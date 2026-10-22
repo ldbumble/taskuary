@@ -960,7 +960,8 @@ const headRows = (page) => page.evaluate(() => {
   const row = head.firstElementChild, kids = [...row.children].filter(vis), mid = (e) => { const r = e.getBoundingClientRect(); return r.top + r.height / 2; };
   const mids = kids.map(mid);
   return { lines: mids.length && Math.max(...mids) - Math.min(...mids) > 10 ? 2 : 1, extra: head.childElementCount - 1, h: Math.round(head.getBoundingClientRect().height), row: Math.round(row.getBoundingClientRect().height),
-    pills: head.querySelectorAll("[data-tq-fact]").length, session: !!head.querySelector('[aria-label="Back to task"]') };
+    pills: head.querySelectorAll("[data-tq-fact], .MuiChip-root").length, status: !!head.querySelector("[data-tq-status-pill]"),
+    session: !!head.querySelector('[aria-label="Back to task"]') };
 });
 async function headNote(page, at) {
   const h = await headRows(page);
@@ -1055,15 +1056,16 @@ async function table() {
     }
     note("RING", page.step, "Next never reached the walk's end chips - the end-chip road was not walked"); return null;
   });
-  // ...and the header on a phone: still one row, its pills folded into "+N" rather than onto a second line
+  // ...and the header on a phone: still one row - the title and the status pill, no chips (the redesign, owner-approved 2026-10-21: what
+  // triage made of it is the last line of From, and the one pill is the rail's own status)
   page.step = "table phone header";
   await page.setViewport({ width: 390, height: 844 });
   for (const t of tasks.slice(0, 3)) {
     await page.goto(`${srv.base}/#task=${t.tid}`, { waitUntil: "load" }); await wait(6000);
     const h = await headRows(page);
     if (!h) { note("HEAD", page.step, `${t.ref} opened at 390px and no task header was drawn`); continue; }
-    // a live session's strip carries no triage facts on purpose: the agent keeps the room
-    if (!h.pills && !h.session) note("HEAD", page.step, `${t.ref} at 390px: the header carries no triage pills`);
+    if (!h.status) note("HEAD", page.step, `${t.ref} at 390px: the header carries no status`);
+    if (h.pills) note("HEAD", page.step, `${t.ref} at 390px: the header carries ${h.pills} chip(s) beside its title`);
     await headNote(page, `${page.step} ${t.ref}`); await phoneNote(page, `${t.ref}'s task header`);
     walked.push(`table: ${t.ref}'s header at 390px`);
   }

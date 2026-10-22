@@ -96,7 +96,8 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         ...(pin ? { position: "fixed", top: 8, left: pin.left, width: pin.width, zIndex: 1350 } : {}) }}>
       {/* a COLUMN that shrinks to the box: the task view inside is a flex column too, so its own scroller gets what is left (TaskPage) */}
       <Box sx={{ flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
-      <TaskPage taskId={card.tid} title={card.title || ""} canvas active autostart={auto} onAutostarted={() => setAuto(null)}
+      {/* `rail`: the rail's own row for this task - the header's status pill wears exactly its mark and word (railStatus.js) */}
+      <TaskPage taskId={card.tid} title={card.title || ""} rail={card} canvas active autostart={auto} onAutostarted={() => setAuto(null)}
         openAct={act} onActOpened={() => setAct(null)}
         expanded={expanded} onExpand={onExpand}
         onClose={onFold} onListChanged={onListChanged} onChanged={onChanged} onGoReports={onGoReports}

@@ -167,6 +167,21 @@ export function headerFacts({ verdict = null, route = null, task = {}, workflow 
   };
 }
 
+// WHAT TRIAGE MADE OF IT IN ONE PLAIN LINE (the audit, 2026-10-17: "Triage decided · Intent task · Who does it an agent · general" was the
+// sorter's own vocabulary): "Sorted as: a task for an assistant · normal priority". A held repository is a warning, never "in none".
+const factOf = (facts, k) => facts.pills.find((p) => p.key === k && p.tone !== "alert")?.value || "";
+const whatOf = (facts, kind) => { const intent = factOf(facts, "intent");
+  return intent === "reply" || kind === "reply" ? "a reply to send" : intent === "fyi" ? "for your information"
+    : `a task ${{ general: "for an assistant", coding: "for your coding tool" }[kind] || "for you"}`; };
+export const sortedLine = (facts, kind) => {
+  const what = whatOf(facts, kind), repo = factOf(facts, "repo");
+  const head = facts.triaged ? `Sorted as: ${what}` : what.charAt(0).toUpperCase() + what.slice(1);
+  return [head, repo && `in ${repo}`, `${factOf(facts, "priority") || "normal"} priority`].filter(Boolean).join(" · ");
+};
+// ...AT THE FOOT OF FROM (the redesign, owner-approved 2026-10-21): "Sorted as: <what> · <priority> · <why>" - the why is the one
+// triage recorded (triageLine), never written here
+export const triageSays = (facts, kind, why = "") => [sortedLine(facts, kind), oneLine(why)].filter(Boolean).join(" · ");
+
 // THE QUIET LINE UNDER THE MESSAGES: when triage judged it, whose it made it, and why - the route record leads with who now
 // ("work for the coding agent in org/app"); older rows said "task", so their head is worked out the way categories.route_head does
 export function routeHead(reason, { intent = "", kind = "", repo = "" } = {}) {

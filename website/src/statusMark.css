@@ -1,0 +1,33 @@
+/* A ROW'S STATE ON ITS ICON (StatusMark.jsx): the ring while an agent works, else the lane's mark as a badge on the logo */
+.tq-mark { position: relative; display: inline-flex; flex-shrink: 0; }
+/* AN AGENT AT WORK (the owner, 2026-10-21): a thin slate ring spinning round the icon - it stops when the agent finishes, asks, fails
+   or is stopped */
+.tq-mark.spins::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 1.5px solid rgba(85, 105, 122, 0.22);
+  border-top-color: #55697a; animation: tq-agent-ring 1s linear infinite; pointer-events: none; }
+@keyframes tq-agent-ring { to { transform: rotate(360deg); } }
+/* every other state: the lane's own mark, small, on the logo's corner, on a disc of the rail's paper so it reads over the logo */
+.tq-mark .badge { position: absolute; right: -6px; bottom: -5px; font-style: normal; font-size: 9px; line-height: 11px; width: 11px; height: 11px;
+  text-align: center; border-radius: 50%; background: #fffdfb; box-shadow: 0 0 0 1px #fffdfb; pointer-events: none; }
+/* somebody waiting on you waves; a start not yet made turns its hourglass - the rest hold still */
+.tq-mark .badge.wave { transform-origin: 70% 80%; animation: tq-badge-wave 1.8s ease-in-out infinite; }
+.tq-mark .badge.turn { animation: tq-badge-turn 3s ease-in-out infinite; }
+@keyframes tq-badge-wave { 0%, 60%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(16deg); } 20%, 40% { transform: rotate(-10deg); } }
+@keyframes tq-badge-turn { 0%, 70% { transform: rotate(0); } 85%, 100% { transform: rotate(180deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .tq-mark.spins::after { animation: none; border-color: #55697a; }   /* a still ring */
+  .tq-mark .badge { animation: none !important; }
+}
+
+/* THE TASK HEADER'S STATUS PILL: the rail's mark and word, in the role's own colours (theme.jsx ROLES) */
+.tq-status-pill { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; height: 22px; box-sizing: border-box; padding: 0 9px 0 7px;
+  border-radius: 11px; border: 1px solid #d8d0c3; background: #ebe6de; color: #5e574c; font: 600 11.5px 'IBM Plex Sans', system-ui, sans-serif;
+  white-space: nowrap; }
+.tq-status-pill .mark { font-style: normal; font-size: 11.5px; line-height: 1; }
+.tq-status-pill .tq-mark { margin: 0 2px; }
+.tq-status-pill.role-you { background: #e3eadf; border-color: #c4d2c0; color: #3f5943; }
+.tq-status-pill.role-working { background: #e4e9ee; border-color: #cbd4dc; color: #41525f; }
+.tq-status-pill.role-handled { background: #e4ebe2; border-color: #cdd9cb; color: #4c6450; }
+.tq-status-pill.role-done { background: #e2ebe0; border-color: #c9dcc8; color: #3c5740; }
+.tq-status-pill.role-info { background: #ece5d6; border-color: #d8ccb4; color: #5f5440; }
+.tq-status-pill.role-bad { background: #f4e7e5; border-color: #e2c6c2; color: #7e2d2d; }
+@media (max-width: 599.95px) { .tq-status-pill .word { max-width: 96px; overflow: hidden; text-overflow: ellipsis; } }

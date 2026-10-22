@@ -926,7 +926,11 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
     """
     from . import concierge
     decision = out.get('decision') or {}
-    said, verb = [turn_text(out, lead, store, table=item)], decision.get('verb')
+    decision_verb = decision.get('verb')
+    # a bare "Next." over the next card only echoes the press (F12): the card that follows is the answer
+    if decision_verb == 'next' and str(out.get('say') or '').strip() == concierge.RECEIPTS['next'] and not lead: said = []
+    else: said = [turn_text(out, lead, store, table=item)]
+    verb = decision_verb
     # The words can name somebody OTHER than what is on the table. The interpreter resolves that into
     # `decision.target` and the desktop's decide() drafts THERE; drafting on `item` regardless answered
     # whoever happened to be up - "reply to Erin" wrote to Dovid (2026-09-10 audit).
@@ -1662,7 +1666,8 @@ def primary(out: dict) -> dict | None:
 def then_line(out: dict, store=None) -> str:
     """"Send the reply: sends the draft above, in your name." - only on a card that shows what it is about."""
     c = primary(out)
-    if store is None or not c or agent_answers(out.get('item')) or out.get('proposal'): return ''
+    # ...and only under a CARD: under the model's own answer ("Yes to what?") it read as a hint about nothing on screen (F12)
+    if store is None or not c or not out.get('item') or agent_answers(out.get('item')) or out.get('proposal'): return ''
     it = out.get('item') or {}
     said = ((it['closeout'] + (', then posts the reply above as its comment.' if it.get('rides') else '.'))
             if c['verb'] == 'approve' and it.get('closeout')

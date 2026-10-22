@@ -31,10 +31,24 @@ test("a goal's row says its mark, its title and its steps, and slipped in red", 
 });
 
 test("an agent at work rings the row's icon, spinning, and still under reduced motion", () => {
-  const view = src("AssistantView.jsx"), css = src("assistantView.css");
-  assert.match(view, /spins = i\.lane === "working" && !i\.settling/);
-  assert.match(view, /className=\{`logo\$\{spins \? " spins" : ""\}`\}/);
-  assert.match(css, /\.tq-pile-row \.logo\.spins::after \{[^}]*animation: tq-agent-ring 1s linear infinite/);
-  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{ \.tq-pile-row \.logo\.spins::after \{ animation: none;/);
-  assert.doesNotMatch(css, /\.tq-pile-row\.working|\.spins[^{]*\{[^}]*border-color: [^;]*;[^}]*outline/, "the row's border is the table's alone");
+  const view = src("AssistantView.jsx"), css = src("statusMark.css"), logo = src("StatusMark.jsx");
+  assert.match(view, /const st = i\.settling \|\| goal \|\| i\.kind === "meeting" \? null : railStatus\(i\);/);
+  assert.match(view, /<StatusLogo status=\{shown\} agent=\{i\.working \|\| i\.agent\} className="logo">/);
+  assert.match(logo, /className=\{\["tq-mark", className, spins \? "spins" : ""\]/);
+  assert.match(css, /\.tq-mark\.spins::after \{[^}]*animation: tq-agent-ring 1s linear infinite/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\n\s+\.tq-mark\.spins::after \{ animation: none;/);
+  assert.doesNotMatch(css + src("assistantView.css"), /\.tq-pile-row\.working|\.spins[^{]*\{[^}]*\bborder-color: [^;]*;[^}]*outline/, "the row's border is the table's alone");
+});
+
+// THE ROW'S STATE IS ON ITS ICON (owner-approved 2026-10-21): the lane's mark as a badge on the source's logo - waving, turning or
+// still - and no status words or emoji on the row's right, so the title gets the room. The words are the icon's label.
+test("a rail row carries its state in its icon and its label, and no status word on its right", () => {
+  const view = src("AssistantView.jsx"), logo = src("StatusMark.jsx"), css = src("statusMark.css");
+  assert.match(view, /const shown = st && \(st\.spins \|\| meta\.word !== BAND_SAYS\[level\]\) \? st : null;/);
+  // the only words left on a row's right: a meeting's time and a goal's "slipped"
+  assert.match(view, /: goal \? \(i\.kind === "goal_slipped" \? meta\.word : ""\) : "";/);
+  assert.match(logo, /role=\{st \? "img" : undefined\} aria-label=\{st \? statusLabel\(st, agent\) : undefined\}/);
+  assert.match(logo, /\{badge && <i className=\{`badge\$\{st\.anim \? ` \$\{st\.anim\}` : ""\}`\} aria-hidden="true">\{badge\}<\/i>\}/);
+  assert.match(css, /\.tq-mark \.badge\.wave \{/);
+  assert.match(css, /\.tq-mark \.badge \{ animation: none !important; \}/, "no badge moves under reduced motion");
 });

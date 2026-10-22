@@ -50,6 +50,27 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
     // the one message it came from reads whole, and the reply is the open half of the work
     assert.ok(await page.$("[data-tq-from] [data-tq-conversation-row][aria-expanded=true]"), "a lone message opens whole");
     assert.ok(await page.$("[data-tq-work] [data-tq-closeout] textarea"), "the draft is in the work column");
+    // ...and the header's status is the rail row's own: the same words on the row's icon
+    await page.waitForSelector(".tq-pile-row.current .tq-mark[role=img]", { timeout: 20000 });
+    assert.equal(await page.$eval(".tq-pile-row.current .tq-mark", (e) => e.getAttribute("aria-label")),
+      await page.$eval("[data-tq-status-pill] .word", (e) => e.textContent));
+  });
+
+  await t.test("a rail row carries its state in its icon - a badge, or the ring - and no status words on its right", async () => {
+    const rows = await page.$$eval("[data-tq-rail] .tq-pile-row", (els) => els.map((r) => ({ key: r.getAttribute("data-tq-key"),
+      mark: r.querySelector(".tq-mark")?.getAttribute("data-tq-status") || "", label: r.querySelector(".tq-mark")?.getAttribute("aria-label") || "",
+      badge: r.querySelector(".tq-mark .badge")?.textContent || "", ring: !!r.querySelector(".tq-mark.spins"),
+      word: r.querySelector(".tq-pile-word")?.innerText || "", band: r.closest("[data-tq-run]")?.getAttribute("data-tq-run") })));
+    const tasks = rows.filter((r) => r.band === "task" && r.mark);
+    assert.ok(tasks.length >= 5, `rows under Tasks wear their state: ${JSON.stringify(rows)}`);
+    for (const r of tasks) {
+      assert.ok(r.label, `${r.key} says its state in words`);
+      assert.ok(r.ring || r.badge, `${r.key} wears a badge or the ring`);
+      assert.equal(r.word, "", `${r.key} has no status word on its right`);
+    }
+    assert.ok(tasks.some((r) => r.mark === "approve" && r.badge && r.label === "ready to send"), "ready to send is a badge, said in words");
+    const ring = rows.find((r) => r.ring);
+    if (ring) assert.match(ring.label, /is working on this$/);
   });
 
   await t.test("a chat burst reads newest on top, the older lines behind Show N older", async () => {

@@ -10,7 +10,6 @@ import QueuedStart from "./QueuedStart.jsx";
 import { strangerLine } from "./strangerLine.js";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useCapabilities } from "./capabilities.js";
-import { createPortal } from "react-dom";
 import {
   Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
   Drawer, IconButton, InputAdornment, Link, Menu, MenuItem, TextField, Tooltip, Typography,
@@ -1482,13 +1481,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       </Box>
                     </Box>
   );
-  const [nextRunSlot, setNextRunSlot] = useState(null);
+  // IN THE AGENT BOX, NOT UNDER THE CONVERSATION (the owner, 2026-10-22: "you can't tell it opened up on bottom ... show up in the
+  // agent box ... like we had originally"): the card under the table opened out of sight; the form sits in the work column and is
+  // brought into view when it opens
   useEffect(() => {
-    if (!(canvas && restartOpen)) { setNextRunSlot(null); return; }
-    const el = document.querySelector("[data-tq-run-slot]");
-    setNextRunSlot(el);
-    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [canvas, restartOpen]);
+    if (restartOpen) requestAnimationFrame(() => document.querySelector("[data-tq-run-form]")?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+  }, [restartOpen]);
   return (
     <>
       {/* ── detail ────────────────────────────────────────────────────── */}
@@ -1953,7 +1951,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     return news ? <Box data-tq-earlier-session="" sx={{ mt: 1 }}><Fold title="The earlier session, before they wrote again">{record}</Fold></Box> : record;
                   })()}
                   {(restartOpen || (!term?.alive && !liveRun && !isGeneral && !report && !detail?.transcript))
-                    && !(canvas && restartOpen) && nextRunForm}
+                    && <Box data-tq-run-form="">{nextRunForm}</Box>}
                   {isGeneral && !generalStarted && (
                     <Box sx={{ mt: 1 }}>
                       {/* the same three answers the hand-off asks - this door had none at all */}
@@ -2512,8 +2510,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       {t && <EmailSomeone open={emailOpen} task={t} detail={detail} onClose={() => setEmailOpen(false)}
         onDrafted={() => { setEmailOpen(false); loadDetail(selected); loadTasks(); onChanged?.(); setOpenStage("reply"); }} />}
       {t && <ContinueBox task={t} anchor={continueAt} onClose={() => setContinueAt(null)} onDone={continued} />}
-      {nextRunSlot && createPortal(<Box data-tq-run-card sx={{ border: "1px solid #d5d0c7", borderRadius: "12px", bgcolor: "#fffdfb", p: 1.5,
-        "& > div": { mt: 0, pt: 0, borderTop: 0 } }}>{nextRunForm}</Box>, nextRunSlot)}
       {t && <CloseNote anchor={noteAt} taskRef={t.ref || ""} onClose={() => setNoteAtRaw(null)} onSubmit={closeWithNote} />}
       {t && inRow && <RemindPicker task={t} anchor={remindAt} onClose={() => setRemindAt(null)} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />}
       {calAsk && slotAt && <SlotPicker mid={calAsk.mid} act={slotAt.act} anchor={slotAt.at} onClose={() => setSlotAt(null)}

@@ -27,7 +27,7 @@ test("the Start panel shows the repository and pins it before the session starts
 
 test("the next-run box takes the mic and pictures like Continue, and both starts send what was typed with them", () => {
   const view = taskSource();
-  const form = view.slice(view.indexOf("const nextRunForm = ("), view.indexOf("const [nextRunSlot"));
+  const form = view.slice(view.indexOf("const nextRunForm = ("), view.indexOf("IN THE AGENT BOX, NOT UNDER THE CONVERSATION"));
   assert.match(form, /\{\.\.\.runPics\.drop\}/);
   assert.match(form, /<AttachImage pics=\{runPics\}/);
   assert.match(form, /<MicButton /);

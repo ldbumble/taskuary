@@ -373,6 +373,46 @@ class RedraftAsksTests(PhoneCase):
         with mock.patch.object(server, 'open_reply', side_effect=AssertionError('no redraft after Cancel')): self.ph.type('next')
 
 
+def _brain(calls):
+    """A scripted model: the first typed words it knows CALL their tool, anything else is "Ok."."""
+    return staticmethod(lambda said: next((f'On it.\n' + call(k, **p) for w, (k, p) in calls.items() if w in said.lower()), 'Ok.'))
+
+
+class TypedActBringsUpThePickerTests(PhoneCase):
+    """A6: a typed act came back as "Remind me: Fri 23 Oct: TQ-0001. Nothing happens until you say yes." with yes/no under it - a confirm
+    card the owner does not want (the router rule: light the real button). A typed Remind me brings up the card's own day picker, the typed
+    day first; an act that is one of the card's buttons brings the card up with that button first. A set of items keeps its yes/no."""
+    brain = _brain({'remind me': ('task.defer', {'until': 'friday'}), 'close it': ('task.complete', {})})
+
+    def setUp(self):
+        super().setUp()
+        self.a, self.b = _two_asks(self.f); self.ph.ready()
+        first = text_of(self.ph.walk())
+        self.tid = next(t for t in (self.a, self.b) if f'TQ-{t:04d}' in first)
+
+    def test_remind_me_friday_is_the_day_picker_with_friday_first(self):
+        got = self.ph.type('remind me about this friday')
+        btns = got[-1][1]
+        self.assertNotIn('yes, go ahead', btns); self.assertNotIn('Nothing happens until you say yes', text_of(got))
+        self.assertRegex(btns[0], r'^Fri \d+ \w{3}$', btns)
+        self.assertEqual(btns[1:], ['Tomorrow', 'Next week', 'In 2 weeks', 'In a month', 'Cancel'])
+        self.assertRegex(text_of(self.ph.tap(btns[0])), rf'TQ-{self.tid:04d} is away until Fri')
+
+    def test_close_it_brings_the_card_up_with_mark_done_first(self):
+        got = self.ph.type('close it, it is handled')
+        self.assertNotIn('yes, go ahead', got[-1][1])
+        self.assertEqual(got[-1][1][0], 'Mark done', got[-1][1])
+        self.assertIn(f'TQ-{self.tid:04d}', text_of(got))
+        self.assertEqual(self.s.get_task(self.tid)['Status'], 'open')           # nothing ran: the tap does it
+        self.assertIn(f'TQ-{self.tid:04d} closed', text_of(self.ph.tap('Mark done')))
+
+    def test_a_set_of_items_keeps_its_yes_or_no(self):
+        for subj in ('Weekly platform digest', 'Office closed Monday'): self.f.filed_fyi(subject=subj)
+        self.ph.ready()
+        with mock.patch.object(self.ph, 'brain_fn', lambda said: 'Ok.\n' + call('pipe.clear', select={'kind': 'fyi'})):
+            self.assertIn('yes, go ahead', self.ph.type('clear all the FYI')[-1][1])
+
+
 class TelegramBareNumberTests(PhoneCase):
     """A18 (b): Telegram shows its choices as buttons with no numbers, yet a bare "2" silently ran button 2. It is not acted on: the answer
     says what the choices are, under them."""

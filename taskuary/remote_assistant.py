@@ -1075,6 +1075,9 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
         done = _run(store, prop, actor)
         said = _said_once(said, done) + [receipt_text(store, done, actor)]
         walk_on = done.get('status') == 'done' and _settled_the_table(prop, item)
+    elif prop and not picked and not prop.get('auto') and prop.get('status') == 'proposed' and not asks(prop) \
+            and (lit := _bring_up(store, prop, actor)):
+        return '\n\n'.join(x for x in (lead.strip(), lit) if x)
     elif prop and prop.get('auto') and prop.get('status') == 'proposed':
         done = _run(store, prop, actor)
         # the act run at once is said ONCE, by its receipt: its card line ("Answer it - general - ...", a button that is gone) said
@@ -1110,6 +1113,45 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
             words = turn_text({**out, 'chips': [], 'options': []}, lead, store)
             return chatformat.BREAK.join(x for x in (words, turn_text(nxt, store=store)) if x)
     return '\n\n'.join(x for x in said if x)
+
+
+def _bring_up(store, prop: dict, actor: str = 'owner') -> str:
+    """A TYPED ACT BRINGS UP THE REAL CHOICE (A6, 2026-10-22; the router rule - no confirm cards, light the real button): "remind me Friday"
+    came back as "Remind me: Fri 23 Oct: TQ-0001. Nothing happens until you say yes." with a yes/no under it. A Remind me is the card's own
+    day picker, the typed day first; an act that is one of a card's buttons brings that card up with the button first. The proposal is
+    withdrawn - the pick is the decision. '' for anything else (a set of items, a setting, a new task): those keep their yes or no."""
+    from . import concierge, operations
+    kind, p, target = prop.get('kind'), prop.get('params') or {}, prop.get('target')
+    # a sender rule is more than the card's Not ours (just this once, on the phone): what was asked keeps its own yes or no
+    if kind in ('preference.exclude_sender', 'preference.sender_rule'): return ''
+    tid = int(target) if str(target or '').isdigit() and prop.get('targetKind') in ('task', 'item') else None
+    if kind == 'item.settle': b, key = concierge.canon_verb(str(p.get('verb') or 'close')), p.get('key') or (f'task:{tid}' if tid else '')
+    else:
+        b = concierge.KIND_BUTTON.get(kind) or ('regular_agent' if kind == 'task.create_from_message' and str(p.get('kind')) in task_kinds.AGENT else '')
+        key = f'task:{tid}' if tid and prop.get('targetKind') == 'task' else str(p.get('key') or '')
+        if not key and prop.get('targetKind') == 'message' and str(target or '').isdigit():   # a mail's act: the card that holds it
+            from . import funnel
+            key = next((i['key'] for i in funnel.pile(store).get('items') or [] if str(i.get('mid') or '') == str(target)), '')
+    if not b or not key or b == 'next': return ''
+    card = concierge.surface(store, key, actor=actor)
+    on = card.get('item')
+    if not on: return ''
+    ref = on.get('ref') or _cut(on.get('title') or 'it', 60)
+    def withdraw():
+        try: operations.cancel(store, prop['id'], actor)
+        except Exception as e: logger.debug(f'the phone left proposal {prop.get("id")} as it was: {e}')
+    if b == 'defer' and on.get('tid'):
+        until = str(p.get('until') or '').strip()
+        day = concierge._day_said(until) if until else ''
+        rows = ([(day, {'t': 'remind', 'tid': on['tid'], 'until': until})] if day and until.lower() not in {u for _l, u in REMIND_DAYS} else [])
+        rows += [(label, {'t': 'remind', 'tid': on['tid'], 'until': u}) for label, u in REMIND_DAYS]
+        rows = sorted(rows, key=lambda r: r[1]['until'] != until) + [('Cancel', {'t': 'stay', 'key': on.get('key') or key})]
+        withdraw()
+        return turn_text({'say': f"Remind you about {ref} when? Or say another day.", 'item': None}, store=store, extra=rows)
+    label = next((c['label'] for c in card.get('chips') or [] if isinstance(c, dict) and c.get('verb') == b), '')
+    if not label: return ''                    # not one of this card's buttons: the yes or no stands
+    withdraw()
+    return turn_text({**card, 'first': b}, f'{label} is first under {ref} - tap it to do it.', store=store)
 
 
 def _unasked(say) -> str:
@@ -1940,7 +1982,7 @@ def primary(out: dict) -> dict | None:
 
 def then_line(out: dict, store=None) -> str:
     """"Send the reply: sends the draft above, in your name." - only on a card that shows what it is about."""
-    c = primary(out)
+    c = next((x for x in out.get('chips') or [] if isinstance(x, dict) and out.get('first') and x.get('verb') == out['first']), None) or primary(out)
     # ...and only under a CARD: under the model's own answer ("Yes to what?") it read as a hint about nothing on screen (F12)
     if store is None or not c or not out.get('item') or agent_answers(out.get('item')) or out.get('proposal'): return ''
     if out['item'].get('kind') in _LEADS_WITH_NEXT: return ''        # nothing to decide: no verb leads, so none is explained (A8, A9)
@@ -2485,7 +2527,9 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     if not out.get('proposal') and not agent_answers(item):
         nxt = [w for w in words if w in next_words]
         rest = [w for w in words if w not in nxt]
-        lead_word = (primary(out) or {}).get('label')
+        # ...the button a typed act asked for, when one was brought up for it (A6), else the card's own verb
+        lead_word = next((c['label'] for c in out.get('chips') or [] if isinstance(c, dict) and out.get('first') and c.get('verb') == out['first']), None) \
+            or (primary(out) or {}).get('label')
         first_ = [] if item.get('kind') in _LEADS_WITH_NEXT else [w for w in rest if w == lead_word][:1] or rest[:1]
         # ...and the draft's own other word rides with it, ahead of Next - the screen draws Redraft beside the send, under the draft
         # (the owner, 2026-10-06: "on whatsapp" the same order)

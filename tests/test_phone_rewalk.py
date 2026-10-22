@@ -211,6 +211,7 @@ class ReceiptTests(PhoneCase):
     def test_a_typed_remind_and_its_yes_say_when_it_is_back(self):
         said = text_of(self.ph.type('remind me about this tomorrow'))
         if 'yes, go ahead' in self.ph.choices(): said = text_of(self.ph.tap('yes, go ahead'))
+        elif 'Tomorrow' in self.ph.choices(): said = text_of(self.ph.tap('Tomorrow'))     # the day picker it brings up (A6)
         self.assertNotIn('Done -', said); self.assertNotIn('Nothing happens until you say yes', said)
         self.assertRegex(said, rf'{self.ref} is away until \w{{3}} \d+ \w{{3}}')
 

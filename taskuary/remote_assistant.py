@@ -844,7 +844,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             if picked and question == MORE:
                 again = [w for w in offered if w != MORE]
                 _offer([(w, acts[w]) for w in again if w in acts])
-                folded = more_text(store, item) or 'Nothing more on this one.'
+                folded = more_text(store, item, page_chars(channel)) or 'Nothing more on this one.'
                 opts = 'Reply with one of:\n' + '\n'.join(f'{i} · {w}' for i, w in enumerate(again, 1)) if again else ''
                 send(store, channel, chat, '\n\n'.join(x for x in (folded, opts) if x), connector_id)
                 return
@@ -1674,9 +1674,10 @@ def full_body(store, item: dict | None) -> str:
     return '\n\n'.join(x for x in parts if x)
 
 
-def more_text(store, item: dict | None) -> str:
+def more_text(store, item: dict | None, limit: int = None) -> str:
     """What the card folds - the phone's More. Under a draft, what they wrote; under a report, every
-    section after the first; under a long message, the whole of it. '' when nothing is folded."""
+    section after the first; under a long message, the whole of it. '' when nothing is folded.
+    `limit`: one bubble on the channel it goes to (page_chars)."""
     if not item: return ''
     if item.get('kind') == 'agentdone' and item.get('tid'):
         # what the agent FOUND, in full - the card's line is its summary, and it asks "want to see the final report?"
@@ -1691,23 +1692,40 @@ def more_text(store, item: dict | None) -> str:
         return chatformat.BREAK + chatformat.BREAK.join(rest) if rest else ''
     if _draft_text(store, item) or len(_plain(body)) > EXCERPT:
         from . import chatformat
-        kin = thread_line(store, msg)
+        head = '\n'.join(x for x in (thread_line(store, msg), 'THEY WROTE') if x)
         # ...a long one in bubbles of a few paragraphs each, never one wall cut wherever the chat's limit fell (F17)
-        return '\n'.join(x for x in (kin, 'THEY WROTE', chatformat.BREAK.join(_quote(p) for p in pages(_plain(body)))) if x)
+        return head + '\n' + chatformat.BREAK.join(_quote(p) for p in pages(_plain(body), limit or PAGE_CHARS, head=len(head) + 1))
     return ''
 
 
-PAGE_CHARS = 1200                              # one bubble of a long message on the phone
+PAGE_CHARS = 1200                              # one More bubble on WhatsApp, whose client folds a long one behind Read more
 
 
-def pages(text: str, limit: int = PAGE_CHARS) -> list:
-    """A long message as bubbles that break at its paragraphs, each at most about `limit` characters."""
+def page_chars(channel: str) -> int:
+    """One More bubble: on Telegram as much as one message holds - six bubbles of 1,200 there were five breaks too many."""
     from . import chatformat
-    out, cur = [], ''
+    return chatformat.HARD if channel == 'telegram' else PAGE_CHARS
+
+
+_SENTENCE = re.compile(r'(?<=[.!?])\s+(?=\S)')
+
+
+def pages(text: str, limit: int = PAGE_CHARS, head: int = 0) -> list:
+    """A long message as as few bubbles as fit `limit` once quoted, broken between paragraphs, else between sentences - a word
+    break only inside one sentence longer than a bubble. Each bubble is filled before the next starts: the first was a lone
+    "Hi Alex," and the rest were cut every 1,200 characters mid-sentence (the 2026-10-22 re-walk). `head`: what the first
+    bubble already carries above the quote."""
+    from . import chatformat
+    fits = lambda t: len(_quote(t)) <= limit - head
+    bits = []                                    # (what goes before it, its words)
     for para in [p.strip() for p in re.split(r'\n\s*\n', str(text or '')) if p.strip()]:
-        for piece in chatformat.split(para, limit) if len(para) > limit else [para]:
-            if cur and len(cur) + 2 + len(piece) > limit: out.append(cur); cur = piece
-            else: cur = f'{cur}\n\n{piece}' if cur else piece
+        for j, sent in enumerate([para] if fits(para) else _SENTENCE.split(para)):
+            for k, piece in enumerate([sent] if fits(sent) else chatformat.split(sent, max(1, limit - head - 40))):
+                bits.append(('\n\n' if j == k == 0 else ' ', piece))
+    out, cur, room = [], '', limit - head
+    for sep, piece in bits:
+        if cur and len(_quote(cur + sep + piece)) > room: out.append(cur); cur, room = piece, limit
+        else: cur = cur + sep + piece if cur else piece
     if cur: out.append(cur)
     return out
 

@@ -1480,13 +1480,19 @@ def member_lines(item: dict | None) -> list:
     # ...and told apart by WHO sent it where the lines alike can be (F26): "(2)" said nothing about which one it was
     from . import concierge
     lines = [line for _k, line in rows]
-    def tell(m, line):
-        if lines.count(line) < 2: return line
-        by = ' '.join(str(m.get('email') or m.get('from') or '').split())
-        age = concierge.funnel_age(m)
-        return f'{line} ({by})' if by and sum(1 for x, mm in zip(lines, item.get('items') or []) if x == line and str(mm.get('email') or mm.get('from') or '') == by) == 1 \
-            else f'{line} ({age})' if age else line
-    told = [(k, tell(m, line)) for (k, line), m in zip(rows, item.get('items') or [])]
+    # ...and where neither the sender nor the age tells them apart - the same notice from the same sender in the same minute - which of
+    # how many it is: "(just now)" and "(just now) (2)" said nothing about either (the 2026-10-22 re-walk)
+    members = list(item.get('items') or [])
+    by = lambda m: ' '.join(str(m.get('email') or m.get('from') or '').split())
+    tellers = (by, concierge.funnel_age)
+    def tell(i, m, line):
+        alike = [j for j, x in enumerate(lines) if x == line]
+        if len(alike) < 2: return line
+        for f in tellers:
+            v = f(m)
+            if v and sum(1 for j in alike if f(members[j]) == v) == 1: return f'{line} ({v})'
+        return f'{line} ({alike.index(i) + 1} of {len(alike)})'
+    told = [(k, tell(i, m, line)) for i, ((k, line), m) in enumerate(zip(rows, members))]
     seen = collections.Counter()
     def _nth(line): seen[line] += 1; return line if seen[line] == 1 else f'{line} ({seen[line]})'
     return [(k, _nth(line)) for k, line in told]

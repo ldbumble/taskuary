@@ -300,4 +300,18 @@ class ClearFyiTests(PhoneCase):
         self.assertRegex(text_of(self.ph.tap('yes, go ahead')), r'Marked 2 FYI read')
 
 
+class AlikeFyiTests(PhoneCase):
+    """F26: lines alike in an FYI batch "told apart by who sent them, not (2)". The re-walk's were the same notice from the same sender
+    in the same minute, so neither the sender nor the age told them apart, and the buttons read "... (just now)" and "... (just now) (2)"."""
+
+    def test_lines_alike_read_as_which_of_how_many(self):
+        for _ in range(3): self.f.filed_fyi(subject='New expense policy PDF')
+        self.f.filed_fyi(subject='Office closed Monday')
+        self.ph.ready()
+        btns = [b for b in self.ph.walk()[-1][1] if 'expense policy' in b]          # the walk brings FYI together, four at a time
+        self.assertEqual(len(btns), 3, btns); self.assertEqual(len(set(btns)), 3, btns)
+        self.assertFalse([b for b in btns if re.search(r'\(\d\)$|just now', b)], btns)
+        self.assertEqual(sorted(re.search(r'\((\d) of 3\)$', b).group(1) for b in btns), ['1', '2', '3'], btns)
+
+
 if __name__ == '__main__': unittest.main()

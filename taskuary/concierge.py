@@ -4010,6 +4010,13 @@ def recover(store, op: dict, actor: str = 'owner', llm=None) -> dict:
                       'label': buttons.label('approve', 'unknown'), 'hint': buttons.hint('approve', 'unknown')})
         rv = store.get_review(int(o['rid'])) if o.get('rid') else None
         if rv and rv.get('TaskId'): chips.append({'verb': 'close', 'tid': rv['TaskId'], 'label': buttons.label('close')})
+    # A START REFUSED FOR A STRANGER (origin.launch_mode): the way on is the owner's word on the sender - Trust and start, the same
+    # proposal told to vouch first (server._run_kind) - never a Try again that is refused the same way, never another tool
+    if st == 'error' and op.get('targetKind') == 'task' and "stranger's task" in str(op.get('error') or ''):
+        chips = [c for c in chips if c.get('verb') != 'retry']
+        chips.insert(0, {'verb': 'revise', 'op': op['id'], 'params': {**(op.get('params') or {}), 'trust': True},
+                         'label': buttons.label('trust_start'), 'hint': buttons.hint('trust_start'),
+                         'settles': any(row[0] == op.get('kind') and row[2] for row in PROPOSALS.values())})
     # nothing here fixes it and pressing again will not: the bug report, with what went wrong filled in (failures.chips)
     if st == 'error' and not chips: chips.append({'verb': 'bug', 'label': buttons.label('report_bug'), 'text': str(op.get('error') or '')})
     gone = {v for v, row in PROPOSALS.items() if row[0] == op.get('kind')}

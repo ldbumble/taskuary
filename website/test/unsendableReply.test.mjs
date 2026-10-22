@@ -23,3 +23,8 @@ test("Send out results is not offered where nothing can be sent", () => {
   assert.match(page, /const cantSend = pendingReview \? !draftCanSend\(caps, pendingReview\) : !!replyMessage && !canSend\(caps, replyMessage\.Channel\);/);
   assert.match(page, /\.\.\.\(!liveSession && !cantSend \? \[\{ id: "email"/);
 });
+
+test("TaskPage reads the capabilities through its own hook - `caps` there was GoalSteps', and the page threw", () => {
+  const page = read("TaskPage.jsx"), body = page.slice(page.indexOf("export default function TaskPage("));
+  assert.match(body, /const caps = useCapabilities\(\), canCode = caps\.coding;/);
+});

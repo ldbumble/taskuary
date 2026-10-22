@@ -49,6 +49,16 @@ try {
 let reconnectTimer = null, reconnectAttempt = 0, reconnectAt = 0, reconnectPaused = false;
 let openedAt = 0, lastDisconnect = "";
 
+// A DROPPED CONNECTION IS NOT A CRASH (2026-10-22). Baileys answers a finished login with an async handler nobody awaits
+// (CB:success -> sendPassiveIq("active")); when the socket closes under that query - a laptop waking, the Wi-Fi changing - the
+// query rejects with the bare close code 1006 and no one catches it. Node exits on an unhandled rejection, so the bridge died a
+// moment after it had scheduled its own reconnect, and nothing brought it back. The close itself still reaches connection.update,
+// which reconnects with backoff; this only keeps a stray rejection from killing the process. A thrown exception stays fatal - that
+// is a bug here, not the network - and Taskuary starts a bridge that has died (wabridge.supervise).
+process.on("unhandledRejection", (reason) => {
+  console.error("ignored a stray rejection - the connection's own close drives the reconnect:", reason?.stack || reason);
+});
+
 const text = (m) => m.conversation || m.extendedTextMessage?.text
   || m.imageMessage?.caption || m.videoMessage?.caption || m.documentMessage?.caption || "";
 const context = (m) => Object.values(m || {}).find((v) => v?.contextInfo)?.contextInfo;
@@ -113,15 +123,18 @@ async function connect() {
       .then(() => thisSock.resyncAppState(["critical_unblock_low"], true))
       .catch((e) => console.log(`could not load WhatsApp contact names (${why}):`, e?.message || e));
   };
-  thisSock.ev.on("creds.update", saveCreds);
+  thisSock.ev.on("creds.update", () => saveCreds().catch((e) => console.error("could not save the pairing:", e?.message || e)));
   thisSock.ev.on("creds.update", (u) => { if (u?.myAppStateKeyId) syncContactNames("new key"); });
   thisSock.ev.on("connection.update", async (u) => {
     if (thisSock !== sock) return;
     if (u.qr) {
       qr = u.qr;
       if (PHONE && !state.creds.registered) {
-        pairingCode = await thisSock.requestPairingCode(PHONE.replace(/\D/g, ""));
-        console.log(`pair by code: enter ${pairingCode} on your phone (Settings > Linked devices)`);
+        // a pairing request on a socket that closes under it rejects; the close reconnects and asks again
+        try {
+          pairingCode = await thisSock.requestPairingCode(PHONE.replace(/\D/g, ""));
+          console.log(`pair by code: enter ${pairingCode} on your phone (Settings > Linked devices)`);
+        } catch (e) { console.log("could not request a pairing code:", e?.message || e); }
       } else {
         console.log("scan this QR from WhatsApp > Linked devices (also served at /status):\n");
         try { (await import("qrcode-terminal")).default.generate(qr, { small: true }); }
@@ -179,7 +192,8 @@ async function connect() {
     for (const contact of contacts) chatRoster.upsertContact(contact);
     for (const chat of chats) chatRoster.upsertChat(chat);
   });
-  thisSock.ev.on("messages.upsert", async ({ messages: ms, type }) => {
+  thisSock.ev.on("messages.upsert", (u) => onMessages(u).catch((e) => console.error("could not take in a message:", e?.message || e)));
+  const onMessages = async ({ messages: ms, type }) => {
     if (thisSock !== sock) return;
     if (type !== "notify") return;                       // history syncs are not new work
     for (const m of ms) {
@@ -242,7 +256,7 @@ async function connect() {
         doc, docMime, docName: dm?.fileName || "", taskuary: taskuarySent.has(m.key.id) });
       while (messages.length > MAX_KEPT) messages.shift();
     }
-  });
+  };
 }
 
 const json = (res, code, obj) => { res.writeHead(code, { "content-type": "application/json" }); res.end(JSON.stringify(obj)); };

@@ -13,9 +13,15 @@ test("two columns at rest, the whole width while an agent works - coding or gene
   assert.match(src, /<Box data-tq-columns="" data-tq-layout=\{layoutOf\(\{ sessionView \}\)\} sx=\{sessionView \? \{ display: "contents" \} : COLUMNS\}>/);
   // ...the work column steps aside (display: contents) so the terminal stays a flex child of the page, sized as it always was
   assert.match(src, /<Box data-tq-work="" sx=\{sessionView \? \{ display: "contents" \} : \{ minWidth: 0, display: "flex", flexDirection: "column" \}\}>/);
-  // and From is one static line over it - no panel yet (item 6 waits on the owner)
-  assert.match(src, /\{sessionView && <Typography data-tq-from-line="" noWrap title=\{fromLine\}/);
-  assert.match(src, /TODO\(item 6, pending the owner\)/);
+  // and From is one line over it, which opens From as a sidebar laid OVER the agent's left edge (item 6, the owner 2026-10-21):
+  // absolutely placed, so the pane underneath is never resized; closed by default, by the line, its X or Escape
+  assert.match(src, /\{sessionView && <Box component="button" type="button" ref=\{fromLineRef\} data-tq-from-line="" title=\{fromLine\}\n\s+aria-expanded=\{fromSide\} aria-controls="tq-from-side" onClick=\{\(\) => setFromSide\(\(v\) => !v\)\}/);
+  assert.match(src, /\{\(!sessionView \|\| fromSide\) && \(/);
+  assert.match(src, /\.\.\.\(sessionView \? FROM_SIDE\(fromTop\) : PHONE_FROM\(fromOpen\)\)/);
+  assert.match(src, /const FROM_SIDE = \(top\) => \(\{ position: "absolute", top, left: 0, bottom: 0,/);
+  assert.match(src, /const \[fromSide, setFromSide\] = useState\(false\)/);
+  assert.match(src, /if \(e\.key === "Escape"\) \{ e\.stopPropagation\(\); setFromSide\(false\);/);
+  assert.match(src, /useEffect\(\(\) => \{ if \(!sessionView\) setFromSide\(false\); \}, \[sessionView\]\);/);
 });
 
 test("the work column opens the agent or the reply - and what the task is for where the focus named the task", () => {

@@ -6,7 +6,7 @@ clicks. A WhatsApp or Telegram chat has no sidebar, so the same steps arrive as 
 catalogue's groups, a group lists its cards, a card opens as text with its state and the way back. Nothing here asks a
 model - a pick is a button (remote_assistant.run_act). What the rail calls a section is funnel.level_of's to say.
 """
-import json
+import json, re
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -112,6 +112,15 @@ def _connections(store, section, open_, page=0):
             paged([(g, {'t': 'browse', 'area': 'connections', 'section': g}) for g in groups], [], {'t': 'browse', 'area': 'connections'}, page))
 
 
+def _purpose(store, source_id) -> str:
+    """What a report is for, in one line: its own description, else the first sentence of what it is asked to do - '' when neither."""
+    try: cfg = json.loads((store.get_source(int(source_id)) or {}).get('ConfigJson') or '{}') or {}
+    except (TypeError, ValueError): return ''
+    text = ' '.join(str(cfg.get('description') or cfg.get('prompt') or '').split())
+    first = re.split(r'(?<=[.!?])\s+', text)[0] if text else ''
+    return first if len(first) <= 140 else first[:139].rstrip() + '…'
+
+
 def _reports(store, open_, page=0):
     """REPORTS, the desktop sidebar's list as picks (the owner, 2026-09-30): each one's clock and how its last run went, then
     one opened - what it is, where it goes, what the last run said. Running or changing one is words: the model proposes it."""
@@ -123,8 +132,13 @@ def _reports(store, open_, page=0):
         r = next((x for x in rows if str(x['source_id']) == str(open_)), None)
         if not r: return 'That report is not there any more.', up
         said = str(r['last_said'] or '').strip()
+        # WHAT IT IS FOR in one line, and where it reaches you without the AI judge's whole instruction - the detail read the judge's
+        # prompt out as "Reaches you" (F16)
+        reach = re.sub(r'(the AI decides) - [^;]*', r'\1', str(r['reach'] or ''))
+        why = _purpose(store, r['source_id'])
         text = (f"{'WORKFLOW' if r['workflow'] else 'REPORT'} · {r['title']}{'' if r['active'] else ' (off)'}\n"
-                f"When: {r['schedule'] or 'no clock - it runs when asked'}\nReaches you: {r['reach']}\nGoes: {r['goes']}\n{last(r).capitalize()}"
+                + (f"{why}\n" if why else '')
+                + f"When: {r['schedule'] or 'no clock - it runs when asked'}\nReaches you: {reach}\nGoes: {r['goes']}\n{last(r).capitalize()}"
                 + (f"\n> {said}" if said else '')
                 + '\n\nSay "run it now", or what to change, and I propose it for your yes.')
         return text, up

@@ -104,6 +104,43 @@ class ReportsAndHubTests(unittest.TestCase):
         with mock.patch.object(appfacts, 'reports', return_value=[]):
             self.assertIn('set up a report', db.browse(MemoryStore(), 'reports')[0])
 
+    def test_a_report_opened_says_its_clock_and_purpose_not_the_judges_prompt(self):
+        """F16: Browse read the AI judge's whole instruction out as "Reaches you"."""
+        import json
+        from taskuary import appfacts
+        s = MemoryStore()
+        sid = s.save_source({'Channel': 'report', 'Address': 'Headcount by site', 'Active': 1,
+                             'ConfigJson': json.dumps({'title': 'Headcount by site', 'prompt': 'Count the staff at each site. Flag any site under plan.'})}, 'o')
+        row = {'source_id': sid, 'title': 'Headcount by site', 'workflow': False, 'schedule': 'weekdays at 07:00', 'active': True,
+               'reach': 'Reports: the AI decides - only when a site is more than ten percent under plan and the trend held for two weeks',
+               'goes': 'in the app only - sent to nobody', 'last_ok': True, 'last_at': '2026-10-21 07:00', 'last_said': ''}
+        with mock.patch.object(appfacts, 'reports', return_value=[row]):
+            text, _ = db.browse(s, 'reports', open_=sid)
+        self.assertIn('When: weekdays at 07:00', text)
+        self.assertIn('Count the staff at each site.', text); self.assertNotIn('Flag any site', text)
+        self.assertIn('Reaches you: Reports: the AI decides', text); self.assertNotIn('ten percent', text)
+
+
+class NoJsonOnThePhoneTests(unittest.TestCase):
+    """F16: a report's rows went out as braces and quotes wherever they were not a whole section of rows - one row, a list on one
+    line, rows quoted on a task made from the report."""
+    def test_rows_anywhere_in_a_message_go_out_as_a_table(self):
+        s, got = MemoryStore(), []
+        text = ('TQ-0004 is on your list.\n{"site": "Lakeview", "headcount": 112}\n\nRows: \n'
+                '[{"site": "Riverside", "headcount": 98}, {"site": "Hillcrest", "headcount": 87}]')
+        from taskuary import messengers
+        with mock.patch.object(messengers, 'wa_send', side_effect=lambda st, chat, body, connector_id=None, poll=None: got.append(body)):
+            ra.send(s, 'whatsapp', '1555@s.whatsapp.net', text, None)
+        out = '\n'.join(got)
+        self.assertNotIn('{"', out)
+        self.assertIn('Lakeview · 112', out); self.assertIn('Hillcrest · 87', out)
+
+    def test_nothing_has_to_happen_is_said_once(self):
+        item = {'key': 'report:3', 'kind': 'report', 'lane': 'report', 'title': 'Headcount by site',
+                'why': 'a report you set up landed; nothing has to happen'}
+        text = ra.turn_text({'say': 'Headcount by site landed. It is open below - read it; nothing has to happen.', 'item': item}, store=MemoryStore())
+        self.assertEqual(text.lower().count('nothing has to happen'), 1, text)
+
 
 
 class PipeListSaysForLaterTests(unittest.TestCase):

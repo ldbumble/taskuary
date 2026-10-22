@@ -217,6 +217,43 @@ def use_chat(store, channel: str, chat: str) -> dict:
     return {'channel': channel, 'chat': chat}
 
 
+PICKED = 'Connected - this is your Assistant chat now.'
+GREET_EVERY = 6 * 3600                  # one fixed line per unchosen chat in this long, so a stranger cannot make the bot talk
+
+
+def hello_chat(store, channel: str, chat: str) -> bool:
+    """The chat the desktop just picked is told so, with the way in (A4, 2026-10-22): picking it sent nothing, and the owner's first message
+    to a bot is often before that. Where the chat listens only during a walk, it says how a walk gets here instead of offering one."""
+    c = doorway(store, channel)
+    if not chat or not c or chat_of(c) != str(chat): return False
+    if enabled(store, channel, chat, c):
+        text = turn_text({'say': f'{PICKED} Tap below to walk through what is waiting, or type what you want.', 'item': None}, store=store,
+                         extra=[(WALK, {'t': 'walk', 'opened': True}), (MENU, {'t': 'menu'})])
+    else: text = f'{PICKED} To walk here, press "Walk me through them in {LABELS.get(channel, channel)}" on the desktop.'
+    send(store, channel, str(chat), text, c['ConnectorId'])
+    return True
+
+
+def greet_unchosen(store, connector, chat: str) -> bool:
+    """/start, "hello" - any first words - from a private Telegram chat the doorway does not answer get ONE fixed line, at most every
+    GREET_EVERY (A4, 2026-10-22): first contact was total silence. A bot is public, so the line says nothing about the owner - only where
+    a chat is chosen. The owner's own chosen chat, quiet between walks, is told how a walk gets there."""
+    from . import messengers, words
+    key = f'tg_greeted:{chat}'
+    try: last = float(store.get_setting(key) or 0)
+    except ValueError: last = 0.0
+    if time.time() - last < GREET_EVERY: return False
+    store.set_setting(key, str(time.time()), 'telegram-poll')
+    mine = chat_of(connector) == str(chat)
+    text = (f'This is your Assistant chat. To walk here, press "Walk me through them in Telegram" on the desktop, or let it listen any time '
+            f'under {words.name("settings")} → Assistant on your phone.' if mine else
+            f'To talk to Taskuary here, choose this chat on the desktop: {words.name("settings")} → Assistant on your phone.')
+    try: messengers.tg_send(store, str(chat), text, connector_id=connector.get('ConnectorId'))
+    except Exception as e:
+        logger.warning(f'telegram: the first-contact line did not go - {e}'); return False
+    return True
+
+
 def doorway(store, channel: str):
     """The active connector of that channel whose card names an Assistant chat, if there is one."""
     return next((c for c in store.connectors_by_type(channel, with_secret=True)

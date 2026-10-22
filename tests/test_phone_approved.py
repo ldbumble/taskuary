@@ -6,7 +6,7 @@ import json, re, time, unittest
 from unittest import mock
 
 from taskuary import remote_assistant as ra
-from tests.phone_transcript import GAIL, RAY, Phone, call, text_of
+from tests.phone_transcript import GAIL, ME, RAY, Phone, call, text_of
 
 
 def _two_asks(f):
@@ -448,7 +448,6 @@ class TelegramFirstContactTests(PhoneCase):
     channel = 'telegram'
 
     def _from(self, chat, text):
-        from tests.phone_transcript import ME
         mid = next(self.ph.ids)
         self.ph.queue.append({'update_id': mid, 'message': {'message_id': mid, 'text': text, 'date': int(time.time()),
                               'chat': {'id': int(chat), 'type': 'private'}, 'from': {**ME, 'id': int(chat)}}})
@@ -469,6 +468,41 @@ class TelegramFirstContactTests(PhoneCase):
             got = self.ph._took(lambda: server.set_assistant_doorway(server.DoorwayBody(channel='telegram', chat='900200')))
         (said, btns), = got
         self.assertIn(ra.PICKED, said); self.assertEqual(btns, ['Walk me through my tasks', 'More…'])
+
+
+class WhileClosedTests(PhoneCase):
+    """A10: messages sent while Taskuary was closed were each answered and acted on when it opened - an hour-old "next" included - and
+    nothing said the app had been closed. Only the newest is acted on; the older ones get their thumb and are named, not acted on."""
+    channel = 'telegram'
+
+    def _queue(self, *texts):
+        for t in texts:
+            if self.channel == 'telegram': self.ph.queue.append({'update_id': next(self.ph.ids), 'message': {'message_id': next(self.ph.ids), 'text': t,
+                                     'date': int(time.time()) - 600, 'chat': {'id': int(self.ph.chat), 'type': 'private'}, 'from': ME}})
+            else: self.ph.queue.append({'id': f'in{next(self.ph.ids)}', 'jid': self.ph.chat, 'text': t, 'fromMe': True, 'poll': False, 'ts': time.time() - 600})
+
+    def test_only_the_newest_queued_message_is_acted_on_and_the_rest_are_named(self):
+        a, b = _two_asks(self.f); self.ph.ready()
+        first = text_of(self.ph.walk())
+        with mock.patch.object(ra, 'STARTED', time.time(), create=True):                 # Taskuary just opened; the three waited ten minutes
+            self._queue('next', 'next', 'help')
+            got = self.ph._took(self.ph._poll)
+        said = text_of(got)
+        self.assertEqual(said.count('Taskuary was closed - picking up from your last message.'), 1, said)
+        self.assertIn('2 earlier messages were not acted on: "next"; "next".', said)
+        self.assertIn('What you can do here', said)                           # the newest, "help", answered
+        self.assertEqual(said.count('What you can do here'), 1)
+        ref = next(f'TQ-{t:04d}' for t in (a, b) if f'TQ-{t:04d}' in first)
+        self.assertIn(f'Back to {ref}', got[-1][1])                           # neither "next" moved the walk
+        if self.channel == 'telegram': self.assertEqual(getattr(self.ph, 'reacted', 0), 3, 'every one gets its thumb')
+
+    def test_a_message_sent_while_it_runs_is_acted_on_as_ever(self):
+        _two_asks(self.f); self.ph.ready(); self.ph.walk()
+        self.assertNotIn('Taskuary was closed', text_of(self.ph.type('help')))
+
+
+class WhatsAppWhileClosedTests(WhileClosedTests):
+    channel = 'whatsapp'
 
 
 class TelegramBareNumberTests(PhoneCase):

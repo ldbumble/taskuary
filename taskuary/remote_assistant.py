@@ -1600,6 +1600,19 @@ _DOWN = ('close', 'not_ours', 'not_ours_sender', 'block_sender', 'done')
 _HAND = ('regular_agent', 'coding_agent')
 
 
+HOLD_LINE = 'New sender - not on your domain, and you have never written to them. Nothing starts until you choose.'
+
+
+def stranger_held(store, item: dict | None) -> bool:
+    """A first message from an address nobody here knows: its task wears ingest.HOLD_TAG and nothing starts on it by itself."""
+    it = item or {}
+    if it.get('hold') is not None: return bool(it['hold'])
+    if store is None or not str(it.get('tid') or '').isdigit(): return False
+    from .ingest import HOLD_TAG
+    try: return store.task_has_tag(int(it['tid']), HOLD_TAG)
+    except Exception: return False
+
+
 def primary(out: dict) -> dict | None:
     """The card's verb: the first word that DOES the thing - a reply with no draft yet leads with
     drafting it, not with closing the task (the vocabulary lists close first for a waiting draft).
@@ -1607,6 +1620,10 @@ def primary(out: dict) -> dict | None:
     never by a reply (the desktop's button there is Hand to agent, 2026-09-28)."""
     chips = [c for c in (out.get('chips') or []) if isinstance(c, dict) and c.get('verb') and c.get('verb') != 'next']
     it = out.get('item') or {}
+    # ...but never on a stranger's held mail: handing a prompt from an unknown address to an agent is not the first thing to do (F8)
+    if it.get('hold'):
+        mine = [c for c in chips if c['verb'] not in _HAND]
+        return next((c for c in mine if c['verb'] not in _DOWN), (mine or chips or [None])[0])
     if it.get('kind') in STORY_KINDS and move_title(it) in ('who should take it?', buttons.label('regular_agent')):
         hand = next((c for c in chips if c['verb'] in _HAND), None)
         if hand: return hand
@@ -1826,6 +1843,10 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
     if state.startswith('failed') and kind not in ('agentdone', 'wrapup'): word = funnel.LANE_WORDS['stopped'][0]
     elif state == 'finished' and kind == 'agent': word = lanes.word('agentdone')
     elif state == 'working' and kind != 'agent': word = funnel.LANE_WORDS['working'][0]
+    # A STRANGER'S HELD MAIL says it is held, once (F8): it read "waiting to start" and "handed over, not started" over a task
+    # nothing will start until the owner chooses - the rail's own `held` state and its word
+    hold = stranger_held(store, it) and state != 'working'
+    if hold: word, state = lanes.word('held'), ''
     head = ' · '.join(x for x in (word, str(it.get('ref') or '')) if x)
     if head and funnel.mark_for(it): head = f'{funnel.mark_for(it)} {head}'
     age = concierge.funnel_age(it)
@@ -1844,6 +1865,7 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
     else:
         verb = 'wrote' if kind == 'fyi' or it.get('lane') in ('fyi', 'report') else 'asked'
         lines.append(' · '.join(x for x in (f'{DOT_TASK} **{story_who(it)}** {verb}', channel_word(ch), age) if x))
+    if hold: lines.append(HOLD_LINE)
     if said: lines.append(said[:1].upper() + said[1:])
     # what the thing IS, in its own words - a pull request's title and number, an email's subject - and the rest of the
     # summary: the first sentence says who wants what, never what it is (the owner, 2026-09-28: "at least the title")
@@ -1858,8 +1880,10 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
     if whole: lines += ['', whole]
     elif not draft and kind in ('message', 'asked', 'todo', 'fyi') and not is_own(it):
         msg, body, is_report = _body(store, it)
-        if body and not is_report:
-            opening = _plain(body)
+        opening = _plain(body) if body and not is_report else ''
+        # ...ONCE: a short mail is often its own title and summary as well, and the card printed it again under them (F8)
+        norm = lambda s: ' '.join(str(s or '').split()).lower().rstrip('.…')
+        if opening and not any(norm(opening) and norm(opening) in norm(x) for x in (said, subj, rest) if x):
             lines.append(_quote(_cut(opening, EXCERPT) if len(opening) > EXCERPT else opening))
     # THE TASK'S TO-DOS (the owner, 2026-10-20: "anything you can do, you can do via the Assistant" - the phone never showed them): the open
     # ones, numbered as task.check takes them, each with its note, and how far the list got; "tick 2" / "note on 2: ..." answer them
@@ -1882,7 +1906,7 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
         # what the AGENT asks is the agent's line, not the owner's: it sat under "You · answer the agent" (2026-10-06)
         asked = ' '.join(str((it.get('tail') or [''])[0]).split()) if kind == 'agent' and it.get('asking') and len(it.get('questions') or []) <= 1 else ''
         if asked: lines.append(f'asks: **{_cut(asked, 600)}**')
-    elif it.get('tid') and kind in ('todo', 'message', 'asked') and (kind == 'todo' or is_own(it)):
+    elif it.get('tid') and kind in ('todo', 'message', 'asked') and (kind == 'todo' or is_own(it)) and not hold:
         lines += ['', f'{DOT_AGENT} No agent yet - nobody is working on this.']
     return '\n'.join(lines).strip()
 
@@ -1891,6 +1915,7 @@ def move_block(store, item: dict | None, draft: str = '') -> str:
     """The loud part: a rule, **YOUR MOVE · <what>**, and what to decide on - your reply, its question, why it waits."""
     it = item or {}
     title = move_title({**it, 'who': asker(store, it) or it.get('who')} if it.get('kind') == 'agentdone' else it, draft)
+    if title == buttons.label('regular_agent') and stranger_held(store, it): title = 'who should take it?'
     if not title: return ''
     body = []
     qs = it.get('questions') or []
@@ -1910,7 +1935,7 @@ def move_block(store, item: dict | None, draft: str = '') -> str:
         via = _VIA.get(str(it.get('channel') or '').lower(), 'by email')
         body.append('Your draft - it goes when you send it:' if is_own(it) else f'Your reply to {story_who(it)} {via} - it goes when you send it:')
         body.append(_quote(draft))
-    elif it.get('lane') == 'queued' and (it.get('why_idle') or it.get('why')):
+    elif it.get('lane') == 'queued' and (it.get('why_idle') or it.get('why')) and not stranger_held(store, it):
         body.append(f"Why it has not started: {' '.join(str(it.get('why_idle') or it['why']).split())}")
     elif it.get('kind') == 'wrapup' and it.get('sent'):
         body.append(f"You sent: {_cut(it['sent'], 300)}")
@@ -1959,6 +1984,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     from . import funnel
     item = out.get('item') or {}
     out, key = _chips_on(store, out, item, table)
+    if item and 'hold' not in item and stranger_held(store, item): item = {**item, 'hold': True}; out = {**out, 'item': item}
     say = _TASK_LINK.sub(r'\1', str(out.get('say') or '')).strip()
     mark = funnel.mark_for(item)
     if say and mark: say = f'{mark} {say}'

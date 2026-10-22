@@ -870,6 +870,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
                     return
             if not picked: forget_offered(store, channel, chat)
             text = carry_out(store, out, item, picked=picked)
+            if out.get('no_brain') and not _CHOICES_BLOCK.search(text): text = text.replace(concierge.NO_BRAIN, concierge.NO_BRAIN_BARE)
             # THE DAY'S OPENING rides on the answer to their first typed message of the day (or after a long gap): the phone
             # never speaks first, so this is where it goes - once, and never if the desk already said it (welcome.phone_lead)
             if not picked:

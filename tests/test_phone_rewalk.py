@@ -42,4 +42,22 @@ class MoreTests(PhoneCase):
         self.assertIn('Reply', got[-1][1])                                     # and the choices come back under the last
 
 
+class NoAiFreshInstallTests(PhoneCase):
+    """2: a fresh install with no AI and nothing waiting answered "until then pick from the choices below" - and sent none."""
+    channel = 'whatsapp'
+
+    def test_with_nothing_to_pick_the_line_promises_no_choices(self):
+        for said in ('hi', 'what can you do?', '1'):
+            (text, poll), = self.ph.type(said)
+            self.assertIn('Connect an AI', text)
+            if not poll: self.assertNotIn('choices', text, f'{said!r} -> {text!r}')
+
+    def test_with_a_card_on_the_table_the_choices_it_names_are_sent(self):
+        self.f._work('Badge access for the new hire', subject='Badge access for the new hire', from_name=RAY[0], from_email=RAY[1],
+                     body='Alex, the new AP clerk starts Monday. Can you get her a badge for floors 2 and 3?', sent_at=self.f.ago(hours=3))
+        self.ph.ready(); self.ph.walk()
+        (text, poll), = self.ph.type('can you chase Gail?')
+        self.assertIn('choices below', text); self.assertIn('Next', poll)
+
+
 if __name__ == '__main__': unittest.main()

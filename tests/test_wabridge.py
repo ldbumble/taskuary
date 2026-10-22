@@ -336,3 +336,62 @@ class SupervisorTests(unittest.TestCase):
         with mock.patch.object(messengers, 'poll_whatsapp', return_value=0), mock.patch.object(wabridge, 'came_back') as back:
             channels._poll_one(self.s, full, False, 0, None, False)
         back.assert_called_once()
+
+
+class HomeStagingTests(unittest.TestCase):
+    """The crash fix must reach the folder the owner is paired in: every start - theirs or the supervisor's - stages the
+    shipped bridge into <home>/whatsapp and runs it there, and the pairing living there is never touched."""
+    def setUp(self):
+        import tempfile, shutil
+        from pathlib import Path
+        root = Path(tempfile.mkdtemp()); self.addCleanup(shutil.rmtree, root, True)
+        self.home, self.pkg = root / 'home' / 'whatsapp', root / 'pkg'
+        self.pkg.mkdir(parents=True)
+        for p in wabridge.DIR.glob('*.mjs'): (self.pkg / p.name).write_bytes(p.read_bytes())     # the shipped code, fixed bridge and all
+        (self.pkg / 'package.json').write_bytes((wabridge.DIR / 'package.json').read_bytes())
+        for x in (mock.patch.object(wabridge, 'DIR', self.pkg), mock.patch.object(wabridge, 'run_dir', return_value=self.home)):
+            x.start(); self.addCleanup(x.stop)
+        wabridge._STATE.update(phase='idle', detail='', pid=None, at=0.0)
+        if wabridge._LOCK.locked(): wabridge._LOCK.release()
+        wabridge._SUP.update(down=0.0, up=0.0, tries=0, next=0.0, held=False, gave_up='')
+
+    def launch(self, go):
+        """Run `go` with node, npm and the process faked; the Popen calls."""
+        class P:
+            pid = 4242
+            def poll(self): return None
+        (self.home / 'node_modules' / '@whiskeysockets').mkdir(parents=True, exist_ok=True)
+        with mock.patch.object(wabridge, 'node', return_value='node'), mock.patch.object(wabridge.subprocess, 'Popen', return_value=P()) as pop, \
+             mock.patch.object(wabridge.time, 'sleep'), mock.patch.object(wabridge, 'token', return_value='t'), \
+             mock.patch.object(wabridge.threading, 'Thread', side_effect=lambda target, daemon: mock.Mock(start=target)):
+            go()
+        return pop.call_args_list
+
+    def test_a_start_stages_the_fixed_bridge_into_the_home_and_keeps_its_pairing(self):
+        self.home.mkdir(parents=True); (self.home / 'wa-auth').mkdir()
+        (self.home / 'wa-auth' / 'creds.json').write_text('paired here')
+        (self.home / 'bridge.mjs').write_text('// the copy from before the fix')
+        (self.pkg / 'wa-auth').mkdir(); (self.pkg / 'wa-auth' / 'creds.json').write_text('an older pairing')
+        calls = self.launch(lambda: wabridge.start(wait=True))
+        self.assertEqual(calls[0].kwargs['cwd'], str(self.home))
+        for n in ('bridge.mjs', 'poll.mjs', 'roster.mjs', 'policy.mjs', 'package.json'):
+            self.assertEqual((self.home / n).read_bytes(), (self.pkg / n).read_bytes(), n)
+        self.assertIn(b'unhandledRejection', (self.home / 'bridge.mjs').read_bytes())
+        self.assertFalse(list(self.home.glob('*.test.mjs')))
+        self.assertEqual((self.home / 'wa-auth' / 'creds.json').read_text(), 'paired here')
+
+    def test_a_pairing_made_in_the_package_folder_is_carried_over_once(self):
+        (self.pkg / 'wa-auth').mkdir(); (self.pkg / 'wa-auth' / 'creds.json').write_text('paired before the move')
+        wabridge.stage()
+        self.assertEqual((self.home / 'wa-auth' / 'creds.json').read_text(), 'paired before the move', 'nobody scans again')
+        import shutil; shutil.rmtree(self.home / 'wa-auth')     # logged out: the owner deletes it to pair afresh
+        wabridge.stage()
+        self.assertFalse((self.home / 'wa-auth').exists(), 'the old pairing is not brought back')
+
+    def test_the_supervisor_starts_a_dead_bridge_from_the_home(self):
+        s = MemoryStore(); wa = s.get_connector_by_type('whatsapp')
+        s.save_connector({'ConnectorId': wa['ConnectorId'], 'Active': 1}, 'owner')
+        c, err = s.get_connector(wa['ConnectorId']), 'the WhatsApp bridge is not running - Restart bridge starts it'
+        calls = self.launch(lambda: [wabridge.supervise(s, c, err, now=1000.0 + t) for t in (0, 3, 6)])
+        self.assertEqual(len(calls), 1); self.assertEqual(calls[0].kwargs['cwd'], str(self.home))
+        self.assertEqual((self.home / 'bridge.mjs').read_bytes(), (self.pkg / 'bridge.mjs').read_bytes())

@@ -344,3 +344,39 @@ class NotOursOnTheTableTests(unittest.TestCase):
     def test_telegram(self):
         s, chat = tg_armed()
         self._tap(s, tg_patch, 'telegram', chat)
+
+
+class TypedTurnChoicesTests(unittest.TestCase):
+    """F2: the choices drawn under a TYPED answer had no item behind them, so tapping Mark done fell through to the model as
+    words. They are the table's chips: a tap runs them on the table."""
+    TABLE = {'key': 'task:5', 'kind': 'task', 'tid': 5, 'ref': 'TQ-0005', 'title': 'Renew the domain'}
+    OWN = [{'verb': 'close', 'label': 'Mark done'}, {'verb': 'next', 'label': 'Next'}]
+
+    def test_mark_done_after_a_typed_turn_closes_the_table_task(self):
+        s, _ = armed()
+        got = []
+        with wa_patch(got), \
+             mock.patch('taskuary.general.dock_task', return_value=({'TaskId': 1}, False)), \
+             mock.patch.object(concierge, 'restore_current', return_value=self.TABLE), \
+             mock.patch.object(concierge, 'chips_for', return_value=self.OWN), \
+             mock.patch.object(concierge, 'say', return_value={'say': 'It renews on the 30th.', 'options': [], 'chips': self.OWN, 'decision': None}):
+            ra.respond(s, 'whatsapp', JID, 'when does it renew?', None)
+        self.assertIn('Mark done', got[-1][1])
+        prop = {'id': 'op4', 'status': 'proposed', 'verb': 'close', 'key': 'task:5', 'settles': True, 'auto': True, 'alts': []}
+        with wa_patch(got), \
+             mock.patch('taskuary.general.dock_task', return_value=({'TaskId': 1}, False)), \
+             mock.patch.object(concierge, 'restore_current', return_value=self.TABLE), \
+             mock.patch.object(concierge, 'say', side_effect=AssertionError('a pick never reaches the model')), \
+             mock.patch.object(concierge, 'propose_direct', return_value=prop) as pd, \
+             mock.patch.object(concierge, 'run_proposal', return_value={**prop, 'status': 'done'}) as run, \
+             mock.patch.object(concierge, 'receipt', return_value='TQ-0005 closed.'), \
+             mock.patch.object(concierge, 'surface', return_value=NEXT_CARD), \
+             mock.patch.object(funnel, 'next_item', return_value=self.TABLE):
+            ra.respond(s, 'whatsapp', JID, 'Mark done', None, poll=True)
+        self.assertEqual(pd.call_args.args[1:3], ('close', 'task:5'))
+        run.assert_called_once()
+
+    def test_chips_with_nothing_to_act_on_are_not_drawn(self):
+        text = ra.turn_text({'say': 'Done.', 'chips': [{'verb': 'close', 'label': 'Mark done'}, {'verb': 'next', 'label': 'Next'}]}, store=MemoryStore())
+        self.assertNotIn('Mark done', text)
+        self.assertIn('1 · Next', text)

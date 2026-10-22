@@ -38,6 +38,22 @@ class TelegramButtonsTests(unittest.TestCase):
         cleared = [p for m, p in self.calls if m == 'editMessageReplyMarkup']
         self.assertEqual([(p['message_id'], p['reply_markup']) for p in cleared], [(51, {'inline_keyboard': []})])
 
+    def test_a_reply_with_no_buttons_takes_the_old_ones_off_too(self):
+        """F2: a typed answer under a card left the card's buttons drawn and looking live above it."""
+        ra.send(self.s, 'telegram', TG_CHAT, 'One?\n\nReply with one of:\n1 · Close out\n2 · Next', self.c['ConnectorId'])
+        ra.send(self.s, 'telegram', TG_CHAT, 'It is about the budget.', self.c['ConnectorId'])
+        cleared = [p for m, p in self.calls if m == 'editMessageReplyMarkup']
+        self.assertEqual([(p['message_id'], p['reply_markup']) for p in cleared], [(51, {'inline_keyboard': []})])
+        ra.send(self.s, 'telegram', TG_CHAT, 'And again.', self.c['ConnectorId'])
+        self.assertEqual(len([m for m, _ in self.calls if m == 'editMessageReplyMarkup']), 1, 'taken off once')
+
+    def test_a_tap_on_an_older_list_brings_the_current_buttons_with_its_answer(self):
+        ra.send(self.s, 'telegram', TG_CHAT, 'One?\n\nReply with one of:\n1 · Close out\n2 · Next', self.c['ConnectorId'])
+        ra.stale_tap(self.s, 'telegram', TG_CHAT, self.c['ConnectorId'])
+        last = self.sent()[-1]
+        self.assertIn('older list', last['text'])
+        self.assertEqual([row[0]['text'] for row in last['reply_markup']['inline_keyboard']], ['Close out', 'Next'])
+
     def test_a_tap_is_the_pick_its_label_names(self):
         ra.send(self.s, 'telegram', TG_CHAT, 'Close out the docs PR?\n\nReply with one of:\n1 · Close out\n2 · Next', self.c['ConnectorId'])
         with mock.patch.object(ra, 'intercept', return_value=True) as heard:

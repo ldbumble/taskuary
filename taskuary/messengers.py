@@ -188,15 +188,17 @@ def tg_send(store, chat_id: str, body: str, connector_id=None, buttons: list = N
     labels = [str(b) for b in (buttons or []) if str(b).strip()][:12]      # whole: a tap is matched by its words
     markup = {'reply_markup': {'inline_keyboard': [[{'text': t, 'callback_data': f'p{i}'}] for i, t in enumerate(labels)]}} if labels else {}
     sent = tg(c['Secret'], 'sendMessage', chat_id=int(chat_id), text=body[:4000], **markup)
-    if labels:
-        key = f'{TG_BUTTONS}:{chat_id}'
-        try: before = json.loads(store.get_setting(key) or '{}') or {}
-        except ValueError: before = {}
-        if before.get('msg'):
-            try: tg(c['Secret'], 'editMessageReplyMarkup', chat_id=int(chat_id), message_id=int(before['msg']),
-                    reply_markup={'inline_keyboard': []})
-            except Exception as e: logger.debug(f'telegram: the older buttons stay drawn - {e}')
-        store.set_setting(key, json.dumps({'msg': (sent or {}).get('message_id'), 'labels': labels}), 'assistant')
+    # ...and ANY newer message takes the older buttons off, one with none of its own too: a typed answer under a card left the card's
+    # buttons drawn and looking live above it, while the list they named had been spent (F2)
+    key = f'{TG_BUTTONS}:{chat_id}'
+    try: before = json.loads(store.get_setting(key) or '{}') or {}
+    except ValueError: before = {}
+    if before.get('msg'):
+        try: tg(c['Secret'], 'editMessageReplyMarkup', chat_id=int(chat_id), message_id=int(before['msg']),
+                reply_markup={'inline_keyboard': []})
+        except Exception as e: logger.debug(f'telegram: the older buttons stay drawn - {e}')
+    if labels or before.get('msg'):
+        store.set_setting(key, json.dumps({'msg': (sent or {}).get('message_id'), 'labels': labels} if labels else {}), 'assistant')
     return {'channel': 'telegram', 'chat': chat_id}
 
 

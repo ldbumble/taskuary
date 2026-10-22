@@ -61,7 +61,8 @@ test("Stop and save puts the agent down and opens Close out at the press; the bl
   assert.match(page, /setErr\(""\); setWritingUpAt\(\{ id, n, sid \}\); setTerm\(null\); setSeekCloseOut\(true\);\n    try \{\n      const \{ data \} = await api\.post\(`\/api\/tasks\/\$\{id\}\/wrap`, \{ close: false, background: true \}\);/);
   assert.match(page, /setWritingUpAt\(null\); findTerm\(id\);/);                                  // a press that fails gives the session back
   assert.match(page, /openStage \|\| \(pressedHere \|\| writeup \? "reply" :/);                    // Close out held open: no jump when it lands
-  assert.match(page, /\{pane === "reply" && writeup && <WriteupBlock view=\{writeup\}/);
+  // ...where a reply will land; on a task nobody sent, the progress is a line under the Result instead (taskLayout.closeOut)
+  assert.match(page, /\{pane === "reply" && co\.writeupAt === "closeout" && <WriteupBlock view=\{writeup\}/);
   assert.match(page, /\{pane === "reply" && !writeup && \(\(pendingReview \|\|/);                 // ...and the draft in its place, same card
   assert.match(page, /if \(pressedHere\?\.sid && live\.sid === pressedHere\.sid\) return;/);       // the closing pty is not adopted back
   assert.match(page, /<Box ref=\{closeOutRef\} data-tq-closeout=""/);

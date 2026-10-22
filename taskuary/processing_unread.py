@@ -613,6 +613,9 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     card['actionable'] = bool(unread and not (passed and (card['put_down'] or done)) and not card['deferred'] and not card.get('settling')
                               and not funnel._not_yet(card))     # ...a task an agent is WORKING is walked like the rest (2026-10-21)
     card['arrived_at'] = arrived_at(store, card, task, view, allowed)
+    # the gutter's age is the LAST message, the place the first (funnel.py `last_at`)
+    sent = [str(m['SentAt']) for m in view.get('messages') or [] if m.get('SentAt') and (not allowed or m.get('MessageId') in allowed)]
+    if sent: card['last_at'] = max(sent, key=funnel_time)
     return card
 
 

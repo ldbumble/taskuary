@@ -58,7 +58,7 @@ import ContinueBox from "./ContinueBox.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory, withdrawSelection } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, ageAt, asPressed, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory, withdrawSelection } from "./funnelPile.js";
 import { FYI_PAGE, coveredByReload, fyiTail, heldSince, pileRows, sentChips } from "./funnelPile.js";
 import { railStatus } from "./railStatus.js";
 import { StatusLogo } from "./StatusMark.jsx";
@@ -682,7 +682,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                     {/* For later counts DOWN to when it comes back, in the same short form the age column uses */}
                     <span className="when" title={level === "later" && backAt(i) ? `back ${ago(backAt(i))}` : undefined}>
                       {String(i.kind || "").startsWith("goal") ? dueWord(i.due)      /* a goal's clock is its date (spec 2026-10-12) */
-                        : level === "later" ? bandUntil(backAt(i)) : band(i.kind === "meeting" ? i.when : arrivedAt(i))}</span>
+                        : level === "later" ? bandUntil(backAt(i)) : band(i.kind === "meeting" ? i.when : ageAt(i))}</span>
                     {/* the dot is the BAND's colour, the pill's own (the owner, 2026-10-06: one palette, everywhere) - where it
                         came from is the logo inside the row */}
                     <span className="rail"><i style={{ background: LEVEL_COLOR[level] || sourceColor(i) }} /></span>

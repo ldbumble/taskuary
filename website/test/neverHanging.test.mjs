@@ -23,7 +23,7 @@ test("with nothing on the table the row's floor is Next, and the chat says to pr
 test("the floor's Next waits while the next one is coming: All read, next shows no Next of its own between batches", () => {
   assert.match(view, /const hanging = [^\n]*!busy[^\n]*!nextComing[^\n]*rowEmpty/);
   // the press itself says the next one is coming, in the same render that folds the batch...
-  assert.match(view, /const done = async \(receipt\) => \{[\s\S]{0,600}?\.\.\.x, done: true[\s\S]{0,200}?setNextComing\(true\);/);
+  assert.match(view, /const done = async \(pressed\) => \{[\s\S]{0,600}?\.\.\.x, done: true[\s\S]{0,200}?setNextComing\(true\);/);
   // ...and the walk's own turn takes `busy` in the same tick it clears it, so there is no frame between the two
   assert.match(view, /deferredChat\.current\.delete\(timer\); setNextComing\(false\);\s*\n\s*if \(epoch === chatEpoch\.current && !resettingRef\.current\) fn\(\);/);
   // ...and a settle that fails lets go of it, its receipt offering Next

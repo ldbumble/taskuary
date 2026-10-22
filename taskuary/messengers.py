@@ -377,7 +377,9 @@ def _unheard(store, channel: str, chat: str, c, e, message_id=None):
         try: react(store, channel, chat, message_id, connector_id=c.get('ConnectorId'))
         except Exception as e3: logger.debug(f'{channel}: no thumb on the voice note - {e3}')
     why, place = str(e)[:200].strip().rstrip('.'), words.name('voice')
-    said = f"I could not hear that voice note - {why}." + ('' if place in why else f" Type it, or add a voice connector under {place}.")
+    # ...the place named ONCE, however the reason spells it: "add one under Connections > Voice" got "under Connections → AI — voice" again
+    told = place in why or place.split(' → ')[0] in why
+    said = f"I could not hear that voice note - {why}." + (' Type it instead.' if told else f" Type it, or add a voice connector under {place}.")
     try: live = json.loads(store.get_setting(f'{remote_assistant.OFFERED_KEY}:{channel}:{chat}') or '[]') or []
     except ValueError: live = []
     try: remote_assistant.send(store, channel, chat, said, c.get('ConnectorId'), **({'choices': live} if live else {}))

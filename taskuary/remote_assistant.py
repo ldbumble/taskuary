@@ -32,12 +32,22 @@ _locks, _locks_guard = {}, threading.Lock()
 _turns: dict = {}                            # chat -> the Event that cancels its turn in flight
 
 # the desk's button that brings the walk back is Walk it here (buttons.json walk_here) - "Take it back" named a button that is gone (verify, 2026-10-19)
+# ...and the phone HAS its choices now (the poll, the bot's buttons): "when you want the buttons again" said it had none (F21)
 OPENED = ('Walking you through it here. Reply in this chat and I keep going; '
-          f"press {buttons.label('walk_here')} on the desktop when you want the buttons again.")
+          f"press {buttons.label('walk_here')} on the desktop to take the walk back.")
 CLOSED = 'Walked back to the desktop - this walk is over here. Message me any time and I will pick it up again.'
 HAND_BACK = 'Hand back to the desktop'
 MORE_CHOICES, POLL_MAX = 'More choices', 12      # WhatsApp's poll and Telegram's buttons both stop at twelve
 HANDED_BACK = 'Handed back - the walk is on the desktop again. Message me any time and I will pick it up again.'
+ANY_TIME = ' Message me any time and I will pick it up again.'
+
+
+def farewell(store, channel: str, note: str) -> str:
+    """The hand-back's last line, true for this chat: "Message me any time" only where the chat listens any time - with the
+    walk handed back, a chat that listens only during a walk hears nothing more (F11). It names the desk's button that sends it."""
+    c = doorway(store, channel)
+    if not note.endswith(ANY_TIME) or (c and listens(store, c) == 'always'): return note
+    return note[:-len(ANY_TIME)] + f' To walk here again, press "Walk me through them in {LABELS.get(channel, channel)}" on the desktop.'
 
 
 def _config(connector) -> dict:
@@ -268,7 +278,9 @@ def start_handoff(store, channel: str, actor: str = 'owner') -> dict:
     # the tab locked behind a walk that never arrived anywhere
     with concierge.delivering(concierge.PHONE):
         out = concierge.resume(store, actor)                  # the item on the table first, when there still is one
-        text = carry_out(store, out, None, actor, lead=OPENED)
+        # the hello, then the card in a bubble of its own - its choices ride the card, not the greeting (F21)
+        from . import chatformat
+        text = OPENED + chatformat.BREAK + carry_out(store, out, None, actor)
     send(store, channel, chat, text, cid)
     store.set_setting(HANDOFF_KEY, json.dumps(live), actor)
     store.audit('task', task['TaskId'], 'assistant_handoff_start', actor, detail={'channel': channel, 'chat': chat})
@@ -288,7 +300,7 @@ def end_handoff(store, actor: str = 'owner', note: str = CLOSED) -> dict:
     store.audit('task', task['TaskId'], 'assistant_handoff_end', actor, detail={'channel': h['channel']})
     concierge.record(store, task['TaskId'], 'assistant',
                      f"Back at the desk - {LABELS[h['channel']]} has been told we are done there.")
-    try: send(store, h['channel'], h['chat'], note, h.get('connector_id'))
+    try: send(store, h['channel'], h['chat'], farewell(store, h['channel'], note), h.get('connector_id'))
     except Exception as e: logger.warning(f"could not close the {h['channel']} walk: {e}")
     return {'ended': True, **h}
 

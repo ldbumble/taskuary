@@ -52,7 +52,12 @@ SYSTEM = (
     'Answer the question actually asked, in the fewest words that fully answer it. Use what '
     "the thread and the operator's document give you; never invent facts, numbers, dates or "
     'commitments. If something needed to answer is genuinely missing, say plainly what you '
-    'need instead of guessing.\n')
+    'need instead of guessing.\n'
+    # a question one colleague put to another, the owner on Cc, came back as "I need confirmation on X before I mark them" - the
+    # sender's own ask in the owner's voice (2026-10-22). Whose question it is was never said, nor that a reply can be none.
+    'Look at who the question is put to. If it is asked of someone else on the thread - you are only copied, or it names '
+    'another person - it is theirs to answer: unless you have something of your own to add, write exactly NO REPLY. '
+    'Never hand their question back to them as your own request.\n')
 
 # A reply nobody reads to the end is a reply that failed. Two or three sentences, and no
 # restating the question back at someone who just asked it.
@@ -318,6 +323,17 @@ def _ask(llm, system, user, max_tokens, images=None):
         except TypeError: pass
     return llm(system, user, max_tokens=max_tokens)
 
+def _to_cc(store, m: dict) -> str:
+    """The message's To and Cc lines, the owner marked "you" - who a question was put to is the writer's to see (2026-10-22)."""
+    import json
+    from .ingest import own_addresses
+    try: r = json.loads(m.get('RecipientsJson') or '{}') or {}
+    except ValueError: return ''
+    me = own_addresses(store)
+    who = lambda xs: ', '.join('you' if str(x).lower() in me else str(x) for x in xs or [])
+    return ''.join(f"{k}: {who(r.get(f))}\n" for k, f in (('To', 'to'), ('Cc', 'cc')) if r.get(f))
+
+
 def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: str = None, seen: dict = None) -> str:
     """The reply this task needs, as text. Uses the owner's own brain (the AI connector, or
     whichever brain `triage_ai` names), the standing memory notes, and the thread itself.
@@ -375,7 +391,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     if seen is not None:
         from . import operations
         seen['saw'], seen['revision'] = store.last_inbound_on_task(task_id), operations.message_revision(store, task_id)
-    user = f"Subject: {last.get('Subject') or t.get('Title') or ''}\nFrom: {last.get('FromName')} <{last.get('FromEmail')}>\n\n{thread}"
+    user = f"Subject: {last.get('Subject') or t.get('Title') or ''}\nFrom: {last.get('FromName')} <{last.get('FromEmail')}>\n{_to_cc(store, last)}\n{thread}"
     # THE PICTURES THEY SENT, seen (the owner, 2026-10-15: "is it not seeing the full message? the image is there higher up the
     # chat"). Triage saw them on arrival; the writer, later, read the thread as text, where a picture is "(sent ad.jpg)" - and
     # drafted "send me the image you mean" to someone who had. The newest ones on the task ride with the call, as triage's do.

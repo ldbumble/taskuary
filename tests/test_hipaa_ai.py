@@ -149,8 +149,8 @@ class GatewayAddressTests(unittest.TestCase):
         self.assertEqual((out['ok'], out['why']), (False, llm.GATEWAY_SILENT))
         self.assertTrue(self.saved().endswith('/v1'), 'the address stays on the card for the next try')
 
-    def test_a_page_that_is_no_gateway_did_not_answer_either(self):
-        with _Gateway(self.allow) as g: self.assertEqual(llm.gateway_problem({'base_url': f'{g.url}/elsewhere'}, self.CODE), llm.GATEWAY_SILENT)
+    def test_a_page_that_is_no_gateway_is_the_wrong_address(self):
+        with _Gateway(self.allow) as g: self.assertEqual(llm.gateway_problem({'base_url': f'{g.url}/elsewhere'}, self.CODE), llm.GATEWAY_NOT_GATEWAY)
 
     def test_only_a_gateway_that_turned_the_code_away_blames_the_code(self):
         for status in (401, 403):
@@ -177,3 +177,68 @@ class GatewayAddressTests(unittest.TestCase):
             self.assertEqual((r.status_code, r.json()['detail']), (422, llm.GATEWAY_NOT_HTTPS))
             row = next(x for x in c.get('/api/connectors').json()['data'] if x['Type'] == 'hipaa_ai')
             self.assertIs(row['GatewayBuiltIn'], False)
+
+
+class _Site:
+    """Anything at an address that answers every GET the same way: status, content type, body and any extra headers."""
+    def __init__(self, allow, status, ctype, body, headers=()):
+        import http.server, threading
+        class H(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(status); self.send_header('Content-Type', ctype)
+                for k, v in headers: self.send_header(k, v)
+                self.end_headers(); self.wfile.write(body.encode())
+            def log_message(self, *a): pass
+        self.srv = http.server.ThreadingHTTPServer(('127.0.0.1', 0), H)
+        self.url = f'http://127.0.0.1:{allow(self.srv.server_address[1])}'
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+    def __enter__(self): return self
+    def __exit__(self, *a): self.srv.shutdown(); self.srv.server_close()
+
+
+class WrongAddressTests(unittest.TestCase):
+    """An admin site pasted as the gateway address answered with its own page or a sign-in redirect, and the card said the access
+    code didn't work - the code was fine, the address was not. Only the gateway itself, in its own JSON, can turn a code away."""
+    CODE = 'hai-code-1234567890'
+    HTML = '<!doctype html><html><body>Sign in</body></html>'
+
+    @pytest.fixture(autouse=True)
+    def _loopback(self, allow_test_port): self.allow = allow_test_port
+
+    def problem(self, *site):
+        with _Site(self.allow, *site) as s: return llm.gateway_problem({'base_url': s.url}, self.CODE)
+
+    def test_a_web_page_is_the_wrong_address(self):
+        self.assertEqual(self.problem(200, 'text/html', self.HTML), llm.GATEWAY_NOT_GATEWAY)
+
+    def test_a_sign_in_redirect_is_the_wrong_address(self):
+        self.assertEqual(self.problem(302, 'text/html', '', [('Location', 'https://admin.example/login?next=/v1/models')]), llm.GATEWAY_NOT_GATEWAY)
+
+    def test_a_sign_in_wall_that_is_not_the_gateway_does_not_blame_the_code(self):
+        for status in (401, 403): self.assertEqual(self.problem(status, 'text/html', self.HTML), llm.GATEWAY_NOT_GATEWAY)
+
+    def test_json_that_is_not_a_model_list_is_the_wrong_address(self):
+        self.assertEqual(self.problem(200, 'application/json', '{"ok": true}'), llm.GATEWAY_NOT_GATEWAY)
+        self.assertEqual(self.problem(404, 'application/json', '{"detail": "Not Found"}'), llm.GATEWAY_NOT_GATEWAY)
+
+    def test_the_gateway_turning_the_code_away_blames_the_code(self):
+        for status in (401, 403):
+            self.assertEqual(self.problem(status, 'application/json', '{"error": {"message": "Authentication Error"}}'), llm.GATEWAY_CODE)
+
+    def test_a_model_list_is_a_working_gateway(self):
+        self.assertEqual(self.problem(200, 'application/json', '{"data": [{"id": "hipaa-ai"}]}'), '')
+
+    def test_nothing_listening_says_it_could_not_reach_the_address(self):
+        self.assertEqual(llm.gateway_problem({'base_url': f'http://127.0.0.1:{self.allow(_closed_port())}'}, self.CODE), llm.GATEWAY_SILENT)
+        self.assertIn("Couldn't reach", llm.GATEWAY_SILENT)
+
+    def test_the_wrong_address_message_names_the_address_not_the_code(self):
+        self.assertIn('web page', llm.GATEWAY_NOT_GATEWAY); self.assertIn('admin site', llm.GATEWAY_NOT_GATEWAY)
+        self.assertNotIn("code didn't work", llm.GATEWAY_NOT_GATEWAY)
+
+    def test_the_card_says_it_through_connect(self):
+        from taskuary import firstrun
+        s = MemoryStore(); cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']
+        with _Site(self.allow, 302, 'text/html', '', [('Location', 'https://admin.example/login')]) as site:
+            out = firstrun.choose_key(s, 'hipaa_ai', self.CODE, cid=cid, config={'base_url': site.url})
+        self.assertEqual((out['ok'], out['why']), (False, llm.GATEWAY_NOT_GATEWAY))

@@ -51,7 +51,9 @@ OPENAI_COMPATIBLE = {
 # with or without its /v1; https, since the access code rides it - plain http only to this computer.
 GATEWAY_MISSING = 'Add the gateway address you were sent, then press Connect.'
 GATEWAY_NOT_HTTPS = 'The gateway address has to start with https:// - copy it again from the message your access code came in.'
-GATEWAY_SILENT = "The gateway address didn't answer - check it against the one you were sent, then press Connect."
+GATEWAY_SILENT = "Couldn't reach that address - check it and your connection, then press Connect."
+GATEWAY_NOT_GATEWAY = ('That address answered with a web page, not the AI gateway - check you pasted the gateway address you were sent, '
+                       'not the admin site.')
 GATEWAY_CODE = "The access code didn't work - copy all of it again and press Connect."
 GATEWAY_FAULT = 'The gateway answered with an error of its own - try again in a minute, or ask whoever sent your access code.'
 LOCAL_HOSTS = ('localhost', '127.0.0.1', '::1')
@@ -78,20 +80,26 @@ def gateway_base(cfg: dict) -> str:
 
 def gateway_problem(cfg: dict, key: str) -> str:
     """'' when the gateway answers this access code on its model list, else the one thing to fix, in the owner's words:
-    no address, an address that does not answer, or a code it turned away (only a 401/403 from a gateway that answered)."""
+    no address, an address that does not answer, an address that is not the gateway, or a code the gateway turned away.
+    An admin site pasted in its place answered with its page or a sign-in redirect, and a 401 from that blamed a good code: only
+    the gateway's own JSON turns a code away, so redirects are not followed and anything but JSON is the wrong address."""
     try: base = gateway_base(cfg)
     except ValueError as e: return str(e)
     if not base: return GATEWAY_MISSING
-    try: r = requests.get(f'{base}/models', headers={'Authorization': f'Bearer {key}'}, timeout=15)
+    try: r = requests.get(f'{base}/models', headers={'Authorization': f'Bearer {key}'}, timeout=15, allow_redirects=False)
     except requests.RequestException: return GATEWAY_SILENT
+    if r.status_code >= 500: return GATEWAY_FAULT
+    if (body := _json(r)) is None: return GATEWAY_NOT_GATEWAY
     if r.status_code in (401, 403): return GATEWAY_CODE
-    if r.status_code == 404 or (r.status_code == 200 and not _json_list(r)): return GATEWAY_SILENT
-    return '' if r.status_code == 200 else GATEWAY_FAULT
+    return '' if r.status_code == 200 and isinstance(body.get('data'), list) else GATEWAY_NOT_GATEWAY
 
 
-def _json_list(r) -> bool:
-    try: return isinstance(r.json().get('data'), list)
-    except (ValueError, AttributeError): return False
+def _json(r):
+    """The answer's JSON object, or None when it is a page, a redirect or anything else that is not."""
+    if 'json' not in (r.headers.get('Content-Type') or '').lower(): return None
+    try: o = r.json()
+    except ValueError: return None
+    return o if isinstance(o, dict) else None
 
 # `chatgpt` is the owner's ChatGPT plan through Sign in with ChatGPT (chatgptauth.py): no key, a signed-in account
 AI_TYPES = ('anthropic', 'openai', 'azure_openai', 'vertex_ai', 'openrouter', 'ollama', 'meta', 'chatgpt') + tuple(OPENAI_COMPATIBLE)

@@ -218,9 +218,10 @@ test("its agent step opens on a general task and beside a live session", () => {
   assert.match(tasks, /\{\(restartOpen \|\| \(!term\?\.alive && !liveRun && !isGeneral && !report && !detail\?\.transcript\)\)/);
 });
 
-test("on the canvas it is a card under the conversation in Continue's place, one at a time, closed when the agent starts", () => {
-  assert.match(tasks, /nextRunSlot && createPortal\(/);
-  assert.match(tasks, /&& !\(canvas && restartOpen\) && nextRunForm\}/, "not drawn twice");
+test("it opens in the agent box, brought into view - never a card under the conversation - one at a time, closed when the agent starts", () => {
+  assert.match(tasks, /&& <Box data-tq-run-form="">\{nextRunForm\}<\/Box>\}/);
+  assert.match(tasks, /querySelector\("\[data-tq-run-form\]"\)\?\.scrollIntoView/);
+  assert.doesNotMatch(tasks, /createPortal/, "drawn once, in the task's own work column");
   assert.match(tasks, /const setContinueAt = \(a\) => \{\s+if \(a\) setRestartOpen\(false\);/);
   assert.match(tasks, /window\.dispatchEvent\(new CustomEvent\("tq-next-run"\)\)/);
   const start = tasks.slice(tasks.indexOf("const startCodingAgent"), tasks.indexOf("const startGeneralAgent"));

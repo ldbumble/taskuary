@@ -65,7 +65,7 @@ test("the agent heading is one short line, live or not", () => {
   // 2026-09-17: keep the stopped header as short as the one a running agent
   // gets). The bar rides IN the heading, so both extra lines go.
   const head = tasks.slice(tasks.indexOf('<WorkflowHeading number="2"'), tasks.indexOf('<WorkflowHeading number="3"'));
-  assert.ok(head.includes("action={inRow ? null : stage === \"agent\" && agentBar ? agentBarRow :"),
+  assert.ok(head.includes("action={inRow ? null : pane === \"agent\" && agentBar ? agentBarRow :"),
     "the expanded card's bar is the heading's action, not a row of its own");
   assert.ok(!head.includes("description="), "and nothing is said under the title");
   assert.ok(!/None of these completes the task/.test(tasks), "the sentence it used to carry is gone");

@@ -34,7 +34,7 @@ test("the chat takes the room on the task page, the way a live session does", ()
 
 // THE AGENT'S CHAT OPENS PUSHED UP on the canvas: the folded Task strip scrolls above, and back down when another step opens
 test("on the canvas the agent step scrolls the Task strip away, and another step scrolls it back", () => {
-  assert.match(tasks, /const agentUp = !!canvas && stage === "agent" && workspaceMode === "general" && !liveSession;/);
+  assert.match(tasks, /const agentUp = !!canvas && pane === "agent" && workspaceMode === "general" && !liveSession;/);
   assert.match(tasks, /if \(!agentUp\) \{ if \(canvas && stepsBox\.current\) stepsBox\.current\.scrollTop = 0; return undefined; \}/);
   assert.match(tasks, /<Box ref=\{stepsBox\} sx=\{\{ px: liveSession/);
   assert.match(tasks, /const triageShown = !sessionView && !\(canvas && stage === "agent"\);/);
@@ -45,13 +45,13 @@ test("on the canvas the agent step scrolls the Task strip away, and another step
 // own focus (focusStage: a draft ready is Close out) decides.
 test("an ended general session's chat gives the page back to the stage that is focused", () => {
   const src = read("../src/TaskPage.jsx");
-  assert.match(src, /\{workspaceMode === "general" && \(liveSession \|\| stage === "agent"\) \? \(/);
+  assert.match(src, /\{workspaceMode === "general" && \(liveSession \|\| pane === "agent"\) \? \(/);
 });
 
 // THE CHAT'S STRIP RIDES IN THE STEP'S HEADING ON THE CANVAS: "Agent work" on one row and the agent's name, brain and Full screen on
 // a second took two lines off the answer (the owner, 2026-10-18: "make the agent space take up more space")
 test("on the canvas the chat's brain and Full screen sit in the agent step's heading, and come home in full screen", () => {
-  assert.match(tasks, /tools=\{inRow && workspaceMode === "general" && \(liveSession \|\| stage === "agent"\)\s*\? <Box ref=\{setChatTools\}/);
+  assert.match(tasks, /tools=\{inRow && workspaceMode === "general" && \(liveSession \|\| pane === "agent"\)\s*\? <Box ref=\{setChatTools\}/);
   assert.match(tasks, /toolsAt=\{canvas \? chatTools : null\}/);
   assert.match(workspace, /\{!dock && toolsAt && !full && createPortal\(tools, toolsAt\)\}/);
   assert.match(workspace, /\{!dock && !\(toolsAt && !full\) && <Box sx=\{\{ minHeight: 39,/);

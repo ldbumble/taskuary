@@ -81,16 +81,16 @@ test("the task page opens exactly one stage and lets you open the others by hand
   // ...Stop and save pressed here (or its write-up running) holds Close out open until the draft stands in the block's place
   assert.match(source, /const stage = sessionView \? "agent" : \(openStage \|\| \(pressedHere \|\| writeup \? "reply" : peek \? "task" : focusStage\(/);
   assert.match(source, /setOpenStage\(null\)/);
-  assert.match(source, /onToggle: stage === name \? null : \(\) => setOpenStage\(name\)/);   // the open one is not a control                                     // a new task recomputes its own focus
+  assert.match(source, /onToggle: pane === name \? null : \(\) => setOpenStage\(name\)/);   // the open one is not a control                                     // a new task recomputes its own focus
   for (const name of ["agent", "reply"]) {
     assert.ok(source.includes(`{...stageProps("${name}")}`), `stage ${name} must fold and open by hand`);
-    assert.ok(source.includes(`stage === "${name}" &&`), `stage ${name} body must be gated`);
+    assert.ok(source.includes(`pane === "${name}" &&`), `stage ${name} body must be gated`);
   }
-  // the Task card has no WorkflowHeading of its own since the page header became its heading
-  // (2026-09-16): folded, it renders its own strip, and that strip is what opens it again
-  assert.ok(source.includes(`stage !== "task" && (`), "the task card must render a folded strip");
-  assert.ok(source.includes(`{...pressable(() => setOpenStage("task"))}`), "stage task must open by hand, by click or key");
-  assert.ok(source.includes(`stage === "task" &&`), "stage task body must be gated");
+  // ...and the task itself is no stage any more: From is its own column, always open (the redesign, 2026-10-21) - the work column
+  // opens what the task is for where the focus names the task (taskLayout.workPane)
+  assert.ok(!source.includes(`stage !== "task" && (`), "no folded Task strip");
+  assert.match(source, /\{!sessionView && \(\s*<Box data-tq-from="" data-tq-task-section=""/);
+  assert.match(source, /const pane = workPane\(\{ stage, kind: t\?\.Kind, hasSender: !!replyMessage, codeRun \}\);/);
 });
 
 test("a general chat that has answered is agent state, not \"not started\"", () => {
@@ -102,11 +102,10 @@ test("a general chat that has answered is agent state, not \"not started\"", () 
 
 test("closing the task never hides behind a fold, and a finished chat can be closed out", () => {
   const source = taskSource();
-  // the completion control rides on the folded strip too, so it is there whether the card is open
-  // or folded - the strip is the Task card's whole presence when the agent or reply has the focus
-  const folded = source.slice(source.indexOf('stage !== "task" && ('), source.indexOf('{stage === "task" && <>'));
-  assert.ok(folded.includes('labelOfRow("done")}</Button>'), "the folded Task strip must carry the done control");
-  assert.ok(folded.includes("onClick={askFinish}"), "and it must run the same completion road (askFinish -> finish(\"done\"))");
+  // the completion control is the Tasks tab's bar at the view's foot (and the row on the canvas) - never inside a column that scrolls
+  const bar = source.slice(source.indexOf('<Box data-tq-task-bar=""'), source.indexOf('labelOfRow("nat")}</Button>'));
+  assert.ok(bar.includes('labelOfRow("done")}</Button>'), "the bar carries the done control");
+  assert.ok(bar.includes("onClick={askFinish}"), "and it must run the same completion road (askFinish -> finish(\"done\"))");
   assert.match(source, /const WorkflowHeading = \(\{ number, title, description, chip, tone, folded, onToggle, action, tools \}\)/);
   // ...and a general conversation is wrappable once its provider session is gone (server.py/wrapup.py, 2026-09-07)
   assert.match(source, /const canWrap = !!term \|\| !!detail\?\.transcript \|\| hasGeneralHistory/);

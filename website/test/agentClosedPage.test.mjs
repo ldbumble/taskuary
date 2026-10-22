@@ -44,6 +44,6 @@ test("a closed task says who closed it and why, never the advice for an open one
   assert.match(src, /const rowState = pageState\(listRow, detail\)/);
   assert.match(src, /closedLine\(t, detail\?\.closedWhy\) \|\| "Nobody sent this one, so there is nobody to answer\. Work it/);
   // ...said at the top of Agent work, the step it opens on - in its body, as the heading carries no sentence (taskControls)
-  const agent = src.slice(src.indexOf('{stage === "agent" && <>'), src.indexOf("<AgentRecord {...recordProps} story={storyAt"));
+  const agent = src.slice(src.indexOf('{pane === "agent" && <>'), src.indexOf("<AgentRecord {...recordProps} story={storyAt"));
   assert.match(agent, /!term\?\.alive && t\?\.Status === "done" && detail\?\.closedWhy && \(\s*<Typography data-tq-closed-why/);
 });

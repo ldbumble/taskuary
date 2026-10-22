@@ -79,6 +79,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { adviceKeyFor, suggestion } from "./advice.js";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
+import { fromLine as fromLineOf, layoutOf, workPane } from "./taskLayout.js";
 import { ASK_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails, wentOut,
   AGENT, agentPhase, closedLine, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
@@ -246,6 +247,15 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
     </React.Fragment>
   ));
 }
+// THE TWO COLUMNS (taskLayout.js): stacked in a narrow view, side by side once the view is wide enough for both - measured on the
+// view itself (the steps box is an inline-size container), so the canvas beside the rail and the Tasks tab's pane each decide
+// by their own width, not the window's
+const COLUMNS = { display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 1.5, alignItems: "start",
+  "@container (min-width: 720px)": { gridTemplateColumns: "minmax(0, 5fr) minmax(0, 7fr)" } };
+// a phone's From: three lines, faded at the foot, until a tap opens it
+const PHONE_MQ = "(max-width: 599.95px)";
+const PHONE_FROM = (open) => (open ? {} : { [`@media ${PHONE_MQ}`]: { maxHeight: 132, overflow: "hidden", cursor: "pointer",
+  maskImage: "linear-gradient(#000 70%, transparent)", WebkitMaskImage: "linear-gradient(#000 70%, transparent)" } });
 // the repo is a filter like the others, but it opens a picker rather than a menu of values
 const chipBtn = { fontSize: 11.5, fontWeight: 600, height: 26, minHeight: 26, py: 0, px: 1.25,
   borderRadius: 13, bgcolor: "#f4f1ec", color: INK, borderColor: BORDER,
@@ -285,8 +295,8 @@ const rowChecklist = (t) => {
 // the ask are separate sections"): the label column sets each part apart without drawing a rule; at phone width it sits above
 function Part({ label, sub, subTitle, children, ...rest }) {
   return (
-    <Box {...rest} sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", sm: "112px minmax(0, 1fr)" }, columnGap: 2, rowGap: 0.4, minWidth: 0 }}>
-      <Box sx={{ pt: { sm: 0.2 }, minWidth: 0 }}>
+    <Box {...rest} sx={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", columnGap: 2, rowGap: 0.4, minWidth: 0 }}>
+      <Box sx={{ minWidth: 0, display: "flex", alignItems: "baseline", gap: 1 }}>
         <Typography sx={{ color: INK, fontSize: 13, fontWeight: 600, lineHeight: 1.4 }}>{label}</Typography>
         {sub && <Typography variant="caption" title={subTitle} sx={{ color: FAINT, display: "block", lineHeight: 1.35 }}>{sub}</Typography>}
       </Box>
@@ -639,6 +649,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // Came from: every message drawn instead of each conversation's ends, and the one message opened in full under its row
   const [showAll, setShowAll] = useState(false);
   const [openMsg, setOpenMsg] = useState(null);
+  // ON A PHONE From shows three lines and opens on a tap (owner-approved 2026-10-21); the tap only opens it - nothing under it is pressed
+  const [fromOpen, setFromOpen] = useState(false);
+  useEffect(() => { setFromOpen(false); }, [selected]);
+  const phoneFromTap = (e) => {
+    if (fromOpen || !window.matchMedia?.(PHONE_MQ).matches) return;
+    e.preventDefault(); e.stopPropagation(); setFromOpen(true);
+  };
   // Close out's "the whole conversation is in Task" opens step 1 and brings Came from into view - once it has drawn
   const cameFromRef = useRef(null);
   const [seekCameFrom, setSeekCameFrom] = useState(false);
@@ -1044,10 +1061,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       settle();
     });
   };
-  // what the folded strip says on its left: the header already has the id, title and state, so
-  // this carries the two things it cannot - how far the list got, and what the task is
-  const foldedFacts = [checklist.length ? progressLine(checklist) : "", kindLabel(t?.Kind || "task"),
-    t?.Assignee ? assigneeLabel(t.Assignee) : "", repoOf(t) || ""].filter(Boolean).join(" · ");
   // ...and a run that FAILED was started, whether or not its first turn got as far as the conversation: with no AI to run on it
   // never did, and the row offered Send to agent as if nothing had been tried (owner-approved, 2026-10-21: Try again)
   const failedRun = !term?.alive && (detail?.runEnded === "failed" || detail?.agentStory?.kind === "failed");
@@ -1107,17 +1120,22 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     proposal: proposals.length > 0, agentSub: term ? subState(term) : null, news: !!news,
     emails: emailsWaiting, record: hasRecord, out: wentOut(detail?.reviews),
   })));
+  // ...which of the work column's two halves is open: the stage, or - where the stage is the task itself, now always open on the
+  // left - what the task is for (taskLayout.workPane). Presentation only: every press still reads `stage`.
+  const pane = workPane({ stage, kind: t?.Kind, hasSender: !!replyMessage, codeRun });
+  // the one line From folds to while an agent works (sessionView)
+  const fromLine = fromLineOf({ sender: sourceMessage, count: sourceCount, workflow: fromWorkflow, made: t ? `${detail.ref} · ${made}` : "" });
   // the note a close was written with (server task.complete: "Closed out: ...") - Close out shows it under the close
   const closedNote = String([...(detail?.comments || [])].reverse().find((c) => /^Closed out: /.test(String(c.Body || "")))?.Body || "").replace(/^Closed out: /, "");
   // the news line is said once, at the top of the task stage; open, the agent step is just its record
-  const storyAt = storyPlace(news ? null : story, { open: stage === "agent" && !sessionView, hasRecord });
+  const storyAt = storyPlace(news ? null : story, { open: pane === "agent" && !sessionView, hasRecord });
   // A START THAT STOPPED ON "WHICH REPOSITORY?" (funnel.HELD_REPO): the chip says so and the pick resumes the start, whichever
   // chip you press (the owner, 2026-10-12: "if i don't fill it out it should warn me at least?")
   const heldRepo = String(t?.Tags || "").split(/[\s,]+/).includes("held:repo");
   const pickRepo = () => { setRepoPick(true); if (heldRepo) setResumeAfterRepo({ dispatch: true }); };
   // only a folded heading is a control: exactly one stage is open, so clicking the open one has
   // nothing to do and must not offer a chevron that does nothing.
-  const stageProps = (name) => ({ folded: stage !== name, onToggle: stage === name ? null : () => setOpenStage(name) });
+  const stageProps = (name) => ({ folded: pane !== name, onToggle: pane === name ? null : () => setOpenStage(name) });
   const startCodingAgent = async () => {
     if (!selected || startingAgent) return;
     const id = selected;
@@ -1279,7 +1297,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ON THE CANVAS THE CHAT'S OWN STRIP RIDES IN THIS STEP'S HEADING: a row for "Agent work" and a second for the agent's name, its
   // brain and Full screen took two lines off the answer (the owner, 2026-10-18: "make the agent space take up more space")
   const [chatTools, setChatTools] = useState(null);
-  const agentUp = !!canvas && stage === "agent" && workspaceMode === "general" && !liveSession;
+  const agentUp = !!canvas && pane === "agent" && workspaceMode === "general" && !liveSession;
   useEffect(() => {
     // ...and back down when another step opens: Task opened from there kept the scroll, its own heading out of sight
     if (!agentUp) { if (canvas && stepsBox.current) stepsBox.current.scrollTop = 0; return undefined; }
@@ -1536,13 +1554,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     wrapped: Expand and the X took a row of their own under a cut title (the 2026-10-07 design pass) */}
                 <Box sx={{ display: "flex", gap: headPillsOn ? { xs: 0.6, sm: 0.9 } : 0.9, rowGap: 0.5, alignItems: "center",
                   flexWrap: headControls ? { xs: "wrap", sm: "nowrap" } : "nowrap" }}>
-                  {/* THE (1) IS THE TASK STEP'S NUMBER, so it sits on whichever line is that step's heading: up here while the
-                      step is open (or a session hides it), on the folded Task strip once another step is open - it stood up
-                      here beside a folded "Task" row that had none, and the count read 1 · Task · 2 · 3 */}
-                  {/* ...and with the step open its heading is "1 Task" inside the card (section 1's redesign, 2026-10-16) - up here only
-                      while a session hides the card */}
-                  {sessionView && <Box sx={{ width: 18, height: 18, borderRadius: "50%", bgcolor: "#55697a", color: "#fff",
-                    display: "grid", placeItems: "center", flexShrink: 0, fontSize: 9.5, fontWeight: 600 }}>1</Box>}
                   <Typography sx={{ color: "#41525f", fontVariantNumeric: "tabular-nums", flexShrink: 0,
                     letterSpacing: ".015em", fontWeight: 600, fontSize: 11.5 }}>{detail.ref}</Typography>
                   {/* ...and the TITLE GIVES WAY FIRST to the pills beside it (it shrinks a hundred times faster), down to a few words; past
@@ -1609,7 +1620,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               {/* a flex column so the terminal takes exactly what is left between the strip above and the
                   waiting room below - a fixed-height formula clipped its bottom line on shorter screens */}
               <Box ref={stepsBox} sx={{ px: liveSession ? 1 : 2, py: liveSession ? 0.65 : 1.5,
-                overflowY: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+                overflowY: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", containerType: "inline-size" }}>
+                {/* FROM, FOLDED TO ONE LINE while an agent works (owner-approved 2026-10-21): the work has the whole width and the
+                    terminal is never covered or squeezed. TODO(item 6, pending the owner): the line opens a panel that pushes the agent
+                    down - until that is decided it is a static line, never a control. */}
+                {sessionView && <Typography data-tq-from-line="" noWrap title={fromLine}
+                  sx={{ flexShrink: 0, fontSize: 12, color: DIM, px: 0.5, pb: 0.6, mb: 0.55, borderBottom: `1px solid ${BORDER}` }}>
+                  <Box component="span" sx={{ ...label, mr: 0.75 }}>From</Box>{fromLine}</Typography>}
                 {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
                     its lap - you type into it like any other terminal. Everything below is
                     reference material about the same task, folded away. */}
@@ -1649,34 +1666,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} /></Box>}
                   </Box>
                 )}
+                {/* TWO COLUMNS, ALWAYS OPEN (the task page redesign, owner-approved 2026-10-21): what it came FROM on the left, the WORK
+                    or the reply on the right - they replace the Task / Agent work / Close out accordion. A narrow view stacks them. While
+                    an agent works (sessionView) the work takes the whole width and From folds to the one line above it. */}
+                <Box data-tq-columns="" data-tq-layout={layoutOf({ sessionView })} sx={sessionView ? { display: "contents" } : COLUMNS}>
                 {!sessionView && (
-                  <Box sx={{ ...card, ...step, borderTop: 0, mb: 0, px: 1.5, py: stage === "task" ? 1.5 : 1.1, flexShrink: 0 }}>
-                    {/* FOLDED - the left half carries what the header cannot: how far the checklist got, and what the task is.
-                        The whole strip reopens the task. */}
-                    {stage !== "task" && (
-                      <Box {...pressable(() => setOpenStage("task"))} aria-expanded={false}
-                        sx={{ ...FOCUS_RING, display: "flex", alignItems: "center", gap: 1, minWidth: 0, cursor: "pointer", flexWrap: { xs: "wrap", sm: "nowrap" },
-                          opacity: 0.72, "&:hover": { opacity: 1 } }}>
-                        {/* the SAME heading as Agent work and Close out under it - circle, title, then what it holds - where it
-                            was a small-caps "Task" label with no number, beside a (1) still up in the header */}
-                        <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: PALETTE.slate, color: "#fff",
-                          display: "grid", placeItems: "center", flexShrink: 0, fontSize: 11.5, fontWeight: 600 }}>1</Box>
-                        <Typography sx={{ color: INK, fontSize: 14, fontWeight: 600, lineHeight: 1.3, flexShrink: 0 }}>Task</Typography>
-                        <Typography noWrap sx={{ color: DIM, fontSize: 12.5, flex: 1, minWidth: 0 }}>{foldedFacts}</Typography>
-                        {/* no buttons on the strip: the Tasks tab's own bar under the view carries them, as the row does on the canvas */}
-                        <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, flexShrink: 0, transform: "rotate(-90deg)" }} />
-                      </Box>
-                    )}
-                    {stage === "task" && <Box data-tq-task-section="" sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1.75 }}>
+                  <Box data-tq-from="" data-tq-task-section="" data-tq-from-open={fromOpen ? "" : undefined} onClickCapture={phoneFromTap} sx={{ ...card, minWidth: 0, px: 1.5, py: 1.25, display: "flex", flexDirection: "column", gap: 1.75,
+                    ...PHONE_FROM(fromOpen) }}>
                     {/* SECTION 1, IN THE ORDER THE OWNER APPROVED (2026-10-16): the ask, what there is to do, where it came from - and no
                         buttons. "The buttons stay on bottom by the prompt box like always. No buttons there." On the canvas that is the row
                         over the chat line; on the Tasks tab, the view's own bar under the sections. */}
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: PALETTE.slate, color: "#fff",
-                        display: "grid", placeItems: "center", flexShrink: 0, fontSize: 11.5, fontWeight: 600 }}>1</Box>
-                      <Typography sx={{ color: INK, fontSize: 14, fontWeight: 600, lineHeight: 1.3 }}>Task</Typography>
-                    </Box>
-                    <Box sx={{ pl: { xs: 0, sm: 4.25 }, minWidth: 0, display: "flex", flexDirection: "column", gap: 2.75 }}>
+                    <Typography sx={{ ...label }}>From</Typography>
+                    <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
                       {/* OPEN AGAIN, AND WHY (funnel.news_since_agent): the message that reopened it, said first - the agent's last
                           session is the record under Agent work, not the news (the owner, 2026-10-12). Where the Advisor's NEXT
                           strip stands under the canvas it says what to do, so this one goes (assistantView.css .advising) */}
@@ -1815,9 +1816,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         ) : <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.25 }}>{detail.ref} · {made}</Typography>}
                       </Part>
                     </Box>
-                    </Box>}
                   </Box>
                 )}
+                {/* THE WORK COLUMN: the agent and the reply - the agent's own pane, full width while it works */}
+                <Box data-tq-work="" sx={sessionView ? { display: "contents" } : { minWidth: 0, display: "flex", flexDirection: "column" }}>
                 {/* ONE SHORT LINE, LIVE OR NOT. A running session has always been a single strip -
                     heading, chip, controls - while the stopped card answered with a heading, a
                     sentence under it, and a row of buttons under that: three lines for the same
@@ -1829,7 +1831,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   <QueuedStart taskId={t.TaskId} queued={listRow.Queued} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
                 </Box>}
                 {!codeRun && <Box ref={agentHead} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
-                  px: liveSession ? 1 : 1.5, py: liveSession ? 0.55 : stage === "agent" ? (agentBar ? 0.8 : 1.5) : 1.1,
+                  px: liveSession ? 1 : 1.5, py: liveSession ? 0.55 : pane === "agent" ? (agentBar ? 0.8 : 1.5) : 1.1,
                   flexShrink: 0,
                   display: liveSession ? "flex" : "block", alignItems: "center",
                   gap: liveSession ? 1 : 0, flexWrap: "wrap" }}>
@@ -1847,13 +1849,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         : `${agentName(t)} is working`}
                     chip={story && STORY_CHIP[story.kind] ? <StoryChip kind={story.kind} text={STORY_CHIP[story.kind]} />
                       : agentState ? <LifecycleChip kind="agent" phase={agentState} compact /> : null} tone={PALETTE.sage} {...stageProps("agent")}
-                    tools={inRow && workspaceMode === "general" && (liveSession || stage === "agent")
+                    tools={inRow && workspaceMode === "general" && (liveSession || pane === "agent")
                       ? <Box ref={setChatTools} sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }} /> : null}
                     /* folded, this heading carried NOTHING - it passed no action at all, so the one
                        card that can actually be picked back up was the one row you could not act on.
                        It gets the move that matches its state, the way the Task strip does. */
-                    action={inRow ? null : stage === "agent" && agentBar ? agentBarRow :
-                      stage !== "agent" && !term?.alive && !["done", "dropped"].includes(t.Status)
+                    action={inRow ? null : pane === "agent" && agentBar ? agentBarRow :
+                      pane !== "agent" && !term?.alive && !["done", "dropped"].includes(t.Status)
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
                           {/* a regular agent's conversation is continued too - "Start an agent" read as starting over (T15) */}
                           {detail?.resumable || (isGeneral && generalStarted) ? (
@@ -1877,7 +1879,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {(storyAt === "line" || storyAt === "story") && <AgentStory story={story} compact={storyAt === "line"} />}
                   {/* ...folded over a record, its sentence and what happened - the draft it wrote opens below it (2026-09-22) */}
                   {storyAt === "summary" && <AgentRecord {...recordProps} story={story} folded />}
-                  {stage === "agent" && <>
+                  {pane === "agent" && <>
                   {/* WHO CLOSED IT AND WHY, one plain line over its work (the owner, 2026-10-21: "I have no idea what the agent did
                       and why it closed"): the agent's own done sentence, else its report's first line (server taskstate.closed_why) */}
                   {!term?.alive && t?.Status === "done" && detail?.closedWhy && (
@@ -2003,7 +2005,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {/* ...while its session is live, or when you open Agent work yourself: drawn whenever the task had a chat, it
                     stayed on screen after End session with Close out folded under it, where a coding session's terminal goes
                     (the owner, 2026-10-13: "it should just move to the close out section when you close out agent run") */}
-                {workspaceMode === "general" && (liveSession || stage === "agent") ? (
+                {workspaceMode === "general" && (liveSession || pane === "agent") ? (
                   /* the chat is this task's session: it gets the room a terminal gets, not the
                      height of its own content squeezed between the cards above and below it. On the canvas that room is the
                      VIEW'S: the chat body is a size container (assistantView.css .tq-chat-body) and the view is 100cqh + 14px tall,
@@ -2075,7 +2077,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   </>
                 ) : null}
 
-                {!sessionView && <Box ref={closeOutRef} data-tq-closeout="" sx={{ ...card, ...step, mt: 0, p: 1.5, py: stage === "reply" ? 1.5 : 1.1, flexShrink: 0 }}>
+                {!sessionView && <Box ref={closeOutRef} data-tq-closeout="" sx={{ ...card, ...step, mt: 0, p: 1.5, py: pane === "reply" ? 1.5 : 1.1, flexShrink: 0 }}>
                   {/* CLOSE OUT, not Reply (the owner, 2026-09-27): what finishes a task is not always a reply - a pull
                       request merges, an issue closes. The label only: the stage's key is still "reply" everywhere. */}
                   <WorkflowHeading number="3" title="Close out"
@@ -2095,7 +2097,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     /* oxblood is the one colour that means "this is on you" - a draft or an email waiting for your yes. Every card
                        wore it on this step, whatever it held (the 2026-10-07 design pass) */
                     tone={pendingReview || emailsWaiting ? PALETTE.oxblood : PALETTE.oat} {...stageProps("reply")}
-                    action={!inRow && stage !== "reply" && replyMessage
+                    action={!inRow && pane !== "reply" && replyMessage
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
                           <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
                             sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
@@ -2110,16 +2112,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       : null} />
                   {/* WHAT CLOSED IT, where it was closed (the owner, 2026-10-19: "i hit mark done on close out but agent work tab opened up
                       again - why is it not just staying in close out showing what closed out"): the close, when, and the note it was closed with */}
-                  {stage === "reply" && t.Status === "done" && <Box data-tq-closed="" sx={{ mt: 1 }}>
+                  {pane === "reply" && t.Status === "done" && <Box data-tq-closed="" sx={{ mt: 1 }}>
                     <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>
                       ✓ {btn("close")}{t.ClosedAt ? ` ${ago(t.ClosedAt)}` : ""}</Typography>
                     {closedNote && <Typography variant="body2" sx={{ color: DIM, mt: 0.25, whiteSpace: "pre-wrap" }}>{closedNote}</Typography>}
                   </Box>}
                   {/* STOP AND SAVE'S WRITE-UP, where its draft will stand (writeupState.js): the job's own stage until the draft
                       replaces this block in place - or, if it stopped, that it did, with Try again and the reply button */}
-                  {stage === "reply" && writeup && <WriteupBlock view={writeup} hasReply={!!replyMessage} onRetry={canWrap || pressedHere ? wrapUp : null}
+                  {pane === "reply" && writeup && <WriteupBlock view={writeup} hasReply={!!replyMessage} onRetry={canWrap || pressedHere ? wrapUp : null}
                     onDraft={() => openReply(true)} draftLabel={replyPrimary} />}
-                  {stage === "reply" && !writeup && ((pendingReview || proposals.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
+                  {pane === "reply" && !writeup && ((pendingReview || proposals.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
                     <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
                       {/* THE CONVERSATION OVER THE DRAFT (the owner, 2026-10-15: "add it to close out too"), CONDENSED: the latest lines of the
                           conversation being answered, newest first - the draft answers the top one - and the rest a click away in Task. The
@@ -2358,7 +2360,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     ))}
                   </Fold>
                 )}
-
+                </Box>
+                </Box>
               </Box>
               {/* THE TASKS TAB'S BAR, AT THE FOOT (the owner, 2026-10-16: "the buttons stay on bottom by the prompt box like always. No
                   buttons there."). The canvas draws these as its row over the chat line (rowVerbs, ActionRow); the Tasks tab has no
@@ -2612,10 +2615,8 @@ const WorkflowHeading = ({ number, title, description, chip, tone, folded, onTog
     sx={{ ...FOCUS_RING, display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" },
     cursor: onToggle ? "pointer" : "default", opacity: folded ? 0.72 : 1,
     "&:hover": onToggle ? { opacity: 1 } : undefined }}>
-    <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: tone, color: "#fff",
-      display: "grid", placeItems: "center", flexShrink: 0, fontSize: 11.5, fontWeight: 600 }}>
-      {number}
-    </Box>
+    {/* no step number any more: From is a column of its own, not step 1 (the redesign, 2026-10-21) - the tone says whose move it is */}
+    <Box data-tq-step={number} sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: tone, flexShrink: 0 }} />
     <Box sx={{ minWidth: 0, flex: 1 }}>
       <Typography sx={{ color: INK, fontSize: 14, fontWeight: 600, lineHeight: 1.3 }}>{title}</Typography>
       {description && !folded && <Typography sx={{ color: FAINT, fontSize: 12, display: "block", lineHeight: 1.4 }}>{description}</Typography>}

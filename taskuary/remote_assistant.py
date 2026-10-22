@@ -987,6 +987,9 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
         # ...the tasks walk is the PILL's walk - the summary, then the card ON THE TABLE (concierge.resume): walking on from here
         # skipped the table, which the walk had already read, and stacked "Done - Start a script" over it (F9)
         if script and 'tasks' in script and done.get('status') == 'done': return walk(store, actor)
+        # ...and set-up is its question alone: "Doing it now. Done - Start a script by its name: ... Starting: set up a report." over it
+        # read the tool's own description back as a receipt (the 2026-10-22 re-walk)
+        if script and done.get('status') == 'done': return '\n\n'.join(x for x in (lead.strip(), script_words(store, script)) if x)
         if script: said.append(script_words(store, script))
     elif verb in ('reply', 'redraft') and (on or {}).get('mid'):
         rid = _draft(store, on, verb, decision.get('text') or '')

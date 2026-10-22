@@ -2477,6 +2477,10 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # verb road skips (2026-10-08; the owner's 2026-10-02 rule: an answer to an asking agent goes directly to it)
     if kind == 'agent.answer' and it.get('kind') == 'agent' and it.get('asking') and it.get('tid') and int(target or 0) == int(it['tid']):
         instant = True
+    # ...and a SCRIPT started by name: a walk or a report's set-up sends nothing and changes nothing, and the phone keeps its yes/no for
+    # what goes out (2026-10-20). "walk me through my tasks" typed asked "Start a script by its name: ...?" and its yes walked nowhere
+    # (the 2026-10-22 re-walk); it is the opener's own Walk me through now, at the card on the table (remote_assistant.carry_out)
+    if kind == 'script.start': instant = True
     tail = 'Doing it now.' if instant else WAITS
     prop = _propose_raw(store, tid, kind, int(target or 0), params, label, named or _where(it) or label, tail, actor, item)
     if instant: prop = {**prop, 'auto': True}

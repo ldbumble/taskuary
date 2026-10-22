@@ -67,7 +67,7 @@ class EverydayAsks(unittest.TestCase):
 
     def test_clear_all_the_fyi_clears_them_and_says_how_many(self):
         r = next(r for r in self.rows if r['q'].text == 'Clear all the FYI, please.')
-        self.assertIn('cleared', r['ideal']['got']); self.assertRegex(r['ideal']['say'], r'^Marked \d+ items? read')
+        self.assertIn('cleared', r['ideal']['got']); self.assertRegex(r['ideal']['say'], r'^Marked \d+ (items?|FYI|reports?) read')
 
 
 if __name__ == '__main__': unittest.main()

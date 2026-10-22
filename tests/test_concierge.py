@@ -734,7 +734,7 @@ class SweepTests(unittest.TestCase):
         s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
         self.assertEqual(len(funnel.build(s)['items']), 4)
         out = cleared_by(s, "all the reports for paula vance you can remove. I don't need them", {'sender': 'Paula Vance'})
-        p = out['proposal']; self.assertEqual((p['kind'], p['label']), ('pipe.clear', 'Clear 3 from the pipe'))
+        p = out['proposal']; self.assertEqual((p['kind'], p['label']), ('pipe.clear', 'Mark 3 items read'))
         self.assertIn('Northwind Financial Report', p['summary'], 'the card names which ones before the yes')
         # ...and the line over the card says only what the card does not (the owner, 2026-10-12: "there should not be text and a card")
         self.assertNotIn('Northwind Financial Report', p['say_card']); self.assertNotIn(p['label'], p['say_card'])
@@ -743,7 +743,7 @@ class SweepTests(unittest.TestCase):
         o = run(s, p).json()['outcome']
         self.assertEqual(o['cleared'], 3)
         line = last_receipt(s)
-        self.assertIn('Cleared 3 - ', line); self.assertIn('Read, not deleted', line)
+        self.assertIn('Marked 3 items read - ', line); self.assertIn('Read, not deleted', line)
         self.assertEqual((funnel.mutes(s), s.list_memories(active_only=True)), ([], []))   # clearing is all it does (R8)
         self.assertEqual([i['who'] for i in funnel.build(s)['items']], ['Omar Keller'])                # Omar stays
         again = cleared_by(s, 'same for all resident refunds', {'contains': 'resident refund'})
@@ -770,7 +770,7 @@ class SweepPronounTests(unittest.TestCase):
         self.assertEqual(first['proposal']['kind'], 'pipe.clear'); self.assertEqual(funnel.mutes(s), [])      # no rule on the words
         self.assertEqual(run(s, first['proposal']).json()['outcome']['cleared'], 3)
         line = last_receipt(s)
-        self.assertIn('Cleared 3 - ', line)
+        self.assertIn('Marked 3 items read - ', line)
         self.assertEqual([i['who'] for i in funnel.build(s)['items']], ['Omar Keller'])
 
 
@@ -1126,6 +1126,35 @@ class NonCoderWordsTests(unittest.TestCase):
             self.assertNotIn('coding agent', concierge.tools_block(s).split('NEVER use')[0].replace('Never mention or offer a coding agent', ''))
         with mock.patch.object(agents, 'coding_ready', return_value=True):
             self.assertEqual(concierge.handoff_verb(s, 'coding_agent'), 'coding_agent')
+
+
+class ClearTheFyiTests(unittest.TestCase):
+    """F23: "clear all the FYI" right after the FYI batch was shown - the batch is read because it was shown, and the count must
+    still hold it (concierge._pipe); the words were the selector's own ("kind: fyi") and "From Unknown Sender."."""
+    def setUp(self):
+        self.s = store()
+        for n in range(4):
+            self.s.add_message({'ExternalId': f'd{n}', 'ConversationId': f'd{n}', 'Channel': 'email', 'Subject': f'Weekly digest {n}',
+                                'FromName': 'Unknown Sender' if n == 0 else 'Payworth', 'FromEmail': f'news{n}@vendor.example',
+                                'SentAt': ago(n + 1), 'BodyText': 'Your weekly digest.', 'Status': 'filed'})
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            shown = concierge.surface(self.s, llm=lambda *a, **k: 'never')
+        self.assertEqual(len((shown.get('item') or {}).get('items') or []), 4, 'the batch is on the table')
+
+    def clear(self, where):
+        call = 'CALL: ' + json.dumps({'kind': 'pipe.clear', 'params': {'select': {'kind': 'fyi'}}})
+        tid = general.dock_task(self.s, 'owner')[0]['TaskId']
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]), concierge.delivering(where):
+            return concierge.say(self.s, 'clear all the FYI', key=concierge.current_key(self.s, tid) or None, llm=lambda *a, **k: call)
+
+    def test_the_desk_counts_the_batch_on_the_table(self):
+        self.assertIn('Marked 4 FYI read.', self.clear(concierge.DESK)['say'])
+
+    def test_the_phone_card_says_it_in_words(self):
+        p = self.clear(concierge.PHONE)['proposal']
+        self.assertEqual(p['label'], 'Mark 4 FYI read')
+        self.assertNotIn('kind: fyi', p['say'])
+        self.assertNotIn('Unknown Sender', concierge.pipe_holds(self.s))
 
 
 class PhoneReceiptTests(unittest.TestCase):

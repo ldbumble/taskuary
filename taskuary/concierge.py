@@ -1783,7 +1783,8 @@ def pipe_holds(store) -> str:
     try: items = _pipe(store)
     except Exception: return ''
     if not items: return 'Nothing is waiting.'
-    who = Counter(str(i.get('who') or '').strip() for i in items if str(i.get('who') or '').strip())
+    # ...by a NAME: "From Unknown Sender." named nobody (F23)
+    who = Counter(w for i in items if (w := str(i.get('who') or '').strip()) and w.lower() not in ('unknown sender', 'unknown', 'someone'))
     top = ', '.join(w for w, _ in who.most_common(3))
     return waiting_line(items) + (f' From {top}, among others.' if len(who) > 3 else f' From {top}.' if top else '')
 
@@ -1847,9 +1848,23 @@ def _off_the_table(store, cleared: list, actor: str):
 def _set_words(sel: dict) -> str:
     """A set, said: "from Gail", "about the export" - what the receipt names so the owner reads which ones."""
     sel = {k: v for k, v in (sel or {}).items() if v not in (None, '', [], False)}
+    # ...in words: "kind: fyi" was the selector's own field read out (F23) - what it IS is the count's noun (_set_noun)
     bits = ([f"from {sel['sender']}"] if sel.get('sender') else []) + ([f"about {sel['contains']}"] if sel.get('contains') else []) \
-        + [f"{k}: {v}" for k, v in sel.items() if k not in ('sender', 'contains', 'everything')]
-    return ' '.join(bits) or 'in the pipe'
+        + ([f"older than {plural(int(float(sel['older_than_hours'])), 'hour')}"] if str(sel.get('older_than_hours') or '').replace('.', '', 1).isdigit() else []) \
+        + [f"{k}: {v}" for k, v in sel.items() if k not in ('sender', 'contains', 'everything', 'kind', 'lane', 'category', 'older_than_hours')]
+    return ' '.join(bits) or ('' if _what_of(sel) else 'in the pipe')
+
+
+def _what_of(sel: dict) -> str:
+    return next((str(sel.get(f) or '').strip().lower() for f in ('kind', 'lane', 'category') if str(sel.get(f) or '').strip()), '')
+
+
+def _set_noun(sel: dict, n: int) -> str:
+    """The count of a set with what it is: "4 FYI", "3 reports", "2 items"."""
+    what = _what_of(sel or {})
+    if what in ('fyi', 'fyis'): return f'{n} FYI'
+    if what in ('report', 'reports'): return plural(n, 'report')
+    return plural(n, 'item')
 
 
 def defer_selected(store, sel: dict, until, actor: str = 'owner') -> dict:
@@ -2263,8 +2278,9 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         try: done = defer_selected(store, sel, params.get('until'), actor) if kind == 'pipe.defer' else close_selected(store, sel, actor)
         except ValueError as e: raise CallMiss(f'{kind}: {e}. Nothing was changed.')
         n = done['done']
-        say_ = ((f"Snoozed {plural(n, 'item')} {_set_words(sel)} until {done['when']}" if kind == 'pipe.defer' else
-                 f"Closed {plural(n, 'item')} {_set_words(sel)}") + ' - ' + ', '.join(_title_cut(t, 50) for t in done['titles'][:3])
+        sw = _set_words(sel)
+        say_ = ((f"Snoozed {_set_noun(sel, n)}{' ' + sw if sw else ''} until {done['when']}" if kind == 'pipe.defer' else
+                 f"Closed {_set_noun(sel, n)}{' ' + sw if sw else ''}") + ' - ' + ', '.join(_title_cut(t, 50) for t in done['titles'][:3])
                 + (' and more' if n > 3 else '') + '.' + (f" {plural(done['stuck'], 'item')} would not go." if done['stuck'] else ''))
         record_related(store, tid, item, 'assistant', say_)
         off = bool(table_keys) and table_keys <= {i['key'] for i in hits}
@@ -2309,18 +2325,18 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             # A RECEIPT, NOT A LIST (the owner, 2026-10-21: "free text should almost never be used in the assistant"): the rail shows what
             # is left; the line counts what went and says it is not gone
             n = len(cleared)
-            say_ = (f"Marked {plural(n, 'item')} read - search still finds {'it' if n == 1 else 'them'}."
+            say_ = (f"Marked {_set_noun(sel, n)} read. Search still finds {'it' if n == 1 else 'them'}."
                     + (f" {plural(len(hits) - n, 'item')} would not clear." if len(hits) > n else '')
                     + (f" {plural(mine, 'item')} waiting on you stay{'s' if mine == 1 else ''} - each has its own button." if mine else ''))
             record_related(store, tid, item, 'assistant', say_)
             # the table among them: the walk moves on, as All read, next does; otherwise the rail is read again (the page's `setting`)
             off = bool(table_keys) and table_keys <= {i['key'] for i in cleared}
             return {'say': say_, 'options': [], 'chips': [], 'decision': {'verb': 'next' if off else 'setting'}, 'cleared': n}
-        where = ', '.join(f'{k}: {v}' for k, v in sel.items())
-        label = f"Clear {len(hits)} from the pipe"
+        where = _set_words(sel)
+        label = f"Mark {_set_noun(sel, len(hits))} read"
         # ...WHICH ones, on the card, before the yes: a count and a selector were all it said
         shown = '; '.join(_title_cut(' '.join(str(i.get('title') or '').split()), 60) for i in hits[:4])
-        summary = f"{plural(len(hits), 'item')} - {where}: {shown}{' and more' if len(hits) > 4 else ''}"
+        summary = f"{_set_noun(sel, len(hits))}{' ' + where if where else ''}: {shown}{' and more' if len(hits) > 4 else ''}"
         tail = ('They are marked read and search still finds them; nothing is deleted. '
                 + WAITS)
         prop = _propose_raw(store, tid, 'pipe.clear', 0, {'select': sel, 'text': text}, label, summary, tail, actor, item)
@@ -3876,7 +3892,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'script.start': return f" Starting: {o.get('script')}."
     if kind == 'pipe.clear':
         if o.get('cleared'):
-            return (f" Cleared {o['cleared']} - {', '.join((o.get('titles') or [])[:3])}{'…' if o['cleared'] > 3 else ''}. "
+            return (f" Marked {_set_noun(p.get('select') or {}, o['cleared'])} read - {', '.join((o.get('titles') or [])[:3])}{'…' if o['cleared'] > 3 else ''}. "
                     "Read, not deleted - search still finds them."
                     + (f" {o['stuck']} wouldn't move just then and {'is' if o['stuck'] == 1 else 'are'} still waiting"
                        ' - say it again and they go too.' if o.get('stuck') else '')

@@ -614,13 +614,13 @@ class ResponseTests(unittest.TestCase):
         # the model names the SET (2026-10-08: no word list sweeps the owner's sentence)
         p = say(s, words, key=pile(s)[0]['key'], model='Ok.' + chr(10) + 'CALL: ' + json.dumps(
             {'kind': 'pipe.clear', 'params': {'select': {'contains': 'Northwind Financial Report'}}}))['proposal']
-        self.assertEqual((p['kind'], p['params']['select'], p['label']), ('pipe.clear', {'contains': 'Northwind Financial Report'}, 'Clear 3 from the pipe'))
+        self.assertEqual((p['kind'], p['params']['select'], p['label']), ('pipe.clear', {'contains': 'Northwind Financial Report'}, 'Mark 3 items read'))
         self.assertEqual(len(pile(s)), 4)                              # nothing swept on the words
         r = run(s, p)
         self.assertEqual(r.json()['outcome']['cleared'], 3)
         self.assertEqual([i['who'] for i in pile(s)], ['Omar'])
         self.assertEqual(funnel.mutes(s), [])                          # a reason in the words writes no rule (R8)
-        self.assertTrue(any('Cleared 3 - ' in b for b in receipts(s)), receipts(s)[-2:])
+        self.assertTrue(any('Marked 3 items read - ' in b for b in receipts(s)), receipts(s)[-2:])
         self.assertTrue(keep['message_id'])
 
     def test_split_is_confirmed_then_breaks_one_arrival_into_two_jobs(self):

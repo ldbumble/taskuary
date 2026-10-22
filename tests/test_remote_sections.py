@@ -107,3 +107,27 @@ class SectionWalkEndsTests(unittest.TestCase):
         with mock.patch.object(ra, 'asking', return_value=chat), mock.patch.object(ra, 'walk', return_value='walked'):
             ra.run_act(s, {'t': 'walk'}, None)
         self.assertIsNone(db.held(s, chat), 'a new walk is not the old section')
+
+
+class SummaryWordsTests(unittest.TestCase):
+    """F15: "1 tasks, 1 reports", a sender read as the word of their address ("example") or an agent as its CLI ("claude"), and
+    "(fyi)" on every row under the FYI heading."""
+    def rows(self):
+        return [{'key': 'msg:1', 'lane': 'asked', 'kind': 'asked', 'order_band': 2, 'title': 'Approve the Q3 invoice',
+                 'who': 'Gail Moreno', 'email': 'gail@mail.example'},
+                {'key': 'task:2', 'lane': 'working', 'kind': 'agent', 'order_band': 2, 'title': 'Census export', 'who': 'claude',
+                 'agent': 'claude', 'working': 'claude', 'mode': 'assistant'},
+                {'key': 'report:3', 'lane': 'report', 'kind': 'report', 'title': 'AP ageing - 5 rows', 'who': 'AP ageing'},
+                {'key': 'msg:4', 'lane': 'fyi', 'kind': 'fyi', 'order_band': 4, 'title': 'Back Tuesday', 'who': 'Ray Colton', 'email': 'ray@northwind.example'}]
+
+    def test_one_is_singular(self):
+        text = ra.who_wants_what(self.rows()[2:])
+        self.assertIn('1 report', text); self.assertNotIn('1 reports', text)
+        self.assertIn('1 task', ra.who_wants_what(self.rows()[:1])); self.assertNotIn('1 tasks', ra.who_wants_what(self.rows()[:1]))
+
+    def test_rows_name_the_sender_and_the_agent_and_drop_their_headings_word(self):
+        text = ra.who_wants_what(self.rows())
+        self.assertIn('· Gail Moreno - Approve the Q3 invoice', text)
+        self.assertNotIn('· example', text); self.assertNotIn('· claude', text)
+        self.assertIn('· General agent - Census export', text)
+        self.assertIn('· Ray Colton - Back Tuesday', text); self.assertNotIn('(fyi)', text)

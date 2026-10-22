@@ -61,7 +61,9 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
   const [auto, setAuto] = useState(card.autostart ? { taskId: card.tid, ...card.autostart } : null);
   const [act, setAct] = useState(card.act ? { taskId: card.tid, act: card.act } : null);
   // a view put on the table is brought into view whole - the chat's own scroll pinned its bottom, which left a task opened
-  // by a link showing only its heading under a screenful of earlier lines
+  // by a link showing only its heading under a screenful of earlier lines. ...to the SAME top the chat's pin holds it at (keepTable): with
+  // an 8px scroll margin here the two smooth scrolls fought, this one won, and the pin put the card back 8px when the answer landed -
+  // seconds after Next on a real brain (browser/next-steady.test.mjs)
   const box = useRef(null);
   useEffect(() => { box.current?.scrollIntoView({ block: "start" }); }, [card.key]);
   const [phoneH] = useState(() => phoneItemHeight(typeof window === "undefined" ? 0 : window.innerHeight));
@@ -86,7 +88,7 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
     {pin && <Box aria-hidden sx={{ position: "fixed", inset: 0, zIndex: 1349, bgcolor: "#f6f4f1" }} />}
     {/* focusable, not in the Tab order: a search pick hands focus here, to what it opened (SearchEverything focusDrawn) */}
     <Box ref={box} data-tq-canvas-item={card.key} data-tq-pinned={pin ? "" : undefined} tabIndex={-1}
-      sx={{ height: h, display: "flex", flexDirection: "column", minWidth: 0, scrollMarginTop: "8px", outline: "none",
+      sx={{ height: h, display: "flex", flexDirection: "column", minWidth: 0, scrollMarginTop: 0, outline: "none",
         // ...but a view with NO PANE in it (a stopped agent, a note, a closed task) is only as tall as what it says: the full
         // height left a screen of blank canvas under three short bars (the owner, 2026-09-30: "what's with extra space???").
         // A pane - terminal, agent chat, browser - still gets the one height it is sized for, so the pty is never grown.

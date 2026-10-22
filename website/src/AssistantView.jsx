@@ -3050,8 +3050,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           )}
           {/* the slot the task view draws Configure the next run into (TaskPage, createPortal) */}
           {!old && <div className="tq-browse-line" data-tq-run-slot="" style={{ display: "contents" }} />}
+          {/* ...a line of its own that stands under the card on the table only while the answer is on its way (tq-pending,
+              assistantView.css) */}
           {(busy || phoneBusy || nextComing) && (
-            <div className="tq-msg"><div className="avatar"><AssistantMark /></div>
+            <div className="tq-msg tq-pending"><div className="avatar"><AssistantMark /></div>
               <div className="body">{busy && words ? <div className="tq-words" data-tq-words="">{looksMd(words) ? <Md text={words} /> : words.split("\n").map((p, i) => <p key={i}>{p}</p>)}</div>
                 : <span className="tq-typing"><i /><i /><i /></span>}
                 {/* ...and how long it has been at it, where the dots alone were silent: its own clock, so the chat does not redraw each second */}

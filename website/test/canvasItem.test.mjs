@@ -18,7 +18,7 @@ test("an item with a task behind it is shown by TaskPage; a proposal, a batch or
 // HARD REQUIREMENT 1: no terminal redraw corruption. The view's box is the chat body's height in BOTH states - Expand
 // hides the conversation around it and never resizes it, so the pty inside can never be grown after it has output.
 test("Expand never changes the view's height, so the pane is never grown", () => {
-  assert.match(item, /sx=\{\{ height: h, display: "flex", flexDirection: "column", minWidth: 0, scrollMarginTop: "8px",/);
+  assert.match(item, /sx=\{\{ height: h, display: "flex", flexDirection: "column", minWidth: 0, scrollMarginTop: 0,/);
   assert.match(item, /export const CANVAS_ITEM_HEIGHT = "max\(340px, calc\(100cqh \+ 14px\)\)";/);
   assert.match(view, /height: CANVAS_ITEM_HEIGHT, expanded,/);
   assert.match(src("assistantView.css"), /container-type: size;/);
@@ -130,6 +130,8 @@ test("a bare line borrows no words while the task view's own row holds them", ()
 // the owner, 2026-10-18: "it should always jump to top of screen, it's okay if there is space under task on the canvas" - the
 // last task view on the canvas holds a screen, so a short one scrolls to the top like a full one; the thread's end is its top
 test("every task view opens at the top of the canvas, a short one with the blank under it", () => {
-  assert.match(src("assistantView.css"), /\.tq-chat-inner > \.tq-canvas-live:not\(:has\(~ \.tq-msg, ~ \.tq-canvas-live, ~ \.tq-live-card\)\) \{ min-height: calc\(100cqh \+ 14px\); \}/);
+  // ...and the "…" of a press in flight under it does not take the screen away (browser/next-steady.test.mjs)
+  assert.match(src("assistantView.css"), /\.tq-chat-inner > \.tq-canvas-live:not\(:has\(~ \.tq-msg:not\(\.tq-pending\), ~ \.tq-canvas-live, ~ \.tq-live-card\)\) \{ min-height: calc\(100cqh \+ 14px\); \}/);
+  assert.match(src("AssistantView.jsx"), /\(busy \|\| phoneBusy \|\| nextComing\) && \(\n\s*<div className="tq-msg tq-pending">/);
   assert.match(src("AssistantView.jsx"), /const toEnd = \(el\) => \{/);
 });

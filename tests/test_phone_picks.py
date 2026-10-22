@@ -291,3 +291,56 @@ class OwnerRulingsOctoberTwoTests(unittest.TestCase):
         # ...and with no walk on the phone (a chat that always listens) it is not offered
         with mock.patch.object(ra, 'handoff', return_value=None):
             self.assertNotIn(ra.HAND_BACK, offer(s, out)[-1][1] or [])
+
+
+def wa_patch(got):
+    return mock.patch.object(messengers, 'wa_send', side_effect=lambda st, chat, body, connector_id=None, poll=None: got.append((body, poll)))
+
+
+def tg_patch(got):
+    return mock.patch.object(messengers, 'tg_send', side_effect=lambda st, chat, body, connector_id=None, buttons=None: got.append((body, buttons)))
+
+
+def tg_armed():
+    from tests.test_remote_assistant import TG_CHAT, armed_store
+    s, _ = armed_store('telegram', TG_CHAT)
+    return s, TG_CHAT
+
+
+NEXT_CARD = {'say': 'Gail Moreno asked about the budget.', 'item': {'key': 'msg:8', 'kind': 'fyi', 'mid': 8, 'title': 'Budget'},
+             'chips': [{'verb': 'mine', 'label': 'Make a task'}, {'verb': 'next', 'label': 'Next'}]}
+
+
+class NotOursOnTheTableTests(unittest.TestCase):
+    """F1: Not ours tapped on the card ON THE TABLE came back as "File it: ..." with nothing numbered and nothing run - the
+    proposal acts at once (concierge.AUTO, the owner 2026-10-21: no question before it) and carries its alts, and the phone drew
+    the question with no way to answer it. It runs on the tap, as the desktop's button does, and the next card follows."""
+    ALTS = [{'verb': 'not_ours', 'label': 'Just this once', 'current': True},
+            {'verb': 'not_ours_sender', 'label': 'From now on - their mail is filed for you', 'current': False}]
+
+    def _tap(self, s, patch, channel, chat):
+        with patch([]): ra.send(s, channel, chat, ra.turn_text({'say': 'x', 'item': ITEM, 'chips': CHIPS}, store=s), None)
+        prop = {'id': 'op1', 'status': 'proposed', 'verb': 'not_ours', 'label': 'Not ours', 'summary': 'The export job → file it',
+                'key': 'msg:7', 'settles': True, 'auto': True, 'alts': self.ALTS, 'say': 'Not ours - the export job.'}
+        got = []
+        with patch(got), \
+             mock.patch('taskuary.general.dock_task', return_value=({'TaskId': 1}, False)), \
+             mock.patch.object(concierge, 'restore_current', return_value=ITEM), \
+             mock.patch.object(concierge, 'say', side_effect=AssertionError('a pick never reaches the model')), \
+             mock.patch.object(concierge, 'propose_direct', return_value=prop) as pd, \
+             mock.patch.object(concierge, 'run_proposal', return_value={**prop, 'status': 'done'}) as run, \
+             mock.patch.object(concierge, 'receipt', return_value='Not ours - filed.'), \
+             mock.patch.object(concierge, 'surface', return_value=NEXT_CARD), \
+             mock.patch.object(funnel, 'next_item', return_value=ITEM):
+            ra.respond(s, channel, chat, 'Not ours', None, poll=True)
+        self.assertTrue(pd.call_args.kwargs['table'])
+        run.assert_called_once()
+        text = '\n'.join(b for b, _ in got)
+        self.assertIn('Not ours - filed.', text)
+        self.assertIn('Budget', text)                                     # the next card follows
+        self.assertIn('Make a task', got[-1][1])
+
+    def test_whatsapp(self): self._tap(armed()[0], wa_patch, 'whatsapp', JID)
+    def test_telegram(self):
+        s, chat = tg_armed()
+        self._tap(s, tg_patch, 'telegram', chat)

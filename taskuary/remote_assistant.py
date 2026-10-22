@@ -1078,7 +1078,10 @@ def _settle(store, prop: dict, item: dict | None, actor: str) -> str:
     from . import concierge
     if prop.get('failed'):              # refused at propose time: the reason, and what the item CAN do instead
         return turn_text({'say': prop['say'], 'item': None}, store=store, extra=list(recovery_rows(store, prop.get('chips') or [], actor)))
-    if asks(prop):
+    # ...but a card that ACTS AT ONCE (concierge.AUTO - Not ours on the table, as just this once: the owner, 2026-10-21, "no 'are you
+    # sure'") runs on the press as the desktop's does: its question drawn here un-numbered was a card nothing could answer, so the tap
+    # showed "File it: ..." and nothing ever ran
+    if asks(prop) and not prop.get('auto'):
         said = f"{prop['label']}: {prop['summary']}." if prop.get('label') and prop.get('summary') else prop.get('say')
         return turn_text({'say': said, 'proposal': prop}, store=store)
     return _ran(store, prop, concierge.run_proposal(store, prop, actor), item, actor)

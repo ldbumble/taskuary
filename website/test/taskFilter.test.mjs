@@ -101,13 +101,13 @@ test("with a live session, X steps back to the task first and the session keeps 
   assert.match(source, /if \(!liveSession\) \{ setPeek\(false\); setOpenStage\(null\); \}/, "the session ending puts the page back");
   assert.match(source, /workspaceMode === "live" && peek \?/, "the terminal folds to a line instead of unmounting the page");
   assert.match(source, /Back to the agent/);
-  // the task card, the reply card, context & history and earlier runs all come back while peeking
+  // the task card, the reply card and earlier runs all come back while peeking (Context & history went 2026-10-22: Came from is its messages)
   // (the steps are sections of one card since the 2026-10-06 cleanup - `...card, ...step` - the gates are the same)
-  for (const gate of [/\{\(!wide \|\| fromSide\) && \(\s*<Box data-tq-from=""/, /\{!sessionView && <Fold title=\{`Context & history/,
-    /\{!sessionView && detail\.runs\.length > 0/, /\{!sessionView && <Box ref=\{closeOutRef\} data-tq-closeout="" sx=\{\{ \.\.\.card, \.\.\.step, mt: 0, p: 1\.5, py: pane === "reply"/]) {
+  for (const gate of [/\{\(!wide \|\| fromSide\) && \(\s*<Box data-tq-from=""/,
+    /\{!sessionView && detail\.runs\.length > 0/, /\{!sessionView && <Box ref=\{closeOutRef\} data-tq-closeout="" sx=\{\{ \.\.\.card, \.\.\.step, borderTop: 0, mt: 1, px: 0, py: pane === "reply"/]) {
     assert.match(source, gate);
   }
-  assert.doesNotMatch(source, /\{!term\?\.alive && <Fold title=\{`Context & history/, "no gate left on the raw flag");
+  assert.doesNotMatch(source, /<Fold title=\{`Context & history/, "the fold is gone, not hidden");
 });
 
 // THE CUT BELONGS TO THE ROW. Applying it per pill gave `in progress` a wider window than `all`

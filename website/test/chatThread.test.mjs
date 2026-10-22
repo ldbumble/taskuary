@@ -54,7 +54,7 @@ test("the conversation is a centred column with its own line around it", () => {
 
 // THE FULL CHAT IS IN TASK, CONDENSED IN CLOSE OUT (the owner, 2026-10-16: "in close out you have the full chat, it's too confusing.
 // full chat should be in task (condensed and full). in close out chats condensed version?")
-const closeOut = page.slice(page.indexOf('<WorkflowHeading number="3" title="Close out"'), page.indexOf("<Fold title={`Context & history"));
+const closeOut = page.slice(page.indexOf('<WorkflowHeading number="3" title="Close out"'), page.indexOf("<Fold title={`Earlier runs"));
 const cameFrom = page.slice(page.indexOf('<Part label="Came from"'), page.indexOf("</Part>", page.indexOf('<Part label="Came from"')));
 test("Show all on a chat draws the back-and-forth in Came from; an email thread keeps its rows", () => {
   assert.match(cameFrom, /\{showAll && isChat\(g\.channel\) \? <ChatThread messages=\{g\.msgs\} maxHeight=\{THREAD_MAX\} \/>/);

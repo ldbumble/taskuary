@@ -18,7 +18,7 @@ test("two columns at rest, the whole width while an agent works - coding or gene
   // absolutely placed, so the pane underneath is never resized; closed by default, by the line, its X or Escape
   assert.match(src, /\{wide && <Box component="button" type="button" ref=\{fromLineRef\} data-tq-from-line=""\s+title=\{fromSide \? "Hide where this came from" : "Show where this came from"\}\s+aria-expanded=\{fromSide\} aria-controls="tq-from-side" onClick=\{\(\) => setFromSide\(\(v\) => !v\)\}/);
   assert.match(src, /\{\(!wide \|\| fromSide\) && \(/);
-  assert.match(src, /\.\.\.\(wide \? FROM_SIDE\(fromTop\) : PHONE_FROM\(fromOpen\)\)/);
+  assert.match(src, /\.\.\.\(wide \? \{ \.\.\.card, px: 1\.5, py: 1\.25, \.\.\.FROM_SIDE\(fromTop\) \} : PHONE_FROM\(fromOpen\)\)/);
   assert.match(src, /const FROM_SIDE = \(top\) => \(\{ position: "absolute", top, left: 0, bottom: 0,/);
   assert.match(src, /const \[fromSide, setFromSide\] = useState\(false\)/);
   assert.match(src, /if \(e\.key === "Escape"\) \{ e\.stopPropagation\(\); setFromSide\(false\);/);
@@ -39,7 +39,8 @@ test("the layout: columns with no agent or one never started, the whole width wh
   // the page reads it once, after its Result and its failure are known, and the From line, its sidebar and its X all follow it
   const src = taskSource(), at = (re) => src.search(re);
   assert.ok(at(/const resultShown = /) < at(/const layout = layoutOf\(/) && at(/const failedRun = /) < at(/const layout = layoutOf\(/));
-  assert.match(src, /\{wide && <IconButton size="small" aria-label="Close From" data-tq-from-close=""/);
+  // the "From" title and its X head only the sidebar (2026-10-22: the columns have no title over From)
+  assert.match(src, /\{wide && <Box sx=\{\{ display: "flex", alignItems: "center" \}\}>\s+<Typography sx=\{\{ \.\.\.label, flex: 1 \}\}>From<\/Typography>\s+<IconButton size="small" aria-label="Close From" data-tq-from-close=""/);
   assert.match(src, /onClickCapture=\{wide \? undefined : phoneFromTap\}/);
   // ...while what a finished agent offers stays where it was: Close out and its record are drawn whenever no session fills the page
   assert.match(src, /\{!sessionView && <Box ref=\{closeOutRef\} data-tq-closeout=""/);

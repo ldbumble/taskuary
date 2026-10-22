@@ -26,7 +26,7 @@ const readAhead = (req) => { if (req?.kind === "browse" && req.area === "connect
 import { onPlace, openAppLink } from "./appLinks.js";
 import { SetupChip, useSetup } from "./SetupWizard.jsx";
 import { DEMO } from "./demoApi.js";
-import { loadedAsset, staleWhat } from "./staleBuild.js";
+import { buildMove, isBusy, loadedAsset, markReloaded, reloadedFor, staleWhat } from "./staleBuild.js";
 import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
 import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } from "./handraiseState.js";
 import { TaskuaryMark, asUtc, timeAgo } from "./ui.jsx";
@@ -156,8 +156,8 @@ function Bell({ onGo }) {
 /* The tab can be older than the app. Taskuary updates underneath an open page - a pull and a
    rebuild, pip install -U, the coding agent shipping its own fix - and the page keeps running
    the bundle it loaded hours ago. Every symptom of that looks like a bug that was already
-   fixed. This is the only honest way to tell the difference from inside the page, so it says
-   so, quietly, and reloads only when asked. */
+   fixed. This is the only honest way to tell the difference from inside the page: at rest it
+   reloads (once per server build), and to someone typing it says so, quietly (staleBuild.js). */
 /* A demo has to SAY so - a visitor clicking Approve on an invented refund should never wonder
    for a second whether it went anywhere. It never does: demo.py refuses at the API layer. */
 function useDemo() {
@@ -189,12 +189,22 @@ function StaleBuild() {
     // the static demo IS a recording: its /api/build is whatever the instance it was dumped
     // from was running, which is not a newer version of anything
     if (import.meta.env.VITE_DEMO === "1") return undefined;
-    const mine = loadedAsset();
-    const check = () => api.get("/api/build")
-      .then(({ data }) => setStale(staleWhat(mine, data))).catch(() => {});
-    check();
-    const t = setInterval(check, 60000);
-    return () => clearInterval(t);
+    // the dev server's page names no hashed bundle: the first build the server reports stands in for its own
+    let mine = loadedAsset();
+    // `act`: only on load, focus and a socket (re)connect - the cheap moments a restart shows up at. The minute poll
+    // keeps only the line, so the page never reloads under someone reading it.
+    const check = (act) => api.get("/api/build").then(({ data }) => {
+      if (!mine) mine = data?.asset || "";
+      const s = staleWhat(mine, data);
+      setStale(s);
+      if (act && buildMove(mine, data, { busy: isBusy(), reloaded: reloadedFor() }) === "reload" && markReloaded(data.asset)) window.location.reload();
+    }).catch(() => {});
+    check(true);
+    const t = setInterval(() => check(false), 60000);
+    const onFocus = () => check(true);
+    window.addEventListener("focus", onFocus);
+    const off = onLive("hello", () => check(true));
+    return () => { clearInterval(t); window.removeEventListener("focus", onFocus); off(); };
   }, []);
   if (!stale) return null;
   const restart = /restart/.test(stale);

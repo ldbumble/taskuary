@@ -56,6 +56,9 @@ test("a rail row carries its state in the ring round its logo and its label, wit
   assert.match(logo, /const said = st && !goal \? statusLabel\(st, agent\) : undefined;/);
   assert.doesNotMatch(logo + css, /badge|lk-|tq-tint|grayscale|filter:/, "no badge, no look on the logo, no colour filter");
   assert.match(logo, /\{children\}\n\s+<\/span>/, "the logo is the mark's only child");
+  // a working row names its ring "spin" too, but draws the old ring (.spins), never a masked one
+  assert.match(logo, /const ring = goal \? "progress" : wears && st \? st\.ring \|\| "none" : "";/);
+  assert.match(logo, /ring && !\["none", "spin"\]\.includes\(ring\) \? `rg-\$\{ring\}` : ""/);
   // every ring but spin (the old ring) and none is drawn, round the logo, in the pill's colour for its role
   for (const r of RINGS.filter((x) => !["spin", "none"].includes(x))) assert.match(css, new RegExp(`\\.tq-mark\\.rg-${r}::after \\{`), r);
   for (const r of ["you", "working", "done", "muted", "bad"]) assert.match(css, new RegExp(`\\.tq-mark\\.rl-${r} \\{ --ring: #[0-9a-f]{6}; \\}`), r);

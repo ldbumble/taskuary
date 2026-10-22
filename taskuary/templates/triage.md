@@ -97,6 +97,7 @@ Signs against coding: the work only reads from a system (a query, a report, a lo
 
 - **title** - what this IS, 12 words max, in your own words; not the subject line handed back.
 - **summary** - two sentences, for every verdict (an fyi and a report are rows the owner reads too). The first says who wants what from the owner, the asker first and by `from_name` - "Erin Blake wants the Q3 numbers before Friday" - or on an fyi who says what - "Payworth says the September statement is ready". The second adds the one detail that matters: a date, an amount, what was already done. Leave out signatures, confidentiality footers and quoted earlier mail.
+- **rests_on** - when your ask, title or summary leans on an earlier line of the `exchange` - the request this message only supplies data for, the question it picks back up - the ids of those lines (the `[#n]`), so the owner sees what the ask came from. Only lines that are actually about this; [] when the message stands on its own. It joins nothing: it shows them.
 - **checklist** (a task) - one distinct requested outcome each, drawn only from what the message and the exchange ask for; nothing invented, nothing listed as already done.
 - **outputs** (a task) - only messages the sender asks the owner to send to OTHER people: `to` (the address when given, else the name as written) and `about`. A reply to the sender is not an output; most tasks have none.
 - **urgent** - true only when time presses: a deadline today or tomorrow, a meeting it serves happening today, someone blocked right now. A failure or a request with no time on it is not urgent, nor is "ASAP" alone, nor any fyi. Almost everything is false.
@@ -112,7 +113,7 @@ Signs against coding: the work only reads from a system (a query, a report, a lo
 Each is a sign to weigh; an absent field is not evidence either way.
 - `addressed_to_you` - "to", "cc" or "not named" (a group alias or shared mailbox); `recipients` - how many people the mail went to.
 - `others_replied`, `last_on_thread` - people other than the owner and the sender who have SENT on this thread, and who spoke last.
-- `exchange` - the recent back-and-forth, oldest first, the owner's lines marked "you".
+- `exchange` - the recent back-and-forth, oldest first, the owner's lines marked "you", each led by its message id `[#n]`.
 - `open_work`, `recently_closed` - tasks this touches, open or closed lately, each with how it ended.
 - `meetings_today` - the owner's meetings today, each already on their rail at its time. A message that only announces, reminds of or links to one of them adds nothing the calendar does not already show; one that changes it, asks something about it or needs something done before it is judged on that.
 - `assistant_said` - what the Advisor already raised on this thread and what the owner did with it.
@@ -126,4 +127,4 @@ Each is a sign to weigh; an absent field is not evidence either way.
 
 ## 7. The answer
 
-JSON only: {"intent": "task|reply_only|fyi", "kind": "coding|general|task", "why": "...", "title": "...", "summary": "...", "checklist": ["..."], "outputs": [{"to": "...", "about": "..."}], "urgent": false, "due": "YYYY-MM-DD or null", "sender_class": "person|automated|bulk", "goal": false, "done_when": null, "danger": null, "meet": null} - plus `same_as`, `serves`, `profile`, `playbook`, `workflow`, `repository` / `needs_repo_choice` / `repo_reason`, and for a chat line `relationship` / `related_message_ids` / `existing_task_id` / `same_problem`, whenever the input gives you what they are chosen from.
+JSON only: {"intent": "task|reply_only|fyi", "kind": "coding|general|task", "why": "...", "title": "...", "summary": "...", "checklist": ["..."], "outputs": [{"to": "...", "about": "..."}], "urgent": false, "due": "YYYY-MM-DD or null", "sender_class": "person|automated|bulk", "goal": false, "done_when": null, "danger": null, "meet": null} - plus `same_as`, `rests_on`, `serves`, `profile`, `playbook`, `workflow`, `repository` / `needs_repo_choice` / `repo_reason`, and for a chat line `relationship` / `related_message_ids` / `existing_task_id` / `same_problem`, whenever the input gives you what they are chosen from.

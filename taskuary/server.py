@@ -1552,6 +1552,18 @@ def _calendar_of(task_id: int):
     except Exception as e:
         logger.debug(f'task {task_id}: the calendar ask was not read - {e}'); return None
 
+def _earlier(d: dict) -> list:
+    """The messages a triage verdict on this task named as what its ask rests on, not already the task's own."""
+    own, out = {m['MessageId'] for m in d.get('messages') or []}, []
+    for r in d.get('routes') or []:
+        try: ids = (json.loads(r.get('VerdictJson') or '{}') or {}).get('rests_on') or []
+        except (ValueError, TypeError, AttributeError): continue
+        for mid in ids:
+            if mid in own or any(m['MessageId'] == mid for m in out): continue
+            if (m := store.get_message(mid)): out.append(_readable(m))
+    return out
+
+
 @app.get('/api/tasks/{task_id}')
 def task_detail(task_id: int):
     d = store.task_detail(task_id)
@@ -1581,6 +1593,8 @@ def task_detail(task_id: int):
             # an invite waiting on the owner, or a thread asking for a time: the row's Accept / Decline / Propose a new time / Find a time
             'calendar': _calendar_of(task_id),
             'messages': [_readable(x) for x in d.get('messages') or []],
+            # ...and the earlier messages triage said its ask rests on, shown with them, never moved onto this task (rests_on, 2026-10-22)
+            'earlier': _earlier(d),
             'artifacts': [_artifact_row(a) for a in d.get('artifacts') or []],
             # The detail page only needs lifecycle here; its terminal pane and optional WorkStrip
             # load their own rich data. Do not block selecting a task on git status.

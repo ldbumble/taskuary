@@ -566,12 +566,12 @@ def _sentence(x: str) -> str:
     return x if not x or x.endswith(('.', '!', '?')) else _cap(x.rstrip(' -;,')) + '.'
 
 
-def run_failed(store, tid) -> dict | None:
+def run_failed(store, tid, live_too: bool = False) -> dict | None:
     """{sentence, fix} when the task's last run ended FAILED by its own word (workerstate.ended), nothing live on it: the reason in
     plain words (failures.classify) and the place that fixes it - Connect an AI for an agent with no AI to run on - else None."""
     from . import workerstate
     from .failures import classify
-    if workerstate.ended(store, tid) != 'failed': return None
+    if workerstate.ended(store, tid, live_too) != 'failed': return None          # live_too: whatever the session does (R2)
     last = store.last_worker_event(tid, kinds=('failed',)) or {}
     c = classify(' '.join(str(last.get('Text') or '').split()) or 'it stopped without saying why')
     return {'sentence': _sentence(c['sentence']), 'fix': c['fix']}

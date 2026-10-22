@@ -1,7 +1,7 @@
 """The re-walk of the phone doorway (2026-10-22): what the phone SHOWS, through the same roads the walker drove - a typed
 line or a tap in through the channel's own poll, the bubbles out of its own send. Each test is a scenario the walk found
 still wrong after the fixes that claimed it. Invented people only: Alex Doyle, Gail Moreno, Ray Colton, northwind.example."""
-import re, unittest
+import json, re, time, unittest
 from unittest import mock
 
 from taskuary import remote_assistant as ra
@@ -82,6 +82,41 @@ class FailedSendToAgentTests(PhoneCase):
         self.assertEqual(got[-1][1][:1], [f'Open {ref}'], got[-1][1])                          # what next: back to it, or on
         self.assertIn('Next', got[-1][1])
         self.assertFalse(any(b[:1] == ['Send to agent'] for _t, b in got), 'the same card, Send to agent first again')
+
+
+class FailedAgentTests(PhoneCase):
+    """4: an agent whose run FAILED while its session stayed open read "agent waiting on you · is waiting on you", no reason - the
+    phone read workerstate.ended, which says nothing while a session is live. R2: a failed run reads "failed - <why>"."""
+    channel = 'whatsapp'
+
+    def _failed_with_its_session_open(self):
+        from types import SimpleNamespace as NS
+        from taskuary import terminal, workerstate as ws
+        p = self.f.running('Fix the export', agent='claude')
+        live = [{'taskId': p.tid, 'sid': 'sF', 'agent': 'claude', 'label': 'claude', 'waiting': True, 'idle': 300,
+                 'started': self.f.ago(minutes=10), 'state': 'asking', 'tail': ['Which database should I use?']}]
+        for x in (mock.patch.dict(terminal.SESSIONS, {'sF': NS(sid='sF', task_id=p.tid, alive=True, started=0, agent='claude', mode='')}),
+                  mock.patch.object(terminal, 'live_sessions', return_value=live)):
+            x.start(); self.addCleanup(x.stop)
+        ws.record(self.s, p.tid, 'sF', 'working')
+        ws.record(self.s, p.tid, 'sF', 'failed', text='The run stopped: the staging database refused the login.')
+        self.ph.ready()
+        return p.tid
+
+    def assertReadsFailed(self, text):
+        self.assertIn('failed - the run stopped: the staging database refused the login', text)
+        self.assertNotIn('waiting on you', text); self.assertNotIn('asked you something', text); self.assertNotIn('answer the agent', text)
+
+    def test_its_card_in_the_walk_reads_failed_with_the_reason(self):
+        self._failed_with_its_session_open()
+        self.assertReadsFailed(text_of(self.ph.walk()))
+
+    def test_its_follow_up_reads_failed_too(self):
+        tid = self._failed_with_its_session_open()
+        self.s.set_setting(ra.PROMISES_KEY, json.dumps([{'tid': tid, 'channel': 'whatsapp', 'chat': self.ph.chat, 'connector_id': self.ph.cid,
+                                                          'at': time.time(), 'lane': 'working', 'armed': True}]), 't')
+        got = self.ph.push(lambda: ra.keep_promises(self.s, force=True))
+        self.assertTrue(got); self.assertReadsFailed(text_of(got))
 
 
 if __name__ == '__main__': unittest.main()

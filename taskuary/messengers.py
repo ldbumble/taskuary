@@ -242,12 +242,12 @@ class BridgeDown(RuntimeError):
     """Nothing answers at the bridge's address - the poll hands it to wabridge.supervise instead of logging it every time."""
 
 
-def _wa(c, path, body=None):
+def _wa(c, path, body=None, timeout=20):
     from .wabridge import token
     url, hdr = (_cfg(c).get('bridge_url') or WA_URL).rstrip('/'), {'X-Bridge-Token': token()}
     try:
-        r = requests.post(f'{url}{path}', json=body, timeout=20, headers=hdr) if body is not None \
-            else requests.get(f'{url}{path}', timeout=20, headers=hdr)
+        r = requests.post(f'{url}{path}', json=body, timeout=timeout, headers=hdr) if body is not None \
+            else requests.get(f'{url}{path}', timeout=timeout, headers=hdr)
     except requests.ConnectionError:
         # a button, not a shell line: the card's Restart bridge installs what is missing and starts it detached (wabridge.py)
         from .wabridge import managed
@@ -623,6 +623,47 @@ def react(store, channel: str, chat: str, message_id: str, emoji: str = GOT_IT, 
     except Exception as e:
         logger.debug(f'could not react in {channel}: {e}')
     return False
+
+
+# ── a file to the owner's phone, as a document (A14) ─────────────────────────────────────
+# Telegram's Bot API takes a bot's upload up to 50 MB; the bridge holds a document in memory as base64, so it stops at 64 MB
+# (bridge.mjs DOC_MAX) - and a tap on a phone on mobile data should not pull more than that anyway.
+FILE_MAX = {'telegram': 50 * 2**20, 'whatsapp': 64 * 2**20}
+FILE_SECS = 180               # an upload is not a text line: 50 MB over a slow uplink takes minutes, not the 20 s a message gets
+
+
+class TooBig(ValueError):
+    "A file over the channel's ceiling - said to the owner with the desktop instead, never tried."
+
+
+def _connector(store, channel: str, connector_id=None):
+    c = store.get_connector(int(connector_id), with_secret=True) if connector_id else store.get_connector_by_type(channel, with_secret=True)
+    return c if c and c.get('Type') == channel else None
+
+
+def tg_upload(token: str, method: str, files: dict, **params):
+    """A multipart Bot API call (sendDocument). The token never reaches a log: requests names the whole URL in its exception."""
+    try: r = requests.post(f'{TG_API}/bot{token}/{method}', data=params, files=files, timeout=FILE_SECS)
+    except Exception as e: raise RuntimeError(str(e).replace(token, '<token>') if token else str(e)) from None
+    try: j = r.json()
+    except ValueError: j = {}
+    if not j.get('ok'): raise RuntimeError(f"telegram {method}: {j.get('description') or r.status_code}")
+    return j['result']
+
+
+def send_document(store, channel: str, chat: str, data: bytes, name: str, mime: str, caption: str = '', connector_id=None) -> dict:
+    """The bytes of one file into one chat as a document. The CALLER chose the file and the chat (remote_assistant.send_files: only
+    a file inside the task's own outputs folder, only the owner's Assistant chat); this only carries it, and refuses one too big."""
+    if len(data) > FILE_MAX[channel]: raise TooBig(f'{len(data)} bytes is over {FILE_MAX[channel] // 2**20} MB')
+    c = _connector(store, channel, connector_id)
+    if channel == 'telegram':
+        if not (c and c.get('Secret')): raise RuntimeError('the Telegram connection is not set up')
+        tg_upload(c['Secret'], 'sendDocument', {'document': (name, data, mime)}, chat_id=str(chat), **({'caption': caption[:1000]} if caption else {}))
+    else:
+        if not c: raise RuntimeError('the WhatsApp connection is not set up')
+        _wa(c, '/send-document', {'jid': chat, 'data': base64.b64encode(data).decode(), 'mimetype': mime, 'fileName': name,
+                                  **({'caption': caption[:1000]} if caption else {})}, timeout=FILE_SECS)
+    return {'channel': channel, 'chat': chat, 'name': name, 'bytes': len(data)}
 
 
 def wa_send(store, jid: str, body: str, connector_id=None, poll: list = None) -> dict:

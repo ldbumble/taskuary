@@ -1,5 +1,5 @@
 // The WhatsApp bridge: Baileys (WhatsApp Web protocol) on one side, a tiny localhost HTTP
-// API on the other. Taskuary polls GET /messages and posts replies to POST /send - it never
+// API on the other. Taskuary polls GET /messages and posts replies to POST /send (a file: /send-document) - it never
 // loads Baileys itself, so the heavy dependency lives here, behind its own `npm install`.
 //
 //   cd taskuary/whatsapp
@@ -260,6 +260,14 @@ async function connect() {
 }
 
 const json = (res, code, obj) => { res.writeHead(code, { "content-type": "application/json" }); res.end(JSON.stringify(obj)); };
+// A document's ceiling: WhatsApp itself takes far larger files, but this one is base64 in a JSON body held in memory, and a
+// phone on mobile data should not be handed a 2 GB file by a tap. Taskuary checks the same number first (messengers.WA_FILE_MAX).
+const DOC_MAX = 64 * 2 ** 20, DOC_BODY_MAX = Math.ceil(DOC_MAX / 3) * 4 + 64 * 1024;
+// ...said before the body is read, and the connection closed after it: what was sent is not drained into memory
+const tooBig = (req, res) => {
+  res.writeHead(413, { "content-type": "application/json", connection: "close" });
+  res.end(JSON.stringify({ error: `the file is over ${DOC_MAX / 2 ** 20} MB` }), () => req.destroy());
+};
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
@@ -342,6 +350,26 @@ http.createServer(async (req, res) => {
         } catch (e) { console.log("poll send failed:", e?.message || e); }
       }
       return json(res, 200, { ok: true, id, poll: pollId });
+    }
+    // A FILE AN AGENT MADE FOR A TASK, sent to the owner's own chat as a document (A14, 2026-10-22: a workbook was named on the
+    // phone and could not be fetched). Taskuary picks the file - only one inside that task's outputs folder - and the chat, and
+    // sends the BYTES: the bridge never opens a path it was handed. Capped at DOC_MAX before anything is read into memory.
+    if (req.method === "POST" && url.pathname === "/send-document") {
+      if (Number(req.headers["content-length"] || 0) > DOC_BODY_MAX) return tooBig(req, res);
+      const chunks = []; let size = 0;
+      for await (const c of req) { size += c.length; if (size <= DOC_BODY_MAX) chunks.push(c); }
+      if (size > DOC_BODY_MAX) return json(res, 413, { error: `the file is over ${DOC_MAX / 2 ** 20} MB` });
+      const { jid, data, mimetype, fileName, caption } = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+      if (!connected) return json(res, 503, { error: "not connected to WhatsApp" });
+      if (!jid || !data || !fileName) return json(res, 400, { error: "jid, data and fileName are required" });
+      const doc = Buffer.from(String(data), "base64");
+      if (!doc.length) return json(res, 400, { error: "the file is empty" });
+      if (doc.length > DOC_MAX) return json(res, 413, { error: `the file is over ${DOC_MAX / 2 ** 20} MB` });
+      const sent = await sock.sendMessage(jid, { document: doc, mimetype: String(mimetype || "application/octet-stream"),
+        fileName: String(fileName).slice(0, 255), ...(caption ? { caption: String(caption).slice(0, 1000) } : {}) });
+      const id = sent?.key?.id || "";
+      if (id) { taskuarySent.add(id); const echo = messages.find((m) => m.id === id); if (echo) echo.taskuary = true; }
+      return json(res, 200, { ok: true, id, bytes: doc.length });
     }
     json(res, 404, { error: "unknown path" });
   } catch (e) { json(res, 500, { error: String(e?.message || e) }); }

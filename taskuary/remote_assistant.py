@@ -1479,6 +1479,84 @@ def _settle(store, prop: dict, item: dict | None, actor: str) -> str:
     return _ran(store, prop, _run(store, prop, actor), item, actor)
 
 
+# ── the files an agent made, to the phone (A14, 2026-10-22) ────────────────────────────────────────────────────────
+# A card named gl-recon.xlsx and the phone had no way to fetch it: the file lives in the task's outputs folder (outputs.py), which
+# only the desktop served. A card on a task with files there offers them as a pick; the pick sends the file itself into this chat.
+FILES_SENT = 10                                # one tap sends at most this many; the rest are on the desktop
+
+
+def _size(n: int) -> str:
+    mb = f'{n / 2**20:.1f}'.removesuffix('.0')
+    return f'{mb} MB' if n >= 2**20 else f'{max(1, round(n / 1024))} KB' if n >= 1024 else f'{n} bytes'
+
+
+def task_files(store, item: dict | None) -> list:
+    """The files in the task's own outputs folder (outputs.listing - no link followed, nothing outside it), newest first."""
+    tid = (item or {}).get('tid')
+    if store is None or not str(tid or '').isdigit(): return []
+    from . import outputs
+    try: return outputs.listing(int(tid))
+    except Exception as e:
+        logger.debug(f'the phone could not list the task files: {e}'); return []
+
+
+def file_picks(rows: list, tid) -> list:
+    """One pick per file, or one for all when there are several - each runs send_files, never the model."""
+    rows = rows[:FILES_SENT]
+    if not rows: return []
+    label = f"📎 Send {rows[0]['name']}" if len(rows) == 1 else f'📎 Send the {len(rows)} files'
+    return [(label, {'t': 'files', 'tid': int(tid), 'paths': [r['path'] for r in rows]})]
+
+
+def files_line(rows: list) -> str:
+    more = len(rows) - FILES_SENT
+    return '📎 ' + ' · '.join(f"{r['name']} ({_size(int(r.get('size') or 0))})" for r in rows[:FILES_SENT]) + \
+        (f' · and {more} more on the desktop' if more > 0 else '')
+
+
+def send_files(store, act: dict, actor: str = 'owner') -> str:
+    """A 📎 pick: the files themselves, as documents, into the chat the pick came from. Two locks, both in code:
+    - THE CHAT is the owner's own Assistant chat, the one that pick came from (asking) - checked again here, so no other road (the
+      desktop, an agent, a stranger's chat, the model) can send anything; elsewhere nothing is sent and nothing is said.
+    - THE FILE is re-resolved inside that task's outputs folder (outputs.resolve: no `..`, no absolute path, no link) at the moment it
+      goes - a name kept on the pick is only a name.
+    Too big says so, with the desktop's address; a failed send says why, with Try again. Nothing fails silently."""
+    from . import digest, general, messengers, outputs
+    from .store import task_ref
+    here = asking() or {}
+    ch, chat = here.get('channel'), str(here.get('chat') or '')
+    c = connector_for_chat(store, ch, chat) if ch in CHANNELS and chat else None
+    if not (c and enabled(store, ch, chat, c)):
+        logger.warning(f'phone files: refused a send to a chat that is not the Assistant chat ({ch or "no chat"})'); return ''
+    try: tid = int(act.get('tid'))
+    except (TypeError, ValueError): return stuck(store, 'That pick names no task - nothing was sent.')
+    ref, cap = task_ref(tid), messengers.FILE_MAX[ch]
+    said, failed, big = [], [], []
+    for rel in [str(r) for r in act.get('paths') or []][:FILES_SENT]:
+        p = outputs.resolve(tid, rel)
+        name = rel.replace('\\', '/').rsplit('/', 1)[-1] or rel
+        if p is None:
+            logger.warning(f'phone files: {ref} has no file {rel!r} in its outputs folder - refused')
+            said.append(f'{_cut(name, 80)} is not one of {ref}\'s files - it was not sent.'); continue
+        size = p.stat().st_size
+        if size > cap: big.append((p.name, size)); continue
+        try:
+            messengers.send_document(store, ch, chat, p.read_bytes(), p.name, outputs.content_type(p.name), f'{ref} · {p.name}', c.get('ConnectorId'))
+            said.append(f'📎 Sent {p.name} ({_size(size)}).')
+            store.audit('task', tid, 'phone_file_sent', actor, detail={'channel': ch, 'file': rel, 'bytes': size})
+        except Exception as e:
+            logger.warning(f'phone files: {p.name} did not go to {ch} - {plain(e)}')
+            failed.append(rel); said.append(f'Could not send {p.name} - {plain(e)}.')
+    for name, size in big:
+        said.append(f"{name} is {_size(size)} - {LABELS[ch]} takes files up to {_size(cap)} from here, so it was not sent. "
+                    f"Download it on the desktop: {ref}, under its files - {digest.task_link(tid)}")
+    if not said: said = [f'{ref} has no files to send.']
+    try: dock = general.dock_task(store, actor)[0]['TaskId']
+    except Exception: dock = None
+    again = [(buttons.label('try_again'), {'t': 'files', 'tid': tid, 'paths': failed})] if failed else []
+    return turn_text({'say': '\n'.join(said), 'item': None}, store=store, extra=again + _way_on(store, dock))
+
+
 def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
     """One numbered pick, run the way the desktop's button runs it - never through the model."""
     from . import funnel
@@ -1559,6 +1637,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             if not rid: return stuck(store, 'I could not rewrite that draft here - the one you had is still waiting.')
             return turn_text(_draft_card(store, rid, actor), store=store)
         if t == 'trust': return _trust(store, int(act['tid']), act.get('key') or f"task:{int(act['tid'])}", actor)
+        if t == 'files': return send_files(store, act, actor)
         if t == 'walk': return walk(store, actor, opener=not act.get('opened'))
         if t == 'script': return script_words(store, act.get('script') or '')
         if t == 'remind': return _remind(store, act, actor)
@@ -2640,6 +2719,11 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
                'options': [o for o in out.get('options') or [] if str(o) not in hand]}
     words, first = choices(out), len(member_lines(item)) + (2 if item.get('kind') == 'fyis' else 1)
     prop = out.get('proposal') if (out.get('proposal') or {}).get('status', 'proposed') == 'proposed' else None
+    # THE FILES AN AGENT MADE for this task, named on the card and one tap from the phone (A14) - not under a question being asked
+    files = task_files(store, item) if item and not out.get('proposal') else []
+    sends = file_picks(files, item.get('tid')) if files else []
+    if files: head = '\n\n'.join(x for x in (head, files_line(files)) if x)
+    _offer(sends)
     if prop and prop.get('id') and not prop.get('auto'):
         # THE CARD'S QUESTION, numbered: how far a Not ours goes, which agent, which checkout - each answer runs
         q, rows = proposal_choices(prop)
@@ -2675,6 +2759,10 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         more = [MORE] if store is not None and not (full and story) and more_text(store, item) else []
         words = first_ + nxt + more + [w for w in rest if w not in first_]
         if leads: words = leads + [w for w in words if w not in leads]
+        # ...the file first on a run that finished - it IS what the run made (the approved A14 card: Send the file, Mark done, Next) -
+        # else straight after the card's own verb
+        at = 0 if out.get('lead_verb') == 'close' else len(leads or first_)
+        words = words[:at] + [w for w, _a in sends] + words[at:]
         if trusting:
             nope = [w for w in words if w == _c.CHIP_WORDS['not_ours']]
             words = [TRUST] + nope + [w for w in words if w not in nope]
@@ -2709,6 +2797,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     if out.get('over') and store is not None:
         words = [WALK] + [w for w in words if w != WALK]
         _offer([(WALK, {'t': 'walk', 'opened': True})])
+    words = words + [w for w, _a in sends]       # an agent asking keeps its own answers first; its files still come under them
     if extra:
         words = words + [label for label, _ in extra]
         _offer(extra)

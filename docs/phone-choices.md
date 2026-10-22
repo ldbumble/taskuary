@@ -50,3 +50,5 @@ flowchart LR
 | 11 | No list offers more than twelve choices: ten, then **More (N left)** / **From the top**, then Back (`doorway_browse.paged`) | the bridge cuts a poll at twelve without a word - five Connections sections and Back could not be tapped |
 | 12 | Reports and Hub are browsed like Connections and Settings; the phone's morning menu holds the sidebar's four | the phone had no way to see a report's clock or read the Hub |
 | 13 | The rail is read to the model by its SECTIONS (`pipe.list`), each row with its lane | grouped by lane, For later - a section, not a lane - was answered "nothing is parked in Later" |
+| 14 | The walk's end offers **Walk me through my tasks** first; the new walk shows every open task again from the top (2026-10-22) | the end offered only its Opens, and outside a hand-off nothing started a new walk |
+| 15 | Remind me's receipt carries no **Bring it back now** on the phone (2026-10-22) | the undo for one task rode under the next task's card |

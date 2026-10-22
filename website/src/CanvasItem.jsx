@@ -94,9 +94,11 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         // A pane - terminal, agent chat, browser - still gets the one height it is sized for, so the pty is never grown.
         // ...on a phone too: there it stood the full screen under a three-row task, 350px of cream below Context & history
         // (the 2026-10-07 design pass). Pinned (Expand) it keeps the screen.
-        // ...except a view in the full-width layout (an agent working, its Result, its failure: taskLayout.layoutOf): the agent's
-        // work is the page there, and sized to its words it was a 300px card the From sidebar was cut off in (the owner, 2026-10-22)
-        ...(!pin ? { "&:not(:has(.xterm, [class*='tq-aui'], canvas, iframe, [data-tq-layout='full']))": { height: "auto", maxHeight: h } } : {}),
+        // ...and a Result is words too: the full-width layout kept the whole height, a screen of blank under a stopped agent's
+        // Result and Close out (the owner, 2026-10-22: "it should not take up the whole space though coding agents working we
+        // want it to take up as much real estate as possible"). Only the From sidebar, laid over the work, asks for the room -
+        // sized to the words it was cut off (the same day's "crunched down")
+        ...(!pin ? { "&:not(:has(.xterm, [class*='tq-aui'], canvas, iframe, [data-tq-from-side]))": { height: "auto", maxHeight: h } } : {}),
         ...(pin ? { position: "fixed", top: 8, left: pin.left, width: pin.width, zIndex: 1350 } : {}) }}>
       {/* a COLUMN that shrinks to the box: the task view inside is a flex column too, so its own scroller gets what is left (TaskPage) */}
       <Box sx={{ flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>

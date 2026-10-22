@@ -413,7 +413,8 @@ const readPage = (page) => page.evaluate(() => {
     strip: strip ? { empty: !strip.querySelector(".tq-next"), busy: strip.getAttribute("data-tq-strip") === "busy" } : null,
     undoSaid: tail.some((m) => /Undo: |confirm below/i.test(m.innerText || "")),
     undoBtns: [...document.querySelectorAll("button")].filter(vis).map((b) => b.innerText.trim()).filter((w) => /^(take it back|undo\b)/i.test(w)),
-    away: tail.filter((m) => /Away until /.test(m.innerText || "")).length,
+    // Remind me's receipt is the badge on its card now ("✓ Remind me", 0.3.9.28), the "Away until" line only where one is left
+    away: tail.filter((m) => /Away until /.test(m.innerText || "") || /^Remind/.test(m.querySelector("[data-tq-pressed]")?.getAttribute("data-tq-pressed") || "")).length,
     chatBtns: tail.flatMap((m) => [...m.querySelectorAll("button")].filter(vis).map((b) => b.innerText.trim())),
     nmsg: msgs.length, last: (msgs[msgs.length - 1]?.innerText || "").slice(0, 200), url: location.href, focus: document.activeElement?.tagName || "",
     folded: [...document.querySelectorAll("[data-tq-folded]")].filter(vis).map((e) => e.getAttribute("data-tq-folded")),
@@ -729,7 +730,7 @@ async function faults() {
     } else note("WAYOUT", page.step, `the closed task's card shows no ${label("defer")}`);
     page.expect.delete("/remind"); page.expect.delete("/execute");
   }
-  // one act, one receipt: Remind me on an open task leaves ONE line saying where it went - after the chat's own read too - and no Take it
+  // one act, one receipt: Remind me on an open task leaves ONE mark saying where it went (its card's badge) - after the chat's own read too - and no Take it
   // back anywhere (judge's UNDO); a day picked wrong is picked again
   page.step = "faults once"; await fresh();
   if (await openItem(page, (x) => x.status === "yours") && (await pressVerb(page, "defer"))) {

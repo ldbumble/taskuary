@@ -20,6 +20,8 @@ def install_processing_changes(app, store):
         '/api/fixture/processing/unread-arrivals',
         '/api/fixture/processing/sync-phase',
         '/api/fixture/task/agent-closed',
+        '/api/fixture/task/coding-saved',
+        '/api/fixture/task/chat-burst',
         '/api/fixture/general/canvas',
     })
 
@@ -49,6 +51,41 @@ def install_processing_changes(app, store):
         store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, body['answer'])
         out = selfclose.declare(store, tid, body['said'], 'assistant')
         if not out.get('closed'): raise HTTPException(409, f"the agent's close was refused: {out.get('why')}")
+        return {'taskId': tid}
+
+    @app.post('/api/fixture/task/chat-burst')
+    def chat_burst(body: dict):
+        """A WhatsApp group's burst - six lines from two people in a quarter of an hour - on one task: what From lists newest on top."""
+        if body: raise HTTPException(422, 'this fixed fixture accepts only an empty object')
+        tid = store.create_task({'Title': 'Site ops: Thursday walk-through', 'Kind': 'reply', 'Status': 'open', 'Source': 'whatsapp'}, 'router')
+        start = datetime.now() - timedelta(minutes=30)
+        for i, (who, words) in enumerate((('Ray Colton', 'Morning all'), ('Gail Moreno', 'Walk-through is Thursday'), ('Ray Colton', 'Keys are at reception from 7'),
+                                          ('Gail Moreno', 'Alex, can you be there at 9:30?'), ('Ray Colton', 'Also need someone to sign the snag list'),
+                                          ('Gail Moreno', 'and bring the floor plan please'))):
+            store.add_message({'TaskId': tid, 'Channel': 'whatsapp', 'SourceName': 'Site ops', 'ExternalId': f'fixture-burst-{tid}-{i}',
+                               'FromName': who, 'BodyText': words, 'SentAt': (start + timedelta(minutes=3 * i)).isoformat(' '), 'Status': 'routed'})
+        return {'taskId': tid}
+
+    @app.post('/api/fixture/task/coding-saved')
+    def coding_saved(body: dict):
+        """A coding task whose agent the owner stopped and saved (Stop and save): its session's screen filed as the transcript, its
+        AGENT REPORT written, and the run's own diff kept - what the Result in the work column reads. Invented people and paths."""
+        if body: raise HTTPException(422, 'this fixed fixture accepts only an empty object')
+        from taskuary import terminal
+        tid = store.create_task({'Title': 'org/app#398 census sync fails when a site has no manager', 'Kind': 'coding', 'Status': 'in_progress',
+                                 'Source': 'github', 'Assignee': 'agent:coding', 'Tags': f'repo:org/app,{terminal.SAVED}'}, 'router')
+        store.add_message({'TaskId': tid, 'Channel': 'github', 'ExternalId': f'fixture-gh-398-{tid}', 'ConversationId': f'fixture-gh-398-{tid}',
+                           'FromName': 'Ray Colton', 'Subject': 'census sync fails when a site has no manager',
+                           'BodyText': 'Third night in a row the census sync stops at a site with no manager.', 'Status': 'routed'})
+        store.add_transcript(tid, f'fixture-{tid}', "I'll take #398. Reading the census sync first.\n> pytest tests/test_census_sync.py -q\n9 passed",
+                             agent='coding', cwd='C:/work/org-app', brain='claude')
+        store.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\nDetermination: A site with no manager stopped the whole census run.\n'
+                          'Actions: Skip that row and log it once; a test for a site with no manager.\n'
+                          'Summary: Census sync no longer stops on a site with no manager.\n\nLAST MESSAGE\n'
+                          'Skipped the row with no manager and logged it once. 9 passed. Not pushed - yours to approve.')
+        rid = store.start_run(tid, 'coding', 'Fix #398', 'fixture')
+        store.update_run(rid, {'Status': 'done', 'DiffText': 'diff --git a/app/census/sync.py b/app/census/sync.py\n--- a/app/census/sync.py\n'
+                               '+++ b/app/census/sync.py\n@@ -1,2 +1,4 @@\n def sync(site):\n+    if not site.manager:\n+        continue\n-    pass\n'}, finished=True)
         return {'taskId': tid}
 
     @app.post('/api/fixture/processing/sync-phase')

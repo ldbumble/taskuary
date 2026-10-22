@@ -88,6 +88,7 @@ import { completionFact, completionLine, waitingEmails, wentOut,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
 import { AgentRecord } from "./AgentRecord.jsx";
+import { diffStat } from "./agentRecord.js";
 import AgentStory, { StoryChip } from "./AgentStory.jsx";
 import { STORY_CHIP, startLabel, storyPlace, storyShown } from "./agentStory.js";
 import PublishedPages, { isPublished } from "./PublishedPages.jsx";
@@ -1049,6 +1050,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const hasRecord = !!(report || detail?.transcript || (isGeneral && generalStarted)
     || (detail?.artifacts || []).some((a) => (isPublished(a) && !isGeneral) || a.kind === "agent_result"));
   const workspaceMode = agentWorkspaceMode({ isGeneral, generalStarted, session: term, wrapping });
+  // THE RESULT (the redesign, owner-approved 2026-10-21): an agent that has stopped and saved - or finished, or stopped - with a record
+  // to show; the work column's agent half is its result then, the session one "Replay the session" line in it
+  const resultShown = !term?.alive && hasRecord && [AGENT.saved, AGENT.stopped, AGENT.finished].includes(agentState);
   const replyState = replyPhase(detail?.reviews || []);
   // ONE question per page. A running session is itself the agent stage, so it is never folded; the
   // hand-picked stage wins over the computed one until you leave the task (start an agent on a task
@@ -1797,7 +1801,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         "agent · needs you" - on an agent that had been parked on a question for an
                         hour (the owner, 2026-09-11, TQ-0499). agentState is the session's own word
                         (taskLifecycle.agentPhase); the heading now says what the chip says. */}
-                    <WorkflowHeading number="2" title={!term?.alive ? "Agent work"
+                    <WorkflowHeading number="2" title={!term?.alive ? (resultShown ? "Result" : "Agent work")
                       : answered ? `${agentName(t)} answered`
                       : agentState === AGENT.waiting ? says(subState(term), agentName(t))   /* asked, approval, stuck (T6) */
                         : `${agentName(t)} is working`}
@@ -1836,6 +1840,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {pane === "agent" && <>
                   {/* WHO CLOSED IT AND WHY, one plain line over its work (the owner, 2026-10-21: "I have no idea what the agent did
                       and why it closed"): the agent's own done sentence, else its report's first line (server taskstate.closed_why) */}
+                  {/* AN AGENT CLOSED IT: nothing waits on you (the redesign, owner-approved 2026-10-21) - said first, over who closed it and why */}
+                  {!term?.alive && t?.Status === "done" && rowState === "agentdone" && (
+                    <Typography data-tq-handled="" sx={{ color: "#47654a", fontSize: 13, fontWeight: 600, mt: 0.9 }}>Nothing to do. It's handled.</Typography>)}
                   {!term?.alive && t?.Status === "done" && detail?.closedWhy && (
                     <Typography data-tq-closed-why="" sx={{ color: INK, fontSize: 12.5, lineHeight: 1.45, mt: 0.9 }}>{detail.closedWhy}</Typography>)}
                   {term?.alive && !inRow && (
@@ -1879,7 +1886,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {!sessionView && hasRecord && (
                     <Box sx={{ mt: 1.1, pt: 1.1, borderTop: `1px solid ${BORDER}`, "&:empty": { display: "none" } }}>
                       {/* a chat shows its pages under the answer that made them; a terminal's are kept here */}
-                      <AgentRecord {...recordProps} story={storyAt === "record" ? story : null} inChat={workspaceMode === "general"} />
+                      <AgentRecord {...recordProps} story={storyAt === "record" ? story : null} inChat={workspaceMode === "general"}
+                        result={resultShown} diff={diffRun ? diffStat(diffRun.DiffText) : null} />
                       {diffRun && <Box sx={{ mt: 0.75 }}><DiffBlock text={diffRun.DiffText} /></Box>}
                     </Box>
                   )}

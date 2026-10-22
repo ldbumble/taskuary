@@ -10,7 +10,7 @@ import api from "./api";
 import { Md } from "./md.jsx";
 import PublishedPages from "./PublishedPages.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
-import { cardParts, hasMore, lastWords, moreParts, plain, recordFacts, recordHead, recordSteps, runsOf, sourceLabel, splitFiles } from "./agentRecord.js";
+import { cardParts, hasMore, lastWords, moreParts, plain, recordFacts, recordHead, recordSteps, resultParts, runsOf, sourceLabel, splitFiles } from "./agentRecord.js";
 import AgentStory, { StoryLine, Timeline } from "./AgentStory.jsx";
 import { plural } from "./timeWords.js";
 
@@ -124,13 +124,25 @@ export const SessionRecord = ({ s, pages = [], draft = "", startOpen = false, ti
 // THE ONE BLOCK on the Agent work step for a session that is not running: the state in a sentence (`story`, from
 // funnel.agent_story: ended by you, cut off by a restart, stopped), what happened, and More. With no record to show it is the
 // story alone.
-export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = null, folded = false, inChat = false }) => {
+// `result`: the agent has stopped and saved, and the work column shows its RESULT (the redesign, owner-approved 2026-10-21) - what it
+// found, how it resolved it, its write-up whole, what it made, and the session as one "Replay the session" line. `diff`: the run's own
+// diff counted (agentRecord.diffStat), where a run kept one.
+export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = null, folded = false, inChat = false, result = false, diff = null }) => {
   const [rec, setRec] = useState(null);
   useEffect(() => {
     let live = true;
     api.get(`/api/tasks/${taskId}/record`).then(({ data }) => live && setRec(data)).catch(() => live && setRec({ sessions: [] }));
     return () => { live = false; };
   }, [taskId, stamp]);
+  // ...and the files it made for the task (outputs.py) - the chat lists them under its answers; a result lists them with its work
+  // (null until read, and on a failed read: the result shows what it has, never "no files" it could not know)
+  const [outputs, setOutputs] = useState(null);
+  useEffect(() => {
+    if (!result || inChat) { setOutputs(null); return undefined; }
+    let live = true;
+    api.get(`/api/task-outputs/${taskId}`).then(({ data }) => live && setOutputs(data?.data || null)).catch(() => live && setOutputs(null));
+    return () => { live = false; };
+  }, [taskId, stamp, result, inChat]);
   const [now, ...before] = rec?.sessions || [];
   // FOLDED, the step is its state and what happened, two lines - the rest is the open step's (storyPlace)
   if (folded) {
@@ -152,10 +164,41 @@ export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = nul
   return (
     <Box sx={{ width: "100%", bgcolor: PANEL, px: 1.35, py: 1.15, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
       {state && <Box sx={{ mb: 1, pb: 1, borderBottom: `1px solid ${BORDER}` }}><StoryLine kind={state.kind} line={state.line} /></Box>}
-      {s && !chat ? <RunSummaries sessions={[s, ...before]} pages={pages}
+      {s && !chat && result ? <ResultView s={s} before={before} pages={[...pages, ...(outputs || [])]} diff={diff} since={since} draft={draft} story={story} />
+        : s && !chat ? <RunSummaries sessions={[s, ...before]} pages={pages}
           full={<SessionRecord s={s} draft={draft} startOpen timeline={story?.steps || []} since={since} earlier={before} />} />
         : s ? <SessionRecord s={s} pages={pages} draft={draft} timeline={story?.steps || []} since={since} earlier={before} inChat={chat} />
         : <PublishedPages pages={pages} />}
+    </Box>);
+};
+
+// THE RESULT (the redesign, owner-approved 2026-10-21): the write-up's own parts, each only where it recorded one - what it found, how
+// it resolved it, the summary and its last words whole - then what it made (the files it saved, the pages and files it made for the
+// task, the run's diff counted), and the terminal as ONE line that replays the session step by step. Never the raw log on top.
+const ResultView = ({ s, before, pages, diff, since, draft, story }) => {
+  const [replay, setReplay] = useState(false);
+  const { rows, summary, writeup } = resultParts(s), { mine } = splitFiles(s.files, s.cwd);
+  const made = !!(mine.length || pages.length || diff);
+  return (
+    <Box data-tq-result="" sx={{ display: "flex", flexDirection: "column", gap: 1.1 }}>
+      {!rows.length && !summary && !writeup && <Typography sx={{ fontSize: 12.5, color: DIM }}>It ended without a written result - the replay has what it did.</Typography>}
+      {rows.map(([k, v]) => <Box key={k} data-tq-result-part={k}><Typography sx={head}>{k}</Typography><Box sx={{ fontSize: 13.5, lineHeight: 1.5, color: INK }}><Md text={v} /></Box></Box>)}
+      {summary && <Box data-tq-result-part="Summary"><Typography sx={head}>Summary</Typography><Box sx={{ fontSize: 13.5, lineHeight: 1.5, color: INK }}><Md text={summary} /></Box></Box>}
+      {writeup && <Box data-tq-result-part="write-up"><Typography sx={head}>{rows.length || summary ? "Its write-up" : "What it did"}</Typography>
+        <Box sx={{ fontSize: 13.5, lineHeight: 1.5, color: INK }}><Md text={writeup} /></Box></Box>}
+      {made && <Box data-tq-result-files="" sx={sec}>
+        <Typography sx={head}>What it made</Typography>
+        {diff && <Typography data-tq-diff-stat="" sx={{ ...mono, fontSize: 11.5, color: DIM, mb: 0.4 }}>
+          {plural(diff.files, "file")} changed · <Box component="span" sx={{ color: "#47654a" }}>+{diff.added}</Box> <Box component="span" sx={{ color: "#6b2733" }}>−{diff.removed}</Box></Typography>}
+        {mine.map((f) => <Typography key={f} noWrap title={f} sx={{ ...mono, fontSize: 11.5, color: INK }}>{f}</Typography>)}
+        {!!pages.length && <Box sx={{ mt: mine.length || diff ? 0.75 : 0 }}><PublishedPages pages={pages} /></Box>}
+      </Box>}
+      {since?.text && <Box sx={sec}><Typography sx={head}>Since then</Typography><Typography sx={{ fontSize: 12.5, color: INK }}>{since.text}</Typography></Box>}
+      <Box sx={sec}>
+        <Button size="small" data-tq-replay="" aria-expanded={replay} sx={{ ...link, textAlign: "left" }} onClick={() => setReplay(!replay)}>
+          {replay ? "▾" : "▶"} Replay the session{before.length ? ` · ${before.length + 1} runs` : ""}{s.at ? ` · ${String(s.at).slice(11, 16)}` : ""}</Button>
+        {replay && <Box sx={{ mt: 1 }}><SessionRecord s={s} draft={draft} startOpen timeline={story?.steps || []} earlier={before} /></Box>}
+      </Box>
     </Box>);
 };
 

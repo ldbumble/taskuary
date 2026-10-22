@@ -87,8 +87,9 @@ class TelegramFileTests(PhoneFiles):
         self.assertIn('gl-recon.xlsx is', said)
         self.assertIn('Telegram takes files up to', said)
         self.assertIn('not sent', said)
-        self.assertIn(f'#task={tid}', said)                                   # the desktop's own address for the task
-        self.assertTrue(got[-1][1], 'and a way on')
+        self.assertIn(f"Open TQ-{tid:04d} on the desktop - it's under the task's files.", said)
+        self.assertNotIn('http', said)                                        # a localhost address opens nothing on a phone
+        self.assertEqual(got[-1][1], [f'Back to TQ-{tid:04d}', ra.WALK, ra.MENU])
 
     def test_a_failed_send_says_why_and_try_again_sends_it(self):
         self.task({'visitor-parking.csv': CSV})
@@ -161,6 +162,7 @@ class WhatsAppFileTests(PhoneFiles):
         with mock.patch.dict('taskuary.messengers.FILE_MAX', {'whatsapp': 10}):
             said = text_of(self.ph.tap('📎 Send gl-recon.xlsx'))
         self.assertIn('WhatsApp takes files up to', said)
+        self.assertIn("on the desktop - it's under the task's files.", said); self.assertNotIn('http', said)
         self.assertEqual(self.ph.docs, [])
         self.ph.tap('Back to')
         self.ph.doc_fails = 'not connected to WhatsApp'

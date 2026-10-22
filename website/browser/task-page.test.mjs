@@ -131,8 +131,18 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
     const before = await pane();
     assert.ok(before, "the coding pane is there");
     assert.equal(await page.$eval("[data-tq-from-line]", (e) => e.getAttribute("aria-expanded")), "false", "closed by default");
+    // ...and the line reads as a press: a chevron after its words, a pointer, a title saying what it opens (the owner, 2026-10-22)
+    const look = () => page.$eval("[data-tq-from-line]", (e) => ({ chevron: e.querySelector("[data-tq-from-chevron]")?.textContent, cursor: getComputedStyle(e).cursor,
+      title: e.getAttribute("title"), gap: e.querySelector("[data-tq-from-chevron]").getBoundingClientRect().left - e.querySelector("[data-tq-from-words]").getBoundingClientRect().right }));
+    const shut = await look();
+    assert.deepEqual([shut.chevron, shut.cursor, shut.title], ["▸", "pointer", "Show where this came from"]);
+    assert.ok(shut.gap >= 0 && shut.gap < 16, `the chevron sits right after the words (${shut.gap}px)`);
+    await page.hover("[data-tq-from-line]");
+    assert.equal(await page.$eval("[data-tq-from-words]", (e) => getComputedStyle(e).textDecorationLine), "underline", "hovered, the words underline");
     await page.click("[data-tq-from-line]");
     await page.waitForSelector("[data-tq-from-side]", { visible: true, timeout: 5000 });
+    const opened = await look();
+    assert.deepEqual([opened.chevron, opened.title], ["◂", "Hide where this came from"], "open, the chevron turns");
     const side = await page.$eval("[data-tq-from-side]", (e) => { const r = e.getBoundingClientRect(); return { left: r.left, w: r.width, text: e.innerText }; });
     assert.match(side.text, /Came from/, "the same From every other task shows");
     assert.ok(side.left <= before.left + 2 && side.w < before.w, "laid over the agent's left edge");
@@ -140,6 +150,11 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
     assert.deepEqual(await pane(), before, "the terminal underneath keeps its size and place while the sidebar is open");
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => !document.querySelector("[data-tq-from-side]"), { timeout: 5000 });
+    assert.equal(await page.evaluate(() => document.activeElement?.hasAttribute("data-tq-from-line")), true, "Escape hands focus back to the line");
+    await page.keyboard.press("Enter");                          // ...where Enter opens it and Space closes it
+    await page.waitForSelector("[data-tq-from-side]", { timeout: 5000 });
+    await page.keyboard.press("Space");
+    await page.waitForFunction(() => !document.querySelector("[data-tq-from-side]") && document.querySelector("[data-tq-from-chevron]")?.textContent === "▸", { timeout: 5000 });
     await page.click("[data-tq-from-line]");                     // ...and the line and the X close it too
     await page.waitForSelector("[data-tq-from-close]", { visible: true, timeout: 5000 });
     await page.click("[data-tq-from-close]");

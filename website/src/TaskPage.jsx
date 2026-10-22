@@ -1593,14 +1593,19 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     2026-10-21) - the same From column every other task shows - and closes on the line, its X or Escape. The agent's
                     area underneath keeps its size: the sidebar is laid over it, never beside it, so the terminal is not refitted and the
                     CLI's screen gets no resize. */}
-                {sessionView && <Box component="button" type="button" ref={fromLineRef} data-tq-from-line="" title={fromLine}
+                {/* ...and it reads as a press (the owner, 2026-10-22: it looked like plain grey text): a chevron right after the words that
+                    turns while the sidebar is open, a tint and an underline on hover, and a hover title saying what it opens */}
+                {sessionView && <Box component="button" type="button" ref={fromLineRef} data-tq-from-line=""
+                  title={fromSide ? "Hide where this came from" : "Show where this came from"}
                   aria-expanded={fromSide} aria-controls="tq-from-side" onClick={() => setFromSide((v) => !v)}
-                  sx={{ appearance: "none", font: "inherit", textAlign: "left", cursor: "pointer", bgcolor: "transparent", border: 0, borderRadius: 0,
-                    display: "flex", alignItems: "baseline", minWidth: 0, flexShrink: 0, fontSize: 12, color: DIM, px: 0.5, pt: 0, pb: 0.6, mb: 0.55,
-                    borderBottom: `1px solid ${BORDER}`, "&:hover": { color: INK }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
+                  sx={{ appearance: "none", font: "inherit", textAlign: "left", cursor: "pointer", bgcolor: fromSide ? "#f4f1ec" : "transparent", border: 0,
+                    borderRadius: "4px 4px 0 0", display: "flex", alignItems: "baseline", minWidth: 0, flexShrink: 0, fontSize: 12, color: DIM,
+                    px: 0.5, pt: 0.25, pb: 0.6, mb: 0.55, borderBottom: `1px solid ${BORDER}`,
+                    "&:hover": { color: INK, bgcolor: "#f4f1ec" }, "&:hover [data-tq-from-words]": { textDecoration: "underline", textUnderlineOffset: "2px" },
+                    "&:hover [data-tq-from-chevron]": { color: INK }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
                   <Box component="span" sx={{ ...label, mr: 0.75, flexShrink: 0 }}>From</Box>
-                  <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 }}>{fromLine}</Box>
-                  <Box component="span" aria-hidden sx={{ ml: 1, color: FAINT, flexShrink: 0 }}>{fromSide ? "◂" : "▸"}</Box></Box>}
+                  <Box component="span" data-tq-from-words="" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{fromLine}</Box>
+                  <Box component="span" aria-hidden data-tq-from-chevron="" sx={{ ml: 0.75, color: DIM, flexShrink: 0 }}>{fromSide ? "◂" : "▸"}</Box></Box>}
                 {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
                     its lap - you type into it like any other terminal. Everything below is
                     reference material about the same task, folded away. */}

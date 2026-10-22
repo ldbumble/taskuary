@@ -15,13 +15,25 @@ test("two columns at rest, the whole width while an agent works - coding or gene
   assert.match(src, /<Box data-tq-work="" sx=\{sessionView \? \{ display: "contents" \} : \{ minWidth: 0, display: "flex", flexDirection: "column" \}\}>/);
   // and From is one line over it, which opens From as a sidebar laid OVER the agent's left edge (item 6, the owner 2026-10-21):
   // absolutely placed, so the pane underneath is never resized; closed by default, by the line, its X or Escape
-  assert.match(src, /\{sessionView && <Box component="button" type="button" ref=\{fromLineRef\} data-tq-from-line="" title=\{fromLine\}\n\s+aria-expanded=\{fromSide\} aria-controls="tq-from-side" onClick=\{\(\) => setFromSide\(\(v\) => !v\)\}/);
+  assert.match(src, /\{sessionView && <Box component="button" type="button" ref=\{fromLineRef\} data-tq-from-line=""\s+title=\{fromSide \? "Hide where this came from" : "Show where this came from"\}\s+aria-expanded=\{fromSide\} aria-controls="tq-from-side" onClick=\{\(\) => setFromSide\(\(v\) => !v\)\}/);
   assert.match(src, /\{\(!sessionView \|\| fromSide\) && \(/);
   assert.match(src, /\.\.\.\(sessionView \? FROM_SIDE\(fromTop\) : PHONE_FROM\(fromOpen\)\)/);
   assert.match(src, /const FROM_SIDE = \(top\) => \(\{ position: "absolute", top, left: 0, bottom: 0,/);
   assert.match(src, /const \[fromSide, setFromSide\] = useState\(false\)/);
   assert.match(src, /if \(e\.key === "Escape"\) \{ e\.stopPropagation\(\); setFromSide\(false\);/);
   assert.match(src, /useEffect\(\(\) => \{ if \(!sessionView\) setFromSide\(false\); \}, \[sessionView\]\);/);
+});
+
+// ...and the line reads as a press (the owner, 2026-10-22: it looked like plain grey text) - a chevron after the words that turns while
+// the sidebar is open, a pointer, a tint and an underline on hover. A native button, so Enter and Space press it.
+test("the folded From line looks pressable: a chevron that turns, a pointer, a hover underline", () => {
+  const src = taskSource(), at = src.indexOf('data-tq-from-line=""'), line = src.slice(at, src.indexOf("</Box></Box>}", at));
+  assert.match(line, /cursor: "pointer"/);
+  assert.match(line, /"&:hover": \{ color: INK, bgcolor: "#f4f1ec" \}/);
+  assert.match(line, /"&:hover \[data-tq-from-words\]": \{ textDecoration: "underline"/);
+  assert.match(line, /data-tq-from-chevron="" sx=\{[^}]*\}\}>\{fromSide \? "◂" : "▸"\}/);
+  assert.ok(line.indexOf("data-tq-from-words") < line.indexOf("data-tq-from-chevron"), "the chevron comes after the words");
+  assert.doesNotMatch(line, /data-tq-from-words="" sx=\{[^}]*flex: 1/, "the chevron sits right after the words, not pushed to the far edge");
 });
 
 test("the work column opens the agent or the reply - and what the task is for where the focus named the task", () => {

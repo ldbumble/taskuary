@@ -197,6 +197,10 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
 // by their own width, not the window's
 const COLUMNS = { display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 1.5, alignItems: "start",
   "@container (min-width: 720px)": { gridTemplateColumns: "minmax(0, 5fr) minmax(0, 7fr)" } };
+// FROM AS A SIDEBAR while an agent works (item 6, the owner 2026-10-21): laid OVER the agent's left edge - absolutely placed in the steps
+// box, so nothing under it moves or resizes - from under the folded line to the foot, scrolling on its own
+const FROM_SIDE = (top) => ({ position: "absolute", top, left: 0, bottom: 0, width: "min(420px, 88%)", zIndex: 6, overflowY: "auto",
+  borderRadius: 0, borderLeft: 0, borderTop: 0, boxShadow: "6px 0 18px rgba(38, 37, 33, 0.14)", bgcolor: "#fffdfb" });
 // a phone's From: three lines, faded at the foot, until a tap opens it
 const PHONE_MQ = "(max-width: 599.95px)";
 const PHONE_FROM = (open) => (open ? {} : { [`@media ${PHONE_MQ}`]: { maxHeight: 132, overflow: "hidden", cursor: "pointer",
@@ -596,6 +600,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [openMsg, setOpenMsg] = useState(undefined);
   // ON A PHONE From shows three lines and opens on a tap (owner-approved 2026-10-21); the tap only opens it - nothing under it is pressed
   const [fromOpen, setFromOpen] = useState(false);
+  // ...and while an agent works, From is a sidebar the folded line opens over the agent's left edge (item 6, the owner 2026-10-21) -
+  // closed by default, on every new task and when the session ends; `fromTop` is where it starts: under the line
+  const [fromSide, setFromSide] = useState(false), [fromTop, setFromTop] = useState(0);
+  const fromLineRef = useRef(null);
+  useEffect(() => { setFromSide(false); }, [selected]);
+  useLayoutEffect(() => { if (fromSide && fromLineRef.current) { const l = fromLineRef.current; setFromTop(l.offsetTop + l.offsetHeight); } }, [fromSide]);
+  useEffect(() => {
+    if (!fromSide) return undefined;
+    const esc = (e) => { if (e.key === "Escape") { e.stopPropagation(); setFromSide(false); fromLineRef.current?.focus(); } };
+    window.addEventListener("keydown", esc, true);
+    return () => window.removeEventListener("keydown", esc, true);
+  }, [fromSide]);
   useEffect(() => { setFromOpen(false); }, [selected]);
   const phoneFromTap = (e) => {
     if (fromOpen || !window.matchMedia?.(PHONE_MQ).matches) return;
@@ -818,6 +834,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // pane with that draft folded away below (the owner, 2026-09-22: "when you hit session closed a
   // reply should automatically pop up"). Cleared, focusStage picks - and a draft ready outranks all.
   useEffect(() => { if (!liveSession) { setPeek(false); setOpenStage(null); } }, [liveSession]);
+  // ...and the From sidebar is a session's: the columns come back without it, and the next session starts with it closed
+  useEffect(() => { if (!sessionView) setFromSide(false); }, [sessionView]);
   const liveCodingSession = !isGeneral && liveSession;
   // Proposals are queued after the reply, so they must not be mistaken for it - but they SHARE
   // its stage. lanes.json has one lane for both ("a reply or an action is drafted and waits for
@@ -1569,13 +1587,20 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               {/* a flex column so the terminal takes exactly what is left between the strip above and the
                   waiting room below - a fixed-height formula clipped its bottom line on shorter screens */}
               <Box ref={stepsBox} sx={{ px: liveSession ? 1 : 2, py: liveSession ? 0.65 : 1.5,
-                overflowY: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", containerType: "inline-size" }}>
+                overflowY: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", containerType: "inline-size", position: "relative" }}>
                 {/* FROM, FOLDED TO ONE LINE while an agent works (owner-approved 2026-10-21): the work has the whole width and the
-                    terminal is never covered or squeezed. TODO(item 6, pending the owner): the line opens a panel that pushes the agent
-                    down - until that is decided it is a static line, never a control. */}
-                {sessionView && <Typography data-tq-from-line="" noWrap title={fromLine}
-                  sx={{ flexShrink: 0, fontSize: 12, color: DIM, px: 0.5, pb: 0.6, mb: 0.55, borderBottom: `1px solid ${BORDER}` }}>
-                  <Box component="span" sx={{ ...label, mr: 0.75 }}>From</Box>{fromLine}</Typography>}
+                    terminal is never covered or squeezed. The line opens From as a SIDEBAR over the agent's left edge (the owner, item 6,
+                    2026-10-21) - the same From column every other task shows - and closes on the line, its X or Escape. The agent's
+                    area underneath keeps its size: the sidebar is laid over it, never beside it, so the terminal is not refitted and the
+                    CLI's screen gets no resize. */}
+                {sessionView && <Box component="button" type="button" ref={fromLineRef} data-tq-from-line="" title={fromLine}
+                  aria-expanded={fromSide} aria-controls="tq-from-side" onClick={() => setFromSide((v) => !v)}
+                  sx={{ appearance: "none", font: "inherit", textAlign: "left", cursor: "pointer", bgcolor: "transparent", border: 0, borderRadius: 0,
+                    display: "flex", alignItems: "baseline", minWidth: 0, flexShrink: 0, fontSize: 12, color: DIM, px: 0.5, pt: 0, pb: 0.6, mb: 0.55,
+                    borderBottom: `1px solid ${BORDER}`, "&:hover": { color: INK }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
+                  <Box component="span" sx={{ ...label, mr: 0.75, flexShrink: 0 }}>From</Box>
+                  <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 }}>{fromLine}</Box>
+                  <Box component="span" aria-hidden sx={{ ml: 1, color: FAINT, flexShrink: 0 }}>{fromSide ? "◂" : "▸"}</Box></Box>}
                 {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
                     its lap - you type into it like any other terminal. Everything below is
                     reference material about the same task, folded away. */}
@@ -1619,13 +1644,19 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     or the reply on the right - they replace the Task / Agent work / Close out accordion. A narrow view stacks them. While
                     an agent works (sessionView) the work takes the whole width and From folds to the one line above it. */}
                 <Box data-tq-columns="" data-tq-layout={layoutOf({ sessionView })} sx={sessionView ? { display: "contents" } : COLUMNS}>
-                {!sessionView && (
-                  <Box data-tq-from="" data-tq-task-section="" data-tq-from-open={fromOpen ? "" : undefined} onClickCapture={phoneFromTap} sx={{ ...card, minWidth: 0, px: 1.5, py: 1.25, display: "flex", flexDirection: "column", gap: 1.75,
-                    ...PHONE_FROM(fromOpen) }}>
+                {(!sessionView || fromSide) && (
+                  <Box data-tq-from="" data-tq-task-section="" data-tq-from-open={fromOpen ? "" : undefined} data-tq-from-side={sessionView ? "" : undefined}
+                    id={sessionView ? "tq-from-side" : undefined} role={sessionView ? "complementary" : undefined} aria-label={sessionView ? "From" : undefined}
+                    onClickCapture={sessionView ? undefined : phoneFromTap} sx={{ ...card, minWidth: 0, px: 1.5, py: 1.25, display: "flex", flexDirection: "column", gap: 1.75,
+                    ...(sessionView ? FROM_SIDE(fromTop) : PHONE_FROM(fromOpen)) }}>
                     {/* SECTION 1, IN THE ORDER THE OWNER APPROVED (2026-10-16): the ask, what there is to do, where it came from - and no
                         buttons. "The buttons stay on bottom by the prompt box like always. No buttons there." On the canvas that is the row
                         over the chat line; on the Tasks tab, the view's own bar under the sections. */}
-                    <Typography sx={{ ...label }}>From</Typography>
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <Typography sx={{ ...label, flex: 1 }}>From</Typography>
+                      {sessionView && <IconButton size="small" aria-label="Close From" data-tq-from-close="" onClick={() => setFromSide(false)}
+                        sx={{ my: -0.5 }}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>}
+                    </Box>
                     <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
                       {/* OPEN AGAIN, AND WHY (funnel.news_since_agent): the message that reopened it, said first - the agent's last
                           session is the record under Agent work, not the news (the owner, 2026-10-12). Where the Advisor's NEXT

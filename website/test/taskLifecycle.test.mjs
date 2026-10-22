@@ -89,7 +89,7 @@ test("the task page opens exactly one stage and lets you open the others by hand
   // ...and the task itself is no stage any more: From is its own column, always open (the redesign, 2026-10-21) - the work column
   // opens what the task is for where the focus names the task (taskLayout.workPane)
   assert.ok(!source.includes(`stage !== "task" && (`), "no folded Task strip");
-  assert.match(source, /\{!sessionView && \(\s*<Box data-tq-from="" data-tq-task-section=""/);
+  assert.match(source, /\{\(!sessionView \|\| fromSide\) && \(\s*<Box data-tq-from="" data-tq-task-section=""/);
   assert.match(source, /const pane = workPane\(\{ stage, kind: t\?\.Kind, hasSender: !!replyMessage, codeRun \}\);/);
 });
 

@@ -112,6 +112,43 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
     assert.ok(term.h > 200, `the terminal is not squeezed (${term.h}px)`);
   });
 
+  // ITEM 6 (the owner, 2026-10-21): the folded line opens From as a sidebar OVER the agent's left edge - the pane underneath keeps its
+  // size, the terminal is not refitted, and no resize reaches the pty; the line, the X and Escape close it
+  await t.test("the From line opens a sidebar over the running coding pane; the terminal keeps its size and gets no resize", async () => {
+    const cdp = await page.createCDPSession();
+    await cdp.send("Network.enable");
+    const resizes = [];
+    cdp.on("Network.webSocketFrameSent", ({ response }) => { try { if (JSON.parse(response.payloadData).type === "resize") resizes.push(response.payloadData); } catch { /* not json */ } });
+    const pane = () => page.evaluate(() => {
+      const x = document.querySelector(".xterm-screen"), r = x?.getBoundingClientRect();
+      return x ? { w: Math.round(r.width), h: Math.round(r.height), left: Math.round(r.left), rows: document.querySelectorAll(".xterm-rows > div").length } : null;
+    });
+    await new Promise((r) => setTimeout(r, 1500));               // the pane's own first fit settles before the clock starts
+    resizes.length = 0;
+    const before = await pane();
+    assert.ok(before, "the coding pane is there");
+    assert.equal(await page.$eval("[data-tq-from-line]", (e) => e.getAttribute("aria-expanded")), "false", "closed by default");
+    await page.click("[data-tq-from-line]");
+    await page.waitForSelector("[data-tq-from-side]", { visible: true, timeout: 5000 });
+    const side = await page.$eval("[data-tq-from-side]", (e) => { const r = e.getBoundingClientRect(); return { left: r.left, w: r.width, text: e.innerText }; });
+    assert.match(side.text, /Came from/, "the same From every other task shows");
+    assert.ok(side.left <= before.left + 2 && side.w < before.w, "laid over the agent's left edge");
+    await new Promise((r) => setTimeout(r, 600));
+    assert.deepEqual(await pane(), before, "the terminal underneath keeps its size and place while the sidebar is open");
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => !document.querySelector("[data-tq-from-side]"), { timeout: 5000 });
+    await page.click("[data-tq-from-line]");                     // ...and the line and the X close it too
+    await page.waitForSelector("[data-tq-from-close]", { visible: true, timeout: 5000 });
+    await page.click("[data-tq-from-close]");
+    await page.waitForFunction(() => !document.querySelector("[data-tq-from-side]"), { timeout: 5000 });
+    await page.click("[data-tq-from-line]"); await page.waitForSelector("[data-tq-from-side]", { timeout: 5000 });
+    await page.click("[data-tq-from-line]"); await page.waitForFunction(() => !document.querySelector("[data-tq-from-side]"), { timeout: 5000 });
+    await new Promise((r) => setTimeout(r, 600));
+    assert.deepEqual(await pane(), before, "the pane is still there, the same size, after it closes");
+    assert.deepEqual(resizes, [], "no resize was sent to the pty");
+    await cdp.detach();
+  });
+
   await t.test("an agent that stopped and saved: the columns return, and the work column is its Result", async () => {
     const made = await post(page, "/api/fixture/task/coding-saved");
     assert.ok(made.taskId, JSON.stringify(made));

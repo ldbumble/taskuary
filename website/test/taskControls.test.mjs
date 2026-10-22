@@ -112,7 +112,7 @@ test("a live session still lets you act on the TASK", () => {
                               ["Hand it to a person", "setHandoff(true)"], ["Split or merge", "setReshape(true)"]]) {
     assert.ok(bar.includes(hook), `${what} must be reachable during a live session`);
   }
-  assert.ok(tasks.includes("{!sessionView && ("), "and the full card is what you get when nothing is running, or when you stepped back to the task");
+  assert.ok(tasks.includes("{(!sessionView || fromSide) && ("), "and the full card is what you get when nothing is running, or when you stepped back to the task (or open From's sidebar)");
   // on the canvas the same four ride in the action row instead, registered whatever the session is doing
   for (const id of ["done", "nat", "hand", "reshape"]) assert.ok(tasks.includes(`{ id: "${id}", group: "more"`), `the row carries ${id}`);
 });

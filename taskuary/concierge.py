@@ -4079,6 +4079,7 @@ def _past(store, op: dict, ref: str) -> str:
     if kind == 'item.settle' and o.get('closed'): return f"{task_ref(int(o['closed']))} closed" + (' - the reply was not sent.' if o.get('unsent') else '.')
     # ...and Not ours and Remind me, the walk's other two receipts: "Done - Not ours · Printer on 3 is jammed again." and "Done - Remind me:
     # Fri 23 Oct · TQ-0001. Away until ..." were still the desk's button words (the 2026-10-22 re-walk)
+    if kind == 'task.create_from_message' and str((op.get('params') or {}).get('kind')) == 'task' and o.get('ref'): return f"{o['ref']} is on your list."
     if kind == 'message.file': return f'{ref} filed as not ours.' if ref.startswith('TQ-') else f'Filed as not ours: {ref}.' if ref else 'Filed as not ours.'
     if kind == 'task.defer' and ref.startswith('TQ-'):
         if not o.get('remindAt'): return f'{ref} is back on your rail now.'

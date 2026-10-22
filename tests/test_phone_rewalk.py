@@ -245,7 +245,8 @@ class ReportTaskTests(PhoneCase):
         self.f.route(mid, None, 'file', 'scheduled report', by='report')
         self.ph.ready(); self.ph.opener()
         self.ph.tap('Walk Reports')
-        self.ph.tap('Put it on my list')
+        receipt = self.ph.tap('Put it on my list')[0][0]
+        self.assertRegex(receipt, r'TQ-\d{4} is on your list\.'); self.assertNotIn('Done -', receipt)      # F13's past tense here too
         self.ph.ready()                                                        # the rail takes the new task in, as the background does
         said = text_of(self.ph.walk())
         self.assertIn('TQ-', said)

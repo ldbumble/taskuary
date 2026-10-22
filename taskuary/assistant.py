@@ -1617,7 +1617,9 @@ def triage_ideas(store, rows: list, llm, report_title: str = None) -> list:
                 out = ingest_message(store, {**msg, '_verdict': (intent, {})}, actor='assistant', llm=llm)
                 if out.get('task_id'):
                     a['tid'] = out['task_id']
-                    store.update_task(out['task_id'], {'SourceRef': f"assistant:idea:{i['IdeaId']}"}, 'assistant')
+                    # only work the idea OPENED is the idea's: one joined to open work keeps where that work came from (2026-10-22)
+                    if out.get('status') == 'created':
+                        store.update_task(out['task_id'], {'SourceRef': f"assistant:idea:{i['IdeaId']}"}, 'assistant')
             except Exception as e:
                 a['triage'] = {'error': f'opening the work failed: {str(e)[:160]}', 'sig': i.get('Sig') or '', 'at': now}
         store.set_idea_action(i['IdeaId'], a); done.append(i['IdeaId'])

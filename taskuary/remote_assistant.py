@@ -1481,7 +1481,7 @@ def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
     # ...and NO PICK ENDS IN A DEAD END (the owner, 2026-10-22: "doesn't drop them in dead ends"): "Left it - nothing moved.", "Dropped -
     # that email will not go.", "Nothing in Reports right now." went out with nothing to tap. Each carries the way on: back to the card
     # on the table, the walk, everything else
-    if said and not _CHOICES_BLOCK.search(said):
+    if said and not _OFFERED.search(said):               # any numbered line is a pick (remember_offered)
         from . import general
         try: tid = general.dock_task(store, actor)[0]['TaskId']
         except Exception: tid = None
@@ -2602,8 +2602,9 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         members = member_lines(item)
         # ...and how many of how many: "4 fyi" over a rail holding fourteen read as all of them (F26)
         total = fyi_total(store, item)
-        head = '\n'.join([f"{mark} {len(members)}{f' of {total}' if total > len(members) else ''} fyi · nothing to do"]
-                         + [f'{i} · {line}' for i, (_k, line) in enumerate(members, 1)])
+        # ...LED BY GOT IT (the owner, 2026-10-22): the way on is 1, the lines 2 on - numbered in the order the poll and the buttons carry them
+        head = '\n'.join([f"{mark} {len(members)}{f' of {total}' if total > len(members) else ''} fyi · nothing to do", f'1 · {GOT_IT}']
+                         + [f'{i} · {line}' for i, (_k, line) in enumerate(members, 2)])
     if item: head = _placed(head, position(store, item))
     if item and len(item.get('questions') or []) > 1:
         from . import concierge
@@ -2626,7 +2627,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         hand = {concierge.CHIP_WORDS[v] for v in _HAND}
         out = {**out, 'chips': [c for c in out.get('chips') or [] if not (isinstance(c, dict) and c.get('verb') in _HAND)],
                'options': [o for o in out.get('options') or [] if str(o) not in hand]}
-    words, first = choices(out), len(member_lines(item)) + 1
+    words, first = choices(out), len(member_lines(item)) + (2 if item.get('kind') == 'fyis' else 1)
     prop = out.get('proposal') if (out.get('proposal') or {}).get('status', 'proposed') == 'proposed' else None
     if prop and prop.get('id') and not prop.get('auto'):
         # THE CARD'S QUESTION, numbered: how far a Not ours goes, which agent, which checkout - each answer runs
@@ -2678,9 +2679,9 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         # card's button, and on the phone it arrives as a word like any other): two ways to say the
         # same move, numbered separately, is the thing that made the desktop drop a button in the
         # first place.
-        if not any(w in next_words for w in words):
-            words = words + [GOT_IT]                  # after the members: they are the card, numbered as the text numbers them
-            _offer([(GOT_IT, {'t': 'next', **_drawn_at(item)})])
+        # ...said ONCE, as the card's first line (Got it, 1): whatever the walk named it, it is not offered again under the lines
+        words = [w for w in words if w not in next_words]
+        _offer([(GOT_IT, {'t': 'next', **_drawn_at(item)})])
     # ...and what a NUMBER does, said plainly. "Open one" describes a door on a screen that is not
     # here; on a phone the number is the only way to see what the line is actually about.
     # A plain answer with nothing on the table offered "Reply with one of: 1 · Next" under every reply - three

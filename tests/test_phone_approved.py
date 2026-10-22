@@ -98,6 +98,18 @@ class FyiLeadsWithGotItTests(PhoneCase):
         for s in ('FW: Quarterly newsletter', 'Office closed Monday'): self.f.filed_fyi(subject=s)
         self.ph.ready()
 
+    def test_the_batch_leads_with_got_it_and_its_lines_are_numbered_as_the_poll_carries_them(self):
+        """The owner, 2026-10-22: the batch leads with Got it too - 1 is Got it, the lines 2 on, so a typed number is the poll's own."""
+        got = self.ph.walk()
+        text, btns = got[-1]
+        self.assertEqual(btns[0], 'Got it', btns)
+        numbered = re.findall(r'(?m)^(\d+) · (.+)$', text)
+        self.assertEqual([w for _n, w in numbered], btns[:len(numbered)], text)          # the text's numbers ARE the poll's order
+        self.assertEqual([int(n) for n, _w in numbered], list(range(1, len(numbered) + 1)))
+        self.assertEqual(btns.count('Got it'), 1)
+        two = text_of(self.ph.type('2'))                                                   # 2 is the first line: it opens
+        self.assertIn(numbered[1][1].split(' - ', 1)[1], two)
+
     def test_the_batch_is_passed_with_got_it_and_never_sent_to_an_agent(self):
         got = self.ph.walk()
         btns = got[-1][1]

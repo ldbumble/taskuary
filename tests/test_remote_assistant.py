@@ -187,21 +187,20 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
         text = remote_assistant.turn_text(batch)
         self.assertNotIn('people told you', text)
         head = text.split('\n\n')[0].split('\n')
-        # ...numbered, so a number opens one; the chips take the numbers after the members
-        self.assertEqual(head[1:], [f"1 · {funnel.CHANNEL_MARKS['github']} Alex - Run failed: ci",
-                                    f"2 · {funnel.CHANNEL_MARKS['email']} Erin - Rebecca is back Tuesday"])
+        # ...numbered, so a number opens one - led by Got it, 1, the members 2 on (the owner, 2026-10-22)
+        self.assertEqual(head[1:], ["1 · Got it", f"2 · {funnel.CHANNEL_MARKS['github']} Alex - Run failed: ci",
+                                    f"3 · {funnel.CHANNEL_MARKS['email']} Erin - Rebecca is back Tuesday"])
         self.assertTrue(head[0].endswith('2 fyi · nothing to do'), head[0])
-        # ...and the line says what a number DOES: "open one" describes a door on a screen that is not
-        # here, and on a phone the number is the only way to see what a line is about (2026-09-22)
-        self.assertIn('Reply with a number to read that message in full, or:\n3 · Got it', text)     # an FYI's way on is Got it (A8)
-        self.assertNotIn('4 · ', text, 'the walk already offered the way on under its own name')
+        # ...and the walk's own way on is said once, first, under the batch's word (A8, 2026-10-22)
+        self.assertEqual(text.count('Got it'), 1)
+        self.assertNotIn('4 · ', text)
 
     def test_a_word_that_only_contains_next_is_not_the_way_on(self):
         """Which word is Next is the chip's verb or the vocabulary's own word - a label match on "next" took "Plan next week"
         for the way on and the batch offered none (the owner, 2026-10-11: no word matching)."""
         batch = {'kind': 'fyis', 'lane': 'fyi', 'items': [{'key': 'msg:7', 'who': 'Erin', 'title': 'Back Tuesday', 'channel': 'email'}]}
         text = remote_assistant.turn_text({'say': 'x', 'options': ['Plan next week'], 'chips': [], 'item': batch})
-        self.assertIn('2 · Plan next week', text); self.assertIn(f"3 · {remote_assistant.GOT_IT}", text)
+        self.assertIn('3 · Plan next week', text); self.assertIn(f"1 · {remote_assistant.GOT_IT}", text)
 
     def test_a_number_on_an_fyi_batch_opens_that_one(self):
         """The desktop's "Talk about it" on one member; the chat had four lines and no door into any of
@@ -215,7 +214,7 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
              mock.patch.object(concierge, 'surface', return_value={'say': 'Erin: back Tuesday.', 'options': [], 'chips': [],
                                                                    'item': {'kind': 'fyi', 'lane': 'fyi'}}) as opened, \
              mock.patch.object(messengers, 'wa_send') as send:
-            remote_assistant.respond(store, 'whatsapp', JID, '2', connector['ConnectorId'])
+            remote_assistant.respond(store, 'whatsapp', JID, '3', connector['ConnectorId'])       # 1 is Got it: the second member is 3
         self.assertEqual(opened.call_args.args[1], 'msg:8')
         self.assertIn('Erin: back Tuesday.', send.call_args.args[2])
 
@@ -235,7 +234,7 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
         self.assertEqual(len(poll), 4, poll)
         self.assertEqual(len(set(poll)), 4, 'a poll drops a repeated option')
         self.assertTrue(all(len(o.encode('utf-16-le')) // 2 <= 100 for o in poll))
-        for vote, key in ((poll[1], 'msg:2'), (poll[2], 'msg:3')):
+        for vote, key in ((poll[2], 'msg:2'), (poll[3], 'msg:3')):         # poll[0] is Got it
             remote_assistant.remember_offered(store, 'whatsapp', JID, text)
             with mock.patch.object(concierge, 'restore_current', return_value=batch), \
                  mock.patch.object(concierge, 'surface', return_value={'say': 'opened', 'item': {'kind': 'fyi'}}) as opened, \

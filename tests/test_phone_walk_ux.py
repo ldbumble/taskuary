@@ -322,12 +322,12 @@ class FyiGroupOnAPhoneTests(unittest.TestCase):
         from taskuary import concierge
         self.assertNotIn('next', concierge.CHIPS['fyis'], 'the desktop card still keeps its own button')
         text = self.turn(('not_ours_sender', 'block_sender'))
-        self.assertIn('5 · Got it', text, 'after the two members and the two sender rules - an FYI is passed with Got it (A8)')
+        self.assertIn('1 · Got it', text, 'an FYI is passed with Got it (A8), and the batch leads with it (2026-10-22)')
+        self.assertIn('4 · Ignore this sender', text); self.assertEqual(text.count('Got it'), 1)
 
     def test_it_is_offered_even_when_the_walk_sends_no_chips(self):
         text = self.turn(())
-        self.assertIn('3 · Got it', text)
-        self.assertIn('read that message in full', text)
+        self.assertIn('1 · Got it\n2 · ', text)
 
     def test_an_ordinary_card_still_says_open_one(self):
         text = remote_assistant.turn_text({'item': {'kind': 'report', 'key': 'report:1'},

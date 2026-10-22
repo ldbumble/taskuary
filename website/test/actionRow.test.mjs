@@ -172,7 +172,9 @@ test("a row, a task or an fyi puts the open browse view down AT THE CLICK, as on
   assert.match(view, /const openTaskCard = \(req\) => \{[\s\S]{0,400}?pull\(`task:\$\{req\.tid\}`\); return;\n\s+\}\n\s+if \(!handoff\) \{ openLater\.current = req; return; \}\n\s+setRailOpen\(false\);[^\n]*browseDown\(\);/);
   // ...and a task asked for while a turn is in flight (the Assistant's own link to it, a Board press during Next) waits for that turn and
   // then goes the same road - the bare card it landed as rang no rail row (the dead-end walk's RING, 2026-10-20)
-  assert.match(view, /if \(busy \|\| resetting \|\| !openLater\.current\) return;\n\s+const req = openLater\.current; openLater\.current = null;\n\s+if \(req\.kind === "msg"\) openMsgRef\.current\?\.\(req\.mid\); else openTaskRef\.current\?\.\(req\);\n\s+\}, \[busy, resetting\]\);/);
+  assert.match(view, /if \(busy \|\| resetting \|\| !openLater\.current\) return;\n\s+const req = openLater\.current; openLater\.current = null;\n\s+if \(req\.kind === "msg"\) openMsgRef\.current\?\.\(req\.mid\); else if \(req\.kind === "pull"\) pullRef\.current\?\.\(req\.key, req\.asUser\); else openTaskRef\.current\?\.\(req\);\n\s+\}, \[busy, resetting\]\);/);
+  // ...and a rail row clicked mid-turn waits in the same one slot - the latest ask wins - where it was refused as busy and did nothing
+  assert.match(view, /if \(!handoff && !resetting && \(busy \|\| turnFlight\.current\)\) \{ openLater\.current = \{ kind: "pull", key, asUser \}; return; \}/);
   assert.match(view, /if \(old\) setOld\(null\); browseDown\(\); surface\(key, asUser \|\| null\);/, "pull");
   // ...and a message asked for by id (a card's link, #msg=) goes the same road, as its own card - waiting out a turn as a task does
   assert.match(view, /const openMsgCard = \(mid\) => \{\n\s+if \(!mid\) return;\n\s+if \(busy \|\| resetting \|\| turnFlight\.current\) \{ openLater\.current = \{ kind: "msg", mid \}; return; \}\n\s+pull\(`msg:\$\{mid\}`\);/);

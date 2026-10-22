@@ -120,5 +120,28 @@ test("a rail click on task B while task A is open goes straight to B and stays",
     assert.equal(await page.evaluate(() => window.location.hash), `#task=${b}`, "the address says the task on the table");
   });
 
+  await t.test("a click on C while B's pull is still in flight is not dropped: it waits for B, then C stays", async () => {
+    const all = await rows(page), cur = await page.$eval(".tq-pile-row.current", (e) => e.getAttribute("data-tq-key")).catch(() => null);
+    const [ka, kb, kc] = all.filter((k) => k !== cur);
+    await clickRow(page, ka);
+    await settled(page, ka);
+    const [a] = await shown(page);
+    await sleep(800);
+    slow.splice(0, slow.length, { test: (u, m) => m === "POST" && /\/api\/concierge\/(?:stream|next)$/.test(new URL(u).pathname), ms: 1500 });
+    await watch(page);
+    await clickRow(page, kb);
+    await sleep(300);
+    slow.length = 0;                                    // C's own pull goes at once, when B's has landed
+    await clickRow(page, kc);
+    await settled(page, kc);
+    await sleep(SAMPLE_MS);
+    const seen = await page.evaluate(() => window.__tqStop());
+    const ids = seen.filter(Boolean), c = ids[ids.length - 1];
+    assert.ok(c && c !== a, `C is up: ${JSON.stringify(seen)}`);
+    const firstC = ids.indexOf(c);
+    assert.ok(!ids.slice(firstC).some((x) => x !== c), `nothing but C once C is up - no flash of B or A: ${JSON.stringify(seen)}`);
+    assert.equal(await page.$eval(".tq-pile-row.current", (e) => e.getAttribute("data-tq-key")), kc, "the rail rings C");
+  });
+
   assert.deepEqual(errors, []);
 });

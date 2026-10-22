@@ -38,19 +38,19 @@ class TheEnvironmentAChildGetsTests(unittest.TestCase):
     def test_windows_gets_the_variables_windows_tools_read(self):
         """Asked for AS Windows rather than pretending to BE Windows: patching os.name out
         from under the interpreter is how the first version of this failed on Linux CI."""
-        env = agents.child_env({}, r'C:\Users\rabbi', windows=True)
-        self.assertEqual(env['USERPROFILE'], r'C:\Users\rabbi')
-        self.assertEqual((env['HOMEDRIVE'], env['HOMEPATH']), ('C:', r'\Users\rabbi'))
-        self.assertEqual(env['CODEX_HOME'], r'C:\Users\rabbi\.codex')
+        env = agents.child_env({}, r'C:\Users\alex', windows=True)
+        self.assertEqual(env['USERPROFILE'], r'C:\Users\alex')
+        self.assertEqual((env['HOMEDRIVE'], env['HOMEPATH']), ('C:', r'\Users\alex'))
+        self.assertEqual(env['CODEX_HOME'], r'C:\Users\alex\.codex')
 
     def test_a_posix_box_gets_posix_variables_and_no_windows_ones(self):
-        env = agents.child_env({}, '/home/rabbi', windows=False)
-        self.assertEqual(env['HOME'], '/home/rabbi')
+        env = agents.child_env({}, '/home/alex', windows=False)
+        self.assertEqual(env['HOME'], '/home/alex')
         self.assertNotIn('USERPROFILE', env)
         self.assertTrue(env['CODEX_HOME'].endswith('.codex'))
 
     def test_an_environment_handed_in_is_the_one_that_comes_back(self):
-        env = agents.child_env({'PATH': '/usr/bin'}, '/home/rabbi', windows=False)
+        env = agents.child_env({'PATH': '/usr/bin'}, '/home/alex', windows=False)
         self.assertEqual(env['PATH'], '/usr/bin')
 
     def test_a_machine_with_no_home_at_all_is_not_a_crash(self):

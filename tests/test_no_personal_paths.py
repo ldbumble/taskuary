@@ -14,7 +14,7 @@ def test_no_committed_file_carries_a_path_into_someones_user_folder():
     files = subprocess.run(['git', 'ls-files'], cwd=ROOT, capture_output=True, text=True, check=True).stdout.split()
     hits = []
     for f in files:
-        if f.endswith(SKIP) or f.startswith(('taskuary/web/', 'site/')): continue
+        if f.endswith(SKIP) or f.startswith(('taskuary/web/', 'site/')) or f == 'tests/test_no_personal_paths.py': continue
         try: text = (ROOT / f).read_text(encoding='utf-8')
         except (UnicodeDecodeError, OSError): continue
         hits += [f'{f}:{n}' for n, line in enumerate(text.splitlines(), 1) if USER_DIR.search(line)]

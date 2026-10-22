@@ -593,8 +593,30 @@ def _claim(channel: str, message_id) -> bool:
     return True
 
 
+STARTED = time.time()                  # this process came up: a message sent before it waited out a closed Taskuary
+CLOSED_GRACE = 5.0                     # seconds of clock skew between the phone's stamp and ours
+
+
+def queued_while_closed(rows) -> dict:
+    """The doorway's messages that were sent while Taskuary was closed - [(chat, message id, sent at, words)] from one poll - as {chat:
+    {'newest': id, 'skip': {ids}, 'older': [words, ...]}}. Only the newest is acted on (A10, 2026-10-22): each was answered and acted on
+    in turn, an hour-old "next" included, and nothing said the app had been closed."""
+    by = collections.defaultdict(list)
+    for chat, mid, at, words in sorted(rows, key=lambda r: float(r[2] or 0)):
+        if at and float(at) < STARTED - CLOSED_GRACE: by[str(chat)].append((mid, words))
+    return {chat: {'newest': q[-1][0], 'skip': {m for m, _w in q[:-1]}, 'older': [w for _m, w in q[:-1]]} for chat, q in by.items()}
+
+
+def closed_note(older: list) -> str:
+    """What the answer to the newest queued message opens with."""
+    said = 'Taskuary was closed - picking up from your last message.'
+    if not older: return said
+    named = '; '.join(f'"{_cut(w, 40)}"' for w in older[:3]) + (f' and {len(older) - 3} more' if len(older) > 3 else '')
+    return f"{said} {plural(len(older), 'earlier message')} {'was' if len(older) == 1 else 'were'} not acted on: {named}."
+
+
 def intercept(store, channel: str, chat: str, text: str, *, from_me=False, taskuary=False, connector=None,
-              message_id=None, poll=False, arrived=None, heard=False) -> bool:
+              message_id=None, poll=False, arrived=None, heard=False, closed=None) -> bool:
     """Claim an owner-authored question before it can be discarded or triaged.
 
     ``taskuary`` is stamped by the local bridge on every message Taskuary itself sends. Those echoes are
@@ -612,13 +634,13 @@ def intercept(store, channel: str, chat: str, text: str, *, from_me=False, tasku
     # on a queue nobody reads again. The turn talks to the store underneath instead, like any request.
     threading.Thread(target=_locked_respond,
                      args=(getattr(store, '_store', store), channel, str(chat), question, c.get('ConnectorId'),
-                           message_id, bool(poll), arrived, bool(heard)),
+                           message_id, bool(poll), arrived, bool(heard), closed),
                      name=f'taskuary-{channel}-assistant', daemon=True).start()
     return True
 
 
 def _locked_respond(store, channel: str, chat: str, question: str, connector_id: int, message_id=None, poll=False,
-                    arrived=None, spoken=False):
+                    arrived=None, spoken=False, closed=None):
     # the thumb goes up BEFORE the lock: it says "heard you", and it must not wait behind the turn
     # already answering (which is exactly when the owner most needs to know they were heard)
     if message_id:
@@ -643,7 +665,7 @@ def _locked_respond(store, channel: str, chat: str, question: str, connector_id:
         with lock:
             ev = threading.Event()
             with _locks_guard: _turns[key] = ev
-            try: respond(store, channel, chat, question, connector_id, poll=poll, cancel=ev, heard=spoken)
+            try: respond(store, channel, chat, question, connector_id, poll=poll, cancel=ev, heard=spoken, closed=closed)
             finally:
                 with _locks_guard:
                     if _turns.get(key) is ev: _turns.pop(key, None)
@@ -860,7 +882,8 @@ def walk(store, actor: str = 'owner', opener: bool = True) -> str:
         return carry_out(store, out, None, actor=actor, lead=opener)
 
 
-def respond(store, channel: str, chat: str, question: str, connector_id: int, poll: bool = False, cancel=None, heard: bool = False):
+def respond(store, channel: str, chat: str, question: str, connector_id: int, poll: bool = False, cancel=None, heard: bool = False,
+            closed: list = None):
     """Answer synchronously; the poller runs this on a serialized background worker. `cancel` is set when a pick
     arrives behind this turn: the model's answer is dropped, never sent after the pick's."""
     from . import concierge, general
@@ -871,6 +894,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
     if hb and not hb.get('told') and not handoff(store):
         store.set_setting(HANDED_KEY, json.dumps({**hb, 'told': True}), 'assistant')
         _ASKING.chat['again'] = True
+    if closed is not None: _ASKING.chat['closed'] = closed_note(closed)       # it waited out a closed Taskuary (A10)
     try:
         task, _ = general.dock_task(store, f'owner-{channel}')
         tid = task['TaskId']
@@ -2798,6 +2822,8 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None, pa
     a = asking()
     if a and a.get('again') and a.get('channel') == channel and str(a.get('chat')) == str(chat):
         text, a['again'] = f'Picking the walk up here again.\n\n{text}', False
+    if a and a.get('closed') and a.get('channel') == channel and str(a.get('chat')) == str(chat):
+        text, a['closed'] = f"{a['closed']}\n\n{text}", ''
     if a and a.get('heard') and a.get('channel') == channel and str(a.get('chat')) == str(chat):
         text, a['heard'] = f'🎤 Heard: "{_cut(a["heard"], 300)}"\n\n{text}', ''
     # every road to this chat passes here, so this is where what we offered is written down -

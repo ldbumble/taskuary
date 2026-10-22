@@ -101,6 +101,13 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
     ups = tg(tok, 'getUpdates', offset=int(cfg.get('tg_offset') or 0), limit=TG_LIMIT,
              allowed_updates=['message', 'callback_query'])
     n = 0
+    from . import remote_assistant
+    # WHAT WAITED OUT A CLOSED TASKUARY in the Assistant chat: only the newest is acted on, the rest get their thumb and are named (A10)
+    mine = lambda x: (((x.get('chat') or {}).get('type') or 'private') == 'private' and not (x.get('from') or {}).get('is_bot')
+                      and ((x.get('text') or '').strip() or x.get('voice') or x.get('audio'))
+                      and remote_assistant.enabled(store, 'telegram', str((x.get('chat') or {}).get('id') or ''), c))
+    late = remote_assistant.queued_while_closed([(str(x['chat']['id']), x.get('message_id'), x.get('date'), (x.get('text') or '').strip() or 'a voice note')
+                                                 for u in ups if (x := u.get('message')) and x.get('chat') and mine(x)])
     for u in ups:
         if u.get('callback_query'):                     # a button under one of the Assistant's messages
             try: tg_tap(store, c, u['callback_query'])
@@ -110,7 +117,10 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
         chat, frm = m.get('chat') or {}, m.get('from') or {}
         cid = str(chat.get('id') or '')
         if not cid or frm.get('is_bot'): continue
-        from . import remote_assistant
+        q = late.get(cid)
+        if q and m.get('message_id') in q['skip']:
+            react(store, 'telegram', cid, m.get('message_id'), connector_id=c.get('ConnectorId')); continue
+        closed = q['older'] if q and m.get('message_id') == q['newest'] else None
         # A VOICE NOTE TO THE ASSISTANT is the owner talking, as on WhatsApp (_hear): heard first, then its words take the
         # text road below. Telegram dropped it - the interceptor reads text only (the owner, 2026-10-02: "yes fix the
         # transcribe thing for telegram"). Only in the chat that would answer typed words, so a stranger's note to a
@@ -126,7 +136,7 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
         # named private chat is what says the words are the owner's - there is no fromMe to read.
         if ((m.get('text') or '').strip() and (chat.get('type') or 'private') == 'private'
                 and remote_assistant.intercept(store, 'telegram', cid, m['text'], from_me=True, connector=c,
-                                               message_id=m.get('message_id'), heard=heard)):
+                                               message_id=m.get('message_id'), heard=heard, closed=closed)):
             continue
         if cid not in want:
             # ...and a private chat nobody chose is not met with silence: one fixed line, with nothing about the owner in it (A4)
@@ -468,12 +478,21 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     if out.get('seq') is not None and int(out['seq']) < seq: _WA_FILTERED.pop(url, None)    # the bridge restarted
     n, took = 0, []
     from . import remote_assistant
+    # WHAT WAITED OUT A CLOSED TASKUARY in the Assistant chat: only the newest is acted on, the rest get their thumb and are named (A10)
+    late = remote_assistant.queued_while_closed([
+        (assistant_chat, x.get('id'), x.get('ts'), (x.get('text') or '').strip() or 'a voice note') for x in out.get('messages', [])
+        if assistant_chat and x.get('jid') == assistant_chat and x.get('fromMe') and not x.get('taskuary') and not x.get('stalePoll')
+        and ((x.get('text') or '').strip() or x.get('audio')) and remote_assistant.enabled(store, 'whatsapp', assistant_chat, c)])
     for m in out.get('messages', []):
         jid = m.get('jid') or ''
         if not jid: continue
         # This id was sent through the bridge's localhost /send endpoint. It is Taskuary's
         # output, never an owner verdict or question; discard it before either interceptor.
         if m.get('taskuary'): continue
+        q = late.get(jid)
+        if q and m.get('id') in q['skip']:
+            react(store, 'whatsapp', jid, m.get('id'), connector_id=c.get('ConnectorId')); took.append(m.get('id')); continue
+        closed = q['older'] if q and m.get('id') == q['newest'] else None
         # A TAP ON AN OLDER LIST of the Assistant's (poll.mjs stale): nothing runs - its choices are gone - but it is answered
         if m.get('stalePoll'):
             if jid == assistant_chat: remote_assistant.stale_tap(store, 'whatsapp', jid, c['ConnectorId'], spent=bool(m.get('spentPoll')))
@@ -493,7 +512,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         # here too, so a notification or answer can never loop back as a fresh question.
         if text and remote_assistant.intercept(
                 store, 'whatsapp', jid, text, from_me=bool(m.get('fromMe')),
-                connector=c, message_id=m.get('id'), poll=bool(m.get('poll')), arrived=m.get('ts'), heard=heard):
+                connector=c, message_id=m.get('id'), poll=bool(m.get('poll')), arrived=m.get('ts'), heard=heard, closed=closed):
             continue
         if m.get('group') or jid.endswith('@g.us'):
             if jid not in want: continue                      # groups are opt-in, always

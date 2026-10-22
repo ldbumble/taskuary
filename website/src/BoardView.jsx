@@ -251,7 +251,7 @@ const COLS = [
   { key: "agentdone", title: `${KIND_META.agentdone.mark} ${KIND_META.agentdone.word}`, dot: "#47654a" },
 ];
 
-export default function BoardView({ onOpenTask, onOpenReports, active = true }) {
+export default function BoardView({ onOpenTask, active = true }) {
   const [tasks, setTasks] = useState(null);
   const [err, setErr] = useState("");
   const [view, setView] = useState("columns");   // columns | wall - the Studio's office is the Game's now (2026-10-15)
@@ -361,7 +361,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
 
       {/* what the agents are telling EACH OTHER - the half of the board git cannot show */}
       {view === "notes" && <AgentWall onOpenTask={onOpenTask} refresh={boardTick} active={active} />}
-      {view === "wall" && <WallView onOpenTask={onOpenTask} onOpenReports={onOpenReports} refresh={boardTick} active={active} />}
+      {view === "wall" && <WallView onOpenTask={onOpenTask} refresh={boardTick} active={active} />}
 
       <Box sx={{ display: view === "columns" ? "grid" : "none", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "repeat(5, minmax(0, 1fr))" }, gap: 1.5, alignItems: "start" }}>
         {COLS.map((col) => {

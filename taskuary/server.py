@@ -1807,60 +1807,6 @@ def assistant_cancel(task_id: int):
     session = general.session_for(task_id)
     return {'stopped': bool(session and session.stop())}
 
-@app.post('/api/tasks/{task_id}/assistant/report')
-def assistant_create_report(task_id: int, body: AssistantSessionBody = None):
-    """One click: summarize the discussion and create a native daily agent report.
-
-    The existing Reports editor owns every adjustment after that (prompt, model, cadence,
-    enable/disable). Long instructions become provider-neutral Taskuary skills automatically.
-    """
-    from . import general
-    body = body or AssistantSessionBody()
-    task = store.get_task(task_id)
-    if not task: raise HTTPException(404, 'task not found')
-    if not general.handles(task): raise HTTPException(422, 'only assistant discussions can become reports here')
-    # Repeated clicks reopen the same report instead of quietly creating duplicates.
-    for source in store.list_sources(active_only=False):
-        if source.get('Channel') != 'report': continue
-        try: old = json.loads(source.get('ConfigJson') or '{}')
-        except ValueError: continue
-        if old.get('origin_task_id') == task_id:
-            return {'sourceId': source['SourceId'], 'title': old.get('title') or source.get('Address'),
-                    'config': old, 'created': False, 'mode': 'skill' if old.get('skill') else 'prompt'}
-    try: draft = general.report_draft(store, task_id, body.pick, body.model)
-    except (ValueError, RuntimeError) as e: raise HTTPException(422, str(e))
-    options = [p for p in general.provider_options(store) if p.get('type') == 'cli']
-    chosen = next((p for p in options if p.get('pick') == body.pick), None) or (options[0] if options else None)
-    if not chosen: raise HTTPException(422, 'a recurring report needs a configured CLI agent')
-    agent = str(chosen['pick']).split(':', 1)[1]
-    title, prompt = draft['title'].strip()[:160], draft['prompt'].strip()[:12000]
-    report_cfg = {'type': 'agent', 'title': title, 'agent': agent, 'daily_at': '08:00',
-                  'origin_task_id': task_id, 'origin_task_ref': task_ref(task_id)}
-    # A WALK DONE IN THE BROWSER REPEATS IN ONE. Without this the promoted job ran through the report
-    # loop, whose CLI has no shell and no browser, so tomorrow's run could not reach the page the
-    # owner signed into today - and the agent that tried said so and refused to save the report
-    # (2026-09-15). Marked here, it is dispatched as a workflow instead: a real session, the same
-    # named browser, the owner's restored profile (workflows.run, browserview.start).
-    from . import browserview
-    if browserview.wanted(task): report_cfg['browser'] = True
-    chosen_model = body.model if chosen.get('pick') == body.pick else chosen.get('model')
-    if chosen_model: report_cfg['model'] = str(chosen_model).strip()
-    if len(prompt) > general.REPORT_SKILL_CHARS:
-        report_cfg['skill'] = general.save_report_skill(task_id, title, prompt)
-        report_cfg['prompt'] = 'Run this workflow with current information and produce today\'s report.'
-        mode = 'skill'
-    else:
-        report_cfg['prompt'] = prompt
-        mode = 'prompt'
-    sid = store.save_source({'Channel': 'report', 'Address': report_cfg['title'], 'Owner': ACTOR,
-                             'Active': 1, 'ConfigJson': json.dumps(report_cfg)}, ACTOR)
-    store.audit('source', sid, 'created_from_assistant', ACTOR,
-                detail={'task_id': task_id, 'agent': agent, 'schedule': {k: report_cfg[k] for k in ('daily_at', 'every_minutes', 'cron') if k in report_cfg}})
-    store.add_comment(task_id, ACTOR, 'human',
-                      f'Created daily recurring report "{report_cfg["title"]}" from this discussion ({mode}; report source {sid}).')
-    return {'sourceId': sid, 'title': report_cfg['title'], 'config': report_cfg, 'created': True, 'mode': mode}
-
-
 @app.post('/api/tasks/{task_id}/assistant/stream')
 async def assistant_stream(task_id: int, body: AssistantMessageBody):
     """NDJSON work stream for assistant-ui: the configured CLI's real tool/text events.

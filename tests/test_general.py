@@ -347,56 +347,6 @@ class GeneralApiTests(unittest.TestCase):
             self.assertNotIn(session.sid, terminal.SESSIONS)
         self.assertEqual(store.get_task(tid)['Kind'], 'coding')
 
-    def test_one_click_turns_the_discussion_into_a_daily_agent_prompt(self):
-        store = MemoryStore(); tid = general_task(store)
-        connect_cli(self, claude={'cmd': 'claude'})
-        store.add_comment(tid, 'owner', general.USER_TYPE, 'Research the facilities and cite every source.')
-        store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'I compared the current sources and listed the gaps.')
-        made = json.dumps({'title': 'Facility ownership watch',
-                           'prompt': 'Research current facility ownership changes; cite sources and flag gaps.'})
-        with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
-             mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: made):
-            response = TestClient(server.app).post(f'/api/tasks/{tid}/assistant/report',
-                                                   json={'pick': 'cli:claude'})
-        self.assertEqual(response.status_code, 200)
-        src = store.get_source(response.json()['sourceId'])
-        cfg = json.loads(src['ConfigJson'])
-        self.assertEqual((src['Channel'], src['Active'], cfg['type']), ('report', 1, 'agent'))
-        self.assertEqual((cfg['agent'], cfg['daily_at'], cfg['origin_task_id']), ('claude', '08:00', tid))
-        self.assertIn('current facility ownership', cfg['prompt'])
-        self.assertEqual(response.json()['mode'], 'prompt')
-        self.assertTrue(any('Created daily recurring report' in c['Body'] for c in store.list_comments(tid)))
-
-    def test_a_long_reusable_workflow_is_saved_as_a_provider_neutral_skill(self):
-        from pathlib import Path
-        from tempfile import TemporaryDirectory
-        store = MemoryStore(); tid = general_task(store)
-        connect_cli(self, claude={'cmd': 'claude'})
-        store.add_comment(tid, 'owner', general.USER_TYPE, 'Build the full recurring review.')
-        store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Done, with sources and a stable structure.')
-        made = json.dumps({'title': 'Deep operations review', 'prompt': 'Check the current systems.\n' + ('Detailed step. ' * 250)})
-        with TemporaryDirectory() as tmp, mock.patch('taskuary.config.home', return_value=Path(tmp)), \
-             mock.patch.object(server, 'store', store), mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: made):
-            response = TestClient(server.app).post(f'/api/tasks/{tid}/assistant/report', json={'pick': 'cli:claude'})
-            cfg = response.json()['config']
-            skill = Path(tmp) / 'skills' / cfg['skill'] / 'SKILL.md'
-            self.assertTrue(skill.is_file())
-            self.assertIn('Detailed step.', skill.read_text(encoding='utf-8'))
-        self.assertEqual(response.json()['mode'], 'skill')
-        self.assertEqual(cfg['prompt'], "Run this workflow with current information and produce today's report.")
-
-    def test_report_still_gets_an_editable_prompt_when_model_selection_fails(self):
-        store = MemoryStore(); tid = general_task(store)
-        connect_cli(self, claude={'cmd': 'claude'})
-        store.add_comment(tid, 'owner', general.USER_TYPE, 'Check this every weekday.')
-        store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'I checked it and cited the result.')
-        with mock.patch.object(server, 'store', store), \
-             mock.patch.object(llm, 'build_llm', side_effect=RuntimeError('provider unavailable')):
-            response = TestClient(server.app).post(f'/api/tasks/{tid}/assistant/report',
-                                                   json={'pick': 'cli:claude'})
-        self.assertEqual(response.status_code, 200)
-        self.assertIn('original requests to preserve', response.json()['config']['prompt'].lower())
-
     def test_stream_exposes_cli_work_before_the_final_answer(self):
         store = MemoryStore(); tid = general_task(store)
         connect_cli(self, claude={'cmd': 'claude'})

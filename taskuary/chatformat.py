@@ -183,7 +183,10 @@ def split(text: str, limit: int = HARD) -> list:
         if cut < limit // 3: cut = window.rfind('\n')
         if cut < limit // 3: cut = window.rfind(' ')
         if cut < limit // 3: cut = limit
+        # ...and a QUOTE cut mid-line stays a quote: the rest went on as plain text (F17)
+        quoted = limit > 8 and text[:cut].rsplit('\n', 1)[-1].startswith('>') and text[cut:cut + 1] != '\n'
         out.append(text[:cut].rstrip()); text = text[cut:].lstrip()
+        if quoted and not text.startswith('>'): text = '> ' + text
     if text.strip(): out.append(text.strip())
     return out
 

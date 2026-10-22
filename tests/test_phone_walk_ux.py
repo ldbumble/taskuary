@@ -408,6 +408,44 @@ class NoHintUnderAnAnswerTests(unittest.TestCase):
         self.assertFalse(text.startswith('Next.'), text)
 
 
+class LongMailTests(unittest.TestCase):
+    """F17: an 8-paragraph mail - its card led with "Hi Alex," as the summary, and More sent the body as one wall cut wherever the
+    chat's limit fell, the cut-off half of a quote going on as plain text."""
+    PARA = ('The vendor sent the revised schedule for the Lakeview move, and it changes three of the dates we agreed with the '
+            'facilities team last month, so I have gone through each one and noted what it means for us. ') * 2
+
+    def setUp(self):
+        self.s = MemoryStore()
+        self.t = self.s.create_task({'Title': 'Revised move schedule', 'Kind': 'reply', 'Status': 'open',
+                                     'Summary': 'Hi Alex, 1. Gail Moreno wants you to confirm the revised move dates. She needs it by Friday.'}, 'o')
+        body = 'Hi Alex,\n\n' + '\n\n'.join(f'{n}. {self.PARA}' for n in range(1, 9)) + '\n\nThanks,\nGail'
+        self.mid = self.s.add_message({'TaskId': self.t, 'Channel': 'email', 'Subject': 'Revised move schedule', 'FromName': 'Gail Moreno',
+                                       'FromEmail': 'gail@northwind.example', 'BodyText': body, 'Status': 'open'})
+        self.item = {'key': f'task:{self.t}', 'kind': 'asked', 'lane': 'asked', 'tid': self.t, 'mid': self.mid, 'who': 'Gail Moreno',
+                     'channel': 'email', 'title': 'Revised move schedule'}
+
+    def test_the_summary_line_is_a_sentence_not_a_salutation(self):
+        story = remote_assistant.story_block(self.s, self.item)
+        self.assertEqual(story.splitlines()[2], 'Gail Moreno wants you to confirm the revised move dates.', story)
+        self.assertFalse([l for l in story.splitlines() if l.startswith(('Hi Alex', '1.'))], story)
+
+    def test_more_pages_the_body_at_paragraphs(self):
+        from taskuary import chatformat
+        got = []
+        with mock.patch.object(messengers, 'tg_send', side_effect=lambda st, chat, body, connector_id=None, buttons=None: got.append(body)):
+            remote_assistant.send(self.s, 'telegram', '900100', remote_assistant.more_text(self.s, self.item), None)
+        self.assertGreater(len(got), 2)
+        self.assertTrue(all(len(b) <= 1300 for b in got), [len(b) for b in got])
+        body = [b.split('Taskuary:\n', 1)[-1] for b in got]
+        self.assertTrue(all(l.startswith('>') for b in body[1:] for l in b.splitlines() if l.strip()), body[1][:200])
+        self.assertEqual([sum(b.count(f'{n}. The vendor') for b in got) for n in range(1, 9)], [1] * 8, 'each paragraph once')
+
+    def test_a_quote_cut_mid_line_stays_a_quote(self):
+        from taskuary import chatformat
+        parts = chatformat.split('> ' + 'word ' * 400, 500)
+        self.assertTrue(all(p.startswith('>') for p in parts), [p[:10] for p in parts])
+
+
 class ReceiptSaidOnceTests(unittest.TestCase):
     """F13: the bubble that reported Done still said "Nothing happens until you say yes."; an act run at once was said twice, its
     card line ("Answer it - general - ...") above its receipt; a bare "Ok." sat over "Not done"; Remind me said where, not what."""

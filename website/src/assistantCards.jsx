@@ -1187,8 +1187,7 @@ export function BriefCard({ card, onStart }) {
   const n = sum ? sum.n : card.n;
   return (
     <CardShell card={{ ...card, lane: "report", when: null }} kicker="start of the walk"
-      lead={<Lead text={sum ? sum.lead : n ? `${plural(n, "thing")} waiting on you.` : "Nothing waiting on you."} />}
-      sub={n ? null : "Ask me anything, or set something up."}>
+      lead={<Lead text={sum ? sum.lead : n ? `${plural(n, "thing")} waiting on you.` : "Nothing waiting on you."} />}>
       {sum && <WhoWantsWhat groups={sum.groups} onRow={nav.surface} />}
       {/* "Start at the top" IS the walk's Next here - one button, not two for the same step */}
       {!!n && <CardNav.Provider value={{ ...nav, onNext: null }}>

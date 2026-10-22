@@ -204,12 +204,10 @@ test("PW-118 a change to the content of the shown Next is taken fresh, never ref
     assert.deepEqual(await activeCard(), originalControls, 'restored controls must still target Current');
     assert.equal(writes.length, beforeWrites + 1, "passive notice and reload must not navigate");
     const ordering = await request(h, "/api/fixture/processing/ordering", "POST", {});
-    await page.waitForFunction((wanted) => document.querySelector('.tq-pile-row.next .card b')?.textContent.trim() === wanted,
-      { timeout: 15000 }, ordering.titles.urgent);
-    assert.equal(await title(page, "current"), currentAfterRetry, "urgent promotion cannot replace Current");
     // the LEVEL, then the oldest inside it - saved priority is a fact on the row, not a tiebreak
     // (the owner, 2026-09-07: "within one level oldest wins first"). All four are the owner's task, and the urgent one, the
-    // newest, sits at its arrival place, shaded - there is no Urgent section (2026-10-22) - while Next still takes it first.
+    // newest, sits at its arrival place, shaded - no Urgent section, and Next walks it in its place like any other row
+    // (the owner, 2026-10-22: "urgent is combined into tasks and it never moves ... you go through it like all other tasks")
     const expectedOrder = [ordering.titles.old, ordering.titles.new, ordering.titles.high, ordering.titles.urgent];
     await page.waitForFunction((wanted) => {
       const titles = [...document.querySelectorAll('.tq-pile-row .card b')].map(n => n.textContent.trim());
@@ -219,7 +217,17 @@ test("PW-118 a change to the content of the shown Next is taken fresh, never ref
     for (const label of expectedOrder) assert.ok(orderedTitles.includes(label), `${label} must be visible`);
     assert.deepEqual(orderedTitles.filter(label => expectedOrder.includes(label)), expectedOrder,
       "work must show the levels, then the oldest inside one");
-    assert.equal(writes.length, beforeWrites + 1, "arrival reordering cannot advance the chat");
+    assert.equal(await page.$eval('.tq-pile-row.urgent .card b', n => n.textContent.trim()), ordering.titles.urgent,
+      "the urgent arrival is shaded in its place");
+    assert.equal(await title(page, "current"), currentAfterRetry, "an urgent arrival cannot replace Current");
+    // Next stays the row directly below Current - an urgent arrival further down does not take the marker
+    const below = await page.$$eval('.tq-pile-row', rows => {
+      const at = rows.findIndex(n => n.classList.contains('current'));
+      return rows[at + 1]?.querySelector('.card b')?.textContent.trim();
+    });
+    assert.notEqual(below, ordering.titles.urgent, "fixture: the urgent arrival must not sit directly below Current");
+    assert.equal(await title(page, "next"), below, "Next is the row directly below Current, not the urgent one");
+    assert.equal(writes.length, beforeWrites + 1, "an urgent arrival cannot advance the chat");
     const orderedResponse = page.waitForResponse(r => new URL(r.url()).pathname === "/api/concierge/stream"
       && r.status() === 200, { timeout: 15000 });
     const nextControl = (await page.evaluateHandle(() => [...document.querySelectorAll("button")]
@@ -227,8 +235,11 @@ test("PW-118 a change to the content of the shown Next is taken fresh, never ref
     assert.ok(nextControl);
     await Promise.all([orderedResponse, nextControl.click()]);
     await page.waitForFunction((wanted) => document.querySelector('.tq-pile-row.current .card b')?.textContent.trim() === wanted,
-      { timeout: 15000 }, ordering.titles.urgent);
+      { timeout: 15000 }, below);
     assert.equal(writes.length, beforeWrites + 2, "one physical Next gesture advances exactly once");
+    // ...and the press named the very row the page had marked: the server's choice and the page's marker are one
+    const named = writes.at(-1).body.expected_next_members?.[0] || writes.at(-1).body.expected_next_key;
+    assert.equal((await request(h, "/api/funnel/pile?force=1")).items.find(i => i.key === named)?.title, below);
     assert.deepEqual(errors, []);
     assert.deepEqual(page.fixtureEscapes, []);
   } finally {

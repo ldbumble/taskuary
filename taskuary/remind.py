@@ -243,7 +243,7 @@ def set_due(store, tid: int, day: str, actor: str = 'triage'):
 
 def deadlines(store, now: datetime = None) -> int:
     """Each open task whose due day is near, said once per step: a note on the task (new activity, so it is back on the
-    rail unread). From the eve on it is urgent - the top of the list - and late too: a task
+    rail unread). From the eve on it is urgent - shaded on the rail - and late too: a task
     first seen past its day (the app off over it, or a date triage read that had gone) never reached the top (B18)."""
     now, n = now or datetime.now(), 0
     for t in store._rows("SELECT * FROM task WHERE IFNULL(DueAt,'')<>'' AND Status NOT IN ('done','dropped')"):

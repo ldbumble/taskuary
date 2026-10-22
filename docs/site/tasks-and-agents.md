@@ -251,7 +251,7 @@ and the walk goes on as usual.
 
 There is no Urgent heading. An urgent row - a meeting starting within 15 minutes, an ask triage called urgent (a deadline today
 or tomorrow, someone blocked now), a sender on your escalate list - sits in Tasks at its own place, quietly shaded, and **Next**
-takes it first wherever the walk is, then carries on from where you were.
+reaches it there like any other row: from the row above it, Next opens it; from it, Next goes on to the row below.
 
 | Heading | What lands there | Comes back to it |
 |---|---|---|

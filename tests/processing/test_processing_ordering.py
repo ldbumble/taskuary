@@ -96,7 +96,7 @@ def test_age_alone_orders_one_level_and_urgency_never_moves_a_row():
     """Saved priority used to reorder rows inside a level, which put a draft from ten minutes ago
     ahead of an ask from Tuesday (the owner, 2026-09-07: "no reason why open task is before a reply
     drafted"). Urgency is not a tiebreak, and since 2026-10-22 not a level either: an urgent request sits in Tasks at its
-    arrival place, shaded, and Next takes it first (funnel_selection.below)."""
+    arrival place, shaded, and Next walks it in its place (funnel_selection.below)."""
     rows = [item("low", "asked", priority="low", at=stamp(-90)),
             item("unknown", "asked", priority="ASAP", at=stamp(-100)),
             item("normal", "asked", at=stamp(-80)),

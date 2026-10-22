@@ -15,7 +15,7 @@ import json, unittest
 from datetime import datetime, timedelta
 from unittest import mock
 
-from taskuary import assistant, funnel, reports, terminal
+from taskuary import assistant, funnel, lanes, reports, terminal
 from taskuary.store import MemoryStore, task_ref
 
 # relative, never a clock time: the pile keeps the last twelve hours, so a fixed 09:00 failed CI every evening
@@ -198,8 +198,9 @@ class MatrixTests(unittest.TestCase):
         tid = {k: json.loads(s.get_idea(r['IdeaId'])['ActionJson'])['tid'] for k, r in (('calm', calm), ('hot', hot))}
         self.assertEqual(s.get_task(tid['hot'])['Priority'], 'urgent')
         self.assertEqual(s.get_task(tid['calm'])['Priority'], 'normal', "the model's own 'urgent' escalates nothing")
-        order = [i['tid'] for i in pile(s) if i.get('tid') in tid.values()]
-        self.assertEqual(order[:1], [tid['hot']], 'the escalated work leads the shared order')
+        # ...shaded urgent on the shared rail, in its arrival place - urgent never moves a row (the owner, 2026-10-22)
+        hot = {i['tid']: lanes.is_urgent(i) for i in pile(s) if i.get('tid') in tid.values()}
+        self.assertEqual(hot, {tid['calm']: False, tid['hot']: True}, 'the escalated work is the urgent row')
 
     def test_an_informational_idea_never_ranks_above_the_work_an_actionable_one_opened(self):
         s = MemoryStore()

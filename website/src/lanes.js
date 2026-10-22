@@ -38,7 +38,7 @@ export const attentionBand = (item) => {
   return band({ urgent: !!(l.urgent || (l.urgent_request && item?.urgent_request)), wait: !!l.waits,
     actionable: sec === "task" || item?.kind === "agentdone" || (item?.lane === "unjudged" && !!item?.held), result: sec === "reports" });
 };
-// urgent - a meeting inside ALERT_MIN, an ask triage called urgent, an escalated sender: shaded in its place, and Next takes it first
+// urgent - a meeting inside ALERT_MIN, an ask triage called urgent, an escalated sender: shaded in its place, and walked in it like any other row
 export const isUrgent = (item) => attentionBand(item) === URGENT.band;
 export const levelOf = (item) => {
   const b = attentionBand(item);

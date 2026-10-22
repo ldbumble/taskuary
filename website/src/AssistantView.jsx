@@ -651,7 +651,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                 const isCur = i.key === curKey;
                 const inBatch = batchKeys.has(i.key);
                 // URGENT IS A QUIET SHADE ON THE ROW, IN ITS PLACE (the owner, 2026-10-22: "remove the urgent section and just add quiet
-                // shading around it") - no heading of its own, no icon, no word; Next takes it first
+                // shading around it") - no heading of its own, no icon, no word; Next walks it in its place
                 const hot = !i.settling && isUrgent(i);
                 const cls = ["tq-pile-row", falls(i.key) ? "landing" : entering.has(i.key) ? "entering" : "", i.settling ? "settling" : "", hot ? "urgent" : "",
                   isCur ? "current" : inBatch ? "inbatch" : i.key === nextKey ? "next" : ""].filter(Boolean).join(" ");

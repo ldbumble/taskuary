@@ -69,7 +69,7 @@ def stamped_band(item: dict) -> int:
 
 def is_urgent(item: dict) -> bool:
     """URGENT - a meeting inside ALERT_MIN, an ask triage called urgent, an escalated sender: no section of its own (the owner,
-    2026-10-22), it sits in Tasks at its arrival place, shaded, and Next takes it first (funnel_selection.below). lanes.js isUrgent."""
+    2026-10-22), it sits in Tasks at its arrival place, shaded, and Next walks it in its place (funnel_selection.below). lanes.js isUrgent."""
     return stamped_band(item) == URGENT['band']
 
 

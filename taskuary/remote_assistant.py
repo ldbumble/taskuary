@@ -1409,14 +1409,16 @@ def _move_on(store, actor: str, leaving: str = None, exclude: str = None, done_w
 NEWS_KEY = 'phone_urgent_told'             # :<channel>:<chat> -> {walk, keys}: the urgent arrivals this walk already named (A12)
 
 
-def urgent_news(store, nxt: dict | None) -> tuple[str, list]:
-    """URGENT MAIL THAT LANDED MID-WALK, said in one short line over the next card, with an Open for it (A12, 2026-10-22): it was never
-    mentioned while a section walk went on past it. Only what the rail shades urgent (lanes.is_urgent), not shown in this walk, not the card coming
-    up, and not named before in this walk. ('', []) when there is none - or no chat is speaking."""
+def urgent_news(store, out: dict | None) -> tuple[str, list]:
+    """URGENT MAIL THAT LANDED MID-WALK, said in one short line over the next card (`out`, concierge.surface's answer), with an Open for
+    it (A12, 2026-10-22): a heads-up, not a jump - Next still reaches it in its place (the owner, 2026-10-22), and a section walk would
+    go on past it without a word. Only what the rail shades urgent (lanes.is_urgent), not shown in this walk, not the card coming up,
+    and not named before in this walk. ('', []) when there is none, no chat is speaking, or the walk ran out: it walked every row below
+    its place, the urgent one too, and the run-out starts a new walk, so the line named it again over "That's everything"."""
     from . import funnel
     from .processing_unread import WALK_KEY
-    here = asking()
-    if store is None or not (here or {}).get('chat'): return '', []
+    here, nxt = asking(), (out or {}).get('item')
+    if store is None or not (here or {}).get('chat') or (out or {}).get('over'): return '', []
     try: items = funnel.pile(store).get('items') or []
     except Exception as e:
         logger.debug(f'the phone could not look for urgent arrivals: {e}'); return '', []
@@ -1442,7 +1444,7 @@ def _on(store, actor: str, said: list, extra=None, **kw) -> str:
     # the task it just sent for) rode the same poll as the card under it - two Nexts, and a Mark done for a different task
     from . import chatformat
     said = [_CHOICES_BLOCK.sub('', x).strip() for x in said if x]
-    news, opens = urgent_news(store, nxt.get('item'))           # what landed urgent while the walk went on (A12)
+    news, opens = urgent_news(store, nxt)                        # what landed urgent while the walk went on (A12)
     card = turn_text(nxt, lead='\n\n'.join(x for x in (lead, news) if x), store=store, extra=list(extra or []) + opens)
     return chatformat.BREAK.join(['\n\n'.join(x for x in said if x), card] if any(said) else [card])
 
@@ -1518,7 +1520,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             if nxt:
                 doorway_browse.hold(store, asking(), walking['section'], [*seen, nxt['key']])
                 out = concierge.surface(store, nxt['key'], actor=actor, leaving=here)
-                news, opens = urgent_news(store, out.get('item'))
+                news, opens = urgent_news(store, out)
                 return carry_out(store, out, out.get('item'), actor, lead=news, extra=opens)
             doorway_browse.hold(store, asking(), None)          # the section ran out: say so, and the walk goes on as normal
             return carry_out(store, concierge.surface(store, actor=actor, leaving=here, exclude=here), None, actor,
@@ -1528,7 +1530,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             # the next pick; the phone surfaced afresh, so a failed item could be handed straight back or left unread
             here = (item or {}).get('key')
             out = concierge.surface(store, actor=actor, leaving=here, exclude=here)
-            news, opens = urgent_news(store, out.get('item'))
+            news, opens = urgent_news(store, out)
             return carry_out(store, out, None, actor, lead=news, extra=opens)
         if t == 'open':                 # one item by name - one the walk already showed and would not repeat yet
             nxt = concierge.surface(store, act.get('key'), actor=actor)

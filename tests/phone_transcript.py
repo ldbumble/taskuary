@@ -43,8 +43,11 @@ class Phone:
         self.cid, self.f = cid, Factory(s)
         self.f.actor = 'triage'
         self.ids, self.queue, self.bubbles, self.msgs, self.seq = itertools.count(500), [], [], {}, 0
+        # files that reached the phone as documents: (chat, file name, bytes, mime, caption); `doc_fails` makes the next upload fail
+        self.docs, self.doc_fails = [], None
         from taskuary import server, wabridge
         self._p = [mock.patch.object(messengers, 'tg', side_effect=self._tg), mock.patch.object(messengers, '_wa', side_effect=self._wa),
+                   mock.patch.object(messengers, 'tg_upload', side_effect=self._tg_upload),
                    mock.patch.object(ra.threading, 'Thread', _Sync), mock.patch.object(ingest, '_spawn'),
                    mock.patch.object(concierge, 'brain', side_effect=lambda *a, **k: self._brain() if self.brain_fn else None),
                    mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(server, 'store', s),
@@ -79,9 +82,20 @@ class Phone:
         if method == 'setMessageReaction': self.reacted = getattr(self, 'reacted', 0) + 1
         return True
 
+    def _tg_upload(self, tok, method, files, **p):
+        assert method == 'sendDocument', method
+        if self.doc_fails: raise RuntimeError(f'telegram sendDocument: {self.doc_fails}')
+        name, data, mime = files['document']
+        self.docs.append((str(p['chat_id']), name, data, mime, p.get('caption'))); return {'message_id': next(self.ids)}
+
     def _wa(self, c, path, body=None, *a, **k):
         if path.startswith('/messages'):
             q, self.queue = self.queue, []; self.seq += len(q); return {'seq': self.seq, 'messages': q}
+        if path == '/send-document':
+            if self.doc_fails: raise RuntimeError(f'bridge /send-document failed (503): {self.doc_fails}')
+            import base64
+            self.docs.append((body['jid'], body['fileName'], base64.b64decode(body['data']), body['mimetype'], body.get('caption')))
+            return {'ok': True, 'id': f'o{next(self.ids)}'}
         if path == '/send':
             self.bubbles.append((body['text'], list((body.get('poll') or {}).get('values') or []))); return {'ok': True, 'id': f'o{next(self.ids)}'}
         return {'ok': True}

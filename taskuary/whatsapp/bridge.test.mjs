@@ -76,3 +76,70 @@ test("a connection that drops under a pending query reconnects, and the bridge s
     fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 });     // Windows holds a dead process's cwd a moment
   }
 });
+
+// A Baileys that connects and stays up, writing every sendMessage it is handed to sent.jsonl in its folder - a document as its bytes.
+const RECORDS = `
+import { EventEmitter } from "node:events";
+import fs from "node:fs";
+export const DisconnectReason = { loggedOut: 401 };
+export const useMultiFileAuthState = async () => ({ state: { creds: {}, keys: { set: async () => {} } }, saveCreds: async () => {} });
+export const downloadMediaMessage = async () => Buffer.alloc(0);
+export const decryptPollVote = () => { throw new Error("no polls here"); };
+let n = 0;
+export default function makeWASocket() {
+  const ev = new EventEmitter();
+  const sock = { ev, user: { id: "15550100100:1@s.whatsapp.net", name: "Alex Doyle" }, groupFetchAllParticipating: async () => ({}),
+    resyncAppState: async () => {},
+    sendMessage: async (jid, content) => {
+      fs.appendFileSync("sent.jsonl", JSON.stringify({ jid, ...content, ...(content.document ? { document: content.document.toString("base64") } : {}) }) + "\\n");
+      return { key: { id: "OUT" + ++n, remoteJid: jid, fromMe: true } };
+    } };
+  setTimeout(() => ev.emit("connection.update", { connection: "open" }), 20);
+  return sock;
+}`;
+
+const post = (port, p, body, headers = {}) => new Promise((ok) => {
+  const data = typeof body === "string" ? body : JSON.stringify(body);
+  const r = http.request({ host: "127.0.0.1", port, path: p, method: "POST",
+    headers: { "content-type": "application/json", "content-length": Buffer.byteLength(data), ...headers } }, (res) => {
+    let b = ""; res.on("data", (c) => (b += c));
+    res.on("end", () => { try { ok({ code: res.statusCode, body: JSON.parse(b) }); } catch { ok({ code: res.statusCode, body: b }); } });
+  });
+  r.on("error", (e) => ok({ code: e.code })); r.end(data);
+});
+
+test("/send-document sends the very bytes as a WhatsApp document - with the token, never from a page, never past the cap", { timeout: 30_000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wa-bridge-test-"));
+  const fake = path.join(dir, "fake-baileys.mjs");
+  fs.writeFileSync(fake, RECORDS);
+  const hooks = `export async function resolve(s, c, next) {
+    return s === "@whiskeysockets/baileys" ? { url: ${JSON.stringify(pathToFileURL(fake).href)}, shortCircuit: true } : next(s, c); }`;
+  const reg = `import { register } from "node:module"; register(${JSON.stringify("data:text/javascript," + encodeURIComponent(hooks))});`;
+  const port = await freePort(), token = "test-token", auth = { "x-bridge-token": token };
+  const child = spawn(process.execPath, ["--import", "data:text/javascript," + encodeURIComponent(reg), BRIDGE],
+    { cwd: dir, env: { ...process.env, WA_BRIDGE_PORT: String(port), WA_BRIDGE_TOKEN: token }, stdio: ["ignore", "pipe", "pipe"] });
+  let out = "", exited = null;
+  child.stdout.on("data", (c) => (out += c)); child.stderr.on("data", (c) => (out += c));
+  child.on("exit", (code) => (exited = code ?? "signal"));
+  try {
+    for (let i = 0; i < 100 && exited === null && !(await status(port, token))?.connected; i++) await new Promise((r) => setTimeout(r, 100));
+    const bytes = Buffer.from("Account,Debit,Credit\n4000,120.00,\n");
+    const doc = { jid: "15550100100@s.whatsapp.net", data: bytes.toString("base64"), mimetype: "text/csv", fileName: "visitor-parking.csv",
+      caption: "TQ-0017 · visitor-parking.csv" };
+    assert.equal((await post(port, "/send-document", doc)).code, 401, "no token, no send");
+    assert.equal((await post(port, "/send-document", doc, { ...auth, origin: "https://page.example" })).code, 403, "never from a web page");
+    assert.equal((await post(port, "/send-document", { ...doc, data: "" }, auth)).code, 400);
+    const big = await post(port, "/send-document", "{}", { ...auth, "content-length": String(200 * 2 ** 20) });
+    assert.ok([413, "ECONNRESET", "EPIPE"].includes(big.code), `an oversized body is refused before it is read: ${JSON.stringify(big)}`);
+    const sentOk = await post(port, "/send-document", doc, auth);
+    assert.equal(sentOk.code, 200, JSON.stringify(sentOk.body) + out);
+    assert.equal(sentOk.body.bytes, bytes.length);
+    const sent = fs.readFileSync(path.join(dir, "sent.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    assert.equal(sent.length, 1, "the refused ones sent nothing");
+    assert.deepEqual([sent[0].jid, sent[0].fileName, sent[0].mimetype, sent[0].caption], [doc.jid, "visitor-parking.csv", "text/csv", doc.caption]);
+    assert.equal(Buffer.from(sent[0].document, "base64").toString(), bytes.toString(), "the very bytes");
+  } finally {
+    if (exited === null) { const gone = new Promise((r) => child.once("exit", r)); child.kill(); await gone; }
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
+  }
+});

@@ -347,6 +347,30 @@ class NotOursOnTheTableTests(unittest.TestCase):
         self._tap(s, tg_patch, 'telegram', chat)
 
 
+class ReceiptBubbleTests(unittest.TestCase):
+    """F14: the receipt and the next card were one bubble, and the poll under it held the receipt's picks too - "Open TQ-0005" for
+    the task just made, and Next twice."""
+
+    def test_the_receipt_is_its_own_bubble_and_the_poll_is_the_cards(self):
+        s, _ = armed()
+        table = {'key': 'msg:7', 'kind': 'fyi', 'mid': 7, 'title': 'The export job failed again'}
+        prop = {'id': 'op9', 'status': 'proposed', 'label': 'Make a task', 'key': 'msg:7', 'settles': True, 'alts': []}
+        done = {**prop, 'status': 'done', 'kind': 'task.create_from_message', 'params': {'kind': 'task'}, 'outcome': {'taskId': 5, 'ref': 'TQ-0005'}}
+        got = []
+        with mock.patch.object(concierge, 'run_proposal', return_value=done), \
+             mock.patch.object(concierge, 'receipt', return_value='TQ-0005 is on your list.'), \
+             mock.patch.object(concierge, 'surface', return_value=NEXT_CARD), \
+             wa_patch(got):
+            ra.send(s, 'whatsapp', JID, ra.carry_out(s, {'say': 'Make a task: the export job.', 'proposal': prop, 'decision': {'verb': 'mine'}},
+                                                     table, picked=True), None)
+        self.assertGreaterEqual(len(got), 2)
+        self.assertIn('TQ-0005 is on your list.', got[0][0]); self.assertIsNone(got[0][1])
+        poll = got[-1][1]
+        self.assertEqual(len(poll), len(set(poll)), poll)
+        self.assertNotIn('Open TQ-0005', poll)
+        self.assertEqual(poll, ['Make a task', 'Next'])
+
+
 class TypedTurnChoicesTests(unittest.TestCase):
     """F2: the choices drawn under a TYPED answer had no item behind them, so tapping Mark done fell through to the model as
     words. They are the table's chips: a tap runs them on the table."""

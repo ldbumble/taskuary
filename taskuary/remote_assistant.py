@@ -1147,6 +1147,8 @@ def receipt_text(store, done: dict, actor: str = 'owner') -> str:
         from .store import task_ref
         ref = o.get('ref') or task_ref(int(tid))
         extra = [(f'Open {ref}', {'t': 'open', 'key': f'task:{int(tid)}'})]
+        # ...and an agent that never started is not walked past: its task to open again, or the walk's way on - never the same card back
+        if o.get('start_error'): return turn_text({'say': line, 'item': None}, store=store, extra=extra + [(concierge.CHIP_WORDS['next'], {'t': 'next'})])
         # ...and an agent set to work from here is followed up HERE (keep_promises), with the walk's way on meanwhile
         if _starts_agent(done) and o.get('started') is not False and promise(store, tid):
             line, extra = f'{line} {PROMISE_LINE}', extra + [(concierge.CHIP_WORDS['next'], {'t': 'next'})]
@@ -1189,7 +1191,7 @@ def _ran(store, prop: dict, done: dict, item: dict | None, actor: str) -> str:
     from . import concierge
     if done.get('draft_changed') and prop.get('key'):           # operations.execute refused it: show what waits now
         return turn_text(concierge.surface(store, prop['key'], actor=actor), concierge.receipt_turn(store, done, actor)['say'], store=store)
-    if done.get('status') != 'done': return receipt_text(store, done, actor)
+    if done.get('status') != 'done' or (done.get('outcome') or {}).get('start_error'): return receipt_text(store, done, actor)
     said = concierge.receipt(store, done, actor)
     # an agent set to work from here is followed up HERE (keep_promises) - the tap's road made no promise, only a typed number's did
     tid = (done.get('outcome') or {}).get('taskId')

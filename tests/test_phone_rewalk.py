@@ -60,4 +60,28 @@ class NoAiFreshInstallTests(PhoneCase):
         self.assertIn('choices below', text); self.assertIn('Next', poll)
 
 
+class FailedSendToAgentTests(PhoneCase):
+    """3: Send to agent whose agent would not start said "Done - Send to agent · TQ-0001. It is on TQ-0001, but the agent did not
+    start - ..." and brought the same card back with Send to agent first again."""
+    brain = staticmethod(lambda said: 'Ok.')
+
+    def test_a_start_that_failed_says_so_why_and_what_next_never_done(self):
+        from taskuary import general
+        tid, _ = self.f._work('Badge access for the new hire', subject='Badge access for the new hire', from_name=RAY[0], from_email=RAY[1],
+                              body='Alex, the new AP clerk starts Monday. Can you get her a badge for floors 2 and 3?', sent_at=self.f.ago(hours=3))
+        self.ph.ready(); self.ph.walk()
+        with mock.patch.object(general, 'start_session', side_effect=RuntimeError('the claude CLI is not installed on this computer')):
+            got = self.ph.tap('Send to agent')
+        said = text_of(got)
+        self.assertNotIn('Done', said)
+        self.assertRegex(said, r"(?i)did not start|didn't start")
+        self.assertIn('the claude CLI is not installed on this computer', said)                 # why
+        self.assertNotIn('I will tell you here when it finishes', said)                          # no promise over nothing
+        ref = f'TQ-{tid:04d}'
+        self.assertIn(ref, said)
+        self.assertEqual(got[-1][1][:1], [f'Open {ref}'], got[-1][1])                          # what next: back to it, or on
+        self.assertIn('Next', got[-1][1])
+        self.assertFalse(any(b[:1] == ['Send to agent'] for _t, b in got), 'the same card, Send to agent first again')
+
+
 if __name__ == '__main__': unittest.main()

@@ -3912,8 +3912,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
         return (f" {o['ref']} - \"{o.get('title') or ''}\" is ready as a walk-through - one step at a time, nothing built and nothing "
                 "changed until you say so. Open it when you want to start.")
     if kind == 'task.create_from_message' and p.get('kind') in task_kinds.AGENT:
-        # the phone starts the agent itself (remote_assistant._run): a start that failed is said, never "being worked on"
-        if o.get('start_error'): return f" It is on {o.get('ref') or 'its task'}, but the agent did not start - {str(o['start_error']).rstrip('.')}."
+        # the phone starts the agent itself (remote_assistant._run): a start that failed is its own line (receipt_turn), never "Done"
         if o.get('existing'): return " It was already being worked on."
         if o.get('started') or o.get('chat'): return " It's being worked on now - moving on."
     if kind == 'item.settle' and o.get('closed'): return f" {task_ref(int(o['closed']))} closed."
@@ -4079,7 +4078,12 @@ def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = 
     st = op.get('status')
     # the reason as a clause: "unknown agent: ." and "...failed.." were the error's own punctuation run into the sentence's
     why = lambda fallback: str(op.get('error') or fallback).strip().rstrip(' .:;') or fallback
-    if st == 'done':
+    if st == 'done' and (start := str((op.get('outcome') or {}).get('start_error') or '').strip().rstrip(' .:;')):
+        # THE TASK WAS MADE AND ITS AGENT NEVER STARTED (remote_assistant._run): "Done - Send to agent · TQ-0001. It is on TQ-0001, but
+        # the agent did not start - ..." led with the one word that was not true (the 2026-10-22 re-walk)
+        line = (f"Not started - the agent on {ref or 'it'} did not start: {start}. {ref or 'It'} is still on you, with nobody working on it; "
+                f"try {buttons.label('regular_agent')} again once that is fixed.")
+    elif st == 'done':
         line = ((DELIVERY.get() == PHONE and not op.get('duplicate') and _past(store, op, ref))
                 or f"{'Already done' if op.get('duplicate') else 'Done'} - {label}{' · ' + ref if ref else ''}."
                 + ('' if op.get('duplicate') else _outcome_line(op.get('kind'), op.get('params') or {}, op.get('outcome'))))

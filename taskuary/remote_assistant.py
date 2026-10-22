@@ -400,7 +400,34 @@ def _starts_agent(op: dict) -> bool:
     """An act that sets an agent working: a hand-off, a continue, an answer to one that asked."""
     k = op.get('kind')
     return k in ('agent.continue', 'agent.answer', 'dispatch.prepare') or \
-        (k == 'task.create_from_text' and str((op.get('params') or {}).get('kind')) in task_kinds.AGENT)
+        (k in ('task.create_from_text', 'task.create_from_message') and str((op.get('params') or {}).get('kind')) in task_kinds.AGENT)
+
+
+def _run(store, op: dict, actor: str) -> dict:
+    """A confirmed act, run from the phone - and a general hand-off STARTED here. On the desk Send to agent makes the general task
+    and the page asks its question when the chat opens (server.chat_message's ask tag); a phone has no page, so the tap said "It's
+    being worked on now" and nothing ever started (F3). It starts on the task page's own Start road (server.dispatch_task)."""
+    from . import concierge
+    done = concierge.run_proposal(store, op, actor)
+    p, o = done.get('params') or op.get('params') or {}, done.get('outcome') or {}
+    if done.get('status') != 'done' or (done.get('kind') or op.get('kind')) != 'task.create_from_message' or str(p.get('kind')) != 'general' \
+            or not o.get('chat') or not str(o.get('taskId') or '').isdigit(): return done
+    import asyncio
+    from fastapi import BackgroundTasks, HTTPException
+    from . import server
+    tid, bg = int(o['taskId']), BackgroundTasks()
+    try: out = server.dispatch_task(tid, server.DispatchBody(kind='general'), bg)
+    except (HTTPException, ValueError, RuntimeError) as e:
+        why = getattr(e, 'detail', None) or plain(e)
+        logger.warning(f'the phone could not start the agent on TQ-{tid:04d}: {why}')
+        return {**done, 'outcome': {**o, 'chat': False, 'started': False, 'start_error': str(why)}}
+    if bg.tasks:
+        try: asyncio.run(bg())
+        except Exception as e: logger.warning(f'the first ask to the agent on TQ-{tid:04d} did not go: {e}')
+    # the page's own ask is spent - opened later, the task would ask the agent the same thing again
+    tags = [x.strip() for x in str((store.get_task(tid) or {}).get('Tags') or '').split(',') if x.strip()]
+    if server.ASK_TAG in tags: store.update_task(tid, {'Tags': ','.join(x for x in tags if x != server.ASK_TAG)}, actor)
+    return {**done, 'outcome': {**o, 'chat': False, **{k: out.get(k) for k in ('started', 'existing', 'dispatch') if k in out}}}
 
 
 def promise(store, tid) -> bool:
@@ -881,11 +908,11 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
     if prop and picked and prop.get('status') == 'proposed' and not asks(prop):
         # the number WAS the yes: run it, and say what happened instead of asking again
         said[0] = turn_text({**out, 'proposal': None}, lead, store, table=item)
-        done = concierge.run_proposal(store, prop, actor)
+        done = _run(store, prop, actor)
         said.append(receipt_text(store, done, actor))
         walk_on = done.get('status') == 'done' and _settled_the_table(prop, item)
     elif prop and prop.get('auto') and prop.get('status') == 'proposed':
-        done = concierge.run_proposal(store, prop, actor)
+        done = _run(store, prop, actor)
         said.append(receipt_text(store, done, actor))
         walk_on = done.get('status') == 'done' and _settled_the_table(prop, item)
         # a SCRIPT started by name from the phone: the tasks walk is Next; set-up opens on the connections
@@ -1032,7 +1059,7 @@ def receipt_text(store, done: dict, actor: str = 'owner') -> str:
         ref = o.get('ref') or task_ref(int(tid))
         extra = [(f'Open {ref}', {'t': 'open', 'key': f'task:{int(tid)}'})]
         # ...and an agent set to work from here is followed up HERE (keep_promises), with the walk's way on meanwhile
-        if _starts_agent(done) and promise(store, tid):
+        if _starts_agent(done) and o.get('started') is not False and promise(store, tid):
             line, extra = f'{line} {PROMISE_LINE}', extra + [(concierge.CHIP_WORDS['next'], {'t': 'next'})]
         return turn_text({'say': line, 'item': None}, store=store, extra=extra)
     turn = concierge.receipt_turn(store, done, actor)
@@ -1070,6 +1097,9 @@ def _ran(store, prop: dict, done: dict, item: dict | None, actor: str) -> str:
         return turn_text(concierge.surface(store, prop['key'], actor=actor), concierge.receipt_turn(store, done, actor)['say'], store=store)
     if done.get('status') != 'done': return receipt_text(store, done, actor)
     said = concierge.receipt(store, done, actor)
+    # an agent set to work from here is followed up HERE (keep_promises) - the tap's road made no promise, only a typed number's did
+    tid = (done.get('outcome') or {}).get('taskId')
+    if _starts_agent(done) and (done.get('outcome') or {}).get('started') is not False and promise(store, tid): said = f'{said} {PROMISE_LINE}'
     if done.get('status') == 'done' and _settled_the_table(prop, item):
         return _on(store, actor, [said], done_with=prop.get('key') or (item or {}).get('key'))
     if (sent := sent_rows(store, done)): return turn_text({'say': said, 'item': None}, store=store, extra=sent)
@@ -1087,7 +1117,7 @@ def _settle(store, prop: dict, item: dict | None, actor: str) -> str:
     if asks(prop) and not prop.get('auto'):
         said = f"{prop['label']}: {prop['summary']}." if prop.get('label') and prop.get('summary') else prop.get('say')
         return turn_text({'say': said, 'proposal': prop}, store=store)
-    return _ran(store, prop, concierge.run_proposal(store, prop, actor), item, actor)
+    return _ran(store, prop, _run(store, prop, actor), item, actor)
 
 
 def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
@@ -1150,7 +1180,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             if not op or op.get('status') != 'error': return 'That one is not waiting to be tried again - nothing moved.'
             # ...and a retry that lands settles the table the way the first press would have
             prop = {**op, 'settles': bool(act.get('settles')), 'key': (item or {}).get('key')}
-            return _ran(store, prop, concierge.run_proposal(store, op, actor), item, actor)
+            return _ran(store, prop, _run(store, op, actor), item, actor)
         # a report-back's picks (asks.phone_text): send exactly what was shown, or let one email go
         if t == 'send': return asks.send_picked(store, [[act.get('rid'), act.get('sig')]])
         if t == 'sendall': return asks.send_picked(store, act.get('sends') or [])
@@ -1173,7 +1203,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
                 return 'Left it - nothing moved.'
             if t == 'repo': op = {**op, **operations.revise(store, op['id'], {**(op.get('params') or {}), 'repo': act['repo']}, actor)}
             prop = {**op, 'settles': bool(act.get('settles')), 'key': act.get('key')}
-            return _ran(store, prop, concierge.run_proposal(store, op, actor), item, actor)
+            return _ran(store, prop, _run(store, op, actor), item, actor)
         key, verb = act.get('key') or '', act.get('verb') or ''
         on = _item_for(store, key, item)
         if not on: return 'That one is not in front of you any more - say next and I show what is.'

@@ -8,6 +8,7 @@ existing feed consumers or read behavior.
 from __future__ import annotations
 
 import copy
+import functools
 import hashlib
 import json
 from datetime import datetime, timedelta
@@ -29,7 +30,13 @@ def _json_value(value: Any) -> Any:
 
 
 def _field_token(name: object) -> str:
-    return "".join(ch for ch in str(name).lower() if ch.isalnum())
+    return _token(name) if type(name) is str else "".join(ch for ch in str(name).lower() if ch.isalnum())
+
+
+@functools.lru_cache(maxsize=4096)
+def _token(name: str) -> str:
+    # a column name, asked once per row of every root - 250,000 times on a cold rail (2026-10-21)
+    return "".join(ch for ch in name.lower() if ch.isalnum())
 
 
 # Context selection is intentionally allowlisted by entity kind. Store rows carry
@@ -84,7 +91,7 @@ def _unordered_entities(values: list[dict], field: str, allowed: set[str]) -> li
         if not selected and value:
             raise ValueError(f"{field} entry has no recognized substantive fields")
         cleaned.append(selected)
-    return sorted(cleaned, key=_canonical_json)
+    return cleaned if len(cleaned) < 2 else sorted(cleaned, key=_canonical_json)
 
 
 def _digest(value: Any) -> str:

@@ -230,7 +230,8 @@ def sweep_task(store, idea: dict, action: dict) -> dict | None:
     return store.get_task(int(action['task']))
 
 
-def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MINUTES, walk_at=None):
+def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MINUTES, walk_at=None, noise=None):
+    """`noise`: _noise_hidden, read once by a build for all its cards (a setting read per card was 10,000 queries)."""
     from . import funnel
     from .processing_reads import state
     from .funnel_presentation import detach
@@ -279,7 +280,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # Review page, or an idea dismissed in the chat, stayed on the rail as an unread fyi. Off until THEY write again.
     if not tid and not review and not closed: closed = _decided(view, allowed) or _idea_off(store, view, compact, now)
     # ...and the noise the old rail filtered (R5): withdrawn lines, auto-replies, a thread you already answered
-    if not tid and not review and not closed and row.get('MessageId') and _noise_hidden(store): closed = _noise(row, view)
+    if not tid and not review and not closed and row.get('MessageId') and (_noise_hidden(store) if noise is None else noise): closed = _noise(row, view)
     if row.get('MessageId'):
         if review:
             exact = next(m for m in view['messages'] if m['MessageId'] == (review.get('MessageId') or row['MessageId']))   # a task's email has none
@@ -651,7 +652,8 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
     by_id = {item['item_id']: item for item in snapshot['items']}
     states = store.funnel_states()
     quiet, walk_at = RETURN_MINUTES, walk_started_at(store)
-    cards = [card_for(store, by_id[row['item_id']], row, live_state, now, states, quiet, walk_at) for row in rows]
+    noise = _noise_hidden(store)
+    cards = [card_for(store, by_id[row['item_id']], row, live_state, now, states, quiet, walk_at, noise) for row in rows]
     # ...and a task put away with Remind me stays on the rail, in For later, saying its day - it is still open work, and
     # the rail is where open work lives (2026-09-29). It is never actionable, so the walk does not offer it early.
     kept = on_rail

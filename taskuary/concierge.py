@@ -286,6 +286,11 @@ def restore_current(store, tid: int) -> dict | None:
     is still unread and still there; otherwise the key is cleared and nothing is chosen in its place."""
     key = current_key(store, tid)
     if not key: return None
+    # the first rail after a restart is still being built: the item is shown from its own rows and judged once there is a
+    # rail - an item_for_key row is no verdict, and a done task's result would have been cleared off the table on it
+    if not key.startswith('fyis:') and getattr(store, 'rail_cold_building', lambda: False)():
+        quick = funnel.item_for_key(store, key)
+        if quick: return card_for(quick) | {'presentation_revision': quick.get('presentation_revision')}
     try: item = funnel.batch_item(store, key) if key.startswith('fyis:') else funnel.next_item(store, key, include_surfaced=True)
     except Exception as e:
         logger.warning(f'concierge: could not validate the current item {key} - {e}'); item = None

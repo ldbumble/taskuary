@@ -838,6 +838,11 @@ class SQLiteStore:
         # Its own lock, not the writer's: threads share sqlite3's cached statement for the same SQL, so two
         # concurrent reads reset each other's and one gets no row back (a 500 on the walk's table chip, 2026-10-21).
         self._rail_lock = threading.Lock()
+        # Long reads - the rail's cold build, a pile's card stamps - take a reader connection from this pool (_snapshot_read)
+        # instead of the writer's lock: holding that for a 71 s first build after a restart queued opening a task, the agents
+        # and the problems list behind it for up to 28 s (2026-10-21). One rail build at a time (_rail_build_lock).
+        self._path, self._readers, self._readers_lock, self._closed = path, [], threading.Lock(), False
+        self._rail_build_lock = threading.Lock()
         self.lock = threading.RLock()
         self.idlock = threading.Lock()     # create_task: allocate-and-insert as one step (self.lock is per statement)
         if path != ':memory:':
@@ -3006,7 +3011,7 @@ class SQLiteStore:
         return [self._processing_evidence_row(r) for r in self._rows(q + ' ORDER BY EvidenceId', p)]
 
     def _processing_snapshot_cursor(self, cur, resolved, *, live_state=None, lineage=None, item=None,
-                                    include_history=True, display_only=False):
+                                    include_history=True, display_only=False, pre=None):
         """Build the public item picture inside a caller-owned read transaction."""
         from .processing_projection import processing_projection
         if item is None:
@@ -3022,7 +3027,7 @@ class SQLiteStore:
         # and hash tens of megabytes before it could draw anything. Keep the complete snapshot as
         # the default contract; display inventory opts into this deliberately smaller envelope.
         if display_only:
-            projection = processing_projection(cur, resolved, live_state=live_state)
+            projection = processing_projection(cur, resolved, live_state=live_state, pre=pre)
             return {
                 'item': item,
                 'item_history': [{'ItemId': item_id} for item_id in lineage],
@@ -3250,10 +3255,38 @@ class SQLiteStore:
         mid-query (the reply watch's judge, 2026-10-11) had its connection closed beneath it and the process died with an
         access violation - after this, a late reader gets sqlite's "closed database" error instead."""
         with self.lock, self._rail_lock:
-            for cx in (self._rail_cx, self.cx):
+            with self._readers_lock: self._closed, readers, self._readers = True, self._readers, []
+            for cx in (self._rail_cx, self.cx, *readers):
                 try:
                     if cx is not None: cx.close()
                 except sqlite3.Error: pass
+
+    @contextlib.contextmanager
+    def _snapshot_read(self):
+        """One SQLite read snapshot on a pooled reader connection - never the writer's lock, so a long read leaves every
+        other request free to run. Read only: what it yields must never write. A memory database has no second
+        connection to open, and reads under the writer's lock as before (_processing_read)."""
+        if self._rail_cx is None:
+            with self._processing_read() as cur: yield cur
+            return
+        with self._readers_lock:
+            if self._closed: raise sqlite3.ProgrammingError('Cannot operate on a closed database.')
+            cx = self._readers.pop() if self._readers else None
+        if cx is None:
+            cx = sqlite3.connect(self._path, check_same_thread=False, timeout=5.0)
+            cx.row_factory = sqlite3.Row
+            cx.create_function('tq_fold', 1, _fold, deterministic=True)
+            cx.execute('PRAGMA busy_timeout=5000')
+        cur = cx.cursor()
+        try:
+            cur.execute('BEGIN')
+            yield cur
+        finally:
+            try: cur.close(); cx.rollback(); keep = True
+            except sqlite3.Error: keep = False
+            with self._readers_lock:
+                if keep and not self._closed and len(self._readers) < 4: self._readers.append(cx); cx = None
+            if cx is not None: cx.close()
 
     def rail_top(self):
         """The newest dirty-row id: "has anything been written, by any process?" in one cheap read. The
@@ -3265,6 +3298,10 @@ class SQLiteStore:
                 with self._rail_lock: return self._rail_cx.execute(sql).fetchone()[0]
             with self.lock: return self.cx.execute(sql).fetchone()[0]
         except sqlite3.OperationalError: return None
+
+    def rail_cold_building(self) -> bool:
+        """A first rail build is running - a restart's - and there is no rail yet: a read of it would wait for that build."""
+        return self._rail_build_lock.locked() and not self._processing_display_cache
 
     def _rail_read(self, *, as_of, history_days, frozen_live, worker_revision):
         """The display snapshot from the rail cache, keyed by window and by whether workers were observed.
@@ -3285,7 +3322,13 @@ class SQLiteStore:
                 finally:
                     cur.close()
             if status is not None: return self._rail_snapshot(rail, as_of, history_days, projection_live, worker_revision, status)
-        with self._processing_read() as cur:
+        # ...and a build or an update on a reader connection of its own, one at a time: the writer's lock stays free for
+        # every other request (_snapshot_read). Waiting here for another thread's build, take what it built. A memory database
+        # reads under the writer's lock, which serialises it already - and a second lock there could cross with it.
+        with self._rail_build_lock if self._rail_cx is not None else contextlib.nullcontext(), self._snapshot_read() as cur:
+            if self._processing_display_cache.get(key) is not rail:
+                rail = self._processing_display_cache.get(key)
+                if rail is not None and rail['day'] != as_of[:10]: rail = None
             top, rows = (0, None) if rail is None else processing_rail.dirty_since(cur, rail['mark'])
             if rail is None or rows is None:
                 rail = self._rail_build(cur, as_of, history_days, projection_live)
@@ -3328,9 +3371,17 @@ class SQLiteStore:
         rail = {'day': as_of[:10], 'mark': 0, 'proj': {}, 'hash': {}, 'selected': set(), 'order': [], 'coverage': {}}
         self._rail_roots(cur, rail)
         rail['selected'] = self._rail_selected(cur, rail, as_of, history_days)
-        for root in rail['selected']: self._rail_project(cur, rail, root, projection_live)
+        pre = self._rail_prefetch(cur, rail, rail['selected'])
+        for root in rail['selected']: self._rail_project(cur, rail, root, projection_live, pre)
         self._rail_publish(cur, rail)
         return rail
+
+    @staticmethod
+    def _rail_prefetch(cur, rail, roots, least=0):
+        """One bulk read for many roots (processing_projection.Prefetch) - None for a handful, which a query each serves."""
+        if len(roots) < max(least, 1): return None
+        from .processing_projection import Prefetch
+        return Prefetch(cur, {r: rail['lineage'][r] for r in roots})
 
     def _rail_publish(self, cur, rail):
         """The view readers take, swapped in whole: order, projections, hashes, coverage."""
@@ -3338,10 +3389,10 @@ class SQLiteStore:
         rail['coverage'] = self._rail_coverage(cur, rail)
         rail['view'] = (rail['order'], rail['proj'], rail['hash'], rail['coverage'])
 
-    def _rail_project(self, cur, rail, root, projection_live):
+    def _rail_project(self, cur, rail, root, projection_live, pre=None):
         from . import processing_rail
         proj = self._processing_snapshot_cursor(cur, root, live_state=projection_live, lineage=rail['lineage'][root],
-                                                item=rail['roots'][root], include_history=False, display_only=True)
+                                                item=rail['roots'][root], include_history=False, display_only=True, pre=pre)
         rail['proj'][root] = proj
         rail['hash'][root] = processing_rail.root_hash(proj)
 
@@ -3355,10 +3406,9 @@ class SQLiteStore:
             roots = set(roots) | {r for r in rail['proj'] if rail['lineage'].get(r) != old.get(r)}
         if structural or reselect:
             rail['selected'] = self._rail_selected(cur, rail, as_of, history_days)
-        for root in roots:
-            if root in rail['selected']: self._rail_project(cur, rail, root, projection_live)
-        for root in rail['selected']:
-            if root not in rail['proj']: self._rail_project(cur, rail, root, projection_live)
+        todo = {r for r in roots if r in rail['selected']} | {r for r in rail['selected'] if r not in rail['proj']}
+        pre = self._rail_prefetch(cur, rail, todo, least=64)
+        for root in todo: self._rail_project(cur, rail, root, projection_live, pre)
         for root in list(rail['proj']):
             if root not in rail['selected']: rail['proj'].pop(root); rail['hash'].pop(root)
         self._rail_publish(cur, rail)

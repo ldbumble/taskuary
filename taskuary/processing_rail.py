@@ -168,5 +168,10 @@ def revision(snapshot, hashes):
 
 
 def root_hash(projection):
-    return hashlib.sha256(json.dumps(projection, ensure_ascii=False, sort_keys=True, separators=(',', ':'),
+    """A root's fingerprint. Its view and context are already hashed whole - view_revision covers the view, and the
+    context is drawn from the view's own rows - so they are named by those revisions, not encoded a second time:
+    that second encoding of every message body was a fifth of a cold rail build (2026-10-21)."""
+    covered = projection.get('view_revision') and projection.get('context_revision')
+    body = {k: v for k, v in projection.items() if k not in ('view', 'context')} if covered else projection
+    return hashlib.sha256(json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(',', ':'),
                                      allow_nan=False).encode()).hexdigest()

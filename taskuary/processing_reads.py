@@ -123,9 +123,13 @@ def active_version(cur):
     return row[0] if row else None
 
 
-def project(cur, item_id, view):
-    """Read using the caller's transaction; never materialize receipts on display."""
-    version = active_version(cur)
+def project(cur, item_id, view, src=None):
+    """Read using the caller's transaction; never materialize receipts on display. `src` is the projection's
+    reader (processing_projection.Direct, or the cold build's bulk Prefetch)."""
+    if src is None:
+        from .processing_projection import Direct
+        src = Direct(cur)
+    version = src.read_version()
     current = units(view)
     for unit in current:
         # WHEN it was read, not just that it was: an open task nobody closed comes back to the work
@@ -133,22 +137,13 @@ def project(cur, item_id, view):
         # ...and when ANY version of it was last read: a finished agent result asks "read since the close?", and
         # a note filed after that read changes the fingerprint without making the result news again (TQ-0740)
         prints = [unit['fingerprint'], *unit.get('also', ())]
-        row = cur.execute(f'''SELECT MAX(CASE WHEN Fingerprint IN ({','.join('?' * len(prints))}) THEN ReadAt END) AS ReadAt,
-            MAX(ReadAt) AS LastReadAt FROM processing_read_receipt WHERE EntityKind=? AND LocalId=?''',
-            (*prints, unit['entity_kind'], unit['local_id'])).fetchone()
-        unit['read_at'],unit['last_read_at'] = (row['ReadAt'] or None, row['LastReadAt'] or None) if row else (None, None)
+        unit['read_at'], unit['last_read_at'] = src.receipt(unit['entity_kind'], unit['local_id'], prints)
         unit['read'] = bool(unit['read_at'])
     # Root deferrals survive redirects. Exact legacy entity deferrals follow moves.
-    deferrals = {row['Key']: dict(row) for row in cur.execute('''WITH RECURSIVE lineage(ItemId) AS (
-        SELECT ? UNION SELECT p.ItemId FROM processing_item p JOIN lineage l
-        ON p.RedirectItemId=l.ItemId)
-        SELECT d.* FROM processing_read_defer d WHERE d.TargetItemId IN (SELECT ItemId FROM lineage)
-        AND d.TargetEntityKind IS NULL''', (item_id,)).fetchall()}
+    deferrals = {row['Key']: row for row in src.root_deferrals(item_id)}
     for mid in view.get('member_ids', ()):
         kind, local_id = mid.split(':', 1)
-        for row in cur.execute('''SELECT * FROM processing_read_defer
-            WHERE TargetEntityKind=? AND TargetLocalId=?''', (kind, local_id)).fetchall():
-            deferrals[row['Key']] = dict(row)
+        for row in src.entity_deferrals(kind, local_id): deferrals[row['Key']] = row
     return dict(active=bool(version), version=version, units=current,
                 deferrals=[dict(key=row['Key'], status=row['Status'], until=row['Until'],
                                 at=row['At'], by=row['By'])

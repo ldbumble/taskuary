@@ -589,6 +589,17 @@ class NoPickEndsTests(PhoneCase):
         self.assertIn(ref, text_of(self.ph.tap(f'Back to {ref}')))
 
 
+class FreshInstallNoAiTests(PhoneCase):
+    """Found while building: a fresh install with no AI and nothing waiting answered "hi" with "Nothing's waiting. Connect an AI ..." and
+    nothing to tap. It offers Connect an AI - the phone's list of AI connections - and More…."""
+
+    def test_the_first_hi_has_a_way_on(self):
+        got = self.ph.type('hi')
+        self.assertIn('Connect an AI', text_of(got))
+        self.assertEqual(got[-1][1], ['Connect an AI', 'More…'])
+        self.assertIn('CONNECTIONS · AI', text_of(self.ph.tap('Connect an AI')))
+
+
 class TelegramBareNumberTests(PhoneCase):
     """A18 (b): Telegram shows its choices as buttons with no numbers, yet a bare "2" silently ran button 2. It is not acted on: the answer
     says what the choices are, under them."""

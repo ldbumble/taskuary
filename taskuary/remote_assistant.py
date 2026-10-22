@@ -774,6 +774,7 @@ SCRIPT_LINES = [(WALK, {'t': 'walk'}), ('Set up a report', {'t': 'script', 'scri
 
 
 MENU = 'More…'                                 # the opener's way to everything it does not list (A7) - not the card's More
+AI_SECTION = 'AI — agents & models'            # the Connections section that holds the AI cards (connectorcatalog.json)
 OPENER_SECTIONS = ('reports', 'fyi', 'ideas', 'later')   # the section walks the opener leads with, the walkers' most used first
 
 
@@ -1002,7 +1003,10 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
                     return
             if not picked: forget_offered(store, channel, chat)
             text = carry_out(store, out, item, picked=picked)
-            if out.get('no_brain') and not _CHOICES_BLOCK.search(text): text = text.replace(concierge.NO_BRAIN, concierge.NO_BRAIN_BARE)
+            if out.get('no_brain') and not _CHOICES_BLOCK.search(text):
+                # ...and with nothing waiting either, still a way on (a fresh install's first "hi" was a dead end): the AI cards, everything else
+                text = turn_text({'say': text.replace(concierge.NO_BRAIN, concierge.NO_BRAIN_BARE), 'item': None}, store=store,
+                                 extra=[('Connect an AI', {'t': 'browse', 'area': 'connections', 'section': AI_SECTION}), (MENU, {'t': 'menu'})])
             # THE DAY'S OPENING rides on the answer to their first typed message of the day (or after a long gap): the phone
             # never speaks first, so this is where it goes - once, and never if the desk already said it (welcome.phone_lead)
             if not picked:

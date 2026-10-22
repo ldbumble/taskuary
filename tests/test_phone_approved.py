@@ -300,4 +300,38 @@ class TelegramHelpTests(HelpAndStopTests):
         self.assertIn('What you can do here', text_of(self.ph.type('/help@TaskuaryBot')))
 
 
+class VoiceEchoTests(PhoneCase):
+    """A17: a voice note was acted on and the owner could not tell what had been transcribed. The answer says it back first."""
+    channel = 'telegram'
+    brain = staticmethod(lambda said: 'It is the new AP clerk\'s badge, for floors 2 and 3.')
+    SAID = 'what is this one about'
+
+    def _voice(self):
+        from taskuary import voice
+        with mock.patch.object(voice, 'transcribe', return_value={'text': self.SAID}): return self.ph.voice()
+
+    def test_a_voice_note_is_said_back_before_the_answer(self):
+        _two_asks(self.f); self.ph.ready(); self.ph.walk()
+        got = self._voice()
+        self.assertTrue(got[0][0].removeprefix('Taskuary:\n').startswith(f'🎤 Heard: "{self.SAID}"'), got[0][0])
+        self.assertIn("new AP clerk's badge", text_of(got)); self.ends_with_choices(got)
+        self.assertEqual(text_of(got).count('Heard:'), 1)
+        self.assertNotIn('Heard:', text_of(self.ph.type('and who sent it?')))       # typed words are not said back
+
+
+class WhatsAppVoiceEchoTests(VoiceEchoTests):
+    channel = 'whatsapp'
+
+    def _voice(self):
+        import os, tempfile
+        from taskuary import voice
+        fd, path = tempfile.mkstemp(suffix='.ogg'); os.write(fd, b'OggS fake'); os.close(fd)
+        self.addCleanup(os.remove, path)
+        self.ph.queue.append({'id': 'v1', 'jid': self.ph.chat, 'text': '', 'audio': path, 'mime': 'audio/ogg', 'fromMe': True, 'ts': time.time()})
+        with mock.patch.object(voice, 'transcribe', return_value={'text': self.SAID}): return self.ph._took(self.ph._poll)
+
+    def test_a_voice_note_is_said_back_before_the_answer(self):
+        super().test_a_voice_note_is_said_back_before_the_answer()
+
+
 if __name__ == '__main__': unittest.main()

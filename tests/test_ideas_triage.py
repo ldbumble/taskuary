@@ -74,6 +74,21 @@ class SharedVerdictTests(unittest.TestCase):
         self.assertEqual(len(s.list_tasks()), 1)
         self.assertEqual(s.get_task(tid)['Status'], 'in_progress')                # a generated claim completes nothing
 
+    def test_an_idea_triage_joins_to_open_work_leaves_that_work_its_own_source(self):
+        """2026-10-22: a meeting note the Advisor said was judged "the same as" a chat task and joined it - and the task's
+        SourceRef was then rewritten to the idea, so a task a colleague asked for read as one the Advisor opened."""
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Look into the uncleared checks', 'Kind': 'general', 'Status': 'open', 'Source': 'teams',
+                             'SourceRef': 'teams:chat:1'}, 'router')
+        row = idea(s, 'prep:4pm', "Today's 4:00 has Erin and Gail.")
+        def joins(system, user, **k): return json.dumps({'intent': 'task', 'kind': 'general', 'why': 'judged', 'same_as': tid})
+        shown = [{'tid': tid, 'ref': task_ref(tid), 'title': 'Look into the uncleared checks', 'status': 'open'}]
+        with mock.patch('taskuary.ingest._spawn'), mock.patch('taskuary.context.recent_open', return_value=shown):
+            assistant.triage_ideas(s, [row], joins)
+        self.assertEqual(len(s.list_tasks()), 1)
+        self.assertEqual(json.loads(s.get_idea(row['IdeaId'])['ActionJson']).get('tid'), tid)
+        self.assertEqual(s.get_task(tid)['SourceRef'], 'teams:chat:1')
+
     def test_an_idea_about_work_the_owner_just_closed_opens_no_second_task(self):
         """TQ-0487 (2026-09-10): Paula's 13:32 spec arrived on the mail behind TQ-0482. The idea about
         it sat linked to that task for two hours, judged three times, creating nothing. The owner closed

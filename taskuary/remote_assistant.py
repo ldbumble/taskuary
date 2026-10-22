@@ -865,7 +865,7 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
     """
     from . import concierge
     decision = out.get('decision') or {}
-    said, verb = [turn_text(out, lead, store)], decision.get('verb')
+    said, verb = [turn_text(out, lead, store, table=item)], decision.get('verb')
     # The words can name somebody OTHER than what is on the table. The interpreter resolves that into
     # `decision.target` and the desktop's decide() drafts THERE; drafting on `item` regardless answered
     # whoever happened to be up - "reply to Erin" wrote to Dovid (2026-09-10 audit).
@@ -880,7 +880,7 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
                                    'Say it here and I will pass it straight to the run that is waiting.'])
     if prop and picked and prop.get('status') == 'proposed' and not asks(prop):
         # the number WAS the yes: run it, and say what happened instead of asking again
-        said[0] = turn_text({**out, 'proposal': None}, lead, store)
+        said[0] = turn_text({**out, 'proposal': None}, lead, store, table=item)
         done = concierge.run_proposal(store, prop, actor)
         said.append(receipt_text(store, done, actor))
         walk_on = done.get('status') == 'done' and _settled_the_table(prop, item)
@@ -983,7 +983,10 @@ def stale_tap(store, channel: str, chat: str, connector_id=None, spent: bool = F
     once (the owner, 2026-10-02: "once a poll is answered it should never be allowed to be used again")."""
     said = ('That list was already used - nothing ran. The choices under my last message are the current ones.' if spent
             else 'That was an older list, so nothing ran - the choices under my last message are the current ones.')
-    try: send(store, channel, chat, said, connector_id)
+    # ...and on Telegram this line is now the last message, which takes the older buttons off (tg_send): the current ones come with it
+    try: live = json.loads(store.get_setting(f'{OFFERED_KEY}:{channel}:{chat}') or '[]') or [] if channel == 'telegram' else []
+    except ValueError: live = []
+    try: send(store, channel, chat, said, connector_id, choices=live or None)
     except Exception as e: logger.warning(f'{channel}: could not answer a tap on an older list - {e}')
 
 
@@ -1814,7 +1817,27 @@ def script_words(store, script: str) -> str:
     return 'Setting Taskuary up is the Setup button at the top of Taskuary on your computer.'
 
 
-def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: bool = False) -> str:
+_ROAMING = ('next', 'open')                   # chips that run with no item behind them
+
+
+def _chips_on(store, out: dict, item: dict, table: dict | None) -> tuple[dict, str]:
+    """(the turn, the key its verb chips act on). A typed answer carries no item, and its chips - the table's own, drawn under the
+    words - were numbered with nothing to run them on: the tap fell through to the model as words (F2). They act on the TABLE when
+    they are the table's chips; a verb chip that has nothing to act on is not drawn at all."""
+    key = item.get('key') or ''
+    if item: return out, key
+    verbs = [c['verb'] for c in out.get('chips') or [] if isinstance(c, dict) and c.get('verb') and c['verb'] not in _ROAMING]
+    if verbs and (table or {}).get('key') and store is not None:
+        from . import concierge
+        try: own = {c.get('verb') for c in concierge.chips_for(store, table) or []}
+        except Exception as e:
+            logger.debug(f'the phone could not read the table chips: {e}'); own = set()
+        if all(v in own for v in verbs): key = table['key']
+    if key or not verbs: return out, key
+    return {**out, 'chips': [c for c in out['chips'] if not (isinstance(c, dict) and c.get('verb') and c['verb'] not in _ROAMING)]}, key
+
+
+def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: bool = False, table: dict = None) -> str:
     """One turn as one message: where it came from, what was said, then what can be said back.
 
     The options used to ride one line joined by dots, which read as a single run-on sentence on a
@@ -1826,6 +1849,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     """
     from . import funnel
     item = out.get('item') or {}
+    out, key = _chips_on(store, out, item, table)
     say = _TASK_LINK.sub(r'\1', str(out.get('say') or '')).strip()
     mark = funnel.mark_for(item)
     if say and mark: say = f'{mark} {say}'
@@ -1875,9 +1899,9 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         # dropped for having no verb, and the phone offered nothing where the desktop offered Try again (2026-09-30)
         _offer([(c['label'], {'t': 'ask', 'text': c['ask']} if c.get('ask') and not c.get('verb')
                  else {'t': 'next', **_drawn_at(item)} if c.get('verb') == 'next' else {'t': 'open', 'key': c['key']} if c.get('verb') == 'open'
-                 else {'t': 'verb', 'verb': c['verb'], 'key': item.get('key'), **_drawn_at(item), **_pinned(store, item, c['verb'])})
+                 else {'t': 'verb', 'verb': c['verb'], 'key': key, **_drawn_at(item or table), **_pinned(store, item or table, c['verb'])})
                 for c in out.get('chips') or [] if isinstance(c, dict) and c.get('label')
-                and ((c.get('ask') and not c.get('verb')) or (c.get('verb') and (item.get('key') or c.get('verb') in ('next', 'open'))))])
+                and ((c.get('ask') and not c.get('verb')) or (c.get('verb') and (key or c.get('verb') in ('next', 'open'))))])
     # THE CARD'S ORDER: the verb, then Next, then More, then the rest - the desktop's two buttons and its
     # Also line, as one numbered list (2026-09-23). A proposal's yes/no and an agent's own answers keep
     # theirs: those are the answer itself, not a choice of what to do.

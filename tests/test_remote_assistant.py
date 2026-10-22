@@ -149,8 +149,12 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
     def test_a_turn_carries_the_action_words_the_desktop_would_have_drawn(self):
         said = {'say': 'Dana wants the corrected file.',
                 'chips': [{'verb': 'approve', 'label': 'Send the reply'}, {'verb': 'next', 'label': 'Next'}]}
-        self.assertEqual(remote_assistant.turn_text(said),
-                         'Dana wants the corrected file.\n\nReply with one of:\n1 · Send the reply\n2 · Next')
+        # ...the TABLE's words, acting on the table: a verb with nothing behind it would be a button that runs nothing (F2)
+        with mock.patch.object(concierge, 'chips_for', return_value=said['chips']):
+            text = remote_assistant.turn_text(said, store=MemoryStore(), table={'key': 'review:3', 'kind': 'review'})
+        self.assertTrue(text.startswith('Dana wants the corrected file.'), text)
+        self.assertTrue(text.endswith('Reply with one of:\n1 · Send the reply\n2 · Next'), text)
+        self.assertEqual(remote_assistant.turn_text(said), 'Dana wants the corrected file.\n\nReply with one of:\n1 · Next')
 
     def test_a_line_wears_the_mark_of_its_lane_and_says_where_it_came_from(self):
         """The desktop identifies a row by an icon; a chat has only emoji, and it uses the SAME ones

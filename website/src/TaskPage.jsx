@@ -350,7 +350,7 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
 }
 
 export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, onReminded, onLeave, onStay, onOpenTask,
-  onChanged, autostart, onAutostarted, onGoReports, active = true, openAct, onActOpened, canvas = false,
+  onChanged, autostart, onAutostarted, active = true, openAct, onActOpened, canvas = false,
   onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false, title = "", rail = null }) {
   const canCode = useCapabilities().coding;                   // no coding tool connected: coding is not offered (capabilities.js)
   // ...drawn from the task's read held ahead of it (taskDetail.js) - a view on the table opens whole, not as an empty shell (G8)

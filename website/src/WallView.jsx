@@ -38,7 +38,7 @@ const savedOrder = () => { try { const o = JSON.parse(localStorage.getItem(ORDER
 const savedH = (c) => { try { return Number(localStorage.getItem(hKey(c))) || 0; } catch { return 0; } };
 const storeH = (c, h) => { try { h ? localStorage.setItem(hKey(c), String(h)) : localStorage.removeItem(hKey(c)); } catch { /* private */ } };
 
-export default function WallView({ onOpenTask, onOpenReports, refresh = 0, active = true }) {
+export default function WallView({ onOpenTask, refresh = 0, active = true }) {
   const [sessions, setSessions] = useState(null);   // alive pty sessions with a task
   const [tasks, setTasks] = useState({});           // TaskId -> task row (title, ref)
   const [live, setLive] = useState({});             // TaskId -> {work, StartedAt, ...} from runs/live

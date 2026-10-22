@@ -89,7 +89,7 @@ const rowChecklist = (t) => {
   catch { return []; }
 };
 
-export default function TasksView({ selected, onSelect, onChanged, autostart, onAutostarted, onGoReports, active = true, openAct, onActOpened }) {
+export default function TasksView({ selected, onSelect, onChanged, autostart, onAutostarted, active = true, openAct, onActOpened }) {
   const canCode = useCapabilities().coding;                   // no coding tool connected: no coding kind to make (capabilities.js)
   const [tasks, setTasks] = useState(null);
   const [leavingId, setLeavingId] = useState(null);     // a task closed at the press, still closing on the server (finishWith)
@@ -452,7 +452,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       {/* ── the task view (TaskPage.jsx) ─────────────────────────────────── */}
       <TaskPage taskId={selected} listRow={(tasks || []).find((x) => x.TaskId === selected) || null}
         onListChanged={loadTasks} onSelect={onSelect} onClose={dismiss} onFinish={finishWith} onReminded={reminded}
-        onChanged={onChanged} autostart={autostart} onAutostarted={onAutostarted} onGoReports={onGoReports}
+        onChanged={onChanged} autostart={autostart} onAutostarted={onAutostarted}
         active={active} openAct={openAct} onActOpened={onActOpened} />
       <Dialog open={newOpen} onClose={() => setNewOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle>New task</DialogTitle>

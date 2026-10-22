@@ -507,8 +507,7 @@ export default function TaskHubPage() {
           )}
           {(everBoard || tab === "Board") && (
             <Box sx={{ display: tab === "Board" ? "block" : "none" }}>
-              <BoardView key={`b${tick}`} onOpenTask={openTask}
-              onOpenReports={(sid) => { ask({ kind: "browse", area: "reports", state: { section: "reports", open: sid } }); go("Assistant"); }} active={tab === "Board"} />
+              <BoardView key={`b${tick}`} onOpenTask={openTask} active={tab === "Board"} />
             </Box>
           )}
         </Box>

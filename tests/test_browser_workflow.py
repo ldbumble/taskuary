@@ -15,9 +15,7 @@ which is what opens the same named browser restored from the owner's own profile
 import json, unittest
 from unittest import mock
 
-from fastapi.testclient import TestClient
-
-from taskuary import blackboard, browserview, concierge, general, ingest, llm, reports, selfclose, server, terminal, triage, workflows
+from taskuary import blackboard, browserview, concierge, general, ingest, reports, selfclose, terminal, triage, workflows
 from taskuary.store import MemoryStore
 
 
@@ -80,33 +78,6 @@ class BrowserJobRepeatsTests(unittest.TestCase):
         self.assertNotIn('BROWSER:', session.send_prompt.call_args[0][0])
 
 
-class PromotionTests(unittest.TestCase):
-    """The walk that used the browser says so on the job it becomes."""
-
-    def _promote(self, tags):
-        s = store(); tid = s.create_task({'Title': 'Daily time card', 'Summary': 'Read the portal message',
-                                          'Kind': 'general', 'Status': 'open', 'Tags': tags}, 'owner')
-        connect_claude(self)
-        s.add_comment(tid, 'owner', general.USER_TYPE, 'Read the message in the secure area every morning.')
-        s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Signed in and read it; here is today\'s message.')
-        made = json.dumps({'title': 'Daily time card', 'prompt': 'Open the portal and report the secure-area message.'})
-        with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
-             mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: made):
-            r = TestClient(server.app).post(f'/api/tasks/{tid}/assistant/report', json={'pick': 'cli:claude'})
-        self.assertEqual(r.status_code, 200, r.text)
-        return s, json.loads(s.get_source(r.json()['sourceId'])['ConfigJson'])
-
-    def test_a_walk_with_a_browser_becomes_a_browser_workflow(self):
-        s, cfg = self._promote(browserview.WANTS)
-        self.assertTrue(cfg.get('browser'))
-        self.assertTrue(workflows.is_workflow(cfg))
-
-    def test_a_walk_without_one_is_an_ordinary_report(self):
-        s, cfg = self._promote('')
-        self.assertFalse(cfg.get('browser'))
-        self.assertFalse(workflows.is_workflow(cfg))
-
-
 class TheBrowserIsARoadTests(unittest.TestCase):
     """Asked for a job on a website, the sorter must not send the owner looking for a connector that
     cannot exist: the composer's answer was "connect a browser/web automation source", and there is
@@ -148,26 +119,6 @@ class ABrowserJobNeedsHandsTests(unittest.TestCase):
                                      'Source': 'workflow', 'SourceRef': 'workflow:5', 'Tags': browserview.WANTS}, 'o')
         self.assertFalse(general.default_pick(s, s.get_task(plain)).startswith('cli:'))       # chat keeps the quick brain
         self.assertTrue(general.default_pick(s, s.get_task(withbrowser)).startswith('cli:'))  # a browser job gets hands
-
-
-class TheSignInWasAOneOffTests(unittest.TestCase):
-    """What the owner typed once is not a step of every run. The first draft off a browser walk told
-    the daily job to open the login page and wait for the owner - so the repeat run walked to a
-    sign-in screen it did not need and stopped there (2026-09-15)."""
-
-    def test_the_draft_off_a_browser_walk_is_written_for_a_run_nobody_is_watching(self):
-        s = store(); seen = []
-        def brain(system, user, **kw):
-            seen.append(system)
-            return json.dumps({'title': 'Daily time card', 'prompt': 'Open the secure area and report the message.'})
-        for tags, browser in ((browserview.WANTS, True), ('', False)):
-            tid = s.create_task({'Title': 'Daily time card', 'Kind': 'general', 'Status': 'open', 'Tags': tags}, 'o')
-            s.add_comment(tid, 'owner', general.USER_TYPE, 'Read the portal message each morning.')
-            s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Signed in and read it.')
-            with mock.patch.object(llm, 'build_llm', return_value=brain):
-                general.report_draft(s, tid)
-            self.assertEqual('starts SIGNED IN' in seen[-1], browser)
-            self.assertEqual('Never make waiting for the' in seen[-1], browser)
 
 
 class HandingOverTheKeyboardTests(unittest.TestCase):

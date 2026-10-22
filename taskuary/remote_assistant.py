@@ -713,6 +713,8 @@ def morning_line(store, now=None, force: bool = False) -> int:
     from . import doorway_browse
     # the two scripts keep the numbers the owner knows; then each section the rail holds; then the browse picks
     lines = SCRIPT_LINES[:2] + doorway_browse.section_rows(items) + SCRIPT_LINES[2:]
+    # ...and the walk picked off THIS message goes straight to the first card: the summary is right above it (F9)
+    lines = [(w, {**a, 'opened': True} if a.get('t') == 'walk' else a) for w, a in lines]
     text = head + '\n\nReply with one of:\n' + '\n'.join(f'{i} · {w}' for i, (w, _) in enumerate(lines, 1))
     # ...never into a conversation: a walk handed to a chat is its own opener, and a door with a turn in flight or a word in
     # the last minutes is left for the next pass (this runs after every report pass)
@@ -733,14 +735,15 @@ def morning_line(store, now=None, force: bool = False) -> int:
     return sent
 
 
-def walk(store, actor: str = 'owner') -> str:
+def walk(store, actor: str = 'owner', opener: bool = True) -> str:
     """"Walk me through my tasks", picked: the day's summary, then the first card - the desktop's Start at the top.
     A table of typed words used to run this and set-up with no model ("next", "set up", "my tasks"); the owner,
     2026-09-25: "No hard coded anything... Only if you type 1 or hit poll that's clicking a pill". Typed, the words
-    go to the model like any other."""
+    go to the model like any other. `opener=False`: picked off the day's opener itself, which was the summary - it goes
+    straight to the first card (docs/phone-choices.md: "no summary reprinted"; F9)."""
     from . import concierge, funnel
     with concierge.delivering(concierge.PHONE):
-        try: opener = day_opener(store, funnel.pile(store).get('items') or [])
+        try: opener = day_opener(store, funnel.pile(store).get('items') or []) if opener else ''
         except Exception as e:
             logger.debug(f'the phone walk opened without its summary: {e}'); opener = ''
         spend_morning(store)                                  # the summary IS the day's opener - it is not said twice
@@ -924,9 +927,10 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
         # a SCRIPT started by name from the phone: the tasks walk is Next; set-up opens on the connections
         # (the spec: "or at least see my connectors"); the composer wants a sentence
         script = str((done.get('outcome') or {}).get('script') or '')
-        if script:
-            if 'tasks' in script: walk_on = True
-            else: said.append(script_words(store, script))
+        # ...the tasks walk is the PILL's walk - the summary, then the card ON THE TABLE (concierge.resume): walking on from here
+        # skipped the table, which the walk had already read, and stacked "Done - Start a script" over it (F9)
+        if script and 'tasks' in script and done.get('status') == 'done': return walk(store, actor)
+        if script: said.append(script_words(store, script))
     elif verb in ('reply', 'redraft') and (on or {}).get('mid'):
         rid = _draft(store, on, verb, decision.get('text') or '')
         if rid:                                             # the draft is the next thing to read, so go to it
@@ -1176,7 +1180,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             said = f'{task_ref(tid_)} closed.' if concierge.close_task(store, tid_, actor) else f'{task_ref(tid_)} was already closed.'
             here = (item or {}).get('key')
             return _on(store, actor, [said], leaving=here, exclude=here, done_with=here)
-        if t == 'walk': return walk(store, actor)
+        if t == 'walk': return walk(store, actor, opener=not act.get('opened'))
         if t == 'script': return script_words(store, act.get('script') or '')
         if t == 'remind': return _remind(store, act, actor)
         if t == 'continue': return _continue(store, act.get('tid'), act.get('note') or '')

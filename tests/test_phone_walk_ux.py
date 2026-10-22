@@ -386,6 +386,52 @@ class TheVerbDoesTheThingTests(unittest.TestCase):
         self.assertIn('Reply with one of:\n1 · Redraft it\n2 · Next\n3 · Close without sending\n4 · Not ours', text)
 
 
+class WalkOffTheOpenerTests(unittest.TestCase):
+    """F9: "Walk me through my tasks" tapped under the day's opener printed the whole opener again above the first card."""
+
+    def test_the_tap_under_the_opener_goes_straight_to_the_first_card(self):
+        from datetime import datetime
+        from taskuary import concierge
+        s = MemoryStore(); s.set_setting('phone_morning_line', '1', 't')
+        sent = []
+        doors = [{'channel': 'whatsapp', 'chat': JID, 'connectorId': 7, 'label': 'WhatsApp', 'name': 'WhatsApp'}]
+        card = {'say': 'Gail Moreno asked about Thursday.', 'item': None, 'chips': [{'verb': 'next', 'label': 'Next'}]}
+        with mock.patch.object(remote_assistant, 'doorways', return_value=doors), \
+             mock.patch.object(remote_assistant, 'greeting', return_value='Good evening.'), \
+             mock.patch.object(remote_assistant, 'send', side_effect=lambda st, ch, chat, text, cid=None, **k: (remote_assistant.remember_offered(st, ch, chat, text), sent.append(text))), \
+             mock.patch('taskuary.funnel.pile', return_value={'items': [{'key': 'msg:1', 'lane': 'approve', 'title': 'Thursday'}]}), \
+             mock.patch('taskuary.general.dock_task', return_value=({'TaskId': 1}, False)), \
+             mock.patch.object(concierge, 'restore_current', return_value=None), \
+             mock.patch.object(concierge, 'resume', return_value=card), \
+             mock.patch.object(concierge, 'say', side_effect=AssertionError('a pick never reaches the model')):
+            self.assertEqual(remote_assistant.morning_line(s, now=datetime(2026, 10, 21, 20, 0)), 1)
+            self.assertIn('Good evening', sent[-1])
+            remote_assistant.respond(s, 'whatsapp', JID, 'Walk me through my tasks', 7, poll=True)
+        self.assertNotIn('Good evening', sent[-1])
+        self.assertIn('Gail Moreno asked about Thursday.', sent[-1])
+
+    def test_the_walk_picked_anywhere_else_still_opens_with_the_summary(self):
+        from taskuary import concierge
+        with mock.patch.object(remote_assistant, 'greeting', return_value='Good evening.'), \
+             mock.patch('taskuary.funnel.pile', return_value={'items': []}), \
+             mock.patch.object(concierge, 'resume', return_value={'say': 'Nothing is waiting.', 'item': None}):
+            self.assertIn('Good evening', remote_assistant.run_act(MemoryStore(), {'t': 'walk'}, None))
+
+    def test_a_typed_walk_starts_at_the_card_on_the_table(self):
+        from taskuary import concierge
+        table = {'key': 'msg:3', 'kind': 'fyi', 'mid': 3, 'title': 'The Thursday plan'}
+        prop = {'id': 'op1', 'status': 'proposed', 'auto': True, 'kind': 'script.start', 'params': {'name': 'walk me through my tasks'}}
+        with mock.patch.object(concierge, 'run_proposal', return_value={**prop, 'status': 'done', 'outcome': {'script': 'walk me through my tasks'}}), \
+             mock.patch.object(concierge, 'receipt', return_value='Done - Start a script. Starting: walk me through my tasks.'), \
+             mock.patch('taskuary.funnel.pile', return_value={'items': []}), \
+             mock.patch.object(concierge, 'resume', return_value={'say': 'The Thursday plan.', 'item': None}) as resumed, \
+             mock.patch.object(concierge, 'surface', side_effect=AssertionError('the walk starts at the table, it does not skip it')):
+            text = remote_assistant.carry_out(MemoryStore(), {'say': 'Starting.', 'proposal': prop}, table)
+        resumed.assert_called_once()
+        self.assertIn('The Thursday plan.', text)
+        self.assertNotIn('Done - Start a script', text)
+
+
 def canonical_world():
     """Two tasks with mail, on a rail that reads canonical processing membership (the shipped default)."""
     from taskuary import funnel, processing_unread

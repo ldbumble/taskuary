@@ -1,4 +1,4 @@
-/* A ROW'S STATE ON ITS ICON (StatusMark.jsx): the ring while an agent works, else the lane's mark as a badge on the logo */
+/* A ROW'S STATE ON ITS ICON (StatusMark.jsx): the ring while an agent works, a hand or a flag badge on the logo where the move is yours */
 .tq-mark { position: relative; display: inline-flex; flex-shrink: 0; }
 /* AN AGENT AT WORK (the owner, 2026-10-21): a thin slate ring spinning round the icon - it stops when the agent finishes, asks, fails
    or is stopped */
@@ -10,11 +10,9 @@
   text-align: center; border-radius: 50%; background: #fffdfb; box-shadow: 0 0 0 1px #fffdfb; pointer-events: none; }
 /* on the rail the logo keeps a little room for its badge, so the badge never touches the title */
 .tq-pile-row .tq-mark { margin-right: 4px; }
-/* somebody waiting on you waves; a start not yet made turns its hourglass - the rest hold still */
+/* somebody waiting on you waves; the flag holds still */
 .tq-mark .badge.wave { transform-origin: 70% 80%; animation: tq-badge-wave 1.8s ease-in-out infinite; }
-.tq-mark .badge.turn { animation: tq-badge-turn 3s ease-in-out infinite; }
 @keyframes tq-badge-wave { 0%, 60%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(16deg); } 20%, 40% { transform: rotate(-10deg); } }
-@keyframes tq-badge-turn { 0%, 70% { transform: rotate(0); } 85%, 100% { transform: rotate(180deg); } }
 @media (prefers-reduced-motion: reduce) {
   .tq-mark.spins::after { animation: none; border-color: #55697a; }   /* a still ring */
   .tq-mark .badge { animation: none !important; }

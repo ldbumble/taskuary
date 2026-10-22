@@ -56,7 +56,7 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
       await page.$eval("[data-tq-status-pill] .word", (e) => e.textContent));
   });
 
-  await t.test("a rail row carries its state in its icon - a badge, or the ring while an agent works - and no status words on its right", async () => {
+  await t.test("a rail row carries its state in its icon - the ring while an agent works, a 👋 or 🏁 badge, or nothing - and no status words on its right", async () => {
     const rows = await page.$$eval("[data-tq-rail] .tq-pile-row", (els) => els.map((r) => { const m = r.querySelector(".tq-mark"); return {
       key: r.getAttribute("data-tq-key"), mark: m?.getAttribute("data-tq-status") || "", label: m?.getAttribute("aria-label") || "",
       badge: r.querySelector(".tq-mark .badge")?.textContent || "", ring: !!r.querySelector(".tq-mark.spins"), kids: m ? m.children.length : 0,
@@ -66,7 +66,11 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
     assert.ok(tasks.length >= 5, `rows under Tasks wear their state: ${JSON.stringify(rows)}`);
     for (const r of tasks) {
       assert.ok(r.label, `${r.key} says its state in words`);
-      assert.ok(r.ring !== !!r.badge, `${r.key} wears the ring or a badge, never both and never neither: ${JSON.stringify(r)}`);
+      assert.ok(!(r.ring && r.badge), `${r.key} wears the ring or a badge, never both: ${JSON.stringify(r)}`);
+      // a badge only where the move is the owner's (the owner, 2026-10-22: too many emojis on the rail)
+      assert.ok(["", "👋", "🏁"].includes(r.badge), `${r.key}: the only badges are the hand and the flag, not ${r.badge}`);
+      if (r.badge) assert.ok(["blocked", "asked", "approve"].includes(r.mark), `${r.key}: a ${r.badge} only on waiting-on-you or ready to send`);
+      else if (!r.ring) assert.ok(!["blocked", "asked", "approve"].includes(r.mark), `${r.key}: ${r.mark} wears its badge`);
       // no ring round the logo but the working one - the shaped rings are gone (the owner, 2026-10-22)
       assert.equal(r.after !== "none", r.ring, `${r.key}: only a working row draws a ring`);
       assert.equal(r.word, "", `${r.key} has no status word on its right`);

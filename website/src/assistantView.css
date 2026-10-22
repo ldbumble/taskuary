@@ -131,7 +131,7 @@
    should be there to clean it up"). */
 .tq-pile-row .t { display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 22px; }
 .tq-pile-row .logo { display: flex; flex-shrink: 0; }
-/* AN AGENT AT WORK is a thin ring spinning round the row's icon, and every other state the lane's mark as a badge on it - the row's
+/* AN AGENT AT WORK is a thin ring spinning round the row's icon, a hand or a flag badge on it where the move is yours - the row's
    border is the table's alone, so the state is the icon's (statusMark.css, drawn by StatusMark.jsx's StatusLogo) */
 .tq-pile-row .logo .goal { width: 15px; font-size: 13px; line-height: 15px; text-align: center; }
 /* a goal's count beside its title - "· 2 of 5 steps" - in the age column's quiet ink */

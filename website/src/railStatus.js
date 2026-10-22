@@ -1,15 +1,18 @@
 // A ROW'S STATUS, SAID ONCE (the task page redesign, owner-approved 2026-10-21): the rail row's icon and the task page's header pill
 // draw the SAME mark and word for one task, from taskuary/lanes.json through the rail's own reading (funnelPile.rowMeta) - so the two
-// cannot disagree. The spinning ring is an agent at work; every other state is the lane's mark, worn as a badge on the source's logo.
+// cannot disagree. The spinning ring is an agent at work; a hand or a flag on the logo is the owner's move; every other state is the
+// plain logo, its words in the icon's label.
 // Pure, so node --test reads it.
 import { KIND_META, rowMeta, taskStateMeta } from "./funnelPile.js";
 
-// WHERE A BADGE MOVES: the hand of somebody - or an agent - waiting on you waves, a start not yet made turns its hourglass. Everything
-// else holds still: a still mark is easier to read, and a rail of moving badges is noise. `ring` is the agent at work.
-export const ANIM = { blocked: "wave", asked: "wave", queued: "turn" };
+// THE ONLY BADGES (the owner, 2026-10-22: too many emojis on the rail): the hand of somebody - or an agent - waiting on you, which
+// waves, and the flag of a reply ready to send. Every other state is the plain logo; its words are the icon's label and hover.
+export const BADGE = { blocked: "👋", asked: "👋", approve: "🏁" };
+// where a badge moves: the hand waves; the flag holds still. `ring` is the agent at work.
+export const ANIM = { blocked: "wave", asked: "wave" };
 
 const said = (key, m, spins) => ({ key, mark: m.mark, word: m.word, role: m.role ?? null, hint: m.hint || "", spins,
-  anim: spins ? "ring" : ANIM[key] || null });
+  badge: spins ? "" : BADGE[key] || "", anim: spins ? "ring" : ANIM[key] || null });
 
 // a RAIL ROW (a funnel item: lane, kind, not_sent, settling) as the rail draws it - a kind's word over its lane's, a refused send over both
 export const railStatus = (item) => {

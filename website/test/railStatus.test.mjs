@@ -2,7 +2,7 @@
 // word for one task, read from lanes.json through the rail's own rowMeta - so they cannot disagree.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ANIM, railStatus, stateStatus, statusLabel, taskStatus } from "../src/railStatus.js";
+import { ANIM, BADGE, railStatus, stateStatus, statusLabel, taskStatus } from "../src/railStatus.js";
 import { LANE_META, rowMeta } from "../src/funnelPile.js";
 
 test("the header's status is exactly the rail row's mark and word, for every lane", () => {
@@ -16,15 +16,13 @@ test("the header's status is exactly the rail row's mark and word, for every lan
   assert.equal(railStatus({ lane: "approve", kind: "review", not_sent: true }).word, "didn't send");
 });
 
-test("an agent at work spins; every other state is a still or moving badge", () => {
+test("an agent at work spins; only the hand waves", () => {
   const working = railStatus({ lane: "working", kind: "task" });
-  assert.equal(working.spins, true); assert.equal(working.anim, "ring");
+  assert.equal(working.spins, true); assert.equal(working.anim, "ring"); assert.equal(working.badge, "");
   assert.equal(railStatus({ lane: "working", settling: true }).spins, false, "a row still settling never spins");
   assert.equal(railStatus({ lane: "blocked" }).anim, "wave", "👋 waves");
-  assert.equal(railStatus({ lane: "blocked" }).mark, "👋");
-  assert.equal(railStatus({ lane: "queued" }).anim, "turn", "⏳ turns");
-  for (const lane of ["approve", "saved", "stopped", "theirs"]) assert.equal(railStatus({ lane }).anim, null, `${lane} holds still`);
-  assert.deepEqual(Object.keys(ANIM).sort(), ["asked", "blocked", "queued"]);
+  for (const lane of ["approve", "saved", "stopped", "theirs", "queued"]) assert.equal(railStatus({ lane }).anim, null, `${lane} holds still`);
+  assert.deepEqual(Object.keys(ANIM).sort(), ["asked", "blocked"]);
 });
 
 test("the live session's word leads, then the rail's row, then the server's state", () => {
@@ -50,16 +48,19 @@ test("the state is readable without colour or motion: its words are the icon's l
   assert.equal(statusLabel(null), "");
 });
 
-// THE RINGS UNDONE (the owner, 2026-10-22: "maybe the emoji on the logo is better. besides for the working agent"): the working ring
-// spins, and every other state is its own emoji as a badge - the hand, the flag, the disk, the hourglass - never a shaped ring
-test("every state but working is its own badge, and only working spins", () => {
-  const badges = { blocked: "👋", asked: "🙋", approve: "🏁", saved: "💾", stopped: "⏹", queued: "⏳", theirs: "📤", broken: "🛠", yours: "📋" };
-  for (const [lane, mark] of Object.entries(badges)) {
+// TOO MANY EMOJIS (the owner, 2026-10-22): a badge only where the move is the owner's - the hand of somebody waiting on you and the flag
+// of a reply ready to send. Every other state is the plain logo, its words the icon's label; the header pill keeps every lane's mark.
+test("only waiting on you and ready to send wear a badge; every other state is the plain logo, said in words", () => {
+  assert.deepEqual(BADGE, { blocked: "👋", asked: "👋", approve: "🏁" });
+  for (const [lane, badge] of Object.entries({ blocked: "👋", asked: "👋", approve: "🏁" })) assert.equal(railStatus({ lane }).badge, badge, lane);
+  for (const lane of ["yours", "queued", "saved", "stopped", "time", "theirs", "broken", "unjudged", "forgotten"]) {
     const st = railStatus({ lane });
-    assert.equal(st.mark, mark, lane); assert.equal(st.spins, false, `${lane} holds no ring`);
+    assert.equal(st.badge, "", `${lane}: the plain logo`); assert.equal(st.spins, false);
     assert.equal(statusLabel(st), st.word, `${lane}: its words are its label`);
-    assert.equal("ring" in st, false, `${lane}: no shaped ring`);
+    assert.ok(st.mark, `${lane}: the header pill still has its mark`);
   }
-  assert.equal(railStatus({ lane: "approve", not_sent: true }).mark, "⛔");
-  assert.equal(railStatus({ lane: "working" }).spins, true);
+  assert.equal(railStatus({ lane: "approve", not_sent: true }).badge, "", "a refused send is said in words, not a flag");
+  assert.equal(railStatus({ lane: "working" }).badge, "");
+  // every lane, kind and state: a badge is only ever the hand or the flag
+  for (const key of [...Object.keys(LANE_META)]) assert.ok(["", "👋", "🏁"].includes(stateStatus(key).badge), key);
 });

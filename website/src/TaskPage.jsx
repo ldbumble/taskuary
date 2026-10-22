@@ -48,7 +48,7 @@ import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT, ALERT_BD, ALERT_INK, ALERT_TINT, BRAND } from "./theme.jsx";
 import RunSteps from "./RunSteps.jsx";
-import { cameFromLabel, channelName, filesByMessage, fromExpands, fromRows, groupConversations, groupMeta, headerFacts, isChat, latestRows, madeLine, rowText, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
+import { cameFromLabel, channelName, filesByMessage, fromExpands, fromRows, groupConversations, groupMeta, headerFacts, isChat, latestRows, madeLine, rowText, todoSources, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
 import { latestTriageVerdict, legacyTriageVerdict, parseTriageVerdict, routeIntent } from "./triageVerdict.js";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
@@ -154,7 +154,7 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
       · · · {r.gap} more - {r.names}</Typography>
   )) : (
     <React.Fragment key={r.m.MessageId}>
-      <Box component="button" type="button" data-tq-conversation-row="" aria-expanded={open === r.m.MessageId}
+      <Box component="button" type="button" data-tq-conversation-row="" data-tq-mid={r.m.MessageId} aria-expanded={open === r.m.MessageId}
         onClick={() => onOpen((v) => (v === r.m.MessageId ? null : r.m.MessageId))}
         title="Open the message"
         sx={{ appearance: "none", font: "inherit", width: "100%", textAlign: "left", bgcolor: "transparent", border: 0, cursor: "pointer",
@@ -1002,6 +1002,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const checklist = withTicks(detail?.checklist, ticks);
   // what the To do list shows: the emails a task owes are Close out's, not boxes to tick here
   const todo = checklist.filter((i) => !i.out);
+  const todoFrom = todoSources(todo, sources);
+  // a to-do's "from" opens its message in Came from, the whole conversation drawn so the row is there to open
+  const openSource = (mid) => {
+    setShowAll(true); setOpenMsg(mid);
+    requestAnimationFrame(() => document.querySelector(`[data-tq-conversation-row][data-tq-mid="${mid}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+  };
   // the to-do being noted, and its words while the field is open (checklist.js saveNote; '' takes the note off)
   const [noting, setNoting] = useState(null), [noteText, setNoteText] = useState("");
   const putNote = async (i, text) => {
@@ -1706,6 +1712,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                     onChange={(e) => setNoteText(e.target.value)} onBlur={() => putNote(i, noteText)}
                                     onKeyDown={(e) => noteKey(e, { save: () => putNote(i, noteText), cancel: () => setNoting(null) })}
                                     sx={{ ml: 3.5, width: "calc(100% - 28px)", mb: 0.4, "& .MuiInputBase-root": { fontSize: 12 } }} />
+                                : null}
+                              {todoFrom.has(i.id) && <Link component="button" type="button" underline="hover" data-tq-todo-from={todoFrom.get(i.id).MessageId}
+                                onClick={() => openSource(todoFrom.get(i.id).MessageId)} title="Open the message this came from"
+                                sx={{ display: "block", ml: 3.5, mt: -0.2, mb: 0.2, color: FAINT, fontSize: 11.5, textAlign: "left" }}>
+                                from {todoFrom.get(i.id).who} · {whenShort(todoFrom.get(i.id).SentAt)}</Link>}
+                              {noting === i.id ? null
                                 : noteOf(i) && <Typography variant="caption" data-tq-todo-note="" onClick={() => { setNoting(i.id); setNoteText(noteOf(i)); }}
                                     sx={{ display: "block", ml: 3.5, color: DIM, fontSize: 12, lineHeight: 1.45, cursor: "text", overflowWrap: "anywhere" }}>
                                     {noteOf(i)}</Typography>}

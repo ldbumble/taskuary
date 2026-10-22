@@ -615,7 +615,8 @@ class WalkOffTheOpenerTests(unittest.TestCase):
              mock.patch('taskuary.general.dock_task', return_value=({'TaskId': 1}, False)), \
              mock.patch.object(concierge, 'restore_current', return_value=None), \
              mock.patch.object(concierge, 'resume', return_value=card), \
-             mock.patch.object(concierge, 'say', side_effect=AssertionError('a pick never reaches the model')):
+             mock.patch.object(concierge, 'say', side_effect=AssertionError('a pick never reaches the model')),              mock.patch.object(remote_assistant, 'quiet', return_value=True),              mock.patch.object(remote_assistant, 'handoff', return_value=None):
+            # quiet/handoff read state other tests in this process leave for the same chat (0 sent on Windows CI, 2026-10-22)
             self.assertEqual(remote_assistant.morning_line(s, now=datetime(2026, 10, 21, 20, 0)), 1)
             self.assertIn('Good evening', sent[-1])
             remote_assistant.respond(s, 'whatsapp', JID, 'Walk me through my tasks', 7, poll=True)

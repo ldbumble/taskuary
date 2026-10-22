@@ -534,8 +534,12 @@ listed by task number, highest first.</p>
 <h2 id="the-work-rail">The work rail<a class="anchor" href="#the-work-rail" aria-label="Link to this section">#</a></h2>
 <p>The rail beside the Assistant holds what still wants something from you - nothing finished, and never a history.</p>
 <p><figure><img src="img/rail-on.svg" alt="What puts something on the rail and under which heading: inside 14 days, not decided or noise, unread or still yours" loading="lazy"><figcaption>What is on the rail, and under which heading.</figcaption></figure></p>
-<p>The headings, top to bottom. Click one to walk that section: its first row goes on the table, and <strong>Next</strong> stays inside
-it until it is empty, then says so (&quot;FYI done.&quot;) and the walk goes on as usual.</p>
+<p>The headings, top to bottom. Inside each, rows sit oldest first by when they arrived - Reports too - and never move. Click one
+to walk that section: its first row goes on the table, and <strong>Next</strong> stays inside it until it is empty, then says so (&quot;FYI done.&quot;)
+and the walk goes on as usual.</p>
+<p>There is no Urgent heading. An urgent row - a meeting starting within 15 minutes, an ask triage called urgent (a deadline today
+or tomorrow, someone blocked now), a sender on your escalate list - sits in Tasks at its own place, quietly shaded, and <strong>Next</strong>
+takes it first wherever the walk is, then carries on from where you were.</p>
 <table>
 <thead>
 <tr>
@@ -545,11 +549,6 @@ it until it is empty, then says so (&quot;FYI done.&quot;) and the walk goes on 
 </tr>
 </thead>
 <tbody><tr>
-<td><strong>Urgent</strong></td>
-<td>A meeting starting within 15 minutes; an ask triage called urgent (a deadline today or tomorrow, someone blocked now); a sender on your escalate list</td>
-<td>-</td>
-</tr>
-<tr>
 <td><strong>Tasks</strong></td>
 <td>Every open task, whoever is on it: a person&#39;s ask, a task ready to send, an agent working on it (a ring spins round the row&#39;s icon until the agent finishes, asks, fails or is stopped), an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a thread or a step gone quiet past that person&#39;s usual day (🧵 slipped - Chase, Let it go, They answered elsewhere, Remind me), a check that failed, a task an agent finished. A task stays here whatever its agent does; <strong>Next</strong> moves the walk on and leaves it here. A goal with news is here too - &quot;🎯 Migrate the census export · 2 of 5 steps&quot;, <em>slipped</em> in red when it is late - and each of its steps is a task row of its own</td>
 <td>For later work when its time comes</td>
@@ -657,7 +656,7 @@ moves it down without deleting it.</p>
 
     </article>
     <nav class="pager"><a class="pn prev" href="./connections"><span>Previous</span>Connections</a><a class="pn next" href="./security"><span>Next</span>Security</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.25 · updated 2026-10-21</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.26 · updated 2026-10-21</p>
   </main>
 </div>
 <script src="./docs.js"></script>

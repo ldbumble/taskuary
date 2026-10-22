@@ -125,9 +125,11 @@ def handoff() -> bool:
 def sweep_stale(now: float = None) -> list:
     """Remove Taskuary's own old unpack folders beside ours: not this run's, old enough not to be a copy still
     unpacking, and renamable - Windows refuses to rename a folder while anything has a file in it open, runs from
-    it or works in it, so a folder some process still uses is left exactly as it is. Returns what went."""
+    it or works in it, so a folder some process still uses is left exactly as it is. Returns what went.
+    Off Windows nothing: a rename there succeeds under a running copy, so it is no test of use, and the bootloader
+    removes a folder held open without a dialog."""
     m = spawn.meipass()
-    if not m: return []
+    if not (m and spawn.WINDOWS): return []
     now, gone = now or time.time(), []
     try: dirs = list(Path(m).parent.iterdir())
     except OSError: return []

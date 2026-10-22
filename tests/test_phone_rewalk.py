@@ -190,4 +190,44 @@ class TypedWalkTests(PhoneCase):
         self.assertNotIn('Start a script', said); self.assertNotIn('Nothing happens until you say yes', said)
 
 
+class ReceiptTests(PhoneCase):
+    """F13: receipts in plain past tense, said once. The re-walk still read "Done - Not ours · Printer on 3 is jammed again.", "Done - Remind
+    me: Fri 23 Oct · TQ-0001. Away until ...", and the model's "Ok." stapled onto "Not sent - ..." - the past tense covered the send and
+    the close only, and the "Ok." came from the failure's own explanation (concierge.recover), not the turn."""
+    brain = staticmethod(lambda said: ('Putting it away until tomorrow.\n' + call('task.defer', until='tomorrow 9am'))
+                         if 'remind me' in said.lower() else 'Ok.')
+
+    def setUp(self):
+        super().setUp()
+        self.a, self.b = _two_asks(self.f); self.ph.ready()
+        self.first = text_of(self.ph.walk())
+        self.ref = next(f'TQ-{t:04d}' for t in (self.a, self.b) if f'TQ-{t:04d}' in self.first)
+
+    def test_not_ours_says_what_happened(self):
+        (receipt, _), *rest = self.ph.tap('Not ours')
+        self.assertRegex(receipt, r'^(Taskuary:\n)?(TQ-\d{4} filed as not ours|Filed as not ours: Badge access for the new hire)\.$')
+        self.assertTrue(rest and rest[-1][1], 'the next card follows with its choices')
+
+    def test_a_typed_remind_and_its_yes_say_when_it_is_back(self):
+        said = text_of(self.ph.type('remind me about this tomorrow'))
+        if 'yes, go ahead' in self.ph.choices(): said = text_of(self.ph.tap('yes, go ahead'))
+        self.assertNotIn('Done -', said); self.assertNotIn('Nothing happens until you say yes', said)
+        self.assertRegex(said, rf'{self.ref} is away until \w{{3}} \d+ \w{{3}}')
+
+
+
+class FailedSendReceiptTests(PhoneCase):
+    """F13: "Not sent - no mailbox is connected to send from. The reply is kept; TQ-0001 is where it was. Ok." - the model's bare
+    acknowledgement, asked to explain the failure (concierge.recover), went out after the receipt."""
+    brain = staticmethod(lambda said: 'Ok.')
+
+    def test_a_failed_send_is_not_followed_by_the_models_ok(self):
+        self.f.pending_draft(title='Q3 vendor contract renewal', subject='Q3 vendor contract renewal', from_name=GAIL[0], from_email=GAIL[1],
+                             body='Are we renewing the Payworth contract for Q3?', draft='Hi Gail - yes, renew it for Q3.', sent_at=self.f.ago(hours=1))
+        self.ph.ready(); self.ph.walk()
+        said = text_of(self.ph.tap('Send'))
+        self.assertIn('Not sent', said)
+        self.assertNotRegex(said, r'\bOk\.', said)
+
+
 if __name__ == '__main__': unittest.main()

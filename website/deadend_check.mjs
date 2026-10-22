@@ -397,7 +397,11 @@ const readPage = (page) => page.evaluate(() => {
   const lr = litEl?.getBoundingClientRect(), hit = lr && document.elementFromPoint(lr.left + lr.width / 2, lr.top + lr.height / 2);
   const lit = litEl ? { word: litEl.innerText.trim(), inView: lr.top >= 0 && lr.left >= 0 && lr.bottom <= innerHeight && lr.right <= innerWidth,
     covered: !(hit && (hit === litEl || litEl.contains(hit))) } : null;
-  const read = [card?.innerText || "", row?.innerText || "", adviceEl?.innerText || "", ...errs].join("\n");
+  // From is the sender's own words, quoted (the two-column page, 0.3.9.21): a mail that says "Traceback ... null" is the ask, not
+  // our jargon - so the words check reads the card without it, and everything Taskuary writes stays held to the list
+  const quoted = card ? [...card.querySelectorAll("[data-tq-from], [data-tq-from-line]")].map((el) => el.innerText).filter(Boolean) : [];
+  const own = quoted.reduce((t, q) => t.split(q).join(" "), card?.innerText || "");
+  const read = [own, row?.innerText || "", adviceEl?.innerText || "", ...errs].join("\n");
   const pops = [...document.querySelectorAll('.MuiPopover-paper, [role="dialog"], .MuiDrawer-paper')].filter(vis).map((p) => p.innerText.replace(/\s+/g, " ").slice(0, 80));
   const msgs = chat ? [...chat.querySelectorAll(".tq-msg")] : [];
   const tail = msgs.slice(-8);                       // a receipt stays a few lines up once the walk has brought the next item

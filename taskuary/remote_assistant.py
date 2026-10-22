@@ -2245,6 +2245,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         total = fyi_total(store, item)
         head = '\n'.join([f"{mark} {len(members)}{f' of {total}' if total > len(members) else ''} fyi · nothing to do"]
                          + [f'{i} · {line}' for i, (_k, line) in enumerate(members, 1)])
+    if item: head = _placed(head, position(store, item))
     if item and len(item.get('questions') or []) > 1:
         from . import concierge
         out = {**out, 'chips': [c for c in out.get('chips') or [] if not (isinstance(c, dict) and c.get('verb') == 'answer_agent')],
@@ -2338,6 +2339,29 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
 
 
 _NOTHING = re.compile(r'(?:\s*[;,]|\s+-)?\s*nothing has to happen\b[.;]?', re.I)
+
+
+def position(store, item: dict | None) -> str:
+    """Where this card is in its rail section - "4 of 19" - so a long walk says how far it has come (A11, 2026-10-22). '' for a card
+    the rail does not hold, a section of one, and an FYI batch (it counts itself)."""
+    key = (item or {}).get('key')
+    if store is None or not key or item.get('kind') == 'fyis': return ''
+    from . import funnel
+    try: items = [i for i in funnel.pile(store).get('items') or [] if not i.get('settling')]
+    except Exception as e:
+        logger.debug(f'the phone could not place the card: {e}'); return ''
+    me = next((i for i in items if key == i.get('key') or key in (i.get('aliases') or ())), None)
+    if not me: return ''
+    rows = [i for i in items if group_of(i) == group_of(me)]
+    if group_of(me) == 'later': rows = sorted(rows, key=lambda i: str(i.get('back_at') or i.get('defer_until') or '9999'))
+    return f'{rows.index(me) + 1} of {len(rows)}' if len(rows) > 1 else ''
+
+
+def _placed(head: str, pos: str) -> str:
+    """The card's first line with its place on the end: "📋 on you · TQ-0004 · 4 of 19"."""
+    if not pos or not head: return head
+    first, _, rest = head.partition('\n')
+    return f'{first} · {pos}' + (f'\n{rest}' if rest else '')
 
 
 def _once(text: str) -> str:

@@ -1,3 +1,4 @@
+import os
 """What the files on a message SAY reaches triage, the drafter, the Advisor and the agent's context file (attachtext.py).
 
 Every file here is invented: a vendor.example invoice whose total is the ask, a contract whose clause the reply has to quote,
@@ -240,4 +241,6 @@ def test_fifty_attachments_read_fast_and_once():
     t0 = time.perf_counter(); first = attachtext.of_items(files); t1 = time.perf_counter()
     again = attachtext.of_items(files); t2 = time.perf_counter()
     assert len(first) == 50 and all('text' in e for e in first) and first == again
-    assert t1 - t0 < 10 and t2 - t1 < 1, (t1 - t0, t2 - t1)
+    # 10s here; a shared Windows CI runner took 10.8 (2026-10-22) - the guard is against reading every file twice, not a busy machine
+    slow = 30 if os.environ.get('CI') else 10
+    assert t1 - t0 < slow and t2 - t1 < 1, (t1 - t0, t2 - t1)

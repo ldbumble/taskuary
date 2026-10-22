@@ -1115,7 +1115,7 @@ def _settled_the_table(prop: dict, item: dict | None) -> bool:
     return prop.get('kind') == 'item.settle' and str(p.get('verb') or '') in ('later', 'skip') and p.get('key') in (None, item.get('key'))
 
 
-def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: str = '', picked: bool = False) -> str:
+def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: str = '', picked: bool = False, extra: list = None) -> str:
     """Everything the Assistant TAB does after a turn, done here - a chat has no page to do it.
 
     The desktop's own JavaScript is the missing half of the walk: it opens the draft a reply decision
@@ -1133,7 +1133,7 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
     decision_verb = decision.get('verb')
     # a bare "Next." over the next card only echoes the press (F12): the card that follows is the answer
     if decision_verb == 'next' and str(out.get('say') or '').strip() == concierge.RECEIPTS['next'] and not lead: said = []
-    else: said = [turn_text(out, lead, store, table=item)]
+    else: said = [turn_text(out, lead, store, table=item, extra=extra)]
     verb = decision_verb
     # The words can name somebody OTHER than what is on the table. The interpreter resolves that into
     # `decision.target` and the desktop's decide() drafts THERE; drafting on `item` regardless answered
@@ -1399,6 +1399,35 @@ def _move_on(store, actor: str, leaving: str = None, exclude: str = None, done_w
     return concierge.surface(store, actor=actor, leaving=leaving, exclude=exclude), ''
 
 
+NEWS_KEY = 'phone_urgent_told'             # :<channel>:<chat> -> {walk, keys}: the urgent arrivals this walk already named (A12)
+
+
+def urgent_news(store, nxt: dict | None) -> tuple[str, list]:
+    """URGENT MAIL THAT LANDED MID-WALK, said in one short line over the next card, with an Open for it (A12, 2026-10-22): it was never
+    mentioned while a section walk went on past it. Only what the rail puts under Urgent, not shown in this walk, not the card coming
+    up, and not named before in this walk. ('', []) when there is none - or no chat is speaking."""
+    from . import funnel
+    from .processing_unread import WALK_KEY
+    here = asking()
+    if store is None or not (here or {}).get('chat'): return '', []
+    try: items = funnel.pile(store).get('items') or []
+    except Exception as e:
+        logger.debug(f'the phone could not look for urgent arrivals: {e}'); return '', []
+    up = (nxt or {}).get('key')
+    news = [i for i in items if funnel.level_of(i) == 'urgent' and not i.get('settling') and not i.get('surfaced') and i.get('key') != up
+            and up not in (i.get('aliases') or ())]
+    if not news: return '', []
+    key, walk_at = f"{NEWS_KEY}:{here['channel']}:{here['chat']}", str(store.get_setting(WALK_KEY) or '')
+    try: told = json.loads(store.get_setting(key) or '{}') or {}
+    except ValueError: told = {}
+    seen = set(told.get('keys') or []) if told.get('walk') == walk_at else set()
+    news = [i for i in news if i['key'] not in seen][:2]
+    if not news: return '', []
+    store.set_setting(key, json.dumps({'walk': walk_at, 'keys': [*seen, *(i['key'] for i in news)]}), 'assistant')
+    line = 'New since you started: ' + '; '.join(f"{story_who(i) or i.get('who') or 'someone'} - {_cut(i.get('title') or '', 70)} (urgent)" for i in news) + '.'
+    return line, [(f"Open {i.get('ref') or _cut(i.get('title') or 'it', 40)}", {'t': 'open', 'key': i['key']}) for i in news]
+
+
 def _on(store, actor: str, said: list, extra=None, **kw) -> str:
     """The receipt lines, then what comes next (_move_on) - with the section's own end said when it ran out."""
     nxt, lead = _move_on(store, actor, **kw)
@@ -1406,7 +1435,8 @@ def _on(store, actor: str, said: list, extra=None, **kw) -> str:
     # the task it just sent for) rode the same poll as the card under it - two Nexts, and a Mark done for a different task
     from . import chatformat
     said = [_CHOICES_BLOCK.sub('', x).strip() for x in said if x]
-    card = turn_text(nxt, lead=lead, store=store, extra=extra)
+    news, opens = urgent_news(store, nxt.get('item'))           # what landed urgent while the walk went on (A12)
+    card = turn_text(nxt, lead='\n\n'.join(x for x in (lead, news) if x), store=store, extra=list(extra or []) + opens)
     return chatformat.BREAK.join(['\n\n'.join(x for x in said if x), card] if any(said) else [card])
 
 
@@ -1472,7 +1502,8 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             if nxt:
                 doorway_browse.hold(store, asking(), walking['section'], [*seen, nxt['key']])
                 out = concierge.surface(store, nxt['key'], actor=actor, leaving=here)
-                return carry_out(store, out, out.get('item'), actor)
+                news, opens = urgent_news(store, out.get('item'))
+                return carry_out(store, out, out.get('item'), actor, lead=news, extra=opens)
             doorway_browse.hold(store, asking(), None)          # the section ran out: say so, and the walk goes on as normal
             return carry_out(store, concierge.surface(store, actor=actor, leaving=here, exclude=here), None, actor,
                              lead=funnel.section_done(walking['section']))
@@ -1480,7 +1511,9 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             # the desktop's Next: what is on the table is put down on the way out (read - Passed when it is yours) and not
             # the next pick; the phone surfaced afresh, so a failed item could be handed straight back or left unread
             here = (item or {}).get('key')
-            return carry_out(store, concierge.surface(store, actor=actor, leaving=here, exclude=here), None, actor)
+            out = concierge.surface(store, actor=actor, leaving=here, exclude=here)
+            news, opens = urgent_news(store, out.get('item'))
+            return carry_out(store, out, None, actor, lead=news, extra=opens)
         if t == 'open':                 # one item by name - one the walk already showed and would not repeat yet
             nxt = concierge.surface(store, act.get('key'), actor=actor)
             return carry_out(store, nxt, nxt.get('item'), actor)

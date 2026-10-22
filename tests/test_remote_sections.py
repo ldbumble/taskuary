@@ -46,7 +46,7 @@ class SectionWalkTests(unittest.TestCase):
             return {'say': f'shown {key}', 'item': {'key': key} if key else None}
         self.patches = [mock.patch.object(funnel, 'pile', return_value={'items': pile()}),
                         mock.patch.object(concierge, 'surface', side_effect=surface),
-                        mock.patch.object(ra, 'carry_out', side_effect=lambda store, out, item, actor='owner', lead='', picked=False: (lead + ' ' + out['say']).strip()),
+                        mock.patch.object(ra, 'carry_out', side_effect=lambda store, out, item, actor='owner', lead='', picked=False, extra=None: (lead + ' ' + out['say']).strip()),
                         mock.patch.object(ra, 'asking', return_value={'channel': 'whatsapp', 'chat': 'c1'})]
         for p in self.patches: p.start()
 

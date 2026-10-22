@@ -259,9 +259,12 @@ def collect(store, all_of_them: bool = False) -> list:
                         'since': away_since(store, c['ConnectorId']) or c.get('LastErrorAt') or '', 'where': 'Connections',
                         'connector': str(c['ConnectorId']), 'fix': 'Sign in', 'kind': 'signed_out'})
             continue
+        # a bridge this machine runs is started again from the bell itself - its error says "Restart bridge starts it"
+        from . import wabridge
+        restart = c.get('Type') == 'whatsapp' and wabridge.managed(c)
         out.append({'key': f"connector:{c['ConnectorId']}", 'title': f"{c.get('Name') or c['Type']}: the last poll failed",
                     'detail': err[:400], 'since': c.get('LastErrorAt') or '', 'where': 'Connections', 'connector': str(c['ConnectorId']),
-                    'fix': 'Open the card'})
+                    'fix': 'Open the card', **({'restart': True} if restart else {})})
     s = store.get_settings()
     brain = thinking(store)
     if brain:

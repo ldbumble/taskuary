@@ -3891,6 +3891,8 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
         return (f" {o['ref']} - \"{o.get('title') or ''}\" is ready as a walk-through - one step at a time, nothing built and nothing "
                 "changed until you say so. Open it when you want to start.")
     if kind == 'task.create_from_message' and p.get('kind') in task_kinds.AGENT:
+        # the phone starts the agent itself (remote_assistant._run): a start that failed is said, never "being worked on"
+        if o.get('start_error'): return f" It is on {o.get('ref') or 'its task'}, but the agent did not start - {str(o['start_error']).rstrip('.')}."
         if o.get('existing'): return " It was already being worked on."
         if o.get('started') or o.get('chat'): return " It's being worked on now - moving on."
     if kind == 'item.settle' and o.get('closed'): return f" {task_ref(int(o['closed']))} closed."

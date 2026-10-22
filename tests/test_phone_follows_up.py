@@ -100,3 +100,41 @@ def test_closing_taskuary_tells_each_promised_chat_once_what_happened():
     with mock.patch.object(messengers, 'wa_send') as sent:
         assert ra.promises_closing(store) == 0                                   # said once
     sent.assert_not_called()
+
+
+def test_send_to_agent_tapped_starts_the_agent_and_is_followed_up_once():
+    """F3: Send to agent tapped on the phone made the general task and said "It's being worked on now" - on the desk the page
+    asks the agent its question when the chat opens, and a phone has no page, so nothing started and nothing came back."""
+    from taskuary import general, server
+    store, _c = armed_store()
+    t = store.create_task({'Title': 'Summarise the vendor contract', 'Kind': 'general', 'Status': 'open', 'Tags': server.ASK_TAG}, 'owner')
+    m = store.add_message({'TaskId': t, 'Channel': 'email', 'Subject': 'Vendor contract', 'FromName': 'Gail Moreno',
+                           'FromEmail': 'gail@northwind.example', 'BodyText': 'Can someone summarise this?', 'Status': 'open'})
+    table = {'key': f'msg:{m}', 'kind': 'fyi', 'mid': m, 'title': 'Vendor contract', 'who': 'Gail Moreno'}
+    store.set_setting(f'{ra.OFFERED_KEY}:whatsapp:{JID}', json.dumps(['Send to agent', 'Next']), 't')
+    store.set_setting(f'{ra.ACTS_KEY}:whatsapp:{JID}', json.dumps({'Send to agent': {'t': 'verb', 'verb': 'regular_agent', 'key': f'msg:{m}'}}), 't')
+    prop = {'id': 'op7', 'version': 1, 'status': 'proposed', 'verb': 'regular_agent', 'kind': 'task.create_from_message', 'key': f'msg:{m}',
+            'settles': True, 'alts': [], 'params': {'kind': 'general'}}
+    done = {**prop, 'status': 'done', 'outcome': {'taskId': t, 'ref': f'TQ-{t:04d}', 'chat': True}}
+    session = mock.Mock(provider='assistant', model='m'); session.info.return_value = {}
+    sent = []
+    with mock.patch.object(server, 'store', store), \
+         mock.patch.object(general, 'start_session', return_value=session) as start, \
+         mock.patch('taskuary.general.dock_task', return_value=({'TaskId': 1}, False)), \
+         mock.patch.object(concierge, 'restore_current', return_value=table), \
+         mock.patch.object(concierge, 'say', side_effect=AssertionError('a pick never reaches the model')), \
+         mock.patch.object(concierge, 'propose_direct', return_value=prop), \
+         mock.patch.object(concierge, 'run_proposal', return_value=done), \
+         mock.patch.object(concierge, 'surface', return_value={'say': 'Nothing else is waiting.', 'item': None}), \
+         mock.patch.object(funnel, 'next_item', return_value=table), \
+         mock.patch.object(funnel, 'pile', return_value=pile({'key': f'task:{t}', 'tid': t, 'lane': 'working'})), \
+         mock.patch.object(messengers, 'wa_send', side_effect=lambda st, chat, body, connector_id=None, poll=None: sent.append(body)):
+        ra.respond(store, 'whatsapp', JID, 'Send to agent', 1, poll=True)
+    start.assert_called_once()
+    assert server.ASK_TAG not in str(store.get_task(t).get('Tags') or ''), 'the page would ask it again'
+    assert ra.PROMISE_LINE in sent[-1], sent
+    assert [p['tid'] for p in json.loads(store.get_setting(ra.PROMISES_KEY))] == [t]
+    assert look(store, [{'key': f'task:{t}', 'tid': t, 'lane': 'working'}])[0] == 0
+    n, _s, out = look(store, [{'key': f'agent:{t}', 'tid': t, 'lane': 'report'}])          # its turn ended: the card comes back
+    assert n == 1 and f'TQ-{t:04d} is back' in out.call_args.args[2]
+    assert look(store, [{'key': f'agent:{t}', 'tid': t, 'lane': 'report'}])[0] == 0       # said once

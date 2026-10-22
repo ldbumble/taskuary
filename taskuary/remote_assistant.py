@@ -1464,9 +1464,30 @@ def member_lines(item: dict | None) -> list:
             for m in item.get('items') or []]
     # the same notification twice is two lines that read alike - a line is what a number or a tap answers, so a repeat
     # wears its count or the second one could never be opened (and a WhatsApp poll dropped it: 2026-09-29, 3 of 4)
+    # ...and told apart by WHO sent it where the lines alike can be (F26): "(2)" said nothing about which one it was
+    from . import concierge
+    lines = [line for _k, line in rows]
+    def tell(m, line):
+        if lines.count(line) < 2: return line
+        by = ' '.join(str(m.get('email') or m.get('from') or '').split())
+        age = concierge.funnel_age(m)
+        return f'{line} ({by})' if by and sum(1 for x, mm in zip(lines, item.get('items') or []) if x == line and str(mm.get('email') or mm.get('from') or '') == by) == 1 \
+            else f'{line} ({age})' if age else line
+    told = [(k, tell(m, line)) for (k, line), m in zip(rows, item.get('items') or [])]
     seen = collections.Counter()
     def _nth(line): seen[line] += 1; return line if seen[line] == 1 else f'{line} ({seen[line]})'
-    return [(k, _nth(line)) for k, line in rows]
+    return [(k, _nth(line)) for k, line in told]
+
+
+def fyi_total(store, item: dict | None) -> int:
+    """Every FYI the rail holds with this batch counted in - its members are read by being shown, so the pile alone has dropped them."""
+    if store is None or (item or {}).get('kind') != 'fyis': return 0
+    from . import funnel
+    try: rows = funnel.pile(store).get('items') or []
+    except Exception as e:
+        logger.debug(f'the phone could not count the FYI: {e}'); return 0
+    keys = {i['key'] for i in rows if i.get('key') and not i.get('settling') and group_of(i) == 'fyi' and i.get('kind') != 'fyis'}
+    return len(keys | {m.get('key') for m in item.get('items') or [] if m.get('key')})
 
 
 def source_line(item: dict | None) -> str:
@@ -2147,7 +2168,10 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         # nothing at all (the owner, 2026-09-18: "don't need random summary, just show the items")
         # ...each NUMBERED, so a number opens that one (respond): the desktop's "Talk about it" door
         members = member_lines(item)
-        head = '\n'.join([f"{mark} {len(members)} fyi · nothing to do"] + [f'{i} · {line}' for i, (_k, line) in enumerate(members, 1)])
+        # ...and how many of how many: "4 fyi" over a rail holding fourteen read as all of them (F26)
+        total = fyi_total(store, item)
+        head = '\n'.join([f"{mark} {len(members)}{f' of {total}' if total > len(members) else ''} fyi · nothing to do"]
+                         + [f'{i} · {line}' for i, (_k, line) in enumerate(members, 1)])
     if item and len(item.get('questions') or []) > 1:
         from . import concierge
         out = {**out, 'chips': [c for c in out.get('chips') or [] if not (isinstance(c, dict) and c.get('verb') == 'answer_agent')],

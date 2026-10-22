@@ -212,7 +212,7 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
   // the agent report/close out"): a task the owner made, its agent stopped and saved and its write-up still running - the card had
   // shrunk to its words (~300px), the Result folded to two lines, the From sidebar cut off, and Close out offered the advice for an
   // open task nobody sent ("Work it, or write what you found") with a "reply · not available" pill
-  await t.test("a saved agent on a task nobody sent fills the table: its Result open at full width, From full height, no empty reply section", async () => {
+  await t.test("a saved agent on a task nobody sent: its Result open at full width, the card its own height, From full height, no empty reply section", async () => {
     const made = await post(page, "/api/fixture/task/coding-saved", { mine: true, writing: true });
     assert.ok(made.taskId, JSON.stringify(made));
     await open(page, made.taskId);
@@ -222,7 +222,11 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
     const area = await box(".tq-chat-body");
     const item = await page.evaluate((tid) => { const r = document.querySelector(`[data-tq-task-page="${tid}"]`).closest("[data-tq-canvas-item]").getBoundingClientRect();
       return { h: r.height }; }, String(made.taskId));
-    assert.ok(item.h >= area.h * 0.7, `the card fills the canvas (${Math.round(item.h)}px of ${Math.round(area.h)}px)`);
+    // ...but only as tall as what it says (the owner, 2026-10-22: blank under Close out) - unless its words need the whole height
+    const fit = await page.evaluate((tid) => { const v = document.querySelector(`[data-tq-task-page="${tid}"]`);
+      const sc = [...v.querySelectorAll("*")].find((e) => e.scrollHeight > e.clientHeight + 2 && getComputedStyle(e).overflowY === "auto");
+      return { scrolls: !!sc }; }, String(made.taskId));
+    assert.ok(fit.scrolls || item.h < area.h * 0.98, `no blank under the task (${Math.round(item.h)}px of ${Math.round(area.h)}px)`);
     const view = await page.evaluate(() => document.querySelector("[data-tq-task-page] [data-tq-task-head]").parentElement.getBoundingClientRect().width);
     const result = await box("[data-tq-result]");
     assert.ok(result.w / view > 0.8, `the Result has the whole width (${Math.round(result.w / view * 100)}%)`);
@@ -244,7 +248,7 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
       const p = e.offsetParent.getBoundingClientRect(); return { bottom: p.bottom, overflow: getComputedStyle(e).overflowY }; });
     const head = await box("[data-tq-from-line]");
     assert.ok(Math.abs(side.y - head.bottom) < 4 && Math.abs(side.bottom - steps.bottom) < 4, `From runs from its line to the card's foot: ${JSON.stringify({ side, steps, head })}`);
-    assert.ok(side.h >= item.h * 0.6, `From is the card's height, not cut off (${Math.round(side.h)}px of ${Math.round(item.h)}px)`);
+    assert.ok(side.h >= area.h * 0.6, `From opens the card to the canvas's height, not cut off (${Math.round(side.h)}px of ${Math.round(area.h)}px)`);
     assert.equal(steps.overflow, "auto", "From scrolls inside itself");
     if (process.env.TASKUARY_SHOTS) await page.screenshot({ path: `${process.env.TASKUARY_SHOTS}/task-page-saved-mine-from.png` });
     await page.click("[data-tq-from-close]");

@@ -413,6 +413,35 @@ class TypedActBringsUpThePickerTests(PhoneCase):
             self.assertIn('yes, go ahead', self.ph.type('clear all the FYI')[-1][1])
 
 
+class AfterTheHandBackTests(PhoneCase):
+    """A5: a walk handed back to the desktop said "Message me any time and I will pick it up again" - and a chat that listens only during a
+    walk then ignored the next message. After a hand-back the chat keeps listening: the next message picks the walk up again, and says so."""
+
+    def setUp(self):
+        super().setUp()
+        ra.set_listens(self.s, self.channel, 'walk')                          # the standing phone assistant is off for this chat
+        self.a, self.b = _two_asks(self.f); self.ph.ready()
+
+    def test_the_next_message_after_a_hand_back_picks_the_walk_up_again(self):
+        self.ph.push(lambda: ra.start_handoff(self.s, self.channel))
+        bye = self.ph.type('stop')                                            # the walk goes back to the desktop
+        self.assertIsNone(ra.handoff(self.s))
+        self.assertIn('Message me any time', text_of(bye)); self.assertIn('Walk me through my tasks', bye[-1][1])
+        got = self.ph.type('next')
+        self.assertTrue(got, 'the message after the hand-back was ignored')
+        self.assertIn('Picking the walk up here again', text_of(got)); self.ends_with_choices(got)
+        self.assertNotIn('Picking the walk up here again', text_of(self.ph.tap('Next')))    # said once
+
+    def test_the_hand_back_s_own_choice_walks_again(self):
+        self.ph.push(lambda: ra.start_handoff(self.s, self.channel))
+        self.ph.push(lambda: ra.end_handoff(self.s))                           # Walk it here, pressed on the desktop
+        got = self.ph.tap('Walk me through my tasks')
+        self.assertRegex(text_of(got), r'TQ-\d{4}'); self.ends_with_choices(got)
+
+    def test_a_chat_never_handed_anything_still_hears_nothing(self):
+        self.assertEqual(self.ph.type('next'), [])
+
+
 class TelegramBareNumberTests(PhoneCase):
     """A18 (b): Telegram shows its choices as buttons with no numbers, yet a bare "2" silently ran button 2. It is not acted on: the answer
     says what the choices are, under them."""

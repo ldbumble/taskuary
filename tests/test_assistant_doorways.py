@@ -180,10 +180,13 @@ def _handed(store, listens):
     return hello, sent
 
 
-def test_a_chat_that_listens_only_during_a_walk_is_not_promised_any_time(store):
+def test_a_chat_that_listens_only_during_a_walk_keeps_listening_after_the_hand_back(store):
+    """A5 (2026-10-22): the chat a walk was handed back from keeps listening - the next message picks the walk up again - so "Message me
+    any time" is true there now (F11 had taken it back), and the walk is a tap under it."""
     _hello, bye = _handed(store, 'walk')
-    assert 'Message me any time' not in bye[-1][0]
-    assert 'Walk me through them in Telegram' in bye[-1][0]
+    assert 'Message me any time' in bye[-1][0]
+    assert bye[-1][1] == [remote_assistant.WALK]
+    assert remote_assistant.enabled(store, 'telegram', '4242')
 
 
 def test_a_chat_that_always_listens_still_says_so(store):

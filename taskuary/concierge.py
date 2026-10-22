@@ -2298,11 +2298,14 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             record_related(store, tid, item, 'assistant', say_)
             return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
         if not hits:
-            said = ', '.join(f'{k}: {v}' for k, v in (sel or {}).items())
+            # ...in words, as the hit's receipt says them: "matches kind: fyi" read the selector's own field out (the 2026-10-22 re-walk)
+            w, sw = _what_of(sel), _set_words(sel)
+            what = 'FYI' if w in ('fyi', 'fyis') else 'reports' if w in ('report', 'reports') else f'{w} items' if w else 'items'
+            said = f"No {what}{' ' + sw if sw else ''} {'is' if what == 'FYI' else 'are'} waiting"
             # ...and WHAT IS THERE, so a miss can be re-aimed instead of read as "those items do not
             # exist". The owner was looking at eleven rows while this said nothing matched them
             # (2026-09-10): the selector had been offered a category the pipe could not hold.
-            say_ = (f"Nothing waiting matches {said}, so there is nothing to clear. "
+            say_ = (f"{said}, so there is nothing to clear. "
                     f"{pipe_holds(store)} Say it another way and I'll look again - nothing has been touched.")
             record_related(store, tid, item, 'assistant', say_)
             return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}

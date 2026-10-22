@@ -747,7 +747,7 @@ class SweepTests(unittest.TestCase):
         self.assertEqual((funnel.mutes(s), s.list_memories(active_only=True)), ([], []))   # clearing is all it does (R8)
         self.assertEqual([i['who'] for i in funnel.build(s)['items']], ['Omar Keller'])                # Omar stays
         again = cleared_by(s, 'same for all resident refunds', {'contains': 'resident refund'})
-        self.assertIsNone(again.get('proposal')); self.assertIn('Nothing waiting matches', again['say'])
+        self.assertIsNone(again.get('proposal')); self.assertIn('No items about resident refund are waiting, so there is nothing to clear', again['say'])
         al = funnel.alerts(s, funnel.build(s)['items'])
         self.assertEqual([(a['kind'], a['text']) for a in al], [('asked', 'Omar Keller asked you: RE: Payworth')] if any(i['lane'] == 'asked' for i in funnel.build(s)['items']) else [])
 

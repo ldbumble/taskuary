@@ -184,7 +184,9 @@ def _settings(store, section, open_, page=0):
         if str(v).strip() == '*': return 'every other one set up, in order'      # backup_brains' own wildcard, said in words
         return str(v) if v not in (None, '') else '(not set)'
     # ...and a knob nobody set says where it is set: "(not set)" alone left the owner nowhere to go (F25)
-    where = lambda k: f" - change it on the desktop: Settings → {(knobs.get(k) or {}).get('group') or section or 'Settings'}" if value(k) == '(not set)' else ''
+    from . import words
+    at = lambda k: (knobs.get(k) or {}).get('group') or section
+    where = lambda k: f" - change it on the desktop: {words.name('settings')}{' → ' + at(k) if at(k) else ''}" if value(k) == '(not set)' else ''
     if open_:
         m = knobs.get(open_) or {'label': open_}
         text = f"{m.get('label') or open_}\n{m.get('desc') or ''}\nnow: {value(open_)}{where(open_)}".strip()

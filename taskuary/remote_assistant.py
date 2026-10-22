@@ -970,7 +970,7 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
     if prop and picked and prop.get('status') == 'proposed' and not asks(prop):
         # the number WAS the yes: run it, and say what happened instead of asking again
         # ...without "Nothing happens until you say yes." over the receipt that says it happened (F13)
-        said[0] = turn_text({**out, 'proposal': None, 'say': _unasked(out.get('say'))}, lead, store, table=item)
+        said = [turn_text({**out, 'proposal': None, 'say': _unasked(out.get('say'))}, lead, store, table=item)]
         done = _run(store, prop, actor)
         said = _said_once(said, done) + [receipt_text(store, done, actor)]
         walk_on = done.get('status') == 'done' and _settled_the_table(prop, item)

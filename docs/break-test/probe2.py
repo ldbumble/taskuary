@@ -2,8 +2,8 @@
 close under a live agent, 'skip it', the dead end after everything was shown."""
 import os, sys, json, tempfile, contextlib
 os.environ['TASKUARY_HOME'] = tempfile.mkdtemp(prefix='tq-probe2-')
-REPO = r'C:\Users\owner\Documents\General\Testing\taskhub'
-sys.path[:0] = [REPO, REPO + r'\tests']
+REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))   # the checkout this sits in
+sys.path[:0] = [REPO, os.path.join(REPO, 'tests')]
 from unittest import mock
 from datetime import datetime, timedelta
 from fastapi.testclient import TestClient

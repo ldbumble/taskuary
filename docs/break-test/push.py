@@ -1,6 +1,6 @@
 """A day's worth of arrivals through the front door of the scratch server, with the real triage brain."""
-import sys, json, time
-sys.path.insert(0, r'C:\Users\UNUSSB~1\AppData\Local\Temp\claude\C--Users-owner-Documents-General-Testing-taskhub\4ed300c8-8b52-4c88-8747-64a79ae5215a\scratchpad')
+import os, sys, json, time
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))          # tq.py sits beside this file
 from tq import call
 from datetime import datetime, timedelta
 def ago(h=0, m=0): return (datetime.now() - timedelta(hours=h, minutes=m)).strftime('%Y-%m-%d %H:%M:%S')
@@ -35,4 +35,4 @@ for m in MSGS:
     t0 = time.time(); st, r = call('POST', '/api/ingest/push', m)
     row = {'tag': tag, 'status': st, 'secs': round(time.time() - t0, 1), 'out': r}; out.append(row)
     print(json.dumps(row, default=str)[:300], flush=True)
-json.dump(out, open(r'C:\Users\UNUSSB~1\AppData\Local\Temp\claude\C--Users-owner-Documents-General-Testing-taskhub\4ed300c8-8b52-4c88-8747-64a79ae5215a\scratchpad\push_out.json', 'w'), indent=1, default=str)
+json.dump(out, open(os.environ.get('TQ_PUSH_OUT', 'push_out.json'), 'w'), indent=1, default=str)

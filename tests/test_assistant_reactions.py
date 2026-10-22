@@ -548,9 +548,10 @@ class ResponseTests(unittest.TestCase):
         p = decide(s, 'close it', 'close', key=item['key'])['proposal']
         self.assertEqual((p['kind'], p['target'], p['label']), ('task.complete', tid, 'Mark done'))
         self.assertEqual(s.get_task(tid)['Status'], 'open')
-        run(s, p)
+        out = run(s, p).json()
         self.assertEqual(s.get_task(tid)['Status'], 'done')
         # this module walks the PHONE's road, whose receipt is plain past tense (F13)
+        self.assertEqual(out['receipt'], f'TQ-{tid:04d} closed.')
         self.assertTrue(any(b == f'TQ-{tid:04d} closed.' for b in receipts(s)), receipts(s)[-2:])
 
     def test_stopping_the_agent_is_not_closing_the_task(self):
@@ -565,10 +566,10 @@ class ResponseTests(unittest.TestCase):
         self.assertEqual((p['kind'], p['target'], p['params']['wrap'], p['label'], p['settles']), ('agent.stop', tid, False, 'Stop and save', True))
         held = mock.Mock(sid='s1', alive=True, label='coding', agent='coding', task_id=tid)
         with mock.patch.object(server.hub_term, 'session_for', return_value=held), mock.patch.object(server.hub_term, 'close', return_value=True) as close:
-            self.assertEqual(run(s, p, live=live).json()['status'], 'done')
-        self.assertTrue(close.called)
+            out = run(s, p, live=live).json()
+        self.assertEqual(out['status'], 'done'); self.assertTrue(close.called)
         self.assertNotEqual(s.get_task(tid)['Status'], 'done')         # the session ends; the task stands
-        self.assertTrue(any('The task stays open' in b for b in receipts(s)))
+        self.assertIn('The task stays open', out['receipt'])
         # the task page's "Stop and save": with a transcript the session is written up, WHATEVER
         # the words - "stop the agent" no longer throws its work away (2026-09-23)
         s.add_transcript(tid, 'sid1', 'ran the tests, fixed the filter', 'coding')
@@ -620,7 +621,7 @@ class ResponseTests(unittest.TestCase):
         self.assertEqual(r.json()['outcome']['cleared'], 3)
         self.assertEqual([i['who'] for i in pile(s)], ['Omar'])
         self.assertEqual(funnel.mutes(s), [])                          # a reason in the words writes no rule (R8)
-        self.assertTrue(any('Marked 3 items read - ' in b for b in receipts(s)), receipts(s)[-2:])
+        self.assertIn('Marked 3 items read - ', r.json()['receipt'])
         self.assertTrue(keep['message_id'])
 
     def test_split_is_confirmed_then_breaks_one_arrival_into_two_jobs(self):
@@ -646,7 +647,7 @@ class ResponseTests(unittest.TestCase):
         new = s.get_task(r.json()['outcome']['taskId'])
         self.assertEqual((new['Title'], new['Kind']), ('Add Priya to the payroll distribution list', 'coding'))
         self.assertEqual(len(s.list_tasks(active_only=True)), 2)
-        self.assertTrue(any('each is its own job now' in b for b in receipts(s)), receipts(s)[-2:])
+        self.assertIn('each is its own job now', r.json()['receipt'])
 
     def test_set_something_up_is_confirmed_then_opens_a_walk_through_not_a_build(self):
         s = store()

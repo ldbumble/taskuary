@@ -32,7 +32,8 @@ test("a send's receipt offers Mark done only where there is a task, and Next alw
 
 test("the canvas keeps a sent item on the table: the card folds, the receipt carries the ways on, nothing settles", () => {
   const cards = read("assistantCards.jsx"), view = read("AssistantView.jsx");
-  assert.match(cards, /if \(ran && onSent\) onSent\(said, card\.tid, card\.ref\);\n\s+else onDone\?\.\(said\);/);
+  // ...and what is not a send is the badge of the button pressed, not a sentence (the owner, 2026-10-22)
+  assert.match(cards, /if \(ran && onSent\) onSent\(said, card\.tid, card\.ref\);\n(\s+\/\/.*\n)*\s+else onDone\?\.\(verb === co\?\.alt\?\.verb \? co\.alt\.label : btn\("approve"/);
   assert.doesNotMatch(cards, /and closes the task/);
   assert.match(cards, /the task stays open until you \$\{btn\("close"\)\}/);
   const sent = view.slice(view.indexOf("const sent = (receipt"), view.indexOf("\n  };", view.indexOf("const sent = (receipt")));

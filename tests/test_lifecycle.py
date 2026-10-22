@@ -62,7 +62,8 @@ class LifecycleTests(unittest.TestCase):
         # ...the introduction is the model's when there is one (PW-153); this walk has none, so the facts spoke
         self.assertFalse(concierge.INTRO_AI)     # the introduction is the facts, instant (2026-09-07)
         self.assertIn(concierge.WAITS, said['say'])                                            # the proposal says what WILL happen
-        self.assertIn(f"Done - {buttons.label('coding_agent')}", self.chat()[-1][1])                       # ...and the receipt what did
+        self.assertIn(f"Done - {buttons.label('coding_agent')}", ran['receipt'])                       # ...and the receipt what did
+        self.assertNotIn('Done - ', self.chat()[-1][1])                  # ...which is no line in the chat (the owner, 2026-10-22)
         # 5. the coding agent works: the item is a task under Tasks like any other, under the agent's key, and the walk takes it
         # in its place (the owner, 2026-10-21); the watcher says so.
         # The watcher only believes a state that HOLDS (funnel.DWELL, so a moment of quiet is not "it

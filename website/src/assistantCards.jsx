@@ -324,7 +324,8 @@ function useClose(card, onDone) {
   const [err, setErr] = useState("");
   const run = async () => {
     setBusy(true); setErr("");
-    try { await runOperation(api, "task.complete", card.tid); onDone?.(`${card.ref || "The task"} is closed.`); }
+    // onDone takes the button's label: the folded card wears it as its badge (the owner, 2026-10-22: "we don't need that text ever")
+    try { await runOperation(api, "task.complete", card.tid); onDone?.(btn("close")); }
     catch (e) { setErr(failOf(e)); setBusy(false); }
   };
   return { run, busy, err };
@@ -651,7 +652,8 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
       // SENDING AND CLOSING ARE TWO STEPS (the owner, 2026-10-18): a send, or an Approve that ran, leaves the item on the table with
       // its receipt - Mark done and Next on its row - where it used to settle the item and walk on as if the task were finished
       if (ran && onSent) onSent(said, card.tid, card.ref);
-      else onDone?.(said);
+      // ...and anything else is the badge of the button pressed, on the card it folds to - never a line (the owner, 2026-10-22)
+      else onDone?.(verb === co?.alt?.verb ? co.alt.label : btn("approve", action ? "action" : undefined));
     } catch (e) { setErr(failOf(e)); }
     setBusy("");
   };
@@ -669,7 +671,7 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
     setBusy("back"); setErr("");
     try {
       await api.post(`/api/tasks/${card.tid}/continue-work`, { note: note || null });
-      onDone?.(`Sent back to ${card.agent || "the agent"}${note ? `: “${note.slice(0, 80)}”` : ""}. It comes back here when it stops.`);
+      onDone?.(btn("continue"));
     } catch (e) { setErr(failOf(e)); }
     setBusy("");
   };
@@ -679,7 +681,7 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
     setBusy("finish"); setErr("");
     try {
       await runOperation(api, "task.complete", card.tid);
-      onDone?.(`${card.ref || "The task"} marked done. No reply was sent.`);
+      onDone?.(btn("close"));
     } catch (e) { setErr(failOf(e)); }
     finally { setBusy(""); }
   };
@@ -758,7 +760,7 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
           onClick: async () => {
             if (o === "anyway") return decide("merge_anyway");
             setBusy(o); setErr("");
-            try { const said = await act(o); onDone?.(`${said}. Press ${btn("approve", "action")} again once the checks pass.`); } catch (e) { setErr(failOf(e)); }
+            try { await act(o); onDone?.(OFFER_LABEL[o]); } catch (e) { setErr(failOf(e)); }
             setBusy("");
           } })),
           ...(cop?.alt ? [{ verb: cop.alt.verb, label: busy === cop.alt.verb ? cop.alt.busy : cop.alt.label, title: `${cop.alt.label} ${cop.alt.then}.`,
@@ -827,7 +829,7 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone }) {
   const rule = card.idea_kind === "rule" && a.policy && card.idea;
   const makeRule = async () => {
     setBusy(true); setErr("");
-    try { await api.post(`/api/assistant/ideas/${card.idea}/rule`, {}); onDone?.(`The rule is made - ${a.policy.Name}. It is in Settings, under Rules.`); }
+    try { await api.post(`/api/assistant/ideas/${card.idea}/rule`, {}); onDone?.("Make it a rule"); }
     catch (e) { setErr(failOf(e)); }
     setBusy(false);
   };
@@ -898,8 +900,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
         setRepoAsk({ taskId: data.taskId, agent: data.agent || "" });
       } else {
         setRepoAsk(null);
-        const who = agentKind === "coding" ? (data.agent || "the coding agent") : (data.agent || "an agent");
-        onDone?.(`${data.ref || "It"} is with ${who} now - I'll bring it back when it's done.`);
+        onDone?.(btn(agentKind === "coding" ? "coding_agent" : "regular_agent"));
       }
     } catch (e) {
       const msg = errText(e);
@@ -939,7 +940,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
       setBusy("check"); setErr("");
       try {
         const { data } = await api.post(`/api/connectors/${cid}/test`);
-        if (data?.ok) onDone?.(`${card.who || "The connection"} answers again - that row is gone.`);
+        if (data?.ok) onDone?.(btn("test_connection"));
         else {
           if (data?.detail) setSaid(data.detail);
           setNote(`Checked at ${at()} - still not answering.`); setStuck(true);
@@ -1007,7 +1008,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   const hand = btn(suggestedKind === "coding" ? "coding_agent" : "regular_agent");
   const startTask = async () => {
     setBusy("agent"); setErr("");
-    try { await runOperation(api, "dispatch.prepare", card.tid, { kind: suggestedKind }); onDone?.(`Started on ${card.ref || "it"}.`); }
+    try { await runOperation(api, "dispatch.prepare", card.tid, { kind: suggestedKind }); onDone?.(hand); }
     catch (e) { setErr(failOf(e)); }
     setBusy("");
   };
@@ -1266,7 +1267,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
       ))}
       </div>
       {/* the one card whose verb IS Next: marking the handful read moves on (fyis carries no `next`) */}
-      <Foot verb={<Button size="small" variant="contained" disableElevation onClick={() => onDone?.(`Read — ${items.length} fyi let go.`)} sx={primary}>{btn("next", "batch")}</Button>}
+      <Foot verb={<Button size="small" variant="contained" disableElevation onClick={() => onDone?.(btn("next", "batch"))} sx={primary}>{btn("next", "batch")}</Button>}
         then={<><b>{btn("next", "batch")}</b> marks {items.length === 1 ? "it" : `all ${items.length}`} read - search finds {items.length === 1 ? "it" : "them"} later.</>}
         where={null} />
     </CardShell>

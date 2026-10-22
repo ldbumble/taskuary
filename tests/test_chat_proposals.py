@@ -251,26 +251,39 @@ class ExecutionTests(unittest.TestCase):
         t = s.get_task(r.json()['outcome']['taskId'])
         self.assertEqual(t['Kind'], 'coding'); self.assertTrue(spawn.called); self.assertIn('did not stick', t['Summary'])
 
-    def test_the_receipt_after_the_click_is_the_fact_in_the_chat(self):
+    def test_the_receipt_after_the_click_is_the_fact_and_the_items_card_wears_it(self):
         s, tid, mid, item = asked()
         p = say(s, 'close it', key=item['key'], model='Closing.\nCALL: {"kind": "close", "params": {}}')['proposal']
-        run(s, p)
         from taskuary import general
         dock, _ = general.dock_task(s, 'owner')
-        bodies = [r.get('Body') or '' for r in general.chat_rows(s, dock['TaskId'])]
-        self.assertTrue(any('Done -' in b and f'TQ-{tid:04d}' in b for b in bodies), bodies[-3:])
+        bodies = lambda: [r.get('Body') or '' for r in general.chat_rows(s, dock['TaskId'])]
+        bare = run(s, p).json()                           # no card of the item in this chat: its line is said
+        self.assertTrue(any('Done -' in b and f'TQ-{tid:04d}' in b for b in bodies()), bodies()[-3:])
+        self.assertTrue(bare['receipt'].startswith('Done -') and f'TQ-{tid:04d}' in bare['receipt'])
+        # ...and with the item's card drawn, the press is its badge and no line (the owner, 2026-10-22: "we don't need that text ever")
+        other = s.create_task({'Title': 'Order the badge printer ribbon', 'Status': 'open'}, 'owner')
+        concierge.record(s, dock['TaskId'], 'assistant', 'Next up.', {'kind': 'task', 'key': f'task:{other}', 'tid': other, 'title': 'Order the badge printer ribbon'})
+        p = say(s, 'close it', key=f'task:{other}', model='Closing.\nCALL: {"kind": "close", "params": {}}')['proposal']
+        n = len(bodies())
+        self.assertEqual(run(s, p).json()['status'], 'done')
+        self.assertEqual(len(bodies()), n)
+        self.assertTrue(any('"pressed": "Mark done"' in b and f'task:{other}' in b for b in bodies()))
 
 
-    def test_a_press_on_the_tables_own_row_is_receipted_and_one_elsewhere_is_not(self):
-        """Mark done on the card on the table closed it with no line in the chat - only chat proposals were its news (the walk
-        click-through, 2026-10-17). The table's own buttons are this chat; a close from anywhere else still says nothing here."""
+    def test_a_press_on_the_tables_own_row_marks_its_card_and_one_elsewhere_does_not(self):
+        """Mark done on the card on the table closed it with nothing in the chat to show for it (the walk click-through, 2026-10-17),
+        and then with a "Done - Mark done · TQ-0001." line under it (the owner, 2026-10-22: "we don't need that text ever"): the item's
+        own card wears the button's label. A close from anywhere else still touches nothing here."""
         from taskuary import general
         s, tid, mid, item = asked()
         dock, _ = general.dock_task(s, 'owner')
         bodies = lambda: [r.get('Body') or '' for r in general.chat_rows(s, dock['TaskId'])]
         concierge.set_current(s, dock['TaskId'], item['key'])
+        concierge.record(s, dock['TaskId'], 'assistant', 'Next up.', {'kind': 'asked', 'key': item['key'], 'tid': tid, 'title': 'Can you fix the export?'})
+        n = len(bodies())
         run(s, operations.propose(s, 'task.complete', tid, {}, 'owner'))
-        self.assertTrue(any('Done -' in b and f'TQ-{tid:04d}' in b for b in bodies()), bodies()[-3:])
+        self.assertEqual(len(bodies()), n)
+        self.assertIn('"pressed": "Mark done"', bodies()[-1])
         other = s.create_task({'Title': 'Order the badge printer ribbon', 'Status': 'open'}, 'owner')
         before = len(bodies())
         run(s, operations.propose(s, 'task.complete', other, {}, 'owner'))
@@ -305,7 +318,7 @@ class HandoffTests(unittest.TestCase):
         self.assertEqual((r['status'], r['outcome']['started']), ('done', True))
         from taskuary import general
         dock, _ = general.dock_task(s, 'owner')
-        self.assertTrue(any("It's being worked on now - moving on" in (c.get('Body') or '') for c in general.chat_rows(s, dock['TaskId'])))
+        self.assertIn("It's being worked on now - moving on", r['receipt'])     # said to the phone; the desk's card wears its badge
         self.assertNotIn(item['key'], {k for k, st in s.funnel_states().items() if st.get('Status') == 'done'})   # nothing settled
         s.update_task(tid, {'Status': 'in_progress'}, 'router')
         live = [{'taskId': tid, 'sid': 's1', 'agent': 'coding', 'label': 'coding', 'started': ago(0), 'idle': 2, 'waiting': False, 'tail': ['reading']}]

@@ -162,7 +162,7 @@ class TurnTests(unittest.TestCase):
         self.assertIn('deep dive', task['Summary'])
         thread.assert_called_once()
         thread.return_value.start.assert_called_once()
-        self.assertIn('is being worked on now', last_receipt(s))
+        self.assertIn('is being worked on now', r['receipt'])          # the words the phone hears; the desk's chat gets no line
 
     def test_okay_send_it_is_read_with_the_conversation_and_keeps_the_prior_brief(self):
         s = store()
@@ -685,9 +685,9 @@ class SetupAndTroubleTests(unittest.TestCase):
         p = said['proposal']; self.assertEqual((p['kind'], p['label']), ('task.setup', 'Open the walk-through'))
         self.assertIsNone(said['decision']); self.assertEqual(len(s.list_tasks()), n0)
         with mock.patch('taskuary.ingest._spawn') as spawn:
-            made = run(s, p).json()['outcome']
+            ran = run(s, p).json(); made = ran['outcome']
         self.assertEqual(s.get_task(made['taskId'])['Kind'], 'general'); self.assertFalse(spawn.called)
-        self.assertIn('walk-through', last_receipt(s)); self.assertIn('nothing built', last_receipt(s))
+        self.assertIn('walk-through', ran['receipt']); self.assertIn('nothing built', ran['receipt'])
         # ...and a hand-off the owner asks for by name IS the coding agent, in a checkout
         with mock.patch('taskuary.ingest._spawn') as spawn:
             made = concierge.setup_task(s, 'find out why the export drops inter-company rows', kind='coding')
@@ -740,9 +740,9 @@ class SweepTests(unittest.TestCase):
         self.assertNotIn('Northwind Financial Report', p['say_card']); self.assertNotIn(p['label'], p['say_card'])
         self.assertIn('nothing is deleted', p['say_card'])
         self.assertEqual(len(funnel.build(s)['items']), 4)                                       # nothing swept on the words
-        o = run(s, p).json()['outcome']
+        ran = run(s, p).json(); o = ran['outcome']
         self.assertEqual(o['cleared'], 3)
-        line = last_receipt(s)
+        line = ran['receipt']
         self.assertIn('Marked 3 items read - ', line); self.assertIn('Read, not deleted', line)
         self.assertEqual((funnel.mutes(s), s.list_memories(active_only=True)), ([], []))   # clearing is all it does (R8)
         self.assertEqual([i['who'] for i in funnel.build(s)['items']], ['Omar Keller'])                # Omar stays
@@ -768,8 +768,9 @@ class SweepPronounTests(unittest.TestCase):
         first = cleared_by(s, 'skip all the northwind financial reports. Those are part of the financials process, taken care of.',
                            {'contains': 'Northwind Financial Report'})
         self.assertEqual(first['proposal']['kind'], 'pipe.clear'); self.assertEqual(funnel.mutes(s), [])      # no rule on the words
-        self.assertEqual(run(s, first['proposal']).json()['outcome']['cleared'], 3)
-        line = last_receipt(s)
+        ran = run(s, first['proposal']).json()
+        self.assertEqual(ran['outcome']['cleared'], 3)
+        line = ran['receipt']
         self.assertIn('Marked 3 items read - ', line)
         self.assertEqual([i['who'] for i in funnel.build(s)['items']], ['Omar Keller'])
 
@@ -793,6 +794,7 @@ class ClosingTests(unittest.TestCase):
         self.assertEqual(s.get_task(t)['Status'], 'waiting')                        # not closed on the words
         self.assertEqual(run(s, out['proposal']).json()['status'], 'done')
         self.assertEqual(s.get_task(t)['Status'], 'done')
+        # no card of the item in this chat to wear the press (concierge._stamp_pressed), so its line is said
         self.assertIn(f'Done - Mark done · TQ-{t:04d}', last_receipt(s))
         self.assertEqual([i for i in funnel.build(s)['items'] if i.get('tid') == t], [])
 

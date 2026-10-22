@@ -4117,11 +4117,43 @@ def _past(store, op: dict, ref: str) -> str:
     return ''
 
 
-def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = False) -> dict:
+def _item_of(store, op: dict) -> tuple:
+    """(task id, card keys) of what an act was about - the item line _stamp_pressed marks."""
+    tk, target, p = op.get('targetKind'), op.get('target'), op.get('params') or {}
+    try:
+        if tk == 'task': return int(target), {f'task:{int(target)}', f'agent:{int(target)}'}
+        if tk == 'message': return (store.get_message(int(target)) or {}).get('TaskId'), {f'msg:{int(target)}'}
+        if tk == 'review': return (store.get_review(int(target)) or {}).get('TaskId'), {f'review:{int(target)}'}
+        if tk == 'item': return (int(p['tid']) if p.get('tid') else None), {str(p.get('key') or '')} - {''}
+    except (TypeError, ValueError, KeyError): pass
+    return None, set()
+
+
+def _stamp_pressed(store, dock_tid: int, op: dict, label: str) -> bool:
+    """A PRESS IS MARKED ON ITS CARD, NOT SAID (the owner, 2026-10-22: "I hate free text" ... "put a little animation on the corner of the
+    past task - like button marked done not free text"): the newest dock line carrying the item gets the button's own label as `pressed`,
+    which the page draws as a badge in that card's corner."""
+    tid, keys = _item_of(store, op)
+    if not tid and not keys: return False
+    for c in reversed(general.chat_rows(store, dock_tid)):
+        m = _MARK.search(c.get('Body') or '')
+        if not m or c.get('ActorType') != general.ASSISTANT_TYPE: continue
+        try: card = json.loads(m.group(1))
+        except ValueError: continue
+        if not isinstance(card, dict) or card.get('kind') in ('words', 'proposal'): continue
+        if card.get('key') in keys or (tid and str(card.get('tid') or '') == str(tid)):
+            # the button's own word: "Remind me: Thu 5 Nov" is the receipt's - the badge is the button the page drew, "Remind me"
+            rewrite(store, int(c['CommentId']), _MARK.sub('', c.get('Body') or ''), {**card, 'pressed': label.split(': ')[0]})
+            return True
+    return False
+
+
+def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = False, press: bool = False) -> dict:
     """The receipt AND, when it did not happen, its way on (recover): {'say': line, 'chips': [...]}. The chips ride on the
-    recorded line, so the desktop draws them under it and the phone numbers them."""
+    recorded line, so the desktop draws them under it and the phone numbers them. `press`: a button pressed on the desk (the operations
+    road, Remind me) - one that went through is stamped on its item's card (_stamp_pressed), never a line of its own."""
     label, ref = describe_op(store, op)
-    st = op.get('status')
+    st, start = op.get('status'), ''
     # the reason as a clause: "unknown agent: ." and "...failed.." were the error's own punctuation run into the sentence's
     why = lambda fallback: str(op.get('error') or fallback).strip().rstrip(' .:;') or fallback
     if st == 'done' and (start := str((op.get('outcome') or {}).get('start_error') or '').strip().rstrip(' .:;')):
@@ -4157,6 +4189,11 @@ def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = 
     # A PRESS ON THE TABLE'S TASK VIEW (Stream B, 2026-10-18): its receipt is a notice beside the view, never a card that takes the table
     # from it. ONE LINE PER ACT and no Take it back (the owner, 2026-10-19: "no take it back button. hate that") - a wrong Mark done is
     # put right with Reopen task, the row's own button
+    # ...and a BUTTON that went through is no line at all, only the badge on its card: "Done - Mark done · TQ-0001." under every press
+    # (the owner, 2026-10-22: "we don't need that text ever"). An agent that never started is a failure, said as one; the words still
+    # come back as `say` for the phone. An act with no card in the chat to wear it (a report set up from words, a connection) keeps its
+    # line: there is nothing else to show it happened, nor that it waits on an authorization
+    if press and not start and _stamp_pressed(store, dock_tid, op, label): return {'say': line, 'chips': []}
     record(store, dock_tid, 'assistant', line, None if proposed else {'kind': 'words', 'key': None, 'title': label, 'chips': [], 'tid': None,
                                                                      'ref': ref or None, 'background_event': True})
     return {'say': line, 'chips': []}

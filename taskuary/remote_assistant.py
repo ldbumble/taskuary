@@ -1922,11 +1922,13 @@ def agent_state(item: dict | None, store=None) -> str:
     kind, lane = it.get('kind'), it.get('lane')
     if store is not None and it.get('tid') and lane != 'working' and (kind in ('agent', 'agentdone') or lane in AGENT_CARD_LANES):
         from . import funnel, workerstate as ws
-        try: end = ws.ended(store, int(it['tid']))
+        # ...FAILED whatever the session does, as the desk's R2 reads it: a run that failed with its session still open read "is waiting
+        # on you" (the 2026-10-22 re-walk) - finished stays a reading of a run that is over
+        try: end = 'failed' if ws.ended(store, int(it['tid']), live_too=True) == 'failed' else ws.ended(store, int(it['tid']))
         except Exception as e:
             logger.debug(f'the phone could not read how the run ended: {e}'); end = None
         if end == 'failed':
-            f = funnel.run_failed(store, int(it['tid'])) or {}
+            f = funnel.run_failed(store, int(it['tid']), live_too=True) or {}
             why = str(f.get('sentence') or '').rstrip('.')
             return f'failed - {why[:1].lower()}{why[1:]}' if why else 'failed'
         if end == 'finished' and not it.get('asking'): return 'finished'
@@ -2019,7 +2021,8 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
     hold = stranger_held(store, it) and state != 'working'
     if hold: word, state = lanes.word('held'), ''
     head = ' · '.join(x for x in (word, str(it.get('ref') or '')) if x)
-    if head and funnel.mark_for(it): head = f'{funnel.mark_for(it)} {head}'
+    mark = funnel.mark_for({**it, 'lane': 'stopped'} if state.startswith('failed') and kind == 'agent' else it)
+    if head and mark: head = f'{mark} {head}'
     age = concierge.funnel_age(it)
     said = lead_line(store, it, '') or _cut(it.get('title') or '', 160)
     lines = [head] if head else []
@@ -2162,6 +2165,10 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     """
     from . import funnel
     item = out.get('item') or {}
+    # A RUN THAT FAILED ASKS NOTHING, though its session is still up and its last question still on the row: the card read "answer the
+    # agent" and offered its old answers over "failed - <why>" (R2)
+    if item.get('kind') == 'agent' and item.get('asking') and agent_state(item, store).startswith('failed'):
+        item = {**item, 'asking': False, 'choices': [], 'questions': [], 'state': 'parked'}; out = {**out, 'item': item}
     out, key = _chips_on(store, out, item, table)
     if item and 'hold' not in item and stranger_held(store, item): item = {**item, 'hold': True}; out = {**out, 'item': item}
     say = _TASK_LINK.sub(r'\1', str(out.get('say') or '')).strip()

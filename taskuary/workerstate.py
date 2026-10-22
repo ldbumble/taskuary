@@ -208,14 +208,16 @@ def status(store, tid: int) -> dict:
 ENDINGS = ('finished', *TERMINAL)
 
 
-def ended(store, tid) -> str | None:
+def ended(store, tid, live_too: bool = False) -> str | None:
     """How the task's last run ENDED, by its own word, with nothing live on it: 'finished' (an explicit result no prompt has
     followed, as status reads it), 'failed', 'stopped' or 'disconnected' - else None: live, never reported, or silent on how it
     ended. Silence is never an ending here: a general conversation that answered and closed is a saved conversation, not a failure.
 
     THE ONE READING every surface takes of a run that is over (G7, 2026-10-20): the task list and the Board said "on you" or
     "waiting to start" over a run that failed, finished or was stopped, while the worker said so - taskstate and the rail read it here."""
-    if not tid or _live(tid): return None
+    # `live_too`: the run's own last word even while its session is still open - a run that FAILED reads failed whatever the
+    # session does (R2): a failed agent whose session stayed up read "waiting on you" on the phone (the 2026-10-22 re-walk)
+    if not tid or (_live(tid) and not live_too): return None
     last = store.last_worker_event(tid, skip=NOTES)
     if not last: return None
     if last['Kind'] in TERMINAL: return last['Kind']

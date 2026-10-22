@@ -663,3 +663,42 @@ def test_a_phone_turn_tells_the_desktop_when_it_starts_and_when_it_is_answered()
         try: remote_assistant._locked_respond(MemoryStore(), 'whatsapp', 'me@s.test', 'hello', None)
         except RuntimeError: pass
     assert said == [(live.CHAT, True), (live.CHAT, False)]
+
+
+class NoAITests(unittest.TestCase):
+    """F10: with no AI connected, typed "next" answered "use the buttons" and the walk stopped; "7" over a list of six did the
+    same; and the phone was told about buttons it does not have."""
+    def setUp(self):
+        self.store, self.c = armed_store()
+        t = self.store.create_task({'Title': 'Renew the domain', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        self.table = {'key': f'task:{t}', 'kind': 'task', 'tid': t, 'ref': f'TQ-{t:04d}', 'title': 'Renew the domain', 'lane': 'yours'}
+        rows = [(f'Choice {i}', {'t': 'stay'}) for i in range(1, 6)] + [('Next', {'t': 'next'})]
+        remote_assistant._offer(rows)
+        remote_assistant.remember_offered(self.store, 'whatsapp', JID, 'Reply with one of:\n' + '\n'.join(f'{i} · {w}' for i, (w, _) in enumerate(rows, 1)))
+
+    def turn(self, text):
+        sent = []
+        with mock.patch.object(concierge, 'brain', return_value=None), \
+             mock.patch.object(concierge, 'restore_current', return_value=self.table), \
+             mock.patch.object(concierge, 'surface', return_value={'say': 'Gail Moreno asked about Thursday.', 'item': None}) as surfaced, \
+             mock.patch.object(messengers, 'wa_send', side_effect=lambda st, chat, body, connector_id=None, poll=None: sent.append((body, poll))):
+            remote_assistant.respond(self.store, 'whatsapp', JID, text, self.c['ConnectorId'])
+        return sent, surfaced
+
+    def test_typed_next_is_next(self):
+        sent, surfaced = self.turn('next')
+        surfaced.assert_called_once()
+        self.assertIn('Gail Moreno asked about Thursday.', sent[-1][0])
+
+    def test_a_number_past_the_list_says_the_range_and_keeps_the_choices(self):
+        sent, surfaced = self.turn('7')
+        surfaced.assert_not_called()
+        self.assertIn('Pick 1 to 6', sent[-1][0])
+        self.assertIn('Next', sent[-1][1])
+        self.assertEqual(remote_assistant.resolve_index(self.store, 'whatsapp', JID, '6'), ('Next', True), 'the list still answers')
+
+    def test_free_words_say_it_in_one_clean_sentence_and_never_buttons(self):
+        sent, _ = self.turn('what is this about?')
+        body = sent[-1][0]
+        self.assertNotIn('button', body.lower())
+        self.assertNotIn('..', body); self.assertNotRegex(body, r'[a-z] Connect an AI')

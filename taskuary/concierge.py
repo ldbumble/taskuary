@@ -3143,7 +3143,8 @@ AGENT_STARTS = ('coding_agent', 'regular_agent', 'continue')
 SETTLING_KINDS = frozenset(kind for kind, _label, settles in PROPOSALS.values() if settles) | {'message.archive', 'item.settle'}
 # SAID ONCE, IN WORDS (U3): a typed question with no AI got "set one up" twice in one reply, the second as a raw "#cli-agents".
 # The desk gets the link to the AI page; a phone chat cannot open one, so it gets the words alone.
-NO_BRAIN = f"Connect an AI under {places.name('ai')} so I can take instructions; until then use the buttons."
+# ...and a phone has no buttons: its choices come under the line, as a poll on WhatsApp (F10)
+NO_BRAIN = f"Connect an AI under {places.name('ai')} so I can take instructions; until then pick from the choices below."
 def connect_ai_chip() -> dict:
     """The chip under a no-AI line: it opens Connections at the AI cards (the page's `go` chip, AssistantView.runChip)."""
     return {'verb': 'go', 'label': 'Connect an AI', 'href': places.href('ai')}
@@ -4153,7 +4154,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     table = table_line(store, item)
     llm = _brain_for(store, tid, llm, trace, cancel)
     if not llm:
-        fb = fallback(item, False, p['items'], store=store)
+        fb = fallback(item, False, p['items'], store=store).strip()
+        if fb and not fb.endswith(('.', '!', '?', ')')): fb += '.'               # a sentence ends before the next one starts
         say_ = fb if places.name('ai') in fb else f"{fb} {no_brain()}".strip()     # the empty table's facts already say it
         rec('assistant', say_)
         # `open: ''` - these are the app's words, and their AI link is to press: the page followed it, and "show me TQ-0003" with no
@@ -4161,7 +4163,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # ...and the button that connects one leads the chips (owner-approved, 2026-10-21: every "no AI" line carries Connect an AI);
         # a phone chat has no page to open, so it keeps the words alone
         ai = [] if DELIVERY.get() == PHONE else [connect_ai_chip()]
-        return {'say': say_, 'options': [], 'chips': ai + (chips_for(store, item) or walk_chips(len(p['items']))), 'decision': None, 'open': ''}
+        return {'say': say_, 'options': [], 'chips': ai + (chips_for(store, item) or walk_chips(len(p['items']))), 'decision': None, 'open': '',
+                'no_brain': True}
     reply, options, decision, call, did_read, failed = '', [], None, None, False, None
     try:
         # NO HUB NOTES PER TURN. Every turn carried whatever notes shared the owner's words - asked to research a

@@ -1,47 +1,23 @@
-/* A ROW'S STATE ON ITS ICON (StatusMark.jsx): a ring round the source's logo - the logo itself never moves, fades or changes colour */
+/* A ROW'S STATE ON ITS ICON (StatusMark.jsx): the ring while an agent works, else the lane's mark as a badge on the logo */
 .tq-mark { position: relative; display: inline-flex; flex-shrink: 0; }
 /* AN AGENT AT WORK (the owner, 2026-10-21): a thin slate ring spinning round the icon - it stops when the agent finishes, asks, fails
    or is stopped */
 .tq-mark.spins::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 1.5px solid rgba(85, 105, 122, 0.22);
   border-top-color: #55697a; animation: tq-agent-ring 1s linear infinite; pointer-events: none; }
 @keyframes tq-agent-ring { to { transform: rotate(360deg); } }
-/* EVERY OTHER STATE IS A RING OF ITS OWN SHAPE (the owner, 2026-10-22), drawn as a thin band masked out of a disc so each shape is exact
-   at 21px. Its colour is the task page pill's for the state (the pill's ink, `rl-*`); the shape alone still tells the states apart. */
-.tq-mark { --ring: #55697a; }
-.tq-mark.rl-you { --ring: #3f5943; }
-.tq-mark.rl-working { --ring: #41525f; }
-.tq-mark.rl-handled { --ring: #4c6450; }
-.tq-mark.rl-done { --ring: #3c5740; }
-.tq-mark.rl-info { --ring: #5f5440; }
-.tq-mark.rl-muted { --ring: #5e574c; }
-.tq-mark.rl-bad { --ring: #7e2d2d; }
-.tq-mark[class*="rg-"]::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; pointer-events: none; --w: 1.5px;
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--w)), #000 calc(100% - var(--w)));
-  mask: radial-gradient(farthest-side, transparent calc(100% - var(--w)), #000 calc(100% - var(--w))); }
-/* somebody waits on you: a full ring, gently breathing */
-.tq-mark.rg-breathe::after { background: var(--ring); animation: tq-ring-breathe 2.4s ease-in-out infinite; }
-@keyframes tq-ring-breathe { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
-/* ready to send: a full solid ring, still - a touch heavier than the breathing one, so the two differ with motion off too */
-.tq-mark.rg-full::after { --w: 2px; background: var(--ring); }
-/* stopped and saved, or an agent stopped: half a ring, still */
-.tq-mark.rg-half::after { background: conic-gradient(var(--ring) 0 50%, transparent 0); }
-/* a check failed, couldn't sort, didn't send: a ring broken in four, still */
-.tq-mark.rg-broken::after { background: repeating-conic-gradient(from 12deg, var(--ring) 0 64deg, transparent 0 90deg); }
-/* waiting to start: eight dots, the lead one ticking round a step a second */
-.tq-mark.rg-dots::after { --w: 2px; --d: color-mix(in srgb, var(--ring) 40%, transparent);
-  background: conic-gradient(var(--ring) 0 14deg, transparent 0 45deg, var(--d) 0 59deg, transparent 0 90deg, var(--d) 0 104deg, transparent 0 135deg,
-    var(--d) 0 149deg, transparent 0 180deg, var(--d) 0 194deg, transparent 0 225deg, var(--d) 0 239deg, transparent 0 270deg,
-    var(--d) 0 284deg, transparent 0 315deg, var(--d) 0 329deg, transparent 0);
-  animation: tq-agent-ring 8s steps(8) infinite; }
-/* waiting on them, or held: a thin faint ring, still */
-.tq-mark.rg-faint::after { --w: 1px; background: var(--ring); opacity: 0.35; }
-/* a goal: the ring fills as its steps are done, over a faint track */
-.tq-mark.rg-progress::after { background: conic-gradient(var(--ring) 0 calc(var(--p, 0) * 1%), color-mix(in srgb, var(--ring) 20%, transparent) 0); }
+/* every other state: the lane's own mark, small, on the logo's corner, on a disc of the rail's paper so it reads over the logo */
+.tq-mark .badge { position: absolute; right: -6px; bottom: -6px; font-style: normal; font-size: 9.5px; line-height: 12px; width: 12px; height: 12px;
+  text-align: center; border-radius: 50%; background: #fffdfb; box-shadow: 0 0 0 1px #fffdfb; pointer-events: none; }
+/* on the rail the logo keeps a little room for its badge, so the badge never touches the title */
+.tq-pile-row .tq-mark { margin-right: 4px; }
+/* somebody waiting on you waves; a start not yet made turns its hourglass - the rest hold still */
+.tq-mark .badge.wave { transform-origin: 70% 80%; animation: tq-badge-wave 1.8s ease-in-out infinite; }
+.tq-mark .badge.turn { animation: tq-badge-turn 3s ease-in-out infinite; }
+@keyframes tq-badge-wave { 0%, 60%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(16deg); } 20%, 40% { transform: rotate(-10deg); } }
+@keyframes tq-badge-turn { 0%, 70% { transform: rotate(0); } 85%, 100% { transform: rotate(180deg); } }
 @media (prefers-reduced-motion: reduce) {
   .tq-mark.spins::after { animation: none; border-color: #55697a; }   /* a still ring */
-  .tq-mark[class*="rg-"]::after { animation: none !important; }   /* the shapes still tell the states apart */
-  .tq-mark.rg-breathe::after { opacity: 0.6; }   /* lighter than ready to send's solid ring */
-  .tq-pile-row .tq-mark.spins::after { border-color: rgba(85, 105, 122, 0.22); border-top-color: #55697a; }   /* on the rail a still arc, not a ring */
+  .tq-mark .badge { animation: none !important; }
 }
 
 /* THE TASK HEADER'S STATUS PILL: the rail's mark and word, in the role's own colours (theme.jsx ROLES) */

@@ -56,29 +56,24 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
       await page.$eval("[data-tq-status-pill] .word", (e) => e.textContent));
   });
 
-  await t.test("a rail row carries its state in the ring round its logo - never a badge - and no status words on its right", async () => {
-    const rows = await page.$$eval("[data-tq-rail] .tq-pile-row", (els) => els.map((r) => { const m = r.querySelector(".tq-mark"), cs = m && getComputedStyle(m);
-      const ring = m && getComputedStyle(m, "::after"); return {
+  await t.test("a rail row carries its state in its icon - a badge, or the ring while an agent works - and no status words on its right", async () => {
+    const rows = await page.$$eval("[data-tq-rail] .tq-pile-row", (els) => els.map((r) => { const m = r.querySelector(".tq-mark"); return {
       key: r.getAttribute("data-tq-key"), mark: m?.getAttribute("data-tq-status") || "", label: m?.getAttribute("aria-label") || "",
-      shape: m?.getAttribute("data-tq-ring") || "", kids: m ? m.children.length : 0, spins: !!r.querySelector(".tq-mark.spins"),
-      emoji: m ? /\p{Extended_Pictographic}/u.test(m.textContent) : false, drawn: !!ring && ring.content !== "none",
-      logo: cs ? [cs.filter, cs.opacity, cs.transform, cs.animationName].join(" ") : "",
+      badge: r.querySelector(".tq-mark .badge")?.textContent || "", ring: !!r.querySelector(".tq-mark.spins"), kids: m ? m.children.length : 0,
+      after: m ? getComputedStyle(m, "::after").content : "none",
       word: r.querySelector(".tq-pile-word")?.innerText || "", band: r.closest("[data-tq-run]")?.getAttribute("data-tq-run") }; }));
     const tasks = rows.filter((r) => r.band === "task" && r.mark);
     assert.ok(tasks.length >= 5, `rows under Tasks wear their state: ${JSON.stringify(rows)}`);
     for (const r of tasks) {
       assert.ok(r.label, `${r.key} says its state in words`);
-      assert.ok(r.shape, `${r.key} names its ring`);
-      assert.equal(r.drawn, r.shape !== "none", `${r.key}: a ${r.shape} ring is drawn round the logo, and no ring is none`);
-      assert.equal(r.kids, 1, `${r.key}: the logo is the only thing in its mark - nothing laid over it`);
-      assert.equal(r.emoji, false, `${r.key}: no emoji on the logo`);
-      assert.equal(r.logo, "none 1 none none", `${r.key}: the logo itself never moves, fades or recolours`);
+      assert.ok(r.ring !== !!r.badge, `${r.key} wears the ring or a badge, never both and never neither: ${JSON.stringify(r)}`);
+      // no ring round the logo but the working one - the shaped rings are gone (the owner, 2026-10-22)
+      assert.equal(r.after !== "none", r.ring, `${r.key}: only a working row draws a ring`);
       assert.equal(r.word, "", `${r.key} has no status word on its right`);
     }
-    const go = tasks.find((r) => r.mark === "approve");
-    assert.ok(go && go.shape === "full" && go.label === "ready to send", `ready to send is a full ring, said in words: ${JSON.stringify(go)}`);
-    const spin = rows.find((r) => r.spins);
-    if (spin) { assert.match(spin.label, /is working on this$/); assert.equal(spin.shape, "spin"); }
+    assert.ok(tasks.some((r) => r.mark === "approve" && r.badge === "🏁" && r.label === "ready to send"), "ready to send is a 🏁 badge, said in words");
+    const ring = rows.find((r) => r.ring);
+    if (ring) assert.match(ring.label, /is working on this$/);
   });
 
   await t.test("a chat burst reads newest on top, the older lines behind Show N older", async () => {

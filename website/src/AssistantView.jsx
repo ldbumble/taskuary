@@ -664,12 +664,12 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                 // owner, 2026-09-16: "for calendar invite you need to say the actual time of the
                 // meeting"). It goes on the card rather than in the gutter, which is an age column
                 // for every row and too narrow for a time.
-                // THE ROW'S STATE IS ON ITS ICON (owner-approved 2026-10-21): the source's logo itself wears it, with nothing laid
-                // over it: the RING round it says the state, each in its own shape (the owner, 2026-10-22) - the arc spinning while
-                // an agent works, breathing while somebody waits on you, solid when ready to send, half when stopped, broken when it
-                // failed, dotted while it waits to start, a goal's filling as its steps are done (railStatus.RING, the same reading
-                // the task header's pill takes) - and the words and emoji on the row's right go, so the title has the room. The words are the icon's label and hover, for a reader without colour. A
-                // row in a band whose heading already says it (fyi, report) wears none; a goal keeps its own mark.
+                // THE ROW'S STATE IS ON ITS ICON (owner-approved 2026-10-21; the rings undone, the owner 2026-10-22: "maybe the emoji on
+                // the logo is better. besides for the working agent - the spinning thing around the logo is good"): the ring spinning
+                // while an agent works, else the lane's own mark as a badge on the logo, waving or turning where that says something
+                // (railStatus.js, the same reading the task header's pill takes) - and the words and emoji on the row's right go, so the
+                // title has the room. The words are the icon's label and hover, for a reader without colour. A row in a band whose
+                // heading already says it (fyi, report) wears none; a goal keeps its own mark.
                 const goal = String(i.kind || "").startsWith("goal");
                 const st = i.settling || goal || i.kind === "meeting" ? null : railStatus(i);
                 const shown = st && (st.spins || meta.word !== BAND_SAYS[level]) ? st : null;
@@ -694,11 +694,9 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                       aria-label={hot ? `${i.title} - urgent` : undefined}
                       title={[i.who, meta.word, i.ref, i.promoted ? 'moved up - it looked urgent' : '', i.why].filter(Boolean).join(" · ")}>
                       <div className="t">
-                        {/* AN AGENT AT WORK is a ring spinning round the row's logo (the owner, 2026-10-21/22) - it stops when the agent
-                            finishes, asks, fails or is stopped; the highlighted border stays the table's alone. A goal wears its mark, ringed by its progress. */}
-                        <StatusLogo status={goal ? (i.kind === "goal_slipped" ? { key: i.kind, role: "bad" } : null) : shown}
-                          agent={i.working || i.agent} className="logo"
-                          progress={goal && Number.isInteger(i.steps) && i.steps > 0 ? (i.steps_done || 0) / i.steps : null}>
+                        {/* AN AGENT AT WORK is a ring spinning round the row's icon (the owner, 2026-10-21) - it stops when the agent
+                            finishes, asks, fails or is stopped; the highlighted border stays the table's alone. A goal wears its mark. */}
+                        <StatusLogo status={shown} agent={i.working || i.agent} className="logo">
                           {goal ? <span className="goal">{meta.mark}</span> : <SourceMark item={i} size={15} />}</StatusLogo>
                         {!!rankNo[i.key] && <span className="tq-pile-rank" title={`#${rankNo[i.key]} of this batch, by importance`}>
                           {CIRCLED[rankNo[i.key] - 1] || rankNo[i.key]}</span>}

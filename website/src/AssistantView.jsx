@@ -1192,7 +1192,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // how the next address is written (recordPlace): "push" once the owner goes somewhere, "replace" for the walk and the server
   const navHow = useRef("replace");
   const cardRef = useRef(null);
+  // every move of the table made HERE, counted: a server word read before one is older than it (readChat, loadPile)
+  const tableMoves = useRef(0);
   const putOnTable = useCallback((card, how = "pile") => {
+    if (how !== "sync") tableMoves.current += 1;
     if (how !== "view") {
       const item = how === "card" ? null : card || null;
       currentRef.current = item; cardRef.current = how === "card" ? card?.key || null : null;
@@ -1317,7 +1320,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // The live socket carries no event for these turns (store.add_comment pokes nothing), so this read
   // runs on the 30 s tick even while the socket is up - the pile beside it does not need to.
   const readChat = useCallback(async (epoch = chatEpoch.current) => {
-    const turns = turnsBegun.current;
+    const turns = turnsBegun.current, moves = tableMoves.current, mid = turnFlight.current;
     const { data: st } = await api.get("/api/concierge");
     if (epoch !== chatEpoch.current || resettingRef.current) return false;
     setMsgs((m) => mergeDurableTurns(m, st.messages || []).messages);
@@ -1334,7 +1337,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // ...and not over a task the owner opened by name here: the walk's Current is not what this tab is showing then
     // ...nor from a read sent before a turn that has answered since: it was taken before that turn moved the table, and dragged a
     // cold link's task back to the item before it (a link's pull outran the boot's own read, found by the perf pass, 2026-10-20)
-    if (!turnFlight.current && !cardRef.current) {
+    // ...NOR FROM A READ SENT WHILE A TURN WAS IN FLIGHT, OR BEFORE THE TABLE MOVED HERE (the owner, 0.3.9.21: "I clicked on task 1171 and
+    // it jumped back to the deep dive one, then right back"). A rail click draws its task at once and its pull runs for seconds on a real
+    // brain; a live event mid-pull read the conversation while the server still had the old task as Current, that answer came back after
+    // the pull had landed, and it put the old task back up until the next read. The latest click wins: only a read sent after it may move it.
+    if (!turnFlight.current && !cardRef.current && !mid && moves === tableMoves.current) {
       const said = st.current || null;
       if (turns === turnsBegun.current && (said?.key || null) !== (currentRef.current?.key || null)) putOnTable(said, "sync");
     }
@@ -1350,7 +1357,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // The optional `current` response belongs to this exact key. A click can put B on the table
     // while the request for A is in flight; that older response may still refresh the rail, but it
     // must never replace or clear B.
-    const requestedCurrentKey = currentRef.current?.key || null;
+    const requestedCurrentKey = currentRef.current?.key || null, requestedMoves = tableMoves.current;
     const requestedScope = nextSelectionScope(only.current, requestedCurrentKey);
     pileLoads.current += 1;                    // a rail still riding behind a card is older than this read (landed)
     if (force) forcedLoadStartedAt.current = Date.now();
@@ -1385,7 +1392,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // the table clears itself instead of showing a draft that is no longer waiting on anybody.
       {
         const cur = currentRef.current;
-        if ((cur?.key || null) !== requestedCurrentKey) return captured;
+        // ...nor the same key put up again since (A, B, A): the table was moved here after this read was sent
+        if ((cur?.key || null) !== requestedCurrentKey || requestedMoves !== tableMoves.current) return captured;
         // Starting from Tasks/Board changes msg:<mid> into agent:<tid>. The old key is correctly
         // absent, but the task is not gone: prefer its working row before clearing the table.
         const fresh = currentItemFromPile(cur, data);

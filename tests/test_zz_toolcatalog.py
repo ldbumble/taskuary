@@ -104,8 +104,8 @@ class SelectorTests(unittest.TestCase):
             out = concierge.call_turn(s, dock['TaskId'], call, None, 'clear all the reports', 'owner')
         p = out['proposal']
         n = len(concierge.select_items(s, {'category': cat}))
-        self.assertIn(f'Clear {n} from the pipe', p['say'])          # the NUMBER is said before the yes
-        self.assertIn(f'category: {cat}', p['say'])
+        self.assertIn(f"Mark {concierge._set_noun({'category': cat}, n)} read", p['say'])          # the NUMBER is said before the yes
+        self.assertNotIn(f'category: {cat}', p['say'])                   # in words, never the selector's field (F23)
         self.assertEqual(len(funnel.build(s)['items']), len(funnel.build(s)['items']))   # nothing ran
         print(f"  proposal says: {p['say'][:90]}")
         r = T.run(s, p)

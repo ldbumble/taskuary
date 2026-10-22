@@ -78,7 +78,7 @@ class RemindMeOnTheWalkTests(unittest.TestCase):
         with mock.patch.object(concierge, 'surface', return_value={'say': 'All clear.', 'item': None}):
             done = ra.run_act(s, {'t': 'remind', 'tid': t, 'until': '1 week'}, item)
         self.assertTrue(s.get_task(t).get('RemindAt'))
-        self.assertIn('under For later on your rail', done)
+        self.assertIn(f'TQ-{t:04d} is away until', done)                 # the phone's plain past tense (F13)
         self.assertIn('Bring it back now', done)
 
 

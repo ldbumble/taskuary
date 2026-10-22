@@ -58,7 +58,7 @@ import ContinueBox from "./ContinueBox.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, arrivals, arrivedAt, asPressed, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
 import { FYI_PAGE, coveredByReload, fyiTail, heldSince, pileRows, sentChips } from "./funnelPile.js";
 import { railStatus } from "./railStatus.js";
 import { StatusLogo } from "./StatusMark.jsx";
@@ -391,7 +391,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   useEffect(() => { if (!markers.length) setOpenChannel(""); }, [markers.length]);
 
   // ── how much of each band fits ──────────────────────────────────────────────────────────────
-  // urgent and tasks draw in full; reports and fyi divide what is left of the
+  // tasks draw in full; reports and fyi divide what is left of the
   // rail's height, floor of two (funnelPile.fillCaps). It is MEASURED from the scroller, so the
   // answer follows the window instead of being a number somebody picked.
   // PASSED means you moved ON from it: the card on the table has been shown (the walk marks it at once)
@@ -455,7 +455,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // the row on the table is 24px taller than the rest, and it is drawn inside one of these bands
   const base = fillCaps(room - (curKey ? CUR_H - ROW_H : 0), bands);
   // how many rows the capped bands could still give back before they are at their floor. Past that
-  // the rail genuinely does not fit and scrolls: urgent and tasks are never trimmed.
+  // the rail genuinely does not fit and scrolls: tasks are never trimmed.
   const headroom = CAPPED.reduce((n, level) => n + Math.max(0, (base[level] ?? 0) - FLOOR), 0);
   const caps = trimCaps(base, bands, trim);
   // what a band draws: its cap's worth, and whatever is on the table wherever in the band it sits
@@ -576,7 +576,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
       ) : bands.map(({ level, items: rows }) => {
         const open = opened.has(level);
         const extra = level === "fyi" ? tail : 0;           // the band's rows not here yet - counted, never dropped
-        // only the bands the rail is allowed to cap can be folded; urgent and tasks are never hidden, so a
+        // only the bands the rail is allowed to cap can be folded; tasks are never hidden, so a
         // chevron on them would offer nothing
         const folds = CAPPED.includes(level) && rows.length > FLOOR;
         // what is on the table is never capped away, wherever in its band it sits
@@ -630,7 +630,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
               title={`Walk ${levelLabel(level)} - ${LEVEL_META[level]?.hint || ""}`}
               {...pressable(() => onSection(level))}>
               {/* each band its own SUBTLE tint (the owner, 2026-09-28: "now all the pills are the same. make them subtly
-                  different") - light red for your task, never the loud one; urgent alone keeps its colour */}
+                  different") */}
               <span className={`lvl-${level}`}>{levelLabel(level)}</span>
               {folds && <i className="fold" title={open ? `Collapse ${levelLabel(level)}` : `Show all ${rows.length + extra}`} aria-expanded={open}
                 {...pressable((e) => { e.stopPropagation(); if (!open && extra) onMoreFyi?.(); setOpened((cur) => {
@@ -650,13 +650,16 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                 const meta = rowMeta(i);
                 const isCur = i.key === curKey;
                 const inBatch = batchKeys.has(i.key);
-                const cls = ["tq-pile-row", falls(i.key) ? "landing" : entering.has(i.key) ? "entering" : "", i.settling ? "settling" : "",
+                // URGENT IS A QUIET SHADE ON THE ROW, IN ITS PLACE (the owner, 2026-10-22: "remove the urgent section and just add quiet
+                // shading around it") - no heading of its own, no icon, no word; Next takes it first
+                const hot = !i.settling && isUrgent(i);
+                const cls = ["tq-pile-row", falls(i.key) ? "landing" : entering.has(i.key) ? "entering" : "", i.settling ? "settling" : "", hot ? "urgent" : "",
                   isCur ? "current" : inBatch ? "inbatch" : i.key === nextKey ? "next" : ""].filter(Boolean).join(" ");
                 // NO PILLS ON A ROW (the owner, 2026-09-28: "nothing else has pill"): a row's state is its mark and word, the same
                 // for every lane - "ready to send" and "agent waiting on you" included
                 // ...and every other row says its lane - mark and word - unless that is the very
                 // thing the heading above it already said (BAND_SAYS).
-                // A MEETING says its clock time instead. "coming up" is what the urgent heading and
+                // A MEETING says its clock time instead. "coming up" is what the shade and
                 // the age already tell you; what it does not tell you is when to be there (the
                 // owner, 2026-09-16: "for calendar invite you need to say the actual time of the
                 // meeting"). It goes on the card rather than in the gutter, which is an age column
@@ -675,7 +678,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                     // a goal says only that it SLIPPED (red); on track or not started, its steps say enough (the owner, 2026-10-21)
                     : goal ? (i.kind === "goal_slipped" ? meta.word : "") : "";
                 return (
-                  <div key={i.key} className={cls} data-tq-key={i.key} style={{ top: falls(i.key) ? -ROW_H : top }}>
+                  <div key={i.key} className={cls} data-tq-key={i.key} data-tq-urgent={hot ? "" : undefined} style={{ top: falls(i.key) ? -ROW_H : top }}>
                     {/* For later counts DOWN to when it comes back, in the same short form the age column uses */}
                     <span className="when" title={level === "later" && backAt(i) ? `back ${ago(backAt(i))}` : undefined}>
                       {String(i.kind || "").startsWith("goal") ? dueWord(i.due)      /* a goal's clock is its date (spec 2026-10-12) */
@@ -688,6 +691,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                       tabIndex={i.key === tabKey ? 0 : -1} onFocus={() => setKbdKey(i.key)}
                       onClick={() => (isCur ? onCurrent?.() : !i.settling && onPull(i.key, `Show me “${i.title}”`))}
                       onPointerEnter={() => { if (!isCur && i.tid) prefetchTask(api, i.tid); }}
+                      aria-label={hot ? `${i.title} - urgent` : undefined}
                       title={[i.who, meta.word, i.ref, i.promoted ? 'moved up - it looked urgent' : '', i.why].filter(Boolean).join(" · ")}>
                       <div className="t">
                         {/* AN AGENT AT WORK is a ring spinning round the row's logo (the owner, 2026-10-21/22) - it stops when the agent

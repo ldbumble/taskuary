@@ -59,7 +59,7 @@ def _arrived_after_close(task, view) -> bool:
 # the lanes that are the OWNER's move (processing_order band 2): what Next leaves in Passed for the quiet hours
 # ...and URGENT work too (R3; the owner, 2026-09-25: "i hit next on urgent task and it's gone now but it should be in passed
 # at least"). Only a row with an open task behind it is ever Passed, so a meeting with no task still leaves on Next (R2).
-# Read off lanes.json: every lane whose section is Urgent or Tasks - a task an agent is working included (2026-10-21).
+# Read off lanes.json: every lane whose section is Tasks - a task an agent is working included (2026-10-21).
 OWNER_LANES = lanes.OWNER_LANES
 # A goal's CHILD is a task row of its own, whoever holds it (the owner, 2026-10-21): it was folded into the goal's row while
 # an agent, a person or a hand-off had it, and a step being worked was nowhere on the rail. The goal's row still names who

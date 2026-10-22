@@ -129,7 +129,7 @@ def state_of(task: dict, card: dict | None, *, deferred: bool = False, chased: b
         # ...and somebody with no date is only LATE once they have been quiet past their own usual answer time (the owner,
         # 2026-10-20): a wait that is still inside it is a wait, not a loose end
         return ('waiting_no_date', who) if quiet >= day else None
-    if (lanes.LANE.get(lane) or {}).get('on_you') and lanes.lane_section(lane) in ('urgent', 'task'): return None
+    if (lanes.LANE.get(lane) or {}).get('on_you') and lanes.lane_section(lane) == 'task': return None
     return ('no_step', '')
 
 

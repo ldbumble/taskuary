@@ -2,14 +2,15 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { LEVEL_META, LEVEL_ORDER, levelLabel, levelOf, levelsOf } from "../src/funnelPile.js";
+import { LEVEL_META, LEVEL_ORDER, isUrgent, levelLabel, levelOf, levelsOf } from "../src/funnelPile.js";
 
 // Unread is ranked, not chronological, so the heading names the LEVEL the rail is crossing.
 // One level per thing triage decided: open work and landed results are not merged into a single name (the owner,
 // 2026-09-07: "why work and reports combined ... just make each one it's own thing").
 test("every level has its own word and its own hint", () => {
-  // the canvas redesign (2026-09-29), and since 2026-10-21 one Tasks for every open task - no Agents working, no Goals
-  assert.deepEqual(LEVEL_ORDER, ["urgent", "task", "later", "reports", "ideas", "fyi"]);
+  // the canvas redesign (2026-09-29), and since 2026-10-21 one Tasks for every open task - no Agents working, no Goals - and
+  // since 2026-10-22 no Urgent: an urgent row is shaded in its place in Tasks
+  assert.deepEqual(LEVEL_ORDER, ["task", "later", "reports", "ideas", "fyi"]);
   for (const level of LEVEL_ORDER) {
     assert.ok(levelLabel(level).length, `${level} needs a word`);
     assert.ok(LEVEL_META[level].hint.length, `${level} needs a hint`);
@@ -42,7 +43,8 @@ test("everything triage called work is one level, and a result is not in it", ()
 });
 
 test("the ends of the list are one level each", () => {
-  assert.equal(levelOf({ lane: "time", order_band: 1 }), "urgent");
+  assert.equal(levelOf({ lane: "time", order_band: 1 }), "task", "an urgent row sits in Tasks - there is no Urgent section");
+  assert.ok(isUrgent({ lane: "time", order_band: 1 }) && !isUrgent({ lane: "asked", order_band: 2 }));
   assert.equal(levelOf({ lane: "fyi", order_band: 4 }), "fyi");
   assert.equal(levelOf({ lane: "working", order_band: 2 }), "task");
   assert.equal(levelOf({ lane: "working", order_band: 5 }), "task", "a stamp from before is read again, never taken as fyi");
@@ -52,7 +54,7 @@ test("the ends of the list are one level each", () => {
   // shown and clicked away from is not put aside (2026-10-08: "it moved 1003 automatically to later?")
   assert.equal(levelOf({ lane: "stopped", order_band: 2, surfaced: true }), "task");
   assert.equal(levelOf({ lane: "stopped", order_band: 2 }), "task");
-  assert.equal(levelOf({ lane: "time", order_band: 1, surfaced: true }), "urgent", "a meeting about to start never moves down");
+  assert.equal(levelOf({ lane: "time", order_band: 1, surfaced: true }), "task", "a meeting about to start never moves down");
 });
 
 test("the menu offers only the runs the pile holds, in the order the rail draws them", () => {

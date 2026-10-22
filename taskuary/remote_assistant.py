@@ -689,7 +689,7 @@ def asking() -> dict | None:
 # Its own who-wants-what grouping put a finished agent's task under "Agents waiting" while the rail had it On you (the
 # owner, 2026-10-02: "it should just read from the rail no?"). The bands, their order and their names are the rail's:
 # funnel.level_of, which mirrors lanes.js levelOf, and the order is lanes.json's `sections`.
-from .lanes import LEVEL_ORDER
+from .lanes import LEVEL_ORDER, is_urgent
 AGENT_CARD_LANES = {'blocked', 'stopped', 'queued', 'working', 'saved'}     # the lanes whose card is an agent's
 _TASKISH = ('todo', 'message', 'asked', 'task')                            # a task's own card - an agent may have run on it
 ROWS_PER_GROUP = 5
@@ -736,8 +736,11 @@ def who_wants_what(items: list, store=None) -> str:
     if not live: return 'Nothing is waiting on you.'
     have = [(k, w, [i for i in live if group_of(i) == k]) for k, w in groups()]
     have = [(k, w, rows) for k, w, rows in have if rows]
+    # ...and how many are URGENT: there is no Urgent group any more (2026-10-22), an urgent row is counted where it sits
+    hot = lambda rows: f" ({n} urgent)" if (n := sum(1 for i in rows if is_urgent(i))) else ''
     lines = [f"{plural(len(live), 'thing')}: "
-             + ', '.join(plural(len(rows), *_ONE[k]) if k in _ONE else f"{len(rows)} {w if k == 'fyi' else w.lower()}" for k, w, rows in have) + '.']
+             + ', '.join((plural(len(rows), *_ONE[k]) if k in _ONE else f"{len(rows)} {w if k == 'fyi' else w.lower()}") + hot(rows)
+                         for k, w, rows in have) + '.']
     for key, word_, rows in have:
         # For later is sorted soonest-back first, as the rail draws it (funnelPile.bandsOf)
         if key == 'later': rows = sorted(rows, key=lambda i: str(i.get('back_at') or i.get('defer_until') or '9999'))
@@ -1408,7 +1411,7 @@ NEWS_KEY = 'phone_urgent_told'             # :<channel>:<chat> -> {walk, keys}: 
 
 def urgent_news(store, nxt: dict | None) -> tuple[str, list]:
     """URGENT MAIL THAT LANDED MID-WALK, said in one short line over the next card, with an Open for it (A12, 2026-10-22): it was never
-    mentioned while a section walk went on past it. Only what the rail puts under Urgent, not shown in this walk, not the card coming
+    mentioned while a section walk went on past it. Only what the rail shades urgent (lanes.is_urgent), not shown in this walk, not the card coming
     up, and not named before in this walk. ('', []) when there is none - or no chat is speaking."""
     from . import funnel
     from .processing_unread import WALK_KEY
@@ -1418,7 +1421,7 @@ def urgent_news(store, nxt: dict | None) -> tuple[str, list]:
     except Exception as e:
         logger.debug(f'the phone could not look for urgent arrivals: {e}'); return '', []
     up = (nxt or {}).get('key')
-    news = [i for i in items if funnel.level_of(i) == 'urgent' and not i.get('settling') and not i.get('surfaced') and i.get('key') != up
+    news = [i for i in items if is_urgent(i) and not i.get('settling') and not i.get('surfaced') and i.get('key') != up
             and up not in (i.get('aliases') or ())]
     if not news: return '', []
     key, walk_at = f"{NEWS_KEY}:{here['channel']}:{here['chat']}", str(store.get_setting(WALK_KEY) or '')

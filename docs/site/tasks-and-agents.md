@@ -245,12 +245,16 @@ The rail beside the Assistant holds what still wants something from you - nothin
 
 ![What puts something on the rail and under which heading: inside 14 days, not decided or noise, unread or still yours](img/rail-on.svg "What is on the rail, and under which heading.")
 
-The headings, top to bottom. Click one to walk that section: its first row goes on the table, and **Next** stays inside
-it until it is empty, then says so ("FYI done.") and the walk goes on as usual.
+The headings, top to bottom. Inside each, rows sit oldest first by when they arrived - Reports too - and never move. Click one
+to walk that section: its first row goes on the table, and **Next** stays inside it until it is empty, then says so ("FYI done.")
+and the walk goes on as usual.
+
+There is no Urgent heading. An urgent row - a meeting starting within 15 minutes, an ask triage called urgent (a deadline today
+or tomorrow, someone blocked now), a sender on your escalate list - sits in Tasks at its own place, quietly shaded, and **Next**
+takes it first wherever the walk is, then carries on from where you were.
 
 | Heading | What lands there | Comes back to it |
 |---|---|---|
-| **Urgent** | A meeting starting within 15 minutes; an ask triage called urgent (a deadline today or tomorrow, someone blocked now); a sender on your escalate list | - |
 | **Tasks** | Every open task, whoever is on it: a person's ask, a task ready to send, an agent working on it (a ring spins round the row's icon until the agent finishes, asks, fails or is stopped), an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a thread or a step gone quiet past that person's usual day (🧵 slipped - Chase, Let it go, They answered elsewhere, Remind me), a check that failed, a task an agent finished. A task stays here whatever its agent does; **Next** moves the walk on and leaves it here. A goal with news is here too - "🎯 Migrate the census export · 2 of 5 steps", *slipped* in red when it is late - and each of its steps is a task row of its own | For later work when its time comes |
 | **For later** | Tasks put away with **Remind me**, and a goal waiting for its next news - still yours, not offered by the walk. The time column counts down to when each comes back, soonest first; a goal's says its date | - |
 | **Reports** | A report run that landed | - |

@@ -17,7 +17,6 @@ flowchart LR
   D -->|no| U{"Unread, or still yours?"}
   U -->|read, nothing open| X4["Not on the rail"]
   U -->|yes| B{"Which heading?"}
-  B -->|a meeting starting, an ask<br/>triage called urgent| B1["Urgent"]
   B -->|every open task: an ask, a task ready to send,<br/>an agent working - its icon spins - waiting,<br/>not started or stopped, a check that failed,<br/>an agent that finished, a goal with news| B2["Tasks"]
   B -->|you put it away with Remind me,<br/>a goal with no news| B5["For later"]
   B -->|a report run| B3["Reports"]

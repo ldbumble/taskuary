@@ -1,8 +1,8 @@
 """The shared displayed funnel and captured assistant selection.
 
-Four attention bands promote urgent requests/current or imminent calendar events,
-then every task (owner input/approval, other actionable work, a task an agent is working), results, FYIs.
-Saved triage priority and oldest activity order each band; stable keys break ties.
+Attention bands sort the rail into its sections: every task (owner input/approval, other actionable work, a task an agent is
+working), results, FYIs. Urgent requests and imminent calendar events sit among the tasks, shaded, and Next takes them first.
+Arrival orders each section, oldest first; stable keys break ties.
 Presentation lanes remain available for their existing controls and status copy.
 
 This ordering activation preserves the existing read, age, mute and capacity rules
@@ -58,7 +58,7 @@ def mark_for(item: dict) -> str:
     """The one emoji that identifies a row: its kind's when that says more than its lane's."""
     if not item: return ''
     return KIND_MARKS.get(str(item.get('kind') or '')) or LANE_MARKS.get(str(item.get('lane') or ''), '')
-SOON_MIN, ALERT_MIN, STARTED_MIN = 120, lanes.ALERT_MIN, 5   # calendar visibility window; attention boundary (Urgent's, lanes.json); grace after the start
+SOON_MIN, ALERT_MIN, STARTED_MIN = 120, lanes.ALERT_MIN, 5   # calendar visibility window; attention boundary (lanes.json `urgent`); grace after the start
 SETUP_GRACE_MIN = 15              # a walk-through the owner is still in does not raise its own hand
 LATER_HOURS = 3                   # "not now" - it comes back this much later
 FEED_DAYS = 7
@@ -1109,18 +1109,18 @@ _LEVEL_RANK = {k: n for n, k in enumerate(lanes.LEVEL_ORDER)}
 
 
 def order_key(item) -> tuple:
-    """A row's place: its SECTION in the rail's drawing order (lanes.json), then when it arrived - oldest first (newest first among
-    reports), then a stable key. Nothing about its agent, its read state, the table or the walk enters it, so a row moves only by
-    leaving its section. Today's brief leads Reports, whatever the clock says - it summarises the day, so it is read first. ONE key
-    for the rail, desktop Next and phone Next (funnel_selection.below)."""
+    """A row's place: its SECTION in the rail's drawing order (lanes.json), then when it arrived - oldest first, in every section,
+    reports too (the owner, 2026-10-22: "reports should go oldest first like everything else"; they were newest first from
+    2026-10-02) - then a stable key. Nothing about its agent, its read state, its urgency, the table or the walk enters it, so a row
+    moves only by leaving its section. Today's brief leads Reports, whatever the clock says - it summarises the day, so it is read
+    first. ONE key for the rail, desktop Next and phone Next (funnel_selection.below)."""
     level, at = level_of(item), arrived(item)
     t = (at - datetime.min).total_seconds() if at else 0.0
-    return (_LEVEL_RANK.get(level, len(_LEVEL_RANK)), not todays_brief(item), at is None, -t if level == 'reports' else t,
-            str(item.get('key') or ''))
+    return (_LEVEL_RANK.get(level, len(_LEVEL_RANK)), not todays_brief(item), at is None, t, str(item.get('key') or ''))
 
 
 def _order(items: list) -> list:
-    """The sections, then the oldest first inside one (newest first among reports), then a stable key - and nothing else (the
+    """The sections, then the oldest first inside one, then a stable key - and nothing else (the
     owner, 2026-09-07: "within one level oldest wins first"; 2026-10-22: "then never move"). See order_key."""
     return sorted(items, key=order_key)
 
@@ -1132,7 +1132,8 @@ PLACE_KEY = 'walk_place'
 
 
 def mark_place(store, item: dict | None):
-    if not item: return
+    # ...and an URGENT row skipped the line to the table (funnel_selection.below): the walk is still where it was, and goes on from there
+    if not item or lanes.is_urgent(item): return
     rows = item.get('items') if item.get('kind') == 'fyis' else None
     at = max((order_key(i) for i in rows), default=None) if rows else order_key(item)
     if at is not None: store.set_setting(PLACE_KEY, json.dumps([item.get('key'), list(at)]), 'system')
@@ -1702,7 +1703,7 @@ def fyi_batch_size(store) -> int:
 # On the timeline, but nothing to say about it YET - the walk skips it and comes back. A meeting enters the pipe two hours out
 # (SOON_MIN) so the day is visible, and the assistant opened with one still an hour and a half away, ahead of mail that wanted
 # answering now (the owner, 2026-09-04: "meetings should not go down into the chat until 15 minutes before like a agent in
-# middel of working"). The same line Urgent draws (lanes.not_yet, at ALERT_MIN).
+# middel of working"). The same line that turns a meeting urgent (lanes.not_yet, at ALERT_MIN).
 _not_yet = lanes.not_yet
 
 
@@ -1710,14 +1711,14 @@ _not_yet = lanes.not_yet
 # row in the walk. "New arrivals still lead" was the rule for every lane, and with fifty unread fyi the one thing actually on
 # the owner was shown once and never came up again (the owner, 2026-09-10). Being shown is not a decision, so it cannot retire
 # the item; only settling it, or later/skip, takes it off the walk - and _eligible's 30-minute cooldown keeps it from coming
-# straight back. ON YOU (lanes.on_you) is the wider count the opener and the greeting say: everything under Urgent and Tasks
+# straight back. ON YOU (lanes.on_you) is the wider count the opener and the greeting say: everything under Tasks
 # that is the owner's move.
 def leads(item: dict) -> bool:
-    """May the walk take this row before the rest? Waiting on the owner, unread - or simply drawn under Urgent or Tasks. A shown
+    """May the walk take this row before the rest? Waiting on the owner, unread - or simply drawn under Tasks. A shown
     row whose lane does not wait on the owner (a saved coding session the owner had just closed) sat FIRST under Tasks on the rail
     while the walk went past it to the next unread one (the owner, 2026-10-14: "the first task was skipped"): the rail and the walk
     are one order, so what the rail puts on you is walked in its place."""
-    return waits_on_you(item) or not item.get('surfaced') or level_of(item) in ('urgent', 'task')
+    return waits_on_you(item) or not item.get('surfaced') or level_of(item) == 'task'
 
 
 def next_item(store, key: str = None, only: str = None, include_surfaced: bool = False,
@@ -1759,10 +1760,11 @@ def next_item(store, key: str = None, only: str = None, include_surfaced: bool =
     from .funnel_selection import below
     down = below(rows, ready, exclude, (walk_place(store) or (None, None))[1] if only is None and not include_surfaced else None)
     if down is not None: return _present_one(store, down[0] if down else None)
-    # What is ON THE OWNER leads; after that, new arrivals; after those, a merely-shown row is walked
+    # What is URGENT leads, then what is ON THE OWNER; after that, new arrivals; after those, a merely-shown row is walked
     # normally. Being put in the conversation never counted as the owner's decision, so it cannot make
     # an unread row unreachable - nor bury the one item that is actually waiting on them under fifty fyi.
-    return _present_one(store, next((i for i in ready if leads(i)), ready[0] if ready else None))
+    from .funnel_selection import first_at_start
+    return _present_one(store, first_at_start(ready))
 
 
 def batch_item(store, key: str) -> dict | None:

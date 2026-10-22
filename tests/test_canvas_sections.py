@@ -33,8 +33,9 @@ class LevelOfTests(unittest.TestCase):
             self.assertEqual(funnel.level_of(item), level, item)
 
     def test_every_section_has_its_heading_word(self):
-        # no Agents working and no Goals: every open task is under Tasks (the owner, 2026-10-21)
-        self.assertEqual(list(funnel.SECTION_WORDS), ['urgent', 'task', 'later', 'reports', 'ideas', 'fyi'])
+        # no Agents working and no Goals: every open task is under Tasks (the owner, 2026-10-21) - and no Urgent: an urgent row is
+        # shaded in its place under Tasks (the owner, 2026-10-22)
+        self.assertEqual(list(funnel.SECTION_WORDS), ['task', 'later', 'reports', 'ideas', 'fyi'])
         self.assertEqual(funnel.SECTION_WORDS['later'], 'For later')
         self.assertEqual(funnel.SECTION_WORDS['task'], 'Tasks')
 

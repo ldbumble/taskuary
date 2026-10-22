@@ -13,6 +13,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from . import lanes
 from .funnel_presentation import detach, item_revision
 
 
@@ -104,14 +105,16 @@ def below(items: list[dict], ready: list[dict], exclude, place=None) -> list[dic
     """NEXT WALKS DOWN THE LINE (the owner, 2026-10-22: "if I click on the bottom one then hit Next it should go to Reports, not jump
     back to Tasks. It should always be in order"): the walkable rows BELOW the one on the table (`exclude`, a row or an fyi batch),
     in the rail's order - or below the walk's place (funnel.walk_place) when that row has left the rail (closed) or the table is
-    empty after a close. None at a walk's start: nothing is above, the walk takes the top. Rows above that were never reached come
-    up again with the next walk (funnel.new_walk), never in the middle of this one.
+    empty after a close. None at a walk's start: nothing is above, the walk takes the top (first_at_start). Rows above that were
+    never reached come up again with the next walk (funnel.new_walk), never in the middle of this one.
 
-    URGENT is the one section Next goes back up to: a meeting inside fifteen minutes or a sender on the escalate list cannot wait
-    for the bottom of the list, so one that is walkable is taken first, wherever the walk stands."""
+    URGENT SKIPS THE LINE (the owner, 2026-10-22: "urgent can skip line"): a meeting inside fifteen minutes or a sender on the escalate
+    list cannot wait for the bottom of the list, so one that is walkable is taken first, wherever it sits and wherever the walk
+    stands. It has no section of its own - it sits in Tasks at its arrival place - so it is not where the walk is: with an urgent row
+    on the table Next goes on from the walk's place (funnel.mark_place never moves it to an urgent row)."""
     from . import funnel
     keys = ({k for k in exclude[5:].split(",") if k} if exclude and exclude.startswith("fyis:") else {exclude}) if exclude else set()
-    hit = [n for n, i in enumerate(items) if i.get("key") in keys or keys.intersection(i.get("aliases") or [])]
+    hit = [n for n, i in enumerate(items) if (i.get("key") in keys or keys.intersection(i.get("aliases") or [])) and not lanes.is_urgent(i)]
     if hit:
         cut, at = max(hit), {id(i): n for n, i in enumerate(items)}
         down = [i for i in ready if at.get(id(i), -1) > cut]
@@ -119,9 +122,17 @@ def below(items: list[dict], ready: list[dict], exclude, place=None) -> list[dic
     # ...from the place itself: a row still there and walkable with nothing on the table is where the walk stood (the table was
     # cleared under it, or it changed since), so it is offered again - a row Next or a close took the walk past is not walkable
     else: down = [i for i in ready if funnel.order_key(i) >= place]
-    took = {id(i) for i in down}
-    now = [i for i in ready if id(i) not in took and funnel.level_of(i) == "urgent"]
-    return now + down
+    return urgent_first(ready) + [i for i in down if not lanes.is_urgent(i)]
+
+
+def urgent_first(ready: list[dict]) -> list[dict]: return [i for i in ready if lanes.is_urgent(i)]
+
+
+def first_at_start(ready: list[dict]):
+    """A walk's first row: an urgent one, then what waits on the owner (funnel.leads), then anything ready - the reason a pending reply
+    is not buried under an inbox of unread fyi."""
+    from . import funnel
+    return next(iter(urgent_first(ready)), None) or next((i for i in ready if funnel.leads(i)), ready[0] if ready else None)
 
 
 def _selection_facts(item: dict) -> dict:
@@ -222,10 +233,8 @@ def capture_selection(store, *, only=None, include_surfaced=False,
     # ...and only what is BELOW the row on the table, or the walk's place: Next walks down the line, never back up (2026-10-22)
     down = below(items, ready, scope["exclude"], (funnel.walk_place(store) or (None, None))[1] if only is None and not include_surfaced else None)
     if down is not None: ready = down
-    # At a walk's start: waiting on the owner first (funnel.leads), then unread, then anything ready - the reason a pending reply
-    # is not buried under an inbox of unread fyi. Walking on, simply the next row down.
-    first = (ready[0] if ready else None) if down is not None else next((item for item in ready if funnel.leads(item)),
-                                                                        ready[0] if ready else None)
+    # At a walk's start: urgent, then waiting on the owner (first_at_start). Walking on, simply the next row down - an urgent one first.
+    first = (ready[0] if ready else None) if down is not None else first_at_start(ready)
     if lazy and first is not None:
         want = _members(first, ready, funnel.fyi_batch_size(store)) if funnel.batchable(first) else [first]
         for row, stamped in zip(want, funnel.present(store, {"items": want})["items"]):

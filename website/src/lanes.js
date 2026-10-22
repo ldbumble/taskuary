@@ -16,11 +16,13 @@ export const LEVEL_ORDER = SECTIONS.map((s) => s.key);
 export const SECTION_WORDS = Object.fromEntries(SECTIONS.map((s) => [s.key, s.word]));
 const fill = (hint) => hint.replace(/\{button:(\w+)\}/g, (_, id) => label(id));
 export const LEVEL_META = Object.fromEntries(SECTIONS.map((s) => [s.key, { word: s.word.toLowerCase(), hint: fill(s.hint) }]));
-const LEVEL_OF_BAND = Object.fromEntries(SECTIONS.filter((s) => s.band).map((s) => [s.band, s.key]));
-export const ALERT_MIN = SECTION.urgent.minutes;
+// URGENT IS A SHADE, NOT A SECTION (the owner, 2026-10-22): its band is drawn in Tasks, at its arrival place (lanes.json `urgent`)
+export const URGENT = vocab.urgent;
+const LEVEL_OF_BAND = { ...Object.fromEntries(SECTIONS.filter((s) => s.band).map((s) => [s.band, s.key])), [URGENT.band]: URGENT.section };
+export const ALERT_MIN = URGENT.minutes;
 export const laneSection = (lane) => LANE[lane]?.section || "task";   // a lane this build does not know is work, never buried
 
-// a meeting is Urgent only inside ALERT_MIN; before that it is on the day, not yet on you (funnel._not_yet)
+// a meeting is urgent only inside ALERT_MIN; before that it is on the day, not yet on you (funnel._not_yet)
 export const notYet = (item) => item?.kind === "meeting"
   && ("calendar_ready" in item ? !item.calendar_ready : item.mins != null && item.mins > ALERT_MIN);
 // processing_order.attention_band: the first flag that holds decides
@@ -33,9 +35,11 @@ export const attentionBand = (item) => {
   if (item?.kind === "meeting") return band({ urgent: !notYet(item), actionable: true });
   const l = LANE[item?.lane] || {}, sec = laneSection(item?.lane);
   // a task its agent finished rides the report lane but is On you; an unjudged row the retry gave up on is the owner's
-  return band({ urgent: sec === "urgent" || !!(l.urgent_request && item?.urgent_request), wait: !!l.waits,
+  return band({ urgent: !!(l.urgent || (l.urgent_request && item?.urgent_request)), wait: !!l.waits,
     actionable: sec === "task" || item?.kind === "agentdone" || (item?.lane === "unjudged" && !!item?.held), result: sec === "reports" });
 };
+// urgent - a meeting inside ALERT_MIN, an ask triage called urgent, an escalated sender: shaded in its place, and Next takes it first
+export const isUrgent = (item) => attentionBand(item) === URGENT.band;
 export const levelOf = (item) => {
   const b = attentionBand(item);
   // A GOAL is one row and never gone: Tasks while it has news you have not read, For later - scheduled to come back - otherwise
@@ -50,7 +54,7 @@ export const levelOf = (item) => {
 // blocked on the owner's answer or yes - an agent asked, a reply waits
 export const waitsOnYou = (item) => !!LANE[item?.lane]?.waits;
 export const isOwnersMove = (item) => LANE[item?.lane]?.on_you !== false;
-// ON YOU, the one count the opener's headline, the greeting and the header give: under Urgent or Tasks, in a lane that is the
+// ON YOU, the one count the opener's headline, the greeting and the header give: under Tasks, in a lane that is the
 // owner's move - waiting on THEM, or an agent working, sits under Tasks as the owner's task, but it is on somebody else
 export const onYou = (item, level = levelOf(item)) => !item?.settling && !!SECTION[level]?.on_you && isOwnersMove(item);
 export const toRead = (item, level = levelOf(item)) => !item?.settling && !!SECTION[level]?.to_read;

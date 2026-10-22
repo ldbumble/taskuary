@@ -409,9 +409,10 @@ def named_now(store, text: str, item: dict | None = None) -> str:
     refs = [int(n) for n in dict.fromkeys(_TQ_REF.findall(text or '')) if int(n) != own][:4]
     # ...and HOW TO SHOW ONE (2026-10-19 UI walk, G4): "open TQ-0004" was answered "drafted and waiting under my message" and nothing
     # opened - a task comes up beside the answer only when the answer links it, and the model was never told so of the task it was
-    # asked about. A phone has no canvas: its link is not a door
-    show = lambda n: (f"\n  TO SHOW IT: link it in your answer as [{task_ref(n)}](#task={n}) - that link alone opens it beside your answer "
-                      "and rings its row on the rail; without it nothing opens and nothing is drawn under your answer") if DELIVERY.get() != PHONE else ''
+    # asked about. ...and on a phone the link is the door too: its card and choices come up under the answer (remote_assistant, F18)
+    show = lambda n: (f"\n  TO SHOW IT: link it in your answer as [{task_ref(n)}](#task={n}) - that link alone "
+                      + ("opens it beside your answer and rings its row on the rail; without it nothing opens and nothing is drawn under your answer"
+                         if DELIVERY.get() != PHONE else "brings its card and its choices up under your answer; without it nothing comes up"))
     return '\n'.join(x + show(n) for n in refs if (x := task_now(store, n)))
 
 

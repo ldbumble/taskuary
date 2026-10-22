@@ -190,7 +190,8 @@ class DeskRoutes(unittest.TestCase):
             concierge.say(s, f'open TQ-{tid2:04d}', key=item['key'], llm=llm)
         self.assertIn(f'TO SHOW IT: link it in your answer as [TQ-{tid2:04d}](#task={tid2})', seen[0])
         tok = concierge.DELIVERY.set(concierge.PHONE)
-        try: self.assertNotIn('TO SHOW IT', concierge.named_now(s, f'open TQ-{tid2:04d}', item), 'a phone has no canvas to open it on')
+        # ...and on a phone the link brings its card up under the answer (F18) - it opens no canvas there
+        try: self.assertIn('brings its card and its choices up under your answer', concierge.named_now(s, f'open TQ-{tid2:04d}', item))
         finally: concierge.DELIVERY.reset(tok)
 
     def test_the_item_under_a_page_comes_with_the_link_that_shows_it_again(self):

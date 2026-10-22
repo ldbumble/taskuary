@@ -6,7 +6,10 @@ import { plural } from "./timeWords.js";
 // WHILE AN AGENT WORKS THE WORK TAKES THE WHOLE WIDTH: a live session - coding or general, working or waiting on you (the rail's
 // spinning ring, or its hand) - and From folds to one line over it; the terminal is never covered or squeezed. `sessionView` is the
 // page's own "the session fills the page" (a live session the owner has not stepped back from).
-export const layoutOf = ({ sessionView }) => (sessionView ? "full" : "columns");
+// ...AND ONCE IT HAS ACTED (the owner, 2026-10-22): an agent that stopped or finished with its Result (`result`), or whose run failed
+// (`failed`, its reason and Try again), keeps the whole width too, From folded over it. Two columns - From | Reply - only where no
+// agent ran or none was ever started: a plain mail or chat task with its draft, a held task.
+export const layoutOf = ({ sessionView = false, result = false, failed = false }) => (sessionView || result || failed ? "full" : "columns");
 
 // WHICH HALF OF THE WORK COLUMN IS OPEN. The page's focus (taskLifecycle.focusStage) still decides between the agent and the
 // reply; where it named the task itself - now the always-open From column - the work column opens on what the task is for: the

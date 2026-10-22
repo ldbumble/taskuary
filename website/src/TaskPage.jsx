@@ -1073,6 +1073,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // THE RESULT (the redesign, owner-approved 2026-10-21): an agent that has stopped and saved - or finished, or stopped - with a record
   // to show; the work column's agent half is its result then, the session one "Replay the session" line in it
   const resultShown = !term?.alive && hasRecord && [AGENT.saved, AGENT.stopped, AGENT.finished].includes(agentState);
+  // ...and THE WORK TAKES THE WHOLE WIDTH once an agent has acted (the owner, 2026-10-22: "on a regular agent that is completed we should
+  // also only show the agent result with the From expandable over the top"): working or waiting, finished with its Result, or failed
+  // with its Try again - From folds to its one line over it. Two columns only where no agent ever ran (taskLayout.layoutOf).
+  const layout = layoutOf({ sessionView, result: resultShown, failed: failedRun }), wide = layout === "full";
   const replyState = replyPhase(detail?.reviews || []);
   // ONE question per page. A running session is itself the agent stage, so it is never folded; the
   // hand-picked stage wins over the computed one until you leave the task (start an agent on a task
@@ -1588,14 +1592,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   waiting room below - a fixed-height formula clipped its bottom line on shorter screens */}
               <Box ref={stepsBox} sx={{ px: liveSession ? 1 : 2, py: liveSession ? 0.65 : 1.5,
                 overflowY: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", containerType: "inline-size", position: "relative" }}>
-                {/* FROM, FOLDED TO ONE LINE while an agent works (owner-approved 2026-10-21): the work has the whole width and the
-                    terminal is never covered or squeezed. The line opens From as a SIDEBAR over the agent's left edge (the owner, item 6,
-                    2026-10-21) - the same From column every other task shows - and closes on the line, its X or Escape. The agent's
+                {/* FROM, FOLDED TO ONE LINE while an agent works, or once it has finished or failed (`wide`, 2026-10-22) - owner-approved
+                    2026-10-21: the work has the whole width and the terminal is never covered or squeezed. The line opens From as a
+                    SIDEBAR over the agent's left edge (the owner, item 6, 2026-10-21) - the same From column every other task shows - and closes on the line, its X or Escape. The agent's
                     area underneath keeps its size: the sidebar is laid over it, never beside it, so the terminal is not refitted and the
                     CLI's screen gets no resize. */}
                 {/* ...and it reads as a press (the owner, 2026-10-22: it looked like plain grey text): a chevron right after the words that
                     turns while the sidebar is open, a tint and an underline on hover, and a hover title saying what it opens */}
-                {sessionView && <Box component="button" type="button" ref={fromLineRef} data-tq-from-line=""
+                {wide && <Box component="button" type="button" ref={fromLineRef} data-tq-from-line=""
                   title={fromSide ? "Hide where this came from" : "Show where this came from"}
                   aria-expanded={fromSide} aria-controls="tq-from-side" onClick={() => setFromSide((v) => !v)}
                   sx={{ appearance: "none", font: "inherit", textAlign: "left", cursor: "pointer", bgcolor: fromSide ? "#f4f1ec" : "transparent", border: 0,
@@ -1647,19 +1651,19 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 )}
                 {/* TWO COLUMNS, ALWAYS OPEN (the task page redesign, owner-approved 2026-10-21): what it came FROM on the left, the WORK
                     or the reply on the right - they replace the Task / Agent work / Close out accordion. A narrow view stacks them. While
-                    an agent works (sessionView) the work takes the whole width and From folds to the one line above it. */}
-                <Box data-tq-columns="" data-tq-layout={layoutOf({ sessionView })} sx={sessionView ? { display: "contents" } : COLUMNS}>
-                {(!sessionView || fromSide) && (
-                  <Box data-tq-from="" data-tq-task-section="" data-tq-from-open={fromOpen ? "" : undefined} data-tq-from-side={sessionView ? "" : undefined}
-                    id={sessionView ? "tq-from-side" : undefined} role={sessionView ? "complementary" : undefined} aria-label={sessionView ? "From" : undefined}
-                    onClickCapture={sessionView ? undefined : phoneFromTap} sx={{ ...card, minWidth: 0, px: 1.5, py: 1.25, display: "flex", flexDirection: "column", gap: 1.75,
-                    ...(sessionView ? FROM_SIDE(fromTop) : PHONE_FROM(fromOpen)) }}>
+                    an agent works, has finished or has failed (wide), the work takes the whole width and From folds to the one line above it. */}
+                <Box data-tq-columns="" data-tq-layout={layout} sx={wide ? { display: "contents" } : COLUMNS}>
+                {(!wide || fromSide) && (
+                  <Box data-tq-from="" data-tq-task-section="" data-tq-from-open={fromOpen ? "" : undefined} data-tq-from-side={wide ? "" : undefined}
+                    id={wide ? "tq-from-side" : undefined} role={wide ? "complementary" : undefined} aria-label={wide ? "From" : undefined}
+                    onClickCapture={wide ? undefined : phoneFromTap} sx={{ ...card, minWidth: 0, px: 1.5, py: 1.25, display: "flex", flexDirection: "column", gap: 1.75,
+                    ...(wide ? FROM_SIDE(fromTop) : PHONE_FROM(fromOpen)) }}>
                     {/* SECTION 1, IN THE ORDER THE OWNER APPROVED (2026-10-16): the ask, what there is to do, where it came from - and no
                         buttons. "The buttons stay on bottom by the prompt box like always. No buttons there." On the canvas that is the row
                         over the chat line; on the Tasks tab, the view's own bar under the sections. */}
                     <Box sx={{ display: "flex", alignItems: "center" }}>
                       <Typography sx={{ ...label, flex: 1 }}>From</Typography>
-                      {sessionView && <IconButton size="small" aria-label="Close From" data-tq-from-close="" onClick={() => setFromSide(false)}
+                      {wide && <IconButton size="small" aria-label="Close From" data-tq-from-close="" onClick={() => setFromSide(false)}
                         sx={{ my: -0.5 }}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>}
                     </Box>
                     <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>

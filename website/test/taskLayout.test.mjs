@@ -10,18 +10,40 @@ test("two columns at rest, the whole width while an agent works - coding or gene
   const src = taskSource();
   // the page's own "the session fills the page" decides it: a live session (term.alive - a terminal or a general agent's chat)
   assert.match(src, /const sessionView = liveSession && !peek;/);
-  assert.match(src, /<Box data-tq-columns="" data-tq-layout=\{layoutOf\(\{ sessionView \}\)\} sx=\{sessionView \? \{ display: "contents" \} : COLUMNS\}>/);
+  assert.match(src, /const layout = layoutOf\(\{ sessionView, result: resultShown, failed: failedRun \}\), wide = layout === "full";/);
+  assert.match(src, /<Box data-tq-columns="" data-tq-layout=\{layout\} sx=\{wide \? \{ display: "contents" \} : COLUMNS\}>/);
   // ...the work column steps aside (display: contents) so the terminal stays a flex child of the page, sized as it always was
   assert.match(src, /<Box data-tq-work="" sx=\{sessionView \? \{ display: "contents" \} : \{ minWidth: 0, display: "flex", flexDirection: "column" \}\}>/);
   // and From is one line over it, which opens From as a sidebar laid OVER the agent's left edge (item 6, the owner 2026-10-21):
   // absolutely placed, so the pane underneath is never resized; closed by default, by the line, its X or Escape
-  assert.match(src, /\{sessionView && <Box component="button" type="button" ref=\{fromLineRef\} data-tq-from-line=""\s+title=\{fromSide \? "Hide where this came from" : "Show where this came from"\}\s+aria-expanded=\{fromSide\} aria-controls="tq-from-side" onClick=\{\(\) => setFromSide\(\(v\) => !v\)\}/);
-  assert.match(src, /\{\(!sessionView \|\| fromSide\) && \(/);
-  assert.match(src, /\.\.\.\(sessionView \? FROM_SIDE\(fromTop\) : PHONE_FROM\(fromOpen\)\)/);
+  assert.match(src, /\{wide && <Box component="button" type="button" ref=\{fromLineRef\} data-tq-from-line=""\s+title=\{fromSide \? "Hide where this came from" : "Show where this came from"\}\s+aria-expanded=\{fromSide\} aria-controls="tq-from-side" onClick=\{\(\) => setFromSide\(\(v\) => !v\)\}/);
+  assert.match(src, /\{\(!wide \|\| fromSide\) && \(/);
+  assert.match(src, /\.\.\.\(wide \? FROM_SIDE\(fromTop\) : PHONE_FROM\(fromOpen\)\)/);
   assert.match(src, /const FROM_SIDE = \(top\) => \(\{ position: "absolute", top, left: 0, bottom: 0,/);
   assert.match(src, /const \[fromSide, setFromSide\] = useState\(false\)/);
   assert.match(src, /if \(e\.key === "Escape"\) \{ e\.stopPropagation\(\); setFromSide\(false\);/);
   assert.match(src, /useEffect\(\(\) => \{ if \(!sessionView\) setFromSide\(false\); \}, \[sessionView\]\);/);
+});
+
+// ...AND ONCE AN AGENT HAS ACTED (the owner, 2026-10-22): its Result, or its failure, keeps the whole width with From folded over it;
+// two columns only where no agent ran or none was ever started
+test("the layout: columns with no agent or one never started, the whole width while working, with a Result, or failed", () => {
+  const cases = [
+    ["no agent at all", {}, "columns"],
+    ["never started (handed or queued, nothing run)", { sessionView: false, result: false, failed: false }, "columns"],
+    ["working or waiting on you", { sessionView: true }, "full"],
+    ["finished, stopped or saved with its Result", { result: true }, "full"],
+    ["failed, with its reason and Try again", { failed: true }, "full"],
+  ];
+  for (const [what, page, want] of cases) assert.equal(layoutOf(page), want, what);
+  // the page reads it once, after its Result and its failure are known, and the From line, its sidebar and its X all follow it
+  const src = taskSource(), at = (re) => src.search(re);
+  assert.ok(at(/const resultShown = /) < at(/const layout = layoutOf\(/) && at(/const failedRun = /) < at(/const layout = layoutOf\(/));
+  assert.match(src, /\{wide && <IconButton size="small" aria-label="Close From" data-tq-from-close=""/);
+  assert.match(src, /onClickCapture=\{wide \? undefined : phoneFromTap\}/);
+  // ...while what a finished agent offers stays where it was: Close out and its record are drawn whenever no session fills the page
+  assert.match(src, /\{!sessionView && <Box ref=\{closeOutRef\} data-tq-closeout=""/);
+  assert.match(src, /\{!sessionView && hasRecord && \(/);
 });
 
 // ...and the line reads as a press (the owner, 2026-10-22: it looked like plain grey text) - a chevron after the words that turns while

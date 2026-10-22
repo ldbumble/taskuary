@@ -29,7 +29,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
 import { openReply as draftReply } from "./replyDraft.js";   // the component's own openReply below would shadow it, and call itself
 import { opError, runOperation } from "./taskOps.js";
-import { ClosingCard, WriteupBlock, completeTask, writeUpThenClose } from "./closeAgent.jsx";
+import { ClosingCard, WriteupBlock, WriteupLine, completeTask, writeUpThenClose } from "./closeAgent.jsx";
 import { writeupView } from "./writeupState.js";
 import { agentName } from "./agentWork.js";
 import { lazyGeneral } from "./lazyGeneral.js";
@@ -79,7 +79,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { adviceKeyFor, suggestion } from "./advice.js";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
-import { fromLine as fromLineOf, layoutOf, workPane } from "./taskLayout.js";
+import { CLOSE_BY_HAND, closeOut, fromLine as fromLineOf, layoutOf, workPane } from "./taskLayout.js";
 import { taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
 import { ASK_TAG } from "./newTask.js";
@@ -1095,7 +1095,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   })));
   // ...which of the work column's two halves is open: the stage, or - where the stage is the task itself, now always open on the
   // left - what the task is for (taskLayout.workPane). Presentation only: every press still reads `stage`.
-  const pane = workPane({ stage, kind: t?.Kind, hasSender: !!replyMessage, codeRun });
+  // ...and Close out under a Result on a task nobody sent: what closes it, the write-up's progress under the Result (taskLayout.closeOut)
+  const co = closeOut({ hasSender: !!replyMessage, result: resultShown, writeup });
+  const replyHas = !!(pendingReview || proposals.length || owesEmails || emailsWaiting || ended || sentOutside.length
+    || ["done", "dropped"].includes(t?.Status) || co.writeupAt === "closeout");
+  const pane = workPane({ stage, kind: t?.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas, picked: !!openStage });
   // the one line From folds to while an agent works (sessionView)
   const fromLine = fromLineOf({ sender: sourceMessage, count: sourceCount, workflow: fromWorkflow, made: t ? `${detail.ref} · ${made}` : "" });
   // the note a close was written with (server task.complete: "Closed out: ...") - Close out shows it under the close
@@ -1875,6 +1879,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {(storyAt === "line" || storyAt === "story") && <AgentStory story={story} compact={storyAt === "line"} />}
                   {/* ...folded over a record, its sentence and what happened - the draft it wrote opens below it (2026-09-22) */}
                   {storyAt === "summary" && <AgentRecord {...recordProps} story={story} folded />}
+                  {storyAt === "summary" && co.writeupAt === "result" && <WriteupLine view={writeup} />}
                   {pane === "agent" && <>
                   {/* WHO CLOSED IT AND WHY, one plain line over its work (the owner, 2026-10-21: "I have no idea what the agent did
                       and why it closed"): the agent's own done sentence, else its report's first line (server taskstate.closed_why) */}
@@ -1927,6 +1932,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       <AgentRecord {...recordProps} story={storyAt === "record" ? story : null} inChat={workspaceMode === "general"}
                         result={resultShown} diff={diffRun ? diffStat(diffRun.DiffText) : null} />
                       {diffRun && <Box sx={{ mt: 0.75 }}><DiffBlock text={diffRun.DiffText} /></Box>}
+                      {co.writeupAt === "result" && <WriteupLine view={writeup} />}
                     </Box>
                   )}
                   {(restartOpen || (!term?.alive && !liveRun && !isGeneral && !report && !detail?.transcript))
@@ -2025,10 +2031,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 ) : workspaceMode === "wrapping" ? (
                   <ClosingCard mode={wrapping} />
                 ) : writingUp === selected ? (
-                  /* Stop and save's write-up runs on the server (writeup.py): the task stays usable, this line until the report lands */
-                  <Typography variant="caption" data-tq-writing-up="" sx={{ color: "#6f8a6e", display: "block", mt: 0.5 }}>
-                    Closing the session and writing up what is on screen — the agent is not asked anything.
-                  </Typography>
+                  /* Stop and save's write-up runs on the server (writeup.py): the task stays usable, and its progress is said ONCE -
+                     the line under the Result, or the block in Close out where a reply will land. A third hint line here said it again. */
+                  null
                 ) : workspaceMode === "live" && peek ? (
                   /* the session, folded to one line while the task behind it is being read */
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.8, borderRadius: 1.5,
@@ -2091,9 +2096,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           : pendingReview ? "What goes back to the sender." : "What goes back to the sender. Sending it never closes the task - Mark done does.")
                       : owesEmails
                         ? "The emails this task owes - each waits for your yes. Mark done closes the task."
-                        : closedLine(t, detail?.closedWhy) || "Nobody sent this one, so there is nobody to answer. Work it, or write what you found on the task."}
+                        : closedLine(t, detail?.closedWhy) || (co.advice ? "Nobody sent this one, so there is nobody to answer. Work it, or write what you found on the task." : CLOSE_BY_HAND)}
                     chip={emailsWaiting ? <LifecycleChip kind="emails" phase={`${emailsWaiting} waiting`} compact />
-                      : <LifecycleChip kind="reply" phase={replyMessage ? replyState : "not available"} compact />}
+                      : co.chip ? <LifecycleChip kind="reply" phase={replyMessage ? replyState : "not available"} compact /> : null}
                     /* oxblood is the one colour that means "this is on you" - a draft or an email waiting for your yes. Every card
                        wore it on this step, whatever it held (the 2026-10-07 design pass) */
                     tone={pendingReview || emailsWaiting ? PALETTE.oxblood : PALETTE.oat} {...stageProps("reply")}
@@ -2119,7 +2124,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   </Box>}
                   {/* STOP AND SAVE'S WRITE-UP, where its draft will stand (writeupState.js): the job's own stage until the draft
                       replaces this block in place - or, if it stopped, that it did, with Try again and the reply button */}
-                  {pane === "reply" && writeup && <WriteupBlock view={writeup} hasReply={!!replyMessage} onRetry={canWrap || pressedHere ? wrapUp : null}
+                  {pane === "reply" && co.writeupAt === "closeout" && <WriteupBlock view={writeup} hasReply={!!replyMessage} onRetry={canWrap || pressedHere ? wrapUp : null}
                     onDraft={() => openReply(true)} draftLabel={replyPrimary} />}
                   {pane === "reply" && !writeup && ((pendingReview || proposals.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
                     <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>

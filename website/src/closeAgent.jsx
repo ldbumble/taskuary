@@ -54,6 +54,21 @@ export const ClosingCover = ({ mode = "done" }) => (
   </Box>
 );
 
+// ...AND UNDER THE RESULT IT IS WRITING UP, on a task nobody sent (taskLayout.closeOut): no reply will land in Close out, so the job's
+// progress is one muted line of the Result - the job's own stage, never a box of its own (the owner, 2026-10-22)
+export const WriteupLine = ({ view }) => {
+  if (view?.state !== "pending") return null;
+  return (
+    <Box data-tq-writeup="pending" data-tq-writeup-stage={view.stage || ""} data-tq-writeup-at="result" role="status" aria-live="polite"
+      sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", columnGap: 1, rowGap: 0.25, mt: 1, fontSize: 12, color: DIM }}>
+      <CircularProgress size={11} sx={{ color: FAINT }} />
+      <Box component="span" sx={{ fontWeight: 600 }}>{writeupHead(view, false)}</Box>
+      {writeupSteps(view, false).map((s) => (
+        <Box component="span" key={s.k} data-step={s.state} sx={{ color: s.state === "next" ? FAINT : DIM }}>
+          {s.state === "done" ? "✓ " : s.state === "now" ? "› " : ""}{s.text}{s.state === "now" ? "…" : ""}</Box>))}
+    </Box>);
+};
+
 // CLOSE OUT WHILE STOP AND SAVE WRITES IT (writeupState.js): where the draft will be, what the server's job is doing now - and, if it
 // stopped, that it did and the ways on (Try again writes the session up again; the reply button drafts from the task as it stands)
 export const WriteupBlock = ({ view, hasReply, onRetry, onDraft, draftLabel }) => {

@@ -69,14 +69,21 @@ def install_processing_changes(app, store):
     @app.post('/api/fixture/task/coding-saved')
     def coding_saved(body: dict):
         """A coding task whose agent the owner stopped and saved (Stop and save): its session's screen filed as the transcript, its
-        AGENT REPORT written, and the run's own diff kept - what the Result in the work column reads. Invented people and paths."""
-        if body: raise HTTPException(422, 'this fixed fixture accepts only an empty object')
-        from taskuary import terminal
+        AGENT REPORT written, and the run's own diff kept - what the Result in the work column reads. Invented people and paths.
+        `mine`: a task the owner made in the Assistant - nobody sent it, so nobody is owed a reply. `writing`: its write-up still running."""
+        if set(body) - {'mine', 'writing'} or not all(isinstance(v, bool) for v in body.values()):
+            raise HTTPException(422, 'only the booleans mine and writing are accepted')
+        from taskuary import terminal, writeup
+        mine = body.get('mine', False)
         tid = store.create_task({'Title': 'org/app#398 census sync fails when a site has no manager', 'Kind': 'coding', 'Status': 'in_progress',
-                                 'Source': 'github', 'Assignee': 'agent:coding', 'Tags': f'repo:org/app,{terminal.SAVED}'}, 'router')
-        store.add_message({'TaskId': tid, 'Channel': 'github', 'ExternalId': f'fixture-gh-398-{tid}', 'ConversationId': f'fixture-gh-398-{tid}',
-                           'FromName': 'Ray Colton', 'Subject': 'census sync fails when a site has no manager',
-                           'BodyText': 'Third night in a row the census sync stops at a site with no manager.', 'Status': 'routed'})
+                                 'Source': 'assistant' if mine else 'github', 'Assignee': 'agent:coding', 'Tags': f'repo:org/app,{terminal.SAVED}'}, 'router')
+        if mine: store.add_message({'TaskId': tid, 'Channel': 'assistant', 'ExternalId': f'fixture-asst-398-{tid}', 'FromName': 'You',
+                                    'BodyText': 'Find out why the census sync stops at a site with no manager.', 'Status': 'context'})
+        else: store.add_message({'TaskId': tid, 'Channel': 'github', 'ExternalId': f'fixture-gh-398-{tid}', 'ConversationId': f'fixture-gh-398-{tid}',
+                                 'FromName': 'Ray Colton', 'Subject': 'census sync fails when a site has no manager',
+                                 'BodyText': 'Third night in a row the census sync stops at a site with no manager.', 'Status': 'routed'})
+        if body.get('writing'):
+            with writeup._LOCK: writeup._STATE[tid] = {'job': f'fixture-{tid}', 'stage': 'report', 'running': True, 'error': None, 'close': False}
         store.add_transcript(tid, f'fixture-{tid}', "I'll take #398. Reading the census sync first.\n> pytest tests/test_census_sync.py -q\n9 passed",
                              agent='coding', cwd='C:/work/org-app', brain='claude')
         store.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\nDetermination: A site with no manager stopped the whole census run.\n'

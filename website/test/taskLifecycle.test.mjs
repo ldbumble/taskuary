@@ -90,7 +90,7 @@ test("the task page opens exactly one stage and lets you open the others by hand
   // opens what the task is for where the focus names the task (taskLayout.workPane)
   assert.ok(!source.includes(`stage !== "task" && (`), "no folded Task strip");
   assert.match(source, /\{\(!wide \|\| fromSide\) && \(\s*<Box data-tq-from="" data-tq-task-section=""/);
-  assert.match(source, /const pane = workPane\(\{ stage, kind: t\?\.Kind, hasSender: !!replyMessage, codeRun \}\);/);
+  assert.match(source, /const pane = workPane\(\{ stage, kind: t\?\.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas, picked: !!openStage \}\);/);
 });
 
 test("a general chat that has answered is agent state, not \"not started\"", () => {

@@ -1,7 +1,7 @@
 // THE TASK PAGE'S LAYOUT (the redesign, owner-approved 2026-10-21): From | Work, and the work alone - full width - while an agent works
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fromLine, layoutOf, workPane } from "../src/taskLayout.js";
+import { CLOSE_BY_HAND, closeOut, fromLine, layoutOf, workPane } from "../src/taskLayout.js";
 import { taskSource } from "./taskSource.mjs";
 
 test("two columns at rest, the whole width while an agent works - coding or general, working or waiting on you", () => {
@@ -68,6 +68,35 @@ test("the work column opens the agent or the reply - and what the task is for wh
   assert.equal(workPane({ stage: "task", kind: "general", hasSender: false }), "agent");
   assert.equal(workPane({ stage: "task", kind: "task", hasSender: false }), "agent", "nobody to answer: the agent half");
   assert.equal(workPane({ stage: "task", kind: "task", codeRun: true }), "reply", "a run of steps has no agent card");
+});
+
+// ...and an agent's Result stays open on a task nobody sent, where Stop and save opened an empty Close out under a Result folded to
+// two lines (the owner, 2026-10-22: "since it gets crunched down you can not really see the agent report")
+test("Stop and save on a task nobody sent keeps its Result open; a reply, a close or a hand-picked Close out still opens Close out", () => {
+  assert.equal(workPane({ stage: "reply", kind: "coding", hasSender: false, result: true }), "agent", "nothing in the reply half: the Result");
+  assert.equal(workPane({ stage: "reply", kind: "coding", hasSender: true, result: true }), "reply", "a reply is being drafted there");
+  assert.equal(workPane({ stage: "reply", kind: "coding", hasSender: false, result: true, replyHas: true }), "reply", "a close, emails, a failed write-up");
+  assert.equal(workPane({ stage: "reply", kind: "coding", hasSender: false, result: true, picked: true }), "reply", "Close out opened by hand");
+  assert.equal(workPane({ stage: "reply", kind: "coding", hasSender: false, result: false }), "reply", "no Result: nothing to show instead");
+});
+
+test("Close out under a Result on a task nobody sent: no 'Nobody sent this one', no reply pill, the write-up under the Result", () => {
+  const pending = { state: "pending", stage: "report" }, failed = { state: "failed", error: "no screen" };
+  assert.deepEqual(closeOut({ hasSender: false, result: true, writeup: pending }), { advice: false, chip: false, writeupAt: "result" });
+  assert.deepEqual(closeOut({ hasSender: false, result: true }), { advice: false, chip: false, writeupAt: null });
+  assert.equal(closeOut({ hasSender: false, result: true, writeup: failed }).writeupAt, "closeout", "a failure keeps its Try again in Close out");
+  // ...a reply being drafted stands where the draft will land (the owner, 2026-10-21: "open the Close out right away")
+  assert.deepEqual(closeOut({ hasSender: true, result: true, writeup: pending }), { advice: true, chip: true, writeupAt: "closeout" });
+  // ...and an open task nobody sent, nothing done yet, keeps its advice
+  assert.deepEqual(closeOut({ hasSender: false, result: false }), { advice: true, chip: true, writeupAt: null });
+  assert.equal(CLOSE_BY_HAND, "Mark done closes it, or close it with a note.");
+  const src = taskSource();
+  assert.match(src, /\|\| \(co\.advice \? "Nobody sent this one[^"]*" : CLOSE_BY_HAND\)/);
+  assert.match(src, /: co\.chip \? <LifecycleChip kind="reply" phase=\{replyMessage \? replyState : "not available"\} compact \/> : null/);
+  assert.match(src, /pane === "reply" && co\.writeupAt === "closeout" && <WriteupBlock/);
+  assert.match(src, /co\.writeupAt === "result" && <WriteupLine view=\{writeup\} \/>/);
+  assert.doesNotMatch(src, /Closing the session and writing up what is on screen — the agent is not asked anything\.\s*<\/Typography>\s*\) : workspaceMode === "live" && peek/,
+    "the third hint line over the write-up is gone");
 });
 
 test("From folds to who and how many", () => {

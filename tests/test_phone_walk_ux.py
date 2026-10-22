@@ -446,6 +446,51 @@ class LongMailTests(unittest.TestCase):
         self.assertTrue(all(p.startswith('>') for p in parts), [p[:10] for p in parts])
 
 
+class TypedActsMoveOnTests(unittest.TestCase):
+    """F19: a Remind me typed (or said) and confirmed said "Away until ..." and sat on the card it had put away - the next "mark this
+    done" closed the reminded task. The poll's Remind me moves on; the typed one now does too. Every acting reply has a way on."""
+
+    def test_a_typed_remind_and_its_yes_walk_on_to_the_next_card(self):
+        from taskuary import concierge
+        s = MemoryStore()
+        table = {'key': 'task:5', 'kind': 'task', 'tid': 5, 'ref': 'TQ-0005', 'title': 'Renew the domain'}
+        nxt = {'say': 'Gail Moreno asked about Thursday.', 'item': {'key': 'task:6', 'kind': 'task', 'tid': 6, 'ref': 'TQ-0006', 'title': 'Thursday'},
+               'chips': [{'verb': 'close', 'label': 'Mark done'}, {'verb': 'next', 'label': 'Next'}]}
+        prop = {'id': 'op1', 'status': 'proposed', 'kind': 'task.defer', 'target': 5, 'params': {'until': 'tomorrow'}, 'label': 'Remind me'}
+        got = []
+        with mock.patch.object(concierge, 'run_proposal', return_value={**prop, 'status': 'done', 'outcome': {'when': 'Thu 22 Oct'}}), \
+             mock.patch.object(concierge, 'receipt', return_value='TQ-0005 is away until Thu 22 Oct.'), \
+             mock.patch.object(concierge, 'surface', return_value=nxt) as surfaced, \
+             mock.patch.object(messengers, 'wa_send', side_effect=lambda st, chat, body, connector_id=None, poll=None: got.append((body, poll))):
+            text = remote_assistant.carry_out(s, {'say': 'Remind you about TQ-0005 tomorrow?', 'proposal': prop, 'decision': None}, table, picked=True)
+            remote_assistant.send(s, 'whatsapp', JID, text, None)
+        surfaced.assert_called_once()
+        self.assertIn('TQ-0005 is away until Thu 22 Oct.', got[0][0])
+        self.assertIn('Mark done', got[-1][1])
+        self.assertEqual(remote_assistant.acts_for(s, 'whatsapp', JID)['Mark done']['key'], 'task:6', 'Mark done is the next card, not the reminded one')
+
+    def test_bring_it_back_keeps_the_cards_choices(self):
+        from taskuary import concierge, remind
+        s = MemoryStore()
+        table = {'key': 'task:6', 'kind': 'task', 'tid': 6, 'ref': 'TQ-0006', 'title': 'Thursday'}
+        with mock.patch.object(remind, 'set_reminder', return_value={'remindAt': None}), \
+             mock.patch('taskuary.general.dock_task', return_value=({'TaskId': 1}, False)), \
+             mock.patch.object(concierge, 'restore_current', return_value=table), \
+             mock.patch.object(concierge, 'chips_for', return_value=[{'verb': 'close', 'label': 'Mark done'}, {'verb': 'next', 'label': 'Next'}]):
+            text = remote_assistant.run_act(s, {'t': 'remind', 'tid': 5, 'until': 'none'}, table)
+        self.assertIn('It is back on your rail now.', text)
+        self.assertIn('· Mark done', text); self.assertIn('· Next', text)
+
+    def test_an_older_list_answer_brings_the_current_choices(self):
+        s, got = MemoryStore(), []
+        remote_assistant._offer([('Mark done', {'t': 'stay'}), ('Next', {'t': 'next'})])
+        remote_assistant.remember_offered(s, 'whatsapp', JID, 'Reply with one of:\n1 · Mark done\n2 · Next')
+        with mock.patch.object(messengers, 'wa_send', side_effect=lambda st, chat, body, connector_id=None, poll=None: got.append((body, poll))):
+            remote_assistant.stale_tap(s, 'whatsapp', JID)
+        self.assertIn('older list', got[-1][0])
+        self.assertEqual(got[-1][1], ['Mark done', 'Next'])
+
+
 class ReceiptSaidOnceTests(unittest.TestCase):
     """F13: the bubble that reported Done still said "Nothing happens until you say yes."; an act run at once was said twice, its
     card line ("Answer it - general - ...") above its receipt; a bare "Ok." sat over "Not done"; Remind me said where, not what."""

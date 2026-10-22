@@ -925,7 +925,14 @@ def _settled_the_table(prop: dict, item: dict | None) -> bool:
     The phone walked on after any settling action, so a hand-off started from plain words arrived with the next
     item stapled under its receipt - an email nobody asked about (the 2026-09-24 chat audit; the owner: the phone
     follows the desktop)."""
-    return bool(prop.get('settles') and prop.get('key') and item and prop['key'] == item.get('key'))
+    if prop.get('settles') and prop.get('key') and item and prop['key'] == item.get('key'): return True
+    # ...and a Remind me / snooze / later TYPED on the table's own task puts it away as the poll's Remind me does - the walk moves on
+    # (F19): typed, it said "Away until ..." and sat on the card it had just put away
+    p = prop.get('params') or {}
+    if not item: return False
+    if prop.get('kind') == 'task.defer':
+        return str(prop.get('target') or '') == str(item.get('tid') or '-') and str(p.get('until') or '').strip().lower() not in ('', 'none')
+    return prop.get('kind') == 'item.settle' and str(p.get('verb') or '') in ('later', 'skip') and p.get('key') in (None, item.get('key'))
 
 
 def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: str = '', picked: bool = False) -> str:
@@ -1090,8 +1097,9 @@ def stale_tap(store, channel: str, chat: str, connector_id=None, spent: bool = F
     once (the owner, 2026-10-02: "once a poll is answered it should never be allowed to be used again")."""
     said = ('That list was already used - nothing ran. The choices under my last message are the current ones.' if spent
             else 'That was an older list, so nothing ran - the choices under my last message are the current ones.')
-    # ...and on Telegram this line is now the last message, which takes the older buttons off (tg_send): the current ones come with it
-    try: live = json.loads(store.get_setting(f'{OFFERED_KEY}:{channel}:{chat}') or '[]') or [] if channel == 'telegram' else []
+    # ...and this line is now the last message - on Telegram it takes the older buttons off (tg_send) - so the current choices come
+    # with it, on both channels: an answer with nothing to tap under it is a dead end (F19)
+    try: live = json.loads(store.get_setting(f'{OFFERED_KEY}:{channel}:{chat}') or '[]') or []
     except ValueError: live = []
     try: send(store, channel, chat, said, connector_id, choices=live or None)
     except Exception as e: logger.warning(f'{channel}: could not answer a tap on an older list - {e}')
@@ -1378,7 +1386,13 @@ def _remind(store, act: dict, actor: str) -> str:
     except remind.AgentOpen as e: return str(e)
     operations.record_direct(store, 'task.defer', int(act['tid']), {'until': act['until']}, actor, out)
     said = concierge.away_line(out)
-    if not out.get('remindAt'): return said
+    if not out.get('remindAt'):
+        # "It is back on your rail now." - and the card in front of you keeps its choices under it, never a dead end (F19)
+        from . import general
+        try: table = concierge.restore_current(store, general.dock_task(store, actor)[0]['TaskId'])
+        except Exception: table = None
+        if not table: return stuck(store, said)
+        return turn_text({'say': said, 'chips': concierge.chips_for(store, table)}, store=store, table=table)
     # ...in plain past tense, the task by name: "TQ-0001 is away until Thu 22 Oct." (F13)
     from .store import task_ref
     said = f"{task_ref(int(act['tid']))} is away until {out['when']}." + (f" {out['warn']}" if out.get('warn') else '')

@@ -636,13 +636,15 @@ def _shows(i: dict) -> dict:
     return i.get('shows') or shows(i)
 
 
-def who_of(i: dict) -> str:
+def who_of(i: dict, store=None) -> str:
     """Who, as the summary names them: the SENDER's own display name where the mail has one - the shared reading took the address's
     domain ("example") or the agent's CLI ("claude", "kai") over the person (F15) - else the row's who, as every surface says it."""
     named = ' '.join(str(i.get('who') or '').split())
     tools = {str(i.get(k) or '').strip().lower() for k in ('agent', 'working')} - {''}
     who = _shows(i)['who']
-    if who.strip().lower() in tools: return agent_label(i)
+    # ...an agent by what it IS, read off its task: with no store a general run (no session mode) was called "Coding agent" in the
+    # opener while its own card said General agent (F6, the 2026-10-22 re-walk)
+    if who.strip().lower() in tools: return agent_label(i, store=store)
     # a word of the ADDRESS stood for a sender whose mail names them in full - a person's or a team's own name, never a lone word
     host = re.split(r'[@.]', str(i.get('email') or '').lower())
     if ' ' in named and '@' not in named and who.strip().lower() in host and not is_own(i): return story_who(i)
@@ -653,7 +655,7 @@ def who_of(i: dict) -> str:
 _ONE = {'task': ('task', 'tasks'), 'reports': ('report', 'reports'), 'ideas': ('Advisor idea', 'Advisor ideas')}
 
 
-def who_wants_what(items: list) -> str:
+def who_wants_what(items: list, store=None) -> str:
     """The desktop's opener, as a chat can print it: the count in a sentence, then each group's rows."""
     live = list(items or [])
     if not live: return 'Nothing is waiting on you.'
@@ -671,7 +673,7 @@ def who_wants_what(items: list) -> str:
             state = (f'back {back}' if back else '') if key == 'later' else _shows(i)['state']
             # ...and never the heading's own word again: "(fyi)" on every row under FYI (F15)
             if state.lower() in (key, word_.lower(), word_.lower().rstrip('s')): state = ''
-            lines.append(f"· {who_of(i)} - {_cut(i.get('title') or '', 70)}" + (f' ({state})' if state else ''))
+            lines.append(f"· {who_of(i, store)} - {_cut(i.get('title') or '', 70)}" + (f' ({state})' if state else ''))
         if len(rows) > ROWS_PER_GROUP: lines.append(f'  and {len(rows) - ROWS_PER_GROUP} more')
     return '\n'.join(lines)
 
@@ -705,7 +707,7 @@ def day_opener(store, items: list, now=None) -> str:
     """THE DAY IN A BREATH - the greeting, today's meetings, then who wants what. ONE text for the morning line and for
     "Walk me through my tasks" (the owner, 2026-09-29: "when you hit walk me through on whatsapp that should trigger the
     morning summary"): the walk opened with who-wants-what alone, without the meetings the morning line carried."""
-    return '\n\n'.join(x for x in (greeting(now), meetings_line(store), who_wants_what(items) if items else 'Nothing is waiting on you.') if x)
+    return '\n\n'.join(x for x in (greeting(now), meetings_line(store), who_wants_what(items, store) if items else 'Nothing is waiting on you.') if x)
 
 
 def spend_morning(store, now=None):

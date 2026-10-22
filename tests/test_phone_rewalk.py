@@ -314,4 +314,18 @@ class AlikeFyiTests(PhoneCase):
         self.assertEqual(sorted(re.search(r'\((\d) of 3\)$', b).group(1) for b in btns), ['1', '2', '3'], btns)
 
 
+class OpenerAgentNameTests(PhoneCase):
+    """F6 in the opener: the card said General agent, the day's opener still listed "Coding agent - Printer vendor call". The opener's
+    rows named the agent with no store to read the task's kind by, and a general run carries no session mode to say it."""
+
+    def test_a_general_agents_row_in_the_opener_says_general_agent(self):
+        tid, _ = self.f._work('Printer vendor call - floor 3', status='in_progress', kind='general', subject='Printer vendor call - floor 3',
+                              from_name=RAY[0], from_email=RAY[1], body='Can someone call the printer vendor about floor 3?', sent_at=self.f.ago(hours=1))
+        self.f.run(tid, agent='claude')
+        self.ph.ready()
+        (said, _), = self.ph.opener()
+        row = next(l for l in said.splitlines() if 'Printer vendor call' in l)
+        self.assertNotIn('Coding agent', row); self.assertNotIn('claude', row)
+
+
 if __name__ == '__main__': unittest.main()

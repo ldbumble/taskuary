@@ -35,6 +35,7 @@ const NO_AI_LINE = "No AI is connected, so an agent can't run this yet - connect
 const NO_AI_PLAN = "No AI is connected to plan the steps - connect one, or choose Track it and add the steps yourself.";
 import { connectorNamed } from "./connectorCatalog.js";
 import { openAppLink } from "./appLinks.js";
+import { NEW_PB, askPlaybook } from "./playbookOpen.js";
 import { place } from "./words.js";
 import { label as btn } from "./buttons.js";
 import { useCapabilities } from "./capabilities.js";
@@ -49,6 +50,9 @@ const KINDS = [
   // your words and Build it - the draft opens on Reports, filled in, to check and save. The same box Reports has (Composer)
   { key: "report",   mark: "📊", label: "Report", hint: "reads your systems on a schedule and summarises what it finds — it changes nothing" },
   { key: "workflow", mark: "🔁", label: "Workflow", hint: "does the work on a schedule — checks, opens tasks, prepares drafts — and asks before what you said it must not" },
+  // ...and the third thing Reports keeps (the owner, 2026-10-22: "this is not playbook ui?" - asked for one, the Assistant handed it to a
+  // general agent as its job). Its words go to the shelf's own New playbook, which sets it up with AI there (playbookOpen.askPlaybook)
+  { key: "playbook", mark: "📖", label: "Playbook", hint: "how one kind of request is handled from now on — triage matches new mail to it, and its steps are followed your way" },
 ];
 const REPEATS = ["report", "workflow"];
 
@@ -122,7 +126,7 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
     if (bus?.current || onWords) { clearTimeout(timer.current); timer.current = setTimeout(() => { bus?.current?.(next); onWords?.(next); }, 200); }
   };
   // ...and a picture pasted or dropped into it goes with the words (a note to self keeps words only)
-  const withPics = pics && kind !== "note";
+  const withPics = pics && kind !== "note" && kind !== "playbook";     // ...and New playbook takes words (POST /api/playbooks/setup)
   return (
     <>
     <TextField fullWidth multiline minRows={kind === "note" ? 2 : 3} value={value} autoFocus
@@ -131,6 +135,7 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
         : kind === "send" ? "the census numbers he asked for, plus why Site 7 moved"
         : kind === "agent" ? (how === "general" ? "why did Site 3's census move four points in July?"
           : "work out why the nightly export drops the last facility")
+        : kind === "playbook" ? "when someone asks for their leave balance, gather it from payroll and draft the reply for my review"
         : "chase the Payworth AP replacement"}
       // SAID, NOT TYPED (the owner, 2026-09-30: "can't ... use voice notes to write this prompt?"): the composer's own mic,
       // its words appended where the typing would go
@@ -281,6 +286,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         if (out?.said) onSaid?.(out.said);
         setOk(`${data.ref} — ${outcomeOf(out).text}.`);
         aboutRef.current?.clear(); setHasAbout(false); pics.clear(); onDone?.(); onOpenTask?.(data.taskId);
+      } else if (kind === "playbook") {
+        // the one road to a playbook is the shelf's New playbook: this press is its Set up with AI, made there once with these words
+        askPlaybook(about, true); onClose?.(); openAppLink(`report=${NEW_PB}`);
       } else if (kind === "goal") {
         // PLAN IT WITH NO AI SAYS SO (owner-approved, 2026-10-21): it promised "planning the steps; they land in a moment" and none came
         if (plan && !((await api.get("/api/agents")).data?.general_brains || []).length) {
@@ -309,14 +317,15 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const canGo = hasAbout && !noCodingTool && (kind !== "send" || (channel && (channel === "email" ? emailTo.length : to.trim())));
   // a hand-off is the one Send to agent / Send to coding agent (buttons.json); the others are this form's own words
   const verb = kind === "send" ? (mode === "task" ? btn("regular_agent") : "Draft it")
-    : kind === "agent" ? btn(how === "general" ? "regular_agent" : "coding_agent") : kind === "goal" ? (plan ? "Plan it" : "Track it") : "Note it";
+    : kind === "agent" ? btn(how === "general" ? "regular_agent" : "coding_agent") : kind === "goal" ? (plan ? "Plan it" : "Track it")
+    : kind === "playbook" ? "Set up with AI" : "Note it";
 
   // the card: a bordered block in the conversation's width, Esc closes it, nothing floats over the page
   const Shell = inline ? Box : Dialog;
   const shell = inline
     ? { "data-tq-new": "", onKeyDown: (e) => { if (e.key === "Escape") close(); },
         sx: { border: `1px solid ${BORDER}`, borderRadius: "12px", bgcolor: PANEL, overflow: "hidden", scrollMarginTop: "8px" } }
-    : { open: !!open, onClose: close, fullWidth: true, maxWidth: "md", "data-tq-keep": true };   // md: six tabs fit on one line
+    : { open: !!open, onClose: close, fullWidth: true, maxWidth: "md", "data-tq-keep": true };   // md: the tabs fit on one line, and scroll sideways when they do not
   if (inline && !open) return null;
   return (
     <Shell {...shell}>
@@ -452,11 +461,16 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         {!REPEATS.includes(kind) && <Box>
           <Label>{kind === "goal" ? "What does done look like" : kind === "send" ? "What's this about"
             : kind === "agent" ? (how === "general" ? "What should it find out or write" : "What should it do")
-            : "What do you want to remember"}</Label>
+            : kind === "playbook" ? "What should this playbook do" : "What do you want to remember"}</Label>
           <AboutField ref={aboutRef} kind={kind} how={how} onReady={setHasAbout} bus={said} pics={pics} initial={initialText} onWords={setWords} />
           {kind === "send" && (
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
               Shorthand is fine — this is what you are telling the drafter, not what they read.
+            </Typography>
+          )}
+          {kind === "playbook" && (
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
+              It opens under Reports → Playbooks, where your assistant drafts the steps with you — Approve there saves it.
             </Typography>
           )}
         </Box>}

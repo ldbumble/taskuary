@@ -232,6 +232,23 @@ class DeskRoutes(unittest.TestCase):
             self.assertEqual(out['open'], '#connector=quickbooks&step=1')
         self.assertNotIn('proposal', out); self.assertEqual(proposals(s), [])
 
+    def test_a_playbook_asked_for_is_new_playbook_never_an_agents_job(self):
+        # the owner, 2026-10-22: "can I build a playbook for it?" opened New on Give an agent a job - "this is not playbook ui?"
+        s = store(); ask = 'when people ask me for their combined leave, can I build a playbook for it?'
+        self.assertIn('"playbook"', concierge.SETUP_SORT_SYSTEM)
+        from taskuary import toolcatalog
+        self.assertIn('a playbook', toolcatalog._DECIDE['setup'])
+        with mock.patch.object(concierge, '_compose_llm', return_value=lambda *a, **k: json.dumps({'kind': 'playbook', 'why': 'a recurring ask'})):
+            out, spawn = say(s, ask, None, json.dumps({'kind': 'setup', 'params': {'text': ask}}).join(('CALL: ', '')))
+        self.assertEqual({k: out['new'][k] for k in ('kind', 'how', 'text')}, {'kind': 'playbook', 'how': '', 'text': ask})
+        self.assertEqual(out['say'], 'Wrote it into New - Set up with AI there starts it.')
+        spawn.assert_not_called(); self.assertEqual(proposals(s), [])
+        # ...and a phone, which has no New, is told where a playbook is made - nothing is started from the line
+        with concierge.delivering(concierge.PHONE), \
+             mock.patch.object(concierge, '_compose_llm', return_value=lambda *a, **k: json.dumps({'kind': 'playbook'})):
+            out, spawn = say(s, ask, None, json.dumps({'kind': 'setup', 'params': {'text': ask}}).join(('CALL: ', '')))
+        self.assertIn('Reports → Playbooks', out['say']); self.assertNotIn('proposal', out); spawn.assert_not_called()
+
     def test_the_phone_keeps_its_text_yes_or_no(self):
         s = store(); tid, item = on_table(s)
         with concierge.delivering(concierge.PHONE):

@@ -283,7 +283,10 @@ _DECIDE = {
     'stop_agent':      "save and end the agent's session on the item",
     'rerun':           'run the report on the table again',
     'remember':        'keep a fact - `text`',
-    'setup':           'build a report, a connection to another system or an automation - `text`: the request. Never a to-do',
+    # ...and a PLAYBOOK, which has its own New playbook: "can I build a playbook for it?" was sent to a general agent as its job (the
+    # owner, 2026-10-22: "this is not playbook ui?")
+    'setup':           ('build a report, a playbook (how one kind of recurring request is handled from now on), a connection to another '
+                        'system or an automation - `text`: the request. Never a to-do, and never an agent\'s job'),
     'confirm':         "the owner's yes to the card already waiting - only when one is",
     'cancel':          "the owner's no to it",
     # the slipped card's answers (spec 2026-10-12, build step 4): each is an outcome the ledger keeps

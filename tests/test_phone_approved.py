@@ -505,6 +505,38 @@ class WhatsAppWhileClosedTests(WhileClosedTests):
     channel = 'whatsapp'
 
 
+class TelegramSendRetryTests(PhoneCase):
+    """A13: a failed Telegram send was only logged - the phone got nothing and never knew. It is tried again with backoff; still failing, the
+    next message that gets through says so first."""
+    channel = 'telegram'
+
+    def _flaky(self, fails):
+        left = [fails]
+        def tg(tok, method, **p):
+            if method == 'sendMessage' and left[0]:
+                left[0] -= 1; raise RuntimeError('telegram sendMessage: Bad Gateway')
+            return self.ph._tg(tok, method, **p)
+        return mock.patch('taskuary.messengers.tg', side_effect=tg)
+
+    def setUp(self):
+        super().setUp()
+        _two_asks(self.f); self.ph.ready(); self.ph.walk()
+
+    def test_a_blip_is_tried_again_and_the_message_arrives(self):
+        with self._flaky(2), mock.patch.object(ra, '_pause', create=True) as waited:
+            got = self.ph.tap('Next')
+        self.assertTrue(got and got[-1][1], 'the card arrived, with its buttons')
+        self.assertEqual([c.args[0] for c in waited.call_args_list], [1.0, 3.0])          # backing off
+
+    def test_a_message_that_never_arrived_is_said_on_the_next_one(self):
+        with self._flaky(99), mock.patch.object(ra, '_pause', create=True):
+            self.assertEqual(self.ph.tap('Next'), [])
+        got = self.ph.type('help')
+        self.assertTrue(got[0][0].startswith('My last message did not reach you ("'), got[0][0])
+        self.assertIn('What you can do here', text_of(got))
+        self.assertNotIn('did not reach you', text_of(self.ph.type('help')))             # said once
+
+
 class TelegramBareNumberTests(PhoneCase):
     """A18 (b): Telegram shows its choices as buttons with no numbers, yet a bare "2" silently ran button 2. It is not acted on: the answer
     says what the choices are, under them."""

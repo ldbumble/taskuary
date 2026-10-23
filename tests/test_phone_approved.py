@@ -377,11 +377,15 @@ class RedraftAsksTests(PhoneCase):
     """A18 (a): Redraft rewrote the draft at once, with no word on what should change. It asks - Shorter, Just rewrite, or the change typed -
     and Cancel goes back to the draft."""
 
+    ai, draft = True, 'Hi Gail - yes, renew it for Q3.'
+
     def setUp(self):
         super().setUp()
+        from taskuary import capabilities
+        hold = mock.patch.object(capabilities, 'has_ai', return_value=self.ai); hold.start(); self.addCleanup(hold.stop)
         p = self.f.pending_draft(title='Q3 vendor contract renewal', subject='Q3 vendor contract renewal', from_name=GAIL[0],
                                            from_email=GAIL[1], body='Are we renewing the Payworth contract for Q3?',
-                                           draft='Hi Gail - yes, renew it for Q3.', sent_at=self.f.ago(hours=1))
+                                           draft=self.draft, sent_at=self.f.ago(hours=1))
         self.tid, self.rid = p.tid, p.rid
         self.ph.ready(); self.card = self.ph.walk()
 
@@ -410,6 +414,40 @@ class RedraftAsksTests(PhoneCase):
         self.assertEqual(back[-1][1], self.card[-1][1])
         from taskuary import server
         with mock.patch.object(server, 'open_reply', side_effect=AssertionError('no redraft after Cancel')): self.ph.type('next')
+
+
+class RedraftWithNoAiTests(RedraftAsksTests):
+    """A18 (b), the 2026-10-22 walk: with no AI, Draft with AI asked "What should change?", wrote nothing and asked again - round and
+    round with no reason. It says no AI is connected, with Connect an AI, and never asks what to change."""
+    ai = False
+
+    def test_redraft_says_no_ai_with_connect_an_ai(self):
+        from taskuary import server
+        with mock.patch.object(server, 'open_reply', side_effect=AssertionError('nothing can write it')):
+            got = self.ph.tap(next(w for w in self.card[-1][1] if w in ('Redraft', 'Draft with AI')))
+        self.assertIn('No AI is connected to write the draft', text_of(got))
+        self.assertNotIn('What should change?', text_of(got))
+        self.assertEqual(got[-1][1], ['Connect an AI', 'Next'])
+
+    def test_set_up_a_report_says_no_ai_too(self):
+        self.assertIn('No AI is connected to put a report together', ra.script_words(self.s, 'set up a report'))
+
+    # the A18 (a) asks are an AI's: with none they are this class's own tests above
+    test_redraft_asks_what_should_change_and_the_typed_line_is_the_instruction = test_shorter_is_one_tap = None
+    test_cancel_goes_back_to_the_draft_and_the_next_line_is_words_again = None
+
+
+class EmptyDraftTests(RedraftAsksTests):
+    """...and over an EMPTY draft there is nothing for "What should change?" to be about: Draft with AI writes it."""
+    draft = ''
+
+    def test_an_empty_draft_is_written_without_asking(self):
+        got, wrote = self._rewrite(lambda: self.ph.tap(next(w for w in self.card[-1][1] if w in ('Redraft', 'Draft with AI'))))
+        self.assertNotIn('What should change?', text_of(got))
+        self.assertTrue(wrote.called)
+
+    test_redraft_asks_what_should_change_and_the_typed_line_is_the_instruction = test_shorter_is_one_tap = None
+    test_cancel_goes_back_to_the_draft_and_the_next_line_is_words_again = None
 
 
 def _brain(calls):

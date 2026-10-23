@@ -186,7 +186,9 @@ class TypedWalkTests(PhoneCase):
         self.assertEqual({'Send to agent', 'Next'} - set(got[-1][1]), set(), got[-1][1])
 
     def test_a_typed_set_up_is_its_question_not_the_tools_description(self):
-        with mock.patch.object(self.ph, 'brain_fn', lambda said: 'Ok.\n' + call('script.start', name='set up a report')):
+        # ...a model answered, so an AI is connected - the scripted brain is not one has_ai can see
+        with mock.patch.object(self.ph, 'brain_fn', lambda said: 'Ok.\n' + call('script.start', name='set up a report')), \
+             mock.patch('taskuary.capabilities.has_ai', return_value=True):
             said = text_of(self.ph.type('set up a report'))
         self.assertIn('Tell me what to set up', said)
         self.assertNotIn('Start a script', said); self.assertNotIn('Nothing happens until you say yes', said)

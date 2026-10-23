@@ -214,12 +214,15 @@ test("run another agent is on the bar, live sessions and general tasks included"
 });
 
 test("its agent step opens on a general task and beside a live session", () => {
-  assert.match(tasks, /\{\(restartOpen \|\| \(!term\?\.alive && !liveRun && !isGeneral && !report && !detail\?\.transcript\)\)/);
+  // ...and on a general task nobody has started, the same box (it had pickers and a button of its own that started at once)
+  assert.match(tasks, /\{\(restartOpen \|\| \(!term\?\.alive && !liveRun && !report && !detail\?\.transcript && \(!isGeneral \|\| !generalStarted\)\)\)/);
+  assert.doesNotMatch(tasks, /\{isGeneral && !generalStarted && \(/);
 });
 
 test("it opens in the agent box, brought into view - never a card under the conversation - one at a time, closed when the agent starts", () => {
   assert.match(tasks, /&& <Box data-tq-run-form="">\{nextRunForm\}<\/Box>\}/);
-  assert.match(tasks, /querySelector\("\[data-tq-run-form\]"\)\?\.scrollIntoView/);
+  assert.match(tasks, /const el = document\.querySelector\("\[data-tq-run-form\]"\);\s+el\?\.scrollIntoView/);
+  assert.match(tasks, /el\?\.querySelector\("textarea"\)\?\.focus\(/, "its words box takes the cursor");
   assert.doesNotMatch(tasks, /createPortal/, "drawn once, in the task's own work column");
   assert.match(tasks, /const setContinueAt = \(a\) => \{\s+if \(a\) setRestartOpen\(false\);/);
   assert.match(tasks, /window\.dispatchEvent\(new CustomEvent\("tq-next-run"\)\)/);
@@ -235,7 +238,27 @@ test("starting the new one pauses a live session first - its handover kept, no r
 test("an unstarted general task's Send to agent is the row's lead, not a button inside the card", () => {
   assert.match(tasks, /const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession;/);
   assert.match(tasks, /sendGeneral \? \[\{ id: "send-general", group: "agent", lead: !pendingReview/);
-  assert.match(tasks, /\{!inRow && <span title=\{noAiWhy \|\| undefined\}><Button size="small" variant="contained" disableElevation disabled=\{!!startingAgent \|\| !!noAiWhy\}\s+startIcon=\{startingAgent === "general"/);
+  // ...and the press OPENS THE AGENT BOX (the owner, 2026-10-23): what to do, typed or a voice note, before it starts
+  assert.match(tasks, /id: "send-general"[^\n]*\n\s+disabled: !!startingAgent \|\| !!noAiWhy, why: noAiWhy, run: openBox,/);
+  assert.match(tasks, /const openBox = \(\) => \{[^\n]*setOpenStage\("agent"\); setRestartOpen\(true\);/);
+});
+
+test("every door that starts an agent on a task opens the box first - none starts at the press", () => {
+  const verbs = tasks.slice(tasks.indexOf("const rowVerbs = "), tasks.indexOf('useVerbs("task", rowVerbs'));
+  // the row's starts: Send to agent, Start an agent (a goal, no coding tool, the step), Run another agent
+  for (const id of ["send-general", "start-agent"]) {
+    for (const m of verbs.matchAll(new RegExp(`id: "${id}"[\\s\\S]*?run: (\\w+)`, "g"))) assert.equal(m[1], "openBox", `${id} runs ${m[1]}`);
+  }
+  assert.match(tasks, /const runAnother = \{[^}]*\n\s+run: openBox,/);
+  // the starts themselves are the box's own buttons
+  const form = tasks.slice(tasks.indexOf("const nextRunForm = ("), tasks.indexOf("IN THE AGENT BOX, NOT UNDER THE CONVERSATION"));
+  assert.match(form, /onClick=\{startCodingAgent\}/);
+  assert.match(form, /onClick=\{goalRun \? startGoalStep : startGeneralAgent\}/);
+  // ...and a goal's step starts with what was said in its box
+  const goal = tasks.slice(tasks.indexOf("const startGoalStep"), tasks.indexOf("CONTINUE SESSION is the rail's box here too"));
+  assert.match(goal, /instruction: withImages\(run\.instruction\.trim\(\), runPics\.paths\) \|\| null/);
+  // the canvas's own Send to agent (a chip or the Advisor's pick naming this task) opens the same box
+  assert.match(tasks, /window\.addEventListener\("tq-agent-ask", on\)/);
 });
 
 test("a live session's Mark done asks for a place on the bar", () => {

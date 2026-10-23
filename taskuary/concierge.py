@@ -3419,6 +3419,9 @@ def _where(it: dict) -> str:
     return f"{who + ' - ' if who else ''}{title}{' (' + it['ref'] + ')' if it.get('ref') else ''}".strip()
 
 
+AGENT_PICKS = ('agent', 'brain', 'pick', 'model')     # what the agent box chose besides the words (operations params, DispatchBody fields)
+
+
 def _brief_from_item(store, item: dict) -> str:
     """What to tell an agent when the owner pressed a button instead of typing: the item itself - what it
     is, who it is from, and everything already known about it (the same facts the assistant reads)."""
@@ -3444,13 +3447,20 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         label = op_label(kind, params)
     elif verb in ('coding_agent', 'regular_agent', 'mine'):
         want = {'coding_agent': 'coding', 'regular_agent': 'general', 'mine': 'task'}[verb]
-        if it.get('mid'): target, params = it['mid'], {'kind': want, 'instructions': d_text or None}
+        # THE AGENT BOX'S ANSWERS (RunForm.AgentAsk, the owner 2026-10-23): which profile, brain and model it chose ride with the
+        # hand-off to the dispatch, beside the owner's words - never on Make a task, which starts nothing
+        picked = {k: decision.get(k) for k in AGENT_PICKS if decision.get(k)} if verb != 'mine' else {}
+        if it.get('mid'): target, params = it['mid'], {'kind': want, 'instructions': d_text or None, **picked}
         elif verb == 'mine': raise ValueError('nothing is on the table to put on your list')
         else:
             # A hand-off asked for by BUTTON carries no sentence, so the brief is the item itself. Without
             # this the chip proposed a task with no text at all and operations refused it outright
             # ('task.create_from_text needs text') - an offered word that did nothing.
-            job = (d_text or text or '').strip() or _brief_from_item(store, it)
+            # ...and one the owner SAID something about keeps the item under their words: the words lead, the item is what they
+            # are about (the owner, 2026-10-23: "what about the email or attachment is the issue")
+            said_ = (d_text or text or '').strip()
+            # - only for a press ON the item (propose_direct): typed words naming a new job are that job alone (test_new_task_from_words)
+            job = f"{said_}\n\n{_brief_from_item(store, it)}" if said_ and decision.get('on_item') else said_ or _brief_from_item(store, it)
             title = _handoff_title(store, dock_tid, job) if (d_text or text or '').strip() else (it.get('title') or 'Look into this')
             kind, target, params = 'task.create_from_text', 0, {'kind': want, 'text': job, 'title': title}
             # a coding job names its checkout on the card, and the one confirmed is the one it opens in
@@ -3476,7 +3486,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
                 # agent even with a researcher on the roster for exactly this (the owner, 2026-09-24)
                 from . import agents as hub_agents
                 role = hub_agents.routed_role(store, 'general', decision.get('as') or '')
-                params['profile'] = role or None
+                params['profile'] = picked.get('agent') or role or None      # the box's own profile pick wins
                 clear = bool(role) or not hub_agents.roster(store).strip()
                 label = buttons.label('regular_agent')         # the worker picked is said in the line, never in the button's name
                 if role: note = f' The {role} takes it.'
@@ -3559,7 +3569,8 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
             'clear': clear, 'repo_choices': choices, 'alts': alts_for(store, it, verb) if not elsewhere else []}
 
 
-def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'owner', table: bool = False, exact: bool = False) -> dict:
+def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'owner', table: bool = False, exact: bool = False,
+                   picks: dict | None = None) -> dict:
     """A card's own button on ONE entry (PW-151): the same proposal the words would make, without the interpreter -
     the target is explicit. From a card it never settles what is on the table and the entry's siblings are not
     touched; from the chips under the composer (`table`) the entry IS the table, so a plain verb runs at once and
@@ -3576,7 +3587,9 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
     why = cannot(item, verb, store)
     if why: raise ValueError(why)
     record_related(store, tid, item, 'user', f"{PROPOSALS[verb][1]}: {item.get('title') or item.get('ref') or key}")
-    try: prop = propose_for(store, tid, {'verb': verb, 'text': text or ''}, item, text or '', actor, table=item if table else None)
+    # `picks`: the agent box's profile, brain and model beside its words (AGENT_PICKS) - a hand-off's only
+    picked = {k: v for k, v in (picks or {}).items() if k in AGENT_PICKS and v}
+    try: prop = propose_for(store, tid, {'verb': verb, 'text': text or '', 'on_item': True, **picked}, item, text or '', actor, table=item if table else None)
     except ValueError as e:
         # THE PRESS IS ANSWERED: its line was already in the conversation, and a refusal went to an error banner only - the
         # chat showed "Stop and save" with nothing under it until the owner typed Next (2026-09-25). The reason

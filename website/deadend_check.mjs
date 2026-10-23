@@ -726,8 +726,12 @@ async function faults() {
     }
     if (!started) { note("WAYOUT", page.step, "no task with Send to agent to start"); page.expect.delete("/dispatch"); await fault(""); continue; }
     await wait(3000);
-    // the card's question, when it asks which agent - in its answer's words, or with the coding agent's own button (CI, 2026-10-19)
-    if (started !== "coding" && !(await clickText(page, choice("agent", "coding_agent")))) await clickText(page, label("coding_agent"));
+    // THE AGENT BOX opens first (the owner, 2026-10-23: every start asks what): the coding agent chosen in it - its answer's words -
+    // where it opened on the regular agent, then the box's own Start. Nothing has started before that press.
+    if (!(await page.$('[data-tq-agent-start="coding"]'))) await clickText(page, choice("agent", "coding_agent"));
+    await wait(1000);
+    const go = await page.$('[data-tq-agent-start="coding"]');
+    if (go) await go.click(); else note("WAYOUT", page.step, "the agent box offers no coding agent to start");
     await wait(5000);
     // ...a folder that is not there is answered by where the code is - in whichever words that button says: "Change where the code is"
     // once the task names a folder, the one that was not there (CI, 2026-10-21: the census issue led the rail after midnight UTC)

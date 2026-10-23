@@ -5,7 +5,8 @@
 // Tasks: dense two-pane - list rows on the left, the selected task's full story right.
 import { says, subState } from "./laneSays.js";
 import ContinueBox from "./ContinueBox.jsx";
-import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
+import { usePromptImages, withImages } from "./promptImages.jsx";
+import { ASK_WHAT, RunForm } from "./RunForm.jsx";
 import QueuedStart from "./QueuedStart.jsx";
 import { strangerLine } from "./strangerLine.js";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -57,7 +58,7 @@ import { Reshape } from "./Reshape.jsx";
 import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
 import { Attachments, mentionsPicture } from "./Attachments.jsx";
 import ChatThread from "./ChatThread.jsx";
-import { ChannelIcon, MicButton, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, codingProfile, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, Confirm, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
+import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, codingProfile, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, Confirm, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -405,6 +406,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // A finished run should lead with what it accomplished. Harness/model/prompt choices stay
   // behind an explicit restart action instead of looking like the main thing to do next.
   const [restartOpen, setRestartOpen] = useState(false);
+  const [boxAt, setBoxAt] = useState(0);              // each opening of the agent box, so a second press brings it into view again
   const [startingAgent, setStartingAgent] = useState("");
   const [generalRevision, setGeneralRevision] = useState(0);
   // the waiting room: notes for the agent, typed in when it stops (waitroom.py)
@@ -523,7 +525,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     const task = detail?.task;
     if (!task || task.TaskId !== selected || !agents.length || pickerTask.current === task.TaskId) return;
     pickerTask.current = task.TaskId;
-    setHandOff(false);                  // another task opens on its own question, not the last one's hand-off
+    // another task opens on its own question, not the last one's hand-off - and a general task's box on the regular agent
+    setHandOff(isGeneralKind(task.Kind));
     const owned = assignedAgent(task.Assignee);
     // a general task starts from the role it was handed, else blank (its configured profile) - never the roster's first name;
     // a coding task from the profile of kind coding, else blank and the server finds it
@@ -1218,7 +1221,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       if (!step) { setErr("Every step is done - close the goal, or add a step."); return; }
       const child = step.tid || (await api.post(`/api/tasks/${id}/steps/${step.id}/start`)).data.taskId;
       // `via`: the press was made HERE, so a start that fails is left on the goal, where its line is read (server._pressed_on)
-      const { data } = await api.post(`/api/tasks/${child}/dispatch`, { kind: "general", agent: run.agent || null, pick: run.pick || null, model: run.model || null, via: id });
+      // ...with what was said in the box: the owner's words are the step's ask, the step and the goal its material
+      const { data } = await api.post(`/api/tasks/${child}/dispatch`, { kind: "general", agent: run.agent || null, pick: run.pick || null, model: run.model || null, via: id,
+        instruction: withImages(run.instruction.trim(), runPics.paths) || null });
+      if (!stale(id)) { setRun((current) => ({ ...current, instruction: "" })); runPics.clear(); setRestartOpen(false); }
       const outcome = outcomeOf(data);
       if (outcome.state === "needs_repo") setErr(`${outcome.text} - open the step and pick one.`);
       await Promise.all([loadDetail(id), loadTasks()]);
@@ -1393,9 +1399,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // more? it should be not in more"). It was offered only behind More, only on a coding task, only once its session had ended -
   // so a general task could never be handed to the coding agent from here. It opens the agent step; a live session is paused
   // (its handover kept for the next) when the new one starts (startCodingAgent).
+  // THE AGENT BOX, OPENED: the agent step, its box open in it and brought into view - one box at a time on the canvas (tq-next-run)
+  const openBox = () => { if (canvas) window.dispatchEvent(new CustomEvent("tq-next-run")); setOpenStage("agent"); setRestartOpen(true); setBoxAt((n) => n + 1); };
   const runAnother = { id: "run-another", group: "agent", label: labelOfRow("run-another"), disabled: !!noAiWhy, why: noAiWhy,
-    run: () => { if (canvas) window.dispatchEvent(new CustomEvent("tq-next-run")); else setOpenStage("agent"); setRestartOpen(true); },
-    title: hintOfRow("run-another") };
+    run: openBox, title: hintOfRow("run-another") };
   const changeVerbs = !notDone ? [] : [
     { id: "kind", group: "more", label: labelOfRow("kind"), run: (e, a) => setPick({ what: "kind", at: a || e?.currentTarget }), title: hintOfRow("kind") },
     { id: "priority", group: "more", label: labelOfRow("priority"), run: (e, a) => setPick({ what: "priority", at: a || e?.currentTarget }), title: hintOfRow("priority") },
@@ -1431,22 +1438,23 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         ...(runFix && !(inRow && runFix.href === place("ai").href) ? [{ id: "fix", group: "decide", tone: "p", label: runFix.label, run: () => openAppLink(runFix.href), title: btnHint("fix") }] : []),
         { id: "continue", group: "agent", lead: !pendingReview && !runFix, label: continueWord, disabled: !!startingAgent || !!noAiWhy, why: noAiWhy,
           run: continuePress, title: failedRun ? btnHint("try_again") : hintOfRow("continue") }]
+      // EVERY START OPENS THE BOX FIRST (the owner, 2026-10-23: "you need to write prompt what about the email or attachment is the
+      // issue"): Send to agent on a general task, on a goal, with no coding tool - each started at the press with nothing said. It
+      // opens the agent box now - what to do, typed or a voice note, pictures, which agent - and only the box's own Start starts it
       : sendGeneral ? [{ id: "send-general", group: "agent", lead: !pendingReview, label: startingAgent === "general" ? "Starting…" : labelOfRow("send-general"),
-        disabled: !!startingAgent || !!noAiWhy, why: noAiWhy, run: startGeneralAgent,
-        // ON THE BAR, not in the Agent work card (the owner, 2026-10-05: "send to agent on general task should be on bottom not inline");
-        // the profile, brain and model pickers stay in that card for whoever wants to change them first
+        disabled: !!startingAgent || !!noAiWhy, why: noAiWhy, run: openBox,
+        // ON THE BAR, not in the Agent work card (the owner, 2026-10-05: "send to agent on general task should be on bottom not inline")
         title: hintOfRow("send-general") }]
       // ON A GOAL the agent starts on the step the goal is up to - the first box not done: its child, made if it has none - and
-      // that step opens on the table (the owner, 2026-10-12: "it should start an agent on what it's up to")
+      // that step opens on the table (the owner, 2026-10-12: "it should start an agent on what it's up to"); the box says what first
       : startHere && t?.DoneWhen ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: startingAgent === "step" ? "Starting…" : labelOfRow("start-agent"),
-        disabled: !!startingAgent || !!noAiWhy, why: noAiWhy, run: startGoalStep, title: hintOfRow("start-agent") }]
-      // WITH NO CODING TOOL CONNECTED the general agent is simply THE agent (B3): Send to agent starts it at once - it opened the
-      // coding form, whose coding session could not work on this computer
+        disabled: !!startingAgent || !!noAiWhy, why: noAiWhy, run: openBox, title: hintOfRow("start-agent") }]
+      // WITH NO CODING TOOL CONNECTED the general agent is simply THE agent (B3): its box is the general agent's alone
       : startHere && !canCode && !ranBefore ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: startingAgent === "general" ? "Starting…" : labelOfRow("start-agent"),
-        disabled: !!startingAgent || !!noAiWhy, why: noAiWhy, run: startGeneralAgent, title: hintOfRow("start-agent") }]
+        disabled: !!startingAgent || !!noAiWhy, why: noAiWhy, run: openBox, title: hintOfRow("start-agent") }]
       // it OPENS the step where the agent and its instructions are chosen - nothing starts until that step's own button
       : startHere ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: ranBefore ? labelOfRow("run-another") : labelOfRow("start-agent"),
-        run: () => (stage === "agent" ? setRestartOpen(true) : setOpenStage("agent")), title: ranBefore ? hintOfRow("run-another") : hintOfRow("start-agent") }] : []),
+        run: openBox, title: ranBefore ? hintOfRow("run-another") : hintOfRow("start-agent") }] : []),
       // MESSAGE SOMEONE - email or chat - whoever started the task (the owner, 2026-10-09) - is Share's "Email a summary" now (the owner,
       // 2026-10-23: one Share button); never where nothing can be sent from here (the owner, 2026-10-22) - useShare below
       // ...nor Ask sender: its question is a reply too, and leaves by the same channel (a Teams task offered it, 2026-10-22)
@@ -1484,46 +1492,32 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // a time - and it closes when the agent starts (startCodingAgent / startGeneralAgent close restartOpen on success)
   // WITH NO CODING TOOL CONNECTED the form is the general agent's and nothing else (B3): no repository picker, no Start coding
   // session, no "Pick a repo first", no switch to a "non-coding" agent and back - there is only the one agent
-  const generalOnly = handOff || !canCode;
+  // ...and A GOAL'S box starts its next step, which is the regular agent's work (startGoalStep)
+  const goalRun = !!t?.DoneWhen && !ranBefore && !generalStarted;
+  const generalOnly = handOff || !canCode || goalRun;
+  // THE ONE BOX (RunForm, the owner 2026-10-23): what to do - typed or a voice note, pictures too - and which agent, before anything
+  // starts. A goal's box starts its next step; a general task's, the regular agent; a coding task's, the coding agent or the other
+  const runText = (f) => setRun((r) => ({ ...r, instruction: typeof f === "function" ? f(r.instruction) : f }));
   const nextRunForm = (
-                    <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-                      <Typography sx={{ color: INK, fontSize: 12.5, fontWeight: 600, mb: 0.75 }}>
-                        {report || detail?.transcript || term?.alive || generalStarted ? labelOfRow("run-another") : labelOfRow("start-agent")}
-                      </Typography>
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
-                        {/* coding asks ONE question (which CLI); a hand-off asks three - which profile,
-                            which brain, which model - and all three reach the session. */}
-                        <AgentPicker agents={agents} models={models} kinds={kinds} coding={!generalOnly}
+                    <RunForm title={report || detail?.transcript || term?.alive || generalStarted ? labelOfRow("run-another") : labelOfRow("start-agent")}
+                      value={run.instruction} onValue={runText} pics={runPics} autoFocus={restartOpen}
+                      placeholder={detail?.transcript ? "What should this new agent do next? - paste or drop a picture too" : ASK_WHAT}
+                      note={goalRun ? "It starts on the goal's next step, with what you write here." : "It gets the task, its messages and files, and what was saved last time."}
+                      /* coding asks ONE question (which CLI); a hand-off asks three - which profile, which brain, which model - and all
+                         three reach the session. */
+                      picker={<AgentPicker agents={agents} models={models} kinds={kinds} coding={!generalOnly}
                           agent={run.agent} model={run.model}
                           brains={brainList} brainModels={brainModels} brain={run.brain || ""}
                           generalBrains={generalBrains} brainsRead={agentsRead} codingReady={codingReady} pick={run.pick || ""} has={ownProfile}
                           onPick={(p) => setRun((r) => ({ ...r, pick: p }))}
                           onBrain={(b) => setRun((r) => ({ ...r, brain: b, model: "" }))}
                           onAgent={(a) => setRun((r) => ({ ...r, agent: a }))}
-                          onModel={(m) => setRun((r) => ({ ...r, model: m }))} size={28} />
-                        <Typography variant="caption" sx={{ color: FAINT }}>
-                          It gets the task, its messages and files, and what was saved last time.
-                        </Typography>
-                      </Box>
-                      <TextField fullWidth multiline minRows={2} maxRows={5} size="small" value={run.instruction}
-                        onChange={(e) => { const v = e.target.value; setRun((r) => ({ ...r, instruction: v })); }}
-                        placeholder={detail?.transcript ? "What should this new agent do next? - paste or drop a picture too" : "Anything else it should know (optional)"}
-                        {...runPics.drop}
-                        InputProps={{ endAdornment: (
-                          <Box sx={{ display: "flex", alignSelf: "flex-start", gap: 0.25 }}>
-                            <AttachImage pics={runPics} sx={{ width: 30, height: 30 }} />
-                            <MicButton size={18} sx={{ width: 30, height: 30, p: 0, color: "#6e685f" }}
-                              onText={(x) => setRun((cur) => ({ ...cur, instruction: cur.instruction ? `${cur.instruction} ${x}` : x }))} />
-                          </Box>) }}
-                        sx={{ mt: 0.85, bgcolor: "#fff", "& .MuiInputBase-root": { alignItems: "flex-start" } }} />
-                      <ImageTray pics={runPics} sx={{ mt: 0.75 }} />
-                      {!generalOnly && <RepoSelect taskId={selected} agent={run.agent} instruction={run.instruction}
-                        value={startRepo} onChange={setStartRepo} />}
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.75, flexWrap: "wrap" }}>
+                          onModel={(m) => setRun((r) => ({ ...r, model: m }))} size={28} />}
+                      actions={<>
                         {!generalOnly && <span title={runWhy(true) || undefined}><Button size="small" variant="contained" disableElevation
                           disabled={!!startingAgent || startRepo === "" || runPics.busy || !agentsRead || !!runWhy(true)}
                           startIcon={startingAgent === "coding" ? <CircularProgress size={11} /> : <TerminalIcon sx={{ fontSize: 14 }} />}
-                          onClick={startCodingAgent}>
+                          data-tq-agent-start="coding" onClick={startCodingAgent}>
                           {startingAgent === "coding" ? "Starting…" : btn("coding_agent")}
                         </Button></span>}
                         {/* HELD FOR A REPOSITORY it said nothing (the owner, 2026-10-01): it says why, with the picker beside it, and
@@ -1542,23 +1536,43 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           onClick={() => { setHandOff(true); setRun((r) => ({ ...r, agent: "", pick: "", model: "" })); }}>{choice("agent", "regular_agent")}</Button>}
                         {generalOnly && <span title={noAiWhy || undefined}><Button size="small" variant="contained" disableElevation
                           disabled={!!startingAgent || runPics.busy || !!noAiWhy}
-                          startIcon={startingAgent === "general" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
-                          onClick={startGeneralAgent}>
-                          {startingAgent === "general" ? "Starting…" : btn("regular_agent")}
+                          startIcon={startingAgent === "general" || startingAgent === "step" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
+                          data-tq-agent-start="general" onClick={goalRun ? startGoalStep : startGeneralAgent}>
+                          {startingAgent === "general" || startingAgent === "step" ? "Starting…" : btn("regular_agent")}
                         </Button></span>}
-                        {handOff && canCode && <Button size="small" variant="text" disabled={!!startingAgent}
-                          onClick={() => { setHandOff(false); setRun((r) => ({ ...r, agent: "", pick: "", model: "" })); }}>Back to coding</Button>}
+                        {/* ...and the coding agent is one press away from a hand-off, never chosen for the owner */}
+                        {handOff && canCode && !goalRun && <Button size="small" variant="outlined" disabled={!!startingAgent}
+                          startIcon={<TerminalIcon sx={{ fontSize: 14 }} />}
+                          onClick={() => { setHandOff(false); setRun((r) => ({ ...r, agent: codingProfile(agents, kinds), pick: "", model: "" })); }}>{choice("agent", "coding_agent")}</Button>}
                         {(restartOpen || report || detail?.transcript) && <Button size="small" variant="text"
                           onClick={() => setRestartOpen(false)}>Cancel</Button>}
-                      </Box>
-                    </Box>
+                      </>}>
+                      {!generalOnly && <RepoSelect taskId={selected} agent={run.agent} instruction={run.instruction}
+                        value={startRepo} onChange={setStartRepo} />}
+                    </RunForm>
   );
   // IN THE AGENT BOX, NOT UNDER THE CONVERSATION (the owner, 2026-10-22: "you can't tell it opened up on bottom ... show up in the
   // agent box ... like we had originally"): the card under the table opened out of sight; the form sits in the work column and is
   // brought into view when it opens
+  // ...and its words box takes the cursor, every time a door opens it (boxAt) - a second press found it open and did nothing
   useEffect(() => {
-    if (restartOpen) requestAnimationFrame(() => document.querySelector("[data-tq-run-form]")?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
-  }, [restartOpen]);
+    if (!restartOpen) return undefined;
+    const f = requestAnimationFrame(() => {
+      const el = document.querySelector("[data-tq-run-form]");
+      el?.scrollIntoView({ block: "nearest", behavior: "smooth" }); el?.querySelector("textarea")?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(f);
+  }, [restartOpen, boxAt]);
+  // THE ROW'S SEND TO AGENT ON THE CANVAS (AssistantView: an Advisor pick or a chip naming this task) opens this same box, never a start
+  useEffect(() => {
+    const on = (e) => {
+      if (Number(e.detail?.tid) !== Number(selRef.current)) return;
+      if (typeof e.detail?.coding === "boolean" && !t?.DoneWhen) setHandOff(!e.detail.coding || !canCode);
+      openBox();
+    };
+    window.addEventListener("tq-agent-ask", on);
+    return () => window.removeEventListener("tq-agent-ask", on);
+  });
   return (
     <>
       {/* ── detail ────────────────────────────────────────────────────── */}
@@ -2034,30 +2048,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     // the sender wrote again since: the earlier session is history, one fold, never the page's lead
                     return news ? <Box data-tq-earlier-session="" sx={{ mt: 1 }}><Fold title="The earlier session, before they wrote again">{record}</Fold></Box> : record;
                   })()}
-                  {(restartOpen || (!term?.alive && !liveRun && !isGeneral && !report && !detail?.transcript))
+                  {/* ONE BOX FOR EVERY START: a general task nobody has started had its own row of pickers and a button that started at
+                      once with nothing said - it is the same box now, with the words, the mic and the pictures */}
+                  {(restartOpen || (!term?.alive && !liveRun && !report && !detail?.transcript && (!isGeneral || !generalStarted)))
                     && <Box data-tq-run-form="">{nextRunForm}</Box>}
-                  {isGeneral && !generalStarted && (
-                    <Box sx={{ mt: 1 }}>
-                      {/* the same three answers the hand-off asks - this door had none at all */}
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mb: 1 }}>
-                        <AgentPicker agents={agents} models={models} kinds={kinds} agent={run.agent} model={run.model}
-                          generalBrains={generalBrains} brainsRead={agentsRead} codingReady={codingReady} pick={run.pick || ""} has={ownProfile}
-                          onPick={(p) => setRun((r) => ({ ...r, pick: p }))}
-                          onAgent={(a) => setRun((r) => ({ ...r, agent: a }))}
-                          onModel={(m) => setRun((r) => ({ ...r, model: m }))} size={28} />
-                      </Box>
-                      {/* on the canvas the button is the row's (rowVerbs: send-general); the pickers above are what it uses */}
-                      {!inRow && <span title={noAiWhy || undefined}><Button size="small" variant="contained" disableElevation disabled={!!startingAgent || !!noAiWhy}
-                        startIcon={startingAgent === "general" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
-                        onClick={startGeneralAgent}>
-                        {startingAgent === "general" ? "Starting…" : labelOfRow("send-general")}
-                      </Button></span>}
-                      <Typography variant="caption" sx={{ color: FAINT, ml: inRow ? 0 : 1 }}>
-                        {inRow ? "Send to agent starts it with these choices, this task and its messages."
-                          : "Starts the regular assistant with this task and its messages."}
-                      </Typography>
-                    </Box>
-                  )}
                   {/* folded onto the live bar these facts share a ROW with the controls, where a
                       rule above them is stray chrome - they get a rule beside them instead, so the
                       pills you press and the pills you read are two groups and not five in a line */}

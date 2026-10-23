@@ -1075,6 +1075,11 @@ def _run_kind(op: dict, background: BackgroundTasks):
         origin.raise_to(store, tid, 'trusted', ACTOR)
     if kind == 'task.create_from_message':
         k = str(p.get('kind') or 'task').lower()
+        # WHAT THE OWNER SAID IN THE AGENT BOX starts it with those words (the owner, 2026-10-23): the chat road opened on the task's
+        # own summary and dropped them. Said nothing and chose nothing, it is the chat road as it always was - the item is the ask
+        if k == 'general' and any(p.get(f) for f in ('instructions', 'agent', 'pick', 'model')):
+            return dispatch_message(mid, DispatchBody(kind='general', agent=p.get('agent'), pick=p.get('pick'), model=p.get('model'),
+                                                      instruction=p.get('instructions')), background)
         if k == 'general': return chat_message(mid, background)
         if k == 'coding':
             out = dispatch_message(mid, DispatchBody(kind='coding', agent=p.get('agent'), brain=p.get('brain'),
@@ -5208,7 +5213,10 @@ def advice_notes(key: str, limit: int = 10):
     return {'rows': advisor.notes(store, key, limit)}
 
 
-class ConciergeProposeBody(BaseModel): verb: str; key: str; text: str | None = None; table: bool = False; exact: bool = False; revision: str | None = None
+class ConciergeProposeBody(BaseModel):
+    verb: str; key: str; text: str | None = None; table: bool = False; exact: bool = False; revision: str | None = None
+    # THE AGENT BOX'S ANSWERS (RunForm.AgentAsk): which profile, brain and model a hand-off runs on - the words ride in `text`
+    agent: str | None = None; brain: str | None = None; pick: str | None = None; model: str | None = None
 
 @app.post('/api/concierge/propose')
 def concierge_propose(body: ConciergeProposeBody):
@@ -5220,7 +5228,8 @@ def concierge_propose(body: ConciergeProposeBody):
         tgt = advisor.target_of(store, body.key)
         if tgt and advisor.revision(store, *tgt) != body.revision:
             raise HTTPException(409, 'That one changed since the Advisor looked at it - read it again before pressing.')
-    try: return concierge.propose_direct(store, body.verb, body.key, body.text or '', ACTOR, table=body.table, exact=body.exact)
+    picks = {'agent': body.agent, 'brain': body.brain, 'pick': body.pick, 'model': body.model}
+    try: return concierge.propose_direct(store, body.verb, body.key, body.text or '', ACTOR, table=body.table, exact=body.exact, picks=picks)
     except ValueError as e: raise HTTPException(422, str(e))
 
 class SetupBody2(BaseModel): text: str

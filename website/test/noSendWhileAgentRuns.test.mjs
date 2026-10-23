@@ -19,7 +19,7 @@ test("an item an agent is working - or a live session holds - reads as running; 
 
 test("the Assistant's message card and the Game do not offer the hand-off while an agent runs", () => {
   const cards = read("assistantCards.jsx");
-  assert.match(cards, /const handIt = agentRuns\(card\) \? null : /);
+  assert.match(cards, /const handIt = agentRuns\(card\) \|\| [^\n]*\? null : /);
   const game = read("gameItem.jsx");
   assert.match(game, /\{!agentRuns\(item\) && <Btn kind=\{m\.verb === "dispatch"/);
 });

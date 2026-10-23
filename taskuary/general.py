@@ -42,6 +42,7 @@ EXTERNAL_WALK = (
     "name now rather than at the end.")
 SCROLLBACK = 200_000
 MAX_CONTEXT = 24_000
+OWNER_ASK_CHARS = 2_000          # the owner's words at the head of the prompt (_prompt): the whole of them, short of a pasted essay
 MAX_REPLY_TOKENS = 2_000
 DOCK_REPLY_TOKENS = 1_000       # a one-item walkthrough should answer quickly, not write an essay
 WAIT_TURN = 240.0        # how long a new question waits behind the one being answered
@@ -656,7 +657,14 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words
     chk = f"CHECKLIST - what was asked for, as triage read it:\n{md}\n" if md else ''
     if stranger: sources.insert(0, f"TITLE: {task.get('Title') or ''}\nSUMMARY: {task.get('Summary') or ''}\n{chk}")
-    head = (f"TASK {detail.get('ref') or tid}\n" + ours(f"TITLE: {task.get('Title') or ''}\n")
+    # THE OWNER'S WORDS LEAD (the owner, 2026-10-23: "write prompt what about the email or attachment is the issue"): what they asked
+    # on this turn heads the prompt, over the task and the item it is about - an email and its files, a report's rows - which follow
+    # as its material. The conversation still ends on the same words; this is where they are read FIRST.
+    rows = chat_rows(store, tid)
+    last = rows[-1] if rows else {}
+    ask = _cut(last.get('Body'), OWNER_ASK_CHARS) if sources and not dock and last.get('ActorType') == USER_TYPE else ''
+    head = ((f"THE OWNER'S ASK - what they want done about the task and the material below:\n{ask}\n\n" if ask else '')
+            + f"TASK {detail.get('ref') or tid}\n" + ours(f"TITLE: {task.get('Title') or ''}\n")
             + ours(f"SUMMARY: {task.get('Summary') or ''}\n") + f"STATUS: {task.get('Status') or ''}\n"
             + ours(chk) + "\n"
             + (dock_snapshot(store) + '\n\n' if dock else '')

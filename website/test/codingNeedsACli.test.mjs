@@ -26,7 +26,7 @@ test("a channel the server names as unable to send hides its Send; one it does n
 test("no coding tool: no Coding agent button, no coding kind to pick, no Coding agent settings", () => {
   assert.match(read("ui.jsx"), /\{canCode && <Button size="small" variant=\{agentKind === "coding"/);
   assert.match(read("ui.jsx"), /const suggestedKind = canCode && /);
-  assert.match(read("assistantCards.jsx"), /i\.mid && !i\.tid && canCode && <Button[^\n]*propose\("coding_agent"/);
+  assert.match(read("assistantCards.jsx"), /i\.mid && !i\.tid && canCode && <Button[^\n]*setAsking\(\{ key: i\.key, coding: true \}\)/);
   assert.match(read("TaskPage.jsx"), /\.filter\(\(o\) => o\.key !== "coding" \|\| canCode \|\| t\.Kind === "coding"\)/);
   assert.match(read("TasksView.jsx"), /o\.made !== false && \(o\.key !== "coding" \|\| canCode\)/);
   assert.match(read("SettingsView.jsx"), /g !== "Coding agent" \|\| canCode/);

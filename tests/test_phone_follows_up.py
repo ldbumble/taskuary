@@ -130,6 +130,9 @@ def test_send_to_agent_tapped_starts_the_agent_and_is_followed_up_once():
          mock.patch.object(funnel, 'pile', return_value=pile({'key': f'task:{t}', 'tid': t, 'lane': 'working'})), \
          mock.patch.object(messengers, 'wa_send', side_effect=lambda st, chat, body, connector_id=None, poll=None: sent.append(body)):
         ra.respond(store, 'whatsapp', JID, 'Send to agent', 1, poll=True)
+        start.assert_not_called()                                   # it asks what first (the owner, 2026-10-23)...
+        assert 'What should it do?' in sent[-1], sent
+        ra.respond(store, 'whatsapp', JID, 'Send to agent', 1, poll=True)       # ...and its own button hands it over as it is
     start.assert_called_once()
     assert server.ASK_TAG not in str(store.get_task(t).get('Tags') or ''), 'the page would ask it again'
     assert any(ra.PROMISE_LINE in b for b in sent), sent

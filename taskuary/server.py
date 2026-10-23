@@ -2512,6 +2512,8 @@ def not_a_task(task_id: int, body: NotATaskBody = None, background: BackgroundTa
     learn=false is the lighter verdict: THIS one is just chatter (someone answered "yes"), with
     nothing to conclude - delete the task and teach nothing."""
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    from . import recentlydeleted
+    snap = recentlydeleted.task_snapshot(store, task_id)          # ...kept for the Undo line, verdict marks and all
     msgs, learned = store.list_messages(task_id), None
     was_kind, was_route = operations.verdict_of_task(store, task_id)
     operations.record_direct(store, 'task.not_a_task', task_id, {}, ACTOR, {'deleted': True}, verdict=was_kind, route_id=was_route)
@@ -2522,11 +2524,13 @@ def not_a_task(task_id: int, body: NotATaskBody = None, background: BackgroundTa
     # the owner's ignore route is what ingest.veto reads before the next message on it can open
     # a task (store.owner_verdict_on_thread) - the six-tasks-from-one-chat failure
     if msgs:
-        store.add_route(msgs[0]['MessageId'], None, 'ignore', None,
-                        f"not a task - {(msgs[0].get('Subject') or 'this conversation')[:80]}", [], ACTOR)
+        snap['ignore'] = store.add_route(msgs[0]['MessageId'], None, 'ignore', None,
+                                         f"not a task - {(msgs[0].get('Subject') or 'this conversation')[:80]}", [], ACTOR)
+    if learned: snap['memory'] = learned['memory_id']
+    kept = recentlydeleted.keep_task(store, snap)
     store.audit('task', task_id, 'not_a_task_delete', ACTOR)
     _drop_task(task_id)
-    return {'ok': True, 'learned': learned}
+    return {'ok': True, 'learned': learned, **kept}
 
 class SplitHalf(BaseModel): title: str | None = None; summary: str | None = None
 class TaskSplitBody(BaseModel):

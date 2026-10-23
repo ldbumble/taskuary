@@ -97,6 +97,7 @@ import { KIND_OPTIONS, KINDS, kindLabel, shortKind } from "./kinds.js";
 import { openAppLink } from "./appLinks.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { place } from "./words.js";
+import { announceRemoved, fromAnswer } from "./removed.js";
 import { heldSteps, heldTask, heldTerm, heldWait, keepTask, keepTerms } from "./taskDetail.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
@@ -656,10 +657,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...put down AT THE PRESS, as Mark done is: cleared only once the delete returned, the task sat on the rail as an
   // open one already seen - under For later - then left, then its mail came back as the FYI it now is (press audit,
   // 2026-10-01). The FYI is right; the steps between were the flicker. A delete that fails puts it back with the reason.
+  // ...AND IS TAKEN BACK (the owner, 2026-10-21: act at once + Undo): the server kept the task (recentlydeleted.keep_task), and the
+  // list it leaves - the rail, the Tasks list - draws "Removed <title> - Undo" (Removed.jsx UndoLine, kind "task")
   const notATask = async () => {
     onLeave?.();
-    try { await runOperation(api, "task.not_a_task", selected); }
+    let out;
+    try { out = await runOperation(api, "task.not_a_task", selected); }
     catch (e) { const msg = opError(e, "Could not remove the task - it is still here; try Remove again."); setErr(msg); onStay?.(msg); return; }
+    announceRemoved(fromAnswer(out, "task", t?.Title || "the task"));
     onSelect(null); await loadTasks(); onChanged?.();
   };
   // The task's own session - the only terminal in the app. undefined means "not looked

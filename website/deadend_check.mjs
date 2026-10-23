@@ -414,7 +414,9 @@ const readPage = (page) => page.evaluate(() => {
     swap: (window.__swap || []).splice(0),
     strip: strip ? { empty: !strip.querySelector(".tq-next"), busy: strip.getAttribute("data-tq-strip") === "busy" } : null,
     undoSaid: tail.some((m) => /Undo: |confirm below/i.test(m.innerText || "")),
-    undoBtns: [...document.querySelectorAll("button")].filter(vis).map((b) => b.innerText.trim()).filter((w) => /^(take it back|undo\b)/i.test(w)),
+    // ...but a REMOVE's own "Removed <it> - Undo" (Removed.jsx, [data-tq-undo]) is the approved exception: a Remove acts at once and is
+    // taken back there, never behind "are you sure" (the owner, 2026-10-21 - Remove - not a task's included, 2026-10-22)
+    undoBtns: [...document.querySelectorAll("button")].filter((b) => vis(b) && !b.closest("[data-tq-undo]")).map((b) => b.innerText.trim()).filter((w) => /^(take it back|undo\b)/i.test(w)),
     // Remind me's receipt is the badge on its card now ("✓ Remind me", 0.3.9.28), the "Away until" line only where one is left
     away: tail.filter((m) => /Away until /.test(m.innerText || "") || /^Remind/.test(m.querySelector("[data-tq-pressed]")?.getAttribute("data-tq-pressed") || "")).length,
     chatBtns: tail.flatMap((m) => [...m.querySelectorAll("button")].filter(vis).map((b) => b.innerText.trim())),

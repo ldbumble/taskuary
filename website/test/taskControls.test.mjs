@@ -16,7 +16,8 @@ test("each control carries the caption that names its effect on task versus agen
     // ...and says only what it does HERE: the session part when one is live, the kept draft when one waits (T11)
     // the words are buttons.json's, read by row id (labelOfRow) - the caption is the button's own
     ['{finishing ? "Marking done…" : labelOfRow("done")}', "title={markDoneHint}"],
-    ['{labelOfRow("reopen")}', "Reopens the task only. No agent starts until you choose one."],
+    // ...and while it reopens it spins and says "Reopening…" (2026-10-23)
+    ['{reopening === selected ? "Reopening…" : labelOfRow("reopen")}', "Reopens the task only. No agent starts until you choose one."],
     // one ending, and it writes the session up either way (2026-09-16)
     ['{labelOfRow("save-end")}', "ends it, and drafts the reply to whoever asked. The task stays open until you complete it."],
     // its label varies - "Write another" once a reply has already gone - but the caption does not
@@ -130,7 +131,7 @@ test("the rail says a task's state once, and puts its title first", () => {
 test("complete, reopen, coding start and stop run the shared operations road, never a second path", () => {
   assert.match(tasks, /const close = \(\) => completeTask\(api, selected, note\);/);   // a close with a note rides the same road
   assert.match(fs.readFileSync(new URL("../src/closeAgent.jsx", import.meta.url), "utf8"), /runOperation\(api, "task\.complete", tid/);
-  assert.match(tasks, /runOperation\(api, "task\.reopen", selected\)/);
+  assert.match(tasks, /runOperation\(api, "task\.reopen", id\)/);
   assert.match(tasks, /runOperation\(api, "dispatch\.prepare", id, \{ kind: "coding"/);
   // there is no stop in this view any more, so there is no second path to guard - a session ends by
   // being written up, and that is the rule (the owner, 2026-09-16: "meaning no stop without saving").

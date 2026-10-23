@@ -86,7 +86,7 @@ import { taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
 import { ASK_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails, wentOut,
-  AGENT, agentPhase, closedLine, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
+  AGENT, agentPhase, closedLine, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, reopenedDetail, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
 import { AgentRecord } from "./AgentRecord.jsx";
@@ -447,6 +447,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [askErr, setAskErr] = useState("");      // said IN the Ask sender box: the page's own line sat behind the dialog, unseen
   useEffect(() => { if (askSenderOpen) setAskErr(""); }, [askSenderOpen]);
   const [openingReply, setOpeningReply] = useState(false);
+  const [reopening, setReopening] = useState(null);   // the task id whose Reopen is on its way
   const [openStage, setOpenStage] = useState(null);   // a stage you opened by hand, overriding the computed focus
   const [diff, setDiff] = useState(null);
   const [diffScope, setDiffScope] = useState("task");   // this task's footprint, or the whole checkout
@@ -560,9 +561,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     loadDetail(selected); loadTasks(); onChanged?.();
   };
   // Reopen changes the task's status and nothing else: no worker starts until the owner chooses one (PW-217)
+  // ...BUSY AT THE PRESS, OPEN AT THE ANSWER (the owner, 2026-10-23: "when you hit reopen task nothing happens for a few seconds"): the
+  // page redrew only when the follow-up GET /api/tasks/{id} came back - 2.2 s of it on a busy home, after an execute of 1.1 s - with
+  // nothing on the button meanwhile. It spins and greys at once, and the page is open the moment the server says so; the re-reads follow.
   const reopen = async () => {
-    try { await runOperation(api, "task.reopen", selected); } catch (e) { setErr(e?.message || "Could not reopen the task"); return; }
-    loadDetail(selected); loadTasks(); onChanged?.();
+    const id = selected;
+    if (!id || reopening === id) return;
+    setErr(""); setReopening(id);
+    try { await runOperation(api, "task.reopen", id); }
+    catch (e) { setReopening(null); if (!stale(id)) setErr(opError(e, "The task did not reopen - press Reopen task again.")); return; }
+    setReopening(null);
+    if (!stale(id)) setDetail((d) => (d?.task?.TaskId === id ? reopenedDetail(d) : d));
+    loadDetail(id); loadTasks(); onChanged?.();
   };
   const queueNote = async () => {
     if (!waitText.trim() || !selected) return;
@@ -1415,7 +1425,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and DARK while the agent is running (the owner, 2026-10-20): not over a turn that finished or a question - those are waiting
   const stopSave = { id: "save-end", group: "agent", lead: !pendingReview, fill: liveSession && agentState === AGENT.working && !pendingReview, label: labelOfRow("save-end"), disabled: !!wrapping, run: wrapUp, title: hintOfRow("save-end") };
   const rowVerbs = !t ? [] : !notDone
-    ? [{ id: "reopen", group: "decide", tone: "s", label: labelOfRow("reopen"), run: reopen, title: hintOfRow("reopen") }]
+    ? [{ id: "reopen", group: "decide", tone: "s", label: reopening === selected ? "Reopening…" : labelOfRow("reopen"), run: reopen,
+      disabled: reopening === selected, why: "it is reopening", title: hintOfRow("reopen") }]
     : [
       ...calVerbs,
       // ...an invite is answered by the calendar, not by an email back (calwrite.py)
@@ -2460,9 +2471,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {bar.folded.includes("change") && <MenuItem sx={{ fontSize: 12.5 }} onClick={() => { const a = barAt; setBarAt(null); setPick({ what: "menu", at: a }); }}>Change…</MenuItem>}
                     </Menu>
                   </> : (
-                    <Button size="small" variant="outlined" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
+                    <Button size="small" variant="outlined" disabled={reopening === selected}
+                      startIcon={reopening === selected ? <CircularProgress size={11} /> : <RefreshIcon sx={{ fontSize: 15 }} />}
                       title="Reopens the task only. No agent starts until you choose one."
-                      onClick={reopen}>{labelOfRow("reopen")}</Button>
+                      onClick={reopen}>{reopening === selected ? "Reopening…" : labelOfRow("reopen")}</Button>
                   )}
                 </Box>
               )}

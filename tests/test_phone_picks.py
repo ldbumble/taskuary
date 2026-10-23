@@ -22,6 +22,7 @@ def armed():
     s.save_connector({'ConnectorId': cid, 'Active': 1, 'Roles': 'trigger,tool', 'Secret': 'tok',
                       'ConfigJson': json.dumps({'assistant_chat': JID})}, 'test')
     s.set_setting('phone_assistant', '1', 'test')
+    ra.owner_spoke(s, 'whatsapp', JID)                 # the owner is talking in the chat: it may answer (in_session)
     return s, cid
 
 

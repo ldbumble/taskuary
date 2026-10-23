@@ -115,13 +115,15 @@ class HookOffLoopTests(unittest.TestCase):
 
 
 class HandsOffTests(unittest.TestCase):
-    def test_the_stream_refuses_a_handed_off_walk_without_reading_the_store_on_the_loop(self):
+    def test_the_stream_never_asks_where_the_walk_is_a_phone_locks_nothing(self):
+        # the owner, 2026-10-23: "we used to have that if we were talking on the phone it would lock the screen on desktop but we
+        # should probably get rid of that" - the stream's admission no longer reads the hand-off at all
         where = []
         def handoff(st): where.append(on_loop()); return {'channel': 'whatsapp', 'chat': 'x'}
-        with mock.patch.object(remote_assistant, 'handoff', handoff):
+        with mock.patch.object(remote_assistant, 'handoff', handoff), mock.patch.object(server, '_navigation_reservation', return_value=None), \
+             mock.patch('taskuary.concierge.brain', return_value=None):
             r = TestClient(server.app).post('/api/concierge/stream', json={'mode': 'next'})
-        self.assertEqual(r.status_code, 409); self.assertIn('WhatsApp', r.json()['detail'])
-        self.assertEqual(where, [False])
+        self.assertNotEqual(r.status_code, 409)
 
 
 if __name__ == '__main__': unittest.main()

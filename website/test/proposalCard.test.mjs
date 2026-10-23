@@ -144,10 +144,16 @@ test("a failed act's way on runs from the chat: Try again, GitHub's own buttons,
   assert.match(view, /\{m\.status && m\.status !== "done" \? "✗" : "✓"\}/);   // a failure never wears a tick
 });
 
-test("a locked card says where the walk is, and the tab follows a hand-off started elsewhere", () => {
+// the owner, 2026-10-23: "we used to have that if we were talking on the phone it would lock the screen on desktop but we should
+// probably get rid of that" - a walk handed to the phone locks nothing here: no banner over the box, no dead card, no refused press
+test("a walk on the phone locks nothing on the desktop: no banner, no dead card, the box and Walk stay live", () => {
   const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
-  assert.match(view, /The walk is in \{actions\.handedTo\}/);
-  assert.match(view, /\{ \.\.\.s, handoff: st\.handoff \|\| null \}/);
+  assert.doesNotMatch(view, /The walk is in/);
+  assert.doesNotMatch(view, /handedTo/);
+  assert.doesNotMatch(view, /(?<![.\w])handoff \|\||\|\| handoff\b|!!handoff|!handoff\b/);    // nothing gated on the hand-off
+  assert.doesNotMatch(view, /this tab locks/);
+  assert.match(view, /\{!old && !walk && \(\s*\n\s*<div className="tq-compose"/);    // the box is drawn whether or not a phone holds the walk
+  assert.match(view, /\{ \.\.\.s, handoff: st\.handoff \|\| null \}/);              // still followed as state, so the table tracks the phone
 });
 
 test("an answered proposal drops its 'confirm below' - the receipt under it says what happened", async () => {

@@ -40,6 +40,7 @@ class Phone:
         s.save_connector({'ConnectorId': cid, 'Active': 1, 'Roles': 'trigger,tool', 'Secret': 'tok',
                           'ConfigJson': json.dumps({'assistant_chat': self.chat, 'me_number': '15550100100'})}, 'test')
         s.set_setting('phone_assistant', '1', 'test')
+        ra.owner_spoke(s, channel, self.chat)          # a transcript is a conversation the owner has open (in_session)
         self.cid, self.f = cid, Factory(s)
         self.f.actor = 'triage'
         self.ids, self.queue, self.bubbles, self.msgs, self.seq = itertools.count(500), [], [], {}, 0

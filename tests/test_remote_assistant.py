@@ -18,7 +18,7 @@ JID = '15551234567@s.whatsapp.net'
 TG_CHAT = '900100'
 
 
-def armed_store(channel='whatsapp', chat=JID, on='1'):
+def armed_store(channel='whatsapp', chat=JID, on='1', talking=True):
     store = MemoryStore()
     store.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
     for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled', 'auto_draft_enabled'): store.set_setting(k, '0', 't')
@@ -27,6 +27,7 @@ def armed_store(channel='whatsapp', chat=JID, on='1'):
     store.save_connector({'ConnectorId': cid, 'Active': 1, 'Roles': 'trigger,tool', 'Secret': 'tok',
                           'ConfigJson': json.dumps({'assistant_chat': chat})}, 'test')
     store.set_setting('phone_assistant', on, 'test')
+    if talking: remote_assistant.owner_spoke(store, channel, chat)      # the owner is talking in the chat: it may answer (in_session)
     return store, store.get_connector(cid, with_secret=True)
 
 
@@ -399,8 +400,10 @@ class SameWalkTests(unittest.TestCase):
 
 
 class HandoffTests(unittest.TestCase):
-    def test_handing_over_says_hello_there_and_locks_the_tab(self):
-        store, connector = armed_store()
+    def test_handing_over_says_hello_there_and_the_tab_keeps_working(self):
+        # the owner, 2026-10-23: "we used to have that if we were talking on the phone it would lock the screen on desktop but we
+        # should probably get rid of that" - the press opens the conversation there, and the desk answers as ever
+        store, connector = armed_store(talking=False)
         waiting(store)
         with mock.patch.object(concierge, 'brain', return_value=None), \
              mock.patch.object(messengers, 'wa_send') as send:
@@ -408,10 +411,11 @@ class HandoffTests(unittest.TestCase):
         self.assertEqual(out['channel'], 'whatsapp')
         self.assertIn('Reply in this chat', send.call_args_list[0].args[2])        # the hello, in a bubble of its own (F21)
         self.assertEqual(remote_assistant.handoff(store)['chat'], JID)
-        with mock.patch.object(server, 'store', store):
-            r = TestClient(server.app).post('/api/concierge/say', json={'text': 'hello'})
-        self.assertEqual(r.status_code, 409)
-        self.assertIn('WhatsApp', r.json()['detail'])
+        self.assertTrue(remote_assistant.in_session(store, 'whatsapp', JID))        # the owner's own press is the conversation starting
+        with mock.patch.object(server, 'store', store), mock.patch.object(concierge, 'brain', return_value=None):
+            client = TestClient(server.app)
+            self.assertEqual(client.post('/api/concierge/say', json={'text': 'hello'}).status_code, 200)
+            self.assertNotEqual(client.post('/api/concierge/open').status_code, 409)
 
     def test_taking_it_back_ends_the_chat_walk_and_unlocks_the_tab(self):
         store, _connector = armed_store()
@@ -421,6 +425,7 @@ class HandoffTests(unittest.TestCase):
             self.assertTrue(remote_assistant.end_handoff(store)['ended'])
         self.assertIn('this walk is over here', send.call_args.args[2])
         self.assertIsNone(remote_assistant.handoff(store))
+        self.assertFalse(remote_assistant.in_session(store, 'whatsapp', JID))      # walked back: the chat goes quiet at once
         with mock.patch.object(server, 'store', store), mock.patch.object(concierge, 'brain', return_value=None):
             self.assertEqual(TestClient(server.app).post('/api/concierge/say', json={'text': 'hello'}).status_code, 200)
 

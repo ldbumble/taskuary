@@ -4794,16 +4794,14 @@ def concierge_state():
 
 class HandoffBody(BaseModel): channel: str
 
-def _hands_off():
-    """Refuse a desktop turn while the walk is in a chat. Two screens answering the same item is how
-    the same mail gets replied to twice - the tab locks itself, and this is the same rule in the API."""
-    from . import remote_assistant
-    h = remote_assistant.handoff(store)
-    if h: raise HTTPException(409, f"the walk is in {remote_assistant.LABELS[h['channel']]} - press {buttons.label('walk_here')} here first")
+# NO DESKTOP LOCK WHILE THE WALK IS ON THE PHONE (the owner, 2026-10-23: "we used to have that if we were talking on the phone it
+# would lock the screen on desktop but we should probably get rid of that"): every desktop turn below runs as it would without a
+# hand-off, and the tab follows the walk's Current. A reply answered twice is still refused at the act (operations' revision pin,
+# verdicts.decide's pending check).
 
 @app.post('/api/concierge/handoff')
 def concierge_handoff(body: HandoffBody):
-    """Send the walk to a chat the owner already has connected: it says hello there, and the tab locks."""
+    """Send the walk to a chat the owner already has connected: it says hello there. The tab keeps working."""
     from . import remote_assistant
     try: return remote_assistant.start_handoff(store, body.channel, ACTOR)
     except ValueError as e: raise HTTPException(422, str(e))
@@ -4888,7 +4886,6 @@ def concierge_chat_continue(tid: int, background: BackgroundTasks):
 def concierge_next(body: SurfaceBody = None):
     """Pull the next thing out of the pipe - or the one named, or the next piece of mail - and say it."""
     from . import concierge
-    _hands_off()                        # the walk is in a chat: a second tab, the office game - none of them move it here
     body = body or SurfaceBody()
     reservation = _navigation_reservation(body)
     if reservation:
@@ -4927,7 +4924,6 @@ def _with_pile(out: dict, body) -> dict:
 def concierge_open():
     """The first line of a new chat: the day in a breath, and the buttons that start the walk."""
     from . import concierge
-    _hands_off()
     return concierge.open_day(store, actor=ACTOR)
 
 _ANSWERING = set()        # the cancel Event of every answer being written in the Assistant tab (concierge_stream)
@@ -4994,7 +4990,7 @@ async def concierge_stream(body: ConciergeStreamBody):
     from .processing_navigation import NavigationStale
     from .funnel_selection import SelectionUnavailable
     def admit():
-        _hands_off()                    # the walk is in a chat: the tab is locked and so is its road (a store read - off the loop, P16)
+        # the walk handed to a phone no longer locks this road (2026-10-23): both surfaces walk, the desk follows
         return _navigation_reservation(body)
     admission = asyncio.create_task(asyncio.to_thread(admit))
     try:
@@ -5169,7 +5165,6 @@ def concierge_say(body: ConciergeSayBody):
         #
         # Nothing is lost. The act boundary guards itself: operations.propose pins ContextRevision and
         # execute refuses a moved one (409), and verdicts.decide re-checks before a reply can leave.
-        _hands_off()
         return concierge.say(store, body.text, body.key, actor=ACTOR, open_card=body.open_card, images=prompt_images(body.images))
     except ValueError as e: raise HTTPException(422, str(e))
 
@@ -5222,7 +5217,6 @@ class ConciergeProposeBody(BaseModel):
 def concierge_propose(body: ConciergeProposeBody):
     """A card's own button on one entry: the same proposal the words would make (PW-151), confirmed the same way."""
     from . import concierge
-    _hands_off()
     if body.revision:                                   # the Advisor's pill carries the stamp it was judged at: a moved item refuses it
         from . import advisor
         tgt = advisor.target_of(store, body.key)
@@ -5296,7 +5290,6 @@ def _walk_cannot(task_id: int, why: str):
 @app.post('/api/concierge/act')
 def concierge_act(body: ConciergeActBody):
     from . import concierge
-    _hands_off()
     try: return concierge.act(store, body.key, body.verb, ACTOR, _llm(), body.hours)
     except ValueError as e: raise HTTPException(422, str(e))
 

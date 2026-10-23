@@ -67,6 +67,7 @@ class RunEndedTests(unittest.TestCase):
         from taskuary import funnel, messengers
         self.s.set_setting(ra.PROMISES_KEY, json.dumps([{'tid': self.tid, 'channel': 'whatsapp', 'chat': 'c1', 'at': __import__('time').time(),
                                                           'lane': 'working', 'armed': True}]), 't')
+        ra.owner_spoke(self.s, 'whatsapp', 'c1')                      # still talking in the chat that asked
         self.event('failed', 'no AI is connected to run on')
         with mock.patch.object(funnel, 'pile', return_value={'items': [], 'alerts': []}), mock.patch.object(messengers, 'wa_send') as sent:
             self.assertEqual(ra.keep_promises(self.s, force=True), 1)

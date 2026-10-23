@@ -449,6 +449,7 @@ def _unheard(store, channel: str, chat: str, c, e, message_id=None):
     said = f"I could not hear that voice note - {why}." + (' Type it instead.' if told else f" Type it, or add a voice connector under {place}.")
     try: live = json.loads(store.get_setting(f'{remote_assistant.OFFERED_KEY}:{channel}:{chat}') or '[]') or []
     except ValueError: live = []
+    remote_assistant.owner_spoke(store, channel, chat)          # the owner sent it: this is their conversation, and it is answered
     try: remote_assistant.send(store, channel, chat, said, c.get('ConnectorId'), **({'choices': live} if live else {}))
     except Exception as e2: logger.warning(f'{channel}: could not say so either - {e2}')
 

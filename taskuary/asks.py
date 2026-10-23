@@ -149,6 +149,10 @@ def _say(store, task: dict, line: str, via: str = None, lane: str = None, says: 
     for channel, chat in doors:
         c = remote_assistant.connector_for_chat(store, channel, chat)
         if not c: continue
+        # ONLY WHILE THE OWNER IS TALKING THERE (2026-10-23): an ask made from the phone two days before said every lane its agent
+        # passed through, eight times in an afternoon spent at the desktop - "i never asked it anything today?". Out of a session
+        # it is the desktop's, like any background line: said = told, nothing owed for later
+        if remote_assistant.held_back(store, channel, chat, f"TQ-{task.get('TaskId')}'s move"): continue
         if not remote_assistant.quiet(store, channel, chat): return False
         if lane:                                    # the phone gets what it is asked a yes for, and the picks to give it
             line, rows = phone_text(store, task, lane, says)
@@ -161,7 +165,7 @@ def _say(store, task: dict, line: str, via: str = None, lane: str = None, says: 
     # already say it. A lane move piled lines under the task being worked (the owner, 2026-10-06: "Task they are working on
     # should be the main thing, nothing else"); a watched reply, a due day, a nudge landed above the morning card - a
     # "thank you" said back from a watch the owner never asked for (2026-10-13: "i don't like the random reminders"). Said
-    # = told: the phone, which has no card and no prompt box, still hears it all.
+    # = told: the phone hears it only while the owner is talking to it there.
     return True
 
 

@@ -1352,6 +1352,10 @@ def _run_kind(op: dict, background: BackgroundTasks):
     if kind == 'memory.remember':
         from . import concierge
         return {'memoryId': concierge.remember_fact(store, str(p.get('note') or ''), ACTOR)}
+    if kind == 'people.relate':
+        from . import orgchart
+        try: return orgchart.relate(store, p.get('who'), p.get('relation'), p.get('owns'), p.get('drops'), bool(p.get('forget')), ACTOR)
+        except ValueError as e: raise HTTPException(422, str(e))
     if kind == 'task.split' and isinstance(p.get('second'), dict):
         # the task page's Split (Reshape): both halves as the owner wrote them and the mails that go with the second - the page's own handler
         return split_task_api(tid, TaskSplitBody(second=SplitHalf(**p['second']), first=SplitHalf(**p['first']) if isinstance(p.get('first'), dict) else None,
@@ -8278,6 +8282,11 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing',
             sweep.run_if_due(target_store)
         except Exception as e:
             logger.warning(f'loose-end check skipped: {e}')
+        try:                                            # ...and the owner's manager and reports from Microsoft's directory, once a day (orgchart.py)
+            from . import orgchart
+            orgchart.sync_if_due(target_store)
+        except Exception as e:
+            logger.warning(f'org chart read skipped: {e}')
         try: playbooks.purge()                          # ...and a playbook deleted KEEP_DAYS ago leaves Recently deleted (playbooks.py)
         except Exception as e: logger.warning(f'deleted playbooks not purged: {e}')
         try:                                            # ...and what Recently deleted has kept its time goes for good (recentlydeleted.py)

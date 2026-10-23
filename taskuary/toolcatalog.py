@@ -322,6 +322,7 @@ PAGE_ONLY = {'new_task': "the page's own New task - the model makes one with tas
              'attach': "opens the file picker on the draft - a file is the owner's to choose",
              'change_kind': 'a picker on the task page; the model changes it with task.set_kind', 'priority': 'a picker; the model uses task.update',
              'assign': 'a picker; the model uses task.update', 'pick_repo': 'a picker; the model uses task.set_repo',
+             'unsubscribe': "an FYI from a list leaves it on the owner's press alone (unsubscribe.py) - a newsletter's words never reach it",
              'make_report': 'turns the workflow being written on the page into a report draft - nothing saved, so the page alone holds it',
 }
 def _has(store, v: str) -> bool:

@@ -207,7 +207,7 @@ def habit(store, verb: str, item: dict) -> tuple:
     from .learn import moment
     w = who_of(store, item or {})
     if w['scope']:
-        rs = store._rows("SELECT TargetKind, TargetId, Pressed FROM advice_press WHERE IFNULL(Stale,0)=0 AND Scope=? AND ItemKind=? ORDER BY Id",
+        rs = store._rows("SELECT TargetKind, TargetId, Pressed FROM advice_press WHERE IFNULL(Stale,0)=0 AND IFNULL(Choice,1)=1 AND Scope=? AND ItemKind=? ORDER BY Id",
                          (w['scope'], str((item or {}).get('kind') or '')))
         last = {(r['TargetKind'], r['TargetId']): r['Pressed'] for r in rs}          # one item, one vote: its last press
         if len(last) >= 2:
@@ -911,8 +911,9 @@ def status(store, key: str) -> dict:
 
 # ── LIT AND PRESSED (the deep dive, 2026-10-20) ─────────────────────────────────────────────────────────────────────────────────
 # Nothing recorded whether the button the Advisor lit was the one pressed, so its record and the owner's habits were the same guess.
-# Every row press and Next while a line is shown sends the advised verb and the revision it was judged at; the row keeps what the
-# item was and whom it was from - the press log the moves in LEARNED.md are learned from (learn.moves). Nothing on screen changes.
+# Every press sends the advised verb (if a line showed) and the revision it was judged at; the row keeps what the item was and whom it
+# was from - the press log the moves in LEARNED.md are learned from (learn.moves). Since phase B (2026-10-23) every press on every
+# surface is kept, lit or not (presses.py). Nothing on screen changes.
 _ROW = {r: v for v, d in buttons.VERBS.items() for r in d.get('row') or []}
 
 
@@ -939,23 +940,17 @@ def who_of(store, item: dict) -> dict:
     return {'sender': sender, 'domain': domain, 'scope': str(scope or '').lower(), 'thread': m.get('ConversationId') or '', 'channel': channel}
 
 
-def press(store, key: str, advised: str, pressed: str, rev: str = None) -> int:
-    """One press while the Advisor's line was shown, judged at `rev`. Returns the row id, or 0 when the key names nothing it advises
-    on. Stale: the item had moved since the line was judged - the press answered an older screen."""
-    tgt = target_of(store, key)
-    if not tgt or not pressed: return 0
-    item = _item(store, *tgt, key=key) or {}
-    w = who_of(store, item)
-    adv, got = pressed_verb(advised) if advised else None, pressed_verb(pressed)
-    try: now = revision(store, *tgt)
-    except Exception: now = None
-    rid = store._exec('INSERT INTO advice_press (Key,TargetKind,TargetId,Revision,Advised,Pressed,Match,ItemKind,Channel,Sender,SenderDomain,Scope,Thread,Stale,CreatedAt) '
-                       'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                       (key, tgt[0], int(tgt[1]), rev or '', adv, got, int(bool(adv) and adv == got), str(item.get('kind') or ''), w['channel'],
-                        w['sender'], w['domain'], w['scope'], w['thread'], int(bool(rev) and bool(now) and rev != now), _now()))
+def press(store, key: str, advised: str, pressed: str, rev: str = None, surface: str = 'desk', lit: str = None, live: list = None,
+          item: dict = None) -> int:
+    """One press on `key`, on any surface, lit or not (presses.record keeps it - phase B, 2026-10-23: only a desk press under a line was
+    kept). `advised`: the Advisor's verb if its line showed, judged at `rev`. Returns the row id, or 0 when nothing was kept."""
+    from . import presses
+    rid, new = presses.kept(store, key, pressed, surface, lit=lit, live=live, rev=rev, advised=advised or '', item=item)
+    if not new: return rid
     from . import learn
     learn.moves(store)                      # ...and what it teaches lands in LEARNED.md at once, where the owner can read it (never raises)
     # a press against the lit move is the owner correcting the Advisor: it counts toward the next reflection like any correction
+    adv, got = pressed_verb(advised) if advised else None, pressed_verb(pressed)
     if adv and got not in (adv, 'next'):
         try: store.set_setting('learn_pending', str(int(store.get_setting('learn_pending') or 0) + 1), 'learn')
         except (TypeError, ValueError): pass

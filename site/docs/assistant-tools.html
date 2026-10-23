@@ -151,7 +151,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tr>
 <td><strong>app</strong></td>
 <td>settings, connections, roles, scripts and kept facts</td>
-<td>setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, script.start(name), memory.remember(note), hub.publish(title, body, topic?, kind?, why_earned?)</td>
+<td>setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, script.start(name), memory.remember(note), people.relate(who), hub.publish(title, body, topic?, kind?, why_earned?)</td>
 </tr>
 <tr>
 <td><strong>look</strong></td>
@@ -546,7 +546,16 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <ul>
 <li><code>note</code></li>
 </ul>
-<p class="runs">Brings up its button for you to press.</p><h3 id="hub-publish"><code>hub.publish</code><a class="anchor" href="#hub-publish" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="people-relate"><code>people.relate</code><a class="anchor" href="#people-relate" aria-label="Link to this section">#</a></h3>
+<p>Who someone is to the owner, on their org chart. &quot;Erin is my manager&quot;, &quot;Ray owns payroll&quot;, &quot;Gail reports to me&quot; - never memory.remember for these: triage and agents read the chart.</p>
+<ul>
+<li><code>who</code> - a name or address</li>
+<li><code>relation</code> - manager | report | none (none clears it)</li>
+<li><code>owns</code> - areas they are responsible for (&quot;payroll, benefits&quot;), added</li>
+<li><code>drops</code> - areas taken off</li>
+<li><code>forget</code> - true takes them off the chart</li>
+</ul>
+<p class="runs">Runs at once and says what it changed.</p><h3 id="hub-publish"><code>hub.publish</code><a class="anchor" href="#hub-publish" aria-label="Link to this section">#</a></h3>
 <p>Save to the company Hub. Only a reusable discovery reached through real work, or a developed idea with its reasons - never a transcript, a task log or a routine answer. When the owner asks to save something there, or a turn clearly earns it.</p>
 <ul>
 <li><code>title</code> - one durable claim</li>
@@ -682,7 +691,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">Runs at once and changes nothing.</p>
     </article>
     <nav class="pager"><a class="pn prev" href="./assistant"><span>Previous</span>Assistant buttons</a><a class="pn next" href="./reports"><span>Next</span>Reports and the Advisor</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.28 · updated 2026-10-22</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.29 · updated 2026-10-23</p>
   </main>
 </div>
 <script src="./docs.js"></script>

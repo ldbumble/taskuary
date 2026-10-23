@@ -26,6 +26,13 @@ export const draftCanSend = (caps, r) => {
   try { env = JSON.parse(r.Deliver || "{}") || {}; } catch { /* not an envelope */ }
   return env.kind === "zoho_invoice" || env.kind === "calendar" || canSend(caps, r.Channel || env.channel);   // outbound.OWN_ROAD
 };
+// AN AGENT THAT CANNOT START IS GREYED, its reason in the hover (the owner, 2026-10-22: never pressable into a failure) - ONE check for
+// both roads: general work needs an AI (this capability, or /api/agents' general_brains once read), coding a coding tool (R3,
+// agents.coding_ready). '' when it can start; Connect an AI stays the lit move (the Advisor's strip)
+export const NO_AI_WHY = "No AI is connected - connect one first";
+export const NO_CODING_TOOL = "Pick a coding tool first";
+export const cannotStart = (caps, { coding = false, read = false, brains = [], codingReady = true } = {}) =>
+  caps?.ai === false || (read && !coding && !brains.length) ? NO_AI_WHY : coding && read && !codingReady ? NO_CODING_TOOL : "";
 export function refreshCapabilities() {
   asked = null;
   return capabilities().then((c) => { subs.forEach((f) => f(c)); return c; });

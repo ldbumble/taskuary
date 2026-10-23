@@ -77,9 +77,9 @@ test("a general agent that could not start says Failed, offers Try again and Con
   await hasButton(page, "Try again");
   await hasButton(page, "Connect an AI");
   if (process.env.TQ_SHOT) await page.screenshot({ path: process.env.TQ_SHOT });
-  // Try again with still no AI says why, where it was pressed
-  assert.ok(await press(page, "Try again"));
-  await page.waitForFunction(() => /Connect an AI under/.test(document.body.innerText), { timeout: 10000 });
+  // Try again with still no AI is greyed, the reason its hover - never pressable into the same failure (the owner, 2026-10-22)
+  assert.ok(await page.evaluate(() => [...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Try again" && b.offsetParent
+    && b.disabled && /No AI is connected/.test(b.title || b.closest("[title]")?.title || ""))), "Try again is greyed, saying why");
   // ...and Connect an AI opens Connections at the AI cards
   assert.ok(await press(page, "Connect an AI"));
   await page.waitForFunction(() => decodeURIComponent(location.hash).includes("connections=AI"), { timeout: 10000 });

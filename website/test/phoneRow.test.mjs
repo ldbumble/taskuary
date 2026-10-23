@@ -23,8 +23,6 @@ test("a phone's row is the one lit move with everything else behind one ▾ - an
 test("the row draws the phone's one group under 600px and wraps a group's chips", () => {
   const row = read("ActionRow.jsx");
   assert.match(row, /const phone = useMediaQuery\("\(max-width:600px\)"\);/);
-  assert.match(row, /const groups = phone \? \[phoneRow\(row\)\]\.filter\(\(g\) => g\.shown\.length \|\| g\.rest\.length\) : clustersOf\(row\);/);
-  assert.match(row, /\(phone \? groups : foldRow\(groups, fold\)/, "a phone wraps; wider, the row folds to one line");
+  assert.match(row, /\(phone \? \[phoneRow\(row\)\]\.filter\(\(g\) => g\.shown\.length \|\| g\.rest\.length\) : clustersOf\(row\)\)/);
   assert.match(read("assistantView.css"), /\.tq-cl-b \{ display: flex; flex-wrap: wrap; justify-content: center;/);
-  assert.match(read("assistantView.css"), /@media \(min-width: 601px\) \{\n  \.tq-arow-verbs, \.tq-cl-b \{ flex-wrap: nowrap; \}/, "...and only a phone");
 });

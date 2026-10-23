@@ -89,7 +89,7 @@ test("Decline says what goes out with it: the text in the box exactly as edited,
 test("Next is the FIRST control of the row, then the types; no task number or waiting words on it (2026-10-13)", () => {
   const src = fs.readFileSync(path.join(process.cwd(), "src", "ActionRow.jsx"), "utf8");
   const row = src.slice(src.indexOf("export default function ActionRow"));
-  assert.ok(row.search(/data-tq-next/) < row.search(/foldRow\(groups, fold\)/), "Next before the types");
+  assert.ok(row.search(/data-tq-next/) < row.search(/clustersOf\(row\)/), "Next before the types");
   assert.doesNotMatch(row, /data-tq-row-ref|waited/);
 });
 
@@ -369,18 +369,4 @@ test("a working agent's Stop and save is dark only when the strip says nothing; 
   assert.deepEqual(filled(rowOf({ ref: "", list })), ["save-end"], "nothing said: the row's own move");
   assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "next" })), ["next"], "'it says when it needs you': Next, and only Next");
   assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "ai" })), [], "'Connect an AI': its own chip is the move, nothing on the row");
-});
-
-test("the row is ONE line: what does not fit goes into its own type's arrow, right-most first, never the filled one (2026-10-23)", async () => {
-  const { foldRow } = await import("../src/actionRow.js");
-  const v = (id, tone = "s") => ({ id, label: id, tone });
-  const gs = [{ type: "reply", shown: [v("reply", "p"), v("send")], rest: [v("fwd")] }, { type: "task", shown: [v("remove"), v("remind")], rest: [] }];
-  assert.deepEqual(foldRow(gs, 0), gs);
-  const one = foldRow(gs, 1);
-  assert.deepEqual(one[1].shown.map((x) => x.id), ["remove"]);
-  assert.deepEqual(one[1].rest.map((x) => x.id), ["remind"], "folded into its own type, in order");
-  const all = foldRow(gs, 9);
-  assert.deepEqual(all[0].shown.map((x) => x.id), ["reply"], "the filled one stays out");
-  assert.deepEqual(all[0].rest.map((x) => x.id), ["send", "fwd"]);
-  assert.deepEqual(gs[1].shown.map((x) => x.id), ["remove", "remind"], "the groups it was given are untouched");
 });

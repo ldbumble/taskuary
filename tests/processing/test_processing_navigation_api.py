@@ -237,16 +237,19 @@ def test_failed_work_releases_but_partial_commit_consumes_reservation(nav_api):
 
 @pytest.mark.parametrize('route', ['next', 'stream'])
 def test_context_changes_during_model_work_do_not_commit_a_stale_card(nav_api, monkeypatch, route):
+    """The pick's own content moving under every attempt of the turn is never committed: the turn is made again from the fresh
+    content (NavigationRebind) as many times as REBINDS allows, then refused with nothing written."""
     db, client, mid, rid = nav_api
     general.dock_task(db)
     payload = binding(client)
-    after_change = []
+    after_change, n = [], [0]
     monkeypatch.setattr(concierge, 'INTRO_AI', True)
     monkeypatch.setattr(concierge, '_brain_for', lambda *args, **kwargs: object())
 
     def changed(*args, **kwargs):
-        db.save_review_draft(rid, 'Changed while model was answering')
-        after_change.extend(dump(db))
+        n[0] += 1
+        db.save_review_draft(rid, f'Changed while model was answering {n[0]}')
+        after_change[:] = dump(db)
         return 'Outdated introduction', []
 
     monkeypatch.setattr(concierge, '_ask', changed)
@@ -257,7 +260,73 @@ def test_context_changes_during_model_work_do_not_commit_a_stale_card(nav_api, m
         assert response.status_code == 200
         event = json.loads(response.text.splitlines()[-1])
         assert event['type'] == 'error' and event['code'] == 'selection_stale'
+    assert n[0] == navigation.REBINDS + 1, 'each attempt was made again from the fresh content'
     assert after_change and dump(db) == after_change
+
+
+@pytest.mark.parametrize('route', ['next', 'stream'])
+def test_the_picks_content_moving_once_is_answered_from_the_fresh_content(nav_api, monkeypatch, route):
+    """A draft rewritten while the turn was being made: the same pick, so the press is not refused (the page already drew it) -
+    the turn is made again from the rewritten draft and that is what is committed."""
+    db, client, mid, rid = nav_api
+    general.dock_task(db)
+    payload = binding(client)
+    monkeypatch.setattr(concierge, 'INTRO_AI', True)
+    monkeypatch.setattr(concierge, '_brain_for', lambda *args, **kwargs: object())
+    drafts = []
+
+    def once(store, llm, tid, item, *args, **kwargs):
+        drafts.append(item.get('draft_text') or item.get('draft') or item.get('preview'))
+        if len(drafts) == 1: db.save_review_draft(rid, 'Rewritten while the model was answering')
+        return f'Introduction {len(drafts)}', [], ''
+
+    monkeypatch.setattr(concierge, '_ask', once)
+    response = client.post(f'/api/concierge/{route}', json={'mode': 'next', **payload})
+    assert response.status_code == 200, response.text
+    assert 'selection_stale' not in response.text
+    data = response.json() if route == 'next' else done_of(response.text)
+    assert data['item']['key'] == f'review:{rid}' and data['say'] == 'Introduction 2', data
+    assert db.funnel_states()[f'review:{rid}']['Status'] == 'surfaced'
+
+
+@pytest.mark.parametrize('route', ['next', 'stream'])
+def test_a_row_arriving_below_the_pick_during_the_press_does_not_refuse_it(nav_api, monkeypatch, route):
+    """The owner, 2026-10-23: a task on the table, Next drew the row below it, and the table jumped back. The press was refused at
+    its commit check: the WHOLE rail's revision had moved - a row arriving below, an agent's lane, the calendar - while the pick
+    had not. A press is bound to its pick (PW-050), at admission and at the commit check alike."""
+    db, client, mid, rid = nav_api
+    payload = binding(client)
+    real, arrived = concierge.chips_for, []
+    def chips_while_a_row_arrives(store, *a, **k):
+        if not arrived: arrived.append(_another(db, 30))
+        return real(store, *a, **k)
+    monkeypatch.setattr(concierge, 'chips_for', chips_while_a_row_arrives)
+    response = client.post(f'/api/concierge/{route}', json={'mode': 'next', **payload})
+    assert response.status_code == 200, response.text
+    assert 'selection_stale' not in response.text
+    data = response.json() if route == 'next' else done_of(response.text)
+    assert data['item']['key'] == f'review:{rid}'
+    assert arrived, 'a row arrived under the press'
+    assert db.funnel_states()[f'review:{rid}']['Status'] == 'surfaced', 'the press committed'
+
+
+@pytest.mark.parametrize('route', ['next', 'stream'])
+def test_the_pick_moving_during_the_press_is_still_refused(nav_api, monkeypatch, route):
+    """...and what PW-050 protects stays protected: the item the page drew is no longer the one handed over (it was handled
+    elsewhere mid-press) - refused, nothing committed."""
+    db, client, mid, rid = nav_api
+    _another(db, 40)
+    payload = binding(client)
+    real = concierge.chips_for
+    def chips_while_the_pick_goes(store, *a, **k):
+        funnel.settle(db, f'review:{rid}', 'done', 'owner')
+        return real(store, *a, **k)
+    monkeypatch.setattr(concierge, 'chips_for', chips_while_the_pick_goes)
+    response = client.post(f'/api/concierge/{route}', json={'mode': 'next', **payload})
+    if route == 'next': assert response.status_code == 409, response.text
+    else:
+        event = json.loads(response.text.splitlines()[-1])
+        assert event['type'] == 'error' and event['code'] == 'selection_stale', response.text
 
 
 def test_stream_thread_start_failure_releases_without_effects(nav_api, monkeypatch):

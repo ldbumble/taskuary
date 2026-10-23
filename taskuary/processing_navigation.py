@@ -129,18 +129,26 @@ class Reservation:
 
     @contextmanager
     def commit_guard(self):
-        from .funnel_selection import recheck_selection, SelectionStale
+        from .funnel_selection import recheck_selection, SelectionStale, same_pick, same_backing
         with self.state.lock:
             if self.closed or _chat(self.store) != self.chat:
                 raise NavigationStale(fields(self.store, self.capture))
             try:
                 recheck_selection(self.store, self.capture)
             except SelectionStale as error:
-                # ...but a press made with nothing on the table (reserve's `blind`: the walk's start) showed the owner no item
+                fresh = error.capture
+                # THE PICK IS THE CONTRACT here too, as at admission (reserve): the rail moving AROUND an unchanged pick - a row
+                # arriving below it, an agent's lane, the calendar's refresh, a rebuild that read the same rows - refused the press
+                # after the page had drawn its row, and the page put the row it left back on the table (the owner, 2026-10-23: "i hit
+                # next ... it goes to [the row below] then jumps back"). The same pick read from the same content commits as captured;
+                # from changed content the turn is made again from it, before anything is committed.
+                if same_backing(fresh, self.capture): pass
+                elif same_pick(fresh, self.capture): raise NavigationRebind(fresh) from error
+                # ...and a press made with nothing on the table (reserve's `blind`: the walk's start) showed the owner no item
                 # it could skip past: the rail moving under it - startup's catch-up still writing - is taken fresh, and the
                 # turn is made again from the rail as it is now, before anything is committed
-                if self.blind: raise NavigationRebind(error.capture) from error
-                raise NavigationStale({'reason': str(error)}) from error
+                elif self.blind: raise NavigationRebind(fresh) from error
+                else: raise NavigationStale({'reason': str(error)}) from error
             # A failed store call can have partially committed. Do not reopen that
             # token merely because response generation or delivery subsequently fails.
             self.attempted_commit = True

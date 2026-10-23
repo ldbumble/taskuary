@@ -116,17 +116,27 @@ class ConcurrentSyncTests(unittest.TestCase):
         return reserve(s, selection_revision=f['selection_revision'], expected_next_key=f['expected_next_key'],
                        expected_next_members=f['expected_next_members'])
 
-    def test_a_sync_between_the_capture_and_the_commit_makes_the_action_stale(self):
-        from taskuary.processing_navigation import NavigationStale
+    def test_a_sync_between_the_capture_and_the_commit_remakes_the_turn_from_it(self):
+        """A newer line on the pick landing mid-turn never commits the turn made from the older one: the turn is made again from
+        the rail as it is now (NavigationRebind) - the page already drew that pick, and a refusal put the row it left back on the
+        table (2026-10-23). Lines that keep landing under every attempt are refused, nothing committed."""
+        from taskuary.processing_navigation import NavigationStale, REBINDS
         chat = ChatFreshnessTests()
         s, tid, _first, _rid = chat.thread()
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
-            held = self._reserved(s)
+            held, seen = self._reserved(s), []
             def landed(selected, guard, dock):
-                chat.add_later(s, tid); funnel.invalidate()          # the poll lands a newer line mid-turn
+                seen.append(selected.revision)
+                if len(seen) == 1: chat.add_later(s, tid); funnel.invalidate()    # the poll lands a newer line mid-turn
                 with guard(): return 'acted'
-            with self.assertRaises(NavigationStale) as e: held.run(landed)
-            self.assertIn('selection changed', e.exception.detail.get('reason') or '')   # the guard, not the door
+            self.assertEqual(held.run(landed), 'acted')
+            self.assertEqual(len(seen), 2); self.assertNotEqual(*seen)            # made again, from the newer rail
+            busy, tries = self._reserved(s), []
+            def always(selected, guard, dock):
+                tries.append(1); chat.add_later(s, tid); funnel.invalidate()
+                with guard(): return 'acted'
+            with self.assertRaises(NavigationStale) as e: busy.run(always)
+            self.assertEqual(len(tries), REBINDS + 1)
             self.assertTrue(e.exception.detail.get('retryable'))
             quiet = self._reserved(s)
             def unchanged(selected, guard, dock):

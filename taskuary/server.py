@@ -6154,6 +6154,16 @@ def wa_bridge_restart(cid: int):
     store.audit('connector', cid, 'wa_bridge_restart', ACTOR)
     return wabridge.restart(filter_policy=wabridge.filter_policy(store, cid))
 
+@app.post('/api/connectors/{cid}/wa/bridge/pair-again')
+def wa_bridge_pair_again(cid: int):
+    """Unlink this device, set its pairing aside and start the bridge unpaired - the card then shows the QR (wabridge.pair_again).
+    The card's button when the bridge is logged out, or when the contact-name sync keeps failing for a missing key."""
+    from . import wabridge
+    c = store.get_connector(cid)
+    if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
+    store.audit('connector', cid, 'wa_bridge_pair_again', ACTOR)
+    return wabridge.pair_again(filter_policy=wabridge.filter_policy(store, cid))
+
 @app.get('/api/connectors/{cid}/wa/chats')
 def wa_chats(cid: int):
     """Chats reachable through the paired WhatsApp account, for compose and inbound sources."""
@@ -7960,6 +7970,15 @@ HEARTBEAT_TICK = 300
 POLL_TICK = 30                  # how often the full loop wakes to look at the clock
 QUICK_TICK = 5                  # the chat loop looks more often, so "every 30 seconds" means that
 SLOW_CHAT_READ = 3.0            # a chat read past this is logged with its length: it is a late phone answer
+
+
+def chat_read_line(types, added, took: float) -> str:
+    """The log line for one chat poll, or ''. Only SLOW reads were logged, so "read 0 line(s)" was all the log ever said about
+    WhatsApp and read as "nothing ever arrives" (2026-10-23). Every read that brought lines says so; a slow empty one says it was
+    slow and that nothing was new; a quick empty one - the doorway's once-a-second read - says nothing."""
+    what, n = ', '.join(types), int(added or 0)
+    if n: return f"chat poll {what} read {n} line{'' if n == 1 else 's'} in {took:.1f}s"
+    return f"chat poll {what} slow ({took:.1f}s), nothing new" if took > SLOW_CHAT_READ else ''
 DRAIN_WAIT = 45                 # the context gate's patience for its lines to be judged (the old lock wait)
 CHAT_CONNECTORS = {'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord'}
 CHAT_POLL_SECONDS = 30
@@ -8594,8 +8613,7 @@ def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = F
                     # a slow read is the whole latency of a phone turn: the doorway cannot hand the
                     # owner's line to the assistant until this returns (the owner, 2026-09-20:
                     # "hitting next or 3 in whatsapp takes a while")
-                    if (took := time.monotonic() - t_read) > SLOW_CHAT_READ:
-                        logger.info(f"chat poll {', '.join(types)} read {int(added or 0)} line(s) in {took:.1f}s")
+                    if said := chat_read_line(types, added, time.monotonic() - t_read): logger.info(said)
                     # new lines are announced the moment they LAND (PW-052): the caller says retriage started,
                     # then waits below for the result - the owner is never shown the result as the first word
                     if on_fetched and added:

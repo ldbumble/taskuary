@@ -96,6 +96,7 @@ import { noteWrite } from "./wrote.js";
 import { LIT, STEP_SAID, finishLine } from "./connectorStep.js";
 import { revealRing } from "./railReveal.js";
 import { pressable } from "./pressable.js";
+import { coalesce } from "./coalesce.js";
 import "./assistantView.css";
 
 // Which walk-through this tab was in. Per-browser and deliberately thin - one task id - because the
@@ -1354,7 +1355,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // watcher event happens to accompany them.
   // The live socket carries no event for these turns (store.add_comment pokes nothing), so this read
   // runs on the 30 s tick even while the socket is up - the pile beside it does not need to.
-  const readChat = useCallback(async (epoch = chatEpoch.current) => {
+  const readChatOnce = useCallback(async (epoch) => {
     const turns = turnsBegun.current, moves = tableMoves.current, mid = turnFlight.current;
     const { data: st } = await api.get("/api/concierge");
     if (epoch !== chatEpoch.current || resettingRef.current) return false;
@@ -1382,6 +1383,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     }
     return true;
   }, [putOnTable]);
+  // ONE CONVERSATION READ AT A TIME (coalesce.js): every chat-changed event, the tick, an arrive and each pile read asked
+  // again on its own, and behind a stalled server they stacked up (2026-10-23). A call while one runs shares the one re-read after it
+  // - which captures the turn and the table as they stand when IT is sent, so the guards above hold as before.
+  const readChatRef = useRef(readChatOnce); readChatRef.current = readChatOnce;
+  const chatReads = useRef(null);
+  chatReads.current ||= coalesce((epoch) => readChatRef.current(epoch));
+  const readChat = useCallback((epoch = chatEpoch.current) => chatReads.current.run(epoch, epoch), []);
   const loadPile = useCallback(async (force = false) => {
     if (resettingRef.current) return;
     if (pileFlight.current) {

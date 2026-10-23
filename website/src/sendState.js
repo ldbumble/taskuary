@@ -5,6 +5,12 @@
 // invents its own: hiding a button is not authorization, and a missing draft is not an fyi.
 import { label } from "./buttons.js";
 
+// A SEND THAT NEVER ANSWERS (2026-10-23): the decide POST had no timeout, so behind a stalled server the button read "Sending…"
+// for minutes. After a minute the press lets go and the card reads the review again: the server keeps the attempt's DeliveryState,
+// so the card shows its own Sending… / Check delivery state - never a second free send and never a sentence of our own.
+export const DECIDE_TIMEOUT = 60000;
+export const timedOut = (e) => e?.code === "ECONNABORTED" || e?.code === "ETIMEDOUT";
+
 const FALLBACK_BLOCK ={ github: "GitHub replies are off (GitHub card)" };
 
 export function replyEnvelope(review) {

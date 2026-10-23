@@ -351,7 +351,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   // A REFUSED OR FAILED SYNC SAYS SO IN THE CLOCK'S OWN SLOT (the UX walk, 2026-10-22): a refusal read as "status unavailable" and a
   // source that failed read as "checked 9:41". Both are the line's status, not a receipt - gone at the next press or clean status
   const [syncErr, setSyncErr] = useState("");
-  const [syncFailed, setSyncFailed] = useState([]);
+  const [syncFailed, setSyncFailed] = useState(null);     // null until the first status: unread is not "none failed"
   const syncObserver = useRef(null);
   const [lastSync, setLastSync] = useState(null);
   const [syncStarted, setSyncStarted] = useState(false);
@@ -572,11 +572,11 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               </Box>
             ))}
             {!rows && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>Loading item counts…</Typography>}
-            <Typography variant="caption" noWrap data-tq-sync-line="" title={syncErr || (syncFailed.length ? `${syncFailed.join(", ")} could not be read - its card says why` : undefined)}
-              sx={{ color: syncErr || (syncFailed.length && !(syncing || bgSync)) ? ALERT_INK : syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5, flex: 1, minWidth: 0, textAlign: "right" }}>
+            <Typography variant="caption" noWrap data-tq-sync-line="" title={syncErr || (syncFailed?.length ? `${syncFailed.join(", ")} could not be read - its card says why` : undefined)}
+              sx={{ color: syncErr || (syncFailed?.length && !(syncing || bgSync)) ? ALERT_INK : syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5, flex: 1, minWidth: 0, textAlign: "right" }}>
               {syncErr ? `✗ ${syncErr}` : syncUnknown ? "Sync status unavailable — rechecking"
                 : <NextIn atRef={nextAtRef} render={(nextIn) => syncFace({ busy: syncing || bgSync, what: syncWhat, every, lastAt: lastSync, nextIn, checked: true, started: syncStarted,
-                    terse: !(syncing || bgSync), failed: syncFailed })} />}
+                    terse: !(syncing || bgSync), failed: syncFailed || [] })} />}
             </Typography>
             <Button size="small" variant="text" disabled={!syncUnknown && (syncing || bgSync)} onClick={() => syncNow(false)}
               title={syncing || bgSync ? syncWhat : bHint("sync_now", syncUnknown ? "unknown" : undefined)}

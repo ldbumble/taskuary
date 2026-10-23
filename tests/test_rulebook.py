@@ -296,3 +296,11 @@ def test_one_census_for_on_you_the_walks_end_and_the_rails_tasks():
     c = lanes.census(items)
     assert (c['on_you'], c['tasks']) == (sum(map(lanes.on_you, items)), sum(1 for i in items if not i.get('settling') and lanes.level_of(i) == 'task'))
     assert c['on_you'] < c['tasks'], 'waiting on them is under Tasks and not on you'
+
+
+def test_a_failure_line_says_what_failed_in_plain_words_never_our_refusal():
+    """The dead-end walk's WORDS, 2026-10-23: "Failed: TQ-0012 needs a repository first - working directory do..." was the server's own
+    refusal read out on the strip. The line takes the first reason that is the owner's words, else says only that it stopped."""
+    assert rulebook._plain_why('TQ-0012 needs a repository first - working directory does not exist', 'Send to agent did not start') == 'Send to agent did not start'
+    assert rulebook._plain_why('the mailbox is signed out') == 'the mailbox is signed out'
+    assert rulebook._plain_why('needs a repository first', None) == 'it stopped without saying why'

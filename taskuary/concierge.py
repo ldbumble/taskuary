@@ -750,6 +750,13 @@ def _live_task(store, item) -> bool:
 IDEA_ACT = {'mine': 'task', 'regular_agent': 'agent', 'coding_agent': 'agent', 'not_ours': 'dismiss', 'not_ours_kind': 'dismiss_kind'}
 
 
+def _chasable(store, item) -> bool:
+    if store is None: return False
+    from . import rulebook
+    try: return rulebook.adds(store, item) == ['chase']
+    except Exception: return False
+
+
 def cannot(item: dict | None, verb: str, store=None) -> str:
     """Why this card cannot carry that verb - '' when it can. Always phrased "nothing to <verb>",
     because the honest line is the only line: no receipt goes out in front of it."""
@@ -759,7 +766,10 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     # "no Make a task on an item that already is a task"); a closed one is history, and new work may be a task again
     if verb == 'mine' and item.get('kind') == 'idea' and _live_task(store, item): return f"{what} is already a task on your list."
     # the slipped answers belong to a slipped card: typed on anything else, or pressed after they wrote back, they do nothing
-    if verb in ('chase', 'let_go', 'elsewhere') and item.get('lane') != 'forgotten': return f"Nothing has slipped on {what} - nobody is quiet past their day on it."
+    # ...save a Chase the rule lit on a wait past its day (rulebook.adds: 3 working days on 'theirs', a late goal step - the owner,
+    # 2026-10-23), which goes to the thread rulebook.chase_thread names
+    if verb in ('chase', 'let_go', 'elsewhere') and item.get('lane') != 'forgotten' and not (verb == 'chase' and _chasable(store, item)):
+        return f"Nothing has slipped on {what} - nobody is quiet past their day on it."
     if item.get('kind') == 'idea' and item.get('idea') and (verb in IDEA_ACT or verb == 'defer'): return ''
     # A SENTENCE NAMES ONLY A BUTTON THE ITEM SHOWS (2026-10-17): these said Not ours, reply and Continue over cards with none of them
     if verb == 'not_ours_kind':

@@ -396,6 +396,9 @@ export const asPressed = (items, { leaving = null, continuing = null } = {}) => 
   : items.filter((i) => !leaving || i.tid !== leaving)
     .map((i) => (continuing && i.tid === continuing
       ? { ...i, lane: "working", order_band: 2, surfaced: false, put_down: false, deferred: false, working: i.working || i.agent || "agent" } : i)));
+// ...and a put-down has LANDED when the server's pile no longer has the row - or has it put away: Remind me keeps the task on the
+// rail under For later (`deferred`), so waiting for it to vanish hid a reminded task until a reload (UX walk, 2026-10-22)
+export const putDownLanded = (items, tid) => { const r = (items || []).find((i) => i.tid === tid); return !r || !!r.deferred; };
 // when a For later row comes back: its Remind me date (an open task walked past has no clock - it is back with the next walk)
 export const backAt = (item) => item?.back_at || item?.defer_until || null;
 // ...said by timeWords.bandUntil, and every other gutter age by timeWords.band - one rule for how a time reads

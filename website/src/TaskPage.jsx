@@ -99,6 +99,7 @@ import { FOCUS_RING, pressable } from "./pressable.js";
 import { place } from "./words.js";
 import { announceRemoved, fromAnswer } from "./removed.js";
 import { heldSteps, heldTask, heldTerm, heldWait, keepTask, keepTerms } from "./taskDetail.js";
+import { coalesce } from "./coalesce.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
 
@@ -449,18 +450,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const onSelectRef = useRef(onSelect); onSelectRef.current = onSelect;
   const listRef = useRef(onListChanged); listRef.current = onListChanged;
   const loadTasks = useCallback(async () => { await listRef.current?.(); }, []);
-  const loadDetail = useCallback(async (id) => {
-    if (!id) { setDetail(null); return; }
-    const ahead = heldTask(id);
-    if (ahead) { setDetail((d) => (d?.task?.TaskId === id ? d : ahead)); const w = heldWait(id); if (w) setWait(w); }
+  // ONE READ OF A TASK AT A TIME (coalesce.js): the task-changed poke, the 3 s poll and every press each read it again, and behind
+  // a stalled server one page held twenty of them open (2026-10-23). A call while one runs shares the one re-read after it.
+  const detailReads = useRef(null);
+  detailReads.current ||= coalesce(async (id, signal) => {
     try {
-      const { data } = await api.get(`/api/tasks/${id}`);
+      const { data } = await api.get(`/api/tasks/${id}`, { signal });
       if (stale(id)) return;
       setDetail(data); keepTask(id, data);
-      try { const w = (await api.get(`/api/tasks/${id}/waitroom`)).data; if (!stale(id)) { setWait(w); keepTask(id, data, w); } }
+      try { const w = (await api.get(`/api/tasks/${id}/waitroom`, { signal })).data; if (!stale(id)) { setWait(w); keepTask(id, data, w); } }
       catch { if (!stale(id)) setWait({ data: [], state: null }); }
     } catch (e) {
-      if (stale(id)) return;
+      if (stale(id) || signal.aborted) return;
       // A task can vanish under an open pane: "not mine" on its message deletes the task and
       // closes its session. The detail poll then asked for a dead id every three seconds and
       // repainted "task not found" each time, which reads as the app being broken rather than
@@ -472,7 +473,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       }
       setErr(e?.response?.data?.detail || "Failed to load task");
     }
+  });
+  const loadDetail = useCallback(async (id) => {
+    if (!id) { setDetail(null); return; }
+    const ahead = heldTask(id);
+    if (ahead) { setDetail((d) => (d?.task?.TaskId === id ? d : ahead)); const w = heldWait(id); if (w) setWait(w); }
+    return detailReads.current.run(id, id);
   }, []);
+  // ...and the read of the task just left is let go of: its answer would be thrown away (stale) after the server spent on it
+  useEffect(() => { detailReads.current.drop(selected || null); }, [selected]);
 
   // ...and keep it honest. The list was fetched ONCE, so a task whose agent picked it up
   // kept wearing "needs you" - and the pill counts kept agreeing with it - until something

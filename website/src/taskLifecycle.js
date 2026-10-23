@@ -22,7 +22,15 @@ export const AGENT = { waiting: WORD.blocked, working: WORD.working, saved: WORD
 
 // THE SERVER'S STATE WHEREVER THE PAGE OPENS: the list's row carries it, and a task opened on the table has no row - its own detail
 // carries the same word (server task_detail). Without it an agent's own close read "stopped and saved" and opened on Close out (2026-10-21).
-export const pageState = (listRow, detail) => listRow?.State || detail?.state || null;
+export const pageState = (listRow, detail) => (!closedRowOverOpen(listRow, detail) && listRow?.State) || detail?.state || null;
+// ...but a row still saying CLOSED over a task the detail has open is the list a poll behind a Reopen (2026-10-23): the page opened at the
+// press and the stale row put it back to closed until Tasks re-read
+const closedRowOverOpen = (listRow, detail) => ["closed", "dropped"].includes(listRow?.State)
+  && !!detail?.task?.Status && !["done", "dropped"].includes(detail.task.Status);
+// THE PAGE AS IT STANDS ONCE THE SERVER HAS REOPENED IT - drawn at the answer, before the detail is read again: open, any Remind me date
+// cleared (server task.reopen), and an owner's "closed" read as the task on you ('yours'); an agent's finished run stays 'agentdone'
+export const reopenedDetail = (d) => d?.task ? { ...d, task: { ...d.task, Status: "open", RemindAt: "" }, closedWhy: null,
+  state: ["closed", "dropped"].includes(d.state) ? "yours" : d.state } : d;
 
 // ...and a CLOSED task with nobody to answer says who closed it and why (the detail's `closedWhy`), never the advice for an open
 // one ("Work it, or write what you found on the task") - on a done task that told the owner nothing (2026-10-21)

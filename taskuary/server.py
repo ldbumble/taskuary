@@ -1276,22 +1276,34 @@ def _run_kind(op: dict, background: BackgroundTasks):
         key = str(p.get('key') or ''); item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
         if not item: raise HTTPException(404, 'that one is not on the rail any more')
         # ...and only while it IS slipped: pressed after they wrote back, or on a card that never slipped, nothing is changed
-        if item.get('lane') != 'forgotten': raise HTTPException(409, 'That one is not slipped any more - they wrote back, or it moved on. Nothing was changed.')
+        # ...or a Chase the rule lit on a wait past its day (rulebook.adds) - it answers the thread rulebook.chase_thread names
+        from . import rulebook
+        ct = rulebook.chase_thread(store, item) if kind == 'task.chase' and item.get('lane') != 'forgotten' and rulebook.adds(store, item) == ['chase'] else None
+        if item.get('lane') != 'forgotten' and not ct: raise HTTPException(409, 'That one is not slipped any more - they wrote back, or it moved on. Nothing was changed.')
         who, tid_, iid, text = str(item.get('who_email') or ''), item.get('tid'), item.get('idea'), str(p.get('text') or '').strip()[:300]
+        if ct: who, tid_ = ct['who'], ct['tid']
         task_ = store.get_task(tid_) if tid_ else None
         step = bool(task_ and str(task_.get('Assignee') or '').startswith('person:') and task_.get('Status') not in ('done', 'dropped'))   # a step somebody owes
         if kind == 'task.chase':
             # the thread's last word FROM THE PERSON WHO OWES IT: a follow-up's own inbound, or the step's conversation filtered by them
             a = item.get('action') or {}
-            if a.get('type') == 'followup' and a.get('mid'): mid = a['mid']
+            if ct: mid = ct['mid']
+            elif a.get('type') == 'followup' and a.get('mid'): mid = a['mid']
             else:
                 row = store._one("SELECT MessageId FROM message WHERE TaskId=? AND lower(FromEmail)=? AND Status!='context' ORDER BY SentAt DESC LIMIT 1",
                                  (tid_, who)) if tid_ and who else None                      # the step's own mail from them
                 mid = (row or {}).get('MessageId')
-            if not mid: raise HTTPException(422, 'There is no thread with them to chase on - write to them from the task page, and the ledger will count it.')
+            if not mid and not ct: raise HTTPException(422, 'There is no thread with them to chase on - write to them from the task page, and the ledger will count it.')
             n = (sum(1 for r in outcomes.rows_for(store, 'task', tid_) if _json.loads(r.get('FactsJson') or '{}').get('chase')) if tid_ else 0) + 1
             cc = outcomes.chase_cc(store, who) if who else None
             instr = f'a short chase to {who or "them"}, in my voice: no answer yet, what I need and by when' + (f'; copy {cc}, who gets them to answer' if cc else '')
+            if ct and not mid:
+                # nothing of theirs on it to answer: a new message to them from the task, waiting for the owner's yes like any draft
+                from . import outbox
+                try: got = outbox.task_email(store, tid_, who, instr, cc=[cc] if cc else None, actor=ACTOR)
+                except ValueError as e: raise HTTPException(422, str(e))
+                store._exec('UPDATE review SET Reason=? WHERE ReviewId=?', (f'chase:{n}' + (f' cc:{cc}' if cc else ''), got['review_id']))
+                return {'reviewId': got['review_id'], 'taskId': tid_, 'draft': got['draft'], 'drafting': not got['draft'], 'cc': cc}
             if a.get('type') == 'followup': out = open_reply(mid, OpenReplyBody(instruction=instr, app_words=True))     # their thread: its newest line is theirs
             else:
                 # a step somebody owes: the review answers THEIR last word, even when somebody else wrote on the thread since -

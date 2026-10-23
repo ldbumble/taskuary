@@ -152,10 +152,10 @@ def state(store, item: dict, verbs: list) -> tuple:
     if kind == 'agent' and (it.get('asking') or lane == 'blocked'): return 'agent_asking', {}
     try: f = advisor.failure(store, it)
     except Exception: f = None
-    if kind == 'report' and (it.get('bad') or f): return 'report_failed', {'why': _cut((f or {}).get('why') or it.get('why') or 'it did not run', 60)}
+    if kind == 'report' and (it.get('bad') or f): return 'report_failed', {'why': _plain_why((f or {}).get('why'), it.get('why'), default='it did not run')}
     # ...the fix named after its place is the way past it, at once; with none named, the model reads the cause (a mail too large is
     # redrafted, a dead address is fixed, a run that hit a wall is tried again) while the rule's Try again / New task stands lit
-    if f: return ('failed' if f.get('fix') else 'failed_cause'), {'why': _cut(f.get('why') or f.get('what') or 'it stopped without saying why', 60)}
+    if f: return ('failed' if f.get('fix') else 'failed_cause'), {'why': _plain_why(f.get('why'), f.get('what'))}
     if kind == 'report': return 'report_ok', {}
     if kind == 'fyis': return 'fyi_batch', {}
     if kind == 'meeting': return 'meeting', {}
@@ -250,6 +250,47 @@ def decide(store, item: dict, verbs: list) -> dict:
     return {'state': st, 'verb': verb, 'line': _cut(line, 64), 'ask': asks(st)}
 
 
+def chase_thread(store, item: dict) -> dict | None:
+    """WHERE A CHASE GOES for a wait the rule calls late but no follow-up ledger slipped (the 'theirs' lane past CHASE_DAYS working
+    days, a goal step past its day): {tid, who, mid} - the task the wait is on (the goal's late step, not the goal), the address it
+    waits on, and their newest mail on it to answer (mid None: the chase is a new message to them from the task). None when nobody's
+    address is known: a Chase with nobody to write to is a button that can only be refused (the dead-end sweep, 2026-10-23), so it is
+    not lit. The slipped lane keeps its own road (server task.chase)."""
+    it = item or {}
+    tid = it.get('tid')
+    t = store.get_task(int(tid)) if tid else None
+    if not t: return None
+    if str(it.get('kind') or '').startswith('goal') or advisor_goal(t):
+        today, best = date.today(), None
+        for x in store.goal_steps(int(t['TaskId'])):
+            c = x.get('child') or {}
+            try: late = (today - date.fromisoformat(str(c.get('DueAt') or '')[:10])).days
+            except ValueError: continue
+            if not x['done'] and c.get('TaskId') and late > 0 and (not best or late > best[1]): best = (c, late)
+        if not best: return None
+        t = best[0]
+    tid = int(t['TaskId'])
+    held = next((str(x).split(':', 1)[-1] for x in (t.get('WaitingOn'), t.get('Assignee')) if '@' in str(x or '')), '').strip().lower()
+    me = str(store.get_setting('owner_email') or '').strip().lower()
+    m = store._one("SELECT MessageId, FromEmail FROM message WHERE TaskId=? AND IFNULL(Direction,'in')<>'out' AND Status!='context' "
+                   "AND IFNULL(FromEmail,'')<>'' AND lower(FromEmail)<>? AND (?='' OR lower(FromEmail)=?) ORDER BY IFNULL(SentAt,CreatedAt) DESC LIMIT 1",
+                   (tid, me, held, held))
+    who = str((m or {}).get('FromEmail') or held or '').lower()
+    return {'tid': tid, 'who': who, 'mid': int(m['MessageId']) if m else None} if '@' in who else None
+
+
+def advisor_goal(t: dict) -> bool:
+    from . import advisor
+    try: return bool(advisor.is_goal(t))
+    except Exception: return False
+
+
+def _plain_why(*said, default: str = 'it stopped without saying why') -> str:
+    """The first reason that is the owner's words: a raw refusal ("needs a repository first - working directory ...") is ours, said
+    on the card's own failure box where its fix is - the line says what failed in plain words, or nothing it cannot say plainly."""
+    return next((_cut(w, 60) for w in said if w and not words.jargon_in(w)), default)
+
+
 def adds(store, item: dict) -> list:
     """The verbs a state lights that the row draws only when the Advisor names them: Chase on a waiting item past its day and on a late
     goal step - the design's "Chase (offered on every waiting lane)" and "(added to goals)". The row draws the advised move in its type
@@ -259,4 +300,5 @@ def adds(store, item: dict) -> list:
     if lane not in ('theirs', 'forgotten') and not kind.startswith('goal'): return []
     try: st, _f = state(store, it, [{'verb': 'chase'}])
     except Exception: return []
-    return ['chase'] if st in ('waiting_late', 'goal_late') else []
+    if st not in ('waiting_late', 'goal_late'): return []
+    return ['chase'] if lane == 'forgotten' or chase_thread(store, it) else []

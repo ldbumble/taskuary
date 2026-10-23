@@ -205,6 +205,8 @@ const TYPE_OF = {
   let_go: "task", defer: "task", split: "task", test_connection: "task",
   // the calendar's answers (calwrite.py) are what goes back: an invite's yes, no or other time, and a thread's meeting
   accept_invite: "reply", decline_invite: "reply", propose_time: "reply", find_time: "reply",
+  // a result's Share (Share.jsx) stands in a band of its own at the row's end: it acts on the whole result, never on a reply or the task
+  share: "share",
 };
 export const typeOf = (v) => TYPE_OF[String(v?.id || "").split(":").pop()] || "act";
 // ON A PHONE (narrower than 600px, the owner, 2026-10-22): Next and the ONE move - the lit one, else the row's lead (its first decision,
@@ -216,7 +218,7 @@ export function phoneRow(row) {
 }
 export function clustersOf(row, keep = 2) {
   const all = [...row.decide, ...row.agent, ...row.more];
-  return ["act", ...TYPES.map(([t]) => t)].map((type) => {
+  return ["act", ...TYPES.map(([t]) => t), "share"].map((type) => {
     const vs = all.filter((v) => typeOf(v) === type);
     if (!vs.length) return null;
     const lead = vs.findIndex((v) => v.tone === "p");

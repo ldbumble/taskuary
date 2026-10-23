@@ -333,6 +333,7 @@ PAGE_ONLY = {'new_task': "the page's own New task - the model makes one with tas
              'make_report': 'turns the workflow being written on the page into a report draft - nothing saved, so the page alone holds it',
              'walk': "the day card's own start, and the walk's again at its end - the model's walk is concierge.surface",
              'sync_now': "the sync clock's own press beside its line - the scheduler reads on its own, so a sentence never needs it",
+             'share_result': "a result's Share menu - a draft, a link on this network or a Drive upload, each the owner's own press (sharing.py)",
 }
 def _has(store, v: str) -> bool:
     """A button that `needs` something (buttons.json: coding) is named only where it exists - no coding tool, no coding agent."""

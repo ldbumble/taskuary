@@ -234,6 +234,8 @@ async def _lifespan(_app):
     msauth.on_rotate = lambda cid, rt: store.save_connector({'ConnectorId': cid, 'Secret': rt}, 'msauth')   # a rotated Microsoft refresh token outlives a restart
     from . import chatgptauth
     chatgptauth.on_rotate = lambda cid, rt: store.save_connector({'ConnectorId': cid, 'Secret': rt}, 'chatgptauth')   # ...and a ChatGPT one
+    from . import sharing
+    threading.Thread(target=lambda: sharing.sync_listener(store), name='taskuary-share-start', daemon=True).start()   # links on: their own port
     try:
         async with processing_all.membership_lifecycle(store):
             yield
@@ -253,6 +255,8 @@ async def _lifespan(_app):
         from . import remote_assistant
         try: remote_assistant.promises_closing(store)
         except Exception as e: logger.warning(f'closing: the phone promises were not told - {e}')
+        try: sharing.stop_listener()   # the share port closes with the app
+        except Exception as e: logger.warning(f'closing: the share listener did not stop - {e}')
         instance.release()           # the next start in this process (a test, a restart) takes the folder again
 
 app = FastAPI(title='Taskuary', docs_url='/api/docs', lifespan=_lifespan)
@@ -313,6 +317,9 @@ async def request_log(request: Request, call_next):
         logger.debug(f'{request.method} {request.url.path} -> {resp.status_code} ({int((_time.time() - t0) * 1000)}ms)')
     return resp
 
+# the redirects back from a provider's sign-in: no header can ride on one, so each proves itself with the one-time state it was issued
+OAUTH_RETURNS = ('/api/quickbooks/callback', '/api/zoho/callback', '/api/linkedin/callback', '/api/google/files/callback')
+
 @app.middleware('http')
 async def token_gate(request: Request, call_next):
     # /api/health is the Docker / load-balancer pulse - it must work without the LAN token
@@ -337,7 +344,7 @@ async def token_gate(request: Request, call_next):
     # ...and a request some OTHER page told the browser to make is not the owner asking, whatever
     # token the browser had lying around. The Intuit callback is the one cross-site arrival by
     # design - a redirect from their site, proving itself with the one-time state it was issued.
-    elif (request.url.path.startswith('/api') and request.url.path not in ('/api/quickbooks/callback', '/api/zoho/callback', '/api/linkedin/callback')
+    elif (request.url.path.startswith('/api') and request.url.path not in OAUTH_RETURNS
           and not guard.origin_ok(request.headers)):
         logger.warning(f'refused {request.method} {request.url.path} from origin {request.headers.get("origin")!r}')
         return JSONResponse({'detail': 'this request came from another site. Taskuary answers its own '
@@ -352,7 +359,7 @@ async def token_gate(request: Request, call_next):
         # It proves itself with the one-time state it was issued (quickbooks_authorize), not the token.
         file_read = request.url.path.startswith(('/api/attachments/', '/api/task-artifacts/', '/api/task-outputs/'))
         if not (file_read and guard.token_matches(request.query_params.get('token'), tok)) \
-                and request.url.path not in ('/api/quickbooks/callback', '/api/zoho/callback', '/api/linkedin/callback'):
+                and request.url.path not in OAUTH_RETURNS:
             # In JSON, like every other refusal: an HTML body left `detail` undefined, so a tab that
             # was open across a token change answered every click with whichever screen's generic
             # "that did not work" fallback happened to be nearest (2026-09-10 audit).
@@ -521,6 +528,51 @@ def launch_key(request: Request):
     from . import launchkey
     if guard.scope_of(cfg['server'], request.headers) != guard.OWNER: raise HTTPException(403, "a launch key is the owner's")
     return {'key': launchkey.mint()}
+
+
+# ── SHARE A RESULT (sharing.py): the menu's ways, the press, the links still open, and the one page outside the token ─────────
+class ShareBody(BaseModel):
+    how: str
+    kind: str | None = None; title: str | None = None; text: str | None = None; html: str | None = None
+    data: list | None = None; task: int | None = None; message: int | None = None
+    to: list[str] | None = None; days: int | None = None
+
+
+@app.get('/api/shares/ways')
+def share_ways():
+    from . import sharing
+    return sharing.ways(store, cfg['server'])
+
+
+@app.get('/api/shares')
+def share_links():
+    from . import sharing
+    return {'data': sharing.active(store)}
+
+
+@app.post('/api/shares')
+def share_result(body: ShareBody, request: Request):
+    """One way out for one result - a draft, a link, an upload. The owner's alone (guard.DENIED keeps agents off it too)."""
+    from . import sharing
+    _owner_only(request, "sharing a result is the owner's")
+    try: return sharing.share(store, cfg['server'], body.model_dump(), ACTOR)
+    except LookupError as e: raise HTTPException(404, str(e))
+    except (ValueError, PermissionError) as e: raise HTTPException(422, str(e))
+    except Exception as e:
+        logger.warning(f'share by {body.how} failed: {e}')
+        raise HTTPException(502, f'it did not go - {str(e)[:300]}')
+
+
+@app.delete('/api/shares/{sid}')
+def share_revoke(sid: int, request: Request):
+    from . import sharing
+    _owner_only(request, "revoking a link is the owner's")
+    if not sharing.revoke(store, sid, ACTOR): raise HTTPException(404, 'no such link, or it was revoked already')
+    return {'ok': True}
+
+
+# ...and the page a link opens is NOT here: this app stays on 127.0.0.1 behind the token. Links are served by sharing.share_app, a second
+# server on its own port that knows /share/<token> and nothing else, running only while "Share links on my network" is on.
 
 
 MAX_BUG_BODY = 200_000       # the scrub matches every private string against every field: a client does not get to make it chew megabytes
@@ -6231,14 +6283,20 @@ def chatgpt_signout(cid: int):
 # ── Sign in with Microsoft (taskuary/msauth.py): Graph for a regular user, no Azure portal ──
 _MSFLOWS = {}   # flow id -> the device code being polled; one browser tab, minutes, then gone
 
+class MsSignInBody(BaseModel):
+    files: bool | None = None        # Allow saving files: this sign-in asks for Files.ReadWrite too (None: as the card already says)
+
+
 @app.post('/api/connectors/{cid}/ms/signin')
-def ms_signin(cid: int):
-    """Start the device-code sign-in: the code and URL to show, and a flow id to poll with."""
+def ms_signin(cid: int, body: MsSignInBody | None = None):
+    """Start the device-code sign-in: the code and URL to show, and a flow id to poll with. `files` turns the card's "Allow saving
+    files" on or off - the scopes asked for follow it, and the card keeps the choice once the sign-in completes (ms_poll)."""
     import secrets as _secrets
     from . import msauth
     c = _ms_card(cid)
     cfg = json.loads(c.get('ConfigJson') or '{}')
-    try: d = msauth.device_start(cfg, msauth.scopes_for(c['Type']))
+    if body is not None and body.files is not None: cfg['allow_files'] = bool(body.files)
+    try: d = msauth.device_start(cfg, msauth.scopes_for(c['Type'], bool(cfg.get('allow_files'))))
     except RuntimeError as e: raise HTTPException(409, str(e))
     except requests.RequestException as e: raise HTTPException(502, f'could not reach login.microsoftonline.com: {str(e)[:160]}')
     flow = _secrets.token_urlsafe(12)
@@ -6268,7 +6326,7 @@ def ms_poll(cid: int, body: dict):
     try: t = msauth.device_poll(f['cfg'], f['device_code'])
     except msauth.AdminConsent as e:
         _MSFLOWS.pop(flow, None)
-        return {'status': 'error', 'detail': str(e), 'admin_consent_url': msauth.admin_consent_url(f['cfg'], msauth.scopes_for(f.get('kind')))}
+        return {'status': 'error', 'detail': str(e), 'admin_consent_url': msauth.admin_consent_url(f['cfg'], msauth.scopes_for(f.get('kind'), bool(f['cfg'].get('allow_files'))))}
     except RuntimeError as e:
         _MSFLOWS.pop(flow, None)
         return {'status': 'error', 'detail': str(e)}
@@ -6315,12 +6373,39 @@ def ms_poll(cid: int, body: dict):
     threading.Thread(target=_poll_reports, kwargs={'what': 'syncing'}, daemon=True).start()
     return {'status': 'ok', **who, 'syncing': True}
 
+class GoogleFilesBody(BaseModel):
+    on: bool = True
+
+
+@app.post('/api/connectors/{cid}/google/files')
+def google_files(cid: int, body: GoogleFilesBody):
+    """Allow saving files on the Gmail card: where the browser goes to sign in again asking for drive.file as well (or, off, without
+    it). The exchange happens on the way back (google_files_callback); the page gets only the link."""
+    from . import fileaccess
+    try: return {'url': fileaccess.google_url(store, cid, cfg['server'], body.on)}
+    except LookupError as e: raise HTTPException(404, str(e))
+    except ValueError as e: raise HTTPException(409, str(e))
+
+
+@app.get('/api/google/files/callback', response_class=HTMLResponse)
+def google_files_callback(code: str = None, state: str = '', error: str = None):
+    """Google sends the browser back here. Outside the token gate like every OAuth return: it proves itself with the one-time state
+    google_files issued, the refresh token never reaches a page, and the tab only says whether it worked (escaped, under a CSP)."""
+    from html import escape as _esc
+    from . import fileaccess
+    ok, msg = fileaccess.google_callback(store, cfg['server'], code, state, error)
+    return HTMLResponse(f'<!doctype html><meta charset=utf-8><title>Taskuary</title><body style="font:15px system-ui;padding:40px;color:#262521;background:#f6f4f1">'
+                        f'<p style="font-weight:700">{"Done" if ok else "Not changed"}</p><p>{_esc(str(msg))}</p><p style="color:#6e685f">You can close this tab and go back to Taskuary.</p>',
+                        headers={'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'", 'Cache-Control': 'no-store'})
+
+
 @app.get('/api/connectors/{cid}/ms/adminlink')
 def ms_adminlink(cid: int):
     """The admin-approval link on demand - for the person who knows in advance that IT has to say yes."""
     from . import msauth
     c = _ms_card(cid)
-    try: return {'url': msauth.admin_consent_url(json.loads(c.get('ConfigJson') or '{}'), msauth.scopes_for(c['Type']))}
+    ccfg = json.loads(c.get('ConfigJson') or '{}')
+    try: return {'url': msauth.admin_consent_url(ccfg, msauth.scopes_for(c['Type'], bool(ccfg.get('allow_files'))))}
     except RuntimeError as e: raise HTTPException(409, str(e))
 
 @app.post('/api/connectors/{cid}/ms/signout')
@@ -9405,6 +9490,11 @@ def set_setting(body: SettingBody):
     prev = store.get_setting(body.name)
     store.set_setting(body.name, body.value, ACTOR)
     store.audit('setting', 0, 'set', ACTOR, detail={'key': body.name, 'from': prev, 'to': body.value})   # as the chat's setting.set does
+    # the share-only listener follows its switch and its port at once (sharing.sync_listener)
+    if body.name in ('share_links_lan', 'share_port'):
+        from . import sharing
+        why = sharing.sync_listener(store)
+        if why: return {'ok': True, 'warning': why}
     return {'ok': True}
 
 @app.get('/api/assistant/doorways')

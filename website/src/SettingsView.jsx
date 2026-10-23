@@ -26,6 +26,7 @@ import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import AiDefaults from "./AiDefaults.jsx";
 import AgentPermissions from "./AgentPermissions.jsx";
+import SharedLinks from "./SharedLinks.jsx";
 import AboutYou from "./AboutYou.jsx";
 import UpdateCard from "./UpdateCard.jsx";
 import SystemUpdateAltIcon from "@mui/icons-material/SystemUpdateAlt";
@@ -661,7 +662,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
         onBlur={(e) => e.target.value !== s.Value && saveSetting(s.Name, e.target.value, e.target)} />
     );
     if (m.type === "switch" || ["0", "1"].includes(String(s.Value))) return (
-      <Switch checked={s.Value === "1"} onChange={() => saveSetting(s.Name, s.Value === "1" ? "0" : "1")} />
+      <Switch checked={s.Value === "1"} title={m.hover || undefined} onChange={() => saveSetting(s.Name, s.Value === "1" ? "0" : "1")} />
     );
     // A JSON KNOB IS CHECKED BEFORE IT IS SENT. A stray quote used to save, and the reader ignored the
     // whole value without a word - so every role quietly fell back to the default brain.
@@ -692,6 +693,10 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     "How mail is sorted": <AiDefaults brains={brainOptions} agents={agentOptions} onGo={goFromPanel} onLoaded={setPanelOk} />,
     "Assistant on your phone": <PhoneDoorways onLoaded={setPanelOk} onNavigate={onNavigate} />,
     "Agent permissions": <AgentPermissions />,
+  };
+  // ...and what a section lists UNDER its knobs: the share links still open sit below the switch that allows them
+  const after = {
+    Sharing: <SharedLinks />,
   };
   // no coding tool connected: the Coding agent section has nothing to set (capabilities.js)
   const cfgGroups = GROUPS.filter((g) => (panels[g] || rowsOf(g).length) && (g !== "Coding agent" || canCode));
@@ -757,6 +762,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
               <SectionHead page="config" name={g} />
               {panels[g]}
               {rowsOf(g).map(knobRow)}
+              {after[g]}
             </Box>
           ))}
         </Box>

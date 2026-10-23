@@ -288,11 +288,44 @@ def wa_status(c) -> dict:
     out = {'connected': bool(st.get('connected')), 'me': st.get('me') or '', 'jid': jid,
            'phone': ('+' + jid.split('@')[0].split(':')[0]) if jid and jid.split(':')[0].split('@')[0].isdigit() else '',   # the paired number, from the account jid
            'pairing_code': st.get('pairingCode') or '', 'qr_svg': '',
-           'reconnect': st.get('reconnect') or {}, 'filter': st.get('filter') or {}}
+           'reconnect': st.get('reconnect') or {}, 'filter': st.get('filter') or {},
+           # what the card's status line says beyond "the socket is open" (bridge.mjs /status, health.mjs) - None from an older bridge
+           'admitted': st.get('admitted'), 'turned_away': st.get('turnedAway'), 'last_inbound_at': st.get('lastInboundAt') or 0,
+           'last_failure': st.get('lastFailure'), 'contact_sync': st.get('contactSync') or {}, 'logged_out': bool(st.get('loggedOut'))}
     if st.get('qr') and not out['connected']:
         import segno
         out['qr_svg'] = segno.make(st['qr'], error='m').svg_data_uri(scale=5, border=2, dark='#1e1e2e', light='#ffffff')
+    out.update(wa_status_line(out))
     return out
+
+
+def _ago(ts: float, now: float) -> str:
+    m = max(0, int(now - ts) // 60)
+    return 'just now' if m < 1 else f'{m} min ago' if m < 60 else f'{m // 60} h ago' if m < 48 * 60 else f'{m // 1440} d ago'
+
+
+CONTACT_SYNC_REPAIR = 3         # failed contact syncs in a row (one per ~10 min) before the card offers Pair again
+
+
+def wa_status_line(st: dict, now: float = None) -> dict:
+    """THE CARD TELLS THE TRUTH (2026-10-23): it said "On - polling on schedule" from its switch while the bridge turned chats
+    away, never heard a 1:1 addressed by LID and failed its contact sync every ten minutes. One short line, the same on the desk
+    card and the phone: `parts` (the desk draws the turned-away count beside them, as a link into the chat picker), `line` (all of
+    it, for the phone), and `fix` - the one button that is the next step: 'restart', 'pair' or ''."""
+    now = time.time() if now is None else now
+    if not st.get('connected'):
+        if st.get('logged_out'): parts, fix = ['Logged out'], 'pair'
+        elif st.get('qr_svg') or st.get('pairing_code'): parts, fix = ['Waiting for the phone to pair'], ''
+        else: parts, fix = ['Not connected'], 'restart'
+    else:
+        parts, fix, n = ['Connected'], '', st.get('admitted')
+        if n is not None: parts.append(f"{n} chat{'' if n == 1 else 's'}")
+        if st.get('last_inbound_at'): parts.append(f"last message {_ago(st['last_inbound_at'], now)}")
+        elif n is not None: parts.append('no message yet')
+        if int((st.get('contact_sync') or {}).get('failures') or 0) >= CONTACT_SYNC_REPAIR:
+            parts.append('contact names not syncing'); fix = 'pair'
+    away = int(st.get('turned_away') or 0) if st.get('connected') else 0
+    return {'parts': parts, 'fix': fix, 'line': ' · '.join(parts + ([f'{away} turned away'] if away else []))}
 
 
 WA_ALL = '*'        # the catch-all WhatsApp no longer honours; Telegram's '*' is a different thing

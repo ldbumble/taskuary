@@ -34,7 +34,8 @@ import { pollSecondsField } from "./pollFields.js";
 import { githubInboundValue } from "./githubInbound.js";
 import { useSaveNote } from "./SaveNote.jsx";
 import { plainError } from "./apiError.js";
-import { namesRestart, restartBridge } from "./waBridge.js";
+import { namesRestart, pairAgain, restartBridge } from "./waBridge.js";
+import { waLine } from "./waStatus.js";
 import { DraftProvider, SaveBar, useCardDraft, useSaveConnector, useSaveSource } from "./ConnectorDraft.jsx";
 import { AI_SHELF, needsGateway } from "./aiShelf.js";
 import { cliCardOf } from "./cliCard.js";
@@ -1414,6 +1415,32 @@ const BridgeRestart = ({ cid, text }) => {
   );
 };
 
+// THE WHATSAPP STATUS LINE (waStatus.js, 2026-10-23): what the bridge says, not what the switch says - short words, the
+// turned-away count a link into the chat picker where they can be switched on, and the next step as a button, not a paragraph
+const WaStatusLine = ({ st, cid, onTurnedAway, fixes = ["restart", "pair"] }) => {
+  const [busy, setBusy] = useState("");
+  const line = waLine(st);
+  if (!line) return null;
+  const fix = fixes.includes(line.fix) ? line.fix : "";
+  const act = async () => { setBusy(fix); try { await (fix === "pair" ? pairAgain(cid) : restartBridge(cid)); } catch { /* the pairing box shows the outcome */ } setBusy(""); };
+  return (
+    <Box data-tq-wa-status={line.fix || "ok"} sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+      <Typography variant="body2" sx={{ color: DIM }}>
+        {line.parts.join(" · ")}
+        {line.away > 0 && <>{" · "}<Button size="small" variant="text" data-tq-wa-turned-away="" onClick={onTurnedAway}
+          title="Chats WhatsApp brought that are not switched on - open the list and switch on the ones that should come in"
+          sx={{ p: 0, minWidth: 0, fontSize: "inherit", textTransform: "none", verticalAlign: "baseline", textDecoration: "underline" }}>
+          {line.away} turned away</Button></>}
+      </Typography>
+      {fix && <Button size="small" variant="outlined" disabled={!!busy} data-tq-wa-fix={fix} sx={{ fontSize: 11.5, textTransform: "none" }}
+        startIcon={busy ? <CircularProgress size={12} /> : <RestartAltIcon sx={{ fontSize: 15 }} />}
+        title={fix === "pair" ? "Unlink this computer on your phone and show a new QR to scan - the old pairing is kept aside, not deleted"
+          : "Start the bridge again on this machine - you stay paired"}
+        onClick={act}>{busy ? (fix === "pair" ? "Unlinking…" : "Restarting…") : fix === "pair" ? "Pair again" : "Restart bridge"}</Button>}
+    </Box>
+  );
+};
+
 const TestLine = ({ test, mt = 1, cid }) => {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState("");
@@ -2243,6 +2270,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   const [secret, setSecret] = useState("");
   const [newSrc, setNewSrc] = useState("");
   const [roster, setRoster] = useState(new Set());   // WhatsApp jids WaChats lists - each with its own switch there
+  const [waSt, setWaSt] = useState(null);            // the bridge's /wa/status, as the pairing box last read it (WaStatusLine)
   const [srcBad, setSrcBad] = useState("");
   const [test, setTest] = useState(null);
   const [busy, setBusy] = useState("");
@@ -2313,6 +2341,8 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   // a source removed AT ONCE (the owner, 2026-10-21): "Removed <address> - Undo" under the list puts it back as it was
   const removeSrc = async (s) => { await run(() => removeNow(() => api.delete(`/api/sources/${s.SourceId}`), "source", s.Address), { ok: "", lead: "Not removed — " }); reload(); };
   const setActive = (on) => draft.ctx.stageConn({ ConnectorId: conn.ConnectorId, Active: on });
+  // "12 turned away" opens the chat picker - the sources step, right after Credentials and Test - where each has its switch
+  const openPicker = () => { if (m.srcLabel) setStep(2); };
 
   const steps = [
     // ticked once a Test has PASSED on them: "saved" ticked a key the service had just refused (the 2026-10-19 UI walk)
@@ -2428,11 +2458,12 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
     { label: "Enable", done: !!conn.Active, body: (
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 1, flexWrap: "wrap" }}>
         <Switch checked={!!conn.Active} onChange={(e) => setActive(e.target.checked)} />
-        <Typography variant="body2" sx={{ color: DIM }}>
-          {conn.Active
-            ? (isAI ? "On — wired into intent triage (the first active AI connector wins)." : "On — polling on schedule and via Sync now.")
-            : "Off — flip on once Test passes."}
-        </Typography>
+        {conn.Active && conn.Type === "whatsapp" && waSt ? <WaStatusLine st={waSt} cid={conn.ConnectorId} onTurnedAway={openPicker} /> : (
+          <Typography variant="body2" sx={{ color: DIM }}>
+            {conn.Active
+              ? (isAI ? "On — wired into intent triage (the first active AI connector wins)." : "On — polling on schedule and via Sync now.")
+              : "Off — flip on once Test passes."}
+          </Typography>)}
         {/* the last step of a setup should be the first sync - not a wait for the ten-minute clock */}
         {conn.Active && !isAI && (
           <Button size="small" variant="contained" disableElevation onClick={syncHere} disabled={srcSync}
@@ -2512,7 +2543,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
           It sits above the agent box too: one sign-in is the whole setup, the agent is the long road (B10) */}
       {MS_SIGNIN.includes(conn.Type) && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} reload={reload} onSignedIn={() => setStep(m.srcLabel ? 2 : 3)} /></Box>}
       {conn.Type === "chatgpt" && <Box sx={{ mb: 2 }}><ChatGptSignIn conn={conn} cfg={cfg} reload={reload} /></Box>}
-      {conn.Type === "whatsapp" && <Box sx={{ mb: 2 }}><WaPair conn={conn} reload={reload} /></Box>}
+      {conn.Type === "whatsapp" && <Box sx={{ mb: 2 }}><WaPair conn={conn} reload={reload} onStatus={setWaSt} onTurnedAway={openPicker} /></Box>}
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{m.desc}</Typography>
       <UnderTabs tabs={conn.Type === "whatsapp" ? ["Setup", "Guide"] : ["Setup", "Guide", "Agent"]} value={tab} onChange={setTab} />
       {tab === "Agent" && <AgentTab steps={m.agent} />}
@@ -3471,7 +3502,7 @@ const credsDone = (conn, cfg, m) => conn.Type === "chatgpt" ? cfg?.auth === "use
    owner installs - the box says how and re-checks on its own); 2 the bridge, which the box starts the
    moment Node is there (no button to find, no agent to wait on); 3 the QR, scanned from the phone.
    A tester's agent-driven setup spun for five minutes on step 2; a person should never see that. ── */
-const WaPair = ({ conn, reload }) => {
+const WaPair = ({ conn, reload, onStatus, onTurnedAway }) => {
   const [st, setSt] = useState(null);
   const kicked = useRef(false);
   const startBridge = useCallback(async () => { try { await api.post(`/api/connectors/${conn.ConnectorId}/wa/bridge/start`); } catch { /* status polling shows the failure */ } }, [conn.ConnectorId]);
@@ -3482,7 +3513,7 @@ const WaPair = ({ conn, reload }) => {
       try {
         const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/wa/status`);
         if (!alive) return;
-        setSt(data);
+        setSt(data); onStatus?.(data);
         if (data.connected && wasConnected === false) reload?.();     // just paired: the card's status line changes
         wasConnected = !!data.connected;
         // Node is there and the bridge is not: start it, once per visit - the owner opened this card to pair
@@ -3494,7 +3525,7 @@ const WaPair = ({ conn, reload }) => {
     };
     tick();
     return () => { alive = false; };
-  }, [conn.ConnectorId, reload, startBridge]);
+  }, [conn.ConnectorId, reload, startBridge, onStatus]);
   // ROOM HELD FOR IT WHILE IT IS READ (the 2026-10-19 UI walk, G8): nothing was drawn until the bridge answered, and then the box
   // pushed the rest of the card ~250px down under the owner's eyes. The box is there from the first frame, at about the height of
   // the steps and QR it will hold - the unpaired box, which is the one a person opens this card to see.
@@ -3550,9 +3581,11 @@ const WaPair = ({ conn, reload }) => {
           {st.bridge === false && st.node && !busy && phase !== "failed" && (
             <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon sx={{ fontSize: 15 }} />} onClick={startBridge}>Start bridge</Button>
           )}
-          <Typography variant="caption" sx={{ color: FAINT }}>
-            {st.connected ? "connected" : reconnect.paused ? "automatic reconnect paused" : st.bridge === false ? "bridge not running" : "bridge up, not connected"}{st.manager?.phase ? ` · ${st.manager.phase}` : ""}
-          </Typography>
+          {/* connected or logged out: the card's own status line (Restart bridge is already beside it, so only Pair again) */}
+          {st.connected || st.logged_out ? <WaStatusLine st={st} cid={conn.ConnectorId} onTurnedAway={onTurnedAway} fixes={["pair"]} /> : (
+            <Typography variant="caption" sx={{ color: FAINT }}>
+              {reconnect.paused ? "automatic reconnect paused" : st.bridge === false ? "bridge not running" : "bridge up, not connected"}{st.manager?.phase ? ` · ${st.manager.phase}` : ""}
+            </Typography>)}
         </Box>
         {reconnect.paused && reconnect.reason !== "logged out" && (
           <Alert severity="warning" sx={{ mb: 1, fontSize: 12.5 }}>

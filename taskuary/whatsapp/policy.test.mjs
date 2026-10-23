@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createChatGate, nextReconnect, wantsMedia, RECONNECT_DELAYS_MS, STABLE_CONNECTION_MS } from "./policy.mjs";
+import { createChatGate, createLidMap, nextReconnect, wantsMedia, RECONNECT_DELAYS_MS, STABLE_CONNECTION_MS } from "./policy.mjs";
 
 test("Baileys decrypts only chats Taskuary explicitly authorizes", () => {
   const gate = createChatGate(() => 1_750_000_000_000);
@@ -53,4 +53,58 @@ test("your own voice note is fetched; Taskuary's own echo is not", () => {
 test("nothing to fetch is not something to fetch", () => {
   assert.equal(wantsMedia(null, { fromMe: false, echo: false }), false);
   assert.equal(wantsMedia(undefined, {}), false);
+});
+
+// WhatsApp writes most 1:1 chats to a LID now (2026-10-23). A LID was not a chat to the gate: the message was dropped before
+// decryption AND left off the turned-away list, so the picker could not even offer it - and a person picked by phone number was
+// never heard once WhatsApp wrote to their LID.
+test("a LID chat is turned away like any chat, and a person picked by number is heard at their LID", () => {
+  const lids = createLidMap();
+  const gate = createChatGate(() => 1_750_000_000_000, lids);
+  gate.configure({ jids: ["15550100200@s.whatsapp.net"] });
+  assert.equal(gate.shouldIgnore("8000@lid"), true, "unknown LID: closed");
+  assert.deepEqual(gate.blockedChats().map((x) => [x.jid, x.group]), [["8000@lid", false]], "and listed, so it can be picked");
+  lids.learn("8000@lid", "15550100200@s.whatsapp.net");
+  assert.equal(gate.shouldIgnore("8000@lid"), false, "the number's LID is the same person");
+  assert.equal(gate.shouldIgnore("8000:3@lid"), false, "on any of their devices");
+  assert.equal(gate.canonical("8000@lid"), "15550100200@s.whatsapp.net", "and is passed on under the number they were picked by");
+  assert.deepEqual(gate.blockedChats(), [], "no longer turned away");
+  assert.equal(gate.shouldIgnore("9000@lid"), true);
+  gate.configure({ jids: ["9000@lid"] });
+  assert.equal(gate.shouldIgnore("9000@lid"), false, "a LID picked as it is");
+  assert.equal(gate.canonical("9000@lid"), "9000@lid");
+});
+
+test("a turned-away LID whose number is known is listed once, under the number", () => {
+  const lids = createLidMap();
+  const gate = createChatGate(() => 1_750_000_000_000, lids);
+  gate.configure({ jids: [] });
+  gate.shouldIgnore("15550100300@s.whatsapp.net"); gate.shouldIgnore("8100@lid");
+  lids.learn("15550100300@s.whatsapp.net", "8100@lid");
+  assert.deepEqual(gate.blockedChats().map((x) => x.jid), ["15550100300@s.whatsapp.net"]);
+});
+
+test("the owner's own addresses are always heard - their phone's key shares come from there - and are never 'turned away'", () => {
+  const gate = createChatGate();
+  gate.configure({ jids: ["42@g.us"] });
+  assert.equal(gate.shouldIgnore("15550100100@s.whatsapp.net"), true);
+  gate.setSelf(["15550100100:12@s.whatsapp.net", "7000:12@lid"]);
+  assert.equal(gate.shouldIgnore("15550100100@s.whatsapp.net"), false);
+  assert.equal(gate.shouldIgnore("7000:3@lid"), false);
+  assert.deepEqual(gate.blockedChats(), []);
+  assert.equal(gate.admits("7000@lid"), false, "heard at the gate is not a picked chat: the bridge drops what it says about others");
+  assert.equal(gate.admits("42@g.us"), true);
+});
+
+test("the map keeps one partner per side and ignores what is not a phone/LID pair", () => {
+  const lids = createLidMap(2);
+  assert.equal(lids.learn("8000@lid", "15550100200@s.whatsapp.net"), true);
+  assert.equal(lids.learn("15550100200:4@s.whatsapp.net", "8000:4@lid"), false, "same pair, any device");
+  assert.equal(lids.learn("42@g.us", "8000@lid"), false);
+  assert.equal(lids.learn("8000@lid", undefined), false);
+  assert.equal(lids.alt("15550100200@s.whatsapp.net"), "8000@lid");
+  lids.learn("8000@lid", "15550100999@s.whatsapp.net");
+  assert.equal(lids.alt("15550100200@s.whatsapp.net"), "", "a number re-assigned forgets the old pair");
+  lids.learn("8001@lid", "15550100201@s.whatsapp.net"); lids.learn("8002@lid", "15550100202@s.whatsapp.net");
+  assert.equal(lids.size(), 2, "capped");
 });

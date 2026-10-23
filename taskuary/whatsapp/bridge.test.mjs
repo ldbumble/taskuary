@@ -143,3 +143,71 @@ test("/send-document sends the very bytes as a WhatsApp document - with the toke
     fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
   }
 });
+
+// THE CARD TELLS THE TRUTH (2026-10-23): /status said "connected" from an open socket while chats were turned away, a person written
+// to by LID was never heard, and the contact-name sync failed every ten minutes. A Baileys that does what the owner's did: a 1:1 by
+// LID from a person picked by NUMBER, a group and a stranger turned away, the owner's own LID heard, the address book's key missing.
+const TRUTH = `
+import { EventEmitter } from "node:events";
+export const DisconnectReason = { loggedOut: 401 };
+const me = { id: "15550100100:1@s.whatsapp.net", lid: "7000:1@lid", name: "Alex Doyle" };
+export const useMultiFileAuthState = async () => ({ state: { creds: { me }, keys: { set: async () => {} } }, saveCreds: async () => {} });
+export const downloadMediaMessage = async () => Buffer.alloc(0);
+export const decryptPollVote = () => { throw new Error("no polls here"); };
+const quiet = () => {};
+export const DEFAULT_CONNECTION_CONFIG = { logger: { child: () => ({ info: quiet, warn: quiet, error: quiet, debug: quiet, trace: quiet }) } };
+export default function makeWASocket(config) {
+  const ev = new EventEmitter();
+  const sock = { ev, user: me, groupFetchAllParticipating: async () => ({}), resyncAppState: async () => {},
+    onWhatsApp: async (...jids) => jids.map((jid) => ({ jid, exists: true, lid: jid.startsWith("15550100200") ? "8000@lid" : undefined })) };
+  setTimeout(() => {
+    ev.emit("connection.update", { connection: "open" });
+    config.logger.info({ name: "critical_unblock_low", error: "Error: failed to find key" }, "failed to sync state from version");
+    for (const jid of ["120363000000000009@g.us", "9000@lid", "7000:1@lid"]) config.shouldIgnoreJid(jid);
+    setTimeout(() => ev.emit("messages.upsert", { type: "notify", messages: [
+      { key: { remoteJid: "8000@lid", fromMe: false, id: "IN1" }, message: { conversation: "the export is late" }, pushName: "Ray", messageTimestamp: 1750000000 },
+      { key: { remoteJid: "9100@lid", fromMe: true, id: "IN2" }, message: { conversation: "to someone never picked" }, messageTimestamp: 1750000001 }] }), 150);
+  }, 20);
+  return sock;
+}`;
+
+const get = (port, p, token) => new Promise((ok) => {
+  http.get({ host: "127.0.0.1", port, path: p, headers: { "x-bridge-token": token } }, (r) => {
+    let b = ""; r.on("data", (c) => (b += c)); r.on("end", () => { try { ok(JSON.parse(b)); } catch { ok(null); } });
+  }).on("error", () => ok(null));
+});
+
+test("/status says how many chats are let in and turned away, when the last message came and what failed; a LID is its number", { timeout: 30_000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wa-bridge-test-"));
+  const fake = path.join(dir, "fake-baileys.mjs");
+  fs.writeFileSync(fake, TRUTH);
+  const hooks = `export async function resolve(s, c, next) {
+    return s === "@whiskeysockets/baileys" ? { url: ${JSON.stringify(pathToFileURL(fake).href)}, shortCircuit: true } : next(s, c); }`;
+  const reg = `import { register } from "node:module"; register(${JSON.stringify("data:text/javascript," + encodeURIComponent(hooks))});`;
+  const port = await freePort(), token = "test-token";
+  const child = spawn(process.execPath, ["--import", "data:text/javascript," + encodeURIComponent(reg), BRIDGE],
+    { cwd: dir, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, WA_BRIDGE_PORT: String(port), WA_BRIDGE_TOKEN: token,
+      WA_BRIDGE_FILTER: JSON.stringify({ allDirect: false, jids: ["15550100200@s.whatsapp.net"] }) } });
+  let out = "", exited = null;
+  child.stdout.on("data", (c) => (out += c)); child.stderr.on("data", (c) => (out += c));
+  child.on("exit", (code) => (exited = code ?? "signal"));
+  try {
+    let st = null;
+    for (let i = 0; i < 100 && exited === null && !((st = await status(port, token))?.lastInboundAt); i++) await new Promise((r) => setTimeout(r, 100));
+    assert.equal(st?.connected, true, out);
+    assert.equal(st.admitted, 1);
+    assert.equal(st.turnedAway, 3, "the group, a stranger's LID, and the unpicked chat the owner wrote to - never the owner's own LID");
+    assert.ok(st.lastInboundAt > 0, "the message from the picked person arrived");
+    assert.deepEqual([st.contactSync.failures, st.contactSync.why, st.lastFailure.kind], [1, "missing key", "contacts"]);
+    assert.equal(st.loggedOut, false);
+    assert.ok(st.lidMapped >= 2, "the owner's pair and the looked-up number");
+    const { messages } = await get(port, "/messages?after=0", token);
+    assert.deepEqual(messages.map((m) => [m.jid, m.text]), [["15550100200@s.whatsapp.net", "the export is late"]],
+      "the LID arrives as the number it was picked by; what the owner wrote to an unpicked chat stays out");
+    const { chats } = await get(port, "/chats", token);
+    assert.ok(chats.some((c) => c.jid === "9000@lid" && !c.group), "a turned-away LID can be picked");
+  } finally {
+    if (exited === null) { const gone = new Promise((r) => child.once("exit", r)); child.kill(); await gone; }
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
+  }
+});

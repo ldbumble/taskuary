@@ -859,7 +859,7 @@ class MemoryBlocksTests(unittest.TestCase):
         from taskuary import assistant, learn
         from taskuary.store import MemoryStore
         s = MemoryStore()
-        s.save_doc('learned', s.get_doc('learned').replace('## Voice & style', '## Voice & style' + chr(10) + '- Short replies, no filler. [s:4 | ev: rv1,rv2,rv3 | seen: 2026-08-20]'), 'reflect')
+        s.save_doc('learned', s.get_doc('learned').replace('## How you sort mail', '## How you sort mail' + chr(10) + '- Short replies, no filler. [s:4 | ev: rv1,rv2,rv3 | seen: 2026-08-20]'), 'reflect')
         text = assistant.inputs(s, [])
         self.assertIn('LEARNED (', text); self.assertIn('Short replies, no filler', text)
 

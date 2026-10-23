@@ -629,7 +629,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # past verdicts. It refines the operator's document; explicit notes still outrank it.
             if learned:
                 system += ("\n\nLearned profile - patterns distilled from the owner's past verdicts "
-                           '(the document above outranks it where they disagree):\n' + learned[:1500])
+                           '(the document above outranks it where they disagree):\n' + learned)     # budgeted by learned_cut, whole lines
             if notes:
                 # already ranked and budgeted by ingest.relevant_notes. Evidence, never an order (PW-025): how much
                 # each counts for is the guide's to say (templates/triage.md, section 6).

@@ -363,6 +363,10 @@ CREATE TABLE IF NOT EXISTS boardnote (NoteId INTEGER PRIMARY KEY, TaskId INTEGER
 CREATE INDEX IF NOT EXISTS idx_boardnote_cwd ON boardnote(Cwd, NoteId);
 CREATE TABLE IF NOT EXISTS learned_history (Id INTEGER PRIMARY KEY, Key TEXT, Text TEXT, Status TEXT, Score INTEGER,
   Ev TEXT, Action TEXT, Actor TEXT, At TEXT);
+-- ...and each line's standing (learnedlines.py, phase C 2026-10-23): who reads it, watching / in_use / wrong / forgotten, the owner's
+-- own wording, the tombstone that keeps a removed line from being written back. LEARNED.md is the readable face of the in-use rows.
+CREATE TABLE IF NOT EXISTS learned_line (Key TEXT PRIMARY KEY, Reader TEXT, Text TEXT, OwnerText TEXT, Status TEXT, Score INTEGER,
+  Ev TEXT, InDoc INTEGER DEFAULT 1, InUseAt TEXT, ForgotEv INTEGER, Source TEXT, UpdatedAt TEXT);
 CREATE TABLE IF NOT EXISTS idea (IdeaId INTEGER PRIMARY KEY, Key TEXT UNIQUE, Kind TEXT, Text TEXT, ActionJson TEXT, Sig TEXT,
   Status TEXT DEFAULT 'open', SnoozeUntil TEXT, MessageId INTEGER, FirstSeen TEXT, LastSaid TEXT, SaidCount INTEGER DEFAULT 0,
   DecidedBy TEXT, DecidedAt TEXT);
@@ -5293,6 +5297,12 @@ class SQLiteStore:
         """Who last wrote it - 'template' means nobody has, and the shipped text still flows in."""
         r = self._one('SELECT UpdatedBy FROM doc WHERE Name=?', (name,)); return r['UpdatedBy'] if r else None
     def save_doc(self, name, content, actor):
+        if name == 'learned':           # every write to LEARNED.md, the owner's above all, is recorded line by line (learnedlines.sync)
+            old = self.get_doc(name) or ''
+            self._exec('INSERT INTO doc (Name, Content, UpdatedBy, UpdatedAt) VALUES (?,?,?,?) ON CONFLICT(Name) DO UPDATE SET Content=?, UpdatedBy=?, UpdatedAt=?',
+                       (name, content, actor, _now(), content, actor, _now()))
+            from . import learnedlines
+            return learnedlines.sync(self, old, content, actor)
         self._exec('INSERT INTO doc (Name, Content, UpdatedBy, UpdatedAt) VALUES (?,?,?,?) ON CONFLICT(Name) DO UPDATE SET Content=?, UpdatedBy=?, UpdatedAt=?',
                    (name, content, actor, _now(), content, actor, _now()))
     def delete_doc(self, name): self._exec('DELETE FROM doc WHERE Name=?', (name,))

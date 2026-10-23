@@ -18,13 +18,13 @@ MAP = 'prompt map'
 def _blocks_triage(store, msg: dict, mid: int) -> list:
     """(label, source, text) for every part of the triage prompt, in prompt order."""
     from .ingest import owner_addresses, relevant_notes
-    from .learn import injectable
+    from . import learned_cut
     from .triage import INTENT_SYSTEM, addressed_to_you, sender_body
     m = {'from_email': msg.get('FromEmail'), 'subject': msg.get('Subject'), 'body': msg.get('BodyText'), 'own_text': msg.get('OwnText'),
          'source_name': msg.get('SourceName'), 'channel': msg.get('Channel')}
     doc = store.doc('triage') or ''
     base = doc.strip() or INTENT_SYSTEM
-    soul, learned = store.doc('soul') or '', injectable(store.doc('learned') or '')
+    soul, learned = store.doc('soul') or '', learned_cut.for_reader(store, 'triage', learned_cut.about_mail(m))
     notes, left = relevant_notes(store, [m['from_email'] or ''],
                                  f"{m['subject'] or ''} {m['body'] or ''}"[:4000],
                                  subject=m['subject'] or '', source=m['source_name'] or '')
@@ -32,7 +32,7 @@ def _blocks_triage(store, msg: dict, mid: int) -> list:
     how = addressed_to_you(m, mine)
     out = [('the classifier instructions', 'TRIAGE.md' if doc.strip() else 'triage.INTENT_SYSTEM (the doc is blank)', base)]
     if soul: out.append(("the operator's document", 'SOUL.md', soul[:2500]))
-    if learned: out.append(('the learned profile', 'LEARNED.md (active sections only - hypotheses are gated out)', learned[:1500]))
+    if learned: out.append(('the learned profile', 'LEARNED.md "How you sort mail" (in-use lines, closest to this sender first, within budget)', learned))
     if notes:
         out.append(('standing notes that apply to THIS message', f'memory table - {len(notes)} of '
                     f'{len(notes) + left} applied, ranked by ingest.relevant_notes',
@@ -47,14 +47,14 @@ def _blocks_triage(store, msg: dict, mid: int) -> list:
 
 def _blocks_reply(store, tid: int) -> list:
     from .ingest import notes_for
-    from .learn import injectable
+    from .byrecipient import block as voice_block
     from .responder import BREVITY, CHAT, EMAIL, NOT_YET, SYSTEM, history_block, style_doc, written_as_chat
     msgs = [m for m in store.list_messages(tid) if m.get('Status') != 'context']
     last = msgs[-1] if msgs else {}
     soul = store.doc('soul') or ''
     owner = soul.split('You work for **')[1].split('**')[0] if 'You work for **' in soul else 'the owner'
     chat = written_as_chat(last.get('Channel'))
-    sty, lrn = style_doc(store), injectable(store.doc('learned') or '')
+    sty, lrn = style_doc(store), voice_block(store, [last.get('FromEmail')])
     notes = notes_for(store, {'from_email': last.get('FromEmail'), 'subject': last.get('Subject'),
                               'body': last.get('BodyText')}, budget=1500)
     out = [('who is writing and the rules of the reply', 'responder.SYSTEM + BREVITY + '
@@ -62,7 +62,7 @@ def _blocks_reply(store, tid: int) -> list:
             SYSTEM.format(owner=owner) + BREVITY + (CHAT if chat else EMAIL) + '\n' + NOT_YET)]
     if soul: out.append(('your document, addressed to the writer as themselves', 'SOUL.md', soul[:4000]))
     if sty: out.append(('your voice, distilled from mail you actually sent', 'STYLE.md', sty[:2500]))
-    if lrn: out.append(('the learned profile', 'LEARNED.md (active sections only)', lrn[:2000]))
+    if lrn: out.append(('how you write to them', 'STYLE.md "By recipient" (this sender first, then their domain, then everyone)', lrn))
     if notes: out.append(('standing notes for this sender/topic', 'memory table (ingest.notes_for)',
                           '\n'.join(f'- {n}' for n in notes)))
     hist = history_block(store, last) if last else ''

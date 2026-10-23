@@ -87,13 +87,14 @@ def test_the_owners_notes_on_the_sender_and_the_head_of_soul_and_job_ride_along(
     assert 'You work for Alex Doyle.' in p and 'Alex runs facilities for Northwind.' in p and 'a comment' not in p and 'y' * 601 not in p
 
 
-def test_an_empty_learned_heading_is_left_out_and_a_live_one_kept(s):
-    from taskuary.learn import injectable
+def test_the_advisor_reads_what_you_do_next_and_nothing_else(s):
+    """One section per reader (the owner, 2026-10-23): the Advisor reads "What you do next"; the sorting lines are triage's."""
     tid, _ = asked(s, 'x', 'y')
-    s.save_doc('learned', '# LEARNED.md\n\n## Role & responsibilities\n_(nothing learned\nyet)_\n\n## Voice & style\n- Alex signs off with "Thanks, A" [s:5 | ev: rv1 | seen: 2026-10-01]\n', 'owner')
+    s.save_doc('learned', '# LEARNED.md\n\n## How you sort mail\n- Vendor statements are fyi [s:5 | ev: mem1 | seen: 2026-10-01]\n\n'
+                          '## What you do next\n_(nothing\nyet)_\n- On asks from northwind.example, Alex presses Reply (4 of 4) [s:5 | ev: pr1 | seen: 2026-10-01]\n', 'owner')
     p = prompt(s, tid)
-    assert '## Voice & style' in p and 'Thanks, A' in p and 'Role & responsibilities' not in p
-    s.save_doc('learned', '# LEARNED.md\n\n## Role & responsibilities\n_(nothing learned yet)_\n', 'owner')
+    assert '## What you do next' in p and 'presses Reply (4 of 4)' in p and 'Vendor statements' not in p and 'nothing' not in p
+    s.save_doc('learned', '# LEARNED.md\n\n## What you do next\n_(nothing learned yet)_\n', 'owner')
     assert 'LEARNED' not in prompt(s, tid)
 
 

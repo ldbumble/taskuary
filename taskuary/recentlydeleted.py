@@ -178,7 +178,10 @@ def _restore_task(store, d: dict) -> int:
         store._exec('UPDATE message SET TaskId=?, Status=? WHERE MessageId=? AND TaskId IS NULL', (tid, m['Status'], m['MessageId']))
     for rid in d.get('routes') or []: store._exec('UPDATE route SET TaskId=? WHERE RouteId=? AND TaskId IS NULL', (tid, rid))
     if d.get('ignore'): store._exec("DELETE FROM route WHERE RouteId=? AND Decision='ignore'", (d['ignore'],))
-    if d.get('memory'): store.set_memory_active(d['memory'], False)
+    if d.get('memory'):
+        store.set_memory_active(d['memory'], False)
+        from . import learn                 # ...and what that note fed in LEARNED.md goes with it (learn.withdraw)
+        learn.withdraw(store, d['memory']); learn.note_verdicts(store)
     for i in d.get('ideas') or []:
         store._exec('UPDATE idea SET Status=?, DecidedBy=?, DecidedAt=? WHERE IdeaId=?', (i['Status'], i.get('DecidedBy'), i.get('DecidedAt'), i['IdeaId']))
     store._bump_snapshots()

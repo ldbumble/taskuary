@@ -37,7 +37,7 @@ class PressTests(_Rail):
         b = advisor.press(s, f'task:{t}', 'continue', '12:done', live=['continue'])
         self.assertEqual(a, b)
         self.assertEqual(s._one('SELECT COUNT(*) n FROM advice_press')['n'], 1)
-        self.assertEqual(s.get_setting('learn_pending'), '1')
+        self.assertFalse(s.get_setting('learn_pending'), 'a press teaches the Advisor, never the reflection that writes what triage reads (2026-10-23)')
         self.assertNotEqual(advisor.press(s, f'task:{t}', None, 'done', surface='task', live=['continue']), a, 'another surface is another press')
 
     def test_the_tasks_tab_left_to_say_what_it_drew_is_read_off_the_row_without_next(self):

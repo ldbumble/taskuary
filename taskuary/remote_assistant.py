@@ -1598,6 +1598,18 @@ def note_pick(store, act: dict, item: dict | None, offered: list, acts: dict) ->
         logger.warning(f'the phone pick {got} was not kept: {e}'); return 0
 
 
+def passed_read(item: dict | None) -> str:
+    """The phone's receipt for Next on a row it READ - a report, a dashboard, an fyi: the desk's badge as one short word (the owner,
+    2026-10-23: "should show read on reports if you go pass them when you hit next"). A task Next only passes says nothing: the next
+    card is the answer (F12)."""
+    from . import concierge
+    word = buttons.label('next', 'read')
+    return f'✓ {word}.' if item and item.get('kind') != 'fyis' and concierge.next_badge(item) == word else ''
+
+
+def _lead(*xs) -> str: return '\n'.join(x for x in xs if x)
+
+
 def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
     """One numbered pick, run the way the desktop's button runs it - never through the model."""
     from . import funnel
@@ -1640,17 +1652,17 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
                 doorway_browse.hold(store, asking(), walking['section'], [*seen, nxt['key']])
                 out = concierge.surface(store, nxt['key'], actor=actor, leaving=here)
                 news, opens = urgent_news(store, out)
-                return carry_out(store, out, out.get('item'), actor, lead=news, extra=opens)
+                return carry_out(store, out, out.get('item'), actor, lead=_lead(passed_read(item), news), extra=opens)
             doorway_browse.hold(store, asking(), None)          # the section ran out: say so, and the walk goes on as normal
             return carry_out(store, concierge.surface(store, actor=actor, leaving=here, exclude=here), None, actor,
-                             lead=funnel.section_done(walking['section']))
+                             lead=_lead(passed_read(item), funnel.section_done(walking['section'])))
         if t == 'next':
             # the desktop's Next: what is on the table is put down on the way out (read - Passed when it is yours) and not
             # the next pick; the phone surfaced afresh, so a failed item could be handed straight back or left unread
             here = (item or {}).get('key')
             out = concierge.surface(store, actor=actor, leaving=here, exclude=here)
             news, opens = urgent_news(store, out)
-            return carry_out(store, out, None, actor, lead=news, extra=opens)
+            return carry_out(store, out, None, actor, lead=_lead(passed_read(item), news), extra=opens)
         if t == 'open':                 # one item by name - one the walk already showed and would not repeat yet
             nxt = concierge.surface(store, act.get('key'), actor=actor)
             return carry_out(store, nxt, nxt.get('item'), actor)

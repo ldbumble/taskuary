@@ -1,6 +1,8 @@
 // Reconcile optimistic chat bubbles with the durable turns returned by the server.
 // Local bubbles use a/u/r/context ids; persisted comments use their database id. Comparing only
 // ids drew both copies after every freshness read even though the server had recorded one turn.
+import { label as btn } from "./buttons.js";
+
 const optimistic = (m) => typeof m?.id === "string" && /^(?:a|u|r|context)\d+$/.test(m.id);
 const words = (v) => String(v || "").replace(/\s+/g, " ").trim();
 // a receipt drawn at the click is the server's recorded line, come back as an assistant turn - the
@@ -116,3 +118,10 @@ export function pressChip(messages = [], chip) {
 // the badge's label: the page's own at the press, the server's stamp after a read
 export const pressedOf = (m) => m?.pressed || m?.card?.pressed || "";
 export const pressedNoteOf = (m) => m?.pressedNote || m?.card?.pressed_note || "";
+// NEXT'S BADGE says what Next did to the card it left (the owner, 2026-10-23: "should show read on reports if you go pass them when you hit
+// next"): "Read" on a row Next settles read - a report, a dashboard, an agent's finished result, an fyi - and "Next" on one it only passes,
+// still yours. The server's next_badge (concierge.py) is the same rule, so the stamp a reload reads says the same word.
+// ...a report that failed is in the broken lane, and read all the same: it has no task to stay on
+const READ_ON_NEXT = new Set(["report", "fyi"]);
+const readOnNext = (c) => READ_ON_NEXT.has(c?.lane) || (c?.kind === "report" && !c?.tid);
+export const nextBadge = (card) => btn("next", card?.kind === "fyis" ? "batch" : readOnNext(card) ? "read" : undefined);

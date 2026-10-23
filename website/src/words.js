@@ -22,8 +22,10 @@ const esc = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 export const JARGON_RES = [...JARGON.map((w) => new RegExp(`\\b${esc(w)}${/-$/.test(w) ? "" : "\\b"}`, w === w.toUpperCase() ? "" : "i")),
   ...GONE.map((w) => new RegExp(`\\b${esc(w)}\\b`))];   // a removed surface is matched as written: "the project timeline" is a word
 export const jargonIn = (text) => { const s = String(text || ""); for (const re of JARGON_RES) { const m = s.match(re); if (m) return m; } return null; };
-// WHEN THE ADVISOR HAS NO LINE (advisor.status {none: why}): the sentence the strip says and the one move the row lights. An unknown
-// reason is said as "nothing" - a strip that goes blank is the thing this exists to stop
+// WHEN THE ADVISOR LIGHTS NOTHING (advisor.status {none: why}): only no AI is said, with its way out (the owner, 2026-10-23: "No
+// suggestion...", "Nothing to decide..." and "Thinking..." went) - any other reason is silent, with Next lit
 const NONE = Object.fromEntries(Object.entries(words.advice_none).filter(([k]) => !k.startsWith("_")));
-export const adviceNone = (why) => NONE[why] || NONE.nothing;
+export const adviceNone = (why) => NONE[why] || { line: "", move: "next" };
 export const ADVICE_NONE = NONE;
+// THE ONE RULEBOOK's words (rulebook.py): each state's line and the verbs it lights, the server's and the page's alike
+export const ADVICE_RULE = Object.fromEntries(Object.entries(words.advice_rule).filter(([k]) => !k.startsWith("_")));

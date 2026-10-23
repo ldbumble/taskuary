@@ -8,12 +8,14 @@ const read = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "ut
 const view = read("AssistantView.jsx"), cards = read("assistantCards.jsx");
 
 test("no AI connected: the strip says it once and its one button opens Connections, AI (U3)", () => {
-  assert.match(read("tableState.js"), /if \(data\.verb \|\| data\.none\)/, "the no-AI answer is kept, not dropped as nothing");
-  assert.match(view, /Connect an AI to get a suggestion on each item/);
-  assert.match(view, /openAppLink\(place\("ai"\)\.href\)\}>Connect an AI<\/button>/);
-  // ...and the capability says so too: one answer for "is an AI connected" (capabilities.js)
+  assert.match(read("tableState.js"), /data\.verb \|\| data\.none \|\| data\.state/, "the no-AI answer is kept, not dropped as nothing");
+  assert.match(view, /\{adviceNone\("no_ai"\)\.line\}/);
+  assert.match(view, /onClick=\{\(\) => openAppLink\(place\("ai"\)\.href\)\}>\{CONNECT_AI\}<\/button>/);
+  // ...LIT: the strip's own Connect an AI is the one lit move, unless the row has its own (the design, phase A: it lit nothing)
+  assert.match(view, /rowVerbs\.list\.some\(\(v\) => v\.label === CONNECT_AI && !v\.disabled\) \? "tq-chip" : "tq-chip primary"/);
+  // ...and only where the move needs an AI: a rule decides the rest with none connected (`needs_ai`, advisor.decide)
   assert.match(view, /aiOff: caps\.ai === false,/);
-  assert.match(read("advice.js"), /aiOff \|\| \(advice\?\.none === "no_ai" && advice\.for === key\)/);
+  assert.match(read("advice.js"), /advice\.none === "no_ai" \|\| \(aiOff && !!advice\.needs_ai\)/);
 });
 
 test("a press refused as changed reads the advice again and says so (B6)", () => {

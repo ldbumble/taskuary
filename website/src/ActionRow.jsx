@@ -7,14 +7,16 @@ import api from "./api.js";
 import { suggestion } from "./advice.js";
 import { advisedAny, advisedIn, clustersOf, phoneRow, press, rowOf, lightOnCard, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
 import { adviceNone } from "./words.js";
+import { CONNECT_AI } from "./ConnectAi.jsx";
 
 // what a refused proposal says on the line: the item moved under the Advisor (409) is not the owner's mistake - the page reads
 // the advice again, and the line says the suggestion is the new one
 export const proposeFailed = (e) => (e?.response?.status === 409 ? "This changed - here's the updated suggestion."
   : e?.response?.data?.detail || "That did not go through - try again.");
 
-// THE ADVISOR'S SUGGESTION (advisor.py), over the row whose filled button it picked: the reason in a sentence, and Why? for the
-// reasoning behind it - the buttons stay on the row, the box below stays the owner's own. Nothing to say draws nothing (2026-10-13).
+// THE ADVISOR'S SUGGESTION (advisor.py), over the row whose filled button it picked: the fact it rests on, and Why? for the
+// reasoning behind it - the buttons stay on the row, the box below stays the owner's own. THE OBVIOUS MOVE IS SILENT (the owner,
+// 2026-10-23): a decision with no line lights its button and the strip draws no sentence - only an empty mark the walk reads.
 export function AdvisorNext({ advice, onPropose }) {
   const verbs = useRowVerbs();
   const [at, setAt] = useState(null), [note, setNote] = useState(null), [going, setGoing] = useState("");
@@ -23,7 +25,7 @@ export function AdvisorNext({ advice, onPropose }) {
   // highlight the button in the button row not add new ones"): the move joins the row in its type, on the proposal road the pill
   // takes, stamped with the revision it was judged at, and the row fills it like any advised button
   const theirs = verbs.list.filter((v) => !String(v.id).startsWith("advice:"));
-  const lacks = !!(advice?.verb && advice.line && onPropose) && !advisedAny(theirs, advice);
+  const lacks = !!(advice?.verb && advice.verb !== "next" && onPropose) && !advisedAny(theirs, advice);
   // ...a 409 says so once and stays over the suggestion the page reads next for this item; another item starts clean
   useEffect(() => { setGoing(""); }, [advice?.for || advice?.key]);
   const run = async (e, anchor) => {
@@ -34,7 +36,10 @@ export function AdvisorNext({ advice, onPropose }) {
   // ...at the END of its type (group "more"): in front, it pushed the type's own second button into ▾ when the advice landed (2026-10-19)
   useVerbs("advice", lacks ? [{ id: `advice:${advice.verb}`, label: advice.label, group: "more", tone: "p", disabled: going === "…",
     title: "What the Advisor suggests", run }] : [], lacks);
-  if (!advice?.verb || !advice.line) return null;
+  if (!advice?.verb) return null;
+  // the silent decision: its button is lit, and the strip says nothing (data-tq-advice marks it decided for the dead-end walk)
+  const mark = <div hidden data-tq-advice="" data-tq-silent="" />;
+  if (advice.verb === "next") return advice.line ? <div className="tq-next" role="status" data-tq-advice=""><div className="tq-next-txt">{advice.line}</div></div> : mark;
   // a move the row cannot make NOW is not advice: "Stop the agent" over a greyed Stop and save left Next the filled
   // button under it (the owner, 2026-10-13: "it said stop agent but highlighted button was next?")
   const onRow = advisedIn(verbs.list, advice);
@@ -52,6 +57,7 @@ export function AdvisorNext({ advice, onPropose }) {
   // ...and a move whose text is gone (`blank`: a chat's Mark done copies the draft, and the box was emptied) says what it does now,
   // in place of the line judged over the draft as filed - still the advised move, still lit (the matrix's verify, 2026-10-20)
   if (onRow.blank) return <div className="tq-next" role="status" data-tq-advice=""><div className="tq-next-txt">{`${onRow.blank}.`}</div></div>;
+  if (!advice.line) return mark;
   const word = onRow.label;
   const why = (e) => {
     setAt(e.currentTarget); setNote(null);
@@ -81,18 +87,6 @@ export function AdvisorNext({ advice, onPropose }) {
   );
 }
 
-// NO LINE IS STILL AN ANSWER (2026-10-19): "Thinking about this one…" then nothing read as broken. Each reason the Advisor gives for
-// having no line (advisor.status {none}) is one plain sentence from words.json, and the row lights its one move (rowOf: Next)
-export function AdviceNone({ advice }) {
-  if (!advice?.none || advice.verb) return null;
-  const said = adviceNone(advice.none);
-  return (
-    <div className="tq-next" role="status" data-tq-advice="none" data-tq-none={advice.none}>
-      <div className="tq-next-txt">{said.line}</div>
-    </div>
-  );
-}
-
 // ONE TYPE: its label, its two most likely buttons joined, and its own ▾ for the rest (clustersOf)
 function Cluster({ g, btn }) {
   const [at, setAt] = useState(null);
@@ -117,10 +111,14 @@ function Cluster({ g, btn }) {
 }
 
 // the row says what to do, by type - not which task or how long it waited: the card above says both (the owner, 2026-10-13)
-export default function ActionRow({ inline = false, advised = null }) {
-  // a "none" answer lights its one move - Next - the way a line lights its verb (words.json advice_none)
-  const pick = advised?.none ? { verb: adviceNone(advised.none).move } : advised;
-  const row = rowOf(useRowVerbs(), pick);
+export default function ActionRow({ inline = false, advised = null, hold = false }) {
+  // a "none" answer lights its one move: no AI lights the row's own Connect an AI where the row has one (a failure's fix named after
+  // its place) - it lit nothing, a move named "ai" no button carries (the design, phase A) - and any other none lights Next
+  const verbs = useRowVerbs();
+  const move = advised?.none ? adviceNone(advised.none).move : "";
+  const conn = move === "ai" ? verbs.list.find((v) => v.label === CONNECT_AI && !v.disabled) : null;
+  const pick = advised?.none ? (conn ? { id: conn.id } : move === "ai" ? null : { verb: move || "next" }) : advised;
+  const row = rowOf(verbs, pick);
   const { ref, decide, agent, more, next, why } = row;
   const hosted = useHosted();
   // ...a phone's row is Next, the one move and one ▾ (phoneRow) - the width the page calls a phone (AssistantView)
@@ -139,7 +137,9 @@ export default function ActionRow({ inline = false, advised = null }) {
       title={(v.disabled && v.why) || v.title || undefined} onClick={(e) => press(v.id, e, e.currentTarget)}>{v.label}</button>
   );
   return (
-    <div className={inline ? "tq-arow inline" : "tq-arow"} role="toolbar" aria-label={ref ? `What to do with ${ref}` : "What to do with this one"} data-tq-row="">
+    // `hold`: the item's first decision is still being read - the row keeps its room and shows nothing until its lit button lands with it
+    <div className={inline ? "tq-arow inline" : "tq-arow"} role="toolbar" aria-label={ref ? `What to do with ${ref}` : "What to do with this one"} data-tq-row=""
+      aria-busy={hold || undefined} style={hold ? { visibility: "hidden" } : undefined}>
       <div className="tq-arow-verbs">
         {next && <div className="tq-cl" role="group" aria-label="Move on">
           <div className="tq-cl-b"><button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} title={next.title || undefined} disabled={next.disabled}

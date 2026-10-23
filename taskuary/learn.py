@@ -34,6 +34,10 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 DOC = 'learned'
+# ONE SECTION PER READER (the owner, 2026-10-23: "why would we want button presses to do with triage"): triage reads the first and
+# nothing else, the Advisor the second and nothing else (learned_cut.READS); how the owner writes lives in STYLE.md (byrecipient.py)
+from .learned_cut import SORT, NEXT
+WATCH_HEADER = '## Watching — not read by anyone yet'
 REFLECT_AT = 3           # corrections that trigger a reflection; fewer still reflect daily
 DAYS = 14                # the fallback event window when no reflection has ever run
 HYP_START, HYP_END = '<!-- hypotheses:start -->', '<!-- hypotheses:end -->'
@@ -50,12 +54,13 @@ VERD_HEADER = '## Verdicts - the evidence'
 VERD_KEEP = 60           # the most recent verdict lines the doc shows; the table keeps them all
 
 LESSON_SYSTEM = (
-    'You maintain the Hypotheses section of LEARNED.md: patterns Taskuary is testing about how '
+    'You maintain the Watching section of LEARNED.md: patterns Taskuary is testing about how '
     'its owner works, distilled from their verdicts. You get the current section and ONE new '
     'event. Return the updated section: markdown bullets only - no headers, no fences, no preamble.\n'
-    '- Infer the GENERAL preference the event reveals: voice and style, what they are responsible '
-    'for, who matters to them, what deserves a task. Never a one-sender rule (standing notes '
+    '- Infer the GENERAL preference the event reveals: what they are responsible for, who matters to '
+    'them, what deserves a task, how they write. Never a one-sender rule (standing notes '
     'handle those) and never a mere restatement of the event.\n'
+    "- Leave every line whose evidence is pr ids exactly as it is.\n"
     "- Every bullet ends with a tag: [s:N | ev: id,id | seen: date]. A new hypothesis starts at "
     "s:2 with this event's id as ev. If a bullet already says the same thing, raise its s by 1, "
     'append the id, update seen - never duplicate. If the event contradicts one, lower its s by 1; '
@@ -72,7 +77,11 @@ REFLECT_SYSTEM = (
     '- Apply the evidence: a hypothesis the events confirm gains 1 strength per distinct episode '
     '(append its ev id); a contradicted one loses 1; s:0 means delete the line.\n'
     '- Promote a hypothesis into the matching section above only at s:4+ with evidence from 3+ '
-    'episodes across 2+ different people or threads - one hot thread proves nothing general.\n'
+    'episodes across 2+ different people or threads - one hot thread proves nothing general. What deserves a task, what the owner '
+    'is responsible for and who matters go into "## How you sort mail" (triage reads it and nothing else); how the owner WRITES goes '
+    'into "## Voice" (the app moves it to STYLE.md, where the drafter reads it).\n'
+    '- "## How you sort mail" is learned ONLY from sorting verdicts: mem ids, rv rejections and no-replies, task ids. A line resting '
+    'only on presses (pr ids) or the outcome ledger (out ids) never goes there - the app moves it back to Watching.\n'
     '- EXCEPTION: a rule whose effect is to hide or auto-file things ("treat X as fyi", "never a '
     'task") promotes only into "Proposed rules" - hiding is the owner\'s call to approve - UNLESS two or '
     'more of its evidence ids are the owner\'s own explicit verdicts (mem ids whose notes say NOT OURS or '
@@ -80,11 +89,10 @@ REFLECT_SYSTEM = (
     '- Add new hypotheses only for patterns 2+ episodes support; singles stay unwritten.\n'
     '- Never contradict SOUL.md (it outranks this file); never invent facts beyond the events.\n'
     '- Lines from the outcome ledger (out123) are evidence of HABITS and of what WORKED: a move the owner makes every '
-    'time an agent stops the same way is a rule about the owner; a reply that always gets more rounds is a fact about '
-    'what works. Cite their ids like any other.\n'
-    '- Lines whose evidence is pr ids (presses: what the owner pressed while the Advisor\'s line was shown) are counted by the app '
-    'from the press log - under "## Moves" and among the hypotheses. Keep them byte-for-byte; the MOVES events are evidence for '
-    'other lines too (a habit about the owner, never a rule about one sender).\n'
+    'time an agent stops the same way is a habit, and a habit belongs under "## What you do next" (the Advisor reads it), never '
+    'under "## How you sort mail". Cite their ids like any other.\n'
+    '- Lines whose evidence is pr ids (presses: what the owner pressed) are counted by the app from the press log - under '
+    '"## What you do next" and in Watching. Keep them byte-for-byte, where they are.\n'
     "- Keep each line's k: byte-for-byte - it is how a line is recognised across rewrites, and a "
     'changed one orphans its evidence and its history. A line you add fresh needs none.\n'
     '- Keep the section headers, all four <!-- --> marker lines, and every {{owner}}-style '
@@ -131,7 +139,22 @@ def settle(store, old_doc: str, doc: str, today: str = None) -> str:
         o = was.get(l['key'])
         if o and set(l['ev']) - set(o['ev']): l['seen'] = today           # something new confirmed it: the clock restarts here
         out[l.pop('_at')] = lg.fmt(l) if lg.effective(l, log) > 0 else None
-    return '\n'.join(r for r in out if r is not None)
+    from .learnedlines import guard
+    return guard(store, _sort_is_verdicts('\n'.join(r for r in out if r is not None)))
+
+
+SORTING = ('mem', 'rv', 'task')       # the evidence a sorting line may rest on: verdict notes, review verdicts, task corrections
+
+
+def _sort_is_verdicts(doc: str) -> str:
+    """PRESS HABITS NEVER REACH TRIAGE (the owner, 2026-10-23): a line under "How you sort mail" that rests only on presses or the
+    outcome ledger goes back to Watching, whatever the model meant by putting it there. Triage learns from sorting verdicts."""
+    from . import learnedgraph as lg
+    bad = [raw for raw, l in lg.walk(doc) if l and f"## {l['section']}" == SORT and l['ev']
+           and not any(e.startswith(SORTING) for e in l['ev'])]
+    if not bad or HYP_START not in doc: return doc
+    for raw in bad: doc = doc.replace(raw + '\n', '', 1).replace(raw, '', 1)
+    return _put_block(doc, HYP_START, HYP_END, '\n'.join(filter(None, [_block(doc, HYP_START, HYP_END)] + [r.strip() for r in bad])))
 
 
 def injectable(text: str) -> str:
@@ -213,17 +236,27 @@ def learn_from(store, event: str, llm=None):
         doc = store.get_doc(DOC) or ''
         hyp = _block(doc, HYP_START, HYP_END)
         if llm is None or hyp is None: return
-        out = _unfence(llm(LESSON_SYSTEM, f'(today: {_today()})\n\nCURRENT HYPOTHESES:\n{hyp[:3000]}'
+        # the press lines are counted by the app (moves), never by a model: held out of the call and put back as they were
+        held = [l for l in hyp.splitlines() if _pressed(l)]
+        sent = '\n'.join(l for l in hyp.splitlines() if not _pressed(l))
+        out = _unfence(llm(LESSON_SYSTEM, f'(today: {_today()})\n\nCURRENT HYPOTHESES:\n{sent[:3000]}'
                                           f'\n\nNEW EVENT:\n{event[:2000]}', max_tokens=700))
         # a broken answer never lands in the doc - markers inside it would corrupt the block splice
         if not out or '<!--' in out or len(out) > 6000: return
-        if out != hyp:
+        if out != sent:
+            out = '\n'.join([l for l in out.splitlines() if not _pressed(l)] + held)
             new_doc = settle(store, doc, _put_block(doc, HYP_START, HYP_END, out))
             store.save_doc(DOC, new_doc, 'learn')
             from . import learnedgraph; learnedgraph.record(store, doc, new_doc, 'learn')
         if n >= REFLECT_AT and not _failed_today(store): reflect(store, llm)
     except Exception as e:
         logger.warning(f'learning skipped: {e}')
+
+
+def _pressed(line: str) -> bool:
+    from .learnedgraph import TAG
+    m = TAG.match(line)
+    return bool(m) and any(e.strip().startswith('pr') for e in m.group('ev').split(','))
 
 
 def gather(store, since: str) -> str:
@@ -251,15 +284,8 @@ def gather(store, since: str) -> str:
     if aud:
         out.append('OWNER CORRECTIONS (audit trail):')
         out += [f"  {a['Action']} {a['EntityType']}{a['EntityId']} {str(a.get('Detail') or '')[:120]}" for a in aud[:20]]
-    # ...and what the owner PRESSED while the Advisor's line was shown (advisor.press): each moment's count, the line it lit against
-    # the one pressed - the moves this document's "## Moves" is counted from
-    try:
-        rs = [r for r in store._rows('SELECT * FROM advice_press WHERE CreatedAt>=? AND IFNULL(Stale,0)=0 ORDER BY Id', (since,))]
-    except Exception: rs = []
-    if rs:
-        out.append(f"MOVES (what the owner pressed while the Advisor's line was shown: {sum(r['Match'] or 0 for r in rs)} of {len(rs)} were the lit one):")
-        out += [f"  pr{r['Id']} on {moment(r.get('ItemKind'), r.get('Channel'), r.get('Scope') or '?')}: lit {r.get('Advised') or '-'}, pressed {r['Pressed']}"
-                for r in rs[-20:]]
+    # ...and NOT what the owner pressed: the presses are counted into "What you do next" by the app (moves), and a reflection that
+    # read them wrote press habits into the sorting lines triage reads (the owner, 2026-10-23: press habits never reach triage)
     from . import outcomes
     led = outcomes.evidence(store, since)
     if led:
@@ -331,6 +357,8 @@ def reflect(store, llm=None) -> bool:
             and all(new.count(m) == 1 for m in markers)):
         return _failed(store, f'unusable answer: {len(new)} chars, {new.count(chr(10))} lines, '
                               f'{sum(new.count(m) == 1 for m in markers)}/4 markers')
+    # ...and each reader's section is still there: a rewrite that lost "How you sort mail" lost everything triage reads
+    if lost := [h for h in (SORT, NEXT) if h in doc and h not in new]: return _failed(store, f'the rewrite dropped {", ".join(lost)}')
     new = _restore(new, held)
     from . import learnedgraph
     # this reflection is itself an opportunity: it read the window, so every line it did not
@@ -341,6 +369,7 @@ def reflect(store, llm=None) -> bool:
     store.save_doc(DOC, final, 'reflect')
     learnedgraph.record(store, doc, new, 'reflect')            # what the reflection itself did to the lines
     learnedgraph.record(store, new, settled, 'decay')          # and what the clock did to the ones it left alone
+    voice_out(store)                               # what it learned about how the owner writes goes where the drafter reads it
     auto_adopt(store)                              # what the owner already said does not wait for a click
     moves(store, restore=True)                     # ...and the press log's counts, as written, whatever the rewrite did to them
     store.set_setting('learn_pending', '0', 'reflect')
@@ -360,7 +389,7 @@ def reflect(store, llm=None) -> bool:
     return True
 
 
-ADOPT_UNDER = '## What becomes a task'
+ADOPT_UNDER = SORT
 
 def adopt(store, key: str, actor: str = 'owner') -> dict:
     """The owner's click on a proposed rule or a hypothesis: the line moves into the live
@@ -372,13 +401,9 @@ def adopt(store, key: str, actor: str = 'owner') -> dict:
     if not target: raise ValueError('no proposed or hypothesis line with that key')
     raw = next(r for r, l in learnedgraph.walk(doc) if l and l['key'] == key)
     rest = doc.replace(raw + '\n', '', 1).replace(raw, '', 1)
-    if ADOPT_UNDER in rest:
-        head, tail = rest.split(ADOPT_UNDER, 1)
-        nxt = tail.find('\n## ')
-        body, after = (tail, '') if nxt < 0 else (tail[:nxt], tail[nxt:])
-        rest = head + ADOPT_UNDER + body.rstrip('\n') + '\n' + raw.strip() + '\n' + after
-    else:
-        rest = rest.rstrip('\n') + f'\n\n{ADOPT_UNDER}\n' + raw.strip() + '\n'
+    # ...its reader's own section: a press habit is the Advisor's, everything else triage's
+    from .learnedlines import reader_of
+    rest = _under(rest, NEXT if reader_of(target) == 'advisor' else ADOPT_UNDER, raw.strip())
     store.save_doc(DOC, rest, actor)
     learnedgraph.record(store, doc, rest, actor)
     return {'ok': True, 'text': target['text']}
@@ -386,6 +411,11 @@ def adopt(store, key: str, actor: str = 'owner') -> dict:
 
 OWNER_SAID = 2      # this many of the owner's own explicit verdicts among a proposed rule's evidence = they stated it
 _MARK = re.compile(r'\b(NOT OURS|NOT A TASK|NOT A CODING TASK)\b')
+
+def _said(store) -> set:
+    """The owner's own explicit verdicts that are still SWITCHED ON - a note switched off no longer says anything (phase C, 2026-10-23)."""
+    return {f"mem{m['MemoryId']}" for m in store.list_memories(active_only=True) if m.get('Source') == 'verdict' and _MARK.search(m.get('Note') or '')}
+
 
 def auto_adopt(store, actor: str = 'owner-verdicts') -> list:
     """The Proposed gate exists because a hide-rule the model INFERRED can silence the corrections
@@ -395,8 +425,7 @@ def auto_adopt(store, actor: str = 'owner-verdicts') -> list:
     as soon as the reflection proposes them (the owner, 2026-08-27: "anything written in absolute rules
     should not be in proposed"). Returns the adopted lines' texts."""
     from . import learnedgraph
-    said = {f"mem{m['MemoryId']}" for m in store.list_memories(active_only=False)
-            if m.get('Source') == 'verdict' and _MARK.search(m.get('Note') or '')}
+    said = _said(store)
     out = []
     for l in learnedgraph.lines(store.get_doc(DOC) or ''):
         if l['status'] != 'proposed' or len(said & set(l['ev'])) < OWNER_SAID: continue
@@ -425,16 +454,20 @@ def reflect_if_due(store) -> bool:
 # ── MOVES: what the owner presses, learned from the press log (the deep dive, 2026-10-20) ─────────────────────────────────────────────
 # The Advisor lit a button and nothing remembered which one the owner pressed (advisor.press keeps it now). The owner expects what is
 # learned to land HERE, where they can read it and delete a line to undo it - so the press log becomes lines in this document's own
-# grammar: a hypothesis under test, then "## Moves" once it holds by the same bar the reflection promotes at (learnedgraph.PROMOTE_AT,
-# evidence from 3+ episodes across 2+ people or threads). The counts are the log's, never a model's: one line per moment - a kind of
-# item from one sender's domain, or one repository - and the verb pressed most there. A line the owner deletes is undone: its moment
-# counts again only from presses made after the delete. The reflection reads the same log (gather) and keeps these lines as written.
-MOVES_HEADER = '## Moves'
-MOVES_INTRO = ("_(what you press on each kind of item, learned from your own presses while the Advisor's line was shown - the "
-               'Advisor reads these; delete a line to undo it)_')
+# grammar: watching, then "## What you do next" (the Advisor's section, and only the Advisor's) once it is IN USE - the one ladder of
+# the phase C design (2026-10-23): 3+ episodes from 2+ people or threads at a share of at least MOVE_SHARE; two overrides in a row put
+# it back to watching, under the same key. The counts are the log's, never a model's: one line per moment - a kind of item from one
+# sender's domain, or one repository - and the verb pressed most there. A line the owner deletes is undone: its moment counts again
+# only from presses made after the delete. The reflection never reads the presses (gather) and keeps these lines as written.
+MOVES_HEADER = NEXT
+MOVES_INTRO = ("_(the Advisor reads only this: what you press on each kind of item, learned from your own presses - it lights that "
+               'button, never presses it; delete a line to undo it)_')
+SORT_INTRO = ('_(triage reads only this: what you are responsible for and what becomes a task, learned from your sorting verdicts - '
+              'Not ours, Not a task, a kind or repository you moved, rules you approved)_')
 MOVES_CUT = 'learn_moves_cut'        # {key: the last press id when the owner deleted that line} - presses up to it no longer count
 MOVES_MINE = 'learn_moves_written'   # {key: the last press it counted} for each line this pass wrote - one gone from the doc was deleted
 MOVE_SHARE = 0.6                     # the verb must be this share of the presses on the moment to be a habit at all
+IN_USE_EPISODES, IN_USE_PEOPLE = 3, 2
 MOMENTS = {'review': 'drafts to', 'todo': 'asks from', 'asked': 'asks from', 'agent': "agents' stops on work from", 'agentdone': 'finished agent work for',
            'idea': "the Advisor's ideas about", 'fyi': 'notices from', 'report': 'reports from', 'wrapup': 'sent replies to', 'task': 'tasks from'}
 CODE_CHANNELS = ('github', 'gitlab', 'azdo', 'bitbucket')
@@ -456,21 +489,30 @@ def _json_setting(store, key, empty):
     except ValueError: return empty
 
 
+def press_rows(store) -> list:
+    """THE ONE READER OF THE PRESS LOG (presses.py records every press, on every surface - phase B): every press with a scope to learn
+    at that was a real CHOICE, oldest first - one made with no other button there says nothing about what the owner would pick. The
+    habits read the presses through here and nowhere else."""
+    return store._rows("SELECT * FROM advice_press WHERE IFNULL(Stale,0)=0 AND IFNULL(Choice,1)=1 AND IFNULL(Scope,'')<>'' AND IFNULL(Pressed,'')<>'' "
+                       "ORDER BY Id")
+
+
 def move_rows(store) -> dict:
     """{(kind, channel, scope): [press rows]} - presses on a line still true of the item (not stale), with a scope to learn at, made
-    after the owner last deleted that moment's line."""
+    after the owner last deleted that moment's line. Only a real choice counts (presses.py, 2026-10-23): every press is kept now, and
+    one made with no other button there says nothing about what the owner would pick."""
     cut, out = _json_setting(store, MOVES_CUT, {}), {}
-    for r in store._rows("SELECT * FROM advice_press WHERE IFNULL(Stale,0)=0 AND IFNULL(Scope,'')<>'' AND IFNULL(Pressed,'')<>'' ORDER BY Id"):
+    for r in press_rows(store):
         g = (str(r.get('ItemKind') or ''), str(r.get('Channel') or ''), str(r['Scope']))
         if int(r['Id']) > int(cut.get(_move_key(*g)) or 0): out.setdefault(g, []).append(r)
     return out
 
 
 def move_lines(store) -> list:
-    """Every moment with a habit: [{key, text, score, ev, seen, live}]. One episode is one item (its last press); the score is 1 + the
-    episodes that pressed the verb - the episodes that pressed another, so a habit is born at s:2 as LESSON_SYSTEM's are; live once it
-    clears the reflection's promotion bar."""
-    from .learnedgraph import PROMOTE_AT
+    """Every moment with a habit: [{key, text, score, ev, seen, live, overridden}]. One episode is one item (its last press); the score
+    is 1 + the episodes that pressed the verb - the episodes that pressed another, so a habit is born at s:2 as LESSON_SYSTEM's are.
+    live = in use: IN_USE_EPISODES+ episodes from IN_USE_PEOPLE+ people or threads at MOVE_SHARE+, and the last two episodes not
+    both something else (`overridden` - two overrides in a row put a habit back to watching)."""
     from . import buttons
     out = []
     for (kind, channel, scope), rs in move_rows(store).items():
@@ -483,20 +525,23 @@ def move_lines(store) -> list:
         score = 1 + n - (m - n)
         if n / m < MOVE_SHARE or score < 2: continue
         who = {r.get('Sender') or r.get('Thread') or f"{r['TargetKind']}{r['TargetId']}" for r in mine}
+        eps = sorted(last.values(), key=lambda r: int(r['Id']))
+        overridden = len(eps) >= 2 and all(r['Pressed'] != verb for r in eps[-2:])
         out.append({'key': _move_key(kind, channel, scope), 'score': score, 'upto': max(int(r['Id']) for r in rs), 'ev': [f"pr{r['Id']}" for r in mine][-8:],
-                    'live': score >= PROMOTE_AT and n >= 3 and len(who) >= 2, 'seen': max(str(r['CreatedAt'])[:10] for r in mine),
-                    'verb': verb, 'n': n, 'm': m, 'moment': moment(kind, channel, scope),
+                    'live': n >= IN_USE_EPISODES and len(who) >= IN_USE_PEOPLE and not overridden, 'overridden': overridden,
+                    'seen': max(str(r['CreatedAt'])[:10] for r in mine), 'verb': verb, 'n': n, 'm': m, 'moment': moment(kind, channel, scope),
                     'text': f"On {moment(kind, channel, scope)}, {{{{owner_first}}}} presses {buttons.label(verb) or verb} ({n} of {m})"})
     return out
 
 
 def moves(store, restore: bool = False) -> bool:
-    """Write the press log's habits into LEARNED.md: each moment's line in the Hypotheses block until it holds, then under "## Moves".
-    A key this pass wrote that is gone from the doc was deleted by the owner: it is cut, and counts only presses after now - unless
-    `restore` (after a reflection, whose rewrite may have dropped it: the count is the log's, not the model's). Lines are rewritten in
-    place by key; nothing else in the doc is touched. Never raises. Returns whether it saved."""
+    """Write the press log's habits into LEARNED.md: each moment's line in Watching until it is in use, then under "## What you do
+    next". A key this pass wrote that is gone from the doc was deleted by the owner: it is cut, and counts only presses after now -
+    unless `restore` (after a reflection, whose rewrite may have dropped it: the count is the log's, not the model's). Lines are
+    rewritten in place by key; nothing else in the doc is touched. Never raises. Returns whether it saved."""
     import json
     from . import learnedgraph as lg
+    from .learnedlines import guard
     try:
         if (store.get_settings() or {}).get('learn_enabled', '1') != '1': return False
         doc = store.get_doc(DOC) or ''
@@ -507,33 +552,154 @@ def moves(store, restore: bool = False) -> bool:
         if not restore and (gone := {k: n for k, n in mine.items() if k not in have}):
             store.set_setting(MOVES_CUT, json.dumps({**_json_setting(store, MOVES_CUT, {}), **gone}), 'learn')
         want = {m['key']: m for m in move_lines(store)}
-        new = doc
+        new, back = doc, []
         def drop(d, k):
             raw = next((r for r, l in lg.walk(d) if l and l['key'] == k), None)
             return d if raw is None else d.replace(raw + '\n', '', 1).replace(raw, '', 1)
         for k, m in want.items():
             line = lg.fmt({'text': m['text'], 'score': m['score'], 'ev': m['ev'], 'seen': m['seen'], 'key': k})
-            if any(raw.strip() == line for raw, l in lg.walk(new) if l and l['key'] == k): continue
-            # a line the owner moved into a live section stays live; otherwise its strength says where it lives
-            live = m['live'] or (k in have and have[k]['status'] == 'live')
+            # a line the owner moved into the section stays in use - until they press otherwise twice in a row
+            live = m['live'] or (k in have and have[k]['status'] == 'live' and not m['overridden'])
+            if any(raw.strip() == line for raw, l in lg.walk(new) if l and l['key'] == k) and live == (k in have and have[k]['status'] == 'live'): continue
+            if k in have and have[k]['status'] == 'live' and not live: back.append(m)
             new = drop(new, k)
-            new = _under_moves(new, line) if live else _put_block(new, HYP_START, HYP_END, '\n'.join(filter(None, [_block(new, HYP_START, HYP_END), line])))
+            new = _under(new, NEXT, line) if live else _put_block(new, HYP_START, HYP_END, '\n'.join(filter(None, [_block(new, HYP_START, HYP_END), line])))
         for k in set(mine) & set(have) - set(want): new = drop(new, k)        # a habit that no longer holds goes; the history says so
         store.set_setting(MOVES_MINE, json.dumps({k: m['upto'] for k, m in want.items()}), 'learn')
+        new = guard(store, new)
         if new == doc: return False
         store.save_doc(DOC, new, 'moves')
         lg.record(store, doc, new, 'moves')
+        for m in back: store.add_learned_event(m['key'], m['text'], 'hypothesis', m['score'], '', 'watching', 'moves')
         return True
     except Exception as e:
         logger.warning(f'moves not learned: {e}'); return False
 
 
-def _under_moves(doc: str, line: str) -> str:
-    """`line` at the end of the "## Moves" section, which is made (above Proposed rules, else at the end) the first time a move holds."""
-    if MOVES_HEADER not in doc:
-        at, sect = doc.find('\n## Proposed rules'), f'{MOVES_HEADER}\n{MOVES_INTRO}\n'
+def _under(doc: str, head: str, line: str) -> str:
+    """`line` at the end of the `head` section, which is made (above Proposed rules, else at the end) the first time it is needed."""
+    if head not in doc:
+        intro = MOVES_INTRO if head == NEXT else SORT_INTRO if head == SORT else ''
+        at, sect = doc.find('\n## Proposed rules'), f'{head}\n' + (f'{intro}\n' if intro else '')
         doc = doc[:at] + '\n\n' + sect + doc[at:] if at >= 0 else doc.rstrip('\n') + '\n\n' + sect
-    head, tail = doc.split(MOVES_HEADER, 1)
+    head_, tail = doc.split(head, 1)
     nxt = tail.find('\n## ')
     body, after = (tail, '') if nxt < 0 else (tail[:nxt], tail[nxt:])
-    return head + MOVES_HEADER + body.rstrip('\n') + '\n' + line + '\n' + after
+    return head_ + head + body.rstrip('\n') + '\n' + line + '\n' + after
+
+
+def _under_moves(doc: str, line: str) -> str: return _under(doc, NEXT, line)
+
+
+# ── VOICE LEAVES FOR STYLE.md, NOTES SWITCHED OFF WITHDRAW, AND THE ONE-TIME MOVE TO SECTIONS (phase C, 2026-10-23) ───────────────────────
+def _sections(doc: str) -> list:
+    """[(heading line, body)] - the document cut at its `## ` headings; the part above the first is ('', head)."""
+    parts = re.split(r'(?m)^(?=## )', doc or '')
+    return [('', parts[0])] + [(p.split('\n', 1)[0].rstrip('\r'), p.split('\n', 1)[1] if '\n' in p else '') for p in parts[1:]]
+
+
+def _is_voice(heading: str) -> bool: return heading.startswith('## ') and any(w in heading.lower() for w in ('voice', 'style'))
+
+
+def voice_out(store, actor: str = 'voice') -> list:
+    """Every line under a voice heading leaves LEARNED.md for STYLE.md's "By recipient" (as a line for everyone), where the drafter
+    reads it - the drafter never read LEARNED.md, so a voice lesson learned there reached triage and not the writer. The heading goes
+    with its lines. Returns the texts moved. Never raises."""
+    from . import byrecipient, learnedgraph as lg
+    try:
+        doc = store.get_doc(DOC) or ''
+        secs = _sections(doc)
+        moved, keep = [], []
+        for h, body in secs:
+            if not _is_voice(h): keep.append((h, body)); continue
+            for raw in _PH.sub('', body).splitlines():
+                t = raw.strip()
+                if not t.startswith(('- ', '* ')): continue
+                m = lg.TAG.match(raw)
+                text = (m.group('text') if m else t[2:]).strip()
+                byrecipient.add(store, byrecipient.EVERYONE, text, actor)
+                moved.append(text)
+                k = ((m.group('k') or '').strip() or lg._key(m.group('text'))) if m else lg._key(t)
+                store.add_learned_event(k, text, 'live', int(m.group('s')) if m else 0, '', 'moved', actor)
+                store._exec("INSERT INTO learned_line (Key,Reader,Text,Status,InDoc,InUseAt,Source,UpdatedAt) VALUES (?,?,?,?,0,?,?,?) ON CONFLICT(Key) "
+                            "DO UPDATE SET Reader='drafter', Status='in_use', InDoc=0, InUseAt=COALESCE(InUseAt, excluded.InUseAt)",
+                            (k, 'drafter', text, 'in_use', '-' if actor == 'migrate' else _today(), actor, _today()))
+        if len(keep) == len(secs): return []
+        new = ''.join((f'{h}\n{b}' if h else b) for h, b in keep)
+        store.save_doc(DOC, new, actor)
+        store._exec("UPDATE learned_line SET Reader='drafter', Status='in_use' WHERE Reader='drafter'")
+        return moved
+    except Exception as e:
+        logger.warning(f'voice lessons not moved to STYLE.md: {e}'); return []
+
+
+_PH = re.compile(r'_\([^)]*\)_', re.S)
+
+
+def withdraw(store, mid: int) -> list:
+    """A note switched off withdraws what it fed (phase C, 2026-10-23): its id leaves every line's evidence; a rule that went live
+    because the owner had said it (auto_adopt) and no longer has OWNER_SAID switched-on verdicts behind it goes back to Proposed; a
+    line with no evidence left goes. Returns the texts touched. Never raises."""
+    from . import learnedgraph as lg
+    try:
+        doc, ev, said, touched = store.get_doc(DOC) or '', f'mem{int(mid)}', _said(store), []
+        new = doc
+        for raw, l in lg.walk(doc):
+            if not l or ev not in l['ev']: continue
+            rest = [e for e in l['ev'] if e != ev]
+            touched.append(l['text'])
+            new = new.replace(raw + '\n', '', 1).replace(raw, '', 1)
+            if not rest:
+                store.add_learned_event(l['key'], l['text'], l['status'], 0, ev, 'withdrawn', 'withdraw'); continue
+            line = lg.fmt({**l, 'ev': rest})
+            adopted = any(h['Actor'] == 'owner-verdicts' for h in store.learned_history(l['key']))
+            if l['status'] == 'live' and adopted and len(said & set(rest)) < OWNER_SAID and PROP_START in new:
+                new = _put_block(new, PROP_START, PROP_END, '\n'.join(filter(None, [_block(new, PROP_START, PROP_END), line])))
+            else: new = _under(new, f"## {l['section']}", line) if l['status'] == 'live' else \
+                        _put_block(new, HYP_START, HYP_END, '\n'.join(filter(None, [_block(new, HYP_START, HYP_END), line])))
+        if new == doc: return []
+        store.save_doc(DOC, new, 'withdraw')
+        lg.record(store, doc, new, 'withdraw')
+        return touched
+    except Exception as e:
+        logger.warning(f'note {mid} not withdrawn from LEARNED.md: {e}'); return []
+
+
+OLD_NEXT = ('## moves',)
+
+
+def migrate(store) -> bool:
+    """LEARNED.md into one section per reader, once. Every live section that is not a voice section or Moves becomes a sub-section of
+    "How you sort mail" (triage read all of them before, so nothing it read is lost); Moves becomes "What you do next"; voice leaves
+    for STYLE.md; Proposed, Watching and the verdicts stay as they are. A line in use before keeps the date it went into use, so the
+    move itself is not counted as this week's learning. Returns whether it rewrote the document. Never raises."""
+    try:
+        doc = store.get_doc(DOC) or ''
+        if not doc.strip() or SORT in doc or HYP_START not in doc: return False
+        from pathlib import Path
+        tpl = (Path(__file__).parent / 'templates' / 'learned.md').read_text(encoding='utf-8')
+        sort, nxt, rest = [], [], []
+        head = _sections(doc)[0][1]
+        if 'Taskuary writes this document itself' in head: head = _sections(tpl)[0][1]     # the shipped explainer, now about readers
+        for h, body in _sections(doc)[1:]:
+            gated = any(m in body for m in (HYP_START, PROP_START, VERD_START))
+            if gated:
+                rest.append((WATCH_HEADER if HYP_START in body else h, body)); continue
+            if _is_voice(h): rest.append((h, body)); continue        # voice_out takes it from here, below
+            meat = _PH.sub('', body).strip('\n')
+            if h.lower().strip() in OLD_NEXT:
+                if meat.strip(): nxt.append(meat.strip('\n'))
+            elif meat.strip(): sort.append(f"### {h[3:].strip()}\n{meat.strip(chr(10))}")
+        out = head.rstrip('\n') + f'\n\n{SORT}\n{SORT_INTRO}\n' + ''.join(f'\n{s}\n' for s in sort) + \
+              f'\n{NEXT}\n{MOVES_INTRO}\n' + ''.join(f'{s}\n' for s in nxt) + '\n' + ''.join(f'{h}\n{b}' for h, b in rest)
+        store.save_doc(DOC, out, 'migrate')
+        voice_out(store, 'migrate')
+        # in use before the move: the date its history says it went live, else unknown ('-', never this week)
+        from .learnedgraph import lines
+        for k in {l['key'] for l in lines(doc) if l['status'] == 'live'}:
+            store._exec("UPDATE learned_line SET InUseAt=COALESCE((SELECT MIN(h.At) FROM learned_history h WHERE h.Key=? AND h.Status='live' AND h.Action<>'moved'), '-') "
+                        "WHERE Key=? AND Status='in_use'", (k, k))
+        logger.info('LEARNED.md: one section per reader - How you sort mail (triage), What you do next (the Advisor)')
+        return True
+    except Exception as e:
+        logger.warning(f'LEARNED.md not moved to reader sections: {e}'); return False

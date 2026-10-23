@@ -12,12 +12,15 @@ import json, os, re, tempfile
 from datetime import datetime, timedelta
 from unittest import mock
 
-# (title or key fragment, ok verbs, never verbs, prompt needs)
+# (title or key fragment, ok verbs, never verbs, prompt needs) - graded against THE ONE DECISION (advisor.decide, the design phase A,
+# 2026-10-23): `next` is Next lit and nothing said, None is nothing lit; `needs` is checked only where the model was asked (the rule
+# decides the rest from the item's facts, and no prompt is written)
 CASES = [
-    # a possible duplicate an agent is on: the lit button agrees with the line - never Reply over "it may already be covered" (C2, 2026-10-21)
-    ('Month-end close is short', {'defer', 'regular_agent'}, {'not_ours', 'close', 'reply'}, ['POSSIBLE DUPLICATES', 'Reconcile the August GL export']),
+    # the same sender asking two things is not a duplicate (the design, 2026-10-23): with nothing on its thread, the ask is answered
+    ('Month-end close is short', {'reply', 'regular_agent', 'defer'}, {'not_ours', 'close'}, []),
     ('New starter on Monday', {'reply', 'regular_agent'}, {'not_ours'}, []),
-    ('did the overnight import finish', {'close'}, {'not_ours', 'approve'}, ['It finished at 04:10']),
+    # a draft that cannot go from here: Copy lit, said by nothing - the reason is its hover (the owner, 2026-10-22)
+    ('did the overnight import finish', {'copy'}, {'not_ours', 'approve'}, []),
     ('Invoice 88213', {'redraft'}, {'approve'}, ["Friday's payment run", 'ATTACHED TO THE DRAFT: nothing']),
     ('AP cutover - Thursday?', {'approve'}, {'not_ours'}, ['Thursday still works']),
     ('Lease renewal for the Elm Street office', {'new_task', 'fix'}, {'redraft', 'approve'}, ['WHAT FAILED', 'no such user']),
@@ -28,31 +31,33 @@ CASES = [
     ('Vendor master clean-up', {'reply'}, {'close'}, ['A REPLY WAS ALREADY SENT']),
     ('Trainly seats', {'reply'}, {'close'}, []),
     ('importers#214', {'regular_agent', 'coding_agent'}, {'reply', 'not_ours'}, ['Traceback']),
-    ('Q3 accruals file', {'close'}, {'reply'}, ['NOTHING HAS COME IN SINCE IT WENT']),
-    ('Helpdesk tickets by day', {None}, set(), []),
-    ('Vendor portal maintenance', {None, 'not_ours'}, {'mine', 'regular_agent'}, []),
-    ('importers#215', {None, 'regular_agent', 'mine'}, {'not_ours'}, []),
-    ('Reconcile the August GL export', {'reply', 'regular_agent', 'close'}, {'not_ours'}, []),
+    ('Q3 accruals file', {'close'}, {'reply'}, []),
+    ('Helpdesk tickets by day', {'next'}, set(), []),
+    ('Vendor portal maintenance', {'next', 'not_ours'}, {'mine', 'regular_agent'}, []),
+    ('importers#215', {'next', 'regular_agent', 'mine'}, {'not_ours'}, []),
+    # an agent at work on it: Next, and nothing said (the owner, 2026-10-13)
+    ('Reconcile the August GL export', {'next'}, {'not_ours', 'reply'}, []),
     # an asking agent is answered in its own pane - no button lights for it (the owner, 2026-10-20: "we don't need that button")
-    ('agent asking (general)', {None}, {'stop_agent', 'answer_agent'}, ['THE AGENT IS ASKING']),
-    ('agent asking (coding)', {None}, {'stop_agent', 'answer_agent'}, ['THE AGENT IS ASKING']),
-    ('agent finished (general)', {'close'}, set(), ["RUN ENDED (finished)"]),
-    ('agent finished (coding)', {'close'}, set(), ["RUN ENDED (finished)"]),
+    ('agent asking (general)', {None}, {'stop_agent', 'answer_agent'}, []),
+    ('agent asking (coding)', {None}, {'stop_agent', 'answer_agent'}, []),
+    ('agent finished (general)', {'close'}, set(), []),
+    ('agent finished (coding)', {'close', 'review_changes'}, set(), []),
     # a failed general run is tried again from its saved conversation, never made a task of (owner-approved, 2026-10-21)
     ('agent failed (general)', {'continue'}, {'new_task', 'stop_agent'}, ['WHAT FAILED', 'test database was not reachable']),
     ('agent failed (coding)', {'new_task'}, {'continue'}, ['WHAT FAILED', 'test database was not reachable']),
-    ('agent stopped-saved (general)', {None, 'defer', 'stop_agent'}, set(), []),
+    ('agent stopped-saved (general)', {'next', 'defer'}, set(), []),
     ('agent stopped-saved (coding)', {'continue'}, set(), []),
-    ('agent working (coding)', {None}, set(), []),
-    ('agent working (general)', {None}, set(), []),
-    ('Close the August books', {'close'}, set(), ['EVERY TODO ON THE TASK IS TICKED']),
-    ('Renew the PhishGuard licence', {None, 'defer'}, {'not_ours'}, ['remind me on']),
-    ('Move payroll to Payworth', {'defer'}, {'not_ours'}, ['THE GOAL']),
-    ('Migrate the census export', {'defer'}, {'not_ours'}, ['THE GOAL', 'late']),
-    ('Ray: schema sign-off', {None, 'defer'}, {'not_ours'}, []),
+    ('agent working (coding)', {'next'}, set(), []),
+    ('agent working (general)', {'next'}, set(), []),
+    ('Close the August books', {'close'}, set(), []),
+    ('Renew the PhishGuard licence', {'next', 'defer'}, {'not_ours'}, []),
+    # a goal on track is Next; a step past its day is Chase, named in the line (the design, states 17 and 18)
+    ('Move payroll to Payworth', {'next'}, {'not_ours'}, []),
+    ('Migrate the census export', {'chase'}, {'not_ours'}, []),
+    ('Ray: schema sign-off', {'defer'}, {'not_ours'}, []),
     # ...the states the matrix lacks
-    ('Vendor W-9 for the new supplier', {'chase'}, {'let_go', 'close'}, ['quiet']),
-    ('Budget figures for Q4', {'chase'}, {'let_go'}, ['quiet']),
+    ('Vendor W-9 for the new supplier', {'chase'}, {'let_go', 'close'}, []),
+    ('Budget figures for Q4', {'chase'}, {'let_go'}, []),
     ('can you cover the Thursday call', {'reply'}, {'not_ours'}, ['whatsapp']),
 ]
 
@@ -127,19 +132,21 @@ def world():
 
 
 def judge(s, item, syn, llm=None):
-    """(verb or None, line, prompt) for one item at item.shown, tier 2, through the real advisor.judge."""
+    """(verb or None, line, prompt) for one item: THE ONE DECISION every surface reads (advisor.decide, the design phase A) - the rule's
+    move from the item's facts, and where the state asks the model (rulebook `ask`), the scripted brain's read of it at item.shown,
+    tier 2, through the real advisor.judge. `prompt` is '' where the rule decided alone - no model was asked."""
     from taskuary import advisor, demo
     calls = []
     base = llm or demo.brain()
     def rec(system, user, **kw): out = base(system, user, **kw); calls.append(user); return out
     tgt = advisor.target_of(s, item.get('key'))
     if not tgt: return None, 'no target', ''
-    if advisor._at_work(s, *tgt): return None, 'working', ''          # for_key shows nothing over an agent at work
     orig = advisor._item
     with mock.patch.object(advisor, '_item', lambda store, tk, ti, key=None: syn.get(key) or (item if key == item.get('key') else orig(store, tk, ti, key))):
-        rid = advisor.judge(s, advisor.SHOWN, tgt[0], tgt[1], advisor.revision(s, *tgt), tier=2, llm=rec, key=item.get('key'))
-        r = s._one('SELECT * FROM advice WHERE Id=?', (rid,)) or {}
-    return r.get('Verb'), r.get('Line') or r.get('Dropped') or '', calls[-1] if calls else ''
+        if not advisor._at_work(s, *tgt):
+            advisor.judge(s, advisor.SHOWN, tgt[0], tgt[1], advisor.revision(s, *tgt), tier=2, llm=rec, key=item.get('key'))
+        with mock.patch.object(advisor, 'notice'): d = advisor.decide(s, item.get('key'), preread=False)
+    return d.get('verb'), d.get('line') or d.get('state') or d.get('none') or '', calls[-1] if calls else ''
 
 
 def grade(verb, ok, never) -> str:
@@ -157,8 +164,8 @@ def run(llm=None) -> list:
         from taskuary import workerstate as ws
         live = ws._live
         with mock.patch.object(ws, '_live', lambda tid: object() if tid in on else live(tid)): verb, line, prompt = judge(s, it, syn, llm)
-        out.append({'case': title, 'key': it.get('key'), 'verb': verb, 'line': line, 'grade': grade(verb, ok, never),
-                    'missing': [n for n in needs if n.lower() not in prompt.lower()], 'prompt': prompt})
+        out.append({'case': title, 'key': it.get('key'), 'verb': verb, 'line': line, 'grade': grade(verb, ok, never), 'asked': bool(prompt),
+                    'missing': [n for n in needs if prompt and n.lower() not in prompt.lower()], 'prompt': prompt})
     return out
 
 

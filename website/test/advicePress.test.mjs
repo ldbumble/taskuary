@@ -24,11 +24,14 @@ test("the row's ids are recorded as the Advisor's verbs: Mark done is close, Rem
   assert.equal(verbOfRow("12:approve"), "approve");
 });
 
-test("the page posts the advised verb, the pressed one and the revision, only while a line is shown", () => {
+test("the desk posts EVERY press - lit or not - with what its row had filled and what else it offered (phase B, 2026-10-23)", () => {
   const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
-  assert.match(view, /onPressing\(\(id\) => notePress\(verbOfRow\(id\) \|\| String\(id \|\| ""\)\.split\(":"\)\.pop\(\)\)\)/);
-  assert.match(view, /api\.post\("\/api\/advice\/press", \{ key: a\.key, advised: a\.verb, pressed, revision: a\.revision \|\| null \}\)/);
-  assert.match(view, /shownRef\.current = shownAdvice\?\.verb \?/);
+  assert.match(view, /useEffect\(\(\) => onPressing\(notePress\), \[notePress\]\);/);
+  assert.match(view, /notePressed\(api, \{ key, surface: "desk", \.\.\.deskPress\(rowNow\(\), pickRef\.current, id\), advised: a\?\.verb \|\| null, revision: a\?\.revision \|\| null \}\);/);
+  // the gate is gone: no line shown is no reason to drop the press - only the Tasks tab's own presses are left to that tab
+  assert.doesNotMatch(view, /if \(!a\?\.key \|\| !a\.verb \|\| !pressed\) return;/);
+  assert.match(view, /if \(!activeRef\.current\) return;/);
+  assert.match(view, /pickRef\.current = stripPick \|\| setupLit;/);
   // a move the row has no button for is recorded where it is pressed - once, never also through the row
   assert.match(view, /if \(real\) \{ pressRow\(real\.id, null, anchor\); return null; \}\n\s+notePress\(liveVerb\(a\.verb\)\);/);
 });

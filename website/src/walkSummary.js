@@ -3,7 +3,7 @@
 // the same order with the same names - its own who-wants-what grouping put a finished agent's task under "Agents
 // waiting" while the rail had it On you, and no agent was working on it.
 import { LEVEL_ORDER, SECTION_WORDS, bandsOf, levelOf } from "./funnelPile.js";
-import { isAgentKind, isUrgent, onYou } from "./lanes.js";
+import { census, isAgentKind, isUrgent } from "./lanes.js";
 import { plural } from "./timeWords.js";
 
 export const GROUPS = LEVEL_ORDER.map((key) => ({ key, word: SECTION_WORDS[key] }));
@@ -49,7 +49,7 @@ export function summarize(items) {
   // the band's count is the RAIL's count (every row), the rows under it fold twins; `you` is how many of them are on you (lanes.onYou)
   // ...and `urgent` how many are urgent: there is no Urgent band any more (2026-10-22), an urgent row is counted where it sits
   const groups = bandsOf(items).map((b) => ({ key: b.level, word: SECTION_WORDS[b.level], n: b.items.length, rows: fold(b.items),
-    you: b.items.filter((i) => onYou(i, b.level)).length, urgent: b.items.filter((i) => !i.settling && isUrgent(i)).length }));
+    you: census(b.items).onYou, urgent: b.items.filter((i) => !i.settling && isUrgent(i)).length }));
   const n = groups.reduce((t, g) => t + g.n, 0);
   const lead = n
     ? `${plural(n, "thing")}: ${groups.map((g) => `${g.n} ${g.key === "fyi" ? g.word : g.word.toLowerCase()}${g.urgent ? ` (${g.urgent} urgent)` : ""}`).join(", ")}.`

@@ -341,7 +341,7 @@ class LearnTests(unittest.TestCase):
         doc = s.get_doc('learned')
         self.assertIn(learn.HYP_START, doc); self.assertIn(learn.PROP_START, doc)
         inj = learn.injectable(doc)
-        self.assertIn('Voice & style', inj)                     # active sections travel...
+        self.assertIn('How you sort mail', inj)                 # active sections travel...
         self.assertNotIn('hypotheses:start', inj)               # ...the gated ones never do
         self.assertNotIn('Proposed rules', inj)
         self.assertNotIn('still being tested', inj)
@@ -370,7 +370,7 @@ class LearnTests(unittest.TestCase):
         with mock.patch('taskuary.llm.build_llm', return_value=None):
             self.assertFalse(learn.reflect(s))                   # no brain: the old doc always stands
         good = s.get_doc('learned').replace(
-            '## Voice & style', '## Voice & style\n- Short replies, no filler. [s:4 | ev: rv1,rv2,rv3 | seen: 2026-08-20]')
+            '## How you sort mail', '## How you sort mail\n- Short replies, no filler. [s:4 | ev: rv1,rv2,rv3 | seen: 2026-08-20]')
         self.assertTrue(learn.reflect(s, llm=lambda sys_, usr, **kw: good))
         self.assertIn('Short replies, no filler', learn.injectable(s.get_doc('learned')))   # promoted = injected
         self.assertEqual(s.get_settings().get('learn_pending'), '0')
@@ -472,7 +472,7 @@ class LearnTests(unittest.TestCase):
         # and the live path wires the doc in: a promoted line reaches the triage system prompt
         s = MemoryStore()
         s.save_doc('learned', s.get_doc('learned').replace(
-            '## What becomes a task', '## What becomes a task\n- Vendor invoices are FYI, never tasks. [s:5 | ev: rv1,rv2,rv3 | seen: 2026-08-01]'), 'reflect')
+            '## How you sort mail', '## How you sort mail\n- Vendor invoices are FYI, never tasks. [s:5 | ev: rv1,rv2,rv3 | seen: 2026-08-01]'), 'reflect')
         from taskuary.ingest import ingest_message
         seen.clear()
         ingest_message(s, {'external_id': 'lrn-1', 'channel': 'email', 'from_email': 'ap@vendor.example',

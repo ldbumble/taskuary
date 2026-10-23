@@ -1964,6 +1964,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   adoptRef.current = adopt;
   const takeEarlyBackRef = useRef(null); takeEarlyBackRef.current = takeEarlyBack;
   const startFlight = useRef(false);
+  const startLast = useRef(null);   // the newest line when Walk was pressed: the "…" stands until a line lands after it
   // ONE ANSWER TO "CAN THE WALK START?" (the 2026-10-19 UI walk): the button greyed on one list and the press returned on another, so a
   // press could look taken and do nothing. Both read walkOff; the refs only close same-tick double presses the state has not caught.
   const walkOff = busy || resetting || !!handoff || starting;
@@ -1973,25 +1974,22 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (walkOff || turnFlight.current || startFlight.current) { if (!starting && !startFlight.current) setWalkQueued(true); return; }
     startFlight.current = true;
     const epoch = chatEpoch.current;
-    const said = "Walk me through my tasks.";
+    // A PRESS IS NOT A TYPED LINE (the owner, 2026-10-23: "it just hung there and we don't need the words"): no "Walk me through my
+    // tasks." bubble - only the "…" (tq-pending) from the press until the first item lands, whatever the server takes
+    startLast.current = msgs.length ? msgs[msgs.length - 1].id : null;
     setStarting(true); setErr("");
-    const lineId = `u${Date.now()}`;
-    setMsgs((m) => [...m, { id: lineId, role: "user", text: said }]);
     try {
       only.current = sharedFilter.current && sharedFilter.current !== "{}" ? `view:${sharedFilter.current}` : (pile?.canonical ? null : what);
       selectionRef.current = null;
       await loadPile(true);                   // validate/resume Current under the requested scope
       if (epoch !== chatEpoch.current || resettingRef.current) return;
-      // the line is already on screen: surface must not post a second copy of it
       // resume what is on the table only if you have not PASSED it: a passed item waits in Passed for
       // its hour, and starting the walk put it straight back in front of you (the owner, 2026-09-23:
       // "it's in the passed section but showing up on assistant first")
       if (!currentRef.current || currentRef.current.surfaced) await surface(null, null, null, true);
     } catch (e) {
-      // the owner's line is on screen now, so a failure has to be answered on screen too -
-      // an unhandled rejection would leave "Walk me through my tasks." sitting there alone. The line is taken back, so the
-      // welcome block (drawn on an empty chat) returns with its button - kept, it hid the only way to try again
-      setMsgs((m) => m.filter((x) => x.id !== lineId));
+      // the "…" went with the press, so a failure has to be answered on screen - and the welcome block (drawn on an empty chat,
+      // hidden while starting) returns with its button: the only way to try again
       setErr(`The walk didn't start - ${errText(e)}. Press Walk me through my tasks to try again.`);
     } finally {
       startFlight.current = false;
@@ -2817,6 +2815,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       deferInChat(() => key ? surfaceRef.current?.(key) : loadPileRef.current?.(), 900);
     } };
   const shown = old ? old.messages : msgs;
+  const walkDots = starting && (msgs.length ? msgs[msgs.length - 1].id : null) === startLast.current;
   const lastBriefId = [...shown].reverse().find((m) => m.card?.kind === "brief")?.id;
   // the live browse card: the newest one, unless the walk has put an item on the table since
   const browsing = useMemo(() => {
@@ -3046,7 +3045,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                   actions={actions} fresh={currentItem} canvas={canvasState} />}
           </div>}
           {firstRun ? state && <div data-tq-setup-under={setupCovered.current ? "hidden" : ""} style={setupCovered.current ? { display: "none" } : undefined}>{welcome()}</div>
-            : state && !shown.length && !busy && welcome()}
+            : state && !shown.length && !busy && !starting && welcome()}
           {!firstRun && shown.map((m, i) => <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} tableChips={tableChips} barHolds={barHolds}
                                      actions={actions} fresh={currentItem} canvas={old ? null : canvasState} />)}
           {/* CONTINUE, IN LINE (the owner, 2026-09-30): a card under the item, like New - the mic and pictures in it */}
@@ -3078,7 +3077,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           )}
           {/* ...a line of its own that stands under the card on the table only while the answer is on its way (tq-pending,
               assistantView.css) */}
-          {(busy || phoneBusy || nextComing) && (
+          {(busy || phoneBusy || nextComing || walkDots) && (
             <div className="tq-msg tq-pending"><div className="avatar"><AssistantMark /></div>
               <div className="body">{busy && words ? <div className="tq-words" data-tq-words="">{looksMd(words) ? <Md text={words} /> : words.split("\n").map((p, i) => <p key={i}>{p}</p>)}</div>
                 : <span className="tq-typing"><i /><i /><i /></span>}

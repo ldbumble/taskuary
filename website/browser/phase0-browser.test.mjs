@@ -68,7 +68,8 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
   await page.waitForFunction(() => !document.querySelector(".tq-typing"), { timeout: 15000 });
   await page.waitForSelector(".tq-pile-row.next .card", { timeout: limits.navigationMs });
   assert.equal(turnRequests, 1, "a same-tick double click must create exactly one assistant turn");
-  assert.equal(await page.$$eval(".tq-msg.you", (rows) => rows.filter((row) => row.textContent.includes("Walk me through my tasks.")).length), 1);
+  // a press is not a typed line (the owner, 2026-10-23): no "Walk me through my tasks." bubble, only the "…" until the item lands
+  assert.equal(await page.$$eval(".tq-msg.you", (rows) => rows.filter((row) => row.textContent.includes("Walk me through my tasks")).length), 0);
   assert.equal(await page.$$eval(".tq-pile-row.current", (rows) => rows.length), 1);
   assert.equal(await page.$$eval(".tq-pile-row.next", (rows) => rows.length), 1);
   // CURRENT and NEXT are rings on the row now, not pills inside it: the row already says what it

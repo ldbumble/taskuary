@@ -93,15 +93,39 @@ def last_here(store):
     return max(got) if got else None
 
 def last_active(store):
-    """The owner's last sign of life: a look, a close, or anything they pressed or sent since (touch)."""
-    got = [d for d in (last_here(store), _at(store.get_setting(ACTIVE_KEY))) if d]
+    """The owner's last sign of life: a look, a close, or anything they pressed or sent since (touch) - a press not written yet
+    (pressed) included."""
+    got = [d for d in (last_here(store), _at(store.get_setting(ACTIVE_KEY)), *store.__dict__.get('_presses', ())) if d]
     return max(got) if got else None
+
+# A PRESS NEVER WAITS ON THE STORE (2026-10-23): the middleware wrote presence inline on the event loop, and store.lock is the one
+# writer connection's lock - a sync or a funnel write holding it held EVERY request behind one presence write (measured: a 2 s
+# hold made touch take 2 s). So a press is kept in memory at once and written only if the lock is free; otherwise the next
+# touch, press or quick_forever tick (flush) writes it, in order. last_active reads the kept ones, so nothing reads differently.
+_PRESS_LOCK = threading.Lock()
+
+def pressed(store, now: datetime = None) -> bool:
+    """The owner pressed something (server.owner_presence): never blocks on store.lock. True when it was written now."""
+    with _PRESS_LOCK: store.__dict__.setdefault('_presses', []).append(now or datetime.now())
+    return flush(store, wait=False)
+
+def flush(store, wait: bool = True) -> bool:
+    """Write the presses kept by pressed, oldest first, each as touch writes it. wait=False gives up at once on a held lock."""
+    if not store.lock.acquire(blocking=wait): return False
+    try:
+        with _PRESS_LOCK: due, store._presses = store.__dict__.get('_presses', []), []
+        for t in due:
+            try: touch(store, t)
+            except Exception as e: logger.debug(f'presence not kept - {e}')
+    finally: store.lock.release()
+    return True
 
 def touch(store, now: datetime = None, key: str = ACTIVE_KEY):
     """The owner did something - a press, a send, the window's focus. THE one place presence is written, in the store so it
     outlives a restart. A silence of AWAY_MINUTES before it was an away, and where that began is what "while you were away"
     counts from (AWAY_KEY). Presses write ACTIVE_KEY, never SEEN_KEY: the greeting's own gap (due) reads SEEN_KEY, and a click
     landing before the window's arrive must not spend it."""
+    if store.__dict__.get('_presses'): flush(store)          # a press kept earlier is written before this one, so the gaps stay in order
     now = now or datetime.now(); prev = last_active(store)
     if prev and now - prev >= timedelta(minutes=AWAY_MINUTES): store.set_setting(AWAY_KEY, _stamp(prev), 'assistant')
     if key == ACTIVE_KEY and prev and timedelta(0) <= now - prev < timedelta(minutes=1): return      # a write a minute is plenty

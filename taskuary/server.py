@@ -283,8 +283,9 @@ async def owner_presence(request: Request, call_next):
     pressed = request.method != 'GET' and p.startswith('/api') and p not in PRESENCE_SKIP and resp.status_code < 400
     if pressed and guard.scope_of(cfg['server'], request.headers) == guard.OWNER:
         from . import welcome
-        # inline, not to_thread: one setting written at most once a minute, and a press must never wait on the thread pool for it
-        try: welcome.touch(store)
+        # never waits: not on the thread pool (to_thread hung under a patched threading.Thread), nor on store.lock while a sync
+        # holds it - kept in memory, written when the lock is free (welcome.pressed)
+        try: welcome.pressed(store)
         except Exception as e: logger.debug(f'presence not kept - {e}')
     return resp
 
@@ -8172,7 +8173,8 @@ def quick_forever():
     _walk_settled()                 # an alert put down in the old chat may speak once more - after the new chat exists
     while True:
         try:
-            from . import remote_assistant
+            from . import remote_assistant, welcome
+            welcome.flush(store, wait=False)              # a press kept while the store was busy (welcome.pressed)
             try: remote_assistant.push_alerts(store)
             except Exception as e: logger.warning(f'could not send an interruption to the chat: {e}')
             try: mins = int(store.get_setting('poll_minutes') or 0)

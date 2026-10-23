@@ -5519,6 +5519,11 @@ def save_source(body: SourceBody):
         # a clock the scheduler cannot read is refused, never saved as "scheduled" (reports.schedule_error, B3)
         from .reports import schedule_error
         if isinstance(rcfg, dict) and (why := schedule_error(rcfg)): raise HTTPException(422, f'Not saved: {why}.')
+        # ...and a dashboard's spec, the same check its composer ran: a component bound to no source never draws (dashboards.validate)
+        if isinstance(rcfg, dict) and rcfg.get('type') == 'dashboard':
+            from . import dashboards
+            ok, why = dashboards.validate(rcfg, store)
+            if not ok: raise HTTPException(422, f'Not saved: {why}.')
         if flow_cfg is not None:
             from . import flow
             ok, why = flow.validate(store, flow_cfg)
@@ -6387,6 +6392,39 @@ def report_compose(body: dict):
                                                            'type': out['config'].get('type'),
                                                            'confidence': out.get('confidence')})
     return out
+
+
+# ── DASHBOARDS (dashboards.py): a report you look at - set up with AI like one, run with none ──
+@app.post('/api/dashboards/compose')
+def dashboard_compose(body: dict):
+    """Say what you want to see; get a dashboard spec (sources + preset components) back, or the questions first. Nothing is
+    saved - the page previews it over real rows and the owner saves it."""
+    from .compose import compose_dashboard
+    out = compose_dashboard(store, (body or {}).get('ask') or '', _llm(), (body or {}).get('answers'))
+    if out.get('config'):
+        store.audit('report', 0, 'compose_dashboard', ACTOR, detail={'ask': ((body or {}).get('ask') or '')[:300], 'confidence': out.get('confidence')})
+    return out
+
+@app.post('/api/dashboards/preview')
+def dashboard_preview(body: dict):
+    """Run a spec's sources for real, without saving it: the rows the page draws, and what would draw empty."""
+    from . import dashboards
+    spec = (body or {}).get('config') or {}
+    ok, why = dashboards.validate(spec, store)
+    if not ok: raise HTTPException(422, why)
+    data = dashboards.collect(store, spec)
+    return {'data': data, 'problems': dashboards.problems(spec, data)}
+
+@app.get('/api/dashboards/{sid}')
+def dashboard_get(sid: int):
+    """A saved dashboard: its spec, its last run's rows (None before the first run) and what would draw empty."""
+    from . import dashboards
+    src = store.get_source(sid)
+    cfg = dashboards.cfg_of(src)
+    if not src or not dashboards.is_dashboard(cfg): raise HTTPException(404, 'dashboard not found')
+    data = dashboards.last(store, sid)
+    return {'source_id': sid, 'active': bool(src.get('Active')), 'config': cfg, 'data': data,
+            'problems': dashboards.problems(cfg, data) if data else []}
 
 
 @app.get('/api/workflows')

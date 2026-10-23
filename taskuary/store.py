@@ -431,6 +431,8 @@ CREATE TABLE IF NOT EXISTS processing_dirty_row (
 CREATE TABLE IF NOT EXISTS report_run (RunId INTEGER PRIMARY KEY, SourceId INTEGER, At TEXT, Type TEXT, Title TEXT, Ms INTEGER, Subject TEXT,
   MessageId INTEGER, Failed INTEGER DEFAULT 0, Error TEXT, Said INTEGER, LinesJson TEXT, ReviewedJson TEXT, Inputs TEXT, Summary TEXT,
   StepsJson TEXT, TaskId INTEGER, RepairsJson TEXT);
+-- A dashboard's last run: the rows its sources returned, which the page slices (dashboards.py). One row per dashboard.
+CREATE TABLE IF NOT EXISTS dashboard_result (SourceId INTEGER PRIMARY KEY, At TEXT, DataJson TEXT);
 -- Stateful report workflows: a scheduled run opens one monthly batch, then each customer
 -- advances independently from amount -> Zoho draft -> Review -> sent.  The unique keys are
 -- the duplicate barrier: restarting Taskuary or pressing Run again cannot create another batch
@@ -4872,6 +4874,9 @@ class SQLiteStore:
         self._exec('UPDATE source SET LastPolledAt=NULL WHERE SourceId=?', (sid,))
     def get_source(self, sid): return self._one('SELECT * FROM source WHERE SourceId=?', (sid,))
     def delete_source(self, sid): self._exec('DELETE FROM source WHERE SourceId=?', (sid,))
+    def save_dashboard_result(self, sid, data_json):
+        self._exec('INSERT OR REPLACE INTO dashboard_result (SourceId, At, DataJson) VALUES (?,?,?)', (sid, _now(), data_json))
+    def get_dashboard_result(self, sid): return self._one('SELECT * FROM dashboard_result WHERE SourceId=?', (sid,))
     def delete_agent(self, name): self._exec('DELETE FROM agent WHERE Name=?', (name,))
     # RECENTLY DELETED (recentlydeleted.py): what a Remove took, kept whole so Restore and Undo put it back as it was
     def keep_deleted(self, kind, title, data, at, until) -> int:

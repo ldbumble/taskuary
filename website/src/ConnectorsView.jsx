@@ -1950,7 +1950,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
         </Typography>
         <Button size="small" variant="contained" disableElevation onClick={syncNow} disabled={syncing}
           startIcon={syncing ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 15 }} />}>
-          {syncing ? "Syncing…" : "Sync now"}
+          {syncing ? "Syncing…" : btnLabel("sync_now")}
         </Button>
       </Box>
 
@@ -2316,7 +2316,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
 
   const steps = [
     // ticked once a Test has PASSED on them: "saved" ticked a key the service had just refused (the 2026-10-19 UI walk)
-    { label: "Credentials", done: !m.secretLabel || (!!conn.HasSecret && !!conn.LastSyncAt && !conn.LastError), body: (
+    { label: "Credentials", done: credsDone(conn, cfg, m), body: (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
         {MS_SIGNIN.includes(conn.Type) && !adminFields && (
           <Button size="small" variant="text" onClick={() => setAdminFields(true)}
@@ -2375,7 +2375,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         {conn.Type === "telegram" && (
           <>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1, maxWidth: 560 }}>
-              No chat id to type: <b>message your bot</b> (or add it to a group), hit <b>Sync now</b>, and the
+              No chat id to type: <b>message your bot</b> (or add it to a group), hit <b>{btnLabel("sync_now")}</b>, and the
               chat appears below with its id — switched off. Flip on the chats that are yours; every other
               chat stays out, because a public bot can be messaged by anyone. The field at the bottom is only
               for an id you already know.
@@ -2437,7 +2437,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         {conn.Active && !isAI && (
           <Button size="small" variant="contained" disableElevation onClick={syncHere} disabled={srcSync}
             startIcon={srcSync ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
-            sx={{ background: "linear-gradient(90deg, #55697a, #7d9a7c)" }}>{srcSync ? "Syncing…" : "Sync now"}</Button>
+            sx={{ background: "linear-gradient(90deg, #55697a, #7d9a7c)" }}>{srcSync ? "Syncing…" : btnLabel("sync_now")}</Button>
         )}
       </Box>
     )},
@@ -3461,6 +3461,12 @@ const MailFolders = ({ conn, s, reload }) => {
 /* ── WhatsApp pairing, on the card. The bridge serves its QR at /status and WhatsApp rotates it
    every ~20 seconds, so this polls and redraws; a terminal QR is too big to scan and a phone
    number is nothing to type into a chat. Paired = the box says who, and stops polling. ── */
+// A CARD WITH NO KEY TO PASTE IS TICKED BY ITS OWN PROOF: "no secret" ticked ChatGPT before anyone signed in and WhatsApp before a
+// phone was paired (the UX walk, 2026-10-22). ChatGPT's proof is the sign-in's token; WhatsApp's is a clean read through the pairing
+const credsDone = (conn, cfg, m) => conn.Type === "chatgpt" ? cfg?.auth === "user" && !!conn.HasSecret
+  : conn.Type === "whatsapp" ? !!conn.LastSyncAt && !conn.LastError
+    : !m.secretLabel || (!!conn.HasSecret && !!conn.LastSyncAt && !conn.LastError);
+
 /* ── WhatsApp pairing: three steps that drive themselves. 1 Node on the machine (the only thing the
    owner installs - the box says how and re-checks on its own); 2 the bridge, which the box starts the
    moment Node is there (no button to find, no agent to wait on); 3 the QR, scanned from the phone.

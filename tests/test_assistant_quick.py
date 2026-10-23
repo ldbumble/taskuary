@@ -260,3 +260,15 @@ def test_the_page_opening_new_chat_and_a_new_brain_each_warm_it(monkeypatch):
     assert c.post('/api/concierge/ai', json={'pick': ''}).status_code == 200
     assert c.post('/api/assistant/dock/new').status_code == 200
     assert calls == ['warm'] * 3
+
+
+def test_the_demo_says_its_assistant_is_scripted(monkeypatch):
+    """Settings' "Which AI speaks here" said "No AI connected" while the demo's scripted brain answered (the UX walk, 2026-10-22)."""
+    from taskuary import server, demo
+    monkeypatch.setattr(server, 'store', _store())
+    monkeypatch.setattr(server, '_warm_assistant', lambda: None)
+    c = TestClient(server.app)
+    monkeypatch.setenv(demo.FLAG, '1')
+    assert c.get('/api/concierge').json()['scripted'] is True
+    monkeypatch.delenv(demo.FLAG)
+    assert c.get('/api/concierge').json()['scripted'] is False

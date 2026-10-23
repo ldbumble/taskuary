@@ -94,7 +94,7 @@ class _Rail(unittest.TestCase):
                        'SentAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'BodyText': 'Please move the export.', 'Status': 'routed', 'TaskId': t})
         rid = s.start_run(t, 'coding', 'move the export', 'owner'); s._exec("UPDATE run SET Status='stopped' WHERE RunId=?", (rid,))   # the agent left: Continue leads
         # ...with its conversation saved, so the task's row draws Continue (concierge.row_buttons) - the only buttons the Advisor picks from
-        s._exec("INSERT INTO transcript (TaskId, Sid, Agent, Text, CreatedAt, ExtId) VALUES (?,?,?,?,?,?)", (t, 'run1', 'coding', 'x', '2026-10-23 09:00:00', 'ext-1'))
+        s._exec("INSERT INTO transcript (TaskId, Sid, Agent, Text, CreatedAt, ExtId) VALUES (?,?,?,?,?,?)", (t, 'run1', 'coding', 'x', (datetime.now() + timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S'), 'ext-1'))
         s.reconcile_processing_membership(); s.activate_processing_reads(fixed_now=datetime.now().isoformat(), live_state=[]); funnel.invalidate()
         return t
 

@@ -4614,7 +4614,9 @@ def concierge_state():
             'providers': general.brain_options(store, keep=pick), 'pick': pick,
             'provider': (chosen or {}).get('label') or pick, 'model': model,
             # the chats this walk can be handed to, and the one it is in right now
-            'doorways': remote_assistant.doorways(store), 'handoff': remote_assistant.handoff(store)}
+            'doorways': remote_assistant.doorways(store), 'handoff': remote_assistant.handoff(store),
+            # the demo's own brain is a script (demo.brain): "No AI connected" over a chat that answered was a lie (the UX walk, 2026-10-22)
+            'scripted': demo.enabled()}
 
 class HandoffBody(BaseModel): channel: str
 

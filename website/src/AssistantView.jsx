@@ -2975,7 +2975,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           ? "Every thread, post, and reply here is invented and runs locally in this page. No AI, agent, mailbox, or outside system is connected."
           : aiSays(state?.providers)}</Typography>
         <Select size="small" fullWidth value={state?.pick || ""} displayEmpty disabled={!!state?.scripted} onChange={(e) => pickAi(e.target.value)} sx={{ fontSize: 12 }}>
-          {!state?.providers?.length && <MenuItem value="">No AI connected</MenuItem>}
+          {!state?.providers?.length && <MenuItem value="">{state?.scripted ? "Scripted demo" : "No AI connected"}</MenuItem>}
           {(state?.providers || []).map((p) => <MenuItem key={p.pick} value={p.pick} sx={{ fontSize: 12 }}>{p.label}{p.type === "demo" ? " · demo" : p.type === "cli" ? " · can look things up and act" : " · fast, talks only"}</MenuItem>)}
         </Select>
         {!state?.scripted && <button type="button" className="tq-linkish" style={{ marginTop: 8, fontSize: 12 }}

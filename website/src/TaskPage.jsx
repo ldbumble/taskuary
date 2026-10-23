@@ -98,7 +98,7 @@ import { openAppLink } from "./appLinks.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { place } from "./words.js";
 import { announceRemoved, fromAnswer } from "./removed.js";
-import { heldSteps, heldTask, heldTerm, heldWait, keepTask, keepTerms } from "./taskDetail.js";
+import { heldSteps, heldTask, heldTerm, heldWait, keepTask, keepTerms, pageRead } from "./taskDetail.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
 
@@ -454,10 +454,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     const ahead = heldTask(id);
     if (ahead) { setDetail((d) => (d?.task?.TaskId === id ? d : ahead)); const w = heldWait(id); if (w) setWait(w); }
     try {
+      const asked = Date.now();             // the read's age, against the rail's (taskDetail.noteRead)
       const { data } = await api.get(`/api/tasks/${id}`);
       if (stale(id)) return;
-      setDetail(data); keepTask(id, data);
-      try { const w = (await api.get(`/api/tasks/${id}/waitroom`)).data; if (!stale(id)) { setWait(w); keepTask(id, data, w); } }
+      setDetail(data); keepTask(id, data, undefined, asked);
+      try { const w = (await api.get(`/api/tasks/${id}/waitroom`)).data; if (!stale(id)) { setWait(w); keepTask(id, data, w, asked); } }
       catch { if (!stale(id)) setWait({ data: [], state: null }); }
     } catch (e) {
       if (stale(id)) return;
@@ -1343,8 +1344,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const headControls = sessionView && !inRow && notDone;
   // THE STATUS IN THE HEADER IS THE RAIL'S (the redesign, owner-approved 2026-10-21): the same mark and word the rail row wears for this
   // task - the live session's own word first, then the rail's row (on the canvas), then the server's state (railStatus.taskStatus)
+  // ...and the rail's agent lane only while no newer read of this task takes it back: a rail built while the agent worked said "agent
+  // working" over the Result of the agent that had finished (railStatus.agentGone) - the row beside it takes the same read
   const status = taskStatus({ live: term?.alive ? { alive: true, waiting: agentState === AGENT.waiting } : null, rail, state: rowState,
-    closed: ["done", "dropped"].includes(t?.Status), cantSend: !!pendingReview && cantSend });
+    closed: ["done", "dropped"].includes(t?.Status), cantSend: !!pendingReview && cantSend, page: rail?.tid ? pageRead(rail.tid) : null });
   const continueHere = !liveSession && notDone && (barContinue || (stage !== "agent" && canContinue));
   const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession;
   const startHere = !liveSession && notDone && !continueHere && !sendGeneral && (stage !== "agent" || (agentBar && !isGeneral));

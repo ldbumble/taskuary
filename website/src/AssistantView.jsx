@@ -30,7 +30,7 @@ import { loadGeneral } from "./lazyGeneral.js";
 // the static demo's guided journey: nothing outside the demo build ever draws it, so nothing there fetches it
 const DemoJourney = DEMO ? lazyView(() => import("./DemoJourney.jsx")) : () => null;
 import { advisedIn, onPressed, onPressing, press as pressRow, rowNow, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
-import { forgetTasks, heldTask, heldTerm, prefetchTask } from "./taskDetail.js";
+import { forgetTasks, heldTask, heldTerm, notePile, pageRead, prefetchTask, watchReads } from "./taskDetail.js";
 import { readLists } from "./connectorLists.js";
 import { hint as btnHint, label as btn, liveVerb, verbOfRow } from "./buttons.js";
 import { readTurn, toolTarget } from "./assistantStream.js";
@@ -60,7 +60,7 @@ import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, ageAt, asPressed, putDownLanded, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory, withdrawSelection } from "./funnelPile.js";
 import { FYI_PAGE, coveredByReload, fyiTail, heldSince, pileRows, sentChips } from "./funnelPile.js";
-import { railStatus } from "./railStatus.js";
+import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
 import { StatusLogo } from "./StatusMark.jsx";
 import { isCoveragePending } from "./processingAll.js";
@@ -279,6 +279,9 @@ class BeforeCommit extends React.Component {
 function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onMoreFyi, settingUp = false, noAi = false, tag = "on the table" }) {
   const items = pile?.items || [];
   const sendCaps = useCapabilities();       // a draft its channel cannot send wears "draft to copy", never the flag (railStatus)
+  // a task read newer than this rail takes back its agent lane (railStatus.agentGone): the row draws again when one says something new
+  const [, reread] = useState(0);
+  useEffect(() => watchReads(() => reread((n) => n + 1)), []);
   // the plain FYI the page has not asked for whole yet (funnel.page_fyi): counted with their band, drawn when it is opened
   const tail = fyiTail(pile).length;
   // A full account can return dozens of canonical rows together. Painting that entire stack in
@@ -673,7 +676,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                 // state's words are the icon's label and hover. A row in a band whose heading already says it (fyi, report) wears none;
                 // a goal keeps its own mark. Urgent is the row's shading, a meeting its time.
                 const goal = String(i.kind || "").startsWith("goal");
-                const st = i.settling || goal || i.kind === "meeting" ? null : railStatus(i, !canSend(sendCaps, i.channel));
+                const page = i.tid ? pageRead(i.tid) : null, why = rowWhy(i, page);
+                const st = i.settling || goal || i.kind === "meeting" ? null : railStatus(i, !canSend(sendCaps, i.channel), page);
                 const shown = st && (st.spins || meta.word !== BAND_SAYS[level]) ? st : null;
                 const word = i.settling ? ""
                   : i.kind === "meeting" ? `invite · ${fmtTime12(i.when)}`
@@ -695,7 +699,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                       onClick={() => (isCur ? onCurrent?.() : !i.settling && onPull(i.key))}
                       onPointerEnter={() => { if (!isCur && i.tid) prefetchTask(api, i.tid); }}
                       aria-label={hot ? `${i.title} - urgent` : undefined}
-                      title={[i.who, meta.word, i.ref, i.promoted ? 'moved up - it looked urgent' : '', i.why].filter(Boolean).join(" · ")}>
+                      title={[i.who, st?.word || meta.word, i.ref, i.promoted ? 'moved up - it looked urgent' : '', why].filter(Boolean).join(" · ")}>
                       <div className="t">
                         {/* AN AGENT AT WORK is a ring spinning round the row's icon (the owner, 2026-10-21) - it stops when the agent
                             finishes, asks, fails or is stopped; the highlighted border stays the table's alone. A goal wears its mark. */}
@@ -720,7 +724,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                             {!goal && <i>{meta.mark}</i>}<span className="w">{word}</span></span>
                         )}
                       </div>
-                      {isCur && <div className="sub">{batchNo[i.key]?.line || [i.why, i.kind === "meeting" ? age(i.when) : ago(i.since || i.when)].filter(Boolean).join(" · ")}</div>}
+                      {isCur && <div className="sub">{batchNo[i.key]?.line || [why, i.kind === "meeting" ? age(i.when) : ago(i.since || i.when)].filter(Boolean).join(" · ")}</div>}
                     </div>
                     {/* THE SAME WORD ON THE SAME BORDER. A handful on the table says so on its
                         bracket ("on the table · 4 fyi"); one item on the table wore the identical
@@ -1374,6 +1378,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const requestedScope = nextSelectionScope(only.current, requestedCurrentKey);
     pileLoads.current += 1;                    // a rail still riding behind a card is older than this read (landed)
     if (force) forcedLoadStartedAt.current = Date.now();
+    const askedAt = Date.now();                // what this rail reflects is no older than this (taskDetail.notePile)
     const request = (async () => { try {
       // the key we are holding rides along, so the server can say whether it is still a thing
       const { data } = await api.get("/api/funnel/pile", { params: {
@@ -1390,7 +1395,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       const captured = captureNextSelection(data, requestedScope);
       if (hasNextSelection(data)) selectionContractSeen.current = true;
       selectionRef.current = captured; preparedRef.current = data.prepared_next || null;
-      pileRef.current = refreshPilePresentation(pileRef.current, data);
+      pileRef.current = refreshPilePresentation(pileRef.current, data); notePile(askedAt);
       setPile((p) => refreshPilePresentation(p, data)); setPileRead(true);
       if (!(await readChat(epoch))) return;
       if (data.events?.length) {
@@ -1719,6 +1724,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // gap between the old rows vanishing and the next four appearing (design B, 2026-09-17).
   const holdPile = useCallback((data, scope) => {
     forcedLoadStartedAt.current = heldSince(data);     // the live events this read already saw need no reload
+    notePile(forcedLoadStartedAt.current);              // ...and a task read older than it no longer speaks over its rows
     if (hasNextSelection(data)) selectionContractSeen.current = true;
     selectionRef.current = captureNextSelection(data, scope);
     preparedRef.current = data.prepared_next || null;

@@ -76,7 +76,7 @@ test("the task header has no chips: its one pill is the status, the rail's own m
   assert.ok(head.length > 100, "the header strip is found");
   assert.doesNotMatch(head, /HeadPills|headPills|data-tq-fact|LifecycleChip|sortedLine\(|completionFact\(|<Chip/);
   assert.match(head, /<StatusPill status=\{status\} agent=\{agentName\(t\)\}/);
-  assert.match(page, /const status = taskStatus\(\{ live: term\?\.alive \? \{ alive: true, waiting: agentState === AGENT\.waiting \} : null, rail, state: rowState,\n\s+closed: \["done", "dropped"\]\.includes\(t\?\.Status\), cantSend: !!pendingReview && cantSend \}\);/);
+  assert.match(page, /const status = taskStatus\(\{ live: term\?\.alive \? \{ alive: true, waiting: agentState === AGENT\.waiting \} : null, rail, state: rowState,\n\s+closed: \["done", "dropped"\]\.includes\(t\?\.Status\), cantSend: !!pendingReview && cantSend, page: rail\?\.tid \? pageRead\(rail\.tid\) : null \}\);/);
   assert.doesNotMatch(page, /export const headPills|function HeadPills/);
 });
 // the owner, 2026-10-19: "never get between a coder and their coding cli" - the question drawn over the terminal behind Show details is gone

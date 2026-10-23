@@ -6,9 +6,17 @@
 export const deliveryMeta = (review) => {
   try { return JSON.parse(review?.Deliver || "null") || {}; } catch { return {}; }
 };
+// THE NAME RIDES WITH ITS ADDRESS: the envelope keeps bare addresses (what the send needs), so a redraft - which pins one - turned
+// "Erin Blake <erin@…>" on the To line into the address alone. The sender's name is on the review: looked up by address.
+const named = (a, review) => {
+  const e = String(a || "").trim(), { FromName: n, FromEmail: em } = review || {};
+  return n && em && !e.includes("<") && e.toLowerCase() === String(em).trim().toLowerCase() ? `${n} <${e}>` : e;
+};
+// ...and back to addresses for the To box and its save (ui.ToRow): "Erin Blake <erin@…>, gail@…" -> ["erin@…", "gail@…"]
+export const bareAddresses = (to) => String(to || "").replace(/[^,<]*<([^>]+)>/g, "$1").split(",").map((a) => a.trim()).filter(Boolean);
 export const deliveryTo = (review) => {
   const raw = deliveryMeta(review).to;
-  const to = Array.isArray(raw) ? raw.filter(Boolean).join(", ") : String(raw || "").trim();
+  const to = (Array.isArray(raw) ? raw : [raw]).map((a) => named(a, review)).filter(Boolean).join(", ");
   if (to) return to;                                    // replies to inbound messages carry no Deliver
   if (review?.FromName && review?.FromEmail) return `${review.FromName} <${review.FromEmail}>`;
   return review?.FromName || review?.FromEmail || review?.ConversationId || "this conversation";

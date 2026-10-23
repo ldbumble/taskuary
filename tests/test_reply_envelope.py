@@ -87,6 +87,14 @@ class PinnedAndSentTests(unittest.TestCase):
             verdicts.decide(s, s.get_review(rid), 'approve')
         self.assertEqual((sent['to'], sent['cc']), (['dana@vendor.example', 'boss@vendor.example'], ['me@elsewhere.example']))
 
+    def test_a_to_saved_back_with_its_name_keeps_the_address(self):
+        # the To line wears "Dana Ruiz <dana@…>" (replyDelivery.deliveryTo); saved back as it stood it was kept as the address
+        s, tid, mid, rid = self.thread()
+        responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'Here it is.')
+        with mock.patch.object(server, 'store', s):
+            r = TestClient(server.app).put(f'/api/reviews/{rid}/envelope', json={'to': ['Dana Ruiz <Dana@vendor.example>', 'boss@vendor.example']}).json()
+        self.assertEqual(r['to'], ['dana@vendor.example', 'boss@vendor.example'])
+
     def test_the_approved_text_leaves_exactly_as_reviewed(self):
         s, tid, mid, rid = self.thread()
         responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'Here it is.')

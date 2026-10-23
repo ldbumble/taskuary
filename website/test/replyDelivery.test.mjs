@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { deliveryCc, deliveryFiles, deliveryMeta, deliveryTo, replyContext } from "../src/replyDelivery.js";
+import { bareAddresses, deliveryCc,deliveryFiles, deliveryMeta, deliveryTo, replyContext } from "../src/replyDelivery.js";
 
 const deliver = (obj) => ({ Deliver: JSON.stringify(obj) });
 
@@ -31,6 +31,17 @@ test("without a to, the reply goes back to the sender, then the conversation", (
   assert.equal(deliveryTo({ ConversationId: "conv-1" }), "conv-1");
   assert.equal(deliveryTo({}), "this conversation");
   assert.equal(deliveryTo({ ...sender, ...deliver({ to: [] }) }), "Erin Blake <erin@northwind.example>");
+});
+
+test("a redrafted email keeps the sender's name on the To line: the envelope's bare address is matched to the review's sender", () => {
+  const erin = { FromName: "Erin Blake", FromEmail: "Erin@northwind.example" };
+  assert.equal(deliveryTo({ ...erin, ...deliver({ kind: "reply", to: ["erin@northwind.example"] }) }), "Erin Blake <erin@northwind.example>");
+  assert.equal(deliveryTo({ ...erin, ...deliver({ to: ["erin@northwind.example", "gail@northwind.example"] }) }),
+    "Erin Blake <erin@northwind.example>, gail@northwind.example");
+  assert.equal(deliveryTo({ ...erin, ...deliver({ to: "Erin B <erin@northwind.example>" }) }), "Erin B <erin@northwind.example>");
+  // ...and the To box and its save take the addresses back out
+  assert.deepEqual(bareAddresses("Erin Blake <erin@northwind.example>, gail@northwind.example"), ["erin@northwind.example", "gail@northwind.example"]);
+  assert.deepEqual(bareAddresses(""), []);
 });
 
 test("attachments without a name and empty cc entries are dropped", () => {

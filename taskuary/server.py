@@ -1289,7 +1289,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
             n = (sum(1 for r in outcomes.rows_for(store, 'task', tid_) if _json.loads(r.get('FactsJson') or '{}').get('chase')) if tid_ else 0) + 1
             cc = outcomes.chase_cc(store, who) if who else None
             instr = f'a short chase to {who or "them"}, in my voice: no answer yet, what I need and by when' + (f'; copy {cc}, who gets them to answer' if cc else '')
-            if a.get('type') == 'followup': out = open_reply(mid, OpenReplyBody(instruction=instr))     # their thread: its newest line is theirs
+            if a.get('type') == 'followup': out = open_reply(mid, OpenReplyBody(instruction=instr, app_words=True))     # their thread: its newest line is theirs
             else:
                 # a step somebody owes: the review answers THEIR last word, even when somebody else wrote on the thread since -
                 # open_reply would re-target to the newest line, and the chase would go to the wrong person
@@ -2933,6 +2933,8 @@ class OpenReplyBody(BaseModel):
     # LOOP THEM IN (the owner, 2026-10-13: "it should create reply with looping in the new person"): names or addresses copied
     # on the reply - looked up among the people who have written, the hand-off's book; one nobody knows is said, not guessed
     cc: list[str] | None = None
+    # the instruction is the app's own (a chase's brief), not the owner's words: it rides into the draft and is not kept as theirs
+    app_words: bool = False
 
 @app.post('/api/messages/{mid}/reply')
 def open_reply(mid: int, body: OpenReplyBody = None):
@@ -2978,7 +2980,10 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     if body is not None and body.redraft: draft = ''          # write it again over what is there
     # ...and so do the owner's own words for it: "reply to Marcus: yes, Thursday at 2 works" found the draft written before
     # and showed it unchanged - it said to check the calendar (2026-10-06)
-    if body is not None and (body.instruction or '').strip(): draft = ''
+    if body is not None and (body.instruction or '').strip():
+        draft = ''
+        # ...and kept, not thrown away once the model has read them (2026-10-23) - the owner's own, never a chase's brief
+        if not body.app_words: store.add_review_instruction(rid, body.instruction)
     owed = not draft and (body is None or body.draft)
     if owed and not later:
         try:
@@ -5096,14 +5101,18 @@ def advice_for(key: str):
     return advisor.status(store, key)
 
 
-class AdvicePressBody(BaseModel): key: str; pressed: str; advised: str | None = None; revision: str | None = None
+class AdvicePressBody(BaseModel):
+    key: str; pressed: str; advised: str | None = None; revision: str | None = None
+    surface: str = 'desk'; lit: str | None = None; live: list[str] | None = None
 
 @app.post('/api/advice/press')
 def advice_press(body: AdvicePressBody):
-    """A press on the row (or Next) while the Advisor's line was shown: what was lit, what was pressed (advisor.press). Never fails the
-    press it rides on - a lost row costs one observation."""
+    """EVERY PRESS on the desk's row or card and on the Tasks tab, lit or not (phase B, 2026-10-23): the surface, what it had lit, what
+    else was live, what was pressed (advisor.press; the phone records in-process). Never fails the press it rides on - a lost row
+    costs one observation."""
     from . import advisor
-    try: return {'id': advisor.press(store, body.key, body.advised, body.pressed, body.revision)}
+    try: return {'id': advisor.press(store, body.key, body.advised, body.pressed, body.revision, surface=body.surface, lit=body.lit,
+                                     live=body.live)}
     except Exception as e: logger.warning(f'advice press on {body.key} not recorded: {e}'); return {'id': 0}
 
 
@@ -5326,6 +5335,8 @@ def draft_review(rid: int, body: DraftBody = None):
     if rv.get('Kind') == 'slot' and deliver.get('by') != 'owner': raise HTTPException(422, 'the agent writes this email - ask it again, or edit it here')
     # a calendar answer's note is the owner's one line: no redrafter writes an RSVP (calwrite.py)
     if deliver.get('kind') == 'calendar': raise HTTPException(422, 'the note on a calendar answer is yours to write - or leave it empty')
+    # THE OWNER'S WORDS FOR IT ARE KEPT on the review (the owner, 2026-10-23: a Redraft's instruction is stored and remembered)
+    if body and (body.instruction or '').strip(): store.add_review_instruction(rid, body.instruction)
     try:
         if rv.get('Kind') == 'slot':
             from . import outbox as ob
@@ -5336,7 +5347,7 @@ def draft_review(rid: int, body: DraftBody = None):
             store.update_review_draft(rid, draft, rv.get('RunId'))
         elif deliver.get('channel') and deliver.get('kind') != 'zoho_invoice':
             from . import outbox as ob
-            draft = ob.redraft_review(store, rv)
+            draft = ob.redraft_review(store, rv, instruction=_reply_nudge(body and body.instruction))
         elif rv.get('TaskId'):
             _refresh_chat_context(task_id=rv.get('TaskId'), message_id=rv.get('MessageId'))
             draft = responder.write_draft(store, rv['TaskId'], rid, actor=ACTOR, nudge=_reply_nudge(body and body.instruction))

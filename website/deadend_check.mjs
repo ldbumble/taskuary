@@ -468,8 +468,10 @@ const pressCardSend = async (page) => {
   await h.click(); mark("approve", page.step); return true;
 };
 const cardSends = (s) => s.cardBtns.some((b) => !b.off && sendWords.some((w) => b.word.startsWith(w)));
+// ...a greyed button is not one to press (the owner, 2026-10-22: a button that cannot work is greyed, its reason in the hover) - a click
+// on it does nothing, and the walk took that for a start and judged the screen it never left
 const rowHandle = (page, verb) => page.evaluateHandle((verb, ids, words) => {
-  const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !e.disabled; };
   return [...document.querySelectorAll("[data-tq-row] button[data-tq-verb]")].filter(vis).find((b) => ids.includes(b.getAttribute("data-tq-verb").split(":").pop())
     && (!words.length || words.some((w) => b.innerText.trim().startsWith(w)))) || null;
 }, verb, [verb, ...(VERBS[verb]?.row || [])], verb === "approve" ? sendWords : []);

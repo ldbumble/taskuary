@@ -83,3 +83,11 @@ test("no button press writes a 'Done - <button>' line or a free-text receipt on 
   assert.match(src("assistantView.css"), /\.tq-pressed \{[^}]*animation: tq-pressed-in/);
   assert.match(src("assistantView.css"), /prefers-reduced-motion: reduce\) \{ \.tq-pressed \{ animation: none; \}/);
 });
+
+test("Next leaves its own badge on the card it passed, and a failed Next takes it off", () => {
+  const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
+  // the owner, 2026-10-23: "we should have next pill on this one to show what was clicked on each task"
+  assert.match(view, /const nextWord = btn\("next"\), wear = \(on\) =>/);
+  assert.match(view, /if \(putDown\) wear\(true\);/);
+  assert.match(view, /if \(putDown\) \{ setFoldedKey\(\(k\) => \(k === putDown \? null : k\)\); wear\(false\); \}/);
+});

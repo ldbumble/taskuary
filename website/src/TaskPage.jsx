@@ -1401,7 +1401,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // MESSAGE SOMEONE - email or chat - whoever started the task (the owner, 2026-10-09): tell somebody it is done, the AI writes it, it waits in Close out
       // ...never where nothing can be sent from here (the owner, 2026-10-22: "no send out results on something you can't send out")
       ...(!liveSession && !cantSend ? [{ id: "email", group: "agent", label: labelOfRow("email"), run: () => setEmailOpen(true), title: hintOfRow("email") }] : []),
-      ...(replyMessage && !liveSession ? [{ id: "ask-sender", group: "more", label: labelOfRow("ask-sender"), run: () => setAskSenderOpen(true), title: hintOfRow("ask-sender") }] : []),
+      // ...nor Ask sender: its question is a reply too, and leaves by the same channel (a Teams task offered it, 2026-10-22)
+      ...(replyMessage && !liveSession && !cantSend ? [{ id: "ask-sender", group: "more", label: labelOfRow("ask-sender"), run: () => setAskSenderOpen(true), title: hintOfRow("ask-sender") }] : []),
       { id: "done", group: "more", label: finishing ? "Marking done…" : labelOfRow("done"), disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession && !pendingReview, beside: liveSession, onCard: !!pendingReview && !liveSession },   // a live session has no primary;
       // ...nor a waiting draft: its Send, under the draft, is the move (2026-10-06), so Mark done stands outlined beside Next -
       // and so do Start an agent and Next (`onCard`): a second filled button on the bar pulled the eye off the draft
@@ -2139,10 +2140,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             startIcon={openingReply ? <CircularProgress size={11} /> : <ForwardToInboxIcon sx={{ fontSize: 14 }} />}
                             onClick={() => (pendingReview ? setOpenStage("reply") : openReply(true))}>
                             {openingReply ? "Drafting…" : replyPrimary}</Button>
-                          <Tooltip title={`${labelOfRow("ask-sender")} - ${hintOfRow("ask-sender")}`}>
+                          {!cantSend && <Tooltip title={`${labelOfRow("ask-sender")} - ${hintOfRow("ask-sender")}`}>
                             <IconButton size="small" sx={{ color: "#8a3646" }} onClick={() => setAskSenderOpen(true)}>
                               <ChatBubbleOutlineIcon sx={{ fontSize: 15 }} /></IconButton>
-                          </Tooltip>
+                          </Tooltip>}
                         </Box>
                       : null} />
                   {/* WHAT CLOSED IT, where it was closed (the owner, 2026-10-19: "i hit mark done on close out but agent work tab opened up
@@ -2194,7 +2195,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               title="Drafts the reply here, from this task's own context. Nothing is sent until you approve it."
                               onClick={() => openReply(true)}>{openingReply ? "Drafting…" : replyPrimary}</Button>
                           )}
-                          {!inRow && <Button size="small" variant="outlined" sx={barBtn}
+                          {!inRow && !cantSend && <Button size="small" variant="outlined" sx={barBtn}
                             startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 15, color: "#8a3646" }} />}
                             title="Drafts a question to the sender. It waits here for your approval; nothing is sent now."
                             onClick={() => setAskSenderOpen(true)}>{labelOfRow("ask-sender")}</Button>}

@@ -9,6 +9,7 @@ import { useVerbs } from "./actionRow.js";
 import { label as btnLabel } from "./buttons.js";
 import { openAppLink } from "./appLinks.js";
 import { NL } from "./sourceShape.js";
+import { DASH } from "./words.js";
 import { PANEL2, DIM, FAINT, INK, ACCENT2, card } from "./theme.jsx";
 
 export default function Composer({ onDraft, kind = "report", initial = "" }) {
@@ -20,7 +21,7 @@ export default function Composer({ onDraft, kind = "report", initial = "" }) {
   const go = async (withAnswers) => {
     setBusy(true);
     try {
-      const endpoint = kind === "workflow" ? "/api/workflows/compose" : "/api/reports/compose";
+      const endpoint = kind === "workflow" ? "/api/workflows/compose" : kind === "dashboard" ? "/api/dashboards/compose" : "/api/reports/compose";
       const { data } = await api.post(endpoint, { ask, answers: withAnswers || undefined });
       setOut(data);
       if (data.config) { onDraft(data.config, data); setAsk(""); setAnswers({}); setOut(null); }
@@ -38,12 +39,12 @@ export default function Composer({ onDraft, kind = "report", initial = "" }) {
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, mb: 0.9 }}>
         <AutoAwesomeIcon sx={{ fontSize: 15, color: ACCENT2 }} />
         <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK }}>
-          {kind === "workflow" ? "Describe the workflow you want" : "Describe the report you want"}
+          {kind === "workflow" ? "Describe the workflow you want" : kind === "dashboard" ? DASH.describe : "Describe the report you want"}
         </Typography>
       </Box>
       <TextField fullWidth size="small" multiline minRows={2} value={ask} disabled={busy}
         sx={{ bgcolor: "#fff" }}
-        placeholder={kind === "workflow"
+        placeholder={kind === "dashboard" ? DASH.example : kind === "workflow"
           ? "Every Monday at 8, check Intacct for active employees that share a name, and open a task for finance per pair."
             + NL + "Every weekday at 7, read yesterday's failed imports and open a task for each one that did not retry."
           : "Read C:/exports/daily-*.csv every morning, total the units by site and flag anything under 70."

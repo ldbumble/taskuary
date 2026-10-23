@@ -48,7 +48,7 @@ REQUIRED = {'agent': ('prompt|skill',), 'intacct': ('object',), 'intacct_fields'
 REPORT_KEYS = ('title', 'ai_prompt', 'ai_brain', 'every_minutes', 'daily_at', 'cron', 'on_startup',
                'deliver', 'alert', 'charts', 'sources', 'watch_sources', 'watch_source_ids')
 MAX_SOURCES = 6      # the Assistant reads every one of them on every check; a wall of them is a slow check
-NOT_A_SOURCE = ('assistant', 'zoho_monthly_invoices')  # checks may read data views, never a stateful workflow
+NOT_A_SOURCE = ('assistant', 'zoho_monthly_invoices', 'dashboard')  # checks may read data views, never a stateful workflow or a dashboard
 
 # Sage Intacct, as the model needs it spelled out: the executor docstring says what the keys are,
 # not how the system thinks. Fields are UPPERCASE ids; readByQuery filters, never SQL; nothing
@@ -82,7 +82,7 @@ def catalog(store) -> list:
             conns[c['Type']] = c
     out = []
     for t, fn in sorted(REGISTRY.items()):
-        if t in PLANNED: continue
+        if t in PLANNED or t == 'dashboard': continue      # a dashboard is built by its own composer, never a report's source
         card = card_of(t)
         c = conns.get(card)
         needs = t in CONNECTION_OF
@@ -547,3 +547,67 @@ def validate(store, cfg: dict):
     has - a name a person will recognise on a list."""
     if not str((cfg or {}).get('title') or '').strip(): return False, 'the report has no title'
     return validate_source(store, cfg, 'report')
+
+
+# ── a dashboard: sources + preset components, written once and run with no AI ─────────────────────────────
+DASHBOARD_SYSTEM = (
+    'You design ONE Taskuary dashboard from a plain-English request: the data sources it reads (deterministic reads from the '
+    'catalog - a query, a sheet, a file, Taskuary\'s own tables) and a grid of PRESET components bound to those sources\' '
+    'columns. Nothing is summarised by an AI when it runs: every run re-reads the sources and the page draws the rows.\n\n'
+    'Answer JSON only, in one of three shapes:\n'
+    '  {"questions": ["..."]} - at most three, only what you can neither find out nor sensibly default.\n'
+    '  {"peek": {"type": "<a catalog type>", ...its keys}} - run one read to SEE the real columns before binding to them.\n'
+    '  {"config": {...}, "explain": "<one or two sentences>", "confidence": "high|medium|low"}.\n\n'
+    'CONFIG\n'
+    '{"type": "dashboard", "title": "<short>", "daily_at": "HH:MM" | "every_minutes": N | "cron": "...",\n'
+    ' "sources": [{"key": "<short id>", "label": "<what a person calls it>", "type": "<a ready catalog type>", ...that type\'s keys,\n'
+    '              "date": "<the column holding each row\'s date, when it has one>"}],\n'
+    ' "filters": {"range": 7|30|90|0, "segment": "<a column several sources share, to slice every component by>"},\n'
+    ' "components": [...]}\n'
+    'COMPONENTS - only these presets, each {"kind", "title", "source": "<a source key>", ...its bindings, "w": 1-4 (of 4 columns)}:\n'
+    '- "stat": one number. "agg": count|sum|avg|min|max, "y" for any agg but count, optional "where": {column: value}, '
+    '"good": "up"|"down" (which direction is good). Its delta and sparkline come from the source\'s date. Lead with 2-4 of them.\n'
+    '- "progress": a number toward a "target" (same keys as stat, plus "target": <number>).\n'
+    '- "line" / "area": a value over time. "x" = the date column, "agg", "y", optional "where". Never two measures on one chart.\n'
+    '- "bar": ranked categories. "x" = the category column, "agg", "y", optional "limit" (default 8; the rest fold into Other).\n'
+    '- "stacked": categories split by a second column: "x", "series" (at most 6 values read well), "agg", "y".\n'
+    '- "table": rows. "columns": [...], optional "sort": "<column>" or "-<column>", "limit".\n'
+    '- "list": items, each one line. "label" = the column a person reads, optional "meta" column, "sort", "limit". A row with a '
+    'task_id column opens that task when pressed.\n'
+    'RULES\n'
+    '- One screen: 4-10 components. The numbers first (stat/progress, w 1), the trends and rankings next (w 2), a table or '
+    'list last (w 2-4). Every title is what a person would call the number, never a column name.\n'
+    '- Bind only to columns you have SEEN - the datasets below list Taskuary\'s own, anything else you peek at first.\n'
+    '- "where" values are exact matches of a column\'s values. Counts are "agg": "count" with no "y".\n'
+    '- "range": false on a component that counts what is true NOW (open tasks, a balance) - the date range then never cuts it.\n'
+    '- No schedule asked for: daily_at "07:00", and say so in explain.\n')
+DASHBOARD_KEYS = ('type', 'title', 'every_minutes', 'daily_at', 'cron', 'on_startup', 'sources', 'filters', 'components')
+
+
+def dashboard_system() -> str:
+    from .dashboards import DATASETS
+    return (DASHBOARD_SYSTEM + '- Taskuary\'s own data is type "taskuary_data" with "dataset" one of: '
+            + '; '.join(f'{k} ({v[1]})' for k, v in DATASETS.items()) + '.\n' + JUDGEMENT)
+
+
+def compose_dashboard(store, ask: str, llm, answers: dict = None, rounds: int = MAX_PEEKS) -> dict:
+    """{'questions': [...]} or {'config': <a dashboard spec>, 'explain', 'confidence', 'looked_at'} - the same fences as a
+    report's: only connected types, only keys the executors take, a peek before a guess. The spec is checked here, and the
+    page's preview runs its sources for real before anything is saved."""
+    if not llm: return dict(NO_AI)
+    if not (ask or '').strip(): return {'error': 'Say what the dashboard should show.'}
+    from . import dashboards
+    cat = [c for c in catalog(store) if c['type'] not in NOT_A_SOURCE]
+    user = {'request': ask.strip(), 'catalog': cat, **({'answers_to_your_questions': answers} if answers else {})}
+
+    def finish(out, looked):
+        cfg = out.get('config')
+        if not isinstance(cfg, dict): return {'error': AGAIN.format('a dashboard')}
+        cfg = {k: v for k, v in cfg.items() if k in DASHBOARD_KEYS} | {'type': 'dashboard'}
+        for i, s in enumerate(cfg.get('sources') or [], 1):
+            if isinstance(s, dict): s.setdefault('key', f's{i}')
+        ok, why = dashboards.validate(cfg, store)
+        if not ok: return {'error': why, 'config': cfg}
+        return {'config': cfg, 'explain': str(out.get('explain') or '')[:600],
+                'confidence': out.get('confidence') or 'medium', 'looked_at': looked}
+    return _rounds(store, llm, dashboard_system() + _playbook(cat), user, rounds, finish)

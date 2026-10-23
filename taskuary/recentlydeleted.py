@@ -14,7 +14,7 @@ import json, time
 from loguru import logger
 
 KEEP_DAYS, UNDO_SECONDS = 30, 600
-LISTED = ('report', 'workflow', 'rule', 'profile')        # what Recently deleted lists; the rest is an Undo line's alone
+LISTED = ('report', 'workflow', 'dashboard', 'rule', 'profile')        # what Recently deleted lists; the rest is an Undo line's alone
 SHORT = ('connection', 'signout', 'cli')                   # kept for the Undo line's minutes, then finished off
 
 
@@ -81,8 +81,8 @@ def take(store, did: int) -> dict | None:
 def source_kind(row: dict) -> str:
     """A report and a workflow are listed under their own names; a mailbox address or a channel is an Undo line's alone."""
     if row.get('Channel') != 'report': return 'source'
-    from . import workflows
-    return 'workflow' if workflows.is_workflow(row) else 'report'
+    from . import workflows, dashboards
+    return 'workflow' if workflows.is_workflow(row) else 'dashboard' if dashboards.is_dashboard(dashboards.cfg_of(row)) else 'report'
 
 
 def source_title(row: dict) -> str:
@@ -201,7 +201,7 @@ def restore(store, cfg: dict, did: int) -> dict:
     if kind == 'profile' and d['name'] in cfg.get('agents', {}): raise Taken(f"a profile named {d['name']} exists again - rename it first")
     if kind == 'cli' and d['name'] in cfg.get('cli_connections', {}): raise Taken(f"{d['name']} is connected again already")
     store.drop_deleted(r['DeletedId'])
-    if kind in ('report', 'workflow', 'source'): store.put_back('source', d['row'], 'SourceId')
+    if kind in ('report', 'workflow', 'dashboard', 'source'): store.put_back('source', d['row'], 'SourceId')
     elif kind == 'rule':
         from . import policy as policy_engine
         store.put_back('policy', d['row'], 'PolicyId')

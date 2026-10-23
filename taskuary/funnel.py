@@ -382,8 +382,10 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             else:
                 ran = _activity_time(base.get('since') or base.get('when'))
                 brief = not bad and is_digest_source(store, sid) and ran is not None and ran.date() == datetime.now().date()
+                # a DASHBOARD's row opens the dashboard over the canvas (dashboards.py), and wears its own mark on the rail
+                dash = {'dashboard': True} if sid in _SOURCES.get('dash', ()) else {}
                 out.append(_item(f"report:{r['MessageId']}", 'report', 'broken' if bad else 'report', subj, bad=bad, source_id=sid,
-                                 brief_today=brief,
+                                 brief_today=brief, **dash,
                                  why='your brief for today - what is going on, and what is pressing' if brief
                                      else ('the check failed - the cause is in it' if bad else 'a report you set up landed'), **base))
                 if group and threads.get(group) is None: threads[group] = out[-1]
@@ -475,11 +477,11 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
     return out
 
 
-_SOURCES = {'at': 0.0, 'by': {}, 'digest': set()}
+_SOURCES = {'at': 0.0, 'by': {}, 'digest': set(), 'dash': set()}
 def report_source_id(store, name: str) -> int | None:
     """The report source behind a report message (its SourceName is the report's title) - cached a minute."""
     if time.time() - _SOURCES['at'] > 60:
-        by, digest = {}, set()
+        by, digest, dash = {}, set(), set()
         for src in store.list_sources(active_only=False):
             if src.get('Channel') != 'report': continue
             try: cfg = json.loads(src.get('ConfigJson') or '{}')
@@ -489,9 +491,10 @@ def report_source_id(store, name: str) -> int | None:
             # still the brief and a report merely CALLED "digest" is not
             if 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}:
                 digest.add(src['SourceId'])
+            if cfg.get('type') == 'dashboard': dash.add(src['SourceId'])
             for k in (src.get('Address'), title):
                 if k: by[str(k)] = src['SourceId']
-        _SOURCES.update(at=time.time(), by=by, digest=digest)
+        _SOURCES.update(at=time.time(), by=by, digest=digest, dash=dash)
     return _SOURCES['by'].get(str(name or ''))
 
 

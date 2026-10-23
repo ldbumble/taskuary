@@ -377,6 +377,8 @@ def protocol_marks(msg, me=(), tz=None) -> dict:
     out, sc = {}, header_class(msg)
     if from_headers(msg): out['auto_reply'] = True
     if sc: out['sender_class'] = sc
+    from .unsubscribe import parse as unsub    # a list's own way off it, for the FYI card's Unsubscribe (unsubscribe.py)
+    if u := unsub(msg): out['unsub'] = u
     from . import mailauth
     try: v = mailauth.verdict(msg)                # did the receiving server verify the From (senders.known)
     except Exception as e: v = 'none'; logger.warning(f'imap: mail auth unreadable - {e}')   # never a stuck UID

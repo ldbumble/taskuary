@@ -187,7 +187,7 @@ def _num(v):
 
 def in_range(rows, date_col, days, now=None):
     if not date_col or not days: return rows
-    cut = ((now or datetime.now()) - timedelta(days=int(days))).strftime('%Y-%m-%d')
+    cut = ((now or datetime.now()) - timedelta(days=int(days) - 1)).strftime('%Y-%m-%d')     # the last 7 days: today and six before
     return [r for r in rows if str(r.get(date_col) or '')[:10] >= cut]
 
 
@@ -216,7 +216,8 @@ def headline(spec: dict, data: dict) -> list:
     for c in spec.get('components') or []:
         if c.get('kind') != 'stat': continue
         rows = ((data.get('sources') or {}).get(c.get('source')) or {}).get('rows') or []
-        rows = where(in_range(rows, (srcs.get(c['source']) or {}).get('date'), days), c.get('where'))
+        date = None if c.get('range') is False else (srcs.get(c['source']) or {}).get('date')     # "range": false counts what is true now
+        rows = where(in_range(rows, date, days), c.get('where'))
         out.append((c.get('title') or 'value', fmt(aggregate(rows, c.get('agg'), c.get('y')))))
     return out
 

@@ -173,3 +173,17 @@ def test_a_report_composer_never_offers_a_dashboard_as_a_source():
 def test_no_ai_says_so_with_its_fix():
     out = compose.compose_dashboard(MemoryStore(), 'anything', None)
     assert out['fix']['label']
+
+
+def test_a_count_of_what_is_true_now_is_not_cut_by_the_range():
+    old = (datetime.now() - timedelta(days=40)).strftime('%Y-%m-%d')
+    data = {'sources': {'t': {'rows': [{'arrived': old, 'state': 'open'}, {'arrived': _day(1), 'state': 'open'}]}}}
+    spec = {'filters': {'range': 7}, 'sources': [{'key': 't', 'date': 'arrived'}],
+            'components': [{'kind': 'stat', 'title': 'Arrived', 'source': 't'}, {'kind': 'stat', 'title': 'Open', 'source': 't', 'range': False}]}
+    assert dashboards.headline(spec, data) == [('Arrived', '1'), ('Open', '2')]
+
+
+def test_the_card_under_the_line_keeps_the_dashboard_mark_and_no_other_card_grows_one():
+    from taskuary import concierge
+    assert concierge.card_for({'kind': 'report', 'dashboard': True})['dashboard'] is True
+    assert 'dashboard' not in concierge.card_for({'kind': 'report'})

@@ -334,7 +334,7 @@ const cardKind = (item) => {
     case "review": case "action": return "reply";
     case "agent": return "agent";
     case "meeting": return "meeting";
-    case "report": return "report";
+    case "report": return item.dashboard ? "dashboard" : "report";     // a dashboard's row opens the dashboard (dashboards.py)
     case "agentdone": return "agentdone";
     case "idea": return "idea";
     case "triaging": return null;

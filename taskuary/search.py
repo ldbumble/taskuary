@@ -296,6 +296,9 @@ def places(store, q: str, n: int = 8) -> list:
     import math
     said = [_fold(w) for w in re.findall(r'[\w@.\-]+', str(q or '')) if len(w) > 1 or w.isdigit()]
     words = list(dict.fromkeys(_stem(w) for w in said))
+    # the app's own name says which app, not which place in it: "reinstall taskuary" is Updates, not the built-in dashboard that
+    # wears the name (Taskuary at a glance) - unless it is all that was asked
+    words = [w for w in words if w != _stem('taskuary')] or words
     rows = _app_rows(store)
     if not words or not rows: return []
     texts = [(_fold(r['title']), _fold(f"{r['title']} {r.get('where') or ''} {r['rest']}")) for r in rows]

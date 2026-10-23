@@ -19,7 +19,7 @@ from .store import task_ref
 # kind -> (bindings it cannot draw without, the width it takes on a four-column grid)
 KINDS = {'stat': ((), 1), 'progress': (('target',), 1), 'line': (('x',), 2), 'area': (('x',), 2), 'bar': (('x',), 2),
          'stacked': (('x', 'series'), 2), 'table': ((), 4), 'list': (('label',), 2)}
-AGGS = ('count', 'sum', 'avg', 'min', 'max')
+AGGS = ('count', 'sum', 'avg', 'median', 'min', 'max')
 RANGES = (7, 30, 90, 0)            # days back; 0 is everything the sources returned
 MAX_SOURCES, MAX_COMPONENTS, ROWS = 6, 12, 2000
 COLUMN_KEYS = ('x', 'y', 'series', 'label', 'meta', 'value', 'date')
@@ -37,33 +37,86 @@ def _since(days): return (datetime.now() - timedelta(days=max(1, int(days or 90)
 
 def _tasks(store, days):
     """One row per task opened in the window or still open: when its ask arrived (its first mail, else when it was made)."""
-    rows = store._rows("""SELECT t.TaskId, t.Title, t.Kind, t.Status, t.Priority, t.CreatedAt, t.ClosedAt,
+    rows = store._rows("""SELECT t.TaskId, t.Title, t.Kind, t.Status, t.Priority, t.CreatedAt, t.ClosedAt, t.UpdatedAt,
         (SELECT MIN(m.SentAt) FROM message m WHERE m.TaskId=t.TaskId) FirstAt
         FROM task t WHERE t.ParentId IS NULL AND (t.CreatedAt>=? OR t.Status NOT IN ('done','dropped'))
         ORDER BY t.TaskId DESC LIMIT ?""", (_since(days), ROWS))
     return [{'task_id': r['TaskId'], 'ref': task_ref(r['TaskId']), 'title': r['Title'] or '', 'kind': r['Kind'] or 'general',
              'status': r['Status'] or 'open', 'state': 'closed' if r['Status'] in ('done', 'dropped') else 'open',
-             'priority': r['Priority'] or 'normal', 'arrived': str(r['FirstAt'] or r['CreatedAt'] or '')[:10],
-             'closed': str(r['ClosedAt'] or '')[:10]} for r in rows]
+             'priority': r['Priority'] or 'normal', 'arrived': (a := str(r['FirstAt'] or r['CreatedAt'] or '')[:10]),
+             # a task closed before ClosedAt was stamped on every close says when it was last touched instead
+             'closed': str(r['ClosedAt'] or (r['UpdatedAt'] if r['Status'] in ('done', 'dropped') else '') or '')[:10], 'waiting': _waited(a)}
+            for r in rows]
+
+
+def _waited(day) -> str:
+    """How long since the ask arrived, as a person says it - a list's meta line under "waiting longest"."""
+    try: n = (datetime.now().date() - datetime.strptime(day, '%Y-%m-%d').date()).days
+    except ValueError: return ''
+    return 'today' if n <= 0 else 'yesterday' if n == 1 else f'{n} days' if n < 60 else f'{n // 30} months'
 
 
 def _mail(store, days):
     """One row per message that came IN (not the reports' own rows): its day, channel and sender."""
-    rows = store._rows("""SELECT MessageId, TaskId, Channel, SentAt, FromName, SourceName FROM message
+    rows = store._rows("""SELECT MessageId, TaskId, Channel, SentAt, FromName, FromEmail, SourceName FROM message
         WHERE IFNULL(Direction,'in')='in' AND Channel<>'report' AND Status<>'context' AND SentAt>=? ORDER BY SentAt DESC LIMIT ?""",
                        (_since(days), ROWS))
     return [{'message_id': r['MessageId'], 'task_id': r['TaskId'], 'day': str(r['SentAt'] or '')[:10], 'channel': r['Channel'] or 'email',
-             'sender': r['FromName'] or r['SourceName'] or '', 'became_task': 'yes' if r['TaskId'] else 'no'} for r in rows]
+             'sender': r['FromName'] or r['SourceName'] or r['FromEmail'] or '', 'became_task': 'yes' if r['TaskId'] else 'no'} for r in rows]
+
+
+# the stages an ask passes, in order: a message is counted at every stage it reached, so the funnel's bars only ever step down
+STAGES = ('Came in', 'Triaged', 'On a task', 'Task closed')
+_JUDGED = """EXISTS (SELECT 1 FROM route r WHERE r.MessageId=m.MessageId AND r.ParseError IS NULL
+    AND IFNULL(r.Reason,'') NOT LIKE 'awaiting AI triage%' AND IFNULL(r.Reason,'') NOT LIKE '%triage failed (%'
+    AND IFNULL(r.Reason,'') NOT LIKE 'AI triage returned an answer it could not read%')"""
+
+
+def _flow(store, days):
+    """How far what came in got: one row per message per stage it reached (STAGES) - came in, triaged (a verdict, not a failure
+    or a wait for an AI), on a task, its task closed. A bar over `stage` is the funnel; `channel` slices it like the mail."""
+    rows = store._rows(f"""SELECT m.MessageId, m.TaskId, m.Channel, m.SentAt, t.Status TaskStatus, (m.TaskId IS NOT NULL OR {_JUDGED}) Judged
+        FROM message m LEFT JOIN task t ON t.TaskId=m.TaskId
+        WHERE IFNULL(m.Direction,'in')='in' AND m.Channel<>'report' AND m.Status<>'context' AND m.SentAt>=? ORDER BY m.SentAt DESC LIMIT ?""",
+                       (_since(days), ROWS))
+    out = []
+    for r in rows:
+        reached = 1 + bool(r['Judged']) + bool(r['TaskId']) + (bool(r['TaskId']) and r['TaskStatus'] in ('done', 'dropped'))
+        base = {'message_id': r['MessageId'], 'task_id': r['TaskId'], 'day': str(r['SentAt'] or '')[:10], 'channel': r['Channel'] or 'email'}
+        out += [{**base, 'stage': st} for st in STAGES[:reached]]
+    return out
+
+
+# how an agent's session ended, by its last word (workerstate.KINDS): a turn that ended with the agent at its prompt waits on the
+# owner, as an open request does - only an explicit finish is "finished". The older run table's statuses read the same way.
+OUTCOME = {'finished': 'finished', 'done': 'finished', 'failed': 'failed', 'stopped': 'stopped', 'disconnected': 'stopped',
+           'turn_end': 'waiting on you', 'input_needed': 'waiting on you', 'approval_needed': 'waiting on you', 'stalled': 'waiting on you'}
 
 
 def _agent_runs(store, days):
-    """One row per agent run: the day it started, the agent, how it ended and how long it took."""
-    rows = store._rows("""SELECT RunId, TaskId, AgentName, Status, StartedAt, FinishedAt,
-        (julianday(FinishedAt)-julianday(StartedAt))*1440 Mins FROM run WHERE StartedAt>=? ORDER BY RunId DESC LIMIT ?""",
-                       (_since(days), ROWS))
-    return [{'run_id': r['RunId'], 'task_id': r['TaskId'], 'ref': task_ref(r['TaskId']) if r['TaskId'] else '', 'day': str(r['StartedAt'] or '')[:10],
-             'agent': r['AgentName'] or 'agent', 'status': r['Status'] or 'running',
-             'minutes': round(r['Mins'], 1) if r['Mins'] is not None else None} for r in rows]
+    """One row per agent session: the day it started, the agent, how it ended (outcome) and the minutes to its last word. A session
+    is its worker events (workerstate.record - every CLI's hooks write them); the older `run` table's rows ride along."""
+    since = _since(days)
+    rows = store._rows("""SELECT e.TaskId, e.Sid, e.Started, l.Kind, t.Assignee,
+        (SELECT tr.Agent FROM transcript tr WHERE tr.Sid=e.Sid AND IFNULL(tr.Agent,'')<>'' ORDER BY tr.TranscriptId DESC LIMIT 1) Agent,
+        (julianday(l.CreatedAt)-julianday(e.Started))*1440 Mins
+        FROM (SELECT TaskId, Sid, MIN(CreatedAt) Started, MAX(Id) LastId FROM worker_event WHERE CreatedAt>=? AND Kind<>'floor_denied'
+              GROUP BY TaskId, Sid) e JOIN worker_event l ON l.Id=e.LastId LEFT JOIN task t ON t.TaskId=e.TaskId
+        ORDER BY e.Started DESC LIMIT ?""", (since, ROWS))
+    out = []
+    for r in rows:
+        who = r['Agent'] or (str(r['Assignee'])[6:] if str(r['Assignee'] or '').startswith('agent:') else '') or 'agent'
+        end = OUTCOME.get(r['Kind'], 'working')
+        out.append({'run_id': r['Sid'], 'task_id': r['TaskId'], 'ref': task_ref(r['TaskId']) if r['TaskId'] else '', 'day': str(r['Started'] or '')[:10],
+                    'agent': who, 'status': r['Kind'] or 'working', 'outcome': end,
+                    'minutes': round(max(0.0, r['Mins']), 1) if r['Mins'] is not None and end != 'working' else None})
+    for r in store._rows("""SELECT RunId, TaskId, AgentName, Status, StartedAt, (julianday(FinishedAt)-julianday(StartedAt))*1440 Mins
+                            FROM run WHERE StartedAt>=? ORDER BY RunId DESC LIMIT ?""", (since, ROWS)):
+        st = r['Status'] or 'running'
+        out.append({'run_id': r['RunId'], 'task_id': r['TaskId'], 'ref': task_ref(r['TaskId']) if r['TaskId'] else '', 'day': str(r['StartedAt'] or '')[:10],
+                    'agent': r['AgentName'] or 'agent', 'status': st, 'outcome': OUTCOME.get(st, 'working'),
+                    'minutes': round(r['Mins'], 1) if r['Mins'] is not None else None})
+    return sorted(out, key=lambda x: x['day'], reverse=True)[:ROWS]
 
 
 def _replies(store, days):
@@ -76,16 +129,54 @@ def _replies(store, days):
              'hours': round(max(0.0, r['Hrs']), 1) if r['Hrs'] is not None else None} for r in rows]
 
 
-DATASETS = {'tasks': (_tasks, 'task_id, ref, title, kind, status, state (open|closed), priority, arrived (date), closed (date)'),
+DATASETS = {'tasks': (_tasks, 'task_id, ref, title, kind, status, state (open|closed), priority, arrived (date), closed (date), '
+                             'waiting (how long since it arrived, in words)'),
             'mail': (_mail, 'message_id, task_id, day (date), channel, sender, became_task (yes|no)'),
-            'agent_runs': (_agent_runs, 'run_id, task_id, ref, day (date), agent, status, minutes'),
+            'flow': (_flow, 'message_id, task_id, day (date), channel, stage (Came in|Triaged|On a task|Task closed - one row per stage reached)'),
+            'agent_runs': (_agent_runs, 'run_id, task_id, ref, day (date), agent, status, outcome (finished|failed|stopped|waiting on you|working), minutes'),
             'replies': (_replies, 'task_id, day (date the reply was decided), channel, status, hours (ask to answer)')}
 
 
+# ── the built-in dashboard: what the End of day checkup is to reports. Every install gets it (store.SEEDED_REPORTS), and New
+# dashboard offers it again in one press. It reads ONLY this app's own tables, so it draws for anybody, with nothing connected.
+_own = lambda key, label, dataset, date: {'key': key, 'label': label, 'type': 'taskuary_data', 'dataset': dataset, 'days': 90, 'date': date}
+GLANCE = {'type': 'dashboard', 'title': 'Taskuary at a glance', 'daily_at': '07:00',
+          'sources': [_own('mail', 'What came in', 'mail', 'day'), _own('flow', 'How far it got', 'flow', 'day'),
+                      _own('tasks', 'Tasks', 'tasks', 'arrived'), _own('closed', 'Tasks closed', 'tasks', 'closed'),
+                      _own('agents', 'Agent sessions', 'agent_runs', 'day'), _own('replies', 'Replies', 'replies', 'day')],
+          'filters': {'range': 7, 'segment': 'channel'},
+          'components': [
+              # the numbers first: what came in, what it became, what is still open, and how fast the owner answers
+              {'kind': 'stat', 'title': 'Came in', 'source': 'mail', 'agg': 'count'},
+              {'kind': 'stat', 'title': 'New tasks', 'source': 'tasks', 'agg': 'count'},
+              {'kind': 'stat', 'title': 'Open now', 'source': 'tasks', 'agg': 'count', 'where': {'state': 'open'}, 'range': False, 'good': 'down'},
+              {'kind': 'stat', 'title': 'Median reply time', 'source': 'replies', 'agg': 'median', 'y': 'hours', 'unit': 'h', 'good': 'down'},
+              # ...the week's close against its target and an agent's time, beside the funnel (four bars: a tile's height, so the row is even)
+              {'kind': 'progress', 'title': 'Closed this week', 'source': 'closed', 'agg': 'count', 'where': {'state': 'closed'}, 'range': 7, 'target': 15},
+              {'kind': 'stat', 'title': 'Agent time per session', 'source': 'agents', 'agg': 'median', 'y': 'minutes', 'unit': 'min', 'good': 'none'},
+              {'kind': 'bar', 'title': 'How far it got', 'source': 'flow', 'x': 'stage', 'order': list(STAGES), 'share': True, 'w': 2},
+              # ...then the days: what came in, and what the agents did with theirs
+              {'kind': 'stacked', 'title': 'What came in, by channel', 'source': 'mail', 'x': 'day', 'series': 'channel', 'w': 2},
+              {'kind': 'stacked', 'title': 'Agent sessions, and how they ended', 'source': 'agents', 'x': 'day', 'series': 'outcome', 'w': 2},
+              # ...the rankings
+              {'kind': 'bar', 'title': 'Open work by kind', 'source': 'tasks', 'x': 'kind', 'where': {'state': 'open'}, 'range': False, 'w': 2},
+              {'kind': 'bar', 'title': 'Who writes most', 'source': 'mail', 'x': 'sender', 'limit': 8, 'w': 2},
+              # ...and the detail: the asks that have waited longest on the owner, each opening its task
+              {'kind': 'list', 'title': 'Waiting longest on you', 'source': 'tasks', 'label': 'title', 'meta': 'waiting',
+               'where': {'status': 'open'}, 'range': False, 'sort': 'arrived', 'limit': 6, 'w': 4}]}
+TEMPLATES = {'glance': {'title': GLANCE['title'], 'config': GLANCE,
+                        'explain': 'What came in and from where, how far it got, what is still open, how fast you answer and what your '
+                                   'agents did - from this app\'s own records, so there is nothing to connect.'}}
+
+
+def templates() -> list: return [{'key': k, 'title': t['title'], 'explain': t['explain']} for k, t in TEMPLATES.items()]
+def template(key) -> dict | None: return json.loads(json.dumps(TEMPLATES[key])) if key in TEMPLATES else None      # a copy: never the shared spec
+
+
 def run_taskuary_data(cfg):
-    """{"dataset": "tasks|mail|agent_runs|replies", "days": 90} - Taskuary's own tables as plain rows, no AI: tasks (task_id,
-    ref, title, kind, status, state, priority, arrived, closed), mail (day, channel, sender, became_task), agent_runs (day,
-    agent, status, minutes), replies (day, channel, hours). The rows a dashboard draws from. `store` arrives via resolve_cfg."""
+    """{"dataset": "tasks|mail|flow|agent_runs|replies", "days": 90} - Taskuary's own tables as plain rows, no AI: tasks (task_id,
+    ref, title, kind, status, state, priority, arrived, closed, waiting), mail (day, channel, sender, became_task), flow (day,
+    channel, stage), agent_runs (day, agent, outcome, minutes), replies (day, channel, hours). The rows a dashboard draws from. `store` arrives via resolve_cfg."""
     from .reports import rows_out, row_limit
     name = str(cfg.get('dataset') or '').strip()
     if name not in DATASETS: raise ValueError(f"no Taskuary dataset called {name!r} - choose one of {', '.join(DATASETS)}")
@@ -126,6 +217,10 @@ def validate(spec: dict, store=None) -> tuple:
         if agg not in AGGS: return False, f"{name}: {agg!r} is not one of {', '.join(AGGS)}"
         if agg != 'count' and not c.get('y'): return False, f'{name}: a {agg} needs the column it adds up (y)'
         if c.get('where') is not None and not isinstance(c['where'], dict): return False, f'{name}: "where" is column: value pairs'
+        r = c.get('range')
+        if r is not None and r is not False and (isinstance(r, bool) or r not in RANGES[:-1]):
+            return False, f'{name}: its own "range" is false (what is true now) or one of {", ".join(map(str, RANGES[:-1]))} days'
+        if c.get('order') is not None and not isinstance(c['order'], list): return False, f'{name}: "order" is a list of its x values'
     rng = (spec.get('filters') or {}).get('range')
     if rng is not None and int(rng) not in RANGES: return False, f'the date range is one of {", ".join(map(str, RANGES))} days'
     return True, ''
@@ -198,7 +293,12 @@ def aggregate(rows, agg='count', y=None):
     if (agg or 'count') == 'count': return len(rows)
     vals = [v for v in (_num(r.get(y)) for r in rows) if v is not None]
     if not vals: return None
+    if agg == 'median': s, n = sorted(vals), len(vals); return s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2
     return {'sum': sum(vals), 'avg': sum(vals) / len(vals), 'min': min(vals), 'max': max(vals)}[agg]
+
+
+# a component's own window: "range": 7 is always the last week (a weekly target), whatever range the page is on
+def span(c, days): return c['range'] if isinstance(c.get('range'), int) and not isinstance(c.get('range'), bool) else days
 
 
 def fmt(v) -> str:
@@ -217,8 +317,9 @@ def headline(spec: dict, data: dict) -> list:
         if c.get('kind') != 'stat': continue
         rows = ((data.get('sources') or {}).get(c.get('source')) or {}).get('rows') or []
         date = None if c.get('range') is False else (srcs.get(c['source']) or {}).get('date')     # "range": false counts what is true now
-        rows = where(in_range(rows, date, days), c.get('where'))
-        out.append((c.get('title') or 'value', fmt(aggregate(rows, c.get('agg'), c.get('y')))))
+        rows = where(in_range(rows, date, span(c, days)), c.get('where'))
+        v = aggregate(rows, c.get('agg'), c.get('y'))
+        out.append((c.get('title') or 'value', fmt(v) + (f" {c['unit']}" if c.get('unit') and v is not None else '')))
     return out
 
 

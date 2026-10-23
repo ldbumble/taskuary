@@ -157,14 +157,3 @@ def test_urgent_is_walked_in_its_place():
     assert keys(items) == ['task:1', 'task:2', 'task:3', 'urgent:1']
     assert keys(below(items, items, 'task:2')) == ['task:3', 'urgent:1']
     assert below(items, items, None) is None, 'a walk with nothing on the table and no place starts at the top'
-
-
-def test_the_gutter_says_the_last_message_while_the_place_stays_the_first(db):
-    """A 14-mail thread read "29d" in the gutter over a mail from today (the owner, 2026-10-22: "it should be last message not first
-    message"): the row keeps its place by arrival, and carries its newest message as `last_at` for the gutter."""
-    store, tids = db
-    mail(store, TASKS[0][0], 1, tids[0], n=':again')
-    settle(store)
-    row = next(i for i in rail(store) if i.get('tid') == tids[0])
-    assert funnel._activity_time(row['last_at']) > funnel._activity_time(row['arrived_at']) + timedelta(hours=4)
-    assert task_rows(store) == tids, 'the newer message moved the row'

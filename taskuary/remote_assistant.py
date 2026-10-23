@@ -936,7 +936,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             builtin = command(question) if not picked else ''
             if builtin:
                 if builtin == 'stop':
-                    for k in (NOTE_KEY, REDRAFT_KEY): store.set_setting(f'{k}:{channel}:{chat}', '', 'assistant')
+                    for k in (NOTE_KEY, REDRAFT_KEY, AGENT_KEY): store.set_setting(f'{k}:{channel}:{chat}', '', 'assistant')
                 forget_offered(store, channel, chat)
                 if builtin == 'stop' and (h := handoff(store)) and h['channel'] == channel and h.get('chat') == chat:
                     end_handoff(store, 'owner', HANDED_BACK)            # the walk was handed here: it goes back, and this chat is told
@@ -949,6 +949,16 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
                 send(store, channel, chat, run_act(store, {'t': 'redraft', 'key': redo, 'how': question}, item), connector_id)
                 return
             if redo: store.set_setting(f'{REDRAFT_KEY}:{channel}:{chat}', '', 'assistant')
+            # ...and the line after Send to agent is what the agent should do: its words lead the hand-off (the owner, 2026-10-23)
+            hand = str(store.get_setting(f'{AGENT_KEY}:{channel}:{chat}') or '')
+            if hand and not picked:
+                forget_offered(store, channel, chat)
+                try: was = json.loads(hand)
+                except ValueError: was = {}
+                send(store, channel, chat, run_act(store, {'t': 'hand', 'key': was.get('key') or '', 'verb': was.get('verb') or '', 'how': question}, item),
+                     connector_id)
+                return
+            if hand: store.set_setting(f'{AGENT_KEY}:{channel}:{chat}', '', 'assistant')
             pending = str(store.get_setting(f'{NOTE_KEY}:{channel}:{chat}') or '')
             if pending: store.set_setting(f'{NOTE_KEY}:{channel}:{chat}', '', 'assistant')
             if pending and not picked:
@@ -1620,7 +1630,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             # nothing to tap was a dead end (the 2026-10-22 re-walk). A section being walked stays walked
             here = asking() or {}
             if here.get('chat'):                                     # no Continue note waits, and no Redraft instruction
-                for k in (NOTE_KEY, REDRAFT_KEY): store.set_setting(f"{k}:{here['channel']}:{here['chat']}", '', 'assistant')
+                for k in (NOTE_KEY, REDRAFT_KEY, AGENT_KEY): store.set_setting(f"{k}:{here['channel']}:{here['chat']}", '', 'assistant')
             if not act.get('key'): return 'Left it - nothing moved.'
             back = concierge.surface(store, act['key'], actor=actor)
             return carry_out(store, back, back.get('item'), actor) if back.get('item') else stuck(store, 'Left it - nothing moved.')
@@ -1639,6 +1649,17 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             rid = _draft(store, on, 'redraft', act.get('how') or '')
             if not rid: return stuck(store, 'I could not rewrite that draft here - the one you had is still waiting.')
             return turn_text(_draft_card(store, rid, actor), store=store)
+        if t == 'hand':
+            # THE ANSWER TO "What should it do?": the hand-off's own proposal, carrying those words (or none - the item alone is the
+            # job), run at once; only a repository still to choose is asked after it
+            here = asking() or {}
+            if here.get('chat'): store.set_setting(f"{AGENT_KEY}:{here['channel']}:{here['chat']}", '', 'assistant')
+            key = act.get('key') or ''
+            if not _item_for(store, key, item): return 'That one is not in front of you any more - say next and I show what is.'
+            verb = act.get('verb') if act.get('verb') in concierge.AGENT_STARTS[:2] else 'regular_agent'
+            prop = concierge.propose_direct(store, verb, key, text=str(act.get('how') or '').strip(), actor=actor,
+                                            table=bool(item and item.get('key') == key), exact=True)
+            return _settle(store, {**prop, 'alts': []}, item, actor)
         if t == 'trust': return _trust(store, int(act['tid']), act.get('key') or f"task:{int(act['tid'])}", actor)
         if t == 'files': return send_files(store, act, actor)
         if t == 'walk': return walk(store, actor, opener=not act.get('opened'))
@@ -1699,6 +1720,15 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
                              store=store, extra=rows + [('Cancel', {'t': 'stay', 'key': key})])
         if verb == 'answer_agent':
             return f"What should I tell {on.get('agent') or 'it'}? Say it here and I will pass it straight to the run that is waiting."
+        # SEND TO AGENT ASKS WHAT FIRST (the owner, 2026-10-23), as the desktop's agent box does: the next typed line or voice note is
+        # what it should do, and its own button hands it over as it is
+        if concierge.canon_verb(verb) in concierge.AGENT_STARTS[:2]:
+            hand = concierge.handoff_verb(store, concierge.canon_verb(verb))
+            here = asking() or {}
+            if here.get('chat'): store.set_setting(f"{AGENT_KEY}:{here['channel']}:{here['chat']}", json.dumps({'key': key, 'verb': hand}), 'assistant')
+            rows = [(buttons.label(hand), {'t': 'hand', 'key': key, 'verb': hand, 'how': ''}), ('Cancel', {'t': 'stay', 'key': key})]
+            return turn_text({'say': f"What should it do? Type it or send a voice note - or tap {buttons.label(hand)} to hand it over as it is.",
+                              'item': None}, store=store, extra=rows)
         if verb == 'redraft' and on.get('mid') and (off := no_ai(store, 'write the draft')): return off
         # ...and only over WORDS to change: an empty draft (Reply with no AI) has nothing for "What should change?" to be about
         if verb == 'redraft' and on.get('mid') and _draft_text(store, on).strip():
@@ -1742,6 +1772,7 @@ def _trust(store, tid: int, key: str, actor: str) -> str:
 
 NOTE_KEY = 'remote_continue_note'         # a Continue pick waiting for its note: the next typed line is it
 REDRAFT_KEY = 'remote_redraft'            # a Redraft pick waiting for what to change: the next typed line is it (A18)
+AGENT_KEY = 'remote_agent_ask'            # a Send to agent pick waiting for what it should do: the next typed or spoken line is it
 
 
 def _continue(store, tid, note: str) -> str:

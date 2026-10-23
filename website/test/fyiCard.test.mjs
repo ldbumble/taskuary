@@ -22,7 +22,12 @@ test("each fyi entry shows its own summary and acts alone through the proposal r
   assert.match(fyis, /<button type="button" className="tq-fyi-line" onClick=\{\(\) => setOpen/);   // the line IS the control
   for (const verb of ["reply", "mine", "coding_agent", "regular_agent", "not_ours"]) assert.match(fyis, new RegExp(`>\\{btn\\("${verb}"\\)\\}</Button>`));
   assert.match(fyis, />Talk about it<\/Button>/);
-  assert.match(fyis, /propose\("mine", i\)/); assert.match(fyis, /propose\("coding_agent", i\)/); assert.match(fyis, /propose\("regular_agent", i\)/);
+  assert.match(fyis, /propose\("mine", i\)/);
+  // ...and Send to agent on a line opens the agent box under that line first - it never proposes a start at the press (2026-10-23)
+  assert.doesNotMatch(fyis, /propose\("(coding|regular)_agent", i\)/);
+  assert.match(fyis, /setAsking\(\{ key: i\.key, coding: true \}\)/); assert.match(fyis, /setAsking\(\{ key: i\.key, coding: false \}\)/);
+  assert.match(fyis, /\{open === i\.key && asking\?\.key === i\.key && \(\s*<AgentAsk [^\n]*coding=\{asking\.coding\}/);
+  assert.match(fyis, /onStart=\{async \(o\) => \{ await onAgent\?\.\(i, o\); setAsking\(null\); \}\}/);
   assert.match(fyis, /onPropose\?\.\(verb, i\.key\)/);                               // the entry's own key, never the handful's
   assert.match(fyis, /openReply\(api, i\.mid\)/);   // a reply opens at once, its draft written behind it (replyDraft.js)
   assert.doesNotMatch(fyis.slice(0, fyis.indexOf('variant="contained"')), /onDone\?\./);  // no entry action settles the handful

@@ -17,7 +17,8 @@ test("the Assistant card asks for a repo and retries dispatch after the choice",
   const cards = src("assistantCards.jsx");
   assert.match(cards, /data\.dispatch === "needs_repo"/);
   assert.match(cards, /Which repository should the coding agent use\?/);
-  assert.match(cards, /setRepoAsk\(null\); startAgent\("coding"\)/);
+  // ...the same start again, with what the agent box said (`asked`) - the owner's words survive the repository question
+  assert.match(cards, /setRepoAsk\(null\); startAgent\(\{ \.\.\.\(asked \|\| \{\}\), kind: "coding", verb: "coding_agent" \}\)/);
 });
 
 test("a selected repository with no local checkout still offers path setup", () => {

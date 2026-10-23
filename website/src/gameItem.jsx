@@ -13,6 +13,7 @@ import { mono } from "./theme.jsx";
 import { cleanText } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import { RepoPicker } from "./RepoPicker.jsx";
+import { AgentAsk } from "./RunForm.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
 import { agentOpen, agentRuns } from "./taskFilter.js";
 import { cardFor, laneMeta } from "./funnelPile.js";
@@ -174,7 +175,23 @@ function Draft({ item, busy, play }) {
 
 // the extra words: the chat's own vocabulary for this item, each run the chat's way (a proposal you confirm).
 // `given` is a set the Core's answer already carried; `initial` a proposal it already made.
-export function Moves({ item, covers = [], busy, play, onRepo, given = null, initial = null }) {
+// THE AGENT BOX'S START, on the game's item: the hand-off's own proposal carrying the owner's words and the agent chosen
+// (concierge.propose_direct), run at once - the box was the confirmation. A repository still to choose comes back as the picker.
+const AGENT_VERBS = ["coding_agent", "regular_agent", "coder"];
+export const handOver = async (item, o, onRepo) => {
+  const { data: p } = await api.post("/api/concierge/propose", { verb: o.verb, key: item.key, table: true, exact: true, text: o.text || null,
+    agent: o.agent || null, brain: o.brain || null, pick: o.pick || null, model: o.model || null });
+  if (!p?.id) throw new Error(p?.say || "it did not start");
+  let res;
+  try { res = (await api.post(`/api/operations/${p.id}/execute`, { version: p.version })).data; }
+  catch (e) { res = { status: e?.response?.status === 409 ? "stale" : "error", error: errText(e) }; }
+  const done = afterExecute(p, res);
+  if (done.repo) onRepo?.(done.repo);
+  if (done.status !== "done") throw new Error(done.receipt);
+  return done;
+};
+
+export function Moves({ item, covers = [], busy, play, onRepo, onAgent, given = null, initial = null }) {
   const [chips, setChips] = useState(given);
   const [prop, setProp] = useState(initial);
   const [remindAt, setRemindAt] = useState(null);     // Remind me asks for the day first
@@ -202,6 +219,8 @@ export function Moves({ item, covers = [], busy, play, onRepo, given = null, ini
     if (c.ask) return null;
     if (c.verb === "defer") { if (item.tid || item.idea) setRemindAt(anchor || document.body); return null; }
     if (c.verb === "continue" && item.tid) return play("dispatch", item.key, () => api.post(`/api/tasks/${item.tid}/continue-work`, { note: null }));
+    // ...and a hand-off opens the agent box first: what to do, which agent - nothing starts at the press (the owner, 2026-10-23)
+    if (AGENT_VERBS.includes(c.verb) && onAgent) { onAgent(c.verb); return null; }
     // a fresh reply opens at once and its draft fills in behind it (replyDraft.js, 2026-10-01); a redraft rewrites the one there
     if (c.verb === "reply" && item.mid) return play("draft", null, () => openReply(api, item.mid));
     if (c.verb === "redraft" && item.mid)
@@ -255,11 +274,10 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
   const [repo, setRepo] = useState(null);
   const card = cardFor(item) || "message", m = matchFor(item, agents);
   const coding = item.coding || item.kind === "coding" || m.kind === "coding";
-  const dispatch = (kind) => play("dispatch", item.key, async () => {
-    const { data } = await api.post(`/api/messages/${item.mid}/dispatch`, { kind });
-    if (data?.dispatch === "needs_repo") { setRepo({ taskId: data.taskId, agent: data.agent || "" }); throw new Error("pick the repository it works in first"); }
-    return data;
-  });
+  // SEND TO AGENT OPENS THE AGENT BOX (RunForm.AgentAsk): `ask` is the kind it opened on, `last` what its Start said - kept for a
+  // start that comes back asking which repository, so the pick resumes it with the same words
+  const [ask, setAsk] = useState(null), [last, setLast] = useState(null);
+  const dispatch = (o) => { setAsk(null); setLast(o); return play("dispatch", item.key, () => handOver(item, o, setRepo)); };
   // the owner's own words are what goes: the box is opened without a draft the model would only write to be thrown away
   const sendMine = () => play("approve", item.key, async () => {
     const { data } = await api.post(`/api/messages/${item.mid}/reply`, { draft: false });
@@ -354,7 +372,7 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
       {asks && item.mid && <Row>
         <Btn kind={m.verb === "draft" ? "gold" : "ghost"} disabled={!!busy} onClick={() => play("draft", item.key, () => openReply(api, item.mid))}>✍ {btn("reply")} · +20</Btn>
         {/* not while an agent runs on it - its session is the way in (2026-10-01) */}
-        {!agentRuns(item) && <Btn kind={m.verb === "dispatch" ? "gold" : "ghost"} disabled={!!busy} onClick={() => dispatch(coding ? "coding" : "general")}>🤖 {btn(coding ? "coding_agent" : "regular_agent")} · +45</Btn>}
+        {!agentRuns(item) && <Btn kind={m.verb === "dispatch" ? "gold" : "ghost"} disabled={!!busy} onClick={() => setAsk(coding)}>🤖 {btn(coding ? "coding_agent" : "regular_agent")} · +45</Btn>}
         <Btn disabled={!!busy} onClick={() => setMine((v) => v == null ? "" : null)}>✎ Write it myself</Btn>
       </Row>}
       {mine != null && <Box onClick={(e) => e.stopPropagation()}>
@@ -369,9 +387,12 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
       {body}
       {repo && <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 1, p: 1, borderRadius: "9px", bgcolor: "#f6f2ea", color: "#262521" }}>
         <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>Which repository should the coding agent use?</Typography>
-        <RepoPicker taskId={repo.taskId} agent={repo.agent} onDone={(d) => { if (d?.repo) { setRepo(null); dispatch("coding"); } }} />
+        <RepoPicker taskId={repo.taskId} agent={repo.agent} onDone={(d) => { if (d?.repo) { setRepo(null); dispatch({ ...(last || {}), verb: "coding_agent", kind: "coding" }); } }} />
       </Box>}
-      <Moves item={item} covers={covers} busy={busy} play={play} onRepo={setRepo} />
+      {ask !== null && <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 1, color: "#262521" }}>
+        <AgentAsk inline coding={ask} what={item.mid ? "It gets the message and its attachments." : "It gets this item."}
+          onClose={() => setAsk(null)} onStart={dispatch} /></Box>}
+      <Moves item={item} covers={covers} busy={busy} play={play} onRepo={setRepo} onAgent={(v) => setAsk(v !== "regular_agent")} />
       <Row>
         {/* Next, as in the chat: it is read, and the next thing comes up - reading what only wanted knowing scores */}
         {onNext && <Btn kind="mint" disabled={!!busy} onClick={() => onNext(item)} title="Read - on to the next thing (N)">

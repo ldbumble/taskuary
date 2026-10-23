@@ -55,6 +55,7 @@ import { RemindPicker } from "./RemindMe.jsx";
 import { SlotPicker } from "./CalendarPick.jsx";
 import { agentOpen } from "./taskFilter.js";
 import ContinueBox from "./ContinueBox.jsx";
+import { ASK_REPORT, AgentAsk } from "./RunForm.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
@@ -141,6 +142,8 @@ const DEMO_SAID = new Set();
 const demoNo = (e) => (e?.response?.status === 403 && e.response.data?.demo ? String(e.response.data.detail || "This is the demo - nothing is sent.") : "");
 // what an empty rail offers: the same doors as the welcome block (runChip knows these three)
 const IDLE_CHIPS = [{ verb: "newtask", label: btn("new_task") }, { verb: "setupask", label: "Set something up" }, { verb: "tour", label: "Change my setup" }];   // not a second "set up" beside "Set something up" (U14)
+// the presses that start an agent on an item: each opens the agent box first (askAgent) - `coder` is coding_agent's old name
+const AGENT_VERBS = ["coding_agent", "regular_agent", "coder"];
 // THE AI POPOVER, from what is connected (J): it named "your coding tool" to people with none, and "chosen elsewhere" with no way there
 export const AI_DEFAULTS = place("ai_defaults").href;
 export const aiSays = (providers = []) => {
@@ -891,7 +894,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
     brief: <BriefCard card={m.card} onStart={actions.start} />,
     // SET UP TASKUARY is the two cards, not the 13-stop walk (the owner, 2026-10-14: "what is this garbage ... where are the cards")
     firstrun: <FirstRun revisit onChanged={actions.reload} onWalk={() => actions.start(null)} />,
-    fyis: <FyisCard card={c} onDone={actions.done} onSurface={actions.surface} onTimeline={actions.timeline} onPropose={actions.propose} />,
+    fyis: <FyisCard card={c} onDone={actions.done} onSurface={actions.surface} onTimeline={actions.timeline} onPropose={actions.propose} onAgent={actions.agent} />,
   }[kind] : null;
   // A STOP THE WALK HAS MOVED PAST is a finished step, not something the assistant said. Falling
   // through to the title note below drew six near-identical rows, each carrying the message avatar
@@ -1117,20 +1120,23 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const pics = usePromptImages();                        // pictures sent with the chat line
   // ...and the task view's own Continue on the canvas (TaskPage) asks for the same card
   useEffect(() => {
-    const on = (e) => { setNoteOn(null); setContinueOn({ task: e.detail.task, ref: e.detail.ref }); };
+    const on = (e) => { setNoteOn(null); setAgentOn(null); setContinueOn({ task: e.detail.task, ref: e.detail.ref }); };
     window.addEventListener("tq-continue", on);
     return () => window.removeEventListener("tq-continue", on);
   }, []);
   // ...and Close with a note, the same card: what came of it, and the task view's own close behind the button
   const [noteOn, setNoteOn] = useState(null);           // { task, ref, close(note) }
   // ...and the task view's Run another agent closes them: one agent box open at a time
+  // SEND TO AGENT ON AN ITEM WITH NO TASK PAGE - an email, an fyi, a report run - opens the agent box under it (RunForm.AgentAsk):
+  // { item, coding }. Nothing starts until its Start (the owner, 2026-10-23: "you need to write prompt what about the email ... is the issue")
+  const [agentOn, setAgentOn] = useState(null);
   useEffect(() => {
-    const on = () => { setContinueOn(null); setNoteOn(null); };
+    const on = () => { setContinueOn(null); setNoteOn(null); setAgentOn(null); };
     window.addEventListener("tq-next-run", on);
     return () => window.removeEventListener("tq-next-run", on);
   }, []);
   useEffect(() => {
-    const on = (e) => { setContinueOn(null); setNoteOn(e.detail); };
+    const on = (e) => { setContinueOn(null); setAgentOn(null); setNoteOn(e.detail); };
     window.addEventListener("tq-close-note", on);
     return () => window.removeEventListener("tq-close-note", on);
   }, []);
@@ -1146,6 +1152,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (continueOn && continueKey.current !== undefined && continueKey.current !== current) setContinueOn(null);
     continueKey.current = continueOn ? (continueKey.current ?? current) : undefined;
   }, [current, continueOn]);
+  // ...and the agent box goes with its item the same way
+  const agentKey = useRef(undefined);
+  useEffect(() => {
+    if (agentOn && agentKey.current !== undefined && agentKey.current !== current) setAgentOn(null);
+    agentKey.current = agentOn ? (agentKey.current ?? current) : undefined;
+  }, [current, agentOn]);
   const [emojiEl, setEmojiEl] = useState(null);
   const [speakOnState, setSpeak] = useState(speakOn);
   const [railOpen, setRailOpen] = useState(false);      // on a phone: the rail instead of the chat
@@ -2237,6 +2249,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     }
     // a move that is no proposal (it drafts, asks for a day, or asks what to add) takes the chip's own road - the server refuses it
     if (["reply", "redraft", "defer", "continue"].includes(liveVerb(a.verb))) { await runChip({ verb: liveVerb(a.verb) }); return null; }
+    // ...and an agent start asks what first, as its button does: the box opens, the Advisor's pick never starts one by itself
+    if (AGENT_VERBS.includes(liveVerb(a.verb))) { askAgent(currentRef.current, liveVerb(a.verb)); return null; }
     try { return await proposeDirect(a.verb, key, true, a.revision); }
     catch (e) {
       if (demoNo(e)) { setErr(errText(e)); return null; }          // the demo saying no is a line in the chat, not the row's error
@@ -2244,6 +2258,24 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       setChanged({ for: key, reading: true }); await readAdvice(key); setChanged({ for: key });
       return null;
     }
+  };
+  // THE AGENT BOX FOR AN ITEM: a task on the table opens its own (TaskPage hears tq-agent-ask - the box in its agent step); an email,
+  // an fyi or a report run with no task page gets the same box under its card here
+  const askAgent = (item, verb) => {
+    const coding = verb === "coding_agent" || verb === "coder" || (verb !== "regular_agent" && !!item?.coding);
+    if (item?.tid && showsTask(item, cardFor(item))) { window.dispatchEvent(new CustomEvent("tq-agent-ask", { detail: { tid: item.tid, coding } })); return; }
+    if (!item?.key) return;
+    setContinueOn(null); setNoteOn(null);
+    setAgentOn({ item, coding });
+  };
+  // ...and its Start: the hand-off's own proposal, carrying what was said and the agent chosen (concierge.propose_direct), run at
+  // once - the box was the confirmation. The walk then does what a hand-off always did: the task opens, working (runProposal)
+  const startOnItem = async (item, o) => {
+    const { data } = await api.post("/api/concierge/propose", { verb: o.verb, key: item.key, table: true, exact: true, text: o.text || null,
+      agent: o.agent || null, brain: o.brain || null, pick: o.pick || null, model: o.model || null });
+    if (!data?.id) throw new Error(data?.say || "It did not start.");
+    setAgentOn(null);
+    await runProposal({ ...data, key: data.key || item.key });
   };
   // ANSWER IT has nothing to send until the owner says it: pressed bare it was refused ("What should I tell...?"). The box is where
   // the answer goes - the server passes what is typed over a waiting agent to it
@@ -2311,6 +2343,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       return;
     }
     if (c.verb === "answer_agent") { askAnswer(item); return; }
+    // SEND TO AGENT ASKS WHAT FIRST (the owner, 2026-10-23): the agent box opens where the item is - nothing starts at the press
+    if (AGENT_VERBS.includes(c.verb) && !c.text) { askAgent(item, c.verb); return; }
     // one item by name - one the walk already showed and will not repeat yet ("N things you've already seen")
     if (c.verb === "open" && c.key) { surface(c.key); return; }
     // REMIND ME asks for the day - the task page's own picker - and the walk moves on once it is put away
@@ -2809,7 +2843,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     openCard,
     walk: walkTo, walkSaved, walkRestart, chip: runChip, busy: busy || resetting || !!handoff,
     handedTo: handoff ? ((state?.doorways || []).find((d) => d.channel === handoff.channel)?.label || handoff.channel) : "",
-    confirm: confirmProposal, cancel: cancelProposal, propose: proposeDirect, preview: previewProposal,
+    confirm: confirmProposal, cancel: cancelProposal, propose: proposeDirect, preview: previewProposal, agent: startOnItem,
     surface: (key, note) => {
       if (note) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: note }]);
       deferInChat(() => key ? surfaceRef.current?.(key) : loadPileRef.current?.(), 900);
@@ -3060,6 +3094,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                   // 2026-09-30: "the session started but then closed and moved on without hitting next"); the view shows the
                   // session when it opens (TaskPage hears task-changed)
                 }} />
+            </div>
+          )}
+          {/* THE AGENT BOX, under the item it is about - what to do, the mic and pictures, which agent - and its Start is the start */}
+          {!old && agentOn && (
+            <div className="tq-browse-line">
+              <AgentAsk inline coding={agentOn.coding} title={`${btn(agentOn.coding ? "coding_agent" : "regular_agent")}${agentOn.item.ref ? ` · ${agentOn.item.ref}` : ""}`}
+                what={agentOn.item.kind === "report" ? "It gets this report and its rows." : agentOn.item.mid ? "It gets the message and its attachments." : "It gets this item."}
+                placeholder={agentOn.item.kind === "report" ? ASK_REPORT : undefined}
+                onClose={() => setAgentOn(null)} onStart={(o) => startOnItem(agentOn.item, o)} />
             </div>
           )}
           {!old && noteOn && (

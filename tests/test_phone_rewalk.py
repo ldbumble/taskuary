@@ -73,6 +73,8 @@ class FailedSendToAgentTests(PhoneCase):
                               body='Alex, the new AP clerk starts Monday. Can you get her a badge for floors 2 and 3?', sent_at=self.f.ago(hours=3))
         self.ph.ready(); self.ph.walk()
         with mock.patch.object(general, 'start_session', side_effect=RuntimeError('the claude CLI is not installed on this computer')):
+            # it asks what first (the owner, 2026-10-23); its own button hands it over as it is
+            self.assertIn('What should it do?', text_of(self.ph.tap('Send to agent')))
             got = self.ph.tap('Send to agent')
         said = text_of(got)
         self.assertNotIn('Done', said)

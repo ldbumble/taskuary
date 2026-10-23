@@ -29,7 +29,8 @@ test("the task page greys every agent start on that one check, the reason in the
   const p = read("TaskPage.jsx");
   assert.match(p, /noAiWhy = runWhy\(false\)/);
   for (const id of ["run-another", "continue"]) assert.match(p, new RegExp(`id: "${id}"[^\\n]*disabled: [^\\n]*!!noAiWhy, why: noAiWhy`), id);
-  assert.equal((p.match(/disabled: !!startingAgent \|\| !!noAiWhy, why: noAiWhy, run: start(GeneralAgent|GoalStep)/g) || []).length, 3, "send-general and both start-agents");
+  // ...each of them opening the agent box, never starting at the press (the owner, 2026-10-23)
+  assert.equal((p.match(/disabled: !!startingAgent \|\| !!noAiWhy, why: noAiWhy, run: openBox/g) || []).length, 3, "send-general and both start-agents");
   assert.match(p, /disabled=\{!!startingAgent \|\| runPics\.busy \|\| !!noAiWhy\}/, "the Run another agent form's start");
   assert.match(p, /!agentsRead \|\| !!runWhy\(true\)\}/, "the coding start reads the same check");
   assert.match(p, /disabled=\{replanning \|\| !!noAiWhy\}/, "Re-plan");

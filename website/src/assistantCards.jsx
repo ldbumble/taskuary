@@ -41,6 +41,7 @@ import { openReply, useDraftJob } from "./replyDraft.js";
 import { agentRuns } from "./taskFilter.js";
 import { progressLine } from "./checklist.js";
 import { RepoPicker } from "./RepoPicker.jsx";
+import { AgentAsk } from "./RunForm.jsx";
 import { Attachments, mentionsPicture } from "./Attachments.jsx";
 import { useCliSetup, SetupButton, CliPane, canSetup } from "./cliSetup.jsx";
 import OwnerForm from "./OwnerForm.jsx";
@@ -944,17 +945,19 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   // card and the row disagreed and the press failed (the re-audit, 2026-10-18)
   const canCode = useCapabilities().coding;
   const suggestedKind = card.kind === "todo" && card.coding && canCode ? "coding" : "general";
-  const startAgent = async (agentKind) => {
-    setBusy("agent"); setErr("");
+  // what the agent box said (RunForm.AgentAsk): the kind, the agent chosen, and the owner's words - which lead its prompt
+  const [asked, setAsked] = useState(null), [askOpen, setAskOpen] = useState(false);
+  const startAgent = async (o) => {
+    setBusy("agent"); setErr(""); setAsked(o);
     try {
       const { data } = await api.post(`/api/messages/${card.mid}/dispatch`, {
-        kind: agentKind,
+        kind: o.kind, agent: o.agent || null, brain: o.brain || null, pick: o.pick || null, model: o.model || null, instruction: o.text || null,
       });
       if (data.dispatch === "needs_repo") {
         setRepoAsk({ taskId: data.taskId, agent: data.agent || "" });
       } else {
-        setRepoAsk(null);
-        onDone?.(btn(agentKind === "coding" ? "coding_agent" : "regular_agent"));
+        setRepoAsk(null); setAsked(null);
+        onDone?.(btn(o.kind === "coding" ? "coding_agent" : "regular_agent"));
       }
     } catch (e) {
       const msg = errText(e);
@@ -1060,14 +1063,19 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   // reply to yourself, no "not ours", and a New task - no message at all - still gets its button
   const mineAlone = isOwn(card);
   const hand = btn(suggestedKind === "coding" ? "coding_agent" : "regular_agent");
-  const startTask = async () => {
+  const startTask = async (o) => {
     setBusy("agent"); setErr("");
-    try { await runOperation(api, "dispatch.prepare", card.tid, { kind: suggestedKind }); onDone?.(hand); }
-    catch (e) { setErr(failOf(e)); }
+    try {
+      await runOperation(api, "dispatch.prepare", card.tid, { kind: o.kind, agent: o.agent || null, brain: o.brain || null, model: o.model || null,
+                                                             instructions: o.text || null });
+      onDone?.(btn(o.verb));
+    } catch (e) { setErr(failOf(e)); }
     setBusy("");
   };
   // NOT WHILE AN AGENT RUNS ON IT (the owner, 2026-10-01): its own session is the way in, and the dispatch door refuses it too
-  const handIt = agentRuns(card) ? null : card.mid ? () => startAgent(suggestedKind) : card.tid ? startTask : null;
+  // ...and the press OPENS THE AGENT BOX under the card (the owner, 2026-10-23): what to do and which agent, then its Start
+  const handIt = agentRuns(card) || !(card.mid || card.tid) ? null : () => setAskOpen(true);
+  const handOver = (o) => { setAskOpen(false); return card.mid ? startAgent(o) : startTask(o); };
   const verb = !asks ? null : own || mineAlone
     ? handIt && <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={handIt} sx={moveSx}>
         {busy === "agent" ? "Handing it over…" : hand}</Button>
@@ -1100,11 +1108,13 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
         extra={card.kind === "fyi" && canUnsubscribe(card) ? [{ verb: "unsubscribe", label: btn("unsubscribe"), title: btnHint("unsubscribe"), onClick: unsub, disabled: !!busy }] : []}
         covers={[...(own || mineAlone ? (suggestedKind === "coding" ? ["coding_agent", "coder"] : ["regular_agent"]) : ["reply"]), ...(mineAlone ? ["reply", "not_ours"] : [])]}
         where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
+      {askOpen && <AgentAsk coding={suggestedKind === "coding"} what={card.mid ? "It gets the message and its attachments." : "It gets the task and its messages."}
+        onClose={() => setAskOpen(false)} onStart={handOver} />}
       {repoAsk && (
         <div className="tq-card-full" style={{ marginTop: 8 }}>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>Which repository should the coding agent use?</div>
           <RepoPicker taskId={repoAsk.taskId} agent={repoAsk.agent}
-            onDone={(data) => { if (data?.repo) { setRepoAsk(null); startAgent("coding"); } }} />
+            onDone={(data) => { if (data?.repo) { setRepoAsk(null); startAgent({ ...(asked || {}), kind: "coding", verb: "coding_agent" }); } }} />
           <Button size="small" sx={faint} onClick={() => setRepoAsk(null)}>Not now</Button>
         </div>
       )}
@@ -1261,12 +1271,15 @@ export function BriefCard({ card, onStart }) {
 // how many fyi a card can show whole before every line folds to one (FyisCard)
 const FOLD_AT = 6;
 
-export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
+export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose, onAgent }) {
   const canCode = useCapabilities().coding;                   // no coding tool connected: no Coding agent (capabilities.js)
   const [open, setOpen] = useState(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const [left, setLeft] = useState({});                      // the lines whose list was left: the press is a badge on that line
+  // SEND TO AGENT ON ONE LINE opens the agent box under that line (RunForm.AgentAsk) - what about it is the issue, which agent - and
+  // only its Start hands it over (the owner, 2026-10-23); { key, coding }
+  const [asking, setAsking] = useState(null);
   const items = card.items || [];
   // A batch of four is read whole: every line carries its gist and its two doors, and you never
   // open anything. A batch of ten drawn the same way is a card you scroll past, with twenty doors
@@ -1321,14 +1334,18 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
             <div className="tq-card-actions tq-fyi-acts">
               {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => reply(i)} title={btnHint("reply")} sx={quiet}>{btn("reply")}</Button>}
               {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("mine", i)} title={btnHint("mine")} sx={quiet}>{btn("mine")}</Button>}
-              {i.mid && !i.tid && canCode && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("coding_agent", i)} title={btnHint("coding_agent")} sx={quiet}>{btn("coding_agent")}</Button>}
-              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("regular_agent", i)} title={btnHint("regular_agent")} sx={quiet}>{btn("regular_agent")}</Button>}
+              {i.mid && !i.tid && canCode && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => setAsking({ key: i.key, coding: true })} title={btnHint("coding_agent")} sx={quiet}>{btn("coding_agent")}</Button>}
+              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => setAsking({ key: i.key, coding: false })} title={btnHint("regular_agent")} sx={quiet}>{btn("regular_agent")}</Button>}
               {/* one line of the handful can be put down on its own - All read was the only way to let any of it go */}
               {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("not_ours", i)} title={btnHint("not_ours")} sx={quiet}>{btn("not_ours")}</Button>}
               {canUnsubscribe(i) && (left[i.key] ? <span className="tq-pressed" data-tq-pressed={btn("unsubscribe")}>✓ {btn("unsubscribe")}</span>
                 : <Button size="small" variant="outlined" disabled={!!busy} onClick={() => unsub(i)} title={btnHint("unsubscribe")} sx={quiet}>{btn("unsubscribe")}</Button>)}
               <Button size="small" onClick={() => onSurface?.(i.key)} sx={faint}>Talk about it</Button>
             </div>
+          )}
+          {open === i.key && asking?.key === i.key && (
+            <AgentAsk key={`${i.key}:${asking.coding}`} coding={asking.coding} what="It gets the message and its attachments."
+              onClose={() => setAsking(null)} onStart={async (o) => { await onAgent?.(i, o); setAsking(null); }} />
           )}
         </div>
       ))}

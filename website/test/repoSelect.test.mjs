@@ -28,10 +28,14 @@ test("the Start panel shows the repository and pins it before the session starts
 test("the next-run box takes the mic and pictures like Continue, and both starts send what was typed with them", () => {
   const view = taskSource();
   const form = view.slice(view.indexOf("const nextRunForm = ("), view.indexOf("IN THE AGENT BOX, NOT UNDER THE CONVERSATION"));
-  assert.match(form, /\{\.\.\.runPics\.drop\}/);
-  assert.match(form, /<AttachImage pics=\{runPics\}/);
-  assert.match(form, /<MicButton /);
-  assert.match(form, /<ImageTray pics=\{runPics\}/);
+  // it is THE box (RunForm), handed this page's words and pictures; the box draws the mic, the paperclip and the tray
+  assert.match(form, /<RunForm [^>]*value=\{run\.instruction\} onValue=\{runText\} pics=\{runPics\}/);
+  const box = readFileSync(fileURLToPath(new URL("../src/RunForm.jsx", import.meta.url)), "utf8");
+  const runForm = box.slice(box.indexOf("export function RunForm"), box.indexOf("export function AgentAsk"));
+  assert.match(runForm, /\{\.\.\.pics\.drop\}/);
+  assert.match(runForm, /<AttachImage pics=\{pics\}/);
+  assert.match(runForm, /<MicButton [^>]*onText=\{add\}/);
+  assert.match(runForm, /<ImageTray pics=\{pics\}/);
   assert.match(view, /instructions: withImages\(run\.instruction\.trim\(\), runPics\.paths\)/);
   assert.match(view, /instruction: withImages\(run\.instruction\.trim\(\), runPics\.paths\)/);
 });

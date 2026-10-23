@@ -1,11 +1,11 @@
 // THE ONE ROW ABOVE THE CHAT LINE (layout B): whatever is on the table, its verbs are here - the decision first, the session's verbs
 // next, the rare ones behind More; Next is FIRST (the owner, 2026-09-30). The card registers them (actionRow.js); this only draws. Centred over the composer,
 // ONE filled button at most - the Advisor's pick, and none before it answers - and a greyed decision says why it is greyed.
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Menu, MenuItem, Popover, useMediaQuery } from "@mui/material";
 import api from "./api.js";
 import { suggestion } from "./advice.js";
-import { advisedAny, advisedIn, clustersOf, phoneRow, press, rowOf, lightOnCard, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { advisedAny, advisedIn, clustersOf, foldRow, phoneRow, press, rowOf, lightOnCard, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
 import { adviceNone } from "./words.js";
 import { CONNECT_AI } from "./ConnectAi.jsx";
 
@@ -127,7 +127,26 @@ export default function ActionRow({ inline = false, advised = null, hold = false
   const drawn = inline || !hosted;
   useEffect(() => { if (drawn) lightOnCard(row.lit); }, [drawn, row.lit]);
   useEffect(() => () => { if (drawn) lightOnCard(""); }, [drawn]);
-  if (!inline && hosted) return null;                  // a phone's task view carries its own row
+  // ONE LINE (foldRow): drawn whole, then a button at a time into its ▾ until the row fits, before the frame is painted; a new set of
+  // buttons or a new width starts again from whole
+  const [verbsEl, setVerbsEl] = useState(null), seen = useRef(""), [fold, setFold] = useState(0), [w, setW] = useState(0);
+  const groups = phone ? [phoneRow(row)].filter((g) => g.shown.length || g.rest.length) : clustersOf(row);
+  const sig = `${w}|${next?.label}|${groups.map((g) => g.shown.map((v) => `${v.id}${v.tone}${v.label}`).join(",")).join("|")}`;
+  useEffect(() => {
+    const el = verbsEl?.parentElement;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setW(Math.round(e.contentRect.width)));
+    ro.observe(el); return () => ro.disconnect();
+  }, [verbsEl]);
+  useLayoutEffect(() => {
+    const v = verbsEl;
+    if (seen.current !== sig) { seen.current = sig; if (fold) { setFold(0); return; } }
+    if (!v || phone) return;
+    const p = v.parentElement, cs = getComputedStyle(p), room = p.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const left = groups.reduce((n, g) => n + g.shown.filter((x) => x.tone !== "p").length, 0);
+    if (v.scrollWidth > room + 1 && fold < left) setFold((f) => f + 1);
+  });
+  if (!inline && hosted) return null;                 // a phone's task view carries its own row
   if (!decide.length && !agent.length && !more.length && !next) return null;
   // ONE NAME PER BUTTON (buttons.json, the owner, 2026-10-17): the bar says the same words the hover, the Advisor and the menu say -
   // a short bar word ("Snooze", "Stop") beside a long hover one was two names for one button
@@ -140,11 +159,11 @@ export default function ActionRow({ inline = false, advised = null, hold = false
     // `hold`: the item's first decision is still being read - the row keeps its room and shows nothing until its lit button lands with it
     <div className={inline ? "tq-arow inline" : "tq-arow"} role="toolbar" aria-label={ref ? `What to do with ${ref}` : "What to do with this one"} data-tq-row=""
       aria-busy={hold || undefined} style={hold ? { visibility: "hidden" } : undefined}>
-      <div className="tq-arow-verbs">
+      <div className="tq-arow-verbs" ref={setVerbsEl}>
         {next && <div className="tq-cl" role="group" aria-label="Move on">
           <div className="tq-cl-b"><button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} title={next.title || undefined} disabled={next.disabled}
             onClick={(e) => press(next.id, e, e.currentTarget)}>{next.label}</button></div></div>}
-        {(phone ? [phoneRow(row)].filter((g) => g.shown.length || g.rest.length) : clustersOf(row)).map((g) => <Cluster key={g.type} g={g} btn={btn} />)}
+        {(phone ? groups : foldRow(groups, fold).filter((g) => g.shown.length || g.rest.length)).map((g) => <Cluster key={g.type} g={g} btn={btn} />)}
       </div>
       {why && <div className="tq-arow-why" role="status" data-tq-row-why="">{why}</div>}
     </div>

@@ -226,4 +226,18 @@ export function clustersOf(row, keep = 2) {
     return { type, label: (TYPES.find(([t]) => t === type) || [])[1] || "", shown, rest: vs.filter((v) => !shown.includes(v) && !v.slot) };
   }).filter(Boolean);
 }
+// THE ROW IS ONE LINE, EVER (the owner, 2026-10-23: two lines "takes up half the canvas"): `n` buttons too many go into their own type's
+// ▾, the right-most type's last first - the filled one stays out, and an empty slot goes with nothing to fold (it is not a button)
+export function foldRow(gs, n) {
+  const out = gs.map((g) => ({ ...g, shown: [...g.shown], rest: [...g.rest] }));
+  for (let i = out.length - 1; i >= 0 && n > 0; i--) {
+    const g = out[i];
+    for (let j = g.shown.length - 1; j >= 0 && n > 0; j--) {
+      const v = g.shown[j];
+      if (v.tone === "p") continue;
+      g.shown.splice(j, 1); if (!v.slot) g.rest.unshift(v); n--;
+    }
+  }
+  return out;
+}
 

@@ -38,8 +38,18 @@ export const openAppLink = (h) => {
   if (`#${want}` === SETUP) { window.dispatchEvent(new Event("tq-first-run")); return; }
   // ...the same link again is cleared without a step of its own (it was a hash of its own, a bare "#" for Back to land on)
   if (window.location.hash.replace(/^#/, "") === want) window.history.replaceState(window.history.state, "", here(""));
+  const d = depth();
   window.location.hash = want;
+  window.history.replaceState({ ...window.history.state, tqDepth: d + 1 }, "", window.location.href);   // a step of ours: Back may take it
 };
+
+// HOW MANY STEPS OF OURS STAND BEHIND THIS ONE (TQ-1187: "there is no easily accessible back button" - the desktop window has no browser
+// bar, so Alt+Left was the only Back). Each step the app pushes carries its count in history.state; the header's Back shows only over
+// one, so it never walks out of the app - a page opened cold from a link has nothing of ours behind it
+const depth = () => (typeof window === "undefined" ? 0 : Number(window.history.state?.tqDepth) || 0);
+export const canGoBack = () => depth() > 0;
+const STEPS = ["popstate", "hashchange", "tq-place"];
+export const onStep = (fn) => { STEPS.forEach((e) => window.addEventListener(e, fn)); return () => STEPS.forEach((e) => window.removeEventListener(e, fn)); };
 
 // ONE ROUTER (the 2026-10-19 UI walk, G2): links came in, but nothing the owner did on the canvas was ever written back - Back left
 // the app, and #task=11 stood in the address after the walk moved on, so a reload reopened it. The canvas says where it is
@@ -49,7 +59,9 @@ const here = (h) => `${window.location.pathname}${window.location.search}${h}`;
 //        "replace" the same step said more exactly, the walk's Next, the server's word, a link already in the address
 export const recordPlace = (want, how = "replace") => {
   if (typeof window === "undefined" || placeOf(window.location.hash) === placeOf(want)) return;
-  window.history[how === "push" ? "pushState" : "replaceState"](window.history.state, "", here(want));
+  const push = how === "push";
+  window.history[push ? "pushState" : "replaceState"]({ ...window.history.state, tqDepth: depth() + (push ? 1 : 0) }, "", here(want));
+  window.dispatchEvent?.(new Event("tq-place"));
 };
 // a followed link fires hashchange (and popstate with it); Back and Forward fire popstate (and hashchange when the hash differs):
 // one call per step. `back` is true for a step of history - the only way an address with no place ("") is asked for

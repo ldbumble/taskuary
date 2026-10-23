@@ -92,6 +92,7 @@ import AgentStory, { StoryChip } from "./AgentStory.jsx";
 import { STORY_CHIP, startLabel, storyPlace, storyShown } from "./agentStory.js";
 import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import EmailSomeone from "./EmailSomeone.jsx";
+import { useShare } from "./Share.jsx";
 import { ago, filesLine, plural } from "./timeWords.js";
 import { KIND_OPTIONS, KINDS, kindLabel, shortKind } from "./kinds.js";
 import { openAppLink } from "./appLinks.js";
@@ -1428,6 +1429,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       ...changeVerbs,
     ];
   useVerbs("task", rowVerbs, inRow && !!t, detail?.ref || "");
+  // SHARE THE RESULT (the owner, 2026-10-23): an agent's Result, or a workflow run's - the server reads what it says off the task (sharing.py);
+  // an email it drafts lands in this task's Close out, so the page reads the task again
+  const shareNode = useShare(`task:${t?.TaskId}`, { kind: fromWorkflow ? "workflow" : "agent", title: t?.Title || "", task: t?.TaskId },
+    inRow && !!t && (resultShown || codeRun), { onShared: (how) => { if (how === "email") { loadDetail(selected); onChanged?.(); setOpenStage("reply"); } } });
   // CONFIGURE THE NEXT RUN, IN LINE (the owner, 2026-10-05: "should be the bottom like continue session and it should replace the
   // continue session box"): on the canvas the agent step's form is a card under the conversation, in Continue's place - one card at
   // a time - and it closes when the agent starts (startCodingAgent / startGeneralAgent close restartOpen on success)
@@ -1821,6 +1826,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                 {fromWorkflow.line} · {whenShort(t?.CreatedAt)}</Typography>
                             </Box>
                             {fromWorkflow.link && <Link href={fromWorkflow.link} underline="hover" sx={{ fontSize: 12, flexShrink: 0 }}>Open the workflow</Link>}
+                            {codeRun && shareNode}
                             {fromWorkflow.steps && <Box data-tq-workflow-steps="" sx={{ flexBasis: "100%", borderTop: `1px solid ${BORDER}`, pt: 0.75, mt: 0.25, minWidth: 0 }}>
                               {/* a failed run's fix is one press from its task: the workflow opens with Fix with AI already asked */}
                               <RunSteps steps={fromWorkflow.steps} dense repairs={fromWorkflow.repairs}
@@ -1885,8 +1891,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       : answered ? `${agentName(t)} answered`
                       : agentState === AGENT.waiting ? says(subState(term), agentName(t))   /* asked, approval, stuck (T6) */
                         : `${agentName(t)} is working`}
-                    chip={story && STORY_CHIP[story.kind] ? <StoryChip kind={story.kind} text={STORY_CHIP[story.kind]} />
-                      : agentState ? <LifecycleChip kind="agent" phase={agentState} compact /> : null} tone={PALETTE.sage} {...stageProps("agent")}
+                    chip={<>{story && STORY_CHIP[story.kind] ? <StoryChip kind={story.kind} text={STORY_CHIP[story.kind]} />
+                      : agentState ? <LifecycleChip kind="agent" phase={agentState} compact /> : null}{resultShown && shareNode}</>} tone={PALETTE.sage} {...stageProps("agent")}
                     tools={inRow && workspaceMode === "general" && (liveSession || pane === "agent")
                       ? <Box ref={setChatTools} sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }} /> : null}
                     /* folded, this heading carried NOTHING - it passed no action at all, so the one

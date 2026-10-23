@@ -26,6 +26,7 @@ import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import AiDefaults from "./AiDefaults.jsx";
 import AgentPermissions from "./AgentPermissions.jsx";
+import SharedLinks from "./SharedLinks.jsx";
 import AboutYou from "./AboutYou.jsx";
 import UpdateCard from "./UpdateCard.jsx";
 import SystemUpdateAltIcon from "@mui/icons-material/SystemUpdateAlt";
@@ -693,6 +694,10 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     "Assistant on your phone": <PhoneDoorways onLoaded={setPanelOk} onNavigate={onNavigate} />,
     "Agent permissions": <AgentPermissions />,
   };
+  // ...and what a section lists UNDER its knobs: the share links still open sit below the switch that allows them
+  const after = {
+    Sharing: <SharedLinks />,
+  };
   // no coding tool connected: the Coding agent section has nothing to set (capabilities.js)
   const cfgGroups = GROUPS.filter((g) => (panels[g] || rowsOf(g).length) && (g !== "Coding agent" || canCode));
   const cfgKey = cfgGroups.join("|");
@@ -757,6 +762,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
               <SectionHead page="config" name={g} />
               {panels[g]}
               {rowsOf(g).map(knobRow)}
+              {after[g]}
             </Box>
           ))}
         </Box>

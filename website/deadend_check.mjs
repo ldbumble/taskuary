@@ -117,6 +117,7 @@ const WALK_SKIP = {
   "run_another": "starts a second agent - the demo refuses starts and the faults pass starts one through Send to agent",
   "retriage": "asks the AI to sort it again - no AI in either world",
   "share": "opens Send out results - mailing someone is refused in the demo",
+  "share_result": "opens the result's Share menu - the demo shares nothing (sharing.ways greys every way), and no demo report or Result is shared by the walk",
   "try_again": "repeats a failed press - pressed in the faults pass only where the failure says a retry could work",
   "walk_here": "brings the walk back from a phone chat - neither world hands the walk to one",
   "new_task": "the idle chips' New task opens the New sheet - walked by the browser New tests",

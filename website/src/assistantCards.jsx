@@ -48,6 +48,7 @@ import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { READY } from "./taskLifecycle.js";
 import { connError, openBugReport } from "./bugReportOpen.js";
 import { dayLabel, fmtTime } from "./dates.js";
+import { useShare } from "./Share.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That did not work";
 const edge = (lane) => { const r = laneMeta(lane).role; return r ? ROLES[r].solid : "#d3ccc1"; };
@@ -803,12 +804,17 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone }) {
   // ...and its heading says the DAY it ran beside its name: the kicker's "18h ago" left an old one reading like today's (the owner,
   // 2026-10-22: "end of day checkup should say the day it's from")
   const [name, rest] = nameAndRest(card.title, card.who), day = dayLabel(card.when);
+  // SHARE IT (the owner, 2026-10-23: "button on report on bottom named share") - the row's Share, while this report is the item on the
+  // table; the server reads the report off its message, never off the page (sharing.py)
+  const nav = React.useContext(CardNav);
+  const share = useShare(`report:${card.key || card.mid}`, { kind: "report", title: card.title, message: card.mid }, !!nav.row && !!card.mid && !card.bad);
   return (
     <CardShell card={card} kicker={card.bad ? "a report failed" : "report"} title={card.title}
       lead={<div className="tq-card-lead" data-tq-report-day={day || undefined}><b>{name}</b>{day && ` · ${day}`}{rest}</div>}>
       {card.bad && <div className="tq-card-excerpt">The run failed — the cause is in the report.</div>}
       {card.brief_today && <TodayMeetingsStrip />}
       {card.mid && <Clamp what="the whole report"><FullText mid={card.mid} revision={card.presentation_revision} /></Clamp>}
+      {share}
       {/* where its result shows is the report's routing, and a failure only ever reaches the bell (reports.run_lands) */}
       <Foot close={card} onDone={onDone} promote={card.bad ? "rerun" : null}
         then={card.bad ? "Running it again runs the report in the background - its result goes where the report sends it, and if it fails the bell says why." : null}

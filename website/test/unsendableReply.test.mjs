@@ -24,6 +24,15 @@ test("Send out results is not offered where nothing can be sent", () => {
   assert.match(page, /\.\.\.\(!liveSession && !cantSend \? \[\{ id: "email"/);
 });
 
+test("Ask sender is not offered where nothing can be sent - on the row, the reply step's icon, or its bar", () => {
+  const page = read("TaskPage.jsx");
+  assert.match(page, /\.\.\.\(replyMessage && !liveSession && !cantSend \? \[\{ id: "ask-sender"/);
+  assert.match(page, /\{!cantSend && <Tooltip title=\{`\$\{labelOfRow\("ask-sender"\)\}/);
+  assert.match(page, /\{!inRow && !cantSend && <Button size="small" variant="outlined" sx=\{barBtn\}/);
+  // every door that opens the dialog stands behind the same rule
+  assert.equal((page.match(/setAskSenderOpen\(true\)/g) || []).length, 3);
+});
+
 test("TaskPage reads the capabilities through its own hook - `caps` there was GoalSteps', and the page threw", () => {
   const page = read("TaskPage.jsx"), body = page.slice(page.indexOf("export default function TaskPage("));
   assert.match(body, /const caps = useCapabilities\(\), canCode = caps\.coding;/);

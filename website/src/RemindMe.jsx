@@ -72,7 +72,7 @@ export function RemindPicker({ task, anchor, onClose, onDone, path, onLeave, onS
   );
 }
 
-export default function RemindMe({ task, compact = false, sx, onDone, onLeave, onStay, live = false }) {
+export default function RemindMe({ task, compact = false, sx, onDone, onLeave, onStay, live = false, lit = false }) {
   const [at, setAt] = useState(null);
   const away = remindWaiting(task);
   const title = away ? `Away until ${remindDay(task.RemindAt)} - change the day or bring it back now`
@@ -82,7 +82,7 @@ export default function RemindMe({ task, compact = false, sx, onDone, onLeave, o
       {compact
         ? <Tooltip title={title}><IconButton size="small" sx={{ color: "#55697a", ...sx }} onClick={(e) => setAt(e.currentTarget)}>
             <EventIcon sx={{ fontSize: 16 }} /></IconButton></Tooltip>
-        : <Button size="small" variant="outlined" sx={sx} title={title} startIcon={<EventIcon sx={{ fontSize: 16, color: "#55697a" }} />}
+        : <Button size="small" variant={lit ? "contained" : "outlined"} disableElevation sx={sx} title={title} startIcon={<EventIcon sx={{ fontSize: 16, color: lit ? "inherit" : "#55697a" }} />}
             onClick={(e) => setAt(e.currentTarget)}>{away ? `Back ${remindDay(task.RemindAt)}` : label("defer")}</Button>}
       <RemindPicker task={task} anchor={at} onClose={() => setAt(null)} onDone={onDone} onLeave={onLeave} onStay={onStay} live={live} />
     </>

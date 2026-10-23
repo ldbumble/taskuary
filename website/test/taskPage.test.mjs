@@ -135,6 +135,8 @@ test("the Advisor's suggestion reaches the Tasks tab and a phone's own row (U12)
   assert.match(page, /setTaskAdvice\(data\?\.verb \? data : null\)/);
   assert.match(page, /const barLit = \(verb\) => !!taskAdvice && liveVerb\(taskAdvice\.verb\) === verb;/);
   assert.match(page, /variant=\{barLit\("close"\) \? "contained" : "outlined"\}/);
+  for (const v of ["remove", "forward", "split"]) assert.match(page, new RegExp(`variant=\\{barLit\\("${v}"\\) \\? "contained" : "outlined"\\}`), v);
+  assert.match(page, /<RemindMe task=\{t\} sx=\{barLit\("defer"\) \? primaryBtn : barBtn\} lit=\{barLit\("defer"\)\}/);
   assert.match(page, /notDone && taskAdvice\?\.line && \(/);
   assert.doesNotMatch(page, /Suggested: \{taskAdvice\.label\}/);
   // ...with its line docked to it: the line and the button it lights are one unit at the view's foot (2026-10-19)

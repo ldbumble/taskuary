@@ -1,6 +1,6 @@
-﻿// Connections own commands; profiles reference a connection and choose a model.
+﻿// Connections own commands; profiles are a name and instructions, run on whatever brain the AI defaults choose.
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogContent, DialogTitle, FormControlLabel, MenuItem, Switch, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogContent, DialogTitle, FormControlLabel, MenuItem, Switch, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import api from "./api";
@@ -12,12 +12,13 @@ import { useCliInstall, InstallLine, UpdateLine } from "./cliInstall.jsx";
 import { useCliSetup, SetupButton, CliPane } from "./cliSetup.jsx";
 import SkillImport from "./SkillImport.jsx";
 import { openAppLink } from "./appLinks.js";
-import ConnectAi from "./ConnectAi.jsx";
 
 const lines = (v) => String(v || "").split("\n").map((x) => x.trim()).filter(Boolean);
 const failure = (e) => e?.response?.data?.detail || e?.message || "Could not save changes";
 const BLANK_CONNECTION = { name: "", cmd: "", args: "", resumeArgs: "", timeout: 1500, modelArg: "" };
-const BLANK_PROFILE = { name: "", purpose: "", kind: "general", rulesDoc: "", triageEnabled: true, provider: "", model: "" };
+// A PROFILE IS A NAME AND INSTRUCTIONS (the owner, 2026-10-22): no provider, no model - the brain is the AI defaults' answer. A saved
+// profile carrying those keys from before still loads; they are not shown and Save does not send them
+const BLANK_PROFILE = { name: "", purpose: "", kind: "general", rulesDoc: "", triageEnabled: true };
 const PROFILE_KINDS = ["general", "coding", "research", "analysis", "coordination", "marketing", "markets", "accounts-payable"];
 
 export const CliConnectionsPage = ({ onBack }) => {
@@ -157,7 +158,7 @@ export const CliConnectionsPage = ({ onBack }) => {
 };
 
 export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles", initialCreate = false, onCreated, onRules }) => {
-  const [agents, setAgents] = useState(null), [connections, setConnections] = useState([]);
+  const [agents, setAgents] = useState(null);
   const [draft, setDraft] = useState(initialCreate ? { ...BLANK_PROFILE } : null);
   const [err, setErr] = useState(""), [saving, setSaving] = useState(false);
   // REMOVE IS AT ONCE (the owner, 2026-10-21): "Removed <profile> - Undo" over the list, and Recently deleted keeps it 30 days
@@ -169,25 +170,24 @@ export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles"
   const [importSkills, setImportSkills] = useState(false);   // the same wizard Docs -> Profiles opens
   const load = useCallback(async () => {
     try {
-      const [a, c] = await Promise.all([api.get("/api/agents"), api.get("/api/cli/connections")]);
+      const a = await api.get("/api/agents");
       const rows = Object.fromEntries((a.data.data || []).map((r) => [r.Name, r]));
       setAgents(Object.fromEntries(Object.entries(a.data.config || {}).map(([name, p]) => [name, {
         ...p, purpose: p.purpose || rows[name]?.purpose || "", kind: p.kind || rows[name]?.Kind || "coding", rules_doc: rows[name]?.rules_doc || p.rules_doc || "",
       }])));
-      setConnections((c.data.data || []).filter((r) => r.configured)); setErr("");
+      setErr("");
     } catch (e) { setErr(failure(e)); }
   }, []);
   useEffect(() => { load(); }, [load]);
   const edit = (name) => {
     const a = agents[name];
-    setDraft({ name, existing: true, purpose: a.purpose, kind: a.kind, rulesDoc: a.rules_doc,
-      triageEnabled: a.triage_enabled !== false, provider: a.provider || "", model: a.model || "" });
+    setDraft({ name, existing: true, purpose: a.purpose, kind: a.kind, rulesDoc: a.rules_doc, triageEnabled: a.triage_enabled !== false });
   };
   const save = async () => {
     setSaving(true); setErr("");
     const name = draft.name.trim();
     const p = { purpose: draft.purpose.trim(), kind: draft.kind, rules_doc: draft.rulesDoc || (draft.kind === "coding" ? "coding" : name),
-      triage_enabled: draft.triageEnabled, provider: draft.provider, model: draft.model.trim() };
+      triage_enabled: draft.triageEnabled };
     try {
       const { data } = await api.put(`/api/agents/${encodeURIComponent(name)}`, p);
       const isNew = !draft.existing;
@@ -195,14 +195,11 @@ export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles"
       if (isNew) onCreated?.(name, data.rules_doc || p.rules_doc);
     } catch (e) { setErr(failure(e)); } finally { setSaving(false); }
   };
-  const providerLabel = (value) => connections.find((c) => `cli:${c.name}` === value)?.label || value || "Choose a provider";
-  const catalog = connections.find((c) => `cli:${c.name}` === draft?.provider)?.models || {};
-  const modelOptions = [...new Set([...(catalog.choices || []), ...(catalog.models || []).flatMap((m) => (m.efforts || []).map((e) => `${m.id}@${e}`))])];
   return <Box sx={{ maxWidth: 980, mx: "auto" }}>
     <Crumb section={section} title={title} onBack={onBack} />
     {err && !draft && <Alert severity="error" sx={{ mb: 2 }}>{err}</Alert>}
     <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
-      <Typography variant="body2" sx={{ color: DIM, flex: 1 }}>Give each worker a purpose and instructions, then choose its provider and model. Triage uses the purpose to assign new tasks.</Typography>
+      <Typography variant="body2" sx={{ color: DIM, flex: 1 }}>Give each worker a purpose and instructions. Triage uses the purpose to assign new tasks.</Typography>
       {/* the two roads to a new worker, side by side and named as a choice: this screen IS the one
           door, so Docs sends you here rather than offering either of them again (2026-09-17) */}
       <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDraft({ ...BLANK_PROFILE })}>Add profile manually</Button>
@@ -214,7 +211,7 @@ export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles"
     {agents && !Object.keys(agents).length && <Empty>Add a profile to create your first worker.</Empty>}
     {Object.entries(agents || {}).map(([name, a]) => <Box key={name} data-profile={name} sx={{ py: 2, borderBottom: `1px solid ${BORDER}` }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-        <Chip size="small" label={name} /><Typography variant="body2" sx={{ flex: 1 }}>{providerLabel(a.provider)} · {a.model || "Provider default model"}</Typography>
+        <Chip size="small" label={name} /><Box sx={{ flex: 1 }} />
         {a.triage_enabled === false && <Chip size="small" label="Manual only" />}
         {onRules && <Button size="small" onClick={() => onRules(a.rules_doc || name)}>Instructions</Button>}
         <Button size="small" onClick={() => edit(name)}>Edit</Button><Button size="small" color="error" onClick={() => remove(name)}>Remove</Button>
@@ -229,16 +226,6 @@ export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles"
           error={!draft.existing && !!agents?.[draft.name.trim()]} helperText={!draft.existing && agents?.[draft.name.trim()] ? "A profile already uses this name." : ""}
           onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
         <TextField label="Purpose — when should triage choose this profile?" multiline minRows={2} value={draft.purpose} onChange={(e) => setDraft({ ...draft, purpose: e.target.value })} />
-        <TextField select label="Model provider" SelectProps={{ displayEmpty: true }} InputLabelProps={{ shrink: true }} value={draft.provider} onChange={(e) => setDraft({ ...draft, provider: e.target.value, model: "" })}>
-          <MenuItem value="">Choose a CLI connection</MenuItem>
-          {connections.map((c) => <MenuItem key={c.name} value={`cli:${c.name}`}>{c.label}</MenuItem>)}
-          {draft.provider && !connections.some((c) => `cli:${c.name}` === draft.provider) && <MenuItem value={draft.provider}>{draft.provider} (unavailable)</MenuItem>}
-        </TextField>
-        {/* ...with the button that does it (owner-approved, 2026-10-21): every "no AI" line carries Connect an AI */}
-        {!connections.length && <Alert severity="info" sx={{ alignItems: "center" }} action={<ConnectAi variant="outlined" onGo={() => setDraft(null)} />}>
-          No AI is connected for a profile to run on - connect one under {placeName("ai_apps")} first.</Alert>}
-        <Autocomplete freeSolo options={modelOptions} inputValue={draft.model} onInputChange={(_, model) => setDraft((d) => ({ ...d, model }))}
-          renderInput={(params) => <TextField {...params} label="Model name" helperText="Choose a model or type its name. Leave blank for the provider default." />} />
         <TextField select label="Type of work" value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
           {[...new Set([...PROFILE_KINDS, draft.kind])].map((k) => <MenuItem key={k} value={k}>{k}</MenuItem>)}
         </TextField>
@@ -247,7 +234,7 @@ export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles"
           {[...new Set(["coding", ...Object.entries(agents || {}).map(([n, a]) => a.rules_doc || n), draft.rulesDoc])].filter(Boolean).map((n) => <MenuItem key={n} value={n}>{n.toUpperCase()}.md</MenuItem>)}
         </TextField>
         <FormControlLabel control={<Switch checked={draft.triageEnabled} onChange={(e) => setDraft({ ...draft, triageEnabled: e.target.checked })} />} label="Can be given new work from what comes in" />
-        <Box><Button variant="contained" disabled={saving || !agents || !draft.name.trim() || (!draft.existing && !!agents?.[draft.name.trim()]) || !connections.some((c) => `cli:${c.name}` === draft.provider) || (draft.triageEnabled && !draft.purpose.trim())} onClick={save}>Save</Button><Button onClick={() => setDraft(null)}>Cancel</Button></Box>
+        <Box><Button variant="contained" disabled={saving || !agents || !draft.name.trim() || (!draft.existing && !!agents?.[draft.name.trim()]) || !draft.purpose.trim()} onClick={save}>Save</Button><Button onClick={() => setDraft(null)}>Cancel</Button></Box>
       </Box></DialogContent>
     </Dialog>}
     <RecentlyDeleted kinds={["profile"]} onRestored={load} />

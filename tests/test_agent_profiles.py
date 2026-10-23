@@ -200,6 +200,19 @@ class ProfileEditingTests(unittest.TestCase):
             profiles=roster)
         self.assertEqual(decision['profile'], 'procurement')
 
+    def test_a_profile_is_a_name_and_instructions_and_saves_with_no_ai_connected(self):
+        """The owner, 2026-10-22: no provider or model on a profile. "Choose a configured CLI provider" refused every save on a box with
+        no CLI connected; one saved before with those keys still loads, and a CLI the body NAMES that is not there is still refused."""
+        with mock.patch.dict(self.server.cfg, {'cli_connections': {}}):
+            result = self.client.put('/api/agents/scout', json={'kind': 'research', 'purpose': 'Compare vendors and cite public sources.',
+                                                                 'rules_doc': 'scout', 'triage_enabled': True})
+            self.assertEqual(result.status_code, 200, result.text)
+            self.assertIn('- scout: Compare vendors', hub_agents.roster(self.s))
+            self.assertNotIn('provider', self.server.cfg['agents']['scout'])
+            self.assertEqual(self.client.put('/api/agents/bad', json={'provider': 'cli:not-connected', 'purpose': 'x'}).status_code, 422)
+        self.server.cfg['agents']['legacy'] = {'provider': 'cli:claude', 'model': 'sonnet', 'kind': 'research', 'purpose': 'Old one'}
+        self.assertEqual(self.client.get('/api/agents').json()['config']['legacy']['model'], 'sonnet')
+
     def test_changing_the_cli_keeps_routing_metadata_and_manual_profiles_stay_out_of_triage(self):
         original = hub_agents.profiles(self.s)['researcher']
         self.s.save_doc('researcher', 'Custom research instructions.', 'owner')

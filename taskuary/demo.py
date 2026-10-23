@@ -316,10 +316,71 @@ ANSWERS = ((re.compile(r'\b(draft|reply|respond|answer|write)\b', re.I),
 OUT_OF_SCRIPT = ('In the demo I answer from a script, so that one is beyond me - in your own Taskuary your own AI answers it. '
                  'Ask me what is on your list, or to draft a reply.')
 
+# THE ASSISTANT'S ROUTING, SCRIPTED (the UX walk, 2026-10-22): the scripted brain only ever answered in words, so a visitor never saw what
+# the real Assistant is for - bringing up the item, the page or the lit button (concierge.CONTRACT). A small decision table, read in order,
+# answers the way a good model would and leaves the rest to Taskuary's own road: Mark done and Remind me CALL the real button on the item
+# on the table, a TQ ref, a report, a person's name or a subject is linked, and a link is the item brought up (appLinks.js).
+# A SET ("all", "everything") is the real brain's pipe.clear/close - lighting one row's button over "close all from Priya" would be wrong.
+_BULK = re.compile(r'\b(all|every|everything|each)\b', re.I)
+_DONE = re.compile(r'\bmark\b.*\bdone\b|^\s*done\W*$', re.I)
+_REMIND = re.compile(r'\bremind me\b', re.I)
+_WHEN = re.compile(r'\b(?:today|tonight|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week|\d+ (?:days?|weeks?))\b'
+                   r'(?:\s+at\s+\d{1,2}(?::\d\d)?\s*[ap]m)?', re.I)
+_REF = re.compile(r'\bTQ-(\d{1,6})\b', re.I)
+_REPORT = re.compile(r'\breports?\b', re.I)
+# ...and a name or a subject brings an item up only when the ask is to SEE one: "forward this to Priya" and "tell Marcus" name a person to
+# act toward, and linking that person's own thread over the item on the table would be the wrong thing brought up
+_SEE = re.compile(r"^\s*(open|show|pull|bring|find|get|go|take|where|who|what|which)\b", re.I)
+_WORD = re.compile(r"[a-z0-9][a-z0-9'-]{2,}", re.I)
+_PLAIN = {'the', 'and', 'for', 'with', 'from', 'this', 'that', 'what', 'about', 'can', 'you', 'your', 'are', 'has', 'have', 'did', 'does',
+          'open', 'show', 'pull', 'bring', 'task', 'report', 'reports', 'over', 'last', 'when', 'still', 'says', 'say'}
+
+def _words(text: str) -> set: return {w.lower().strip("'-").removesuffix("'s") for w in _WORD.findall(text or '')} - _PLAIN
+
+def _call(kind: str, **params) -> str: return 'CALL: ' + json.dumps({'kind': kind, 'params': params})
+
+def _link(name: str, href: str) -> str: return f'Here: [{name}]({href}).'
+
+def _named(asked: str, store):
+    """The one open task the ask names - by its sender's name, or by two words of its subject (one is "sync" in "the sync interval").
+    Two that fit as well are no answer: a sender with three threads open is not one of them."""
+    from .store import task_ref
+    if not _SEE.search(asked): return None
+    want = _words(asked)
+    def hits(t):
+        who = _words(str((store.last_inbound_on_task(t['TaskId']) or {}).get('FromName') or '').split(' ')[0])
+        return len(want & _words(t.get('Title'))) + 2 * len(want & who)
+    fit = sorted(((hits(t), t) for t in store.list_tasks(active_only=True)), key=lambda x: -x[0])
+    if not fit or fit[0][0] < 2 or (len(fit) > 1 and fit[1][0] == fit[0][0]): return None
+    return _link(task_ref(fit[0][1]['TaskId']), f"#task={fit[0][1]['TaskId']}")
+
+def _report(asked: str, store) -> str:
+    """The report the ask names by the most words of its title, else the Reports page."""
+    want, best = _words(asked), (0, None)
+    for r in (x for x in store.list_sources(active_only=False) if x.get('Channel') == 'report'):
+        try: title = json.loads(r.get('ConfigJson') or '{}').get('title') or r.get('Address') or ''
+        except ValueError: title = r.get('Address') or ''
+        if len(want & _words(title)) > best[0]: best = (len(want & _words(title)), (title, r['SourceId']))
+    return _link(best[1][0], f'#report={best[1][1]}') if best[1] else _link('Reports', '#report=reports')
+
+def _route(asked: str, store) -> str | None:
+    if _BULK.search(asked): return None
+    if _DONE.search(asked): return _call('close')
+    if _REMIND.search(asked):
+        when = _WHEN.search(asked)
+        return _call('task.defer', **({'until': when[0]} if when else {}))
+    if store is None: return None
+    if (ref := _REF.search(asked)) and store.get_task(int(ref[1])): return _link(f'TQ-{int(ref[1]):04d}', f'#task={int(ref[1])}')
+    if any(rx.search(asked) for rx, _ in ANSWERS): return None          # a reply, a schedule, the list: the scripted line answers those
+    if _REPORT.search(asked): return _report(asked, store)
+    return _named(asked, store)
+
 def _answer(asked: str, store) -> str:
+    store = store if store is not None else _store()
+    if routed := _route(asked, store): return routed
     said = next((a for rx, a in ANSWERS if rx.search(asked)), None)
     if said is None: return OUT_OF_SCRIPT + f'\n\n(You asked: "{asked[:160]}" - and this is a scripted answer.)'
-    return said.format(list=_list_line(store if store is not None else _store())) if '{list}' in said else said
+    return said.format(list=_list_line(store)) if '{list}' in said else said
 
 
 # A DRAFT IS A REPLY, never the assistant's chat line (2026-10-19 UI walk): the responder's prompt was answered from CANNED, and TQ-0001's

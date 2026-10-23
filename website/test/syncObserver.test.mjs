@@ -74,18 +74,21 @@ test('the sync caption names the work and labels completed fetch attempts as che
   assert.equal(syncFace({ checked: true, lastAt: new Date(2026, 8, 6, 10, 42), terse: true }), 'checked 10:42 AM');
 });
 
-// Sync now said nothing on a refusal ("status unavailable") or a failed source ("checked 9:41"): both are the clock line's own
-// status, in its own slot (the UX walk, 2026-10-22), and the button's words are buttons.json's
-test("a refused sync and a failed source say so on the sync line", async () => {
+// Sync now said nothing on a refusal ("status unavailable"): that is the clock line's own status, in its own slot (the UX walk,
+// 2026-10-22), and the button's words are buttons.json's. A CONNECTION that failed is not the sync's: the bell says it, never this
+// line (the owner, 2026-10-23: "it also says chatgpt is not connected. Let's not show errors there")
+test("a refused sync says so on the sync line; a failed connection never does", async () => {
   const { readFileSync } = await import("node:fs");
   const feed = readFileSync(new URL("../src/FeedView.jsx", import.meta.url), "utf8");
   assert.match(feed, /catch \(e\) \{ if \(e\?\.response\) \{ setSyncing\(false\); setSyncErr\(plainError\(e, /);
   assert.match(feed, /\{syncErr \? `✗ \$\{syncErr\}` : syncUnknown \?/);
-  assert.match(feed, /setSyncFailed\(Array\.isArray\(data\.failed\) \? data\.failed : \[\]\)/);
-  assert.match(feed, /terse: !\(syncing \|\| bgSync\), failed: syncFailed \|\| \[\] \}\)/);
+  assert.doesNotMatch(feed, /syncFailed|data\.failed|could not be read - its card/);
+  assert.match(feed, /terse: !\(syncing \|\| bgSync\) \}\)/);
   assert.match(feed, /bLabel\("sync_now", "unknown"\) : syncing \|\| bgSync \? syncPhaseLabel\(syncPhase\) : bLabel\("sync_now"\)/);
   assert.doesNotMatch(feed, /: "Sync now"\}/);
-  assert.equal(syncFace({ checked: true, lastAt: new Date(2026, 8, 6, 10, 42), terse: true, failed: ["imap"] }), "checked 10:42 AM · imap failed");
+  // the line is the count, the clock and the button - a connection's name or "failed" can never reach the clock
+  assert.equal(syncFace({ checked: true, lastAt: new Date(2026, 8, 6, 10, 42), terse: true, failed: ["imap", "chatgpt"] }), "checked 10:42 AM");
+  assert.equal(syncFace({ checked: true, lastAt: new Date(2026, 8, 6, 10, 42), nextIn: 90, failed: ["imap"] }), "checked 10:42 AM · next in 1:30");
   const { label } = await import("../src/buttons.js");
   assert.equal(label("sync_now"), "Sync now");
   assert.equal(label("sync_now", "unknown"), "Check status");

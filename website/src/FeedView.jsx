@@ -348,10 +348,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const [syncWhat, setSyncWhat] = useState("");
   const [syncPhase, setSyncPhase] = useState("");
   const [syncUnknown, setSyncUnknown] = useState(false);
-  // A REFUSED OR FAILED SYNC SAYS SO IN THE CLOCK'S OWN SLOT (the UX walk, 2026-10-22): a refusal read as "status unavailable" and a
-  // source that failed read as "checked 9:41". Both are the line's status, not a receipt - gone at the next press or clean status
+  // A REFUSED SYNC SAYS SO IN THE CLOCK'S OWN SLOT (the UX walk, 2026-10-22): it read as "status unavailable". It is the line's
+  // status, not a receipt - gone at the next press or clean status. A CONNECTION that failed is not the sync's: it rings the bell
+  // (problems.collect, one entry per connection with its fix), never this line (the owner, 2026-10-23: "Let's not show errors there")
   const [syncErr, setSyncErr] = useState("");
-  const [syncFailed, setSyncFailed] = useState(null);     // null until the first status: unread is not "none failed"
   const syncObserver = useRef(null);
   const [lastSync, setLastSync] = useState(null);
   const [syncStarted, setSyncStarted] = useState(false);
@@ -386,7 +386,6 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     nextAtRef.current = data.nextPollAt ? Date.now() + (data.nextPollAt - data.now) * 1000 : null;
     setTriageErr(data.triageError || "");
     setThinking(data.thinking || "");
-    setSyncFailed(Array.isArray(data.failed) ? data.failed : []);
     if (data.timelineFade) setFade(data.timelineFade);
     // a coalesced feed-changed can fold running+idle into one idle payload, so lastPollAt
     // advancing is how a sub-second automatic poll still gets a visible receipt
@@ -560,7 +559,11 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               under it jumped with every sync (the owner, 2026-09-23: "it should stay in same place at all
               times"). The counts keep their size, the clock takes what is left and ellipses, and the button
               has one width whatever its label says, flush right under + New. */}
-          <Box sx={{ display: setupMode ? "none" : "flex", alignItems: "center", gap: 1.25, flexWrap: "nowrap", minHeight: 20 }}>
+          {/* ...and the clock sits CENTRED over the rail (the owner, 2026-10-23: "'checked 12:58' is not centered"): two equal 1fr
+              sides, each at least as wide as what it holds, around a middle as wide as its words that ellipses before a side gives way */}
+          <Box data-tq-sync-row="" sx={{ display: setupMode ? "none" : "grid", alignItems: "center", columnGap: 0.75, minHeight: 20,
+            gridTemplateColumns: "minmax(max-content, 1fr) minmax(0, max-content) minmax(max-content, 1fr)" }}>
+            <Box sx={{ display: "flex", alignItems: "baseline", minWidth: 0 }}>
             {/* THE NARROWED SIDEBAR (the owner, 2026-09-29: "make the full time fit ... might have to hide the 8 in today while
                 refreshing ... when it's not refreshing it should not have a ..."): at rest, the day's one count and the whole
                 time - the other counts ride its tooltip; while a sync runs, no counts, and the line says what it is reading */}
@@ -572,11 +575,12 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               </Box>
             ))}
             {!rows && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>Loading item counts…</Typography>}
-            <Typography variant="caption" noWrap data-tq-sync-line="" title={syncErr || (syncFailed?.length ? `${syncFailed.join(", ")} could not be read - its card says why` : undefined)}
-              sx={{ color: syncErr || (syncFailed?.length && !(syncing || bgSync)) ? ALERT_INK : syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5, flex: 1, minWidth: 0, textAlign: "right" }}>
+            </Box>
+            <Typography variant="caption" noWrap data-tq-sync-line="" title={syncErr || undefined}
+              sx={{ color: syncErr ? ALERT_INK : syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5, minWidth: 0, textAlign: "center" }}>
               {syncErr ? `✗ ${syncErr}` : syncUnknown ? "Sync status unavailable — rechecking"
                 : <NextIn atRef={nextAtRef} render={(nextIn) => syncFace({ busy: syncing || bgSync, what: syncWhat, every, lastAt: lastSync, nextIn, checked: true, started: syncStarted,
-                    terse: !(syncing || bgSync), failed: syncFailed || [] })} />}
+                    terse: !(syncing || bgSync) })} />}
             </Typography>
             <Button size="small" variant="text" disabled={!syncUnknown && (syncing || bgSync)} onClick={() => syncNow(false)}
               title={syncing || bgSync ? syncWhat : bHint("sync_now", syncUnknown ? "unknown" : undefined)}
@@ -584,7 +588,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                 color: syncing || bgSync ? ACCENT : "inherit",
                 ...(!syncUnknown && (syncing && !bgSync || bgSync && (!syncPhase || syncPhase === "fetching"))
                   ? { animation: "tqSyncSpin .8s linear infinite" } : {}) }} />}
-              sx={{ width: 112, flexShrink: 0, justifyContent: "flex-end", minHeight: { xs: 30, md: 20 }, py: 0, pl: { xs: 1, md: 0.6 }, pr: 0, fontSize: 10.5,
+              sx={{ width: 104, justifySelf: "end", justifyContent: "flex-end", minHeight: { xs: 30, md: 20 }, py: 0, pl: { xs: 1, md: 0.6 }, pr: 0, fontSize: 10.5,
                 lineHeight: 1.2, whiteSpace: "nowrap", color: DIM,
                 // paint containment keeps the spin's compositor layer inside the button: without it Chrome
                 // assumes the rotating icon may overlap everything painted after it, promotes the rail to

@@ -181,13 +181,12 @@ test("a task nobody sent offers no reply to write", () => {
   assert.match(tasks, /Nobody sent this one, so there is nobody to answer/);
 });
 
-test("a draft that cannot be sent says why on the card, not in a tooltip", () => {
-  // outbound.send_block writes one sentence for exactly this (PW-044) and every other surface
-  // shows it; the task page kept it in the hover of the button that replaced Send
+// REVERSED by the owner, 2026-10-22 ("buttons do the talking. I hate free text"): the line said why a draft cannot be sent; now the
+// draft's own Copy button says it, in its hover - outbound.send_block's sentence (PW-044) is still the reason given
+test("a draft that cannot be sent says why in its Copy button's hover, not in a line on the card", () => {
   const decision = fs.readFileSync(path.join(process.cwd(), "src", "ReviewDecision.jsx"), "utf8");
-  assert.match(decision, /!proposal && !carried && !canSendIt && \(/);                 // canSendIt: capabilities.js draftCanSend
-  assert.match(decision, /No reply can be sent from here — \{r\.SendBlock/);
-  assert.match(decision, /The draft stays for you to use/);
+  assert.doesNotMatch(decision, /No reply can be sent from here|The draft stays for you to use/);
+  assert.match(decision, /const copyTitle = `\$\{btnHint\("copy"\)\}\. It cannot be sent from here - \$\{r\.SendBlock \|\| "this channel cannot be replied to"\}\.`;/);
 });
 
 test("Mark done on a live session ends it the way Stop and save does", () => {

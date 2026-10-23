@@ -124,8 +124,18 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
     : co ? `${co.approveLabel} ${co.then}${sendable ? `, then sends your reply to ${replyContext(r)}` : ""} - and only that; ${stays}.`
     : chatFile ? `A ${r.Channel} message cannot carry a file. Reply by email with the file, or send the words alone.`
     : isCal && !r.Stale ? `${sendWord} tells the calendar, with the note above if there is one - ${stays}.`
-    : onTask && !r.Stale && canSendIt ? `${sendWord} sends this to ${replyContext(r)} - ${stays}.`
-    : onTask && !r.Stale && !canSendIt ? `Copy the draft and answer it there yourself - ${btn("close")} on the task closes it.` : "";
+    : onTask && !r.Stale && canSendIt ? `${sendWord} sends this to ${replyContext(r)} - ${stays}.` : "";
+  // A DRAFT THAT CANNOT LEAVE FROM HERE is copied (the owner, 2026-10-22: "buttons do the talking"): Copy beside Redraft, which
+  // copies and closes nothing; why it cannot be sent is the Copy button's hover - the three lines that said so are gone
+  const [copied, setCopied] = useState(false);
+  const draftRef = useRef(null);
+  useEffect(() => { setCopied(false); }, [r.ReviewId, value]);
+  const copyTitle = `${btnHint("copy")}. It cannot be sent from here - ${r.SendBlock || "this channel cannot be replied to"}.`;
+  const copyIt = async () => {
+    try { await navigator.clipboard.writeText(value); setCopied(true); }
+    catch { const el = draftRef.current?.querySelector("textarea"); el?.focus(); el?.select(); }   // a refused clipboard: the text, selected, to copy by hand
+    finally { acted(no("copy")); }
+  };
   const [coFail, setCoFail] = useState(null);       // the close-out itself refused: nothing was sent ({offers} = what fits instead)
   const [said, setSaid] = useState("");              // what Update branch / Re-run checks just did
   // THE CARD READS GITHUB FIRST (closeoutState.js): Close out is live only when this repo's rules let it merge now
@@ -262,6 +272,8 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
     ] : !canSendIt ? [
       // NO CLOSE UNDER A DRAFT THAT CANNOT LEAVE (the owner, 2026-10-22: "there should be no mark done under reply if you can't send
       // out message ... mark done is on the tasks"): the draft is there to copy, Redraft beside it, and the task's own Mark done closes
+      { id: no("copy"), label: copied ? `✓ ${btn("copy", "done")}` : btn("copy"), tone: "s", disabled: busy || !value.trim(), run: copyIt, title: copyTitle,
+        why: value.trim() ? "" : "write the reply first" },
     ] : r.Stale ? [
       { id: no("approve"), label: busy ? "Drafting…" : btn("redraft"), tone: "p", disabled: busy, run: redraft, title: btnHint("redraft") },
     ] : chatFile ? [
@@ -377,19 +389,10 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           CC: {ccNow.length ? ccNow.join(", ") : "none"}
         </Typography>
       ) : !proposal && <CcRow cc={ccNow} setCc={setCc} channel={r.Channel} />}
-      {/* WHY THERE IS NO SEND BUTTON, on the surface rather than under a hover. The server writes
-          this one sentence for exactly this (outbound.send_block, PW-044) and every other surface
-          shows it; here it lived only in the tooltip of the button that replaced Send, so a drafted
-          answer with nowhere to go looked like a card that had simply lost its button. The draft is
-          real and worth reading - a GitHub task with replies off is still answered, by hand. */}
-      {!proposal && !carried && !canSendIt && (
-        <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.5 }}>
-          No reply can be sent from here — {r.SendBlock || "this channel cannot be replied to"}. The draft stays for you to use.
-        </Typography>
-      )}
-      <DraftField value={value} onChange={(e) => setText(e.target.value)}
+      {/* why there is no Send (outbound.send_block, PW-044) is the Copy button's hover under the draft, not a line over it (2026-10-22) */}
+      <Box ref={draftRef}><DraftField value={value} onChange={(e) => setText(e.target.value)}
         placeholder={proposal?.kind === "closeout" ? proposal.placeholder : isCal ? "A note with your answer - or leave it empty" : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}
-        inputProps={{ readOnly: busy || delivery.frozen || !!proposal?.readOnly, style: { fontSize: 12.5, lineHeight: 1.45 } }} />
+        inputProps={{ readOnly: busy || delivery.frozen || !!proposal?.readOnly, style: { fontSize: 12.5, lineHeight: 1.45 } }} /></Box>
       {compare?.reviewId === r.ReviewId && (
         <Box sx={{ mt: 0.75, border: "1px solid #d2d6cf", borderRadius: 1.5, px: 1.25, py: 0.75, bgcolor: PANEL2 }}>
           <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, display: "block" }}>
@@ -437,7 +440,13 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
               : "Run the proposed action; nothing is sent to the sender"}>
             {busy ? proposal.busyLabel : proposal.approveLabel}
           </Button>
-        ) : !canSendIt ? null : r.Stale ? (
+        ) : !canSendIt ? (
+          /* COPY, BESIDE REDRAFT (the owner, 2026-10-22): the draft goes to the clipboard and the task stays open - its badge says it
+             went; the reason nothing here can send it is the hover */
+          <Button size="small" variant={lit === no("copy") ? "contained" : "outlined"} disableElevation disabled={busy || !value.trim()} onClick={copyIt}
+            title={copyTitle} data-tq-copy={copied ? "done" : ""}>
+            {copied ? `✓ ${btn("copy", "done")}` : btn("copy")}</Button>
+        ) : r.Stale ? (
           /* THE ROAD OUT OF THE WARNING. A stale draft disabled the only button on the card
              and left a faint "Refresh draft" at the far end of the row, so the answer to "a
              new message arrived" was a dead end (the owner, 2026-09-21: "can't hit approve &

@@ -15,7 +15,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text) |
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear, pipe.defer(select, until), pipe.close(select), review.each, button.light(button, ref?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
 | **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how), report.edit(config), report.delete |
-| **app** | settings, connections, roles, scripts and kept facts | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, script.start(name), memory.remember(note), hub.publish(title, body, topic?, kind?, why_earned?) |
+| **app** | settings, connections, roles, scripts and kept facts | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, script.start(name), memory.remember(note), people.relate(who), hub.publish(title, body, topic?, kind?, why_earned?) |
 | **look** | look-ups - they run at once and change nothing | app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
 
 A task you name goes in `ref` ("TQ-0123"); otherwise the tool acts on what is on the table.
@@ -684,6 +684,18 @@ Keep a fact.
 - `note`
 
 <p class="runs">Brings up its button for you to press.</p>
+
+### `people.relate`
+
+Who someone is to the owner, on their org chart. "Erin is my manager", "Ray owns payroll", "Gail reports to me" - never memory.remember for these: triage and agents read the chart.
+
+- `who` - a name or address
+- `relation` - manager | report | none (none clears it)
+- `owns` - areas they are responsible for ("payroll, benefits"), added
+- `drops` - areas taken off
+- `forget` - true takes them off the chart
+
+<p class="runs">Runs at once and says what it changed.</p>
 
 ### `hub.publish`
 

@@ -283,7 +283,8 @@ async def owner_presence(request: Request, call_next):
     pressed = request.method != 'GET' and p.startswith('/api') and p not in PRESENCE_SKIP and resp.status_code < 400
     if pressed and guard.scope_of(cfg['server'], request.headers) == guard.OWNER:
         from . import welcome
-        try: await asyncio.to_thread(welcome.touch, store)
+        # inline, not to_thread: one setting written at most once a minute, and a press must never wait on the thread pool for it
+        try: welcome.touch(store)
         except Exception as e: logger.debug(f'presence not kept - {e}')
     return resp
 

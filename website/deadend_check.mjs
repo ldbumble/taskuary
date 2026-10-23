@@ -89,6 +89,12 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // THE BUTTONS THE WALK CANNOT PRESS, and why - every other verb (and each of its states) is pressed at least once, or COVER says so.
 // A new button with neither fails the walk: that is what keeps it from going hollow again.
 const WALK_SKIP = {
+  "walk": "the end of the walk's own button: pressing it starts the walk the check just finished - the walk step checks it is on the end row",
+  "unsubscribe": "the demo's mail carries no List-Unsubscribe header, and a press would post to a real list",
+  "sync_now": "fetches mail - the demo refuses ingest and the faults world has no mailbox",
+  "sync_now:unknown": "as Sync now: no mailbox to check",
+  "fix:card": "New report's 'Open the card' shows only when its source is not connected; the walk does not open New report",
+  "pick_repo": "offered only when triage could not tell the repository - the demo world names one for every coding task",
   "approve:action": "an agent's proposal: the demo's agents are recordings and never propose an act",
   "redraft": "redrafting asks the AI - the demo's canned brain writes no drafts, and the faults world has no AI",
   "redraft:none": "as Redraft: writing a draft is the AI's",

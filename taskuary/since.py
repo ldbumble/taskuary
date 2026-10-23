@@ -55,12 +55,14 @@ def overnight(store, now: datetime = None) -> dict:
 
 
 def learned(store, now: datetime = None) -> dict:
-    """{line, n, latest} - what LEARNED.md took in over the last seven days: new guesses and new rules."""
-    since = ((now or datetime.now()) - timedelta(days=7)).strftime('%Y-%m-%d')
-    rows = store._rows("SELECT Text, Action FROM learned_history WHERE At>=? AND Action IN ('born','promoted') ORDER BY Id DESC", (since,))
+    """{line, n, latest} - the lines that went INTO USE in the last seven days and are in use still, each once (learnedlines.week).
+    It counted every guess born and every rule promoted - rebirths, double counts and lines nobody reads - and said "Learned this
+    week: 32" over about three real things (the Advisor and memory design, 2026-10-23: "This week: N now in use")."""
+    from .learnedlines import week
+    rows = week(store, now)
     n = len(rows)
-    return {'line': f"Learned this week: {_plural(n, 'new thing')} about how you work." if n else '', 'n': n,
-            'latest': _named(store)(rows[0]['Text']) if rows else ''}
+    return {'line': f'This week: {n} now in use' if n else '', 'n': n,
+            'latest': _named(store)(rows[0].get('OwnerText') or rows[0]['Text']) if rows else ''}
 
 
 CARDS = 3

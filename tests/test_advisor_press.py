@@ -17,7 +17,7 @@ class PressTests(_Rail):
         self.assertEqual((r['Advised'], r['Pressed'], r['Match'], r['Stale']), ('continue', 'close', 0, 0))   # the row's `done` is close
         self.assertEqual((r['Sender'], r['SenderDomain'], r['Scope'], r['Channel']), ('gail@northwind.example', 'northwind.example', 'northwind.example', 'email'))
         self.assertTrue(r['ItemKind'])
-        self.assertEqual(s.get_setting('learn_pending'), '1', 'a press against the lit move is a correction the reflection counts')
+        self.assertFalse(s.get_setting('learn_pending'), "a press is the Advisor's to learn, never the reflection's - it writes what triage reads")
         j = advisor.press(s, f'task:{t}', 'continue', 'continue', 'an-older-revision')
         self.assertEqual(s._one('SELECT Match, Stale FROM advice_press WHERE Id=?', (j,)), {'Match': 1, 'Stale': 1})
 

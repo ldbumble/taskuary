@@ -264,13 +264,17 @@ _KEEP = 4                # EVENT, THE ITEM, PREVIEW, VERBS OFFERED
 def _one(s, n: int) -> str: return ' '.join(str(s or '').split())[:n]
 
 
-def _learned(store) -> str:
-    """LEARNED.md as a prompt reads it - the promoted sections only (learn.injectable), minus every heading with nothing under it
-    but its italic placeholder: three empty headings rode into every judgement as if they were the owner's habits."""
-    from .learn import injectable
-    parts = re.split(r'(?m)^(?=## )', injectable(store.doc('learned') or ''))
-    live = [p.strip() for p in parts[1:] if re.sub(r'_\([^)]*\)_', '', p.split('\n', 1)[1] if '\n' in p else '', flags=re.S).strip()]
-    return '\n\n'.join([parts[0].strip(), *live]).strip() if live else ''
+def _learned(store, item: dict = None) -> str:
+    """LEARNED.md's "What you do next" and nothing else - the Advisor's own section (the owner, 2026-10-23: one section per reader),
+    its in-use lines ranked closest to this item first (this sender, their domain or repository, this kind) within its budget
+    (learned_cut). '' while the section has no line: an empty heading is not a habit."""
+    from . import learned_cut
+    about = {}
+    if item:
+        try: w = who_of(store, item)
+        except Exception: w = {}
+        about = {'sender': w.get('sender'), 'domain': w.get('domain'), 'scope': w.get('scope'), 'kind': item.get('kind')}
+    return learned_cut.for_reader(store, 'advisor', about)
 
 
 def _msgs(store, item, target_kind, target_id) -> list:
@@ -470,8 +474,8 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     for f_ in (draft_line, thread_line, related_line, notes_line):
         try: lines.append(f_(store, item, target_kind, target_id))
         except Exception as e: logger.debug(f'advisor: {f_.__name__} skipped for {item.get("key")} - {e}')
-    lrn = _learned(store)
-    if lrn: lines.append('LEARNED (the owner, from their own verdicts):\n' + lrn[:2000])
+    lrn = _learned(store, item)
+    if lrn: lines.append('LEARNED (what the owner does next, from their own presses):\n' + lrn)
     led = [f"out{r['Id']}: {outcomes._sentence(store, r)}" for r in outcomes.rows_for(store, target_kind, target_id) if r.get('ResolvedAt')][:5]
     led += [f"{v['label']}: {says(v['verb'], c)}" for v in verbs for c in [habit(store, v['verb'], item)] if says(v['verb'], c)]
     if led: lines.append('THE OUTCOME LEDGER (what came of actions like this):\n' + '\n'.join(led))
@@ -949,11 +953,8 @@ def press(store, key: str, advised: str, pressed: str, rev: str = None, surface:
     if not new: return rid
     from . import learn
     learn.moves(store)                      # ...and what it teaches lands in LEARNED.md at once, where the owner can read it (never raises)
-    # a press against the lit move is the owner correcting the Advisor: it counts toward the next reflection like any correction
-    adv, got = pressed_verb(advised) if advised else None, pressed_verb(pressed)
-    if adv and got not in (adv, 'next'):
-        try: store.set_setting('learn_pending', str(int(store.get_setting('learn_pending') or 0) + 1), 'learn')
-        except (TypeError, ValueError): pass
+    # ...and only there: a press is not a correction for the reflection, which writes what TRIAGE reads (the owner, 2026-10-23: "why
+    # would we want button presses to do with triage") - the moves count presses, the reflection counts sorting verdicts
     return rid
 
 

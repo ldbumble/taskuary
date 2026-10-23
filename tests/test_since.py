@@ -56,14 +56,22 @@ class SinceTests(unittest.TestCase):
         self.assertEqual(since.overnight(MemoryStore(), NOW)['line'], '')
         self.assertEqual(since.learned(MemoryStore(), NOW)['line'], '')
 
-    def test_learned_counts_new_guesses_and_new_rules_this_week(self):
+    def test_learned_counts_the_lines_that_went_into_use_this_week_and_are_still_in_use_each_once(self):
+        """It counted every guess born and every rule promoted - rebirths and double counts too - and said "Learned this week: 32"
+        over about three real things (the Advisor and memory design, 2026-10-23)."""
+        from taskuary import learn
         s = MemoryStore()
-        s.add_learned_event('k1', 'Alex answers vendors himself.', 'hypothesis', 2, '', 'born', 'learn')
-        s.add_learned_event('k1', 'Alex answers vendors himself.', 'live', 5, '', 'promoted', 'reflect')
-        s.add_learned_event('k2', 'Alex files newsletters.', 'hypothesis', 0, '', 'faded', 'reflect')   # a fade is not learning
+        doc = s.get_doc('learned')
+        live = '- Alex answers vendors himself. [s:5 | ev: mem1, mem2, mem3 | seen: 2026-10-20 | k: alex answers vendors himself]'
+        guess = '- Alex files newsletters. [s:2 | ev: mem4 | seen: 2026-10-20 | k: alex files newsletters]'
+        doc = learn._put_block(doc.replace(learn.SORT + '\n', learn.SORT + '\n' + live + '\n', 1), learn.HYP_START, learn.HYP_END, guess)
+        s.save_doc('learned', doc, 'reflect')
+        for _ in range(3): s.save_doc('learned', doc.replace(live + '\n', ''), 'reflect'); s.save_doc('learned', doc, 'reflect')   # churn
         out = since.learned(s, datetime.now())
-        self.assertEqual(out['line'], 'Learned this week: 2 new things about how you work.')
+        self.assertEqual(out['line'], 'This week: 1 now in use')          # one line, once; a guess is not in use
         self.assertEqual(out['latest'], 'Alex answers vendors himself.')
+        s.save_doc('learned', doc.replace(live + '\n', ''), 'owner')       # the owner removed it: no longer in use
+        self.assertEqual(since.learned(s, datetime.now())['line'], '')
 
 
 class WhatChangedTests(unittest.TestCase):

@@ -323,6 +323,7 @@ PAGE_ONLY = {'new_task': "the page's own New task - the model makes one with tas
              'change_kind': 'a picker on the task page; the model changes it with task.set_kind', 'priority': 'a picker; the model uses task.update',
              'assign': 'a picker; the model uses task.update', 'pick_repo': 'a picker; the model uses task.set_repo',
              'make_report': 'turns the workflow being written on the page into a report draft - nothing saved, so the page alone holds it',
+             'walk': "the day card's own start, and the walk's again at its end - the model's walk is concierge.surface",
 }
 def _has(store, v: str) -> bool:
     """A button that `needs` something (buttons.json: coding) is named only where it exists - no coding tool, no coding agent."""

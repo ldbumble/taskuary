@@ -3036,6 +3036,9 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             say = "Nothing else needs you right now; " + ', '.join(parts) + '.'
         else: say = all_done(store)
         over = not key and not (only and left)
+        # ...and THE WAY TO WALK AGAIN, on the row by the prompt box, before the Opens: the day card's own button, not a card and not a
+        # sentence (the owner, 2026-10-22: "just have ... button on bottom on top of the prompt box"). The phone has its own Walk.
+        if over and opens and DELIVERY.get() != PHONE: opens = [buttons.chip('walk'), *opens]
         with guarded():
             put_down()
             if not key: set_current(store, tid, None, actor)                  # the walk ran out: nothing is on the table

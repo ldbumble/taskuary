@@ -5291,10 +5291,12 @@ def set_review_envelope(rid: int, body: EnvelopeBody):
     if not m or str(m.get('Channel') or '').lower() != 'email': raise HTTPException(422, 'only an email reply has a recipient envelope')
     env = store.review_envelope(rid) or outbound.reply_envelope(store, m) or {}
     if body.mode: env = outbound.reply_envelope(store, m, mode=body.mode) or env
+    # ..."Erin Blake <erin@…>" is the address in it: the To line wears the name, and saved back whole it was kept as the address
+    from email.utils import parseaddr
     def clean(seq):
         out = []
         for a in seq or []:
-            a = str(a or '').strip().lower()
+            a = (parseaddr(str(a or ''))[1] or str(a or '')).strip().lower()
             if a and '@' in a and a not in out: out.append(a)
         return out
     if body.to is not None: env['to'] = clean(body.to)

@@ -6,6 +6,7 @@ import { WORD } from "./lanes.js";
 import { ago, agoMins, dur, durSince, plural } from "./timeWords.js";
 import React, { useEffect, useRef, useState } from "react";
 import { useCapabilities } from "./capabilities.js";
+import { bareAddresses } from "./replyDelivery.js";
 import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogContentText, DialogTitle, InputAdornment, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
@@ -1882,15 +1883,17 @@ export const ContactPicker = ({ value, onChange, onPick, placeholder = "name or 
 // copying somebody you added an hour ago (verdicts.decide).
 // WHO AN EMAIL DRAFT GOES TO, corrected at the card: the TO line was text, so a wrong name or one with no address ("Devorah
 // Cohn ?") could only be dropped (the owner, 2026-10-06: "i should be able to edit the email address"). Saves on pick.
+// ...the line wears the sender's name ("Erin Blake <erin@…>", replyDelivery.deliveryTo); the box and the save carry the addresses alone -
+// saved back as it stood, the name went into the envelope as the address
 export const ToRow = ({ to, onSave, disabled }) => {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [err, setErr] = useState("");
   const people = useContacts();
   const save = async (a) => {
-    const v = String(a || "").trim();
-    if (!v.includes("@")) { setErr("pick a person or type their email address"); return; }
-    try { await onSave([v]); setText(""); setErr(""); setOpen(false); }
+    const v = bareAddresses(a);
+    if (!v.length || !v.every((x) => x.includes("@"))) { setErr("pick a person or type their email address"); return; }
+    try { await onSave(v); setText(""); setErr(""); setOpen(false); }
     catch (e) { setErr(e?.response?.data?.detail || "could not change who it goes to"); }
   };
   return (
@@ -1905,7 +1908,7 @@ export const ToRow = ({ to, onSave, disabled }) => {
         <>
           <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{to || "nobody yet"}</Typography>
           {/* ...opened on the address it has: "change" emptied To while the footer still named the old one (the UI audit, 2026-10-21) */}
-          {!disabled && <Typography {...pressable(() => { setText(to || ""); setOpen(true); })} data-tq-to-change
+          {!disabled && <Typography {...pressable(() => { setText(bareAddresses(to).join(", ")); setOpen(true); })} data-tq-to-change
             sx={{ ...FOCUS_RING, fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>
             change</Typography>}
         </>

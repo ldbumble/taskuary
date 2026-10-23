@@ -1381,13 +1381,8 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
     # ...or its FIRST mail, when that came first: triage makes the task a little after the mail that asked for it. The row's own time
     # is its NEWEST activity - an agent starting or asking - so it counts only for a task with no mail at all: it moved a row an hour
     # down when its agent asked, and Next, walking on below the place that row had held, found nothing (tests/test_lifecycle.py)
-    # ...and the gutter's age is its LAST message (`last_at`): placed by its first, a 14-mail thread read "29d" under a mail from today
-    # (the owner, 2026-10-22: "it should be last message not first message")
-    last = {}
     def made_at(tid):
-        msgs = store.list_messages(tid) if hasattr(store, 'list_messages') else []
-        sent = [m.get('SentAt') for m in msgs[:1]]
-        if (ts := [m['SentAt'] for m in msgs if m.get('SentAt') and _activity_time(m['SentAt'])]): last[tid] = max(ts, key=_activity_time)
+        sent = [m.get('SentAt') for m in (store.list_messages(tid) if hasattr(store, 'list_messages') else [])[:1]]
         return [x for x in ((store.get_task(tid) or {}).get('CreatedAt'), *sent) if x], bool(sent)
     made = {tid: made_at(tid) for tid in {i['tid'] for i in items if i.get('tid')}}
     def first(i, made_at):
@@ -1396,7 +1391,6 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
         return min(at, key=_activity_time) if at else (stamps or [None])[0]
     items = _order([i | {'arrived_at': first(i, made[i['tid']])} if i.get('tid') and made.get(i['tid']) and not i.get('arrived_at') else i
                     for i in items])
-    items = [i | {'last_at': last[i['tid']]} if i.get('tid') in last and not i.get('last_at') else i for i in items]
     # the owner's standing rules: what they told us to stop showing them never enters again. Only the
     # lanes with nothing to do - a rule must not be able to hide something asking them for something.
     rules = mutes(store)

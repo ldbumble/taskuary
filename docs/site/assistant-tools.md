@@ -55,7 +55,7 @@ The "Put it on my list" button: make it a task on the owner's own list - no agen
 
 ### `regular_agent`
 
-The "Send to agent" button: send it to an agent that does not write code - it becomes a task of its own.
+The "Send to agent" button: send it to an agent that does not write code - it becomes a task of its own. Never for Taskuary's own settings, connections or update: those are its own screens (app.find)
 
 - `text` - the job
 - `as` (optional) - a profile from agents.list, only when one fits

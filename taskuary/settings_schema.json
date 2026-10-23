@@ -125,7 +125,7 @@
       "group": "How mail is sorted",
       "label": "Assistant tab brain",
       "type": "brain",
-      "desc": "Which AI speaks on the Assistant tab and walks you through the pipe. auto = your default coding agent, on its faster, lighter model.",
+      "desc": "Which AI speaks on the Assistant tab and in your phone chat, and walks you through the pipe - the Assistant's own brain. auto = your default coding agent, on its faster, lighter model.",
       "help": "THREE DEFAULTS, side by side in How mail is sorted: the triage brain, the default coding CLI, and this one.\n\nA CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent's own 'light model' from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks."
     },
     "concierge_model": {

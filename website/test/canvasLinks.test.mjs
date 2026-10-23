@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { canvasRequestFromHash } from "../src/canvasLinks.js";
+import { canvasRequestFromHash, hashFor } from "../src/canvasLinks.js";
 
 // Every link the app writes still lands once the tabs are gone (the canvas redesign, 2026-09-29).
 test("each old link becomes a canvas request", () => {
@@ -18,6 +18,10 @@ test("each old link becomes a canvas request", () => {
   assert.equal(canvasRequestFromHash("#cli-agents").area, "connections");
   assert.deepEqual(canvasRequestFromHash("#settings=config&group=How%20mail%20is%20sorted").state, { section: "config", open: "How mail is sorted" });
   assert.deepEqual(canvasRequestFromHash("#settings=policies").state, { section: "policies", open: "policies" });
+  // "update taskuary" (2026-10-23): Updates comes up with its one button lit, and the link round-trips
+  assert.deepEqual(canvasRequestFromHash("#settings=updates&key=update").state, { section: "updates", open: "updates", knob: "update" });
+  assert.equal(hashFor("settings", { section: "updates", open: "updates", knob: "update" }), "#settings=updates&key=update");
+  assert.equal(hashFor("settings", { section: "updates", open: "updates" }), "#settings=updates");
   assert.deepEqual(canvasRequestFromHash("#settings=docs").state, { section: "docs", open: null }, "Docs opens on its shelf of files");
   assert.deepEqual(canvasRequestFromHash("#settings=playbooks"), { kind: "browse", area: "reports", state: { section: "playbooks", open: null }, n: 0 },
     "Playbooks left Settings for the Reports page (2026-10-21) - an old link lands on their shelf");

@@ -272,7 +272,8 @@ _DECIDE = {
     'redraft':         'write the draft again - `text`: the change',
     'mine':            "make it a task on the owner's own list - no agent",
     'regular_agent':   ('send it to an agent that does not write code - `text`: the job; `as`: a profile from agents.list, only when one fits; '
-                        '`new`: true when the job is NOT about the item on the table - it becomes a task of its own'),
+                        '`new`: true when the job is NOT about the item on the table - it becomes a task of its own. Never for Taskuary\'s own '
+                        'settings, connections or update: those are its own screens (app.find)'),
     'coding_agent':    ('send it to a coding agent - `text`: what is wanted; `as`: the repository (repos.list), only when sure. '
                         'Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick. '
                         '`new`: true when the job is NOT about the item on the table'),

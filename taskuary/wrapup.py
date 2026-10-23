@@ -442,7 +442,7 @@ def deliver_findings(store, task_id: int, mid: int, run_id: int, rep: dict, tgt:
                             'Reason': f"the report's findings, for {tgt['to']} - approve to send"})
     try:
         draft = outbox.draft_message(store, tgt['channel'], tgt['to'],
-                                     f"what we found looking into the \"{tgt['subject']}\" report", resolution_text(rep))
+                                     f"what we found looking into the \"{tgt['subject']}\" report", resolution_text(rep), mailbox=tgt.get('mailbox'))
         store.update_review_draft(rid, draft, run_id)
     except Exception as e:
         logger.warning(f'findings draft failed for task {task_id}: {e}')

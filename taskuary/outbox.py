@@ -58,16 +58,19 @@ def _voice(store) -> str:
 
 
 def draft_message(store, channel: str, to, about: str, resolution: str = None, llm=None,
-                  cc: list = None, attached: list = None) -> str:
+                  cc: list = None, attached: list = None, mailbox: str = None) -> str:
     """The message itself. `resolution` is what an agent found, when one was sent to find out
-    first - the brief says what to write about, the resolution says what is true."""
+    first - the brief says what to write about, the resolution says what is true. An email is signed
+    as the `mailbox` it leaves from, like a reply: a new email used to sign as STYLE.md's one learned
+    signature, so mail from a second mailbox went out under the first one's hat."""
     from .knowledge import block as kb_block
     from .llm import build_llm
+    from .responder import email_rule, signature_for, signed, strip_signoff
     llm = llm or build_llm(store)
     if not llm: raise RuntimeError('no AI connector is set up to write messages')
-    ident, soul, sty, lrn, brevity, chat, email = _voice(store)
+    ident, soul, sty, lrn, brevity, chat, _ = _voice(store)
     is_chat = str(channel or '').lower() in ('teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord')
-    system = (ident + brevity + (chat if is_chat else email) + '\n' + COMPOSE_SYSTEM
+    system = (ident + brevity + (chat if is_chat else email_rule(store, mailbox)) + '\n' + COMPOSE_SYSTEM
               + (f'\n\nYOUR OWN document - your voice, your rules, your responsibilities:\n{soul[:4000]}' if soul else '')
               + (f'\n\nYour own style, distilled from mail you have actually sent - write like this:\n{sty[:2500]}' if sty else '')
               + (f'\n\nYour own writing instructions:\n{lrn[:2000]}' if lrn else ''))
@@ -88,8 +91,7 @@ def draft_message(store, channel: str, to, about: str, resolution: str = None, l
     if kb: user += kb
     out = str(llm(system, user, max_tokens=DRAFT_TOKENS) or '').strip()
     if not out: raise RuntimeError('the AI returned an empty message')
-    from .responder import strip_signoff
-    return strip_signoff(out) if is_chat else out
+    return strip_signoff(out) if is_chat else signed(out, signature_for(store, mailbox))
 
 
 def subject_for(store, about: str, llm=None) -> str:
@@ -119,8 +121,9 @@ def redraft_review(store, review: dict, resolution: str = None, llm=None, instru
     if resolution is None:
         from .responder import resolution_of
         resolution = resolution_of(store, review.get('TaskId')) if review.get('TaskId') else None
+    from .outbound import sending_mailbox
     draft = draft_message(store, deliver['channel'], deliver.get('to'), '\n\n'.join(filter(None, [about, instruction])),
-                          resolution=resolution, llm=llm, cc=deliver.get('cc'))
+                          resolution=resolution, llm=llm, cc=deliver.get('cc'), mailbox=sending_mailbox(store, review, message))
     store.update_review_draft(review['ReviewId'], draft, review.get('RunId'))
     return draft
 
@@ -268,7 +271,8 @@ def task_email(store, tid: int, to: str, about: str, cc: list = None, subject: s
     about = results_brief(said)
     draft = draft_message(store, channel, [name or who[0]] if channel != 'email' else who, about,
                           resolution=work_of(store, tid) or None, llm=llm, cc=cc,
-                          attached=[n for n, _ in files or []] if channel == 'email' else None)
+                          attached=[n for n, _ in files or []] if channel == 'email' else None,
+                          mailbox=(mailbox or outbound.task_mailbox(store, tid)) if channel == 'email' else None)
     subject = ((subject or '').strip() or subject_for(store, about, llm)) if channel == 'email' else ''
     out = slots.draft(store, tid, draft, to=who[0], subject=subject, agent=actor, channel=channel, name=name)
     if not out.get('ok'): raise ValueError(out.get('why') or 'the message could not be saved on the task')

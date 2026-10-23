@@ -2454,7 +2454,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
             onChange={(e) => { setNewSrc(e.target.value); setSrcBad(""); }} onKeyDown={(e) => e.key === "Enter" && addSource()} />
           <Button variant="contained" disableElevation onClick={addSource}>Add</Button>
         </Box>
-        {MAIL_CARDS.includes(conn.Type) && <MailSignature conn={conn} reload={reload} />}
+        {MAIL_CARDS.includes(conn.Type) && <MailSignature conn={conn} addresses={mine.map((s) => s.Address)} reload={reload} />}
       </Box>
     )}] : []),
     ...(isAI ? [] : [
@@ -3298,15 +3298,21 @@ const MAIL_CARDS = ["outlook", "gmail", "imap"];
 // the cards that sign in with Microsoft, each its own account: Outlook for mail and calendar, Teams for chats (msauth.TEAMS_SCOPES)
 const MS_SIGNIN = ["outlook", "teams"];
 const MS_APP_KEYS = ["tenant_id", "client_id"];      // a tenant app registration's fields - an admin's road (adminFields)
-function MailSignature({ conn, reload }) {
+// ...and a card that reads more than one mailbox (a shared one on the same sign-in) is more than one hat: one field per
+// address, saved under `signatures`, until it is edited showing the card's own one that signs it today (TQ-1191)
+function MailSignature({ conn, addresses = [], reload }) {
   const saveConn = useSaveConnector(reload);
   const cfg = parse(conn.ConfigJson);
-  return (
-    <TextField data-tq-mail-signature fullWidth multiline minRows={2} size="small" sx={{ mt: 2, maxWidth: 460, bgcolor: "#fff" }}
-      label="Signature for mail from this mailbox" value={cfg.signature || ""}
-      helperText="Blank uses the signature in Settings."
-      onChange={(e) => saveConn({ ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify({ ...cfg, signature: e.target.value }) })} />
+  const per = cfg.signatures && typeof cfg.signatures === "object" ? cfg.signatures : {};
+  const field = (key, label, value, onChange) => (
+    <TextField key={key} data-tq-mail-signature={key} fullWidth multiline minRows={2} size="small" sx={{ mt: 2, maxWidth: 460, bgcolor: "#fff" }}
+      label={label} value={value} helperText="Blank uses the signature in Settings." onChange={onChange} />
   );
+  const save = (next) => saveConn({ ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify({ ...cfg, ...next }) });
+  const boxes = [...new Map(addresses.filter((a) => String(a).includes("@")).map((a) => [a.toLowerCase(), a])).values()];
+  if (boxes.length < 2) return field("", "Signature for mail from this mailbox", cfg.signature || "", (e) => save({ signature: e.target.value }));
+  return <>{boxes.map((a) => field(a, `Signature for mail from ${a}`, a.toLowerCase() in per ? per[a.toLowerCase()] : cfg.signature || "",
+    (e) => save({ signatures: { ...per, [a.toLowerCase()]: e.target.value } })))}</>;
 }
 
 const useRoles = (conn, reload) => {

@@ -33,7 +33,8 @@ import Composer from "./Composer.jsx";
 import { onDraftHanded, takeDraft } from "./draftHandoff.js";
 import { label as btnLabel } from "./buttons.js";
 import { ideaCounted, ideaWord } from "./lanes.js";   // an Advisor line's kind, in lanes.json's words
-import { placeName } from "./words.js";
+import { DASH, placeName } from "./words.js";
+import DashboardEditor from "./DashboardEditor.jsx";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
 import { NewPlaybook, PB_EMPTY, PB_OPEN, PlaybookDetail, PlaybookRow, RecentlyDeleted as PlaybooksDeleted, pbOpen, usePlaybooks } from "./PlaybookShelf.jsx";
@@ -282,6 +283,9 @@ const CARD_LABELS = { mssql: "SQL Server", winrm: "Remote Windows", database: "A
 const BLANK = { type: "mssql", title: "", every_minutes: "", daily_at: "" };
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
 const isWorkflowSource = (s) => isWorkflowConfig(parse(s?.ConfigJson));
+// a dashboard is a report you look at (dashboards.py): its own shelf, its own editor
+const isDashboardSource = (s) => parse(s?.ConfigJson).type === "dashboard";
+const DASH_BUCKETS = ["dashboards", "new-dashboard", "draft-dashboard"];
 
 // The rules a "when a rule trips" line can carry - arithmetic on what came back, which is the one
 // thing a model should not be trusted with ("spend over 500"). Same list as reports.ALERT_WHEN.
@@ -358,7 +362,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   const [bucket, setBucket] = useState(() => {
     const value = /report=([^&]+)/.exec(window.location.hash || "")?.[1];
     return value === "new" ? "new-report"
-      : ["workflows", "new-invoices", "new-agent"].includes(value) ? value
+      : ["workflows", "new-invoices", "new-agent", ...DASH_BUCKETS].includes(value) ? value
         : /^\d+$/.test(value || "") ? Number(value) : "reports";
   });   // which rail section is open (a newly promoted discussion links straight to its editor)
   const [q, setQ] = useState("");
@@ -378,6 +382,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   // abandoned when the owner switched tabs, so the report stopped before it filed its result.
   // Queue the same background road the Assistant uses; leaving Reports cannot cancel it.
   const [draft, setDraft] = useState(null);   // a composed config waiting in the builder
+  const [dashDraft, setDashDraft] = useState(null);   // a dashboard New composed, waiting for its editor (DashboardEditor)
   // ...and what the composer said about it, shown above step 1 of the draft - the list's note was hidden the
   // moment the draft opened, so a "not confident" or a failed check never reached the owner
   const [draftNote, setDraftNote] = useState(null);
@@ -390,7 +395,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
       const value = /report=([^&]+)/.exec(window.location.hash || "")?.[1];
       if (value === "new") { setQ(""); setDraft(null); setBucket("new-report"); }
       else if (value === "draft" || value === "draft-workflow") { setQ(""); setBucket("draft"); }
-      else if (["workflows", "new-invoices", "new-agent"].includes(value)) { setQ(""); setDraft(null); setBucket(value); }
+      else if (["workflows", "new-invoices", "new-agent", ...DASH_BUCKETS].includes(value)) { setQ(""); setDraft(null); setBucket(value); }
       else if (/^\d+$/.test(value || "")) {
         setQ(""); setBucket(Number(value));
         // a failed run's Fix with AI pressed on its task (RunSteps): the workflow opens with the fix on its way
@@ -403,7 +408,8 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   }, []);
   // a draft New built (draftHandoff): taken when this view opens, or the moment it is handed if it is already open
   useEffect(() => {
-    const take = () => { const p = takeDraft(); if (p) onDraftRef.current(p.config, p.meta); };
+    // ...a dashboard's draft goes to its own editor, not the report builder
+    const take = () => { const p = takeDraft(); if (p) (p.kind === "dashboard" ? setDashDraft({ config: p.config, meta: p.meta || {} }) : onDraftRef.current(p.config, p.meta)); };
     take();
     return onDraftHanded(take);
   }, []);
@@ -454,13 +460,18 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   /* Reports and workflows use the same durable scheduler rows, but they are not the same
      product concept. The rail says which is which; selecting either still opens it directly. */
   const titleOf = (s) => parse(s.ConfigJson).title || s.Address || `report ${s.SourceId}`;
-  const reportSources = sources.filter((s) => !isWorkflowSource(s));
+  const reportSources = sources.filter((s) => !isWorkflowSource(s) && !isDashboardSource(s));
   const workflowSources = sources.filter(isWorkflowSource);
+  const dashboardSources = sources.filter(isDashboardSource);
   const railItems = [
     { section: "Reports", first: true },
     { key: "reports", label: "All reports", n: reportSources.length || null },
     ...reportSources.map((s) => ({ key: s.SourceId, label: titleOf(s) })),
     { key: "new-report", label: "+ New report" },
+    { section: "Dashboards" },
+    { key: "dashboards", label: "All dashboards", n: dashboardSources.length || null },
+    ...dashboardSources.map((s) => ({ key: s.SourceId, label: titleOf(s) })),
+    { key: "new-dashboard", label: DASH.new },
     { section: "Workflows" },
     { key: "workflows", label: "All workflows", n: workflowSources.length || null },
     ...workflowSources.map((s) => ({ key: s.SourceId, label: titleOf(s) })),
@@ -469,17 +480,20 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   // the canvas keeps its own place: a section, then one report (or a new one) open in it
   const bucketNow = browse ? (browseState.open ?? browseState.section ?? "reports") : bucket;
   const workflowOverview = bucketNow === "workflows";
-  const baseList = workflowOverview ? workflowSources : reportSources;
+  const dashOverview = bucketNow === "dashboards";
+  const baseList = workflowOverview ? workflowSources : dashOverview ? dashboardSources : reportSources;
   const list = (q ? sources : baseList).filter((s) => !q || titleOf(s).toLowerCase().includes(q.toLowerCase()));
   const openId = typeof bucketNow === "number" ? bucketNow : null;
-  const open = !q && (openId != null || ["new-report", "new-invoices", "new-agent", "draft"].includes(bucketNow));
+  const open = !q && (openId != null || ["new-report", "new-invoices", "new-agent", "draft", "new-dashboard", "draft-dashboard"].includes(bucketNow));
   const selectedSource = sources.find((s) => s.SourceId === openId);
   const starter = bucketNow === "new-invoices" ? { type: "zoho_monthly_invoices", title: "Monthly customer invoices", cron: "0 9 1 * *", customers: [] }
     : bucketNow === "new-agent" ? { type: "agent", access: "write", title: "", every_minutes: "" } : {};
   const selectedConfig = selectedSource ? parse(selectedSource.ConfigJson) : (draft || starter);
   const invoiceOpen = selectedConfig.type === "zoho_monthly_invoices";
   const workflowOpen = isWorkflowConfig(selectedConfig);
-  const backTo = workflowOpen ? "workflows" : "reports";
+  const dashOpen = selectedSource ? isDashboardSource(selectedSource)
+    : ["new-dashboard", "draft-dashboard"].includes(bucketNow) || (!!browse && browseState.section === "dashboards" && bucketNow === "draft");
+  const backTo = dashOpen ? "dashboards" : workflowOpen ? "workflows" : "reports";
 
   // one report open: the tab's rail moves, or the canvas's line does
   const openOne = (sid) => { setQ(""); if (browse) onBrowseState?.({ ...browseState, open: sid }); else setBucket(sid); };
@@ -541,7 +555,10 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     if (browse) onBrowseState?.({ section: "reports", open: "draft" }); else setBucket("draft");
   };
   const toInvoices = () => { setDraft(null); if (browse) onBrowseState?.({ section: "workflows", open: "new-invoices" }); else setBucket("new-invoices"); };
-  const wizard = (onBack, onSaved) => agentWorkflow
+  const wizard = (onBack, onSaved) => dashOpen
+    ? <DashboardEditor key={String(bucketNow) + (dashDraft ? "-draft" : "")} sourceId={openId} draft={openId == null ? dashDraft : null}
+        reload={load} onBack={() => { setDashDraft(null); onBack(); }} onSaved={(sid) => { setDashDraft(null); onSaved(sid); }} />
+    : agentWorkflow
     ? <WorkflowEditor key={String(bucketNow)} sourceId={openId} sources={sources} connectors={connectors} types={types} draft={draft}
         reload={load} onBack={onBack} onSaved={saved(onSaved)} note={wizardNote}
         lastRun={openId != null && lastRuns[openId] ? (more) => <LastRun r={lastRuns[openId]} sid={openId} flush {...more} /> : null}
@@ -569,28 +586,34 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     // a link names a number, not a shelf (#report=<id>, a failed run's Fix it): a workflow opens under Workflows, where it lives.
     // No shelf named (the sidebar, "Run a report or workflow") is the reports themselves: three chips over nothing was a page
     // with no list on it, one press short of what the door says
-    const section = openSource && isWorkflowSource(openSource) ? "workflows" : browseState.section ?? "reports";
+    const section = openSource && isWorkflowSource(openSource) ? "workflows" : openSource && isDashboardSource(openSource) ? "dashboards"
+      : browseState.section ?? "reports";
     const back = () => { setDraft(null); load(); pbs.load(); onBrowseState?.({ ...browseState, section, open: null }); };
     const pbSlug = pbOpen(browseState.open), pbBook = pbs.books.find((b) => b.slug === pbSlug);
-    const sectionRows = section === "workflows" ? workflowSources : section === "reports" ? reportSources : [];
+    const sectionRows = section === "workflows" ? workflowSources : section === "reports" ? reportSources : section === "dashboards" ? dashboardSources : [];
     // what Remove kept for this shelf: Restore puts it back for 30 days (recentlydeleted.py)
-    const binKinds = section === "workflows" ? ["workflow"] : section === "reports" ? ["report"] : null;
+    const binKinds = section === "workflows" ? ["workflow"] : section === "reports" ? ["report"] : section === "dashboards" ? ["dashboard"] : null;
     // a link to a report that has since been removed: the list, and why - never an empty editor saving to a missing id
     const missing = typeof browseState.open === "number" && !sources.some((x) => x.SourceId === browseState.open);
     return browse({
       title: "Reports", wide: true,
-      summary: `${plural(reportSources.length, "report")} · ${plural(workflowSources.length, "workflow")} · ${plural(pbs.books.length, "playbook")} · reports read and summarise, workflows write, playbooks say how a kind of job is done`,
-      sections: [{ key: "reports", label: "Reports", n: reportSources.length }, { key: "workflows", label: "Workflows", n: workflowSources.length },
+      summary: `${plural(reportSources.length, "report")} · ${plural(dashboardSources.length, "dashboard")} · ${plural(workflowSources.length, "workflow")} · ${plural(pbs.books.length, "playbook")} · reports read and summarise, dashboards show the numbers, workflows write, playbooks say how a kind of job is done`,
+      // DASHBOARDS BESIDE REPORTS (the owner, 2026-10-23): Reports, Dashboards, Workflows, Playbooks - and the + New chips in that order
+      sections: [{ key: "reports", label: "Reports", n: reportSources.length },
+        { key: "dashboards", label: placeName("dashboards").split(" → ").pop(), n: dashboardSources.length },
+        { key: "workflows", label: "Workflows", n: workflowSources.length },
         { key: "playbooks", label: "Playbooks", n: pbs.books.length },
         // both ways in, always - not the open shelf's only: a new workflow was one click into Workflows away (the owner, 2026-10-15:
         // "it should say new workflow and new report right away without clicking in"). "new-invoices" is reached from the new workflow
         // ...and the third (the owner, 2026-10-22: "no new playbook ui either??"): New playbook's own dialog, opened on its shelf
-        { key: "new-report", label: "+ New report" }, { key: "new-agent", label: "+ New workflow" }, { key: NEW_PB, label: "+ New playbook" }],
+        { key: "new-report", label: "+ New report" }, { key: "new-dashboard", label: DASH.new }, { key: "new-agent", label: "+ New workflow" },
+        { key: NEW_PB, label: "+ New playbook" }],
       section,
       onSection: (key) => {
-        setDraft(null);
+        setDraft(null); setDashDraft(null);
         if (key === NEW_PB) takePlaybookAsk();      // a blank one: words New handed and never landed are not this press's
         onBrowseState?.(key === "new-report" ? { section: "reports", open: "new-report" }
+          : key === "new-dashboard" ? { section: "dashboards", open: "new-dashboard" }
           : key === NEW_PB ? { section: "playbooks", open: null, newPb: Date.now() }
           : key === "new-invoices" || key === "new-agent" ? { section: "workflows", open: key } : { section: key, open: null });
       },
@@ -601,7 +624,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         {!!pbs.err && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#6b2733" }}>✗ {pbs.err}</Typography>}</Box> : null)
       : section && browseState.open == null ? (
         <Box sx={{ mt: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
-          <UndoLine kinds={["report", "workflow"]} onRestored={load} sx={{ mb: 0 }} />
+          <UndoLine kinds={["report", "workflow", "dashboard"]} onRestored={load} sx={{ mb: 0 }} />
           {!sectionRows.length && binKinds && <RecentlyDeleted kinds={binKinds} onRestored={load} sx={{ mt: 0 }} />}
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <Button size="small" variant="outlined" disableElevation onClick={syncNow} disabled={syncing}
@@ -610,8 +633,11 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
             </Button>
             {note && <Typography variant="body2" sx={{ fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
           </Box>
-          {section !== "workflows" && <Composer kind="report" onDraft={(config, meta) => {
+          {section === "reports" && <Composer kind="report" onDraft={(config, meta) => {
             onDraft(config, meta); onBrowseState?.({ section, open: "draft" });
+          }} />}
+          {section === "dashboards" && <Composer kind="dashboard" onDraft={(config, meta) => {
+            setDashDraft({ config, meta: meta || {} }); onBrowseState?.({ section, open: "draft" });
           }} />}
         </Box>
       ) : null,
@@ -628,9 +654,11 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
       onBack: back,
       openLabel: pbSlug != null ? (pbSlug === "new" ? "a new playbook being written (Reports - Playbooks)" : `the playbook "${pbBook?.title || pbSlug}" (Reports - Playbooks), its words open`)
         : browseState.open === "new-report" ? "a new report being set up (Reports)"
+        : section === "dashboards" && !openSource && browseState.open != null ? "a new dashboard being set up (Reports - Dashboards)"
+        : openSource && section === "dashboards" ? `the dashboard "${titleOf(openSource)}" (Reports - Dashboards), drawn with its buttons`
         : openSource ? (section === "workflows" ? `the workflow "${titleOf(openSource)}" (Workflows), its steps open`
           : `the report "${titleOf(openSource)}" (Reports), its editor open`) : "",
-      empty: section === "playbooks" ? (pbs.err || (pbs.loaded ? PB_EMPTY : "Reading the playbooks…")) : section === "workflows" ? "No workflows yet - + New workflow describes one and sets it up." : "No reports yet - + New report walks you through one.",
+      empty: section === "playbooks" ? (pbs.err || (pbs.loaded ? PB_EMPTY : "Reading the playbooks…")) : section === "dashboards" ? DASH.empty : section === "workflows" ? "No workflows yet - + New workflow describes one and sets it up." : "No reports yet - + New report walks you through one.",
       note: missing ? `That report (#${browseState.open}) is not here any more - these are the ones there are.` : "",
     });
   }
@@ -658,13 +686,14 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
           onClick={() => { setQ(""); setDraft(null); setBucket("new-agent"); }} sx={workflowOverview ? { background: GRADIENT } : {}}>New workflow</Button>
       </Box>
       {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
-      <UndoLine kinds={["report", "workflow"]} onRestored={load} />
-      {!workflowOverview && <Composer kind="report" onDraft={(config, meta) => { onDraft(config, meta); setBucket("draft"); }} />}
-      {!list.length && <Empty>{q ? nothingMatches(q, workflowOverview ? "Workflows" : "Reports") : workflowOverview
+      <UndoLine kinds={["report", "workflow", "dashboard"]} onRestored={load} />
+      {!workflowOverview && !dashOverview && <Composer kind="report" onDraft={(config, meta) => { onDraft(config, meta); setBucket("draft"); }} />}
+      {dashOverview && <Composer kind="dashboard" onDraft={(config, meta) => { setDashDraft({ config, meta: meta || {} }); setBucket("draft-dashboard"); }} />}
+      {!list.length && <Empty>{q ? nothingMatches(q, workflowOverview ? "Workflows" : "Reports") : dashOverview ? DASH.empty : workflowOverview
         ? "No workflows yet — New workflow describes one and sets it up."
         : "No reports yet — New report walks you through source, query, AI summary and schedule."}</Empty>}
       {list.map((s) => row(s))}
-      {!q && <RecentlyDeleted kinds={[workflowOverview ? "workflow" : "report"]} onRestored={load} />}
+      {!q && <RecentlyDeleted kinds={[workflowOverview ? "workflow" : dashOverview ? "dashboard" : "report"]} onRestored={load} />}
       </>)}
     </SideRail>
   );

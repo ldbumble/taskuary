@@ -1,0 +1,150 @@
+/* THE DASHBOARD'S ONE PALETTE (docs/notes/dashboards.md). Six categorical slots in a fixed order, validated with the dataviz
+   skill's checker against this surface: light worst adjacent CVD dE 9.2, normal 17.2; dark 9.1 / 15.4 - slot 4 is under 3:1 on
+   the light paper, so every chart keeps its legend and its table view. Marks wear the slots; text never does. Chrome is the
+   Beacon paper and ink. Dark is chosen step by step, not flipped - it waits on [data-theme="dark"], which the app does not set yet. */
+.tq-dash {
+  --d-surface: #fffdfb; --d-plane: #f6f4f1; --d-ink: #262521; --d-ink2: #4d4a43; --d-muted: #6e685f;
+  --d-grid: #ece7df; --d-axis: #d3ccc0; --d-border: #e1dcd5; --d-wash: rgba(85, 105, 122, .07); --d-focus: #55697a;
+  --d-s1: #3f77b3; --d-s2: #c8743a; --d-s3: #2f9e7a; --d-s4: #c19a2e; --d-s5: #b06c9e; --d-s6: #6a8f3c; --d-other: #b3ab9e;
+  --d-track: #dfe7f0; --d-up: #2f6b34; --d-down: #8a3646;
+  container-type: inline-size; display: flex; flex-direction: column; gap: 12px; min-height: 0; color: var(--d-ink);
+  font-size: 13px;
+}
+:root[data-theme="dark"] .tq-dash {
+  --d-surface: #1c1b19; --d-plane: #121110; --d-ink: #f0eee9; --d-ink2: #c9c5bb; --d-muted: #8f897e;
+  --d-grid: #2b2a27; --d-axis: #3a3935; --d-border: rgba(255, 255, 255, .1); --d-wash: rgba(255, 255, 255, .06); --d-focus: #8fb0d6;
+  --d-s1: #4f8acb; --d-s2: #cf7e44; --d-s3: #36a882; --d-s4: #b08a22; --d-s5: #c07aae; --d-s6: #78a046; --d-other: #5d5a54;
+  --d-track: #24364a; --d-up: #5fb865; --d-down: #e0838f;
+}
+
+/* one row of filters, above everything it scopes (never inside a card) */
+.tq-dash-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tq-dash-seg { display: inline-flex; border: 1px solid var(--d-border); border-radius: 8px; overflow: hidden; background: var(--d-surface); }
+.tq-dash-seg button { all: unset; cursor: pointer; padding: 5px 11px; font-size: 12px; color: var(--d-ink2); }
+.tq-dash-seg button + button { border-left: 1px solid var(--d-border); }
+.tq-dash-seg button:hover { background: var(--d-wash); }
+.tq-dash-seg button[aria-pressed="true"] { background: var(--d-ink); color: var(--d-surface); font-weight: 600; }
+.tq-dash-seg button:focus-visible, .tq-dash-press:focus-visible { outline: 2px solid var(--d-focus); outline-offset: 1px; }
+.tq-dash-select { font: inherit; font-size: 12px; padding: 5px 8px; border: 1px solid var(--d-border); border-radius: 8px;
+  background: var(--d-surface); color: var(--d-ink); max-width: 220px; }
+.tq-dash-bar label { font-size: 12px; color: var(--d-muted); display: inline-flex; align-items: center; gap: 6px; }
+
+/* the grid: four columns, two on a tablet, one on a phone (the container, not the window: the canvas is narrower than the screen) */
+.tq-dash-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-content: start; }
+.tq-dash-grid > .w1 { grid-column: span 1; } .tq-dash-grid > .w2 { grid-column: span 2; }
+.tq-dash-grid > .w3 { grid-column: span 3; } .tq-dash-grid > .w4 { grid-column: span 4; }
+@container (max-width: 860px) {
+  .tq-dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tq-dash-grid > .w3, .tq-dash-grid > .w4 { grid-column: span 2; }
+}
+@container (max-width: 520px) {
+  /* a phone: the numbers two abreast, every chart and list the whole width */
+  .tq-dash-grid { gap: 8px; }
+  .tq-dash-card { padding: 10px 11px; }
+  .tq-dash-value { font-size: 26px; }
+}
+
+.tq-dash-card { background: var(--d-surface); border: 1px solid var(--d-border); border-radius: 10px; padding: 12px 14px;
+  min-width: 0; display: flex; flex-direction: column; gap: 8px; position: relative; transition: opacity .2s; }
+.tq-dash-card.stale { opacity: .55; }
+.tq-dash-h { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.tq-dash-h h3 { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--d-ink2); flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-dash-flip { all: unset; cursor: pointer; font-size: 11px; color: var(--d-muted); padding: 2px 4px; border-radius: 4px; }
+.tq-dash-flip:hover { color: var(--d-ink); background: var(--d-wash); }
+.tq-dash-flip:focus-visible { outline: 2px solid var(--d-focus); }
+.tq-dash-none { color: var(--d-muted); font-size: 12px; padding: 18px 0; text-align: center; }
+
+/* the stat tile: label, value, delta vs the period before, a sparkline in the de-emphasis ink with today in the accent */
+.tq-dash-stat { cursor: pointer; }
+.tq-dash-stat:hover { border-color: var(--d-axis); }
+.tq-dash-value { font-size: 30px; font-weight: 600; line-height: 1.05; letter-spacing: -.01em; color: var(--d-ink); }
+.tq-dash-delta { font-size: 12px; color: var(--d-muted); display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.tq-dash-delta b { font-weight: 600; }
+.tq-dash-delta .up { color: var(--d-up); } .tq-dash-delta .down { color: var(--d-down); }
+.tq-dash-spark { display: block; width: 100%; height: 30px; }
+
+/* progress toward a target: the track is a lighter step of the fill's own hue */
+.tq-dash-track { height: 8px; border-radius: 4px; background: var(--d-track); overflow: hidden; }
+.tq-dash-fill { height: 100%; background: var(--d-s1); border-radius: 0 4px 4px 0; }
+
+/* ranked bars, in HTML: label | bar | value. 14px bars, rounded at the data end, square at the baseline */
+.tq-dash-bars { display: grid; grid-template-columns: minmax(70px, max-content) minmax(0, 1fr) auto; gap: 6px 10px; align-items: center; }
+.tq-dash-bars .lbl { font-size: 12px; color: var(--d-ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+.tq-dash-bars .val { font-size: 12px; color: var(--d-ink); font-variant-numeric: tabular-nums; text-align: right; }
+.tq-dash-press { all: unset; cursor: pointer; display: block; padding: 3px 0; border-radius: 3px; }
+.tq-dash-press:hover .bar, .tq-dash-press.on .bar { filter: brightness(1.12) saturate(1.1); }
+.tq-dash-bars .bar { height: 14px; border-radius: 0 4px 4px 0; background: var(--d-s1); min-width: 2px; }
+
+/* columns (a stacked bar over days or categories): 2px surface gaps between segments and between columns, <= 24px wide */
+.tq-dash-plot { display: flex; gap: 6px; min-width: 0; }
+.tq-dash-plotbody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.tq-dash-yax { position: relative; width: 26px; height: 150px; flex: none; font-size: 11px; color: var(--d-muted); font-variant-numeric: tabular-nums; }
+.tq-dash-yax span { position: absolute; right: 0; transform: translateY(-50%); }
+.tq-dash-cols { display: flex; align-items: flex-end; gap: 2px; height: 150px; border-bottom: 1px solid var(--d-axis);
+  background-image: linear-gradient(var(--d-grid) 1px, transparent 1px); background-size: 100% 75px; }
+.tq-dash-col { flex: 1 1 0; min-width: 0; height: 100%; display: flex; flex-direction: column-reverse; align-items: center; cursor: pointer;
+  border-radius: 2px; }
+.tq-dash-col:hover, .tq-dash-col:focus-visible { background: var(--d-wash); outline: none; }
+.tq-dash-col .seg { width: 100%; max-width: 24px; flex: none; }
+.tq-dash-col .seg + .seg { border-bottom: 2px solid var(--d-surface); box-sizing: content-box; }
+.tq-dash-col .seg:last-child { border-radius: 4px 4px 0 0; }
+.tq-dash-xlab { display: flex; justify-content: space-between; font-size: 11px; color: var(--d-muted); font-variant-numeric: tabular-nums; }
+.tq-dash-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--d-ink2); }
+.tq-dash-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+/* line/area in SVG: 2px line, a hairline grid, an end dot with a surface ring, a crosshair that snaps to the day */
+.tq-dash-svg { display: block; width: 100%; overflow: visible; }
+.tq-dash-svg text { font-size: 11px; fill: var(--d-muted); font-variant-numeric: tabular-nums; }
+.tq-dash-svg .grid { stroke: var(--d-grid); stroke-width: 1; }
+.tq-dash-svg .axis { stroke: var(--d-axis); stroke-width: 1; }
+.tq-dash-svg .ln { fill: none; stroke: var(--d-s1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.tq-dash-svg .ar { fill: var(--d-s1); fill-opacity: .1; stroke: none; }
+.tq-dash-svg .dot { fill: var(--d-s1); stroke: var(--d-surface); stroke-width: 2; }
+.tq-dash-svg .xh { stroke: var(--d-axis); stroke-width: 1; }
+.tq-dash-svg .end { fill: var(--d-ink); font-weight: 600; }
+.tq-dash-spark .ln { fill: none; stroke: var(--d-muted); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.tq-dash-spark .now { fill: var(--d-s1); }
+
+/* the tooltip: values lead, the label follows; a short line key, never a box */
+.tq-dash-tip { position: absolute; z-index: 3; pointer-events: none; background: var(--d-surface); border: 1px solid var(--d-border);
+  border-radius: 8px; padding: 6px 9px; box-shadow: 0 4px 14px rgba(38, 37, 33, .12); font-size: 12px; min-width: 110px; white-space: nowrap; }
+.tq-dash-tip .k { color: var(--d-muted); font-size: 11px; margin-bottom: 3px; }
+.tq-dash-tip .r { display: flex; align-items: center; gap: 6px; }
+.tq-dash-tip .r b { font-weight: 600; color: var(--d-ink); font-variant-numeric: tabular-nums; }
+.tq-dash-tip .r span { color: var(--d-ink2); }
+.tq-dash-tip .r i { width: 10px; height: 2px; border-radius: 1px; display: inline-block; }
+
+/* tables and lists: tabular figures, a row that is an item opens it */
+.tq-dash-tablewrap { overflow: auto; max-height: 320px; margin: 0 -4px; }
+.tq-dash-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.tq-dash-table th { text-align: left; font-weight: 600; color: var(--d-muted); border-bottom: 1px solid var(--d-border); padding: 4px;
+  position: sticky; top: 0; background: var(--d-surface); white-space: nowrap; }
+.tq-dash-table th button { all: unset; cursor: pointer; }
+.tq-dash-table th button:focus-visible { outline: 2px solid var(--d-focus); }
+.tq-dash-table td { padding: 5px 4px; border-bottom: 1px solid var(--d-grid); color: var(--d-ink); font-variant-numeric: tabular-nums;
+  max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-dash-table tr.go { cursor: pointer; } .tq-dash-table tr.go:hover td { background: var(--d-wash); }
+.tq-dash-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.tq-dash-list li { display: flex; gap: 10px; align-items: baseline; padding: 6px 4px; border-bottom: 1px solid var(--d-grid); min-width: 0; }
+.tq-dash-list li:last-child { border-bottom: 0; }
+.tq-dash-list li.go { cursor: pointer; border-radius: 4px; } .tq-dash-list li.go:hover { background: var(--d-wash); }
+.tq-dash-list li:focus-visible { outline: 2px solid var(--d-focus); }
+.tq-dash-list .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--d-ink); }
+.tq-dash-list .m { color: var(--d-muted); font-size: 11.5px; white-space: nowrap; }
+
+/* the drill: the rows behind a pressed bar, a full-width card at the top of the grid */
+.tq-dash-drill { border-color: var(--d-axis); }
+
+/* on the canvas the dashboard takes the chat body's height (a size container, assistantView.css) less its card's own heading and
+   buttons, and scrolls inside itself - the card never runs off under the dock */
+.tq-dash-canvas { margin-top: 8px; overflow: auto; padding: 10px; border-radius: 10px; background: #f3f0eb;
+  flex: 1 1 auto; min-height: 280px; }
+/* ...and the CARD is the pane: the chat body's whole height, as a task view with a live agent takes it (CanvasItem.CANVAS_ITEM_HEIGHT,
+   the same 100cqh against the same size container), its heading and buttons at the ends and the dashboard taking what is between */
+.tq-card:has(> .tq-dash-canvas) { display: flex; flex-direction: column; box-sizing: border-box;
+  height: max(460px, calc(100cqh + 14px - var(--tq-dash-gap, 2px))); margin-top: 0; margin-bottom: 0; }
+:root[data-theme="dark"] .tq-dash-canvas { background: #121110; }
+
+@media (prefers-reduced-motion: reduce) { .tq-dash-card { transition: none; } }
+@media (forced-colors: active) { .tq-dash-bars .bar, .tq-dash-col .seg, .tq-dash-fill { forced-color-adjust: none; border: 1px solid CanvasText; } }

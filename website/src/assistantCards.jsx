@@ -15,6 +15,7 @@ import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
 import EventIcon from "@mui/icons-material/Event";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import OutlinedFlagIcon from "@mui/icons-material/OutlinedFlag";
+import InsertChartOutlinedIcon from "@mui/icons-material/InsertChartOutlined";
 import api from "./api.js";
 import { gistFor } from "./fyiRow.js";
 import { canUnsubscribe, unsubscribeFrom } from "./unsubscribe.js";
@@ -22,7 +23,8 @@ import { runOperation } from "./taskOps.js";
 import { ChannelIcon, DraftField, TaskuaryMark, channelColor, cleanText, fmtDateTime, fmtTime12 } from "./ui.jsx";
 import { openAppLink } from "./appLinks.js";
 import { CardErr, failOf } from "./failure.jsx";
-import { place } from "./words.js";
+import { DASH, place } from "./words.js";
+import Dashboard from "./dashboard/Dashboard.jsx";
 import { Md, looksMd } from "./md.jsx";
 import { jsonRows, nameAndRest } from "./reportRows.js";
 import DigestText from "./DigestText.jsx";
@@ -62,6 +64,8 @@ export function SourceMark({ item, size = 14 }) {
   if (item.kind === "meeting") return <EventIcon sx={{ fontSize: size, color: "#55697a" }} />;
   // a goal has no source: it wears the project mark (spec 2026-10-12)
   if (String(item.kind || "").startsWith("goal")) return <OutlinedFlagIcon sx={{ fontSize: size, color: "#55697a" }} />;
+  // a dashboard's row wears a chart, not the report's page (dashboards.py)
+  if (item.dashboard) return <InsertChartOutlinedIcon sx={{ fontSize: size, color: "#55697a" }} />;
   // an agent on it is the row's STATE (its chip says so), not where it came from: an Advisor idea, a report or a
   // mail an agent picked up keeps its own mark (the owner, 2026-09-25: "it should be advisor as that's what it
   // comes from"). The terminal is left for work with no source at all.
@@ -80,6 +84,7 @@ export function sourceColor(item) {
   if (!item) return "#a9a294";
   if (item.kind === "meeting") return "#55697a";
   if (String(item.kind || "").startsWith("goal")) return "#55697a";
+  if (item.dashboard) return "#55697a";
   if ((item.kind === "agent" || item.kind === "agentdone") && !item.channel) return "#41525f";
   if (item.kind === "setup" || item.kind === "brief" || item.kind === "walk" || (item.kind === "idea" && !item.channel)) return ASSISTANT.solid;
   if (item.kind === "fyis" && !item.channel) return ASSISTANT.solid;
@@ -819,6 +824,29 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone }) {
           {/* the report itself, one press away - the card was the only place it showed and it had no way back to it */}
           {card.source_id != null && <Button size="small" component="a" href={`#report=${card.source_id}`} sx={faint}>Edit this report ↗</Button>}
         </>} />
+    </CardShell>
+  );
+}
+
+// A DASHBOARD landed: it is LOOKED AT, so it takes the canvas - the filter row, the tiles, the charts and the lists at the canvas's
+// height, scrolling inside itself - with the day it ran and when its rows were read, like a report card's heading (dashboards.py)
+export function DashboardCard({ card, onDone }) {
+  const [got, setGot] = useState(null), [err, setErr] = useState("");
+  useEffect(() => {
+    let live = true;
+    setErr("");
+    api.get(`/api/dashboards/${card.source_id}`).then(({ data }) => { if (live) setGot(data); }).catch((e) => { if (live) setErr(failOf(e)); });
+    return () => { live = false; };
+  }, [card.source_id, card.mid]);
+  const [name] = nameAndRest(card.title, card.who), day = dayLabel(card.when), at = got?.data?.at ? fmtTime12(got.data.at) : "";
+  return (
+    <CardShell card={card} kicker="dashboard" title={card.title}
+      lead={<div className="tq-card-lead" data-tq-report-day={day || undefined}><b>{name}</b>{day && ` · ${day}`}{at && ` · ${DASH.updated} ${at}`}</div>}>
+      <div className="tq-dash-canvas" data-tq-dash-canvas="">
+        {got?.data ? <Dashboard spec={got.config} data={got.data} /> : <div className="tq-card-excerpt">{err || (got ? DASH.never : DASH.loading)}</div>}
+      </div>
+      <Foot close={card} onDone={onDone}
+        where={card.source_id != null && <Button size="small" component="a" href={`#report=${card.source_id}`} sx={faint}>{DASH.edit} ↗</Button>} />
     </CardShell>
   );
 }

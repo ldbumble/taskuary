@@ -9,6 +9,8 @@ export const place = (id) => PLACES[id] || { name: String(id || ""), href: "" };
 export const placeName = (id) => place(id).name;
 export const placeHref = (id) => place(id).href;
 export const JARGON = words.jargon;
+// a dashboard's doors, filters and page buttons (dashboards.py, src/dashboard/)
+export const DASH = words.dashboard;
 // one name per thing the owner is shown, and the surfaces that are gone (words.json's nouns and gone)
 export const NOUNS = Object.fromEntries(Object.entries(words.nouns).filter(([k]) => !k.startsWith("_")));
 export const noun = (id) => NOUNS[id] || String(id || "");

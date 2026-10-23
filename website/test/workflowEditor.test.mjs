@@ -49,7 +49,7 @@ test("Reports opens an agent workflow on its own page, with one way in to a new 
 
 test("Reports offers New report and New workflow together, whichever list is open", () => {
   const view = read("ReportsView.jsx");
-  assert.match(view, /\{ key: "new-report", label: "\+ New report" \}, \{ key: "new-agent", label: "\+ New workflow" \}, \{ key: NEW_PB, label: "\+ New playbook" \}\]/);
+  assert.match(view, /\{ key: "new-report", label: "\+ New report" \}, \{ key: "new-dashboard", label: DASH\.new \}, \{ key: "new-agent", label: "\+ New workflow" \},\s*\{ key: NEW_PB, label: "\+ New playbook" \}\]/);
   assert.doesNotMatch(view, /section === "workflows" \? \{ key: "new-agent"/);
   assert.ok(view.includes(">New report</Button>") && view.includes(">New workflow</Button>"));
 });

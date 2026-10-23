@@ -2883,7 +2883,7 @@ def card_for(item: dict) -> dict:
                                        # an FYI from a list that names its own way off it: the card's Unsubscribe (unsubscribe.py)
                                        'unsub',
                                        'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'members', 'aliases', 'unread', 'deferred', 'actionable', 'paused', 'closed',
-                                       'brief_today')}
+                                       'brief_today')} | ({'dashboard': True} if item.get('dashboard') else {})   # a dashboard's row draws the dashboard
 
 
 def move_on(store, key: str, actor: str = 'owner') -> dict:

@@ -7,7 +7,7 @@ except the ones in PLANNED, which fail loudly so a misconfig is visible on the t
 of silently absent. Building a planned type = one ~15-line function + its REGISTRY entry, and
 taking it out of PLANNED - PRs welcome.
 """
-import io, json, os, re, sqlite3, threading, time
+import contextlib, contextvars, io, json, os, re, sqlite3, threading, time
 from datetime import datetime, timedelta
 from loguru import logger
 from . import spawn
@@ -40,6 +40,19 @@ def row_limit(cfg):
     return (max(1, int(n)), True) if n else (MAX_ROWS, False)
 
 
+# A DASHBOARD keeps the rows, not a summary of them: the 20K body cap is the AI pass's budget, and cut at it a chart drew a
+# fifth of the month. Inside wide_rows() the body is every row the limit allowed (dashboards.collect).
+_WIDE = contextvars.ContextVar('report_wide_rows', default=False)
+WIDE_CHARS = 2_000_000
+
+
+@contextlib.contextmanager
+def wide_rows():
+    tok = _WIDE.set(True)
+    try: yield
+    finally: _WIDE.reset(tok)
+
+
 def rows_out(rows, limit, unit='rows', mine=True):
     """(headline, body) from executor rows, SAYING SO when the result was cut. A silent cap
     made the AI describe 20 rows of a TOP 500 query as 'all of them' - fetch one extra row
@@ -51,7 +64,7 @@ def rows_out(rows, limit, unit='rows', mine=True):
     w, _, rest = unit.partition(' ')
     one = (w[:-1] if len(rows) == 1 and w.endswith('s') and not w.endswith(('ss', 'ings', 'ies')) else w) + (f' {rest}' if rest else '')
     head = f'{len(rows)} {one}' + (f' ({why})' if more else '')
-    return head, '\n'.join(json.dumps(r, default=str) for r in rows)[:BODY_CHARS]
+    return head, '\n'.join(json.dumps(r, default=str) for r in rows)[:WIDE_CHARS if _WIDE.get() else BODY_CHARS]
 
 
 def ro_sqlite(path: str):
@@ -809,6 +822,8 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'metric': run_metric, 'metric_check': run_metric_check,
             'rss': run_rss, 'digest': run_digest, 'evening_inbox': run_evening_inbox,
             'automate': run_automate, 'assistant': run_assistant, 'taskuary': run_taskuary,
+            # a dashboard's own reads: Taskuary's tables as rows, and the dashboard itself (its sources, run and kept - dashboards.py)
+            'taskuary_data': _lazy('dashboards', 'run_taskuary_data'), 'dashboard': lambda cfg: _dashboard_preview(cfg),
             'calendar': _calendar,       # the owner's busy times, off the Outlook (and Google) cards - read-only
             'agent': run_agent,          # the AI itself: a saved skill or a prompt, run by a CLI agent on the schedule
             # files & sheets people already keep: a Google Sheet, a SharePoint list, a file in a library
@@ -829,6 +844,16 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'sftp_list': _lazy('files', 'run_sftp_list'), 'sftp_get': _lazy('files', 'run_sftp_get'),
             'sftp_put': _lazy('files', 'run_sftp_put'), 'sftp_move': _lazy('files', 'run_sftp_move'),
             **{n: _planned(n) for n in PLANNED}}
+
+
+def _dashboard_preview(cfg):
+    """{"sources": [...], "components": [...]} - a dashboard read as a report would read it: its tiles, then its rows per source."""
+    from . import dashboards
+    data = dashboards.collect(cfg['store'], cfg)
+    tiles = dashboards.headline(cfg, data)
+    head = ' · '.join(f'{t} {v}' for t, v in tiles[:3]) or f"{sum(len(d['rows']) for d in data['sources'].values())} rows"
+    return head, '\n\n'.join(f"=== {d['label']} ({d['head']}) ===\n" + '\n'.join(json.dumps(r, default=str) for r in d['rows'][:50])
+                               for d in data['sources'].values())[:BODY_CHARS]
 
 
 def executor_for(type_name):
@@ -1098,7 +1123,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
 # Report types whose data IS the store - they reach no further than the local database, so they
 # can neither be slow nor unreachable. Everything else dials out: a SQL box, an API, a share.
 # run_due_reports runs these FIRST for that reason, so keep the two uses of this list together.
-STORE_BACKED = ('taskuary', 'digest', 'evening_inbox', 'automate', 'assistant', 'agent', 'calendar', 'kb_search', 'kb_reindex',
+STORE_BACKED = ('taskuary', 'taskuary_data', 'dashboard', 'digest', 'evening_inbox', 'automate', 'assistant', 'agent', 'calendar', 'kb_search', 'kb_reindex',
                 'metric', 'metric_check', 'handbook_search', 'handbook_write', 'handbook_vote',
                 'hub_search', 'hub_write', 'hub_vote', 'hub_comment')
 
@@ -1706,6 +1731,11 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
                     'summary': f"running its steps as {out['ref']} ({trigger})", 'task_id': out['task_id']}
         return {'message_id': None, 'subject': f"{title} → {out['ref']} ({who} agent, {trigger})", 'files': 0, 'said': 0,
                 'summary': f"handed to the {who} agent as {out['ref']} ({trigger})", 'task_id': out['task_id']}
+    # A DASHBOARD is looked at, not read: its sources re-run and its rows are kept, one row under Reports says it is fresh -
+    # no AI, no triage, no send (dashboards.py)
+    if cfg.get('type') == 'dashboard':
+        from . import dashboards
+        return dashboards.file_run(store, src, cfg, trigger)
     logger.debug(f'report run: {title} ({cfg.get("type", "rest")}, ai={bool(cfg.get("ai_prompt"))})')
     if cfg.get('type') == 'zoho_monthly_invoices':
         from .invoice_workflow import run_report

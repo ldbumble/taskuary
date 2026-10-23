@@ -44,9 +44,12 @@ class AfterSendTests(_Rail):
         line = advisor.sent_line(s, 'task', t)
         self.assertIn('A REPLY WAS ALREADY SENT', line); self.assertIn('Erin Blake', line); self.assertIn('the numbers stand', line)
         self.assertIn('NOTHING HAS COME IN SINCE IT WENT', line)
-        llm = brain_saying({'verb': None, 'line': '', 'evidence': []})
-        advisor.notice(s, advisor.SHOWN, 'task', t, wait=True, llm=llm)
-        self.assertIn('A REPLY WAS ALREADY SENT', llm.calls[0][1], 'the model is given the send as evidence')
+        # the close-out with nothing since is the rule's: Mark done, lit at once and said by nothing (the design, phase A)
+        from unittest import mock
+        with mock.patch.object(advisor, 'notice'): d = advisor.decide(s, f'task:{t}')
+        self.assertEqual((d['verb'], d['line'], d['by']), ('close', '', 'rule'))
+        p = advisor._prompt(s, advisor.SHOWN, advisor._item(s, 'task', t) or {}, [{'verb': 'reply', 'label': 'Reply'}], 1, 'task', t)
+        self.assertIn('A REPLY WAS ALREADY SENT', p, 'where the model is asked, it is given the send as evidence')
         # ...and a word from her after it is the evidence that something is owed again - the model reads which
         s.add_message({'ConversationId': f'c{t}', 'Channel': 'email', 'Subject': 'Re: August close', 'FromEmail': 'erin@northwind.example',
                        'FromName': 'Erin Blake', 'SentAt': _at(0), 'BodyText': 'And September?', 'Status': 'routed', 'TaskId': t})
@@ -62,7 +65,8 @@ class AfterSendTests(_Rail):
 
 
 def test_every_reason_for_no_line_is_a_sentence_with_one_move():
-    """advisor.status answers {none: why}; the strip says each as words.json's sentence and lights its move - none goes blank."""
+    """advisor.status answers {none: why} only where nothing is lit for a reason with a way out (no AI): it is words.json's sentence
+    and lights its move - every other silence is the rule's lit button (the owner, 2026-10-23)."""
     for why in advisor.REASONS:
         said = words.ADVICE_NONE.get(why)
         assert said and said['line'].strip() and said['move'] in ('next', 'ai'), why

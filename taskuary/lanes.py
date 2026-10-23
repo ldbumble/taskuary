@@ -99,6 +99,16 @@ def on_you(item: dict, level: str = None) -> bool:
     return (level or level_of(item)) in ON_YOU_SECTIONS and (LANE.get(item.get('lane')) or {}).get('on_you', True)
 
 
+def census(items) -> dict:
+    """ONE COUNT FOR EVERY SURFACE (the design, phase A): "N on you", the end of the walk and the rail's Tasks heading each counted their
+    own way, and 12 sat beside 13 (the 2026-10-22 UX walk). {'tasks': rows drawn under Tasks, 'on_you': those that are the owner's move,
+    'to_read': rows to read} - lanes.js census is the same rule."""
+    live = [i for i in items or [] if not i.get('settling')]
+    lv = [(i, level_of(i)) for i in live]
+    return {'tasks': sum(1 for _i, l in lv if l == 'task'), 'on_you': sum(1 for i, l in lv if on_you(i, l)),
+            'to_read': sum(1 for i, l in lv if to_read(i, l))}
+
+
 def to_read(item: dict, level: str = None) -> bool:
     return not item.get('settling') and (level or level_of(item)) in TO_READ_SECTIONS
 

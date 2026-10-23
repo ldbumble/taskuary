@@ -2181,20 +2181,6 @@ def pages(text: str, limit: int = PAGE_CHARS, head: int = 0) -> list:
     return out
 
 
-# what the first word does, said before it is pressed - the desktop card's "then" line. Keyed on the
-# vocabulary's verbs (concierge.CHIPS), so a word the table does not name simply says nothing.
-THEN = {'approve': f"sends the draft above, in your name - the task stays open until you {buttons.label('close')}.",
-        'answer_agent': 'goes straight to the agent; it picks up where it stopped.',
-        'reply': 'writes a draft for you to approve here - nothing is sent.',
-        'regular_agent': 'hands it to an agent - you can change which one before it starts.',
-        'coding_agent': 'starts a coding agent on it; it comes back here when it stops.',
-        'mine': 'puts it on your own list - no agent starts.',
-        'stop_agent': 'saves what the agent did and stops it; the task stays open.',
-        'close': 'ends the task - it stops coming back.'}
-# an action card's Send is "Run it": it runs what the card shows, it sends no mail
-THEN_KIND = {('approve', 'action'): 'runs what the card above shows, and only that.'}
-
-
 # words that put a thing DOWN rather than do it: never the card's verb while a real one is offered
 _DOWN = ('close', 'not_ours', 'not_ours_sender', 'block_sender', 'done')
 
@@ -2218,13 +2204,29 @@ def stranger_held(store, item: dict | None) -> bool:
     except Exception: return False
 
 
-def primary(out: dict) -> dict | None:
-    """The card's verb: the first word that DOES the thing - a reply with no draft yet leads with
-    drafting it, not with closing the task (the vocabulary lists close first for a waiting draft).
+def decision(store, item: dict | None) -> dict:
+    """THE ADVISOR'S ONE DECISION for the item on this card (advisor.decide) - the button the desk lights and the line its strip says, so
+    the phone reads the same move (the design, phase A: Send led here on a draft the desk said not to send). {} with nothing to read."""
+    key = (item or {}).get('key')
+    if store is None or not key: return {}
+    from . import advisor
+    try: return advisor.decide(store, key, preread=False) or {}
+    except Exception as e:
+        logger.debug(f'the phone could not read the Advisor for {key}: {e}'); return {}
+
+
+def primary(out: dict, said: dict = None) -> dict | None:
+    """The card's verb: THE ADVISOR'S, when it lit one of the chips here (`said`, decision()) - the same button as the desk - and, only
+    while it has nothing, the fixed rule: the first word that DOES the thing - a reply with no draft yet leads with drafting it, not with
+    closing the task (the vocabulary lists close first for a waiting draft).
     ...and the move's own verb where the card names one: "who should take it?" is answered by handing it over,
-    never by a reply (the desktop's button there is Hand to agent, 2026-09-28)."""
+    never by a reply (the desktop's button there is Hand to agent, 2026-09-28). {'verb': 'next'} when the Advisor's move is Next."""
     chips = [c for c in (out.get('chips') or []) if isinstance(c, dict) and c.get('verb') and c.get('verb') != 'next']
     it = out.get('item') or {}
+    ours = bool(said) and said.get('key') == it.get('key')
+    if ours and said.get('verb') == 'next': return {'verb': 'next', 'label': said.get('label') or buttons.label('next')}
+    hit = next((c for c in chips if c['verb'] == said.get('verb')), None) if ours and said.get('verb') else None
+    if hit: return hit
     # ...but never on a stranger's held mail: handing a prompt from an unknown address to an agent is not the first thing to do (F8)
     if it.get('hold'):
         mine = [c for c in chips if c['verb'] not in _HAND]
@@ -2239,22 +2241,13 @@ def primary(out: dict) -> dict | None:
     return next((c for c in chips if c['verb'] not in _DOWN), chips[0] if chips else None)
 
 
-def then_line(out: dict, store=None) -> str:
-    """"Send the reply: sends the draft above, in your name." - only on a card that shows what it is about."""
-    c = next((x for x in out.get('chips') or [] if isinstance(x, dict) and out.get('first') and x.get('verb') == out['first']), None) or primary(out)
-    # ...and only under a CARD: under the model's own answer ("Yes to what?") it read as a hint about nothing on screen (F12)
-    if store is None or not c or not out.get('item') or agent_answers(out.get('item')) or out.get('proposal'): return ''
-    if out['item'].get('kind') in _LEADS_WITH_NEXT: return ''        # nothing to decide: no verb leads, so none is explained (A8, A9)
-    if out.get('lead_verb') == 'try_again': return f"{buttons.label('try_again')}: starts the agent again from where it stopped."
-    if out.get('lead_verb') == 'close': return f"{buttons.label('close')}: {THEN['close']}"
-    if out['item'].get('hold') and out['item'].get('kind') not in ('review', 'action', 'agent'):
-        return f"{TRUST}: you vouch for this sender - then {buttons.label('regular_agent')} is offered. Nothing starts by itself."
+def advice_line(out: dict, said: dict) -> str:
+    """The Advisor's line, as the desk's strip says it - a fact the card does not show, or nothing. The "then" line that explained the
+    first word ("Send: sends the draft above, in your name...") went (the design, phase A: buttons do the talking, the owner 2026-10-22)
+    - and only under a CARD: under the model's own answer ("Yes to what?") it read as a hint about nothing on screen (F12)."""
     it = out.get('item') or {}
-    if c['verb'] == 'approve' and str(it.get('channel') or '').lower() == 'teams' and not it.get('closeout'): return ''   # it does not send (F20)
-    said = ((it['closeout'] + (', then posts the reply above as its comment.' if it.get('rides') else '.'))
-            if c['verb'] == 'approve' and it.get('closeout')
-            else THEN_KIND.get((c['verb'], it.get('kind'))) or THEN.get(c['verb']))
-    return f"{c.get('label')}: {said}" if said else ''
+    if not it or out.get('proposal') or agent_answers(it) or (said or {}).get('key') != it.get('key'): return ''
+    return str((said or {}).get('line') or '').strip()
 
 
 def lead_line(store, item: dict | None, say: str) -> str:
@@ -2713,6 +2706,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     trusting = bool(held_on and str(held_on.get('tid') or '').isdigit() and held_on.get('kind') not in ('review', 'action', 'agent'))
     if held_on: out = _recast(out, drop=set(_HAND))
     out, leads = _after_the_run(store, out, item)
+    said = decision(store, item) if item else {}             # the Advisor's one decision: the desk's lit button and line, here too
     say = _TASK_LINK.sub(r'\1', str(out.get('say') or '')).strip()
     mark = funnel.mark_for(item)
     if say and mark: say = f'{mark} {say}'
@@ -2797,9 +2791,11 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         nxt = [w for w in words if w in next_words]
         rest = [w for w in words if w not in nxt]
         # ...the button a typed act asked for, when one was brought up for it (A6), else the card's own verb
-        lead_word = next((c['label'] for c in out.get('chips') or [] if isinstance(c, dict) and out.get('first') and c.get('verb') == out['first']), None) \
-            or (primary(out) or {}).get('label')
-        first_ = [] if item.get('kind') in _LEADS_WITH_NEXT else [w for w in rest if w == lead_word][:1] or rest[:1]
+        asked_for = next((c['label'] for c in out.get('chips') or [] if isinstance(c, dict) and out.get('first') and c.get('verb') == out['first']), None)
+        pick = None if asked_for else primary(out, said)
+        lead_word = asked_for or (pick or {}).get('label')
+        # ...and the Advisor's Next is Next first, as the desk lights it: nothing here needs a move from the owner
+        first_ = [] if item.get('kind') in _LEADS_WITH_NEXT or (pick or {}).get('verb') == 'next' else [w for w in rest if w == lead_word][:1] or rest[:1]
         # ...and the draft's own other word rides with it, ahead of Next - the screen draws Redraft beside the send, under the draft
         # (the owner, 2026-10-06: "on whatsapp" the same order)
         redo = {c['label'] for c in out.get('chips') or [] if isinstance(c, dict) and c.get('verb') == 'redraft'}   # Redraft, or Draft with AI
@@ -2855,7 +2851,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     opts = (lead_in + '\n'
             + '\n'.join(f'{i} · {w}' for i, w in enumerate(words, first))) if words else ''
     shown = move_block(store, item, draft) if story else decision_block(store, item) if store is not None else ''
-    return _once('\n\n'.join(x for x in (lead.strip(), head, shown, then_line(out, store), opts) if x))
+    return _once('\n\n'.join(x for x in (lead.strip(), head, advice_line(out, said), shown, opts) if x))
 
 
 _NOTHING = re.compile(r'(?:\s*[;,]|\s+-)?\s*nothing has to happen\b[.;]?', re.I)

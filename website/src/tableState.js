@@ -20,16 +20,13 @@ export function tableWords(table, ref = "") {
     phone: !has ? "Ask Taskuary anything…" : under ? "Ask about this page…" : "Ask about this one…" };
 }
 
-// What an /api/advice answer (advisor.status) means for the strip: a line, "Thinking..." only while a judgement is really in
-// flight, or the reason there is none. It spun 20 s and then showed nothing over items the Advisor never judges (error sweep,
-// 2026-10-18) - and then showed nothing at all for every reason but two, so the strip came and went under the row (2026-10-19).
-// Every reason is kept now: the strip says it as a sentence (words.json advice_none) and lights its one move.
+// What an /api/advice answer (advisor.status) means for the strip: the Advisor's ONE decision - a lit verb, its line '' when the move is
+// obvious - or why nothing is lit. There is no "Thinking..." any more (the owner, 2026-10-23): the rule's button is lit at once, and
+// the model's answer, where it reads one, arrives by the `advice` event. A decision that lights nothing (an agent asking) is kept too.
 export function adviceRead(data, key) {
-  if (!data || !key) return { advice: null, asking: null };
-  if (data.verb || data.none) return { advice: { ...data, for: key }, asking: null };
-  return { advice: null, asking: data.pending ? key : null };
+  if (!data || !key) return { advice: null };
+  return { advice: data.verb || data.none || data.state ? { ...data, for: key } : null };
 }
-export const CAP_LINE = "No suggestion for a while - the Advisor has read as many items as it may this hour.";
 
 // THE ADVISOR'S EVENT NAMES ITS ITEM BY THE RAIL'S KEY, and a task opened by name sits on the table as `task:N` - so the line for a
 // Board-opened task landed and was never read (re-audit: "a task opened by name never gets its Advisor line"). The event's own

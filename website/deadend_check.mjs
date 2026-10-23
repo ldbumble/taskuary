@@ -36,7 +36,8 @@
 //   ONCE      one act, two receipt lines: Remind me's receipt printed by the page and again by the server (2026-10-19 UI walk) - and two
 //             rail rows picked in turn leave every line once, not a "Show me" line per pick (verify, 2026-10-19)
 //   STILL     the Advisor's line landing moved a button on the row - the advice only tints (2026-10-19: Send pushed in, Attach into ▾)
-//   STRIP     the Advisor's strip under the item on the table says nothing - no line, no reason, no Thinking
+//   STRIP     the Advisor's strip under the item on the table says nothing AND nothing is lit - an obvious move is an empty strip
+//             with its one button lit (the owner, 2026-10-23), never an empty strip over an unlit row
 //   REREAD    a press on the row and no fresh read of the advice after it (2026-10-19: "waiting on you" stood over a sent reply)
 //   LIT       the Advisor's lit button is off the screen or covered, a screen away from the line that names it
 //   AGAIN     a lit press refused or failed, and the line read again still lights it (2026-10-19: Send lit over "Not sent" and the demo's no)
@@ -401,6 +402,8 @@ const readPage = (page) => page.evaluate(() => {
   const table = [...document.querySelectorAll("[data-tq-rail] *")].find((e) => e.children.length === 0 && e.innerText?.trim() === "ON THE TABLE");
   const ref = (table?.closest("[data-tq-key]")?.innerText.match(/TQ-\d+/) || [])[0] || ((card?.innerText || "").match(/TQ-\d+/) || [])[0] || "";
   const adviceEl = document.querySelector('[data-tq-advice]:not([data-tq-advice="no_ai"])');
+  // ...the Advisor DECIDED: a line, a silent decision's mark (an obvious move lit and said by nothing), or no AI with its Connect lit
+  const decided = !!document.querySelector("[data-tq-advice]");
   // THE ADVISOR'S STRIP AND ITS LIT BUTTON: the strip is empty only if nothing in it speaks; the lit button must be on the screen
   // and the thing under its own centre
   const strip = [...document.querySelectorAll("[data-tq-strip]")].find(vis);
@@ -416,7 +419,7 @@ const readPage = (page) => page.evaluate(() => {
   const pops = [...document.querySelectorAll('.MuiPopover-paper, [role="dialog"], .MuiDrawer-paper')].filter(vis).map((p) => p.innerText.replace(/\s+/g, " ").slice(0, 80));
   const msgs = chat ? [...chat.querySelectorAll(".tq-msg")] : [];
   const tail = msgs.slice(-8);                       // a receipt stays a few lines up once the walk has brought the next item
-  return { verbs, cardBtns, advice: !!adviceEl, adv: adviceEl?.innerText || "", errs, rail, ref, read, chat: chat?.innerText || "", pops, lit,
+  return { verbs, cardBtns, advice: !!adviceEl, decided, adv: adviceEl?.innerText || "", errs, rail, ref, read, chat: chat?.innerText || "", pops, lit,
     swap: (window.__swap || []).splice(0),
     strip: strip ? { empty: !strip.querySelector(".tq-next"), busy: strip.getAttribute("data-tq-strip") === "busy" } : null,
     undoSaid: tail.some((m) => /Undo: |confirm below/i.test(m.innerText || "")),
@@ -439,10 +442,10 @@ const judge = (s, at) => {
   // ...but for ONE button the row darkens itself (the owner, 2026-10-20): a running agent's own Stop and save, the Advisor quiet over it
   const dark = s.verbs.filter((v) => v.dark && !darkOwn(v));
   if (s.card || s.ref) {
-    if (!s.advice && dark.length) note("DARK", at, `"${dark.map((v) => v.word).join('", "')}" dark with no Advisor line over it`);
+    if (!s.decided && dark.length) note("DARK", at, `"${dark.map((v) => v.word).join('", "')}" dark with no Advisor decision over it`);
     if (s.advice && dark.length > 1) note("DARK", at, `the Advisor spoke and ${dark.length} buttons are dark - ${JSON.stringify(s.verbs.map((v) => v.word))} / "${s.adv.slice(0, 80)}"`);
   }
-  if (s.strip?.empty && !s.strip.busy) note("STRIP", at, "the Advisor's strip under the item says nothing - no line, no reason, no Thinking");
+  if (s.strip?.empty && !s.strip.busy && !s.lit) note("STRIP", at, "the Advisor's strip under the item says nothing and nothing on the row is lit");
   if (s.advice && s.lit && !s.pops.length && (!s.lit.inView || s.lit.covered)) note("LIT", at, `the Advisor's lit "${s.lit.word}" is ${s.lit.inView ? "covered" : "off the screen"}`);
   if (s.card && s.card.shown < 120) note("SEEN", at, `only ${Math.round(s.card.shown)}px of the card on the table is in view`);
   if (s.errs.length && !s.verbs.some((v) => !v.next && !v.off) && !s.cardBtns.some((b) => !b.off && NAMED.has(b.word)))

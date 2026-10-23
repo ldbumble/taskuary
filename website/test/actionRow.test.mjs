@@ -137,7 +137,8 @@ test("a card's own <Button> is read into a row verb: its label, handler, disable
 test("a move on a PIECE stays on it; a move on the whole item rides the row (2026-10-06)", () => {
   const src = fs.readFileSync(path.join(process.cwd(), "src", "assistantCards.jsx"), "utf8");
   assert.match(src, /const rowed = false;/, "YourMove - a draft's send, an agent's answer - draws its button where it acts");
-  assert.match(src, /\.\.\.movesOf\(verb, "decide", "v"\)/, "a Foot's move (All read, next on a batch) acts on the whole item: the row");
+  assert.match(src, /\.\.\.movesOf\(verb, moves \? "next" : "decide", "v"\)/, "a Foot's move acts on the whole item: the row - a batch's All read, next IS its Next");
+  assert.match(src, /<Foot moves verb=\{<Button[\s\S]{0,200}onDone\?\.\(btn\("next", "batch"\)\)/, "the batch's verb is in the Next group (the design, phase A)");
   assert.match(src, /\{!rowed && \(verb \|\|/, "...and is not drawn twice");
   assert.match(src, /i < 3 \|\| a\.verb === "close" \? "decide" : "more"/, "Mark done is never behind More");
   assert.match(src, /row: outer\.row/, "the walk's foot rides in the row as well");

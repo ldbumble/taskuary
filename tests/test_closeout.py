@@ -483,9 +483,9 @@ class WordsTests(unittest.TestCase):
         self.assertIn('Approve', labels)                        # ONE name: approve in its proposal state (buttons.json, 2026-10-17)
         # the same word whether a reply rides along - the sentence under it says the reply goes too
         self.assertIn('Approve', [c['label'] for c in concierge.chips_for(MemoryStore(), {**item, 'rides': True})])
+        # ...and no "then" line explains it on the phone any more: buttons do the talking (the design, phase A, 2026-10-23)
         from taskuary import remote_assistant
-        line = remote_assistant.then_line({'chips': [{'verb': 'approve', 'label': 'Approve'}], 'item': {**item, 'rides': True}}, MemoryStore())
-        self.assertEqual(line, 'Approve: merges the pull request on GitHub, then posts the reply above as its comment.')
+        self.assertFalse(hasattr(remote_assistant, 'then_line'))
         self.assertNotIn('Run it', labels); self.assertNotIn('Not ours', labels)
 
 

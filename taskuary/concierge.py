@@ -1029,6 +1029,8 @@ def _shows(store, it: dict, b: str) -> bool:
     if b == 'continue': return bool(store.resumable_session(it['tid'])) and not _general(store, it)
     if b in ('review_changes', 'run_another', 'share'): return _agent_holds(store, it) or bool(store.resumable_session(it['tid']))
     if b == 'attach': return bool(it.get('rid'))
+    # Copy is a draft's that cannot be sent from here (ReviewDecision, the owner 2026-10-22) - it stood on every task's list of buttons
+    if b == 'copy': return bool(it.get('rid')) and cannot(it, 'approve', store)
     if b == 'pick_repo': return str((store.get_task(int(it['tid'])) or {}).get('Kind') or '').lower() == 'coding'
     return b != 'fix'                  # a failure's own way out, with its own words - never a button to light from the chat
 
@@ -2997,7 +2999,9 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         # everything the rail holds For later: shown and put down for a while, AND put away to a day (Remind me) - the line
         # counted only the first, and said "1 thing" over a rail of two (the owner, 2026-10-01: "why does it say one thing
         # when there are 2?")
-        waiting = [i for i in left if i['lane'] != 'working' and (i.get('surfaced') or i.get('back_at'))]
+        # ...and "still wait on you" counts what IS on you - the census's rule (lanes.census): a row waiting on them was counted, and the
+        # line said 13 under an opener's "12 on you" (the 2026-10-22 UX walk; the design, phase A)
+        waiting = [i for i in left if i['lane'] != 'working' and (i.get('surfaced') or i.get('back_at')) and (i.get('deferred') or lanes.on_you(i))]
         # ...and what the walk never reached: Next walks DOWN the line (2026-10-22), so a row above where the owner started - a row
         # clicked further down, say - is still walkable when the bottom is reached. It is named here, and the next walk starts with it.
         skipped = [i for i in left if i.get('actionable', True) and not i.get('put_down') and not i.get('surfaced') and not i.get('deferred')

@@ -346,7 +346,7 @@ function useClose(card, onDone) {
 // the task page's own acts, by their buttons.json verbs - the same words the task page draws
 const TASK_ACTS = [["not_a_task", "remove"], ["handoff", "forward"], ["reshape", "split"]].map(([act, v]) => [act, btn(v), btnHint(v)]);
 
-export function Foot({ verb, then, where, covers = [], close, onDone, more, promote, extra = [], inline = false, openTask, taskId }) {
+export function Foot({ verb, then, where, covers = [], close, onDone, more, promote, extra = [], inline = false, openTask, taskId, moves = false }) {
   const nav = React.useContext(CardNav);
   const shut = useClose(close || {}, onDone);
   const [open, setOpen] = useState(false);
@@ -367,11 +367,13 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
   const asVerb = (a, group) => ({ id: `w:${a.verb || a.label}`, group, tone: "s", label: a.label, title: a.title, disabled: a.disabled,
     run: (e, anchor) => a.onClick?.({ currentTarget: anchor || e?.currentTarget }) });
   useVerbs("foot", rowed ? [
-    ...(nav.onNext ? [{ id: "next", group: "next", label: btn("next"), disabled: nav.busy, run: () => nav.onNext(), title: btnHint("next") }] : []),
+    // a move that IS the way on - a batch's "All read, next" (`moves`) - is the row's Next itself (the design, phase A: the batch verb in
+    // the Next group), so the batch shows one way on, and the Advisor's lit Next is it
+    ...(nav.onNext && !moves ? [{ id: "next", group: "next", label: btn("next"), disabled: nav.busy, run: () => nav.onNext(), title: btnHint("next") }] : []),
     // a Foot's move acts on the WHOLE item on the table - a batch's "All read, next", a report's, a message's - so it rides the row with
     // the task's verbs (the owner, 2026-10-06: "all read next should be on bottom no as it relates to the whole lot?"); what acts on a
     // PIECE of it (a draft under a task, YourMove's send) stays on the piece. Mark done is never behind More.
-    ...movesOf(verb, "decide", "v"),
+    ...movesOf(verb, moves ? "next" : "decide", "v"),
     ...(lifted ? [{ ...asVerb(lifted, "decide"), tone: "p" }] : []),
     ...words.map((a, i) => asVerb(a, i < 3 || a.verb === "close" ? "decide" : "more")),
   ] : null, rowed, nav.ref);
@@ -1129,9 +1131,12 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
   const cnt = (gs) => gs.reduce((n, g) => n + (g.n ?? g.rows.length), 0), isRead = (g) => !!SECTION[g.key]?.to_read;
   const act = groups.filter((g) => !isRead(g)), read = groups.filter(isRead);
   const onYou = onYouCount(groups), toRead = cnt(read);
+  // ...and each band under "N on you" counts what of it is on you (lanes.census), so the rows add up to the headline - 13 sat under
+  // "12 on you" while waiting on them was counted in the band and not in the headline (the 2026-10-22 UX walk; the design, phase A)
+  const bandN = (g) => (SECTION[g.key]?.on_you ? g.you ?? g.n ?? g.rows.length : g.n ?? g.rows.length);
   const row = (g) => (
     <button key={g.key} type="button" className={`tq-day-row lvl-${g.key}`} onClick={() => onSection?.(g.key)} title={`Walk me through ${g.word}`}>
-      <i className="dot" /><b className="lbl">{g.word}</b><span className="who">{g.urgent ? `${g.urgent} urgent · ` : ""}{gistOf(g)}</span><b className="n">{loading ? "…" : g.n ?? g.rows.length}</b>
+      <i className="dot" /><b className="lbl">{g.word}</b><span className="who">{g.urgent ? `${g.urgent} urgent · ` : ""}{gistOf(g)}</span><b className="n">{loading ? "…" : bandN(g)}</b>
     </button>
   );
   // THE WHOLE CARD FROM THE FIRST DAY (the owner, 2026-10-15: "on first startup it should show the full card - say calendar missing if
@@ -1284,7 +1289,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
       ))}
       </div>
       {/* the one card whose verb IS Next: marking the handful read moves on (fyis carries no `next`) */}
-      <Foot verb={<Button size="small" variant="contained" disableElevation onClick={() => onDone?.(btn("next", "batch"))} sx={primary}>{btn("next", "batch")}</Button>}
+      <Foot moves verb={<Button size="small" variant="contained" disableElevation onClick={() => onDone?.(btn("next", "batch"))} sx={primary}>{btn("next", "batch")}</Button>}
         then={<><b>{btn("next", "batch")}</b> marks {items.length === 1 ? "it" : `all ${items.length}`} read - search finds {items.length === 1 ? "it" : "them"} later.</>}
         where={null} />
     </CardShell>

@@ -59,7 +59,7 @@ class RefusedTests(_Rail):
                 ('Not sent: the mail server refused erin.blake@northwind.example (5.1.1 no such user)', r['ReviewId']))
         got = self._advise(s, key)
         self.assertIn(got.get('verb'), ('fix', 'new_task'), got)
-        self.assertIn('address', got.get('line', ''))
+        self.assertIn('erin.blake@northwind.example', got.get('line', ''), 'the line is the fact: which address was refused')
 
     def test_a_send_refused_for_another_reason_is_still_redrafted_not_sent_again(self):
         s = self._world(); key, r = self._draft(s)
@@ -72,17 +72,17 @@ class RefusedTests(_Rail):
         send = 'approve (Send), redraft (Redraft), close (Mark done)'
         self.assertEqual(ask(send)['verb'], 'approve')
         self.assertEqual(ask(f'fix (Sign in again), {send}', '\n\nWHAT FAILED: the reply was not sent - the mailbox refused the sign-in')['verb'], 'fix')
-        self.assertIn('Sign in again', ask(f'fix (Sign in again), {send}', '\n\nWHAT FAILED: x - y')['line'])
+        self.assertEqual(ask(f'fix (Sign in again), {send}', '\n\nWHAT FAILED: x - y')['line'], 'X: y.', 'what failed, as a fact - never the button explained')
         unknown = '\n\nWHAT FAILED: the reply may not have gone - timeout (nobody knows whether it went: check before sending again)'
         self.assertEqual(ask(f"approve ({buttons.label('approve', 'check')}), close (Mark done)", unknown)['verb'], 'approve')
         self.assertEqual(ask(send, unknown)['verb'], 'redraft', 'a plain Send is never advised over a send nobody can confirm')
         self.assertEqual(ask(send, f'\n\nWHAT FAILED: the reply was not sent - {demo.SENDS}')['verb'], 'close')
 
     def test_a_chat_draft_with_no_send_is_copied_and_closed_not_left_silent(self):
+        # the design's state 4 (2026-10-23): Copy lit, and no line - the reason it cannot go is the hover (the owner, 2026-10-22)
         s = self._world(); key, r = self._draft(s, 'teams')
         got = self._advise(s, key)
-        self.assertEqual(got.get('verb'), 'close', got)
-        self.assertIn('copy', got.get('line', '').lower())
+        self.assertEqual((got.get('verb'), got.get('line'), got.get('state')), ('copy', '', 'unsendable'), got)
 
     def test_a_draft_that_could_not_be_written_is_what_failed_and_an_email_is_never_copied(self):
         """The advisor matrix (2026-10-19): Reply with no AI left an empty box and "no AI connector is set up to write replies" - and the

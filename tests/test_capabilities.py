@@ -105,15 +105,16 @@ class KeyedTests(unittest.TestCase):
         """One task, two cards: its draft (review:N) and its agent (agent:T). A line judged for the agent's card names a verb only
         that card carries - read over the draft, it pointed at a button the draft does not have."""
         s = MemoryStore(); it = draft(s, 'email'); tid = it['tid']
-        agent = {'key': f'agent:{tid}', 'kind': 'agent', 'lane': 'blocked', 'tid': tid, 'ref': it['ref']}
+        agent = {'key': f'agent:{tid}', 'kind': 'agent', 'lane': 'blocked', 'tid': tid, 'ref': it['ref'], 'asking': True}
         rev = advisor.revision(s, 'task', tid)
         advisor._write(s, target_kind='task', target_id=tid, key=agent['key'], event='agent.asked', revision=rev, tier=2,
-                       line='The agent is asking you something.', verb='answer_agent', label='Answer it')
+                       line='Draft promises Friday - nothing here shows it.', verb='redraft', label='Redraft')
         cards = {it['key']: it, agent['key']: agent}
         with mock.patch.object(advisor, '_item', side_effect=lambda st, k, i, key=None: cards.get(key) or agent), \
              mock.patch.object(advisor, 'notice') as n:
-            self.assertEqual(advisor.for_key(s, agent['key'])['verb'], 'answer_agent')
-            self.assertEqual(advisor.for_key(s, it['key']), {})                  # not the agent card's line
+            self.assertIsNone(advisor.for_key(s, agent['key'])['verb'], 'an agent asking is answered in its pane')
+            got = advisor.for_key(s, it['key'])
+            self.assertEqual((got['verb'], got['by']), ('approve', 'rule'))      # not the agent card's line
         self.assertEqual(n.call_args.kwargs.get('key'), it['key'])                 # ...the draft is judged as itself
 
     def test_a_judgement_is_written_under_the_item_it_judged(self):

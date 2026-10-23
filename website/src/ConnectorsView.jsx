@@ -46,6 +46,7 @@ import ConnectAi from "./ConnectAi.jsx";
 import { LIT, lightField, lightStep } from "./connectorStep.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { validEmail } from "./recipientOptions.js";
+import { waLabel, waMatches, waPhone } from "./waChats.js";
 import ReasonPanel from "./ReasonNetwork.jsx";
 
 /* ── Get AI to set it up: the GENERAL agent walks the person through the card (taskuary/aisetup.py start_walk - the owner,
@@ -3660,8 +3661,9 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle }) => {
   // yours, then the one already in the funnel, then the rest as they come
   const needle = q.trim().toLowerCase();
   const isGroup = (r) => r.group && !r.self;
-  const found = (rows || []).filter((r) => (kind === "All" || (kind === "Groups") === isGroup(r)) && (!needle
-    || `${r.name || ""} ${r.jid}`.toLowerCase().includes(needle)));
+  // by the name, the phone number in any form, the group's name - the JID is printed small under it, never searched (the owner,
+  // 2026-10-23: "search should be by phone number, name or group name not id's")
+  const found = (rows || []).filter((r) => (kind === "All" || (kind === "Groups") === isGroup(r)) && waMatches(q, r.jid, r.name));
   const ranked = [...found].sort((a, b) => (b.self ? 1 : 0) - (a.self ? 1 : 0)
     || (b.jid === guideJid ? 1 : 0) - (a.jid === guideJid ? 1 : 0));
   // a chat already coming in is always on screen - this list is now the only place its switch is
@@ -3680,9 +3682,12 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle }) => {
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.25, py: 0.6, px: 0.8, flexWrap: "wrap",
         border: `1px solid ${guideJid ? "#c3d2c5" : BORDER}`, borderRadius: 1, bgcolor: guideJid ? "#f2f7f2" : "transparent" }}>
         <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>Assistant chat</Typography>
-        <Typography variant="caption" sx={{ ...mono, color: guideJid ? INK : FAINT, flex: 1, minWidth: 180, fontSize: 10.5 }} noWrap>
-          {guideJid || "not connected"}
-        </Typography>
+        <Box sx={{ flex: 1, minWidth: 180 }}>
+          <Typography variant="caption" sx={{ color: guideJid ? INK : FAINT, fontWeight: guideJid ? 600 : 400, display: "block" }} noWrap>
+            {guideJid ? waLabel(guideJid, chosen?.name) : "not connected"}
+          </Typography>
+          {guideJid && <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10, display: "block" }} noWrap>{guideJid}</Typography>}
+        </Box>
         <Button size="small" sx={{ fontSize: 11 }} onClick={() => {
           openAppLink(`settings=config&group=${encodeURIComponent("Assistant on your phone")}`);
           onNavigate?.("Settings");
@@ -3699,7 +3704,7 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle }) => {
       <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 0.75, flexWrap: "wrap" }}>
         <FilterPills options={["All", "People", "Groups"]} value={kind} onChange={setKind} />
         <TextField size="small" value={q} onChange={(e) => setQ(e.target.value)} sx={{ flex: 1, minWidth: 200, bgcolor: "#fff" }}
-          placeholder="search your chats by name or number" />
+          placeholder="search by name, phone number or group name" />
       </Box>
       {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block" }}>✗ {err}</Typography>}
       {rows && !rows.length && !err && <Typography variant="caption" sx={{ color: FAINT }}>no reachable chats loaded yet — refresh, or send a message in a direct chat</Typography>}
@@ -3710,13 +3715,18 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle }) => {
           <Chip size="small" label={r.self ? "Myself" : r.group ? "group" : "chat"}
             sx={{ height: 18, fontSize: 10, ...(r.self ? { bgcolor: "#dfe9e0", fontWeight: 600 } : {}) }} />
           <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{r.name || r.jid}</Typography>
-            <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10.5 }} noWrap>{r.jid} · {r.n} msg · {r.last}{r.snippet ? ` · “${r.snippet}”` : ""}</Typography>
+            <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{waLabel(r.jid, r.name)}</Typography>
+            {/* the number beside a saved name - a person is known by both; the id is the small grey line under them */}
+            <Typography variant="caption" sx={{ color: FAINT, fontSize: 11, display: "block" }} noWrap>
+              {[waPhone(r.jid) !== waLabel(r.jid, r.name) ? waPhone(r.jid) : "", r.n ? `${r.n} msg` : "", r.last,
+                r.snippet ? `“${r.snippet}”` : ""].filter(Boolean).join(" · ")}
+            </Typography>
+            <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 9.5, display: "block", opacity: 0.8 }} noWrap>{r.jid}</Typography>
           </Box>
           {guideJid === r.jid && <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>✓ assistant chat</Typography>}
           {adding === r.jid ? <CircularProgress size={14} sx={{ mx: 1.5 }} />
             : <Switch size="small" checked={!!src[r.jid]?.Active} onChange={() => flip(r.jid)}
-                inputProps={{ "aria-label": `${r.name || r.jid} comes in` }} />}
+                inputProps={{ "aria-label": `${waLabel(r.jid, r.name)} comes in` }} />}
         </Box>
       ))}
       {!needle && !all && ranked.length > shown.length && (

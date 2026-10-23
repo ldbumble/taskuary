@@ -4,7 +4,7 @@
 // stay pure connections; this tab is where reports are built and managed.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, createFilterOptions, Dialog,
+  Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog,
   DialogContent, DialogTitle, IconButton, ListSubheader, Menu, MenuItem, Select, Step, StepButton, StepContent,
   Stepper, Switch, TextField, Typography,
 } from "@mui/material";
@@ -23,6 +23,7 @@ import api from "./api";
 import { nothingMatches } from "./searchHits.js";
 import { NL, SOURCE_KEYS, WORKFLOW_TYPES, addField, firstConnected, isWorkflowConfig, showValue, toShape, toSources } from "./sourceShape.js";
 import { ASSISTANT, GRADIENT, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, PILL_COLORS, ALERT, ALERT_INK } from "./theme.jsx";
+import { recipientLabel, recipientOptions } from "./recipientOptions.js";
 import { TASKUARY_CARDS, cardLabel, cardsLine, cardsOf, costLine, promptSources, sourceKey, tokenOf } from "./assistantBlocks.js";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail } from "./ui.jsx";
 import { RecentlyDeleted, UndoLine, removeNow } from "./Removed.jsx";
@@ -677,7 +678,8 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
    the channels with a live connector and replies switched on, and the destinations already seen
    on each). Email is the one exception - an address you have never had mail from is still a real
    address - so there, and only there, you may type one as well. */
-const chatFilter = createFilterOptions({ limit: 8, stringify: (o) => `${o.name} ${o.to} ${o.hint || ""}` });
+// eight at a time, and a WhatsApp chat matched by its name and number - never its JID (recipientOptions)
+const chatFilter = (opts, st) => recipientOptions(opts, st.inputValue, 8).slice(0, 8);
 
 function Destination({ dest, onChange, targets, inboxes = {} }) {
   const chans = targets.map((t) => t.channel);
@@ -687,7 +689,7 @@ function Destination({ dest, onChange, targets, inboxes = {} }) {
   // "the one that spoke last", which is the order the list itself is built in
   const chatOpts = [...opts].sort((a, b) => (b.mine ? 1 : 0) - (a.mine ? 1 : 0));
   const picked = String(dest.to || "").split(",").map((x) => x.trim()).filter(Boolean);
-  const named = (to) => opts.find((o) => o.to === to)?.name || to;
+  const named = (to) => recipientLabel(opts.find((o) => o.to === to) || { to });
   const empty = ch ? `no ${ch} chat seen yet` : "connect a channel first";
   // a chat Taskuary READS is refused at send time; a report saved before the picker knew that still holds
   // one, and said nothing about it for a week (the owner, 2026-09-24: "i am not getting those messages?")
@@ -723,17 +725,17 @@ function Destination({ dest, onChange, targets, inboxes = {} }) {
           options={chatOpts} filterOptions={chatFilter}
           value={chatOpts.find((o) => o.to === picked[0]) || (picked[0] ? { to: picked[0], name: named(picked[0]), hint: "saved, not seen lately" } : null)}
           onChange={(_e, v) => onChange({ to: v?.to || "" })}
-          getOptionLabel={(o) => o?.name || o?.to || ""}
+          getOptionLabel={(o) => (o ? recipientLabel(o) : "")}
           isOptionEqualToValue={(o, v) => o.to === v.to}
           noOptionsText={opts.length ? "no chat matches that" : empty}
           renderOption={(props, o) => (
             <li {...props} key={o.to} style={{ display: "block", paddingTop: 4, paddingBottom: 4 }}>
               <Typography variant="body2" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>
-                {o.name}
+                {recipientLabel(o)}
                 {o.mine && <Chip size="small" label="yours" sx={{ ml: 0.75, height: 16, fontSize: 9.5 }} />}
               </Typography>
               <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10 }}>
-                {[o.name === o.to ? "" : o.to, o.hint].filter(Boolean).join(" · ")}
+                {[recipientLabel(o) === o.to ? "" : o.to, o.hint].filter(Boolean).join(" · ")}
               </Typography>
             </li>
           )}

@@ -320,8 +320,11 @@ def wa_self_number(store, c) -> str:
     return number
 
 
-def wa_chats(c) -> list:
+def wa_chats(c, store=None) -> list:
     """Chats reachable through the paired account, newest first.
+
+    With a `store`, every row is named and given its `phone` (wanames.fill) and the names the roster gave are kept, so a
+    picker can find a chat by its name or number - never only by its JID - even while the bridge is restarting.
 
     New bridges expose a metadata-only roster (including every group the account still belongs
     to). The legacy message roll-up remains as a compatibility path until an already-running
@@ -350,7 +353,7 @@ def wa_chats(c) -> list:
         rows.sort(key=lambda r: (-r['last'], (r['name'] or r['jid']).lower()))
         for r in rows:
             r['last'] = datetime.fromtimestamp(r['last']).strftime('%Y-%m-%d %H:%M') if r['last'] else ''
-        return rows
+        return _named(store, rows)
     by = {}
     for m in out.get('messages', []):
         jid = m.get('jid') or ''
@@ -372,7 +375,16 @@ def wa_chats(c) -> list:
                    'last': m.get('last') or 0, 'snippet': '', 'people': m.get('people')}
     rows = sorted(by.values(), key=lambda r: -r['last'])
     for r in rows: r['last'] = datetime.fromtimestamp(r['last']).strftime('%Y-%m-%d %H:%M') if r['last'] else ''
-    return rows
+    return _named(store, rows)
+
+
+def _named(store, rows) -> list:
+    from . import wanames
+    if store is None:
+        for r in rows: r['phone'] = wanames.phone(r['jid'])
+        return rows
+    wanames.remember(store, rows)
+    return wanames.fill(store, rows)
 
 
 def _read_media(path: str):

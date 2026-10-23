@@ -83,7 +83,8 @@ export function marks(text, words) {
 // the small grey line under a title: who, where, and the task it is on when the title is not already the task
 export function meta(h) {
   if (h.type === "task") return [h.sub, h.status && ["done", "dropped"].includes(h.status) ? (h.status === "done" ? "closed" : "dropped") : ""].filter(Boolean);
-  if (h.type === "source") return [h.channel];
+  // a WhatsApp source is titled by its name or number; its JID is the small line (search.py `sub`)
+  if (h.type === "source") return [h.channel, h.sub].filter(Boolean);
   if (h.href) return [h.where, h.sub].filter(Boolean);
   return [h.who, h.where && h.where !== h.who ? h.where : ""].filter(Boolean);
 }

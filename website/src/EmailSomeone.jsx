@@ -9,8 +9,8 @@ import { Autocomplete, Box, Button, Checkbox, CircularProgress, Dialog, DialogAc
   MenuItem, Select, TextField, Typography } from "@mui/material";
 import api from "./api";
 import { EmailRecipients } from "./NewSheet.jsx";
-import { recipientLabel, recipientOptions } from "./recipientOptions.js";
-import { ACCENT, BORDER, DIM, FAINT, INK } from "./theme.jsx";
+import { recipientId, recipientLabel, recipientOptions } from "./recipientOptions.js";
+import { ACCENT, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 import { ChannelIcon } from "./ui.jsx";
 import { label } from "./buttons.js";
 
@@ -100,7 +100,8 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
                 noOptionsText={people.length ? "No matching conversation" : "nothing known on this channel yet"}
                 renderOption={(props, t) => (
                   <Box component="li" {...props} key={t.to} sx={{ display: "block !important", fontSize: 12.5 }}>
-                    <Box sx={{ fontWeight: 600 }}>{t.name || t.to}</Box>
+                    <Box sx={{ fontWeight: 600 }}>{recipientLabel(t)}</Box>
+                    {recipientId(t) && <Box sx={{ ...mono, fontSize: 10, color: FAINT }}>{recipientId(t)}</Box>}
                     {t.hint && <Box sx={{ fontSize: 10.5, color: FAINT }}>{t.hint}</Box>}
                   </Box>
                 )}

@@ -155,7 +155,8 @@ class WhichDestinationsTests(unittest.TestCase):
         _conn(s, 'whatsapp')
         _chat(s, 'whatsapp', 'whatsapp:15551110000@s.whatsapp.net', None)
         (wa,) = outbound.send_targets(s)
-        self.assertEqual(wa['to'][0]['name'], '15551110000@s.whatsapp.net')
+        # ...and a nameless WhatsApp person reads as their number, never the JID (wanames.label, the owner 2026-10-23)
+        self.assertEqual(wa['to'][0]['name'], '+1 555-111-0000')
 
     def test_what_is_offered_is_exactly_what_send_out_would_accept(self):
         s = MemoryStore()

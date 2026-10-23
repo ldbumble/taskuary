@@ -204,8 +204,10 @@ class TheScriptedBrainTests(unittest.TestCase):
         were all answered with the rail's count."""
         from taskuary import concierge
         ask = lambda q: demo.brain(store=MemoryStore())('You are the assistant.', f'{concierge.OWNER_SAYS}{q}\nAnswer them, briefly.')
-        for q in ('run the end of day report', 'when is my next meeting?', 'put it on my list', 'show me the new starter task', 'next'):
+        for q in ('when is my next meeting?', 'put it on my list', 'show me the new starter task', 'next'):
             self.assertTrue(ask(q).startswith(demo.OUT_OF_SCRIPT), (q, ask(q)))
+        # ...a report is brought up, never the schedule line it shares "day" with
+        self.assertRegex(ask('run the end of day report'), r'^Here: \[End of day[^\]]*\]\(#report=\d+\)\.$')
         for q in ("what's waiting on me", 'summarize my day', 'how many open tasks do I have'):
             self.assertTrue(ask(q).startswith('I looked at your list.'), (q, ask(q)))
         self.assertEqual(ask('every monday send me the overdue invoices'), demo.CANNED[2])
@@ -220,6 +222,42 @@ class TheScriptedBrainTests(unittest.TestCase):
         self.assertTrue(other.startswith('Thanks Marcus'), other)
         canned = {c.split('{')[0] for c in demo.CANNED}
         for d in (other, *demo.DRAFTS.values()): self.assertFalse(any(d.startswith(c) for c in canned), d)
+
+
+class TheScriptedBrainRoutesTests(unittest.TestCase):
+    """The UX walk, 2026-10-22: the demo chat was a dead end for anything but two phrases, so a visitor never saw the Assistant's
+    routing - it brings up the item, the report or the lit button, the way a good model's CALL or link would (demo._route)."""
+    @classmethod
+    def setUpClass(cls):
+        cls.s = MemoryStore()
+        with mock.patch('taskuary.terminal.live_sessions', lambda tail=0: []): demo.seed(cls.s)
+
+    def ask(self, q):
+        from taskuary import concierge
+        return demo.brain(store=self.s)('You are the assistant.', f'THE RAIL\n\n{concierge.OWNER_SAYS}{q}\nAnswer them, briefly.')
+
+    def test_mark_done_and_remind_me_call_the_real_buttons(self):
+        import json
+        call = lambda q: json.loads(self.ask(q).removeprefix('CALL: '))
+        self.assertEqual(call('mark this done'), {'kind': 'close', 'params': {}})
+        self.assertEqual(call('done.'), {'kind': 'close', 'params': {}})
+        self.assertEqual(call('remind me about this on friday at 2pm'), {'kind': 'task.defer', 'params': {'until': 'friday at 2pm'}})
+        self.assertEqual(call('remind me later'), {'kind': 'task.defer', 'params': {}})
+
+    def test_a_ref_a_subject_or_a_name_brings_the_item_up(self):
+        self.assertEqual(self.ask('open TQ-0004'), 'Here: [TQ-0004](#task=4).')
+        self.assertEqual(self.ask('open the invoice 88213 task'), 'Here: [TQ-0004](#task=4).')
+        self.assertEqual(self.ask("pull up Marcus's month-end close"), 'Here: [TQ-0001](#task=1).')
+        self.assertTrue(self.ask('open TQ-9999').startswith(demo.OUT_OF_SCRIPT))              # no such task: never a dead link
+
+    def test_a_report_brings_up_that_report_or_reports(self):
+        self.assertEqual(self.ask('what did the helpdesk report say?'), 'Here: [Helpdesk tickets by day, last 14](#report=5).')
+        self.assertEqual(self.ask('list my reports'), 'Here: [Reports](#report=reports).')
+
+    def test_a_set_a_person_to_act_toward_and_a_shared_word_bring_nothing_up(self):
+        for q in ('close all the tasks from Priya', 'clear all the reports', 'forward this to Priya', 'tell Marcus I will look at it',
+                  'the sync interval', 'mark all the approvals as done'):
+            self.assertFalse(self.ask(q).startswith(('Here:', 'CALL:')), (q, self.ask(q)))
 
 
 class TheAdvisorSpeaksInTheDemoTests(unittest.TestCase):
@@ -392,3 +430,22 @@ class TheSameWorldAtEveryHourTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TheOwnerIsAtNorthwindTests(unittest.TestCase):
+    def test_a_colleague_is_not_a_stranger(self):
+        """The demo owner had no address, so no domain of their own, and every colleague at Northwind was a stranger (the UX walk,
+        2026-10-22). The owner's mailbox is at the colleagues' company; a vendor stays outside it."""
+        from taskuary import senders
+        s = MemoryStore()
+        with mock.patch('taskuary.terminal.live_sessions', lambda tail=0: []): demo.seed(s)
+        self.assertEqual(s.owner()['owner_email'], demo.OWNER_EMAIL)
+        self.assertTrue(demo.OWNER_EMAIL.endswith('@northwind.example'))
+        self.assertIn('northwind.example', senders.own_domains(s))
+        self.assertNotIn('vendor.example', senders.own_domains(s))
+        from taskuary import origin
+        by = {t['TaskId']: (s.last_inbound_on_task(t['TaskId']) or {}).get('FromEmail') or '' for t in s.list_tasks()}
+        colleague = next(t for t, e in by.items() if e.endswith('@northwind.example'))
+        vendor = next(t for t, e in by.items() if e.endswith('@vendor.example'))
+        self.assertEqual(origin.of_task(s, colleague)[0], 'trusted')
+        self.assertEqual(origin.of_task(s, vendor)[0], 'stranger')

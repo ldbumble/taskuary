@@ -28,7 +28,7 @@ class Q:
     """One ask. `ideal`: the scripted answers in order (a CALL line, then words after a look-up). `expect`: the outcome the deterministic
     road must reach - light:<verb> | open:<href> | new:<kind> | next | draft:<verb> | read:<tool> | link:<href> | cleared | words.
     `tools`: what in the real prompt could satisfy it - () when nothing can (unsupported), including a tool the catalogue has but the desk
-    has no button for. `demo`: the scripted demo line that fits - reply | report | list | out (beyond a script). `freq`: how often an owner
+    has no button for. `demo`: the scripted demo line that fits - reply | report | list | open (an item or report brought up) | lit (a row button lit) | out (beyond a script). `freq`: how often an owner
     would say it, 1-5 - ranks the unsupported list."""
     def __init__(self, cat, text, table, ideal, expect, tools=None, demo='out', freq=3, sort=None, live=None, note='', phone=False):
         self.cat, self.text, self.table, self.expect, self.demo, self.freq, self.sort = cat, text, table, expect, demo, freq, sort
@@ -43,17 +43,17 @@ CASES = [
     # ── navigation: a page, a report, a task by ref or by name ──
     Q('navigation', 'open settings', None, 'Here: [Settings](#settings=config).', 'link:#settings', tools=('pages',), freq=4),
     Q('navigation', 'show me my connections', None, 'They are here: [Connections](#connector=).', 'link:#connector', tools=('connections.list', 'pages'), freq=3),
-    Q('navigation', 'take me to the AP ageing report', None, 'Here it is: [AP ageing over 30 days, weekly](#report=4).', 'link:#report', tools=('pages',), freq=3),
-    Q('navigation', f'open {T4}', 'todo', f'Here: [{T4}](#task=4).', 'link:#task=4', tools=('pages',), freq=5),
-    Q('navigation', 'open the invoice 88213 task', 'todo', [c('tasks.list', contains='invoice 88213'), f'That is [{T4}](#task=4).'], 'read:tasks.list', freq=4),
-    Q('navigation', "pull up Marcus's month-end close", None, [c('tasks.list', contains='month-end close'), f'That is [{T1}](#task=1).'], 'read:tasks.list', demo='out', freq=4),
+    Q('navigation', 'take me to the AP ageing report', None, 'Here it is: [AP ageing over 30 days, weekly](#report=4).', 'link:#report', tools=('pages',), demo='open', freq=3),
+    Q('navigation', f'open {T4}', 'todo', f'Here: [{T4}](#task=4).', 'link:#task=4', tools=('pages',), demo='open', freq=5),
+    Q('navigation', 'open the invoice 88213 task', 'todo', [c('tasks.list', contains='invoice 88213'), f'That is [{T4}](#task=4).'], 'read:tasks.list', demo='open', freq=4),
+    Q('navigation', "pull up Marcus's month-end close", None, [c('tasks.list', contains='month-end close'), f'That is [{T1}](#task=1).'], 'read:tasks.list', demo='open', freq=4),
     Q('navigation', 'where do I set up the AI?', None, 'Under [Connections → AI](#settings=config&group=How%20mail%20is%20sorted).', 'link:#settings', tools=('pages',), freq=3),
     Q('navigation', 'open the agent profiles', None, 'Here: [Profiles](#profiles).', 'link:#profiles', tools=('pages',), freq=2),
     Q('navigation', 'show me the workflows', None, 'Here: [Workflows](#report=workflows).', 'link:#report=workflows', tools=('pages',), freq=2),
     Q('navigation', 'go to the memory page', None, 'Here: [Verdicts & notes](#settings=memory).', 'link:#settings=memory', tools=('pages',), freq=2),
     Q('navigation', 'open the GitHub connection', None, 'Here: [GitHub](#connector=github).', 'link:#connector=github', tools=('pages',), freq=2),
-    Q('navigation', 'show me the new starter task', None, [c('tasks.list', contains='new starter'), 'That is [TQ-0002](#task=2).'], 'read:tasks.list', freq=3),
-    Q('navigation', 'bring up the census sync bug', None, [c('tasks.list', contains='census sync'), f'That is [{T12}](#task=12).'], 'read:tasks.list', freq=3),
+    Q('navigation', 'show me the new starter task', None, [c('tasks.list', contains='new starter'), 'That is [TQ-0002](#task=2).'], 'read:tasks.list', demo='open', freq=3),
+    Q('navigation', 'bring up the census sync bug', None, [c('tasks.list', contains='census sync'), f'That is [{T12}](#task=12).'], 'read:tasks.list', demo='open', freq=3),
     Q('navigation', 'open the audit log', None, 'Here: [Audit](#settings=audit).', 'link:#settings=audit', tools=('pages',), freq=1),
     # ── bulk: sets of items ──
     Q('bulk', 'Clear all the FYI, please.', 'todo', c('pipe.clear', select={'kind': 'fyi'}), 'cleared', freq=5),
@@ -83,14 +83,14 @@ CASES = [
     Q('item', 'send this to an agent', 'todo', c('regular_agent', text='find the 4,180 gap in the month-end close'), 'light:regular_agent', freq=4),
     Q('item', 'hand this to a coding agent', 'coding', c('coding_agent', text='fix the census sync'), 'light:regular_agent', freq=4,
       note='the demo world has no coding CLI, so a coding hand-off is the one Send to agent (coding needs a CLI)'),
-    Q('item', 'remind me tomorrow', 'todo', c('task.defer', until='tomorrow 9am'), 'light:defer', freq=5),
-    Q('item', 'remind me about this on friday at 2pm', 'todo', c('task.defer', until='friday 2pm'), 'light:defer', freq=4),
+    Q('item', 'remind me tomorrow', 'todo', c('task.defer', until='tomorrow 9am'), 'light:defer', demo='lit', freq=5),
+    Q('item', 'remind me about this on friday at 2pm', 'todo', c('task.defer', until='friday 2pm'), 'light:defer', demo='lit', freq=4),
     Q('item', 'not ours', 'fyi', c('not_ours'), 'light:not_ours', freq=4),
     Q('item', 'this is not ours', 'todo', c('task.not_a_task'), 'light:remove', freq=3, note="a task's row has Remove - not a task, not Not ours"),
     Q('item', 'change the priority to high', 'todo', c('task.update', priority='high'), 'light:priority', freq=3),
     Q('item', 'make this urgent', 'todo', c('task.update', priority='urgent'), 'light:priority', freq=3),
-    Q('item', 'mark this done', 'todo', c('close'), 'light:close', freq=5),
-    Q('item', 'done', 'todo', c('close'), 'light:close', freq=4),
+    Q('item', 'mark this done', 'todo', c('close'), 'light:close', demo='lit', freq=5),
+    Q('item', 'done', 'todo', c('close'), 'light:close', demo='lit', freq=4),
     Q('item', 'close it, the bank feed reconciled', 'todo', c('task.complete', note='the bank feed reconciled'), 'light:close_note', freq=3),
     Q('item', 'assign it to me', 'todo', c('task.update', assignee='owner'), 'light:assign', freq=2),
     Q('item', 'forward this to Priya', 'todo', c('task.handoff', who='Priya Shah'), 'light:forward', freq=3),
@@ -113,7 +113,7 @@ CASES = [
     Q('question', 'what is this about?', 'todo', [c('task.read', ref=T1), 'The month-end close is short by 4,180.'], 'read:task.read', freq=5),
     Q('question', 'what did Priya ask?', None, [c('sender.read', who='Priya Shah'), 'She asked about the new starter.'], 'read:sender.read', freq=4),
     Q('question', 'when is my next meeting?', None, [c('calendar.read', **{'from': 'today'}), 'The AP cutover dry run.'], 'read:calendar.read', freq=4),
-    Q('question', f'what did the agent do on {T6}?', None, [c('task.read', ref=T6), 'It reconciled most of the export.'], 'read:task.read', freq=4),
+    Q('question', f'what did the agent do on {T6}?', None, [c('task.read', ref=T6), 'It reconciled most of the export.'], 'read:task.read', demo='open', freq=4),
     Q('question', 'what is on my calendar tomorrow', None, [c('calendar.read', **{'from': 'tomorrow'}), 'Nothing yet.'], 'read:calendar.read', freq=4),
     Q('question', 'did I miss anything?', None, [c('missed.check'), 'Nothing slipped.'], 'read:missed.check', freq=4),
     Q('question', 'anything urgent?', None, [c('pipe.list'), 'Nothing is marked urgent.'], 'read:pipe.list', freq=4),
@@ -123,7 +123,7 @@ CASES = [
     Q('question', 'what do you remember about me?', None, [c('memory.list'), 'Nothing yet.'], 'read:memory.list', freq=2),
     Q('question', 'how many open tasks do I have', None, [c('tasks.list'), 'Fourteen.'], 'read:tasks.list', demo='list', freq=3),
     Q('question', 'why did I never see the vendor portal notices', None, [c('rules.list', about='vendor portal'), 'No rule filters them.'], 'read:rules.list', freq=2),
-    Q('question', 'how do I set up a report?', None, [c('docs.search', query='set up a report'), 'Press New, then Report.'], 'read:docs.search', freq=3),
+    Q('question', 'how do I set up a report?', None, [c('docs.search', query='set up a report'), 'Press New, then Report.'], 'read:docs.search', demo='open', freq=3),
     Q('question', "what's the PO approval limit here", None, [c('knowledge.search', query='PO approval limit'), 'Nothing written down about it.'], 'read:knowledge.search', freq=2),
     Q('question', 'what did I do yesterday', None, [c('activity.list', days=2), 'You closed six.'], 'read:activity.list', freq=2),
     Q('question', 'what did I ask you to do this week', None, [c('asks.list', status='all'), 'Two asks.'], 'read:asks.list', freq=2),
@@ -152,18 +152,18 @@ CASES = [
     Q('agents', 'what is the agent doing?', 'agent', [c('agents.now'), 'It is reconciling the August export.'], 'read:agents.now', freq=4),
     Q('agents', 'which agents are running', None, [c('agents.now'), 'One, on TQ-0006.'], 'read:agents.now', freq=3),
     Q('agents', 'tell the agent to skip the inter-company rows', 'agent', c('answer_agent', text='skip the inter-company rows'), 'words', tools=('answer_agent', 'agent.answer'), freq=3),
-    Q('agents', f'start an agent on {T12}', None, c('dispatch.prepare', ref=T12, kind='coding'), 'light:regular_agent', freq=3),
+    Q('agents', f'start an agent on {T12}', None, c('dispatch.prepare', ref=T12, kind='coding'), 'light:regular_agent', demo='open', freq=3),
     Q('agents', 'research what Payworth charges per seat', None, c('task.create_from_text', kind='general', text='research what Payworth charges per seat', title='Payworth seat price'), 'new:agent:general', freq=3),
     Q('agents', 'have a coding agent fix the census sync timeout', None, c('task.create_from_text', kind='coding', text='fix the census sync timeout', title='Census sync timeout'), 'new:agent', freq=3, note='no coding CLI in the demo world: written into New as an agent job'),
     Q('agents', 'kill all the agents', None, 'Each agent stops from its own row - there is no stop-all.', 'words', tools=(), freq=1),
     # ── reports ──
-    Q('reports', 'run the end of day report', None, c('report.run', title='End of day checkup'), 'open:#report=', freq=4),
+    Q('reports', 'run the end of day report', None, c('report.run', title='End of day checkup'), 'open:#report=', demo='open', freq=4),
     Q('reports', 'run the AP ageing again', 'report', c('rerun'), 'open:#report=', freq=3),
-    Q('reports', 'pause the headcount report', None, c('report.pause', title='Headcount by site'), 'open:#report=', freq=2),
+    Q('reports', 'pause the headcount report', None, c('report.pause', title='Headcount by site'), 'open:#report=', demo='open', freq=2),
     Q('reports', 'every monday send me the overdue invoices', None, c('setup', text='every monday send me the overdue invoices'), 'new:report', sort={'kind': 'report'}, demo='report', freq=3),
-    Q('reports', 'what did the helpdesk report say?', None, [c('report.read', title='Helpdesk tickets'), 'Fourteen rows.'], 'read:report.read', freq=3),
-    Q('reports', 'list my reports', None, [c('reports.list'), 'Five reports.'], 'read:reports.list', freq=2),
-    Q('reports', 'delete the headcount report', None, c('report.delete', title='Headcount by site'), 'open:#report=', freq=1),
+    Q('reports', 'what did the helpdesk report say?', None, [c('report.read', title='Helpdesk tickets'), 'Fourteen rows.'], 'read:report.read', demo='open', freq=3),
+    Q('reports', 'list my reports', None, [c('reports.list'), 'Five reports.'], 'read:reports.list', demo='open', freq=2),
+    Q('reports', 'delete the headcount report', None, c('report.delete', title='Headcount by site'), 'open:#report=', demo='open', freq=1),
     Q('reports', 'make the AP ageing daily', None, c('report.edit', title='AP ageing', config={'daily_at': '08:00'}), 'open:#report=', demo='report', freq=2),
     # ── chit-chat and the ambiguous ──
     Q('chat', 'hi', None, 'Morning - ten things are on you.', 'words', tools=('words',), freq=4),
@@ -178,20 +178,20 @@ CASES = [
     # ── typos ──
     Q('typos', 'clera all teh fyi', 'todo', c('pipe.clear', select={'kind': 'fyi'}), 'cleared', freq=3),
     Q('typos', 'remidn me tmrw', 'todo', c('task.defer', until='tomorrow'), 'light:defer', freq=3),
-    Q('typos', 'mark tihs done', 'todo', c('close'), 'light:close', freq=3),
+    Q('typos', 'mark tihs done', 'todo', c('close'), 'light:close', demo='lit', freq=3),
     Q('typos', 'whats waitng on me', None, [c('pipe.list'), 'Ten things.'], 'read:pipe.list', demo='list', freq=3),
     Q('typos', 'opne settigns', None, 'Here: [Settings](#settings=config).', 'link:#settings', tools=('pages',), freq=2),
     Q('typos', 'repyl to marcus', 'todo', c('reply'), 'draft:reply', freq=3),
     # ── WhatsApp-style short replies ──
     Q('short', 'yes', 'review', c('approve'), 'light:approve', freq=5),
-    Q('short', '2', 'todo', 'Ok.', 'words', tools=('digit',), freq=4),
+    Q('short', '2', 'todo', 'Ok.', 'words', tools=('digit',), demo='lit', freq=4),
     Q('short', 'skip', 'todo', c('next'), 'next', freq=4),
     Q('short', 'no', 'review', 'Then it stays as drafted - nothing is sent.', 'words', tools=('words',), freq=4),
     Q('short', 'ok', 'todo', 'Ok.', 'words', tools=('words',), freq=4),
     Q('short', 'later', 'todo', c('task.defer', until='tomorrow 9am'), 'light:defer', freq=3),
     Q('short', 'k', 'todo', 'Ok.', 'words', tools=('words',), freq=2),
     Q('short', '👍', 'todo', 'Ok.', 'words', tools=('words',), freq=3),
-    Q('short', 'done.', 'todo', c('close'), 'light:close', freq=4),
+    Q('short', 'done.', 'todo', c('close'), 'light:close', demo='lit', freq=4),
 ]
 
 def find(query, title_hint=''):
@@ -234,7 +234,8 @@ BRING_UP = [
     ('check for updates', 'updates', '#settings=updates'),
     ('the Hub', 'hub', '#hub'),
 ]
-CASES += [Q('bring-up', t, None, find(q), f'link:{h}', freq=4) for t, q, h in BRING_UP]
+# ...the demo's script brings a report it names up itself (demo._route); every other bring-up is the real brain's look-up
+CASES += [Q('bring-up', t, None, find(q), f'link:{h}', demo='open' if re.fullmatch(r'#report=\d+', h) else 'out', freq=4) for t, q, h in BRING_UP]
 CASES += [
     Q('connectors', 'add LinkedIn as a connector', None, c('connection.create', type='linkedin'), 'open:#connector=linkedin', freq=3),
     Q('connectors', 'connect Slack', None, c('connection.create', type='slack'), 'open:#connector=slack', freq=3),
@@ -253,8 +254,8 @@ PHONE = [
     Q('phone', 'note on the task: waiting on the bank', 'todo', c('task.comment', text='waiting on the bank'), 'did:task.comment', freq=3, phone=True),
     Q('phone', 'snooze everything from Ruth until Monday', 'todo', c('pipe.defer', select={'sender': 'Ruth'}, until='monday 9am'), 'did:pipe.defer', freq=3, phone=True),
     Q('phone', 'close all from Priya', 'todo', c('pipe.close', select={'sender': 'Priya'}), 'did:pipe.close', freq=2, phone=True),
-    Q('phone', 'mark this done', 'todo', c('close'), 'proposal:task.complete', freq=4, phone=True),
-    Q('phone', 'remind me tomorrow', 'todo', c('task.defer', until='tomorrow 9am'), 'proposal:task.defer', freq=4, phone=True),
+    Q('phone', 'mark this done', 'todo', c('close'), 'proposal:task.complete', demo='lit', freq=4, phone=True),
+    Q('phone', 'remind me tomorrow', 'todo', c('task.defer', until='tomorrow 9am'), 'proposal:task.defer', demo='lit', freq=4, phone=True),
     Q('phone', 'send it', 'review', c('approve'), 'proposal:review.approve', freq=4, phone=True),
     Q('phone', 'reply to this', 'todo', c('reply'), 'draft:reply', freq=4, phone=True, demo='reply'),
     Q('phone', 'approve all the drafts', 'review', c('review.each'), 'card', freq=2, phone=True),
@@ -366,6 +367,9 @@ def ideal_turn(q: Q) -> dict:
 def demo_line(said: str) -> str:
     from taskuary import demo
     if said.startswith(demo.OUT_OF_SCRIPT[:40]): return 'out'
+    # ...and the script's routing (demo._route): the item, report or page brought up, or the real button lit on the table's item
+    if re.match(r'Here: \[[^\]]+\]\(#(task|report)=', said): return 'open'
+    if said.startswith('Lit '): return 'lit'
     for (rx, line), name in zip(demo.ANSWERS, ('reply', 'report', 'list')):
         if said.startswith(line.split('{')[0][:40]): return name
     return 'other'

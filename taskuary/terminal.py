@@ -373,7 +373,7 @@ class Term:
         # ...and the CLI's own account of it - every thought, tool and answer - copied beside the task, so the record
         # does not depend on the CLI keeping its logs (sessionrecord)
         from . import sessionrecord
-        try: sessionrecord.save(self.store, self.task_id, self.sid, self.cli, self.ext_id, text)
+        try: sessionrecord.save(self.store, self.task_id, self.sid, self.cli, self.ext_id, text, started=self.started)
         except Exception as e: logger.debug(f'session record for {self.sid} not kept: {e}')
 
     def settle(self, cap: float) -> bool:

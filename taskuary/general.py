@@ -892,6 +892,7 @@ class GeneralSession:
             raise RuntimeError(f'the assistant has been answering the previous question for over '
                                f'{int(WAIT_TURN)}s - something is stuck. Press stop, or reload the page.')
         self.busy, self.last = True, time.time()
+        t0 = self.last                       # the turn's own time, kept with its record (sessionrecord.record sums them)
         try:
             from . import workerstate as ws
             ws.record(self.store, self.task_id, self.sid, 'working', source='api')
@@ -1160,7 +1161,7 @@ class GeneralSession:
             try: sessionrecord.keep_turn(self.task_id, rid, self.trace)
             except Exception as e: logger.debug(f'general turn steps not kept for task {self.task_id}: {e}')
             self.store.audit('task', self.task_id, 'assistant_reply', 'assistant', 'agent',
-                             {'provider': self.provider, 'model': self.model, 'chars': len(reply)})
+                             {'provider': self.provider, 'model': self.model, 'chars': len(reply), 'took': round(time.time() - t0)})
             self._emit(f'\x1b[1;32massistant>\x1b[0m {reply}\r\n\r\n')
             # AFTER the turn is filed, and off this thread: closing runs wrapup.wrap, which closes
             # this very session - doing it inline would kill the pty from inside its own answer.

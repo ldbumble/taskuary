@@ -1416,7 +1416,9 @@ def _system(store, llm=None) -> str:
     except Exception: repos = []
     where = (f"REPOSITORIES a coding job can open in - name one as `as` when the owner's words or the work point at it; name none when "
              f"unsure and the card asks them: {', '.join(repos[:40])}\n\n") if repos else ''
-    pages = pages_block(store) if DELIVERY.get() != PHONE else ''      # a phone has no canvas to open a page on
+    # a phone has no canvas to open a page on - but it still knows the screens, by name: with none, "update taskuary" from the phone had
+    # no road but a link it could not open or a button it had no row for (2026-10-23)
+    pages = pages_block(store) if DELIVERY.get() != PHONE else phone_screens()
     return f"{_counsel(store)}\n\n{who}{where}{pages}{contract.format(owner=_owner(store))}"
 
 
@@ -1457,8 +1459,27 @@ def pages_block(store) -> str:
                'no link: it is the Setup button at the top of the page; say so\n') +
             f"- a report or workflow: #report=<id>{' - ' + reps if reps else ''}; a new report #report=new; a new workflow "
             '#report=new-agent; the workflows #report=workflows\n'
-            '- settings: #settings=config, #settings=policies, #settings=memory, #settings=docs (the operator documents), '
-            '#settings=updates, #settings=audit; agent profiles #profiles\n\n')
+            '- settings, page by page:\n' + _screens() + '\n' + THIS_APP + '\n\n')
+
+
+# WHAT THE APP ITSELF IS ASKED TO DO IS ITS OWN SCREEN (the owner, 2026-10-23: "i asked assistant to update taskuary and it pulled up general
+# agent instead of settings page updates"). Updates was a bare "#settings=updates" in a list, while every louder line - "work goes to an
+# agent", "what you can do, you do" - pointed an act with no tool of its own at an agent, which could run the install itself. Each page is
+# said by what it holds (words.json `does`), and using the app is told apart from changing its code, which is a coding job like any other.
+THIS_APP = ('USING OR SETTING TASKUARY ITSELF - a setting, a connection, its own update to a new version - is done on its own screen or by '
+            'its own tool, never handed to an agent and never a set-up: the owner presses it there. Changing Taskuary\'s CODE is a coding '
+            'job like any other.')
+
+def _screens(link: bool = True) -> str:
+    """The pages the Assistant brings up, each by what it holds (words.json `does`) - with its link on the desk, by name alone on a phone."""
+    return '\n'.join(f"  {p['href'] + ' - ' if link else ''}{p['name']}: {p['does']}" for p in places.PLACES.values() if p.get('does'))
+
+
+def phone_screens() -> str:
+    """The same screens for a phone chat, where no link opens: named in words, at the desk (a phone has no canvas to open them on)."""
+    return ('APP SCREENS - on their desk, never on this phone. When they ask for something done on one of these and no tool of yours does it, '
+            f'say the screen and what to press there in words ("at your desk, {places.name("updates")} - press its update button"), never a link:\n'
+            + _screens(link=False) + '\n' + THIS_APP + '\n\n')
 
 
 def _urgent_line(pile_items: list, item: dict | None) -> str:
@@ -2068,8 +2089,11 @@ def read_op(store, kind: str, params: dict) -> str:
         from . import search
         hits = search.places(store, str(p.get('query') or ''))
         if not hits: return f"Nothing in the app is called that ({p.get('query')!r}). Try the one word that names it."
-        return NEWLINE.join(f"{h['title']} ({h['type']}{' - ' + h['where'] if h.get('where') else ''}{', ' + h['sub'] if h.get('sub') else ''}): link it as "
-                            f"[{h['title']}]({h['href']})" for h in hits)
+        # ...and on a phone no link opens: the screen is named, at the desk (phone_screens)
+        say = (lambda h: f"no link opens on a phone - name it, at their desk: {h.get('where') + ' → ' if h['type'] == 'setting' and h.get('where') else ''}"
+               f"{h['title']}") if DELIVERY.get() == PHONE else (lambda h: f"link it as [{h['title']}]({h['href']})")
+        return NEWLINE.join(f"{h['title']} ({h['type']}{' - ' + h['where'] if h.get('where') else ''}{', ' + h['sub'] if h.get('sub') else ''}): {say(h)}"
+                            for h in hits)
     # THE APP ITSELF, by name - appfacts reads the tables the tabs read. A miss lists what exists, so
     # the second try finds it; an id is printed with every row, so the next call can be exact.
     if kind == 'report.read':

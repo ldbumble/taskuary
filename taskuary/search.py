@@ -226,7 +226,8 @@ PAGES = (('the Hub', '#hub', 'hub company knowledge handbook'), ('Reports', '#re
 
 def _app_rows(store) -> list:
     from . import words as places
-    rows = [{'type': 'place', 'title': p['name'], 'rest': k, 'href': p['href'], 'key': k} for k, p in places.PLACES.items() if p.get('href')]
+    # ...a page by what it holds too (words.json `does`): "install the new version" named no page, and Updates was found only by "update"
+    rows = [{'type': 'place', 'title': p['name'], 'rest': f"{k} {p.get('does') or ''}", 'href': p['href'], 'key': k} for k, p in places.PLACES.items() if p.get('href')]
     rows += [{'type': 'place', 'title': t, 'rest': w, 'href': h, 'key': w.split()[0]} for t, h, w in PAGES]
     rows += [{'type': 'setting', 'title': m['label'], 'where': f"{places.name('settings')} → {m['group']}", 'rest': f"{m['group']} {m.get('desc') or ''} {m.get('help') or ''} {k}",
               'href': f"#settings=config&group={quote(m['group'], safe='')}&key={quote(k, safe='')}"}

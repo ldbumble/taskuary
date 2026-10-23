@@ -88,7 +88,8 @@ export default function UpdateCard() {
           </Box>
           <Button size="small" variant="outlined" disabled={!!busy} onClick={() => check(true)}
             startIcon={busy === "check" ? <CircularProgress size={12} /> : null}>Check now</Button>
-          <Button size="small" variant="contained" disableElevation disabled={!canApply || !!busy} onClick={apply}
+          {/* data-tq-knob: the Assistant's "update taskuary" lights this one (#settings=updates&key=update, SettingsView's knob) */}
+          <Button size="small" variant="contained" disableElevation disabled={!canApply || !!busy} onClick={apply} data-tq-knob="update"
             startIcon={busy === "apply" || busy === "restarting" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}
             title={how === "source" ? "a source checkout updates with git pull" : info?.newer ? `install v${info.latest} and reopen`
               : unknown ? "the check did not reach the release page - press Check now to try again" : "nothing newer to install"}>

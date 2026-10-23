@@ -1335,7 +1335,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // THE STATUS IN THE HEADER IS THE RAIL'S (the redesign, owner-approved 2026-10-21): the same mark and word the rail row wears for this
   // task - the live session's own word first, then the rail's row (on the canvas), then the server's state (railStatus.taskStatus)
   const status = taskStatus({ live: term?.alive ? { alive: true, waiting: agentState === AGENT.waiting } : null, rail, state: rowState,
-    closed: ["done", "dropped"].includes(t?.Status) });
+    closed: ["done", "dropped"].includes(t?.Status), cantSend: !!pendingReview && cantSend });
   const continueHere = !liveSession && notDone && (barContinue || (stage !== "agent" && canContinue));
   const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession;
   const startHere = !liveSession && notDone && !continueHere && !sendGeneral && (stage !== "agent" || (agentBar && !isGeneral));

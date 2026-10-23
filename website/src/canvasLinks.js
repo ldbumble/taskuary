@@ -51,7 +51,8 @@ export function canvasRequestFromHash(hash, n = 0) {
     if (!SETTINGS_PAGES.includes(page)) return { kind: "browse", area: "settings", state: { section: null, open: null }, n };
     // Docs is a shelf of files: its link opens the shelf, not whichever document happens to be first
     // ...and &key=<knob>: the one setting the Assistant brought the page up for (concierge._route), outlined and in view
-    const knob = page === "config" && group && /&key=([^&]+)/.test(h) ? decodeURIComponent(/&key=([^&]+)/.exec(h)[1]) : "";
+    // ...and on a page of its own, its one button (#settings=updates&key=update: "update taskuary" brings Updates up with its button lit)
+    const knob = (page !== "config" || group) && /&key=([^&]+)/.test(h) ? decodeURIComponent(/&key=([^&]+)/.exec(h)[1]) : "";
     return { kind: "browse", area: "settings", state: { section: page, open: page === "config" ? (group || null) : page === "docs" ? null : page, ...(knob ? { knob } : {}) }, n };
   }
   // a connector card's "new playbook for this connection" (#playbook=new:<type>): the Playbooks shelf, its New playbook asked for that card
@@ -78,7 +79,7 @@ export function hashFor(area, s = {}) {
     if (!p) return "#settings";
     if (p === "docs") return /^d:\w+$/.test(String(s.open || "")) ? `#settings=docs&doc=${s.open.slice(2)}${s.view ? `&view=${s.view}` : ""}` : "#settings=docs";
     if (p === "config") return s.open ? `#settings=config&group=${enc(s.open)}${s.knob ? `&key=${enc(s.knob)}` : ""}` : "#settings=config";
-    return `#settings=${p}`;
+    return `#settings=${p}${s.knob ? `&key=${enc(s.knob)}` : ""}`;
   }
   if (area === "reports") {
     if (s.section === "workflows") return s.open === "draft" ? "#report=draft-workflow" : REPORT_BUCKETS.includes(s.open) ? `#report=${s.open}` : "#report=workflows";

@@ -142,6 +142,12 @@ CASES = [
     Q('settings', 'which AI runs triage?', None, [c('agents.list'), 'Triage uses the default brain.'], 'read:agents.list', freq=2),
     Q('settings', 'use dark mode', None, 'The theme is the switch in the top bar.', 'words', tools=(), freq=2),
     Q('settings', 'make the font bigger', None, 'Text size follows the browser: Ctrl and + makes it bigger.', 'words', tools=(), freq=1),
+    # ...siblings of "update taskuary" (2026-10-23): the app's own settings and connections are its screens, never an agent's job; one
+    # it does not have is said in words - never a hand-off to build or find it
+    Q('settings', 'turn on quiet hours', None, [c('app.find', query='quiet hours'), 'There is no quiet-hours switch - the sound and the desktop notification are '
+      'each their own setting under Notifications.'], 'read:app.find', freq=2, note='no such setting: said in words, never an agent sent to build it'),
+    Q('settings', 'turn on share links', None, 'Sharing is per task - the Share button on its row; there is no switch for it.', 'words', tools=('words',), freq=2,
+      note='no such setting: a task is shared from its own row'),
     Q('settings', 'connect my bank', None, c('setup', text='connect my bank'), 'open:#connector=teller', sort={'kind': 'connection', 'provider': 'teller'}, freq=2),
     # ── agents ──
     Q('agents', 'stop the agent', 'agent', c('stop_agent'), 'light:stop_agent', freq=4, live=6),
@@ -231,7 +237,16 @@ BRING_UP = [
     ('the audit log', 'audit log', '#settings=audit'),
     ('agent profiles', 'profiles', '#profiles'),
     ('the routing rules', 'routing policies', '#settings=policies'),
-    ('check for updates', 'updates', '#settings=updates'),
+    # ...Taskuary's own update, by any words for it: Updates, its button lit - never an agent (the owner, 2026-10-23: "i asked assistant to
+    # update taskuary and it pulled up general agent")
+    ('check for updates', 'updates', '#settings=updates&key=update'),
+    ('update taskuary', 'update taskuary', '#settings=updates&key=update'),
+    ('install the new version', 'install the new version', '#settings=updates&key=update'),
+    ('upgrade the app', 'upgrade the app', '#settings=updates&key=update'),
+    ('install the latest release', 'install the latest release', '#settings=updates&key=update'),
+    # ...and its siblings: a connection or a brain is its own screen too, never an agent's job
+    ('connect my mail', 'email connections', '#connections=Email'),
+    ('change the assistant brain', 'assistant brain', '#settings=config&group=How%20mail%20is%20sorted&key=concierge_ai'),
     ('the Hub', 'hub', '#hub'),
 ]
 # ...the demo's script brings a report it names up itself (demo._route); every other bring-up is the real brain's look-up
@@ -259,11 +274,21 @@ PHONE = [
     Q('phone', 'send it', 'review', c('approve'), 'proposal:review.approve', freq=4, phone=True),
     Q('phone', 'reply to this', 'todo', c('reply'), 'draft:reply', freq=4, phone=True, demo='reply'),
     Q('phone', 'approve all the drafts', 'review', c('review.each'), 'card', freq=2, phone=True),
+    # THE APP'S OWN ACTS FROM A PHONE (2026-10-23): one with a tool is its yes or no; Updates has none, so it is named at the desk in words -
+    # no link a phone cannot open, and never an agent
+    Q('phone', 'connect my gmail', None, c('connection.create', type='gmail'), 'proposal:connection.create', freq=3, phone=True),
+    Q('phone', 'turn off the sounds', None, c('setting.set', setting='hand_sound', value='0'), 'proposal:setting.set', freq=2, phone=True),
+    Q('phone', 'update taskuary', None, [c('app.find', query='update taskuary'),
+                                         lambda user: f"At your desk, {re.search(r'name it, at their desk: (.+)', user).group(1)} - press its update button."],
+      'read:app.find', tools=('app.find', 'screens'), freq=3, phone=True),
+    Q('phone', 'change the assistant brain', None, [c('app.find', query='assistant brain'),
+                                                    lambda user: f"At your desk, {re.search(r'name it, at their desk: (.+)', user).group(1)}."],
+      'read:app.find', tools=('app.find', 'screens'), freq=2, phone=True),
 ]
 CASES += PHONE
 
 # not tools, but roads the prompt carries all the same: a link to a page (pages_block), plain words, the desk's numbered action words
-ROADS = {'pages': 'APP PAGES', 'words': 'Answer in plain words', 'digit': None}
+ROADS = {'pages': 'APP PAGES', 'screens': 'APP SCREENS', 'words': 'Answer in plain words', 'digit': None}
 
 
 def _scripted(answers, seen):

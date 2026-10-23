@@ -656,9 +656,12 @@
 .tq-arow-verbs { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 10px; }   /* a narrow screen wraps, still centred */
 /* ONE TYPE (canvas J3): its own soft section, the label inside on the left of its one-word pills - one line, so the row is a
    band as tall as the suggestion and the box (the owner, 2026-10-13). The label names the noun. */
-.tq-cl { display: flex; align-items: center; gap: 5px; padding: 5px; border-radius: 16px; background: #f3f1ec; }
+.tq-cl { display: flex; align-items: center; gap: 5px; padding: 5px; border-radius: 16px; background: #f3f1ec; max-width: 100%; box-sizing: border-box; min-width: 0; }
 .tq-cl-h { width: 44px; padding-left: 9px; font: 500 9.5px/1 'IBM Plex Mono', Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; color: #8a857c; }
-.tq-cl-b { display: flex; gap: 5px; }
+/* ...and its pills WRAP inside it: the walk's end "Open TQ-... · <title>" chips ran past a phone's edge, and a centred line that does not
+   wrap overflows on both sides - their starts were cut off (the owner, 2026-10-22: chips wrap, never clip) */
+.tq-cl-b { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; min-width: 0; }
+.tq-cl-b .tq-ab { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .tq-cl .tq-ab { min-height: 30px; min-width: 78px; padding: 0 14px; font-size: 12.5px; }
 .tq-cl .tq-ab.next { min-width: 0; }
 .tq-cl-more { min-width: 30px !important; width: 30px; padding: 0 !important; color: #6e685f; }

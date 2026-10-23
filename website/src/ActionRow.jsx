@@ -2,10 +2,10 @@
 // next, the rare ones behind More; Next is FIRST (the owner, 2026-09-30). The card registers them (actionRow.js); this only draws. Centred over the composer,
 // ONE filled button at most - the Advisor's pick, and none before it answers - and a greyed decision says why it is greyed.
 import React, { useEffect, useState } from "react";
-import { Menu, MenuItem, Popover } from "@mui/material";
+import { Menu, MenuItem, Popover, useMediaQuery } from "@mui/material";
 import api from "./api.js";
 import { suggestion } from "./advice.js";
-import { advisedAny, advisedIn, clustersOf, press, rowOf, lightOnCard, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { advisedAny, advisedIn, clustersOf, phoneRow, press, rowOf, lightOnCard, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
 import { adviceNone } from "./words.js";
 
 // what a refused proposal says on the line: the item moved under the Advisor (409) is not the owner's mistake - the page reads
@@ -123,6 +123,8 @@ export default function ActionRow({ inline = false, advised = null }) {
   const row = rowOf(useRowVerbs(), pick);
   const { ref, decide, agent, more, next, why } = row;
   const hosted = useHosted();
+  // ...a phone's row is Next, the one move and one ▾ (phoneRow) - the width the page calls a phone (AssistantView)
+  const phone = useMediaQuery("(max-width:600px)");
   // the card's own move, advised, is lit on the card (rowOf's `lit`); only the row that is drawn says which
   const drawn = inline || !hosted;
   useEffect(() => { if (drawn) lightOnCard(row.lit); }, [drawn, row.lit]);
@@ -141,7 +143,7 @@ export default function ActionRow({ inline = false, advised = null }) {
         {next && <div className="tq-cl" role="group" aria-label="Move on">
           <div className="tq-cl-b"><button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} title={next.title || undefined} disabled={next.disabled}
             onClick={(e) => press(next.id, e, e.currentTarget)}>{next.label}</button></div></div>}
-        {clustersOf(row).map((g) => <Cluster key={g.type} g={g} btn={btn} />)}
+        {(phone ? [phoneRow(row)].filter((g) => g.shown.length || g.rest.length) : clustersOf(row)).map((g) => <Cluster key={g.type} g={g} btn={btn} />)}
       </div>
       {why && <div className="tq-arow-why" role="status" data-tq-row-why="">{why}</div>}
     </div>

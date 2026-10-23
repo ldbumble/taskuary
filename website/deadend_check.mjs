@@ -1231,6 +1231,10 @@ async function searchPass() {
   // ...the walk's FYI card, its subjects beside each sender (they stood a letter a line), and the Your work drawer with its tooltip
   page.step = "phone";
   await page.goto(`${srv.base}/`, { waitUntil: "load" }); await wait(5000); await clickText(page, "Walk me through my tasks"); await wait(4000);
+  // ...and the row at a phone's width: Next, the one move and ONE ▾ for the rest - two groups, never a band per type (the owner, 2026-10-22)
+  const groups = await page.evaluate(() => [...document.querySelectorAll("[data-tq-row] .tq-cl")].filter((e) => e.getBoundingClientRect().width > 0).length);
+  if (groups > 2) note("PHONE", page.step, `the row at 390px has ${groups} groups - Next, the one move and its ▾ are two`);
+  else walked.push("phone: the row is Next, one move and its ▾");
   for (let n = 0; n < 14 && !(await page.$(".tq-fyi-line")); n++) { if (!(await pressNext(page))) break; await wait(2500); }
   if (await page.$(".tq-fyi-line")) { await phoneNote(page, "the FYI card"); walked.push("phone: the FYI card at 390px"); }
   const rail = await page.$("[data-testid=ViewSidebarIcon]");

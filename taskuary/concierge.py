@@ -1075,6 +1075,17 @@ def _did(store, tid: int, said: str, kind: str) -> dict:
     return {'say': said, 'options': [], 'chips': [], 'decision': {'verb': 'setting'}, 'did': kind}
 
 
+def _relate(store, tid: int, p: dict, actor: str) -> dict:
+    "people.relate, run: the org chart changed and said in one line - or a miss the model fixes (a name that is several people)."
+    from . import orgchart
+    try: r = orgchart.relate(store, p.get('who'), p.get('relation'), p.get('owns'), p.get('drops'),
+                             str(p.get('forget')).strip().lower() in ('true', '1', 'yes'), actor)
+    except ValueError as e: raise CallMiss(f'{e}. Nothing was changed on the org chart.')
+    who = r.get('name') or r.get('email')
+    if r.get('forgotten'): return _did(store, tid, f'Took {who} off your org chart.', 'people.relate')
+    return _did(store, tid, f"Org chart: {who} - {orgchart.words(r) or 'nothing now'}.", 'people.relate')
+
+
 def _page(store, tid: int, table: dict | None, href: str, said: str) -> dict:
     """An act whose button lives on a page: that page, opened beside the answer (appLinks), and where to press on it - said by the page's
     name, never "beside this", so the line is still true after a reload, when nothing is beside it."""
@@ -2208,6 +2219,9 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # failed at the run with "what: done | reply | any | off" (2026-10-06). The model fixes it before anything is proposed.
     if kind == 'task.watch' and str(params.get('what') or 'any').strip().lower() not in asks.WATCHES:
         raise CallMiss(f"task.watch what is one of done, reply, any, off - not {str(params.get('what'))[:60]!r}. Nothing was set.")
+    # WHO IS WHO, KEPT AND SAID (orgchart.py, 2026-10-22): the owner's word on a person - "Erin is my manager" - is a fact about their own
+    # organisation, kept at once on the desk and the phone alike, like a note on a task: nothing leaves, and the chart has no page to bring up
+    if kind == 'people.relate': return _relate(store, tid, params, actor)
     # ON THE DESK A NEW JOB IS NEW, FILLED IN (routes): the words on the tab that starts it, its own button the one to press
     if routes() and kind in ('task.create_from_text', 'task.setup'):
         return _new(store, tid, item, str(params.get('kind') or 'general') if kind == 'task.create_from_text' else 'general',

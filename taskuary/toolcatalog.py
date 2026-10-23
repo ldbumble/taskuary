@@ -52,6 +52,10 @@ PURPOSE = {
     'agent.stop':               "save and end an agent's session - the one on the table, or the task `ref` names; never a guess at which",
     'report.rerun':             'run that report again',
     'memory.remember':          'keep a fact - `note`',
+    'people.relate':            ("who someone is to the owner, on their org chart - `who`: a name or address; `relation`: manager | report | none "
+                                 '(none clears it); `owns`: areas they are responsible for ("payroll, benefits"), added; `drops`: areas taken off; '
+                                 '`forget`: true takes them off the chart. "Erin is my manager", "Ray owns payroll", "Gail reports to me" - '
+                                 'never memory.remember for these: triage and agents read the chart'),
     'routing.remember':         ('remember how work like this should be ROUTED next time - `field`: kind | profile | system, '
                                  'and `value`. kind: coding (an agent in a checkout) | general (the assistant) | task (the owner, '
                                  'no agent). system: where the work actually lives when no repository here can touch it, named '
@@ -138,6 +142,8 @@ PURPOSE = {
 
 # THE APP'S OWN KNOBS - reports, settings, connections, scripts - named by what they do. They ran at once, put back from the receipt
 # (the tiers, 2026-09-18) until the owner ruled out undo and the chat's own acts (2026-10-19): each is its page's button now (concierge._route).
+# ...and a fact about the owner's own world with no button and no page to bring up: kept at once and said (concierge._relate)
+KEPT = frozenset({'people.relate'})
 INSTANT = frozenset({'report.run', 'report.pause', 'report.resume', 'report.route', 'report.edit', 'setting.set', 'task.defer', 'task.watch',
                      'connection.test', 'connection.pause', 'connection.resume', 'script.start'})
 
@@ -365,7 +371,7 @@ BUCKETS = (
     ('reports', 'reports and workflows', ('report.create', 'report.run', 'report.rerun', 'report.pause', 'report.resume',
                                           'report.route', 'report.edit', 'report.delete')),
     ('app', 'settings, connections, roles, scripts and kept facts', ('setting.set', 'connection.create', 'role.apply', 'connection.test', 'connection.pause',
-                                                             'connection.resume', 'script.start', 'memory.remember', 'hub.publish')),
+                                                             'connection.resume', 'script.start', 'memory.remember', 'people.relate', 'hub.publish')),
 )
 
 
@@ -392,7 +398,7 @@ def describe(kind: str) -> str:
     if kind in PURPOSE:
         target, required, _ = operations.KINDS[kind]
         asks = [r for r in required if r not in CONTEXT_FILLED]
-        runs = 'the owner presses its button'
+        runs = 'runs at once, said' if kind in KEPT else 'the owner presses its button'
         return f"{kind} (on a {target}; {runs}){' - needs ' + ', '.join(asks) if asks else ''} - {PURPOSE[kind]}"
     return f'There is no tool {kind!r}. The buckets: ' + ', '.join(n for n, _, _ in BUCKETS) + ', look.'
 
@@ -590,7 +596,7 @@ def _entry(k: str) -> list:
                            'the task (TQ-0123) - always named, the one on the table included; a new job is task.create_from_text')
     prose = ''.join(s + c for s, c in keep).strip(' -;')
     runs = ('Runs at once and changes nothing.' if k in READS else DECISION_RUNS.get(k, '').capitalize() + '.' if k in DECISION_RUNS
-            else 'Brings up its button for you to press.')
+            else 'Runs at once and says what it changed.' if k in KEPT else 'Brings up its button for you to press.')
     stop = '' if prose.endswith(('.', ')', '"')) else '.'
     out = [f'### `{k}`', '', f'{prose[:1].upper()}{prose[1:]}{stop}', '']
     out += [f"- `{a}`{' (optional)' if a in optional else ''}{' - ' + d if d else ''}" for a, d in args.items()]

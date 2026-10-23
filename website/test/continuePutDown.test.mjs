@@ -6,7 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { asPressed, levelOf } from "../src/funnelPile.js";
+import { asPressed, levelOf, putDownLanded } from "../src/funnelPile.js";
 
 const read = (f) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), "utf8");
 const rows = [
@@ -35,4 +35,13 @@ test("the walk's Continue moves the row at the press, holds it until the pile ag
   assert.match(view, /onFail=\{\(\) => setContinuingTid\(null\)\}/);
   assert.match(view, /asPressed\(pile\.items, \{ leaving: leavingTid, continuing: continuingTid \}\)/);
   assert.match(view, /row\.lane === "working"\)\) setContinuingTid\(null\)/, "held until the server's pile has it working");
+});
+
+// REMIND ME HID THE ROW UNTIL A RELOAD (UX walk, 2026-10-22): the put-down was held until the row left the pile, but a reminded
+// task stays in it, For later - so the rail went on dropping it. The hold ends when the row is gone OR put away.
+test("a put-down lands when its row leaves the pile or comes back For later, and not before", () => {
+  assert.equal(putDownLanded(rows, 4), false, "still an ordinary row: the server has not answered yet");
+  assert.equal(putDownLanded(rows, 99), true, "closed: gone from the pile");
+  assert.equal(putDownLanded([{ ...rows[1], deferred: true, back_at: "2026-10-23 09:00:00" }], 4), true, "reminded: For later");
+  assert.match(read("AssistantView.jsx"), /putDownLanded\(pile\.items, leavingTid\)\) setLeavingTid\(null\)/);
 });

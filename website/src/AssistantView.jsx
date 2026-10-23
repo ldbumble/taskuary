@@ -58,7 +58,7 @@ import ContinueBox from "./ContinueBox.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, ageAt, asPressed, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory, withdrawSelection } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, ageAt, asPressed, putDownLanded, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory, withdrawSelection } from "./funnelPile.js";
 import { FYI_PAGE, coveredByReload, fyiTail, heldSince, pileRows, sentChips } from "./funnelPile.js";
 import { railStatus } from "./railStatus.js";
 import { StatusLogo } from "./StatusMark.jsx";
@@ -2916,8 +2916,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const railPile = useMemo(() => ((leavingTid || continuingTid) && pile?.items
     ? { ...pile, items: asPressed(pile.items, { leaving: leavingTid, continuing: continuingTid }) } : pile),
     [pile, leavingTid, continuingTid]);
-  useEffect(() => {                                   // the close has landed: the server's pile no longer has it
-    if (leavingTid && pile?.items && !pile.items.some((i) => i.tid === leavingTid)) setLeavingTid(null);
+  useEffect(() => {                                   // the close has landed: the server's pile no longer has it, or has it For later
+    if (leavingTid && pile?.items && putDownLanded(pile.items, leavingTid)) setLeavingTid(null);
   }, [pile, leavingTid]);
   useEffect(() => {                                   // ...and the continue has: the server's pile has it working (or not at all)
     const row = continuingTid && pile?.items ? pile.items.find((i) => i.tid === continuingTid) : undefined;

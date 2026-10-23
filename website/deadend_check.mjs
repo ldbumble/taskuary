@@ -411,7 +411,7 @@ const readPage = (page) => page.evaluate(() => {
   const strip = [...document.querySelectorAll("[data-tq-strip]")].find(vis);
   // ...the row's filled button, or the draft card's own lit one (ReviewDecision marks it [data-tq-lit]): a draft's Send, Copy or
   // Redraft is lit under the draft, never on the bar (the owner, 2026-10-22) - the silent strip over it is the obvious move, not a gap
-  const litEl = (row && [...row.querySelectorAll(".tq-ab.p")].find(vis)) || [...document.querySelectorAll("[data-tq-lit]")].find(vis);
+  const litEl = (row && [...row.querySelectorAll(".tq-arow-verbs .tq-ab.p")].find(vis)) || [...document.querySelectorAll("[data-tq-lit]")].find(vis);
   const lr = litEl?.getBoundingClientRect(), hit = lr && document.elementFromPoint(lr.left + lr.width / 2, lr.top + lr.height / 2);
   const lit = litEl ? { word: litEl.innerText.trim(), inView: lr.top >= 0 && lr.left >= 0 && lr.bottom <= innerHeight && lr.right <= innerWidth,
     covered: !(hit && (hit === litEl || litEl.contains(hit))) } : null;
@@ -1271,7 +1271,7 @@ async function searchPass() {
   page.step = "phone";
   await page.goto(`${srv.base}/`, { waitUntil: "load" }); await wait(5000); await clickText(page, "Walk me through my tasks"); await wait(4000);
   // ...and the row at a phone's width: Next, the one move and ONE ▾ for the rest - two groups, never a band per type (the owner, 2026-10-22)
-  const groups = await page.evaluate(() => [...document.querySelectorAll("[data-tq-row] .tq-cl")].filter((e) => e.getBoundingClientRect().width > 0).length);
+  const groups = await page.evaluate(() => [...document.querySelectorAll("[data-tq-row] .tq-arow-verbs > .tq-cl")].filter((e) => e.getBoundingClientRect().width > 0).length);
   if (groups > 2) note("PHONE", page.step, `the row at 390px has ${groups} groups - Next, the one move and its ▾ are two`);
   else walked.push("phone: the row is Next, one move and its ▾");
   for (let n = 0; n < 14 && !(await page.$(".tq-fyi-line")); n++) { if (!(await pressNext(page))) break; await wait(2500); }

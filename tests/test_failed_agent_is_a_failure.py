@@ -43,6 +43,12 @@ class FailedAgent(unittest.TestCase):
         self.assertEqual(story['fix']['label'], 'Connect an AI')
         self.assertEqual(advisor.agent_failed(self.s, {'tid': self.tid})['fix']['label'], 'Connect an AI')
 
+    def test_with_no_ai_the_owners_words_are_kept_and_nothing_says_it_started(self):
+        sess = self.fail()
+        self.assertIn('compare them', [c['Body'] for c in self.s.list_comments(self.tid) if c.get('ActorType') == general.USER_TYPE])
+        self.assertNotIn('working', [e['Kind'] for e in self.s.worker_events(self.tid)], 'no run worked: there was no AI to run on')
+        self.assertFalse([t for t in sess.trace if t.get('type') == 'start'], 'no "Started the selected agent" step')
+
     def test_no_report_is_filed_for_a_failed_turn(self):
         self.fail()
         self.assertFalse(any(str(c.get('Body') or '').startswith('AGENT REPORT') for c in self.s.list_comments(self.tid)))

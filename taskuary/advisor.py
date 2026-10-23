@@ -337,11 +337,16 @@ def related_line(store, item, target_kind, target_id, cap: int = 5) -> str:
         for t in store.list_tasks(active_only=True):
             if t['TaskId'] != own and t.get('Title') and topic_hit(subj, t['Title']) and topic_hit(t['Title'], subj): hits.setdefault(t['TaskId'], set()).add('same subject')
     out = []
+    from .store import task_ref
+    from .funnel import working_tids
+    from .workerstate import _live
+    running = working_tids(store, live_state=[])                  # a headless run still going; a live session is _live's
     for tid, why in sorted(hits.items(), key=lambda kv: (-len(kv[1]), -kv[0]))[:cap]:
         t = store.get_task(tid) or {}
         if t.get('Status') in ('done', 'dropped'): continue
-        from .store import task_ref
-        held = ' - an agent is on it' if t.get('Status') == 'in_progress' else ''
+        # ...on it means a live session or run: `in_progress` outlives a stopped or failed agent, and the Advisor told the owner
+        # to "look again later" about work nobody was doing (2026-10-22 walk)
+        held = ' - an agent is on it' if _live(tid) or tid in running else ''
         out.append(f"- {task_ref(tid)} {t.get('Status')}: {_one(t.get('Title'), 100)} ({', '.join(sorted(why))}){held}")
     return ('POSSIBLE DUPLICATES - other open tasks with its sender, thread or subject (one may already cover this ask):\n' + '\n'.join(out)) if out else ''
 

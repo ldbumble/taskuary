@@ -190,8 +190,11 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   // note
   const [when, setWhen] = useState("");
   // a goal (spec 2026-10-12): what done looks like is the words above; by when, who is involved, and whether the AI plans the steps
-  const [by, setBy] = useState(""); const [who, setWho] = useState(""); const [plan, setPlan] = useState(true);
   const noAi = useCapabilities().ai === false;
+  // ...Plan it only with an AI to plan: pre-selected with none, the goal's first press failed into NO_AI_PLAN (2026-10-22 walk). The
+  // capability lands after the first draw, so it is followed until the owner picks a side
+  const [by, setBy] = useState(""); const [who, setWho] = useState(""); const [plan, setPlan] = useState(!noAi), planPicked = useRef(false);
+  useEffect(() => { if (!planPicked.current) setPlan(!noAi); }, [noAi]);
   const filed = useRef(null);      // a task this sheet filed whose start was refused: {taskId, ref, about, how}
 
   useEffect(() => { if (!open) return; setErr(""); setOk(""); setKind(initialKind); }, [open, initialKind]);
@@ -503,9 +506,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
             <Box>
               <Label>And then</Label>
               <Box sx={{ display: "flex", gap: 1 }}>
-                <Fork on={plan} onClick={() => setPlan(true)} title="Plan it and show me"
+                <Fork on={plan} onClick={() => { planPicked.current = true; setPlan(true); }} title="Plan it and show me"
                   hint="the AI proposes the steps from your words; you cut or add, then start the first one. It lands on the rail as a goal." />
-                <Fork on={!plan} onClick={() => setPlan(false)} title="Track it, I have the plan"
+                <Fork on={!plan} onClick={() => { planPicked.current = true; setPlan(false); }} title="Track it, I have the plan"
                   hint="type the steps yourself on the task; it chases the people on them and reports against the date." />
               </Box>
             </Box>

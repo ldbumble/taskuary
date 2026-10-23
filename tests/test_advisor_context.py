@@ -66,6 +66,10 @@ def test_another_open_task_on_the_same_sender_or_thread_is_flagged_a_possible_du
     two, _ = asked(s, 'Reconcile the export against the feed', 'can it be reconciled?')
     s.update_task(two, {'Status': 'in_progress'}, 'owner')
     other, _ = asked(s, 'Something else entirely', 'hello', who=('Ray Colton', 'ray@northwind.example'))
+    # in_progress with nothing running is a stopped or failed agent: never "an agent is on it - look again later" (2026-10-22 walk)
+    dup = prompt(s, one).split('POSSIBLE DUPLICATES', 1)[1].split('\n\n')[0]
+    assert 'Reconcile the export against the feed (same sender)' in dup and 'an agent is on it' not in dup
+    s.start_run(two, 'assistant', 'reconcile', 'owner')
     p = prompt(s, one)
     dup = p.split('POSSIBLE DUPLICATES', 1)[1].split('\n\n')[0]
     assert 'Reconcile the export against the feed (same sender) - an agent is on it' in dup

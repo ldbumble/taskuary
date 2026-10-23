@@ -847,10 +847,14 @@ def paused_conversation(store, item: dict) -> dict:
     # what is TRUE of it: a conversation that finished and was saved, often reopened by mail that came after it - never "paused when
     # Taskuary stopped", which a reopened ask read as and the Advisor repeated as its reason to Continue (the owner, 2026-10-14)
     from .continuity import since_line, mail_since
-    return item | {'key': f'agent:{tid}', 'kind': 'agent', 'lane': 'blocked', 'paused': True,
+    # ...and nothing is ASKING: no session is live here (session_for above), so `blocked` - "agent waiting on you", the hand - was
+    # untrue of every saved or failed one (2026-10-22 walk). It is saved or stopped, and a failed last run says it failed (R2)
+    failed = run_failed(store, tid)
+    return item | {'key': f'agent:{tid}', 'kind': 'agent', 'lane': 'saved' if session_saved(store, tid) else 'stopped', 'paused': True,
                    'agent': 'assistant', 'mode': 'assistant', 'tail': [last[:600]] if last else [],
-                   'news': bool(mail_since(store, tid)),
-                   'why': since_line(store, tid, 'the assistant') or 'its saved conversation can pick up where it left off'}
+                   'news': bool(mail_since(store, tid)), **({'failed': True} if failed else {}),
+                   'why': (f"Failed - {failed['sentence']}" if failed else '')
+                          or since_line(store, tid, 'the assistant') or 'its saved conversation can pick up where it left off'}
 
 
 def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:

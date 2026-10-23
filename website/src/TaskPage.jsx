@@ -9,7 +9,7 @@ import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptIma
 import QueuedStart from "./QueuedStart.jsx";
 import { strangerLine } from "./strangerLine.js";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { canSend, draftCanSend, useCapabilities } from "./capabilities.js";
+import { canSend, cannotStart, draftCanSend, useCapabilities } from "./capabilities.js";
 import {
   Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
   Drawer, IconButton, InputAdornment, Link, Menu, MenuItem, TextField, Tooltip, Typography,
@@ -296,7 +296,7 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
   // RE-PLAN: the AI writes the steps again from the goal's words; a step already started keeps its place (server.plan_goal)
   // ...which needs an AI: with none it said "Planning…" and nothing came, and a refused press said nothing at all (the UI audit, 2026-10-21)
   const [replanning, setReplanning] = useState(false);
-  const caps = useCapabilities();
+  const caps = useCapabilities(), noAiWhy = cannotStart(caps);
   const replan = async () => {
     setStepErr("");
     if (caps.ai === false) { setStepErr("No AI is connected, so nothing can write the steps - add them below, or connect an AI under Connections."); return; }
@@ -317,8 +317,10 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
         <Typography variant="caption" sx={{ color: FAINT }}>by</Typography>
         <TextField type="date" size="small" defaultValue={String(task.DueAt || "").slice(0, 10)} onBlur={moveDate}
           inputProps={{ "aria-label": "Move the date" }} sx={{ "& .MuiInputBase-root": { fontSize: 12, height: 26 } }} />
-        <Button size="small" variant="text" onClick={replan} disabled={replanning} sx={{ fontSize: 11, textTransform: "none", ml: "auto" }}
-          title="The AI writes the steps again from what done looks like; a step already started keeps its place">{replanning ? "Planning…" : "Re-plan"}</Button>
+        {/* ...greyed with no AI, the reason its hover - pressable, it only failed into a line (the owner, 2026-10-22) */}
+        <span title={noAiWhy || "The AI writes the steps again from what done looks like; a step already started keeps its place"} style={{ marginLeft: "auto" }}>
+          <Button size="small" variant="text" onClick={replan} disabled={replanning || !!noAiWhy} sx={{ fontSize: 11, textTransform: "none" }}>
+            {replanning ? "Planning…" : "Re-plan"}</Button></span>
       </Box>
       {list.map((s, k) => (
         <Box key={s.id} sx={{ borderBottom: `1px solid ${BORDER}` }}>
@@ -330,8 +332,8 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
           {s.who && <Typography variant="caption" sx={{ color: FAINT }}>{s.who}</Typography>}
           {s.ref
             ? <Button size="small" variant="text" onClick={() => onOpenTask?.(s.tid)} sx={{ fontSize: 11, textTransform: "none" }}>{s.ref} · {s.state || s.status}</Button>
-            : !s.done && <Button size="small" variant="outlined" onClick={() => start(s)} sx={{ fontSize: 11, textTransform: "none" }}
-              title={btnHint("regular_agent")}>{btn("regular_agent")}</Button>}
+            : !s.done && <span title={noAiWhy || btnHint("regular_agent")}><Button size="small" variant="outlined" onClick={() => start(s)}
+              disabled={!!noAiWhy} sx={{ fontSize: 11, textTransform: "none" }}>{btn("regular_agent")}</Button></span>}
         </Box>
         {/* the mail triage said served this step (store.step_arrivals) - who sent what, under the step it moved */}
         {(s.arrivals || []).map((a) => (
@@ -378,7 +380,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   }, []);
   const stale = (id) => selRef.current !== id;
   const { agents, models, kinds, brains, brainList, brainModels, generalBrains, agentsRead, codingReady } = useAgents();
-  const pickerTask = useRef(null);          // initialize each task from its durable worker once
+  // an agent start with nothing to run on is greyed, the reason its hover - one check for both roads (capabilities.cannotStart)
+  const runWhy = (coding) => cannotStart(caps, { coding, read: agentsRead, brains: generalBrains, codingReady }), noAiWhy = runWhy(false);
+  const pickerTask = useRef(null);         // initialize each task from its durable worker once
   const [err, setErr] = useState("");
   const [startFail, setStartFail] = useState(null);   // a failed agent start's ways past it (failures.py), drawn on the error line
   const [run, setRun] = useState({ agent: "", model: "", instruction: "" });
@@ -1344,7 +1348,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // more? it should be not in more"). It was offered only behind More, only on a coding task, only once its session had ended -
   // so a general task could never be handed to the coding agent from here. It opens the agent step; a live session is paused
   // (its handover kept for the next) when the new one starts (startCodingAgent).
-  const runAnother = { id: "run-another", group: "agent", label: labelOfRow("run-another"),
+  const runAnother = { id: "run-another", group: "agent", label: labelOfRow("run-another"), disabled: !!noAiWhy, why: noAiWhy,
     run: () => { if (canvas) window.dispatchEvent(new CustomEvent("tq-next-run")); else setOpenStage("agent"); setRestartOpen(true); },
     title: hintOfRow("run-another") };
   const changeVerbs = !notDone ? [] : [
@@ -1380,21 +1384,21 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       ] : continueHere ? [
         // ...not a second Connect an AI on the canvas: with no AI the Advisor's own strip carries it, lit (words.json advice_none)
         ...(runFix && !(inRow && runFix.href === place("ai").href) ? [{ id: "fix", group: "decide", tone: "p", label: runFix.label, run: () => openAppLink(runFix.href), title: btnHint("fix") }] : []),
-        { id: "continue", group: "agent", lead: !pendingReview && !runFix, label: continueWord, disabled: !!startingAgent,
+        { id: "continue", group: "agent", lead: !pendingReview && !runFix, label: continueWord, disabled: !!startingAgent || !!noAiWhy, why: noAiWhy,
           run: continuePress, title: failedRun ? btnHint("try_again") : hintOfRow("continue") }]
       : sendGeneral ? [{ id: "send-general", group: "agent", lead: !pendingReview, label: startingAgent === "general" ? "Starting…" : labelOfRow("send-general"),
-        disabled: !!startingAgent, run: startGeneralAgent,
+        disabled: !!startingAgent || !!noAiWhy, why: noAiWhy, run: startGeneralAgent,
         // ON THE BAR, not in the Agent work card (the owner, 2026-10-05: "send to agent on general task should be on bottom not inline");
         // the profile, brain and model pickers stay in that card for whoever wants to change them first
         title: hintOfRow("send-general") }]
       // ON A GOAL the agent starts on the step the goal is up to - the first box not done: its child, made if it has none - and
       // that step opens on the table (the owner, 2026-10-12: "it should start an agent on what it's up to")
       : startHere && t?.DoneWhen ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: startingAgent === "step" ? "Starting…" : labelOfRow("start-agent"),
-        disabled: !!startingAgent, run: startGoalStep, title: hintOfRow("start-agent") }]
+        disabled: !!startingAgent || !!noAiWhy, why: noAiWhy, run: startGoalStep, title: hintOfRow("start-agent") }]
       // WITH NO CODING TOOL CONNECTED the general agent is simply THE agent (B3): Send to agent starts it at once - it opened the
       // coding form, whose coding session could not work on this computer
       : startHere && !canCode && !ranBefore ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: startingAgent === "general" ? "Starting…" : labelOfRow("start-agent"),
-        disabled: !!startingAgent, run: startGeneralAgent, title: hintOfRow("start-agent") }]
+        disabled: !!startingAgent || !!noAiWhy, why: noAiWhy, run: startGeneralAgent, title: hintOfRow("start-agent") }]
       // it OPENS the step where the agent and its instructions are chosen - nothing starts until that step's own button
       : startHere ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: ranBefore ? labelOfRow("run-another") : labelOfRow("start-agent"),
         run: () => (stage === "agent" ? setRestartOpen(true) : setOpenStage("agent")), title: ranBefore ? hintOfRow("run-another") : hintOfRow("start-agent") }] : []),
@@ -1459,11 +1463,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {!generalOnly && <RepoSelect taskId={selected} agent={run.agent} instruction={run.instruction}
                         value={startRepo} onChange={setStartRepo} />}
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.75, flexWrap: "wrap" }}>
-                        {!generalOnly && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || startRepo === "" || runPics.busy || !agentsRead || !codingReady}
+                        {!generalOnly && <span title={runWhy(true) || undefined}><Button size="small" variant="contained" disableElevation
+                          disabled={!!startingAgent || startRepo === "" || runPics.busy || !agentsRead || !!runWhy(true)}
                           startIcon={startingAgent === "coding" ? <CircularProgress size={11} /> : <TerminalIcon sx={{ fontSize: 14 }} />}
                           onClick={startCodingAgent}>
                           {startingAgent === "coding" ? "Starting…" : btn("coding_agent")}
-                        </Button>}
+                        </Button></span>}
                         {/* HELD FOR A REPOSITORY it said nothing (the owner, 2026-10-01): it says why, with the picker beside it, and
                             the pick resumes this start - the same road a start that ran into the question takes */}
                         {!generalOnly && startRepo === "" && <>
@@ -1478,11 +1483,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {!generalOnly && <Button size="small" variant="outlined" disabled={!!startingAgent}
                           startIcon={<TaskuaryMark size={13} />}
                           onClick={() => { setHandOff(true); setRun((r) => ({ ...r, agent: "", pick: "", model: "" })); }}>{choice("agent", "regular_agent")}</Button>}
-                        {generalOnly && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || runPics.busy}
+                        {generalOnly && <span title={noAiWhy || undefined}><Button size="small" variant="contained" disableElevation
+                          disabled={!!startingAgent || runPics.busy || !!noAiWhy}
                           startIcon={startingAgent === "general" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
                           onClick={startGeneralAgent}>
                           {startingAgent === "general" ? "Starting…" : btn("regular_agent")}
-                        </Button>}
+                        </Button></span>}
                         {handOff && canCode && <Button size="small" variant="text" disabled={!!startingAgent}
                           onClick={() => { setHandOff(false); setRun((r) => ({ ...r, agent: "", pick: "", model: "" })); }}>Back to coding</Button>}
                         {(restartOpen || report || detail?.transcript) && <Button size="small" variant="text"
@@ -1978,11 +1984,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           onModel={(m) => setRun((r) => ({ ...r, model: m }))} size={28} />
                       </Box>
                       {/* on the canvas the button is the row's (rowVerbs: send-general); the pickers above are what it uses */}
-                      {!inRow && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
+                      {!inRow && <span title={noAiWhy || undefined}><Button size="small" variant="contained" disableElevation disabled={!!startingAgent || !!noAiWhy}
                         startIcon={startingAgent === "general" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
                         onClick={startGeneralAgent}>
                         {startingAgent === "general" ? "Starting…" : labelOfRow("send-general")}
-                      </Button>}
+                      </Button></span>}
                       <Typography variant="caption" sx={{ color: FAINT, ml: inRow ? 0 : 1 }}>
                         {inRow ? "Send to agent starts it with these choices, this task and its messages."
                           : "Starts the regular assistant with this task and its messages."}

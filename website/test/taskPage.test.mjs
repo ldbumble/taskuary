@@ -32,7 +32,7 @@ test("Write reply calls the draft helper, not itself - the component's own openR
 // THE AUDIT FOR NON-CODERS (2026-10-17): what the task view offers and says when the person using it never wrote code
 test("with no coding tool connected, Start is the general agent and nothing asks for a repository (B3)", () => {
   const page = src("TaskPage.jsx");
-  assert.match(page, /startHere && !canCode && !ranBefore \? \[\{ id: "start-agent"[^\n]*labelOfRow\("start-agent"\),\n\s+disabled: !!startingAgent, run: startGeneralAgent/);
+  assert.match(page, /startHere && !canCode && !ranBefore \? \[\{ id: "start-agent"[^\n]*labelOfRow\("start-agent"\),\n\s+disabled: !!startingAgent \|\| !!noAiWhy, why: noAiWhy, run: startGeneralAgent/);
   assert.match(page, /const generalOnly = handOff \|\| !canCode;/);
   assert.match(page, /\{!generalOnly && <RepoSelect/);
   assert.match(page, /\{!generalOnly && startRepo === "" && <>/);

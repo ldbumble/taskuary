@@ -602,7 +602,7 @@ def send_targets(store) -> list:
         for c in store.list_connectors():
             if c.get('Active') and c.get('Type') == 'whatsapp':
                 try:
-                    for chat in messengers.wa_chats(c):
+                    for chat in messengers.wa_chats(c, store):
                         last = chat.get('last') or ''
                         n = int(chat.get('n') or 0)
                         hint = (f"{plural(n, 'recent message')}"
@@ -622,6 +622,10 @@ def send_targets(store) -> list:
         for p in store.people(None):
             add('email', p['Email'], p['Name'],
                 f"{plural(p['N'], 'message')}, last {(p['Last'] or '')[:16]}", p['Last'])
+    # a WhatsApp chat is named and numbered (wanames): the picker searches those, and its JID is only the small line under them
+    if 'whatsapp' in seen:
+        from . import wanames
+        for r in wanames.fill(store, list(seen['whatsapp'].values()), key='to'): r['name'] = wanames.label(r['to'], r['name'])
     for tos in seen.values():
         for r in tos.values():
             if not r['name']: r['name'] = r['to']

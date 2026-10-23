@@ -446,6 +446,7 @@ class EventsSocketTests(unittest.TestCase):
         from fastapi.testclient import TestClient
         from taskuary import server
         from starlette.websockets import WebSocketDisconnect
+        saved = server.cfg['server'].get('token')
         server.cfg['server']['token'] = 's3cret'
         try:
             with TestClient(server.app) as c:
@@ -459,7 +460,9 @@ class EventsSocketTests(unittest.TestCase):
                                              headers={'Origin': 'http://evil.example'}) as ws:
                         ws.receive_json()
         finally:
-            server.cfg['server'].pop('token', None)
+            # ...put back the token it found: popping it left the app open to every later test (test_sharing's 401s read 200)
+            if saved is None: server.cfg['server'].pop('token', None)
+            else: server.cfg['server']['token'] = saved
 
 
 if __name__ == '__main__':

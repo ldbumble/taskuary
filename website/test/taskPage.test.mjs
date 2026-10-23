@@ -32,11 +32,13 @@ test("Write reply calls the draft helper, not itself - the component's own openR
 // THE AUDIT FOR NON-CODERS (2026-10-17): what the task view offers and says when the person using it never wrote code
 test("with no coding tool connected, Start is the general agent and nothing asks for a repository (B3)", () => {
   const page = src("TaskPage.jsx");
-  assert.match(page, /startHere && !canCode && !ranBefore \? \[\{ id: "start-agent"[^\n]*labelOfRow\("start-agent"\),\n\s+disabled: !!startingAgent \|\| !!noAiWhy, why: noAiWhy, run: startGeneralAgent/);
-  assert.match(page, /const generalOnly = handOff \|\| !canCode;/);
+  // ...opening the agent box, whose one Start is the general agent's (the owner, 2026-10-23: every start asks what first)
+  assert.match(page, /startHere && !canCode && !ranBefore \? \[\{ id: "start-agent"[^\n]*labelOfRow\("start-agent"\),\n\s+disabled: !!startingAgent \|\| !!noAiWhy, why: noAiWhy, run: openBox/);
+  assert.match(page, /const generalOnly = handOff \|\| !canCode \|\| goalRun;/);
   assert.match(page, /\{!generalOnly && <RepoSelect/);
   assert.match(page, /\{!generalOnly && startRepo === "" && <>/);
-  assert.match(page, /\{handOff && canCode && <Button[^\n]*\n[^\n]*Back to coding/);
+  // the coding agent is one press back from a hand-off - only where a coding tool is connected
+  assert.match(page, /\{handOff && canCode && !goalRun && <Button[^\n]*\n[^\n]*\n[^\n]*choice\("agent", "coding_agent"\)/);
   // ...except a start already HELD for it: then choosing where the code is is the way on, whatever is connected (the walk, 2026-10-18)
   assert.match(page, /\.\.\.\(heldRepo \|\| \(!isGeneral && canCode\) \? \[\{ id: "repo"/);
   assert.match(page, /\{!isGeneral && canCode && <Button size="small" variant="outlined" sx=\{chipBtn\}/);

@@ -461,5 +461,39 @@ class PresenceTests(unittest.TestCase):
             c.post('/api/concierge/arrive', json={'leaving': True})
             self.assertEqual(t.call_count, 1, 'arrive keeps its own book')
 
+    def test_a_press_never_waits_on_a_held_store_lock(self):
+        """The middleware ran on the event loop: a sync holding store.lock held every request behind one presence write."""
+        import asyncio, threading, time
+        from starlette.requests import Request
+        from starlette.responses import Response
+        from taskuary import server
+        s, held, done = MemoryStore(), threading.Event(), threading.Event()
+        def hold():
+            with s.lock: held.set(); done.wait(10)
+        threading.Thread(target=hold, daemon=True).start(); held.wait(5)
+        async def ok(_): return Response(status_code=200)
+        own = [(b'x-taskuary-token', str(server.cfg['server'].get('token') or '').encode())]
+        req = Request({'type': 'http', 'method': 'POST', 'path': '/api/board/notes', 'query_string': b'', 'headers': own})
+        try:
+            with mock.patch.object(server, 'store', s):
+                t0 = time.perf_counter(); r = asyncio.run(server.owner_presence(req, ok)); took = time.perf_counter() - t0
+        finally: done.set()
+        self.assertEqual(r.status_code, 200)
+        self.assertLess(took, 0.5, 'the press answered without waiting for the lock')
+        self.assertIsNone(s.get_setting(welcome.ACTIVE_KEY), 'nothing written under a lock somebody else holds')
+        self.assertIsNotNone(welcome.last_active(s), 'but the press already counts as presence')
+        self.assertTrue(welcome.flush(s))
+        self.assertIsNotNone(s.get_setting(welcome.ACTIVE_KEY), 'written once the lock is free')
+
+    def test_a_kept_press_is_written_in_order_before_a_later_one(self):
+        """Kept presses go through touch oldest first, so where an away began is what it was when written inline."""
+        s, day = store(), datetime(2026, 10, 22)
+        s.set_setting(welcome.SEEN_KEY, stamp(day.replace(hour=8)), 't')
+        s._presses = [day.replace(hour=10)]                     # a press kept while a sync held the lock
+        welcome.touch(s, day.replace(hour=10, minute=5))
+        self.assertEqual(s.get_setting(welcome.AWAY_KEY), stamp(day.replace(hour=8)), 'the 8-to-10 silence, from the kept press')
+        self.assertEqual(s.get_setting(welcome.ACTIVE_KEY), stamp(day.replace(hour=10, minute=5)))
+        self.assertFalse(s.__dict__['_presses'])
+
 
 if __name__ == '__main__': unittest.main()

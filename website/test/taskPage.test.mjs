@@ -131,12 +131,19 @@ test("the Advisor's suggestion reaches the Tasks tab and a phone's own row (U12)
   const page = src("TaskPage.jsx"), item = src("CanvasItem.jsx");
   assert.match(page, /api\.get\("\/api\/advice", \{ params: \{ key: `task:\$\{id\}` \} \}\)/);
   assert.match(page, /data-tq-task-advice=""/);
+  // ...THE TASKS TAB LIGHTS THE ADVISOR'S VERB (the design, phase A): Mark done was dark on every task; a line only for a fact
+  assert.match(page, /setTaskAdvice\(data\?\.verb \? data : null\)/);
+  assert.match(page, /const barLit = \(verb\) => !!taskAdvice && liveVerb\(taskAdvice\.verb\) === verb;/);
+  assert.match(page, /variant=\{barLit\("close"\) \? "contained" : "outlined"\}/);
+  assert.match(page, /notDone && taskAdvice\?\.line && \(/);
+  assert.doesNotMatch(page, /Suggested: \{taskAdvice\.label\}/);
   // ...with its line docked to it: the line and the button it lights are one unit at the view's foot (2026-10-19)
   // ...and the Assistant's lit button, when it lit one, with its line (verify, 2026-10-19: the strip stood empty over it)
-  assert.match(item, /\{phone && <div className="tq-docked"><div className="tq-strip" data-tq-strip="">\s*\{lit && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">\{lit\.line\}<\/div><\/div>\}[\s\S]{0,260}data-tq-advice-thinking=""[\s\S]{0,120}<AdvisorNext advice=\{advised\} onPropose=\{onPropose\} \/><AdviceNone advice=\{none\} \/><\/div>\s*<ActionRow inline advised=\{pick\} \/><\/div>\}/);
+  assert.match(item, /\{phone && <div className="tq-docked"><div className="tq-strip" data-tq-strip="">\s*\{lit && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">\{lit\.line\}<\/div><\/div>\}[\s\S]{0,400}\{!noAi && <AdvisorNext advice=\{advised\} onPropose=\{onPropose\} \/>\}<\/div>\s*<ActionRow inline advised=\{pick\} \/><\/div>\}/);
   assert.match(item, /const advised = lit \? null : adviceShown\(read, \{ key: card\.key, lane: card\.lane \}, busy\)/);
-  // ...Thinking while it is read, and the Advisor's own move pressed from the phone's row as from the page's (the phone pass, 2026-10-20)
-  assert.match(item, /const \[read, asking\] = useItemAdvice\(card, phone\);/);
+  // ...no Thinking while it is read (the owner, 2026-10-23), and the Advisor's own move pressed from the phone's row as from the page's
+  assert.match(item, /const read = useItemAdvice\(card, phone\);/);
+  assert.doesNotMatch(item, /Thinking about this one|AdviceNone/);
   assert.match(src("AssistantView.jsx"), /onPropose=\{actions\.pressAdvice\} \/>/);
 });
 

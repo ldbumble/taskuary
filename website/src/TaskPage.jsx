@@ -92,7 +92,7 @@ import AgentStory, { StoryChip } from "./AgentStory.jsx";
 import { STORY_CHIP, startLabel, storyPlace, storyShown } from "./agentStory.js";
 import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import EmailSomeone from "./EmailSomeone.jsx";
-import { useShare } from "./Share.jsx";
+import { useShareParts } from "./Share.jsx";
 import { ago, filesLine, plural } from "./timeWords.js";
 import { KIND_OPTIONS, KINDS, kindLabel, shortKind } from "./kinds.js";
 import { openAppLink } from "./appLinks.js";
@@ -1408,9 +1408,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // it OPENS the step where the agent and its instructions are chosen - nothing starts until that step's own button
       : startHere ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: ranBefore ? labelOfRow("run-another") : labelOfRow("start-agent"),
         run: () => (stage === "agent" ? setRestartOpen(true) : setOpenStage("agent")), title: ranBefore ? hintOfRow("run-another") : hintOfRow("start-agent") }] : []),
-      // MESSAGE SOMEONE - email or chat - whoever started the task (the owner, 2026-10-09): tell somebody it is done, the AI writes it, it waits in Close out
-      // ...never where nothing can be sent from here (the owner, 2026-10-22: "no send out results on something you can't send out")
-      ...(!liveSession && !cantSend ? [{ id: "email", group: "agent", label: labelOfRow("email"), run: () => setEmailOpen(true), title: hintOfRow("email") }] : []),
+      // MESSAGE SOMEONE - email or chat - whoever started the task (the owner, 2026-10-09) - is Share's "Email a summary" now (the owner,
+      // 2026-10-23: one Share button); never where nothing can be sent from here (the owner, 2026-10-22) - useShare below
       // ...nor Ask sender: its question is a reply too, and leaves by the same channel (a Teams task offered it, 2026-10-22)
       ...(replyMessage && !liveSession && !cantSend ? [{ id: "ask-sender", group: "more", label: labelOfRow("ask-sender"), run: () => setAskSenderOpen(true), title: hintOfRow("ask-sender") }] : []),
       { id: "done", group: "more", label: finishing ? "Marking done…" : labelOfRow("done"), disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession && !pendingReview, beside: liveSession, onCard: !!pendingReview && !liveSession },   // a live session has no primary;
@@ -1429,10 +1428,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       ...changeVerbs,
     ];
   useVerbs("task", rowVerbs, inRow && !!t, detail?.ref || "");
-  // SHARE THE RESULT (the owner, 2026-10-23): an agent's Result, or a workflow run's - the server reads what it says off the task (sharing.py);
-  // an email it drafts lands in this task's Close out, so the page reads the task again
-  const shareNode = useShare(`task:${t?.TaskId}`, { kind: fromWorkflow ? "workflow" : "agent", title: t?.Title || "", task: t?.TaskId },
-    inRow && !!t && (resultShown || codeRun), { onShared: (how) => { if (how === "email") { loadDetail(selected); onChanged?.(); setOpenStage("reply"); } } });
+  // SHARE (the owner, 2026-10-23: one Share button): an agent's Result, or a workflow run's - the server reads what it says off the task
+  // (sharing.py) - and "Email a summary", the AI's message about the work (EmailSomeone), wherever something can be sent from here.
+  // A draft either way lands in this task's Close out, opened at once for its Send
+  const hasResult = resultShown || codeRun, canSummary = !liveSession && !cantSend && notDone;
+  const { badge: shareBadge, menu: shareMenu } = useShareParts(`task:${t?.TaskId}`, { kind: fromWorkflow ? "workflow" : "agent", title: t?.Title || "", task: t?.TaskId },
+    inRow && !!t && !liveSession && (hasResult || canSummary), {
+      noResult: hasResult ? "" : "there is no result to share yet - an agent's Result or a workflow run is what goes",
+      summary: canSummary ? () => setEmailOpen(true) : null,
+      summaryWhy: liveSession ? "an agent is still working" : !notDone ? "the task is closed - reopen it first" : "nothing can be sent from here",
+      // ...a closed task's result is drafted on a task of its own (sharing.email): that one opens instead
+      onShared: (how, out) => { if (how !== "email") return; if (out?.task_id && out.task_id !== t?.TaskId) { onOpenTask?.(out.task_id); return; }
+        loadDetail(selected); onChanged?.(); setOpenStage("reply"); } });
   // CONFIGURE THE NEXT RUN, IN LINE (the owner, 2026-10-05: "should be the bottom like continue session and it should replace the
   // continue session box"): on the canvas the agent step's form is a card under the conversation, in Continue's place - one card at
   // a time - and it closes when the agent starts (startCodingAgent / startGeneralAgent close restartOpen on success)
@@ -1826,7 +1833,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                 {fromWorkflow.line} · {whenShort(t?.CreatedAt)}</Typography>
                             </Box>
                             {fromWorkflow.link && <Link href={fromWorkflow.link} underline="hover" sx={{ fontSize: 12, flexShrink: 0 }}>Open the workflow</Link>}
-                            {codeRun && shareNode}
+                            {codeRun && shareBadge}
                             {fromWorkflow.steps && <Box data-tq-workflow-steps="" sx={{ flexBasis: "100%", borderTop: `1px solid ${BORDER}`, pt: 0.75, mt: 0.25, minWidth: 0 }}>
                               {/* a failed run's fix is one press from its task: the workflow opens with Fix with AI already asked */}
                               <RunSteps steps={fromWorkflow.steps} dense repairs={fromWorkflow.repairs}
@@ -1892,7 +1899,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       : agentState === AGENT.waiting ? says(subState(term), agentName(t))   /* asked, approval, stuck (T6) */
                         : `${agentName(t)} is working`}
                     chip={<>{story && STORY_CHIP[story.kind] ? <StoryChip kind={story.kind} text={STORY_CHIP[story.kind]} />
-                      : agentState ? <LifecycleChip kind="agent" phase={agentState} compact /> : null}{resultShown && shareNode}</>} tone={PALETTE.sage} {...stageProps("agent")}
+                      : agentState ? <LifecycleChip kind="agent" phase={agentState} compact /> : null}{resultShown && shareBadge}</>} tone={PALETTE.sage} {...stageProps("agent")}
                     tools={inRow && workspaceMode === "general" && (liveSession || pane === "agent")
                       ? <Box ref={setChatTools} sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }} /> : null}
                     /* folded, this heading carried NOTHING - it passed no action at all, so the one
@@ -2540,6 +2547,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           </Button>
         </DialogActions>
       </Dialog>
+      {/* Share's menu and its Email the result dialog; the badge stands on the Result (or the workflow run) it shared */}
+      {shareMenu}
       {t && <EmailSomeone open={emailOpen} task={t} detail={detail} onClose={() => setEmailOpen(false)}
         onDrafted={() => { setEmailOpen(false); loadDetail(selected); loadTasks(); onChanged?.(); setOpenStage("reply"); }} />}
       {t && <ContinueBox task={t} anchor={continueAt} onClose={() => setContinueAt(null)} onDone={continued} />}

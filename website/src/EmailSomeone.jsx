@@ -1,4 +1,4 @@
-// SEND OUT RESULTS, from inside a task - whoever started it (the owner, 2026-10-09: "even though i started it from the new button
+// EMAIL A SUMMARY - one of Share's ways since 2026-10-23 (Share.jsx), and a chat reply's "by email with the file" - from inside a task - whoever started it (the owner, 2026-10-09: "even though i started it from the new button
 // i want to be able to create email to send to someone and notify it's done ... choose sender/attachments/draft message with
 // ai"; then "add from mailbox picker and teams/chat too"). An email - From, To, CC, which of the task's files ride on it - or a
 // chat message into one chat; and what it should say. The AI writes it from those words AND what the work found
@@ -61,7 +61,7 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
   };
   return (
     <Dialog open={open} onClose={() => !busy && onClose?.()} fullWidth maxWidth="sm" PaperProps={{ sx: { borderRadius: 3 } }}>
-      <DialogTitle>Send out results · {detail?.ref || ""}</DialogTitle>
+      <DialogTitle>{label("share")} · {detail?.ref || ""}</DialogTitle>
       <DialogContent sx={{ pt: "8px !important", display: "flex", flexDirection: "column", gap: 1.6 }}>
         <Typography variant="body2" sx={{ color: DIM }}>
           The AI writes a short summary of what this task's work delivered, for the person you pick. It waits in Close out for you

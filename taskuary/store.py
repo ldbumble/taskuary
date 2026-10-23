@@ -690,6 +690,8 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     'mark_read_enabled': '0',
                     # Share -> Shared link: a read-only page for one result on this network (sharing.py). Off: no link exists
                     'share_links_lan': '0',
+                    # ...served on a port of its own (sharing.share_app), never Taskuary's: blank = sharing.SHARE_PORT
+                    'share_port': '7797',
                     # the zone timestamps are stamped in (blank = this machine's local). Setting
                     # it makes every displayed time wear its label (2:44 PM EDT) and keeps a
                     # browser in another zone reading the stamps correctly.

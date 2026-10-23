@@ -1,14 +1,16 @@
 """SHARE A RESULT (the owner, 2026-10-23: "put on sharing reports/new dashboards or agent result so you can email it out, maybe on
 same network you can share results directly via shared link or post report in google drive, sharepoint ... button on report on
-bottom named share"). One Share, four ways out, each offered only where it can work (ways):
+bottom named share"). One Share, five ways out, each offered only where it can work (ways):
 
-- EMAIL IT: a draft on the same review road every send takes - the task's Close out when the result is a task's, else a task of
-  its own like ＋ New's - with the result as its text and, at send, as clean HTML beside it (email_html). Nothing leaves here.
-- SHARED LINK: a frozen, escaped snapshot of the one result at /share/<token> on this machine, for people on the same network.
-  Off until the owner turns `share_links_lan` on, and useless while the server listens on loopback alone (lan_url says which).
-  The token is shown once and only its hash is kept; a link expires (7 days by default) and is revoked from Settings.
-- ONEDRIVE / GOOGLE DRIVE: the same HTML uploaded to a "Taskuary" folder, through a sign-in the owner already gave - only when
-  that sign-in holds a file scope. Taskuary never widens a sign-in to get one (NEED_MS / NEED_G say what would be needed).
+- EMAIL THE RESULT: a draft on the same review road every send takes - the task's Close out when the result is a task's, else a task
+  of its own like ＋ New's - with the result as its text and, at send, as clean HTML beside it (email_html). Nothing leaves here; the
+  page opens the draft for its Send. (Share's other email, "Email a summary", is the AI's message about a task's work - outbox.task_email.)
+- SHARED LINK: a frozen, escaped snapshot of the one result at /share/<token>, served by a SECOND server on its own port
+  (share_app, `share_port`) that knows that one route and nothing else - the app and its /api stay on 127.0.0.1. It runs only
+  while the owner has `share_links_lan` on. The token is shown once and only its hash is kept; a link expires (7 days by default)
+  and is revoked from Settings.
+- ONEDRIVE / GOOGLE DRIVE: the same HTML uploaded to a "Taskuary" folder, through a sign-in that the owner let save files ("Allow
+  saving files" on the card - fileaccess.py). No default sign-in asks for that (NEED_MS / NEED_G say how to allow it).
 
 A SHAREABLE RESULT is {kind, title, text, html?, data?} - a report's message, an agent's or a workflow's task (snapshot reads
 those from the store, so the page cannot hand in words the store does not hold), or anything a page registers itself with
@@ -16,9 +18,11 @@ those from the store, so the page cannot hand in words the store does not hold),
 attributes, and the share page's CSP sandboxes it besides.
 
 Every share is a row of the audit chain (EntityType 'share'): what, how, to whom or where, when."""
-import hashlib, html as H, json, re, secrets, socket, time
+import hashlib, html as H, json, re, secrets, socket, threading, time
 from datetime import datetime, timedelta
 from html.parser import HTMLParser
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 import requests
 from loguru import logger
 
@@ -29,9 +33,9 @@ GRAPH = 'https://graph.microsoft.com/v1.0'
 FOLDER = 'Taskuary'
 MS_FILES = ('files.readwrite', 'files.readwrite.all', 'sites.readwrite.all')
 G_FILES = ('https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/drive')
-NEED_MS = ("the Microsoft sign-in has no file access - uploading to OneDrive or SharePoint needs Files.ReadWrite "
-           "(a tenant app: Files.ReadWrite.All), which Taskuary does not ask for")
-NEED_G = 'the Google sign-in has no Drive access - uploading needs the drive.file scope, which Taskuary does not ask for'
+NEED_MS = ('the Microsoft sign-in may not save files - turn on "Allow saving files" on the Outlook or Teams card, which signs in again '
+           'asking for Files.ReadWrite (a tenant app needs Files.ReadWrite.All granted in Azure)')
+NEED_G = 'the Google sign-in may not save files - turn on "Allow saving files" on the Gmail card, which signs in again asking for drive.file'
 WAYS = ('email', 'link', 'onedrive', 'gdrive')
 # the page a link opens: no script, nothing fetched, no frame, no form - the snapshot's own styles and nothing else
 CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; sandbox"
@@ -223,21 +227,94 @@ def lan_address() -> str:
     except OSError: return ''
 
 
-def base_url(server: dict) -> str:
-    """Where someone else on the network reaches this server - '' when it listens on this computer alone."""
-    host, port = str(server.get('host') or '').strip(), server.get('port') or 7787
-    if host.lower() in LOOPBACK: return ''
-    if host in ('0.0.0.0', '::'): host = lan_address()
-    if not host: return ''
-    return f"http://{f'[{host}]' if ':' in host else host}:{port}"
+# ── THE SHARE-ONLY LISTENER (the owner, 2026-10-23): the app and its whole /api stay on 127.0.0.1; links are served by a second,
+# separate server on its own port that knows ONE route - /share/<token> - and nothing else. It runs only while the owner's switch is
+# on, binds every interface on that port, and stops when the switch goes off. Whatever else is asked of it is a 404.
+SHARE_PORT = 7797
+_L = {'srv': None, 'thread': None, 'port': None, 'error': '', 'store': None}
+_LOCK = threading.Lock()
+share_app = FastAPI(title='Taskuary shared result', docs_url=None, redoc_url=None, openapi_url=None)
 
 
-def link_block(store, server: dict) -> str:
+@share_app.middleware('http')
+async def _share_headers(request, call_next):
+    resp = await call_next(request)
+    for k, v in HEADERS.items(): resp.headers[k] = v          # every answer on this port, the 404s too: never cached, never framed
+    return resp
+
+
+@share_app.get('/share/{token}', response_class=HTMLResponse)
+def _shared_page(token: str):
+    """The one page this port serves: the snapshot behind a live token, else one plain 404 for every reason."""
+    st = _L['store']
+    got = page(st, token) if st is not None else None
+    if got is None: return HTMLResponse('<!doctype html><title>Not available</title><p>This link is not available.</p>', 404)
+    return HTMLResponse(got)
+
+
+def share_port(store) -> int:
+    try: n = int(str(store.get_setting('share_port', '') or SHARE_PORT).strip())
+    except ValueError: n = SHARE_PORT
+    return n if 1024 <= n <= 65535 else SHARE_PORT
+
+
+def listening() -> int | None:
+    """The port the share listener answers on now, or None."""
+    srv, t = _L['srv'], _L['thread']
+    return _L['port'] if srv is not None and t is not None and t.is_alive() and getattr(srv, 'started', False) else None
+
+
+def _start(port: int) -> str:
+    import uvicorn
+    srv = uvicorn.Server(uvicorn.Config(share_app, host='0.0.0.0', port=port, log_level='warning', lifespan='off', access_log=False))
+    def run():
+        try: srv.run()
+        except BaseException as e: _L['error'] = f'port {port} could not be opened ({str(e)[:100] or type(e).__name__})'   # SystemExit on a busy port
+    t = threading.Thread(target=run, name='taskuary-share', daemon=True)
+    _L.update(srv=srv, thread=t, port=port, error='')
+    t.start()
+    for _ in range(100):
+        if getattr(srv, 'started', False) or not t.is_alive(): break
+        time.sleep(0.05)
+    if getattr(srv, 'started', False): logger.info(f'share links: listening on port {port} for this network'); return ''
+    _L['error'] = _L['error'] or f'port {port} could not be opened - another program may hold it; choose another Share port in Settings'
+    return _L['error']
+
+
+def stop_listener():
+    srv, t = _L['srv'], _L['thread']
+    if srv is not None:
+        srv.should_exit = True
+        if t is not None: t.join(5)
+    _L.update(srv=None, thread=None, port=None)
+
+
+def sync_listener(store) -> str:
+    """Make the listener match the switch: running on the configured port while links are on, gone while they are off.
+    '' when it is as it should be, else why links cannot be reached. The demo never opens a port."""
+    from . import demo
+    with _LOCK:
+        _L['store'] = store
+        if store.get_setting(SETTING, '0') != '1' or demo.enabled():
+            stop_listener(); _L['error'] = ''; return ''
+        port = share_port(store)
+        if listening() == port: return ''
+        stop_listener()
+        return _start(port)
+
+
+def base_url(server: dict = None) -> str:
+    """Where someone else on the network opens a link: this machine's address on it, and the share port - '' while none listens."""
+    port = listening()
+    host = lan_address() if port else ''
+    return f"http://{f'[{host}]' if ':' in host else host}:{port}" if host else ''
+
+
+def link_block(store, server: dict = None) -> str:
     if store.get_setting(SETTING, '0') != '1':
         return 'share links are off - turn on "Share links on my network" in Settings first'
-    if not base_url(server):
-        return (f"Taskuary listens only on this computer ({server.get('host') or '127.0.0.1'}), so nobody else on your network could open a "
-                'link - it needs to listen on your network (host under [server] in config.toml) first')
+    why = sync_listener(store)
+    if why or not base_url(): return why or _L['error'] or 'the share port is not open yet'
     return ''
 
 
@@ -251,7 +328,11 @@ def _cached(key, f, ttl=300):
 
 
 def _ms_card(store):
-    return next((c for c in store.connectors_by_type('outlook', with_secret=True) if c.get('Active')), None)
+    """The Microsoft card to save through: one whose sign-in may write files (Outlook or Teams - each card opts in on its own,
+    fileaccess.py), else the first Outlook card, whose reason is then the one said."""
+    cards = [c for k in ('outlook', 'teams') for c in store.connectors_by_type(k, with_secret=True) if c.get('Active')]
+    files = lambda c: any(x in str(json.loads(c.get('ConfigJson') or '{}').get('granted_scope') or '').lower().split() for x in MS_FILES)
+    return next((c for c in cards if files(c)), None) or next((c for c in cards if c['Type'] == 'outlook'), None)
 
 
 def _ms_token(store, c):
@@ -264,7 +345,7 @@ def onedrive_block(store) -> str:
     """'' when the Outlook card's sign-in can write files. A signed-in card says what Microsoft granted (granted_scope); a tenant
     app's token carries its roles. Neither is ever widened from here."""
     c = _ms_card(store)
-    if not c: return 'no Microsoft account is connected - OneDrive and SharePoint go through the Outlook card'
+    if not c: return 'no Microsoft account is connected - OneDrive goes through the Outlook or Teams card'
     cfg = json.loads(c.get('ConfigJson') or '{}')
     if cfg.get('auth') == 'user':
         return '' if any(s in str(cfg.get('granted_scope') or '').lower().split() for s in MS_FILES) else NEED_MS

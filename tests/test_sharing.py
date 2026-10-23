@@ -10,6 +10,7 @@ from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
 c = TestClient(server.app)
+web = TestClient(sharing.share_app)          # the share-only listener's app: what the network reaches
 NOBODY = {'X-Taskuary-Token': ''}
 AGENT = {'X-Taskuary-Token': config.load()['server']['agent_token']}
 LAN = {'host': '0.0.0.0', 'port': 7787}
@@ -43,11 +44,14 @@ class Links(unittest.TestCase):
         self.s.set_setting(sharing.SETTING, '1', 'test')
         self.f = Factory(self.s)
         self.mid = self.f.message(subject='Weekly spend', body=REPORT, channel='report')
-        self.lan = mock.patch.dict(server.cfg['server'], LAN); self.lan.start()
         self.ip = mock.patch.object(sharing, 'lan_address', return_value='192.168.1.20'); self.ip.start()
+        # the listener itself is a real port - stood in for here (ShareListener below drives its start and stop)
+        self.on = mock.patch.object(sharing, 'sync_listener', return_value=''); self.on.start()
+        self.port = mock.patch.object(sharing, 'listening', return_value=7797); self.port.start()
+        sharing._L['store'] = self.s
 
     def tearDown(self):
-        self.lan.stop(); self.ip.stop()
+        self.ip.stop(); self.on.stop(); self.port.stop()
         self.s.set_setting(sharing.SETTING, '0', 'test')
 
     def make(self, **kw):
@@ -57,8 +61,8 @@ class Links(unittest.TestCase):
 
     def test_a_link_opens_the_one_snapshot_without_the_owner_token(self):
         out = self.make()
-        self.assertRegex(out['url'], r'^http://192\.168\.1\.20:7787/share/[A-Za-z0-9_-]{40,}$')
-        page = c.get('/share/' + out['url'].rsplit('/', 1)[1], headers=NOBODY)
+        self.assertRegex(out['url'], r'^http://192\.168\.1\.20:7797/share/[A-Za-z0-9_-]{40,}$')
+        page = web.get('/share/' + out['url'].rsplit('/', 1)[1], headers=NOBODY)
         self.assertEqual(page.status_code, 200)
         self.assertIn('<h1>Weekly spend</h1>', page.text)
         self.assertNotIn('<script', page.text)
@@ -78,8 +82,8 @@ class Links(unittest.TestCase):
     def test_the_snapshot_is_frozen(self):
         tok = self.make()['url'].rsplit('/', 1)[1]
         self.s._exec('UPDATE message SET BodyText=? WHERE MessageId=?', ('# Changed since', self.mid))
-        self.assertIn('Payworth', c.get('/share/' + tok, headers=NOBODY).text)
-        self.assertNotIn('Changed since', c.get('/share/' + tok, headers=NOBODY).text)
+        self.assertIn('Payworth', web.get('/share/' + tok, headers=NOBODY).text)
+        self.assertNotIn('Changed since', web.get('/share/' + tok, headers=NOBODY).text)
 
     def test_only_the_hash_of_the_token_is_kept(self):
         tok = self.make()['url'].rsplit('/', 1)[1]
@@ -91,15 +95,15 @@ class Links(unittest.TestCase):
         a, b, d = (self.make()['url'].rsplit('/', 1)[1] for _ in range(3))
         sid = c.get('/api/shares').json()['data'][0]['id']
         self.assertEqual(c.delete(f'/api/shares/{sid}').status_code, 200)
-        self.assertEqual(c.get('/share/' + d, headers=NOBODY).status_code, 404)           # the newest, revoked
+        self.assertEqual(web.get('/share/' + d, headers=NOBODY).status_code, 404)           # the newest, revoked
         past = (datetime.now() - timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S')
         self.s._exec('UPDATE share_link SET ExpiresAt=? WHERE TokenHash=?', (past, sharing._hash(b)))
-        self.assertEqual(c.get('/share/' + b, headers=NOBODY).status_code, 404)
-        self.assertEqual(c.get('/share/' + 'x' * 43, headers=NOBODY).status_code, 404)
-        self.assertEqual(c.get('/share/' + a, headers=NOBODY).status_code, 200)
+        self.assertEqual(web.get('/share/' + b, headers=NOBODY).status_code, 404)
+        self.assertEqual(web.get('/share/' + 'x' * 43, headers=NOBODY).status_code, 404)
+        self.assertEqual(web.get('/share/' + a, headers=NOBODY).status_code, 200)
         self.s.set_setting(sharing.SETTING, '0', 'test')
-        self.assertEqual(c.get('/share/' + a, headers=NOBODY).status_code, 404)
-        self.assertEqual({r.status_code for r in (c.get('/share/' + t, headers=NOBODY) for t in (a, b, d))}, {404})
+        self.assertEqual(web.get('/share/' + a, headers=NOBODY).status_code, 404)
+        self.assertEqual({r.status_code for r in (web.get('/share/' + t, headers=NOBODY) for t in (a, b, d))}, {404})
 
     def test_off_by_default_and_refused_while_off(self):
         self.assertEqual(MemoryStore().get_setting(sharing.SETTING), '0')
@@ -108,12 +112,24 @@ class Links(unittest.TestCase):
         self.assertEqual(r.status_code, 422)
         self.assertIn('Share links on my network', r.json()['detail'])
 
-    def test_loopback_says_so_and_makes_no_link(self):
-        with mock.patch.dict(server.cfg['server'], {'host': '127.0.0.1'}):
-            w = c.get('/api/shares/ways').json()
-            self.assertFalse(w['link']['ok'])
-            self.assertIn('only on this computer', w['link']['why'])
-            self.assertEqual(c.post('/api/shares', json={'how': 'link', 'message': self.mid}).status_code, 422)
+    def test_the_share_port_serves_nothing_but_share_pages(self):
+        tok = self.make()['url'].rsplit('/', 1)[1]
+        for path in ('/', '/api/tasks', '/api/shares', '/api/health', f'/api/messages/{self.mid}', '/assets/index.js', '/api/docs', '/openapi.json'):
+            self.assertEqual(web.get(path, headers=NOBODY).status_code, 404, path)
+            self.assertEqual(web.get(path, headers={'X-Taskuary-Token': server.cfg['server']['token']}).status_code, 404, path)
+        self.assertEqual(web.post('/api/shares', json={'how': 'link', 'message': self.mid}).status_code, 404)
+        self.assertEqual(web.get('/share/' + tok).headers['cache-control'], 'no-store')
+        # ...and the app's own port does not serve them: it stays on this computer, behind the token
+        self.assertEqual(c.get('/share/' + tok, headers=NOBODY).status_code, 404)
+
+    def test_a_port_that_would_not_open_greys_the_link(self):
+        self.on.stop(); self.port.stop()
+        try:
+            with mock.patch.object(sharing, 'sync_listener', return_value='port 7797 could not be opened'), mock.patch.object(sharing, 'listening', return_value=None):
+                w = c.get('/api/shares/ways').json()
+                self.assertEqual(w['link'], {'ok': False, 'why': 'port 7797 could not be opened'})
+                self.assertEqual(c.post('/api/shares', json={'how': 'link', 'message': self.mid}).status_code, 422)
+        finally: self.on.start(); self.port.start()
 
     def test_expiry_is_seven_days_by_default(self):
         exp = datetime.strptime(self.make()['expires'], '%Y-%m-%d %H:%M:%S')
@@ -128,6 +144,113 @@ class Links(unittest.TestCase):
         rows = [r for r in self.s._rows("SELECT * FROM audit WHERE EntityType='share' ORDER BY Id DESC LIMIT 1")]
         self.assertEqual(rows[0]['Action'], 'link')
         self.assertEqual(json.loads(rows[0]['Detail'])['title'], 'Weekly spend')
+
+
+class ShareListener(unittest.TestCase):
+    """The second server: on its own port while the switch is on, on every interface, gone when it goes off; never in the demo."""
+    def setUp(self): self.s = MemoryStore(); sharing.stop_listener()
+    def tearDown(self): sharing.stop_listener()
+
+    def test_it_follows_the_switch_and_the_port(self):
+        started = []
+        def start(port):
+            started.append(port); sharing._L.update(port=port, srv=mock.Mock(started=True, should_exit=False), thread=mock.Mock(is_alive=lambda: True)); return ''
+        with mock.patch.object(sharing, '_start', side_effect=start):
+            self.assertEqual(sharing.sync_listener(self.s), '')
+            self.assertEqual(started, [])                                      # off by default: no port at all
+            self.s.set_setting(sharing.SETTING, '1', 'test')
+            sharing.sync_listener(self.s); sharing.sync_listener(self.s)
+            self.assertEqual((started, sharing.listening()), ([7797], 7797))   # once, on the default port
+            self.s.set_setting('share_port', '8123', 'test')
+            sharing.sync_listener(self.s)
+            self.assertEqual((started, sharing.listening()), ([7797, 8123], 8123))
+            self.s.set_setting(sharing.SETTING, '0', 'test')
+            sharing.sync_listener(self.s)
+            self.assertIsNone(sharing.listening())
+
+    def test_it_binds_every_interface_on_its_own_port_with_only_the_share_app(self):
+        import uvicorn
+        seen = {}
+        class Srv:
+            def __init__(self, config): seen['cfg'] = config; self.started = True; self.should_exit = False
+            def run(self): pass
+        with mock.patch.object(uvicorn, 'Server', Srv):
+            self.assertEqual(sharing._start(7797), '')
+        self.assertEqual((seen['cfg'].host, seen['cfg'].port, seen['cfg'].app), ('0.0.0.0', 7797, sharing.share_app))
+        self.assertNotEqual(seen['cfg'].app, server.app)
+
+    def test_a_bad_port_falls_back_to_the_default(self):
+        for v in ('80', 'abc', '70000', ''):
+            self.s.set_setting('share_port', v, 'test')
+            self.assertEqual(sharing.share_port(self.s), 7797, v)
+
+    def test_never_in_the_demo(self):
+        self.s.set_setting(sharing.SETTING, '1', 'test')
+        with mock.patch('taskuary.demo.enabled', return_value=True), mock.patch.object(sharing, '_start') as start:
+            sharing.sync_listener(self.s)
+        start.assert_not_called()
+
+
+class FileAccess(unittest.TestCase):
+    """Allow saving files: asked for only when the card chooses it - Files.ReadWrite on a Microsoft sign-in, drive.file on Google's."""
+    def test_microsoft_asks_for_files_only_when_chosen(self):
+        from taskuary import msauth
+        cid = next(x for x in server.store.list_connectors() if x['Type'] == 'outlook')['ConnectorId']
+        d = {'device_code': 'D', 'user_code': 'X', 'verification_uri': 'u', 'expires_in': 9, 'interval': 1, 'message': ''}
+        with mock.patch.object(msauth, 'device_start', return_value=dict(d)) as start:
+            c.post(f'/api/connectors/{cid}/ms/signin')
+            c.post(f'/api/connectors/{cid}/ms/signin', json={'files': True})
+            c.post(f'/api/connectors/{cid}/ms/signin', json={'files': False})
+        scopes = [call.args[1].split() for call in start.call_args_list]
+        self.assertNotIn('Files.ReadWrite', scopes[0])
+        self.assertIn('Files.ReadWrite', scopes[1])
+        self.assertNotIn('Files.ReadWrite', scopes[2])
+        self.assertEqual(msauth.SCOPES, 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite')   # the default never widens
+        self.assertIn('Files.ReadWrite', msauth.scopes_for('teams', True).split())
+
+    def test_a_teams_card_that_may_save_files_carries_onedrive(self):
+        s = MemoryStore()
+        s.save_connector({'Type': 'outlook', 'Name': 'Outlook', 'Active': 1, 'Secret': 'r',
+                          'ConfigJson': json.dumps({'auth': 'user', 'granted_scope': 'Mail.Send'})}, 'test')
+        s.save_connector({'Type': 'teams', 'Name': 'Teams', 'Active': 1, 'Secret': 'r',
+                          'ConfigJson': json.dumps({'auth': 'user', 'granted_scope': 'Chat.ReadWrite Files.ReadWrite'})}, 'test')
+        self.assertEqual(sharing.onedrive_block(s), '')
+        self.assertEqual(sharing._ms_card(s)['Type'], 'teams')
+
+    def gmail(self, **cfg):
+        return server.store.save_connector({'Type': 'gmail', 'Name': 'Gmail', 'Active': 1,
+                                            'ConfigJson': json.dumps({'address': 'alex@northwind.example', 'google_client_id': 'cid.apps.example',
+                                                                      'google_client_secret': 'sec', 'google_refresh_token': 'old', **cfg})}, 'test')
+
+    def test_google_asks_again_with_drive_file_and_keeps_the_new_token(self):
+        from urllib.parse import parse_qs, urlsplit
+        from taskuary import fileaccess
+        cid = self.gmail()
+        with mock.patch('taskuary.calwrite._google_token', return_value=('t', 'https://www.googleapis.com/auth/calendar.events')):
+            url = c.post(f'/api/connectors/{cid}/google/files', json={'on': True}).json()['url']
+        q = {k: v[0] for k, v in parse_qs(urlsplit(url).query).items()}
+        self.assertEqual(q['scope'].split(), ['https://www.googleapis.com/auth/calendar.events', fileaccess.DRIVE_FILE])
+        self.assertTrue(q['redirect_uri'].startswith('http://127.0.0.1:') and q['redirect_uri'].endswith('/api/google/files/callback'))
+        self.assertEqual(q['code_challenge_method'], 'S256')
+        bad = c.get('/api/google/files/callback', params={'code': 'x', 'state': 'forged'}, headers=NOBODY)
+        self.assertEqual(bad.status_code, 200); self.assertIn('was not started here', bad.text)
+        tok = mock.Mock(status_code=200, json=lambda: {'refresh_token': 'new', 'scope': f"https://www.googleapis.com/auth/calendar.events {fileaccess.DRIVE_FILE}"})
+        with mock.patch.object(fileaccess.requests, 'post', return_value=tok) as post:
+            ok = c.get('/api/google/files/callback', params={'code': 'C', 'state': q['state']}, headers=NOBODY)   # outside the token gate
+        self.assertIn('may now save files', ok.text)
+        self.assertEqual(post.call_args.kwargs['data']['code_verifier'] and post.call_args.kwargs['data']['code'], 'C')
+        cfg = json.loads(server.store.get_connector(cid, with_secret=True)['ConfigJson'])
+        self.assertEqual((cfg['google_refresh_token'], cfg['allow_files']), ('new', True))
+        again = c.get('/api/google/files/callback', params={'code': 'C', 'state': q['state']}, headers=NOBODY)
+        self.assertIn('was not started here', again.text)                  # a state answers once
+
+    def test_a_google_card_with_no_oauth_client_cannot(self):
+        cid = server.store.save_connector({'Type': 'gmail', 'Name': 'Gmail 2', 'Active': 1, 'ConfigJson': json.dumps({'address': 'x@northwind.example'})}, 'test')
+        self.assertEqual(c.post(f'/api/connectors/{cid}/google/files', json={'on': True}).status_code, 409)
+
+    def test_an_agent_may_not_widen_a_sign_in(self):
+        cid = self.gmail()
+        self.assertEqual(c.post(f'/api/connectors/{cid}/google/files', json={'on': True}, headers=AGENT).status_code, 403)
 
 
 class EmailIt(unittest.TestCase):

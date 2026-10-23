@@ -6,7 +6,7 @@ import json
 from datetime import date, datetime, timedelta
 from unittest import mock
 import pytest
-from taskuary import advisor, calwrite, concierge, faults, funnel, lanes, remote_assistant, rulebook, terminal, words
+from taskuary import advisor, assistant, calwrite, concierge, faults, funnel, lanes, remote_assistant, rulebook, terminal, words
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 from tests import advisor_cases as C
@@ -18,10 +18,13 @@ def at(d=0, h=0): return (datetime.now() - timedelta(days=d, hours=h)).strftime(
 # ── the state x surface matrix, over the eval's world (the demo, the advisor matrix's faults, and the states they lack) ─────────────
 @pytest.fixture(scope='module')
 def world():
-    sessions = dict(terminal.SESSIONS)
+    # faults.world holds its calendar fresh for good (assistant._AGENDA): put back the one it found, or every later module's pile
+    # carries the world's two meetings ("clear the vendor report" cleared a Vendor review in test_triage_urgent)
+    sessions, agenda = dict(terminal.SESSIONS), dict(assistant._AGENDA)
     with mock.patch.object(faults, 'scratch_home', lambda: True): s, by, syn = C.world()
     yield s, by, syn
     for sid in [k for k in terminal.SESSIONS if k not in sessions]: terminal.SESSIONS.pop(sid, None)
+    assistant._AGENDA.clear(); assistant._AGENDA.update(agenda); funnel.invalidate()
 
 
 def _decide(s, syn, item, key=None):

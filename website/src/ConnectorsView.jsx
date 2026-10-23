@@ -1950,7 +1950,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
         </Typography>
         <Button size="small" variant="contained" disableElevation onClick={syncNow} disabled={syncing}
           startIcon={syncing ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 15 }} />}>
-          {syncing ? "Syncing…" : "Sync now"}
+          {syncing ? "Syncing…" : btnLabel("sync_now")}
         </Button>
       </Box>
 
@@ -2375,7 +2375,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         {conn.Type === "telegram" && (
           <>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1, maxWidth: 560 }}>
-              No chat id to type: <b>message your bot</b> (or add it to a group), hit <b>Sync now</b>, and the
+              No chat id to type: <b>message your bot</b> (or add it to a group), hit <b>{btnLabel("sync_now")}</b>, and the
               chat appears below with its id — switched off. Flip on the chats that are yours; every other
               chat stays out, because a public bot can be messaged by anyone. The field at the bottom is only
               for an id you already know.
@@ -2437,7 +2437,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         {conn.Active && !isAI && (
           <Button size="small" variant="contained" disableElevation onClick={syncHere} disabled={srcSync}
             startIcon={srcSync ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
-            sx={{ background: "linear-gradient(90deg, #55697a, #7d9a7c)" }}>{srcSync ? "Syncing…" : "Sync now"}</Button>
+            sx={{ background: "linear-gradient(90deg, #55697a, #7d9a7c)" }}>{srcSync ? "Syncing…" : btnLabel("sync_now")}</Button>
         )}
       </Box>
     )},

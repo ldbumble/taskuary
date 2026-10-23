@@ -17,7 +17,7 @@ test("the sidebar's buttons are New, Reports, Connections, Hub, Settings, in tha
 test("the stack sits above the filter, which takes the whole row and says what it filters to", () => {
   const feed = src("FeedView.jsx");
   assert.doesNotMatch(feed, /aria-label="Feed views"/, "no Work | Timeline switch");
-  const nav = feed.indexOf("data-tq-sidenav"), filterAt = feed.indexOf("<FilterButton "), sync = feed.indexOf("Sync now");
+  const nav = feed.indexOf("data-tq-sidenav"), filterAt = feed.indexOf("<FilterButton "), sync = feed.indexOf(`bLabel("sync_now")`);
   assert.ok(nav > 0 && nav < filterAt && filterAt < sync, "buttons, then the filter, then the counts line");
   const filter = feed.slice(feed.indexOf("function FilterButton"), feed.indexOf("function FilterButton") + 2500);
   assert.match(filter, /const label = filterLabel\(cat, pick\)/);

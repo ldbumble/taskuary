@@ -23,9 +23,10 @@ export const syncFace = ({ busy = false, what = "", every = 10, lastAt = null, n
   if (!every) return terse ? "sync off" : "background sync off";
   const at = lastAt ? fmtTime(lastAt, "en-US", { hour: "numeric", minute: "2-digit" }) : "—";
   const verb = started ? 'check started' : checked ? 'checked' : 'synced';
-  // terse is the narrowed sidebar's one line (2026-09-29): the whole time must fit, so a started check says just that
-  if (terse) return `${started ? 'started' : verb} ${at}`;
-  const nxt = nextIn == null ? "" : nextIn <= 0 ? " · next sync due now" : ` · next in ${Math.floor(nextIn / 60)}:${String(nextIn % 60).padStart(2, "0")}`;
   const bad = failed.length ? ` · ${failed.join(", ")} failed` : "";   // a source that could not be read is never covered by "checked"
+  // terse is the narrowed sidebar's one line (2026-09-29): the whole time must fit, so a started check says just that - and a
+  // failed source still rides it: "checked 9:41" over a mailbox that refused was a sync that said nothing (2026-10-22)
+  if (terse) return `${started ? 'started' : verb} ${at}${bad}`;
+  const nxt = nextIn == null ? "" : nextIn <= 0 ? " · next sync due now" : ` · next in ${Math.floor(nextIn / 60)}:${String(nextIn % 60).padStart(2, "0")}`;
   return `${verb} ${at}${nxt}${bad}`;
 };

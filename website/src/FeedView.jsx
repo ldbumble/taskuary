@@ -9,7 +9,8 @@ import {
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import FilterAltIcon from "@mui/icons-material/FilterAlt";
 import api from "./api";
-import { label as bLabel } from "./buttons.js";
+import { label as bLabel, hint as bHint } from "./buttons.js";
+import { plainError } from "./apiError.js";
 import SearchEverything, { OPEN_SEARCH, searchPicked } from "./SearchEverything.jsx";
 import { fadeBand } from "./timelineFade.js";
 import { syncFace, syncPhaseLabel } from "./syncTiming.js";
@@ -347,6 +348,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const [syncWhat, setSyncWhat] = useState("");
   const [syncPhase, setSyncPhase] = useState("");
   const [syncUnknown, setSyncUnknown] = useState(false);
+  // A REFUSED OR FAILED SYNC SAYS SO IN THE CLOCK'S OWN SLOT (the UX walk, 2026-10-22): a refusal read as "status unavailable" and a
+  // source that failed read as "checked 9:41". Both are the line's status, not a receipt - gone at the next press or clean status
+  const [syncErr, setSyncErr] = useState("");
+  const [syncFailed, setSyncFailed] = useState([]);
   const syncObserver = useRef(null);
   const [lastSync, setLastSync] = useState(null);
   const [syncStarted, setSyncStarted] = useState(false);
@@ -381,6 +386,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     nextAtRef.current = data.nextPollAt ? Date.now() + (data.nextPollAt - data.now) * 1000 : null;
     setTriageErr(data.triageError || "");
     setThinking(data.thinking || "");
+    setSyncFailed(Array.isArray(data.failed) ? data.failed : []);
     if (data.timelineFade) setFade(data.timelineFade);
     // a coalesced feed-changed can fold running+idle into one idle payload, so lastPollAt
     // advancing is how a sub-second automatic poll still gets a visible receipt
@@ -421,8 +427,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const syncNow = useCallback(async (silent) => {
     if (syncUnknown) { await syncObserver.current?.refresh(); return; }
     if (!silent) setSyncing(true);
+    setSyncErr("");
+    // ...an answer that refused is its own words; only no answer at all leaves the state unknown
     try { await api.post("/api/ingest/poll"); }
-    catch { setSyncUnknown(true); }
+    catch (e) { if (e?.response) { setSyncing(false); setSyncErr(plainError(e, "The sync was refused.")); } else setSyncUnknown(true); }
     await syncObserver.current?.refresh();
   }, [syncUnknown]);
 
@@ -564,13 +572,14 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               </Box>
             ))}
             {!rows && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>Loading item counts…</Typography>}
-            <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5, flex: 1, minWidth: 0, textAlign: "right" }}>
-              {syncUnknown ? "Sync status unavailable — rechecking"
+            <Typography variant="caption" noWrap data-tq-sync-line="" title={syncErr || (syncFailed.length ? `${syncFailed.join(", ")} could not be read - its card says why` : undefined)}
+              sx={{ color: syncErr || (syncFailed.length && !(syncing || bgSync)) ? ALERT_INK : syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5, flex: 1, minWidth: 0, textAlign: "right" }}>
+              {syncErr ? `✗ ${syncErr}` : syncUnknown ? "Sync status unavailable — rechecking"
                 : <NextIn atRef={nextAtRef} render={(nextIn) => syncFace({ busy: syncing || bgSync, what: syncWhat, every, lastAt: lastSync, nextIn, checked: true, started: syncStarted,
-                    terse: !(syncing || bgSync) })} />}
+                    terse: !(syncing || bgSync), failed: syncFailed })} />}
             </Typography>
             <Button size="small" variant="text" disabled={!syncUnknown && (syncing || bgSync)} onClick={() => syncNow(false)}
-              title={syncing || bgSync ? syncWhat : "read the mailboxes, chats and repos now"}
+              title={syncing || bgSync ? syncWhat : bHint("sync_now", syncUnknown ? "unknown" : undefined)}
               startIcon={<SyncIcon data-tq-sync-icon sx={{ fontSize: 12,
                 color: syncing || bgSync ? ACCENT : "inherit",
                 ...(!syncUnknown && (syncing && !bgSync || bgSync && (!syncPhase || syncPhase === "fetching"))
@@ -585,7 +594,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                 "@keyframes tqSyncSpin": { to: { transform: "rotate(360deg)" } },
                 "&.Mui-disabled": { color: DIM, opacity: 1 },
                 "& .MuiButton-startIcon": { mr: 0.35 }, "&:hover": { bgcolor: PANEL2 } }}>
-              {syncUnknown ? "Check status" : syncing || bgSync ? syncPhaseLabel(syncPhase) : "Sync now"}
+              {syncUnknown ? bLabel("sync_now", "unknown") : syncing || bgSync ? syncPhaseLabel(syncPhase) : bLabel("sync_now")}
             </Button>
           </Box>
           {/* a brain that errors on every call used to look like slow triage: rows parked on

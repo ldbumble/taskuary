@@ -45,7 +45,7 @@ test("a typed turn draws no proposal card and runs nothing: it lights, opens a p
   // "send Erin the answer": the draft lands in the item's own reply box, and its Send is lit - drafting is not sending
   assert.match(view, /setLit\(\{ verb: "approve", label: btn\("approve"\), line: `Read the draft, then press \$\{btn\("approve"\)\} when you're sure\.`, key: `review:\$\{data\.reviewId\}`/);
   // the lit act outranks the Advisor's line, which would name another button; any press puts it out
-  assert.match(view, /<ActionRow advised=\{stripPick \|\| setupLit\} \/>/);
+  assert.match(view, /<ActionRow advised=\{stripPick \|\| setupLit\}( hold=\{[^}]*\})? \/>/);
   assert.match(view, /const shownAdvice = table\.speaks && !litNow \?/);
   assert.match(src("advice.js"), /pick: lit \|\| \(noAi \? \{ none: "no_ai", for: key \} : shown \|\| quiet\)/, "the light first, then no AI's way out, then the Advisor's decision, then Next (advice.stripWord)");
   assert.match(view, /useEffect\(\(\) => onPressed\(\(\) => setLit\(null\)\), \[\]\);/);

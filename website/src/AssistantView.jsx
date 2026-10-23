@@ -101,6 +101,7 @@ import "./assistantView.css";
 // walk itself lives on the server: a reload asks the task whether it is still an open set-up before
 // showing anything, so a stale key restores nothing.
 const WALK_KEY = "taskuary_walk_tid";
+const HOLD_MS = 400;            // the longest a row waits for its item's first decision before it is drawn without one
 const isOpenWalk = (t) => !!t && t.SourceRef === "assistant:setup" && !["done", "dropped"].includes(t.Status);
 // markers the server writes on a line that are NOT cards (concierge.SETUP_QUESTIONS): the line is its words
 // ...and a line that carries its own words (concierge: a failed act's way on, the already-seen opens): never an item card
@@ -1081,6 +1082,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [cardKey, setCardKey] = useState(null);       // ...or a task opened by name (the Board's open), which is no pile item
   const [text, setText] = useState("");
   const [advice, setAdvice] = useState(null);     // the Advisor's line for the key on the table (advisor.py), or null
+  // the key whose FIRST decision is being read: its row waits for it (at most HOLD_MS), so the lit button lands with the row instead of
+  // reshuffling it under the owner's hand - a lit verb kept in view pushed its neighbour into the ▾ (the dead-end walk's STILL, 2026-10-23)
+  const [reading, setReading] = useState(""), [readFor, setReadFor] = useState(null);
+  // ...let go only once the decision is drawn: the effect runs after the strip's own (AdvisorNext registers a move the row lacks then)
+  useEffect(() => { if (readFor) setReading((r) => (r === readFor.key ? "" : r)); }, [readFor]);
   const [changed, setChanged] = useState(null);   // {for, reading}: a press refused as changed since the Advisor looked (B6)
   // THE BOX GROWS WITH WHAT YOU TYPE, like every chat app: one row empty, a row per line after that, up to the CSS
   // cap (40% of the window) - then it scrolls inside. rows={1} alone held a paragraph in a one-and-a-half-line slot
@@ -1490,13 +1496,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // ...and not while the card is one drawn ahead of its press's answer (drawAhead): the Advisor reads the rail, and
     // a rail rebuilt under the press between its admission and its commit check refused the press as stale (PW-118). The
     // read is made once the answer has landed (landed), exactly as it was when the card only came with the answer.
+    if (!keep) { setReading(key); setTimeout(() => setReading((r) => (r === key ? "" : r)), HOLD_MS); }
     if (unconfirmedRef.current === key) { adviceHeld.current = key; return; }
     let got = null;
     // ...and {"none":"no_ai"}: no AI connected is said once, with the way to connect one, instead of a strip that stays empty (U3)
     try { got = adviceRead((await api.get("/api/advice", { params: { key } })).data, key).advice; }
     catch { got = null; }
     if (n !== adviceAsk.current) return;
-    setAdvice(got);
+    setAdvice(got); setReadFor({ key });
   }, []);
   // ...re-read when the table changes AND when the card on it refreshes (a reply landing keeps the key and moves the
   // revision: the old pill must go), and when the Advisor's own event names this item or one of its aliases
@@ -3131,7 +3138,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           ) : <>
             {/* THE ADVICE IS ON ITS WAY: the row has nothing dark until it lands (rowOf), and a quiet line says so - no button.
                 ONE STRIP, ONE HEIGHT from Thinking to its answer: it came and went under the row, which jumped (2026-10-19) */}
-            {table.speaks && !holding && !hostedRow && <div className="tq-strip" data-tq-strip={busy ? "busy" : ""}>
+            {table.speaks && !holding && !hostedRow && <div className="tq-strip" data-tq-strip={busy || (reading && reading === onTable) ? "busy" : ""}>
             {/* THE ASSISTANT'S LIT BUTTON SAYS SO HERE, over the row it lit: the strip stood empty over a dark Mark done, and "Press Mark done"
                 was only up in the chat (verify, 2026-10-19) - it goes out with the light */}
             {table.speaks && !!litNow && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">{litNow.line}</div></div>}
@@ -3139,11 +3146,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               <div className="tq-next-txt">{changed.reading ? "This changed - reading it again…" : shownAdvice ? "This changed - here's the updated suggestion."
                 : "This changed."}</div></div>}
             <AdvisorNext advice={shownAdvice} onPropose={pressAdvice} />
+            {/* ...and a decision that lights NOTHING on purpose (an agent asking is answered in its own pane, the design's state 7): no
+                word, no button - only a mark, so the dead-end walk can tell it from a strip that never got its decision */}
+            {!shownAdvice && advice?.for === onTable && advice?.state && !advice.verb && !advice.none && <div hidden data-tq-advice="" data-tq-silent="" data-tq-unlit={advice.state} />}
             </div>}
           </>}
           {/* ...and during setup its line is the Advisor's (SetupLine): the move setup fills (FirstRun's tone) is the one lit - nothing
               was, so the line said "pick it" over a plain Back and a greyed Next (2026-10-19) */}
-          <ActionRow advised={stripPick || setupLit} />
+          <ActionRow advised={stripPick || setupLit} hold={!!reading && reading === onTable} />
           {!firstRun && <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />}
           <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined}>
             <AttachImage pics={pics} sx={{ color: DIM }} />

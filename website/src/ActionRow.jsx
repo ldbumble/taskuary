@@ -144,8 +144,9 @@ export default function ActionRow({ inline = false, advised = null, hold = false
     ro.observe(box);
     return () => ro.disconnect();
   }, [box]);
-  // ...and if the drawn line still runs past its box (a width the parts did not add up to), one more group folds
-  const sig = `${parts}|${avail}|${phone}`, extra = over.at === sig ? over.n : 0;
+  // ...and if the drawn line still runs past its box (a width the parts did not add up to), one more group folds - until the parts are
+  // measured again: an overflow drawn off a measure taken before the fonts landed folded a row that fit, and kept it folded
+  const sig = `${parts}|${avail}|${phone}|${JSON.stringify(m)}`, extra = over.at === sig ? over.n : 0;
   const fit = fitRow(row, m, avail, phone, extra);
   useLayoutEffect(() => { if (box && fit.level < fit.last && box.scrollWidth > box.clientWidth + 1) setOver({ at: sig, n: extra + 1 }); });
   if (!inline && hosted) return null;                  // a phone's task view carries its own row

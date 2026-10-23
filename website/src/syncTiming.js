@@ -18,15 +18,14 @@ export const syncStatusDelay = ({ running = false, nextAt = null, now = Date.now
 export const syncPhaseLabel = phase => ({ fetching: 'Reading sources', triaging: 'Organizing',
   checking: 'Checking updates', running_reports: 'Running reports' }[phase] || 'Syncing');
 
-export const syncFace = ({ busy = false, what = "", every = 10, lastAt = null, nextIn = null, terse = false, checked = false, started = false, failed = [] } = {}) => {
+export const syncFace = ({ busy = false, what = "", every = 10, lastAt = null, nextIn = null, terse = false, checked = false, started = false } = {}) => {
   if (busy) return what && !terse ? what : "syncing…";
   if (!every) return terse ? "sync off" : "background sync off";
   const at = lastAt ? fmtTime(lastAt, "en-US", { hour: "numeric", minute: "2-digit" }) : "—";
   const verb = started ? 'check started' : checked ? 'checked' : 'synced';
-  const bad = failed.length ? ` · ${failed.join(", ")} failed` : "";   // a source that could not be read is never covered by "checked"
-  // terse is the narrowed sidebar's one line (2026-09-29): the whole time must fit, so a started check says just that - and a
-  // failed source still rides it: "checked 9:41" over a mailbox that refused was a sync that said nothing (2026-10-22)
-  if (terse) return `${started ? 'started' : verb} ${at}${bad}`;
+  // terse is the narrowed sidebar's one line (2026-09-29): the whole time must fit, so a started check says just that. A source
+  // that could not be read rode it in red (2026-10-22) until the owner moved it to the bell (2026-10-23): a clock, never an error
+  if (terse) return `${started ? 'started' : verb} ${at}`;
   const nxt = nextIn == null ? "" : nextIn <= 0 ? " · next sync due now" : ` · next in ${Math.floor(nextIn / 60)}:${String(nextIn % 60).padStart(2, "0")}`;
-  return `${verb} ${at}${nxt}${bad}`;
+  return `${verb} ${at}${nxt}`;
 };

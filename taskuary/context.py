@@ -252,7 +252,6 @@ def build(store, tid: int, msgs: list = None, repo: str = None, general: bool = 
     is, the playbook, the thread) and the linked documents, which are fetched, and it is rebuilt every turn."""
     from .counsel import dossier, msg_of
     from .triage import sender_body
-    from .learn import injectable
     t = store.get_task(tid) or {}
     msgs = msgs if msgs is not None else [m for m in store.list_messages(tid) if m.get('Status') != 'context']
     last = msgs[-1] if msgs else None
@@ -284,8 +283,11 @@ def build(store, tid: int, msgs: list = None, repo: str = None, general: bool = 
     if meet := _meetings(store): parts.append("## Today's meetings\n" + meet)
     if goals := render_goals(open_goals(store)): parts.append('## Open goals (what the owner is working toward)\n' + goals)
     # only a profile with lines in it: a fresh LEARNED.md is placeholders, and placeholders are not context
-    lrn = injectable(store.doc('learned') or '')
-    if lrn and re.search(r'^\s*[-*] ', lrn, re.M): parts.append("## The owner's learned profile (from their own verdicts)\n" + lrn[:2500])
+    # ...and only "How you sort mail", closest to this task's sender and repository first (learned_cut): the press habits are the Advisor's
+    from . import learned_cut
+    who = str((last or {}).get('FromEmail') or '').lower()
+    lrn = learned_cut.for_reader(store, 'agents', {'sender': who, 'domain': who.rsplit('@', 1)[-1] if '@' in who else '', 'repo': repo})
+    if lrn: parts.append("## The owner's learned profile (from their own verdicts)\n" + lrn.split('\n', 1)[1])
     # the documents the owner indexed that speak to this thread - a policy, a contract, a runbook
     from . import knowledge
     kb = knowledge.block(store, ' '.join(f"{t.get('Title') or ''} {m.get('Subject') or ''} {m.get('BodyText') or ''}" for m in msgs)[:4000], budget=2500, limit=6)

@@ -253,9 +253,22 @@ def style_doc(store) -> str:
     rendered - and empty until the doc says something REAL (headers alone are not a style),
     so the untouched template never rides into a prompt as noise. The doc is the owner's
     voice distilled from their own sent mail (Docs → STYLE.md → Generate from history)."""
-    t = _TEMPLATE_LINES.sub('', _COMMENT.sub('', store.doc('style') or ''))
+    from .byrecipient import without
+    # ...minus "By recipient": those lines are each for one person, and voice_line hands a draft only its own recipients'
+    t = _TEMPLATE_LINES.sub('', _COMMENT.sub('', without(store.doc('style') or '')))
     meat = '\n'.join(l for l in t.splitlines() if l.strip() and not l.strip().startswith('#'))
     return t.strip() if len(meat) > 40 else ''
+
+
+VOICE_HEAD = '\n\nHow you write to the people this goes to (learned from the drafts you edited and the redrafts you asked for):\n'
+
+
+def voice_line(store, to) -> str:
+    """STYLE.md's "By recipient" lines for `to`, closest first (byrecipient.block) - the voice lessons the drafter finally reads (phase C,
+    2026-10-23: they were learned into LEARNED.md, which no drafter reads)."""
+    from . import byrecipient
+    b = byrecipient.block(store, to)
+    return VOICE_HEAD + b if b else ''
 
 def history_block(store, m: dict) -> str:
     """What this mailbox already knows about the sender and the topic BEYOND this thread - their
@@ -376,6 +389,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
                  f'this:\n{sty[:2500]}' if sty else ''))
     # LEARNED.md is triage's document (PW-058): what deserves a task is not how to write a reply
     if notes: system += '\n\nYour own writing instructions:\n' + '\n'.join(f'- {n}' for n in notes)
+    system += voice_line(store, [last.get('FromEmail')])
     from .triage import sender_body
     # the writer reads the same assembled conversation triage reads (PW-054): the whole chain, history
     # included, cleaned and de-quoted under one budget, with the cut said out loud - not the last six
@@ -540,6 +554,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
                  f'this:\n{sty[:2500]}' if sty else ''))
     notes = writing_notes(store)                                     # explicit writing instructions only (PW-060)
     if notes: system += '\n\nYour own writing instructions:\n' + '\n'.join(f'- {n}' for n in notes)
+    system += voice_line(store, [m.get('FromEmail')])
     user = (f"Subject: {m.get('Subject') or ''}\nFrom: {m.get('FromName')} <{m.get('FromEmail')}>\n\n"
             f"{sender_body(str(m.get('BodyText') or ''), m.get('OwnText'), budget=4000)[0]}")
     from . import calendar as cal

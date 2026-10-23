@@ -2316,7 +2316,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
 
   const steps = [
     // ticked once a Test has PASSED on them: "saved" ticked a key the service had just refused (the 2026-10-19 UI walk)
-    { label: "Credentials", done: !m.secretLabel || (!!conn.HasSecret && !!conn.LastSyncAt && !conn.LastError), body: (
+    { label: "Credentials", done: credsDone(conn, cfg, m), body: (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
         {MS_SIGNIN.includes(conn.Type) && !adminFields && (
           <Button size="small" variant="text" onClick={() => setAdminFields(true)}
@@ -3461,6 +3461,12 @@ const MailFolders = ({ conn, s, reload }) => {
 /* ── WhatsApp pairing, on the card. The bridge serves its QR at /status and WhatsApp rotates it
    every ~20 seconds, so this polls and redraws; a terminal QR is too big to scan and a phone
    number is nothing to type into a chat. Paired = the box says who, and stops polling. ── */
+// A CARD WITH NO KEY TO PASTE IS TICKED BY ITS OWN PROOF: "no secret" ticked ChatGPT before anyone signed in and WhatsApp before a
+// phone was paired (the UX walk, 2026-10-22). ChatGPT's proof is the sign-in's token; WhatsApp's is a clean read through the pairing
+const credsDone = (conn, cfg, m) => conn.Type === "chatgpt" ? cfg?.auth === "user" && !!conn.HasSecret
+  : conn.Type === "whatsapp" ? !!conn.LastSyncAt && !conn.LastError
+    : !m.secretLabel || (!!conn.HasSecret && !!conn.LastSyncAt && !conn.LastError);
+
 /* ── WhatsApp pairing: three steps that drive themselves. 1 Node on the machine (the only thing the
    owner installs - the box says how and re-checks on its own); 2 the bridge, which the box starts the
    moment Node is there (no button to find, no agent to wait on); 3 the QR, scanned from the phone.

@@ -65,13 +65,13 @@ export default function ReplyFiles({ reviewId, files = [], text = "", channel = 
             sx={{ color: DIM, textTransform: "none", fontSize: 11.5 }}>
             {busy === "adding" ? "Attaching…" : label("attach", files.length ? "more" : null)}
           </Button>
-        ) : (
-          // ...and a draft that PROMISES one says so in the alert colour: sent here, the words would arrive without it (U17)
-          <Typography variant="caption" sx={{ color: promisesFiles(text) || files.length ? ALERT_INK : DIM }}>
-            {promisesFiles(text) || files.length ? `This reply mentions a file, and a ${channel} message cannot carry one — reply by email with the file instead.`
-              : `A ${channel} message cannot carry a file — answer by email to attach one.`}
+        ) : (promisesFiles(text) || files.length) ? (
+          // ...a draft that PROMISES one says so in the alert colour: sent here, the words would arrive without it (U17). A chat draft that
+          // promises none says nothing - "a Teams message cannot carry a file" under every chat draft was a line, not a button (2026-10-22)
+          <Typography variant="caption" sx={{ color: ALERT_INK }}>
+            {`This reply mentions a file, and a ${channel} message cannot carry one — reply by email with the file instead.`}
           </Typography>
-        )}
+        ) : null}
         <input ref={pick} hidden type="file" multiple disabled={disabled} onChange={(e) => add(e.target.files)} />
       </Box>
       {missing && mail && (

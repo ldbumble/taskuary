@@ -122,6 +122,8 @@ const WALK_SKIP = {
   "pick_repo:set": "shows once a task names its folder - the faults pass takes a task that names none, to press Choose where the code is",
   "split:split": "the plain split's own name for the same drawer Split or merge opens - the drawer's press is walked as split",
   "attach:more": "shows once a file is attached - the walk attaches none: the file picker is the system's own window",
+  "copy": "under a draft its channel cannot send (Teams) - neither world drafts one; test/unsendableReply.test.mjs holds it to copy and close nothing",
+  "copy:done": "as Copy: the badge its own press leaves",
 };
 
 // --cover a.json,b.json: COVER over the presses of a walk run in parts (CI runs its passes as four jobs, 2026-10-20) - no browser,

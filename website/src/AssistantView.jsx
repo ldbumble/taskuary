@@ -686,10 +686,11 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                     {/* the dot is the BAND's colour, the pill's own (the owner, 2026-10-06: one palette, everywhere) - where it
                         came from is the logo inside the row */}
                     <span className="rail"><i style={{ background: LEVEL_COLOR[level] || sourceColor(i) }} /></span>
-                    {/* the row already on the table SHOWS it - on a phone that means closing the drawer over it */}
+                    {/* the row already on the table SHOWS it - on a phone that means closing the drawer over it. Any other row is pulled
+                        QUIETLY, as a search hit is: a 'Show me "..."' bubble per click was free text saying what the click did (2026-10-22) */}
                     <div className="card" role="option" aria-selected={isCur} aria-disabled={i.settling ? true : undefined}
                       tabIndex={i.key === tabKey ? 0 : -1} onFocus={() => setKbdKey(i.key)}
-                      onClick={() => (isCur ? onCurrent?.() : !i.settling && onPull(i.key, `Show me “${i.title}”`))}
+                      onClick={() => (isCur ? onCurrent?.() : !i.settling && onPull(i.key))}
                       onPointerEnter={() => { if (!isCur && i.tid) prefetchTask(api, i.tid); }}
                       aria-label={hot ? `${i.title} - urgent` : undefined}
                       title={[i.who, meta.word, i.ref, i.promoted ? 'moved up - it looked urgent' : '', i.why].filter(Boolean).join(" · ")}>

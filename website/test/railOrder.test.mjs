@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { arrivedAt, bandsOf, inOrder, isUrgent, nextMarkerKey } from "../src/funnelPile.js";
+import { ageHover, arrivedAt, bandsOf, inOrder, isUrgent, latestLine, newMark, nextMarkerKey } from "../src/funnelPile.js";
 import { summarize } from "../src/walkSummary.js";
 
 // THE RAIL IS ONE FIXED ORDER (the owner, 2026-10-22: "set by time, oldest to newest and then never move ... on the table should
@@ -69,4 +69,34 @@ test("the rail shades an urgent row in place and says urgent to a screen reader;
   const sum = summarize([task("task:1", 19), task("task:2", 11, { lane: "time", order_band: 1 }), report("report:1", 3)]);
   assert.deepEqual(sum.groups.map((g) => [g.key, g.n, g.urgent]), [["task", 2, 1], ["reports", 1, 0]]);
   assert.equal(sum.lead, "3 things: 2 tasks (1 urgent), 1 reports.");
+});
+
+// +N, NEVER A MOVE (the owner, 2026-10-23): a reply since the owner last opened the row is a quiet "+N" beside the ARRIVAL age, the
+// age's hover says both clocks, and the line under the title is the newest message; the row on the table (just opened) wears none
+const local = (h) => { const d = new Date(Date.now() - h * 3600e3); return new Date(d - d.getTimezoneOffset() * 60e3).toISOString().slice(0, 19).replace("T", " "); };
+
+test("a row with replies since it was opened says +N beside its arrival, and none once it is opened", () => {
+  const row = task("task:4", 26, { new_n: 3, last_at: local(2) });
+  assert.equal(newMark(row, false), "+3");
+  assert.equal(newMark(row, true), "", "the row on the table has just been opened");
+  assert.equal(newMark({ ...row, new_n: 0 }, false), "");
+  assert.equal(arrivedAt(row), row.arrived_at, "a reply changed the age");
+});
+
+test("the age's hover says when it arrived and when its last message came", () => {
+  const row = { key: "task:4", arrived_at: local(26), last_at: local(2) };
+  assert.match(ageHover(row), /^arrived .+ · last message 2h ago$/);
+  assert.match(ageHover({ ...row, last_at: undefined }), /^arrived [^·]+$/);
+});
+
+test("the line under the title is the newest message", () => {
+  assert.equal(latestLine({ latest: { who: "Erin Blake", text: "Signed copy attached." } }), "Erin Blake: Signed copy attached.");
+  assert.equal(latestLine({}), "");
+});
+
+test("the rail row draws the mark in the age column and the newest message on the table's line", () => {
+  const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
+  assert.match(view, /<span className="tq-pile-new">\{newMark\(i, isCur\)\}<\/span>/);
+  assert.match(view, /: ageHover\(i\)\}>/);
+  assert.match(view, /latestLine\(i\) \? \[latestLine\(i\), ago\(i\.last_at\)\]/);
 });

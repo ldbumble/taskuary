@@ -912,14 +912,14 @@ DASHBOARD = {'type': 'dashboard', 'title': 'Northwind desk', 'daily_at': '07:00'
                          {'key': 'mail', 'label': 'Mail in', 'type': 'taskuary_data', 'dataset': 'mail', 'days': 90, 'date': 'day'}],
              'filters': {'range': 7, 'segment': 'channel'},
              'components': [
-                 {'kind': 'stat', 'title': 'Open tasks', 'source': 'tasks', 'agg': 'count', 'where': {'state': 'open'}, 'good': 'down'},
+                 {'kind': 'stat', 'title': 'Open tasks', 'source': 'tasks', 'agg': 'count', 'where': {'state': 'open'}, 'range': False},
                  {'kind': 'stat', 'title': 'Came in', 'source': 'mail', 'agg': 'count'},
                  {'kind': 'stat', 'title': 'Became tasks', 'source': 'mail', 'agg': 'count', 'where': {'became_task': 'yes'}},
                  {'kind': 'progress', 'title': 'Closed toward 25 this week', 'source': 'tasks', 'agg': 'count', 'where': {'state': 'closed'}, 'target': 25},
                  {'kind': 'stacked', 'title': 'Mail in by day', 'source': 'mail', 'x': 'day', 'series': 'channel', 'w': 2},
-                 {'kind': 'bar', 'title': 'Open work by kind', 'source': 'tasks', 'x': 'kind', 'where': {'state': 'open'}, 'w': 2},
+                 {'kind': 'bar', 'title': 'Open work by kind', 'source': 'tasks', 'x': 'kind', 'where': {'state': 'open'}, 'range': False, 'w': 2},
                  {'kind': 'bar', 'title': 'Who wrote most', 'source': 'mail', 'x': 'sender', 'limit': 6, 'w': 2},
-                 {'kind': 'list', 'title': 'Open now', 'source': 'tasks', 'label': 'title', 'meta': 'kind', 'where': {'state': 'open'},
+                 {'kind': 'list', 'title': 'Open now', 'source': 'tasks', 'label': 'title', 'meta': 'kind', 'where': {'state': 'open'}, 'range': False,
                   'sort': '-arrived', 'limit': 8, 'w': 2}]}
 
 

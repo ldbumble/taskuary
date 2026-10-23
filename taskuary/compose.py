@@ -579,6 +579,7 @@ DASHBOARD_SYSTEM = (
     'list last (w 2-4). Every title is what a person would call the number, never a column name.\n'
     '- Bind only to columns you have SEEN - the datasets below list Taskuary\'s own, anything else you peek at first.\n'
     '- "where" values are exact matches of a column\'s values. Counts are "agg": "count" with no "y".\n'
+    '- "range": false on a component that counts what is true NOW (open tasks, a balance) - the date range then never cuts it.\n'
     '- No schedule asked for: daily_at "07:00", and say so in explain.\n')
 DASHBOARD_KEYS = ('type', 'title', 'every_minutes', 'daily_at', 'cron', 'on_startup', 'sources', 'filters', 'components')
 

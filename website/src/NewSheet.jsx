@@ -36,7 +36,7 @@ const NO_AI_PLAN = "No AI is connected to plan the steps - connect one, or choos
 import { connectorNamed } from "./connectorCatalog.js";
 import { openAppLink } from "./appLinks.js";
 import { NEW_PB, askPlaybook } from "./playbookOpen.js";
-import { place } from "./words.js";
+import { DASH, place } from "./words.js";
 import { label as btn } from "./buttons.js";
 import { useCapabilities } from "./capabilities.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
@@ -53,8 +53,11 @@ const KINDS = [
   // ...and the third thing Reports keeps (the owner, 2026-10-22: "this is not playbook ui?" - asked for one, the Assistant handed it to a
   // general agent as its job). Its words go to the shelf's own New playbook, which sets it up with AI there (playbookOpen.askPlaybook)
   { key: "playbook", mark: "📖", label: "Playbook", hint: "how one kind of request is handled from now on — triage matches new mail to it, and its steps are followed your way" },
+  // ...and the fourth (the owner, 2026-10-23: "dashboards would be ... similar to reports but more visual"): described here, drafted by
+  // the same box, and opened on Reports → Dashboards drawn over real rows to save
+  { key: "dashboard", mark: "📈", label: DASH.tab, hint: DASH.tab_hint },
 ];
-const REPEATS = ["report", "workflow"];
+const REPEATS = ["report", "workflow", "dashboard"];
 
 const Label = ({ children }) => (
   <Typography sx={{ ...mono, fontSize: 9.5, fontWeight: 600, letterSpacing: ".11em",

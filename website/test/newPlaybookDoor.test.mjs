@@ -18,7 +18,8 @@ test("New has a Playbook tab after Report and Workflow, its press handing the wo
 
 test("Reports offers + New playbook beside + New report and + New workflow, opening New playbook on its shelf", () => {
   const view = read("ReportsView.jsx");
-  assert.match(view, /\{ key: "new-agent", label: "\+ New workflow" \}, \{ key: NEW_PB, label: "\+ New playbook" \}\]/);
+  // ...and + New dashboard after them (the owner, 2026-10-23: dashboards are the fourth thing Reports keeps)
+  assert.match(view, /\{ key: "new-agent", label: "\+ New workflow" \}, \{ key: NEW_PB, label: "\+ New playbook" \},\s*\{ key: "new-dashboard", label: DASH\.new \}\]/);
   assert.match(view, /key === NEW_PB \? \{ section: "playbooks", open: null, newPb: Date\.now\(\) \}/);
   assert.match(view, /<NewPlaybook key=\{browseState\.newFor \|\| browseState\.newPb \|\| ""\}[^>]*asked=\{!!browseState\.newPb\}/);
 });

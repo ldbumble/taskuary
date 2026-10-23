@@ -30,6 +30,7 @@ ACTIONS = {
     'poll': 'read', 'fetch': 'read', 'search': 'read', 'list': 'read', 'discover': 'read',
     'image_generate': 'read',      # draws a picture: it spends, but nothing upstream moves
     'sqlite': 'read', 'mssql': 'read', 'database': 'read',
+    'taskuary_data': 'read', 'dashboard': 'read',     # a dashboard's own rows and the dashboard: reads (each source is gated on its own card)
     'intacct': 'read', 'intacct_fields': 'read',      # readByQuery and lookup; nothing posts
     # QuickBooks: the reads are reads. The two writes post to the books, which is exactly what the
     # ladder is for - the card ships at 'read', so an agent can only PROPOSE a bill (proposals.py,

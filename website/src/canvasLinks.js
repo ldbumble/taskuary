@@ -21,6 +21,9 @@ export function canvasRequestFromHash(hash, n = 0) {
     // a draft New built (draftHandoff): its kind's shelf, the draft open
     const state = v === "new" ? { section: "reports", open: "new-report" }
       : v === "draft" ? { section: "reports", open: "draft" } : v === "draft-workflow" ? { section: "workflows", open: "draft" }
+      // the dashboards' shelf: the list, a new one being described, or a draft New built (dashboards.py)
+      : v === "dashboards" ? { section: "dashboards", open: null } : v === "new-dashboard" ? { section: "dashboards", open: "new-dashboard" }
+      : v === "draft-dashboard" ? { section: "dashboards", open: "draft" }
       : v === "workflows" ? { section: "workflows", open: null } : v === "playbooks" ? { section: "playbooks", open: null }
         // ...and New playbook asked for (New's Playbook tab): the shelf, its dialog open - `newPb` numbers the ask, so a second one opens it again
         : v === "new-playbook" ? { section: "playbooks", open: null, newPb: n + 1 }
@@ -83,6 +86,8 @@ export function hashFor(area, s = {}) {
   if (area === "reports") {
     if (s.section === "workflows") return s.open === "draft" ? "#report=draft-workflow" : REPORT_BUCKETS.includes(s.open) ? `#report=${s.open}` : "#report=workflows";
     if (s.section === "playbooks") return /^pb:[\w.-]+$/.test(String(s.open || "")) ? `#playbook=${s.open.slice(3)}` : "#report=playbooks";
+    if (s.section === "dashboards") return typeof s.open === "number" ? `#report=${s.open}` : s.open === "draft" ? "#report=draft-dashboard"
+      : s.open === "new-dashboard" ? "#report=new-dashboard" : "#report=dashboards";
     // ...a run's Fix with AI (&fix=) is an act the link asks for once, not a place: Back to it must not ask again
     return typeof s.open === "number" ? `#report=${s.open}` : s.open === "new-report" ? "#report=new"
       : s.open === "draft" ? "#report=draft" : "#report=reports";

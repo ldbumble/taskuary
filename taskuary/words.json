@@ -2,6 +2,7 @@
   "_": "THE PLACES A SENTENCE SENDS THE OWNER, AND THE WORDS THEY NEVER SEE. A sentence that names a place asks words.place(id) (taskuary/words.py, website/src/words.js) for its name and its link - never a path typed into the sentence, so a page that moves or is renamed is fixed here once. `href` is the link the canvas already opens (website/src/canvasLinks.js, appLinks.js); '' for a place that is on the screen and has no link of its own. `jargon` is every word a non-coder must never read in a line the app writes for them.",
   "places": {
     "connections":       {"name": "Connections", "href": "#connector="},
+    "dashboards":        {"name": "Reports → Dashboards", "href": "#report=dashboards"},
     "ai":                {"name": "Connections → AI", "href": "#connections=AI%20%E2%80%94%20agents%20%26%20models"},
     "ai_apps":           {"name": "Connections → AI CLI agents", "href": "#cli-agents"},
     "voice":             {"name": "Connections → AI — voice", "href": "#connections=AI%20%E2%80%94%20voice"},
@@ -55,11 +56,23 @@
     "_": "ONE NAME FOR EACH THING THE OWNER IS SHOWN (2026-10-19 UI walk: the coding tools on this computer were 'AI CLI agents' on their card, 'Connections > AI CLI agents' in a hint and their own crumb, each typed apart). A surface that names one asks words.noun(id).",
     "cli_agents": "AI CLI agents",
     "rail":       "your work rail",
-    "reports":    "Reports"
+    "reports":    "Reports",
+    "dashboards": "Dashboards"
   },
   "gone": {
     "_": "SURFACES THAT NO LONGER EXIST, named in no line the owner reads: the Timeline (removed 2026-10-15), the Reports tab and the Assistant tab (Reports is a page of the canvas, the chat is the app). Matched as written - 'timeline' in a sentence is a word. The page's walk (deadend_check.mjs WORDS) and words.jargon_in flag them with the jargon.",
     "words": ["Timeline", "Reports tab", "Assistant tab"]
+  },
+  "dashboard": {
+    "_": "A DASHBOARD'S OWN WORDS (dashboards.py, website/src/dashboard/): its doors, its filters and the buttons on its page. The page reads them from here, never typed in a component.",
+    "new": "+ New dashboard", "tab": "Dashboard", "tab_hint": "your systems' numbers on one screen - charts, tiles and lists that refresh on a schedule, set up by describing it",
+    "describe": "Describe the dashboard you want", "example": "Open tasks by kind, mail in per day by channel, and who wrote most - refreshed every morning.",
+    "save": "Save dashboard", "saving": "Saving…", "again": "Describe it again", "run": "Run now", "running": "Running…", "remove": "Remove",
+    "edit": "Edit this dashboard", "open": "Open", "loading": "Reading its rows…", "never": "It has not run yet - Run now fills it.",
+    "empty": "No dashboards yet - + New dashboard describes one and sets it up.",
+    "ranges": {"7": "7 days", "30": "30 days", "90": "90 days", "0": "All"}, "all": "All",
+    "table": "Table", "chart": "Chart", "rows_behind": "Rows behind", "close": "Close", "no_rows": "No rows in this range.", "other": "Other",
+    "updated": "updated", "schedule": "Refresh"
   },
   "jargon": ["CLI", "repo", "repository", "PR", "pull request", "token", "lane", "brain", "triage", "harness", "session", "JSON",
              "worktree", "terminal", "by triage", "regular agent", "coder", "claude-", "gpt-", "gemini-", "sonnet", "opus", "haiku"]

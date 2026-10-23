@@ -10,4 +10,4 @@ export const handDraft = (kind, config, meta) => {
 export const takeDraft = () => { const p = pending; pending = null; return p; };
 export const onDraftHanded = (f) => { listeners.add(f); return () => listeners.delete(f); };
 // where each kind's draft opens (canvasLinks reads it; ReportsView reads the hash on its tab)
-export const DRAFT_HASH = { report: "report=draft", workflow: "report=draft-workflow" };
+export const DRAFT_HASH = { report: "report=draft", workflow: "report=draft-workflow", dashboard: "report=draft-dashboard" };

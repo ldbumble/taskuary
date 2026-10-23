@@ -969,6 +969,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
                 send(store, channel, chat, 'Go ahead - type your question.', connector_id)
                 return
             if act:
+                note_pick(store, act, item, offered, acts)
                 send(store, channel, chat, run_act(store, act, item), connector_id)
                 return
             # ...and on an fyi batch a number names one of the lines we printed: open that one - the item on
@@ -1001,6 +1002,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
                 hit = next((w for w in offered if str(w).strip().lower() == said and w in acts), None)
                 if hit:
                     forget_offered(store, channel, chat)
+                    note_pick(store, acts[hit], item, offered, acts)
                     send(store, channel, chat, run_act(store, acts[hit], item), connector_id)
                     return
                 if said.lstrip('#').isdigit() and offered:
@@ -1557,6 +1559,32 @@ def send_files(store, act: dict, actor: str = 'owner') -> str:
     except Exception: dock = None
     again = [(buttons.label('try_again'), {'t': 'files', 'tid': tid, 'paths': failed})] if failed else []
     return turn_text({'say': '\n'.join(said), 'item': None}, store=store, extra=again + _way_on(store, dock))
+
+
+# A PICK IS A PRESS (phase B, 2026-10-23): the phone's taps were never kept, so a habit formed on WhatsApp was invisible to what the
+# app learns. Only a pick that IS a button on the item - its verbs, Next, Mark done under a receipt, Trust them - is one; a page of
+# choices, the menu, a Cancel or the second step of a question (the day for Remind me, the words for Redraft) is not
+_PICK_VERB = {'next': 'next', 'close': 'close', 'trust': 'trust_start'}
+
+
+def pick_verb(act: dict | None) -> str:
+    """The button a numbered pick stands for, or '' for a pick that is not a press on the item."""
+    t = (act or {}).get('t')
+    return str(act.get('verb') or '') if t in ('verb', 'alt') else _PICK_VERB.get(t, '')
+
+
+def note_pick(store, act: dict, item: dict | None, offered: list, acts: dict) -> int:
+    """Keep one pick (advisor.press, surface phone): lit is button 1 - the card's lead - and live is every other button offered."""
+    got = pick_verb(act)
+    tid = str(act.get('tid') or '')
+    key = act.get('key') or (f'task:{int(tid)}' if act.get('t') in ('close', 'trust') and tid.isdigit() else '') or (item or {}).get('key') or ''
+    if not got or not key: return 0
+    verbs = [pick_verb(acts.get(w)) for w in offered or []]
+    from . import advisor
+    try: return advisor.press(store, key, None, got, surface='phone', lit=verbs[0] if verbs else '', live=[v for v in verbs if v],
+                              item=item if (item or {}).get('key') == key else None)
+    except Exception as e:
+        logger.warning(f'the phone pick {got} was not kept: {e}'); return 0
 
 
 def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:

@@ -254,11 +254,11 @@ def gather(store, since: str) -> str:
     # ...and what the owner PRESSED while the Advisor's line was shown (advisor.press): each moment's count, the line it lit against
     # the one pressed - the moves this document's "## Moves" is counted from
     try:
-        rs = [r for r in store._rows('SELECT * FROM advice_press WHERE CreatedAt>=? AND IFNULL(Stale,0)=0 ORDER BY Id', (since,))]
+        rs = [r for r in store._rows('SELECT * FROM advice_press WHERE CreatedAt>=? AND IFNULL(Stale,0)=0 AND IFNULL(Choice,1)=1 ORDER BY Id', (since,))]
     except Exception: rs = []
     if rs:
-        out.append(f"MOVES (what the owner pressed while the Advisor's line was shown: {sum(r['Match'] or 0 for r in rs)} of {len(rs)} were the lit one):")
-        out += [f"  pr{r['Id']} on {moment(r.get('ItemKind'), r.get('Channel'), r.get('Scope') or '?')}: lit {r.get('Advised') or '-'}, pressed {r['Pressed']}"
+        out.append(f"MOVES (what the owner pressed where another button was there to press: {sum(r['Match'] or 0 for r in rs)} of {len(rs)} were the lit one):")
+        out += [f"  pr{r['Id']} on {moment(r.get('ItemKind'), r.get('Channel'), r.get('Scope') or '?')}: lit {r.get('Lit') or r.get('Advised') or '-'}, pressed {r['Pressed']}"
                 for r in rs[-20:]]
     from . import outcomes
     led = outcomes.evidence(store, since)
@@ -458,9 +458,10 @@ def _json_setting(store, key, empty):
 
 def move_rows(store) -> dict:
     """{(kind, channel, scope): [press rows]} - presses on a line still true of the item (not stale), with a scope to learn at, made
-    after the owner last deleted that moment's line."""
+    after the owner last deleted that moment's line. Only a real choice counts (presses.py, 2026-10-23): every press is kept now, and
+    one made with no other button there says nothing about what the owner would pick."""
     cut, out = _json_setting(store, MOVES_CUT, {}), {}
-    for r in store._rows("SELECT * FROM advice_press WHERE IFNULL(Stale,0)=0 AND IFNULL(Scope,'')<>'' AND IFNULL(Pressed,'')<>'' ORDER BY Id"):
+    for r in store._rows("SELECT * FROM advice_press WHERE IFNULL(Stale,0)=0 AND IFNULL(Choice,1)=1 AND IFNULL(Scope,'')<>'' AND IFNULL(Pressed,'')<>'' ORDER BY Id"):
         g = (str(r.get('ItemKind') or ''), str(r.get('Channel') or ''), str(r['Scope']))
         if int(r['Id']) > int(cut.get(_move_key(*g)) or 0): out.setdefault(g, []).append(r)
     return out

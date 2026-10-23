@@ -927,6 +927,9 @@ class SQLiteStore:
             # who wrote the draft: 'agent:<name>' when the agent that did the work wrote it itself
             # (wrapup.agent_reply), NULL when the responder did - the end of the run keeps the former
             if 'DraftBy' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN DraftBy TEXT')
+            # THE OWNER'S OWN WORDS FOR THE DRAFT ("shorter", "say we pay on Friday"), every one, JSON [{at, text}] - they rode into
+            # the model's prompt and were gone (the owner, 2026-10-23: the typed instruction is now stored and remembered)
+            if 'Instructions' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN Instructions TEXT')
             # Approval is not a provider receipt. Keep the in-flight claim and the exact
             # attempted payload separate from the UI's pending/approved review status.
             for col in ('DeliveryState', 'DeliveryClaim', 'DeliveryAttemptedAt', 'DeliveryEnvelope', 'DeliveryReceipt'):
@@ -1026,6 +1029,14 @@ class SQLiteStore:
             self.cx.execute('CREATE TABLE IF NOT EXISTS advice_press (Id INTEGER PRIMARY KEY, Key TEXT, TargetKind TEXT, TargetId INTEGER, '
                             'Revision TEXT, Advised TEXT, Pressed TEXT, Match INTEGER, ItemKind TEXT, Channel TEXT, Sender TEXT, '
                             'SenderDomain TEXT, Scope TEXT, Thread TEXT, Stale INTEGER, CreatedAt TEXT)')
+            # ...ON EVERY SURFACE, LIT OR NOT (the Advisor and memory design, phase B, 2026-10-23): only desk presses under a line were kept.
+            # Surface: desk / task (the Tasks tab) / phone. Lit: the button filled on THAT surface (Advised stays the Advisor's own verb).
+            # Live: the other buttons that could be pressed, JSON. Choice: 1 when one was there - a press with no other button is no choice
+            # and no evidence. Repo: a code item's repository, named apart from the sender's domain
+            apcols = {r[1] for r in self.cx.execute('PRAGMA table_info(advice_press)')}
+            for col, typ in (('Surface', 'TEXT'), ('Lit', 'TEXT'), ('Live', 'TEXT'), ('Choice', 'INTEGER'), ('Repo', 'TEXT')):
+                if col not in apcols: self.cx.execute(f'ALTER TABLE advice_press ADD COLUMN {col} {typ}')
+            self.cx.execute('CREATE INDEX IF NOT EXISTS advice_press_at ON advice_press(CreatedAt)')
             # a verified 'this mailbox wrote to them' hit, remembered so the mail server is asked once per address (PW-080)
             self.cx.execute('CREATE TABLE IF NOT EXISTS sender_trust (Mailbox TEXT, Address TEXT, Reason TEXT, CheckedAt TEXT, '
                             'PRIMARY KEY (Mailbox, Address))')
@@ -4747,6 +4758,19 @@ class SQLiteStore:
     def update_review_draft(self, rid, draft, run_id, by=None):
         self._exec("UPDATE review SET DraftText=?, RunId=?, DraftError=NULL, DraftBy=? WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')", (draft, run_id, by, rid))
         self._review_changed(rid)
+    def add_review_instruction(self, rid, text: str):
+        """Keep the owner's instruction for this draft beside the ones before it - never replaced, never cleared by a redraft."""
+        said = ' '.join(str(text or '').split())[:1000]
+        if not said: return
+        with self.lock:
+            r = self.cx.execute('SELECT Instructions FROM review WHERE ReviewId=?', (rid,)).fetchone()
+            if not r: return
+            try: have = json.loads(r[0] or '[]') or []
+            except ValueError: have = []
+            # ...once: a reply opened with words (open_reply's later) hands the same words to the draft it owes (/draft)
+            if have and have[-1].get('text') == said: return
+            have.append({'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'text': said})
+            self.cx.execute('UPDATE review SET Instructions=? WHERE ReviewId=?', (json.dumps(have), rid)); self.cx.commit(); self._writes += 1
     def set_review_draft_error(self, rid, error: str):
         """The draft could not be written: keep the review pending and say why (PW-046)."""
         self._exec('UPDATE review SET DraftError=? WHERE ReviewId=?', ((error or '')[:300] or None, rid))

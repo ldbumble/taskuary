@@ -2283,6 +2283,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (c.verb === "opentask" && c.tid) { openTaskRef.current?.({ tid: c.tid }); return; }
     if (c.verb === "bug") { openBugReport(shownError(c.text)); return; }
     if (c.verb === "setupask") { askSetup(); return; }
+    // ...and the end of the walk's way to walk again: the day card's own button and handler, on the row (the owner, 2026-10-22)
+    if (c.verb === "walk") { start(null); return; }
     // ...a Not ours taken further, under its receipt (followUps): the item it names, whatever is on the table now - run at once
     if (c.follow?.kind) {
       setBusy(true); setErr("");
@@ -2760,7 +2762,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           // whose release lands after the move never reaches the button
           onPointerDown={counting ? () => setWalkQueued(true) : undefined}
           onClick={() => (counting || walkOff ? setWalkQueued(true) : start(null))}
-          title="Everything waiting, most important first - mail, reports, agents, meetings">{starting || walkQueued ? "Getting your first one..." : "Walk me through my tasks"}</button>
+          title={btnHint("walk")}>{starting || walkQueued ? "Getting your first one..." : btn("walk")}</button>
         {/* NO "Set up Taskuary" HERE: setup is the Setup button on the top bar, never a choice in the chat (the owner, 2026-10-19) */}
         {/* RUN, not set up: setting things up is the top bar's Setup; this door goes where the reports and workflows ARE
             (the owner, 2026-10-08: "it should be run report/workflow which will take you to reports/workflows") */}

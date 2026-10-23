@@ -541,6 +541,8 @@ async function walk() {
     seen.set(k, (seen.get(k) || 0) + 1);
     if (seen.get(k) >= 3) { note("STUCK", at, `three presses left the same screen - the row: ${JSON.stringify(s.verbs.map((v) => v.word))}`); break; }
   }
+  // ...and the end row offers the walk again beside them - the day card's own button, not a card or a line (the owner, 2026-10-22)
+  if (s.verbs.some((v) => v.word.startsWith("Open TQ")) && !s.verbs.some((v) => v.word === label("walk"))) note("OPENS", page.step, `the walk's end has no ${label("walk")} on the row: ${JSON.stringify(s.verbs.map((v) => v.word))}`);
   // OPENS: the end line's first chip must put its own TQ on the table
   const w = s.verbs.map((v) => v.word).find((x) => x.startsWith("Open TQ"));
   if (w && await clickText(page, w, "[data-tq-row]")) {

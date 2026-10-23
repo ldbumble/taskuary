@@ -214,9 +214,9 @@ class TurnTests(unittest.TestCase):
         again = concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])      # Next, as the page presses it
         # ...walked past, it is still under Tasks - Next moves on, the task stays, and the next walk starts with it (the owner, 2026-10-21)
         self.assertIsNone(again['item']); self.assertRegex(again['say'], r"^That's everything for now\. 1 thing you already saw still waits on you - TQ-\d+\. The next walk starts with it, or open it now\.$")
-        # ...and the way to it NOW is a button naming it - a Next under this line only said it again (2026-09-23)
-        self.assertEqual([c['verb'] for c in again['chips']], ['open'])
-        self.assertTrue(again['chips'][0]['label'].startswith('Open TQ-'))
+        # ...and the way to it NOW is a button naming it - a Next under this line only said it again (2026-09-23) - after the walk again
+        self.assertEqual([c['verb'] for c in again['chips']], ['walk', 'open'])
+        self.assertTrue(again['chips'][1]['label'].startswith('Open TQ-'))
         gone = concierge.surface(s, key='msg:999', llm=lambda *a, **k: 'never')
         self.assertIsNone(gone['item']); self.assertIn("can't find that one", gone['say'])
 
@@ -1054,7 +1054,25 @@ class ForLaterLine(unittest.TestCase):
         with mock.patch.object(concierge.funnel, 'pile', return_value={'items': rows}),              mock.patch.object(concierge.funnel, 'next_item', return_value=None):
             out = concierge.surface(MemoryStore(), llm=lambda *a, **k: 'never')
         self.assertIn('TQ-0001 back in 2h, TQ-0002 back in 2h, TQ-0003 back in 2h', out['say'])
-        self.assertEqual([c['key'] for c in out['chips']], ['task:1', 'task:2', 'task:3'])
+        self.assertEqual([c.get('key') for c in out['chips']], [None, 'task:1', 'task:2', 'task:3'])
+
+    def test_the_end_of_a_walk_offers_the_walk_again_as_a_button_not_a_sentence(self):
+        """The end of a walk offered only Open TQ-... (the owner, 2026-10-22: "just have ... button on bottom on top of the prompt
+        box"): the day card's own Walk me through my tasks leads the row, its words from buttons.json - and the line says no more.
+        The phone has its own Walk, so its poll keeps only the Opens."""
+        from unittest import mock
+        rows = [{'key': 'task:4', 'ref': 'TQ-0004', 'title': 'Quarter plan', 'lane': 'yours', 'surfaced': True, 'put_down': True}]
+        with mock.patch.object(concierge.funnel, 'pile', return_value={'items': rows}), mock.patch.object(concierge.funnel, 'next_item', return_value=None):
+            out = concierge.surface(MemoryStore(), llm=lambda *a, **k: 'never')
+            self.assertTrue(out['over'])
+            self.assertEqual(out['chips'][0], {'verb': 'walk', 'label': 'Walk me through my tasks', 'hint': buttons.hint('walk')})
+            self.assertEqual([c['verb'] for c in out['chips']], ['walk', 'open'])
+            self.assertNotIn('Walk me through', out['say'])
+            with concierge.delivering(concierge.PHONE):
+                self.assertEqual([c['verb'] for c in concierge.surface(MemoryStore(), llm=lambda *a, **k: 'never')['chips']], ['open'])
+        # ...and a walk that ends with nothing waiting offers no walk to start
+        with mock.patch.object(concierge.funnel, 'pile', return_value={'items': []}), mock.patch.object(concierge.funnel, 'next_item', return_value=None):
+            self.assertFalse(any(c.get('verb') == 'walk' for c in concierge.surface(MemoryStore(), llm=lambda *a, **k: 'never')['chips']))
 
 
 class NonCoderWordsTests(unittest.TestCase):

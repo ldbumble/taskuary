@@ -235,6 +235,7 @@ async def _lifespan(_app):
     msauth.on_rotate = lambda cid, rt: store.save_connector({'ConnectorId': cid, 'Secret': rt}, 'msauth')   # a rotated Microsoft refresh token outlives a restart
     from . import chatgptauth
     chatgptauth.on_rotate = lambda cid, rt: store.save_connector({'ConnectorId': cid, 'Secret': rt}, 'chatgptauth')   # ...and a ChatGPT one
+    from . import sharing   # imported here, before the first request: imported on the start's own thread it raced the first requests (a card's Enable read back Off)
     threading.Thread(target=share_start, name='taskuary-share-start', daemon=True).start()   # links on: their own port
     try:
         async with processing_all.membership_lifecycle(store):

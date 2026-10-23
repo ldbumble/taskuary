@@ -5369,6 +5369,8 @@ class SQLiteStore:
         q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt, m.CreatedAt IngestedAt,
                        m.ConversationId,
                        substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId, m.Direction, m.Brief, m.TriageTitle, m.SenderClass,
+                       CASE WHEN json_valid(m.MailMetaJson) AND json_extract(m.MailMetaJson, '$.unsub.done') IS NULL
+                            THEN json_extract(m.MailMetaJson, '$.unsub.via') END Unsub,
                        t.Title, t.Status TaskStatus, t.Priority, t.Kind TaskKind, t.Tags TaskTags, {self.NEEDS_YOU} NeedsYou,
                        CASE WHEN m.TaskId IS NULL THEN 0 ELSE (SELECT COUNT(*) FROM message c
                             WHERE c.TaskId=m.TaskId AND c.Status NOT IN ('context','history')) END ChainSize,

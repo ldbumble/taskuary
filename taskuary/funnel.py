@@ -454,7 +454,9 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             out.append(_item(f"msg:{r['MessageId']}", 'fyi', 'fyi', subj, closed=True, why=closed_why(r), **base))
             if group and threads.get(group) is None: threads[group] = out[-1]
             continue
-        out.append(_item(f"msg:{r['MessageId']}", 'fyi', 'fyi', subj, why=r.get('RouteReason') or 'a person told you something; nothing to do', **base))
+        # ...and a list's way off it, still unpressed (store.feed `Unsub`): the card's Unsubscribe (unsubscribe.py)
+        out.append(_item(f"msg:{r['MessageId']}", 'fyi', 'fyi', subj, why=r.get('RouteReason') or 'a person told you something; nothing to do',
+                         **({'unsub': r['Unsub']} if r.get('Unsub') else {}), **base))
         if group and out and threads.get(group) is None: threads[group] = out[-1]
     # ONE brief leads the day. `brief_today` is true of every digest run made today, and the digest
     # ran twice on 2026-09-14 - so two identical "Morning digest" rows sat at the top of the work

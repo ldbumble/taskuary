@@ -17,6 +17,7 @@ import TerminalIcon from "@mui/icons-material/Terminal";
 import OutlinedFlagIcon from "@mui/icons-material/OutlinedFlag";
 import api from "./api.js";
 import { gistFor } from "./fyiRow.js";
+import { canUnsubscribe, unsubscribeFrom } from "./unsubscribe.js";
 import { runOperation } from "./taskOps.js";
 import { ChannelIcon, DraftField, TaskuaryMark, channelColor, cleanText, fmtDateTime, fmtTime12 } from "./ui.jsx";
 import { openAppLink } from "./appLinks.js";
@@ -885,6 +886,13 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
     setBusy("");
   };
   const asks = card.kind !== "fyi";
+  // a list's way off it (unsubscribe.js): the whole item IS the list's mail, so its Unsubscribe rides the row with the item's verbs,
+  // and the press folds the card wearing it as its badge
+  const unsub = async () => {
+    setBusy("unsubscribe"); setErr("");
+    try { await unsubscribeFrom(api, card.mid); onDone?.(btn("unsubscribe")); } catch (e) { setErr(failOf(e)); }
+    setBusy("");
+  };
   // ...read off what is connected, like the row (concierge.chips_for): the card offered Send to coding agent with no coding tool, so the
   // card and the row disagreed and the press failed (the re-audit, 2026-10-18)
   const canCode = useCapabilities().coding;
@@ -1042,6 +1050,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
             : "writes one for you to approve here - nothing is sent."} />
       ) : card.kind === "fyi" && <div className="tq-card-note">Nothing to decide - it only wants you to know.</div>}
       <Foot openTask={onOpenTask} close={card} onDone={onDone}
+        extra={card.kind === "fyi" && canUnsubscribe(card) ? [{ verb: "unsubscribe", label: btn("unsubscribe"), title: btnHint("unsubscribe"), onClick: unsub, disabled: !!busy }] : []}
         covers={[...(own || mineAlone ? (suggestedKind === "coding" ? ["coding_agent", "coder"] : ["regular_agent"]) : ["reply"]), ...(mineAlone ? ["reply", "not_ours"] : [])]}
         where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
       {repoAsk && (
@@ -1207,6 +1216,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
   const [open, setOpen] = useState(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
+  const [left, setLeft] = useState({});                      // the lines whose list was left: the press is a badge on that line
   const items = card.items || [];
   // A batch of four is read whole: every line carries its gist and its two doors, and you never
   // open anything. A batch of ten drawn the same way is a card you scroll past, with twenty doors
@@ -1224,6 +1234,12 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
   const propose = async (verb, i) => {
     setBusy(i.key); setErr("");
     try { await onPropose?.(verb, i.key); } catch (e) { setErr(failOf(e)); }
+    setBusy("");
+  };
+  // one line's list, left from under that line (unsubscribe.js) - never the handful's, and never marking it read: All read does that
+  const unsub = async (i) => {
+    setBusy(i.key); setErr("");
+    try { await unsubscribeFrom(api, i.mid); setLeft((l) => ({ ...l, [i.key]: true })); } catch (e) { setErr(failOf(e)); }
     setBusy("");
   };
   return (
@@ -1259,6 +1275,8 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
               {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("regular_agent", i)} title={btnHint("regular_agent")} sx={quiet}>{btn("regular_agent")}</Button>}
               {/* one line of the handful can be put down on its own - All read was the only way to let any of it go */}
               {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("not_ours", i)} title={btnHint("not_ours")} sx={quiet}>{btn("not_ours")}</Button>}
+              {canUnsubscribe(i) && (left[i.key] ? <span className="tq-pressed" data-tq-pressed={btn("unsubscribe")}>✓ {btn("unsubscribe")}</span>
+                : <Button size="small" variant="outlined" disabled={!!busy} onClick={() => unsub(i)} title={btnHint("unsubscribe")} sx={quiet}>{btn("unsubscribe")}</Button>)}
               <Button size="small" onClick={() => onSurface?.(i.key)} sx={faint}>Talk about it</Button>
             </div>
           )}

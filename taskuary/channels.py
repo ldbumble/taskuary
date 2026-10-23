@@ -530,8 +530,9 @@ def _header_marks(m: dict) -> dict:
     # a header the parser chokes on is no verdict, never a stalled poll
     try: v = mailauth.verdict((m or {}).get('internetMessageHeaders'), internal=True)
     except Exception as e: v = 'none'; logger.warning(f'mail auth unreadable on {(m or {}).get("id")}: {e}')
+    from .unsubscribe import parse as unsub    # a list's own way off it, for the FYI card's Unsubscribe (unsubscribe.py)
     return {**({'auto_reply': True} if from_headers(h) else {}), **({'sender_class': header_class(h)} if header_class(h) else {}),
-            **({'auth': v} if v != 'none' else {})}
+            **({'auth': v} if v != 'none' else {}), **({'unsub': u} if (u := unsub(h)) else {})}
 
 
 # Graph's bodyPreview is capped at 255 chars - reading it FIRST truncated every stored mail,

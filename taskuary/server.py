@@ -3136,6 +3136,26 @@ def file_message(mid: int, body: NotATaskBody = None, background: BackgroundTask
     return {'ok': True, 'taskDeleted': fate == 'deleted', 'taskArchived': fate == 'archived',
             'ref': task_ref(tid) if tid else None, 'memoryId': learned}
 
+class UnsubscribeBody(BaseModel):
+    open: bool = False          # the desktop app has no browser of its own: Taskuary opens the list's page for it (as /api/open-url)
+
+@app.post('/api/messages/{mid}/unsubscribe')
+def unsubscribe_message(mid: int, request: Request, body: UnsubscribeBody = None):
+    """The FYI card's Unsubscribe (the owner, 2026-10-22). Owner-only: a list is left on the owner's press and never on an agent's
+    - an agent's context is full of mail, and a newsletter talking one into leaving lists is exactly what this refuses. The link is
+    the one ingest stored off the list's own headers, never one the client sends (unsubscribe.py)."""
+    _owner_only(request, "leaving a list is the owner's press")
+    from . import unsubscribe
+    if not store.get_message(mid): raise HTTPException(404, 'message not found')
+    try: out = unsubscribe.run(store, mid, ACTOR)
+    except LookupError as e: raise HTTPException(422, str(e))
+    except RuntimeError as e: raise HTTPException(502, str(e))
+    if out.get('link') and body is not None and body.open:
+        import webbrowser
+        threading.Thread(target=webbrowser.open, args=(out['link'],), daemon=True).start()
+        out['opened'] = True
+    return out
+
 @app.get('/api/messages/{mid}/not-mine/suggest')
 def not_mine_suggest(mid: int, scope: str = None, topic: str = None):
     """The note we'd save, so the panel can show it for editing before it's committed - phrased

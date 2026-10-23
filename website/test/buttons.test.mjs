@@ -77,7 +77,8 @@ const NOT_BUTTONS = {
   "demoApi.js": ["New task"],                                  // a new demo task's default title
   "TasksView.jsx": ["New task"],                               // the new-task dialog's title
   // a setup wizard's own step forward - not the walk's Next, which puts an item down
-  "FirstRun.jsx": ["Next"], "FirstRunAbout.jsx": ["Next"], "SkillImport.jsx": ["Next"],
+  // ...and the skill import's Read, which reads a link or a path - not Next's badge on a report it read (2026-10-23)
+  "FirstRun.jsx": ["Next"], "FirstRunAbout.jsx": ["Next"], "SkillImport.jsx": ["Next", "Read"],
   // other sends that are not a draft's Send (2026-10-18, when approve's label became "Send"): the bug report's own, the chat
   // composer's arrow, and the answer box's Send/Queue to a waiting agent
   "BugReportDialog.jsx": ["Send"], "GeneralWorkspace.jsx": ["Send"], "ui.jsx": ["Send"],

@@ -142,7 +142,8 @@ def test_the_bottom_ends_the_walk_names_what_was_skipped_and_the_next_walk_start
     out = concierge.surface(store, bottom['key'])
     while out['item']: out = concierge.surface(store, leaving=out['item']['key'])
     assert out.get('over'), 'the walk did not end at the bottom'
-    assert 'TQ-0001' in out['say'] and 'TQ-0002' in out['say'], f"the end line did not name the tasks skipped above: {out['say']}"
+    # ...named by their Opens, with no sentence on the desk (the owner, 2026-10-23: "yes remove the sentence, just the button")
+    assert out['say'] == '', f"the end of the walk said a sentence: {out['say']}"
     assert out['chips'][0]['verb'] == 'walk' and [c['key'] for c in out['chips'][1:]][:2] == [i['key'] for i in rail(store) if i.get('tid') in tids[:2]]
     again = concierge.surface(store)
     assert again['item'] and again['item'].get('tid') == tids[0], 'the next walk did not start at the top'

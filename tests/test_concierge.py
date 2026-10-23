@@ -213,7 +213,8 @@ class TurnTests(unittest.TestCase):
         first = concierge.surface(s, llm=lambda *a, **k: 'first')
         again = concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])      # Next, as the page presses it
         # ...walked past, it is still under Tasks - Next moves on, the task stays, and the next walk starts with it (the owner, 2026-10-21)
-        self.assertIsNone(again['item']); self.assertRegex(again['say'], r"^That's everything for now\. 1 thing you already saw still waits on you - TQ-\d+\. The next walk starts with it, or open it now\.$")
+        # ...and the desk says no sentence about it: the buttons do the talking (the owner, 2026-10-23: "yes remove the sentence, just the button")
+        self.assertIsNone(again['item']); self.assertEqual(again['say'], '')
         # ...and the way to it NOW is a button naming it - a Next under this line only said it again (2026-09-23) - after the walk again
         self.assertEqual([c['verb'] for c in again['chips']], ['walk', 'open'])
         self.assertTrue(again['chips'][1]['label'].startswith('Open TQ-'))
@@ -314,8 +315,8 @@ class DecisionTests(unittest.TestCase):
         # ...and nothing on the table means nothing to decide - the words move the WALK instead
         out = concierge.say(s, 'next', key=None, llm=lambda *a, **k: 'Nothing is on the table.\nCALL: {"kind": "next", "params": {}}')
         self.assertIsNone(out.get('decision'))
-        # shown, never walked past with Next: still On you, and the line says so (2026-10-08 - For later is only what you put there)
-        self.assertIn('still waits on you', out['say'])
+        # shown, never walked past with Next: still On you, and its Open says so - no sentence (2026-10-08, 2026-10-23)
+        self.assertEqual(out['say'], ''); self.assertEqual([c.get('verb') for c in out['chips']], ['walk', 'open'])
 
     def test_mine_with_nothing_on_the_table_is_a_new_to_do_in_their_words(self):
         """"remind me to renew the contract" came back as DECIDE: mine - theirs to do - and was answered
@@ -1022,6 +1023,32 @@ class FyiHandOffTests(unittest.TestCase):
         self.assertEqual(concierge.triage_agent(s, {'tid': t}), 'regular_agent')
 
 
+class NextBadge(unittest.TestCase):
+    """NEXT READS A REPORT, IT PASSES A TASK (the owner, 2026-10-23: "should show read on reports if you go pass them when you hit next"):
+    the card Next left wears "Read" where Next settled it read and "Next" where it stays yours - stamped here, so a reload draws it."""
+    def test_the_badge_says_what_next_did(self):
+        read, nxt = buttons.label('next', 'read'), buttons.label('next')
+        self.assertEqual(read, 'Read')
+        for c in ({'kind': 'report', 'lane': 'report'}, {'kind': 'report', 'lane': 'report', 'dashboard': True}, {'kind': 'report', 'lane': 'broken', 'bad': True},
+                  {'kind': 'agentdone', 'lane': 'report', 'tid': 8}, {'kind': 'fyi', 'lane': 'fyi'}):
+            self.assertEqual(concierge.next_badge(c), read, c)
+        for c in ({'kind': 'task', 'lane': 'yours', 'tid': 7}, {'kind': 'review', 'lane': 'approve', 'tid': 3}, {'kind': 'meeting', 'lane': 'time'},
+                  {'kind': 'connection', 'lane': 'broken'}, None):
+            self.assertEqual(concierge.next_badge(c), nxt, c)
+        self.assertEqual(concierge.next_badge({'kind': 'fyis', 'lane': 'fyi'}), buttons.label('next', 'batch'))
+
+    def test_the_card_next_left_is_stamped_once_and_never_over_another_press(self):
+        s = MemoryStore(); dock = general.dock_task(s)[0]['TaskId']
+        cards = lambda: [json.loads(m.group(1)) for c in s.list_comments(dock) if (m := concierge._MARK.search(c.get('Body') or ''))]
+        concierge.record(s, dock, 'assistant', 'Next up: a report.', {'key': 'report:4', 'kind': 'report', 'lane': 'report', 'title': 'Weekly spend'})
+        concierge.record(s, dock, 'assistant', 'Next up: a task.', {'key': 'task:7', 'kind': 'task', 'lane': 'yours', 'tid': 7, 'title': 'Renew the lease',
+                                                                    'pressed': buttons.label('close')})
+        concierge.record(s, dock, 'assistant', 'Next up: a task.', {'key': 'task:8', 'kind': 'task', 'lane': 'yours', 'tid': 8, 'title': 'Quarter plan'})
+        for k in ('report:4', 'task:7', 'task:8'): concierge._stamp_next(s, dock, k)
+        self.assertEqual([c.get('pressed') for c in cards()], ['Read', buttons.label('close'), 'Next'])
+        self.assertFalse(concierge._stamp_next(s, dock, 'report:99'))      # nothing drawn, nothing stamped
+
+
 class ForLaterLine(unittest.TestCase):
     def test_the_line_counts_what_the_rail_holds_for_later_and_says_when_each_is_back(self):
         """The rail held two For later - one shown and put down for 2h, one put away until tomorrow with Remind me - and the
@@ -1035,14 +1062,21 @@ class ForLaterLine(unittest.TestCase):
         with mock.patch.object(concierge.funnel, 'pile', return_value={'items': rows}), \
              mock.patch.object(concierge.funnel, 'next_item', return_value=None):
             out = concierge.surface(s, llm=lambda *a, **k: 'never')
-        self.assertEqual(out['say'], "That's everything for now. 2 things are under For later - TQ-0014 back in 2h, TQ-0008 back in 19h. "
-                                     "Open one now if you want it sooner.")
-        self.assertEqual(concierge._back_words('not a time'), 'back in a while')
+        # the desk says nothing - the Opens are the line (the owner, 2026-10-23: "yes remove the sentence, just the button") - and the
+        # phone, which has no row, one short status
+        self.assertEqual(out['say'], '')
+        self.assertEqual([c.get('key') for c in out['chips']], [None, 'task:14', 'task:8'])
+        with concierge.delivering(concierge.PHONE), mock.patch.object(concierge.funnel, 'pile', return_value={'items': rows}), \
+             mock.patch.object(concierge.funnel, 'next_item', return_value=None):
+            self.assertEqual(concierge.surface(s, llm=lambda *a, **k: 'never')['say'], "That's everything for now - 2 things are under For later.")
         rows[0] = rows[0] | {'deferred': False, 'surfaced': True, 'put_down': True}       # ...walked past with Next: still a task
         with mock.patch.object(concierge.funnel, 'pile', return_value={'items': rows}), \
              mock.patch.object(concierge.funnel, 'next_item', return_value=None):
             out = concierge.surface(s, llm=lambda *a, **k: 'never')
-        self.assertTrue(out['say'].startswith("That's everything for now. 2 things you already saw still wait on you - TQ-0014"), out['say'])
+        self.assertEqual(out['say'], '')
+        with concierge.delivering(concierge.PHONE), mock.patch.object(concierge.funnel, 'pile', return_value={'items': rows}), \
+             mock.patch.object(concierge.funnel, 'next_item', return_value=None):
+            self.assertEqual(concierge.surface(s, llm=lambda *a, **k: 'never')['say'], "That's everything for now - 2 things you already saw still wait on you.")
 
     def test_the_line_and_its_buttons_keep_the_rails_order(self):
         """A sort of the line's own named TQ-0001, TQ-0003, TQ-0004 over a rail reading TQ-0001, TQ-0002, TQ-0003 - a to-do is
@@ -1053,7 +1087,7 @@ class ForLaterLine(unittest.TestCase):
                 for n, t, lane in ((1, 'Month-end close', 'approve'), (2, 'New starter kit', 'yours'), (3, 'Overnight import', 'approve'))]
         with mock.patch.object(concierge.funnel, 'pile', return_value={'items': rows}),              mock.patch.object(concierge.funnel, 'next_item', return_value=None):
             out = concierge.surface(MemoryStore(), llm=lambda *a, **k: 'never')
-        self.assertIn('TQ-0001 back in 2h, TQ-0002 back in 2h, TQ-0003 back in 2h', out['say'])
+        self.assertEqual(out['say'], '')                                     # the buttons name them, in the rail's order
         self.assertEqual([c.get('key') for c in out['chips']], [None, 'task:1', 'task:2', 'task:3'])
 
     def test_the_end_of_a_walk_offers_the_walk_again_as_a_button_not_a_sentence(self):

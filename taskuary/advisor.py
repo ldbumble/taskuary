@@ -778,6 +778,9 @@ def offered(store, item: dict) -> list:
     add to a move, and are never the move. Chase joins where the rulebook says a wait has run past its day (rulebook.adds)."""
     from . import rulebook
     verbs = [buttons.chip(b['verb']) | {'label': b['label']} for b in concierge.row_buttons(store, item) if b['verb'] not in NOT_MOVES]
+    # ...in the item's own order (its vocabulary, chips_for - a draft's Send first), the row's other moves after it
+    first = [c['verb'] for c in concierge.chips_for(store, item)]
+    verbs.sort(key=lambda v: first.index(v['verb']) if v['verb'] in first else len(first))
     verbs += [buttons.chip(v) for v in rulebook.adds(store, item) if v not in {x['verb'] for x in verbs}]
     try: fix = delivery_fix(store, item)
     except Exception as e:

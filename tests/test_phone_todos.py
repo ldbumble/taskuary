@@ -9,6 +9,11 @@ from taskuary import concierge, remote_assistant as R, terminal
 from tests.test_assistant_router import on_table, say, store
 
 
+# store() patches the app's store for the put-downs it runs (test_assistant_router) - put it back after this module, as that one does,
+# or every later module reads this module's last store (test_reclassify's messages were 404s)
+def tearDownModule(): mock.patch.stopall()
+
+
 class PhoneToDos(unittest.TestCase):
     def setUp(self):
         self.s = store(); self.tid, self.item = on_table(self.s)

@@ -4,7 +4,7 @@
 // queue or the Board; the card only puts it under the sentence that was just said. Reading
 // happens IN the card (the full text unfolds under it) and every card links to where the whole of
 // it lives - the task, or the row on the Timeline - because everything is the chat.
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
 import { movesOf, useVerbs } from "./actionRow.js";
 import { choice, hint as btnHint, label as btn } from "./buttons.js";
@@ -25,6 +25,7 @@ import { openAppLink } from "./appLinks.js";
 import { CardErr, failOf } from "./failure.jsx";
 import { DASH, place } from "./words.js";
 import Dashboard from "./dashboard/Dashboard.jsx";
+import { snapshotOf } from "./dashboard/slice.js";
 import { Md, looksMd } from "./md.jsx";
 import { jsonRows, nameAndRest } from "./reportRows.js";
 import DigestText from "./DigestText.jsx";
@@ -839,8 +840,14 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone }) {
 
 // A DASHBOARD landed: it is LOOKED AT, so it takes the canvas - the filter row, the tiles, the charts and the lists at the canvas's
 // height, scrolling inside itself - with the day it ran and when its rows were read, like a report card's heading (dashboards.py)
-export function DashboardCard({ card, onDone }) {
+export function DashboardCard({ card, onOpenTask, onDone }) {
   const [got, setGot] = useState(null), [err, setErr] = useState("");
+  // SHARE IT, like a report (the owner, 2026-10-23: Share on report / workflow / Result / dashboard): the store holds no page for a
+  // dashboard, so it brings its own words - the tiles and the rows it drew, frozen at the press (snapshotOf); an email opens at once
+  const nav = React.useContext(CardNav), snap = useMemo(() => (got?.data ? snapshotOf(got.config, got.data) : null), [got]);
+  const share = useShare(`dashboard:${card.key || card.mid || card.source_id}`, { kind: "dashboard", title: card.title, ...(snap || {}) }, !!nav.row && !!snap,
+    { onShared: (how, out) => { if (how === "email" && out?.task_id) onOpenTask?.(out.task_id); },
+      summaryWhy: "a summary is written from a task's work - a dashboard is its own result; Email the result sends it" });
   useEffect(() => {
     let live = true;
     setErr("");
@@ -854,6 +861,7 @@ export function DashboardCard({ card, onDone }) {
       <div className="tq-dash-canvas" data-tq-dash-canvas="">
         {got?.data ? <Dashboard spec={got.config} data={got.data} /> : <div className="tq-card-excerpt">{err || (got ? DASH.never : DASH.loading)}</div>}
       </div>
+      {share}
       <Foot close={card} onDone={onDone}
         where={card.source_id != null && <Button size="small" component="a" href={`#report=${card.source_id}`} sx={faint}>{DASH.edit} ↗</Button>} />
     </CardShell>

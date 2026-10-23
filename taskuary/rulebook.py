@@ -156,7 +156,10 @@ def state(store, item: dict, verbs: list) -> tuple:
     # ...the fix named after its place is the way past it, at once; with none named, the model reads the cause (a mail too large is
     # redrafted, a dead address is fixed, a run that hit a wall is tried again) while the rule's Try again / New task stands lit
     if f: return ('failed' if f.get('fix') else 'failed_cause'), {'why': _plain_why(f.get('why'), f.get('what'))}
-    if kind == 'report': return 'report_ok', {}
+    # A DASHBOARD's refresh lands under Reports like a report run and Next walks past it (the owner, 2026-10-23): looked at, never acted
+    # on - so silent, Next lit. Its Share (and a report's) is on the row for the Advisor to SEE, never the move a rule lights: sending a
+    # result somewhere is the owner's own idea, not the obvious next step
+    if kind == 'report': return ('dashboard' if it.get('dashboard') else 'report_ok'), {}
     if kind == 'fyis': return 'fyi_batch', {}
     if kind == 'meeting': return 'meeting', {}
     if kind == 'connection': return 'connection', {}

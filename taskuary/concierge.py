@@ -1038,6 +1038,8 @@ def _shows(store, it: dict, b: str) -> bool:
     if b == 'stop_agent': return _agent_running(it['tid'])
     if b == 'continue': return bool(store.resumable_session(it['tid'])) and not _general(store, it)
     if b in ('review_changes', 'run_another', 'share'): return _agent_holds(store, it) or bool(store.resumable_session(it['tid']))
+    # Share stands on a task's row whenever no agent is at work on it (TaskPage: a Result to share, or a summary to email)
+    if b == 'share_result': return not _agent_running(it['tid'])
     if b == 'attach': return bool(it.get('rid'))
     # Copy is a draft's that cannot be sent from here (ReviewDecision, the owner 2026-10-22) - it stood on every task's list of buttons
     if b == 'copy': return bool(it.get('rid')) and cannot(it, 'approve', store)
@@ -1058,6 +1060,9 @@ def row_buttons(store, it: dict) -> list:
         out = [{'verb': v, 'label': buttons.label(v)} for v, d in buttons.VERBS.items()
                if d.get('row') and not cannot(it, v, store) and _shows(store, it, v) and not (v == 'regular_agent' and _agent_holds(store, it))]
     else: out = [{'verb': c['verb'], 'label': c['label']} for c in chips_for(store, it) if c.get('verb') and c['verb'] != 'next']
+    # ...and a report's or a dashboard's Share, which its card draws on the row while it is the item (ReportCard, DashboardCard) - a run
+    # that failed has nothing to share. Seen here so the Advisor knows the row has it; no rule lights it (rulebook: report_ok, dashboard)
+    if it.get('kind') == 'report' and it.get('mid') and not it.get('bad'): out.append({'verb': 'share_result', 'label': buttons.label('share_result')})
     if it.get('closeout'): out.insert(0, {'verb': 'approve', 'label': closeout_label(it)})
     seen = set()
     return [b for b in out if not (b['verb'] in seen or seen.add(b['verb']))]

@@ -93,5 +93,5 @@ test("every state's words: a fact or silence, and never the filler the owner str
     for (const gone of ["No suggestion", "Nothing to decide", "Thinking", "the choice is yours", "Suggested"]) assert.ok(!w.line.includes(gone), `${st}: ${w.line}`);
     assert.ok(w.line.length <= 64, st);
   }
-  for (const st of ["working", "report_ok", "fyi_batch", "goal", "invite_no_cal"]) assert.deepEqual(ADVICE_RULE[st], { line: "", lit: ["next"] }, st);
+  for (const st of ["working", "report_ok", "dashboard", "fyi_batch", "goal", "invite_no_cal"]) assert.deepEqual(ADVICE_RULE[st], { line: "", lit: ["next"] }, st);
 });

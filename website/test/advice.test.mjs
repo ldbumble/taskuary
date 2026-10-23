@@ -51,7 +51,10 @@ test("the page draws the gated line, starts each item with none, and drops a rea
   const fs = await import("node:fs"), path = await import("node:path");
   const src = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
   assert.match(src, /<AdvisorNext advice=\{shownAdvice\} onPropose=\{pressAdvice\} \/>/);
-  assert.match(src, /try \{ return await proposeDirect\(a\.verb, key, true, a\.revision\); \}/);
+  // ...and a move the server runs at once (Not ours) runs at once from the Advisor's copy too - never a proposal card with Cancel
+  assert.match(src, /try \{ const pr = await proposeDirect\(a\.verb, key, true, a\.revision\); if \(pr\?\.auto\) await runProposal\(pr\); return pr; \}/);
+  assert.match(src, /if \(pr\?\.auto && !c\.revision\) await runProposal\(pr\);/, "a stamped chip's AUTO move is not run twice");
+  assert.match(src, /if \(data\.auto\) return data;/, "an AUTO move draws no proposal card with Cancel while it runs");
   assert.match(src, /advised=\{stripPick \|\| setupLit\}/);
   assert.doesNotMatch(src, /<AdvisorNext advice=\{advice\}/);
   assert.match(src, /if \(!keep\) setAdvice\(null\)/);

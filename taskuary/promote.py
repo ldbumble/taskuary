@@ -55,6 +55,22 @@ def written_to(store, em: str) -> bool:
                            (f'%{em}%',)))
 
 
+def _by_sender(store, q: str, senders) -> list:
+    "q's rows (an `em` column) for these senders only - the one scan that replaced a scan per sender."
+    return [r for r in store._rows(q) if r['em'] in senders]
+
+
+def _newest_threads(store, pairs: set) -> dict:
+    "{(sender, subject's first 90): the thread of the newest such message} - what a note's per-note lookup found, in one read per 500 senders."
+    ems, out = sorted({em for em, _ in pairs}), {}
+    for i in range(0, len(ems), 500):
+        chunk = ems[i:i + 500]
+        for r in store._rows("SELECT lower(FromEmail) em, substr(IFNULL(Subject,''),1,90) s, ConversationId cid FROM message "
+                             f"WHERE lower(FromEmail) IN ({','.join('?' * len(chunk))}) ORDER BY MessageId", chunk):
+            if (r['em'], r['s']) in pairs: out[(r['em'], r['s'])] = r['cid']
+    return out
+
+
 def evidence(store, days: int = DAYS) -> dict:
     """{sender: {'down': {thread}, 'up': {thread}, 'urgent': {task}, 'threads': {thread}, 'auto': bool}} - what the owner did,
     per sender and per THREAD (three replies on one thread are one episode), from the route log, the press log, the verdict notes
@@ -76,26 +92,27 @@ def evidence(store, days: int = DAYS) -> dict:
         if p['Pressed'] in DOWN: row(p['em'])['down'].add(k)
         elif p['Pressed'] not in NEUTRAL: row(p['em'])['up'].add(k)
     # the verdict notes (LEARNED.md's evidence block): one per mail, matched to its thread so a note and its route are one episode
+    notes = []
     for n in store.list_memories():
         if n.get('Source') != 'verdict' or str(n.get('CreatedAt') or '') < since: continue
         note = str(n.get('Note') or ''); f = FROM_NOTE.search(note)
         em = (f.group(1) if f else (n.get('ScopeKey') if n.get('Scope') == 'sender' else '') or '').lower()
-        if '@' not in em: continue
-        subj = (NOTE_SUBJ.match(note) or [None, None])[1]
-        hit = store._one("SELECT ConversationId FROM message WHERE lower(FromEmail)=? AND substr(IFNULL(Subject,''),1,90)=? ORDER BY MessageId DESC LIMIT 1",
-                         (em, subj)) if subj is not None else None
-        k = (hit or {}).get('ConversationId') or f"mem{n['MemoryId']}"
+        if '@' in em: notes.append((n, note, em, (NOTE_SUBJ.match(note) or [None, None])[1]))
+    # ONE read per question, not one per note or per sender: lower(FromEmail)=? is a full scan of the message table each time,
+    # and ~250 of them back to back held the store for two minutes on every Advisor run (2026-10-23)
+    newest = _newest_threads(store, {(em, s) for _, _, em, s in notes if s is not None})
+    for n, note, em, subj in notes:
+        k = newest.get((em, subj)) or f"mem{n['MemoryId']}"
         if DOWN_NOTE.search(note): row(em)['down'].add(k)
         elif UP_NOTE.search(note): row(em)['up'].add(k)
     # taken up: the owner wrote back on the thread, sent a reply from a task on it, or closed a task of theirs as done work
-    for em, r in out.items():
-        for t in store._rows("SELECT DISTINCT i.ConversationId cid FROM message i JOIN message o ON o.ConversationId=i.ConversationId "
-                             "WHERE lower(i.FromEmail)=? AND (o.Direction='out' OR o.Status='context')", (em,)): r['up'].add(t['cid'])
-        for t in store._rows("SELECT DISTINCT m.ConversationId cid FROM message m JOIN review v ON v.TaskId=m.TaskId WHERE lower(m.FromEmail)=? "
-                             "AND v.Status IN ('approved','sent')", (em,)): r['up'].add(t['cid'])
-        for t in store._rows("SELECT DISTINCT m.ConversationId cid FROM message m JOIN task t ON t.TaskId=m.TaskId WHERE lower(m.FromEmail)=? "
-                             "AND t.Status='done' AND t.UpdatedBy='owner'", (em,)):
-            if t['cid'] not in r['down']: r['up'].add(t['cid'])
+    for t in _by_sender(store, "SELECT DISTINCT lower(FromEmail) em, ConversationId cid FROM message WHERE ConversationId IN "
+                               "(SELECT ConversationId FROM message WHERE Direction='out' OR Status='context')", out): out[t['em']]['up'].add(t['cid'])
+    for t in _by_sender(store, "SELECT DISTINCT lower(m.FromEmail) em, m.ConversationId cid FROM message m JOIN review v ON v.TaskId=m.TaskId "
+                               "WHERE v.Status IN ('approved','sent')", out): out[t['em']]['up'].add(t['cid'])
+    for t in _by_sender(store, "SELECT DISTINCT lower(m.FromEmail) em, m.ConversationId cid FROM message m JOIN task t ON t.TaskId=m.TaskId "
+                               "WHERE t.Status='done' AND t.UpdatedBy='owner'", out):
+        if t['cid'] not in out[t['em']]['down']: out[t['em']]['up'].add(t['cid'])
     # escalated by hand: the owner set a task of theirs urgent (server.update_task's audit row)
     for a in store._rows('SELECT EntityId, Detail FROM audit WHERE EntityType=? AND Action=? AND Actor=? AND CreatedAt>=?',
                          ('task', URGENT_ACTION, 'owner', since)):

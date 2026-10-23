@@ -2,10 +2,68 @@
 default) and in-memory (tests/demo). Every mutation is meant to be paired with .audit();
 the audit log is a Buzz-style tamper-evident hash chain (each row hashes the previous).
 """
-import contextlib, copy, hashlib, json, os, re, sqlite3, threading, uuid
+import contextlib, contextvars, copy, hashlib, json, os, re, sqlite3, sys, threading, time, uuid
 from datetime import datetime, timedelta
 from loguru import logger
 from . import vault
+
+# WHO HELD THE STORE, AND FOR HOW LONG (2026-10-23): three freezes in a day left a log where unrelated requests all finished in
+# the same second after 20-150 s, and nothing said what they had waited on. The writer's lock now says it: a wait over
+# LOCK_SLOW_WAIT names the waiter and the holder's call site, a hold over LOCK_SLOW_HOLD names the holder, and a request reads
+# its own total wait (lock_wait_meter) for its log line. A free lock costs one non-blocking acquire and a short frame walk.
+LOCK_SLOW_WAIT, LOCK_SLOW_HOLD = 1.0, 2.0
+_LOCK_WAITED = contextvars.ContextVar('taskuary_lock_waited', default=None)
+_HERE = __file__
+
+def _call_site() -> str:
+    "The first frame outside this file: who asked the store, not which store helper asked the lock."
+    f = sys._getframe(1)
+    while f is not None and f.f_code.co_filename == _HERE: f = f.f_back
+    return f'{os.path.basename(f.f_code.co_filename)}:{f.f_lineno} {f.f_code.co_name}' if f else '?'
+
+@contextlib.contextmanager
+def lock_wait_meter():
+    "Seconds this request (its thread and anything it hands its context to) spent waiting on a store's lock: m[0]."
+    m = [0.0]; tok = _LOCK_WAITED.set(m)
+    try: yield m
+    finally: _LOCK_WAITED.reset(tok)
+
+
+class _TimedLock:
+    """The writer's RLock, the same re-entrant lock, that writes down who held it when somebody had to wait for it."""
+    def __init__(self): self._l, self._depth, self._since, self._site, self._who, self._n = threading.RLock(), 0, 0.0, '', '', 0
+    def acquire(self, blocking=True, timeout=-1):
+        if self._l.acquire(False): self._took(); return True
+        if not blocking: return False
+        site, who, since, n, t0 = self._site, self._who, self._since, self._n, time.perf_counter()     # the holder as we found it
+        got = self._l.acquire(True, timeout)
+        waited = time.perf_counter() - t0
+        if (m := _LOCK_WAITED.get()) is not None: m[0] += waited
+        if waited > LOCK_SLOW_WAIT:
+            # one holder all along is one slow job; many hand-offs is a crowd of short ones (or one that keeps coming back)
+            logger.warning(f'store.lock: {threading.current_thread().name} at {_call_site()} waited {waited:.1f}s - '
+                           f'held by {who or "?"} at {site or "?"} for {max(0.0, t0 - since):.1f}s before the wait began, '
+                           f'{self._n - n} hand-off(s) during it')
+        if got: self._took()
+        return got
+    def _took(self):
+        self._depth += 1
+        if self._depth == 1: self._since, self._site, self._who, self._n = time.perf_counter(), _call_site(), threading.current_thread().name, self._n + 1
+    def release(self):
+        self._depth -= 1
+        held, who, site = (time.perf_counter() - self._since if self._depth == 0 else 0.0), self._who, self._site
+        self._l.release()
+        if held > LOCK_SLOW_HOLD: logger.warning(f'store.lock: held {held:.1f}s by {who} at {site}')
+    def _is_owned(self): return self._l._is_owned()
+    def __enter__(self): return self.acquire()
+    def __exit__(self, *a): self.release()
+
+
+# READS OFF THE WRITER (2026-10-23): a background job that reads a lot - the Advisor's rule-promotion evidence was hundreds of
+# full scans of the message table at 0.3-0.5 s each, two minutes back to back on the writer's lock - queued every request's
+# every statement behind it. Inside reads_off_writer() a plain SELECT through _rows/_one runs on a pooled reader connection
+# (WAL: it sees every committed write) instead; writes, and reads inside a writer transaction, still use the writer.
+_OFF_WRITER = threading.local()
 
 _LIVE_UNSET = object()
 _POLL_UNSET = object()
@@ -854,7 +912,7 @@ class SQLiteStore:
         # and the problems list behind it for up to 28 s (2026-10-21). One rail build at a time (_rail_build_lock).
         self._path, self._readers, self._readers_lock, self._closed = path, [], threading.Lock(), False
         self._rail_build_lock = threading.Lock()
-        self.lock = threading.RLock()
+        self.lock = _TimedLock()
         self.idlock = threading.Lock()     # create_task: allocate-and-insert as one step (self.lock is per statement)
         if path != ':memory:':
             self.cx.execute('PRAGMA journal_mode=WAL')
@@ -1650,7 +1708,16 @@ class SQLiteStore:
         if healed: logger.info(f'sources: restored Owner=template on the seeded report row(s) an old save had taken over - SourceId {healed} '
                                '(idea keys deliberately untouched)')
 
+    @contextlib.contextmanager
+    def reads_off_writer(self):
+        "This thread's plain SELECTs go to a reader connection until the block ends (see _OFF_WRITER). Re-entrant."
+        was = getattr(_OFF_WRITER, 'on', False); _OFF_WRITER.on = True
+        try: yield
+        finally: _OFF_WRITER.on = was
     def _rows(self, q, p=()):
+        if (getattr(_OFF_WRITER, 'on', False) and self._rail_cx is not None and q.lstrip()[:6].upper() == 'SELECT'
+                and not self.lock._is_owned()):
+            with self._snapshot_read() as cur: return [dict(r) for r in cur.execute(q, p).fetchall()]
         with self.lock: return [dict(r) for r in self.cx.execute(q, p).fetchall()]
     def _one(self, q, p=()):
         r = self._rows(q, p); return r[0] if r else None

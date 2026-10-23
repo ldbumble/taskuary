@@ -35,7 +35,7 @@ start from zero; a quiet check still rewrites the note, it just posts nothing. H
 COUNSEL.md (Settings → Docs) - the owner edits that to change its voice and what it takes a position on;
 the report's prompt is what it watches for.
 """
-import json, math, re, threading
+import contextlib, json, math, re, threading
 from datetime import datetime, timedelta
 from loguru import logger
 
@@ -1713,7 +1713,9 @@ def run(store, llm=None, force: bool = False, instruction: str = None, *,
     # own lists, including empty lists, so one Assistant report can never borrow another's sources.
     if report_id is None and watch_source_ids is None and watch_sources is None:
         watch_source_ids, watch_sources = _watch(store)
-    with _LOCK:
+    # its reads - minutes of them over the whole mail history - go to a reader connection, never the writer's lock every request
+    # queues on (store.reads_off_writer, 2026-10-23); what it writes still goes through the writer
+    with _LOCK, (store.reads_off_writer() if hasattr(store, 'reads_off_writer') else contextlib.nullcontext()):
         retry_stuck_ideas(store, report_id, report_title)
         return _run(store, llm, instruction, watch_source_ids or [], watch_sources or [],
                     systems_only, report_id, report_title, always_post, blocks, judge)

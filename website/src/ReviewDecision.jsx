@@ -19,7 +19,7 @@ import { hint as btnHint, label as btn } from "./buttons.js";   // theme.jsx own
 import { useDraftJob } from "./replyDraft.js";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
 import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
-import { replySendFailure, reviewDeliveryState, sendFix } from "./sendState.js";
+import { DECIDE_TIMEOUT, replySendFailure, reviewDeliveryState, sendFix, timedOut } from "./sendState.js";
 import { openAppLink } from "./appLinks.js";
 import { runOperation } from "./taskOps.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
@@ -158,14 +158,19 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
     setBusy(true); setErr(""); setSendErr(""); setCoFail(null);
     try {
       const { data } = await api.post(`/api/reviews/${closeout.ReviewId}/decide`,
-        { verb, final_text: null, note: null, reply_text: verb !== "reject" && sendable && value.trim() ? value : null, cc: sendable ? ccNow : null });
+        { verb, final_text: null, note: null, reply_text: verb !== "reject" && sendable && value.trim() ? value : null, cc: sendable ? ccNow : null },
+        { timeout: DECIDE_TIMEOUT });
       // refused before anything happened is not "approved, but it did not send"
       if (!data.ok && data.send_error) setCoFail({ text: data.send_error, offers: data.offers || [] });
       else if (data.send_error) setSendErr(replySendFailure(data));
       // WAIT FOR IT, THEN MOVE ON (the owner, 2026-10-02): the close-out landed with no error, so the task may be closed now
-      else if (data.ok && verb !== "reject" && onSent) { await onSent(); setBusy(false); return; }
+      // ...the press is over when the server answers: the re-read after it is the page's, and "Sending…" waited on it too
+      else if (data.ok && verb !== "reject" && onSent) { setBusy(false); await onSent(); return; }
       reloadGh(); onChanged?.();
-    } catch (e) { setErr(e?.response?.data?.detail || "That didn't go through - nothing was sent. Try the button again."); }
+    } catch (e) {
+      if (timedOut(e)) onChanged?.();       // no answer in a minute: the review's own delivery state says where it stands
+      else setErr(e?.response?.data?.detail || "That didn't go through - nothing was sent. Try the button again.");
+    }
     finally { acted(no(verb)); }          // the Advisor reads the item again: what it advised has been done, or failed
     setBusy(false);
   };
@@ -180,7 +185,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       const { data } = await api.post(`/api/reviews/${r.ReviewId}/decide`,
         { verb, final_text: verb === "approve" && !delivery.frozen ? value : null, note: null,
           // only on the send: rejecting or "no reply needed" copies nobody on nothing
-          cc: verb === "approve" && !proposal && !delivery.frozen ? ccNow : null, anyway });
+          cc: verb === "approve" && !proposal && !delivery.frozen ? ccNow : null, anyway }, { timeout: DECIDE_TIMEOUT });
       const it = interruptOf(data, r.ReviewId);
       if (it) { setInterrupt(it); onChanged?.(); setBusy(false); return; }
       // DECIDED ALREADY - answered in the chat itself (channels.retire_draft_answered_elsewhere), or by another window - is not a
@@ -193,9 +198,15 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       // task again - still open, its Mark done the move now (the owner, 2026-10-02; 2026-10-18: a send never closes it)
       // ...and a close without sending (a chat's Mark done, which copies the draft) is a close: the task page reads it the same way,
       // finds it done and walks on - it stood on the table as "task · done" with no line over it (the matrix's verify, 2026-10-20)
-      else if (data.ok && (verb === "approve" || (verb === "close_unsent" && r.Kind !== "slot")) && onSent) { await onSent(); setBusy(false); return; }
+      // ...and busy ends when the decide answers, not when that re-read does: behind a slow server "Sending…" outlived the send
+      else if (data.ok && (verb === "approve" || (verb === "close_unsent" && r.Kind !== "slot")) && onSent) { setBusy(false); await onSent(); return; }
       onChanged?.();
-    } catch (e) { setErr(e?.response?.data?.detail || "That didn't go through - nothing was sent. Try the button again."); }
+    } catch (e) {
+      // NO ANSWER IN A MINUTE is not "nothing was sent": the server may be sending still. The card reads the review again and its
+      // DeliveryState draws Sending… or Check delivery (reviewDeliveryState) - the check it already has, not a line of ours
+      if (timedOut(e)) onChanged?.();
+      else setErr(e?.response?.data?.detail || "That didn't go through - nothing was sent. Try the button again.");
+    }
     finally { acted(no(verb)); }
     setBusy(false);
   };

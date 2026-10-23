@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import api from "./api";
 import { PANEL, BORDER, DIM, INK } from "./theme.jsx";
-import { applied, changes, keepDraft, keptDraft, saveBody, say, stage, stageable } from "./connectorDraft.js";
+import { applied, changes, keepDraft, keptDraft, saveBody, say, splitNow, stage, stageable } from "./connectorDraft.js";
 import { plural } from "./timeWords.js";
 
 const Draft = createContext(null);
@@ -22,7 +22,15 @@ export function useCardDraft(conn, sources, reload) {
   // looks exactly like a click that did nothing - or like the changes were thrown away.
   const [saved, setSaved] = useState(0);
   useEffect(() => { if (!saved) return undefined; const t = setTimeout(() => setSaved(0), 3500); return () => clearTimeout(t); }, [saved]);
-  const draftConn = applied(conn, want);
+  // the switch's own press (splitNow): drawn at once, saved at once, and the card comes back from the server as it now is
+  const [flip, setFlip] = useState(null);
+  const setOn = async (on) => {
+    setFlip(on); setErr("");
+    try { await api.post("/api/connectors", { ConnectorId: id, Active: !!on }); await reload?.(); }
+    catch (e) { setErr(e?.response?.data?.detail || `the connection could not be switched ${on ? "on" : "off"} - try again`); }
+    finally { setFlip(null); }
+  };
+  const draftConn = conn && flip !== null ? { ...applied(conn, want), Active: flip } : applied(conn, want);
   const draftSources = sources.map((s) => (wantSrc[s.SourceId] ? applied(s, wantSrc[s.SourceId]) : s));
   const pending = [
     ...changes(conn, want).map((c) => ({ ...c, where: "" })),
@@ -46,10 +54,14 @@ export function useCardDraft(conn, sources, reload) {
     } finally { setBusy(false); }
   };
   const ctx = {
-    stageConn: (body) => setWant((w) => stage(w, body)),
+    stageConn: (body) => {
+      const { now, rest } = splitNow(body);
+      if (now) setOn(now.Active);
+      if (rest) setWant((w) => stage(w, rest));
+    },
     stageSource: (body) => setWantSrc((m) => ({ ...m, [body.SourceId]: stage(m[body.SourceId], body) })),
   };
-  return { conn: draftConn, sources: draftSources, pending, save, discard, busy, err, saved, ctx };
+  return { conn: draftConn, sources: draftSources, pending, save, discard, busy, err, saved, ctx, flipping: flip !== null };
 }
 
 export const DraftProvider = ({ value, children }) => <Draft.Provider value={value}>{children}</Draft.Provider>;
@@ -79,7 +91,8 @@ export function SaveBar({ draft, labels = {}, words = {} }) {
       ✓ Saved {draft.saved === 1 ? "your change" : `${draft.saved} changes`}
     </Box>
   );
-  if (!n) return null;
+  // a refused switch press, with nothing staged: said where a refused Save is
+  if (!n) return draft.err ? <Typography role="alert" sx={{ mt: 2, color: "#8a3646", fontSize: 12 }}>{draft.err}</Typography> : null;
   const line = (c) => {
     const label = labels[c.key] || c.key.replace(/_/g, " ");
     const obj = (c.from && typeof c.from === "object") || (c.to && typeof c.to === "object");

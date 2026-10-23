@@ -36,6 +36,7 @@ import { useSaveNote } from "./SaveNote.jsx";
 import { plainError } from "./apiError.js";
 import { namesRestart, restartBridge } from "./waBridge.js";
 import { DraftProvider, SaveBar, useCardDraft, useSaveConnector, useSaveSource } from "./ConnectorDraft.jsx";
+import { editedBoxes, syncState } from "./connectorDraft.js";
 import { AI_SHELF, needsGateway } from "./aiShelf.js";
 import { cliCardOf } from "./cliCard.js";
 import { label as btnLabel } from "./buttons.js";
@@ -2240,6 +2241,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   const [tab, setTab] = useState("Setup");
   const [step, setStep] = useState(conn.HasSecret ? (conn.LastSyncAt ? 2 : 1) : 0);
   const [cfg, setCfg] = useState(parse(conn.ConfigJson));
+  const [cfgSaved, setCfgSaved] = useState(cfg);     // what the boxes held when they were last saved: typed past it is unsaved
   const [secret, setSecret] = useState("");
   const [newSrc, setNewSrc] = useState("");
   const [roster, setRoster] = useState(new Set());   // WhatsApp jids WaChats lists - each with its own switch there
@@ -2260,7 +2262,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       if (secret) body.Secret = secret;
       const { data } = await api.post("/api/connectors", body);
       const d = data.discovery;
-      setSecret(""); setCfg(withoutWriteOnly(conn, cfg)); setTest(null); setFresh(!d?.error); reload();
+      setSecret(""); setCfg(withoutWriteOnly(conn, cfg)); setCfgSaved(withoutWriteOnly(conn, cfg)); setTest(null); setFresh(!d?.error); reload();
       if (d?.error) setSaveSaid({ ok: false, detail: d.error });     // saved, but the key was refused: the fix is here, not a step on
       else {
         setMsg("saved ✓");
@@ -2312,7 +2314,10 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   const toggleSource = (s) => draft.ctx.stageSource({ SourceId: s.SourceId, Active: !s.Active });
   // a source removed AT ONCE (the owner, 2026-10-21): "Removed <address> - Undo" under the list puts it back as it was
   const removeSrc = async (s) => { await run(() => removeNow(() => api.delete(`/api/sources/${s.SourceId}`), "source", s.Address), { ok: "", lead: "Not removed — " }); reload(); };
-  const setActive = (on) => draft.ctx.stageConn({ ConnectorId: conn.ConnectorId, Active: on });
+  const setActive = (on) => draft.ctx.stageConn({ ConnectorId: conn.ConnectorId, Active: on });   // saves on the press (splitNow)
+  // Sync now reads what is saved: there once the server has the card on, greyed while a box or the bar holds an unsaved edit.
+  // The boxes are measured against what they last saved, not the row: a sign-in that rewrites the config is not the owner's typing
+  const sync = syncState(savedConn, draft.pending, editedBoxes(m.fields.map((f) => f[1]), cfg, cfgSaved, secret));
 
   const steps = [
     // ticked once a Test has PASSED on them: "saved" ticked a key the service had just refused (the 2026-10-19 UI walk)
@@ -2381,11 +2386,14 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
               for an id you already know.
             </Typography>
             {/* one line at any width: wrapped on a phone, it shrank to one line as "Syncing…" and the list under it jumped */}
-            <Button size="small" variant="outlined" onClick={syncHere} disabled={srcSync} sx={{ mb: 1, maxWidth: "100%" }}
-              startIcon={srcSync ? <CircularProgress size={11} /> : <SyncIcon sx={{ fontSize: 14 }} />}>
-              <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {srcSync ? "Syncing…" : "Sync now — pull in chats that messaged the bot"}</Box>
-            </Button>
+            {/* the reason sits on a wrapper: a disabled button takes no hover, so its own title never shows */}
+            <Box component="span" title={sync.why} data-tq-sync-why={sync.why || undefined} sx={{ display: "inline-flex", maxWidth: "100%", mb: 1 }}>
+              <Button size="small" variant="outlined" onClick={syncHere} disabled={srcSync || (sync.show && !sync.ok)} sx={{ maxWidth: "100%" }}
+                startIcon={srcSync ? <CircularProgress size={11} /> : <SyncIcon sx={{ fontSize: 14 }} />}>
+                <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {srcSync ? "Syncing…" : "Sync now — pull in chats that messaged the bot"}</Box>
+              </Button>
+            </Box>
           </>
         )}
         {/* a WhatsApp chat the roster lists is switched on its named row up there; this list keeps what was typed by hand -
@@ -2427,17 +2435,20 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       { label: "Close out — what finishing a task does on GitHub", done: true, body: <GithubCloseout conn={conn} mine={mine} reload={reload} /> }] : []),
     { label: "Enable", done: !!conn.Active, body: (
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 1, flexWrap: "wrap" }}>
-        <Switch checked={!!conn.Active} onChange={(e) => setActive(e.target.checked)} />
+        <Switch data-tq-card-on="" checked={!!conn.Active} disabled={draft.flipping} onChange={(e) => setActive(e.target.checked)} />
         <Typography variant="body2" sx={{ color: DIM }}>
           {conn.Active
             ? (isAI ? "On — wired into intent triage (the first active AI connector wins)." : "On — polling on schedule and via Sync now.")
             : "Off — flip on once Test passes."}
         </Typography>
-        {/* the last step of a setup should be the first sync - not a wait for the ten-minute clock */}
-        {conn.Active && !isAI && (
-          <Button size="small" variant="contained" disableElevation onClick={syncHere} disabled={srcSync}
-            startIcon={srcSync ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
-            sx={{ background: "linear-gradient(90deg, #55697a, #7d9a7c)" }}>{srcSync ? "Syncing…" : btnLabel("sync_now")}</Button>
+        {/* the last step of a setup should be the first sync - not a wait for the ten-minute clock. It is there once the SERVER has the
+            card on (syncState), and greyed - the reason in its hover - while a box or the Save bar holds an edit it would not read */}
+        {sync.show && !isAI && (
+          <Box component="span" title={sync.why} data-tq-sync-why={sync.why || undefined} sx={{ display: "inline-flex" }}>
+            <Button size="small" variant="contained" disableElevation onClick={syncHere} disabled={srcSync || !sync.ok}
+              startIcon={srcSync ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
+              sx={{ background: sync.ok ? "linear-gradient(90deg, #55697a, #7d9a7c)" : undefined }}>{srcSync ? "Syncing…" : btnLabel("sync_now")}</Button>
+          </Box>
         )}
       </Box>
     )},
@@ -3012,7 +3023,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
   };
   // A SAVE IS NEWS, the last Test's failure is not: the old "need tenant_id" stayed under a good save (the UI audit, 2026-10-21)
   const [fresh, setFresh] = useState(false);
-  // held for the Save bar, as on a channel card; Save was once the only thing that turned a data card on
+  // saved on the press, as on a channel card (splitNow); Save was once the only thing that turned a data card on
   const setActive = (on) => draft.ctx.stageConn({ ConnectorId: conn.ConnectorId, Active: on });
 
   return (
@@ -3063,7 +3074,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
             {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
-            <Switch data-tq-card-on="" checked={!!conn.Active} onChange={(e) => setActive(e.target.checked)} />
+            <Switch data-tq-card-on="" checked={!!conn.Active} disabled={draft.flipping} onChange={(e) => setActive(e.target.checked)} />
             <Typography variant="body2" sx={{ color: DIM }}>
               {conn.Active ? "On — reports, workflows and agents can use it." : "Off — flip on once Test passes."}
             </Typography>

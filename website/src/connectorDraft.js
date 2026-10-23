@@ -28,6 +28,27 @@ export const stage = (want, body) => {
   return next;
 };
 
+// THE CONNECTION'S OWN SWITCH IS A PRESS, NOT A DRAFT (the owner, 2026-10-23: "you enable a connection and then sync now button
+// shows up but then under it it says not saved"). Held for the bar, the switch drew the card on - Sync now and all - while the
+// server still had it off and the bar said "Connection: off → on". It saves on the press now, so the card is in one state; a
+// source's switch stays a setting in the draft. `now` posts at once, `rest` is what is still staged (null: nothing)
+export const splitNow = (body, idKey = "ConnectorId") => {
+  if (!body || !("Active" in body)) return { now: null, rest: body };
+  const { Active, ...others } = body, keys = Object.keys(others).filter((k) => k !== idKey);
+  return { now: { [idKey]: body[idKey], Active: !!Active }, rest: keys.length ? others : null };
+};
+
+// SYNC NOW READS WHAT IS SAVED: shown only once the server has the card on, and greyed - the reason in its hover - while the
+// card holds edits the server does not have yet. `edited`: a box on the card typed into and not saved (its credentials)
+export const syncState = (saved, pending = [], edited = false) =>
+  !saved?.Active ? { show: false, ok: false, why: "" }
+  : pending.length || edited ? { show: true, ok: false, why: "Save your changes first - Sync now reads what is saved" }
+  : { show: true, ok: true, why: "" };
+
+// a card's own boxes (its credentials, saved by their own button) typed past what they last saved - a secret typed at all counts
+export const editedBoxes = (keys, cfg, base, secret = "") =>
+  !!secret || keys.some((k) => String(cfg?.[k] ?? "") !== String(base?.[k] ?? ""));
+
 // the row as its controls should draw it: saved, with the draft laid over
 export const applied = (saved, want) => {
   if (!want) return saved;

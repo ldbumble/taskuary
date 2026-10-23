@@ -15,10 +15,10 @@ test("a data card's Save and Use it save settings, never switch the card on", ()
   assert.match(dd, /api\.post\("\/api\/connectors", \{ ConnectorId: conn\.ConnectorId, ConfigJson: JSON\.stringify\(next\) \}\)/);
 });
 
-test("a data card has its own on/off switch, beside Save, held for the Save bar like a channel card's", () => {
+test("a data card has its own on/off switch, beside Save, saved on the press like a channel card's (splitNow)", () => {
   const dd = fn("DataDetail");
   assert.match(dd, /const setActive = \(on\) => draft\.ctx\.stageConn\(\{ ConnectorId: conn\.ConnectorId, Active: on \}\);/);
-  assert.match(dd, /<Switch data-tq-card-on="" checked=\{!!conn\.Active\} onChange=\{\(e\) => setActive\(e\.target\.checked\)\} \/>/);
+  assert.match(dd, /<Switch data-tq-card-on="" checked=\{!!conn\.Active\} disabled=\{draft\.flipping\} onChange=\{\(e\) => setActive\(e\.target\.checked\)\} \/>/);
   // on the Connection tab, after the Save row - where the person who just saved is looking
   const tab = dd.slice(dd.indexOf('{tab === "Connection" && ('));
   assert.ok(tab.indexOf("data-tq-card-on") > tab.indexOf('"Save"}</Button>'), "the switch comes after Save");

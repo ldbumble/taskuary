@@ -2386,7 +2386,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       sx={barLit("remove") ? primaryBtn : { ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }}
                       title={NAT_TITLE}
                       onClick={notATask}>{labelOfRow("nat")}</Button>
-                    <RemindMe task={t} sx={barBtn} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />
+                    <RemindMe task={t} sx={barLit("defer") ? primaryBtn : barBtn} lit={barLit("defer")} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />
                     <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />
                     <Button size="small" variant={barLit("forward") ? "contained" : "outlined"} disableElevation sx={barLit("forward") ? primaryBtn : barBtn}
                       startIcon={<ForwardToInboxIcon sx={{ fontSize: 16, color: barLit("forward") ? "inherit" : "#55697a" }} />}

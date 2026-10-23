@@ -365,6 +365,27 @@ def restart(wait: bool = False, filter_policy: dict = None) -> dict:
     return start(wait=wait, filter_policy=filter_policy)
 
 
+def pair_again(wait: bool = False, filter_policy: dict = None) -> dict:
+    """PAIR AGAIN, the card's button for "Logged out" and for a contact sync that keeps failing (2026-10-23): the address book is
+    encrypted with app-state keys only the phone hands out, and a linked device that missed one cannot ask for it in Baileys 6.7 -
+    "failed to find key ... to decode mutation" every ten minutes until it pairs afresh. The bridge unlinks itself on the phone,
+    stops, and its auth folder is set aside (renamed, never deleted - it is the one copy of the old pairing); the bridge then
+    starts unpaired and the card shows the QR."""
+    import requests
+    try: requests.post(f'http://127.0.0.1:{port()}/logout', headers={'x-bridge-token': token()}, json={}, timeout=8)
+    except requests.RequestException as e: logger.info(f'wa bridge: could not unlink on the phone first ({e}) - pairing again anyway')
+    stop(); time.sleep(1.0)
+    run = run_dir(); auth = run / 'wa-auth'
+    if auth.exists():
+        aside = run / f"wa-auth.replaced-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        try: auth.rename(aside)
+        except OSError as e:
+            _set('failed', f'could not set the old pairing aside ({e}) - Restart bridge, then Pair again'); return state()
+        logger.info(f'wa bridge: old pairing set aside as {aside.name}')
+    (run / '.carried-wa-auth').touch()         # the package folder's old pairing must not come back on this start (stage)
+    return start(wait=wait, filter_policy=filter_policy)
+
+
 # ── A BRIDGE THAT DIED IS STARTED AGAIN (2026-10-22) ──────────────────────────────────────────────────────────
 # A WhatsApp connection drop killed the bridge process (bridge.mjs, an unhandled 1006), and nothing brought it back: the
 # poll said "the WhatsApp bridge is not running" into the log every three seconds until the owner noticed. The poll is

@@ -14,8 +14,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import makeWASocket, { useMultiFileAuthState, DisconnectReason, downloadMediaMessage } from "@whiskeysockets/baileys";
-import { createChatGate, nextReconnect, wantsMedia } from "./policy.mjs";
+import * as WA from "@whiskeysockets/baileys";          // DEFAULT_CONNECTION_CONFIG, read without requiring it (health.tap)
+import { createChatGate, createLidMap, nextReconnect, user, wantsMedia } from "./policy.mjs";
 import { createChatRoster } from "./roster.mjs";
+import { createHealth } from "./health.mjs";
 import { createPolls, pollValues } from "./poll.mjs";
 import crypto from "node:crypto";
 
@@ -40,8 +42,12 @@ const CODE = crypto.createHash("sha1").update(Buffer.concat(fs.readdirSync(path.
 let sock = null, connected = false, me = "", meJid = "", qr = "", pairingCode = "", seq = 0;
 const messages = [];                       // { seq, id, jid, chat, name, text, ts, fromMe }
 const taskuarySent = new Set();             // ids sent through localhost /send, never user prompts
-const chatGate = createChatGate();
-const chatRoster = createChatRoster();       // JIDs/names/recency only; never message bodies
+const lids = createLidMap();                 // phone <-> LID, so a person picked by number is heard when WhatsApp writes by LID
+const chatGate = createChatGate(undefined, lids);
+const chatRoster = createChatRoster({ canon: chatGate.canonical, alt: lids.alt });   // JIDs/names/recency only; never message bodies
+const health = createHealth();               // the facts the card's status line reads off /status
+const waLogger = health.tap(WA.DEFAULT_CONNECTION_CONFIG?.logger?.child?.({}));
+let loggedOut = false;
 const polls = createPolls();                 // the newest poll per chat and its secret: what opens a vote
 try {
   if (process.env.WA_BRIDGE_FILTER) chatGate.configure(JSON.parse(process.env.WA_BRIDGE_FILTER));
@@ -98,9 +104,23 @@ function scheduleReconnect(reason) {
   }, decision.delayMs);
 }
 
+// the owner's own addresses, both forms: always heard at the gate (policy.mjs setSelf), and one person in the map
+const learnSelf = (...jids) => { chatGate.setSelf(jids.filter(Boolean)); lids.learn(...jids.filter(Boolean).slice(0, 2)); };
+const learnContact = (c = {}) => { lids.learn(c.id, c.lid); lids.learn(c.id, c.jid); lids.learn(c.lid, c.jid); };
+// A NUMBER THE OWNER PICKED, ASKED FOR ITS LID. WhatsApp writes most 1:1 chats to a LID now; a person saved as a source by phone
+// was never let in. onWhatsApp(number) answers with both forms in Baileys 6.7 - asked on connect and whenever the list changes.
+const lookupLids = (s) => {
+  const pns = chatGate.snapshot().jids.map(user).filter((j) => j.endsWith("@s.whatsapp.net") && !lids.alt(j)).slice(0, 50);
+  if (!pns.length || s !== sock || !connected || typeof s.onWhatsApp !== "function") return;
+  s.onWhatsApp(...pns).then((rows) => { for (const r of rows || []) lids.learn(r.jid, r.lid); })
+    .catch((e) => console.log("could not look up WhatsApp LIDs:", e?.message || e));
+};
+
 async function connect() {
   const { state, saveCreds } = await useMultiFileAuthState("wa-auth");
+  learnSelf(state.creds?.me?.id, state.creds?.me?.lid);
   const thisSock = makeWASocket({
+    ...(waLogger ? { logger: waLogger } : {}),
     auth: state,
     printQRInTerminal: false,
     markOnlineOnConnect: false,
@@ -124,7 +144,10 @@ async function connect() {
       .catch((e) => console.log(`could not load WhatsApp contact names (${why}):`, e?.message || e));
   };
   thisSock.ev.on("creds.update", () => saveCreds().catch((e) => console.error("could not save the pairing:", e?.message || e)));
-  thisSock.ev.on("creds.update", (u) => { if (u?.myAppStateKeyId) syncContactNames("new key"); });
+  thisSock.ev.on("creds.update", (u) => {
+    if (u?.me) learnSelf(u.me.id, u.me.lid);
+    if (u?.myAppStateKeyId) syncContactNames("new key");
+  });
   thisSock.ev.on("connection.update", async (u) => {
     if (thisSock !== sock) return;
     if (u.qr) {
@@ -142,7 +165,8 @@ async function connect() {
       }
     }
     if (u.connection === "open") {
-      connected = true; qr = ""; pairingCode = "";
+      connected = true; qr = ""; pairingCode = ""; loggedOut = false;
+      learnSelf(thisSock.user?.id, thisSock.user?.lid);
       reconnectAt = 0; reconnectPaused = false; openedAt = Date.now();
       me = thisSock.user?.name || thisSock.user?.id || "";
       meJid = thisSock.user?.id || "";                   // 15551234567:12@s.whatsapp.net - the number is who the owner IS here
@@ -152,24 +176,31 @@ async function connect() {
       // never been allowed into Taskuary's inbound timeline.
       thisSock.groupFetchAllParticipating().then((groups) => {
         if (thisSock !== sock) return;
+        // every participant carries its phone and its LID side by side: the widest map 6.7 hands over without asking
+        for (const g of Object.values(groups || {})) for (const p of g?.participants || []) { lids.learn(p.id, p.lid); lids.learn(p.jid, p.lid); }
         chatRoster.replaceGroups(Object.values(groups || {}));
       }).catch((e) => console.log("could not refresh WhatsApp group roster:", e?.message || e));
       syncContactNames("connect");
+      lookupLids(thisSock);
     }
     if (u.connection === "close") {
       connected = false;
       const code = u.lastDisconnect?.error?.output?.statusCode;
       const why = u.lastDisconnect?.error?.message || `WhatsApp closed the socket${code ? ` (${code})` : ""}`;
       if (code !== DisconnectReason.loggedOut) scheduleReconnect(why);
-      else { reconnectPaused = true; lastDisconnect = "logged out"; console.log("logged out - delete ./wa-auth and pair again"); }
+      else {
+        reconnectPaused = true; lastDisconnect = "logged out"; loggedOut = true; health.fail("auth", "logged out");
+        console.log("logged out - delete ./wa-auth and pair again");
+      }
     }
   });
   thisSock.ev.on("contacts.upsert", (contacts) => {
-    if (thisSock === sock) for (const contact of contacts || []) chatRoster.upsertContact(contact);
+    if (thisSock === sock) for (const contact of contacts || []) { learnContact(contact); chatRoster.upsertContact(contact); }
   });
   thisSock.ev.on("contacts.update", (contacts) => {
-    if (thisSock === sock) for (const contact of contacts || []) chatRoster.upsertContact(contact);
+    if (thisSock === sock) for (const contact of contacts || []) { learnContact(contact); chatRoster.upsertContact(contact); }
   });
+  thisSock.ev.on("chats.phoneNumberShare", ({ lid, jid } = {}) => { if (thisSock === sock) lids.learn(lid, jid); });
   thisSock.ev.on("chats.upsert", (chats) => {
     if (thisSock === sock) for (const chat of chats || []) chatRoster.upsertChat(chat);
   });
@@ -189,7 +220,7 @@ async function connect() {
   // history sync disabled, and even here only chat/contact metadata is observed.
   thisSock.ev.on("messaging-history.set", ({ chats = [], contacts = [] }) => {
     if (thisSock !== sock) return;
-    for (const contact of contacts) chatRoster.upsertContact(contact);
+    for (const contact of contacts) { learnContact(contact); chatRoster.upsertContact(contact); }
     for (const chat of chats) chatRoster.upsertChat(chat);
   });
   thisSock.ev.on("messages.upsert", (u) => onMessages(u).catch((e) => console.error("could not take in a message:", e?.message || e)));
@@ -197,6 +228,12 @@ async function connect() {
     if (thisSock !== sock) return;
     if (type !== "notify") return;                       // history syncs are not new work
     for (const m of ms) {
+      const k = m.key || {};
+      // the author's other form, when the stanza carried it; a 1:1 chat's own LID only from the other side's message
+      lids.learn(k.participant, k.participantPn); lids.learn(k.participant, k.participantLid);
+      if (!k.fromMe) { lids.learn(k.remoteJid, k.senderPn); lids.learn(k.remoteJid, k.senderLid); }
+      // the gate opens for the owner's own address (key shares); what that lets through about an unpicked chat stops here
+      if (!chatGate.admits(k.remoteJid)) { chatGate.shouldIgnore(k.remoteJid); continue; }
       chatRoster.observeMessage(m);
       // A VOTE on the Assistant's poll is the owner picking one of its choices: it goes on as that choice's
       // own words, the same as typing them. A vote on anything else (another poll, an older one) is nothing.
@@ -210,7 +247,7 @@ async function connect() {
         const stale = picked ? "" : polls.stale(pu, who);
         // ...and a second pick on the newest one, already spent (2026-10-02): told the same way, never run
         const spent = picked || stale ? "" : polls.spent(pu, who);
-        if (picked || stale || spent) messages.push({ seq: ++seq, id: m.key.id, jid: picked ? m.key.remoteJid : stale || spent, sender: m.key.participant || m.key.remoteJid,
+        if (picked || stale || spent) messages.push({ seq: ++seq, id: m.key.id, jid: picked ? chatGate.canonical(m.key.remoteJid) : stale || spent, sender: m.key.participant || m.key.remoteJid,
           group: m.key.remoteJid?.endsWith("@g.us"), name: m.pushName || "", text: picked, poll: true, quoted: "",
           ...(stale ? { stalePoll: true } : spent ? { stalePoll: true, spentPoll: true } : {}),
           ts: Number(m.messageTimestamp) || Math.floor(Date.now() / 1000), fromMe: !!m.key.fromMe, taskuary: false });
@@ -248,7 +285,9 @@ async function connect() {
       // owner will look for, and a .bin they cannot open is barely better than losing it
       const [doc, docMime] = await grab(dm, "application/octet-stream",
         () => (String(dm?.fileName || "").split(".").pop() || "bin").slice(0, 8).toLowerCase());
-      messages.push({ seq: ++seq, id: m.key.id, jid: m.key.remoteJid,
+      if ((body || am || im || dm) && !taskuarySent.has(m.key.id)) health.inbound();
+      // under the form the owner picked it by: a person saved by number keeps that number when WhatsApp writes by LID
+      messages.push({ seq: ++seq, id: m.key.id, jid: chatGate.canonical(m.key.remoteJid),
         sender: m.key.participant || m.key.remoteJid, senderAlt: senderAlt(m.key), group: m.key.remoteJid?.endsWith("@g.us"),
         name: m.pushName || "", text: body, ts: Number(m.messageTimestamp) || Math.floor(Date.now() / 1000),
         fromMe: !!m.key.fromMe, quoted, key: m.key, // quote routes phone answers; key is for read receipts
@@ -275,12 +314,24 @@ http.createServer(async (req, res) => {
     if (req.headers.origin !== undefined) return json(res, 403, { error: "browsers may not call the bridge" });
     if (TOKEN && req.headers["x-bridge-token"] !== TOKEN) return json(res, 401, { error: "bridge token missing or wrong" });
     if (req.method === "GET" && url.pathname === "/status")
+      // ...and what the card's one line says beyond "the socket is open": how many chats are let in, how many were turned away,
+      // when the last message arrived, and the last thing that failed (health.mjs)
       return json(res, 200, { connected, me, jid: meJid, qr, pairingCode, seq, kept: messages.length, code: CODE,
-        filter: chatGate.snapshot(), reconnect: reconnectStatus() });
+        filter: chatGate.snapshot(), reconnect: reconnectStatus(), loggedOut,
+        admitted: chatGate.snapshot().jids.length, turnedAway: chatGate.blockedChats().length, lidMapped: lids.size(), ...health.status() });
     if (req.method === "POST" && url.pathname === "/filter") {
       const chunks = []; for await (const c of req) chunks.push(c);
       const policy = JSON.parse(Buffer.concat(chunks).toString() || "{}");
-      return json(res, 200, { ok: true, filter: chatGate.configure(policy) });
+      const filter = chatGate.configure(policy);
+      lookupLids(sock);
+      return json(res, 200, { ok: true, filter });
+    }
+    // PAIR AGAIN, step one: unlink this device on the phone, so the fresh pairing is the only one listed (wabridge.pair_again
+    // then stops the bridge, sets the old auth folder aside and starts it, and the card shows the new QR)
+    if (req.method === "POST" && url.pathname === "/logout") {
+      let unlinked = false;
+      if (sock && connected) { try { await sock.logout(); unlinked = true; } catch (e) { console.log("could not unlink on the phone:", e?.message || e); } }
+      return json(res, 200, { ok: true, unlinked });
     }
     if (req.method === "GET" && url.pathname === "/messages") {
       const after = Number(url.searchParams.get("after") || 0);

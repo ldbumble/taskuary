@@ -25,6 +25,30 @@ class BridgeManagerTests(unittest.TestCase):
                 self.assertEqual(wabridge.restart()['phase'], 'starting')
             self.assertIn(['taskkill', '/PID', '4242', '/T', '/F'], [c.args[0] for c in run.call_args_list]); st.assert_called_once()
 
+    def test_pair_again_unlinks_sets_the_old_pairing_aside_and_starts_unpaired(self):
+        """Logged out, or a contact sync that keeps failing for a key the phone never sent: the card's Pair again (2026-10-23).
+        The old auth folder is renamed, never deleted - it is the only copy of the old pairing."""
+        import tempfile, pathlib
+        with tempfile.TemporaryDirectory() as d:
+            run = pathlib.Path(d); (run / 'wa-auth').mkdir(); (run / 'wa-auth' / 'creds.json').write_text('{}')
+            with mock.patch.object(wabridge, 'run_dir', return_value=run), mock.patch.object(wabridge, 'stop') as stop, \
+                 mock.patch.object(wabridge, 'start', return_value={'phase': 'starting'}) as start, mock.patch.object(wabridge.time, 'sleep'), \
+                 mock.patch('requests.post') as post:
+                self.assertEqual(wabridge.pair_again(filter_policy={'jids': []})['phase'], 'starting')
+            self.assertTrue(post.call_args.args[0].endswith('/logout')); stop.assert_called_once()
+            start.assert_called_once_with(wait=False, filter_policy={'jids': []})
+            self.assertFalse((run / 'wa-auth').exists())
+            aside = [p for p in run.iterdir() if p.name.startswith('wa-auth.replaced-')]
+            self.assertEqual(len(aside), 1); self.assertTrue((aside[0] / 'creds.json').exists())
+            self.assertTrue((run / '.carried-wa-auth').exists(), "the package folder's old pairing is not carried back")
+
+    def test_pair_again_is_a_verb_on_the_whatsapp_card_only(self):
+        s = MemoryStore(); wa = s.get_connector_by_type('whatsapp')
+        with mock.patch.object(server, 'store', s), mock.patch.object(wabridge, 'pair_again', return_value={'phase': 'starting'}) as pa:
+            self.assertEqual(c_api.post(f"/api/connectors/{wa['ConnectorId']}/wa/bridge/pair-again").json()['phase'], 'starting')
+            pa.assert_called_once()
+            self.assertEqual(c_api.post(f"/api/connectors/{s.get_connector_by_type('telegram')['ConnectorId']}/wa/bridge/pair-again").status_code, 404)
+
     def test_an_enabled_local_bridge_starts_with_the_app(self):
         s = MemoryStore()
         wa = s.get_connector_by_type('whatsapp')

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createChatRoster } from "./roster.mjs";
+import { createChatGate, createLidMap } from "./policy.mjs";
 
 test("the roster exposes only chats, named and ordered by account recency", () => {
   const roster = createChatRoster();
@@ -62,10 +63,33 @@ test("an address-book contact is a searchable chat before anyone writes, under t
   const roster = createChatRoster();
   roster.upsertContact({ id: "15550100200@s.whatsapp.net", name: "Ray Colton" });
   roster.upsertContact({ id: "15550100300@s.whatsapp.net", notify: "a group participant's profile name" });
-  roster.upsertContact({ id: "8000@lid", name: "no number to write to" });
   assert.deepEqual(roster.list(), [
     { jid: "15550100200@s.whatsapp.net", group: false, name: "Ray Colton", last: 0, n: 0 }
   ]);
+});
+
+// WhatsApp writes most 1:1 chats to a LID now (2026-10-23): a LID was "not a chat" here, so a person written to by LID could not
+// be listed, picked or let in. A LID is a direct chat; one whose number is known is that number's row, under the saved name.
+test("a LID is a direct chat, and a LID whose number is known is one row under the number", () => {
+  const lids = createLidMap();
+  const gate = createChatGate(() => 0, lids);
+  const roster = createChatRoster({ canon: gate.canonical, alt: lids.alt });
+  roster.upsertContact({ id: "15550100200@s.whatsapp.net", name: "Ray Colton" });
+  roster.observeMessage({ key: { remoteJid: "8000@lid", fromMe: false }, pushName: "Ray", messageTimestamp: 500 });
+  roster.observeMessage({ key: { remoteJid: "9000@lid", fromMe: false }, pushName: "Gail", messageTimestamp: 400 });
+  assert.deepEqual(roster.list().map(({ jid, name, group }) => [jid, name, group]),
+    [["8000@lid", "Ray", false], ["9000@lid", "Gail", false], ["15550100200@s.whatsapp.net", "Ray Colton", false]], "unmapped: listed as they are");
+  lids.learn("8000@lid", "15550100200@s.whatsapp.net");
+  assert.deepEqual(roster.list().map(({ jid, name, last, n }) => [jid, name, last, n]),
+    [["15550100200@s.whatsapp.net", "Ray Colton", 500, 1], ["9000@lid", "Gail", 400, 1]], "mapped: one row, the number, the saved name");
+});
+
+test("a contact saved under its LID carries its saved name to the number row", () => {
+  const lids = createLidMap();
+  const roster = createChatRoster({ canon: (j) => lids.pnOf(j) || j, alt: lids.alt });
+  roster.upsertContact({ id: "8000@lid", jid: "15550100200@s.whatsapp.net", lid: "8000@lid", name: "Ray Colton" });
+  lids.learn("8000@lid", "15550100200@s.whatsapp.net");
+  assert.deepEqual(roster.list().map(({ jid, name }) => [jid, name]), [["15550100200@s.whatsapp.net", "Ray Colton"]]);
 });
 
 test("the saved name outlives the profile name a message carries", () => {

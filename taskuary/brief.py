@@ -29,7 +29,7 @@ def build(store, tid: int, instruction: str = None, repo: str = None, context_bu
     return {
         'task': f"{task_ref(tid)} - {t.get('Title') or ''}",
         'objective': str(t.get('Summary') or '').strip(),
-        'checklist': store.checklist_markdown(tid) if hasattr(store, 'checklist_markdown') else '',
+        'checklist': store.checklist_markdown(tid, ids=True) if hasattr(store, 'checklist_markdown') else '',   # ids: the agent ticks its own (--tick)
         'instruction': (instruction or '').strip(),
         'repository': repo or '',
         'context': context,
@@ -45,16 +45,21 @@ def build(store, tid: int, instruction: str = None, repo: str = None, context_bu
 # agent"). PW-184 had taken SOUL.md out of every worker and JOB.md never reached one, so an agent knew its rules and not whom it
 # worked for - the people, the systems, the repos, what the job is. Every worker now reads both, whole, as background; the one
 # part left out is SOUL.md's "What counts as a task", which is triage's sorting rules, not something an agent does.
+# ...and JOB.md stays with triage, the Assistant and the morning brief: its own template promises the owner it "never reaches a
+# working agent (the task is the agent's job)", and every agent CLI read it whole - a promise to the owner about what leaves the
+# app outranks the convenience (the owner picked the fix, 2026-10-22). A worker gets SOUL.md alone (worker=True).
 BACKGROUND_DOCS = (('soul', 'SOUL.md - who the owner is, their people, systems and repositories'),
                    ('job', "JOB.md - the owner's job: what they own, who they serve, what matters"))
 TRIAGE_ONLY = ('what counts as a task',)
 
 
-def background(store, chars: int = 9_000) -> str:
-    """SOUL.md and JOB.md as one background block, comments stripped and triage's own section dropped. '' when both are empty."""
+def background(store, chars: int = 9_000, worker: bool = False) -> str:
+    """SOUL.md and JOB.md as one background block, comments stripped and triage's own section dropped. '' when both are empty.
+    `worker`: the block for an agent working a task - SOUL.md only, JOB.md never leaves for one."""
     import re
     out = []
     for name, what in BACKGROUND_DOCS:
+        if worker and name == 'job': continue
         text = re.sub(r'<!--.*?-->', '', str(store.doc(name) or ''), flags=re.S)
         keep, skip = [], False
         for line in text.splitlines():

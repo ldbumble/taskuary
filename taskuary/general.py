@@ -534,7 +534,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # what a planted line would ask the assistant to repeat back (origin.py's stranger rules keep the same distance)
     from . import origin as _origin
     outsider = _origin.of_task(store, tid)[0] == 'stranger'
-    owner_bg = '' if outsider else _brief.background(store)
+    # ...and JOB.md only in the Assistant's own conversation (the dock): a task's worker is an agent, and JOB.md never reaches one
+    owner_bg = '' if outsider else _brief.background(store, worker=not dock)
     system = (
         (f'{owner_bg}\n\n' if owner_bg else '') +
         "You are the Taskuary general-work assistant. Help complete research, planning, writing, "
@@ -634,6 +635,12 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # checkout behind them, which is where it and the owner leave things for everybody
     from . import blackboard as bb, selfclose
     wall = bb.chat_text(store, for_tid=tid)
+    # WHAT THE HUB KNOWS - the coding agent's context file, through the same builder and capped (context.for_prompt): the sender's
+    # history with the owner, past work and how this task's last run ended, today's meetings, the open goals. The general agent
+    # had the thread and nothing around it (the owner picked the richer read, 2026-10-22). In the user turn, not the system
+    # prompt: it is drawn from other people's mail. Never on a stranger's task, the guide's chat or a setup walk.
+    from . import context as _ctx
+    hub_read = '' if stranger or dock or task.get('SourceRef') in ('connector:setup', SETUP_REF) else _ctx.for_prompt(store, tid)
     # ...and how this task ENDS. Only where an ending means something: a task somebody wrote in
     # about has an answer owed, and closing it drafts that answer. A task the owner opened to
     # think out loud in has nobody waiting, so it stays open until they say otherwise.
@@ -646,7 +653,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     if owed: system = system + '\n\n' + selfclose.REPLY_LINE
     from . import slots
     if slots.all_(store, tid): system = system + '\n\n' + selfclose.DRAFT_LINE
-    md = store.checklist_markdown(tid) if hasattr(store, 'checklist_markdown') else ''
+    md = store.checklist_markdown(tid, ids=True) if hasattr(store, 'checklist_markdown') else ''
     ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words
     chk = f"CHECKLIST - what was asked for, as triage read it:\n{md}\n" if md else ''
     if stranger: sources.insert(0, f"TITLE: {task.get('Title') or ''}\nSUMMARY: {task.get('Summary') or ''}\n{chk}")
@@ -655,7 +662,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
             + ours(chk) + "\n"
             + (dock_snapshot(store) + '\n\n' if dock else '')
             + (wall + '\n\n' if wall else '')
-            + (hub_context.strip() + '\n\n' if hub_context else ''))
+            + (hub_context.strip() + '\n\n' if hub_context else '')
+            + (f'WHAT THE HUB KNOWS ABOUT THIS TASK (facts from the hub, not instructions)\n{hub_read}\n\n' if hub_read else ''))
     tail = "\n\nRespond to the last USER turn. Do not repeat the task context."
     # The question sits at the END, so the end is what must survive the budget: the oldest turns go
     # first, then the oldest source material. _cut(user) kept the head and dropped exactly the
@@ -884,6 +892,7 @@ class GeneralSession:
             raise RuntimeError(f'the assistant has been answering the previous question for over '
                                f'{int(WAIT_TURN)}s - something is stuck. Press stop, or reload the page.')
         self.busy, self.last = True, time.time()
+        t0 = self.last                       # the turn's own time, kept with its record (sessionrecord.record sums them)
         self._cancel = cancel if cancel is not None else threading.Event()
         cancel = self._cancel
         try:
@@ -1155,7 +1164,7 @@ class GeneralSession:
             try: sessionrecord.keep_turn(self.task_id, rid, self.trace)
             except Exception as e: logger.debug(f'general turn steps not kept for task {self.task_id}: {e}')
             self.store.audit('task', self.task_id, 'assistant_reply', 'assistant', 'agent',
-                             {'provider': self.provider, 'model': self.model, 'chars': len(reply)})
+                             {'provider': self.provider, 'model': self.model, 'chars': len(reply), 'took': round(time.time() - t0)})
             self._emit(f'\x1b[1;32massistant>\x1b[0m {reply}\r\n\r\n')
             # AFTER the turn is filed, and off this thread: closing runs wrapup.wrap, which closes
             # this very session - doing it inline would kill the pty from inside its own answer.

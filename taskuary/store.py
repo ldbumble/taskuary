@@ -170,6 +170,7 @@ def retoken_doc(text: str, old_name: str, old_email: str = '') -> str:
 INTERNAL_TASK_BASE = 1_000_000_000
 def task_ref(task_id): return f'TQ-{int(task_id):04d}'
 def is_goal(t) -> bool: return bool((t or {}).get('DoneWhen'))      # a goal is a task with a done-when sentence (spec 2026-10-12)
+def agent_tickable(i) -> bool: return not (i.get('out') or i.get('tid'))   # an email box ticks when it goes, a goal's step when its task closes
 def auto_code_enabled(src) -> bool:
     """Does new coding work start its agent by itself? ONE read of `coding_auto_enabled` (a store or its settings
     dict), missing = the seeded default. Four readers used to disagree: three read missing as off, one as on."""
@@ -1956,13 +1957,16 @@ class SQLiteStore:
         hit[0]['done'] = bool(done)
         self._write_checklist(task_id, items, actor)
         return True
-    def checklist_markdown(self, task_id) -> str:
+    def checklist_markdown(self, task_id, ids: bool = False) -> str:
+        """`ids`: the agent's copy - each box an agent may tick carries its id, for `taskuary --tick <id>` (the owner, 2026-10-22:
+        agents tick the to-dos they finish). An email box ticks when its email goes and a goal's step when its task closes."""
         # a slot says where it goes and how to fill it: the seed line is byte-capped, so the command rides here (slots.py)
         def line(i):
             o = i.get('out') if isinstance(i.get('out'), dict) else None
             maybe = f" (could be {' or '.join(o['candidates'][:3])} - fill with --to)" if o and o.get('candidates') else ''
             tail = (f" -> email to {o.get('to')}{maybe}, " + ('drafted' if i.get('rid') else f"fill with `taskuary --slot {i['id']} --draft \"<text>\"`")) if o else ''
-            return f"- [{'x' if i.get('done') else ' '}] {i['text']}{tail}" + (f" (note: {i['note']})" if i.get('note') else '')
+            tag = f" [{i['id']}]" if ids and agent_tickable(i) else ''
+            return f"- [{'x' if i.get('done') else ' '}] {i['text']}{tag}{tail}" + (f" (note: {i['note']})" if i.get('note') else '')
         return '\n'.join(line(i) for i in self.task_checklist(task_id))
     # ── goals: a task whose boxes are tasks (spec 2026-10-12) ─────────────────────────────────
     def children(self, task_id) -> list:

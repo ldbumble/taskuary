@@ -373,7 +373,7 @@ class Term:
         # ...and the CLI's own account of it - every thought, tool and answer - copied beside the task, so the record
         # does not depend on the CLI keeping its logs (sessionrecord)
         from . import sessionrecord
-        try: sessionrecord.save(self.store, self.task_id, self.sid, self.cli, self.ext_id, text)
+        try: sessionrecord.save(self.store, self.task_id, self.sid, self.cli, self.ext_id, text, started=self.started)
         except Exception as e: logger.debug(f'session record for {self.sid} not kept: {e}')
 
     def settle(self, cap: float) -> bool:
@@ -1724,10 +1724,17 @@ BIG_LINE = ('Big results: when a query, file, log or page may be large, do not p
             'beside it. Read something whole only when the job is to read it closely.')
 
 
+# AGENTS TICK THEIR OWN TO-DOS (the owner, 2026-10-22): the boxes stayed empty until the task closed and ticked them all, so the page
+# never showed which part of the job was done. Only the box moves (server.agent_tick), and only on the session's own task.
+TICK_LINE = ('To-dos: when you finish one of the checklist\'s to-dos, tick it with `taskuary --tick <id>` (the id in brackets after it; '
+             '`--untick <id>` takes back a mistaken tick). Tick nothing you did not do.')
+
+
 def with_fence_rule(rules: str) -> str:
-    "AGENT.md flattened for a prompt, with the standing rules the owner's copy predates appended: what the marks mean, big results."
+    "AGENT.md flattened for a prompt, with the standing rules the owner's copy predates appended: what the marks mean, big results, ticks."
     if not rules: return rules
     if FENCE_OPEN not in rules: rules = f'{rules} {FENCE_LINE}'
+    if '--tick' not in rules: rules = f'{rules} {TICK_LINE}'
     return rules if 'Big results' in rules else f'{rules} {BIG_LINE}'
 
 

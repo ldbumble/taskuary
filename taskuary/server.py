@@ -4258,6 +4258,22 @@ def agent_item(body: AgentItemBody, request: Request):
     if not batch.is_batch(store, body.task_id): raise HTTPException(422, 'this task is not a batch - report with --done or --reply')
     return batch.report(store, body.task_id, body.item, body.result, body.overlap, body.settled, body.agent, body.propose)
 
+class AgentTickBody(BaseModel): task_id: int; item: str; done: bool = True; agent: str = 'agent'
+
+@app.post('/api/agent/tick')
+def agent_tick(body: AgentTickBody, request: Request):
+    """`taskuary --tick <id>` / `--untick <id>` from the session working the task: it ticks the to-dos it finishes (the owner,
+    2026-10-22). The box's state and nothing else - never its words, never a box on another task. An email box ticks when its email
+    goes and a goal's step when its task closes, so neither is a session's to tick (store.agent_tickable)."""
+    from .store import agent_tickable
+    _own_task_only(request, body.task_id)
+    if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
+    hit = next((i for i in store.task_checklist(body.task_id) if i['id'] == body.item.strip()), None)
+    if not hit: raise HTTPException(404, f'no to-do {body.item} on this task - the id is in brackets after it in your checklist')
+    if not agent_tickable(hit): raise HTTPException(422, f"\"{hit['text']}\" ticks itself - when its email goes, or its task closes")
+    store.tick_checklist_item(body.task_id, hit['id'], body.done, 'agent')
+    return {'ok': True, 'item': hit['id'], 'text': hit['text'], 'done': bool(body.done)}
+
 class BatchActBody(BaseModel): action: str
 
 @app.post('/api/tasks/{tid}/batch/{idx}')

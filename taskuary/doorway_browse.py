@@ -62,7 +62,23 @@ def _connected(store) -> dict:
     return out
 
 
-POLL_MAX, PAGE = 12, 10          # WhatsApp's poll holds twelve (whatsapp/poll.mjs cuts the rest SILENTLY); a page leaves room
+FIX_WORDS = {'restart': 'Restart bridge on its desktop card', 'pair': 'Pair again on its desktop card'}
+
+
+def _live(store, typ: str) -> str:
+    """WhatsApp said by its bridge, not its switch - the desk card's own line (messengers.wa_status_line): "Connected · 2 chats ·
+    last message 40 min ago · 12 turned away". '' for any other card, an inactive one, or the demo (it has no bridge)."""
+    from . import demo
+    if typ != 'whatsapp' or demo.enabled(): return ''
+    c = next((x for x in store.list_connectors() or [] if x.get('Type') == 'whatsapp' and x.get('Active')), None)
+    if not c: return ''
+    from .messengers import wa_status
+    try: st = wa_status(store.get_connector(c['ConnectorId'], with_secret=True))
+    except Exception: st = {'line': 'Not connected', 'fix': 'restart'}
+    return st['line'] + (f" - {FIX_WORDS[st['fix']]}" if st.get('fix') in FIX_WORDS else '')
+
+
+POLL_MAX, PAGE = 12, 10         # WhatsApp's poll holds twelve (whatsapp/poll.mjs cuts the rest SILENTLY); a page leaves room
 
 
 def paged(rows: list, up: list, act: dict, page: int = 0) -> list:
@@ -97,7 +113,7 @@ def _connections(store, section, open_, page=0):
     if open_:
         c = connectorcatalog.by_type(open_) or {'title': open_, 'desc': ''}
         said = state.get(open_) or ('planned' if c.get('planned') else 'not connected')
-        text = f"{c['title']} - {said}.\n{c.get('desc') or ''}".strip()
+        text = f"{c['title']} - {_live(store, open_) or said}.\n{c.get('desc') or ''}".strip()
         text += '\n\nSay "set it up" and I walk you through it, or open it on the desktop to fill it in.' if said != 'connected' else ''
         return text, [(f'Back to {section}', {'t': 'browse', 'area': 'connections', 'section': section})] + up if section else up
     if section:

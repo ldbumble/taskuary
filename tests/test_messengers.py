@@ -203,6 +203,52 @@ class WhatsAppTests(unittest.TestCase):
             r = c_api.get(f"/api/connectors/{c['ConnectorId']}/wa/status")
         self.assertEqual(r.status_code, 200); self.assertEqual((r.json()['connected'], r.json()['bridge']), (False, False))
 
+    def test_the_status_says_chats_turned_away_last_message_and_the_fix(self):
+        """THE CARD TELLS THE TRUTH (2026-10-23): "connected" came from an open socket while chats were turned away and the
+        contact sync failed every ten minutes. The bridge's new fields pass through, and one short line is made of them."""
+        s, c = self._store()
+        now = messengers.time.time()
+        bridge = {'connected': True, 'me': 'Alex', 'jid': '15550100100:1@s.whatsapp.net', 'qr': '', 'pairingCode': '',
+                  'admitted': 2, 'turnedAway': 12, 'lastInboundAt': now - 40 * 60, 'loggedOut': False,
+                  'lastFailure': {'kind': 'decrypt', 'at': now - 60, 'detail': 'Bad MAC'},
+                  'contactSync': {'failures': 1, 'at': now - 60, 'ok': 0, 'why': 'missing key'}}
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: bridge):
+            st = messengers.wa_status(c)
+        self.assertEqual((st['admitted'], st['turned_away'], st['last_failure']['kind'], st['contact_sync']['why']), (2, 12, 'decrypt', 'missing key'))
+        self.assertEqual(st['line'], 'Connected · 2 chats · last message 40 min ago · 12 turned away')
+        self.assertEqual((st['parts'], st['fix']), (['Connected', '2 chats', 'last message 40 min ago'], ''))
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {**bridge, 'contactSync': {'failures': 3, 'why': 'missing key'}}):
+            st = messengers.wa_status(c)
+        self.assertEqual((st['line'], st['fix']), ('Connected · 2 chats · last message 40 min ago · contact names not syncing · 12 turned away', 'pair'))
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {**bridge, 'connected': False, 'loggedOut': True}):
+            st = messengers.wa_status(c)
+        self.assertEqual((st['line'], st['fix']), ('Logged out', 'pair'))
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {**bridge, 'connected': False}):
+            self.assertEqual((messengers.wa_status(c)['line'], messengers.wa_status(c)['fix']), ('Not connected', 'restart'))
+        # an older bridge says none of it: no counts are made up
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {'connected': True, 'me': 'Alex', 'qr': '', 'pairingCode': ''}):
+            st = messengers.wa_status(c)
+        self.assertEqual((st['line'], st['turned_away'], st['admitted']), ('Connected', None, None))
+        self.assertEqual(messengers.wa_status_line({'connected': True, 'admitted': 1})['line'], 'Connected · 1 chat · no message yet')
+
+    def test_every_chat_poll_that_reads_lines_is_logged_and_a_slow_empty_one_says_nothing_new(self):
+        """Only slow polls were logged, so "read 0 line(s)" was all the log said about WhatsApp - as if nothing ever came."""
+        self.assertEqual(server.chat_read_line(['whatsapp'], 3, 0.4), 'chat poll whatsapp read 3 lines in 0.4s')
+        self.assertEqual(server.chat_read_line(['whatsapp', 'telegram'], 1, 0.2), 'chat poll whatsapp, telegram read 1 line in 0.2s')
+        self.assertEqual(server.chat_read_line(['whatsapp'], 0, server.SLOW_CHAT_READ + 1.5), 'chat poll whatsapp slow (4.5s), nothing new')
+        self.assertEqual(server.chat_read_line(['whatsapp'], 0, 0.3), '', "the doorway's once-a-second empty read stays quiet")
+
+    def test_the_phone_reads_the_same_line_and_names_the_fix(self):
+        from taskuary import doorway_browse
+        s, c = self._store()
+        s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1}, 'o')
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {'connected': True, 'qr': '', 'pairingCode': '', 'admitted': 2,
+                                                                          'turnedAway': 3, 'lastInboundAt': messengers.time.time() - 5}):
+            self.assertEqual(doorway_browse._live(s, 'whatsapp'), 'Connected · 2 chats · last message just now · 3 turned away')
+        with mock.patch.object(messengers, '_wa', side_effect=RuntimeError('the WhatsApp bridge is not running')):
+            self.assertEqual(doorway_browse._live(s, 'whatsapp'), 'Not connected - Restart bridge on its desktop card')
+        self.assertEqual(doorway_browse._live(s, 'telegram'), '')
+
     def test_the_chats_the_bridge_has_seen_are_offered_as_sources(self):
         """"Only this group" needs the group's JID, and there is no directory to browse: the JID
         appears the moment someone writes there. One row per chat, newest first, the other side's

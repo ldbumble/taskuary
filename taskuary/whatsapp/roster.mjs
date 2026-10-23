@@ -1,8 +1,7 @@
 // A metadata-only view of chats the paired account can currently reach. Message bodies never
 // live here: the compose picker needs a JID, a useful name and recency, not a copy of WhatsApp.
 
-const isChat = (jid) => String(jid || "").endsWith("@s.whatsapp.net")
-  || String(jid || "").endsWith("@g.us");
+import { isChat } from "./policy.mjs";      // a LID (<n>@lid) is a direct chat too
 
 const timestamp = (value) => {
   const n = Number(value?.toNumber ? value.toNumber() : value || 0);
@@ -14,10 +13,12 @@ const timestamp = (value) => {
 const savedName = (contact = {}) => String(contact.name || "").trim();
 const ownName = (contact = {}) => String(contact.verifiedName || contact.notify || "").trim();
 
-export function createChatRoster() {
+// `canon` and `alt` come from the bridge's phone<->LID map (policy.mjs createLidMap): one person written to by LID and saved by
+// number is ONE row under the number - the form a person source is saved by - and carries the name saved under either.
+export function createChatRoster({ canon = (jid) => jid, alt = () => "" } = {}) {
   const chats = new Map();
   const names = new Map(), saved = new Map();
-  const nameOf = (jid) => saved.get(jid) || names.get(jid) || "";
+  const nameOf = (jid) => saved.get(jid) || saved.get(alt(jid)) || names.get(jid) || names.get(alt(jid)) || "";
 
   const ensure = (jid) => {
     jid = String(jid || "").trim();
@@ -34,7 +35,7 @@ export function createChatRoster() {
   // A profile name alone never adds a row: every participant of every group carries one.
   const upsertContact = (contact = {}) => {
     const name = savedName(contact), own = ownName(contact);
-    for (const jid of [contact.id, contact.jid].filter(Boolean).map(String)) {
+    for (const jid of [...new Set([contact.id, contact.jid, contact.lid].filter(Boolean).map(String))]) {
       if (name) saved.set(jid, name);
       else if (own) names.set(jid, own);
       else continue;
@@ -80,15 +81,22 @@ export function createChatRoster() {
   };
 
   const list = (extra = []) => {
-    const rows = new Map([...chats].map(([jid, row]) => [jid, { ...row }]));
+    const rows = new Map();
+    const into = (raw, item) => {
+      const jid = canon(raw) || raw, had = rows.get(jid);
+      const row = had || { ...item, jid, group: jid.endsWith("@g.us"), name: String(item.name || "").trim(), last: 0, n: 0 };
+      row.last = Math.max(row.last, timestamp(item.last));
+      row.n += Number(item.n) || 0;
+      if (!row.name) row.name = String(item.name || nameOf(raw) || nameOf(jid)).trim();
+      rows.set(jid, row);
+    };
+    for (const [jid, row] of chats) into(jid, row);
     for (const item of extra || []) {
       const jid = String(item?.jid || "").trim();
-      if (!isChat(jid)) continue;
-      const row = rows.get(jid) || { jid, group: jid.endsWith("@g.us"), name: "", last: 0, n: 0 };
-      row.last = Math.max(row.last, timestamp(item.last));
-      if (!row.name) row.name = String(item.name || nameOf(jid)).trim();
-      rows.set(jid, row);
+      if (isChat(jid)) into(jid, { last: item.last, name: item.name });
     }
+    // two rows made one: the name the owner saved wins over the one a LID row carried in from a push name
+    for (const r of rows.values()) if (!r.group && (saved.get(r.jid) || saved.get(alt(r.jid)))) r.name = saved.get(r.jid) || saved.get(alt(r.jid));
     return [...rows.values()].sort((a, b) => b.last - a.last || a.name.localeCompare(b.name)
       || a.jid.localeCompare(b.jid));
   };

@@ -141,7 +141,8 @@ AGENT_READS = (
 # door is a decision, not something that inherits whatever the table happened to say.
 OWNER_ONLY = (
     (r'POST', r'^/api/(bug-report/draft|open-url)$', "a bug report is drafted from the owner's own screen, and only the owner's click opens a page on their desktop"),
-    (r'POST', r'^/api/messages/\d+/calendar$', "answering an invite or drafting one is the owner's - drafted for their Send (calwrite)"),
+    (r'POST', r'^/api/messages/\d+/unsubscribe$', "leaving a mailing list is the owner's press - a newsletter's words never reach it (unsubscribe.py)"),
+    (r'POST', r'^/api/messages/\d+/calendar$',"answering an invite or drafting one is the owner's - drafted for their Send (calwrite)"),
     (r'POST', r'^/api/concierge/chats/\d+/continue$', "continuing an earlier Assistant chat is the owner's own conversation"),
     (r'PATCH', r'^/api/tasks/\d+/checklist/[^/]+/note$', "a note on one of a task's to-dos is the owner's (the agent writes through its own task tools)"),
     (r'POST', r'^/api/advice/press$', "the owner's own press, recorded against what the Advisor lit (learn.moves)"),

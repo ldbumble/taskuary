@@ -1868,6 +1868,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // line now and the "…" shows while the next one loads; a Next that fails opens it again
     const putDown = !key && currentRef.current?.key ? currentRef.current.key : null;
     if (putDown) { setExpanded(false); setFoldedKey(putDown); }
+    // ...AND IT WEARS "Next" like any press (the owner, 2026-10-23: "we should have next pill on this one to show what was clicked on
+    // each task") - only a card nothing else was pressed on; a Next that fails takes the badge off with the fold
+    const nextWord = btn("next"), wear = (on) => setMsgs((m) => { let i = -1;
+      for (let j = m.length - 1; j >= 0; j -= 1) if (m[j]?.card?.key === putDown) { i = j; break; }
+      if (i < 0 || (on ? pressedOf(m[i]) : m[i].pressed !== nextWord)) return m;
+      return m.map((x, j) => (j !== i ? x : on ? { ...x, pressed: nextWord } : (({ pressed, ...rest }) => rest)(x))); });
+    if (putDown) wear(true);
     // ...AND THE NEXT ONE IS PUT UP IN THE SAME FRAME (G8, swap never clear): between the fold and the server's answer the canvas held
     // no view at all and the rail still rang the item just put down - 10-25 frames on every Next. The capture already names what this
     // Next brings (the server refuses any other - PW-050), so it is drawn now (drawAhead) and the answer fills the same line in place
@@ -1934,7 +1941,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         setPile((p) => replaceSelectionToken(p, guard));
         loadPile(true);                       // refresh the rows, never retry the navigation
       }
-      if (putDown) setFoldedKey((k) => (k === putDown ? null : k));
+      if (putDown) { setFoldedKey((k) => (k === putDown ? null : k)); wear(false); }
       setErr(errText(e));
     }
     turnFlight.current = false;

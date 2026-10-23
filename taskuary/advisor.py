@@ -884,24 +884,27 @@ def for_key(store, key: str) -> dict: return decide(store, key)
 #   rule   rulebook.py - every other state, at once, from facts the app keeps, with no "Thinking..." and outside the hourly cap
 # A line is said only for a fact the card does not show; the obvious move is an empty strip and its button lit (ruling 1). The item on
 # the table earns the model's bigger read, once (B5); the next two on the walk are read ahead, so their lines are there when Next is.
-HABIT_HEAD = 'What you do next'
 PREREAD = 2
 
 
 def habit_pick(store, item: dict, verbs: list) -> str | None:
-    """THE CONFIRMED HABIT TIER's hook (phase A builds it; phase C writes the lines; until then it finds none and changes nothing). A
-    line under "## What you do next" in LEARNED.md - in use, keyed `move <kind> <channel> <scope>` (learn._move_key) for this kind of item
-    from this sender's domain or repository, saying "presses <a button's label> (n of m)" - lights that button where the row draws it.
-    The owner, 2026-10-23: an in-use habit may change the lit button by itself; press habits never reach triage (it reads only "## How you
-    sort mail")."""
-    doc = str(store.doc('learned') or '')
-    if f'## {HABIT_HEAD}' not in doc: return None
-    from . import learnedgraph as lg
+    """THE CONFIRMED HABIT TIER: a line under "## What you do next" in LEARNED.md (learn.moves writes it from the press log) keyed
+    `move <kind> <channel> <scope>` (learn._move_key) for this kind of item from this sender's domain or repository, saying "presses <a
+    button's label> (n of m)" - lights that button where the row draws it. It reads the lines the Advisor's prompt reads (learned_cut:
+    the section's in-use lines within its budget, closest scope first), so a habit that lights a button is one the Advisor was told -
+    and never one the owner marked wrong or removed (learnedlines; phase D's Keep/Wrong/Forget hang there). The owner, 2026-10-23: an
+    in-use habit may change the lit button by itself; press habits never reach triage (it reads only "## How you sort mail")."""
+    from . import learned_cut, learnedlines
     from .learn import _move_key
+    doc = str(store.doc('learned') or '')
+    if learned_cut.NEXT not in doc: return None
     w = who_of(store, item or {})
     k = _move_key(str((item or {}).get('kind') or ''), w['channel'], w['scope'])
-    l = next((l for l in lg.lines(doc) if l['section'] == HABIT_HEAD and l['status'] == 'live' and l['key'] == k), None)
-    m = re.search(r'presses (.+?) \(\d+ of \d+\)', (l or {}).get('text') or '')
+    ls = learned_cut.lines(doc, learned_cut.NEXT)
+    keep = set(learned_cut.cut(ls, learned_cut.BUDGET['advisor'], {**w, 'kind': (item or {}).get('kind')})[0])
+    raw = next((r for r, key in ls if key == k and r in keep), None)
+    if not raw or learnedlines.row(store, k).get('Status') in ('wrong', 'forgotten'): return None
+    m = re.search(r'presses (.+?) \(\d+ of \d+\)', raw)
     if not m: return None
     said = m.group(1).strip().lower()
     return next((v['verb'] for v in verbs if said in (str(v['label']).lower(), buttons.label(v['verb']).lower())), None)

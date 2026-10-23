@@ -7,6 +7,7 @@ import { ago, agoMins, dur, durSince, plural } from "./timeWords.js";
 import React, { useEffect, useRef, useState } from "react";
 import { useCapabilities, NO_CODING_TOOL } from "./capabilities.js";
 import { bareAddresses } from "./replyDelivery.js";
+import { keepAddresses, linkParts } from "./mailLinks.js";
 import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogContentText, DialogTitle, InputAdornment, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
@@ -1126,9 +1127,13 @@ export const BANNER = /(this email was sent from outside of[^*\n]*(\*\*[^*]*\*\*
 // the line Taskuary writes over a GitHub/Asana/monday item for TRIAGE ("[pull request by X - association: Y]") is
 // evidence for the judge, never what they said - remote_assistant.PROVENANCE is the same rule for the phone
 export const PROVENANCE = /^\s*\[(?:pull request|issue) by [^\]\n]*\]\s*|^\s*\[(?:Asana task|Monday item)[^\]\n]*\]\s*/i;
-export const cleanText = (s) => (s || "").replace(PROVENANCE, "").replace(/<(style|script|head)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+export const cleanText = (s) => keepAddresses(s).replace(PROVENANCE, "").replace(/<(style|script|head)[^>]*>[\s\S]*?<\/\1>/gi, " ")
   .replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#\d+;|&\w+;/g, " ").replace(BANNER, "")
   .replace(/[^\S\n]+/g, " ").replace(/ ?\n ?/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+// a mail's text with its addresses as links (mailLinks.js), each opened in a new tab
+export const LinkedText = ({ text }) => linkParts(text).map((p, i) => p.href
+  ? <a key={i} href={p.href} target="_blank" rel="noopener noreferrer" style={{ color: "#55697a", overflowWrap: "anywhere" }}>{p.text}</a>
+  : <React.Fragment key={i}>{p.text}</React.Fragment>);
 
 // Mail carries the whole thread quoted underneath the new text. Find where the new part
 // ends so the panel can lead with what actually just arrived and fold the history away.

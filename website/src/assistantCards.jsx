@@ -20,7 +20,7 @@ import api from "./api.js";
 import { gistFor } from "./fyiRow.js";
 import { canUnsubscribe, unsubscribeFrom } from "./unsubscribe.js";
 import { runOperation } from "./taskOps.js";
-import { ChannelIcon, DraftField, TaskuaryMark, channelColor, cleanText, fmtDateTime, fmtTime12 } from "./ui.jsx";
+import { ChannelIcon, DraftField, LinkedText, TaskuaryMark, channelColor, cleanText, fmtDateTime, fmtTime12 } from "./ui.jsx";
 import { openAppLink } from "./appLinks.js";
 import { CardErr, failOf } from "./failure.jsx";
 import { DASH, place } from "./words.js";
@@ -466,7 +466,7 @@ function FullText({ mid, revision }) {
   const morning = doc.SourceName === "Morning digest" || /^Morning digest\b/i.test(doc.Subject || "");
   return (
     <div className="tq-card-full">
-      {morning ? <DigestText text={text} sourceId={/^report:(\d+)/.exec(doc.ConversationId || "")?.[1] ?? null} /> : jsonRows(text) ? <RowsTable rows={jsonRows(text)} /> : looksMd(text) ? <Md text={text} /> : (text || "(empty)")}
+      {morning ? <DigestText text={text} sourceId={/^report:(\d+)/.exec(doc.ConversationId || "")?.[1] ?? null} /> : jsonRows(text) ? <RowsTable rows={jsonRows(text)} /> : looksMd(text) ? <Md text={text} /> : text ? <LinkedText text={text} /> : "(empty)"}
       {/* ...and the pictures pasted into it, drawn - the screenshot is often the whole ask */}
       {!none && !morning && <Attachments messageId={mid} canFetch={String(doc.Channel || "") === "email" && mentionsPicture(doc.BodyText)} dense />}
       {read !== raw && <button type="button" className="tq-card-more" onClick={() => setWhole((v) => !v)}>{whole ? "Just what they wrote" : "Show the whole email"}</button>}
@@ -555,7 +555,7 @@ function CombinedTaskText({ card, list = true }) {
             <div className="tq-card-note" style={{ marginBottom: 3 }}>
               {m.Direction === "out" ? "You" : (m.FromName || m.FromEmail || "Someone")}{m.SentAt ? ` · ${fmtDateTime(m.SentAt)}` : ""}
             </div>
-            {looksMd(body) ? <Md text={body} /> : (body || "(empty)")}
+            {looksMd(body) ? <Md text={body} /> : body ? <LinkedText text={body} /> : "(empty)"}
             {m.MessageId && <Attachments messageId={m.MessageId} canFetch={String(m.Channel || "") === "email" && mentionsPicture(m.BodyText)} dense />}
           </div>
         );

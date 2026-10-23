@@ -840,7 +840,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # "Ok. Monday 2 pm?" each reopened the day's closed task - triage read both as reply_only, an answer and not work. Its own
         # intent says which: a task reopens it under the new ask (_retitle, below); a reply or a comment is kept on it, still closed.
         kept = bool(r.get('reopen') and follow and follow.get('intent') != 'task' and not follow.get('invite'))
-        if follow and (follow.get('intent') == 'fyi' or kept) and not follow.get('degraded'):
+        # THE ANSWER A TASK WAITS ON IS NEVER FILED (waiton.py): "Thursday works" from the person an agent is waiting on reads as
+        # nothing to do, and filed it would leave the task waiting on an answer it already has
+        from . import waiton
+        awaited = waiton.is_them(waiton.waiting(store.get_task(tid)), msg)
+        if follow and (follow.get('intent') == 'fyi' or kept) and not follow.get('degraded') and not awaited:
             mid = _land(store, msg, tid, 'filed')
             said = (f"{follow.get('intent')} on {task_ref(tid)}, which is closed - nothing new to do on it, so it stays closed" if kept
                     else f"fyi - {follow.get('why') or 'nothing to do'} · kept on {task_ref(tid)} for the chain")
@@ -854,6 +858,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             return {'status': 'filed', 'task_id': tid, 'message_id': mid}
         mid = _land(store, msg, tid, 'routed')
         if r.get('reopen'): _reopen(store, tid, msg, actor)
+        if awaited: waiton.arrived(store, tid, msg, mid, actor)
         # ...and the task says what is asked NOW (the owner, 2026-10-15): an email thread stays one task, but a new ask on it - a
         # CFO's "export and send the status" on a thread closed two days before - reopened it under the old title, read as the
         # finished thread, and was closed again unseen. _retitle keeps the old title in a note; an owner-written task keeps its own.
@@ -900,7 +905,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # typed straight into the live session; 'ask' leaves the one-click offer in the
         # panel; 'off' does neither. A dead session just means False - nothing breaks. Only the task's own
         # person: anyone else on the thread is not the one it asked (B6, 2026-10-11).
-        if from_opener(store, tid, msg): _hand_to_agent(store, cfg, tid, msg, actor)
+        # ...or of the person the agent said it was waiting on (waiton.py) - the same owner setting, never a start of its own
+        if awaited or from_opener(store, tid, msg): _hand_to_agent(store, cfg, tid, msg, actor)
     else:
         # Nothing the owner said before decides here without a model. A ruling on THIS thread used
         # to (ingest.ruled_on_thread, until PW-020): every later reply on a dismissed email thread

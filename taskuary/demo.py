@@ -103,7 +103,7 @@ REFUSALS = (
     (r'^/api/(terminals|agents)(/|$)|^/api/tasks/\d+/(dispatch|code|continue|continue-session|continue-work|resume)$'
      r'|^/api/messages/\d+/dispatch$', STARTS),
     (r'^/api/(sync|ingest|poll|msauth|hooks)', 'This is the demo - no mail is fetched; what you see was written in advance.'),
-    (r'^/api/(doc|soul|semantic|reports?/[^/]*/(run|preview))', 'This is the demo - editing your documents and running reports are switched off.'),
+    (r'^/api/(doc|soul|semantic|reports?/[^/]*/(run|preview)|dashboards/(compose|preview))','This is the demo - editing your documents and running reports are switched off.'),
 )
 
 
@@ -829,6 +829,7 @@ def seed(store) -> int:
             store.lore_comment(lid, 'Try it on the next two launches and compare escaped issues.', 'owner')
         elif kind == 'technical_solve':
             store.lore_comment(lid, 'The same elapsed-time budget should apply to report polling.', 'assistant')
+    seed_dashboard(store)
     logger.info(f'demo: seeded {made} items of invented work')
     return made
 
@@ -902,6 +903,31 @@ _generated 2026-09-30 09:12 — 412 inbound + 188 sent from the last 90 days acr
 
 <!-- this is a demo: Dana, Northwind and everyone in it are invented -->
 """
+
+
+# ONE DASHBOARD, drawn from the demo's own tables (taskuary_data), so the preset library can be seen without a real source:
+# what came in and from where, what it became, and what is still open. Run once at seed time - no AI - like a scheduled run.
+DASHBOARD = {'type': 'dashboard', 'title': 'Northwind desk', 'daily_at': '07:00',
+             'sources': [{'key': 'tasks', 'label': 'Tasks', 'type': 'taskuary_data', 'dataset': 'tasks', 'days': 90, 'date': 'arrived'},
+                         {'key': 'mail', 'label': 'Mail in', 'type': 'taskuary_data', 'dataset': 'mail', 'days': 90, 'date': 'day'}],
+             'filters': {'range': 7, 'segment': 'channel'},
+             'components': [
+                 {'kind': 'stat', 'title': 'Open tasks', 'source': 'tasks', 'agg': 'count', 'where': {'state': 'open'}, 'good': 'down'},
+                 {'kind': 'stat', 'title': 'Came in', 'source': 'mail', 'agg': 'count'},
+                 {'kind': 'stat', 'title': 'Became tasks', 'source': 'mail', 'agg': 'count', 'where': {'became_task': 'yes'}},
+                 {'kind': 'progress', 'title': 'Closed toward 25 this week', 'source': 'tasks', 'agg': 'count', 'where': {'state': 'closed'}, 'target': 25},
+                 {'kind': 'stacked', 'title': 'Mail in by day', 'source': 'mail', 'x': 'day', 'series': 'channel', 'w': 2},
+                 {'kind': 'bar', 'title': 'Open work by kind', 'source': 'tasks', 'x': 'kind', 'where': {'state': 'open'}, 'w': 2},
+                 {'kind': 'bar', 'title': 'Who wrote most', 'source': 'mail', 'x': 'sender', 'limit': 6, 'w': 2},
+                 {'kind': 'list', 'title': 'Open now', 'source': 'tasks', 'label': 'title', 'meta': 'kind', 'where': {'state': 'open'},
+                  'sort': '-arrived', 'limit': 8, 'w': 2}]}
+
+
+def seed_dashboard(store) -> int:
+    from . import reports
+    sid = store.save_source({'Channel': 'report', 'Address': DASHBOARD['title'], 'Active': 1, 'ConfigJson': json.dumps(DASHBOARD)}, 'demo')
+    reports.run_one(store, store.get_source(sid), None, 'schedule')      # its clock moves, so the server's start does not run it again
+    return sid
 
 
 class Replay:

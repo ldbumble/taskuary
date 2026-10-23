@@ -106,3 +106,28 @@ def test_saving_an_edit_signs_it_for_the_sending_mailbox(s):
     try: r = TestClient(server.app).patch(f'/api/reviews/{rid}', json={'body': 'Hi Paula,\n\nDone.'})
     finally: server.store = old
     assert r.json()['draft'].endswith('Contoso board')
+
+
+def test_a_new_email_on_the_task_is_signed_as_its_mailbox(s):
+    # it came in on the second mailbox; the email written from the task signed as STYLE.md's one learned signature - the first hat
+    tid, _ = asked_on(s, CT)
+    llm = lambda system, user, max_tokens=0: 'Budget is final' if max_tokens <= 40 else 'Hi Erin,\n\nThe budget is final.\n\nAlex'
+    with mock.patch.object(outbound, 'can_reply', return_value=True):
+        out = outbox.task_email(s, tid, 'erin@northwind.example', 'tell her', llm=llm)
+        picked = outbox.task_email(s, tid, 'erin@northwind.example', 'tell her', llm=llm, mailbox=NW)
+    assert out['draft'].endswith('Alex Doyle\nContoso board') and 'Northwind' not in out['draft']
+    assert picked['draft'].endswith('Alex Doyle\nNorthwind') and 'Contoso' not in picked['draft']
+
+
+def test_two_mailboxes_on_one_sign_in_sign_as_themselves(s):
+    # a shared mailbox read through the same Outlook card: one card, two hats
+    SH = 'board@northwind.example'
+    a = s.boxes[0]
+    s.save_connector({'ConnectorId': a, 'Type': 'outlook', 'Name': 'Outlook', 'Active': 1, 'ConfigJson': json.dumps(
+        {'address': NW, 'signature': 'Alex Doyle\nNorthwind', 'signatures': {SH: 'Alex Doyle\nNorthwind board', 'Other@Northwind.example': ''}})}, 't')
+    for addr in (NW, SH, 'other@northwind.example'): s.save_source({'Channel': 'email', 'Address': addr, 'Active': 1, 'ConnectorId': a}, 't')
+    s.set_setting('email_signature', 'Alex', 'owner')
+    assert responder.signature_for(s, SH) == 'Alex Doyle\nNorthwind board'
+    assert responder.signature_for(s, SH.upper()) == 'Alex Doyle\nNorthwind board'
+    assert responder.signature_for(s, NW) == 'Alex Doyle\nNorthwind'                       # none of its own: the card's
+    assert responder.signature_for(s, 'other@northwind.example') == 'Alex'                 # saved blank: the one in Settings

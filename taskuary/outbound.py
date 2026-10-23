@@ -407,11 +407,17 @@ def _box(store, mailbox): return next((m for m in mailboxes(store) if m['address
 
 def card_signature(store, mailbox) -> str:
     """The signature saved on the card that sends as this mailbox - '' when it has none, and the global one is used.
-    Two mailboxes are two hats: mail from the second one went out under the first one's name and title."""
+    Two mailboxes are two hats: mail from the second one went out under the first one's name and title. One sign-in can read
+    both (a shared mailbox on the same Outlook card), so the card keeps one per address - `signatures` - over its own. An
+    address saved blank there is blank on purpose: the one in Settings, not the card's (that one is the other hat's)."""
     from .channels import _cfg
     box = _box(store, mailbox)
     c = store.get_connector(box['connector_id']) if box else None
-    return str(_cfg(c).get('signature') or '').strip() if c else ''
+    if not c: return ''
+    cfg = _cfg(c)
+    per = {str(k).strip().lower(): v for k, v in cfg['signatures'].items()} if isinstance(cfg.get('signatures'), dict) else {}
+    a = box['address'].lower()
+    return str((per[a] if a in per else cfg.get('signature')) or '').strip()
 
 
 def task_mailbox(store, tid) -> str | None:

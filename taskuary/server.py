@@ -5439,7 +5439,8 @@ def draft_review(rid: int, body: DraftBody = None):
             chat = (deliver.get('channel') or 'email') != 'email'
             draft = ob.draft_message(store, deliver.get('channel') or 'email', [deliver['name']] if chat and deliver.get('name') else deliver.get('to'), ob.results_brief('\n\n'.join(filter(None, [deliver.get('about'), _reply_nudge(body and body.instruction)]))),
                                      resolution=ob.work_of(store, rv['TaskId']) or None, cc=deliver.get('cc'),
-                                     attached=None if chat else [f.get('name') for f in deliver.get('attachments') or []])
+                                     attached=None if chat else [f.get('name') for f in deliver.get('attachments') or []],
+                                     mailbox=None if chat else outbound.sending_mailbox(store, rv))
             store.update_review_draft(rid, draft, rv.get('RunId'))
         elif deliver.get('channel') and deliver.get('kind') != 'zoho_invoice':
             from . import outbox as ob

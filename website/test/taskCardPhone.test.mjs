@@ -20,5 +20,6 @@ test("From shows three lines on a phone and opens on a tap; the bar wraps at the
   assert.match(src, /const PHONE_FROM = \(open\) => \(open \? \{\} : \{ \[`@media \$\{PHONE_MQ\}`\]: \{ maxHeight: 132, overflow: "hidden"/);
   assert.match(src, /onClickCapture=\{wide \? undefined : phoneFromTap\}/);
   assert.match(src, /if \(fromOpen \|\| !window\.matchMedia\?\.\(PHONE_MQ\)\.matches\) return;\n\s+e\.preventDefault\(\); e\.stopPropagation\(\); setFromOpen\(true\);/);
-  assert.match(src, /\{!inRow && !sessionView && \(\s+<Box data-tq-task-bar=""[^>]*flexWrap: "wrap"/, "the bar it lost wraps at the view's foot");
+  // ...one line, never wrapped (the owner, 2026-10-23): what does not fit folds into its ▾ (foldBar.js)
+  assert.match(src, /\{!inRow && !sessionView && \(\s+<Box data-tq-task-bar="" ref=\{bar\.ref\}[^>]*flexWrap: "nowrap"/,"the bar it lost stays one line at the view's foot");
 });

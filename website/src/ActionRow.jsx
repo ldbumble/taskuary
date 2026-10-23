@@ -1,11 +1,11 @@
 // THE ONE ROW ABOVE THE CHAT LINE (layout B): whatever is on the table, its verbs are here - the decision first, the session's verbs
 // next, the rare ones behind More; Next is FIRST (the owner, 2026-09-30). The card registers them (actionRow.js); this only draws. Centred over the composer,
 // ONE filled button at most - the Advisor's pick, and none before it answers - and a greyed decision says why it is greyed.
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Menu, MenuItem, Popover, useMediaQuery } from "@mui/material";
 import api from "./api.js";
 import { suggestion } from "./advice.js";
-import { advisedAny, advisedIn, clustersOf, phoneRow, press, rowOf, lightOnCard, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { TYPES, advisedAny, advisedIn, fitRow, press, rowOf, lightOnCard, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
 import { adviceNone } from "./words.js";
 
 // what a refused proposal says on the line: the item moved under the Advisor (409) is not the owner's mistake - the page reads
@@ -97,7 +97,7 @@ export function AdviceNone({ advice }) {
 function Cluster({ g, btn }) {
   const [at, setAt] = useState(null);
   return (
-    <div className="tq-cl" role="group" aria-label={g.label || "This one"} data-tq-type={g.type}>
+    <div className="tq-cl" role="group" aria-label={g.label || (g.type === "more" ? "More" : "This one")} data-tq-type={g.type}>
       {g.label && <span className="tq-cl-h" aria-hidden="true">{g.label}</span>}
       <div className="tq-cl-b">
         {g.shown.map(btn)}
@@ -129,6 +129,27 @@ export default function ActionRow({ inline = false, advised = null }) {
   const drawn = inline || !hosted;
   useEffect(() => { if (drawn) lightOnCard(row.lit); }, [drawn, row.lit]);
   useEffect(() => () => { if (drawn) lightOnCard(""); }, [drawn]);
+  // ONE LINE, ALWAYS (the owner, 2026-10-23, foldsOf): the row's width and every part it can draw are measured, and the widest
+  // layout that fits is drawn - on a resize, a verb arriving or a label changing ("Drafting…" -> "Redraft"), and once the fonts land
+  const [box, setBox] = useState(null), ghost = useRef(null);
+  const [m, setM] = useState(null), [avail, setAvail] = useState(0), [over, setOver] = useState({ at: "", n: 0 }), [fonts, setFonts] = useState(0);
+  const narrow = useMediaQuery("(max-width:1099px)");   // the row's own breakpoint (assistantView.css): pills lose their min-width
+  const parts = JSON.stringify([next?.label || "", [...decide, ...agent, ...more].map((v) => [v.id, v.label, v.tone])]);
+  useEffect(() => { let on = true; document.fonts?.ready?.then(() => on && setFonts((n) => n + 1)); return () => { on = false; }; }, []);
+  useLayoutEffect(() => { if (box && ghost.current) setM(measure(ghost.current, box)); }, [box, parts, narrow, fonts]);
+  useLayoutEffect(() => {
+    if (!box) return undefined;
+    const f = () => setAvail(box.clientWidth);
+    f();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(f);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [box]);
+  // ...and if the drawn line still runs past its box (a width the parts did not add up to), one more group folds
+  const sig = `${parts}|${avail}|${phone}`, extra = over.at === sig ? over.n : 0;
+  const fit = fitRow(row, m, avail, phone, extra);
+  useLayoutEffect(() => { if (box && fit.level < fit.last && box.scrollWidth > box.clientWidth + 1) setOver({ at: sig, n: extra + 1 }); });
   if (!inline && hosted) return null;                  // a phone's task view carries its own row
   if (!decide.length && !agent.length && !more.length && !next) return null;
   // ONE NAME PER BUTTON (buttons.json, the owner, 2026-10-17): the bar says the same words the hover, the Advisor and the menu say -
@@ -136,17 +157,38 @@ export default function ActionRow({ inline = false, advised = null }) {
   // the card's main move keeps its width here, empty and unpressable - its button is under the draft (rowOf's `slot`)
   const btn = (v) => (v.slot ? <span key={v.id} className="tq-ab s slot" aria-hidden="true" data-tq-slot="">{v.label}</span> :
     <button key={v.id} type="button" className={`tq-ab ${v.tone}`} disabled={v.disabled} data-tq-verb={v.id} data-tq-own={v.own ? "" : undefined}
-      title={(v.disabled && v.why) || v.title || undefined} onClick={(e) => press(v.id, e, e.currentTarget)}>{v.label}</button>
+      title={(v.disabled && v.why) || v.title || (fit.tight ? v.label : undefined)} onClick={(e) => press(v.id, e, e.currentTarget)}>{v.label}</button>
   );
   return (
     <div className={inline ? "tq-arow inline" : "tq-arow"} role="toolbar" aria-label={ref ? `What to do with ${ref}` : "What to do with this one"} data-tq-row="">
-      <div className="tq-arow-verbs">
-        {next && <div className="tq-cl" role="group" aria-label="Move on">
+      <div className={fit.tight ? "tq-arow-verbs tight" : "tq-arow-verbs"} ref={setBox} data-tq-fold={fit.level}>
+        {next && <div className="tq-cl tq-cl-next" role="group" aria-label="Move on">
           <div className="tq-cl-b"><button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} title={next.title || undefined} disabled={next.disabled}
             onClick={(e) => press(next.id, e, e.currentTarget)}>{next.label}</button></div></div>}
-        {(phone ? [phoneRow(row)].filter((g) => g.shown.length || g.rest.length) : clustersOf(row)).map((g) => <Cluster key={g.type} g={g} btn={btn} />)}
+        {fit.groups.map((g) => <Cluster key={g.type} g={g} btn={btn} />)}
       </div>
       {why && <div className="tq-arow-why" role="status" data-tq-row-why="">{why}</div>}
+      {/* every part the row can draw, unseen, in the row's own classes - what fitRow adds up */}
+      <div className="tq-arow-ghost" ref={ghost} aria-hidden="true">
+        <div className="tq-cl">
+          {TYPES.map(([t, l]) => <span key={t} className="tq-cl-h" data-tq-wl={t}>{l}</span>)}
+          <div className="tq-cl-b">
+            {next && <span className={`tq-ab ${next.tone} next`} data-tq-wn="">{next.label}</span>}
+            {[...decide, ...agent, ...more].map((v) => <span key={v.id} className={`tq-ab ${v.tone}`} data-tq-w={v.id}>{v.label}</span>)}
+            <span className="tq-ab s tq-cl-more" data-tq-wm="">▾</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
+}
+
+// the parts' widths off the hidden copy, and the gaps off the row's own styles - rounded up, so a fit is never a fraction short
+function measure(ghost, box) {
+  const w = (el) => (el ? Math.ceil(el.getBoundingClientRect().width) : 0), px = (el, k) => (el ? parseFloat(getComputedStyle(el)[k]) || 0 : 0);
+  const cl = ghost.querySelector(".tq-cl"), b = ghost.querySelector(".tq-cl-b"), btn = {}, label = {};
+  ghost.querySelectorAll("[data-tq-w]").forEach((el) => { btn[el.dataset.tqW] = w(el); });
+  ghost.querySelectorAll("[data-tq-wl]").forEach((el) => { label[el.dataset.tqWl] = w(el); });
+  return { btn, label, more: w(ghost.querySelector("[data-tq-wm]")), next: w(ghost.querySelector("[data-tq-wn]")),
+    pad: px(cl, "paddingLeft") + px(cl, "paddingRight"), clGap: px(cl, "columnGap"), bGap: px(b, "columnGap"), rowGap: px(box, "columnGap") };
 }

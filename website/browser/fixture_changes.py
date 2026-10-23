@@ -22,6 +22,7 @@ def install_processing_changes(app, store):
         '/api/fixture/task/agent-closed',
         '/api/fixture/task/coding-saved',
         '/api/fixture/task/chat-burst',
+        '/api/fixture/task/chat-saved',
         '/api/fixture/general/canvas',
     })
 
@@ -64,6 +65,24 @@ def install_processing_changes(app, store):
                                           ('Gail Moreno', 'and bring the floor plan please'))):
             store.add_message({'TaskId': tid, 'Channel': 'whatsapp', 'SourceName': 'Site ops', 'ExternalId': f'fixture-burst-{tid}-{i}',
                                'FromName': who, 'BodyText': words, 'SentAt': (start + timedelta(minutes=3 * i)).isoformat(' '), 'Status': 'routed'})
+        return {'taskId': tid}
+
+    @app.post('/api/fixture/task/chat-saved')
+    def chat_saved(body: dict):
+        """A WhatsApp group's ask whose general agent the owner stopped and saved (Stop and save): its transcript and AGENT REPORT
+        filed, nothing sent. The browser test then presses Reply and holds the draft - the row the owner saw wrap onto two lines
+        (2026-10-23): the agent's session over, its WhatsApp reply drafting. Invented people."""
+        if body: raise HTTPException(422, 'this fixed fixture accepts only an empty object')
+        from taskuary import terminal
+        tid = store.create_task({'Title': 'Site ops: who signs the snag list on Thursday', 'Kind': 'general', 'Status': 'in_progress', 'Source': 'whatsapp',
+                                 'Assignee': 'agent:general', 'Tags': terminal.SAVED}, 'router')
+        store.add_message({'TaskId': tid, 'Channel': 'whatsapp', 'SourceName': 'Site ops', 'ExternalId': f'fixture-saved-{tid}', 'ConversationId': f'fixture-saved-{tid}',
+                           'FromName': 'Gail Moreno', 'BodyText': 'Alex, can you find out who signs the snag list on Thursday and tell the group?',
+                           'SentAt': (datetime.now() - timedelta(minutes=20)).isoformat(' '), 'Status': 'routed'})
+        store.add_transcript(tid, f'fixture-{tid}', "Looking for who signs the snag list.\nThe handover sheet names Ray Colton for Thursday.",
+                             agent='general', cwd='C:/work', brain='claude')
+        store.add_comment(tid, 'general', 'agent', 'AGENT REPORT\nDetermination: Ray Colton signs the snag list on Thursday.\n'
+                          'Actions: Read the handover sheet.\nSummary: Ray Colton signs it; the group should be told.')
         return {'taskId': tid}
 
     @app.post('/api/fixture/task/coding-saved')

@@ -134,7 +134,8 @@ class SaysHowTests(unittest.TestCase):
         self.assertIn('change it on the desktop', opened)
 
     def test_set_up_a_report_gives_an_example(self):
-        self.assertIn('For example: "', ra.script_words(MemoryStore(), 'set up a report'))
+        with mock.patch('taskuary.capabilities.has_ai', return_value=True):        # with none it says so instead (test_phone_approved)
+            self.assertIn('For example: "', ra.script_words(MemoryStore(), 'set up a report'))
 
 
 class NoJsonOnThePhoneTests(unittest.TestCase):

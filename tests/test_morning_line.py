@@ -16,6 +16,7 @@ class MorningLineTests(unittest.TestCase):
     def setUp(self):
         self.s = A.store(); self.sent = []
         self.s.set_setting('phone_morning_line', '1', 't')      # off unless turned on (2026-10-02)
+        ra.owner_spoke(self.s, 'whatsapp', '1555@s.whatsapp.net')  # ...and only into a conversation the owner started there (2026-10-23)
         self.patches = [mock.patch.object(ra, 'doorways', _doors),
                         mock.patch.object(ra, 'send', lambda store, ch, chat, text, connector_id=None: (ra.remember_offered(store, ch, chat, text), self.sent.append((ch, chat, text))))]   # the real send remembers the numbers too
         for p in self.patches: p.start()
@@ -28,6 +29,12 @@ class MorningLineTests(unittest.TestCase):
     def test_nothing_goes_out_unless_the_owner_turned_it_on(self):
         # the owner, 2026-10-02: "it should not be sending to whatsapp anything unless the user asks the assistant a question"
         self.s.set_setting('phone_morning_line', '', 't')
+        with self._pile(7): self.assertEqual(ra.morning_line(self.s, now=datetime(2026, 9, 18, 8, 0)), 0)
+        self.assertEqual(self.sent, [])
+
+    def test_turned_on_it_still_never_speaks_first(self):
+        # the owner, 2026-10-23: "it should not talk to phone unless it was triggered from there" - no conversation, no opener
+        ra.hung_up(self.s, 'whatsapp', '1555@s.whatsapp.net')
         with self._pile(7): self.assertEqual(ra.morning_line(self.s, now=datetime(2026, 9, 18, 8, 0)), 0)
         self.assertEqual(self.sent, [])
 

@@ -949,7 +949,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
   const moved = !!m.card && (!live || foldedNow) && !m.sent;
   const strip = moved ? chips.filter((c) => c.verb === "next") : inCard ? chips.filter((c) => !c.verb) : chips;
   const nextChip = verbs.find((c) => c.verb === "next");
-  const nav = { busy: actions.busy, items: actions.items, surface: actions.surface, row: live && last && !!canvas && !actions.handedTo, ref: c?.ref || "",   // Next and the words ride in the row above the chat line
+  const nav = { busy: actions.busy, items: actions.items, surface: actions.surface, row: live && last && !!canvas, ref: c?.ref || "",   // Next and the words ride in the row above the chat line
 
     onNext: nextChip ? () => actions.chip(nextChip) : null,
     also: verbs.filter((c) => c.verb !== "next").map((c) => ({ verb: c.verb, label: c.label, title: c.hint, disabled: actions.busy, onClick: (e) => actions.chip(c, e?.currentTarget) })) };
@@ -993,11 +993,6 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
             </div>
           )}
           {card && !foldedNow && <CardNav.Provider value={nav}>{card}</CardNav.Provider>}
-          {/* WHY ITS BUTTONS ARE DEAD, on the card itself: the walk is in a chat, and the one explanation was a banner
-              at the foot of the page (2026-09-29: "Next" greyed out on the card with nothing saying why) */}
-          {last && card && actions.handedTo && (
-            <div className="tq-card-excerpt">The walk is in {actions.handedTo} - answer it there, or press {btn("walk_here")} below to use these buttons here.</div>
-          )}
           {/* The action words, in the assistant's own line - one place to look, chosen by the server from
               the item's kind and already filtered to what this one can carry (concierge.chips_for). A
               strip over the composer and a second row under the bubble said the same things twice and
@@ -1058,7 +1053,6 @@ function AdvisorNotes({ keyOnTable }) {
 
 export default function AssistantView({ onOpenTask, onNavigate, onChanged, active = true, request = null }) {
   const [state, setState] = useState(null);           // /api/concierge: the dock task, its turns, the AI choices
-  const handoff = state?.handoff || null;             // the walk is in a phone chat: this tab is locked behind it
   // A set-up walk-through, running HERE. The conversation binds to that task's own session - which
   // is the one with the browser and the operator's brain - so the owner never leaves this tab to be
   // walked through something they just asked for. Leaving is a button; the task and its session
@@ -1377,7 +1371,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (epoch !== chatEpoch.current || resettingRef.current) return false;
     setMsgs((m) => mergeDurableTurns(m, st.messages || []).messages);
     // WHERE THE WALK IS, from the same answer: a hand-off started or ended somewhere else (a second tab, the phone's own
-    // "take it back") left this tab unlocked or locked until a reload (2026-09-29 audit)
+    // "stop") - kept as state only; it locks nothing here (2026-10-23)
     setState((s) => (s && (s.handoff?.at || null) !== (st.handoff?.at || null) ? { ...s, handoff: st.handoff || null } : s));
     // ...AND WHAT IS ON THE TABLE, from the same answer. The walk can be driven from somewhere
     // else - a phone chat holding the handoff, another tab - and this one followed the WORDS while
@@ -1857,7 +1851,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (!carried && earlyRef.current) adoptRef.current?.();   // any other walk move makes a close's early draw the table's own
     const dropCarried = () => { if (carried) { unconfirmedRef.current = null; adviceHeld.current = null;
       setMsgs((m) => m.filter((x) => x.id !== carried.id)); if (!currentRef.current) putOnTable(null, "sync"); } };
-    if (busy || resetting || handoff || turnFlight.current) { dropCarried(); return; }
+    if (busy || resetting || turnFlight.current) { dropCarried(); return; }
     // WALKING A SECTION: Next stays inside it - the next of its rows the walk has not shown - and once it is empty it
     // says so and the walk goes on as normal (the canvas redesign, 2026-09-29)
     if (!key && sectionRef.current) {
@@ -1990,7 +1984,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     }
     turnFlight.current = false;
     setBusy(false);
-  }, [busy, drawAhead, ensureNextSelection, handoff, landed, loadPile, noteLine, putOnTable, resetting, turn, unshow]);
+  }, [busy, drawAhead, ensureNextSelection, landed, loadPile, noteLine, putOnTable, resetting, turn, unshow]);
   useEffect(() => { surfaceRef.current = surface; }, [surface]);
   // A CLOSE PUTS THE NEXT ONE UP AT ITS PRESS (owner-approved, 2026-10-20): Mark done, Remove and Remind me fold the item at once, and
   // the next was drawn only once the server had recorded the close and the walk asked for it - ~200 ms of a folded line and no view.
@@ -2022,7 +2016,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const startLast = useRef(null);   // the newest line when Walk was pressed: the "…" stands until a line lands after it
   // ONE ANSWER TO "CAN THE WALK START?" (the 2026-10-19 UI walk): the button greyed on one list and the press returned on another, so a
   // press could look taken and do nothing. Both read walkOff; the refs only close same-tick double presses the state has not caught.
-  const walkOff = busy || resetting || !!handoff || starting;
+  const walkOff = busy || resetting || starting;
   const start = async (what) => {
     // A WALK PRESSED WHILE THE WALK IS BUSY IS HELD (owner-approved, 2026-10-20), as the opener's early press is (74861f7d): a turn
     // or a Next in flight dropped it and the button looked taken. Its button says "Getting your first one..." until it runs.
@@ -2071,7 +2065,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // a picture alone is a line too: "what is this?" is what it means
     const images = line == null ? pics.paths : [];
     const t = String(line ?? text).trim() || (images.length ? "What is this?" : "");
-    if (!t || busy || resetting || handoff || turnFlight.current || pics.busy) return;
+    if (!t || busy || resetting || turnFlight.current || pics.busy) return;
     turnFlight.current = answering.current = true;
     setText(""); setBusy(true); setErr(""); setLit(null);
     const shots = line == null ? pics.imgs : [];
@@ -2370,7 +2364,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // are not proposals keep their own immediate behaviour - a reply DRAFTS (PW-126), Next moves the walk
   // and puts down what it left. An OPTIONS choice is not a verb at all: it goes back as the owner's words.
   const runChip = async (c, anchor) => {
-    if (busy || resetting || handoff || !c) return;
+    if (busy || resetting || !c) return;
     if (c.ask) { send(c.ask); return; }
     if (c.verb === "newtask") { browseRef.current?.("new", {}); return; }
     // THE PLACE THAT FIXES IT (concierge.recover, outbound.Fixable): an app link, opened on the canvas like any other
@@ -2722,14 +2716,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // to talk to assistant through it not connect it"). While it is there the tab locks itself: two
   // screens answering the same item is how the same mail gets replied to twice.
   const handOver = async (d) => {
-    if (busy || resetting || handoff) return;
+    if (busy || resetting) return;
     setBusy(true); setErr("");
     try { await api.post("/api/concierge/handoff", { channel: d.channel }); await loadState(); }
-    catch (e) { setErr(errText(e)); } finally { setBusy(false); }
-  };
-  const takeBack = async () => {
-    setBusy(true); setErr("");
-    try { await api.post("/api/concierge/handoff/end"); await loadState(); }
     catch (e) { setErr(errText(e)); } finally { setBusy(false); }
   };
   // a row pulled off the rail - the pipe's or the Timeline's - goes on the table exactly as the pipe's
@@ -2779,22 +2768,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // a pull, still lands the bare card - opening must never do nothing.
   // ...and A TASK ASKED FOR WHILE A TURN IS IN FLIGHT waits for that turn, then goes the rail's road (the dead-end walk's RING, 2026-10-20):
   // the Assistant's own answer linking it is followed before its turn has closed, and a Board press during a slow Next is too - each landed
-  // the bare card, so the rail ringed nothing and only the address told the server. Only a walk handed to a phone keeps the bare card.
+  // the bare card, so the rail ringed nothing and only the address told the server. A walk handed to a phone waits the same way (no lock, 2026-10-23).
   const openLater = useRef(null);
   const openTaskCard = (req) => {
     setExpanded(false); setFoldedKey(null);
     if (setupOn.current) setOverSetup(true);
-    if (!(busy || resetting || handoff || turnFlight.current)) {
+    if (!(busy || resetting || turnFlight.current)) {
       openExtra.current = req.start || req.act ? { tid: req.tid, autostart: req.start || null, act: req.act || null } : null;
       pull(`task:${req.tid}`); return;
     }
-    if (!handoff) { openLater.current = req; return; }
-    setRailOpen(false); if (old) setOld(null); browseDown();
-    const ref = `TQ-${String(req.tid).padStart(4, "0")}`;
-    // the task from the Board is what is on the table now: the rail kept marking the item before it "on the table"
-    const card = { kind: "task", key: `task:${req.tid}`, tid: req.tid, title: ref, ref, autostart: req.start || null, act: req.act || null };
-    setMsgs((m) => [...m, { id: `t${Date.now()}`, role: "assistant", text: "", card }]);
-    putOnTable(card, "card");
+    openLater.current = req;
   };
   browseRef.current = browse; openTaskRef.current = openTaskCard; browseDownRef.current = browseDown;
   useEffect(() => {
@@ -2804,10 +2787,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   }, [busy, resetting]);
   // a pull lands through surface() -> landed() -> putOnTable. ONE ASKED FOR WHILE A TURN IS IN FLIGHT WAITS for it, as Open from chat
   // does (above): a rail click mid-pull was refused as busy and did nothing at all - the owner clicked a third task while the second was
-  // still coming up, and stayed on the second. The latest ask wins; one queued before it is dropped. A walk handed to a phone still refuses.
+  // still coming up, and stayed on the second. The latest ask wins; one queued before it is dropped. A walk handed to a phone refuses nothing.
   const pullRef = useRef(null);
   const pull = (key, asUser) => {
-    if (!handoff && !resetting && (busy || turnFlight.current)) { openLater.current = { kind: "pull", key, asUser }; return; }
+    if (!resetting && (busy || turnFlight.current)) { openLater.current = { kind: "pull", key, asUser }; return; }
     navHow.current = "push";
     if (setupOn.current) setOverSetup(true);                // during setup it opens over setup, which waits where it was (W2)
     setRailOpen(false); if (old) setOld(null); browseDown(); surface(key, asUser || null);
@@ -2855,7 +2838,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       </DayHold>
       <div className="tq-modes">
         {/* pressable while the day counts or the walk is busy: the press is held (walkQueued) and runs once it can */}
-        <button type="button" className="tq-chip primary" disabled={walkQueued || starting || resetting || !!handoff || (!counting && !canAdvance && !onYou)}
+        <button type="button" className="tq-chip primary" disabled={walkQueued || starting || resetting || (!counting && !canAdvance && !onYou)}
           // ...kept on the press itself while loading: the day fills in above this row as it lands and moves it, and a click
           // whose release lands after the move never reaches the button
           onPointerDown={counting ? () => setWalkQueued(true) : undefined}
@@ -2870,7 +2853,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             names an Assistant chat, because this talks to the assistant, it does not set one up */}
         {(state?.doorways || []).map((d) => (
           <button key={d.channel} type="button" className="tq-chip tq-chip-chat" disabled={busy || resetting || !canAdvance}
-            onClick={() => handOver(d)} title={`I say hello in ${d.name} and take you through the same items there; this tab locks until you press ${btn("walk_here")}`}>
+            onClick={() => handOver(d)} title={`I say hello in ${d.name} and take you through the same items there; this tab keeps working beside it`}>
             <ChannelIcon channel={d.channel} sx={{ fontSize: 14 }} />
             Walk me through them in {d.label}
           </button>
@@ -2905,8 +2888,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // ...and pressed: the line that wrote it says what it started, as the server now has it (a reload reads the same words)
     said: (id, text) => { if (id && text) setMsgs((m) => m.map((x) => (x.id === id ? { ...x, text } : x))); },
     openCard,
-    walk: walkTo, walkSaved, walkRestart, chip: runChip, busy: busy || resetting || !!handoff,
-    handedTo: handoff ? ((state?.doorways || []).find((d) => d.channel === handoff.channel)?.label || handoff.channel) : "",
+    walk: walkTo, walkSaved, walkRestart, chip: runChip, busy: busy || resetting,
     confirm: confirmProposal, cancel: cancelProposal, propose: proposeDirect, preview: previewProposal, agent: startOnItem,
     surface: (key, note) => {
       if (note) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: note }]);
@@ -3043,7 +3025,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     putDown: (key, tid = null) => { setExpanded(false); setFoldedKey(key); setNextComing(true); setLeavingTid(tid); drawNextEarlyRef.current?.(key); },
     pickUp: (key, why) => { takeEarlyBackRef.current?.(); setFoldedKey((k) => (k === key ? null : k)); setNextComing(false); setLeavingTid(null); if (why) setErr(why); } }),
     [bodyH, expanded, foldedKey, browsing, phone, litNow?.verb, litNow?.line]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const handedTo = handoff ? (state?.doorways || []).find((d) => d.channel === handoff.channel) : null;
   const lastCardIdx = useMemo(() => tableCardIndex(shown, old ? null : current || cardKey), [shown, old, current, cardKey]);
   const lastSaidIdx = useMemo(() => lastActIndex(shown), [shown]);
   // a reloaded answer is text only: the item still on the table lends it its verbs, so Next is never gone
@@ -3217,17 +3198,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       {/* NO BOTTOM STRIP. The pinned reminder line restated what the rail and the card already show (the owner,
           2026-09-23: "remove the label that is constantly reminding you of tasks ... it's now in the
           screen"). A new message on the card you are reading refreshes that card; its draft says it is stale. */}
-      {/* the walk is on the phone: this tab does not get to answer the same item (the owner, 2026-09-07:
-          "make the desktop unavailable if sent to whatsapp otherwise it's confusing") */}
-      {!old && handoff && (
-        <div className="tq-handed" role="status">
-          <ChannelIcon channel={handoff.channel} sx={{ fontSize: 17 }} />
-          <div className="txt"><b>The walk is in {handedTo?.label || handoff.channel}</b>
-            <span>Answer me there and I keep going. This chat waits so the same thing is not answered twice.</span></div>
-          <button type="button" className="tq-chip primary" disabled={busy} onClick={takeBack} title={btnHint("walk_here")}>{btn("walk_here")}</button>
-        </div>
-      )}
-      {!old && !handoff && !walk && (
+      {/* NO LOCK WHILE THE WALK IS ON THE PHONE (the owner, 2026-10-23: "we used to have that if we were talking on the phone it would
+          lock the screen on desktop but we should probably get rid of that"): the box stays, and the table follows the phone's walk */}
+      {!old && !walk && (
         <div className="tq-compose" {...pics.drop}>
           <RetryVerbs item={currentItem} failed={(pile?.items || []).filter((i) => i.lane === "unjudged").length}
             onSaid={(text, status) => setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: status || "done", text }])}

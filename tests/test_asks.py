@@ -14,7 +14,11 @@ from taskuary.store import MemoryStore
 
 @pytest.fixture
 def s():
-    v = MemoryStore(); yield v; v.close()
+    # the owner is talking in both phone chats these tests use: a line may reach them (remote_assistant.in_session) - the
+    # tests at the foot hang up and see it held
+    v = MemoryStore()
+    for chat in ('c1@example.com', 'c2@example.com'): remote_assistant.owner_spoke(v, 'whatsapp', chat)
+    yield v; v.close()
 
 
 def made(s, text='Check the four tabs', **k):

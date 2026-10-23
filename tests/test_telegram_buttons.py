@@ -80,6 +80,7 @@ class TelegramButtonsTests(unittest.TestCase):
         batch = {'key': 'fyis:msg:1,msg:2', 'kind': 'fyis', 'lane': 'fyi', 'items': items}
         with mock.patch.object(m, 'wa_send', side_effect=lambda st, chat, body, connector_id=None, poll=None: got.append(body)), \
              mock.patch('taskuary.funnel.pile', return_value={'items': []}):
+            ra.owner_spoke(self.s, 'whatsapp', '15550001234@s.whatsapp.net')
             ra.send(self.s, 'whatsapp', '15550001234@s.whatsapp.net', ra.turn_text({'say': 'x', 'item': batch}, store=self.s), None)
         self.assertTrue(got[0].startswith('Taskuary:\n')); self.assertIn('Back Tuesday', got[0])
 

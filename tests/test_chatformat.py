@@ -201,6 +201,7 @@ class PhoneDoorTests(unittest.TestCase):
     def sent(self, channel, text):
         from unittest import mock
         name = 'tg_send' if channel == 'telegram' else 'wa_send'
+        self.ra.owner_spoke(self.s, channel, 'chat-1')            # the door speaks only into a conversation the owner started
         with mock.patch.object(self.messengers, name) as out:
             self.ra.send(self.s, channel, 'chat-1', text)
         return [c.args[2] for c in out.call_args_list]

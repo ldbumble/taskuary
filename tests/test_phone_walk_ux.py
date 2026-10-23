@@ -438,6 +438,7 @@ class LongMailTests(unittest.TestCase):
         from taskuary import chatformat
         got = []
         with mock.patch.object(messengers, 'tg_send', side_effect=lambda st, chat, body, connector_id=None, buttons=None: got.append(body)):
+            remote_assistant.owner_spoke(self.s, 'telegram', '900100')       # More was tapped: the owner is talking there
             remote_assistant.send(self.s, 'telegram', '900100', remote_assistant.more_text(self.s, self.item), None)
         self.assertGreater(len(got), 2)
         self.assertTrue(all(len(b) <= 1300 for b in got), [len(b) for b in got])
@@ -468,7 +469,7 @@ class TypedActsMoveOnTests(unittest.TestCase):
              mock.patch.object(concierge, 'surface', return_value=nxt) as surfaced, \
              mock.patch.object(messengers, 'wa_send', side_effect=lambda st, chat, body, connector_id=None, poll=None: got.append((body, poll))):
             text = remote_assistant.carry_out(s, {'say': 'Remind you about TQ-0005 tomorrow?', 'proposal': prop, 'decision': None}, table, picked=True)
-            remote_assistant.send(s, 'whatsapp', JID, text, None)
+            remote_assistant.owner_spoke(s, 'whatsapp', JID); remote_assistant.send(s, 'whatsapp', JID, text, None)
         surfaced.assert_called_once()
         self.assertIn('TQ-0005 is away until Thu 22 Oct.', got[0][0])
         self.assertIn('Mark done', got[-1][1])
@@ -606,6 +607,7 @@ class WalkOffTheOpenerTests(unittest.TestCase):
         from datetime import datetime
         from taskuary import concierge
         s = MemoryStore(); s.set_setting('phone_morning_line', '1', 't')
+        remote_assistant.owner_spoke(s, 'whatsapp', JID)       # the opener goes only into a conversation the owner started there
         sent = []
         doors = [{'channel': 'whatsapp', 'chat': JID, 'connectorId': 7, 'label': 'WhatsApp', 'name': 'WhatsApp'}]
         card = {'say': 'Gail Moreno asked about Thursday.', 'item': None, 'chips': [{'verb': 'next', 'label': 'Next'}]}

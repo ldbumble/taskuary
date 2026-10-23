@@ -115,7 +115,7 @@ class TelegramTypesTheNumberTests(unittest.TestCase):
             text = ra._ran(s, p, concierge.run_proposal(s, operations.get(s, p['id'])), item, 'owner')
         sent = []
         with mock.patch.object(messengers, 'tg_send', side_effect=lambda st, chat, body, connector_id=None, buttons=None: sent.append(buttons)):
-            ra.send(s, 'telegram', '4242', text)
+            ra.owner_spoke(s, 'telegram', '4242'); ra.send(s, 'telegram', '4242', text)
         self.assertEqual(sent[-1][0], 'Try again')                       # the bot's own buttons; the number still answers
         self.assertEqual(ra.resolve_index(s, 'telegram', '4242', '1'), ('Try again', True))
         act = ra.acts_for(s, 'telegram', '4242')['Try again']

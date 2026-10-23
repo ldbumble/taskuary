@@ -6,12 +6,15 @@ through the same concierge: the pipe it takes items from, the verbs it decides w
 waits on are the desk's. What the desktop draws as a card with action words under it, the phone carries
 as words in the message - the choices are appended here, from the item, never invented by the model.
 
-A HANDOFF is the explicit version, and the reason the button exists: the tab hands its walk to the chat
-and LOCKS itself, because two screens answering the same item is how the same mail gets replied to twice.
+A HANDOFF is the explicit version: the tab hands its walk to the chat, and both keep working - the desktop
+follows what the phone puts on the table, nothing is locked (the owner, 2026-10-23: "we used to have that if we
+were talking on the phone it would lock the screen on desktop but we should probably get rid of that"). A send
+answered twice is still refused where it is sent (a review that is no longer pending, a draft changed since shown).
 Walk it here on the desktop and the chat is told the walk is over.
 
 Only messages the owner themself sent in that named, private chat are accepted. Other people, other
-chats and groups continue through the normal funnel.
+chats and groups continue through the normal funnel. And the chat is SPOKEN TO only while the owner is talking
+in it (in_session): nothing reaches the owner's phone that the owner did not start there.
 """
 import collections, json, re, threading, time
 
@@ -231,7 +234,8 @@ def hello_chat(store, channel: str, chat: str) -> bool:
         text = turn_text({'say': f'{PICKED} Tap below to walk through what is waiting, or type what you want.', 'item': None}, store=store,
                          extra=[(WALK, {'t': 'walk', 'opened': True}), (MENU, {'t': 'menu'})])
     else: text = f'{PICKED} To walk here, press "Walk me through them in {LABELS.get(channel, channel)}" on the desktop.'
-    send(store, channel, str(chat), text, c['ConnectorId'])
+    # the owner's own press, this moment, naming this chat: the one line the phone may hear without being spoken to first
+    send(store, channel, str(chat), text, c['ConnectorId'], asked=True)
     return True
 
 
@@ -315,7 +319,8 @@ def polls(store, connector) -> bool:
 
 
 def start_handoff(store, channel: str, actor: str = 'owner') -> dict:
-    """Send the walk to the phone: the opening turn goes to the chat, and the desktop locks behind it."""
+    """Send the walk to the phone: the opening turn goes to the chat. The owner pressed for exactly that, so the press opens the
+    conversation there (owner_spoke) - and the desktop keeps working, following the walk (no lock, 2026-10-23)."""
     from . import concierge, general
     if channel not in CHANNELS: raise ValueError(f'{channel} is not a chat the assistant can be handed to')
     c = doorway(store, channel)
@@ -324,7 +329,8 @@ def start_handoff(store, channel: str, actor: str = 'owner') -> dict:
     live = {'channel': channel, 'chat': chat, 'connector_id': cid, 'at': _now()}
     task, _ = general.dock_task(store, actor)
     # the hello goes first: a bridge that is not running or a bot that will not send must never leave
-    # the tab locked behind a walk that never arrived anywhere
+    # a hand-off recorded for a walk that never arrived anywhere
+    owner_spoke(store, channel, chat)
     with concierge.delivering(concierge.PHONE):
         out = concierge.resume(store, actor)                  # the item on the table first, when there still is one
         # the hello, then the card in a bubble of its own - its choices ride the card, not the greeting (F21)
@@ -341,7 +347,7 @@ def start_handoff(store, channel: str, actor: str = 'owner') -> dict:
 
 
 def end_handoff(store, actor: str = 'owner', note: str = CLOSED) -> dict:
-    """Take it back: the chat is told the walk is over there, and the desktop is its own again."""
+    """Take it back: the chat is told the walk is over there - if the owner is still talking in it - and it goes quiet."""
     from . import concierge, general
     h = handoff(store)
     store.set_setting(HANDOFF_KEY, '', actor)
@@ -354,6 +360,7 @@ def end_handoff(store, actor: str = 'owner', note: str = CLOSED) -> dict:
                      f"Back at the desk - {LABELS[h['channel']]} has been told we are done there.")
     try: send(store, h['channel'], h['chat'], farewell(store, h['channel'], note), h.get('connector_id'))
     except Exception as e: logger.warning(f"could not close the {h['channel']} walk: {e}")
+    hung_up(store, h['channel'], h['chat'])
     return {'ended': True, **h}
 
 
@@ -371,6 +378,53 @@ def _sid(store) -> int: return id(getattr(store, '_store', store))      # a poll
 
 
 def talked(store, channel: str, chat: str): _talked[(_sid(store), channel, str(chat))] = time.monotonic()
+
+
+# ── THE PHONE SPEAKS ONLY WHEN SPOKEN TO ──────────────────────────────────────────────────────────────────────────────
+# The owner, 2026-10-23: "why is whatsapp still sending me messages. i never asked it anything today? ... it should not talk
+# to phone unless it was triggered from there". A task asked from the phone two days before kept saying every lane its agent
+# passed through ("TQ-… - coding asked you: …"), eight times in an afternoon spent at the desktop. So the owner's own chat
+# hears from Taskuary only inside a conversation the owner started THERE: their last word in that chat within
+# SESSION_MINS, until they say stop. Outside one nothing goes - no follow-up, no by-the-way, no ask, no reminder, no opener.
+# send() is the one road to that chat, so the rule is kept there; the producers look first (held_back) so a held line
+# stays owed or is left to the desktop rather than counted as said. Replies to OTHER people never come this way (outbound).
+SESSION_KEY, SESSION_MINS = 'phone_session', 30           # {"<channel>:<chat>": epoch of the owner's last word there}
+
+
+def _sessions(store) -> dict:
+    try: d = json.loads(store.get_setting(SESSION_KEY) or '{}') or {}
+    except ValueError: d = {}
+    return d if isinstance(d, dict) else {}
+
+
+def owner_spoke(store, channel: str, chat: str):
+    """The owner just wrote in this chat (or pressed, on the desktop, to walk there): a conversation is live."""
+    store.set_setting(SESSION_KEY, json.dumps({**_sessions(store), f'{channel}:{str(chat).strip()}': time.time()}), 'assistant')
+
+
+def hung_up(store, channel: str, chat: str):
+    """The owner ended it ("stop", Walk it here): the chat goes quiet now, not when the window runs out."""
+    d = _sessions(store); d.pop(f'{channel}:{str(chat).strip()}', None)
+    store.set_setting(SESSION_KEY, json.dumps(d), 'assistant')
+
+
+def session_minutes(store) -> float:
+    try: return max(1.0, float(store.get_setting('phone_session_minutes') or SESSION_MINS))
+    except (TypeError, ValueError): return float(SESSION_MINS)
+
+
+def in_session(store, channel: str, chat: str) -> bool:
+    """True while the owner is talking to Taskuary in this chat - the only time anything may be sent there."""
+    try: at = float(_sessions(store).get(f'{channel}:{str(chat).strip()}') or 0)
+    except (TypeError, ValueError): at = 0.0
+    return time.time() - at < session_minutes(store) * 60
+
+
+def held_back(store, channel: str, chat: str, what: str) -> bool:
+    """True, with a debug line, when `what` must not go to this chat now: no conversation the owner started there is live."""
+    if in_session(store, channel, chat): return False
+    logger.debug(f'{channel}: held back {what} - the owner is not talking to Taskuary there')
+    return True
 
 
 def quiet(store, channel: str, chat: str) -> bool:
@@ -396,7 +450,7 @@ def push_alerts(store, force: bool = False) -> int:
     try: keep_promises(store, force=force)
     except Exception as e: logger.warning(f'could not follow up in the chat: {e}')
     h = handoff(store)
-    if not h: return 0
+    if not h or held_back(store, h['channel'], h['chat'], 'a by-the-way'): return 0     # a hand-off the owner walked away from is no session
     if not force and not quiet(store, h['channel'], h['chat']): return 0          # mid-conversation: the next look tries again
     from . import concierge, funnel, general
     try: p = funnel.pile(store)
@@ -444,7 +498,7 @@ def push_alerts(store, force: bool = False) -> int:
 PROMISES_KEY = 'phone_promises'
 WORKING = ('working', 'queued')
 PROMISE_HOURS = 12
-PROMISE_LINE = 'I will tell you here when it finishes or needs you.'
+PROMISE_LINE = 'I will tell you here if it finishes or needs you while we are talking - after that it waits on the desktop.'
 
 
 def _promises(store) -> list:
@@ -518,6 +572,8 @@ def keep_promises(store, force: bool = False) -> int:
     for p in ps:
         tid, chat = int(p['tid']), p['chat']
         if time.time() - float(p.get('at') or 0) > PROMISE_HOURS * 3600: continue        # stale: the walk has long moved on
+        # ...and the conversation that made it is over: the desktop's rail has the task, the phone hears nothing unasked (2026-10-23)
+        if held_back(store, p['channel'], chat, f'the follow-up on TQ-{tid:04d}'): continue
         it, t = _task_item(store, tid, items), store.get_task(tid) or {}
         lane = (it or {}).get('lane') or ''
         if lane in WORKING: keep.append({**p, 'armed': True}); continue
@@ -555,7 +611,8 @@ def promises_closing(store, secs: float = CLOSING_SECS) -> int:
     it finishes" was the last thing the chat heard - the close stopped the agent, nothing was sent, and the promise lapsed
     twelve hours later in silence (B3, 2026-10-11). Run after the sessions are closed, so the task says what the close did."""
     from .terminal import INTERRUPTED
-    ps = [p for p in _promises(store) if time.time() - float(p.get('at') or 0) <= PROMISE_HOURS * 3600]
+    ps = [p for p in _promises(store) if time.time() - float(p.get('at') or 0) <= PROMISE_HOURS * 3600
+          and not held_back(store, p['channel'], p['chat'], 'the closing line')]
     end, told = time.time() + secs, 0
     for p in ps:
         if time.time() > end: logger.warning(f'closing: {len(ps) - told} phone promise(s) left unsaid - out of time'); break
@@ -839,7 +896,9 @@ def morning_line(store, now=None, force: bool = False) -> int:
     if str(st.get(MORNING_KEY, '0')).strip() not in ('1', 'true', 'on'): return 0
     today = now.strftime('%Y-%m-%d')
     if not force and (str(st.get(MORNING_AT) or '') == today or now.hour < 6): return 0
-    doors = doorways(store)
+    # ...and even turned on, only into a conversation the owner started there (2026-10-23: "it should not talk to phone unless it
+    # was triggered from there") - which a word in the chat already spends (respond), so the opener rides the walk, never alone
+    doors = [d for d in doorways(store) if not held_back(store, d['channel'], d['chat'], 'the morning line')]
     if not doors: return 0
     try: p = funnel.pile(store)
     except Exception as e:
@@ -894,6 +953,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
     from . import concierge, general
     # `heard`: the words are a voice note's, as transcribed - the answer says them back first (A17)
     _ASKING.chat = {'channel': channel, 'chat': chat, 'connector_id': connector_id, **({'heard': question} if heard else {})}
+    owner_spoke(store, channel, chat)                 # the owner wrote here: the chat may answer, for the session's window
     # the first word after a hand-back picks the walk up here again, and says so once (A5)
     hb = handed_back(store, channel, chat)
     if hb and not hb.get('told') and not handoff(store):
@@ -943,6 +1003,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
                     end_handoff(store, 'owner', HANDED_BACK)            # the walk was handed here: it goes back, and this chat is told
                     return
                 send(store, channel, chat, (help_text if builtin == 'help' else stop_walk)(store, tid), connector_id)
+                if builtin == 'stop': hung_up(store, channel, chat)          # stopped: nothing more reaches this chat until they write again
                 return
             redo = str(store.get_setting(f'{REDRAFT_KEY}:{channel}:{chat}') or '')
             if redo and not picked:
@@ -1348,6 +1409,7 @@ def stale_tap(store, channel: str, chat: str, connector_id=None, spent: bool = F
     # with it, on both channels: an answer with nothing to tap under it is a dead end (F19)
     try: live = json.loads(store.get_setting(f'{OFFERED_KEY}:{channel}:{chat}') or '[]') or []
     except ValueError: live = []
+    owner_spoke(store, channel, chat)                 # a tap is the owner talking here
     try: send(store, channel, chat, said, connector_id, choices=live or None)
     except Exception as e: logger.warning(f'{channel}: could not answer a tap on an older list - {e}')
 
@@ -3059,8 +3121,10 @@ def _deliver(channel: str, out, store, chat: str, body: str, connector_id=None, 
             logger.warning(f'{channel}: a message did not go ({plain(e)}) - trying again in {pauses[i]:.0f}s'); _pause(pauses[i])
 
 
-def send(store, channel: str, chat: str, text: str, connector_id: int = None, page: int = 0, choices: list = None):
-    """Everything we say to the owner leaves through here, so this is where it is SPELLED.
+def send(store, channel: str, chat: str, text: str, connector_id: int = None, page: int = 0, choices: list = None, asked: bool = False):
+    """Everything we say to the owner leaves through here, so this is where it is SPELLED - and where it is HELD: outside a
+    conversation the owner started in this chat (in_session) nothing goes. `asked`: the owner's own press this moment named this
+    chat (hello_chat) - the one exception.
 
     WhatsApp formats client-side, so its own emphasis reaches it; Telegram renders nothing
     without a parse mode and neither sender sets one, so it gets the words bare. A producer
@@ -3069,6 +3133,7 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None, pa
     Only the opening bubble wears the name. Four of them labelled "Taskuary (2/4):" over a
     heading that already says what it is read as machinery rather than somebody talking."""
     from . import chatformat, messengers
+    if not asked and held_back(store, channel, chat, f'{len(str(text or ""))} chars'): return
     out = messengers.tg_send if channel == 'telegram' else messengers.wa_send
     talked(store, channel, chat)
     # A VOICE NOTE IS SAID BACK before it is acted on (A17, 2026-10-22): the owner could not tell what was transcribed - once, on the turn's

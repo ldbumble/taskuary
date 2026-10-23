@@ -34,7 +34,7 @@ test("the first read, landed or failed, ends the loading - a coverage retry does
 });
 
 test("Walk is pressable while loading, and the press is kept until the rows are in", () => {
-  assert.match(view, /disabled=\{walkQueued \|\| starting \|\| resetting \|\| !!handoff \|\| \(!counting && !canAdvance && !onYou\)\}/);   // walkGuard.test
+  assert.match(view, /disabled=\{walkQueued \|\| starting \|\| resetting \|\| \(!counting && !canAdvance && !onYou\)\}/);   // walkGuard.test
   assert.match(view, /onPointerDown=\{counting \? \(\) => setWalkQueued\(true\) : undefined\}/);
   assert.match(view, /onClick=\{\(\) => \(counting \|\| walkOff \? setWalkQueued\(true\) : start\(null\)\)\}/);
   assert.match(view, /\{starting \|\| walkQueued \? "Getting your first one\.\.\." : btn\("walk"\)\}/);

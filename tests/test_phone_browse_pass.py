@@ -147,7 +147,7 @@ class NoJsonOnThePhoneTests(unittest.TestCase):
                 '[{"site": "Riverside", "headcount": 98}, {"site": "Hillcrest", "headcount": 87}]')
         from taskuary import messengers
         with mock.patch.object(messengers, 'wa_send', side_effect=lambda st, chat, body, connector_id=None, poll=None: got.append(body)):
-            ra.send(s, 'whatsapp', '1555@s.whatsapp.net', text, None)
+            ra.owner_spoke(s, 'whatsapp', '1555@s.whatsapp.net'); ra.send(s, 'whatsapp', '1555@s.whatsapp.net', text, None)
         out = '\n'.join(got)
         self.assertNotIn('{"', out)
         self.assertIn('Lakeview · 112', out); self.assertIn('Hillcrest · 87', out)

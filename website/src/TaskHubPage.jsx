@@ -83,6 +83,9 @@ function Bell({ onGo }) {
     try { const { data } = await api.get("/api/problems"); setItems(data.data || []); setNews(data.news || []); } catch { /* the bell is optional */ }
   }, []);
   useEffect(() => pollWhileVisible(load, 30000), [load]);
+  // a connection that failed on a sync is said HERE, not on the rail's clock line (the owner, 2026-10-23), so the bell reads
+  // again when a sync's status lands rather than up to 30 s later - and drops the entry as soon as the connection works
+  useEffect(() => onLive("ingest-status", load, { wait: 1000, max: 5000 }), [load]);
   const n = items.length;
   const put = async (p) => {
     setBusy(p.key);

@@ -165,8 +165,13 @@ def _send_snapshot(store, snapshot):
     if env.get('kind') == 'calendar':                 # an invite answered or a meeting booked: the note is the comment
         from . import calwrite
         return calwrite.deliver(store, env, body)
+    # a shared result (sharing.email) goes as HTML too - rendered from the text as approved, so the owner's edits are in both parts
+    html = None
+    if env.get('format') == 'html' and str(env.get('channel') or 'email').lower() == 'email':
+        from .sharing import email_html
+        html = email_html(env.get('subject') or '', body)
     return outbound.send_out(store, env.get('channel'), env.get('to'), env.get('subject'), body, cc=env.get('cc'),
-                             attachments=env.get('attachments'), mailbox=env.get('mailbox'))
+                             attachments=env.get('attachments'), mailbox=env.get('mailbox'), **({'html': html} if html else {}))
 
 
 def _reconcile_snapshot(store, snapshot):

@@ -64,6 +64,7 @@ DENIED = (
     (r'POST', r'^/api/tasks/\d+/clarify$', 'opening a clarification is the first half of sending one'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/(connectors|sources)', 'credentials and where mail goes'),
     (r'GET', r'^/api/send-targets$', 'the address book of everywhere this install can send'),
+    (r'POST|DELETE', r'^/api/shares(/\d+)?$', 'sharing a result puts it in front of someone else - a draft, a link, an upload (sharing.py)'),
     # ...and anything that would let it widen its own reach
     (r'POST|PUT|PATCH', r'^/api/settings', 'the settings decide what agents may do'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/(policies|agents)', 'the rules and the agent profiles'),

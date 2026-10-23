@@ -21,7 +21,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
 import { nothingMatches } from "./searchHits.js";
-import { NL, SOURCE_KEYS, WORKFLOW_TYPES, addField, isWorkflowConfig, showValue, toShape, toSources } from "./sourceShape.js";
+import { NL, SOURCE_KEYS, WORKFLOW_TYPES, addField, firstConnected, isWorkflowConfig, showValue, toShape, toSources } from "./sourceShape.js";
 import { ASSISTANT, GRADIENT, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, PILL_COLORS, ALERT, ALERT_INK } from "./theme.jsx";
 import { TASKUARY_CARDS, cardLabel, cardsLine, cardsOf, costLine, promptSources, sourceKey, tokenOf } from "./assistantBlocks.js";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail } from "./ui.jsx";
@@ -1139,7 +1139,10 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   const cur = sources.find((s) => s.SourceId === sourceId);
   // a composed draft is a STARTING POINT, not a saved report: it lands in the same boxes the
   // owner would have filled in, and nothing exists until they preview it and press save
-  const saved = cur ? { ...BLANK, ...parse(cur.ConfigJson) } : { ...BLANK, ...(draft || {}) };
+  // ...and a new one with no type of its own starts on the first source that is connected, not on SQL Server regardless
+  const live = !cur && !draft?.type ? firstConnected(TYPE_GROUPS.flatMap(([, ts]) => ts).filter((t) => types.some((x) => x.type === t
+    && x.status === "builtin" && !WORKFLOW_TYPES.has(t))), connectors, CARD_OF) : null;
+  const saved = cur ? { ...BLANK, ...parse(cur.ConfigJson) } : { ...BLANK, ...(live ? { type: live } : {}), ...(draft || {}) };
   const [cfg, setCfg] = useState(saved);
   // WHEN IT RUNS, as the workflow editor holds it: the picker's shape, written back into the config as the one key the scheduler reads
   const [sched, setSchedState] = useState(() => scheduleOf(saved));
@@ -2041,10 +2044,11 @@ export function SourceCard({ src, index, count, typeOptions, connectors, draggin
               ))}
             </Select>
           )}
-          <Typography variant="caption" sx={{ fontWeight: 600, color: connOk ? "#47654a" : "#55697a" }}>
-            {connOk ? `✓ uses ${conn.Name} from Connections`
-              : `⚠ set up ${conn?.Name || CARD_LABELS[cardType] || cardType} in Connections first`}
-          </Typography>
+          {/* not connected: the way there, not a sentence about it - the reason is the hover ("buttons do the talking", 2026-10-22) */}
+          {connOk ? <Typography variant="caption" sx={{ fontWeight: 600, color: "#47654a" }}>✓ uses {conn.Name} from Connections</Typography>
+            : <Button size="small" variant="outlined" data-tq-open-card={cardType} onClick={() => openAppLink(`#connector=${cardType}`)}
+              title={`${conn?.Name || CARD_LABELS[cardType] || cardType} is not set up in Connections yet - this opens its card`}
+              sx={{ alignSelf: "flex-start", fontSize: 11.5 }}>{btnLabel("fix", "card")}</Button>}
         </>
       )}
       {onFill && !["assistant", "taskuary"].includes(src.type) && <SourceComposer one typeHint={src.type} hint="say what you want out of it"

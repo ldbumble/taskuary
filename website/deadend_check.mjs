@@ -799,8 +799,11 @@ async function cards() {
     const x2 = await page.$('[data-tq-task-page] [aria-label="Close task"]');
     if (x2) {
       await x2.click(); await wait(2500);
-      const cur = await page.$("[data-tq-rail] [data-tq-key].current");
-      if (cur) { await cur.click(); await wait(3000); walked.push("fold: reopened from its rail row"); if (!(await look(page)).card) note("FOLD", page.step, "its rail row, ringed as on the table, did not open it again"); }
+      // folded by its X it is put away: no row ringed "on the table", no #task in the address (UX walk, 2026-10-22) - its row opens it again
+      if (await page.$("[data-tq-rail] [data-tq-key].current")) note("FOLD", page.step, "folded by its X, its rail row is still marked on the table");
+      if (/#task=/.test(await page.evaluate(() => window.location.hash))) note("FOLD", page.step, "folded by its X, the address still names the task");
+      const row = await page.$(`[data-tq-rail] [data-tq-key="${t.key}"]`);
+      if (row) { await row.click(); await wait(3000); walked.push("fold: reopened from its rail row"); if (!(await look(page)).card) note("FOLD", page.step, "its rail row did not open the folded task again"); }
     }
   }
   // ONE COPY: two rail rows picked in turn, twice - every line in the chat once; picking between them added another "Show me" line per

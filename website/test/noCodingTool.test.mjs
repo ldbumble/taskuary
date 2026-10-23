@@ -12,11 +12,11 @@ test("a coding picker with no tool says Pick a coding tool first, with Connect o
   // ...on the server's own fact (agents.coding_ready, served by /api/agents) - the one terminal.start_on_task refuses on
   assert.match(ui, /if \(coding && brainsRead && !codingReady\) return <NoCodingTool \/>/);
   assert.match(ui, /setCodingReady\(data\.coding_ready/);
-  assert.match(ui, /export const NO_CODING_TOOL = "Pick a coding tool first"/);
+  assert.match(src("capabilities.js"), /export const NO_CODING_TOOL = "Pick a coding tool first"/);
   assert.match(ui, /Connect one<\/Button>/);
 });
 
 test("Send to coding agent stays off with no coding tool, on the New sheet and the task page", () => {
   assert.match(src("NewSheet.jsx"), /const canGo = hasAbout && !noCodingTool/);
-  assert.match(src("TaskPage.jsx"), /runPics\.busy \|\| !agentsRead \|\| !codingReady\}/);
+  assert.match(src("TaskPage.jsx"), /runPics\.busy \|\| !agentsRead \|\| !!runWhy\(true\)\}/);     // runWhy: capabilities.cannotStart
 });

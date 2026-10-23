@@ -18,10 +18,10 @@ export const prefetchTask = (api, tid) => {
   const e = held.get(id);
   readTerms(api);
   if (fresh(e)) return e.p;
-  const rec = { at: now(), data: null, p: null };
+  const rec = { at: now(), data: null, p: null }, asked = rec.at;
   // ...a GOAL's steps with it: they were read only after the view mounted, and "no steps yet" stood over a goal with five (G8)
   rec.p = api.get(`/api/tasks/${id}`).then(({ data }) => {
-    rec.data = data;
+    rec.data = data; noteRead(id, data, asked);
     if (data?.task?.DoneWhen) api.get(`/api/tasks/${id}/steps`).then(({ data: d }) => { rec.steps = d?.steps || []; }).catch(() => {});
     // ...and its waiting room, which the view reads straight after the task: drawn without it, the view filled in a beat later
     api.get(`/api/tasks/${id}/waitroom`).then(({ data: w }) => { rec.wait = w; }).catch(() => {});
@@ -50,12 +50,35 @@ export const keepTerms = (rows) => { if (Array.isArray(rows)) terms = { at: now(
 export const heldTask = (tid) => { const e = held.get(Number(tid)); return fresh(e) && e.data?.task?.TaskId === Number(tid) ? e.data : null; };
 export const heldSteps = (tid) => { const e = held.get(Number(tid)); return fresh(e) && Array.isArray(e.steps) ? e.steps : null; };
 export const heldWait = (tid) => { const e = held.get(Number(tid)); return fresh(e) && e.data && e.wait ? e.wait : null; };
-// ...a view's own read is the newest word on its task; an act on any task makes every held read old
-export const keepTask = (tid, data, wait = undefined) => { const id = Number(tid), e = held.get(id);
-  if (id && data?.task?.TaskId === id) held.set(id, { at: now(), data, p: Promise.resolve(data), steps: e?.steps, wait: wait === undefined ? e?.wait : wait }); };
+// ...a view's own read is the newest word on its task; an act on any task makes every held read old. `asked`: when that read was asked
+// (noteRead), never when it landed - a read that waited behind the rail's build reflects the moment it was sent
+export const keepTask = (tid, data, wait = undefined, asked = now()) => { const id = Number(tid), e = held.get(id);
+  if (id && data?.task?.TaskId === id) held.set(id, { at: now(), data, p: Promise.resolve(data), steps: e?.steps, wait: wait === undefined ? e?.wait : wait });
+  noteRead(id, data, asked); };
 // ...one task's write leaves every other task's session as it was: only that task's is unknown again
 export const forgetTasks = (tid = null) => {
-  if (tid == null) { terms = null; held.clear(); return; }
+  if (tid == null) { terms = null; held.clear(); reads.clear(); pileAt = 0; return; }
   held.delete(Number(tid));
   if (terms) terms.gone = new Set([...(terms.gone || []), Number(tid)]);
 };
+
+// WHICH READ IS NEWER, THE RAIL'S OR THE TASK'S (the owner, 2026-10-23: "this shows agent working but it's not working"). The rail is
+// one big read the server builds under a lock - 152 s on that morning - while the task's own read is small, so the page knew its agent
+// had finished (its Result) while the rail row and the header pill, which reads that row, still held the build from when it worked.
+// Each read is stamped with the moment it was ASKED: what it reflects is no older than that. A task read asked after the rail's last
+// one is the newer word on that task (railStatus.agentGone), for its header pill and its rail row alike. Never aged out - only compared.
+let pileAt = 0;
+const reads = new Map();                // tid -> { at, state, live }
+const watchers = new Set();
+export const notePile = (at) => { pileAt = Math.max(pileAt, Number(at) || 0); };
+export function noteRead(tid, data, at = now()) {
+  const id = Number(tid), was = reads.get(id);
+  if (!id || data?.task?.TaskId !== id || (was && was.at > at)) return;
+  const r = { at, state: data.state || null, live: !!data.session?.alive };
+  reads.set(id, r);
+  if (!was || was.state !== r.state || was.live !== r.live) watchers.forEach((f) => f(id));
+}
+// the task's own read when it was asked after the rail's last one - else null, and the rail's row stands
+export const pageRead = (tid) => { const r = reads.get(Number(tid)); return r && r.at > pileAt ? r : null; };
+// a view drawing rail rows draws again when a task's read says something new
+export const watchReads = (f) => { watchers.add(f); return () => { watchers.delete(f); }; };

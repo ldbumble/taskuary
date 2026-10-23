@@ -2,7 +2,7 @@
 // word for one task, read from lanes.json through the rail's own rowMeta - so they cannot disagree.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ANIM, BADGE, railStatus, stateStatus, statusLabel, taskStatus } from "../src/railStatus.js";
+import { ANIM, BADGE, agentGone, railStatus, rowWhy, stateStatus, statusLabel, taskStatus } from "../src/railStatus.js";
 import { LANE_META, rowMeta } from "../src/funnelPile.js";
 
 test("the header's status is exactly the rail row's mark and word, for every lane", () => {
@@ -77,4 +77,33 @@ test("a draft its channel cannot send wears no flag and no 'ready to send' - on 
   assert.equal(railStatus({ lane: "approve", kind: "action" }, true).key, "approve");
   assert.equal(taskStatus({ rail: { lane: "approve", kind: "action" }, cantSend: true }).key, "approve");
   assert.equal(railStatus({ ...teams, not_sent: true }, true).key, "not_sent");
+});
+
+// AN AGENT LANE IS A CLAIM ABOUT A LIVE SESSION (the owner, 2026-10-23: "this shows agent working but it's not working"): the agent had
+// finished, its pty was closed and its reply waited in Close out, while a rail built minutes earlier still said "agent working" - on the
+// row and on the header pill that reads it - beside the Result that said it had finished. A task read newer than the rail takes it back.
+test("a newer read of the task takes back the rail's agent lane - on the row, its line and the header pill alike", () => {
+  const row = { lane: "working", kind: "agent", tid: 7, why: "An agent is working on this; nothing needs your input yet" };
+  for (const [state, word] of [["approve", "ready to send"], ["agentdone", "agent finished"], ["stopped", "agent stopped"], ["saved", "stopped and saved"]]) {
+    const page = { live: false, state };
+    const st = railStatus(row, false, page), pill = taskStatus({ rail: row, state, page });
+    assert.equal(st.word, word, state); assert.equal(st.spins, false, `${state}: nothing spins`);
+    assert.deepEqual(pill, st, `${state}: the header pill says what the row says`);
+    assert.doesNotMatch(rowWhy(row, page), /is working on this/, `${state}: the row's line goes with its lane`);
+  }
+  // a reply its channel cannot send is a draft to copy here too
+  assert.equal(railStatus(row, true, { live: false, state: "approve" }).key, "unsendable");
+  // ...and an agent waving on a stale rail is taken back the same way
+  assert.equal(railStatus({ lane: "blocked", tid: 7 }, false, { live: false, state: "agentdone" }).word, "agent finished");
+  // the rail stands when no newer read speaks, when that read still has the agent live, or itself names an agent state
+  assert.equal(railStatus(row, false, null).spins, true);
+  assert.equal(railStatus(row, false, { live: true, state: "agentdone" }).spins, true);
+  assert.equal(railStatus(row, false, { live: false, state: "working" }).spins, true);
+  assert.equal(railStatus(row, false, { live: false, state: null }).spins, true);
+  assert.equal(rowWhy(row, null), row.why);
+  // ...and only an agent lane is ever taken back: a reply ready to send is the rail's own word whatever the read says
+  assert.equal(agentGone({ lane: "approve" }, { live: false, state: "agentdone" }), false);
+  assert.equal(railStatus({ lane: "approve", kind: "review" }, false, { live: false, state: "agentdone" }).word, "ready to send");
+  // a live session on the page still leads everything
+  assert.equal(taskStatus({ live: { alive: true, waiting: false }, rail: row, page: { live: false, state: "approve" } }).key, "working");
 });

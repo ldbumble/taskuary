@@ -206,9 +206,10 @@ const TYPE_OF = {
 export const typeOf = (v) => TYPE_OF[String(v?.id || "").split(":").pop()] || "act";
 // ON A PHONE (narrower than 600px, the owner, 2026-10-22): Next and the ONE move - the lit one, else the row's lead (its first decision,
 // else its first session verb) - and every other button of every type behind one ▾. Four typed bands wrapped to four lines over the box.
+// An empty slot is neither the move nor a menu item: it only holds the Send's width on a wide row.
 export function phoneRow(row) {
-  const all = [...row.decide, ...row.agent, ...row.more];
-  const lead = all.find((v) => v.tone === "p") || row.decide[0] || row.agent[0] || null;
+  const all = [...row.decide, ...row.agent, ...row.more].filter((v) => !v.slot);
+  const lead = all.find((v) => v.tone === "p") || row.decide.find((v) => !v.slot) || row.agent[0] || null;
   return { type: "phone", label: "", shown: lead ? [lead] : [], rest: all.filter((v) => v !== lead) };
 }
 export function clustersOf(row, keep = 2) {
@@ -220,5 +221,40 @@ export function clustersOf(row, keep = 2) {
     const shown = lead >= keep ? [...vs.slice(0, keep - 1), vs[lead]] : vs.slice(0, keep);
     return { type, label: (TYPES.find(([t]) => t === type) || [])[1] || "", shown, rest: vs.filter((v) => !shown.includes(v) && !v.slot) };
   }).filter(Boolean);
+}
+
+// THE ROW IS ONE LINE, AT EVERY WIDTH (the owner, 2026-10-23: "the buttons turned into 2 rows ... NEVER do that"): an agent stopped
+// while its WhatsApp reply drafted put five typed groups on a desktop row, and the row wrapped. Nothing wraps now - groups FOLD into
+// one ▾ at the row's end until the line fits: the lowest group first (Task, then Close, Agent, Reply, the card's own), the group
+// holding the lit move last; with every group folded the row is the phone's - Next, the one move, one ▾. Next never folds.
+// foldsOf: every layout from the widest (the typed groups) to the narrowest (phoneRow), each a list of groups for Cluster.
+export function foldsOf(row) {
+  const cs = clustersOf(row), ph = phoneRow(row), lead = ph.shown[0], holds = (g) => !!lead && g.shown.includes(lead);
+  const order = [...cs.filter((g) => !holds(g)).reverse(), ...cs.filter(holds)], out = [cs];
+  for (let k = 1; k < order.length; k++) {
+    const gone = new Set(order.slice(0, k)), folded = cs.filter((g) => gone.has(g)).flatMap((g) => [...g.shown, ...g.rest]).filter((v) => !v.slot);
+    out.push([...cs.filter((g) => !gone.has(g)), { type: "more", label: "", shown: [], rest: folded }]);
+  }
+  out.push([ph].filter((g) => g.shown.length || g.rest.length));
+  return out;
+}
+// a layout's width in px from measured parts (ActionRow reads them off a hidden copy of the row): `btn` by verb id, `label` by type,
+// the ▾, Next, a group's side padding, the gap after its label, between its buttons, and between groups
+export function rowWidth(groups, next, m) {
+  const w = (v) => m.btn[v.id] ?? 0;
+  const cl = (g) => {
+    const n = g.shown.length + (g.rest.length ? 1 : 0);
+    return m.pad + (g.label ? (m.label[g.type] ?? 0) + m.clGap : 0) + g.shown.reduce((a, v) => a + w(v), 0) + (g.rest.length ? m.more : 0) + m.bGap * Math.max(0, n - 1);
+  };
+  const parts = [...(next ? [m.pad + m.next] : []), ...groups.map(cl)];
+  return parts.reduce((a, x) => a + x, 0) + m.rowGap * Math.max(0, parts.length - 1);
+}
+// the widest layout that fits `avail` (a phone starts at the phone's, 2026-10-22); `extra` steps further when the drawn row still
+// overflows what was measured; nothing measured yet (a test render, no layout) is the widest
+export function fitRow(row, m, avail, phone = false, extra = 0) {
+  const all = foldsOf(row), last = all.length - 1, at = (i) => ({ groups: all[Math.min(last, i)], level: Math.min(last, i), last });
+  if (!m || !(avail > 0)) return at((phone ? last : 0) + extra);
+  for (let i = phone ? last : 0; i <= last; i++) if (rowWidth(all[i], row.next, m) <= avail) return at(i + extra);
+  return { ...at(last), tight: true };
 }
 

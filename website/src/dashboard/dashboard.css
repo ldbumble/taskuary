@@ -138,8 +138,12 @@
 
 /* on the canvas the dashboard takes the chat body's height (a size container, assistantView.css) less its card's own heading and
    buttons, and scrolls inside itself - the card never runs off under the dock */
-.tq-dash-canvas { margin-top: 8px; height: max(420px, calc(100cqh - 170px)); overflow: auto; padding: 10px; border-radius: 10px;
-  background: #f3f0eb; }
+.tq-dash-canvas { margin-top: 8px; overflow: auto; padding: 10px; border-radius: 10px; background: #f3f0eb;
+  flex: 1 1 auto; min-height: 280px; }
+/* ...and the CARD is the pane: the chat body's whole height, as a task view with a live agent takes it (CanvasItem.CANVAS_ITEM_HEIGHT,
+   the same 100cqh against the same size container), its heading and buttons at the ends and the dashboard taking what is between */
+.tq-card:has(> .tq-dash-canvas) { display: flex; flex-direction: column; box-sizing: border-box;
+  height: max(460px, calc(100cqh + 14px - var(--tq-dash-gap, 2px))); margin-top: 0; margin-bottom: 0; }
 :root[data-theme="dark"] .tq-dash-canvas { background: #121110; }
 
 @media (prefers-reduced-motion: reduce) { .tq-dash-card { transition: none; } }

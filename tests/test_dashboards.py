@@ -118,6 +118,25 @@ def test_a_run_asks_no_ai_keeps_the_rows_and_files_one_row_that_opens_the_dashbo
     assert not any(i.get('dashboard') for i in items if i is not item)
 
 
+def test_next_walks_past_a_dashboard_as_it_walks_past_a_report_and_the_next_refresh_brings_it_back():
+    """The owner, 2026-10-23: "it shows up on report rail and when you hit next it goes away like report"."""
+    from taskuary import concierge
+    s = _store(); src = _save(s)
+    report = _save(s, {'type': '_none', 'title': 'Plain report'})
+    mid = reports.run_one(s, src, None, 'manual')['message_id']
+    rmid = s.add_message({'Channel': 'report', 'SourceName': 'Plain report', 'Subject': 'Plain report - 2 rows', 'FromName': 'Plain report',
+                          'ConversationId': f"report:{report['SourceId']}", 'SentAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                          'BodyText': 'x', 'Status': 'feed'})
+    funnel._SOURCES['at'] = 0
+    keys = lambda: {i['key'] for i in funnel.pile(s, force=True)['items']}
+    assert {f'report:{mid}', f'report:{rmid}'} <= keys()
+    concierge.move_on(s, f'report:{mid}'); concierge.move_on(s, f'report:{rmid}')
+    after = keys()
+    assert f'report:{mid}' not in after and f'report:{rmid}' not in after
+    again = reports.run_one(s, s.get_source(src['SourceId']), None, 'manual')['message_id']
+    assert f'report:{again}' in keys() and f'report:{mid}' not in keys()
+
+
 def test_a_second_run_retires_the_first_row():
     s = _store(); src = _save(s)
     first = reports.run_one(s, src, None, 'manual')['message_id']

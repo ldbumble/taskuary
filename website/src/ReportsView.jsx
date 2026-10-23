@@ -468,14 +468,14 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     { key: "reports", label: "All reports", n: reportSources.length || null },
     ...reportSources.map((s) => ({ key: s.SourceId, label: titleOf(s) })),
     { key: "new-report", label: "+ New report" },
-    { section: "Workflows" },
-    { key: "workflows", label: "All workflows", n: workflowSources.length || null },
-    ...workflowSources.map((s) => ({ key: s.SourceId, label: titleOf(s) })),
-    { key: "new-agent", label: "+ New workflow" },
     { section: "Dashboards" },
     { key: "dashboards", label: "All dashboards", n: dashboardSources.length || null },
     ...dashboardSources.map((s) => ({ key: s.SourceId, label: titleOf(s) })),
     { key: "new-dashboard", label: DASH.new },
+    { section: "Workflows" },
+    { key: "workflows", label: "All workflows", n: workflowSources.length || null },
+    ...workflowSources.map((s) => ({ key: s.SourceId, label: titleOf(s) })),
+    { key: "new-agent", label: "+ New workflow" },
   ];
   // the canvas keeps its own place: a section, then one report (or a new one) open in it
   const bucketNow = browse ? (browseState.open ?? browseState.section ?? "reports") : bucket;
@@ -597,15 +597,17 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     const missing = typeof browseState.open === "number" && !sources.some((x) => x.SourceId === browseState.open);
     return browse({
       title: "Reports", wide: true,
-      summary: `${plural(reportSources.length, "report")} · ${plural(workflowSources.length, "workflow")} · ${plural(pbs.books.length, "playbook")} · ${plural(dashboardSources.length, "dashboard")} · reports read and summarise, workflows write, playbooks say how a kind of job is done, dashboards show the numbers`,
-      sections: [{ key: "reports", label: "Reports", n: reportSources.length }, { key: "workflows", label: "Workflows", n: workflowSources.length },
-        { key: "playbooks", label: "Playbooks", n: pbs.books.length },
+      summary: `${plural(reportSources.length, "report")} · ${plural(dashboardSources.length, "dashboard")} · ${plural(workflowSources.length, "workflow")} · ${plural(pbs.books.length, "playbook")} · reports read and summarise, dashboards show the numbers, workflows write, playbooks say how a kind of job is done`,
+      // DASHBOARDS BESIDE REPORTS (the owner, 2026-10-23): Reports, Dashboards, Workflows, Playbooks - and the + New chips in that order
+      sections: [{ key: "reports", label: "Reports", n: reportSources.length },
         { key: "dashboards", label: placeName("dashboards").split(" → ").pop(), n: dashboardSources.length },
+        { key: "workflows", label: "Workflows", n: workflowSources.length },
+        { key: "playbooks", label: "Playbooks", n: pbs.books.length },
         // both ways in, always - not the open shelf's only: a new workflow was one click into Workflows away (the owner, 2026-10-15:
         // "it should say new workflow and new report right away without clicking in"). "new-invoices" is reached from the new workflow
         // ...and the third (the owner, 2026-10-22: "no new playbook ui either??"): New playbook's own dialog, opened on its shelf
-        { key: "new-report", label: "+ New report" }, { key: "new-agent", label: "+ New workflow" }, { key: NEW_PB, label: "+ New playbook" },
-        { key: "new-dashboard", label: DASH.new }],
+        { key: "new-report", label: "+ New report" }, { key: "new-dashboard", label: DASH.new }, { key: "new-agent", label: "+ New workflow" },
+        { key: NEW_PB, label: "+ New playbook" }],
       section,
       onSection: (key) => {
         setDraft(null); setDashDraft(null);

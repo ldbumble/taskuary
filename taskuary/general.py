@@ -884,14 +884,8 @@ class GeneralSession:
             raise RuntimeError(f'the assistant has been answering the previous question for over '
                                f'{int(WAIT_TURN)}s - something is stuck. Press stop, or reload the page.')
         self.busy, self.last = True, time.time()
-        try:
-            from . import workerstate as ws
-            ws.record(self.store, self.task_id, self.sid, 'working', source='api')
-        except Exception: pass
         self._cancel = cancel if cancel is not None else threading.Event()
         cancel = self._cancel
-        self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}}]
-        self.trace_revision += 1
         try:
             if connector_id is not None or model or pick:
                 self.select_provider(connector_id, model, pick)
@@ -902,11 +896,20 @@ class GeneralSession:
                     self.cli_sid = ''
                     self.resume_notice = 'Continuing from the saved conversation with the selected provider.'
                     self._remember_session()
+            if echo and as_owner: self._emit(f'\x1b[1;34myou>\x1b[0m {text}\r\n')
+            # the owner's words are kept FIRST, and the run says it is working only once it has an AI: with none, the message was
+            # lost under "Started the selected agent" and a `working` record for an agent that never could start (2026-10-22 walk)
+            if as_owner: self.store.add_comment(self.task_id, 'owner', USER_TYPE, text)
             if not self.pick:
+                self.trace = []; self.trace_revision += 1
                 # ...in plain words: the AI CLI agents page's own name read "CLI agent" on the failed card (the 2026-10-21 audit, R2)
                 raise RuntimeError(f"{NO_AI} - connect one on {words.name('ai')} to run this task")
-            if echo and as_owner: self._emit(f'\x1b[1;34myou>\x1b[0m {text}\r\n')
-            if as_owner: self.store.add_comment(self.task_id, 'owner', USER_TYPE, text)
+            try:
+                from . import workerstate as ws
+                ws.record(self.store, self.task_id, self.sid, 'working', source='api')
+            except Exception: pass
+            self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}}]
+            self.trace_revision += 1
             system, user = _prompt(self.store, self.task_id)
             if delivery_instructions:
                 system = f'{system}\n\n{str(delivery_instructions).strip()}'

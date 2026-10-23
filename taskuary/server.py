@@ -1866,7 +1866,9 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
                 put({'type': 'tool_call', 'name': 'sync_messages',
                      'detail': {'new': fresh.get('added', 0)}})
             session = general.start_session(store, task_id, body.connector_id, body.model, ACTOR, body.pick)
-            put({'type': 'start', 'session': session.info()})
+            # ...said started only with an AI to start on: with none the step read "Started the selected agent" over a turn that
+            # never could run (2026-10-22 walk) - send_prompt keeps the owner's words and fails saying why
+            if session.pick: put({'type': 'start', 'session': session.info()})
             try:
                 reply = session.send_prompt(body.text, body.attachments, body.connector_id, body.model,
                                             pick=body.pick, trace=trace, cancel=cancel)

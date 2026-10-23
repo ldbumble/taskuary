@@ -35,7 +35,7 @@ test("a goal's row says its mark, its title and its steps, and slipped in red", 
 
 test("an agent at work rings the row's icon, spinning, and still under reduced motion", () => {
   const view = src("AssistantView.jsx"), css = src("statusMark.css"), logo = src("StatusMark.jsx");
-  assert.match(view, /const st = i\.settling \|\| goal \|\| i\.kind === "meeting" \? null : railStatus\(i\);/);
+  assert.match(view, /const st = i\.settling \|\| goal \|\| i\.kind === "meeting" \? null : railStatus\(i, !canSend\(sendCaps, i\.channel\)\);/);
   assert.match(view, /<StatusLogo status=\{shown\} agent=\{i\.working \|\| i\.agent\} className="logo">/);
   assert.match(logo, /className=\{\["tq-mark", className, spins \? "spins" : ""\]/);
   assert.match(css, /\.tq-mark\.spins::after \{[^}]*animation: tq-agent-ring 1s linear infinite/);

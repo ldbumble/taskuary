@@ -77,6 +77,9 @@ ALLOWED_WRITES = (
     r'^/api/messages/\d+/reply$',                      # puts a draft on the table - only approving it sends
     r'^/api/messages/\d+/calendar$',                   # ...and a calendar answer the same way: drafted, never sent (calwrite.py)
     r'^/api/reviews/\d+/draft$',
+    # ...and Remove - not a task's Undo (recentlydeleted.restore): only what a Remove here kept can come back, and the demo's only
+    # Remove that is not refused is that one - a task, put back in the demo's own database
+    r'^/api/deleted/\d+/restore$',
 )
 
 # What a confirmed proposal may run here: each writes the demo's own database and nothing else. Start (dispatch.prepare,

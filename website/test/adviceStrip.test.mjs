@@ -27,7 +27,7 @@ test("a press is heard once it settles, so the advice is read again for the item
   // ...and the page and a phone's row both listen, as does the draft's own Send under the card
   assert.match(read("AssistantView.jsx"), /onPressed\(\(\) => \{ if \(onTableRef\.current\) readAdvice\(onTableRef\.current, true\); \}\)/);
   assert.match(read("CanvasItem.jsx"), /onPressed\(\(\) => read\(\)\)/);
-  assert.equal((read("ReviewDecision.jsx").match(/finally \{ acted\(no\(/g) || []).length, 3, "decide, decideBoth and redraft");
+  assert.equal((read("ReviewDecision.jsx").match(/finally \{ acted\(no\(/g) || []).length, 4, "decide, decideBoth, redraft and copy");
 });
 
 test("the advice only tints: the same buttons in the same places with and without it, whatever it picks", () => {
@@ -37,7 +37,7 @@ test("the advice only tints: the same buttons in the same places with and withou
   const plain = layout(rowOf({ ref: "", list }));
   for (const pick of [{ verb: "approve", label: "Send" }, { verb: "reply", label: "Reply" }, { verb: "close", label: "Mark done" }, { verb: "next" }])
     assert.deepEqual(layout(rowOf({ ref: "", list }, pick)), plain, pick.verb);
-  assert.equal(layout(rowOf({ ref: "", list })).find(([t]) => t === "reply")[1][0], "12:approve", "the card's own Send holds its slot from the first render");
+  assert.equal(layout(rowOf({ ref: "", list })).find(([t]) => t === "reply")[1][0], "slot:12:approve", "the card's own Send keeps an empty slot from the first render - its button is under the draft (2026-10-22)");
 });
 
 test("no line is still an answer: every reason is a sentence and lights one move - Next, never nothing", () => {

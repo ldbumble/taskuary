@@ -61,6 +61,7 @@ import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, mark
 import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, ageAt, asPressed, putDownLanded, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory, withdrawSelection } from "./funnelPile.js";
 import { FYI_PAGE, coveredByReload, fyiTail, heldSince, pileRows, sentChips } from "./funnelPile.js";
 import { railStatus } from "./railStatus.js";
+import { UndoLine } from "./Removed.jsx";
 import { StatusLogo } from "./StatusMark.jsx";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns, pickLine, placeLine, pressChip, pressLine, pressedOf } from "./assistantTurns.js";
@@ -68,7 +69,7 @@ import { lightOf, litAfter, litPick, litPull } from "./assistantLight.js";
 import DigestText from "./DigestText.jsx";
 import { firstAppLink, openAppLink, recordPlace } from "./appLinks.js";
 import { hashFor } from "./canvasLinks.js";
-import { useCapabilities } from "./capabilities.js";
+import { canSend, useCapabilities } from "./capabilities.js";
 import { place } from "./words.js";
 import ConnectAi, { CONNECT_AI, connectAi } from "./ConnectAi.jsx";
 // FirstRun, the walk's workspace and the browse cards are drawn after the pile or a click, never on the first frame: out of the entry chunk
@@ -277,6 +278,7 @@ class BeforeCommit extends React.Component {
 
 function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onMoreFyi, settingUp = false, noAi = false, tag = "on the table" }) {
   const items = pile?.items || [];
+  const sendCaps = useCapabilities();       // a draft its channel cannot send wears "draft to copy", never the flag (railStatus)
   // the plain FYI the page has not asked for whole yet (funnel.page_fyi): counted with their band, drawn when it is opened
   const tail = fyiTail(pile).length;
   // A full account can return dozens of canonical rows together. Painting that entire stack in
@@ -671,7 +673,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                 // state's words are the icon's label and hover. A row in a band whose heading already says it (fyi, report) wears none;
                 // a goal keeps its own mark. Urgent is the row's shading, a meeting its time.
                 const goal = String(i.kind || "").startsWith("goal");
-                const st = i.settling || goal || i.kind === "meeting" ? null : railStatus(i);
+                const st = i.settling || goal || i.kind === "meeting" ? null : railStatus(i, !canSend(sendCaps, i.channel));
                 const shown = st && (st.spins || meta.word !== BAND_SAYS[level]) ? st : null;
                 const word = i.settling ? ""
                   : i.kind === "meeting" ? `invite · ${fmtTime12(i.when)}`
@@ -3194,11 +3196,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     {DEMO && <DemoJourney onChanged={() => { loadPile(true); onChanged?.(); }} />}
     <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active} onGo={(tab, key) => browse(key)} navOn={navOn}
       onInventoryFilter={inventoryFilterChanged} unreadInventory={pile}
-      top={<Pile pile={railPile} settingUp={firstRun ? setupTodo || "finish setting up" : ""} noAi={!!state && !(state.providers || []).length}
+      // a task Removed as not a task leaves the rail with "Removed <title> - Undo" over it (Removed.jsx); Undo puts it back on the rail
+      top={<><UndoLine kinds={["task"]} onRestored={() => { loadPile(true); onChanged?.(); }} sx={{ mx: 1, mt: 1, mb: 1 }} /><Pile pile={railPile} settingUp={firstRun ? setupTodo || "finish setting up" : ""} noAi={!!state && !(state.providers || []).length}
         current={old || table.folded || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
         onPull={(key, asUser) => { sectionRef.current = null; if (table.folded && key === table.key) unfoldTable(); else pull(key, asUser); }}
-        onSection={walkSection} onMoreFyi={moreFyi} tag={tableSays.tag} onCurrent={() => { setRailOpen(false); if (table.folded || table.place) unfoldTable(); }} />}
+        onSection={walkSection} onMoreFyi={moreFyi} tag={tableSays.tag} onCurrent={() => { setRailOpen(false); if (table.folded || table.place) unfoldTable(); }} /></>}
       stage={chat}
       onPull={(r, o) => pull(keyForRow(r), o?.quiet ? null : `Tell me about “${r.Subject || r.Title || "this"}”`)}
       railOnNarrow={railOpen} setupMode={firstRun} setupRail={firstRun ? <SetupSteps /> : null} />

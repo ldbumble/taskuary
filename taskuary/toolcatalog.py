@@ -320,6 +320,7 @@ PAGE_ONLY = {'new_task': "the page's own New task - the model makes one with tas
              'new_task': 'the model makes one with task.create_from_text; naming the button too pushed the index over its cap',
              'report_bug': 'a failure the app cannot fix opens the bug report, which the owner reads before it goes',
              'attach': "opens the file picker on the draft - a file is the owner's to choose",
+             'copy': "puts an unsendable draft on the owner's own clipboard, which only the page can reach",
              'change_kind': 'a picker on the task page; the model changes it with task.set_kind', 'priority': 'a picker; the model uses task.update',
              'assign': 'a picker; the model uses task.update', 'pick_repo': 'a picker; the model uses task.set_repo',
              'make_report': 'turns the workflow being written on the page into a report draft - nothing saved, so the page alone holds it',

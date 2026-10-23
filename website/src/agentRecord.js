@@ -44,11 +44,22 @@ export const splitFiles = (files, cwd) => {
   return { mine, other };
 };
 
-// one line of facts: who, when, and how much it did - each only when there is some (its files are under What it made)
+// WHAT A RUN TOOK AND COST (the owner, 2026-10-22), from its record (sessionrecord.save): how long it worked, the tokens its CLI
+// counted - new ones, cache reads apart, which are most of a long session's count and little of its price - and the cost only where
+// the CLI priced it. Unknown is said by saying nothing, never "$0".
+const span = (n) => n < 60 ? `${n}s` : n < 3600 ? `${Math.round(n / 60)}m` : `${Math.floor(n / 3600)}h ${Math.round((n % 3600) / 60)}m`;
+const count = (n) => n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(/\.0$/, "")}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n);
+export const runCost = (s) => {
+  const u = s?.usage || {}, fresh = (u.in || 0) - (u.cached || 0) + (u.out || 0);
+  return [Number.isFinite(s?.took) && s.took > 0 ? span(s.took) : "", fresh > 0 ? `${count(fresh)} tokens` : "",
+    u.cost > 0 ? (u.cost < 0.01 ? "<$0.01" : `$${u.cost.toFixed(2)}`) : ""].filter(Boolean);
+};
+
+// one line of facts: who, when, how much it did and what that took - each only when there is some (its files are under What it made)
 export const recordFacts = (s) => {
   const c = s?.counts || {};
   return [s?.cli || s?.by, s?.at && s.at.slice(0, 16),
-    c.thought ? plural(c.thought, "thought") : "", c.tool ? plural(c.tool, "step") : ""].filter(Boolean);
+    c.thought ? plural(c.thought, "thought") : "", c.tool ? plural(c.tool, "step") : "", ...runCost(s)].filter(Boolean);
 };
 
 // is there anything behind "Every step" that the card does not already show?

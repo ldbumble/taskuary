@@ -15,6 +15,7 @@ import { PANEL2, BORDER, DIM, FAINT, INK, card, ACCENT, PILL_COLORS, ALERT } fro
 import { StateChip, stateOf, TASK_STATES, asUtc, timeAgo, askedAgo, Empty, FilterPills, isWaiting, assignedAgent } from "./ui.jsx";
 import { ListItemText } from "@mui/material";
 import TaskPage from "./TaskPage.jsx";
+import { UndoLine } from "./Removed.jsx";
 
 // An open tab can still hold yesterday's entry bundle after a local upgrade. Vite names lazy
 // chunks by content, so that tab asks the new server for a filename the build no longer has.
@@ -308,6 +309,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           and a detail pane pushed clean off the right edge - a selected task showed nothing. */}
       <Box sx={{ width: { xs: "100%", md: 372 }, flexShrink: 0, display: { xs: selected ? "none" : "block", md: "block" } }}>
         {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1 }}>{err}</Alert>}
+        {/* Remove - not a task, taken back where the task was listed (Removed.jsx; the task page announces it) */}
+        <UndoLine kinds={["task"]} onRestored={() => { loadTasks(); onChanged?.(); }} sx={{ mb: 1 }} />
         <Box sx={{ ...card, p: 0, overflow: "hidden", display: "flex", flexDirection: "column",
           height: "calc(100vh - 118px)", minHeight: 420 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.75,

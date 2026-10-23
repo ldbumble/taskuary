@@ -202,6 +202,13 @@ const TYPE_OF = {
   accept_invite: "reply", decline_invite: "reply", propose_time: "reply", find_time: "reply",
 };
 export const typeOf = (v) => TYPE_OF[String(v?.id || "").split(":").pop()] || "act";
+// ON A PHONE (narrower than 600px, the owner, 2026-10-22): Next and the ONE move - the lit one, else the row's lead (its first decision,
+// else its first session verb) - and every other button of every type behind one ▾. Four typed bands wrapped to four lines over the box.
+export function phoneRow(row) {
+  const all = [...row.decide, ...row.agent, ...row.more];
+  const lead = all.find((v) => v.tone === "p") || row.decide[0] || row.agent[0] || null;
+  return { type: "phone", label: "", shown: lead ? [lead] : [], rest: all.filter((v) => v !== lead) };
+}
 export function clustersOf(row, keep = 2) {
   const all = [...row.decide, ...row.agent, ...row.more];
   return ["act", ...TYPES.map(([t]) => t)].map((type) => {

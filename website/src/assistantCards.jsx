@@ -807,7 +807,10 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone }) {
   // SHARE IT (the owner, 2026-10-23: "button on report on bottom named share") - the row's Share, while this report is the item on the
   // table; the server reads the report off its message, never off the page (sharing.py)
   const nav = React.useContext(CardNav);
-  const share = useShare(`report:${card.key || card.mid}`, { kind: "report", title: card.title, message: card.mid }, !!nav.row && !!card.mid && !card.bad);
+  // ...and an email it drafts opens on the table at once, its task's Close out, for the owner to read and Send (the owner, 2026-10-23)
+  const share = useShare(`report:${card.key || card.mid}`, { kind: "report", title: card.title, message: card.mid }, !!nav.row && !!card.mid && !card.bad,
+    { onShared: (how, out) => { if (how === "email" && out?.task_id) onOpenTask?.(out.task_id); },
+      summaryWhy: "a summary is written from a task's work - a report is its own result; Email the result sends it" });
   return (
     <CardShell card={card} kicker={card.bad ? "a report failed" : "report"} title={card.title}
       lead={<div className="tq-card-lead" data-tq-report-day={day || undefined}><b>{name}</b>{day && ` · ${day}`}{rest}</div>}>

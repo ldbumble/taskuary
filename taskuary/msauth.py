@@ -32,7 +32,10 @@ SCOPES = 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite'
 LEGACY_SCOPES = 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.Read'
 # a Teams card's own sign-in: its chats, their senders' names, marking a chat read, and answering in it - none needs an admin
 TEAMS_SCOPES = 'offline_access User.Read User.ReadBasic.All Chat.ReadWrite ChatMessage.Send'
-def scopes_for(kind) -> str: return TEAMS_SCOPES if kind == 'teams' else SCOPES
+# ALLOW SAVING FILES (the owner, 2026-10-23): a card that opts in signs in again asking for Files.ReadWrite as well - its own OneDrive,
+# where Share puts a result (sharing.onedrive). Off by default: the scopes above are never widened unless the card says so.
+FILES_SCOPE = 'Files.ReadWrite'
+def scopes_for(kind, files: bool = False) -> str: return (TEAMS_SCOPES if kind == 'teams' else SCOPES) + (f' {FILES_SCOPE}' if files else '')
 def card_of(cfg) -> str: return 'Teams' if (cfg or {}).get('_kind') == 'teams' else 'Outlook'   # whose sign-in this is, said
 # Taskuary's own registration (multi-tenant + personal accounts, public client, device code
 # on). Overridable per install with TASKUARY_MS_CLIENT_ID, or per card with client_id.

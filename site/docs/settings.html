@@ -218,9 +218,14 @@ is what you see if those cards cannot load.</li>
 <h3 id="share-links-on-my-network">Share links on my network<a class="anchor" href="#share-links-on-my-network" aria-label="Link to this section">#</a></h3>
 <p><code>share_links_lan</code> · type: switch · default: off</p>
 <p>Share on a result can make a read-only link to it that people on your network open in their browser.</p>
-<p>Off (the default): no shared link exists and /share/ answers nothing. On: Share -&gt; Shared link takes a frozen copy of that one result and gives it an unguessable address on this computer, copied for you to paste. Whoever has the link sees that copy and nothing else of Taskuary - no other result, no task, no setting - and the copy does not change when the result does.</p>
-<p>A link expires after 7 days, and Revoke below ends it at once. Turning this off closes every link while it is off.</p>
-<p>Others can only reach the link when Taskuary listens on your network, not only on this computer - the host under [server] in config.toml. Anyone on that network who is given the link can open it, so share links to results you would email to the same people.</p>
+<p>Off (the default): no shared link exists and nothing listens for one. On: a second, separate server starts on the Share port below and serves ONE kind of page - a link&#39;s frozen copy of one result - to your network. Taskuary itself, and everything behind it, stays on this computer only.</p>
+<p>Share -&gt; Shared link takes a frozen copy of that one result and gives it an unguessable address on that port, copied for you to paste. Whoever has the link sees that copy and nothing else of Taskuary - no other result, no task, no setting - and the copy does not change when the result does.</p>
+<p>A link expires after 7 days, and Revoke below ends it at once. Turning this off closes the port and every link while it is off. Anyone on your network who is given a link can open it, so share links to results you would email to the same people.</p>
+<p>The first time the port opens, Windows may ask whether to let Taskuary through its firewall - allow it on private networks for others to reach the link.</p>
+<h3 id="share-port">Share port<a class="anchor" href="#share-port" aria-label="Link to this section">#</a></h3>
+<p><code>share_port</code> · type: number · default: <code>7797</code></p>
+<p>The port share links are served on, separate from Taskuary&#39;s own. Blank = 7797.</p>
+<p>Only the shared pages are served on this port; Taskuary&#39;s own port stays on this computer. Change it if another program already uses 7797 - links made before the change stop working, because they name the old port.</p>
 <h2 id="assistant">Assistant<a class="anchor" href="#assistant" aria-label="Link to this section">#</a></h2>
 <h3 id="semantic-search">Semantic search<a class="anchor" href="#semantic-search" aria-label="Link to this section">#</a></h3>
 <p><code>kb_semantic</code> · type: switch · default: off</p>

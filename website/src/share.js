@@ -16,11 +16,14 @@ export const SETTING_HREF = `settings=config&group=Sharing&key=${LINK_SETTING}`;
 export const shareable = (r) => !!r && !!(r.task || r.message || String(r.text || "").trim() || String(r.html || "").trim() || (Array.isArray(r.data) && r.data.length));
 
 // the menu's rows from /api/shares/ways: each way, greyed with the server's sentence; before it answers, greyed and "Checking…"; a page
-// that could not ask says so on every row rather than offering what may not work
-export function waysOf(ways, failed = false) {
+// that could not ask says so on every row rather than offering what may not work.
+// `summary`: whether this item offers "Email a summary" (the AI's message about a task's work - EmailSomeone), else `summaryWhy`; it
+// goes by email too, so it is greyed with email's own reason. `noResult`: why the ways that carry THE RESULT cannot (nothing to carry yet).
+export function waysOf(ways, failed = false, { summary = false, summaryWhy = "", noResult = "" } = {}) {
   return WAYS.map(({ key, word }) => {
-    const w = ways?.[key];
-    const why = failed ? "Taskuary did not answer - try again in a moment" : !ways ? "Checking…" : w?.ok ? "" : w?.why || "this cannot work here yet";
+    const w = ways?.[key === "summary" ? "email" : key];
+    const own = key === "summary" ? (summary ? "" : summaryWhy || "a summary is written from a task's work - this has none") : noResult;
+    const why = own || (failed ? "Taskuary did not answer - try again in a moment" : !ways ? "Checking…" : w?.ok ? "" : w?.why || "this cannot work here yet");
     return { key, word, ok: !why, why };
   });
 }
@@ -36,6 +39,7 @@ export function shareBody(result, how, extra = {}) {
 
 // what the card's badge says on its hover once a way went - the badge itself is the button's own word, "✓ Share" (presses are badges)
 export function sharedNote(how, out, copied) {
+  if (how === "summary") return `Drafted - it waits on its task for you to press ${label("approve")}`;
   if (how === "email") return `Drafted for ${(out?.to || []).join(", ")} on ${out?.ref || "its task"} - nothing is sent until you press ${label("approve")}`;
   const where = how === "link" ? `Link for your network, open until ${String(out?.expires || "").slice(0, 16)}` : how === "onedrive" ? "In OneDrive, in the Taskuary folder" : "In Google Drive, in the Taskuary folder";
   return `${where}${out?.url ? ` - ${copied ? "link copied" : `copy it: ${out.url}`}` : ""}`;

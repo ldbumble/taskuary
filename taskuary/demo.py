@@ -418,6 +418,9 @@ def brain(seed: int = 0, store=None):
 # Northwind Facilities: a plausible mid-size operation with a plausible morning. Everything
 # below is written; nobody's mail was borrowed for it.
 OWNER = 'Dana Whitfield'
+# ...and the owner's own mailbox, at the company the colleagues write from: with no address the owner had no domain, so everyone at
+# Northwind was a stranger to the demo (origin.py - a colleague's task read as an outsider's; the UX walk, 2026-10-22)
+OWNER_EMAIL = 'alex@northwind.example'
 PEOPLE = [('Marcus Reed', 'mreed@northwind.example'), ('Priya Shah', 'pshah@northwind.example'),
           ('Tom Alvarez', 'talvarez@vendor.example'), ('Ruth Bennett', 'rbennett@northwind.example')]
 
@@ -639,6 +642,7 @@ def seed(store) -> int:
     if store.list_tasks(): return 0
     f = Factory(store)
     f.actor = 'triage'                     # not the test factory's 't': it is printed on every task
+    store.set_setting('owner_email', OWNER_EMAIL, 'demo')
     made = 0
     refs = {}
     for i, (channel, who, subject, body, verdict, why) in enumerate(SEEDS):

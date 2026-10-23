@@ -9,7 +9,8 @@ from tests import assistant_queries as Q
 # what no tool or desk button does today - a new tool takes its ask off this list on purpose (ASK OWNER before building one)
 UNSUPPORTED = {'archive all the read mail', 'use dark mode', 'make the font bigger', 'kill all the agents'}
 # ...and the row buttons a phone chat cannot reach - each opens something only a screen has (the diff, a second agent's form, a file picker)
-PHONE_UNREACHABLE = {'review_changes', 'run_another', 'attach'}
+# ...and Copy, which puts an unsendable draft on the screen's own clipboard - a phone chat's draft is already text to copy
+PHONE_UNREACHABLE = {'review_changes', 'run_another', 'attach', 'copy'}
 
 
 class EverydayAsks(unittest.TestCase):

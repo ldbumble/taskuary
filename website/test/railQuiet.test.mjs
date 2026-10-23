@@ -11,3 +11,9 @@ test("a rail row is pulled quietly, as a search hit is", () => {
   assert.doesNotMatch(src, /Show me “\$\{i\.title\}”/, "no bubble saying the click");
   assert.match(src, /!i\.settling && onPull\(i\.key\)\)\}/);
 });
+
+test("a section click walks its first row and posts no receipt listing the section", () => {
+  const walk = src.slice(src.indexOf("const walkSection = (level) => {"), src.indexOf("const browse = (area"));
+  assert.match(walk, /pull\(first\.key, null\);/);
+  assert.doesNotMatch(walk, /setMsgs|role: "receipt"|to go through/, "the rail already lists the section");
+});

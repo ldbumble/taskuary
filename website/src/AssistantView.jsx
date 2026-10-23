@@ -2644,10 +2644,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (!first) return;
     seen.add(first.key);
     sectionRef.current = { level, seen };
-    // the assistant SAYS what is in the section, then walks it - the whole list once, before the first item (the owner, 2026-09-30)
-    const rows = (bandsOf(pileRows(pile)).find((b) => b.level === level)?.items || []).filter((i) => !i.settling);
-    const said = rows.slice(0, 8).map((i) => `${i.who ? i.who + " - " : ""}${i.title}`).join("; ") + (rows.length > 8 ? `; and ${rows.length - 8} more` : "");
-    if (rows.length) setMsgs((m) => [...m, { id: `s${Date.now()}`, role: "receipt", text: `${levelLabel(level)}: ${rows.length} to go through. ${said}. Starting with the first.` }]);
+    // ...and walks it from its first row, saying nothing: the line that listed the section first (2026-09-30) was a long receipt with
+    // report titles doubled, and the rail beside it already lists them ("buttons do the talking", the owner, 2026-10-22)
     pull(first.key, null);
   };
   // A SIDEBAR BUTTON POSTS ITS BROWSE CARD into the conversation - no AI, no tab: the newest one is the live one, and an

@@ -101,13 +101,14 @@ class NoBlanketSoulTests(unittest.TestCase):
         self.assertNotIn('ASSISTANT STYLE', seed)                                             # coding does not need the writing voice
 
     def test_the_general_prompt_opens_on_the_owner_then_agent_rules_and_style(self):
-        """The owner, 2026-10-14: "soul/job which is about the person, then specific profile for agent" - SOUL.md and JOB.md lead,
-        whole, as background; only SOUL.md's triage section ("What counts as a task") stays with triage."""
+        """The owner, 2026-10-14: "soul/job which is about the person, then specific profile for agent" - SOUL.md leads, whole,
+        as background; SOUL.md's triage section ("What counts as a task") stays with triage, and JOB.md with the Assistant (its
+        template promises it never reaches a working agent - the owner, 2026-10-22)."""
         s = MemoryStore(); tid = make(s, 'general')
         s.save_doc('job', '## The job\n- Runs month-end close for the finance team.', 't')
         system, _user = general._prompt(s, tid)
         self.assertTrue(system.startswith('ABOUT THE OWNER'), system[:80])
-        self.assertIn('Runs month-end close for the finance team', system); self.assertIn('## SOUL.md', system)
+        self.assertNotIn('Runs month-end close for the finance team', system); self.assertIn('## SOUL.md', system)
         self.assertLess(system.index('ABOUT THE OWNER'), system.index('RULES (AGENT.md'))
         self.assertIn('RULES (AGENT.md', system); self.assertIn('ASSISTANT STYLE', system)
         self.assertNotIn('OPERATOR RULES', system); self.assertNotIn('What counts as a task', system)

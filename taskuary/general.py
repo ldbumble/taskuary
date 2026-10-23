@@ -534,7 +534,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # what a planted line would ask the assistant to repeat back (origin.py's stranger rules keep the same distance)
     from . import origin as _origin
     outsider = _origin.of_task(store, tid)[0] == 'stranger'
-    owner_bg = '' if outsider else _brief.background(store)
+    # ...and JOB.md only in the Assistant's own conversation (the dock): a task's worker is an agent, and JOB.md never reaches one
+    owner_bg = '' if outsider else _brief.background(store, worker=not dock)
     system = (
         (f'{owner_bg}\n\n' if owner_bg else '') +
         "You are the Taskuary general-work assistant. Help complete research, planning, writing, "

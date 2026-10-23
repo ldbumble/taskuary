@@ -35,7 +35,8 @@
     "reopen":          {"label": "Reopen task", "hint": "Opens the task again", "row": ["reopen"]},
     "close_note":      {"label": "Close with a note", "hint": "Closes the task with a line saying how it ended", "row": ["close-note"]},
     "review_changes":  {"label": "Review changes", "hint": "See what the agent changed", "row": ["diff"]},
-    "share":           {"label": "Send out results", "hint": "Email what was found to someone", "row": ["email"]},
+    "share":           {"label": "Email a summary", "hint": "The AI writes a short summary of what the work found, for someone you pick - it waits in Close out for your Send. One of Share's ways now, not a button of its own", "row": []},
+    "share_result":    {"label": "Share", "hint": "Email this result or a summary of it, give people on your network a read-only link, or put it in your OneDrive or Google Drive - each way only where it can work", "row": ["share"]},
     "ask_sender":      {"label": "Ask sender", "hint": "Ask whoever sent it a question", "row": ["ask-sender"]},
     "forward":         {"label": "Hand it to a person", "hint": "Pass it to a colleague", "row": ["hand"]},
     "remove":          {"label": "Remove - not a task", "hint": "Taskuary stops making tasks from messages like this; the email itself is kept", "row": ["nat"]},
@@ -65,7 +66,8 @@
     "_": "The card's own question after Not ours / Send to agent - answers, not buttons of their own",
     "not_ours": [["not_ours", "Just this once"], ["not_ours_sender", "From now on - their mail is filed for you"], ["block_sender", "A rule in Settings - their mail never comes in"]],
     "idea": [["not_ours", "Just this one"], ["not_ours_kind", "No more ideas like this"]],
-    "agent": [["coding_agent", "A coding agent"], ["regular_agent", "An agent"]]
+    "agent": [["coding_agent", "A coding agent"], ["regular_agent", "An agent"]],
+    "share": [["email", "Email the result"], ["summary", "Email a summary"], ["link", "Shared link"], ["onedrive", "OneDrive"], ["gdrive", "Google Drive"]]
   },
   "removed": {
     "_": "Buttons that no longer exist - an old saved card or a typed word lands on the verb named, the button is never drawn",

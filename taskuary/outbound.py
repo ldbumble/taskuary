@@ -138,7 +138,7 @@ def _attach_to_draft(hdr: dict, box: str, draft_id: str, f: dict):
 
 
 def _send_with_files(hdr: dict, box: str, to: list, cc: list, subject: str, body: str,
-                     reply_to_graph_id: str, files: list) -> dict:
+                     reply_to_graph_id: str, files: list, html: str = None) -> dict:
     """A mail that carries files is composed as a DRAFT and then sent.
 
     Graph's one-shot /reply and /sendMail take a body and nothing else, so anything with an
@@ -146,7 +146,7 @@ def _send_with_files(hdr: dict, box: str, to: list, cc: list, subject: str, body
     createReply - whose draft already holds the quoted original, which our text goes above, exactly
     where the one-shot road puts it."""
     import html as _html
-    said = _html.escape(body).replace(chr(10), '<br>')
+    said = html or _html.escape(body).replace(chr(10), '<br>')
     if reply_to_graph_id:
         r = requests.post(f'{GRAPH}/users/{box}/messages/{reply_to_graph_id}/createReply', headers=hdr, timeout=30, data='{}')
         if r.status_code >= 300: raise RuntimeError(f'graph could not open a reply ({r.status_code}): {r.text[:200]}')
@@ -175,13 +175,15 @@ def _send_with_files(hdr: dict, box: str, to: list, cc: list, subject: str, body
 
 
 def send_email(store, to: list, subject: str, body: str, reply_to_graph_id: str = None, mailbox: str = None,
-               connector_id=None, cc: list = None, attachments: list = None) -> dict:
+               connector_id=None, cc: list = None, attachments: list = None, html: str = None) -> dict:
     """Reply in thread when we know the Graph message id, otherwise a new mail. Plain text:
     these are answers from a person, not marketing.
 
     `cc` is looping somebody in - the owner adding a colleague to their own answer, in the open
     where the sender can see it. It rides the same approval and the same audit line as the reply
-    itself, because it IS the reply: one send, one record of who received it."""
+    itself, because it IS the reply: one send, one record of who received it.
+
+    `html`: a shared result (sharing.email_html) goes as HTML rendered from this same text - a new mail only, never a reply."""
     box = mailbox or _mailbox(store)
     connector_id = connector_id or _source_connector_id(store, 'email', box)
     tok = _graph_token(store, connector_id=connector_id)
@@ -189,7 +191,7 @@ def send_email(store, to: list, subject: str, body: str, reply_to_graph_id: str 
     if not to and not reply_to_graph_id: raise RuntimeError('no recipient')
     hdr = {'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'}
     files = read_attachments(attachments)
-    if files: return _send_with_files(hdr, box, to, cc, subject, body, reply_to_graph_id, files)
+    if files: return _send_with_files(hdr, box, to, cc, subject, body, reply_to_graph_id, files, html=None if reply_to_graph_id else html)
     if reply_to_graph_id:
         # Graph reads the reply `comment` as HTML, so plain-text newlines collapse into one long
         # line - greeting, body and signature all jammed together. Escape and give the breaks back.
@@ -205,7 +207,7 @@ def send_email(store, to: list, subject: str, body: str, reply_to_graph_id: str 
     else:
         r = requests.post(f'{GRAPH}/users/{box}/sendMail', headers=hdr, timeout=30,
                           data=json.dumps({'message': {'subject': subject or '(no subject)',
-                                                       'body': {'contentType': 'Text', 'content': body},
+                                                       'body': {'contentType': 'HTML', 'content': html} if html else {'contentType': 'Text', 'content': body},
                                                        'toRecipients': [{'emailAddress': {'address': a}} for a in to],
                                                        **({'ccRecipients': [{'emailAddress': {'address': a}} for a in cc]} if cc else {})},
                                            'saveToSentItems': True}))
@@ -435,7 +437,7 @@ def sending_mailbox(store, rv: dict, msg: dict = None) -> str | None:
 
 
 def send_out(store, channel: str, to, subject: str, body: str, cc: list = None, attachments: list = None,
-             mailbox: str = None) -> dict:
+             mailbox: str = None, html: str = None) -> dict:
     """Send something nobody asked for: a report going OUT, to an address the owner chose.
 
     reply_to_message answers a message - it reads the mailbox, thread id and chat id off the row
@@ -465,19 +467,19 @@ def send_out(store, channel: str, to, subject: str, body: str, cc: list = None, 
             if not box: raise Fixable(f'{mailbox} is not a connected mailbox any more - pick another one to send from', *MAIL)
             if box['kind'] == 'outlook':
                 return send_email(store, to, subject or '(no subject)', body, mailbox=box['address'], connector_id=box['connector_id'],
-                                  cc=cc, attachments=attachments)
+                                  cc=cc, attachments=attachments, **({'html': html} if html else {}))
             from .imapmail import send_smtp
             return send_smtp(store, store.get_connector(box['connector_id'], with_secret=True), to, subject or '(no subject)', body,
-                             cc=cc, attachments=attachments)
+                             cc=cc, attachments=attachments, **({'html': html} if html else {}))
         # Graph when the Outlook card is connected, otherwise the IMAP mailbox's own SMTP
         c = store.get_connector_by_type('outlook')
         if c and c.get('Active'):
-            return send_email(store, to, subject or '(no subject)', body, cc=cc, attachments=attachments)
+            return send_email(store, to, subject or '(no subject)', body, cc=cc, attachments=attachments, **({'html': html} if html else {}))
         from .imapmail import send_smtp
         box = next((store.get_connector(x['ConnectorId'], with_secret=True) for x in store.list_connectors()
                     if x['Type'] in ('gmail', 'imap') and x['Active']), None)
         if not box: raise Fixable('no mailbox is connected to send from', *MAIL)
-        return send_smtp(store, box, to, subject or '(no subject)', body, cc=cc, attachments=attachments)
+        return send_smtp(store, box, to, subject or '(no subject)', body, cc=cc, attachments=attachments, **({'html': html} if html else {}))
     if ch == 'teams':
         if not to: raise RuntimeError('no chat id - a Teams message needs one to land in')
         return send_teams(store, to[0], f'**{subject}**\n\n{body}' if subject else body)

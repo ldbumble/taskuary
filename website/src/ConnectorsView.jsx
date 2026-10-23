@@ -26,6 +26,7 @@ import { nothingMatches } from "./searchHits.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, SideRail, Confirm } from "./ui.jsx";
 import { UndoLine, removeNow } from "./Removed.jsx";
+import { AllowFiles, GoogleFiles, MS_FILES_HINT } from "./FileAccess.jsx";
 import { hasLogo } from "./logos.jsx";
 import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
@@ -2512,6 +2513,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
           It sits above the agent box too: one sign-in is the whole setup, the agent is the long road (B10) */}
       {MS_SIGNIN.includes(conn.Type) && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} reload={reload} onSignedIn={() => setStep(m.srcLabel ? 2 : 3)} /></Box>}
       {conn.Type === "chatgpt" && <Box sx={{ mb: 2 }}><ChatGptSignIn conn={conn} cfg={cfg} reload={reload} /></Box>}
+      {conn.Type === "gmail" && <Box sx={{ mb: 2 }}><GoogleFiles conn={conn} cfg={cfg} reload={reload} /></Box>}
       {conn.Type === "whatsapp" && <Box sx={{ mb: 2 }}><WaPair conn={conn} reload={reload} /></Box>}
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{m.desc}</Typography>
       <UnderTabs tabs={conn.Type === "whatsapp" ? ["Setup", "Guide"] : ["Setup", "Guide", "Agent"]} value={tab} onChange={setTab} />
@@ -3818,6 +3820,8 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
   const [detail, setDetail] = useState("");
   const [busy, setBusy] = useState(false);
   const [adminUrl, setAdminUrl] = useState("");   // the link IT clicks once; shown when Microsoft says "Need admin approval" or on request
+  const [files, setFiles] = useState(!!cfg.allow_files);   // Allow saving files: the next sign-in asks for Files.ReadWrite too (FileAccess.jsx)
+  useEffect(() => { setFiles(!!cfg.allow_files); }, [cfg.allow_files]);
   // a stored token is not a sign-in: Microsoft lets one lapse, and this said "Signed in" over hours of unread mail
   // (problems.signed_out, from the card's last poll)
   const signedOut = cfg.auth === "user" && conn.HasSecret && conn.SignedOut;
@@ -3850,9 +3854,9 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
     const id = setTimeout(tick, wait);
     return () => { alive = false; clearTimeout(id); };
   }, [flow, conn.ConnectorId, reload]);
-  const start = async () => {
+  const start = async (want = files) => {
     setBusy(true); setState(""); setDetail("");
-    try { const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/ms/signin`); setFlow({ ...data, at: Date.now() }); }
+    try { const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/ms/signin`, { files: !!want }); setFlow({ ...data, at: Date.now() }); }
     catch (e) { setState("error"); setDetail(e?.response?.data?.detail || "could not start the sign-in"); }
     setBusy(false);
   };
@@ -3880,11 +3884,13 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
           : <>Your own account, your own mailbox — mail, sending and calendar. No Azure portal, no tenant id, no secret;
         work and personal (Outlook.com) accounts both work.</>}
       </Typography>
-      {signedIn ? (
+      {!flow && signedIn ? (
         <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
           <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Signed in as {cfg.name ? `${cfg.name} · ` : ""}{cfg.account}</Typography>
           <Button size="small" variant="outlined" onClick={signout}
             title={`${chats ? "Teams chats" : "Mail and calendar"} stop syncing until you sign in again - Undo puts it back. Nothing already here is lost.`}>Sign out</Button>
+          {/* choosing it signs in again with the one more permission (or without it) - the code to type comes up here */}
+          {!plain && <AllowFiles checked={files} disabled={busy} hint={MS_FILES_HINT} onChange={(v) => { setFiles(v); start(v); }} />}
         </Box>
       ) : flow ? (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
@@ -3911,8 +3917,9 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
               nothing is lost, and I'll catch up on everything that came in.
             </Typography>
           )}
-          <Button variant="contained" disableElevation disabled={busy} onClick={start}>
+          <Button variant="contained" disableElevation disabled={busy} onClick={() => start()}>
             {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : signedOut ? "Sign in again" : "Sign in with Microsoft"}</Button>
+          {!plain && <AllowFiles checked={files} disabled={busy} hint={MS_FILES_HINT} onChange={setFiles} />}
           {/* the QUESTION is not the button. Asked and answered in one 48-character control, it was
               the widest thing on the card and read as a sentence somebody had made clickable. */}
           {!adminUrl && !signedOut && (

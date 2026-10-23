@@ -31,10 +31,12 @@ test("a draft decided already - answered in the chat itself - is not a delivery 
   assert.match(read("ReviewDecision.jsx"), /if \(data\.already\) \{ onChanged\?\.\(\); setBusy\(false\); return; \}/);
 });
 
-test("Send out results is not offered where nothing can be sent", () => {
+test("Email a summary (Share's, once Send out results) is not offered where nothing can be sent - and is no row button of its own", () => {
   const page = read("TaskPage.jsx");
   assert.match(page, /const cantSend = pendingReview \? !draftCanSend\(caps, pendingReview\) : !!replyMessage && !canSend\(caps, replyMessage\.Channel\);/);
-  assert.match(page, /\.\.\.\(!liveSession && !cantSend \? \[\{ id: "email"/);
+  assert.match(page, /canSummary = !liveSession && !cantSend && notDone/);
+  assert.match(page, /summary: canSummary \? \(\) => setEmailOpen\(true\) : null/);
+  assert.doesNotMatch(page, /\{ id: "email"/);
 });
 
 test("Ask sender is not offered where nothing can be sent - on the row, the reply step's icon, or its bar", () => {

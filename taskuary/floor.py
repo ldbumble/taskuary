@@ -139,7 +139,7 @@ _SCRIPT_MARKS = re.compile(r'\bunset\s[^\n;|&]*\btaskuary_|^\s*(?:export\s+|set\
 # `rd Env:*`, `Set-Item Env:$n $null`, `-Path:Env:*` - and the narrowed forms above are for everything else
 _PS_MARKS = re.compile(_SCRIPT_MARKS.pattern + '|' + _WIPE, re.I | re.M)
 # cli.STRANGER_ACTS and the options that go with them (test_floor_wave_b keeps the two in step)
-TASKUARY_OK = frozenset({'--reply', '--reply-file', '--draft', '--draft-file', '--attach', '--item', '--done', '--note'})
+TASKUARY_OK = frozenset({'--reply', '--reply-file', '--draft', '--draft-file', '--attach', '--item', '--done', '--note', '--waiting-on'})
 _TASKUARY_WITH = frozenset({'--slot', '--to', '--subject', '--result', '--overlap', '--settled', '--propose', '--no-reply', '--kind', '--follow-up'})
 _TASKUARY_ASK = frozenset({'--help', '-h', '--version'})
 _SEG = re.compile(r'(?:&&|\|\||[;|&\n]|\$\(|`)+')

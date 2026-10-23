@@ -98,8 +98,10 @@ def waited_on(store, task: dict, now=None) -> tuple:
     ledger the reply watch reads), SILENT_DAYS when they have no history."""
     from . import outcomes
     msgs = store.list_messages(task['TaskId'])
+    from .waiton import waiting
     who = str(task.get('Assignee') or '')
-    who = who[7:] if who.startswith('person:') else next((str(m['FromEmail']).lower() for m in reversed(msgs) if m.get('FromEmail')
+    # the person an agent SAID it waits on (waiton.py) first: the last one to write may be the asker, not who holds the answer
+    who = waiting(task) or (who[7:] if who.startswith('person:') else '') or next((str(m['FromEmail']).lower() for m in reversed(msgs) if m.get('FromEmail')
                                                          and m.get('Direction') != 'out' and m.get('Status') != 'context'), '')
     last = max((_ts(m.get('SentAt')) for m in msgs if m.get('SentAt')), default='') or _ts(task.get('UpdatedAt') or task.get('CreatedAt'))
     try: quiet = ((now or datetime.now()) - datetime.fromisoformat(last)).days if last else 0

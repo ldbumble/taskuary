@@ -94,7 +94,7 @@ DENIED = (
     (r'POST', r'^/api/(soul|learn)(/|$)', 'SOUL.md and LEARNED.md are the owner\'s word - propose, do not write'),
     (r'PUT|PATCH', r'^/api/(owner|whoami)$', 'who the owner is'),
     (r'POST', r'^/api/(mcp|mssql)/', 'runs a command, or sends saved credentials to a host of the caller\'s choosing'),
-    (r'POST', r'^/api/(reports/(preview|compose|compose-sources)|workflows/compose)$',
+    (r'POST', r'^/api/(reports/(preview|compose|compose-sources)|workflows/compose|dashboards/(compose|preview))$',
      'the report/workflow composer may read a connected system with the card\'s credentials'),
     # testing a step reads a connected system with the card's credentials; a repair rewrites a saved workflow
     (r'POST', r'^/api/workflows/(step-test|\d+/repair)$',

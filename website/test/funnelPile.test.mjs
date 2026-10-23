@@ -197,7 +197,8 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.match(view, /fillCaps\(room - \(curKey \? CUR_H - ROW_H : 0\), bands\)/);
   // Unread is the ranked pipe again: it is the only source for CURRENT/NEXT and for what the chat
   // will actually ask about. All remains FeedView's chronological history.
-  assert.match(view, /<FeedView[^]*top=\{<Pile/);
+  // ...under a removed task's "Removed <title> - Undo" when there is one (Removed.jsx, 2026-10-22)
+  assert.match(view, /<FeedView[^]*top=\{<><UndoLine kinds=\{\["task"\]\}[^<]*\/><Pile /);
   assert.match(read("FeedView.jsx"), /\{setupRail \? null : top\}/);
   // The rail's kind/source filters narrow the rail's OWN rows and nothing else: the pile and the
   // walk are asked for over everything, so the assistant processes the whole pipe whatever the

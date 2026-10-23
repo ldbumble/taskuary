@@ -303,20 +303,26 @@ test("one border around the three layers: the suggestion, the row and the box si
   assert.match(css, /\.tq-dock \.tq-compose-box \{[^}]*border: 0;/);
 });
 
-// The draft's own Send is a card verb with its slot on the bar from the first render: pushed on only when advised, it reshuffled the
-// row when the advice landed (2026-10-19). Advised, it is filled where it stands; the press runs the card's own handler.
-test("the draft's own Send leads the bar from the first render, outlined; advised it is filled in place, the bar unchanged", async () => {
-  const { advisedAny, holdsMove } = await import("../src/actionRow.js");
+// The draft's own Send lives UNDER THE DRAFT only (the owner, 2026-10-22, reversing the bar's copy of 2026-10-19): the bar keeps an
+// empty slot of its width from the first render, so nothing reshuffles when the advice lands. Advised, it is lit on the card.
+test("the draft's own Send is never on the bar: an empty slot holds its place, and advised it is lit on the card, the bar unchanged", async () => {
+  const { advisedAny, advisedIn, clustersOf, holdsMove } = await import("../src/actionRow.js");
   const list = [v("12:approve", "decide", { tone: "p", label: "Send", card: true }), v("12:redraft", "decide", { label: "Redraft", card: true }),
     v("remind", "more", { label: "Remind me" }), v("done", "more", { promote: false, onCard: true, label: "Mark done" }), v("next", "next")];
   assert.ok(holdsMove(list));
   assert.equal(advisedAny(list, { verb: "approve", label: "Send" })?.id, "12:approve", "found, so no advice:approve is drawn");
+  assert.equal(advisedIn(list, { verb: "approve", label: "Send" })?.id, "12:approve", "the Advisor's line finds the Send under the draft");
   const quiet = rowOf({ ref: "", list });
-  assert.deepEqual([...quiet.decide, ...quiet.agent, ...quiet.more].filter((x) => x.card).map((x) => x.id), ["12:approve"], "only its main move, never Redraft");
-  assert.equal(quiet.decide[0].id, "12:approve");
+  assert.deepEqual([...quiet.decide, ...quiet.agent, ...quiet.more].filter((x) => x.card).map((x) => x.id), [], "no card verb on the bar - not Send, not Redraft");
+  assert.deepEqual([quiet.decide[0].id, quiet.decide[0].slot, quiet.decide[0].label], ["slot:12:approve", true, "Send"], "its slot, as wide as its word");
+  // ...in the reply group, where the Send stood, and never behind ▾
+  const reply = clustersOf(quiet).find((g) => g.type === "reply");
+  assert.equal(reply.shown[0].slot, true); assert.ok(!clustersOf(quiet).some((g) => g.rest.some((x) => x.slot)));
   assert.deepEqual(filled(quiet), []);
   const sent = rowOf({ ref: "", list }, { verb: "approve", label: "Send" }), ids = (r) => [...r.decide, ...r.agent, ...r.more].map((x) => x.id);
-  assert.deepEqual(filled(sent), ["12:approve"]); assert.equal(sent.lit, ""); assert.equal(sent.next.tone, "s");
+  assert.deepEqual(filled(sent), []); assert.equal(sent.lit, "12:approve", "lit where it stands, under the draft"); assert.equal(sent.next.tone, "s");
+  const row = fs.readFileSync(path.join(process.cwd(), "src", "ActionRow.jsx"), "utf8");
+  assert.match(row, /v\.slot \? <span key=\{v\.id\} className="tq-ab s slot" aria-hidden="true" data-tq-slot="">/, "drawn empty and unpressable");
   assert.equal(rowOf({ ref: "", list }, { verb: "redraft", label: "Redraft" }).lit, "12:redraft", "a card verb with no slot is lit on the card");
   assert.deepEqual(ids(sent), ids(quiet), "the bar is the same with and without the advice");
   const later = rowOf({ ref: "", list }, { verb: "defer", label: "Remind me" });

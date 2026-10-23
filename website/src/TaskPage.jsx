@@ -97,6 +97,7 @@ import { KIND_OPTIONS, KINDS, kindLabel, shortKind } from "./kinds.js";
 import { openAppLink } from "./appLinks.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { place } from "./words.js";
+import { announceRemoved, fromAnswer } from "./removed.js";
 import { heldSteps, heldTask, heldTerm, heldWait, keepTask, keepTerms } from "./taskDetail.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
@@ -660,10 +661,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...put down AT THE PRESS, as Mark done is: cleared only once the delete returned, the task sat on the rail as an
   // open one already seen - under For later - then left, then its mail came back as the FYI it now is (press audit,
   // 2026-10-01). The FYI is right; the steps between were the flicker. A delete that fails puts it back with the reason.
+  // ...AND IS TAKEN BACK (the owner, 2026-10-21: act at once + Undo): the server kept the task (recentlydeleted.keep_task), and the
+  // list it leaves - the rail, the Tasks list - draws "Removed <title> - Undo" (Removed.jsx UndoLine, kind "task")
   const notATask = async () => {
     onLeave?.();
-    try { await runOperation(api, "task.not_a_task", selected); }
+    let out;
+    try { out = await runOperation(api, "task.not_a_task", selected); }
     catch (e) { const msg = opError(e, "Could not remove the task - it is still here; try Remove again."); setErr(msg); onStay?.(msg); return; }
+    announceRemoved(fromAnswer(out, "task", t?.Title || "the task"));
     onSelect(null); await loadTasks(); onChanged?.();
   };
   // The task's own session - the only terminal in the app. undefined means "not looked
@@ -1339,7 +1344,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // THE STATUS IN THE HEADER IS THE RAIL'S (the redesign, owner-approved 2026-10-21): the same mark and word the rail row wears for this
   // task - the live session's own word first, then the rail's row (on the canvas), then the server's state (railStatus.taskStatus)
   const status = taskStatus({ live: term?.alive ? { alive: true, waiting: agentState === AGENT.waiting } : null, rail, state: rowState,
-    closed: ["done", "dropped"].includes(t?.Status) });
+    closed: ["done", "dropped"].includes(t?.Status), cantSend: !!pendingReview && cantSend });
   const continueHere = !liveSession && notDone && (barContinue || (stage !== "agent" && canContinue));
   const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession;
   const startHere = !liveSession && notDone && !continueHere && !sendGeneral && (stage !== "agent" || (agentBar && !isGeneral));
@@ -1405,7 +1410,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // MESSAGE SOMEONE - email or chat - whoever started the task (the owner, 2026-10-09): tell somebody it is done, the AI writes it, it waits in Close out
       // ...never where nothing can be sent from here (the owner, 2026-10-22: "no send out results on something you can't send out")
       ...(!liveSession && !cantSend ? [{ id: "email", group: "agent", label: labelOfRow("email"), run: () => setEmailOpen(true), title: hintOfRow("email") }] : []),
-      ...(replyMessage && !liveSession ? [{ id: "ask-sender", group: "more", label: labelOfRow("ask-sender"), run: () => setAskSenderOpen(true), title: hintOfRow("ask-sender") }] : []),
+      // ...nor Ask sender: its question is a reply too, and leaves by the same channel (a Teams task offered it, 2026-10-22)
+      ...(replyMessage && !liveSession && !cantSend ? [{ id: "ask-sender", group: "more", label: labelOfRow("ask-sender"), run: () => setAskSenderOpen(true), title: hintOfRow("ask-sender") }] : []),
       { id: "done", group: "more", label: finishing ? "Marking done…" : labelOfRow("done"), disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession && !pendingReview, beside: liveSession, onCard: !!pendingReview && !liveSession },   // a live session has no primary;
       // ...nor a waiting draft: its Send, under the draft, is the move (2026-10-06), so Mark done stands outlined beside Next -
       // and so do Start an agent and Next (`onCard`): a second filled button on the bar pulled the eye off the draft
@@ -2145,10 +2151,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             startIcon={openingReply ? <CircularProgress size={11} /> : <ForwardToInboxIcon sx={{ fontSize: 14 }} />}
                             onClick={() => (pendingReview ? setOpenStage("reply") : openReply(true))}>
                             {openingReply ? "Drafting…" : replyPrimary}</Button>
-                          <Tooltip title={`${labelOfRow("ask-sender")} - ${hintOfRow("ask-sender")}`}>
+                          {!cantSend && <Tooltip title={`${labelOfRow("ask-sender")} - ${hintOfRow("ask-sender")}`}>
                             <IconButton size="small" sx={{ color: "#8a3646" }} onClick={() => setAskSenderOpen(true)}>
                               <ChatBubbleOutlineIcon sx={{ fontSize: 15 }} /></IconButton>
-                          </Tooltip>
+                          </Tooltip>}
                         </Box>
                       : null} />
                   {/* WHAT CLOSED IT, where it was closed (the owner, 2026-10-19: "i hit mark done on close out but agent work tab opened up
@@ -2200,7 +2206,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               title="Drafts the reply here, from this task's own context. Nothing is sent until you approve it."
                               onClick={() => openReply(true)}>{openingReply ? "Drafting…" : replyPrimary}</Button>
                           )}
-                          {!inRow && <Button size="small" variant="outlined" sx={barBtn}
+                          {!inRow && !cantSend && <Button size="small" variant="outlined" sx={barBtn}
                             startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 15, color: "#8a3646" }} />}
                             title="Drafts a question to the sender. It waits here for your approval; nothing is sent now."
                             onClick={() => setAskSenderOpen(true)}>{labelOfRow("ask-sender")}</Button>}

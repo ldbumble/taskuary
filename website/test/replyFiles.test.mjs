@@ -49,9 +49,12 @@ test("the surface that approves a reply shows what rides with it", () => {
   assert.match(review, /<ReplyFiles reviewId=\{r\.ReviewId\} files=\{deliveryFiles\(filedDelivery\)\}/);
 });
 
-test("a chat says it cannot carry a file instead of offering a picker that lies", () => {
+test("a chat offers no picker that lies, and says a file cannot ride only where its draft promises one", () => {
   const pane = read("ReplyFiles.jsx");
-  assert.match(pane, /cannot carry a file/);
+  assert.match(pane, /\) : \(promisesFiles\(text\) \|\| files\.length\) \? \(/);
+  assert.match(pane, /message cannot carry one — reply by email with the file instead/);
+  // ...no line under every chat draft that promises nothing (the owner, 2026-10-22: no explanation lines)
+  assert.doesNotMatch(pane, /answer by email to attach one/);
   assert.match(pane, /const mail = String\(channel \|\| "email"\)\.toLowerCase\(\) === "email"/);
   // the warning is a LINE, never a block: "attached in my last mail" is a real sentence
   assert.doesNotMatch(pane, /disabled=\{missing/);

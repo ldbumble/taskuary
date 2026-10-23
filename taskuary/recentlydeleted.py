@@ -18,7 +18,10 @@ LISTED = ('report', 'workflow', 'rule', 'profile')        # what Recently delete
 SHORT = ('connection', 'signout', 'cli')                   # kept for the Undo line's minutes, then finished off
 
 
-def _keep(kind: str) -> float: return UNDO_SECONDS if kind in SHORT else KEEP_DAYS * 86400
+BRIEF = SHORT + ('task',)                                  # ...and a task Removed as not a task: its Undo line's alone, nothing to finish
+
+
+def _keep(kind: str) -> float: return UNDO_SECONDS if kind in BRIEF else KEEP_DAYS * 86400
 
 
 def keep(store, kind: str, title: str, data: dict, now: float = None) -> int:
@@ -143,6 +146,46 @@ def remove_cli(store, cfg: dict, name: str, users: list) -> dict:
     return {'deleted': keep(store, 'cli', name, kept), 'title': name, 'kind': 'cli'}
 
 
+TASK_ROWS = (('review', 'ReviewId'), ('comment', 'CommentId'), ('run', 'RunId'), ('task_artifact', 'ArtifactId'), ('session_resume', 'TaskId'))
+
+
+def task_snapshot(store, tid: int) -> dict:
+    """REMOVE - NOT A TASK IS TAKEN BACK BY ITS UNDO (the owner, 2026-10-21: no "are you sure"; the task card had no Undo, 2026-10-22).
+    What store.delete_task takes or unhooks, read before it runs: the task row, the rows it deletes, which messages and routes it lets
+    go (and as what), and the Advisor ideas it dismisses. The verdict's own marks - the ignore route and the memory note - are added
+    to it by the caller (`ignore`, `memory`) so the Undo takes those back too."""
+    rows = lambda q: store._rows(q, (tid,))
+    return {'task': store.get_task(tid),
+            **{t: rows(f'SELECT * FROM {t} WHERE TaskId=?') for t, _ in TASK_ROWS},
+            'messages': rows('SELECT MessageId, Status FROM message WHERE TaskId=?'),
+            'routes': [r['RouteId'] for r in rows('SELECT RouteId FROM route WHERE TaskId=?')],
+            'ideas': store._rows("SELECT IdeaId, Status, DecidedBy, DecidedAt FROM idea WHERE Status IN ('open','snoozed') AND (json_extract(ActionJson,'$.tid')=? "
+                                 "OR IdeaId IN (SELECT CAST(substr(SourceRef,16) AS INTEGER) FROM task WHERE TaskId=? AND SourceRef LIKE 'assistant:idea:%'))", (tid, tid))}
+
+
+def keep_task(store, snap: dict) -> dict:
+    t = snap.get('task') or {}
+    return {'deleted': keep(store, 'task', t.get('Title') or 'the task', snap), 'title': t.get('Title') or 'the task', 'kind': 'task'}
+
+
+def _restore_task(store, d: dict) -> int:
+    """The task back as it stood - under its old id while nothing has taken it - with its rows, its messages and routes, its ideas;
+    the verdict's ignore route deleted and its memory note switched off, so the next message on the thread can open work again."""
+    tid = store.put_back('task', d['task'], 'TaskId')
+    for t, key in TASK_ROWS:
+        for r in d.get(t) or []: store.put_back(t, {**r, 'TaskId': tid}, key)
+    for m in d.get('messages') or []:
+        store._exec('UPDATE message SET TaskId=?, Status=? WHERE MessageId=? AND TaskId IS NULL', (tid, m['Status'], m['MessageId']))
+    for rid in d.get('routes') or []: store._exec('UPDATE route SET TaskId=? WHERE RouteId=? AND TaskId IS NULL', (tid, rid))
+    if d.get('ignore'): store._exec("DELETE FROM route WHERE RouteId=? AND Decision='ignore'", (d['ignore'],))
+    if d.get('memory'): store.set_memory_active(d['memory'], False)
+    for i in d.get('ideas') or []:
+        store._exec('UPDATE idea SET Status=?, DecidedBy=?, DecidedAt=? WHERE IdeaId=?', (i['Status'], i.get('DecidedBy'), i.get('DecidedAt'), i['IdeaId']))
+    store._bump_snapshots()
+    store._poke('feed-changed', 'task-changed', task_id=tid)
+    return tid
+
+
 class Gone(LookupError): pass
 class Taken(ValueError): pass
 
@@ -174,6 +217,7 @@ def restore(store, cfg: dict, did: int) -> dict:
             if n in cfg.get('agents', {}): cfg['agents'][n] = prof
         config.save(cfg)
         cli_connections.sync(cfg, store)
+    elif kind == 'task': return {'kind': kind, 'title': r['Title'], 'task_id': _restore_task(store, d)}
     elif kind in SHORT:
         row = d.get('row') or {}
         store._exec('UPDATE connector SET ConfigJson=?, Secret=?, Active=?' + (', Scope=?, LastSyncAt=?' if kind == 'connection' else '')

@@ -51,6 +51,8 @@
     "attach":          {"label": "Attach a file", "hint": "Adds a file to the reply - nothing is sent until you approve it", "row": ["attach"],
                         "states": {"more": "Attach another"}},
     "walk":            {"label": "Walk me through my tasks", "hint": "Everything waiting, most important first - mail, reports, agents, meetings", "row": []},
+    "copy":            {"label": "Copy", "hint": "Copies the draft to paste where it came from - nothing is sent, and the task stays open", "row": ["copy"],
+                        "states": {"done": "Copied"}},
     "report_bug":      {"label": "Report this bug", "hint": "Opens a bug report with what went wrong filled in - you read it before anything is sent", "row": []},
     "new_task":        {"label": "New task", "hint": "Start a task of your own", "row": [],
                         "states": {"fix": "New task to fix this"}, "state_hints": {"fix": "A task of its own, carrying what failed and why - for an agent or for you to work"}}

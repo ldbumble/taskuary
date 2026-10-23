@@ -1,7 +1,7 @@
 // A DASHBOARD ON THE REPORTS PAGE: set up with AI like a report (describe it, the composer proposes sources and presets, the owner
 // sees it drawn over REAL rows and saves it), then its name, its refresh and its buttons. Nothing runs an AI after the save - each
 // refresh re-reads the sources (dashboards.py). The composer's words land here; the buttons do the talking.
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, Box, Button, CircularProgress, TextField, Typography } from "@mui/material";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import api from "./api";
@@ -10,11 +10,41 @@ import Dashboard from "./dashboard/Dashboard.jsx";
 import { SchedulePicker, scheduleOf, withSchedule } from "./WorkflowEditor.jsx";
 import { removeNow } from "./Removed.jsx";
 import { DASH } from "./words.js";
-import { FAINT, INK } from "./theme.jsx";
+import { BORDER, FAINT, INK } from "./theme.jsx";
 import { dayLabel } from "./dates.js";
 import { fmtTime12 } from "./ui.jsx";
 
 const errOf = (e, fallback) => e?.response?.data?.detail || e?.message || fallback;
+
+// THE READY ONES (dashboards.TEMPLATES): what the End of day checkup is to reports - one press draws it over this install's own rows,
+// and it is saved like any draft. Taskuary at a glance needs nothing connected, so it is the way in for anybody (the owner, 2026-10-23).
+export function Templates({ onUse }) {
+  const [list, setList] = useState(null), [busy, setBusy] = useState(""), [err, setErr] = useState("");
+  useEffect(() => { api.get("/api/dashboards/templates").then(({ data }) => setList(data.templates || [])).catch(() => setList([])); }, []);
+  const use = async (key) => {
+    setBusy(key); setErr("");
+    try { const { data } = await api.get(`/api/dashboards/templates/${encodeURIComponent(key)}`); onUse(data); }
+    catch (e) { setErr(errOf(e, "It could not be drawn.")); }
+    setBusy("");
+  };
+  if (!list?.length) return null;
+  return (
+    <Box data-tq-dashboard-templates="" sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+      <Typography sx={{ fontSize: 12, color: FAINT }}>{DASH.or_start}</Typography>
+      {list.map((t) => (
+        <Box key={t.key} sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1.5, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: "#fffdfb" }}>
+          <Box sx={{ flex: "1 1 240px", minWidth: 0 }}>
+            <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: INK }}>{t.title}</Typography>
+            <Typography sx={{ fontSize: 12.5, color: FAINT, mt: 0.25 }}>{t.explain}</Typography>
+          </Box>
+          <Button size="small" variant="outlined" disableElevation disabled={!!busy} onClick={() => use(t.key)} data-tq-dashboard-template={t.key}
+            startIcon={busy === t.key ? <CircularProgress size={12} /> : null} sx={{ flex: "none" }}>{busy === t.key ? DASH.using : DASH.use}</Button>
+        </Box>
+      ))}
+      {err && <Alert severity="error">{err}</Alert>}
+    </Box>
+  );
+}
 
 export default function DashboardEditor({ sourceId = null, draft = null, reload, onBack, onSaved }) {
   const [spec, setSpec] = useState(draft?.config || null);
@@ -23,6 +53,12 @@ export default function DashboardEditor({ sourceId = null, draft = null, reload,
   const [data, setData] = useState(null), [problems, setProblems] = useState([]), [active, setActive] = useState(true);
   const [busy, setBusy] = useState(""), [err, setErr] = useState(""), [said, setSaid] = useState("");
   const [title, setTitle] = useState(draft?.config?.title || ""), [sched, setSched] = useState(() => scheduleOf(draft?.config || {}));
+  const drawn = useRef(null);
+  const takeTemplate = (t) => {
+    drawn.current = t.config;
+    setSpec(t.config); setData(t.data); setProblems(t.problems || []); setTitle(t.config.title || ""); setSched(scheduleOf(t.config));
+    setNote({ severity: "info", text: t.explain || "" });
+  };
 
   const fetchSaved = async () => {
     const { data: d } = await api.get(`/api/dashboards/${sourceId}`);
@@ -34,9 +70,9 @@ export default function DashboardEditor({ sourceId = null, draft = null, reload,
     fetchSaved().then((d) => { setTitle(d.config.title || ""); setSched(scheduleOf(d.config)); })
       .catch((e) => setErr(errOf(e, "The dashboard could not be read.")));
   }, [sourceId]);   // eslint-disable-line react-hooks/exhaustive-deps
-  // a draft is drawn over real rows before it is kept: its sources run now, nothing is saved
+  // a draft is drawn over real rows before it is kept: its sources run now, nothing is saved - a ready one came drawn already
   useEffect(() => {
-    if (sourceId != null || !spec) return;
+    if (sourceId != null || !spec || drawn.current === spec) return;
     let live = true;
     setBusy("preview"); setErr("");
     api.post("/api/dashboards/preview", { config: spec })
@@ -84,10 +120,13 @@ export default function DashboardEditor({ sourceId = null, draft = null, reload,
   if (!spec) return (
     <Box data-tq-dashboard-setup="">
       {err && <Alert severity="error" sx={{ mb: 1.5 }}>{err}</Alert>}
-      {sourceId == null ? <Composer kind="dashboard" onDraft={(config, meta) => {
-        setSpec(config); setTitle(config.title || ""); setSched(scheduleOf(config));
-        setNote({ severity: meta?.error || meta?.confidence === "low" ? "warning" : "info", text: meta?.error ? `${meta.error}.` : meta?.explain || "" });
-      }} /> : !err && <CircularProgress size={20} />}
+      {sourceId == null ? <>
+        <Composer kind="dashboard" onDraft={(config, meta) => {
+          setSpec(config); setTitle(config.title || ""); setSched(scheduleOf(config));
+          setNote({ severity: meta?.error || meta?.confidence === "low" ? "warning" : "info", text: meta?.error ? `${meta.error}.` : meta?.explain || "" });
+        }} />
+        <Templates onUse={takeTemplate} />
+      </> : !err && <CircularProgress size={20} />}
     </Box>
   );
   return (

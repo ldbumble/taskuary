@@ -6558,6 +6558,22 @@ def dashboard_preview(body: dict):
     data = dashboards.collect(store, spec)
     return {'data': data, 'problems': dashboards.problems(spec, data)}
 
+@app.get('/api/dashboards/templates')
+def dashboard_templates():
+    """The built-in dashboards New dashboard offers in one press (dashboards.TEMPLATES) - what the End of day checkup is to reports."""
+    from . import dashboards
+    return {'templates': dashboards.templates()}
+
+@app.get('/api/dashboards/templates/{key}')
+def dashboard_template(key: str):
+    """One built-in dashboard, drawn over this install's own rows: its sources are Taskuary's tables, read locally and deterministically,
+    so it is shown at once (a GET - the demo shows it too) and saved like any draft."""
+    from . import dashboards
+    t = dashboards.template(key)
+    if not t: raise HTTPException(404, 'no such dashboard template')
+    data = dashboards.collect(store, t['config'])
+    return {**t, 'data': data, 'problems': dashboards.problems(t['config'], data)}
+
 @app.get('/api/dashboards/{sid}')
 def dashboard_get(sid: int):
     """A saved dashboard: its spec, its last run's rows (None before the first run) and what would draw empty."""

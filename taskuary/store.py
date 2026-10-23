@@ -121,7 +121,8 @@ SOURCE_COLS = ('Channel', 'Address', 'Owner', 'ConnectorId', 'Active', 'ConfigJs
 # asserts this table describes the rows that actually appeared. The ownership heal reads it, and
 # RETIRED_SEEDS beside it; nothing else may write `Owner='template'`.
 SEEDED_REPORTS = (('assistant_report_seeded', 'Advisor', 'assistant'),
-                  ('evening_inbox_report_seeded', 'End of day checkup', 'evening_inbox'))
+                  ('evening_inbox_report_seeded', 'End of day checkup', 'evening_inbox'),
+                  ('glance_dashboard_seeded', 'Taskuary at a glance', 'dashboard'))
 # ...and the ones a fresh install no longer gets, which older installs still carry and the heal still
 # owes. The Morning digest: the walk now opens with who wants what (the owner, 2026-09-23: "remove the
 # morning digest as report by default if the walk through does that"). An install that has one keeps
@@ -1575,6 +1576,14 @@ class SQLiteStore:
                                              'daily_at': '18:00', 'once_per_day': True,
                                              'first_run_at_schedule': True, 'ai_prompt': EVENING_PROMPT})))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('evening_inbox_report_seeded', '1', 'template')")
+            # ...and its dashboard twin (the owner, 2026-10-23: "like we have end of day report as template let's do the same for
+            # dashboard"): Taskuary at a glance, drawn from the app's own tables, so it needs nothing connected. A daily_at with no
+            # run yet is due at once (reports.is_due), so the first sync fills it; deleting the row is the off switch, as above.
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='glance_dashboard_seeded'").fetchone():
+                from .dashboards import GLANCE
+                self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
+                                ('report', GLANCE['title'], 'template', 1, json.dumps(GLANCE)))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('glance_dashboard_seeded', '1', 'template')")
             # prompt heal: a Morning digest still running a SHIPPED instruction tracks the
             # current one (same deal the template docs get) - an owner-edited prompt is never touched
             from .digest import OLD_PROMPTS, PROMPT as DIGEST_PROMPT

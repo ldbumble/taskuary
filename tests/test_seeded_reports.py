@@ -32,7 +32,8 @@ def _ago(days):
 class WhatShipsTests(unittest.TestCase):
     def test_the_two_shipped_reports_are_there_and_active(self):
         got = _reports(MemoryStore())
-        self.assertEqual(sorted(got), ['Advisor', 'End of day checkup'])
+        self.assertEqual(sorted(got), ['Advisor', 'End of day checkup', 'Taskuary at a glance'])     # ...and the built-in dashboard
+        self.assertEqual(got['Taskuary at a glance']['type'], 'dashboard')
         self.assertEqual([got[n]['type'] for n in ('End of day checkup', 'Advisor')], ['evening_inbox', 'assistant'])
 
     def test_a_fresh_install_gets_no_automation_ideas_the_advisor_counts_the_month_itself(self):

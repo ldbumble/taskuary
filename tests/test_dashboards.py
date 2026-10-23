@@ -206,3 +206,84 @@ def test_the_card_under_the_line_keeps_the_dashboard_mark_and_no_other_card_grow
     from taskuary import concierge
     assert concierge.card_for({'kind': 'report', 'dashboard': True})['dashboard'] is True
     assert 'dashboard' not in concierge.card_for({'kind': 'report'})
+
+
+# ── the built-in dashboard: Taskuary at a glance (what the End of day checkup is to reports) ─────────────────────────
+def _glance_store():
+    """A small world with every shape the template reads: mail that became a task, one whose task closed, an fyi, one still
+    waiting for an AI; two replies answered; three agent sessions - finished, failed, still going. Invented people only."""
+    from taskuary.testing import Factory
+    s = MemoryStore(); f = Factory(s)
+    at = lambda h: (datetime.now() - timedelta(hours=h)).strftime('%Y-%m-%d %H:%M:%S')
+    t1 = f.task(title='Reconcile the GL export', status='open', kind='general')
+    t2 = f.task(title='Resend the Q3 numbers', status='done', kind='reply')
+    s._exec('UPDATE task SET ClosedAt=? WHERE TaskId=?', (at(2), t2))
+    m1 = f.message(task_id=t1, subject='GL export is short', from_name='Erin Blake', sent_at=at(30))
+    m2 = f.message(task_id=t2, channel='teams', subject='Q3 numbers?', from_name='Gail Moreno', sent_at=at(20))
+    m3 = f.message(status='filed', subject='Portal maintenance Sunday', from_name='Paula Vance', sent_at=at(10))
+    m4 = f.message(status='error', subject='Can you look at this', from_name='Erin Blake', sent_at=at(5))
+    f.route(m1, t1); f.route(m2, t2); f.route(m3, None, 'file', 'a notice, nothing asked'); f.route(m4, None, 'file', 'awaiting AI triage')
+    for mid, tid, decided in ((m1, t1, 28), (m2, t2, 16)):     # answered 2h and 4h after the ask: the median is 3
+        rid = f.review(tid, mid, status='approved', draft='Done.', final='Done.')
+        s._exec('UPDATE review SET DecidedAt=? WHERE ReviewId=?', (at(decided), rid))
+    for sid, tid, kinds in (('s1', t1, (('working', 9), ('finished', 8.5))), ('s2', t2, (('working', 7), ('failed', 6))), ('s3', t1, (('working', 1),))):
+        for kind, h in kinds:
+            eid = s.add_worker_event({'TaskId': tid, 'Sid': sid, 'Kind': kind, 'Source': 'test', 'EventId': f'{sid}-{kind}'})
+            s._exec('UPDATE worker_event SET CreatedAt=? WHERE Id=?', (at(h), eid))
+    return s
+
+
+def test_the_template_is_offered_and_every_install_has_it_like_the_end_of_day_checkup():
+    from taskuary.store import SEEDED_REPORTS
+    assert [t['key'] for t in dashboards.templates()] == ['glance'] and dashboards.template('nope') is None
+    assert ('glance_dashboard_seeded', 'Taskuary at a glance', 'dashboard') in SEEDED_REPORTS
+    rows = [r for r in MemoryStore().list_sources(active_only=False) if r['Address'] == 'Taskuary at a glance']
+    cfg = json.loads(rows[0]['ConfigJson'])          # ...as written, plus what every report row is given (its routing)
+    assert len(rows) == 1 and rows[0]['Owner'] == 'template' and {k: cfg[k] for k in dashboards.GLANCE} == dashboards.GLANCE
+    t = dashboards.template('glance'); t['config']['title'] = 'changed'
+    assert dashboards.GLANCE['title'] == 'Taskuary at a glance'          # a copy: using it never edits the shared spec
+
+
+def test_the_template_validates_reads_only_taskuary_data_and_fits_one_screen():
+    spec = dashboards.GLANCE
+    assert dashboards.validate(spec, MemoryStore()) == (True, '')
+    assert {x['type'] for x in spec['sources']} == {'taskuary_data'}
+    assert len(spec['components']) <= dashboards.MAX_COMPONENTS
+    assert [c['kind'] for c in spec['components'][:4]] == ['stat'] * 4      # the numbers first
+
+
+def test_the_template_runs_deterministically_over_the_apps_own_rows():
+    s = _glance_store()
+    one, two = dashboards.collect(s, dashboards.GLANCE), dashboards.collect(s, dashboards.GLANCE)
+    assert one['sources'] == two['sources'] and not dashboards.problems(dashboards.GLANCE, one)
+    src = one['sources']
+    stages = [r['stage'] for r in src['flow']['rows']]
+    assert [stages.count(x) for x in dashboards.STAGES] == [4, 3, 2, 1]      # came in, triaged (not the one waiting on an AI), on a task, closed
+    runs = {r['run_id']: r for r in src['agents']['rows']}
+    assert {k: r['outcome'] for k, r in runs.items()} == {'s1': 'finished', 's2': 'failed', 's3': 'working'}
+    assert runs['s1']['minutes'] == 30 and runs['s3']['minutes'] is None
+    tiles = dict(dashboards.headline(dashboards.GLANCE, one))
+    assert tiles == {'Came in': '4', 'New tasks': '2', 'Open now': '1', 'Median reply time': '3 h', 'Agent time per session': '45 min'}
+    closed = next(c for c in dashboards.GLANCE['components'] if c['kind'] == 'progress')
+    week = dashboards.in_range(src['closed']['rows'], 'closed', dashboards.span(closed, 90))
+    assert dashboards.span(closed, 90) == 7 and dashboards.aggregate(dashboards.where(week, closed['where'])) == 1
+
+
+def test_a_components_own_range_and_the_median_are_checked():
+    bad = {**SPEC, 'components': [{'kind': 'progress', 'title': 'P', 'source': 'tasks', 'target': 5, 'range': 12}]}
+    assert 'own "range"' in dashboards.validate(bad, MemoryStore())[1]
+    assert dashboards.aggregate([{'v': 1}, {'v': 9}, {'v': 3}], 'median', 'v') == 3
+    assert dashboards.aggregate([{'v': 1}, {'v': 4}], 'median', 'v') == 2.5
+
+
+def test_the_template_endpoint_hands_it_drawn_over_this_installs_rows():
+    from unittest import mock
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    s = _glance_store()
+    with mock.patch.object(server, 'store', s):
+        c = TestClient(server.app)
+        assert [t['key'] for t in c.get('/api/dashboards/templates').json()['templates']] == ['glance']
+        got = c.get('/api/dashboards/templates/glance').json()
+        assert c.get('/api/dashboards/templates/nope').status_code == 404
+    assert got['config'] == dashboards.GLANCE and len(got['data']['sources']['mail']['rows']) == 4 and got['problems'] == []

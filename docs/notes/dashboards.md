@@ -9,10 +9,20 @@ rows (`dashboard_result`) and files one row under Reports. The page slices those
 - page: `website/src/dashboard/` (`slice.js` cuts the rows, `charts.jsx` holds the presets, `Dashboard.jsx` lays them out) ·
   `DashboardEditor.jsx` (Reports → Dashboards) · `assistantCards.DashboardCard` (the canvas)
 
+## The built-in one
+
+**Taskuary at a glance** (`dashboards.GLANCE`) is to dashboards what the End of day checkup is to reports: every install gets
+it (`store.SEEDED_REPORTS`, `Owner='template'`, deleting it is the off switch), and New dashboard offers it again under the
+composer in one press (`/api/dashboards/templates`, drawn over the install's own rows). It reads only `taskuary_data` - mail,
+`flow` (how far each message got: came in, triaged, on a task, its task closed), tasks, agent sessions (worker events) and
+replies - so it draws with nothing connected.
+
 ## The presets
 
-`stat` (a number, its change against the previous period, a sparkline) · `progress` (toward a target) · `line` / `area` (one
-value over time) · `bar` (ranked categories, the tail folded into Other) · `stacked` (categories or days split by a second
+`stat` (a number - count, sum, avg, median, min or max - with an optional unit, its change against the previous period, a
+sparkline) · `progress` (toward a target) · `line` / `area` (one
+value over time) · `bar` (ranked categories, the tail folded into Other; or stages kept in a given `order`, each also said as a `share` of the
+first) · `stacked` (categories or days split by a second
 column) · `table` (sortable) · `list` (one line per item; a row that is a task or a message opens it).
 
 The interactive layer: a date range (7 / 30 / 90 / All) and a segment filter re-slice every component. Pressing a bar, column,

@@ -77,6 +77,12 @@ export const toSources = (cfg) => {
   return [{ type: cfg.type || "mssql", ...one }];
 };
 
+// THE FIRST SOURCE THAT CAN ANSWER: a new report started on SQL Server whether or not there was one, so the first thing it said was
+// "set up SQL Server" (the UX walk, 2026-10-22). `order` is the types as the picker offers them; a card counts when it has read
+// cleanly - the source card's own ✓ test - and null leaves the blank's own default
+export const firstConnected = (order, connectors, cardOf = {}) =>
+  order.find((t) => (connectors || []).some((c) => c.Type === (cardOf[t] || t) && c.LastSyncAt && !c.LastError)) || null;
+
 // picking a field out of Intacct's own list appends it to whatever the box holds - which is a
 // list once the composer has written it and a typed string once you have edited it by hand
 export const addField = (v, id) => {

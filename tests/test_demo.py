@@ -430,3 +430,22 @@ class TheSameWorldAtEveryHourTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TheOwnerIsAtNorthwindTests(unittest.TestCase):
+    def test_a_colleague_is_not_a_stranger(self):
+        """The demo owner had no address, so no domain of their own, and every colleague at Northwind was a stranger (the UX walk,
+        2026-10-22). The owner's mailbox is at the colleagues' company; a vendor stays outside it."""
+        from taskuary import senders
+        s = MemoryStore()
+        with mock.patch('taskuary.terminal.live_sessions', lambda tail=0: []): demo.seed(s)
+        self.assertEqual(s.owner()['owner_email'], demo.OWNER_EMAIL)
+        self.assertTrue(demo.OWNER_EMAIL.endswith('@northwind.example'))
+        self.assertIn('northwind.example', senders.own_domains(s))
+        self.assertNotIn('vendor.example', senders.own_domains(s))
+        from taskuary import origin
+        by = {t['TaskId']: (s.last_inbound_on_task(t['TaskId']) or {}).get('FromEmail') or '' for t in s.list_tasks()}
+        colleague = next(t for t, e in by.items() if e.endswith('@northwind.example'))
+        vendor = next(t for t, e in by.items() if e.endswith('@vendor.example'))
+        self.assertEqual(origin.of_task(s, colleague)[0], 'trusted')
+        self.assertEqual(origin.of_task(s, vendor)[0], 'stranger')

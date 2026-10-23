@@ -24,6 +24,7 @@ def install_processing_changes(app, store):
         '/api/fixture/task/chat-burst',
         '/api/fixture/task/chat-saved',
         '/api/fixture/general/canvas',
+        '/api/fixture/processing/arrive-during-next',
     })
 
     def fixture_refuse(method, path):
@@ -251,6 +252,26 @@ def install_processing_changes(app, store):
             'SentAt': sent.isoformat(sep=' '), 'BodyText': body['body'],
         })
         return {'ok': True, 'message_id': mid}
+
+    @app.post('/api/fixture/processing/arrive-during-next')
+    def arrive_during_next(body: dict):
+        """A WhatsApp task lands while the next Next is being made - after its admission, before its commit check (the owner,
+        2026-10-23: Next drew the row below, then the table jumped back). Armed once; the press after it runs as it always does."""
+        if body: raise HTTPException(422, 'this fixed fixture accepts only an empty object')
+        from taskuary import concierge, funnel
+        real, fired = concierge.chips_for, []
+        def chips_while_a_row_arrives(st, *a, **k):
+            if not fired:
+                fired.append(True); concierge.chips_for = real
+                tid = store.create_task({'Title': 'Fix the gate code on the side door', 'Kind': 'general', 'Status': 'open', 'Source': 'whatsapp'}, 'router')
+                store.add_message({'TaskId': tid, 'Channel': 'whatsapp', 'Status': 'routed', 'ExternalId': f'arrive-during-next:{tid}',
+                                   'FromName': 'Ray Colton', 'Subject': 'Side door', 'BodyText': 'The side door code stopped working.',
+                                   'SentAt': datetime.now().isoformat(' ')})
+                store.reconcile_processing_membership()
+                funnel.invalidate()
+            return real(st, *a, **k)
+        concierge.chips_for = chips_while_a_row_arrives
+        return {'armed': True}
 
     @app.post('/api/fixture/processing/ordering')
     def ordering_arrivals(body: dict):

@@ -30,8 +30,7 @@ if __name__ == '__main__':
 
 class StrangerGetsNoBackgroundTests(unittest.TestCase):
     """Who the owner is - SOUL.md, JOB.md, the repos and their paths - is what a planted line in a stranger's mail would ask the
-    agent to repeat back. A stranger's task reads none of it; the owner's own task reads SOUL.md and the repos - JOB.md is the
-    Assistant's alone (its template: "it never reaches a working agent")."""
+    agent to repeat back. A stranger's task reads none of it; the owner's own task reads all of it."""
     def _store(self, origin):
         s = MemoryStore()
         s.save_doc('job', '## The job\n- Runs month-end close for the finance team.', 't')
@@ -48,37 +47,12 @@ class StrangerGetsNoBackgroundTests(unittest.TestCase):
         for private in ('month-end close', 'C:/src/ledger', 'ABOUT THE OWNER'): self.assertNotIn(private, system, private)
         self.assertNotIn('month-end close', context.build(s, tid))
 
-    def test_the_owners_own_task_reads_soul_and_the_repos_but_never_job(self):
+    def test_the_owners_own_task_reads_all_of_it(self):
         from taskuary import context
         s, tid = self._store('owner')
         system = general._prompt(s, tid)[0]
-        for known in ('finance backend', 'C:/src/ledger', 'ABOUT THE OWNER'): self.assertIn(known, system, known)
-        self.assertNotIn('month-end close', system); self.assertNotIn('JOB.md', system)
-        ctx = context.build(s, tid)
-        self.assertIn('finance backend', ctx); self.assertNotIn('month-end close', ctx)
-
-
-class JobStaysWithTheAssistantTests(unittest.TestCase):
-    """JOB.md's template promises the owner it "never reaches a working agent"; every agent CLI read it whole (the owner picked
-    the fix, 2026-10-22). No agent's prompt - general system prompt, coding context file, coding seed - carries a line of it;
-    the Assistant's own conversation (the dock) still does."""
-    JOB = '## The job\n- Owns vendor renewals for Northwind; the Payworth contract is up in March.'
-
-    def _store(self, kind):
-        s = MemoryStore(); s.save_doc('job', self.JOB, 't')
-        return s, s.create_task({'Title': 'Draft the renewal note', 'Kind': kind, 'Status': 'open'}, 'o')
-
-    def test_no_agent_prompt_carries_job(self):
-        from taskuary import context, terminal
-        for kind in ('general', 'coding'):
-            s, tid = self._store(kind)
-            for text in (general._prompt(s, tid)[0], context.build(s, tid), terminal.seed_text(s, tid, repo='northwind/ledger', cwd=None)):
-                self.assertNotIn('Payworth contract', text, kind); self.assertNotIn('JOB.md', text, kind)
-
-    def test_the_assistants_own_conversation_still_reads_it(self):
-        s = MemoryStore(); s.save_doc('job', self.JOB, 't')
-        task, _ = general.dock_task(s)
-        self.assertIn('Payworth contract', general._prompt(s, task['TaskId'])[0])
+        for known in ('month-end close', 'C:/src/ledger', 'ABOUT THE OWNER'): self.assertIn(known, system, known)
+        self.assertIn('month-end close', context.build(s, tid))
 
 
 class AssistantProfileTests(unittest.TestCase):

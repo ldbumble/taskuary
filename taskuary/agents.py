@@ -1610,6 +1610,9 @@ def task_context(store, task_id: int) -> str:
     from . import knowledge
     kb = knowledge.block(store, ' '.join(f"{m.get('Subject') or ''} {m.get('BodyText') or ''}" for m in d['messages'])[:4000])
     if kb: lines += [kb.strip()]
+    # the owner's people (orgchart.py), so "send it to whoever owns payroll" has a name - not on a stranger's task (context.build's rule)
+    from . import orgchart, origin
+    if (org := orgchart.block(store)) and origin.of_task(store, task_id)[0] != 'stranger': lines += ['', "The owner's people:", org]
     return '\n'.join(lines)
 
 

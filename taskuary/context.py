@@ -261,8 +261,12 @@ def build(store, tid: int, msgs: list = None, repo: str = None) -> str:
     # ...never on a stranger's task (origin.py): who the owner is is what a planted line would ask for
     from .brief import background
     from . import origin
-    bg = '' if origin.of_task(store, tid)[0] == 'stranger' else background(store)
+    stranger = origin.of_task(store, tid)[0] == 'stranger'
+    bg = '' if stranger else background(store)
     if bg: parts.append('## About the owner (background - whom you work for)\n' + bg.split('\n\n', 1)[1].replace('## ', '### '))
+    # ...and the owner's people (orgchart.py): whom to send what to - "whoever owns payroll" is a name here. Never on a stranger's task either
+    from . import orgchart
+    if not stranger and (org := orgchart.block(store)): parts.append("## The owner's people (their manager, their reports, who owns what)\n" + org)
     if last:
         try: dos = dossier(store, msg_of(last), exclude_mid=last['MessageId'], skip_conv=True)
         except Exception as e:

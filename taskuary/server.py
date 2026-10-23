@@ -272,6 +272,21 @@ async def walk_gate(request: Request, call_next):
         await asyncio.to_thread(_walk_settled)    # the first rail, chat or pile read sees the new walk, never yesterday's
     return await call_next(request)
 
+PRESENCE_SKIP = {'/api/concierge/arrive', '/api/health'}     # arrive keeps its own book: its gap is the greeting's (welcome.arrive)
+
+@app.middleware('http')
+async def owner_presence(request: Request, call_next):
+    # WHAT THE OWNER DID IS WHERE THEY WERE: every press and send is one, so "while you were away" counts from a real silence
+    # (welcome.touch) and not from the morning's gap all day. GETs are the page's own polls, an agent's call is not the owner.
+    resp = await call_next(request)
+    p = request.url.path
+    pressed = request.method != 'GET' and p.startswith('/api') and p not in PRESENCE_SKIP and resp.status_code < 400
+    if pressed and guard.scope_of(cfg['server'], request.headers) == guard.OWNER:
+        from . import welcome
+        try: await asyncio.to_thread(welcome.touch, store)
+        except Exception as e: logger.debug(f'presence not kept - {e}')
+    return resp
+
 @app.middleware('http')
 async def request_log(request: Request, call_next):
     t0 = _time.time()

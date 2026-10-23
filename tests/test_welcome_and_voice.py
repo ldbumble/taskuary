@@ -401,7 +401,36 @@ class AwayWindowTests(unittest.TestCase):
         gone = now - timedelta(days=3, hours=15)
         s.set_setting(welcome.SEEN_KEY, stamp(gone), 't')
         with mock.patch.object(funnel, 'pile', return_value={'items': []}): self.assertTrue(welcome.arrive(s, now)['said'])
+        s.set_setting(welcome.ACTIVE_KEY, stamp(now + timedelta(hours=1, minutes=50)), 't')        # pressing Next since
         self.assertEqual(welcome.away_window(s, now + timedelta(hours=2))[0], gone, 'the opening screen counts the gap it greeted')
+        # ...while they are still at it: two hours with nothing pressed is an away of its own, from the last press
+        self.assertEqual(welcome.away_window(s, now + timedelta(hours=4))[0], now + timedelta(hours=1, minutes=50))
+
+    def test_a_day_of_presses_is_not_away_since_the_small_hours(self):
+        """The bug: greeted at 8 for a gap from 2:05 AM, then busy all day - at eleven at night the card still read
+        "While you were away · since 2:05 AM". Away is where the latest silence of AWAY_MINUTES began."""
+        s = store(); day = datetime(2026, 10, 22)
+        s.set_setting(welcome.SEEN_KEY, stamp(day.replace(hour=2, minute=5)), 't')
+        with mock.patch.object(funnel, 'pile', return_value={'items': []}): self.assertTrue(welcome.arrive(s, day.replace(hour=8))['said'])
+        self.assertEqual(welcome.away_window(s, day.replace(hour=8, minute=5))[0], day.replace(hour=2, minute=5), 'away overnight: since last night')
+        t = day.replace(hour=8)
+        while t < day.replace(hour=22, minute=50):               # a press every twenty minutes, an hour's dinner at six
+            if not (18 <= t.hour < 19): welcome.touch(s, t)
+            t += timedelta(minutes=20)
+        start, word = welcome.away_window(s, day.replace(hour=22, minute=57))
+        self.assertEqual((start, word), (day.replace(hour=17, minute=40), 'While you were away'), 'the dinner hour, not 2:05 AM')
+        from taskuary import since
+        self.assertEqual(since.overnight(s, day.replace(hour=22, minute=57))['heading'], 'While you were away · since Thu 5:40 PM')
+
+    def test_presence_survives_a_restart_and_a_press_never_spends_the_greeting(self):
+        s = store(); now = datetime(2026, 10, 22, 8, 0)
+        s.set_setting(welcome.SEEN_KEY, stamp(now - timedelta(hours=6)), 't')
+        welcome.touch(s, now)                                      # a click that beat the window's arrive
+        self.assertEqual(s.get_setting(welcome.AWAY_KEY), stamp(now - timedelta(hours=6)))
+        self.assertEqual(s.get_setting(welcome.ACTIVE_KEY), stamp(now), 'in the store, so a restart keeps it')
+        self.assertEqual(welcome.due(s, now)[0], True, 'the morning greeting is still due')
+        welcome.touch(s, now + timedelta(seconds=30))
+        self.assertEqual(s.get_setting(welcome.ACTIVE_KEY), stamp(now), 'a write a minute')
 
     def test_monday_did_i_miss_anything_reaches_back_to_friday(self):
         s = store(); now = datetime.now()
@@ -415,6 +444,22 @@ class AwayWindowTests(unittest.TestCase):
         s = store(); gone = datetime.now().replace(microsecond=0) - timedelta(days=3, hours=15)
         s.set_setting(welcome.SEEN_KEY, stamp(gone), 't')
         self.assertIn(f"the window is since {stamp(gone)[:16]}", digest.gather(s, 1))
+
+
+class PresenceTests(unittest.TestCase):
+    """Presence is written in one place (welcome.touch), from what the owner actually does over the API."""
+
+    def test_an_owner_press_is_presence_and_a_poll_or_an_agent_is_not(self):
+        from fastapi.testclient import TestClient
+        from taskuary import config, server
+        c, agent = TestClient(server.app), {'X-Taskuary-Token': config.load()['server']['agent_token']}
+        with mock.patch.object(welcome, 'touch') as t:
+            c.get('/api/since'); c.post('/api/board/notes', json={'body': 'taking store.py'}, headers=agent)
+            self.assertEqual(t.call_count, 0, 'a poll and an agent are not the owner')
+            self.assertEqual(c.post('/api/board/notes', json={'body': 'a note'}).status_code, 200)
+            self.assertEqual(t.call_count, 1)
+            c.post('/api/concierge/arrive', json={'leaving': True})
+            self.assertEqual(t.call_count, 1, 'arrive keeps its own book')
 
 
 if __name__ == '__main__': unittest.main()

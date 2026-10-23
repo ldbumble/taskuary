@@ -85,6 +85,8 @@ def sender_read(store, p: dict) -> str:
     if replies: out.append('you last wrote back ' + _day(replies[0].get('SentAt')))
     notes = [m['Note'] for m in store.list_memories() if str(m.get('ScopeKey') or '').lower() == em]
     if notes: out += ['what you told me about them:'] + [f'  - {_cut(n, 300)}' for n in notes[:8]]
+    from . import orgchart
+    if (rel := orgchart.relation_of(store, em, s.get('Name') or '')): out.append(f'to you: {rel}')
     others = [h for h in hits if h['Email'] != em]
     if others: out.append('also matching: ' + ', '.join(f"{h['Name'] or h['Email']} <{h['Email']}> ({h['N']})" for h in others))
     return NL.join(out)
@@ -263,6 +265,9 @@ def memory_list(store, p: dict) -> str:
     if want: learned = NL.join(l for l in learned.splitlines() if hit(l))
     out.append('WHAT I LEARNED FROM YOUR VERDICTS (LEARNED.md):' + NL + _cut(learned, 3000) if learned.strip() else 'LEARNED.md has nothing learned yet.')
     if testing and not want: out.append('STILL BEING TESTED, not trusted yet:' + NL + _cut(testing, 1200))
+    from . import orgchart
+    org = NL.join(l for l in orgchart.block(store).splitlines() if hit(l))
+    if org: out.append('YOUR PEOPLE (the org chart - your manager, your reports, who owns what):' + NL + org)
     return NL.join(out)
 
 ACTION_SAYS = {'skip': 'never shown at all', 'ignore': 'shown, marked nothing to do', 'escalate': 'raised to you',

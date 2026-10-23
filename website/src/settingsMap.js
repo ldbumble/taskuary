@@ -7,7 +7,8 @@
 // are the schema's groups, so adding a group there adds a rail entry, an anchor and a search
 // crumb at once.
 export const ABOUT_SECTIONS = ["You", "Per channel", "What the agents are told"];
-export const AUDIT_SECTIONS = ["Verify the chain", "History"];
+// "Is it working?" sits beside the chain it is read from (workingNumbers.js, 2026-10-22)
+export const AUDIT_SECTIONS = ["Verify the chain", "Is it working?", "History"];
 export const secId = (page, name) => `set-${page}-${String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 // A page's own heading. Every rail entry has one now, because every rail entry is a place you
 // scroll to rather than a page that replaces the one before it.

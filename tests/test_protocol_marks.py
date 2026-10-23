@@ -16,7 +16,8 @@ class ImapMarksTests(unittest.TestCase):
     def test_what_the_raw_mail_says(self):
         self.assertEqual(protocol_marks(raw('From: Erin Blake <erin@northwind.example>\nSubject: Out of office coverage - can you?')), {})
         self.assertEqual(protocol_marks(raw('Auto-Submitted: auto-replied')), {'auto_reply': True, 'sender_class': 'automated'})
-        self.assertEqual(protocol_marks(raw('List-Unsubscribe: <mailto:u@vendor.example>')), {'sender_class': 'bulk'})
+        self.assertEqual(protocol_marks(raw('List-Unsubscribe: <mailto:u@vendor.example>')),
+                         {'sender_class': 'bulk', 'unsub': {'via': 'mailto', 'mailto': 'mailto:u@vendor.example'}})
         ics = raw('Subject: Budget sync\nContent-Type: multipart/mixed; boundary=b',
                   '--b\nContent-Type: text/plain\n\nJoin\n--b\nContent-Type: text/calendar; method=REQUEST\n\nBEGIN:VCALENDAR\nEND:VCALENDAR\n--b--\n')
         self.assertEqual(protocol_marks(ics), {'invite': True, 'mail_meta': {'invite': True}})

@@ -2216,7 +2216,9 @@ def _fields(msg, task_id):
             'OwnText': msg.get('own_text') or None,
             # the From verification (mailauth.verdict) rides beside the folder and flag, so a read can still refuse a forgery
             'MailMetaJson': json.dumps(meta) if (meta := {**(msg.get('mail_meta') or {}),
-                                                          **({'auth': msg['auth']} if msg.get('auth') in ('pass', 'fail') else {})}) else None,
+                                                          **({'auth': msg['auth']} if msg.get('auth') in ('pass', 'fail') else {}),
+                                                          # ...and a list's way off it (unsubscribe.parse), for the FYI card's Unsubscribe
+                                                          **({'unsub': msg['unsub']} if isinstance(msg.get('unsub'), dict) else {})}) else None,
             # what the mail's own headers say sent it (categories.header_class) - the verdict overwrites it (store.add_route)
             'SenderClass': msg.get('sender_class') if msg.get('sender_class') in ('automated', 'bulk') else None,
             # kept so a verdict can be replayed against the lines that decided it (evalset.py)

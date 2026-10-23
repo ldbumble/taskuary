@@ -2852,6 +2852,8 @@ def card_for(item: dict) -> dict:
                                        'choices', 'request_id', 'request_kind', 'closeout', 'rides',
                                        # a broken connection whose bridge runs on this machine: the card offers to restart it
                                        'restart',
+                                       # an FYI from a list that names its own way off it: the card's Unsubscribe (unsubscribe.py)
+                                       'unsub',
                                        'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'members', 'aliases', 'unread', 'deferred', 'actionable', 'paused', 'closed',
                                        'brief_today')}
 

@@ -35,6 +35,7 @@ import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } f
 import { ChannelIcon, Empty } from "./ui.jsx";
 import { RecentlyDeleted, UndoLine, removeNow } from "./Removed.jsx";
 import { normalizeBrainOptions } from "./brainOptions.js";
+import { workingTable } from "./workingNumbers.js";
 import { mailboxChoices, mailboxValue } from "./ruleMailbox.js";
 import { ABOUT_SECTIONS, AUDIT_SECTIONS, secId, pageId, scrollToSection, sectionOffset, SCROLL_TOP } from "./settingsMap.js";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
@@ -951,6 +952,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
             </Box>
           )}
           <Box sx={{ mt: 4 }}><SectionHead page="audit" name={AUDIT_SECTIONS[1]} /></Box>
+          <WorkingNumbers />
+          <Box sx={{ mt: 4 }}><SectionHead page="audit" name={AUDIT_SECTIONS[2]} /></Box>
           <AuditHistory />
         </Box>
       );
@@ -1346,6 +1349,28 @@ const AssistantChanges = () => {
         <Typography key={i} variant="body2" sx={{ fontSize: 12, color: INK, mt: 0.4 }}>
           <Box component="span" sx={{ color: FAINT, mr: 1 }}>{String(r.when || "").slice(0, 16)}</Box>{said(r)}
         </Typography>
+      ))}
+    </Box>
+  );
+};
+
+// whether the app's calls stood, 7 and 30 days (workingNumbers.js) - a table of numbers and nothing said about them
+const WorkingNumbers = () => {
+  const [wins, setWins] = useState(null);
+  useEffect(() => { api.get("/api/working").then(({ data }) => setWins(data.windows || [])).catch(() => setWins([])); }, []);
+  if (wins === null) return <CircularProgress size={16} sx={{ display: "block", mt: 1 }} />;
+  if (!wins.length) return <Empty>Not counted - Taskuary did not answer.</Empty>;
+  const cols = `130px repeat(${wins.length}, minmax(0, 1fr))`;
+  return (
+    <Box sx={{ mt: 1 }}>
+      <Box sx={{ display: "grid", gridTemplateColumns: cols, gap: 1.5, pb: 0.5, borderBottom: `1px solid ${BORDER}` }}>
+        <span />{wins.map((w) => <Typography key={w.days} sx={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT }}>LAST {w.days} DAYS</Typography>)}
+      </Box>
+      {workingTable(wins).map((r) => (
+        <Box key={r.label} sx={{ display: "grid", gridTemplateColumns: cols, gap: 1.5, alignItems: "baseline", py: 0.75, borderBottom: `1px solid ${BORDER}` }}>
+          <Typography variant="caption" sx={{ color: INK, fontWeight: 600 }}>{r.label}</Typography>
+          {r.cells.map((c, i) => <Typography key={i} variant="caption" sx={{ color: DIM }}>{c}</Typography>)}
+        </Box>
       ))}
     </Box>
   );

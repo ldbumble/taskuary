@@ -61,19 +61,23 @@ def test_the_tasks_dates_and_weight_are_facts_of_the_item(s):
     assert (item['due'], item['priority'], item['remind me on']) == ('2026-10-23', 'high', '2026-10-22 09:00:00')
 
 
-def test_another_open_task_on_the_same_sender_or_thread_is_flagged_a_possible_duplicate(s):
-    one, _ = asked(s, 'Month-end close is short', 'the export and the feed disagree')
-    two, _ = asked(s, 'Reconcile the export against the feed', 'can it be reconciled?')
+def test_another_open_task_on_the_same_thread_is_flagged_a_possible_duplicate_and_the_same_sender_alone_is_not(s):
+    one, _ = asked(s, 'Month-end close is short', 'the export and the feed disagree', cid='email:month-end')
+    two, _ = asked(s, 'Reconcile the export against the feed', 'can it be reconciled?', cid='email:month-end')
     s.update_task(two, {'Status': 'in_progress'}, 'owner')
     other, _ = asked(s, 'Something else entirely', 'hello', who=('Ray Colton', 'ray@northwind.example'))
+    # the same sender asking another thing is no duplicate (the design, 2026-10-23): one person asks for many things
+    lone, _ = asked(s, 'Badge access for the new AP clerk', 'can you set it up?')
     # in_progress with nothing running is a stopped or failed agent: never "an agent is on it - look again later" (2026-10-22 walk)
     dup = prompt(s, one).split('POSSIBLE DUPLICATES', 1)[1].split('\n\n')[0]
-    assert 'Reconcile the export against the feed (same sender)' in dup and 'an agent is on it' not in dup
+    assert 'Reconcile the export against the feed (same thread)' in dup and 'an agent is on it' not in dup
+    assert 'Badge access' not in dup, 'Erin asking something else is not the same ask'
     s.start_run(two, 'assistant', 'reconcile', 'owner')
     p = prompt(s, one)
     dup = p.split('POSSIBLE DUPLICATES', 1)[1].split('\n\n')[0]
-    assert 'Reconcile the export against the feed (same sender) - an agent is on it' in dup
+    assert 'Reconcile the export against the feed (same thread) - an agent is on it' in dup
     assert 'Something else entirely' not in dup and 'Month-end close' not in dup        # never itself
+    assert 'POSSIBLE DUPLICATES' not in prompt(s, lone)
 
 
 def test_the_owners_notes_on_the_sender_and_the_head_of_soul_and_job_ride_along(s):

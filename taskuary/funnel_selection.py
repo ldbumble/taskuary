@@ -338,6 +338,21 @@ def validate_selection(capture: SelectionCapture, *, selection_revision,
     return capture
 
 
+def same_pick(a: SelectionCapture, b: SelectionCapture) -> bool:
+    """The same item(s) handed over - the one thing a press made on what the page showed is bound to (PW-050)."""
+    return (a.selected or {}).get("key") == (b.selected or {}).get("key") and tuple(a.member_keys) == tuple(b.member_keys)
+
+
+def _backing(capture: SelectionCapture):
+    s = capture.selected or {}
+    return s.get("presentation_revision"), [(c.get("key"), c.get("presentation_revision")) for c in s.get("items") or [] if isinstance(c, dict)]
+
+
+def same_backing(a: SelectionCapture, b: SelectionCapture) -> bool:
+    """The same pick, read from the same content: an answer made from one is true of the other."""
+    return same_pick(a, b) and _backing(a) == _backing(b)
+
+
 def recheck_selection(store, capture: SelectionCapture, *, now: datetime | None = None) -> SelectionCapture:
     """Reject drift after a model call while retaining the originally selected object."""
     fresh = capture_from_rail(store, now=now, **capture.scope)

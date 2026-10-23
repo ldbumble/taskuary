@@ -669,6 +669,12 @@
 .tq-arow-why { font-size: 11px; line-height: 1.25; color: #8a6d1f; text-align: center; }
 /* NARROWER THAN 1100px the row stacked one type per line - four lines over the box, a third of a 768px screen taken from the task
    on the table (2026-10-18). Pills as wide as their words put two types on a line. */
+/* ...and from a phone up it is ONE line (ActionRow folds what does not fit into its type's ▾): pills as wide as their words, labels too */
+@media (min-width: 601px) {
+  .tq-arow-verbs, .tq-cl-b { flex-wrap: nowrap; }
+  .tq-cl-h { width: auto; padding: 0 2px 0 7px; }
+  .tq-cl .tq-ab { min-width: 0; padding: 0 12px; }
+}
 @media (max-width: 1099px) {
   .tq-cl-h { width: auto; padding: 0 2px 0 7px; }
   .tq-cl .tq-ab { min-width: 0; padding: 0 11px; }

@@ -82,3 +82,10 @@ test("Docs in the canvas lists every document the tab's rail did, and opens the 
   assert.match(s, /setDocSel\(e\.sel\.action \? \{ \.\.\.e\.sel, n: Date\.now\(\) \} : e\.sel\)/);
   assert.match(s, /<DocsView (?:key=\{catN\} )?onCatalog=\{onCatalog\} catalogOnly \/>/, "the profiles and playbooks are listed before any document is opened");
 });
+
+// the sidebar and "Run a report or workflow" hand no state: the page opened on three chips and no list (the UX walk, 2026-10-22)
+test("Reports opened with no shelf named shows the reports", () => {
+  const s = src("ReportsView.jsx");
+  assert.match(s, /: browseState\.section \?\? "reports";/);
+  assert.doesNotMatch(s, /browseState\.section \?\? null/);
+});

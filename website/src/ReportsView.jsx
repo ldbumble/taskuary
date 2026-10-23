@@ -566,8 +566,10 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
 
   if (browse) {
     const openSource = sources.find((x) => x.SourceId === browseState.open);
-    // a link names a number, not a shelf (#report=<id>, a failed run's Fix it): a workflow opens under Workflows, where it lives
-    const section = openSource && isWorkflowSource(openSource) ? "workflows" : browseState.section ?? null;
+    // a link names a number, not a shelf (#report=<id>, a failed run's Fix it): a workflow opens under Workflows, where it lives.
+    // No shelf named (the sidebar, "Run a report or workflow") is the reports themselves: three chips over nothing was a page
+    // with no list on it, one press short of what the door says
+    const section = openSource && isWorkflowSource(openSource) ? "workflows" : browseState.section ?? "reports";
     const back = () => { setDraft(null); load(); pbs.load(); onBrowseState?.({ ...browseState, section, open: null }); };
     const pbSlug = pbOpen(browseState.open), pbBook = pbs.books.find((b) => b.slug === pbSlug);
     const sectionRows = section === "workflows" ? workflowSources : section === "reports" ? reportSources : [];

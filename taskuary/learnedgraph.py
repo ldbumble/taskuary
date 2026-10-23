@@ -64,7 +64,7 @@ def fmt(l: dict) -> str:
 
 def _status(header: str) -> str:
     h = (header or '').lower()
-    if 'hypothes' in h: return 'hypothesis'
+    if 'hypothes' in h or 'watching' in h: return 'hypothesis'      # "Watching" is the hypotheses block's name since phase C
     if 'proposed' in h: return 'proposed'
     if 'verdict' in h: return 'evidence'
     return 'live'
@@ -108,7 +108,8 @@ def record(store, old_doc: str, new_doc: str, actor: str = 'learn'):
         after = {l['key']: l for l in lines(new_doc)}
         for k, l in after.items():
             o = before.get(k)
-            if not o: store.add_learned_event(k, l['text'], l['status'], l['score'], ','.join(l['ev']), 'born', actor)
+            # a key the history already knows came BACK - never born twice: the rebirth was the opener's "Learned this week: 32"
+            if not o: store.add_learned_event(k, l['text'], l['status'], l['score'], ','.join(l['ev']), 'back' if store.learned_history(k) else 'born', actor)
             elif l['score'] != o['score'] or l['status'] != o['status']:
                 new_ev = [e for e in l['ev'] if e not in o['ev']]
                 act = ('promoted' if l['status'] == 'live' and o['status'] != 'live' else
@@ -160,6 +161,9 @@ def graph(store) -> dict:
     doc = store.get_doc('learned') or ''
     ls, log = lines(doc), reflect_log(store)
     hist, named = store.learned_history(), _named(store)
+    from .learnedlines import reader_of, rows as line_rows
+    from .learned_cut import over_budget
+    rows, over = {r['Key']: r for r in line_rows(store)}, over_budget(store)
     by_key = {}
     for h in hist: by_key.setdefault(h['Key'], []).append(h)
     out = []
@@ -179,8 +183,13 @@ def graph(store) -> dict:
         if steps and steps[-1]['score'] != l['score']: steps.append({'date': None, 'score': l['score'], 'ev': None, 'effect': 0, 'action': 'now'})
         people = {(e.get('key') or e.get('label') or '')[:40] for e in evs if e.get('kind') == 'verdict'}
         eff = effective(l, log)
+        r = rows.get(l['key']) or {}
+        # ...and its standing in the line store (learnedlines, phase C): who reads it, watching or in use, whether the reader's
+        # budget left it out - the data the memory list's Keep / Wrong / Forget (phase D) hangs on
         out.append({**l, 'text': named(l.get('text')), 'evidence': evs, 'steps': steps, 'effective': eff,
-                    'eligible': l['status'] == 'hypothesis' and eff >= PROMOTE_AT and len(dated) >= 3 and len(people) >= 2})
+                    'eligible': l['status'] == 'hypothesis' and eff >= PROMOTE_AT and len(dated) >= 3 and len(people) >= 2,
+                    'reads': reader_of(l), 'standing': r.get('Status') or ('in_use' if l['status'] == 'live' else 'watching'),
+                    'in_use_at': r.get('InUseAt'), 'over_budget': over.get(l['key'], [])})
     live_keys = {l['key'] for l in ls}
     deleted = []
     for k, hs in by_key.items():
@@ -211,7 +220,9 @@ def soul_rules(store, limit: int = 5) -> list:
 # WHAT CHANGED, as sentences (the LEARNED.md "What changed" view): the history the Visualize chart draws as dots, read as a list -
 # what was learned, what grew stronger, what merged into what, what faded for want of evidence (the row-bot comparison, 2026-10-07)
 SAYS = {'born': 'New guess', 'strengthened': 'Seen again', 'promoted': 'Now a rule', 'demoted': 'Weaker',
-        'merged': 'Merged into a line that says the same', 'faded': 'Faded - nothing confirmed it for a while', 'deleted': 'Removed'}
+        'merged': 'Merged into a line that says the same', 'faded': 'Faded - nothing confirmed it for a while', 'deleted': 'Removed',
+        'back': 'Back', 'edited': 'Reworded by you', 'forgotten': 'Removed by you - stays removed', 'withdrawn': 'Withdrawn - its note was switched off',
+        'watching': 'Back to watching - you pressed otherwise twice in a row', 'moved': 'Moved to STYLE.md - the drafter reads it there'}
 
 
 def _named(store):

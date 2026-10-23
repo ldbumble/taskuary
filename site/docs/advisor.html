@@ -239,7 +239,7 @@ capped at 9,000 characters (whole sections drop from the end, the item and its v
 </tr>
 <tr>
 <td><code>LEARNED.md</code></td>
-<td>Its promoted sections, <code>## Moves</code> included; an empty heading is left out</td>
+<td><code>## What you do next</code> and nothing else - your press habits in use, closest to this sender first, within its budget; the sorting lines are triage&#39;s</td>
 </tr>
 <tr>
 <td>The ledger</td>
@@ -271,10 +271,12 @@ and without advice and asks for the same order. Two settings govern it, in Setti
 switch, and a cap on judgements per hour.</p>
 <p><strong>What you pressed.</strong> Every press on the row, and Next, while a line is shown is kept: the move it
 lit, the one you pressed, and what kind of item it was from whom. That log is where your moves are
-learned: a moment you answer the same way becomes a line in <code>LEARNED.md</code> - a hypothesis first, then
-under <code>## Moves</code> once it holds by the same bar the reflection promotes at (strength 4, three
-items, two people or threads) - and the Advisor reads it. Delete the line to undo it; that moment
-then counts only your presses from then on.</p>
+learned: a moment you answer the same way becomes a line in <code>LEARNED.md</code> - watching first, then
+under <code>## What you do next</code> once it is in use (three items, from two people or threads, the same
+press at least six times in ten) - and the Advisor reads it. Press otherwise twice in a row and it
+goes back to watching, the same line with its history. Press habits never reach triage: triage
+reads <code>## How you sort mail</code>, learned only from your sorting verdicts. Delete the line to undo it;
+that moment then counts only your presses from then on.</p>
 <p><strong>How it is tested.</strong> <code>tests/advisor_cases.py</code> is the eval: every state the demo and the advisor
 matrix hold, plus a few they lack, each with the moves that are right there, the ones that never
 are, and what its prompt must carry. It runs in the suite against the demo&#39;s scripted Advisor.

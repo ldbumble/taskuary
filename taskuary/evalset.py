@@ -238,14 +238,14 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
     promoted sections ride along (the doc has no history, so it is all or nothing). `system`
     replaces the install's TRIAGE.md for the run - how a wording change is scored before it ships."""
     from .ingest import others_on_thread, owner_addresses, relevant_notes
-    from .learn import injectable
+    from . import learned_cut
     from .routing import draft_task_fields
     from .triage import classify_intent, job_doc
     mine = owner_addresses(store)
     from .ingest import own_addresses
     me = own_addresses(store)          # the To/Cc signal is measured against the owner, not the shared boxes
     soul, job, system = store.doc('soul'), job_doc(store), (system if system is not None else store.doc('triage'))
-    lrn = injectable(store.doc('learned') or '') if learned else ''
+    lrn = learned_cut.for_reader(store, 'triage') if learned else ''
     conf, rows, by_signal = Counter(), [], {'colleague_replied': Counter(), 'alone': Counter()}
     by_channel = {}
     for c in cases:
@@ -296,7 +296,7 @@ def jev_state(c: dict, thread: dict, soul: str = '', learned: str = '', notes=()
     sig = {k: thread[k] for k in ('others_replied', 'last_on_thread', 'recently_closed') if thread.get(k)}
     msg = json.dumps({'from': c.get('from_name') or c.get('from'), 'subject': c.get('subject'), 'addressed_to_you': c.get('addressed_to_you'),
                       'recipients': c.get('recipients'), **sig, 'body': body}, ensure_ascii=False, default=str)
-    return (f"OWNER PROFILE:\n{soul[:2500]}\n\nLEARNED (patterns from their past verdicts):\n{learned[:1500]}\n\n"
+    return (f"OWNER PROFILE:\n{soul[:2500]}\n\nLEARNED (patterns from their past verdicts):\n{learned}\n\n"
             "PAST VERDICTS on related mail:\n" + ('\n'.join(f'- {n}' for n in notes) or '(none)') + f"\n\nTHE MESSAGE:\n{msg}")
 
 
@@ -305,9 +305,9 @@ def evaluate_jev(store, cases: list, key: str, notes: str = 'asof', learned: boo
     ('asof' = only those on file when the message arrived)."""
     from . import jev
     from .ingest import others_on_thread, owner_addresses, relevant_notes
-    from .learn import injectable
+    from . import learned_cut
     mine, conf, rows = owner_addresses(store), Counter(), []
-    soul, lrn = store.doc('soul') or '', injectable(store.doc('learned') or '') if learned else ''
+    soul, lrn = store.doc('soul') or '', learned_cut.for_reader(store, 'triage') if learned else ''
     for c in cases:
         if not c.get('body'): continue
         msg = as_message(c)

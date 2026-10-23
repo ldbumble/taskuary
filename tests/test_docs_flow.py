@@ -24,8 +24,8 @@ def seeded():
     s.save_doc('coding', f'# Coding rules\n- {MARK["coding"]}', 'owner')
     s.upsert_agent('coding', 'coding', 'cli', '{}')      # the coding profile is found by its kind (agents.coding_role), as config seeds it
     s.save_doc('triage', f'Classify one inbound work message. Answer JSON only. {MARK["triage"]}', 'owner')
-    # LEARNED.md injects its ACTIVE sections only, so the marker has to live inside one
-    s.save_doc('learned', f'## Active\n- {MARK["learned"]} [s:3 | ev: rv1 | seen: 2026-08-01]', 'owner')
+    # triage reads LEARNED.md's "How you sort mail" and nothing else (learned_cut), so the marker has to live there
+    s.save_doc('learned', f'## How you sort mail\n- {MARK["learned"]} [s:3 | ev: rv1 | seen: 2026-08-01]', 'owner')
     # style_doc holds an untouched template out of prompts, so the marker needs real content
     s.save_doc('style', f'### Tone & length\n- {MARK["style"]}: two sentences, answer first, no preamble.', 'owner')
     s.add_memory({'Scope': 'global', 'ScopeKey': None, 'Note': f'{NOTE} always defer to the finance team',

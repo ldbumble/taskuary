@@ -559,7 +559,7 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     _guarded.takes_want = getattr(llm, 'takes_want', None)
     from .triage import takes_tokens
     _guarded.takes_tokens = takes_tokens(llm)                 # ...and whether it takes a length, so triage's room reaches it
-    from .learn import injectable
+    from . import learned_cut
     notes, notes_left = relevant_notes(store, [msg.get('from_email') or ''],
                                        f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000],
                                        subject=msg.get('subject') or '',
@@ -640,7 +640,8 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     project = context_for_message(store, msg)
     from .triage import job_doc
     intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), job=job_doc(store), thread=thread, seen=carried,
-                             learned=injectable(store.doc('learned') or ''),
+                             # "How you sort mail" and nothing else - press habits never reach triage (the owner, 2026-10-23)
+                             learned=learned_cut.for_reader(store, 'triage', learned_cut.about_mail(msg)),
                              notes=notes, notes_left=notes_left, images=msg.get('images'),
                              system=store.doc('triage'), mine=me,
                              # a scheduled report carries its own brief - what the owner

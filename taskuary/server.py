@@ -212,6 +212,7 @@ async def _lifespan(_app):
     except Exception as e: logger.warning(f'whatsapp log trim skipped: {e}')
     _heal_owner_docs()
     _refresh_soul_connections()
+    learn.migrate(store)           # one section per reader, once (phase C, 2026-10-23) - before anything else writes the doc
     learn.note_verdicts(store)     # the evidence block in LEARNED.md tracks the verdict table
     try: blackboard.schedule_due(store)   # a retry that was backing off when the app closed is re-armed, not reset (PW-085)
     except Exception as e: logger.warning(f'retry scheduling skipped: {e}')
@@ -2985,7 +2986,7 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     if body is not None and (body.instruction or '').strip():
         draft = ''
         # ...and kept, not thrown away once the model has read them (2026-10-23) - the owner's own, never a chase's brief
-        if not body.app_words: store.add_review_instruction(rid, body.instruction)
+        if not body.app_words: _keep_instruction(rid, body.instruction)
     owed = not draft and (body is None or body.draft)
     if owed and not later:
         try:
@@ -3022,6 +3023,15 @@ def _loop_in(rid: int, m: dict, who: list) -> tuple:
     env['cc'] = list(env.get('cc') or []) + [a for a in dict.fromkeys(adds) if a not in have]
     store.set_review_deliver(rid, json.dumps(env))
     return [a for a in adds], unknown
+
+
+def _keep_instruction(rid: int, said: str):
+    """The owner's words for a draft, kept on its review (phase B) - and the second time the same words are said for one person, they
+    are how that person is written to: a STYLE.md "By recipient" line every later draft to them reads (byrecipient, phase C;
+    the owner, 2026-10-23: the typed instruction is stored and remembered, the 2nd time a style line, no chips)."""
+    store.add_review_instruction(rid, said)
+    from . import byrecipient
+    byrecipient.note_instruction(store, rid, said)
 
 
 def _reply_nudge(instruction) -> str | None:
@@ -5338,7 +5348,7 @@ def draft_review(rid: int, body: DraftBody = None):
     # a calendar answer's note is the owner's one line: no redrafter writes an RSVP (calwrite.py)
     if deliver.get('kind') == 'calendar': raise HTTPException(422, 'the note on a calendar answer is yours to write - or leave it empty')
     # THE OWNER'S WORDS FOR IT ARE KEPT on the review (the owner, 2026-10-23: a Redraft's instruction is stored and remembered)
-    if body and (body.instruction or '').strip(): store.add_review_instruction(rid, body.instruction)
+    if body and (body.instruction or '').strip(): _keep_instruction(rid, body.instruction)
     try:
         if rv.get('Kind') == 'slot':
             from . import outbox as ob
@@ -7790,6 +7800,9 @@ def add_memory(body: MemoryBody):
 def toggle_memory(mid: int, body: MemoryToggle):
     store.set_memory_active(mid, body.active)
     store.audit('memory', mid, 'activate' if body.active else 'deactivate', ACTOR)
+    # A NOTE SWITCHED OFF WITHDRAWS WHAT IT FED (phase C, 2026-10-23): a rule it carried into LEARNED.md stopped being the owner's word
+    if not body.active: learn.withdraw(store, mid)
+    learn.note_verdicts(store)
     return {'ok': True}
 
 @app.get('/api/audit/recent')

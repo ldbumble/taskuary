@@ -522,6 +522,58 @@ def launch_key(request: Request):
     return {'key': launchkey.mint()}
 
 
+# ── SHARE A RESULT (sharing.py): the menu's ways, the press, the links still open, and the one page outside the token ─────────
+class ShareBody(BaseModel):
+    how: str
+    kind: str | None = None; title: str | None = None; text: str | None = None; html: str | None = None
+    data: list | None = None; task: int | None = None; message: int | None = None
+    to: list[str] | None = None; days: int | None = None
+
+
+@app.get('/api/shares/ways')
+def share_ways():
+    from . import sharing
+    return sharing.ways(store, cfg['server'])
+
+
+@app.get('/api/shares')
+def share_links():
+    from . import sharing
+    return {'data': sharing.active(store)}
+
+
+@app.post('/api/shares')
+def share_result(body: ShareBody, request: Request):
+    """One way out for one result - a draft, a link, an upload. The owner's alone (guard.DENIED keeps agents off it too)."""
+    from . import sharing
+    _owner_only(request, "sharing a result is the owner's")
+    try: return sharing.share(store, cfg['server'], body.model_dump(), ACTOR)
+    except LookupError as e: raise HTTPException(404, str(e))
+    except (ValueError, PermissionError) as e: raise HTTPException(422, str(e))
+    except Exception as e:
+        logger.warning(f'share by {body.how} failed: {e}')
+        raise HTTPException(502, f'it did not go - {str(e)[:300]}')
+
+
+@app.delete('/api/shares/{sid}')
+def share_revoke(sid: int, request: Request):
+    from . import sharing
+    _owner_only(request, "revoking a link is the owner's")
+    if not sharing.revoke(store, sid, ACTOR): raise HTTPException(404, 'no such link, or it was revoked already')
+    return {'ok': True}
+
+
+@app.get('/share/{token}', response_class=HTMLResponse)
+def shared_page(token: str):
+    """THE ONE PAGE NOBODY'S TOKEN OPENS: outside /api, so the owner token is not asked for - the unguessable link is the
+    credential, and it opens one frozen, escaped snapshot and nothing else. No app, no script (sharing.CSP), never cached or
+    indexed; unknown, revoked, expired and switched-off links are one and the same 404."""
+    from . import sharing
+    page = sharing.page(store, token)
+    if page is None: return HTMLResponse('<!doctype html><title>Not available</title><p>This link is not available.</p>', 404, headers=sharing.HEADERS)
+    return HTMLResponse(page, headers=sharing.HEADERS)
+
+
 MAX_BUG_BODY = 200_000       # the scrub matches every private string against every field: a client does not get to make it chew megabytes
 
 

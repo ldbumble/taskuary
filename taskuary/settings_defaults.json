@@ -46,6 +46,7 @@
     "report_images_enabled": "1",
     "poll_minutes": "10",
     "startup_sync_days": "3",
+    "share_links_lan": "0",
     "mark_read_enabled": "0",
     "timezone": "",
     "timeline_fade": "normal",

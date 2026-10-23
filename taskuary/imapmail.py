@@ -786,7 +786,7 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
 
 
 def send_smtp(store, c, to: list, subject: str, body: str, in_reply_to: str = None, cc: list = None,
-              attachments: list = None) -> dict:
+              attachments: list = None, html: str = None) -> dict:
     """The reply, over the provider's own SMTP, threaded with In-Reply-To/References. `cc` is the
     colleague the owner looped in: on the header so everyone sees it, and in the envelope so the
     server actually delivers to them (the header alone sends nothing - it is only text)."""
@@ -794,17 +794,21 @@ def send_smtp(store, c, to: list, subject: str, body: str, in_reply_to: str = No
     user = (cfg.get('address') or '').strip()
     cc = [a for a in (cc or []) if a]
     # A reply that carries files is a multipart message; without them it stays the plain text it was.
+    # ...and a shared result (sharing.email_html) carries its HTML beside the same text, which stays the fallback part
+    from email.mime.multipart import MIMEMultipart
+    text = MIMEText(body, 'plain', 'utf-8')
+    if html:
+        alt = MIMEMultipart('alternative'); alt.attach(text); alt.attach(MIMEText(html, 'html', 'utf-8')); text = alt
     if attachments:
-        from email.mime.multipart import MIMEMultipart
         from email.mime.application import MIMEApplication
         m = MIMEMultipart()
-        m.attach(MIMEText(body, 'plain', 'utf-8'))
+        m.attach(text)
         for f in attachments:
             part = MIMEApplication(f['bytes'], name=f['name'])
             part['Content-Disposition'] = f'attachment; filename="{f["name"]}"'
             m.attach(part)
     else:
-        m = MIMEText(body, 'plain', 'utf-8')
+        m = text
     m['From'], m['To'], m['Subject'] = user, ', '.join(to), subject or '(no subject)'
     if cc: m['Cc'] = ', '.join(cc)
     # SMTP servers are not bound to add these, and a mail without them sorts and threads badly at the other end

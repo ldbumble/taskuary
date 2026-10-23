@@ -79,6 +79,10 @@
 /* HOW LONG IT HAS WAITED, not what o'clock it arrived: the rail is ranked, not dated. No mono -
    at 10px its figures were the hardest thing on the rail to read (the owner, 2026-09-16). */
 .tq-pile-row .when { font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; text-align: right; padding: 8px 6px 0 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* "+3" beside the arrival age: what landed since it was last opened, quiet - the rail's small chip ink; the age keeps its place, the mark
+   spills left into the gutter's edge rather than pushing it (flex-end) */
+.tq-pile-row .when:has(.tq-pile-new) { display: flex; justify-content: flex-end; align-items: flex-start; gap: 3px; }
+.tq-pile-new { font: 600 9.5px/15px 'IBM Plex Sans', system-ui, sans-serif; color: #746e64; margin-top: -1px; letter-spacing: .01em; }
 .tq-pile-row .rail { position: relative; }
 .tq-pile-row .rail::before { content: ""; position: absolute; left: 6px; top: -5px; bottom: -5px; width: 1px; background: #e1dcd5; }
 /* the dot is the SOURCE (assistantCards.sourceColor) - one size for every row, because importance

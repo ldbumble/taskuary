@@ -59,7 +59,7 @@ import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, putDownLanded, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory, withdrawSelection } from "./funnelPile.js";
-import { FYI_PAGE, coveredByReload, fyiTail, heldSince, pileRows, sentChips } from "./funnelPile.js";
+import { FYI_PAGE, ageHover, coveredByReload, fyiTail, heldSince, latestLine, newMark, pileRows, sentChips } from "./funnelPile.js";
 import { railStatus } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
 import { StatusLogo } from "./StatusMark.jsx";
@@ -682,8 +682,10 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                 return (
                   <div key={i.key} className={cls} data-tq-key={i.key} data-tq-urgent={hot ? "" : undefined} style={{ top: falls(i.key) ? -ROW_H : top }}>
                     {/* For later counts DOWN to when it comes back, in the same short form the age column uses */}
-                    <span className="when" title={level === "later" && backAt(i) ? `back ${ago(backAt(i))}` : undefined}>
-                      {String(i.kind || "").startsWith("goal") ? dueWord(i.due)      /* a goal's clock is its date (spec 2026-10-12) */
+                    {/* ...every other row says its ARRIVAL; a reply since it was last opened is a quiet "+N" beside it, never a new age */}
+                    <span className="when" title={level === "later" && backAt(i) ? `back ${ago(backAt(i))}` : goal || i.kind === "meeting" ? undefined : ageHover(i)}>
+                      {!goal && level !== "later" && !!newMark(i, isCur) && <span className="tq-pile-new">{newMark(i, isCur)}</span>}
+                      {goal ? dueWord(i.due)      /* a goal's clock is its date (spec 2026-10-12) */
                         : level === "later" ? bandUntil(backAt(i)) : band(i.kind === "meeting" ? i.when : arrivedAt(i))}</span>
                     {/* the dot is the BAND's colour, the pill's own (the owner, 2026-10-06: one palette, everywhere) - where it
                         came from is the logo inside the row */}
@@ -720,7 +722,9 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                             {!goal && <i>{meta.mark}</i>}<span className="w">{word}</span></span>
                         )}
                       </div>
-                      {isCur && <div className="sub">{batchNo[i.key]?.line || [i.why, i.kind === "meeting" ? age(i.when) : ago(i.since || i.when)].filter(Boolean).join(" · ")}</div>}
+                      {/* the line under the title is the NEWEST message once there is more than one (the owner, 2026-10-23) */}
+                      {isCur && <div className="sub">{batchNo[i.key]?.line || (latestLine(i) ? [latestLine(i), ago(i.last_at)]
+                        : [i.why, i.kind === "meeting" ? age(i.when) : ago(i.since || i.when)]).filter(Boolean).join(" · ")}</div>}
                     </div>
                     {/* THE SAME WORD ON THE SAME BORDER. A handful on the table says so on its
                         bracket ("on the table · 4 fyi"); one item on the table wore the identical

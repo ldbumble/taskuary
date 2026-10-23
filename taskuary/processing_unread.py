@@ -621,7 +621,29 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     card['actionable'] = bool(unread and not (passed and (card['put_down'] or done)) and not card['deferred'] and not card.get('settling')
                               and not funnel._not_yet(card))     # ...a task an agent is WORKING is walked like the rest (2026-10-21)
     card['arrived_at'] = arrived_at(store, card, task, view, allowed)
+    card.update(news_since_seen(view, read, allowed))
     return card
+
+
+def news_since_seen(view, read, allowed) -> dict:
+    """+N ON THE ROW (the owner, 2026-10-23): a reply on an item does not move its row nor change its age - both stay its arrival -
+    so the row says what landed since the owner last opened it: `new_n`, the messages from others they have not been shown since,
+    `latest` the newest message for the line under the title, `last_at` its time for the age's hover. A burst is one row and one "+3".
+    Not shown is the message's own receipt (processing_reads), not "sent after the open": a mail polled minutes after its SentAt
+    landed after an open it predates. Never opened, nothing is new on it - the whole row is."""
+    from .ingest import is_ours
+    from .autoreply import is_auto
+    units = {u['local_id']: u for u in view.get('processing_read', {}).get('units', ()) if u.get('entity_kind') == 'message'}
+    msgs = sorted((m for m in view.get('messages') or [] if m.get('SentAt') and (not allowed or m.get('MessageId') in allowed)),
+                  key=lambda m: funnel_time(str(m['SentAt'])))
+    seen = read.get('last_read_at') or read.get('read_at')
+    new = [m for m in msgs if seen and not is_ours(m) and not is_auto(m) and not (units.get(str(m['MessageId'])) or {'read': True})['read']]
+    out = {'new_n': len(new)} if new else {}
+    if len(msgs) > 1:
+        m = msgs[-1]
+        out.update(last_at=str(m['SentAt']), latest={'who': 'You' if is_ours(m) else m.get('FromName') or m.get('FromEmail') or '',
+                                                     'text': ' '.join(str(m.get('BodyText') or m.get('Subject') or '').split())[:160]})
+    return out
 
 
 def arrived_at(store, card, task, view, allowed):

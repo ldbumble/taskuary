@@ -1,7 +1,8 @@
 import vocab from "../../taskuary/lanes.json" with { type: "json" };
 import { label } from "./buttons.js";
 import { says, subState } from "./laneSays.js";
-import { band } from "./timeWords.js";
+import { ago, band } from "./timeWords.js";
+import { fmtDateTime } from "./dates.js";
 import { LEVEL_META, LEVEL_ORDER, SECTION_WORDS, attentionBand, isUrgent, levelOf, onYou } from "./lanes.js";
 export { says, subState };
 // the rail's sections and the on-you rule are lanes.js's, re-exported where the rail's readers have always found them
@@ -440,6 +441,14 @@ const walkAt = (i) => Date.parse(String(i?.arrived_at || i?.sort_at || i?.since 
 // (the last message was tried on 2026-10-22: placed by arrival, labelled by its newest mail, the column read 1d, 1d, 2h, 1d, 2h - a
 // user reported the tasks out of order; the owner, 2026-10-23, chose the arrival)
 export const arrivedAt = (i) => i?.arrived_at || i?.since || i?.when;
+// ...and a reply never moves the row nor changes that age: it says "+N" beside it, the messages from others since the owner last opened
+// it (the server's `new_n`), and the age's hover says both clocks (the owner, 2026-10-23). The row on the table has just been opened,
+// so it wears none - the server's next pile has cleared it.
+export const newMark = (i, isCur) => (!isCur && i?.new_n > 0 ? `+${i.new_n}` : "");
+export const ageHover = (i) => [arrivedAt(i) && `arrived ${fmtDateTime(arrivedAt(i))}`, i?.last_at && `last message ${ago(i.last_at)}`]
+  .filter(Boolean).join(" · ") || undefined;
+// ...and the line under its title is the newest message, who said it and what
+export const latestLine = (i) => (i?.latest?.text ? [i.latest.who, i.latest.text].filter(Boolean).join(": ") : "");
 // A ROW FROM OUTSIDE THE PILE - the task on the table pulled by name, a batch's members put back - TAKES ITS PLACE in the rail's
 // order: it was drawn first, above every row of its section, so the row on the table jumped to the top (2026-10-22: "on the table
 // should never move them")

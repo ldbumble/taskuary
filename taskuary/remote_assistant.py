@@ -1948,7 +1948,9 @@ def source_line(item: dict | None) -> str:
     if not item: return ''
     who = ' '.join(str(item.get('who') or '').split())
     ch = str(item.get('channel') or '')
-    bits = ' · '.join(x for x in (who, ch.replace('_', ' '), str(item.get('ref') or '')) if x)
+    # ...and what landed since the owner last opened it, the rail's "+3" said short (processing_unread.news_since_seen)
+    new = f"+{item['new_n']} new" if item.get('new_n') else ''
+    bits = ' · '.join(x for x in (who, ch.replace('_', ' '), str(item.get('ref') or ''), new) if x)
     return ' '.join(x for x in (funnel.CHANNEL_MARKS.get(ch, ''), bits) if x) if bits else ''
 
 

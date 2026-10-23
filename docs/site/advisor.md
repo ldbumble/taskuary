@@ -76,7 +76,7 @@ capped at 9,000 characters (whole sections drop from the end, the item and its v
 | Your notes | Standing notes and past verdicts about the sender or topic, and your corrections of triage there - the same evidence triage is handed |
 | The agent | What it last said, what it is asking, how its run ended, and mail that came in since its last turn |
 | The goal or the idea | A goal's open steps, who holds each, its day and how late, and when anything last moved. An idea's words, and for a follow-up how long the person has been quiet against their own day |
-| `LEARNED.md` | Its promoted sections, `## Moves` included; an empty heading is left out |
+| `LEARNED.md` | `## What you do next` and nothing else - your press habits in use, closest to this sender first, within its budget; the sorting lines are triage's |
 | The ledger | Outcome rows on the item, and your habit for each verb offered on this kind of item from this sender |
 | The playbook, `SOUL.md`, `JOB.md` | The matching playbook, and the opening of each document |
 | The bigger read | For the item on the table: what the hub knows about the people on it, and the month's outcomes |
@@ -100,10 +100,12 @@ switch, and a cap on judgements per hour.
 
 **What you pressed.** Every press on the row, and Next, while a line is shown is kept: the move it
 lit, the one you pressed, and what kind of item it was from whom. That log is where your moves are
-learned: a moment you answer the same way becomes a line in `LEARNED.md` - a hypothesis first, then
-under `## Moves` once it holds by the same bar the reflection promotes at (strength 4, three
-items, two people or threads) - and the Advisor reads it. Delete the line to undo it; that moment
-then counts only your presses from then on.
+learned: a moment you answer the same way becomes a line in `LEARNED.md` - watching first, then
+under `## What you do next` once it is in use (three items, from two people or threads, the same
+press at least six times in ten) - and the Advisor reads it. Press otherwise twice in a row and it
+goes back to watching, the same line with its history. Press habits never reach triage: triage
+reads `## How you sort mail`, learned only from your sorting verdicts. Delete the line to undo it;
+that moment then counts only your presses from then on.
 
 **How it is tested.** `tests/advisor_cases.py` is the eval: every state the demo and the advisor
 matrix hold, plus a few they lack, each with the moves that are right there, the ones that never

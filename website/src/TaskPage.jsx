@@ -17,6 +17,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import RemindMe, { RemindPicker } from "./RemindMe.jsx";
+import { useFoldBar } from "./foldBar.js";
 import { SlotPicker } from "./CalendarPick.jsx";
 import { onPressed, useVerbs } from "./actionRow.js";
 import { notePress, pagePress } from "./pressLog.js";
@@ -216,6 +217,9 @@ const chipBtn = { fontSize: 11.5, fontWeight: 600, height: 26, minHeight: 26, py
 const barBtn = { minHeight: 34, py: 0, px: 1.6, fontSize: 12.5, color: INK, borderColor: BORDER };
 // ...and the one filled move beside them. Every card's bar reads [ primaryBtn ] | [ barBtn ] [ barBtn ].
 const primaryBtn = { minHeight: 34, py: 0, px: 1.75, fontSize: 12.5 };
+const BAR_FOLD = { change: 1, reshape: 2, hand: 3, sep: 3, nat: 4 }, HIDE = { display: "none" };   // the Tasks tab bar's fold order (useFoldBar)
+// ...less the button the Advisor lit, which never folds (one object per lit button, so useFoldBar re-fits only when the light moves)
+const BAR_FOLD_BUT = Object.fromEntries(["", "nat", "hand", "reshape"].map((k) => [k, Object.fromEntries(Object.entries(BAR_FOLD).filter(([i]) => i !== k))]));
 // A LIVE SESSION'S CONTROLS LOOK LIKE CONTROLS. These were bare text buttons sitting next to
 // the outlined role/brain/repo pills, so the two things you could press had less edge than the
 // three facts you can only read - "buttons are still not clear what they are. and they are
@@ -1339,6 +1343,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const notDone = !!t && !["done", "dropped"].includes(t.Status);
   // the bar's button the Advisor lit (advisor.decide - the canvas's decision for the same task); nothing is dark before it answers
   const barLit = (verb) => !!taskAdvice && liveVerb(taskAdvice.verb) === verb;
+  // THE TASKS TAB'S BAR IS ONE LINE (2026-10-23, foldBar.js): Change folds first, then Split or merge, Hand off with its rule, Not a task;
+  // Mark done and Remind me never fold, nor the button the Advisor lit
+  const bar = useFoldBar(BAR_FOLD_BUT[{ remove: "nat", forward: "hand", split: "reshape" }[liveVerb(taskAdvice?.verb)] || ""], `${t?.TaskId}|${notDone}|${finishing}|${t?.RemindAt || ""}`);
+  const [barAt, setBarAt] = useState(null);
   // THE CALENDAR'S ANSWERS (calwrite.py, server task_detail's `calendar`): an invite waiting on the owner is answered from the row -
   // Accept, Decline, Propose a new time - and a thread asking for a time offers Find a time. Each DRAFTS into Close out for the
   // owner's Send; a card that may not write says so on the error line with its sign-in as the way out (failures.py's fix).
@@ -2404,8 +2412,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 </Typography>
               )}
               {!inRow && !sessionView && (
-                <Box data-tq-task-bar="" sx={{ display: "flex", alignItems: "center", gap: 0.8, rowGap: 0.6, flexWrap: "wrap", flexShrink: 0,
-                  px: 1.75, py: 1, borderTop: `1px solid ${BORDER}`, bgcolor: "#fff" }}>
+                <Box data-tq-task-bar="" ref={bar.ref} sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "nowrap", flexShrink: 0, minWidth: 0,
+                  px: 1.75, py: 1, borderTop: `1px solid ${BORDER}`, bgcolor: "#fff", "& > *": { flexShrink: 0, whiteSpace: "nowrap" } }}>
                   {notDone ? <>
                     {/* THE TASKS TAB LIGHTS THE ADVISOR'S VERB, the canvas's own (the design, phase A): Mark done was dark on every task */}
                     <Button size="small" variant={barLit("close") ? "contained" : "outlined"} disableElevation startIcon={finishing ? <CircularProgress size={14} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 16 }} />}
@@ -2413,22 +2421,33 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       title={markDoneHint}
                       disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : labelOfRow("done")}</Button>
                     <Button size="small" variant={barLit("remove") ? "contained" : "outlined"} disableElevation startIcon={<BlockIcon sx={{ fontSize: 15 }} />}
-                      sx={barLit("remove") ? primaryBtn : { ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }}
+                      sx={barLit("remove") ? primaryBtn : { ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }} data-tq-bar-item="nat" style={bar.shown("nat") ? undefined : HIDE}
                       title={NAT_TITLE}
                       onClick={notATask}>{labelOfRow("nat")}</Button>
                     <RemindMe task={t} sx={barLit("defer") ? primaryBtn : barBtn} lit={barLit("defer")} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />
-                    <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />
+                    <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} data-tq-bar-item="sep" style={bar.shown("sep") ? undefined : HIDE} />
                     <Button size="small" variant={barLit("forward") ? "contained" : "outlined"} disableElevation sx={barLit("forward") ? primaryBtn : barBtn}
+                      data-tq-bar-item="hand" style={bar.shown("hand") ? undefined : HIDE}
                       startIcon={<ForwardToInboxIcon sx={{ fontSize: 16, color: barLit("forward") ? "inherit" : "#55697a" }} />}
                       title="Not ours to do — the AI writes the forward, you send it."
                       onClick={() => setHandoff(true)}>{labelOfRow("hand")}</Button>
                     <Button size="small" variant={barLit("split") ? "contained" : "outlined"} disableElevation sx={barLit("split") ? primaryBtn : barBtn}
+                      data-tq-bar-item="reshape" style={bar.shown("reshape") ? undefined : HIDE}
                       startIcon={<CallSplitIcon sx={{ fontSize: 16, color: barLit("split") ? "inherit" : "#6f8a6e" }} />}
                       title="Two jobs in here, or a duplicate? Break it in two, or fold it into the task it repeats."
                       onClick={() => setReshape(true)}>{labelOfRow("reshape")}</Button>
-                    <Button size="small" variant="outlined" sx={barBtn} endIcon={<ExpandMoreIcon sx={{ fontSize: 16 }} />}
+                    <Button size="small" variant="outlined" sx={barBtn} endIcon={<ExpandMoreIcon sx={{ fontSize: 16 }} />} data-tq-bar-item="change" style={bar.shown("change") ? undefined : HIDE}
                       title={`Who does it, the priority${canCode ? ", who it is assigned to, or the repository" : " or who it is assigned to"}`}
                       onClick={(e) => setPick({ what: "menu", at: e.currentTarget })}>Change</Button>
+                    {/* ...what did not fit, behind one ▾ - the same handlers, in the bar's order */}
+                    {bar.folded.length > 0 && <Button size="small" variant="outlined" sx={{ ...barBtn, minWidth: 34, px: 0.75 }} data-tq-bar-more=""
+                      aria-haspopup="menu" aria-expanded={!!barAt} aria-label="More actions" onClick={(e) => setBarAt(e.currentTarget)}>▾</Button>}
+                    <Menu open={!!barAt} anchorEl={barAt} onClose={() => setBarAt(null)}>
+                      {bar.folded.includes("nat") && <MenuItem sx={{ fontSize: 12.5 }} title={NAT_TITLE} onClick={() => { setBarAt(null); notATask(); }}>{labelOfRow("nat")}</MenuItem>}
+                      {bar.folded.includes("hand") && <MenuItem sx={{ fontSize: 12.5 }} onClick={() => { setBarAt(null); setHandoff(true); }}>{labelOfRow("hand")}</MenuItem>}
+                      {bar.folded.includes("reshape") && <MenuItem sx={{ fontSize: 12.5 }} onClick={() => { setBarAt(null); setReshape(true); }}>{labelOfRow("reshape")}</MenuItem>}
+                      {bar.folded.includes("change") && <MenuItem sx={{ fontSize: 12.5 }} onClick={() => { const a = barAt; setBarAt(null); setPick({ what: "menu", at: a }); }}>Change…</MenuItem>}
+                    </Menu>
                   </> : (
                     <Button size="small" variant="outlined" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
                       title="Reopens the task only. No agent starts until you choose one."

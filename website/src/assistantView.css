@@ -656,16 +656,25 @@
    The item on the table registers its verbs (actionRow.js); the decision comes first, the session's verbs next, the rare ones
    behind More, Next last. CENTRED over the composer (the owner: "center them and make them obvious"), ONE filled button at most
    (p), outlined for the rest (s), plain text for the quiet ones (q); a greyed decision says why underneath. */
-.tq-arow { display: flex; flex-direction: column; align-items: center; gap: 2px; width: min(980px, 100%); margin: 0 auto 5px; }
-.tq-arow-verbs { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 10px; }   /* a narrow screen wraps, still centred */
+.tq-arow { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; width: min(980px, 100%); margin: 0 auto 5px; }
+/* ONE LINE AT EVERY WIDTH (the owner, 2026-10-23: "the buttons turned into 2 rows ... NEVER do that"): the row never wraps - ActionRow
+   measures it and folds whole groups into one ▾ until it fits (actionRow.js foldsOf). Groups keep their width so an overflow is seen
+   and folded, not squeezed; only the last layout (Next, the one move, ▾) may shorten the move's label, with an ellipsis */
+.tq-arow-verbs { display: flex; flex-wrap: nowrap; align-items: center; justify-content: center; justify-content: safe center; gap: 6px 10px; width: 100%; min-width: 0; }
+.tq-arow-verbs > .tq-cl { flex: 0 0 auto; }
+.tq-arow-verbs.tight > .tq-cl:not(.tq-cl-next) { flex-shrink: 1; }
+/* the unseen copy ActionRow measures: every part in the row's own classes, at its natural width, taking no room */
+.tq-arow-ghost { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
+.tq-arow-ghost .tq-cl { width: max-content; max-width: none; }
+.tq-arow-ghost .tq-cl-h, .tq-arow-ghost .tq-ab { flex: none; max-width: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; }
 /* ONE TYPE (canvas J3): its own soft section, the label inside on the left of its one-word pills - one line, so the row is a
    band as tall as the suggestion and the box (the owner, 2026-10-13). The label names the noun. */
 .tq-cl { display: flex; align-items: center; gap: 5px; padding: 5px; border-radius: 16px; background: #f3f1ec; max-width: 100%; box-sizing: border-box; min-width: 0; }
 .tq-cl-h { width: 44px; padding-left: 9px; font: 500 9.5px/1 'IBM Plex Mono', Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; color: #8a857c; }
-/* ...and its pills WRAP inside it: the walk's end "Open TQ-... · <title>" chips ran past a phone's edge, and a centred line that does not
-   wrap overflows on both sides - their starts were cut off (the owner, 2026-10-22: chips wrap, never clip) */
-.tq-cl-b { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; min-width: 0; }
-.tq-cl-b .tq-ab { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+/* ...and its pills stay on ITS line too (2026-10-23): the walk's end "Open TQ-... · <title>" chips that ran past a phone's edge (2026-10-22)
+   fold into the ▾ now, and a centred line that overflowed both sides is `safe center` above - a start is never cut off */
+.tq-cl-b { display: flex; flex-wrap: nowrap; justify-content: center; gap: 5px; min-width: 0; }
+.tq-cl-b .tq-ab { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tq-cl .tq-ab { min-height: 30px; min-width: 78px; padding: 0 14px; font-size: 12.5px; }
 .tq-cl .tq-ab.next { min-width: 0; }
 .tq-cl-more { min-width: 30px !important; width: 30px; padding: 0 !important; color: #6e685f; }

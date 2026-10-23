@@ -89,7 +89,7 @@ test("Decline says what goes out with it: the text in the box exactly as edited,
 test("Next is the FIRST control of the row, then the types; no task number or waiting words on it (2026-10-13)", () => {
   const src = fs.readFileSync(path.join(process.cwd(), "src", "ActionRow.jsx"), "utf8");
   const row = src.slice(src.indexOf("export default function ActionRow"));
-  assert.ok(row.search(/data-tq-next/) < row.search(/clustersOf\(row\)/), "Next before the types");
+  assert.ok(row.search(/data-tq-next/) < row.search(/fit\.groups\.map/), "Next before the types");
   assert.doesNotMatch(row, /data-tq-row-ref|waited/);
 });
 

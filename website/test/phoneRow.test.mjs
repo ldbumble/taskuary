@@ -20,9 +20,12 @@ test("a phone's row is the one lit move with everything else behind one ▾ - an
   assert.deepEqual(phoneRow(rowOf({ ref: "", list: [v("next", "next")] })), { type: "phone", label: "", shown: [], rest: [] });
 });
 
-test("the row draws the phone's one group under 600px and wraps a group's chips", () => {
+// ...and a group's chips never wrap now (the owner, 2026-10-23: one line, always - rowOneLine.test.mjs): what does not fit folds into the ▾
+test("the row draws the phone's one group under 600px, and a group's chips stay on its one line", () => {
   const row = read("ActionRow.jsx");
   assert.match(row, /const phone = useMediaQuery\("\(max-width:600px\)"\);/);
-  assert.match(row, /\(phone \? \[phoneRow\(row\)\]\.filter\(\(g\) => g\.shown\.length \|\| g\.rest\.length\) : clustersOf\(row\)\)/);
-  assert.match(read("assistantView.css"), /\.tq-cl-b \{ display: flex; flex-wrap: wrap; justify-content: center;/);
+  assert.match(row, /const fit = fitRow\(row, m, avail, phone, extra\);/);
+  assert.match(read("actionRow.js"), /const all = foldsOf\(row\), last = all\.length - 1/);
+  assert.match(read("actionRow.js"), /out\.push\(\[ph\]\.filter\(\(g\) => g\.shown\.length \|\| g\.rest\.length\)\);/, "the narrowest layout is the phone's");
+  assert.match(read("assistantView.css"), /\.tq-cl-b \{ display: flex; flex-wrap: nowrap; justify-content: center;/);
 });

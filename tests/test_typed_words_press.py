@@ -82,9 +82,10 @@ class OnlyRealButtons(unittest.TestCase):
     def test_a_real_button_is_still_offered(self):
         s, a, b, item = two_tasks()
         item = dict(item)
-        llm, _ = scripted(call('close'))
-        out = ask(s, 'done with this one', item['key'], llm)
-        self.assertEqual(out['light']['verb'], 'close', 'Mark done is a button on its row - lit, not run')
+        # ...a move that is not a put-down (those are pressed now, typed-put-down-acts): Remind me is lit, not run
+        llm, _ = scripted('CALL: {"kind": "button.light", "params": {"button": "defer"}}')
+        out = ask(s, 'remind me about this one', item['key'], llm)
+        self.assertEqual(out['light']['verb'], 'defer', 'Remind me is a button on its row - lit, not run')
 
     def test_a_chip_the_task_view_does_not_draw_is_not_lit(self):
         # a mail with a task behind it is drawn as the task's view, whose row has no Not ours - it was lit there over nothing (verify,

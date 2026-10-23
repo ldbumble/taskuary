@@ -299,9 +299,10 @@ def wa_status(c) -> dict:
     return out
 
 
+# said the way every other age is (timewords.ago_m) - its own "40 min ago" sat beside the rail's "40m ago"
 def _ago(ts: float, now: float) -> str:
-    m = max(0, int(now - ts) // 60)
-    return 'just now' if m < 1 else f'{m} min ago' if m < 60 else f'{m // 60} h ago' if m < 48 * 60 else f'{m // 1440} d ago'
+    from .timewords import ago_m
+    return ago_m(max(0, now - ts) // 60)
 
 
 CONTACT_SYNC_REPAIR = 3         # failed contact syncs in a row (one per ~10 min) before the card offers Pair again
@@ -319,7 +320,9 @@ def wa_status_line(st: dict, now: float = None) -> dict:
         else: parts, fix = ['Not connected'], 'restart'
     else:
         parts, fix, n = ['Connected'], '', st.get('admitted')
-        if n is not None: parts.append(f"{n} chat{'' if n == 1 else 's'}")
+        if n is not None:
+            from .timewords import plural
+            parts.append(plural(n, 'chat'))
         if st.get('last_inbound_at'): parts.append(f"last message {_ago(st['last_inbound_at'], now)}")
         elif n is not None: parts.append('no message yet')
         if int((st.get('contact_sync') or {}).get('failures') or 0) >= CONTACT_SYNC_REPAIR:

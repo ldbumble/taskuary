@@ -224,7 +224,9 @@ class TheCallbackOverTheApi(unittest.TestCase):
         import inspect
         from taskuary import server
         src = inspect.getsource(server)
-        self.assertEqual(src.count("'/api/quickbooks/callback', '/api/zoho/callback', '/api/linkedin/callback'"), 2)
+        # ...one list (OAUTH_RETURNS), read by both checks
+        self.assertIn('/api/linkedin/callback', server.OAUTH_RETURNS)
+        self.assertEqual(src.count("request.url.path not in OAUTH_RETURNS"), 2)
 
 
 class TheStatusEndpoint(unittest.TestCase):

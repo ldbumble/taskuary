@@ -428,6 +428,7 @@ def isolated_runtime_boundaries():
                  mock.patch.object(server, 'reports_forever', stopped('report scheduler')), \
                  mock.patch.object(server, 'quick_forever', stopped('chat poll scheduler')), \
                  mock.patch.object(server, 'doorway_forever', stopped('assistant doorway')), \
+                 mock.patch.object(server, 'share_start', stopped('share port')), \
                  mock.patch.object(blackboard, 'schedule_due', stopped('dispatch retry scheduler')), \
                  mock.patch.object(waitroom, 'watch', stopped('waitroom watcher')), \
                  mock.patch.object(asks, 'watch', stopped('asks watcher')):

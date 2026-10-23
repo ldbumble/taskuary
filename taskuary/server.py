@@ -235,8 +235,7 @@ async def _lifespan(_app):
     msauth.on_rotate = lambda cid, rt: store.save_connector({'ConnectorId': cid, 'Secret': rt}, 'msauth')   # a rotated Microsoft refresh token outlives a restart
     from . import chatgptauth
     chatgptauth.on_rotate = lambda cid, rt: store.save_connector({'ConnectorId': cid, 'Secret': rt}, 'chatgptauth')   # ...and a ChatGPT one
-    from . import sharing
-    threading.Thread(target=lambda: sharing.sync_listener(store), name='taskuary-share-start', daemon=True).start()   # links on: their own port
+    threading.Thread(target=share_start, name='taskuary-share-start', daemon=True).start()   # links on: their own port
     try:
         async with processing_all.membership_lifecycle(store):
             yield
@@ -7998,7 +7997,9 @@ def chat_read_line(types, added, took: float) -> str:
     WhatsApp and read as "nothing ever arrives" (2026-10-23). Every read that brought lines says so; a slow empty one says it was
     slow and that nothing was new; a quick empty one - the doorway's once-a-second read - says nothing."""
     what, n = ', '.join(types), int(added or 0)
-    if n: return f"chat poll {what} read {n} line{'' if n == 1 else 's'} in {took:.1f}s"
+    if n:
+        from .timewords import plural
+        return f"chat poll {what} read {plural(n, 'line')} in {took:.1f}s"
     return f"chat poll {what} slow ({took:.1f}s), nothing new" if took > SLOW_CHAT_READ else ''
 DRAIN_WAIT = 45                 # the context gate's patience for its lines to be judged (the old lock wait)
 CHAT_CONNECTORS = {'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord'}
@@ -8336,6 +8337,12 @@ def poll_forever():
 
 
 DOORWAY_TICK = 1.0              # the assistant chat is a conversation, not a mailbox - see doorway_forever
+
+
+# the share-only port (sharing.py), opened at start when links are on - named, so the tests' lifespan guard can stop it like the loops
+def share_start():
+    from . import sharing
+    sharing.sync_listener(store)
 
 
 def doorway_forever():

@@ -653,7 +653,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     if owed: system = system + '\n\n' + selfclose.REPLY_LINE
     from . import slots
     if slots.all_(store, tid): system = system + '\n\n' + selfclose.DRAFT_LINE
-    md = store.checklist_markdown(tid) if hasattr(store, 'checklist_markdown') else ''
+    md = store.checklist_markdown(tid, ids=True) if hasattr(store, 'checklist_markdown') else ''
     ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words
     chk = f"CHECKLIST - what was asked for, as triage read it:\n{md}\n" if md else ''
     if stranger: sources.insert(0, f"TITLE: {task.get('Title') or ''}\nSUMMARY: {task.get('Summary') or ''}\n{chk}")

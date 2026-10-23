@@ -29,7 +29,7 @@ def build(store, tid: int, instruction: str = None, repo: str = None, context_bu
     return {
         'task': f"{task_ref(tid)} - {t.get('Title') or ''}",
         'objective': str(t.get('Summary') or '').strip(),
-        'checklist': store.checklist_markdown(tid) if hasattr(store, 'checklist_markdown') else '',
+        'checklist': store.checklist_markdown(tid, ids=True) if hasattr(store, 'checklist_markdown') else '',   # ids: the agent ticks its own (--tick)
         'instruction': (instruction or '').strip(),
         'repository': repo or '',
         'context': context,

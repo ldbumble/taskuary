@@ -162,12 +162,13 @@ def candidates(store, connector) -> list:
     kind = (connector or {}).get('Type')
     if kind == 'whatsapp':
         from . import messengers
-        try: rows = messengers.wa_chats(connector)
+        try: rows = messengers.wa_chats(connector, store)
         except Exception as e:
             logger.debug(f'whatsapp roster unavailable for the doorway picker: {e}')
             return []
         guide = chat_of(connector)
-        return [{'to': r['jid'], 'name': r.get('name') or r['jid'], 'mine': bool(r.get('self'))}
+        from . import wanames
+        return [{'to': r['jid'], 'name': wanames.label(r['jid'], r.get('name')), 'phone': r.get('phone') or '', 'mine': bool(r.get('self'))}
                 for r in rows if own_thread(store, connector, r, guide)]
     if kind == 'telegram':
         seen = {}

@@ -6161,7 +6161,7 @@ def wa_chats(cid: int):
     c = store.get_connector(cid, with_secret=True)
     if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
     from . import remote_assistant
-    try: rows = _chats(c)
+    try: rows = _chats(c, store)
     except RuntimeError as e: raise HTTPException(409, str(e))
     # The owner's own "Message yourself" thread wears a legacy GROUP jid, and so does every group
     # they created - the shape and the number prefix cannot tell those apart, so the count of people

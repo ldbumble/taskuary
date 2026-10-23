@@ -312,7 +312,7 @@ def base_url(server: dict = None) -> str:
 
 def link_block(store, server: dict = None) -> str:
     if store.get_setting(SETTING, '0') != '1':
-        return 'share links are off - turn on "Share links on my network" in Settings first'
+        return 'share links are off - turn on "Share links on your network" in Settings first'
     why = sync_listener(store)
     if why or not base_url(): return why or _L['error'] or 'the share port is not open yet'
     return ''

@@ -475,13 +475,14 @@ class TypedActBringsUpThePickerTests(PhoneCase):
         self.assertEqual(btns[1:], ['Tomorrow', 'Next week', 'In 2 weeks', 'In a month', 'Cancel'])
         self.assertRegex(text_of(self.ph.tap(btns[0])), rf'TQ-{self.tid:04d} is away until Fri')
 
-    def test_close_it_brings_the_card_up_with_mark_done_first(self):
+    # ...but a PUT-DOWN typed is done at once (the owner, 2026-10-23: "it should be the pill saying i have closed this task for you"):
+    # no yes/no, no card brought up to tap - the short receipt, and the walk goes on
+    def test_close_it_is_done_at_once_with_a_short_receipt(self):
         got = self.ph.type('close it, it is handled')
-        self.assertNotIn('yes, go ahead', got[-1][1])
-        self.assertEqual(got[-1][1][0], 'Mark done', got[-1][1])
-        self.assertIn(f'TQ-{self.tid:04d}', text_of(got))
-        self.assertEqual(self.s.get_task(self.tid)['Status'], 'open')           # nothing ran: the tap does it
-        self.assertIn(f'TQ-{self.tid:04d} closed', text_of(self.ph.tap('Mark done')))
+        said = text_of(got)
+        self.assertNotIn('yes, go ahead', [b for _t, bs in got for b in bs]); self.assertNotIn('Nothing happens until you say yes', said)
+        self.assertIn(f'TQ-{self.tid:04d} closed', said)
+        self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')
 
     def test_a_set_of_items_keeps_its_yes_or_no(self):
         for subj in ('Weekly platform digest', 'Office closed Monday'): self.f.filed_fyi(subject=subj)

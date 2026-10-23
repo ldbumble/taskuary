@@ -24,7 +24,7 @@ def c(_kind, **params): return 'CALL: ' + json.dumps({'kind': _kind, 'params': p
 class Step:
     """One thing the owner types. `table`: the pile key on screen when it is typed (None: nothing). `first`/`then`: the scripted
     model's answer, and its answer after a look-up. `expect`: the outcome (tests/assistant_queries.py's words: link:<href> |
-    draft:<verb> | light:<verb> | read:<tool> | cleared). `says`: a regex the line the owner reads must match - it says what it did.
+    draft:<verb> | light:<verb> | read:<tool> | cleared). `says`: a regex the line the owner reads must match - it says what it did; a lit button says nothing (2026-10-23).
     `budget`: (first word, action) in seconds on the fake's realistic timings."""
     def __init__(self, text, table, first, expect, says, then=None, budget=(1.5, 3.0), live=None):
         self.text, self.table, self.first, self.then, self.expect, self.says, self.budget, self.live = text, table, first, then, expect, says, budget, live
@@ -36,15 +36,15 @@ STEPS = [
     # TQ-12's coding agent ran before and its session is saved (world()): Continue reopens it, the notes riding along
     Step('rerun the agent with these notes: use the new template', 'msg:17',
          'Sending it back to work with your notes.\n' + c('agent.continue', ref='TQ-0012', note='use the new template'), 'light:continue',
-         r'^Lit Continue on TQ-0012 with your notes: use the new template'),
+         r'^$'),                                                  # the lit Continue is the whole answer (2026-10-23)
     Step("what's waiting on me", None, c('pipe.list'), 'read:pipe.list', r'month-end',
          # a question that needs a look-up is two model rounds, and its first words are the second round's
          then='Ten things are on you - the month-end close is short by 4,180 and leads the list.', budget=(2.0, 3.0)),
     Step('mark the FYI read', 'msg:5', 'Clearing the FYIs.\n' + c('pipe.clear', select={'kind': 'fyi'}), 'cleared', r'^Marked \d+ (items?|FYI|reports?) read'),
     Step('open Settings → Sounds', None, 'The sounds are under [Notifications](#settings=config&group=Notifications).', 'link:#settings', r'Notifications'),
     Step('add LinkedIn as a connector', None, 'Bringing up the LinkedIn card.\n' + c('connection.create', type='linkedin'), 'open:#connector=linkedin', r'LinkedIn'),
-    Step('remind me tomorrow', 'msg:1', 'Putting it away until tomorrow.\n' + c('task.defer', until='tomorrow 9am'), 'light:defer', r'.'),
-    Step('stop the agent', 'agent:6', 'Stopping it.\n' + c('stop_agent'), 'light:stop_agent', r'.', live=6),
+    Step('remind me tomorrow', 'msg:1', 'Putting it away until tomorrow.\n' + c('task.defer', until='tomorrow 9am'), 'light:defer', r'^$'),
+    Step('stop the agent', 'agent:6', 'Stopping it.\n' + c('stop_agent'), 'light:stop_agent', r'^$', live=6),
 ]
 
 

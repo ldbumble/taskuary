@@ -66,8 +66,8 @@ import { railStatus } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
 import { StatusLogo } from "./StatusMark.jsx";
 import { isCoveragePending } from "./processingAll.js";
-import { mergeDurableTurns, pickLine, placeLine, pressChip, pressLine, pressedOf } from "./assistantTurns.js";
-import { lightOf, litAfter, litPick, litPull } from "./assistantLight.js";
+import { mergeDurableTurns, pickLine, placeLine, pressChip, pressLine, pressedNoteOf, pressedOf } from "./assistantTurns.js";
+import { lightOf, litAfter, litOn, litPick, litPull } from "./assistantLight.js";
 import DigestText from "./DigestText.jsx";
 import { canGoBack, firstAppLink, onStep, openAppLink, recordPlace } from "./appLinks.js";
 import { hashFor } from "./canvasLinks.js";
@@ -789,7 +789,12 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
 // anyway. it should on bottom by the prompt"). A line hands its words to the same row the task view fills (actionRow.js).
 // WHAT WAS PRESSED, ON THE CARD IT WAS PRESSED ON (the owner, 2026-10-22: "put a little animation on the corner of the past task - like
 // button marked done not free text"): the button's own label as a quiet badge (assistantTurns.pressedOf)
-function Pressed({ label }) { return <span className="tq-pressed" data-tq-pressed={label}>✓ {label}</span>; }
+// ...and a Close with a note wears its note after the badge, one muted truncated line, whole on hover (the owner, 2026-10-23: "write on it
+// marked done with note")
+function Pressed({ label, note = "" }) {
+  return <><span className="tq-pressed" data-tq-pressed={label} title={note || undefined}>✓ {label}</span>
+    {note && <span className="tq-pressed-note" data-tq-pressed-note="" title={note}>{note}</span>}</>;
+}
 function BarVerbs({ owner, chips, busy, onChip }) {
   // the item's key in the id: the end of the walk offers one "open" chip per item, and one id kept only the last - "Open TQ-0001" opened
   // TQ-0010. The verb stays LAST so isDone's /:done$/ still finds a done chip
@@ -844,7 +849,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
     </div>
   );
   if (m.role === "receipt") return (
-    <div className="tq-msg receipt"><span /><div className="body">{m.status && m.status !== "done" ? "✗" : "✓"} {m.text}{pressedOf(m) && <Pressed label={pressedOf(m)} />}
+    <div className="tq-msg receipt"><span /><div className="body">{m.status && m.status !== "done" ? "✗" : "✓"} {m.text}{pressedOf(m) && <Pressed label={pressedOf(m)} note={pressedNoteOf(m)} />}
       {/* a receipt can carry the walk's own word: a sweep puts the table down and OFFERS Next rather
           than jumping to the next thing by itself (the owner, 2026-09-11). Same strip, same buttons.
           ...and its Open and Report this bug go there too: a button in the line is against "no button in line ever" (2026-10-06),
@@ -972,7 +977,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
               <SourceMark item={m.card} size={12} />
               {!!m.card.ref && <span className="ref">{m.card.ref}</span>}
               <b>{m.card.title}</b>
-              {pressedOf(m) && <Pressed label={pressedOf(m)} />}
+              {pressedOf(m) && <Pressed label={pressedOf(m)} note={pressedNoteOf(m)} />}
             </div>
           )}
           {card && !foldedNow && <CardNav.Provider value={nav}>{card}</CardNav.Provider>}
@@ -2062,13 +2067,28 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         // THE ASSISTANT ROUTES (the owner, 2026-10-19: "it should just surface the correct button"): an act comes back as the row's own button
         // to light (`light`), the page that holds it (`open`) or a new job written into New (`new`) - never a card to confirm, and nothing runs
         const aid = `a${Date.now()}`;
-        setMsgs((m) => [...m, { id: aid, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [] }]);
+        // ...and a lit button or a press is no line at all (the owner, 2026-10-23: "what the heck is Lit"): only words get one
+        if (data.say || data.options?.length || data.chips?.length)
+          setMsgs((m) => [...m, { id: aid, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [] }]);
+        // A TYPED PUT-DOWN WAS PRESSED (concierge._put_down - the owner, 2026-10-23: "it should collapse the task and write on it marked done
+        // with note"): its card wears the button's badge, and on the table it is put down as the row's own press puts it down - folded, the
+        // next item up - never a line saying so
+        const pr = data.pressed;
+        if (pr?.label) {
+          setMsgs((m) => pressLine(m, pr, pr.label, pr.note || ""));
+          const here = { key: tableKey || current, tid: currentItem?.tid };
+          if (litOn({ key: pr.key, tid: pr.tid ? Number(pr.tid) : null }, here) || pr.table) {
+            // ...folded as done() folds the card a press lands on
+            setMsgs((m) => { const i = interactiveCardIndex(m); return i < 0 ? m : m.map((x, j) => (j === i ? { ...x, done: true } : x)); });
+            canvasState.putDown(here.key || pr.key, pr.tid ?? null); advance(null, true);
+          } else { onChanged?.(); loadPile(); }
+        }
         // a connector card brought up lights its first step - the line is finished with what it lit ("press Sign in with LinkedIn")
         if (String(data.say || "").includes(STEP_SAID)) {
           const done = (e) => { window.removeEventListener(LIT, done); setMsgs((m) => m.map((x) => (x.text === data.say ? { ...x, text: finishLine(x.text, e.detail) } : x))); };
           window.addEventListener(LIT, done); setTimeout(() => window.removeEventListener(LIT, done), 8000);
         }
-        say(data.say);
+        if (data.say) say(data.say);
         // THE PAGE IT NAMED, OPENED (appLinks.js): "set up Intacct" puts the Sage Intacct card beside the answer, not a sentence
         // about where to find it. Only a fresh reply opens one - a reloaded history draws its links, it does not open them.
         // ...a reply that carries `open` has decided for itself: "" is the app's own words (no AI), whose links are to press
@@ -2142,7 +2162,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         // yes", and the draft went onto his task with nothing landing here (2026-10-06)
         // ...and its Send is lit: drafting is not sending, the owner's press is (the owner, 2026-10-19)
         if (data.reviewId) {
-          setLit({ verb: "approve", label: btn("approve"), line: `Read the draft, then press ${btn("approve")} when you're sure.`, key: `review:${data.reviewId}`,
+          setLit({ verb: "approve", label: btn("approve"), line: "", key: `review:${data.reviewId}`,
                    tid: cur?.tid ? Number(cur.tid) : null, landed: false });
           if (!elsewhere) putOnTable(null, "sync"); deferInChat(() => surfaceRef.current?.(`review:${data.reviewId}`), 300); return;
         }
@@ -2283,7 +2303,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         chips: [...(data?.fix?.href ? [{ verb: "go", href: data.fix.href, label: data.fix.label }] : []), { verb: "next", label: btn("next") }] }]);
       return;
     }
-    setLit({ verb: "approve", label: btn("approve"), line: `Read it, then press ${btn("approve")} when you're sure.`, key: `review:${data.reviewId}`,
+    setLit({ verb: "approve", label: btn("approve"), line: "", key: `review:${data.reviewId}`,
              tid: item?.tid ? Number(item.tid) : null, landed: false });
     putOnTable(null, "sync"); deferInChat(() => surfaceRef.current?.(`review:${data.reviewId}`), 300);
   };
@@ -3165,7 +3185,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             {table.speaks && !holding && !hostedRow && <div className="tq-strip" data-tq-strip={busy || (reading && reading === onTable) ? "busy" : ""}>
             {/* THE ASSISTANT'S LIT BUTTON SAYS SO HERE, over the row it lit: the strip stood empty over a dark Mark done, and "Press Mark done"
                 was only up in the chat (verify, 2026-10-19) - it goes out with the light */}
-            {table.speaks && !!litNow && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">{litNow.line}</div></div>}
+            {table.speaks && !!litNow?.line && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">{litNow.line}</div></div>}
             {table.speaks && !litNow && changed && changed.for === onTable && <div className="tq-next" role="status" data-tq-advice-changed="">
               <div className="tq-next-txt">{changed.reading ? "This changed - reading it again…" : shownAdvice ? "This changed - here's the updated suggestion."
                 : "This changed."}</div></div>}

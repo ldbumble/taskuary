@@ -7346,9 +7346,10 @@ def put_agent(name: str, body: dict):
     candidate = copy.deepcopy(cfg)
     try:
         profile = cli_connections.set_profile(candidate, store, name, body)
-        resolved = cli_connections.resolve(candidate, profile, cli_connections.brain_of(store, candidate, name, profile))
-    except ValueError as e: raise HTTPException(422, str(e))
-    if not str(resolved.get('cmd') or '').strip(): raise HTTPException(422, 'Choose a configured CLI provider')
+        cli_connections.resolve(candidate, profile, cli_connections.brain_of(store, candidate, name, profile))
+    except ValueError as e: raise HTTPException(422, str(e))           # a CLI the body NAMES that is not connected is still refused
+    # A PROFILE IS A NAME AND INSTRUCTIONS (the owner, 2026-10-22): it saves with no CLI behind it - the brain is the AI defaults'
+    # answer, asked when work starts. "Choose a configured CLI provider" refused every profile on a box with none connected
     profile['kind'] = profile.get('kind') or hub_agents.DEFAULT_PROFILES.get(name, {}).get('kind') or row.get('Kind') or 'coding'
     profile['purpose'] = hub_agents.profile_purpose(name, profile, profile['kind'])
     if profile.get('triage_enabled', True) and not profile['purpose']:

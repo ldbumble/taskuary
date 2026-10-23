@@ -194,7 +194,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
   const VERB = {
     back: { label: "Back", tone: "s", run: () => go(prevOf(view, st)), title: "The step before" },
     next: { label: "Next", tone: "p", run: () => go(nextOf(view)), title: "The next step" },
-    walk: { label: "Walk me through my tasks", tone: "p", run: finishThen(onWalk), title: "Everything waiting, most important first" },
+    walk: { label: btnLabel("walk"), tone: "p", run: finishThen(onWalk), title: "Everything waiting, most important first" },
     finish: { label: reopened ? "Back to my day" : "Finish setup", tone: "p", run: finishThen(onFinish),
       title: "Setup is done - the canvas shows your day. Setup on the top bar opens this again." },
   };

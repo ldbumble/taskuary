@@ -37,5 +37,5 @@ test("Walk is pressable while loading, and the press is kept until the rows are 
   assert.match(view, /disabled=\{walkQueued \|\| starting \|\| resetting \|\| !!handoff \|\| \(!counting && !canAdvance && !onYou\)\}/);   // walkGuard.test
   assert.match(view, /onPointerDown=\{counting \? \(\) => setWalkQueued\(true\) : undefined\}/);
   assert.match(view, /onClick=\{\(\) => \(counting \|\| walkOff \? setWalkQueued\(true\) : start\(null\)\)\}/);
-  assert.match(view, /\{starting \|\| walkQueued \? "Getting your first one\.\.\." : "Walk me through my tasks"\}/);
+  assert.match(view, /\{starting \|\| walkQueued \? "Getting your first one\.\.\." : btn\("walk"\)\}/);
 });

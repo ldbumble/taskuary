@@ -44,7 +44,7 @@ test("Finish setup and Walk me through my tasks are row verbs, and both finish s
   // the Advisor's suggestions are typed into the catalogue's search, never buttons (2026-10-16); never "press Next" in its line
   assert.doesNotMatch(fr, /setup:open:/);
   assert.doesNotMatch(fr, /or press Next/);
-  assert.match(fr, /walk: \{ label: "Walk me through my tasks"/);
+  assert.match(fr, /walk: \{ label: btnLabel\("walk"\)/);
   assert.match(fr, /finish: \{ label: reopened \? "Back to my day" : "Finish setup"/);
   assert.match(fr, /api\.post\("\/api\/setup\/first-run\/finish"\)/);
   assert.doesNotMatch(fr, /<Button variant="contained" disableElevation disabled=\{st\.step !== "done"\} onClick=\{onWalk\}>/, "no button of its own on the canvas");

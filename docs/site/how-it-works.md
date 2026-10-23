@@ -105,19 +105,30 @@ be drafted; **Not our task** teaches where your responsibility ends. The exact d
 with its date, sender and subject, so future triage can judge whether a new message is genuinely
 similar.
 
-Repeated patterns become lessons in `LEARNED.md`. Each machine-written line carries its evidence:
+Repeated patterns become lessons in `LEARNED.md`, one section per reader: triage reads
+`## How you sort mail` (learned only from your sorting verdicts), the Advisor reads
+`## What you do next` (learned from your presses), and nothing else reads either. How you write
+is kept in `STYLE.md` under `## By recipient`, for the drafter - with the instruction you typed into
+Redraft, once you have typed the same one twice for the same person. Each machine-written line
+carries its evidence:
 
 ```text
 - John drops greetings and signs off in one word. [s:4 | ev: rv12,rv15,rv31 | seen: 2026-08-19]
 ```
 
-- `s` is strength. A hypothesis starts at 2 and is promoted at 4 or more, supported by at least
-  three episodes across two people or threads. Contradictions weaken it; stale hypotheses decay.
+- `s` is strength. A line starts at 2 under Watching, where nothing reads it, and is in use at 4 or
+  more, supported by at least three episodes across two people or threads. Contradictions weaken
+  it; stale hypotheses decay.
 - `ev` names the verdicts that taught it, so you can go and read them.
 - `seen` is the last date on which it held.
 
-Delete a learned line and it is gone. Lines you write yourself carry no machine tag and are never
-rewritten. An inferred rule that would *hide* work waits in Proposed rules until you adopt it.
+Delete a learned line and it stays gone: the next reflection cannot write it back unless its
+evidence grows threefold. Reword one and your wording stays. Lines you write yourself carry no
+machine tag and are never rewritten. An inferred rule that would *hide* work waits in Proposed rules
+until you adopt it, and switching off a note it rested on takes it back there. Each reader takes its
+section's lines closest to the message first, within a budget; a line that did not fit is recorded
+as over budget, never cut in half. The opening screen says how many lines went into use this week
+and are still in use.
 `SOUL.md` always outranks `LEARNED.md`, and one setting switches the whole loop off.
 
 ## Three brains, one voice
@@ -167,7 +178,7 @@ around the edges — they are what the models are actually told.
 | `STYLE.md` | Greeting, tone, length, phrasing | reply drafts |
 | `COUNSEL.md` | How the assistant speaks, and how readily it takes a position | the assistant, the morning brief, replies |
 | `CODING.md` | How coding agents work and close out | coding agents |
-| `LEARNED.md` | The profile learned from your verdicts; always below `SOUL.md` | triage, replies, coding agents |
+| `LEARNED.md` | What was learned from what you do, one section per reader; always below `SOUL.md` | triage and agents (`How you sort mail`), the Advisor (`What you do next`) |
 | `DIGEST.md` | The current morning brief | you |
 | Playbooks | One page per kind of job: when it starts, which connections it uses, the steps, what an agent may do alone, what counts as done | triage's `when` line, and the agent working it |
 

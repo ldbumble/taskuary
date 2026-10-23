@@ -109,9 +109,9 @@ def _notes(store, o):
 def _learned(store, o):
     # what the owner's verdicts taught (learn.injectable: promoted lines only, never a hypothesis) - the event pass read it, the
     # clock pass never did (2026-10-12). The seed is headings and placeholders: a document with no line yet says nothing.
-    from .learn import injectable
-    t = injectable(store.doc('learned') or '')
-    return (t[:2000] if any(l.strip().startswith('- ') for l in t.splitlines()) else ''), []
+    # ...its own section, "How you sort mail" (learned_cut.READS) - the press habits are the Advisor's alone (the owner, 2026-10-23)
+    from . import learned_cut
+    return learned_cut.for_reader(store, 'assistant', budget=o.get('cap')), []
 
 def _ledger(store, o):
     # the resolved outcomes of the window, cited by out-id, and the ledger's page on each person the candidates name

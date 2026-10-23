@@ -14,8 +14,10 @@ def noun(nid: str) -> str: return NOUNS[nid]
 # a tool that runs on the owner's own machine, said the one way the server and the page both say it ("claude (your CLI)" was
 # code-speak on the agent card - the dead-end walk's WORDS, 2026-10-18)
 LOCAL = _J['local']
-# what the Advisor's strip says when it has no line, by advisor.status's reason - one sentence and the one move it lights
+# what the Advisor's strip says when it lights nothing, by advisor.status's reason - only no AI is said (the owner, 2026-10-23)
 ADVICE_NONE = {k: v for k, v in _J['advice_none'].items() if not k.startswith('_')}
+# the one rulebook: each state's line and the verbs it lights (rulebook.py)
+ADVICE_RULE = {k: v for k, v in _J['advice_rule'].items() if not k.startswith('_')}
 # what the daily check says about an item that fell through, by why (sweep.py)
 LOOSE = {k: v for k, v in _J['loose_ends'].items() if not k.startswith('_')}
 def local(tool: str) -> str: return f'{tool} ({LOCAL})'

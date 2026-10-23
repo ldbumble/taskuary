@@ -262,7 +262,8 @@ class TheScriptedBrainRoutesTests(unittest.TestCase):
 
 class TheAdvisorSpeaksInTheDemoTests(unittest.TestCase):
     def test_an_item_on_the_table_gets_a_verb(self):
-        """The demo is where newcomers first meet the Advisor: the strip over an ask has a suggestion on it."""
+        """The demo is where newcomers first meet the Advisor: an ask has its button lit - and, its move plain, nothing said (the owner,
+        2026-10-23: an obvious move is an empty strip and one lit button)."""
         from taskuary import advisor, funnel
         s = MemoryStore(); demo.seed(s)
         with on(), mock.patch('taskuary.terminal.live_sessions', lambda tail=0: []):
@@ -273,7 +274,7 @@ class TheAdvisorSpeaksInTheDemoTests(unittest.TestCase):
             advisor.judge(s, advisor.SHOWN, *tgt, advisor.revision(s, *tgt), tier=2, key=keys[0])
             got = advisor.for_key(s, keys[0])
         funnel.invalidate()
-        self.assertTrue(got.get('verb'), got); self.assertTrue(got.get('line'), got)
+        self.assertTrue(got.get('verb'), got); self.assertNotIn('pending', got)
 
 
 class TheWorldTests(unittest.TestCase):

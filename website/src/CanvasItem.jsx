@@ -8,34 +8,35 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Box } from "@mui/material";
 import TaskPage from "./TaskPage.jsx";
-import ActionRow, { AdviceNone, AdvisorNext } from "./ActionRow.jsx";
+import ActionRow, { AdvisorNext } from "./ActionRow.jsx";
 import api from "./api.js";
 import { onLive } from "./live.js";
 import { adviceKeyFor, adviceShown, stripWord } from "./advice.js";
-import { onPressed, useHost, useVerbs } from "./actionRow.js";
+import { onPressed, useHost, useRowVerbs, useVerbs } from "./actionRow.js";
 import { adviceRead } from "./tableState.js";
 import { hint as btnHint, label as btnLabel } from "./buttons.js";
+import { adviceNone } from "./words.js";
+import { CONNECT_AI, connectAi } from "./ConnectAi.jsx";
 
 // THE ADVISOR'S PICK ON A PHONE'S ROW (U12): the dock's row is filled by the canvas's advice, but a phone draws its own row at the
 // view's foot, which was handed none - so the suggestion's line stood over a row whose dark button was something else. Read for
-// this item, re-read when the Advisor's event names it, and dropped when the item moves on (adviceShown).
+// this item, re-read when the Advisor's event names it, and dropped when the item moves on (adviceShown). The same ONE decision as the
+// desk's (advisor.decide) - and no "Thinking..." while it is read: the rule's button is lit at once (the owner, 2026-10-23)
 function useItemAdvice(card, on) {
-  // ...and WHILE IT IS STILL BEING READ (`asking`): the phone's strip drew nothing at all over an item the Advisor had not judged yet,
-  // where the page's says "Thinking about this one…" (the matrix's phone pass, 2026-10-20)
-  const [advice, setAdvice] = useState(null), [asking, setAsking] = useState(false);
+  const [advice, setAdvice] = useState(null);
   const key = card?.key || "";
   useEffect(() => {
-    if (!on || !key) { setAdvice(null); setAsking(false); return undefined; }
+    if (!on || !key) { setAdvice(null); return undefined; }
     let live = true;
     const read = () => api.get("/api/advice", { params: { key } })
-      .then(({ data }) => { if (!live) return; const r = adviceRead(data, key); setAdvice(r.advice); setAsking(!!r.asking); })
-      .catch(() => { if (live) { setAdvice(null); setAsking(false); } });
-    setAdvice(null); setAsking(true); read();
+      .then(({ data }) => { if (live) setAdvice(adviceRead(data, key).advice); })
+      .catch(() => { if (live) setAdvice(null); });
+    setAdvice(null); read();
     const off = onLive("advice", (ev) => { if (adviceKeyFor(ev, { key, aliases: card.aliases || [] })) read(); });
     const after = onPressed(() => read());          // an act on the item moves its revision: read the line again (2026-10-19)
     return () => { live = false; off?.(); after(); };
   }, [on, key]);   // eslint-disable-line react-hooks/exhaustive-deps
-  return [advice, asking];
+  return advice;
 }
 
 // the height the view takes: the chat body's own, less its padding - the same in both states (see above). Said in CSS,
@@ -78,11 +79,12 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
   // NEXT, in the row: the walk's ONE button on a task (the owner, 2026-09-29), the same handler as the button it replaces
   useHost(phone);
   useVerbs("next", [{ id: "next", group: "next", label: btnLabel("next"), disabled: !!busy, run: () => onNext(), title: btnHint("next") }]);
-  const [read, asking] = useItemAdvice(card, phone);
+  const read = useItemAdvice(card, phone);
+  const rowHas = useRowVerbs().list.some((v) => v.label === CONNECT_AI && !v.disabled);   // the row's own Connect is lit there (ActionRow)
   // the Assistant's lit button outranks the Advisor's line, as it does over the composer (assistantLight.js)
   const advised = lit ? null : adviceShown(read, { key: card.key, lane: card.lane }, busy);
   // ...and the strip's word and the button it lights are ONE decision, the dock's (advice.stripWord, the UI audit's C2)
-  const { none, pick } = stripWord({ speaks: true, busy, shown: advised, lit, advice: read, key: card.key, lane: card.lane });
+  const { noAi, pick } = stripWord({ speaks: true, busy, shown: advised, lit, advice: read, key: card.key, lane: card.lane });
   return (
     <>
     {pin && <Box aria-hidden sx={{ position: "fixed", inset: 0, zIndex: 1349, bgcolor: "#f6f4f1" }} />}
@@ -122,9 +124,9 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
       {/* ...and the Advisor's line rides WITH the row it lights: pinned over the composer, it stood a screen away (2026-10-19) */}
       {phone && <div className="tq-docked"><div className="tq-strip" data-tq-strip="">
         {lit && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">{lit.line}</div></div>}
-        {!lit && !advised && !none && !busy && asking && card.lane !== "working" && (
-          <div className="tq-next" role="status" data-tq-advice-thinking=""><div className="tq-next-txt">Thinking about this one…</div></div>)}
-        <AdvisorNext advice={advised} onPropose={onPropose} /><AdviceNone advice={none} /></div>
+        {noAi && <div className="tq-next" role="status" data-tq-advice="no_ai"><div className="tq-next-txt">{adviceNone("no_ai").line}</div>
+          <button type="button" className={rowHas ? "tq-chip" : "tq-chip primary"} onClick={connectAi}>{CONNECT_AI}</button></div>}
+        {!noAi && <AdvisorNext advice={advised} onPropose={onPropose} />}</div>
         <ActionRow inline advised={pick} /></div>}
     </Box>
     </>

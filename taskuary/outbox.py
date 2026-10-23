@@ -71,6 +71,8 @@ def draft_message(store, channel: str, to, about: str, resolution: str = None, l
               + (f'\n\nYOUR OWN document - your voice, your rules, your responsibilities:\n{soul[:4000]}' if soul else '')
               + (f'\n\nYour own style, distilled from mail you have actually sent - write like this:\n{sty[:2500]}' if sty else '')
               + (f'\n\nYour own writing instructions:\n{lrn[:2000]}' if lrn else ''))
+    from .responder import voice_line          # ...and how the owner writes to these people (STYLE.md "By recipient", byrecipient.py)
+    system += voice_line(store, list(to) if isinstance(to, (list, tuple)) else [to])
     recipients = ', '.join(to) if isinstance(to, (list, tuple)) else str(to)
     copies = ', '.join(cc or [])
     user = f'TO: {recipients}' + (f'\nCC: {copies}' if copies else '') + \
@@ -105,8 +107,9 @@ def subject_for(store, about: str, llm=None) -> str:
         return fallback
 
 
-def redraft_review(store, review: dict, resolution: str = None, llm=None) -> str:
-    """Rewrite a new outbound message from its saved envelope, including all To/CC recipients."""
+def redraft_review(store, review: dict, resolution: str = None, llm=None, instruction: str = None) -> str:
+    """Rewrite a new outbound message from its saved envelope, including all To/CC recipients - and the owner's instruction for it,
+    which this road dropped while every other redraft followed it (2026-10-23)."""
     try: deliver = json.loads(review.get('Deliver') or '{}') or {}
     except (TypeError, ValueError): deliver = {}
     if not deliver.get('channel'): raise ValueError('this review has no outbound destination')
@@ -116,7 +119,7 @@ def redraft_review(store, review: dict, resolution: str = None, llm=None) -> str
     if resolution is None:
         from .responder import resolution_of
         resolution = resolution_of(store, review.get('TaskId')) if review.get('TaskId') else None
-    draft = draft_message(store, deliver['channel'], deliver.get('to'), about,
+    draft = draft_message(store, deliver['channel'], deliver.get('to'), '\n\n'.join(filter(None, [about, instruction])),
                           resolution=resolution, llm=llm, cc=deliver.get('cc'))
     store.update_review_draft(review['ReviewId'], draft, review.get('RunId'))
     return draft

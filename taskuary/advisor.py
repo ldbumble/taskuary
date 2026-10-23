@@ -11,7 +11,7 @@ a per-hour cap, the light gear, a small prompt, the bigger read only for the ite
 import hashlib, json, re, threading
 from datetime import datetime, timedelta
 from loguru import logger
-from . import buttons, concierge
+from . import buttons, concierge, words
 from .llm import build_llm, ask_json
 L = buttons.label        # the prompt names a button by its one label (buttons.json)
 
@@ -120,8 +120,9 @@ def rows(store, target_kind: str, target_id, limit: int = 10) -> list:
 
 SYSTEM = (
     "You are the Advisor inside Taskuary, speaking as the owner's own assistant. ONE item just changed. Say what the owner should do "
-    "with it now, as ONE of the VERBS OFFERED (exactly as written) and one short sentence in the second person that says why, naming "
-    "the habit or the fact it rests on - or say nothing. Say nothing unless the owner's own habits (LEARNED), the outcome ledger or "
+    "with it now, as ONE of the VERBS OFFERED (exactly as written) and the LINE: the one checkable fact it rests on that the card does "
+    "not already show - an age, a clash, a failure, a promise nothing backs, someone else who owns it - or an empty line when the move "
+    "is plain; the lit button does the talking, so never a sentence explaining the button or what it does - or say nothing. Say nothing unless the owner's own habits (LEARNED), the outcome ledger or "
     "the item's own facts point at one verb. Never invent a number: the numbers in the ledger lines are the only ones you may use, "
     "and you cite their ids. A ledger line says what HAPPENED, never whether it worked: \"continued\" means the session was started "
     "again, nothing more - never call it a success, and never say something was merged, sent or fixed unless a line says exactly that. "
@@ -130,7 +131,7 @@ SYSTEM = (
     "The reason must be the fact that makes THIS verb right, and it must hold up on its own: someone or an agent waiting on the "
     "owner is a reason to answer, never a reason to put it off. Ending an agent's session is right when its work is done or no "
     "longer wanted; when it has finished something for the owner to review or send, the move is the one that reviews or sends it. If none of the verbs offered is the right move, say nothing - a "
-    "wrong suggestion is worse than none. The line is at most 80 characters, so it is read whole. "
+    "wrong suggestion is worse than none. The line is at most 60 characters, so it is read whole on a phone. "
     "Answer with JSON only:{\"verb\": \"<one of the verbs>\" or null, \"line\": \"<sentence>\" or \"\", "
     "\"evidence\": [\"<ids from the lines below>\"]}. "
     "EXCEPT when the EVENT is item.shown: the owner is looking at this item right now and is owed a next step, so pick the verb the "
@@ -140,7 +141,7 @@ SYSTEM = (
     f"a reply already sent (an A REPLY WAS ALREADY SENT line) - sending never closes the task - and nothing left to do: {L('close')}, "
     "never an answer the sent reply already gave - someone is waiting only when they wrote again after it; a reply that failed to "
     "send: the fix offered with it) - whichever of those is "
-    "OFFERED - and say why in plain words - say nothing only when no verb offered fits at all. "
+    "OFFERED - the line only for a fact the card does not show - say nothing only when no verb offered fits at all. "
     "WHEN SOMETHING FAILED (a WHAT FAILED line below), the owner is owed the way past it, at any event: say in plain words what went "
     "wrong, and pick the move that fixes it - the fix offered when there is one (it opens the place that fixes it); else a verb offered "
     "that gets round it; else, when nothing here can fix it, the one that makes a task to fix it. Never advise the act that failed again "
@@ -207,7 +208,7 @@ def habit(store, verb: str, item: dict) -> tuple:
     from .learn import moment
     w = who_of(store, item or {})
     if w['scope']:
-        rs = store._rows("SELECT TargetKind, TargetId, Pressed FROM advice_press WHERE IFNULL(Stale,0)=0 AND Scope=? AND ItemKind=? ORDER BY Id",
+        rs = store._rows("SELECT TargetKind, TargetId, Pressed FROM advice_press WHERE IFNULL(Stale,0)=0 AND IFNULL(Choice,1)=1 AND Scope=? AND ItemKind=? ORDER BY Id",
                          (w['scope'], str((item or {}).get('kind') or '')))
         last = {(r['TargetKind'], r['TargetId']): r['Pressed'] for r in rs}          # one item, one vote: its last press
         if len(last) >= 2:
@@ -264,13 +265,17 @@ _KEEP = 4                # EVENT, THE ITEM, PREVIEW, VERBS OFFERED
 def _one(s, n: int) -> str: return ' '.join(str(s or '').split())[:n]
 
 
-def _learned(store) -> str:
-    """LEARNED.md as a prompt reads it - the promoted sections only (learn.injectable), minus every heading with nothing under it
-    but its italic placeholder: three empty headings rode into every judgement as if they were the owner's habits."""
-    from .learn import injectable
-    parts = re.split(r'(?m)^(?=## )', injectable(store.doc('learned') or ''))
-    live = [p.strip() for p in parts[1:] if re.sub(r'_\([^)]*\)_', '', p.split('\n', 1)[1] if '\n' in p else '', flags=re.S).strip()]
-    return '\n\n'.join([parts[0].strip(), *live]).strip() if live else ''
+def _learned(store, item: dict = None) -> str:
+    """LEARNED.md's "What you do next" and nothing else - the Advisor's own section (the owner, 2026-10-23: one section per reader),
+    its in-use lines ranked closest to this item first (this sender, their domain or repository, this kind) within its budget
+    (learned_cut). '' while the section has no line: an empty heading is not a habit."""
+    from . import learned_cut
+    about = {}
+    if item:
+        try: w = who_of(store, item)
+        except Exception: w = {}
+        about = {'sender': w.get('sender'), 'domain': w.get('domain'), 'scope': w.get('scope'), 'kind': item.get('kind')}
+    return learned_cut.for_reader(store, 'advisor', about)
 
 
 def _msgs(store, item, target_kind, target_id) -> list:
@@ -331,8 +336,10 @@ def related_line(store, item, target_kind, target_id, cap: int = 5) -> str:
         q = ' OR '.join(['LOWER(m.FromEmail) IN (%s)' % ','.join('?' * len(senders))] * bool(senders) + ['m.ConversationId IN (%s)' % ','.join('?' * len(cids))] * bool(cids))
         for r in store._rows(f"SELECT m.TaskId, LOWER(m.FromEmail) AS e, m.ConversationId AS c FROM message m JOIN task t ON t.TaskId=m.TaskId "
                              f"WHERE t.Status NOT IN ('done','dropped') AND ({q})", (*senders, *cids)):
-            if r['TaskId'] == own: continue
-            hits.setdefault(r['TaskId'], set()).add('same thread' if r['c'] in cids else 'same sender')
+            # THE SAME SENDER ALONE IS NO DUPLICATE (the design, 2026-10-23): one person asks for many things - the thread, or the
+            # subject the model then reads, is the evidence; the sender only names who
+            if r['TaskId'] == own or r['c'] not in cids: continue
+            hits.setdefault(r['TaskId'], set()).add('same thread')
     if subj:
         for t in store.list_tasks(active_only=True):
             if t['TaskId'] != own and t.get('Title') and topic_hit(subj, t['Title']) and topic_hit(t['Title'], subj): hits.setdefault(t['TaskId'], set()).add('same subject')
@@ -348,7 +355,7 @@ def related_line(store, item, target_kind, target_id, cap: int = 5) -> str:
         # to "look again later" about work nobody was doing (2026-10-22 walk)
         held = ' - an agent is on it' if _live(tid) or tid in running else ''
         out.append(f"- {task_ref(tid)} {t.get('Status')}: {_one(t.get('Title'), 100)} ({', '.join(sorted(why))}){held}")
-    return ('POSSIBLE DUPLICATES - other open tasks with its sender, thread or subject (one may already cover this ask):\n' + '\n'.join(out)) if out else ''
+    return ('POSSIBLE DUPLICATES - other open tasks on its thread or subject (one may already cover this ask):\n' + '\n'.join(out)) if out else ''
 
 
 def notes_line(store, item, target_kind, target_id) -> str:
@@ -470,8 +477,8 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     for f_ in (draft_line, thread_line, related_line, notes_line):
         try: lines.append(f_(store, item, target_kind, target_id))
         except Exception as e: logger.debug(f'advisor: {f_.__name__} skipped for {item.get("key")} - {e}')
-    lrn = _learned(store)
-    if lrn: lines.append('LEARNED (the owner, from their own verdicts):\n' + lrn[:2000])
+    lrn = _learned(store, item)
+    if lrn: lines.append('LEARNED (what the owner does next, from their own presses):\n' + lrn)
     led = [f"out{r['Id']}: {outcomes._sentence(store, r)}" for r in outcomes.rows_for(store, target_kind, target_id) if r.get('ResolvedAt')][:5]
     led += [f"{v['label']}: {says(v['verb'], c)}" for v in verbs for c in [habit(store, v['verb'], item)] if says(v['verb'], c)]
     if led: lines.append('THE OUTCOME LEDGER (what came of actions like this):\n' + '\n'.join(led))
@@ -613,11 +620,14 @@ def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1
     own = keys_of(item, key)
     def W(**kw): return _write(store, target_kind=target_kind, target_id=target_id, key=key, event=event, revision=rev, tier=tier, **kw)
     if not item: return W(dropped='no item')
-    if quiet(item): return W(dropped='left to the item')
     verbs = offered(store, item)
     if not verbs: return W(dropped='no actions')
     have = row(store, target_kind, target_id, rev, own)                      # two events in one poll: the second finds the first's row
     if judged(have, tier): return have['Id']
+    # THE RULE DECIDES FIRST (the design, phase A): the model reads only where intent must be read - every other state is the
+    # rulebook's, at once and outside the hourly cap, so an event on it asks nothing of the model
+    from . import rulebook
+    if not rulebook.decide(store, item, verbs)['ask']: return W(dropped='left to the rule')
     brain = llm or build_llm(store)
     if not brain:
         # once per revision, and said: the strip asks for an AI (for_key's {"none": "no_ai"}) - a repeat would loop the re-read
@@ -634,7 +644,8 @@ def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1
     if not d: return W(dropped=f'no answer: {ans.error or "not an object"}'[:200], model=model)
     verb, line = d.get('verb'), ' '.join(str(d.get('line') or '').split())[:200]
     ev = [e for e in (d.get('evidence') or []) if isinstance(e, str) and _EV.match(e)][:6]
-    if not verb or not line: return W(dropped='nothing to say', model=model, evidence=ev)
+    # ...a verb with no line is an answer now: the obvious move is said by its lit button alone (the owner, 2026-10-23)
+    if not verb: return W(dropped='nothing to say', model=model, evidence=ev)
     hit = _offered(verbs, verb)
     verb = hit['verb'] if hit else verb
     if not hit: return W(dropped=f'verb not offered: {verb}'[:120], model=model, line=line, evidence=ev)
@@ -658,12 +669,6 @@ def judged(have, tier: int) -> bool:
     tier and below, so the item on the table still earns the bigger read after the small one said nothing."""
     return bool(have) and (bool(have.get('Verb')) or int(have.get('Tier') or 1) >= tier)
 
-
-def quiet(item: dict) -> bool:
-    """Where the Advisor keeps out of it. Mail the AI never sorted: the row's own Sort it again is the move, and the Advisor,
-    offered only Make a task / Send to agent / Not ours, put the dark button on "Not ours" for mail nobody read. A report that
-    ran fine: it is read, not acted on, and the only verbs it carries create work (2026-10-17 audit)."""
-    return item.get('lane') == 'unjudged' or (item.get('kind') == 'report' and not item.get('bad'))
 
 
 def failure(store, item: dict) -> dict | None:
@@ -761,14 +766,26 @@ def delivery_fix(store, item: dict) -> dict | None:
     return ok((out or {}).get('fix')) if isinstance(out, dict) else None
 
 
+NOT_MOVES = frozenset({'priority', 'assign', 'change_kind', 'pick_repo', 'attach', 'close_note', 'next'})
+
+
 def offered(store, item: dict) -> list:
     """THE ITEM'S REAL BUTTONS, AND NOTHING IT CANNOT DO: the verbs its row carries minus Next - chips_for, which already drops
     what this install cannot do (capabilities.py: no Send on a draft whose channel cannot send, no coding agent with no
     coding tool) - plus the row's own fix when a send failed and named the place that fixes it, under that place's own name.
     An agent waiting on the owner carries Answer it there (chips_for) - its card once offered only End and Remind me, which the
     prompt forbids for someone waiting, so the Advisor stood silent (2026-10-17 audit). Not added here: a paused, stalled or
-    stopped agent has nobody listening, and the row knows which is which."""
-    verbs = [c for c in concierge.chips_for(store, item) if c.get('verb') != 'next']
+    stopped agent has nobody listening, and the row knows which is which.
+    THE BUTTONS THE ROW ACTUALLY DRAWS (the design, phase A, 2026-10-23): the verbs came from chips_for while the row drew row_buttons -
+    why Review changes, Chase and Accept could never be lit, and why "Not ours" was picked on a task whose row has no Not ours. Only
+    the row's moves count: its pickers (who does it, priority, assignee, the code's place), Attach and Close with a note set a field or
+    add to a move, and are never the move. Chase joins where the rulebook says a wait has run past its day (rulebook.adds)."""
+    from . import rulebook
+    verbs = [buttons.chip(b['verb']) | {'label': b['label']} for b in concierge.row_buttons(store, item) if b['verb'] not in NOT_MOVES]
+    # ...in the item's own order (its vocabulary, chips_for - a draft's Send first), the row's other moves after it
+    first = [c['verb'] for c in concierge.chips_for(store, item)]
+    verbs.sort(key=lambda v: first.index(v['verb']) if v['verb'] in first else len(first))
+    verbs += [buttons.chip(v) for v in rulebook.adds(store, item) if v not in {x['verb'] for x in verbs}]
     try: fix = delivery_fix(store, item)
     except Exception as e:
         logger.debug(f'advisor: no fix read for {item.get("key")} - {e}'); fix = None
@@ -856,63 +873,135 @@ def _at_work(store, target_kind: str, target_id) -> bool:
     except Exception: return False
 
 
-def for_key(store, key: str) -> dict:
-    """What the prompt box shows for the item on the table: the row at the item's CURRENT revision, or nothing. A changed
-    item drops its old pill by this one comparison - no cleanup pass. The item on the table earns the bigger read, once, and
-    only where the small read left no line: a tier-2 answer swapped the line and moved the filled button seconds after the item
-    opened, under the owner's hand (B5, 2026-10-17). {"none": "no_ai"} is the strip's cue to ask for an AI."""
-    tgt = target_of(store, key)
-    if not tgt or _at_work(store, *tgt): return {}
-    rev = revision(store, *tgt); rs = _at(store, tgt[0], tgt[1], rev)
-    # only the rows written for THIS item (keys_of): a line judged over the same task's other card is not this one's
-    own = _own(store, tgt, key, rs); rs = [x for x in rs if x.get('Key') in own]; r = row(store, tgt[0], tgt[1], rev, own)
-    if r and r.get('Verb'):
-        out = _payload(r) | {'key': key}
-        # a fix is a place, not a proposal: the page opens its href where the row has no '<rid>:fix' of its own to press (a failed
-        # act with no draft on the table) - read live, so a fix already made carries no stale link
-        if out.get('verb') == 'fix':
-            try: it = _item(store, *tgt, key=key) or {}; f = delivery_fix(store, it) or (failure(store, it) or {}).get('fix')
-            except Exception: f = None
-            if f: out['href'] = f['href']
-        # ...and the task "New task to fix this" makes, read live the same way
-        if out.get('verb') == 'new_task':
-            try: it = _item(store, *tgt, key=key) or {}; f = failure(store, it)
-            except Exception: f = None
-            if f: out['task'] = fix_task(store, it, f)
-        return out
-    # NEVER LEFT GUESSING (the owner, 2026-10-15: "the advisor ... should be guiding at all times never leaving it guessing"): only
-    # eight events ever judged an item, so a fresh email or a task that moved since its last event had an empty bar for good. The
-    # item on the table is judged now, at this revision, once - the line arrives by the `advice` live event the page already reads
-    if not judged(r, 2): notice(store, r['Event'] if r else SHOWN, tgt[0], tgt[1], tier=2, key=key)
-    return {'none': 'no_ai'} if rs and rs[0].get('Dropped') == 'no brain' else {}
+def for_key(store, key: str) -> dict: return decide(store, key)
 
 
-# WHY THE STRIP IS EMPTY, in one word the page reads: "Thinking about this one..." ran 20 s and then showed nothing, over an item the
-# Advisor keeps out of (unsorted mail, a report that ran fine) as much as over one it was judging (error sweep, 2026-10-18)
-QUIET = {'left to the item': 'quiet', 'no actions': 'no_actions', 'cap': 'cap', 'no brain': 'no_ai'}
-# ...and each reason is said on the strip as one sentence with one lit move (words.json advice_none): every one must have it
-REASONS = (*QUIET.values(), 'nothing', 'working', 'off')
-def status(store, key: str) -> dict:
-    """for_key, and when it has no line: {'pending': True} while a judgement of this item is in flight, else {'none': why}."""
-    out = for_key(store, key)
-    if out.get('verb') or out.get('none'): return out
+# ── ONE DECISION (the design, phase A; the owner's rulings, 2026-10-23) ──────────────────────────────────────────────────────────────
+# Every surface - the desk canvas, the Tasks tab, a phone chat, the desk at phone width - reads THIS: the button lit and the line said,
+# picked only from the buttons the row draws (offered). Three tiers, the higher outranking the lower but never a safety rule:
+#   habit  a confirmed habit of the owner's ("## What you do next" in LEARNED.md, in use) - lights its button, never presses it (ruling 9)
+#   model  where intent must be read (rulebook `ask`): its verb stands where it differs from the rule's, with its line
+#   rule   rulebook.py - every other state, at once, from facts the app keeps, with no "Thinking..." and outside the hourly cap
+# A line is said only for a fact the card does not show; the obvious move is an empty strip and its button lit (ruling 1). The item on
+# the table earns the model's bigger read, once (B5); the next two on the walk are read ahead, so their lines are there when Next is.
+PREREAD = 2
+
+
+def habit_pick(store, item: dict, verbs: list) -> str | None:
+    """THE CONFIRMED HABIT TIER: a line under "## What you do next" in LEARNED.md (learn.moves writes it from the press log) keyed
+    `move <kind> <channel> <scope>` (learn._move_key) for this kind of item from this sender's domain or repository, saying "presses <a
+    button's label> (n of m)" - lights that button where the row draws it. It reads the lines the Advisor's prompt reads (learned_cut:
+    the section's in-use lines within its budget, closest scope first), so a habit that lights a button is one the Advisor was told -
+    and never one the owner marked wrong or removed (learnedlines; phase D's Keep/Wrong/Forget hang there). The owner, 2026-10-23: an
+    in-use habit may change the lit button by itself; press habits never reach triage (it reads only "## How you sort mail")."""
+    from . import learned_cut, learnedlines
+    from .learn import _move_key
+    doc = str(store.doc('learned') or '')
+    if learned_cut.NEXT not in doc: return None
+    w = who_of(store, item or {})
+    k = _move_key(str((item or {}).get('kind') or ''), w['channel'], w['scope'])
+    ls = learned_cut.lines(doc, learned_cut.NEXT)
+    keep = set(learned_cut.cut(ls, learned_cut.BUDGET['advisor'], {**w, 'kind': (item or {}).get('kind')})[0])
+    raw = next((r for r, key in ls if key == k and r in keep), None)
+    if not raw or learnedlines.row(store, k).get('Status') in ('wrong', 'forgotten'): return None
+    m = re.search(r'presses (.+?) \(\d+ of \d+\)', raw)
+    if not m: return None
+    said = m.group(1).strip().lower()
+    return next((v['verb'] for v in verbs if said in (str(v['label']).lower(), buttons.label(v['verb']).lower())), None)
+
+
+def _label(verbs: list, verb: str, item: dict) -> str:
+    if verb == 'next': return buttons.label('next', 'batch') if (item or {}).get('kind') == 'fyis' else buttons.label('next')
+    return next((v['label'] for v in verbs if v['verb'] == verb), None) or buttons.label(verb) or verb
+
+
+def decide(store, key: str, preread: bool = True) -> dict:
+    """The Advisor's one decision for the item keyed `key`: {key, state, verb, label, line, by, revision, ...} - `verb` None lights
+    nothing (an agent asking is answered in its pane, a closed task's Reopen stays outlined), `line` '' says nothing. {} for a key with
+    nothing to decide on; {"none": "no_ai"} where the move needs an AI and none is connected; {"none": "off"} with the Advisor off."""
+    from . import rulebook
     tgt = target_of(store, key)
-    if not tgt: return {'none': 'nothing'}
-    if _at_work(store, *tgt): return {'none': 'working'}
-    if str(store.get_setting(ON_KEY, '1') or '1') != '1': return {'none': 'off'}
+    if not tgt: return {}
+    if str(store.get_setting(ON_KEY, '1') or '1') != '1': return {'key': key, 'none': 'off'}
     rev = revision(store, *tgt)
-    with _LOCK: busy = any(m[:3] == (tgt[0], int(tgt[1]), rev) for m in _INFLIGHT)
-    if busy: return {'pending': True}
-    rs = _at(store, tgt[0], tgt[1], rev); own = _own(store, tgt, key, rs) if rs else {key}
-    last = next((r for r in rs if r.get('Key') in own), None)
-    if not last: return {'pending': True} if BACKGROUND else {'none': 'nothing'}
-    return {'none': QUIET.get(str(last.get('Dropped') or ''), 'cap' if str(last.get('Dropped') or '').startswith('cap') else 'nothing')}
+    # an agent at work is nothing for the owner to do, whatever the card was judged as (the owner, 2026-10-13)
+    if _at_work(store, *tgt): return {'key': key, 'state': 'working', 'verb': 'next', 'label': buttons.label('next'), 'line': '', 'by': 'rule',
+                                      'revision': rev, 'count': [0, 0], 'says': '', 'pill': '', 'evidence': [], 'ask': False, 'needs_ai': False}
+    item = _item(store, *tgt, key=key)
+    if not item: return {}
+    verbs = offered(store, item)
+    r = rulebook.decide(store, item, verbs)
+    verb, line, by, ev, flagged = r['verb'], r['line'], 'rule', [], False
+    rs = _at(store, tgt[0], tgt[1], rev)
+    # only the rows written for THIS item (keys_of): a line judged over the same task's other card is not this one's
+    own = _own(store, tgt, key, rs); rs = [x for x in rs if x.get('Key') in own]
+    m = row(store, tgt[0], tgt[1], rev, own)
+    if r['ask']:
+        mv = concierge.canon_verb(m['Verb']) if m and m.get('Verb') else None
+        hit = next((v for v in verbs if v['verb'] == mv), None) if mv else None
+        # the model's verb stands where it differs from the rule's - with its line, the reason the lit button is not the one you would
+        # guess; agreeing, the rule's fact stands and the model's sentence goes (ruling 1: no explanation of the obvious button)
+        if hit and mv != verb:
+            verb, by, ev = mv, 'model', json.loads(m.get('EvidenceJson') or '[]')
+            line = '' if r['state'] == 'idea' else _one(plain(m.get('Line') or '', m['Verb'], hit['label']), 64)
+        # SEND IS NEVER LIT ON A DRAFT THE CHECK FLAGGED - not by a habit either (the design, 1.1)
+        flagged = r['state'] == 'draft_ready' and bool(hit) and mv != 'approve'
+        # NEVER LEFT GUESSING (the owner, 2026-10-15): the item on the table is read now, at this revision, once - the rule's button
+        # stands lit meanwhile, and the model's answer arrives by the `advice` live event the page already reads
+        if not mv and not judged(m, 2): notice(store, m['Event'] if m else SHOWN, tgt[0], tgt[1], tier=2, key=key)
+        if not mv and r['state'] in rulebook.NEEDS_AI and rs and rs[0].get('Dropped') == 'no brain':
+            return {'key': key, 'none': 'no_ai', 'state': r['state'], 'revision': rev, 'line': ''}
+    h = habit_pick(store, item, verbs) if r['state'] not in rulebook.SAFE and not flagged else None
+    if h and h != verb: verb, line, by = h, '', 'habit'
+    if preread: _preread(store, key)
+    count = habit(store, verb, item) if verb and verb != 'next' else (0, 0, '')
+    lbl = _label(verbs, verb, item) if verb else ''
+    out = {'key': key, 'state': r['state'], 'verb': verb, 'label': lbl, 'line': line, 'by': by, 'revision': rev, 'count': list(count[:2]),
+           'says': says(verb or '', count), 'pill': pill(lbl, count) if verb else '', 'evidence': ev, 'ask': r['ask'],
+           'needs_ai': r['state'] in rulebook.NEEDS_AI}
+    # a fix is a place, not a proposal: the page opens its href where the row has no '<rid>:fix' of its own to press (a failed act with
+    # no draft on the table) - read live, so a fix already made carries no stale link
+    if verb == 'fix':
+        try: f = delivery_fix(store, item) or (failure(store, item) or {}).get('fix')
+        except Exception: f = None
+        if f: out['href'] = f['href']
+    # ...and the task "New task to fix this" makes, read live the same way
+    if verb == 'new_task':
+        try: f = failure(store, item)
+        except Exception: f = None
+        if f: out['task'] = fix_task(store, item, f)
+    return out
+
+
+def _preread(store, key: str):
+    """THE NEXT TWO, READ AHEAD (the design, 1.1): where their state asks the model, it is asked now, in the background, so the line is
+    there when Next brings them - never a button that changes under the owner's hand a moment after the item opens."""
+    if not BACKGROUND: return
+    def go():
+        try:
+            from . import funnel, rulebook
+            items = funnel.pile(store, quiet=True).get('items') or []
+            at = next((n for n, i in enumerate(items) if key in keys_of(i)), None)
+            for it in (items[at + 1:at + 1 + PREREAD] if at is not None else []):
+                tgt = target_of(store, it.get('key'))
+                if tgt and rulebook.decide(store, it, offered(store, it))['ask']: notice(store, SHOWN, tgt[0], tgt[1], tier=1, key=it['key'])
+        except Exception as e: logger.debug(f'advisor: no read ahead of {key} - {e}')
+    threading.Thread(target=go, daemon=True, name='advise-ahead').start()
+
+
+# WHY NOTHING IS LIT, in one word the page reads - only no AI is said, with its way out (words.json advice_none): "Thinking...", "No
+# suggestion...", "Nothing to decide..." went (the owner, 2026-10-23); every other state is the rule's lit button, or silence
+REASONS = tuple(words.ADVICE_NONE)
+def status(store, key: str) -> dict:
+    """decide, or {'none': 'nothing'} for a key nothing is decided on (a meeting row, a connection): the page lights Next, silent."""
+    return decide(store, key) or {'none': 'nothing'}
 
 
 # ── LIT AND PRESSED (the deep dive, 2026-10-20) ─────────────────────────────────────────────────────────────────────────────────
 # Nothing recorded whether the button the Advisor lit was the one pressed, so its record and the owner's habits were the same guess.
-# Every row press and Next while a line is shown sends the advised verb and the revision it was judged at; the row keeps what the
-# item was and whom it was from - the press log the moves in LEARNED.md are learned from (learn.moves). Nothing on screen changes.
+# Every press sends the advised verb (if a line showed) and the revision it was judged at; the row keeps what the item was and whom it
+# was from - the press log the moves in LEARNED.md are learned from (learn.moves). Since phase B (2026-10-23) every press on every
+# surface is kept, lit or not (presses.py). Nothing on screen changes.
 _ROW = {r: v for v, d in buttons.VERBS.items() for r in d.get('row') or []}
 
 
@@ -939,26 +1028,17 @@ def who_of(store, item: dict) -> dict:
     return {'sender': sender, 'domain': domain, 'scope': str(scope or '').lower(), 'thread': m.get('ConversationId') or '', 'channel': channel}
 
 
-def press(store, key: str, advised: str, pressed: str, rev: str = None) -> int:
-    """One press while the Advisor's line was shown, judged at `rev`. Returns the row id, or 0 when the key names nothing it advises
-    on. Stale: the item had moved since the line was judged - the press answered an older screen."""
-    tgt = target_of(store, key)
-    if not tgt or not pressed: return 0
-    item = _item(store, *tgt, key=key) or {}
-    w = who_of(store, item)
-    adv, got = pressed_verb(advised) if advised else None, pressed_verb(pressed)
-    try: now = revision(store, *tgt)
-    except Exception: now = None
-    rid = store._exec('INSERT INTO advice_press (Key,TargetKind,TargetId,Revision,Advised,Pressed,Match,ItemKind,Channel,Sender,SenderDomain,Scope,Thread,Stale,CreatedAt) '
-                       'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                       (key, tgt[0], int(tgt[1]), rev or '', adv, got, int(bool(adv) and adv == got), str(item.get('kind') or ''), w['channel'],
-                        w['sender'], w['domain'], w['scope'], w['thread'], int(bool(rev) and bool(now) and rev != now), _now()))
+def press(store, key: str, advised: str, pressed: str, rev: str = None, surface: str = 'desk', lit: str = None, live: list = None,
+          item: dict = None) -> int:
+    """One press on `key`, on any surface, lit or not (presses.record keeps it - phase B, 2026-10-23: only a desk press under a line was
+    kept). `advised`: the Advisor's verb if its line showed, judged at `rev`. Returns the row id, or 0 when nothing was kept."""
+    from . import presses
+    rid, new = presses.kept(store, key, pressed, surface, lit=lit, live=live, rev=rev, advised=advised or '', item=item)
+    if not new: return rid
     from . import learn
     learn.moves(store)                      # ...and what it teaches lands in LEARNED.md at once, where the owner can read it (never raises)
-    # a press against the lit move is the owner correcting the Advisor: it counts toward the next reflection like any correction
-    if adv and got not in (adv, 'next'):
-        try: store.set_setting('learn_pending', str(int(store.get_setting('learn_pending') or 0) + 1), 'learn')
-        except (TypeError, ValueError): pass
+    # ...and only there: a press is not a correction for the reflection, which writes what TRIAGE reads (the owner, 2026-10-23: "why
+    # would we want button presses to do with triage") - the moves count presses, the reflection counts sorting verdicts
     return rid
 
 
@@ -978,13 +1058,15 @@ def notes(store, key: str, limit: int = 10) -> list:
 
 def block(store, item: dict) -> str:
     """The Advisor's line for the chat's system prompt, so 'why?' is answered from its evidence - a lookup, not a think."""
-    d = for_key(store, (item or {}).get('key') or '') if item else {}
+    d = decide(store, (item or {}).get('key') or '', preread=False) if item else {}
     if not d.get('verb'): return ''
     # the button's name and what the evidence SAYS: "verb stop_agent; evidence: out13" was handed to the chat as-is, and came
     # back to the owner in its answer (2026-10-17 audit)
-    ev = '; '.join(filter(None, (evidence_words(store, e) for e in d['evidence']))) or 'the item itself'
+    ev = '; '.join(filter(None, (evidence_words(store, e) for e in d.get('evidence') or []))) or 'the item itself'
+    # ...a silent decision is its lit button alone (the owner, 2026-10-23), decided by the rule from the item's own facts
+    said = f"\"{d['line']}\" - its button is {d['label']}" if d.get('line') else f"no line - its lit button is {d['label']}"
     return (f"THE ADVISOR'S LINE on this item (if the owner asks why, this is the answer; the numbers are the ledger's): "
-            f"\"{d['line']}\" - its button is {d['label']}" + (f" ({d['says']})" if d.get('says') else '') + f"; it rests on: {ev}.")
+            f"{said}" + (f" ({d['says']})" if d.get('says') else '') + f"; it rests on: {ev}.")
 
 
 def evidence_words(store, ev_id: str) -> str:

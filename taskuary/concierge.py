@@ -750,6 +750,13 @@ def _live_task(store, item) -> bool:
 IDEA_ACT = {'mine': 'task', 'regular_agent': 'agent', 'coding_agent': 'agent', 'not_ours': 'dismiss', 'not_ours_kind': 'dismiss_kind'}
 
 
+def _chasable(store, item) -> bool:
+    if store is None: return False
+    from . import rulebook
+    try: return rulebook.adds(store, item) == ['chase']
+    except Exception: return False
+
+
 def cannot(item: dict | None, verb: str, store=None) -> str:
     """Why this card cannot carry that verb - '' when it can. Always phrased "nothing to <verb>",
     because the honest line is the only line: no receipt goes out in front of it."""
@@ -759,7 +766,10 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     # "no Make a task on an item that already is a task"); a closed one is history, and new work may be a task again
     if verb == 'mine' and item.get('kind') == 'idea' and _live_task(store, item): return f"{what} is already a task on your list."
     # the slipped answers belong to a slipped card: typed on anything else, or pressed after they wrote back, they do nothing
-    if verb in ('chase', 'let_go', 'elsewhere') and item.get('lane') != 'forgotten': return f"Nothing has slipped on {what} - nobody is quiet past their day on it."
+    # ...save a Chase the rule lit on a wait past its day (rulebook.adds: 3 working days on 'theirs', a late goal step - the owner,
+    # 2026-10-23), which goes to the thread rulebook.chase_thread names
+    if verb in ('chase', 'let_go', 'elsewhere') and item.get('lane') != 'forgotten' and not (verb == 'chase' and _chasable(store, item)):
+        return f"Nothing has slipped on {what} - nobody is quiet past their day on it."
     if item.get('kind') == 'idea' and item.get('idea') and (verb in IDEA_ACT or verb == 'defer'): return ''
     # A SENTENCE NAMES ONLY A BUTTON THE ITEM SHOWS (2026-10-17): these said Not ours, reply and Continue over cards with none of them
     if verb == 'not_ours_kind':
@@ -1029,6 +1039,8 @@ def _shows(store, it: dict, b: str) -> bool:
     if b == 'continue': return bool(store.resumable_session(it['tid'])) and not _general(store, it)
     if b in ('review_changes', 'run_another', 'share'): return _agent_holds(store, it) or bool(store.resumable_session(it['tid']))
     if b == 'attach': return bool(it.get('rid'))
+    # Copy is a draft's that cannot be sent from here (ReviewDecision, the owner 2026-10-22) - it stood on every task's list of buttons
+    if b == 'copy': return bool(it.get('rid')) and cannot(it, 'approve', store)
     if b == 'pick_repo': return str((store.get_task(int(it['tid'])) or {}).get('Kind') or '').lower() == 'coding'
     return b != 'fix'                  # a failure's own way out, with its own words - never a button to light from the chat
 
@@ -2997,7 +3009,9 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         # everything the rail holds For later: shown and put down for a while, AND put away to a day (Remind me) - the line
         # counted only the first, and said "1 thing" over a rail of two (the owner, 2026-10-01: "why does it say one thing
         # when there are 2?")
-        waiting = [i for i in left if i['lane'] != 'working' and (i.get('surfaced') or i.get('back_at'))]
+        # ...and "still wait on you" counts what IS on you - the census's rule (lanes.census): a row waiting on them was counted, and the
+        # line said 13 under an opener's "12 on you" (the 2026-10-22 UX walk; the design, phase A)
+        waiting = [i for i in left if i['lane'] != 'working' and (i.get('surfaced') or i.get('back_at')) and (i.get('deferred') or lanes.on_you(i))]
         # ...and what the walk never reached: Next walks DOWN the line (2026-10-22), so a row above where the owner started - a row
         # clicked further down, say - is still walkable when the bottom is reached. It is named here, and the next walk starts with it.
         skipped = [i for i in left if i.get('actionable', True) and not i.get('put_down') and not i.get('surfaced') and not i.get('deferred')

@@ -25,23 +25,23 @@ export function suggestion(line, label, verb) {
 }
 
 /* WHEN THE STRIP SPEAKS (the owner, 2026-10-13: "there should not be an updated advisor comment when it's refreshing ... not while
-   waiting or walking through things"). Only the line read for the item on the table NOW - a line read for the item before
-   it stood over the next one until the new read came back - and only while nothing is in flight. An agent at work is
-   nothing for the owner to do: "the agent stopped and is waiting on you" stood over an agent that had been continued. */
+   waiting or walking through things"). Only the decision read for the item on the table NOW - a line read for the item before it stood
+   over the next one until the new read came back - and only while nothing is in flight. THE OBVIOUS MOVE IS SILENT (the owner,
+   2026-10-23): a decision lights its verb with `line` '' - the strip says nothing and the button does the talking. An agent at work is
+   nothing for the owner to do: whatever was read before it started, its decision is Next, said by nothing. */
 export function adviceShown(advice, item, busy) {
-  if (!advice?.verb || !advice.line || busy || !item?.key || advice.for !== item.key) return null;
-  return item.lane === "working" ? null : advice;
+  if (!advice?.verb || busy || !item?.key || advice.for !== item.key) return null;
+  return item.lane === "working" ? { ...advice, verb: "next", line: "", state: "working" } : advice;
 }
 
-/* WHAT THE STRIP SAYS AND WHAT THE ROW LIGHTS, ONE DECISION (the UI audit's C2, 2026-10-21): the strip asked to "Connect an AI" while the
-   row lit Stop and save over an agent at work, which needed nothing - the line and the button were chosen in two places. Here the strip's
-   word is chosen once and `pick` is what ActionRow lights for it. An agent at work outranks a missing AI: nothing about a working agent
-   needs an AI, so its line is "it says when it needs you" with Next, never Connect an AI over a dark Stop and save.
-   `shown`/`lit`: the Advisor's line and the Assistant's light, already read for the item on the table; `aiOff`: caps.ai === false. */
+/* WHAT THE STRIP SAYS AND WHAT THE ROW LIGHTS, ONE DECISION (the UI audit's C2, 2026-10-21; the design's phase A, 2026-10-23): the
+   Advisor's one decision (advisor.decide) is what every surface lights. Only one reason for lighting nothing is said - no AI connected,
+   where the move needs one (`needs_ai`, or the server's {none: "no_ai"}) - with its way out lit; any other answer with no verb (a key
+   nothing is decided on, the Advisor switched off) lights Next and says nothing. An agent at work outranks a missing AI.
+   `shown`/`lit`: the Advisor's decision and the Assistant's light, already read for the item on the table; `aiOff`: caps.ai === false. */
 export function stripWord({ speaks, busy, shown = null, lit = null, aiOff = false, advice = null, key = "", lane = "" } = {}) {
-  const working = lane === "working";
-  const noAi = !!speaks && !busy && !shown && !lit && !working && (aiOff || (advice?.none === "no_ai" && advice.for === key));
-  const none = !speaks || busy || shown || noAi || lit ? null
-    : advice?.none && advice.for === key && !(working && advice.none === "no_ai") ? advice : working ? { none: "working", for: key } : null;
-  return { noAi, none, pick: lit || shown || none || (noAi ? { none: "no_ai", for: key } : null) };
+  const working = lane === "working", mine = !!advice && advice.for === key;
+  const noAi = !!speaks && !busy && !lit && !working && mine && (advice.none === "no_ai" || (aiOff && !!advice.needs_ai));
+  const quiet = !!speaks && !busy && !lit && !noAi && !shown && ((mine && !!advice.none) || working) ? { verb: "next", line: "", for: key } : null;
+  return { noAi, pick: lit || (noAi ? { none: "no_ai", for: key } : shown || quiet) };
 }

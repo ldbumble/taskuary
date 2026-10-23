@@ -69,7 +69,7 @@ def evidence(store, days: int = DAYS) -> dict:
     for m in store._rows("SELECT lower(m.FromEmail) em, m.ConversationId cid, m.MessageId FROM route r JOIN message m ON m.MessageId=r.MessageId "
                          "WHERE r.RoutedBy='owner' AND r.Decision='ignore' AND m.FromEmail LIKE '%_@_%' AND r.CreatedAt>=?", (since,)):
         row(m['em'])['down'].add(m['cid'] or f"m{m['MessageId']}")
-    try: presses = store._rows("SELECT lower(Sender) em, Thread, Pressed, Id FROM advice_press WHERE Sender LIKE '%_@_%' AND CreatedAt>=?", (since,))
+    try: presses = store._rows("SELECT lower(Sender) em, Thread, Pressed, Id FROM advice_press WHERE Sender LIKE '%_@_%' AND IFNULL(Choice,1)=1 AND CreatedAt>=?", (since,))
     except Exception: presses = []
     for p in presses:
         k = p['Thread'] or f"pr{p['Id']}"

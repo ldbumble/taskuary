@@ -40,19 +40,20 @@ test("the advice only tints: the same buttons in the same places with and withou
   assert.equal(layout(rowOf({ ref: "", list })).find(([t]) => t === "reply")[1][0], "slot:12:approve", "the card's own Send keeps an empty slot from the first render - its button is under the draft (2026-10-22)");
 });
 
-test("no line is still an answer: every reason is a sentence and lights one move - Next, never nothing", () => {
-  for (const why of ["nothing", "quiet", "no_actions", "working", "off", "cap"]) {
-    assert.ok(ADVICE_NONE[why]?.line, why);
-    assert.equal(ADVICE_NONE[why].move, "next", why);
-  }
-  assert.equal(adviceNone("some-new-reason").line, ADVICE_NONE.nothing.line, "an unknown reason is said, not dropped");
+// THE OBVIOUS MOVE IS SILENT (the owner, 2026-10-23: "No suggestion...", "Nothing to decide...", "Thinking..." and every sentence
+// explaining a silence go): only no AI is said, with its way out; any other reason lights Next and says nothing
+test("no line is still an answer: only no AI is a sentence, and every other silence lights Next - never nothing", () => {
+  assert.deepEqual(Object.keys(ADVICE_NONE), ["no_ai"]);
+  assert.equal(ADVICE_NONE.no_ai.move, "ai");
+  for (const why of ["nothing", "quiet", "working", "off", "cap", "some-new-reason"]) assert.deepEqual(adviceNone(why), { line: "", move: "next" }, why);
   const r = rowOf({ ref: "", list: [v("done", "more"), v("next", "next")] }, { verb: adviceNone("nothing").move });
   assert.equal(r.next.tone, "p");
   assert.equal(rowOf({ ref: "", list: [v("next", "next", { disabled: true })] }, { verb: "next" }).next.tone, "s", "a greyed Next is never lit");
   const view = read("AssistantView.jsx");
-  assert.match(view, /<AdviceNone advice=\{noneSaid\} \/>/);
+  assert.doesNotMatch(view, /AdviceNone|Thinking about this one/);
+  assert.doesNotMatch(read("ActionRow.jsx"), /export function AdviceNone/);
   // ...in one strip that holds its height from Thinking to the answer, so the row under it never jumps
-  assert.match(view, /<div className="tq-strip" data-tq-strip=\{busy \? "busy" : ""\}>/);
+  assert.match(view, /<div className="tq-strip" data-tq-strip=\{busy( \|\| \(reading && reading === onTable\))? \? "busy" : ""\}>/);
   // ...and the dead-end walk holds the page to all of it (STILL, STRIP, REREAD, LIT)
   const walk = fs.readFileSync(path.join(process.cwd(), "deadend_check.mjs"), "utf8");
   for (const rule of ["STILL", "STRIP", "REREAD", "LIT"]) assert.ok(walk.includes(`note("${rule}"`), rule);

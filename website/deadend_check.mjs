@@ -36,7 +36,9 @@
 //   ONCE      one act, two receipt lines: Remind me's receipt printed by the page and again by the server (2026-10-19 UI walk) - and two
 //             rail rows picked in turn leave every line once, not a "Show me" line per pick (verify, 2026-10-19)
 //   STILL     the Advisor's line landing moved a button on the row - the advice only tints (2026-10-19: Send pushed in, Attach into ▾)
-//   STRIP     the Advisor's strip under the item on the table says nothing - no line, no reason, no Thinking
+//   STRIP     the Advisor's strip under the item on the table says nothing AND nothing is lit - an obvious move is an empty strip
+//             with its one button lit (the owner, 2026-10-23), never an empty strip over an unlit row - save a decision that lights
+//             nothing on purpose ([data-tq-unlit]: an agent asking is answered in its pane)
 //   REREAD    a press on the row and no fresh read of the advice after it (2026-10-19: "waiting on you" stood over a sent reply)
 //   LIT       the Advisor's lit button is off the screen or covered, a screen away from the line that names it
 //   AGAIN     a lit press refused or failed, and the line read again still lights it (2026-10-19: Send lit over "Not sent" and the demo's no)
@@ -401,10 +403,14 @@ const readPage = (page) => page.evaluate(() => {
   const table = [...document.querySelectorAll("[data-tq-rail] *")].find((e) => e.children.length === 0 && e.innerText?.trim() === "ON THE TABLE");
   const ref = (table?.closest("[data-tq-key]")?.innerText.match(/TQ-\d+/) || [])[0] || ((card?.innerText || "").match(/TQ-\d+/) || [])[0] || "";
   const adviceEl = document.querySelector('[data-tq-advice]:not([data-tq-advice="no_ai"])');
+  // ...the Advisor DECIDED: a line, a silent decision's mark (an obvious move lit and said by nothing), or no AI with its Connect lit
+  const decided = !!document.querySelector("[data-tq-advice]");
   // THE ADVISOR'S STRIP AND ITS LIT BUTTON: the strip is empty only if nothing in it speaks; the lit button must be on the screen
   // and the thing under its own centre
   const strip = [...document.querySelectorAll("[data-tq-strip]")].find(vis);
-  const litEl = row && [...row.querySelectorAll(".tq-ab.p")].find(vis);
+  // ...the row's filled button, or the draft card's own lit one (ReviewDecision marks it [data-tq-lit]): a draft's Send, Copy or
+  // Redraft is lit under the draft, never on the bar (the owner, 2026-10-22) - the silent strip over it is the obvious move, not a gap
+  const litEl = (row && [...row.querySelectorAll(".tq-ab.p")].find(vis)) || [...document.querySelectorAll("[data-tq-lit]")].find(vis);
   const lr = litEl?.getBoundingClientRect(), hit = lr && document.elementFromPoint(lr.left + lr.width / 2, lr.top + lr.height / 2);
   const lit = litEl ? { word: litEl.innerText.trim(), inView: lr.top >= 0 && lr.left >= 0 && lr.bottom <= innerHeight && lr.right <= innerWidth,
     covered: !(hit && (hit === litEl || litEl.contains(hit))) } : null;
@@ -416,9 +422,9 @@ const readPage = (page) => page.evaluate(() => {
   const pops = [...document.querySelectorAll('.MuiPopover-paper, [role="dialog"], .MuiDrawer-paper')].filter(vis).map((p) => p.innerText.replace(/\s+/g, " ").slice(0, 80));
   const msgs = chat ? [...chat.querySelectorAll(".tq-msg")] : [];
   const tail = msgs.slice(-8);                       // a receipt stays a few lines up once the walk has brought the next item
-  return { verbs, cardBtns, advice: !!adviceEl, adv: adviceEl?.innerText || "", errs, rail, ref, read, chat: chat?.innerText || "", pops, lit,
+  return { verbs, cardBtns, advice: !!adviceEl, decided, adv: adviceEl?.innerText || "", errs, rail, ref, read, chat: chat?.innerText || "", pops, lit,
     swap: (window.__swap || []).splice(0),
-    strip: strip ? { empty: !strip.querySelector(".tq-next"), busy: strip.getAttribute("data-tq-strip") === "busy" } : null,
+    strip: strip ? { empty: !strip.querySelector(".tq-next"), busy: strip.getAttribute("data-tq-strip") === "busy", unlit: !!strip.querySelector("[data-tq-unlit]") } : null,
     undoSaid: tail.some((m) => /Undo: |confirm below/i.test(m.innerText || "")),
     // ...but a REMOVE's own "Removed <it> - Undo" (Removed.jsx, [data-tq-undo]) is the approved exception: a Remove acts at once and is
     // taken back there, never behind "are you sure" (the owner, 2026-10-21 - Remove - not a task's included, 2026-10-22)
@@ -439,10 +445,10 @@ const judge = (s, at) => {
   // ...but for ONE button the row darkens itself (the owner, 2026-10-20): a running agent's own Stop and save, the Advisor quiet over it
   const dark = s.verbs.filter((v) => v.dark && !darkOwn(v));
   if (s.card || s.ref) {
-    if (!s.advice && dark.length) note("DARK", at, `"${dark.map((v) => v.word).join('", "')}" dark with no Advisor line over it`);
+    if (!s.decided && dark.length) note("DARK", at, `"${dark.map((v) => v.word).join('", "')}" dark with no Advisor decision over it`);
     if (s.advice && dark.length > 1) note("DARK", at, `the Advisor spoke and ${dark.length} buttons are dark - ${JSON.stringify(s.verbs.map((v) => v.word))} / "${s.adv.slice(0, 80)}"`);
   }
-  if (s.strip?.empty && !s.strip.busy) note("STRIP", at, "the Advisor's strip under the item says nothing - no line, no reason, no Thinking");
+  if (s.strip?.empty && !s.strip.busy && !s.strip.unlit && !s.lit) note("STRIP", at, "the Advisor's strip under the item says nothing and nothing on the row is lit");
   if (s.advice && s.lit && !s.pops.length && (!s.lit.inView || s.lit.covered)) note("LIT", at, `the Advisor's lit "${s.lit.word}" is ${s.lit.inView ? "covered" : "off the screen"}`);
   if (s.card && s.card.shown < 120) note("SEEN", at, `only ${Math.round(s.card.shown)}px of the card on the table is in view`);
   if (s.errs.length && !s.verbs.some((v) => !v.next && !v.off) && !s.cardBtns.some((b) => !b.off && NAMED.has(b.word)))
@@ -495,9 +501,11 @@ const closePops = async (page) => { for (let i = 0; i < 2; i++) { await page.key
 // STILL: the row sampled while the item settles - every button's place by its id, and whether the Advisor's line is up. A button that
 // moved when the line landed is a row reshuffled under the owner's hand; the advice only tints (2026-10-19)
 const rowAt = (page) => page.evaluate(() => {
-  const row = document.querySelector("[data-tq-row]");
+  // a row held for its first decision (aria-busy, hidden) is not drawn yet: the owner sees no button on it to move
+  const row = document.querySelector("[data-tq-row]:not([aria-busy])");
   const at = row ? Object.fromEntries([...row.querySelectorAll("button[data-tq-verb], button[data-tq-next]")].filter((b) => b.getBoundingClientRect().width > 0)
-    .map((b) => [b.getAttribute("data-tq-verb") || "next", Math.round(b.getBoundingClientRect().left)])) : {};
+    // a button is known by its act, not the card that registered it: a chat's `chat:mine` and the walk's `w:mine` are one button
+    .map((b) => [String(b.getAttribute("data-tq-verb") || "next").split(":").pop(), Math.round(b.getBoundingClientRect().left)])) : {};
   return { item: document.querySelector("[data-tq-canvas-item]")?.getAttribute("data-tq-canvas-item") || "", advice: !!document.querySelector('[data-tq-advice=""]'), at };
 });
 async function settle(page, at, ms = 5000) {
@@ -726,8 +734,14 @@ async function faults() {
     await wayOut(page.step, [aFix, f === "nocli" ? "Connect a coding tool" : whereCode, (x) => /coding tool/i.test(x.word)]);
     page.expect.delete("/dispatch"); await fault("");
   }
-  // no AI at all: the strip asks for one, with the button that connects it
+  // no AI at all: the strip asks for one, with the button that connects it - on an item whose move needs an AI (the owner, 2026-10-23:
+  // a move the rule decides is lit with no AI, and a failure's fix outranks it). The walk has been past every ask by now (Next is
+  // seen-in-this-walk), so the rail's rows are opened in turn until one is
   page.step = "faults noai"; await fresh();
+  for (const r of (await look(page)).rail.slice(0, 16)) {
+    if (await page.$('[data-tq-advice="no_ai"] button')) break;
+    await openItem(page, r.key); await wait(1500);
+  }
   const s = await look(page);
   if (!(await page.$('[data-tq-advice="no_ai"] button'))) note("WAYOUT", page.step, "with no AI the Advisor's strip offers no way to connect one");
   else { const before = s; await (await page.$('[data-tq-advice="no_ai"] button')).click(); await wait(3000);

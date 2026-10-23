@@ -45,9 +45,9 @@ test("a typed turn draws no proposal card and runs nothing: it lights, opens a p
   // "send Erin the answer": the draft lands in the item's own reply box, and its Send is lit - drafting is not sending
   assert.match(view, /setLit\(\{ verb: "approve", label: btn\("approve"\), line: `Read the draft, then press \$\{btn\("approve"\)\} when you're sure\.`, key: `review:\$\{data\.reviewId\}`/);
   // the lit act outranks the Advisor's line, which would name another button; any press puts it out
-  assert.match(view, /<ActionRow advised=\{stripPick \|\| setupLit\} \/>/);
+  assert.match(view, /<ActionRow advised=\{stripPick \|\| setupLit\}( hold=\{[^}]*\})? \/>/);
   assert.match(view, /const shownAdvice = table\.speaks && !litNow \?/);
-  assert.match(src("advice.js"), /pick: lit \|\| shown \|\| none/, "the light first, then the line, then the reason there is none (advice.stripWord)");
+  assert.match(src("advice.js"), /pick: lit \|\| \(noAi \? \{ none: "no_ai", for: key \} : shown \|\| quiet\)/, "the light first, then no AI's way out, then the Advisor's decision, then Next (advice.stripWord)");
   assert.match(view, /useEffect\(\(\) => onPressed\(\(\) => setLit\(null\)\), \[\]\);/);
 });
 
@@ -59,7 +59,7 @@ test("the lit button's line is the strip's, over the composer and on a phone's o
   assert.equal(lightOf({ verb: "defer", label: label("defer"), key: "task:2" }).line, `Press ${label("defer")} when you're sure.`, "a light with no line still says one");
   const view = src("AssistantView.jsx");
   assert.match(view, /\{table\.speaks && !!litNow && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">\{litNow\.line\}<\/div><\/div>\}/);
-  assert.match(view, /\{table\.speaks && !litNow && !shownAdvice && !noneSaid && !changed && !busy && asking === onTable/, "no Thinking under it");
+  assert.doesNotMatch(view, /Thinking about this one/, "no Thinking under it - or anywhere (the owner, 2026-10-23)");
   assert.match(view, /lit: litNow,/);
   assert.match(src("CanvasItem.jsx"), /<ActionRow inline advised=\{pick\} \/>/);
 });

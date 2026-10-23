@@ -19,7 +19,8 @@ import CloseIcon from "@mui/icons-material/Close";
 import RemindMe, { RemindPicker } from "./RemindMe.jsx";
 import { SlotPicker } from "./CalendarPick.jsx";
 import { onPressed, useVerbs } from "./actionRow.js";
-import { choice, hint as btnHint, hintOfRow, label as btn, labelOfRow } from "./buttons.js";   // theme.jsx owns `label`
+import { notePress, pagePress } from "./pressLog.js";
+import { choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
 import BlockIcon from "@mui/icons-material/Block";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import DifferenceIcon from "@mui/icons-material/Difference";
@@ -1308,7 +1309,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const readTaskAdvice = useCallback((id) => {
     if (!id) { setTaskAdvice(null); return; }
     api.get("/api/advice", { params: { key: `task:${id}` } })
-      .then(({ data }) => { if (!stale(id)) setTaskAdvice(data?.verb && data.line ? data : null); })
+      .then(({ data }) => { if (!stale(id)) setTaskAdvice(data?.verb ? data : null); })
       .catch(() => { if (!stale(id)) setTaskAdvice(null); });
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (canvas || !active) return; setTaskAdvice(null); readTaskAdvice(selected); }, [canvas, active, selected, readTaskAdvice]);
@@ -1317,8 +1318,26 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     : onLive("advice", (ev) => { if (adviceKeyFor(ev, `task:${selRef.current}`)) readTaskAdvice(selRef.current); })), [canvas, active, readTaskAdvice]);
   // ...and after every press on it: an act moves the item's revision, and the line judged before it must not stand (2026-10-19)
   useEffect(() => (canvas || !active ? undefined : onPressed(() => readTaskAdvice(selRef.current))), [canvas, active, readTaskAdvice]);
+  // EVERY PRESS ON THE TASKS TAB IS KEPT (phase B, 2026-10-23): it was never recorded - only the desk's row was. This view draws its own
+  // buttons, so a press is heard here, before it runs: a button known by its one name (pressLog.pagePress), what was filled on the page
+  // and what else could be pressed. The canvas's copy is the desk's row, recorded there
+  const pageRef = useRef(null), taskAdviceRef = useRef(null);
+  taskAdviceRef.current = taskAdvice;
+  useEffect(() => {
+    const el = pageRef.current;
+    if (canvas || !active || !el) return undefined;
+    const heard = (e) => {
+      const b = e.target?.closest?.("button");
+      const got = selRef.current && b && !b.disabled && el.contains(b) ? pagePress(el, b) : null;
+      if (got) notePress(api, { key: `task:${selRef.current}`, surface: "task", ...got, advised: taskAdviceRef.current?.verb || null });
+    };
+    el.addEventListener("click", heard, true);
+    return () => el.removeEventListener("click", heard, true);
+  }, [canvas, active]);
   const [remindAt, setRemindAt] = useState(null);
   const notDone = !!t && !["done", "dropped"].includes(t.Status);
+  // the bar's button the Advisor lit (advisor.decide - the canvas's decision for the same task); nothing is dark before it answers
+  const barLit = (verb) => !!taskAdvice && liveVerb(taskAdvice.verb) === verb;
   // THE CALENDAR'S ANSWERS (calwrite.py, server task_detail's `calendar`): an invite waiting on the owner is answered from the row -
   // Accept, Decline, Propose a new time - and a thread asking for a time offers Find a time. Each DRAFTS into Close out for the
   // owner's Send; a card that may not write says so on the error line with its sign-in as the way out (failures.py's fix).
@@ -1516,7 +1535,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           and borders sat OUTSIDE a height of 100% (14px over), and that 100% was of a box with only a max-height - which a percentage
           cannot resolve against - so a long task grew to its whole content (34px over) and the next line of the chat landed on it.
           On the canvas the chain is flex columns that SHRINK to the box instead, and the task's own scroller takes what is left. */}
-      <Box data-tq-task-page={selected || ""} sx={{ ...frame, ...(canvas ? { p: 0, bgcolor: "transparent", border: 0, boxShadow: "none" } : {}), flex: 1, minWidth: 0, height: canvas ? "auto" : "calc(100vh - 118px)", minHeight: canvas ? 0 : 420,
+      <Box ref={pageRef} data-tq-task-page={selected || ""} sx={{ ...frame, ...(canvas ? { p: 0, bgcolor: "transparent", border: 0, boxShadow: "none" } : {}), flex: 1, minWidth: 0, height: canvas ? "auto" : "calc(100vh - 118px)", minHeight: canvas ? 0 : 420,
         ...(canvas ? { boxSizing: "border-box", flex: "1 1 auto", display: "flex", flexDirection: "column" }
                    : { display: { xs: selected ? "block" : "none", md: "block" } }) }}>
         <Box sx={{ ...frameInner, display: "flex", flexDirection: "column",
@@ -2363,34 +2382,35 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   row, so its view keeps the same moves here, under the sections, instead of inside the Task card. The two endings
                   first, then a rule, then the reroutes, then Change - what the task's pills used to set. While a session fills the page
                   the header carries them (headControls). */}
-              {/* the Advisor's suggestion over the bar, said and not pressed: the buttons below stay as they are (U12) */}
-              {!inRow && !sessionView && notDone && taskAdvice && (
+              {/* the Advisor's line over the bar - only a fact the task does not show; the obvious move is said by its lit button alone
+                  (the owner, 2026-10-23). The button below IS the suggestion: no "Suggested: ..." in words */}
+              {!inRow && !sessionView && notDone && taskAdvice?.line && (
                 <Typography data-tq-task-advice="" role="status" sx={{ px: 1.75, py: 0.75, borderTop: `1px solid ${BORDER}`, bgcolor: "#fff",
                   fontSize: 12.5, color: DIM, flexShrink: 0, overflowWrap: "anywhere" }}>
-                  <Box component="span" sx={{ color: INK, fontWeight: 600 }}>Suggested: {taskAdvice.label}</Box>
-                  {" - "}{suggestion(taskAdvice.line, taskAdvice.label, taskAdvice.verb)}
+                  {suggestion(taskAdvice.line, taskAdvice.label, taskAdvice.verb)}
                 </Typography>
               )}
               {!inRow && !sessionView && (
                 <Box data-tq-task-bar="" sx={{ display: "flex", alignItems: "center", gap: 0.8, rowGap: 0.6, flexWrap: "wrap", flexShrink: 0,
                   px: 1.75, py: 1, borderTop: `1px solid ${BORDER}`, bgcolor: "#fff" }}>
                   {notDone ? <>
-                    <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={14} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 16 }} />}
-                      sx={primaryBtn}
+                    {/* THE TASKS TAB LIGHTS THE ADVISOR'S VERB, the canvas's own (the design, phase A): Mark done was dark on every task */}
+                    <Button size="small" variant={barLit("close") ? "contained" : "outlined"} disableElevation startIcon={finishing ? <CircularProgress size={14} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 16 }} />}
+                      sx={barLit("close") ? primaryBtn : barBtn}
                       title={markDoneHint}
                       disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : labelOfRow("done")}</Button>
-                    <Button size="small" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 15 }} />}
-                      sx={{ ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }}
+                    <Button size="small" variant={barLit("remove") ? "contained" : "outlined"} disableElevation startIcon={<BlockIcon sx={{ fontSize: 15 }} />}
+                      sx={barLit("remove") ? primaryBtn : { ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }}
                       title={NAT_TITLE}
                       onClick={notATask}>{labelOfRow("nat")}</Button>
-                    <RemindMe task={t} sx={barBtn} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />
+                    <RemindMe task={t} sx={barLit("defer") ? primaryBtn : barBtn} lit={barLit("defer")} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />
                     <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />
-                    <Button size="small" variant="outlined" sx={barBtn}
-                      startIcon={<ForwardToInboxIcon sx={{ fontSize: 16, color: "#55697a" }} />}
+                    <Button size="small" variant={barLit("forward") ? "contained" : "outlined"} disableElevation sx={barLit("forward") ? primaryBtn : barBtn}
+                      startIcon={<ForwardToInboxIcon sx={{ fontSize: 16, color: barLit("forward") ? "inherit" : "#55697a" }} />}
                       title="Not ours to do — the AI writes the forward, you send it."
                       onClick={() => setHandoff(true)}>{labelOfRow("hand")}</Button>
-                    <Button size="small" variant="outlined" sx={barBtn}
-                      startIcon={<CallSplitIcon sx={{ fontSize: 16, color: "#6f8a6e" }} />}
+                    <Button size="small" variant={barLit("split") ? "contained" : "outlined"} disableElevation sx={barLit("split") ? primaryBtn : barBtn}
+                      startIcon={<CallSplitIcon sx={{ fontSize: 16, color: barLit("split") ? "inherit" : "#6f8a6e" }} />}
                       title="Two jobs in here, or a duplicate? Break it in two, or fold it into the task it repeats."
                       onClick={() => setReshape(true)}>{labelOfRow("reshape")}</Button>
                     <Button size="small" variant="outlined" sx={barBtn} endIcon={<ExpandMoreIcon sx={{ fontSize: 16 }} />}

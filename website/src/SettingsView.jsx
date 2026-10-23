@@ -1229,7 +1229,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
           {/* the one-click road to a whole role - worker, playbooks, where the mail goes (roles.py) - offered beside the workers */}
           {section === "profiles" && !needle && <Box sx={{ mt: 1.5 }}><RoleStart onApplied={() => setCatN((n) => n + 1)} /></Box>}
           <Box key={catN} sx={{ display: "none" }}><DocsView onCatalog={onCatalog} catalogOnly /></Box></> : null}</>,
-      detail: open ? <SettingsPages only={{ page, group: section === "config" ? open : null, knob: section === "config" ? browseState.knob || "" : "", at: browseState.at }} q="" setQ={() => {}} onNavigate={onNavigate}
+      detail: open ? <SettingsPages only={{ page, group: section === "config" ? open : null, knob: browseState.knob || "", at: browseState.at }} q="" setQ={() => {}} onNavigate={onNavigate}
         onJump={() => {}} onSections={setCfgSecs} docSel={docSel} setDocSel={setDocSel} onCatalog={onCatalog} /> : null,
       onBack: () => onBrowseState?.({ ...browseState, open: null }),
       openLabel: !open ? "" : SHELF[section] ? `the document "${docCards.find((c) => c.key === open)?.title || "Docs"}" (Settings - ${section === "docs" ? "Docs" : "Profiles"})`

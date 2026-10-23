@@ -82,7 +82,7 @@ test("a refused sync and a failed source say so on the sync line", async () => {
   assert.match(feed, /catch \(e\) \{ if \(e\?\.response\) \{ setSyncing\(false\); setSyncErr\(plainError\(e, /);
   assert.match(feed, /\{syncErr \? `✗ \$\{syncErr\}` : syncUnknown \?/);
   assert.match(feed, /setSyncFailed\(Array\.isArray\(data\.failed\) \? data\.failed : \[\]\)/);
-  assert.match(feed, /terse: !\(syncing \|\| bgSync\), failed: syncFailed \}\)/);
+  assert.match(feed, /terse: !\(syncing \|\| bgSync\), failed: syncFailed \|\| \[\] \}\)/);
   assert.match(feed, /bLabel\("sync_now", "unknown"\) : syncing \|\| bgSync \? syncPhaseLabel\(syncPhase\) : bLabel\("sync_now"\)/);
   assert.doesNotMatch(feed, /: "Sync now"\}/);
   assert.equal(syncFace({ checked: true, lastAt: new Date(2026, 8, 6, 10, 42), terse: true, failed: ["imap"] }), "checked 10:42 AM · imap failed");

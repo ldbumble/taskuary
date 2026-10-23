@@ -41,6 +41,7 @@ import { ABOUT_SECTIONS, AUDIT_SECTIONS, secId, pageId, scrollToSection, section
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import DocsView, { OPERATOR_DOCS } from "./DocsView.jsx";
 import RoleStart from "./RoleStart.jsx";
+import { recipientLabel, recipientOptions } from "./recipientOptions.js";
 
 
 const KINDS = ["keyword", "sender", "sender_domain", "noreply", "first_time_sender"];
@@ -166,7 +167,7 @@ const PhoneDoorways = ({ onLoaded, onNavigate }) => {
     <Box sx={{ mb: 2 }}>
       {(rows || []).map((r) => {
         const picked = r.options.find((o) => o.to === r.chat)
-          || (r.chat ? { to: r.chat, name: r.chat, mine: true } : null);
+          || (r.chat ? { to: r.chat, name: recipientLabel({ to: r.chat }), mine: true } : null);
         return (
           <Box key={`${r.channel}-${r.connectorId}`} sx={{ py: 2, borderBottom: `1px solid ${BORDER}` }}>
             <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
@@ -182,15 +183,16 @@ const PhoneDoorways = ({ onLoaded, onNavigate }) => {
                 <>
                   <Autocomplete size="small" sx={{ flex: 1, minWidth: 260 }} autoHighlight disabled={busy === r.channel}
                     options={r.options} value={picked}
-                    getOptionLabel={(o) => o?.name || o?.to || ""}
+                    getOptionLabel={(o) => (o ? recipientLabel(o) : "")}
                     isOptionEqualToValue={(o, v) => o.to === v.to}
+                    filterOptions={(o, st) => recipientOptions(o, st.inputValue, o.length)}
                     onChange={(_e, v) => choose(r.channel, v?.to || "")}
                     noOptionsText={r.channel === "whatsapp"
                       ? "no private chat seen yet — message yourself on WhatsApp, then press Look again"
                       : "no private chat seen yet — send your bot a direct message, then press Look again"}
                     renderOption={(props, o) => (
                       <li {...props} key={o.to} style={{ display: "block", paddingTop: 4, paddingBottom: 4 }}>
-                        <Typography variant="body2" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>{o.name}</Typography>
+                        <Typography variant="body2" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>{recipientLabel(o)}</Typography>
                         <Typography variant="caption" sx={{ color: FAINT, fontSize: 10, fontFamily: "monospace" }}>{o.to}</Typography>
                       </li>
                     )}

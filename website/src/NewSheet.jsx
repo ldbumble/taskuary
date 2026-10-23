@@ -22,7 +22,7 @@ import { outcomeOf } from "./dispatchOutcome.js";
 import { NO_REPO, planTask } from "./newTask.js";
 import NewRepo from "./NewRepo.jsx";
 import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
-import { emailRecipientOptions, normalizeEmails, recipientLabel, recipientOptions, validEmail } from "./recipientOptions.js";
+import { emailRecipientOptions, normalizeEmails, recipientId, recipientLabel, recipientOptions, validEmail } from "./recipientOptions.js";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Checkbox from "@mui/material/Checkbox";
 import Composer from "./Composer.jsx";
@@ -390,7 +390,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
                 noOptionsText={chanTargets.length ? "No matching conversation" : "nothing known on this channel yet"}
                 renderOption={(props, target) => (
                   <Box component="li" {...props} key={target.to} sx={{ display: "block !important", fontSize: 12.5 }}>
-                    <Box sx={{ fontWeight: 600 }}>{target.name || target.to}</Box>
+                    <Box sx={{ fontWeight: 600 }}>{recipientLabel(target)}</Box>
+                    {recipientId(target) && <Box sx={{ ...mono, fontSize: 10, color: FAINT }}>{recipientId(target)}</Box>}
                     {target.hint && <Box sx={{ fontSize: 10.5, color: FAINT }}>{target.hint}</Box>}
                   </Box>
                 )}

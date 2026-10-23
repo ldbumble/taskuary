@@ -16,7 +16,7 @@ footer said "15 of 15" over a list cut at eight tasks - and a hit says WHY it ma
 "Ruth Bennett" listed six tasks with no Ruth anywhere on them."""
 import json, re
 from urllib.parse import quote
-from . import connectorcatalog, settings_schema
+from . import connectorcatalog, settings_schema, wanames
 from .store import _fold, task_ref
 
 CHAT = {'teams', 'slack', 'whatsapp', 'telegram', 'imessage', 'discord'}
@@ -59,8 +59,12 @@ def snippet(text: str, words, width: int = 150) -> str:
     return ('…' if lo else '') + t[lo:lo + width].strip() + ('…' if lo + width < len(t) else '')
 
 
-def _where(m: dict) -> str:
+def _where(m: dict, store=None) -> str:
     ch = m.get('Channel') or ''
+    if ch == 'whatsapp' and store is not None:
+        jid = str(m.get('ConversationId') or '').removeprefix('whatsapp:')
+        if wanames.is_jid(jid):
+            return wanames.name_of(store, jid) or (m.get('SourceName') if wanames.is_group(jid) else '') or wanames.label(jid)
     if ch == 'email':
         try: to = ', '.join((json.loads(m.get('RecipientsJson') or '{}') or {}).get('to') or [])
         except (ValueError, AttributeError): to = ''
@@ -122,6 +126,31 @@ def _tasks(store, q: str, words, status: str = '') -> tuple:
              'why': _task_why(t, words, mail.get(t['TaskId'], []))} for t in top], len(ts)
 
 
+def _who(store, m: dict) -> str:
+    """A WhatsApp sender by name, else by number - the bare number the poller signs a nameless line with is not a name."""
+    who = m.get('FromName') or m.get('FromEmail') or ''
+    if m.get('Channel') != 'whatsapp' or not str(m.get('FromEmail') or '').startswith('whatsapp:'): return who
+    jid = str(m['FromEmail'])[9:] + '@s.whatsapp.net'
+    return (wanames.name_of(store, jid) or ('' if wanames.bare(m.get('FromName'), jid) else m['FromName'])
+            or wanames.phone(jid) or who)
+
+
+def _wa_ids(store, q: str) -> list:
+    """WhatsApp lines found by WHO they are with - a person's name or number, a group's name (wanames.matches) - never the JID
+    typed. Newest first, ahead of the index's matches, which know only the name each line was signed with."""
+    q = str(q or '').strip()
+    if not q: return []
+    jids = [j for j, n in wanames.names(store).items() if wanames.matches(q, j, n)]
+    conds, p = [], []
+    if jids: conds.append(f"ConversationId IN ({','.join('?' * len(jids))})"); p += [f'whatsapp:{j}' for j in jids]
+    if wanames.is_phone_query(q):
+        d = wanames.digits(q); d = d[2:] if d.startswith('00') else d.lstrip('0') or d
+        conds.append("(ConversationId LIKE ? AND ConversationId LIKE '%@s.whatsapp.net') OR FromEmail LIKE ?"); p += [f'whatsapp:%{d}%'] * 2
+    if not conds: return []
+    return [r['MessageId'] for r in store._rows(f"SELECT MessageId FROM message WHERE Channel='whatsapp' AND ({' OR '.join(conds)}) "
+                                                'ORDER BY SentAt DESC LIMIT ?', (*p, N_MSGS * 6))]
+
+
 def _message_ids(store, words) -> list:
     ids = store.message_search(words, limit=N_MSGS * 6, prefix=True)
     if ids is not None: return ids
@@ -131,8 +160,9 @@ def _message_ids(store, words) -> list:
     return [r['MessageId'] for r in store._rows(f'SELECT MessageId FROM message WHERE {cond} ORDER BY SentAt DESC LIMIT ?', (*pat, N_MSGS * 6))]
 
 
-def _messages(store, words) -> tuple:
-    ids = _message_ids(store, words)
+def _messages(store, words, first=()) -> tuple:
+    had = set(first)
+    ids = [*first, *(i for i in _message_ids(store, words) if i not in had)]
     # every match is counted, by thread and kind, from one light read - only the rows shown are read whole
     rows = {r['MessageId']: r for r in store._rows(
         f"SELECT MessageId, ConversationId, Channel, SourceLink FROM message WHERE MessageId IN ({','.join('?' * len(ids))})", ids)} if ids else {}
@@ -150,8 +180,8 @@ def _messages(store, words) -> tuple:
         k = kind_of(m or r); totals[k] = totals.get(k, 0) + 1
         if not m: continue
         t = store.get_task(m['TaskId']) if m.get('TaskId') else None
-        hit = {'type': k, 'id': f'msg:{mid}', 'mid': mid, 'title': _title(m), 'who': m.get('FromName') or m.get('FromEmail') or '',
-               'where': _where(m), 'channel': m.get('Channel'), 'when': m.get('SentAt') or m.get('CreatedAt'), 'link': m.get('SourceLink'),
+        hit = {'type': k, 'id': f'msg:{mid}', 'mid': mid, 'title': _title(m), 'who': _who(store, m),
+               'where': _where(m, store), 'channel': m.get('Channel'), 'when': m.get('SentAt') or m.get('CreatedAt'), 'link': m.get('SourceLink'),
                'snippet': snippet(m.get('OwnText') or m.get('BodyText'), words), 'more': 0,
                'tid': t['TaskId'] if t else None, 'ref': task_ref(t['TaskId']) if t else None, 'status': t.get('Status') if t else None}
         shows = f"{hit['title']} {hit['who']} {hit['where']} {hit['snippet']}"
@@ -161,8 +191,8 @@ def _messages(store, words) -> tuple:
     return out, totals, len(ids) >= N_MSGS * 6
 
 
-def _sources(store, words) -> list:
-    lw = [w.lower() for w in words]
+def _sources(store, words, q: str = '') -> list:
+    lw, known, q = [w.lower() for w in words], wanames.names(store), q or ' '.join(words)
     out = []
     for s in store.list_sources():
         # named as the rail's filter names it (FeedView's source picker): a report by its title, the scheduled Advisor
@@ -171,6 +201,12 @@ def _sources(store, words) -> list:
         except ValueError: cfg = {}
         ch = 'assistant' if s.get('Channel') == 'report' and cfg.get('type') == 'assistant' else s.get('Channel') or ''
         name = (cfg.get('title') or s.get('Address') or '') if s.get('Channel') == 'report' else s.get('Address') or ''
+        if ch == 'whatsapp' and wanames.is_jid(name):
+            # a WhatsApp chat by its name or number - its JID is the small line under it, never what finds it
+            title = wanames.label(name, wanames.name_of(store, name, known))
+            if wanames.matches(q, name, title) or all(w in f'{title} {ch}'.lower() for w in lw):
+                out.append({'type': 'source', 'id': f"src:{ch}:{name}", 'title': title, 'sub': name, 'channel': ch, 'pick': f'src:{ch}:{name}'})
+            continue
         if all(w in f'{name} {ch}'.lower() for w in lw):
             out.append({'type': 'source', 'id': f"src:{ch}:{name}", 'title': name, 'channel': ch, 'pick': f'src:{ch}:{name}'})
     return out
@@ -284,9 +320,11 @@ def everything(store, q: str) -> dict:
     rest = ' '.join(t for t in toks if not _fold(t).startswith('status:'))
     words = [w for w in re.findall(r'[\w@.\-]+', rest) if len(w) > 1 or w.isdigit()]
     if not words and not status: return {'q': q, 'hits': [], 'totals': {}, 'capped': False}
+    # +1 (555) 010-0123 is one phone number, not four words to find in a body
+    if wanames.is_phone_query(rest): words = [wanames.digits(rest)]
     tasks, n_tasks = _tasks(store, rest, words, status)
     if status: return {'q': q, 'hits': tasks, 'totals': {'task': n_tasks}, 'capped': False}
-    msgs, totals, capped = _messages(store, words)
-    srcs, sets, cons = _sources(store, words), _settings(words), _connectors(store, words)
+    msgs, totals, capped = _messages(store, words, _wa_ids(store, rest))
+    srcs, sets, cons = _sources(store, words, rest), _settings(words), _connectors(store, words)
     totals.update(task=n_tasks, source=len(srcs), setting=len(sets), connector=len(cons))
     return {'q': q, 'hits': tasks + msgs + srcs[:N_SRCS] + sets[:N_PLACES] + cons[:N_PLACES], 'totals': totals, 'capped': capped}

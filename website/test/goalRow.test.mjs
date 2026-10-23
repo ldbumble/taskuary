@@ -12,9 +12,12 @@ test("a goal's gutter says its date, short", () => {
   assert.equal(dueWord(null), "");
 });
 
-test("a goal is under Tasks only while it has news you have not walked past", () => {
+// GOALS STAY IN TASKS (the owner, 2026-10-22): walked past or quiet, a goal is not moved - only Remind me puts it For later
+test("a goal stays under Tasks when Next walks past it, and goes For later only by Remind me", () => {
   assert.equal(levelOf({ kind: "goal_slipped", order_band: 2, news: true, surfaced: false }), "task");
-  assert.equal(levelOf({ kind: "goal", order_band: 2, news: true, surfaced: true }), "later", "walked past: scheduled to come back");
+  assert.equal(levelOf({ kind: "goal", order_band: 2, news: true, surfaced: true }), "task", "walked past: still in Tasks");
+  assert.equal(levelOf({ kind: "goal_fresh", order_band: 2 }), "task", "quiet: still in Tasks");
+  assert.equal(levelOf({ kind: "goal", order_band: 2, deferred: true }), "later", "Remind me");
 });
 
 // THE RAIL'S ROW (the owner, 2026-10-21): a goal reads "🎯 <title> · 2 of 5 steps" - no TQ number - with "slipped" in red when late;

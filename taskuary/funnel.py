@@ -1116,7 +1116,11 @@ def order_key(item) -> tuple:
     first. ONE key for the rail, desktop Next and phone Next (funnel_selection.below)."""
     level, at = level_of(item), arrived(item)
     t = (at - datetime.min).total_seconds() if at else 0.0
-    return (_LEVEL_RANK.get(level, len(_LEVEL_RANK)), not todays_brief(item), at is None, t, str(item.get('key') or ''))
+    # ...a TIE in the same second goes to the task number before the key: a goal and the steps made with it arrive together, and their
+    # keys are hashes - a step stood above its goal, in an order nothing about them chose. The goal is made first, then its steps.
+    try: n = int(item.get('tid'))
+    except (TypeError, ValueError): n = None
+    return (_LEVEL_RANK.get(level, len(_LEVEL_RANK)), not todays_brief(item), at is None, t, n is None, n or 0, str(item.get('key') or ''))
 
 
 def _order(items: list) -> list:

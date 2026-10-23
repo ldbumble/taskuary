@@ -54,11 +54,10 @@ test("Next from the clicked bottom task opens the first report, and no row moves
   assert.equal(await current(page), firstReport, "the table did not stay on the first report");
   const after = await rail(page);
   assert.deepEqual(common(after, before), common(before, after), "Next moved a row on the rail");
-  // every task Next did not walk past stays in Tasks; the one it did stays too - or, a goal, goes to For later once its news is
-  // walked past (the goal spec, 2026-10-12): leaving its section, never changing place inside one
+  // every task stays in Tasks, the one Next walked past too - a goal included: goals stay in Tasks (the owner, 2026-10-22)
   for (const r of tasks) {
     const now = after.find((x) => x.key === r.key);
-    assert.ok(now && (now.level === "task" || (r.key === bottom && now.level === "later")), `task ${r.key} left Tasks on Next: ${JSON.stringify({ before, after })}`);
+    assert.ok(now && now.level === "task", `task ${r.key} left Tasks on Next: ${JSON.stringify({ before, after })}`);
   }
   assert.deepEqual(errors, []);
 });

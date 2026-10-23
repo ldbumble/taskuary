@@ -42,8 +42,8 @@ export const attentionBand = (item) => {
 export const isUrgent = (item) => attentionBand(item) === URGENT.band;
 export const levelOf = (item) => {
   const b = attentionBand(item);
-  // A GOAL is one row and never gone: Tasks while it has news you have not read, For later - scheduled to come back - otherwise
-  if (String(item?.kind || "").startsWith("goal")) return item?.news && !item?.surfaced ? "task" : "later";
+  // A GOAL is one row and never gone, and it STAYS IN TASKS (the owner, 2026-10-22): Next walking past it, or no news, moved it to For
+  // later (spec 2026-10-12) - the rail-order rule wins. Only Remind me puts it there, as for any task (lanes.py level_of)
   // For later is what you PUT there with a date - Remind me - never a card merely shown (2026-10-08), and no longer Next: Next
   // moves the walk on and the task stays in Tasks (the owner, 2026-10-21)
   if (b === 2 && item?.deferred) return "later";

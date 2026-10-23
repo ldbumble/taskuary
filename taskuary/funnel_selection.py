@@ -131,7 +131,9 @@ def below(items: list[dict], ready: list[dict], exclude, place=None, at_key=None
     # ...and by its PLACE, never its key: the row on the table can come back under another key with the same arrival - a message
     # handed to an agent is `agent:<task>` now, where it was `msg:<id>` - and the key's tiebreak put it above the place, so Next
     # found nothing below and the walk ended on a task waiting right there (tests/test_lifecycle.py)
-    else: down = [i for i in ready if funnel.order_key(i)[:-1] >= tuple(place)[:-1]]
+    # ...nor its task number (the tie-break after the arrival): `msg:<id>` has none, `agent:<task>` has one. So the place is the
+    # section and the arrival - the first four parts, which is also all a place saved before the task number joined the key holds
+    else: down = [i for i in ready if funnel.order_key(i)[:4] >= tuple(place)[:4]]
     return down
 
 

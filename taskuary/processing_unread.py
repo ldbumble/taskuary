@@ -473,7 +473,8 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     back = bool(tid and active and not read.get('deferred') and read_at and not this_walk(read_at, walk_at))
     if back: card['why_open'] = 'Nothing has closed this since you last looked. If it is done, close it.'
     # A GOAL COMES BACK ON NEWS, never on the quiet hours (the review, 2026-10-12): a step closed or a day slipped since you
-    # last read it is what puts it under Tasks; a quiet goal stays in For later however long it has been quiet
+    # last read it is what brings it back as yours; a quiet goal stays read however long it has been quiet - under Tasks, where every
+    # goal stays (the owner, 2026-10-22: lanes.level_of)
     if str(card.get('kind') or '').startswith('goal'):
         back = bool(card.get('news_at') and (not read_at or read_at <= processing_all._stamp(card['news_at'])))   # same second counts
         card.pop('why_open', None)

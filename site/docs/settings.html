@@ -154,7 +154,7 @@ is what you see if those cards cannot load.</li>
 <p>On: triage is shown every playbook that is switched on, a message that is an instance of one becomes a task worked from it, and a finished job that will recur is proposed as a new playbook for your approval. Off: no playbook is matched or proposed; the playbooks themselves stay on Reports → Playbooks, and a single one can be switched off there instead.</p>
 <h3 id="assistant-tab-brain">Assistant tab brain<a class="anchor" href="#assistant-tab-brain" aria-label="Link to this section">#</a></h3>
 <p><code>concierge_ai</code> · type: brain · set on a card at the top of the page</p>
-<p>Which AI speaks on the Assistant tab and walks you through the pipe. auto = your default coding agent, on its faster, lighter model.</p>
+<p>Which AI speaks on the Assistant tab and in your phone chat, and walks you through the pipe - the Assistant&#39;s own brain. auto = your default coding agent, on its faster, lighter model.</p>
 <p>THREE DEFAULTS, side by side in How mail is sorted: the triage brain, the default coding CLI, and this one.</p>
 <p>A CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent&#39;s own &#39;light model&#39; from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks.</p>
 <h3 id="assistant-tab-model">Assistant tab model<a class="anchor" href="#assistant-tab-model" aria-label="Link to this section">#</a></h3>
@@ -215,7 +215,7 @@ is what you see if those cards cannot load.</li>
 <p>When the thread mentions a day, a time, a meeting or availability, the responder fetches your busy slots for the next 14 days and is told: never offer a busy time; if the asked time is busy, say so and offer the nearest free one; if the calendar could not be read, say you will confirm. The task gets a note that the calendar was checked.</p>
 <p>Agents can read the same thing: POST /api/tools/run with type &quot;calendar&quot;.</p>
 <h2 id="sharing">Sharing<a class="anchor" href="#sharing" aria-label="Link to this section">#</a></h2>
-<h3 id="share-links-on-my-network">Share links on my network<a class="anchor" href="#share-links-on-my-network" aria-label="Link to this section">#</a></h3>
+<h3 id="share-links-on-your-network">Share links on your network<a class="anchor" href="#share-links-on-your-network" aria-label="Link to this section">#</a></h3>
 <p><code>share_links_lan</code> · type: switch · default: off</p>
 <p>Share on a result can make a read-only link to it that people on your network open in their browser.</p>
 <p>Off (the default): no shared link exists and nothing listens for one. On: a second, separate server starts on the Share port below and serves ONE kind of page - a link&#39;s frozen copy of one result - to your network. Taskuary itself, and everything behind it, stays on this computer only.</p>
@@ -527,7 +527,7 @@ answer to &quot;why did this happen&quot; and &quot;who did this&quot; for anyth
 
     </article>
     <nav class="pager"><a class="pn prev" href="./phone"><span>Previous</span>On your phone</a><a class="pn next" href="./faq"><span>Next</span>FAQ</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.30 · updated 2026-10-23</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.31 · updated 2026-10-23</p>
   </main>
 </div>
 <script src="./docs.js"></script>

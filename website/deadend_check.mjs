@@ -453,9 +453,17 @@ const receipts = (before, after, at) => {
       note("RECEIPT", at, `${name} left the rail with no line saying where it went`);
   }
 };
-// ...and a draft's `approve` only by a Send word: the draft's main move holds the bar's first slot from the first render, and on a
-// channel that cannot send it reads Mark done (copy and close) - pressed as "Send", it closed the task (2026-10-19)
+// ...and a draft's `approve` only by a Send word (on a channel that cannot send it once read Mark done - pressed as "Send", it closed
+// the task, 2026-10-19). A draft's Send lives UNDER THE DRAFT only (the owner, 2026-10-22): the bar keeps an empty slot, so the walk
+// presses the card's own button - its first visible, live one that starts with a Send word
 const sendWords = [label("approve"), ...Object.values(VERBS.approve?.states || {})];
+const pressCardSend = async (page) => {
+  const h = (await page.evaluateHandle((words) => [...document.querySelectorAll("[data-tq-task-page] button")].find((b) => !b.disabled
+    && b.getBoundingClientRect().width > 0 && words.some((w) => b.innerText.trim().startsWith(w))) || null, sendWords)).asElement();
+  if (!h) return false;
+  await h.click(); mark("approve", page.step); return true;
+};
+const cardSends = (s) => s.cardBtns.some((b) => !b.off && sendWords.some((w) => b.word.startsWith(w)));
 const rowHandle = (page, verb) => page.evaluateHandle((verb, ids, words) => {
   const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   return [...document.querySelectorAll("[data-tq-row] button[data-tq-verb]")].filter(vis).find((b) => ids.includes(b.getAttribute("data-tq-verb").split(":").pop())
@@ -518,7 +526,7 @@ async function walk() {
     judge(s, at);
     if (s.verbs.some((v) => v.word.startsWith("Open TQ"))) break;
     const before = s, has = (verb) => s.verbs.some((v) => verbOfId(v.id) === verb), t0 = Date.now();
-    if (!did.has("approve") && has("approve") && (await pressVerb(page, "approve"))) {
+    if (!did.has("approve") && (has("approve") || cardSends(s)) && ((await pressVerb(page, "approve")) || (await pressCardSend(page)))) {
       did.add("approve"); await wait(2600); reread(page, t0, at); await again(page, before, t0, sendWords, at);
     }
     else if (!did.has("close") && has("close")) {
@@ -625,8 +633,8 @@ async function faults() {
   // each scenario from the chat as it opens: a fix that opened a place leaves the canvas on it
   const fresh = async () => { await page.goto(`${srv.base}/`, { waitUntil: "load" }); await wait(5000); await clickText(page, "Walk me through my tasks"); await wait(4000); };
   const outs = (s) => [...s.verbs.filter((v) => !v.next && !v.off).map((v) => ({ word: v.word, id: v.id, row: true })), ...s.cardBtns.filter((b) => !b.off).map((b) => ({ word: b.word }))];
-  // press the draft's Send: on the row when the Advisor put it there, else the card's own
-  const send = async () => (await pressVerb(page, "approve")) || (await clickText(page, label("approve"), "[data-tq-task-page]") && (mark("approve", page.step), true));
+  // press the draft's Send: the card's own, under the draft (a proposal's row verb first, where one is on the bar)
+  const send = async () => (await pressVerb(page, "approve")) || (await pressCardSend(page));
   // after a forced failure: the screen must carry a way out from the list, and pressing it must do something
   const wayOut = async (at, want, { press = true } = {}) => {
     const s = await look(page);

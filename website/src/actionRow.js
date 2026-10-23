@@ -129,17 +129,19 @@ export function rowOf({ list, ref }, pick = null) {
   // the card's own idea of its move (its filled tone) only says which greyed button the row explains - it never fills one
   const head = by("decide").find((v) => v.tone === "p") || null;
   const plain = (xs) => xs.map((v) => (v.tone === "p" ? { ...v, tone: "s" } : v));
-  // THE CARD'S MAIN MOVE HAS ITS SLOT FROM THE FIRST RENDER: the draft's own Send (the card verb it fills) leads the bar, outlined,
-  // whether or not the Advisor has answered - it came onto the bar only when advised, pushed the row along and "Attach a file" into
-  // ▾ seconds after the item opened, under the owner's hand (2026-10-19). Its press runs the card's own handler, the box as edited.
+  // THE CARD'S MAIN MOVE LIVES UNDER THE DRAFT ONLY (the owner, 2026-10-22: Send under the draft, never the same press twice on
+  // screen) - the bar's copy of it (2026-10-19) is gone. Its SLOT stays, empty, from the first render: the copy was put there so the
+  // row would not reshuffle when the advice landed - pushing the row along and "Attach a file" into ▾ under the owner's hand - and an
+  // empty slot of the same width keeps that. Advised, the Send is lit where it stands, on the card (`lit`).
   const main = list.find((v) => v.card && v.group === "decide" && v.tone === "p") || null;
-  let decide = plain([...(main ? [main] : []), ...by("decide")]), more = plain(by("more")), agent = plain(by("agent"));
+  const slot = main && { id: `slot:${main.id}`, label: main.label, group: "decide", tone: "s", title: "", disabled: true, why: "", slot: true };
+  let decide = plain([...(slot ? [slot] : []), ...by("decide")]), more = plain(by("more")), agent = plain(by("agent"));
   // THE ADVISOR PICKS THE FILLED BUTTON (the owner, 2026-10-13: "the advisor should pick which button is dark based off its advice")
   // - AND ONLY TINTS IT, IN PLACE: the layout is the same with and without advice. A verb in More is filled where it stands
   // (clustersOf keeps the filled one in view); a card's other verb advised (its Redraft) is lit on the card (`lit`, useLit); Next is
   // filled when the Advisor's answer is that nothing here needs a move (words.json advice_none)
   const advised = advisedIn(list, pick), primary = advised ? { ...advised, tone: "p" } : null;
-  if (advised && (!advised.card || advised === main)) {
+  if (advised && !advised.card) {
     const fill = (xs) => xs.map((v) => (v.id === advised.id ? primary : v));
     decide = fill(decide); agent = fill(agent); more = fill(more);
   }
@@ -173,12 +175,12 @@ export function rowOf({ list, ref }, pick = null) {
   // NO WORD TWICE: a card's decision and the task's own verbs can name the same act (a close-out's Remind me beside the task's, a
   // message card's Mark done beside the walk's). The first one placed stands; the bar outranks More.
   const seen = new Set();
-  const once = (xs) => xs.filter((v) => (seen.has(v.label) ? false : (seen.add(v.label), true)));
+  const once = (xs) => xs.filter((v) => v.slot || (seen.has(v.label) ? false : (seen.add(v.label), true)));   // an empty slot names nothing
   decide = once(decide); agent = once(agent); more = once(more);
   const next = by("next")[0] || null;
   if (decide.length > ROOM) { more = [...decide.slice(ROOM), ...more]; decide = decide.slice(0, ROOM); }   // the row stays a short line of chips; the rest wait behind More
   // a greyed decision says why it is greyed - the advised one never is (advisedIn skips greyed verbs), so the card's own move speaks
-  return { ref, decide, agent, more, primary, lit: advised?.card && advised !== main ? advised.id : "", next: next && { ...next, tone: pick?.verb === "next" && !next.disabled ? "p" : "s" },
+  return { ref, decide, agent, more, primary, lit: advised?.card ? advised.id : "", next: next && { ...next, tone: pick?.verb === "next" && !next.disabled ? "p" : "s" },
     why: head?.disabled && head.why ? `${head.label} is off - ${head.why}` : "" };
 }
 
@@ -209,7 +211,7 @@ export function clustersOf(row, keep = 2) {
     if (!vs.length) return null;
     const lead = vs.findIndex((v) => v.tone === "p");
     const shown = lead >= keep ? [...vs.slice(0, keep - 1), vs[lead]] : vs.slice(0, keep);
-    return { type, label: (TYPES.find(([t]) => t === type) || [])[1] || "", shown, rest: vs.filter((v) => !shown.includes(v)) };
+    return { type, label: (TYPES.find(([t]) => t === type) || [])[1] || "", shown, rest: vs.filter((v) => !shown.includes(v) && !v.slot) };
   }).filter(Boolean);
 }
 

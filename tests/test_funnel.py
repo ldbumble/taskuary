@@ -1044,7 +1044,7 @@ class MemoryTests(unittest.TestCase):
             self.assertEqual((first['item']['lane'], first['item']['tid']), ('queued', t))
             again = concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
             # put down: read, and still under Tasks - Next moves on, the task stays (the owner, 2026-10-21)
-            self.assertIsNone(again['item']); self.assertIn('you already saw still waits on you', again['say'])
+            self.assertIsNone(again['item']); self.assertEqual([c.get('key') for c in again['chips']][1:], [first['item']['key']])
             later = datetime.now() + timedelta(hours=4)
             on_rail = [(i['lane'], bool(i.get('why_open')), bool(i.get('surfaced'))) for i in processing_unread.build(s, now=later, live_state=[])['items'] if i.get('tid') == t]
             self.assertEqual(on_rail, [('queued', True, False)])                                # the hour brought it back, and the mark went with it
@@ -1063,7 +1063,7 @@ class MemoryTests(unittest.TestCase):
 
         ...for the rest of THIS walk (the owner, 2026-10-21): here it was the last thing, so the walk ran out and the next one
         starts with it again - under Tasks, offered, no mark."""
-        from taskuary import concierge, processing_unread
+        from taskuary import concierge, general, processing_unread
         s, settle = self._canonical()
         t = s.create_task({'Title': 'Month-end close is short', 'Kind': 'general', 'Status': 'open'}, 'o')
         mid = mail(s, 'Month-end close is short', who='Erin', email='erin@northwind.example', hours=3, tid=t)
@@ -1074,7 +1074,12 @@ class MemoryTests(unittest.TestCase):
             self.assertEqual(first['item']['tid'], t)
             again = concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
             self.assertIsNone(again['item'])                                                  # the walk does not bring it straight back
-            self.assertIn('next walk starts with it', again['say'])
+            self.assertEqual(again['say'], '')                                                  # its Open is the line (2026-10-23)
+            self.assertEqual([c.get('verb') for c in again['chips']], ['walk', 'open'])
+            # ...and the card it left wears Next - passed, not read: the task is still yours (2026-10-23)
+            dock = general.dock_task(s)[0]['TaskId']
+            worn = [json.loads(m.group(1)).get('pressed') for c in s.list_comments(dock) if (m := concierge._MARK.search(c.get('Body') or ''))]
+            self.assertIn('Next', worn); self.assertNotIn('Read', worn)
             rail = [i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t]
         self.assertEqual([(bool(i.get('surfaced')), i['actionable']) for i in rail], [(False, True)])   # ...on the rail, the next walk's first
         self.assertEqual(s.get_task(t)['Status'], 'open')

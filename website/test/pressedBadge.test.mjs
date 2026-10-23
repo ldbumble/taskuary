@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { mergeDurableTurns, pressChip, pressLine, pressedNoteOf, pressedOf } from "../src/assistantTurns.js";
+import { mergeDurableTurns, nextBadge, pressChip, pressLine, pressedNoteOf, pressedOf } from "../src/assistantTurns.js";
 import { label as btn } from "../src/buttons.js";
 import { chipsOf, lastActIndex, sentChips } from "../src/funnelPile.js";
 
@@ -100,7 +100,37 @@ test("no button press writes a 'Done - <button>' line or a free-text receipt on 
 test("Next leaves its own badge on the card it passed, and a failed Next takes it off", () => {
   const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
   // the owner, 2026-10-23: "we should have next pill on this one to show what was clicked on each task"
-  assert.match(view, /const nextWord = btn\("next"\), wear = \(on\) =>/);
+  assert.match(view, /const word = i < 0 \? "" : nextBadge\(m\[i\]\.card\);/);
+  assert.match(view, /on \? \{ \.\.\.x, pressed: word \}/);
   assert.match(view, /if \(putDown\) wear\(true\);/);
   assert.match(view, /if \(putDown\) \{ setFoldedKey\(\(k\) => \(k === putDown \? null : k\)\); wear\(false\); \}/);
+});
+
+// NEXT READS A REPORT, IT PASSES A TASK (the owner, 2026-10-23: "should show read on reports if you go pass them when you hit next"):
+// the badge says which - "Read" where Next settled the row read, "Next" where the row stays yours
+test("Next's badge is Read on a report, a dashboard or an fyi it read, and Next on a task it only passed", () => {
+  assert.equal(btn("next", "read"), "Read");
+  for (const c of [{ kind: "report", lane: "report" }, { kind: "report", lane: "report", dashboard: true }, { kind: "report", lane: "broken", bad: true },
+    { kind: "agentdone", lane: "report", tid: 8 }, { kind: "fyi", lane: "fyi" }]) assert.equal(nextBadge(c), "Read", JSON.stringify(c));
+  for (const c of [{ kind: "task", lane: "yours", tid: 7 }, { kind: "review", lane: "approve", tid: 3 }, { kind: "agent", lane: "blocked", tid: 5 },
+    { kind: "meeting", lane: "time" }, { kind: "connection", lane: "broken" }, null]) assert.equal(nextBadge(c), "Next", JSON.stringify(c));
+  assert.equal(nextBadge({ kind: "fyis", lane: "fyi" }), btn("next", "batch"));
+  // ...worn the way wear() puts it, and taken off by a failed Next only when it is Next's own word
+  const ms = [{ id: "a1", role: "assistant", text: "", card: { kind: "report", key: "report:4", lane: "report", title: "Weekly spend" } }, item("a2", "task:7", 7)];
+  const wear = (m, key, on) => m.map((x) => (x.card?.key !== key ? x : on ? (pressedOf(x) ? x : { ...x, pressed: nextBadge(x.card) })
+    : x.pressed === nextBadge(x.card) ? (({ pressed, ...r }) => r)(x) : x));
+  const passed = wear(wear(ms, "report:4", true), "task:7", true);
+  assert.equal(pressedOf(passed[0]), "Read"); assert.equal(pressedOf(passed[1]), "Next");
+  assert.equal(pressedOf(wear(passed, "report:4", false)[0]), "", "a failed Next takes Read off");
+  const closed = pressLine(ms, { key: "task:7", tid: 7 }, btn("close"));
+  assert.equal(pressedOf(wear(wear(closed, "task:7", true), "task:7", false)[1]), "Mark done", "another press's badge is never Next's to take");
+});
+
+// THE END OF THE WALK SAYS NOTHING (the owner, 2026-10-23: "yes remove the sentence, just the button"): the server sends no words on the
+// desk, and a line with no words and no item draws no bubble - only its buttons, on the row by the prompt
+test("a line with no words and no item is only its buttons", () => {
+  const view = src("AssistantView.jsx");
+  assert.match(view, /&& !m\.proposal && !String\(m\.text \|\| ""\)\.trim\(\) && !pressedOf\(m\)\)\n\s+return last \? <BarVerbs owner=\{`line:\$\{m\.id\}`\} chips=\{barHolds \? \[\] : chipsOf\(m\)\}/);
+  const end = { id: "a9", role: "assistant", text: "", chips: [{ verb: "walk", label: btn("walk") }, { verb: "open", key: "task:4", label: "Open TQ-0004 · Quarter plan" }] };
+  assert.deepEqual(chipsOf(end).map((c) => c.verb), ["walk", "open"]);
 });

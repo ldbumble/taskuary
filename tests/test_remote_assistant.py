@@ -332,6 +332,20 @@ class SameWalkTests(unittest.TestCase):
         nxt.assert_called_once()
         self.assertIn("That's everything for now.", send.call_args.args[2])
 
+    def test_next_on_a_report_says_read_and_on_a_task_nothing(self):
+        """The desk's badge, on the phone (the owner, 2026-10-23: "should show read on reports if you go pass them when you hit next"):
+        Next on a report it read leads with one short word; Next on a task it only passed lets the next card answer."""
+        store = MemoryStore()
+        report, task = {'key': 'report:4', 'kind': 'report', 'lane': 'report', 'title': 'Weekly spend'}, {'key': 'task:7', 'kind': 'task', 'lane': 'yours', 'tid': 7}
+        self.assertEqual(remote_assistant.passed_read(report), '✓ Read.')
+        self.assertEqual(remote_assistant.passed_read({**report, 'dashboard': True}), '✓ Read.')
+        self.assertEqual(remote_assistant.passed_read(task), '')
+        self.assertEqual(remote_assistant.passed_read(None), '')
+        end = {'item': None, 'say': "That's everything for now.", 'options': [], 'chips': [], 'over': True}
+        with mock.patch.object(concierge, 'surface', return_value=end):
+            self.assertTrue(remote_assistant._run_act(store, {'t': 'next'}, report).startswith('✓ Read.'))
+            self.assertFalse(remote_assistant._run_act(store, {'t': 'next'}, task).startswith('✓'))
+
     def test_a_settle_the_assistant_decided_runs_here_because_no_page_will(self):
         store, connector = armed_store()
         ran = {}

@@ -1392,12 +1392,6 @@ def funnel_age(item: dict) -> str:
 
 
 
-def _back_words(at) -> str:
-    """'back in 2h' - the rail's own countdown for a row put away (funnelPile.railBack), so the line and the rail agree."""
-    if timewords.mins(at) is None: return 'back in a while'
-    return f'back {timewords.back_in(at) or "now"}'
-
-
 def _title_cut(s: str, n: int = 120) -> str:
     """A title at most n long, cut at a word and marked as cut - "...check the schedule config, a" read as a typo."""
     s = str(s or '').strip()
@@ -3069,7 +3063,8 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
     way out (move_on): read, and nothing more - a reply it was waiting on still waits, in Passed."""
     if selection is not None and key is not None:
         raise ValueError('a captured automatic selection cannot name a different item')
-    put_down = (lambda: move_on(store, leaving, actor)) if leaving else (lambda: None)
+    # ...and the card it left wears the press, as every press's does (_stamp_next): "Read" or "Next", surviving a reload
+    put_down = (lambda: (move_on(store, leaving, actor), _stamp_next(store, tid, leaving))) if leaving else (lambda: None)
     # ...and the row being left is not the next one: the pile is read BEFORE Next puts it down, and a task merely opened stays
     # walkable (processing_unread: actionable), so only this keeps Next from offering it straight back (the page sends it too)
     if leaving and selection is None: exclude = exclude or leaving
@@ -3099,9 +3094,9 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         if key: say = "I can't find that one - it may be older than what I keep, or it went out under another subject."
         elif not only and skipped:
             n = len(skipped)
-            when = ', '.join(i.get('ref') or _title_cut(' '.join(str(i.get('title') or 'one').split()), 40) for i in skipped[:4])
-            say = (f"That's the bottom of the list. {plural(n, 'thing')} above where you started still wait{'s' if n == 1 else ''} - "
-                   f"{when}{' and more' if n > 4 else ''}. The next walk starts with {'it' if n == 1 else 'them'}, or open {'it' if n == 1 else 'one'} now.")
+            # BUTTONS DO THE TALKING (the owner, 2026-10-23: "yes remove the sentence, just the button"): on the desk the row by the prompt
+            # says it - Walk me through my tasks and an Open for each - and no paragraph names them first. The phone has no row: one short status.
+            say = f"That's the bottom of the list - {plural(n, 'thing')} above where you started still wait{'s' if n == 1 else ''}." if DELIVERY.get() == PHONE else ''
             opens = [{'verb': 'open', 'key': i['key'], 'label': ' · '.join(x for x in (
                          f"Open {i.get('ref') or ''}".strip(), _title_cut(' '.join(str(i.get('title') or 'it').split()), 50)) if x)}
                      for i in skipped[:3 if DELIVERY.get() != PHONE else 10]]
@@ -3118,19 +3113,16 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             # TQ-0004 over a rail reading TQ-0001, TQ-0002, TQ-0003 - a to-do is not on_you() - and the owner could not match them
             # (the walk click-through, 2026-10-17)
             n = len(waiting)
-            when = ', '.join(f"{i.get('ref') or _title_cut(' '.join(str(i.get('title') or 'one').split()), 40)}{' ' + _back_words(i['back_at']) if i.get('back_at') else ''}"
-                             for i in waiting[:4])
             # "Nothing new right now" opened a line about nine things still waiting: say the walk is through, then where they are
             # ...and only what Remind me put there is "under For later": one Next walked past, or you looked at and left, is still
             # under Tasks (the owner, 2026-10-21: Next moves on, the task stays)
             aside = all(i.get('deferred') for i in waiting)
             # ...and in words that are true of how each got there: Next is not "putting aside", and Remind me is not passing (2026-10-17)
             # ...and what this walk passed is where the next one starts (the owner, 2026-10-21) - no hour it comes back in
-            say = (f"That's everything for now. {plural(n, 'thing')} "
-                   + (f"{'is' if n == 1 else 'are'} under {funnel.SECTION_WORDS['later']}" if aside else f"you already saw still wait{'s' if n == 1 else ''} on you")
-                   + f" - {when}{' and more' if n > 4 else ''}. "
-                   + (f"Open {'it' if n == 1 else 'one'} now if you want it sooner." if aside
-                      else f"The next walk starts with {'it' if n == 1 else 'them'}, or open {'it' if n == 1 else 'one'} now."))
+            # ...and on the desk no sentence at all (the owner, 2026-10-23): the Opens below and the Walk button are the end of the walk
+            say = ((f"That's everything for now - {plural(n, 'thing')} "
+                    + (f"{'is' if n == 1 else 'are'} under {funnel.SECTION_WORDS['later']}." if aside else f"you already saw still wait{'s' if n == 1 else ''} on you."))
+                   if DELIVERY.get() == PHONE else '')
             # ...and the way to them NOW, by name: a Next under this line only said it again (2026-09-23, six days running).
             # What waits on the owner first - a close-out, an agent's question - then the rest.
             # ...each saying WHAT it is, not a bare number (the owner, 2026-09-30: "have to write what they are about a little")
@@ -4261,26 +4253,55 @@ def _item_of(store, op: dict) -> tuple:
     return None, set()
 
 
-def _stamp_pressed(store, dock_tid: int, op: dict, label: str) -> bool:
-    """A PRESS IS MARKED ON ITS CARD, NOT SAID (the owner, 2026-10-22: "I hate free text" ... "put a little animation on the corner of the
-    past task - like button marked done not free text"): the newest dock line carrying the item gets the button's own label as `pressed`,
-    which the page draws as a badge in that card's corner."""
-    tid, keys = _item_of(store, op)
-    if not tid and not keys: return False
+def _item_line(store, dock_tid: int, keys, tid=None):
+    """(comment, card) of the newest dock line whose card is the item - by its key, or its task - else (None, None)."""
     for c in reversed(general.chat_rows(store, dock_tid)):
         m = _MARK.search(c.get('Body') or '')
         if not m or c.get('ActorType') != general.ASSISTANT_TYPE: continue
         try: card = json.loads(m.group(1))
         except ValueError: continue
         if not isinstance(card, dict) or card.get('kind') in ('words', 'proposal'): continue
-        if card.get('key') in keys or (tid and str(card.get('tid') or '') == str(tid)):
-            # the button's own word: "Remind me: Thu 5 Nov" is the receipt's - the badge is the button the page drew, "Remind me"
-            # ...and a Close with a note wears its note beside the badge (the owner, 2026-10-23: "write on it marked done with note")
-            note = str((op.get('params') or {}).get('note') or '').strip() if op.get('kind') == 'task.complete' else ''
-            rewrite(store, int(c['CommentId']), _MARK.sub('', c.get('Body') or ''),
-                    {**card, 'pressed': label.split(': ')[0], **({'pressed_note': _cut(note, 300)} if note else {})})
-            return True
-    return False
+        if card.get('key') in keys or (tid and str(card.get('tid') or '') == str(tid)): return c, card
+    return None, None
+
+
+def _stamp_pressed(store, dock_tid: int, op: dict, label: str) -> bool:
+    """A PRESS IS MARKED ON ITS CARD, NOT SAID (the owner, 2026-10-22: "I hate free text" ... "put a little animation on the corner of the
+    past task - like button marked done not free text"): the newest dock line carrying the item gets the button's own label as `pressed`,
+    which the page draws as a badge in that card's corner."""
+    tid, keys = _item_of(store, op)
+    if not tid and not keys: return False
+    c, card = _item_line(store, dock_tid, keys, tid)
+    if not c: return False
+    # the button's own word: "Remind me: Thu 5 Nov" is the receipt's - the badge is the button the page drew, "Remind me"
+    # ...and a Close with a note wears its note beside the badge (the owner, 2026-10-23: "write on it marked done with note")
+    note = str((op.get('params') or {}).get('note') or '').strip() if op.get('kind') == 'task.complete' else ''
+    rewrite(store, int(c['CommentId']), _MARK.sub('', c.get('Body') or ''),
+            {**card, 'pressed': label.split(': ')[0], **({'pressed_note': _cut(note, 300)} if note else {})})
+    return True
+
+
+# what Next READS rather than passes: a row with nothing to do - a report run, a dashboard, an agent's finished result, an fyi - is gone
+# once walked past; anything in an owner lane (a task, a reply, an ask) stays under Tasks, still yours (funnel._apply_states)
+READ_ON_NEXT = ('report', 'fyi')
+def next_badge(card: dict) -> str:
+    """The badge a card Next walked past wears (the owner, 2026-10-23: "should show read on reports if you go pass them when you hit next"):
+    "Read" where Next settled it read, "Next" where it only passed it. The page's nextBadge (assistantTurns.js) is the same rule."""
+    c = card or {}
+    # ...a report that failed is in the broken lane, and read all the same: it has no task to stay on
+    read = c.get('lane') in READ_ON_NEXT or (c.get('kind') == 'report' and not c.get('tid'))
+    return buttons.label('next', 'batch' if c.get('kind') == 'fyis' else 'read' if read else None)
+
+
+def _stamp_next(store, dock_tid: int, key: str) -> bool:
+    """Next's badge on the card it left, from the server too, so a reload draws it - only on a card nothing else was pressed on."""
+    try:
+        c, card = _item_line(store, dock_tid, {key})
+        if not c or card.get('pressed'): return False
+        rewrite(store, int(c['CommentId']), _MARK.sub('', c.get('Body') or ''), {**card, 'pressed': next_badge(card)})
+        return True
+    except Exception as e:
+        logger.debug(f'concierge: Next left no badge on {key} - {e}'); return False
 
 
 def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = False, press: bool = False) -> dict:

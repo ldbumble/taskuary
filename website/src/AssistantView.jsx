@@ -67,7 +67,7 @@ import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
 import { StatusLogo } from "./StatusMark.jsx";
 import { isCoveragePending } from "./processingAll.js";
-import { mergeDurableTurns, pickLine, placeLine, pressChip, pressLine, pressedNoteOf, pressedOf } from "./assistantTurns.js";
+import { mergeDurableTurns, nextBadge, pickLine, placeLine, pressChip, pressLine, pressedNoteOf, pressedOf } from "./assistantTurns.js";
 import { lightOf, litAfter, litOn, litPick, litPull } from "./assistantLight.js";
 import DigestText from "./DigestText.jsx";
 import { canGoBack, firstAppLink, onStep, openAppLink, recordPlace } from "./appLinks.js";
@@ -864,6 +864,10 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
           and an Open TQ-x and a Report this bug link stood in the chat under a failure (the walk click-through, 2026-10-17) */}
       {last && <BarVerbs owner={`line:${m.id}`} chips={receiptChips(m)} busy={actions.busy} onChip={actions.chip} />}
     </div></div>);
+  // THE END OF THE WALK SAYS NOTHING (the owner, 2026-10-23: "yes remove the sentence, just the button"): a line with no words and no item
+  // is only its buttons - Walk me through my tasks and its Opens - on the row by the prompt, never an empty bubble wearing the mark
+  if (m.role === "assistant" && (!m.card || m.card.kind === "words") && !m.proposal && !String(m.text || "").trim() && !pressedOf(m))
+    return last ? <BarVerbs owner={`line:${m.id}`} chips={barHolds ? [] : chipsOf(m)} busy={actions.busy} onChip={actions.chip} /> : null;
   // The funnel deliberately renames msg:<mid> to agent:<tid> when somebody takes the task. Follow
   // the task identity across that rename; matching only the old key left a live agent displayed as
   // "nobody on it" until a new chat line happened to replace the card.
@@ -1907,10 +1911,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (putDown) { setExpanded(false); setFoldedKey(putDown); }
     // ...AND IT WEARS "Next" like any press (the owner, 2026-10-23: "we should have next pill on this one to show what was clicked on
     // each task") - only a card nothing else was pressed on; a Next that fails takes the badge off with the fold
-    const nextWord = btn("next"), wear = (on) => setMsgs((m) => { let i = -1;
+    // ...saying what Next did (the owner, 2026-10-23: "should show read on reports if you go pass them when you hit next"): "Read" on a
+    // report, a dashboard or an fyi Next settles read, "Next" on a task it only passes (nextBadge)
+    const wear = (on) => setMsgs((m) => { let i = -1;
       for (let j = m.length - 1; j >= 0; j -= 1) if (m[j]?.card?.key === putDown) { i = j; break; }
-      if (i < 0 || (on ? pressedOf(m[i]) : m[i].pressed !== nextWord)) return m;
-      return m.map((x, j) => (j !== i ? x : on ? { ...x, pressed: nextWord } : (({ pressed, ...rest }) => rest)(x))); });
+      const word = i < 0 ? "" : nextBadge(m[i].card);
+      if (i < 0 || (on ? pressedOf(m[i]) : m[i].pressed !== word)) return m;
+      return m.map((x, j) => (j !== i ? x : on ? { ...x, pressed: word } : (({ pressed, ...rest }) => rest)(x))); });
     if (putDown) wear(true);
     // ...AND THE NEXT ONE IS PUT UP IN THE SAME FRAME (G8, swap never clear): between the fold and the server's answer the canvas held
     // no view at all and the rail still rang the item just put down - 10-25 frames on every Next. The capture already names what this

@@ -1926,6 +1926,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     <Typography data-tq-handled="" sx={{ color: "#47654a", fontSize: 13, fontWeight: 600, mt: 0.9 }}>Nothing to do. It's handled.</Typography>)}
                   {!term?.alive && t?.Status === "done" && detail?.closedWhy && (
                     <Typography data-tq-closed-why="" sx={{ color: INK, fontSize: 12.5, lineHeight: 1.45, mt: 0.9 }}>{detail.closedWhy}</Typography>)}
+                  {/* ...and the note it was closed with, one muted line, whole on hover: opened later on its work, the note stood only under
+                      Close out, folded (the owner, 2026-10-23: "write on it marked done with note") */}
+                  {!term?.alive && t?.Status === "done" && !detail?.closedWhy && !!closedNote && (
+                    <Typography data-tq-closed-note="" noWrap title={closedNote} sx={{ color: DIM, fontSize: 12.5, mt: 0.9 }}>
+                      ✓ {btn("close_note")}: {closedNote}</Typography>)}
                   {term?.alive && !inRow && (
                     // on a phone the two buttons take their own row: sharing one with the heading, they
                     // stacked over the "agent · needs you" chip (2026-09-20)
@@ -2161,7 +2166,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       again - why is it not just staying in close out showing what closed out"): the close, when, and the note it was closed with */}
                   {pane === "reply" && t.Status === "done" && <Box data-tq-closed="" sx={{ mt: 1 }}>
                     <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>
-                      ✓ {btn("close")}{t.ClosedAt ? ` ${ago(t.ClosedAt)}` : ""}</Typography>
+                      ✓ {btn(closedNote ? "close_note" : "close")}{t.ClosedAt ? ` ${ago(t.ClosedAt)}` : ""}</Typography>
                     {closedNote && <Typography variant="body2" sx={{ color: DIM, mt: 0.25, whiteSpace: "pre-wrap" }}>{closedNote}</Typography>}
                   </Box>}
                   {/* STOP AND SAVE'S WRITE-UP, where its draft will stand (writeupState.js): the job's own stage until the draft

@@ -229,17 +229,17 @@ def test_a_cli_that_dies_again_on_restart_is_said_plainly(fast_fake, monkeypatch
 
 def test_continue_lit_with_notes_carries_them_and_says_so():
     """"Rerun the agent with these notes: use the new template" lit Continue and dropped the notes (the real-CLI walk, 2026-10-20):
-    the light carries them - Continue's box opens holding them - and the line says they go with it. Without notes, as before."""
+    the light carries them - Continue's box opens holding them. Without notes, as before."""
     from tests import assistant_walk as W
     s = W.world()
     with mock.patch('taskuary.ingest._spawn'):
         said = lambda call: concierge.say(s, 'rerun the agent', key='msg:17', llm=lambda *a, **k: 'Sending it back.\nCALL: ' + json.dumps(call))
         out = said({'kind': 'agent.continue', 'params': {'ref': 'TQ-0012', 'note': 'use the new template'}})
         assert out['light']['verb'] == 'continue' and out['light']['note'] == 'use the new template'
-        assert out['say'] == 'Lit Continue on TQ-0012 with your notes: use the new template'
-        assert 'your notes are in its box' in out['light']['line']
+        # ...and no "Lit Continue on TQ-0012" line, nor a "press it" strip: the lit button is the whole answer (the owner, 2026-10-23)
+        assert (out['say'], out['light']['line']) == ('', '')
         bare = said({'kind': 'agent.continue', 'params': {'ref': 'TQ-0012'}})
-        assert bare['say'] == 'Lit Continue on TQ-0012.' and 'note' not in bare['light']
+        assert bare['say'] == '' and 'note' not in bare['light']
 
 
 def test_the_tool_text_tells_marking_read_from_putting_down():

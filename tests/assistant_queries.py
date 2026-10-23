@@ -85,13 +85,13 @@ CASES = [
       note='the demo world has no coding CLI, so a coding hand-off is the one Send to agent (coding needs a CLI)'),
     Q('item', 'remind me tomorrow', 'todo', c('task.defer', until='tomorrow 9am'), 'light:defer', demo='lit', freq=5),
     Q('item', 'remind me about this on friday at 2pm', 'todo', c('task.defer', until='friday 2pm'), 'light:defer', demo='lit', freq=4),
-    Q('item', 'not ours', 'fyi', c('not_ours'), 'light:not_ours', freq=4),
-    Q('item', 'this is not ours', 'todo', c('task.not_a_task'), 'light:remove', freq=3, note="a task's row has Remove - not a task, not Not ours"),
+    Q('item', 'not ours', 'fyi', c('not_ours'), 'pressed:not_ours', freq=4),
+    Q('item', 'this is not ours', 'todo', c('task.not_a_task'), 'pressed:remove', freq=3, note="a task's row has Remove - not a task, not Not ours"),
     Q('item', 'change the priority to high', 'todo', c('task.update', priority='high'), 'light:priority', freq=3),
     Q('item', 'make this urgent', 'todo', c('task.update', priority='urgent'), 'light:priority', freq=3),
-    Q('item', 'mark this done', 'todo', c('close'), 'light:close', demo='lit', freq=5),
-    Q('item', 'done', 'todo', c('close'), 'light:close', demo='lit', freq=4),
-    Q('item', 'close it, the bank feed reconciled', 'todo', c('task.complete', note='the bank feed reconciled'), 'light:close_note', freq=3),
+    Q('item', 'mark this done', 'todo', c('close'), 'pressed:close', demo='lit', freq=5),
+    Q('item', 'done', 'todo', c('close'), 'pressed:close', demo='lit', freq=4),
+    Q('item', 'close it, the bank feed reconciled', 'todo', c('task.complete', note='the bank feed reconciled'), 'pressed:close_note', freq=3),
     Q('item', 'assign it to me', 'todo', c('task.update', assignee='owner'), 'light:assign', freq=2),
     Q('item', 'forward this to Priya', 'todo', c('task.handoff', who='Priya Shah'), 'light:forward', freq=3),
     Q('item', 'ask Marcus which account it is', 'todo', c('task.clarify', text='Which account is short?'), 'light:ask_sender', freq=3),
@@ -105,9 +105,9 @@ CASES = [
     Q('item', 'tick the second to-do', 'todo', c('task.check', item='2'), 'did:task.check', freq=3),
     Q('item', 'note on the first to-do: the bank has it', 'todo', c('task.check', item='1', note='the bank has it'), 'did:task.check', freq=2),
     Q('item', 'add a to-do: call the bank', 'todo', c('task.checklist', add=['call the bank']), 'did:task.checklist', freq=3),
-    Q('item', 'press Review changes', 'todo', c('button.light', button='remove'), 'light:remove', freq=1, note='any row button, by name'),
+    Q('item', 'press Review changes', 'todo', c('button.light', button='remove'), 'pressed:remove', freq=1, note='any row button, by name'),
     Q('item', 'reopen it', 'todo', c('task.reopen', ref='TQ-0015'), 'light:reopen', freq=2),
-    Q('item', 'delete this', 'todo', c('task.not_a_task'), 'light:remove', freq=2),
+    Q('item', 'delete this', 'todo', c('task.not_a_task'), 'pressed:remove', freq=2),
     # ── questions ──
     Q('question', "what's waiting on me", None, [c('pipe.list'), 'Ten things are on you.'], 'read:pipe.list', demo='list', freq=5),
     Q('question', 'what is this about?', 'todo', [c('task.read', ref=T1), 'The month-end close is short by 4,180.'], 'read:task.read', freq=5),
@@ -178,7 +178,7 @@ CASES = [
     # ── typos ──
     Q('typos', 'clera all teh fyi', 'todo', c('pipe.clear', select={'kind': 'fyi'}), 'cleared', freq=3),
     Q('typos', 'remidn me tmrw', 'todo', c('task.defer', until='tomorrow'), 'light:defer', freq=3),
-    Q('typos', 'mark tihs done', 'todo', c('close'), 'light:close', demo='lit', freq=3),
+    Q('typos', 'mark tihs done', 'todo', c('close'), 'pressed:close', demo='lit', freq=3),
     Q('typos', 'whats waitng on me', None, [c('pipe.list'), 'Ten things.'], 'read:pipe.list', demo='list', freq=3),
     Q('typos', 'opne settigns', None, 'Here: [Settings](#settings=config).', 'link:#settings', tools=('pages',), freq=2),
     Q('typos', 'repyl to marcus', 'todo', c('reply'), 'draft:reply', freq=3),
@@ -191,7 +191,7 @@ CASES = [
     Q('short', 'later', 'todo', c('task.defer', until='tomorrow 9am'), 'light:defer', freq=3),
     Q('short', 'k', 'todo', 'Ok.', 'words', tools=('words',), freq=2),
     Q('short', '👍', 'todo', 'Ok.', 'words', tools=('words',), freq=3),
-    Q('short', 'done.', 'todo', c('close'), 'light:close', demo='lit', freq=4),
+    Q('short', 'done.', 'todo', c('close'), 'pressed:close', demo='lit', freq=4),
 ]
 
 def find(query, title_hint=''):
@@ -305,10 +305,12 @@ def _guards(stack, sort=None, live=None):
 
 # THE ACT, SAID (the owner, 2026-10-20: "it should show what it chose to do"): an answer that acted or lit leads with what it did - never a
 # bare word. A proposal on a phone is its question; a look-up's answer and a link are the model's own words.
-ACTS = ('Lit ', 'Opened ', 'Marked ', 'Wrote ', 'Put down ', 'Drafting ', 'Rewriting ', 'Snoozed ', 'Closed ', 'Added ', 'Set ', 'Noted ',
+ACTS = ('Opened ', 'Marked ', 'Wrote ', 'Put down ', 'Drafting ', 'Rewriting ', 'Snoozed ', 'Closed ', 'Added ', 'Set ', 'Noted ',
         'Ticked ', 'Unticked ', 'Took ', 'Renamed ', 'Brought up ')
 def said_what(say: str, got: list, q) -> bool:
-    acted = [g for g in got if g.split(':')[0] in ('light', 'open', 'new', 'next', 'draft', 'cleared', 'did')]
+    acted = [g for g in got if g.split(':')[0] in ('open', 'new', 'next', 'draft', 'cleared', 'did')]
+    # ...and a lit button or a press speaks for itself - the filled button, the card's badge - and says no line (the owner, 2026-10-23)
+    if any(g.split(':')[0] in ('light', 'pressed') for g in got): return not say.startswith('Lit ')
     return not acted or say.startswith(ACTS) and len(say.split()) > 3
 
 
@@ -316,6 +318,7 @@ def outcomes(out: dict, reads: list) -> list:
     """What the turn did, as words a case can expect."""
     o = []
     if (l := out.get('light')) is not None: o.append(f"light:{l.get('verb') or ''}")
+    if (p := out.get('pressed')) is not None: o.append(f"pressed:{p.get('verb') or ''}")
     if out.get('open'): o.append(f"open:{out['open']}")
     if out.get('new'): o.append(f"new:{out['new'].get('kind')}" + (f":{out['new'].get('how')}" if out['new'].get('how') else ''))
     d = (out.get('decision') or {}).get('verb')
@@ -335,13 +338,14 @@ MISSES = ('I could not find', 'I could not finish', 'I could not put that', 'cou
 
 
 def ideal_turn(q: Q) -> dict:
-    from taskuary import concierge
+    from taskuary import concierge, server
     s, seen, reads = _world(), [], []
     real_read = concierge._read
     def read(store, item, call):
         found = real_read(store, item, call); reads.append(call['kind']); return found
     with ExitStack() as st:
         _guards(st, q.sort, q.live)
+        st.enter_context(mock.patch.object(server, 'store', s))          # a typed put-down runs its operation (concierge._put_down)
         st.enter_context(mock.patch.object(concierge, '_read', read))
         err = None
         if q.phone: st.enter_context(concierge.delivering(concierge.PHONE))
@@ -364,26 +368,27 @@ def ideal_turn(q: Q) -> dict:
     return {'grade': grade, 'got': got, 'say': say, 'heard': heard, 'told': told, 'carried': carried, 'missing': [t for t in q.tools if t not in carried]}
 
 
-def demo_line(said: str) -> str:
+def demo_line(said: str, out: dict | None = None) -> str:
     from taskuary import demo
     if said.startswith(demo.OUT_OF_SCRIPT[:40]): return 'out'
     # ...and the script's routing (demo._route): the item, report or page brought up, or the real button lit on the table's item
     if re.match(r'Here: \[[^\]]+\]\(#(task|report)=', said): return 'open'
-    if said.startswith('Lit '): return 'lit'
+    if (out or {}).get('light') or (out or {}).get('pressed'): return 'lit'
     for (rx, line), name in zip(demo.ANSWERS, ('reply', 'report', 'list')):
         if said.startswith(line.split('{')[0][:40]): return name
     return 'other'
 
 
 def demo_turn(q: Q) -> dict:
-    from taskuary import concierge, demo
+    from taskuary import concierge, demo, server
     s = _world()
     with ExitStack() as st:
         _guards(st, q.sort, q.live)
+        st.enter_context(mock.patch.object(server, 'store', s))
         try: out = concierge.say(s, q.text, key=TABLES[q.table], llm=demo.brain(store=s))
         except Exception as e: out = {'say': f'RAISED {type(e).__name__}: {e}'}
     said = str(out.get('say') or '')
-    line = demo_line(said)
+    line = demo_line(said, out)
     return {'grade': 'right' if line == q.demo else 'bare-Next' if said.strip() == 'Next.' else 'wrong', 'line': line, 'say': said}
 
 

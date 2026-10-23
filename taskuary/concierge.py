@@ -120,7 +120,9 @@ CONTRACT = (
     "something. When you cannot tell which of two things the owner's words mean, say which two and ask - one short "
     "question, and OPTIONS instead of a CALL. When the words say what they want, CALL it: Taskuary brings up the "
     "button that does it, lit, or the page that holds it, and nothing happens until the owner presses it - so acting on a clear "
-    "ask is not a guess. Never say it is done: say what to press.\n" + IN_PART)
+    "ask is not a guess. Putting an item down - closing it (with a note when they gave a reason), removing it as not a task, filing "
+    "it as not ours - is the one act their words do at once: CALL it and its card folds with the button's badge. Never say it is "
+    "done, and never say what to press - the button speaks.\n" + IN_PART)
 SYSTEM = CONTRACT      # the old name, for one release
 
 # The same walk, read in a phone chat. There are no cards there and no action words under the line, so
@@ -1004,8 +1006,8 @@ def table_op_verb(call: dict | None) -> str | None:
 # THE ASSISTANT IS A ROUTER ON THE DESK (the owner, 2026-10-19: "no take it back button. hate that. the assistant again should just be a
 # router to actions or answer quick questions about things ... all work goes to agents, it brings up tasks/settings/action buttons" and "it
 # should just surface the correct button"): a typed ask that means an act brings its item up and LIGHTS the row's own button for it - the
-# Advisor's tint on a real verb, never a button of its own - with one line. It runs nothing and draws no card to confirm: the press is the
-# confirmation. An act whose button lives on a page opens that page beside the answer. A phone chat has no buttons, so it keeps its text
+# Advisor's tint on a real verb, never a button of its own - and no line (2026-10-23). It runs nothing and draws no card to confirm: the
+# press is the confirmation - except a put-down of the item, which the owner's words press (PUT_DOWN). An act whose button lives on a page opens that page beside the answer. A phone chat has no buttons, so it keeps its text
 # yes/no (DELIVERY == PHONE). The model still picks the act; code only finds its button, or tells the model there is none.
 def routes() -> bool: return DELIVERY.get() != PHONE
 # ...so "name the one you mean and I will ..." promises what this screen does: the desk brings it up, the phone does it (verify, 2026-10-19)
@@ -1054,21 +1056,56 @@ def row_buttons(store, it: dict) -> list:
 def _lit(store, tid: int, table: dict | None, it: dict, verb: str, note: str = '') -> dict:
     """The item's own button for `verb`, lit - the item brought up first when it is not the one on the table (the page pulls `light.key`,
     the rail's road). Nothing runs. A button the row does not draw is a miss the model answers in words (CallMiss), never a line naming it.
-    `light.line` is what the strip over the row says while it is lit; `say` is the chat's record of it - past, so a reload never shows
-    "press it" over a row with nothing lit (verify, 2026-10-19: "Press Mark done when you're sure" outlived its light)."""
+    THE LIT BUTTON IS THE WHOLE ANSWER (the owner, 2026-10-23: "what the heck is Lit" - "buttons do the talking", "I hate free text"): no
+    "Lit Mark done on TQ-0026." in the chat and no "Press it when you're sure." over the row - the filled button says it all."""
     b = BUTTON_OF.get(verb, verb)
+    label = _label_on(store, it, b)
+    # `note`: the owner's words for the press to carry - Continue's box opens holding them
+    return {'say': '', 'options': [], 'chips': [], 'decision': None,
+            'light': {'verb': b, 'label': label, 'line': '', 'key': it.get('key') or '', 'tid': it.get('tid'), 'ref': it.get('ref') or '',
+                      **({'note': note} if note else {})}}
+
+
+def _label_on(store, it: dict, b: str) -> str:
+    "The row's own label for button `b` on this item - or a miss the model answers in words (CallMiss), never a line naming it."
     have = row_buttons(store, it)
     label = next((x['label'] for x in have if x['verb'] == b), '')
     if not label:
         raise CallMiss(f"{_where(it) or 'This item'} has no {buttons.label(b) or b} button - its row has "
                        f"{', '.join(x['label'] for x in have) or 'only Next'}. Say in plain words that it is not done from this row, or name "
                        "the one of its buttons that does it. Nothing was changed.")
-    # `note`: the owner's words for the press to carry - Continue's box opens holding them
-    said = f"Lit {label} on {it.get('ref') or _where(it) or 'it'}" + (f" with your notes: {_cut(note, 200)}" if note else '.')
-    record(store, tid, 'assistant', said)          # the chat's line; the task's notes keep no "press it"
-    return {'say': said, 'options': [], 'chips': [], 'decision': None,
-            'light': {'verb': b, 'label': label, 'line': f"Press {label} when you're sure" + (' - your notes are in its box.' if note else '.'),
-                      'key': it.get('key') or '', 'tid': it.get('tid'), 'ref': it.get('ref') or '', **({'note': note} if note else {})}}
+    return label
+
+
+# TYPED PUT-DOWNS ARE PRESSED (the owner, 2026-10-23, over "Lit Close with a note on TQ-0026.": "it should be the pill saying i have closed
+# this task for you with note ... it should collapse the task and write on it marked done with note ... same if it says not a task"): the
+# owner's own words putting an item down - Mark done, Close with a note, Remove - not a task, Not ours just this once - are the command,
+# so the Assistant presses that same button: the operation the row runs, and the item's card folds wearing the button's badge
+# (_stamp_pressed), no line. Anything that reaches another person - a reply, a send, a forward - and a rule for "from now on" still lights.
+PUT_DOWN = {'close': 'task.complete', 'close_note': 'task.complete', 'remove': 'task.not_a_task', 'not_ours': 'message.file'}
+
+
+def _press_or_light(store, tid: int, table: dict | None, it: dict, verb: str, note: str = '', actor: str = 'owner') -> dict:
+    """`verb` as the owner's words mean it: a put-down pressed (_put_down), anything else lit (_lit). A Close with a note with no note is
+    lit - its box is where the note is written."""
+    if verb in PUT_DOWN and not (verb == 'close_note' and not note.strip()): return _put_down(store, tid, table, it, verb, note, actor)
+    return _lit(store, tid, table, it, verb, note=note if verb == 'continue' else '')
+
+
+def _put_down(store, tid: int, table: dict | None, it: dict, b: str, note: str = '', actor: str = 'owner') -> dict:
+    label, kind = _label_on(store, it, b), PUT_DOWN[b]
+    target = it.get('mid') if kind == 'message.file' else it.get('tid')
+    if not target: return _lit(store, tid, table, it, b)                # nothing behind the row to run it on: its button, lit
+    note = note.strip()[:2000] if b == 'close_note' else ''
+    params = {'note': note} if note else {'learn': False} if kind == 'message.file' else {}
+    here = bool(table) and (table.get('key') == it.get('key') or (bool(it.get('tid')) and str(table.get('tid') or '') == str(it.get('tid'))))
+    done = run_proposal(store, operations.propose(store, kind, int(target), params, actor), actor)
+    ok = done.get('status') == 'done'
+    pressed = {'verb': b, 'label': label, 'key': it.get('key') or '', 'tid': it.get('tid'), 'ref': it.get('ref') or '', 'table': here, **({'note': note} if note else {})}
+    if ok and _stamp_pressed(store, tid, done, label): return {'say': '', 'options': [], 'chips': [], 'decision': None, 'did': kind, 'pressed': pressed}
+    # ...with no card of it in this chat (named by its ref), or when it did not go through: the receipt's one line, as a press's
+    r = receipt_turn(store, done, actor, table=True)
+    return {'say': r['say'], 'options': [], 'chips': r['chips'], 'decision': None, 'did': kind, **({'pressed': pressed} if ok else {})}
 
 
 def _did(store, tid: int, said: str, kind: str) -> dict:
@@ -2263,11 +2300,14 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         nxt = drafts[0]
         if not routes(): return surface(store, nxt['key'], None, actor)
         out = _lit(store, tid, item, nxt, 'approve')
-        out['say'] = (f"Lit {out['light']['label']} on {nxt.get('ref') or _where(nxt)} - 1 of {plural(len(drafts), 'draft')} waiting. "
-                      "Read it before you press; ask again for the next one.")
+        # ...its Send lit says the rest; only how many more wait is words, and only when there are more (no "Lit ...", 2026-10-23)
+        if len(drafts) > 1:
+            out['say'] = f"1 of {plural(len(drafts), 'draft')} - ask again for the next one."
+            record(store, tid, 'assistant', out['say'])
         return out
     # ANY BUTTON A ROW DRAWS, BY NAME (the owner, 2026-10-20: "pretty much any action should work"): lit on its row - the table's, or the
-    # task `ref` names - never pressed. A phone has no rows to light: its acts are the tools and decisions, answered yes or no
+    # task `ref` names - never pressed, but for a put-down, which the words press (_press_or_light). A phone has no rows to light: its
+    # acts are the tools and decisions, answered yes or no
     if kind == 'button.light':
         b = canon_verb(str(params.get('button') or '').strip().lower())
         ref = re.search(r'(\d+)', str(params.get('ref') or ''))
@@ -2275,7 +2315,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         if not on: raise CallMiss('Name the task (TQ-0123) whose button to light, or bring it up first. Nothing was changed.')
         if not routes():
             raise CallMiss(f"A phone has no row to light - CALL the tool or decision {b!r} is (THE BUTTONS BY NAME) and it is asked yes or no.")
-        return _lit(store, tid, item, on, b)
+        return _press_or_light(store, tid, item, on, b, str(params.get('note') or ''), actor)
     if kind in ('pipe.defer', 'pipe.close'):
         sel = params.get('select') or {}
         hits = select_items(store, sel)
@@ -2500,9 +2540,17 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # what goes out (2026-10-20). "walk me through my tasks" typed asked "Start a script by its name: ...?" and its yes walked nowhere
     # (the 2026-10-22 re-walk); it is the opener's own Walk me through now, at the card on the table (remote_assistant.carry_out)
     if kind == 'script.start': instant = True
-    tail = 'Doing it now.' if instant else WAITS
+    # ...and a PUT-DOWN typed (the owner, 2026-10-23): close it, close it with a note, not a task, not ours just this once - the words press
+    # it, as on the desk (PUT_DOWN); the receipt is the item's line in the past (_past)
+    down = kind in ('task.complete', 'task.not_a_task', 'message.file') and bool(target)
+    if down: instant = True
+    tail ='Doing it now.' if instant else WAITS
     prop = _propose_raw(store, tid, kind, int(target or 0), params, label, named or _where(it) or label, tail, actor, item)
     if instant: prop = {**prop, 'auto': True}
+    if down: prop['say_card'] = ''                          # its receipt is the whole reply - no "Doing it now." over it
+    # ...and put down off the table, the walk goes on to the next, as after the poll's own Mark done (remote_assistant._settled_the_table)
+    if down and it.get('key') and str(target) == str(it.get('mid') if kind == 'message.file' else it.get('tid')):
+        prop = {**prop, 'settles': True, 'key': it['key']}
     return {'say': prop['say'], 'options': [], 'chips': [], 'decision': None, 'proposal': prop}
 
 
@@ -2602,7 +2650,10 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
         if why: raise CallMiss(f"{why} Say so in plain words. Nothing was changed.")
         # THE NOTES GO WITH IT: "rerun the agent with these notes: use the new template" lit Continue and dropped the notes (the real-CLI
         # walk, 2026-10-20) - they are in Continue's box when it is pressed, and the line says so
-        note = str(params.get('note') or params.get('text') or '').strip() if b == 'continue' else ''
+        note = str(params.get('note') or params.get('text') or '').strip() if b in ('continue', 'close_note') else ''
+        # ...and a put-down is pressed, not lit (_press_or_light) - but a rule for "from now on" (preference.*) is the owner's own press
+        if kind in ('task.complete', 'item.settle', 'task.not_a_task', 'message.file', 'message.archive'):
+            return _press_or_light(store, tid, table, on, b, note, actor)
         return _lit(store, tid, table, on, b, note=note)
     if on and kind in ON_TASK:
         said = f"Brought up {_where(on) or 'it'} - {ON_TASK[kind]}."
@@ -3862,6 +3913,7 @@ def op_label(kind: str, p: dict) -> str:
     if kind == 'task.create_from_text': label = hand.get(str(p.get('kind')), L('regular_agent'))
     if kind == 'preference.exclude_sender': label = L('not_ours_sender') if p.get('scope') == 'sender' else PROPOSALS['not_ours_remember'][1]
     if kind == 'item.settle': label = L('close') if p.get('tid') else L('next')
+    if kind == 'task.complete' and str(p.get('note') or '').strip(): label = L('close_note')     # the badge names the button that did it
     if kind == 'report.create': label = 'Create the report'
     if kind == 'connection.create': label = 'Create the connection'
     if kind == 'role.apply': label = 'Set it up'
@@ -4126,7 +4178,10 @@ def _past(store, op: dict, ref: str) -> str:
         name = lambda a: (m or {}).get('FromName') if (m or {}).get('FromName') and str(a).strip().lower() == str((m or {}).get('FromEmail') or '').lower() else a
         return f"Sent to {', '.join(name(a) for a in o['sent']['to'])}{on}."
     if kind == 'task.complete' and ref.startswith('TQ-'):
-        return f"{ref} {'was closed already' if o.get('already') else 'closed'}" + (' - the reply was not sent.' if o.get('unsent') else '.')
+        note = str((op.get('params') or {}).get('note') or '').strip()
+        tail = f" with a note: “{_title_cut(note, 120)}”" if note and not o.get('already') else ''
+        return f"{ref} {'was closed already' if o.get('already') else 'closed'}{tail}" + (' - the reply was not sent.' if o.get('unsent') else '.')
+    if kind == 'task.not_a_task' and ref.startswith('TQ-'): return f"{ref} removed - {buttons.label('remove').split(' - ')[-1]}."
     if kind == 'item.settle' and o.get('closed'): return f"{task_ref(int(o['closed']))} closed" + (' - the reply was not sent.' if o.get('unsent') else '.')
     # ...and Not ours and Remind me, the walk's other two receipts: "Done - Not ours · Printer on 3 is jammed again." and "Done - Remind me:
     # Fri 23 Oct · TQ-0001. Away until ..." were still the desk's button words (the 2026-10-22 re-walk)
@@ -4164,7 +4219,10 @@ def _stamp_pressed(store, dock_tid: int, op: dict, label: str) -> bool:
         if not isinstance(card, dict) or card.get('kind') in ('words', 'proposal'): continue
         if card.get('key') in keys or (tid and str(card.get('tid') or '') == str(tid)):
             # the button's own word: "Remind me: Thu 5 Nov" is the receipt's - the badge is the button the page drew, "Remind me"
-            rewrite(store, int(c['CommentId']), _MARK.sub('', c.get('Body') or ''), {**card, 'pressed': label.split(': ')[0]})
+            # ...and a Close with a note wears its note beside the badge (the owner, 2026-10-23: "write on it marked done with note")
+            note = str((op.get('params') or {}).get('note') or '').strip() if op.get('kind') == 'task.complete' else ''
+            rewrite(store, int(c['CommentId']), _MARK.sub('', c.get('Body') or ''),
+                    {**card, 'pressed': label.split(': ')[0], **({'pressed_note': _cut(note, 300)} if note else {})})
             return True
     return False
 
@@ -4553,7 +4611,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     if decision and verb == 'setup':                                     # a report, a connection: gathered, then confirmed (PW-194)
         return setup_turn(store, tid, text, decision.get('text') or text, item, actor, trace=trace, cancel=cancel)
     # ON THE DESK THE WORDS LIGHT THE BUTTON (routes): the item comes up with its own button for the act lit, and nothing runs - except
-    # words to an agent that asked, which are its answer; a new job is New, filled in; a fact to keep goes in under Verdicts & notes
+    # words to an agent that asked, which are its answer; a put-down, which is pressed (PUT_DOWN); a new job is New, filled in; a fact to
+    # keep goes in under Verdicts & notes
     if decision and verb in PROPOSALS and routes():
         if verb == 'answer_agent' and target_item and target_item.get('tid'):
             return _answer_now(store, tid, item, int(target_item['tid']), decision.get('text') or text, actor)
@@ -4561,7 +4620,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         if verb in ('coding_agent', 'regular_agent') and (own_job or not target_item):
             return _new(store, tid, item, 'coding' if verb == 'coding_agent' else 'general', decision.get('text') or text)
         if target_item:
-            try: return _lit(store, tid, item, target_item, verb, note=str(decision.get('text') or '').strip() if verb == 'continue' else '')
+            # ...a put-down (Mark done, Not ours just this once) is pressed, not lit (_press_or_light)
+            try: return _press_or_light(store, tid, item, target_item, verb, str(decision.get('text') or '').strip() if verb == 'continue' else '', actor)
             except CallMiss:                                           # no such button on its row: the model says so in words
                 # ...except a report asked to run again: Run it again is drawn only on a failed run, and the report's own page has Run now -
                 # "run the AP ageing again" over a good run was answered in words with the page one link away (the 2026-10-20 query walk)

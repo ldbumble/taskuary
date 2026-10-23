@@ -10,7 +10,7 @@ import json, unittest
 from datetime import datetime, timedelta
 from unittest import mock
 
-from taskuary import buttons, concierge, funnel, ingest, operations, terminal
+from taskuary import buttons, concierge, funnel, ingest, operations, server, terminal
 from taskuary.store import MemoryStore
 
 
@@ -24,7 +24,30 @@ def store():
     s.set_setting('team_domains', 'northwind.example', 't'); s.set_setting('owner_email', 'alex@northwind.example', 't')
     s.set_setting('poll_minutes', '5', 't')
     funnel.invalidate(); funnel.forget_states(); funnel._SOURCES.update(at=0.0, by={})
+    # a typed put-down runs the row's own operation (concierge._put_down), whose handler reads the app's store
+    mock.patch.object(server, 'store', s).start()
     return s
+
+
+def tearDownModule(): mock.patch.stopall()
+
+
+def chat_cards(s):
+    "the cards the dock's lines carry"
+    raw = s.get_setting('assistant_dock_task_id')
+    ms = [concierge._MARK.search(c.get('Body') or '') for c in s.list_comments(int(raw))] if str(raw or '').isdigit() else []
+    return [json.loads(m.group(1)) for m in ms if m]
+
+
+def drawn(s, item):
+    "the walk's card for the item, drawn in the chat as the desk draws it"
+    with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+        concierge.surface(s, key=item['key'], llm=lambda *a, **k: 'Erin needs the May numbers.')
+
+
+def chat_lines(s):
+    raw = s.get_setting('assistant_dock_task_id')
+    return [str(c.get('Body') or '') for c in s.list_comments(int(raw))] if str(raw or '').isdigit() else []
 
 
 def triage(system, user, **kw): return json.dumps({'intent': 'task', 'why': 'she asked', 'kind': 'task'})
@@ -55,22 +78,52 @@ def proposals(s): return [r for r in s._rows("SELECT * FROM operation")] if hasa
 
 
 class DeskRoutes(unittest.TestCase):
-    def test_mark_this_done_lights_mark_done_and_changes_nothing_until_pressed(self):
-        s = store(); tid, item = on_table(s)
+    # TYPED PUT-DOWNS ARE PRESSED (the owner, 2026-10-23: "what the heck is Lit ... it should collapse the task and write on it marked done"):
+    # the words press the row's own Mark done - no "Lit" line, no light, and the card wears the button's badge
+    def test_mark_this_done_is_pressed_and_says_no_line(self):
+        s = store(); tid, item = on_table(s); drawn(s, item)
         out, _ = say(s, 'mark this done', item['key'], 'Sure.\nCALL: {"kind": "close", "params": {}}')
-        self.assertNotIn('proposal', out)
-        self.assertEqual((out['light']['verb'], out['light']['label']), ('close', buttons.label('close')))
-        # the strip over the row says to press it while it is lit; the chat keeps the past - after a reload nothing says "press" over a dark row
-        self.assertEqual(out['light']['line'], f"Press {buttons.label('close')} when you're sure.")
-        self.assertEqual(out['say'], f"Lit {buttons.label('close')} on TQ-{tid:04d}.")
-        self.assertEqual(s.get_task(tid)['Status'], 'open')                        # nothing ran on the words
-        self.assertEqual(proposals(s), [])                                           # ...and nothing waits on a card either
+        self.assertNotIn('proposal', out); self.assertNotIn('light', out)
+        self.assertEqual(out['say'], '')
+        self.assertEqual((out['pressed']['label'], out['pressed']['tid'], out['pressed']['table']), (buttons.label('close'), tid, True))
+        self.assertEqual(s.get_task(tid)['Status'], 'done')
+        self.assertFalse([l for l in chat_lines(s) if l.startswith('Lit ') or "when you're sure" in l])
 
-    def test_the_task_tool_road_lights_the_same_button(self):
+    def test_the_task_tool_road_presses_the_same_button(self):
         s = store(); tid, item = on_table(s)
         out, _ = say(s, 'close it out', item['key'], f'CALL: {{"kind": "task.complete", "params": {{"ref": "TQ-{tid:04d}"}}}}')
-        self.assertEqual(out['light']['verb'], 'close')
-        self.assertEqual(s.get_task(tid)['Status'], 'open')
+        self.assertEqual(out['pressed']['label'], buttons.label('close'))
+        self.assertEqual(s.get_task(tid)['Status'], 'done')
+
+    def test_close_with_a_note_carries_the_owners_reason_onto_the_task_and_the_card(self):
+        s = store(); tid, item = on_table(s); drawn(s, item)
+        why = 'Gail sent the numbers herself on Tuesday'
+        out, _ = say(s, f'close it, {why}', item['key'], f'CALL: {{"kind": "task.complete", "params": {{"note": "{why}"}}}}')
+        self.assertEqual((out['pressed']['label'], out['pressed']['note']), (buttons.label('close_note'), why))
+        self.assertEqual(out['say'], '')
+        self.assertEqual(s.get_task(tid)['Status'], 'done')
+        # ...the task keeps the note, so its page says it when it is opened later (TaskPage's closed line reads "Closed out: ")
+        self.assertIn(f'Closed out: {why}', [c['Body'] for c in s.list_comments(tid)])
+        # ...and the card in the chat wears the badge and the note
+        worn = [c for c in chat_cards(s) if c.get('pressed')]
+        self.assertEqual([(c['pressed'], c.get('pressed_note')) for c in worn], [(buttons.label('close_note'), why)])
+
+    def test_close_with_a_note_by_its_button_name_is_pressed_with_the_note(self):
+        s = store(); tid, item = on_table(s)
+        out, _ = say(s, 'close with a note: done on the phone', item['key'],
+                     'CALL: {"kind": "button.light", "params": {"button": "close_note", "note": "done on the phone"}}')
+        self.assertEqual((out['pressed']['label'], out['pressed']['note']), (buttons.label('close_note'), 'done on the phone'))
+        self.assertEqual(s.get_task(tid)['Status'], 'done')
+        # ...with no note it is lit: its box is where the note is written
+        s = store(); tid, item = on_table(s)
+        out, _ = say(s, 'close with a note', item['key'], 'CALL: {"kind": "button.light", "params": {"button": "close_note"}}')
+        self.assertEqual((out['light']['verb'], out['say']), ('close_note', '')); self.assertEqual(s.get_task(tid)['Status'], 'open')
+
+    def test_not_a_task_is_pressed(self):
+        s = store(); tid, item = on_table(s)
+        out, _ = say(s, 'this is not a task', item['key'], 'CALL: {"kind": "task.not_a_task", "params": {}}')
+        self.assertEqual(out['pressed']['label'], buttons.label('remove')); self.assertNotIn('light', out)
+        self.assertNotEqual((s.get_task(tid) or {}).get('Status'), 'open')
 
     def test_an_act_on_another_task_brings_it_up_with_its_button_lit(self):
         s = store(); tid, item = on_table(s)
@@ -78,7 +131,7 @@ class DeskRoutes(unittest.TestCase):
         out, _ = say(s, 'remind me about the Spendly one next week', item['key'],
                      f'CALL: {{"kind": "task.defer", "params": {{"ref": "TQ-{other:04d}", "until": "monday"}}}}')
         self.assertEqual((out['light']['verb'], out['light']['tid']), ('defer', other))
-        self.assertEqual(out['say'], f"Lit {buttons.label('defer')} on TQ-{other:04d}.")
+        self.assertEqual((out['say'], out['light']['line']), ('', ''))          # the lit button is the whole answer (2026-10-23)
         self.assertFalse(s.get_task(other).get('RemindAt'))
 
     def test_send_erin_the_answer_drafts_and_sends_nothing(self):
@@ -177,7 +230,7 @@ class DeskRoutes(unittest.TestCase):
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             out = concierge.say(s, 'mark this done', key=item['key'], llm=llm, open_card='Settings - Sync & startup')
         self.assertIn('OPEN BESIDE IT: Settings - Sync & startup', seen[0])
-        self.assertEqual(out['light']['verb'], 'close')
+        self.assertEqual(out['pressed']['label'], buttons.label('close'))
 
     def test_a_task_named_to_open_comes_with_the_link_that_opens_it(self):
         # "open TQ-0004" was answered "drafted and waiting under my message" and nothing opened: the model was never told that only its
@@ -255,6 +308,18 @@ class DeskRoutes(unittest.TestCase):
             out, _ = say(s, 'mark this done', item['key'], 'CALL: {"kind": "close", "params": {}}')
         self.assertEqual(out['proposal']['kind'], 'task.complete')
         self.assertNotIn('below', out['say'])
+
+    def test_a_put_down_on_the_phone_runs_at_once_with_a_short_receipt(self):
+        s = store(); tid, item = on_table(s)
+        with concierge.delivering(concierge.PHONE):
+            out, _ = say(s, 'close it, they sorted it out themselves', item['key'],
+                         'CALL: {"kind": "task.complete", "params": {"note": "they sorted it out themselves"}}')
+            p = out['proposal']
+            self.assertEqual((p['auto'], p['settles'], p['say_card']), (True, True, ''))
+            done = concierge.run_proposal(s, p)
+            said = concierge.receipt_turn(s, done)['say']
+        self.assertEqual(said, f"TQ-{tid:04d} closed with a note: “they sorted it out themselves”.")
+        self.assertEqual(s.get_task(tid)['Status'], 'done')
 
 
 def notices(s, n=9):
@@ -340,13 +405,13 @@ class DraftsInTurnAndAnyButton(unittest.TestCase):
         out, _ = say(s, 'approve all the drafts', 'msg:1', 'CALL: {"kind": "review.each", "params": {}}')
         self.assertGreater(len(drafts), 1)
         self.assertEqual(out['light']['verb'], 'approve')
-        self.assertRegex(out['say'], rf"^Lit {buttons.label('approve')} on .* - 1 of \d+ drafts? waiting")
+        self.assertRegex(out['say'], r"^1 of \d+ drafts - ask again for the next one\.$")
         self.assertEqual(proposals(s), [])
 
     def test_any_row_button_by_name(self):
         s = store(); tid, item = on_table(s)
-        out, _ = say(s, 'press remove', item['key'], 'CALL: {"kind": "button.light", "params": {"button": "remove"}}')
-        self.assertEqual(out['light']['verb'], 'remove'); self.assertTrue(out['say'].startswith('Lit '))
+        out, _ = say(s, 'press remind me', item['key'], 'CALL: {"kind": "button.light", "params": {"button": "defer"}}')
+        self.assertEqual((out['light']['verb'], out['say']), ('defer', ''))
 
 
 class AConnectorIsItsCard(unittest.TestCase):

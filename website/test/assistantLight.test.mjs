@@ -28,7 +28,7 @@ test("the light lands on its item - by key, or by its task - and goes out when t
   assert.ok(litOn(lit, up)); assert.equal(litPull(lit, up), null);
   const landed = litAfter(lit, up);
   assert.equal(landed.landed, true);
-  assert.deepEqual(litPick(landed, up), { verb: "defer", label: label("defer"), line: `Press ${label("defer")} when you're sure.` });
+  assert.deepEqual(litPick(landed, up), { verb: "defer", label: label("defer"), line: "" });
   assert.equal(litAfter(landed, { key: "msg:41", tid: 13 }), null, "another item puts it out");
   assert.equal(litAfter(lit, { key: "msg:41", tid: 13 }), lit, "...but not before it has landed");
   assert.equal(lightOf(null), null);
@@ -43,7 +43,7 @@ test("a typed turn draws no proposal card and runs nothing: it lights, opens a p
   assert.match(body, /if \(data\.new\) browseRef\.current\?\.\("new", \{ \.\.\.data\.new, aid \}\);/);
   assert.match(body, /const page = "open" in data \? data\.open : firstAppLink\(data\.say\);/);
   // "send Erin the answer": the draft lands in the item's own reply box, and its Send is lit - drafting is not sending
-  assert.match(view, /setLit\(\{ verb: "approve", label: btn\("approve"\), line: `Read the draft, then press \$\{btn\("approve"\)\} when you're sure\.`, key: `review:\$\{data\.reviewId\}`/);
+  assert.match(view, /setLit\(\{ verb: "approve", label: btn\("approve"\), line: "", key: `review:\$\{data\.reviewId\}`/);
   // the lit act outranks the Advisor's line, which would name another button; any press puts it out
   assert.match(view, /<ActionRow advised=\{stripPick \|\| setupLit\} \/>/);
   assert.match(view, /const shownAdvice = table\.speaks && !litNow \?/);
@@ -51,17 +51,33 @@ test("a typed turn draws no proposal card and runs nothing: it lights, opens a p
   assert.match(view, /useEffect\(\(\) => onPressed\(\(\) => setLit\(null\)\), \[\]\);/);
 });
 
-// THE STRIP SAYS IT (verify, 2026-10-19): a lit Mark done stood dark under an empty strip, "Press Mark done" only up in the chat - the
-// DARK and STRIP rules' own state. The line rides with the light and goes out with it; the chat keeps the past
-test("the lit button's line is the strip's, over the composer and on a phone's own row", () => {
-  const lit = lightOf({ verb: "close", label: label("close"), line: `Press ${label("close")} when you're sure.`, key: "msg:4", tid: 7 });
-  assert.equal(litPick(lit, { key: "msg:4", tid: 7 }).line, `Press ${label("close")} when you're sure.`);
-  assert.equal(lightOf({ verb: "defer", label: label("defer"), key: "task:2" }).line, `Press ${label("defer")} when you're sure.`, "a light with no line still says one");
-  const view = src("AssistantView.jsx");
-  assert.match(view, /\{table\.speaks && !!litNow && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">\{litNow\.line\}<\/div><\/div>\}/);
+// THE LIT BUTTON IS THE WHOLE ANSWER (the owner, 2026-10-23: "what the heck is Lit"): no "Lit Mark done on TQ-0026." line in the chat and
+// no "Press Mark done when you're sure." over the row - the filled button says it. A strip line is drawn only when a light carries one
+test("a lit button says no line, in the chat or over the row", () => {
+  const lit = lightOf({ verb: "close", label: label("close"), key: "msg:4", tid: 7 });
+  assert.equal(lit.line, ""); assert.equal(litPick(lit, { key: "msg:4", tid: 7 }).line, "");
+  const view = src("AssistantView.jsx"), light = src("assistantLight.js");
+  assert.doesNotMatch(view + light.replace(/\/\/.*$/gm, ""), /when you're sure/);
+  assert.doesNotMatch(light, /export const pressLine/);
+  assert.match(view, /\{table\.speaks && !!litNow\?\.line && <div className="tq-next" role="status" data-tq-advice="lit">/);
+  assert.match(src("CanvasItem.jsx"), /\{lit\?\.line && <div className="tq-next" role="status" data-tq-advice="lit">/);
+  // ...and a reply that only lit or pressed is no chat line at all: only words get one
+  assert.match(view, /if \(data\.say \|\| data\.options\?\.length \|\| data\.chips\?\.length\)\s+setMsgs\(\(m\) => \[\.\.\.m, \{ id: aid, role: "assistant"/);
   assert.match(view, /\{table\.speaks && !litNow && !shownAdvice && !noneSaid && !changed && !busy && asking === onTable/, "no Thinking under it");
   assert.match(view, /lit: litNow,/);
   assert.match(src("CanvasItem.jsx"), /<ActionRow inline advised=\{pick\} \/>/);
+});
+
+// A TYPED PUT-DOWN WAS PRESSED (concierge._put_down): the card wears the button's badge (and a Close with a note its note), and on the table
+// it is put down as the row's own press puts it down - folded, the next item up
+test("a typed put-down folds its card with the press badge and the note", () => {
+  const view = src("AssistantView.jsx");
+  const at = view.indexOf("const send = async"), body = view.slice(at, view.indexOf("const sendEmoji", at));
+  assert.match(body, /const pr = data\.pressed;\s+if \(pr\?\.label\) \{\s+setMsgs\(\(m\) => pressLine\(m, pr, pr\.label, pr\.note \|\| ""\)\);/);
+  assert.match(body, /canvasState\.putDown\(here\.key \|\| pr\.key, pr\.tid \?\? null\); advance\(null, true\);/);
+  assert.match(view, /<Pressed label=\{pressedOf\(m\)\} note=\{pressedNoteOf\(m\)\} \/>/);
+  assert.match(view, /\{note && <span className="tq-pressed-note" data-tq-pressed-note="" title=\{note\}>\{note\}<\/span>\}/);
+  assert.match(src("assistantView.css"), /\.tq-pressed-note \{[^}]*white-space: nowrap; overflow: hidden; text-overflow: ellipsis;/);
 });
 
 test("the setting the Assistant names opens with its knob outlined", async () => {

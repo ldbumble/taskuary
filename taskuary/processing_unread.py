@@ -9,7 +9,7 @@ from .timewords import plural
 from .categories import agent_word
 from datetime import date, datetime, timedelta
 
-from . import lanes, processing_all, proposals
+from . import lanes, processing_all, proposals, waiton
 
 # How long a row with NO open task behind it - a draft or an agent's question on its own - stays passed after Next, and how long a
 # phone's section walk is held. FIXED, not a setting (the owner, 2026-10-21): it was task_return_minutes, which timed open tasks
@@ -397,6 +397,8 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
         who = agent_word(task.get('Kind'))                 # what it IS - a profile's name is not a worker
         frm = str(news.get('FromName') or news.get('FromEmail') or 'they').split(' at ')[0]
         card.update(lane='asked' if card['lane'] in ('queued', 'saved', 'stopped') else card['lane'], why=f'{frm} wrote again since {who} finished')
+        # ...and when it is the answer the agent said it was waiting on (waiton.py), Continue leads: it hands them the reply first
+        if waiton.woke_by(task, news): card['woke'] = True
     # ...and WHY it has not started, which the lane word cannot say. "waiting to start" reads as a
     # queue that clears itself; every cause underneath it needs the owner instead (2026-09-14). The row says
     # which in a few words: "handed to coder, not started yet" sat on a task held for the owner, that
@@ -454,6 +456,11 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     if review and card.get('kind') == 'agent': card.update(rid=None, draft=False, reply_pending=True)
     # ...and what an agent already did on it, for the card's middle part (AgentDid) - the reply card had it, the agent's did not
     if card.get('kind') == 'agent' and not card.get('summary'): card['summary'] = funnel.agent_found(store, tid)
+    # WAITING ON A NAMED PERSON (waiton.py): an agent said only they can answer, so until they write the task is theirs - not an
+    # agent stopped or saved (whose Continue would only ask again), nor one parked at its prompt reading "waiting on you"
+    them = waiton.waiting(task) if active and not review and not news else ''
+    if them and (not worker or worker.get('waiting')) and card['lane'] in ('yours', 'queued', 'stopped', 'saved', 'asked', 'blocked'):
+        card.update(lane='theirs', waiting_on=them, why=f'waiting on {waiton.name_of(them)}')
     # ...and an open task nobody closed comes BACK once it has been quiet, so clearing it is a
     # "not now", never a way to lose it. `queued` used to sit in the force-unread clause below, which
     # made a task handed to an agent the one row Done could not shift - the same question answered two

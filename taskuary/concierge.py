@@ -909,7 +909,9 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
         at = next((verbs.index(v) + 1 for v in ('reply', 'redraft') if v in verbs), 0)
         verbs = verbs[:at] + ['find_time'] + verbs[at:]
     # CONTINUE leads on work an agent left - stopped, saved by you, or paused when Taskuary stopped (A19)
-    if item.get('tid') and (item.get('lane') in ('stopped', 'saved') or item.get('paused')): verbs = ['continue'] + [v for v in verbs if v != 'continue']
+    # ...and on work an agent left WAITING ON SOMEONE, once their answer came (waiton.py: `woke`) - Continue hands it the reply first
+    if item.get('tid') and (item.get('lane') in ('stopped', 'saved') or item.get('paused') or item.get('woke')):
+        verbs = ['continue'] + [v for v in verbs if v != 'continue']
     # ...and never on FINISHED work: an agent that is done is closed or opened, not sent on (the owner, 2026-10-18: "no keep going
     # if finished") - more for it is said in the task's own box
     # ...but never on a general agent: its card's own chat box is the way on, so the row draws no Continue (the owner,

@@ -4278,6 +4278,17 @@ def agent_draft(body: AgentDraftBody, request: Request):
     out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent)
     return {**out, **wrapup.attach_files(store, out['review_id'], files, body.agent)} if out.get('ok') and files else out
 
+class AgentWaitBody(BaseModel): task_id: int; who: str; agent: str = 'agent'
+
+@app.post('/api/agent/waiting')
+def agent_waiting(body: AgentWaitBody, request: Request):
+    """`taskuary --waiting-on "<who>"` from an agent's own shell: only that person can answer what it needs, so the task waits on
+    them - and their reply wakes it (waiton.py). Nothing is sent: asking them is a --draft or --reply the owner approves."""
+    from . import waiton
+    _own_task_only(request, body.task_id)
+    if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
+    return waiton.declare(store, body.task_id, body.who, body.agent)
+
 class AgentItemBody(BaseModel): task_id: int; item: int; result: str; overlap: str = ''; settled: bool = False; agent: str = 'agent'; propose: str = ''
 
 @app.post('/api/agent/item')

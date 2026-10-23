@@ -105,9 +105,9 @@ def _open_keyed(url):
 # moment a session unsets its own. An owner's session already has full permissions, so this buys nothing there and stays
 # as it was. A stranger's session runs only the agent commands that go over HTTP with its own task-bound token, where the
 # server's STRANGER scope decides.
-AGENT_ACTS = ('reply', 'reply_file', 'draft', 'draft_file', 'attach', 'item', 'tick', 'untick', 'done', 'note', 'board', 'learned', 'upvote', 'downvote', 'comment',
+AGENT_ACTS = ('reply', 'reply_file', 'draft', 'draft_file', 'attach', 'item', 'tick', 'untick', 'done', 'note', 'waiting_on', 'board', 'learned', 'upvote', 'downvote', 'comment',
               'search', 'message')                  # ...and the owner's mail history, which a stranger's task never reads
-STRANGER_ACTS = AGENT_ACTS[:10]                     # ...the Hub, and the wall's other sessions' words, are not a stranger's to read or write
+STRANGER_ACTS = AGENT_ACTS[:11]                     # ...the Hub, and the wall's other sessions' words, are not a stranger's to read or write
 OWNER_ACTS = ('prompts', 'reroute_held', 'backfill_asks', 'evalset', 'demo', 'link')
 NO_TOKEN = ("not sent: this session has no token of its own (TASKUARY_TOKEN) - Taskuary's own is the owner's, and a "
             "session never borrows it. Restart the session from its task.")
@@ -283,6 +283,11 @@ def main():
                          'this transcript, and draft the reply the sender gets (you are not '
                          'sending it - the owner approves it). Give one sentence on what you did '
                          'or found. Do not run this while waiting on the owner.')
+    # ...and how it WAITS on somebody else (waiton.py): their reply brings the task back to the owner, with Continue
+    ap.add_argument('--waiting-on', metavar='WHO',
+                    help='only this person (a name or an address) can answer what you need: the task waits on them, and '
+                         'their reply brings it back to the owner, who continues this session with it. Ask them with '
+                         '--draft or --reply first; this sends nothing. Not for the owner - ask them here.')
     ap.add_argument('--no-reply', action='store_true',
                     help='with --done: nobody should hear back (the owner said not to answer, or there is nothing '
                          'for the sender) - the task closes with no reply drafted, and your sentence says why'),
@@ -334,6 +339,19 @@ def main():
     # --done goes over HTTP, unlike --note. A note is a database row and any process can write
     # one; ENDING a task needs the live session's scrollback, which exists only inside the
     # running server - this process would find no transcript and wrap an empty one.
+    # first, so `--reply "..." --waiting-on Erin` both asks and waits - the reply branch below ends the command
+    if args.waiting_on:
+        import os, sys
+        try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, OSError): pass
+        tid = os.environ.get('TASKUARY_TASK')
+        if not str(tid).isdigit(): print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no task to wait on'); return
+        got = _post('/api/agent/waiting', {'task_id': int(tid), 'who': args.waiting_on, 'agent': os.environ.get('TASKUARY_AGENT') or 'agent'}, stranger)
+        if not got: return
+        r, out = got
+        print(f"the task waits on {args.waiting_on}; their reply brings it back to the owner." if out.get('ok')
+              else f"not recorded: {out.get('why') or out.get('detail') or r.text[:200]}")
+        if not (args.reply is not None or args.reply_file or args.draft is not None or args.draft_file or args.attach): return
     if args.reply is not None or args.reply_file or args.draft is not None or args.draft_file or args.attach:
         import os, sys
         try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')

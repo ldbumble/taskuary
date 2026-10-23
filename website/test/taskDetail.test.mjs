@@ -37,7 +37,7 @@ test("a failed read ahead holds nothing, so the view reads it itself", async () 
 test("the view draws from the held read, and the reads ahead are where the next view is already known", () => {
   const page = src("TaskPage.jsx"), view = src("AssistantView.jsx"), search = src("SearchEverything.jsx");
   assert.match(page, /const \[detail, setDetail\] = useState\(\(\) => heldTask\(selected\)\);/);
-  assert.match(page, /setDetail\(data\); keepTask\(id, data\);/);
+  assert.match(page, /setDetail\(data\); keepTask\(id, data, undefined, asked\);/);
   assert.match(view, /useEffect\(\(\) => \{ if \(nextTid\) prefetchTask\(api, nextTid\); \}, \[nextTid, displayRevision\(pile\)\]\);/);   // the row Next brings
   assert.match(view, /onPointerEnter=\{\(\) => \{ if \(!isCur && i\.tid\) prefetchTask\(api, i\.tid\); \}\}/);        // a rail row under the pointer
   assert.match(search, /if \(aheadTid\) prefetchTask\(api, aheadTid\);/);                                             // a search hit highlighted
@@ -96,4 +96,39 @@ test("Mark done, Remove and Remind me draw the next item at the press; a failed 
     "advance keeps the drawn item up and hands it to the walk's surface");
   assert.match(view, /if \(keeps\) aheadRef\.current = \{ \.\.\.carried, hash: null, table: tableNow\(\) \};\s+else dropCarried\(\);/,
     "the answer fills the drawn line in place when it names the same item, and takes it down when not");
+});
+
+// WHICH READ IS NEWER (the owner, 2026-10-23: "this shows agent working but it's not working"): the rail was built under the server's lock
+// for minutes, and its "agent working" stood over a task whose own read said the agent had finished - a task read asked after the rail's
+// is the newer word on that task, for its rail row and its header pill alike
+test("a task read speaks over the rail only when it was asked after the rail's, and the rail draws again when one says something new", async () => {
+  const { notePile, noteRead, pageRead, watchReads } = await import("../src/taskDetail.js");
+  forgetTasks();
+  const seen = [], stop = watchReads((tid) => seen.push(tid));
+  notePile(1000);
+  noteRead(7, { task: { TaskId: 7 }, state: "approve", session: null }, 900);
+  assert.equal(pageRead(7), null, "a read asked before the rail's is older than it");
+  noteRead(7, { task: { TaskId: 7 }, state: "approve", session: { alive: false } }, 1100);
+  assert.deepEqual(pageRead(7), { at: 1100, state: "approve", live: false });
+  noteRead(7, { task: { TaskId: 7 }, state: "working", session: { alive: true } }, 1050);
+  assert.equal(pageRead(7).state, "approve", "a read asked earlier never overwrites a later one, whenever it lands");
+  noteRead(7, { task: { TaskId: 8 } }, 1200);
+  assert.equal(pageRead(7).at, 1100, "another task's answer is never kept under this one");
+  notePile(1300);
+  assert.equal(pageRead(7), null, "a newer rail stands again");
+  keepTask(7, { task: { TaskId: 7 }, state: "agentdone" }, undefined, 1400);
+  assert.equal(pageRead(7).state, "agentdone", "the page's own read is kept with the moment it was asked");
+  assert.deepEqual(seen, [7, 7], "a read that says the same thing again draws nothing");
+  stop(); forgetTasks();
+  assert.equal(pageRead(7), null);
+});
+
+test("the rail stamps its reads and its rows and the header pill take the task's newer read", () => {
+  const view = src("AssistantView.jsx"), page = src("TaskPage.jsx");
+  assert.match(view, /pileRef\.current = refreshPilePresentation\(pileRef\.current, data\); notePile\(askedAt\);/, "a rail read, stamped when asked");
+  assert.match(view, /notePile\(forcedLoadStartedAt\.current\);/, "...and one that came with an answer");
+  assert.match(view, /const page = i\.tid \? pageRead\(i\.tid\) : null, why = rowWhy\(i, page\);/);
+  assert.match(view, /railStatus\(i, !canSend\(sendCaps, i\.channel\), page\)/, "the row's icon");
+  assert.match(view, /useEffect\(\(\) => watchReads\(\(\) => reread\(\(n\) => n \+ 1\)\), \[\]\);/, "the rail draws again on a new read");
+  assert.match(page, /page: rail\?\.tid \? pageRead\(rail\.tid\) : null \}\);/, "the header pill takes the same read");
 });

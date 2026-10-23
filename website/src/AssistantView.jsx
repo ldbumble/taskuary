@@ -21,6 +21,7 @@ import SendIcon from "@mui/icons-material/ArrowUpward";
 import SentimentSatisfiedAltIcon from "@mui/icons-material/SentimentSatisfiedAlt";
 import CloseIcon from "@mui/icons-material/Close";
 import ViewSidebarIcon from "@mui/icons-material/ViewSidebar";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import api from "./api.js";
 import { runOperation } from "./taskOps.js";
 import { openReply } from "./replyDraft.js";
@@ -67,7 +68,7 @@ import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns, pickLine, placeLine, pressChip, pressLine, pressedOf } from "./assistantTurns.js";
 import { lightOf, litAfter, litPick, litPull } from "./assistantLight.js";
 import DigestText from "./DigestText.jsx";
-import { firstAppLink, openAppLink, recordPlace } from "./appLinks.js";
+import { canGoBack, firstAppLink, onStep, openAppLink, recordPlace } from "./appLinks.js";
 import { hashFor } from "./canvasLinks.js";
 import { canSend, useCapabilities } from "./capabilities.js";
 import { place } from "./words.js";
@@ -2916,6 +2917,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (!active || !state || old || firstRun || busy) return;
     recordPlace(placeHash, navHow.current); navHow.current = "replace";
   }, [placeHash, active, state, old, firstRun, busy, request]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // BACK IN THE WINDOW ITSELF (TQ-1187): the desktop window has no browser bar, so the step behind a page or task the owner opened is
+  // a press away here - the browser's own Back, the road onPlace already takes. Only over a step of ours (appLinks.canGoBack)
+  const [canBack, setCanBack] = useState(canGoBack);
+  useEffect(() => onStep(() => setCanBack(canGoBack())), []);
   const railPile = useMemo(() => ((leavingTid || continuingTid) && pile?.items
     ? { ...pile, items: asPressed(pile.items, { leaving: leavingTid, continuing: continuingTid }) } : pile),
     [pile, leavingTid, continuingTid]);
@@ -2961,6 +2966,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     <div className={shownAdvice ? "tq-asst-col advising" : "tq-asst-col"} style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div className="tq-chat-head">
         {/* no mark here: the top bar already carries the logo (the owner, 2026-10-06: "don't need it on top of the assistant") */}
+        {canBack && !!placeHash && !old && !firstRun && <Tooltip title="Back (Alt+←)"><IconButton size="small" aria-label="Back" onClick={() => window.history.back()} sx={{ ml: -0.75, mr: 0.25 }}><ArrowBackIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>}
         <div className="who" style={{ minWidth: 0 }}><b>Taskuary</b>{old && <span>An earlier chat · {fmtDateTime(old.at)}</span>}</div>
         <div className="grow" />
         <Tooltip title="Your work"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>

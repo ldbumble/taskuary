@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import { canvasRequestFromHash, hashFor, placeOf } from "../src/canvasLinks.js";
-import { ownerHref, recordPlace, onPlace } from "../src/appLinks.js";
+import { canGoBack, ownerHref, recordPlace, onPlace } from "../src/appLinks.js";
 import { PLACES } from "../src/words.js";
 
 const src = (p) => fs.readFileSync(new URL(p, import.meta.url), "utf8");
@@ -77,8 +77,8 @@ test("the address of a place reads back as the same place", () => {
 const fakeWindow = (hash = "") => {
   const steps = [], on = {};
   const w = { location: { pathname: "/", search: "?k=x", hash }, history: { state: null,
-    pushState: (_, __, u) => { steps.push(["push", u]); w.location.hash = u.includes("#") ? u.slice(u.indexOf("#")) : ""; },
-    replaceState: (_, __, u) => { steps.push(["replace", u]); w.location.hash = u.includes("#") ? u.slice(u.indexOf("#")) : ""; } },
+    pushState: (s, __, u) => { w.history.state = s; steps.push(["push", u]); w.location.hash = u.includes("#") ? u.slice(u.indexOf("#")) : ""; },
+    replaceState: (s, __, u) => { w.history.state = s; steps.push(["replace", u]); w.location.hash = u.includes("#") ? u.slice(u.indexOf("#")) : ""; } },
   addEventListener: (t, f) => { on[t] = f; }, removeEventListener: (t) => { delete on[t]; } };
   return { w, steps, on };
 };
@@ -93,6 +93,19 @@ test("the canvas writes where the owner is: a step for a new place, nothing for 
     recordPlace("#task=12", "replace");                      // the walk's Next: the address follows, no step
     recordPlace("", "replace");                              // an item with no task: the address names none, the sign-in key stays
     assert.deepEqual(steps, [["push", "/?k=x#connector=3"], ["replace", "/?k=x#task=12"], ["replace", "/?k=x"]]);
+  } finally { delete globalThis.window; }
+});
+
+// the header's Back (TQ-1187) shows only over a step of ours, so it never walks out of the app
+test("only a step the app pushed is one Back may take", () => {
+  const { w } = fakeWindow("");
+  globalThis.window = w;
+  try {
+    assert.equal(canGoBack(), false, "a cold page has nothing of ours behind it");
+    recordPlace("#task=11", "replace"); assert.equal(canGoBack(), false, "the walk's Next is no step");
+    recordPlace("#connector=3", "push"); assert.equal(canGoBack(), true);
+    recordPlace("#settings=config", "push"); assert.equal(w.history.state.tqDepth, 2);
+    recordPlace("#settings=docs", "replace"); assert.equal(w.history.state.tqDepth, 2, "said more exactly: the same step");
   } finally { delete globalThis.window; }
 });
 

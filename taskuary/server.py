@@ -3156,6 +3156,13 @@ def unsubscribe_message(mid: int, request: Request, body: UnsubscribeBody = None
         out['opened'] = True
     return out
 
+@app.get('/api/working')
+def working_numbers():
+    """"Is it working?" (the owner, 2026-10-22): whether the app's drafts, triage verdicts and agent results stood, over the last 7
+    and 30 days - counted from the owner's own next moves (working.py)."""
+    from . import working
+    return {'windows': working.windows(store)}
+
 @app.get('/api/messages/{mid}/not-mine/suggest')
 def not_mine_suggest(mid: int, scope: str = None, topic: str = None):
     """The note we'd save, so the panel can show it for editing before it's committed - phrased

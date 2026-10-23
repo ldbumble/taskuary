@@ -19,7 +19,7 @@ test("a section's name, its anchor and its crumb come from one place", () => {
   assert.match(map, /export const secId = /, "one function builds the id both sides use");
   assert.match(src, /const SECTIONS = \{ about: ABOUT_SECTIONS, config: GROUPS, audit: AUDIT_SECTIONS \};/,
     "Configuration's sections ARE the schema's groups - adding a group must not mean editing a rail by hand");
-  assert.ok(secNames("ABOUT_SECTIONS").length === 3 && secNames("AUDIT_SECTIONS").length === 2);
+  assert.ok(secNames("ABOUT_SECTIONS").length === 3 && secNames("AUDIT_SECTIONS").length === 3);
 });
 
 test("every section the rail offers is a heading the page actually stamps", () => {
@@ -30,6 +30,7 @@ test("every section the rail offers is a heading the page actually stamps", () =
   assert.match(src, /<SectionHead page="config" name=\{g\} \/>/);
   assert.match(src, /<SectionHead page="audit" name=\{AUDIT_SECTIONS\[0\]\} \/>/);
   assert.match(src, /<SectionHead page="audit" name=\{AUDIT_SECTIONS\[1\]\} \/>/);
+  assert.match(src, /<SectionHead page="audit" name=\{AUDIT_SECTIONS\[2\]\} \/>/);
   assert.equal((about.match(/id=\{secId\("about", /g) || []).length, secNames("ABOUT_SECTIONS").length,
     "About you stamps one id per section it declares");
 });

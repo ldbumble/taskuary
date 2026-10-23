@@ -3,6 +3,7 @@
 """
 import asyncio, collections, contextlib, copy, json, re, secrets, sys, threading, time, weakref
 import requests
+from starlette.concurrency import run_in_threadpool
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -264,6 +265,7 @@ ATTACH_QUIET = 10
 from loguru import logger
 import time as _time
 QUIET_GETS = {'/api/ingest/status'}     # polled GETs that are not logged when they succeed (request_log)
+SLOW_REQUEST = 5.0                      # seconds: a request this slow is logged at INFO with its store.lock wait (request_log)
 
 @app.middleware('http')
 async def walk_gate(request: Request, call_next):
@@ -293,7 +295,8 @@ async def owner_presence(request: Request, call_next):
 async def request_log(request: Request, call_next):
     t0 = _time.time()
     try:
-        resp = await call_next(request)
+        # what this request spent queued on store.lock, as against running - the context rides into the thread pool with it
+        with store_mod.lock_wait_meter() as waited: resp = await call_next(request)
     except Exception as e:
         # WHAT BROKE, IN THE PAGE. The trace goes to taskuary.log as it always has, but the browser
         # got a bare 500 with no body - so the Timeline sat on "Loading timeline" for ever and the
@@ -309,7 +312,13 @@ async def request_log(request: Request, call_next):
     # ...except a status poll that answered: the page asks every second or so, and those lines were three
     # quarters of taskuary.log - the 5 MB rotation then kept a day and a half of anything else (P13)
     if request.url.path.startswith('/api') and not (request.method == 'GET' and request.url.path in QUIET_GETS and resp.status_code < 300):
-        logger.debug(f'{request.method} {request.url.path} -> {resp.status_code} ({int((_time.time() - t0) * 1000)}ms)')
+        took = _time.time() - t0
+        # A SLOW ONE SAYS WHERE ITS TIME WENT (2026-10-23): waited on the store's lock, or ran (its own work, the thread pool, the
+        # network). The freezes left only "20 requests finished in the same second"; this line, with store.lock's own warning
+        # naming the holder, is what tells a held store from a slow handler next time.
+        why = f' - store.lock wait {waited[0]:.1f}s, ran {max(0.0, took - waited[0]):.1f}s' if took >= SLOW_REQUEST else ''
+        (logger.info if took >= SLOW_REQUEST else logger.debug)(
+            f'{request.method} {request.url.path} -> {resp.status_code} ({int(took * 1000)}ms){why}')
     return resp
 
 @app.middleware('http')
@@ -377,7 +386,7 @@ async def token_gate(request: Request, call_next):
     # no other mail, no settings, no neighbour
     elif scope == guard.STRANGER:
         tid = guard.stranger_tid(cfg['server'], presented)
-        why = guard.stranger_denied(request.method, request.url.path, request.query_params, tid, _stranger_file_task)
+        why = await run_in_threadpool(guard.stranger_denied, request.method, request.url.path, request.query_params, tid, _stranger_file_task)   # it may ask the store
         if why:
             logger.warning(f'stranger session on task {tid} refused {request.method} {request.url.path} - {why}')
             return JSONResponse({'detail': f'agents cannot do this: {why}.'}, status_code=403)
@@ -1868,7 +1877,7 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
     files its reply on the task.
     """
     from . import general
-    _refuse_closed_chat(task_id)              # before the stream opens: a plain 409 the composer can say
+    await run_in_threadpool(_refuse_closed_chat, task_id)    # before the stream opens: a plain 409 the composer can say (a store read: off the loop)
     loop, events, cancel = asyncio.get_running_loop(), asyncio.Queue(), threading.Event()
 
     def put(event):
@@ -3775,7 +3784,7 @@ async def review_attach(rid: int, request: Request, name: str = ''):
     waiting room's images); `name` is what the recipient will see it called."""
     from . import verdicts
     data = await request.body()
-    try: return verdicts.attach(store, rid, name or 'attachment', data, ACTOR)
+    try: return await run_in_threadpool(verdicts.attach, store, rid, name or 'attachment', data, ACTOR)      # it writes: off the loop
     except ValueError as e: raise HTTPException(422, str(e))
 
 @app.delete('/api/reviews/{rid}/attachment')
@@ -5257,8 +5266,8 @@ def with_images(text: str, paths) -> str:
 
 
 async def _save_prompt_image(tid: int | None, request: Request):
-    """Store an image that will be named in a CLI prompt, from any prompt surface."""
-    if tid is not None and not store.get_task(tid): raise HTTPException(404, 'task not found')
+    """Store an image that will be named in a CLI prompt, from any prompt surface. The store and the disk off the loop."""
+    if tid is not None and not await run_in_threadpool(store.get_task, tid): raise HTTPException(404, 'task not found')
     mime = (request.headers.get('content-type') or '').split(';')[0].strip().lower()
     ext = _IMG_EXT.get(mime)
     if not ext: raise HTTPException(415, 'paste a PNG, JPEG, GIF or WebP image')
@@ -5268,8 +5277,10 @@ async def _save_prompt_image(tid: int | None, request: Request):
     d = config.home() / 'attachments' / ('waitroom' if tid is not None else 'prompt') / (str(tid) if tid is not None else time.strftime('%Y%m'))
     d.mkdir(parents=True, exist_ok=True)
     p = d / f'{time.strftime("%Y%m%d-%H%M%S")}-{secrets.token_hex(3)}.{ext}'
-    p.write_bytes(data)
-    if tid is not None: store.audit('task', tid, 'waitroom_image', ACTOR, detail={'path': str(p), 'size': len(data)})
+    def keep():
+        p.write_bytes(data)
+        if tid is not None: store.audit('task', tid, 'waitroom_image', ACTOR, detail={'path': str(p), 'size': len(data)})
+    await run_in_threadpool(keep)
     return {'path': str(p), 'size': len(data)}
 
 
@@ -5999,7 +6010,8 @@ async def voice_transcribe(request: Request):
     data = await request.body()
     if not data: raise HTTPException(422, 'no audio in the request')
     mime = (request.headers.get('content-type') or 'audio/webm').split(';')[0].strip()
-    try: return voice.transcribe(store, data, mime, f'clip.{voice.ext_for(mime)}')
+    # a call to the transcription service, seconds long: on the loop it froze every pane and request until it answered
+    try: return await run_in_threadpool(voice.transcribe, store, data, mime, f'clip.{voice.ext_for(mime)}')
     except RuntimeError as e: raise HTTPException(409, str(e))
     except requests.RequestException as e: raise HTTPException(502, f'could not reach the transcription service: {str(e)[:160]}')
 
@@ -9058,12 +9070,13 @@ async def terminal_ws(ws: WebSocket, sid: str):
                     await send_frame(geom_frame(t, owns_geometry()))
                     continue
                 t.resize(rows, cols)
-                # ...and the next session opens at this size instead of being grown into it
-                hub_term.remember_geometry(store, rows, cols)
                 # A real pty says it changed size (Term emits RESIZED, and every pane hears it); a general session and the demo's
                 # replay change theirs silently, so the pane that just took the geometry was never told it owns it and went on
                 # drawing at the old size (2026-10-15, Chat after the Wall). Say it to this pane directly.
                 if not isinstance(t, hub_term.Term): await send_frame(geom_frame(t, owns_geometry()))
+                # ...and the next session opens at this size instead of being grown into it. A store write: off the loop, and after
+                # the pane's answer, so a store held by a sync never delays it (2026-10-23)
+                await run_in_threadpool(hub_term.remember_geometry, store, rows, cols)
     except (WebSocketDisconnect, RuntimeError, ValueError):
         pass
     finally:

@@ -57,6 +57,9 @@ CASES = [
 ]
 
 RAIL = {'Vendor W-9 for the new supplier', 'Move payroll to Payworth', 'Migrate the census export'}     # judged as the processing rail draws them
+# a duplicate whose agent is at work while the case is judged: "an agent is on it" now needs a live session or run, not the task's
+# in_progress status a stopped agent leaves behind (advisor.related_line, 2026-10-22) - the demo seeds no live session, so the case says one
+AGENT_ON = {'Month-end close is short': 'Reconcile the August GL export'}
 
 
 def world():
@@ -150,7 +153,10 @@ def run(llm=None) -> list:
     for title, ok, never, needs in CASES:
         it = by.get(title)
         if not it: out.append({'case': title, 'grade': 'missing', 'verb': None, 'line': 'no item', 'missing': needs}); continue
-        verb, line, prompt = judge(s, it, syn, llm)
+        on = {t['TaskId'] for t in s.list_tasks() if AGENT_ON.get(title) and AGENT_ON[title].lower() in str(t.get('Title') or '').lower()}
+        from taskuary import workerstate as ws
+        live = ws._live
+        with mock.patch.object(ws, '_live', lambda tid: object() if tid in on else live(tid)): verb, line, prompt = judge(s, it, syn, llm)
         out.append({'case': title, 'key': it.get('key'), 'verb': verb, 'line': line, 'grade': grade(verb, ok, never),
                     'missing': [n for n in needs if n.lower() not in prompt.lower()], 'prompt': prompt})
     return out

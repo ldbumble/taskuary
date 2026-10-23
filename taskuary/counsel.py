@@ -72,6 +72,10 @@ def dossier(store, msg: dict, days: int = DAYS, exclude_mid: int = None, skip_co
     subj_toks = set(tokens(msg.get('subject') or ''))
     conv = msg.get('conversation_id')
     since, parts = _since(days), []
+    # who they are to the owner (orgchart.py) - their manager, a report, the person who owns payroll: every reader of this dossier
+    # (the drafter, the Advisor, the agent's context file) weighs a manager's ask as one
+    from . import orgchart
+    if (rel := orgchart.relation_of(store, frm, msg.get('from_name') or '')): parts.append(f'WHO THEY ARE TO YOU: {rel}')
     if frm:
         theirs = [r for r in store.messages_from(frm, since, 8) if r['MessageId'] != exclude_mid and not (skip_conv and conv and r.get('ConversationId') == conv)]
         if theirs: parts.append(f'FROM THIS SENDER, last {days} days:\n' + '\n'.join(_line(r) for r in theirs))

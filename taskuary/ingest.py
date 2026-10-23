@@ -575,6 +575,12 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     except Exception as e: logger.debug(f'correction evidence skipped: {e}')
     thread = others_on_thread(store, msg, mine)
     if (put_to := addressed_to(store, msg, me)): thread = {**thread, 'addressed_to': put_to}
+    # ...and who the sender IS to the owner - their manager, someone reporting to them, the person who owns payroll (orgchart.py): a
+    # request from the owner's own manager read exactly like anybody's on the To line (the org-chart gap, 2026-10-22)
+    try:
+        from . import orgchart
+        if (rel := orgchart.relation_of(store, msg.get('from_email'), msg.get('from_name'))): thread = {**thread, 'sender_relation': rel}
+    except Exception as e: logger.debug(f'org chart skipped for triage: {e}')
     candidates = chat_candidates(store, msg) if is_chat(msg) else None
     repos = repo_candidates(store)
     # ...and what was actually SAID before this, theirs and ours. A mail quotes its own thread

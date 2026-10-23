@@ -215,11 +215,11 @@ class WhatsAppTests(unittest.TestCase):
         with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: bridge):
             st = messengers.wa_status(c)
         self.assertEqual((st['admitted'], st['turned_away'], st['last_failure']['kind'], st['contact_sync']['why']), (2, 12, 'decrypt', 'missing key'))
-        self.assertEqual(st['line'], 'Connected · 2 chats · last message 40 min ago · 12 turned away')
-        self.assertEqual((st['parts'], st['fix']), (['Connected', '2 chats', 'last message 40 min ago'], ''))
+        self.assertEqual(st['line'], 'Connected · 2 chats · last message 40m ago · 12 turned away')
+        self.assertEqual((st['parts'], st['fix']), (['Connected', '2 chats', 'last message 40m ago'], ''))
         with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {**bridge, 'contactSync': {'failures': 3, 'why': 'missing key'}}):
             st = messengers.wa_status(c)
-        self.assertEqual((st['line'], st['fix']), ('Connected · 2 chats · last message 40 min ago · contact names not syncing · 12 turned away', 'pair'))
+        self.assertEqual((st['line'], st['fix']), ('Connected · 2 chats · last message 40m ago · contact names not syncing · 12 turned away', 'pair'))
         with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {**bridge, 'connected': False, 'loggedOut': True}):
             st = messengers.wa_status(c)
         self.assertEqual((st['line'], st['fix']), ('Logged out', 'pair'))

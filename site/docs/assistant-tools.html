@@ -141,7 +141,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tr>
 <td><strong>pipe</strong></td>
 <td>the walk and sets of items, and filing mail</td>
-<td>pipe.clear, pipe.defer(select, until), pipe.close(select), review.each, button.light(button, ref?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage</td>
+<td>pipe.clear, pipe.defer(select, until), pipe.close(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage</td>
 </tr>
 <tr>
 <td><strong>reports</strong></td>
@@ -433,10 +433,11 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">Brings up its button for you to press.</p><h3 id="review-each"><code>review.each</code><a class="anchor" href="#review-each" aria-label="Link to this section">#</a></h3>
 <p>&quot;approve all the drafts&quot;: brings the next draft waiting for a Send up with its Send lit, and says how many are left - each one still goes only by its own press; CALL it again for the one after.</p>
 <p class="runs">Brings up its button for you to press.</p><h3 id="button-light"><code>button.light</code><a class="anchor" href="#button-light" aria-label="Link to this section">#</a></h3>
-<p>Light any button a row draws, by its name.</p>
+<p>Light any button a row draws, by its name. A put-down (close, close_note with its note, remove, not_ours) is pressed.</p>
 <ul>
 <li><code>button</code> - the verb (THE BUTTONS BY NAME, or a row&#39;s own: review_changes, run_another, attach, pick_repo, change_kind...)</li>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the row on the table</li>
+<li><code>note</code> (optional) - a close_note&#39;s note, the owner&#39;s reason in their words</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="item-settle"><code>item.settle</code><a class="anchor" href="#item-settle" aria-label="Link to this section">#</a></h3>
 <p>Put the item down, read and settled.</p>

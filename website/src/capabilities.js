@@ -31,8 +31,10 @@ export const draftCanSend = (caps, r) => {
 // agents.coding_ready). '' when it can start; Connect an AI stays the lit move (the Advisor's strip)
 export const NO_AI_WHY = "No AI is connected - connect one first";
 export const NO_CODING_TOOL = "Pick a coding tool first";
+// ...the coding road asks only its tool: a coding agent runs its own CLI with no AI connected, and greying it on `ai` left the
+// owner nothing to press where the coding agent would have worked (the dead-end walk's nocli/badrepo faults, 2026-10-22)
 export const cannotStart = (caps, { coding = false, read = false, brains = [], codingReady = true } = {}) =>
-  caps?.ai === false || (read && !coding && !brains.length) ? NO_AI_WHY : coding && read && !codingReady ? NO_CODING_TOOL : "";
+  coding ? (read && !codingReady ? NO_CODING_TOOL : "") : caps?.ai === false || (read && !brains.length) ? NO_AI_WHY : "";
 export function refreshCapabilities() {
   asked = null;
   return capabilities().then((c) => { subs.forEach((f) => f(c)); return c; });

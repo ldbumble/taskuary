@@ -13,9 +13,10 @@ const { cannotStart, NO_AI_WHY, NO_CODING_TOOL } = (() => {
   return new Function(`${src}\nreturn { cannotStart, NO_AI_WHY, NO_CODING_TOOL };`)();
 })();
 
-test("cannotStart: no AI greys both roads; no coding tool greys only coding; an unread list greys nothing", () => {
+test("cannotStart: no AI greys the general road; no coding tool greys only coding; an unread list greys nothing", () => {
   assert.equal(cannotStart({ ai: false }), NO_AI_WHY);
-  assert.equal(cannotStart({ ai: false }, { coding: true }), NO_AI_WHY);
+  assert.equal(cannotStart({ ai: false }, { coding: true, read: true, codingReady: true }), "", "a coding agent runs its own tool, no AI needed");
+  assert.equal(cannotStart({ ai: false }, { coding: true, read: true, codingReady: false }), NO_CODING_TOOL);
   assert.equal(cannotStart({ ai: true }, { read: true, brains: [] }), NO_AI_WHY, "general_brains read and empty is no AI");
   assert.equal(cannotStart({ ai: true }, { read: false, brains: [] }), "", "not read yet is not a no");
   assert.equal(cannotStart({ ai: true }, { read: true, brains: [{ pick: "cli:codex" }] }), "");

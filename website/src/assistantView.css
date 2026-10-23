@@ -625,6 +625,9 @@
 .tq-pressed { flex-shrink: 0; margin-left: auto; padding: 2px 8px; border: 1px solid #d8d1c5; border-radius: 99px; background: #f4f6f8;
   color: #55697a; font: 500 10.5px 'IBM Plex Sans', system-ui, sans-serif; white-space: nowrap; animation: tq-pressed-in .28s ease-out both; }
 .tq-msg.receipt .tq-pressed { margin-left: 8px; }
+/* a Close with a note: its note after the badge, one muted line, cut short - whole on hover */
+.tq-pressed-note { flex: 0 1 auto; min-width: 0; max-width: 38%; margin-left: -4px; color: #7d8a95; font: italic 400 11px 'IBM Plex Sans', system-ui, sans-serif;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @keyframes tq-pressed-in { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .tq-pressed { animation: none; } }
 /* a browse card sits in the conversation at the canvas's width, like the task view */

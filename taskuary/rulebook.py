@@ -42,14 +42,13 @@ def working_days(since, now: datetime = None) -> int:
 
 
 def ago(at, now: datetime = None) -> str:
-    """'40 min ago', '3 hours ago', 'yesterday', '4 days ago' - '' for a time nothing can read."""
+    """'40 minutes ago', '3 hours ago', 'yesterday', '4 days ago' - '' for a time nothing can read."""
     t = _dt(at)
     if not t: return ''
-    s = max(0, int(((now or datetime.now()) - t).total_seconds()))
-    if s < 3600: return f'{max(1, s // 60)} min ago'
-    if s < 86400: return f"{s // 3600} hour{'s' if s >= 7200 else ''} ago"
-    d = s // 86400
-    return 'yesterday' if d == 1 else f'{d} days ago'
+    # ...said by timewords, as every other age is - only "yesterday" is the line's own word
+    from .timewords import ago_m
+    m = max(1, ((now or datetime.now()) - t).total_seconds() // 60)
+    return 'yesterday' if 1440 <= m < 2880 else ago_m(m, long=True)
 
 
 def _say(state: str, **facts) -> str:

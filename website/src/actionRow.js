@@ -35,8 +35,11 @@ export const acted = (id) => pressed.forEach((f) => f(id));
 // settled, the line had already moved on to the next item's
 const pressing = new Set();
 export const onPressing = (f) => { pressing.add(f); return () => pressing.delete(f); };
+// ...a card's own button that acts without the row (the draft's Send, Redraft and Copy under it) is heard the same way, before it runs
+// (phase B, 2026-10-23: they were never recorded). Told twice when the row ran it - the server keeps one
+export const announce = (id) => pressing.forEach((f) => { try { f(id); } catch { /* a lost record never stops the press */ } });
 export const press = (id, e, anchor) => {
-  pressing.forEach((f) => { try { f(id); } catch { /* a lost record never stops the press */ } });
+  announce(id);
   const out = live.get(id)?.run?.(e, anchor);
   Promise.resolve(out).catch(() => {}).then(() => acted(id));
   return out;

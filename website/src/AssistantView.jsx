@@ -30,6 +30,7 @@ import { loadGeneral } from "./lazyGeneral.js";
 // the static demo's guided journey: nothing outside the demo build ever draws it, so nothing there fetches it
 const DemoJourney = DEMO ? lazyView(() => import("./DemoJourney.jsx")) : () => null;
 import { advisedIn, onPressed, onPressing, press as pressRow, rowNow, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { deskPress, notePress as notePressed } from "./pressLog.js";
 import { forgetTasks, heldTask, heldTerm, prefetchTask } from "./taskDetail.js";
 import { readLists } from "./connectorLists.js";
 import { hint as btnHint, label as btn, liveVerb, verbOfRow } from "./buttons.js";
@@ -1517,15 +1518,17 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const onTableRef = useRef(null);
   useEffect(() => { onTableRef.current = onTable; }, [onTable]);
   useEffect(() => onPressed(() => { if (onTableRef.current) readAdvice(onTableRef.current, true); }), [readAdvice]);
-  // LIT AND PRESSED (the deep dive, 2026-10-20): each press on the row, Next included, while a line is shown says what was lit and the
-  // revision it was judged at (advisor.press) - the evidence the owner's moves are learned from. Nothing on screen changes for it.
-  const shownRef = useRef(null);
-  const notePress = useCallback((pressed) => {
-    const a = shownRef.current;
-    if (!a?.key || !a.verb || !pressed) return;
-    api.post("/api/advice/press", { key: a.key, advised: a.verb, pressed, revision: a.revision || null }).catch(() => {});
+  // LIT AND PRESSED (the deep dive, 2026-10-20): each press on the row says what was lit and the revision it was judged at
+  // (advisor.press) - the evidence the owner's moves are learned from. EVERY press, lit or not (phase B, 2026-10-23: only a press
+  // under a shown line was sent): what the row had filled and what else it offered (pressLog.deskPress). Nothing on screen changes.
+  const shownRef = useRef(null), pickRef = useRef(null), activeRef = useRef(active);
+  activeRef.current = active;
+  const notePress = useCallback((id) => {
+    if (!activeRef.current) return;                // a card pressed on the Tasks tab is that tab's to record (TaskPage)
+    const a = shownRef.current, key = a?.key || onTableRef.current;
+    notePressed(api, { key, surface: "desk", ...deskPress(rowNow(), pickRef.current, id), advised: a?.verb || null, revision: a?.revision || null });
   }, []);
-  useEffect(() => onPressing((id) => notePress(verbOfRow(id) || String(id || "").split(":").pop())), [notePress]);
+  useEffect(() => onPressing(notePress), [notePress]);
   // ARRIVING (welcome.arrive): the page opening, or the window coming back into focus, is the owner sitting down - the
   // first time on a new day, or after a long gap, the chat opens with the day in a breath. Leaving is noted too, so "what
   // came in while you were away" counts from when they actually went. Code on the server, never a model; a miss is silent.
@@ -2860,6 +2863,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const rowVerbs = useRowVerbs();
   // setup's lit move on the row - About your work's Next (`about:next`) included: it was never lit, as its id is not `setup:` (2026-10-19)
   const setupLit = !firstRun ? null : (() => { const v = rowVerbs.list.find((x) => /^(setup|about):/.test(String(x.id)) && x.tone === "p" && !x.disabled); return v ? { id: v.id } : null; })();
+  pickRef.current = stripPick || setupLit;         // what the row is drawn with - a press records what it had filled (notePress)
   const rowEmpty = !rowVerbs.list.some((v) => !String(v.id).startsWith("floor:"));
   // ...and not under a page the owner opened on the canvas (Reports, Connections): they are working there, and the line read
   // as part of that page (the owner's workflow screenshot, 2026-10-15)

@@ -14,7 +14,7 @@ import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
 import { CcRow, DraftField, ToRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
 import { deliveryCc, deliveryFiles, deliveryMeta, replyContext } from "./replyDelivery.js";
-import { acted, useLit, useVerbs } from "./actionRow.js";
+import { acted, announce, useLit, useVerbs } from "./actionRow.js";
 import { hint as btnHint, label as btn } from "./buttons.js";   // theme.jsx owns `label`
 import { useDraftJob } from "./replyDraft.js";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
@@ -132,6 +132,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   useEffect(() => { setCopied(false); }, [r.ReviewId, value]);
   const copyTitle = `${btnHint("copy")}. It cannot be sent from here - ${r.SendBlock || "this channel cannot be replied to"}.`;
   const copyIt = async () => {
+    announce(no("copy"));
     try { await navigator.clipboard.writeText(value); setCopied(true); }
     catch { const el = draftRef.current?.querySelector("textarea"); el?.focus(); el?.select(); }   // a refused clipboard: the text, selected, to copy by hand
     finally { acted(no("copy")); }
@@ -153,6 +154,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
 
   const decideBoth = async (verb) => {
     if (delivery.frozen) return;
+    announce(no(verb));
     setBusy(true); setErr(""); setSendErr(""); setCoFail(null);
     try {
       const { data } = await api.post(`/api/reviews/${closeout.ReviewId}/decide`,
@@ -172,6 +174,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // used to return quietly and leave a "NOT SENT" line in the task history for you to find later.
   const decide = async (verb, anyway = false) => {
     if (delivery.active || (delivery.frozen && verb !== "approve")) return;
+    announce(no(verb));
     setBusy(true); setErr(""); setSendErr("");
     try {
       const { data } = await api.post(`/api/reviews/${r.ReviewId}/decide`,
@@ -209,6 +212,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
 
   const redraft = async () => {
     if (delivery.frozen) return;
+    announce(no("redraft"));
     setBusy(true);
     try { await api.post(`/api/reviews/${r.ReviewId}/draft`); setText(null); onChanged?.(); }
     catch (e) { setErr(e?.response?.data?.detail || "Redraft failed"); }

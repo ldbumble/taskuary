@@ -114,8 +114,24 @@ class PausedConversationTests(unittest.TestCase):
         item = funnel.paused_conversation(s, {'key': 'msg:1', 'kind': 'todo', 'lane': 'asked',
                                                'tid': tid, 'title': 'Set up ADP'})
         self.assertEqual((item['key'], item['kind'], item['lane'], item['paused'], item['mode']),
-                         (f'agent:{tid}', 'agent', 'blocked', True, 'assistant'))
+                         (f'agent:{tid}', 'agent', 'stopped', True, 'assistant'))
         self.assertIn('sign-in page is open', item['tail'][0])
+
+    def test_a_saved_or_failed_conversation_is_never_waiting_on_you(self):
+        "No session is live on it, so nothing asks: the hand ('blocked') was untrue of every one (2026-10-22 walk)."
+        from taskuary import terminal, workerstate as ws
+        s = store()
+        tid = s.create_task({'Title': 'Compare vendors', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        s.add_comment(tid, 'assistant', 'assistant_agent', 'Here is the comparison.')
+        s.save_session(tid, 'cli:codex', '', 'native-1', 'context-1')
+        paused = lambda: funnel.paused_conversation(s, {'key': 'msg:1', 'kind': 'todo', 'lane': 'asked', 'tid': tid, 'title': 't'})
+        ws.record(s, tid, 'sid1', 'failed', text='No AI is connected - connect one', source='api')
+        item = paused()
+        self.assertEqual((item['lane'], item.get('failed')), ('stopped', True))
+        self.assertTrue(item['why'].startswith('Failed - No AI is connected'), item['why'])
+        s.tag_task(tid, terminal.SAVED, actor='owner')
+        self.assertEqual(paused()['lane'], 'saved')
+        self.assertFalse(any(a['item'] == f'agent:{tid}' for a in funnel.alerts(s, [paused()])), 'a saved agent interrupts nobody')
 
     def test_a_task_with_no_saved_conversation_stays_an_ordinary_task(self):
         s = store()

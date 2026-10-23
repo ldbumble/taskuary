@@ -190,7 +190,8 @@ class AuditAndPhoneTests(unittest.TestCase):
     def test_setting_taskuary_up_from_a_phone_names_the_setup_button(self):
         from taskuary import remote_assistant
         self.assertIn('Setup button', remote_assistant.script_words(self.s, 'set up Taskuary'))
-        self.assertIn('sentence', remote_assistant.script_words(self.s, 'set up a report'))
+        with mock.patch('taskuary.capabilities.has_ai', return_value=True):        # with no AI it says so (test_phone_approved)
+            self.assertIn('sentence', remote_assistant.script_words(self.s, 'set up a report'))
 
 
 if __name__ == '__main__':

@@ -236,7 +236,7 @@ test("starting the new one pauses a live session first - its handover kept, no r
 test("an unstarted general task's Send to agent is the row's lead, not a button inside the card", () => {
   assert.match(tasks, /const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession;/);
   assert.match(tasks, /sendGeneral \? \[\{ id: "send-general", group: "agent", lead: !pendingReview/);
-  assert.match(tasks, /\{!inRow && <Button size="small" variant="contained" disableElevation disabled=\{!!startingAgent\}\s+startIcon=\{startingAgent === "general"/);
+  assert.match(tasks, /\{!inRow && <span title=\{noAiWhy \|\| undefined\}><Button size="small" variant="contained" disableElevation disabled=\{!!startingAgent \|\| !!noAiWhy\}\s+startIcon=\{startingAgent === "general"/);
 });
 
 test("a live session's Mark done asks for a place on the bar", () => {

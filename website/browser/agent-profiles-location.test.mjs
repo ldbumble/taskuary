@@ -6,10 +6,6 @@ async function clickText(page, text, selector = 'button,p,div') {
   await page.waitForFunction(({ text, selector }) => [...document.querySelectorAll(selector)].some((el) => el.textContent.trim() === text && el.getBoundingClientRect().height), {}, { text, selector });
   await page.evaluate(({ text, selector }) => [...document.querySelectorAll(selector)].find((el) => el.textContent.trim() === text && el.getBoundingClientRect().height).click(), { text, selector });
 }
-async function selectProvider(page, label) {
-  await page.click('[role="dialog"] [role="combobox"]');
-  await clickText(page, label, '[role="option"]');
-}
 async function connectionsPage(page) {
   await clickNav(page, 'Connections');
   await page.waitForSelector('input[placeholder^="Search connectors"]');
@@ -18,7 +14,8 @@ async function connectionsPage(page) {
   await page.waitForSelector('[data-connection="claude"]');
 }
 
-test('Connections share CLI commands; Docs profiles choose only provider and model', { timeout: 120000 }, async (t) => {
+// A PROFILE IS A NAME AND INSTRUCTIONS (the owner, 2026-10-22): no provider or model field; one saved with them still loads
+test('Connections share CLI commands; Docs profiles are a name and instructions only',{ timeout: 120000 }, async (t) => {
   const harness = await startHarness(); t.after(() => harness.close());
   const page = await harness.newPage(), errors = [], writes = [], installs = [];
   let installerRevision = 1;
@@ -111,13 +108,13 @@ test('Connections share CLI commands; Docs profiles choose only provider and mod
   assert.doesNotMatch(await page.$eval('[role="dialog"]', (el) => el.innerText), /Arguments|Timeout|Command|Install|Set it up/);
   await page.type('[role="dialog"] input', 'scout');
   await page.type('[role="dialog"] textarea', 'Compare vendors and cite public sources.');
-  await selectProvider(page, 'Claude Code');
-  await page.type('[role="dialog"] .MuiAutocomplete-input', 'sonnet');
+  assert.doesNotMatch(await page.$eval('[role="dialog"]', (el) => el.innerText), /Model provider|Model name/);
+  assert.equal(await page.$('[role="dialog"] .MuiAutocomplete-input'), null);
   await clickText(page, 'Save', 'button');
   await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
   assert.equal(writes[1].name, 'scout');
-  assert.equal(writes[1].update.provider, 'cli:claude');
-  assert.equal(writes[1].update.model, 'sonnet');
+  assert.equal(writes[1].update.provider, undefined);
+  assert.equal(writes[1].update.model, undefined);
   assert.equal(writes[1].update.triage_enabled, true);
   assert.equal(writes[1].update.cmd, undefined);
   await page.waitForFunction(() => document.body.innerText.includes('SCOUT.md'));
@@ -126,15 +123,12 @@ test('Connections share CLI commands; Docs profiles choose only provider and mod
   assert.doesNotMatch(await page.evaluate(() => document.body.innerText), /Set it up|Edit command|Install|--verbose|Devin CLI/);
   await page.evaluate(() => [...document.querySelectorAll('[data-profile="researcher"] button')].find((el) => el.textContent === 'Edit').click());
   await page.waitForSelector('[role="dialog"]');
-  await selectProvider(page, 'OpenAI Codex CLI');
-  await page.type('[role="dialog"] .MuiAutocomplete-input', 'test-codex-model');
   await page.screenshot({ path: '../.codex-tmp/profile-editor.png', fullPage: true });
   await clickText(page, 'Save', 'button');
   await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
   assert.equal(writes.length, 3);
   assert.equal(writes[2].name, 'researcher');
-  assert.equal(writes[2].update.provider, 'cli:codex');
-  assert.equal(writes[2].update.model, 'test-codex-model');
+  assert.equal(writes[2].update.provider, undefined, 'the saved provider is never sent back');
   assert.equal(writes[2].update.purpose, 'Research public information');
   assert.equal(writes[2].update.kind, 'research');
   assert.equal(profiles.coding.provider, 'cli:claude');

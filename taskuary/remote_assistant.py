@@ -1633,6 +1633,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             if here.get('chat'): store.set_setting(f"{REDRAFT_KEY}:{here['channel']}:{here['chat']}", '', 'assistant')
             on = _item_for(store, act.get('key') or '', item)
             if not (on or {}).get('mid'): return stuck(store, 'That draft is not in front of you any more - nothing changed.')
+            if (off := no_ai(store, 'write the draft')): return off
             rid = _draft(store, on, 'redraft', act.get('how') or '')
             if not rid: return stuck(store, 'I could not rewrite that draft here - the one you had is still waiting.')
             return turn_text(_draft_card(store, rid, actor), store=store)
@@ -1696,7 +1697,9 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
                              store=store, extra=rows + [('Cancel', {'t': 'stay', 'key': key})])
         if verb == 'answer_agent':
             return f"What should I tell {on.get('agent') or 'it'}? Say it here and I will pass it straight to the run that is waiting."
-        if verb == 'redraft' and on.get('mid') and (on.get('rid') or _draft_text(store, on)):
+        if verb == 'redraft' and on.get('mid') and (off := no_ai(store, 'write the draft')): return off
+        # ...and only over WORDS to change: an empty draft (Reply with no AI) has nothing for "What should change?" to be about
+        if verb == 'redraft' and on.get('mid') and _draft_text(store, on).strip():
             # REDRAFT ASKS WHAT TO CHANGE (A18, 2026-10-22): it rewrote at once with no instruction. The next typed line is the instruction
             here = asking() or {}
             if here.get('chat'): store.set_setting(f"{REDRAFT_KEY}:{here['channel']}:{here['chat']}", key, 'assistant')
@@ -1762,6 +1765,19 @@ def stuck(store, text: str) -> str:
     by guessing (2026-09-29 audit: four phone error paths sent text with nothing to pick)."""
     from . import concierge
     return turn_text({'say': text, 'item': None}, store=store, extra=[(concierge.CHIP_WORDS['next'], {'t': 'next'})])
+
+
+def no_ai(store, what: str) -> str | None:
+    """None while an AI is connected; else the no-AI line and the pick that connects one (W11) - never a question nobody can answer:
+    Draft with AI asked "What should change?" and wrote nothing, round again (the 2026-10-22 walk)."""
+    from . import concierge
+    from .capabilities import has_ai
+    try:
+        if has_ai(store): return None
+    except Exception as e:
+        logger.debug(f'the phone could not tell whether an AI is connected: {e}'); return None
+    return turn_text({'say': f"No AI is connected to {what} - connect one under {concierge.places.name('ai')}.", 'item': None}, store=store,
+                     extra=[('Connect an AI', {'t': 'browse', 'area': 'connections', 'section': AI_SECTION}), (concierge.CHIP_WORDS['next'], {'t': 'next'})])
 
 
 def asking_key(store) -> str:
@@ -2568,6 +2584,8 @@ def script_words(store, script: str) -> str:
     """A script, as a chat can hold it: the composer asks for the sentence it builds from. Setting Taskuary up is the desk's Setup
     button, never a script here (the owner, 2026-10-19) - an old pick of it says where it is."""
     if 'report' in str(script or '').lower():
+        # ...a sentence only an AI can put together: with none it asked for one and nothing could read it (the 2026-10-22 walk)
+        if (off := no_ai(store, 'put a report together')): return off
         # ...with one sentence to copy the shape of: the bare ask left the owner guessing what a sentence like that is (F25)
         return ('Tell me what to set up - a check that reads, or a workflow that writes - in a sentence, and I put it together. '
                 'For example: "Every weekday at 8, list the invoices more than 30 days overdue and send them to me here."')

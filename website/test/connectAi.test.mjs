@@ -16,7 +16,7 @@ test("Connect an AI opens Connections at the AI cards", () => {
 test("each no-AI line carries the button", () => {
   for (const [file, near] of [
     ["GeneralWorkspace.jsx", /No AI is connected, so this work cannot run yet/],
-    ["AgentsPanel.jsx", /No AI is connected for a profile to run on/],
+    // (not the profile editor: a profile is a name and instructions and runs on no AI of its own - the owner, 2026-10-22)
     ["ui.jsx", /brainsRead && !generalBrains\.length && <ConnectAi/],
     ["NewSheet.jsx", /action=\{errAi \? <ConnectAi/],
     ["NewPlaybookDialog.jsx", /action=\{noAi \? <ConnectAi/],

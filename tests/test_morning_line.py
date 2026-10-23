@@ -57,7 +57,8 @@ class MorningLineTests(unittest.TestCase):
         "No hard coded anything... Only if you type 1 or hit poll that's clicking a pill")."""
         self.assertFalse(hasattr(ra, 'script_direct'))
         self.assertIn('Setup button', ra.run_act(self.s, {'t': 'script', 'script': 'set up Taskuary'}, None))      # an old pick says where it is
-        self.assertIn('sentence', ra.run_act(self.s, {'t': 'script', 'script': 'set up a report'}, None))
+        with mock.patch('taskuary.capabilities.has_ai', return_value=True):        # with no AI it says so (test_phone_approved)
+            self.assertIn('sentence', ra.run_act(self.s, {'t': 'script', 'script': 'set up a report'}, None))
         # ...and the sidebar's browse picks after them (the canvas redesign, 2026-09-29; Reports and Hub 2026-09-30)
         self.assertEqual([t for t, _ in ra.SCRIPT_LINES], ['Walk me through my tasks', 'Set up a report', 'Connections', 'Reports', 'Hub', 'Settings'])
 

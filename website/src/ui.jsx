@@ -5,7 +5,7 @@ import { AGENT, NOT_SENT, READY } from "./taskLifecycle.js";
 import { WORD } from "./lanes.js";
 import { ago, agoMins, dur, durSince, plural } from "./timeWords.js";
 import React, { useEffect, useRef, useState } from "react";
-import { useCapabilities } from "./capabilities.js";
+import { useCapabilities, NO_CODING_TOOL } from "./capabilities.js";
 import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogContentText, DialogTitle, InputAdornment, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
@@ -694,7 +694,7 @@ export const ModelSelect = ({ info = {}, model, onModel, size = 30, whose = "too
   );
 };
 
-export const NO_CODING_TOOL = "Pick a coding tool first";
+export { NO_CODING_TOOL };            // one wording, beside the check that greys on it (capabilities.cannotStart)
 export const NoCodingTool = () => (
   <Box data-tq-no-coding-tool="" sx={{ display: "flex", alignItems: "center", gap: 1, fontSize: 12.5, color: INK }}>
     <span>{NO_CODING_TOOL} -</span>

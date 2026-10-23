@@ -195,6 +195,76 @@ def cli_steps(cli: str, ext: str) -> tuple[list, str]:
         logger.debug(f'session record: {cli} log for {ext} unreadable - {e}'); return [], ''
 
 
+# WHAT A RUN COST (the owner, 2026-10-22: cost & time per run): the tokens each CLI's own log counts, from `since` - a resumed
+# conversation's log holds every earlier run too. {'in': every input token, cached ones included, 'cached', 'out', 'cost'?}; a log
+# that counts nothing gives {}, and only a log that prices its run gives 'cost' - an unknown cost is said by saying nothing, never $0.
+def _after(at, since) -> bool: return not since or _local(at) >= since
+
+
+def _claude_usage(path: Path, since: str) -> dict:
+    msgs, cost = {}, 0.0
+    for line in path.read_text(encoding='utf-8', errors='replace').splitlines():
+        try: j = json.loads(line)
+        except ValueError: continue
+        if j.get('type') != 'assistant' or j.get('isSidechain') or not _after(j.get('timestamp'), since): continue
+        m = j.get('message') or {}
+        if isinstance(m.get('usage'), dict): msgs[m.get('id') or len(msgs)] = m['usage']    # one message spans lines, each with its usage
+        if isinstance(j.get('costUSD'), (int, float)): cost += j['costUSD']
+    if not msgs: return {}
+    n = lambda k: sum(int(u.get(k) or 0) for u in msgs.values())
+    cached = n('cache_read_input_tokens')
+    return {'in': n('input_tokens') + n('cache_creation_input_tokens') + cached, 'cached': cached, 'out': n('output_tokens'),
+            **({'cost': round(cost, 4)} if cost else {})}
+
+
+def _codex_usage(path: Path, since: str) -> dict:
+    got = {'in': 0, 'cached': 0, 'out': 0}
+    for line in path.read_text(encoding='utf-8', errors='replace').splitlines():
+        try: j = json.loads(line)
+        except ValueError: continue
+        p = j.get('payload') or {}
+        if j.get('type') != 'event_msg' or p.get('type') != 'token_count' or not _after(j.get('timestamp'), since): continue
+        u = (p.get('info') or {}).get('last_token_usage') or {}       # each turn's own; total_token_usage runs across runs
+        for k, f in (('in', 'input_tokens'), ('cached', 'cached_input_tokens'), ('out', 'output_tokens')): got[k] += int(u.get(f) or 0)
+    return got if got['in'] or got['out'] else {}
+
+
+def _gemini_usage(path: Path, since: str) -> dict:
+    try: j = json.loads(path.read_text(encoding='utf-8', errors='replace'))
+    except ValueError: return {}
+    got = {'in': 0, 'cached': 0, 'out': 0}
+    for m in (j.get('messages') if isinstance(j, dict) else j) or []:
+        t = m.get('tokens') if isinstance(m, dict) else None
+        if not isinstance(t, dict) or not _after(m.get('timestamp'), since): continue
+        got['in'] += int(t.get('input') or 0); got['cached'] += int(t.get('cached') or 0)
+        got['out'] += int(t.get('output') or 0) + int(t.get('thoughts') or 0)
+    return got if got['in'] or got['out'] else {}
+
+
+USAGE = {'claude': _claude_usage, 'codex': _codex_usage, 'gemini': _gemini_usage}
+
+
+def cli_usage(cli: str, ext: str, since: str = '') -> dict:
+    """What this run cost by its CLI's own count, from `since` (local time) - {} when the CLI keeps no count we can read."""
+    name = str(cli or '').split('/')[-1].removesuffix('.exe')
+    if not (ext and name in USAGE): return {}
+    try:
+        f = READERS[name][0](str(ext))
+        return USAGE[name](f, since) if f else {}
+    except Exception as e:
+        logger.debug(f'session record: {cli} usage for {ext} unreadable - {e}'); return {}
+
+
+def took(steps: list, started: str, ended: str = '') -> int | None:
+    """Seconds from the run's start to the last thing it did - not to when its pane closed, which can be hours of waiting on the
+    owner later. A run whose log has no times is measured to `ended`; None when the start is unknown."""
+    if not started: return None
+    times = [t for x in steps if x.get('at') and (t := _local(x['at'])) >= started]
+    end = max(times) if times else ended
+    try: return max(0, int((datetime.fromisoformat(end) - datetime.fromisoformat(started)).total_seconds())) if end else None
+    except ValueError: return None
+
+
 def screen_steps(text: str) -> list:
     """No readable log (cursor, devin, muse, a pane with no id yet): what was on screen is still the record."""
     return [{'k': 'screen', 'text': str(text).strip()[-SAID_N:]}] if str(text or '').strip() else []
@@ -242,11 +312,14 @@ def _saved_path(tid: int, sid: str) -> Path:
     return d / f"record-{re.sub(r'[^A-Za-z0-9._-]+', '-', str(sid))[:80]}.json"
 
 
-def save(store, tid: int, sid: str, cli: str, ext: str, screen: str = '') -> dict:
-    """Snapshot a session's steps beside the task (wrapup.wrap), so the record outlives the CLI's own log."""
+def save(store, tid: int, sid: str, cli: str, ext: str, screen: str = '', started: str = '') -> dict:
+    """Snapshot a session's steps beside the task (wrapup.wrap), so the record outlives the CLI's own log - with how long the run
+    took and what it cost, where its start is known (`started`, local) and its CLI counts."""
     steps, source = cli_steps(cli, ext)
     if not steps: steps, source = screen_steps(screen), 'screen'
     rec = {'sid': sid, 'cli': cli, 'ext': ext, 'source': source, 'steps': _bound(steps)}
+    if (secs := took(steps, _when(started), datetime.now().strftime('%Y-%m-%d %H:%M:%S'))) is not None: rec['took'] = secs
+    if started and (use := cli_usage(cli, ext, _when(started))): rec['usage'] = use
     try: _saved_path(tid, sid).write_text(json.dumps(rec), encoding='utf-8')
     except OSError as e: logger.warning(f'session record for task {tid} not kept: {e}')
     return rec
@@ -320,14 +393,20 @@ def record(store, tid: int) -> dict:
             steps, source = cli_steps(r.get('Brain'), r.get('ExtId'))
             rec = {'steps': _bound(steps), 'source': source} if steps else {'steps': screen_steps(r.get('Text')), 'source': 'screen'}
         sessions.append({'sid': r.get('Sid'), 'by': r.get('Agent') or 'agent', 'cli': r.get('Brain') or '', 'cwd': r.get('Cwd') or '',
-                         'at': _when(r.get('CreatedAt')), 'source': rec.get('source') or '', 'steps': rec.get('steps') or []})
+                         'at': _when(r.get('CreatedAt')), 'source': rec.get('source') or '', 'steps': rec.get('steps') or [],
+                         **{k: rec[k] for k in ('took', 'usage') if rec.get(k) is not None}})
     chat = general.chat_rows(store, tid)
     if chat and any(c.get('ActorType') == general.ASSISTANT_TYPE for c in chat):
-        ran = store._one("SELECT Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action='assistant_reply' ORDER BY Id DESC LIMIT 1", (int(tid),)) or {}
-        try: ran = json.loads(ran.get('Detail') or '{}')
-        except ValueError: ran = {}
+        turns = []
+        for a in store._rows("SELECT Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action='assistant_reply' ORDER BY Id", (int(tid),)):
+            try: turns.append(json.loads(a.get('Detail') or '{}'))
+            except ValueError: continue
+        ran = turns[-1] if turns else {}
+        # the conversation's time is its turns' own, summed: the gaps between them are the owner's
+        spent = sum(int(x['took']) for x in turns if isinstance(x.get('took'), (int, float)))
         sessions.append({'sid': 'general', 'by': 'assistant', 'cli': ' · '.join(x for x in (ran.get('provider'), ran.get('model')) if x) or 'assistant', 'cwd': '',
-                         'at': _when(chat[-1].get('CreatedAt')), 'source': 'conversation', 'steps': general_steps(store, tid)})
+                         'at': _when(chat[-1].get('CreatedAt')), 'source': 'conversation', 'steps': general_steps(store, tid),
+                         **({'took': spent} if spent else {})})
     sessions.sort(key=lambda s: s['at'])
     for c in store.list_comments(tid):
         if str(c.get('Body') or '').startswith(REPORTS) and (s := _nearest(sessions, c.get('CreatedAt'))):

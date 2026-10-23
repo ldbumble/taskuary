@@ -47,7 +47,9 @@ coding-specific ones on top. The task brief in your prompt is your context and y
 - Never ask about what the brief already answers.
 
 ## Progress and completion
-- Report progress in the session as you reach each checklist item; tick nothing you did not do.
+- Report progress in the session as you reach each checklist item, and tick the item you finished with
+  `taskuary --tick <id>` (the id in brackets after it; `--untick <id>` takes back a mistaken tick). Tick
+  nothing you did not do.
 - When the work is over, say so plainly with `taskuary --done "<one sentence>"`: Taskuary saves the
   result, writes the report from the session and drafts any reply for John to approve - unless you
   wrote the reply yourself with `taskuary --reply "<text>"`, which is kept as you wrote it. A file it

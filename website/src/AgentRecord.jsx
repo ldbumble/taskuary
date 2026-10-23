@@ -10,7 +10,7 @@ import api from "./api";
 import { Md } from "./md.jsx";
 import PublishedPages from "./PublishedPages.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
-import { cardParts, hasMore, lastWords, moreParts, plain, recordFacts, recordHead, recordSteps, resultParts, runsOf, sourceLabel, splitFiles } from "./agentRecord.js";
+import { cardParts, hasMore, lastWords, moreParts, plain, recordFacts, recordHead, recordSteps, resultParts, runCost, runsOf, sourceLabel, splitFiles } from "./agentRecord.js";
 import AgentStory, { StoryLine, Timeline } from "./AgentStory.jsx";
 import { plural } from "./timeWords.js";
 
@@ -196,7 +196,8 @@ const ResultView = ({ s, before, pages, diff, since, draft, story }) => {
       {since?.text && <Box sx={sec}><Typography sx={head}>Since then</Typography><Typography sx={{ fontSize: 12.5, color: INK }}>{since.text}</Typography></Box>}
       <Box sx={sec}>
         <Button size="small" data-tq-replay="" aria-expanded={replay} sx={{ ...link, textAlign: "left" }} onClick={() => setReplay(!replay)}>
-          {replay ? "▾" : "▶"} Replay the session{before.length ? ` · ${before.length + 1} runs` : ""}{s.at ? ` · ${String(s.at).slice(11, 16)}` : ""}</Button>
+          {replay ? "▾" : "▶"} Replay the session{before.length ? ` · ${before.length + 1} runs` : ""}{s.at ? ` · ${String(s.at).slice(11, 16)}` : ""}
+          {runCost(s).map((x) => ` · ${x}`).join("")}</Button>
         {replay && <Box sx={{ mt: 1 }}><SessionRecord s={s} draft={draft} startOpen timeline={story?.steps || []} earlier={before} /></Box>}
       </Box>
     </Box>);

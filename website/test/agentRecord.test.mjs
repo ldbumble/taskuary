@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { cardParts, hasMore, moreParts, plain, recordFacts, recordHead, recordSteps, splitFiles } from "../src/agentRecord.js";
+import { cardParts, hasMore, moreParts, plain, recordFacts, recordHead, recordSteps, runCost, splitFiles } from "../src/agentRecord.js";
 
 const coding = { source: "Claude Code log", cli: "claude", at: "2026-10-10 09:00:03", result: "Fixed: the cursor reset.",
   counts: { thought: 2, tool: 1 }, files: ["ledger/importer.py"],
@@ -49,6 +49,16 @@ test("a conversation lists only its working - its turns are the chat", () => {
 
 test("facts name who, when and how much", () => {
   assert.deepEqual(recordFacts(coding), ["claude", "2026-10-10 09:00", "2 thoughts", "1 step"]);
+});
+
+// cost & time per run (the owner, 2026-10-22): one quiet addition to the facts; an unknown cost is said by saying nothing
+test("a run's time, new tokens and priced cost join the facts, and nothing is said of what is unknown", () => {
+  const run = { ...coding, took: 754, usage: { in: 1_250_000, cached: 1_200_000, out: 8_000, cost: 0.8412 } };
+  assert.deepEqual(runCost(run), ["13m", "58K tokens", "$0.84"]);
+  assert.deepEqual(recordFacts(run).slice(4), ["13m", "58K tokens", "$0.84"]);
+  assert.deepEqual(runCost({ ...coding, took: 45, usage: { in: 900, cached: 0, out: 300 } }), ["45s", "1K tokens"]);   // no cost: no "$0"
+  assert.deepEqual(runCost({ took: 3 * 3600 + 600, usage: { in: 2, out: 1, cost: 0.004 } }), ["3h 10m", "3 tokens", "<$0.01"]);
+  assert.deepEqual(runCost(coding), []);
 });
 
 // THE ONE MORE (the owner, 2026-10-12: "main summary, then details behind more"): what happened is the card; everything

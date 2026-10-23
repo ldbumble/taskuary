@@ -61,7 +61,7 @@ def revision(store, target_kind: str, target_id) -> str:
     if target_kind == 'task':
         t = store.get_task(target_id) or {}
         ev = store._one('SELECT MAX(Id) AS Id FROM worker_event WHERE TaskId=?', (int(target_id),)) or {}
-        base += f"|{t.get('Status')}|{t.get('Assignee')}|{t.get('DueAt')}|{ev.get('Id')}"
+        base += f"|{t.get('Status')}|{t.get('Assignee')}|{t.get('DueAt')}|{ev.get('Id')}|{t.get('WaitingOn')}|{t.get('WokeMid')}"
     # ...and every act on it: a line judged "Send" before the send failed stood over the failure, advising the same Send (2026-10-18);
     # one judged "Reply" before the reply WENT stood over "Sent" on the close-out, still saying the sender was waiting (2026-10-19)
     base += f"|{_acted(store, target_kind, target_id)}"
@@ -450,6 +450,12 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
                          "them to it first:\n" + '\n'.join(f"- {m.get('FromName') or m.get('FromEmail')} ({m.get('CreatedAt')}): {m.get('Subject') or ''}"
                                                              f" - {' '.join(str(m.get('BodyText') or '').split())[:500]}" for m in mail[-3:]))
         t = store.get_task(int(target_id)) or {}
+        # ...and WHO it was waiting on (waiton.py): the agent said only that person could answer, and their answer is in - or not yet
+        from . import waiton
+        if waiton.waiting(t): lines.append(f"THE AGENT IS WAITING ON {waiton.name_of(t['WaitingOn'])}'S ANSWER - they have not written since; nothing here moves it")
+        elif mail and waiton.woke_by(t, mail[-1]):
+            lines.append(f"THE AGENT WAS WAITING ON {mail[-1].get('FromName') or mail[-1].get('FromEmail')}'S ANSWER, AND IT IS THE NEWEST LINE ABOVE - "
+                         f"{buttons.label('continue')} hands it to the agent's saved conversation")
         todo = [c.get('text') + (f" (note: {c['note']})" if c.get('note') else '') for c in _checklist(t) if not c.get('done') and c.get('text')]
         if todo: lines.append('STILL TO DO ON THE TASK: ' + ' | '.join(' '.join(str(x).split())[:160] for x in todo[:6]))
         # ...and a list with nothing left on it, said: with no line at all the model could not tell it from a task with no list

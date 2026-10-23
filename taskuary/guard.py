@@ -117,8 +117,8 @@ AGENT_WRITES = (
     (r'POST', r'^/api/hooks/claude/ask$', 'the ask hook - it shows the question; the owner answers it'),
     (r'POST', r'^/api/hooks/claude/(floor|permit)$', "a stranger's session asking the floor, or the owner, before a tool call"),
     (r'POST', r'^/api/hooks/claude/reason$', "the Reason Network hook - a message to someone untrusted is refused, an approval goes to the owner"),
-    (r'POST', r'^/api/agent/(reply|done|draft|item)$',
-     "`taskuary --reply/--done/--draft/--item` on the session's OWN task (owns_task); nothing leaves"),
+    (r'POST', r'^/api/agent/(reply|done|draft|item|waiting)$',
+     "`taskuary --reply/--done/--draft/--item/--waiting-on` on the session's OWN task (owns_task); nothing leaves"),
     (r'POST', r'^/api/board/notes$', 'the wall agents leave lines for each other on'),
     (r'POST', r'^/api/(hub|handbook)(/\d+/(comment|vote|retire|restore))?$',
      "the Hub - post, correct, vote, retire what is no longer true; gated again by the card's hub_write scope"),
@@ -247,7 +247,7 @@ def stranger_tid(server: dict, presented) -> int | None:
 # --draft/--item`, whose task id owns_task checks in the handler - and `taskuary --note`, whose note the board door pins to
 # the token's own task, so it never reaches another session's seed (blackboard.live_notes, wave B). Not the Hub, the data
 # tools or a report rerun: each of those reaches past its own task.
-_STRANGER_WRITES = (re.compile(r'^/api/hooks/[a-z]+$'), re.compile(r'^/api/agent/(reply|done|draft|item)$'), re.compile(r'^/api/board/notes$'))
+_STRANGER_WRITES = (re.compile(r'^/api/hooks/[a-z]+$'), re.compile(r'^/api/agent/(reply|done|draft|item|waiting)$'), re.compile(r'^/api/board/notes$'))
 _STRANGER_TASK_HOOK = re.compile(r'^/api/hooks/claude/(floor|permit)$')
 _STRANGER_FILE = re.compile(r'^/api/(attachments|task-artifacts)/(\d+)$')
 STRANGER_WHY = "a session working a stranger's task reaches its own task and nothing else"

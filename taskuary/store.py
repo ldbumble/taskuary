@@ -956,6 +956,9 @@ class SQLiteStore:
             # last computed answer the card reads. Computed on read from the messages, so no ingest road can skip it.
             for col in ('OriginBase', 'Origin', 'OriginWhy'):
                 if col not in tcols: self.cx.execute(f'ALTER TABLE task ADD COLUMN {col} TEXT')
+            # who the task waits on, since when, and the line that woke it (waiton.py)
+            for col in ('WaitingOn', 'WaitingSince', 'WokeMid'):
+                if col not in tcols: self.cx.execute(f'ALTER TABLE task ADD COLUMN {col} TEXT')
             if 'TrustedThrough' not in tcols: self.cx.execute('ALTER TABLE task ADD COLUMN TrustedThrough INTEGER')
             # an email slot an agent addressed as "Name <address>" handed the provider the whole string (TQ-0957): the
             # recipient is the address, the name rides beside it (slots.split) - repaired once, on start
@@ -1796,6 +1799,8 @@ class SQLiteStore:
         # closing a task IS the decision: its pending reviews (escalations, drafts) resolve
         # with it instead of haunting the review queue for a task that's already handled
         if fields.get('Status') in ('done', 'dropped'):
+            # a closed task waits on nobody: their later line is judged as any line on a closed thread (ingest._reopen)
+            self._exec('UPDATE task SET WaitingOn=NULL WHERE TaskId=?', (task_id,))
             self._exec("UPDATE review SET Status='superseded', DecidedBy=?, DecidedAt=? "
                        "WHERE TaskId=? AND Status='pending'", (actor, _now(), task_id))
             # ...and so does the Advisor idea the task was MADE from: left open, 96 ideas outlived their closed tasks

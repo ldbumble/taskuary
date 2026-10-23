@@ -237,7 +237,8 @@ def _wrap(store, tid: int, agent: str, why: str, final_message: str = '', no_rep
 # part that must survive a blanked document: the command, and what pressing it does.
 SEED_LINE = ('REPLY: save the answer for the person who asked with `taskuary --reply "<text>"` (a file it promises: add `--attach <path>`) - the owner approves it. '
              'WHEN FINISHED: run `taskuary --done "<one sentence>"` - it closes the task and drafts the reply unless you saved one; '
-             'add `--no-reply` when nobody should hear back.')
+             'add `--no-reply` when nobody should hear back. '
+             'ONLY SOMEONE ELSE CAN ANSWER: ask them, then `taskuary --waiting-on "<who>"` - their reply brings the task back.')
 # ...and its opposite, for a session the owner opened to sit in (stays_open): the one thing the
 # agent must NOT do is end it. Said in the prompt, because CODING.md's finishing rules say the
 # reverse and an agent reading both without this line picks the one with a command in it. It says

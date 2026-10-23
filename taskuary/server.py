@@ -581,7 +581,7 @@ def share_revoke(sid: int, request: Request):
 
 
 # ...and the page a link opens is NOT here: this app stays on 127.0.0.1 behind the token. Links are served by sharing.share_app, a second
-# server on its own port that knows /share/<token> and nothing else, running only while "Share links on my network" is on.
+# server on its own port that knows /share/<token> and nothing else, running only while "Share links on your network" is on.
 
 
 MAX_BUG_BODY = 200_000       # the scrub matches every private string against every field: a client does not get to make it chew megabytes

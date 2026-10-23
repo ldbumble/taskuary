@@ -464,7 +464,7 @@
     },
     "share_links_lan": {
       "group": "Sharing",
-      "label": "Share links on my network",
+      "label": "Share links on your network",
       "type": "switch",
       "desc": "Share on a result can make a read-only link to it that people on your network open in their browser.",
       "hover": "Opens the Share port below to your network - Windows may ask once whether to allow it through its firewall",

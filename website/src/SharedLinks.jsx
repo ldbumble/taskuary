@@ -1,4 +1,4 @@
-// THE LINKS STILL OPEN (Settings -> Sharing, under "Share links on my network"): each result shared by link, when it closes, how often it
+// THE LINKS STILL OPEN (Settings -> Sharing, under "Share links on your network"): each result shared by link, when it closes, how often it
 // was opened - and Revoke, which ends it at once (sharing.revoke). The link itself was shown once, when it was made: only its hash is kept.
 import React, { useEffect, useState } from "react";
 import { Box, Button, Typography } from "@mui/material";

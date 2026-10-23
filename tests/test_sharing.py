@@ -110,7 +110,7 @@ class Links(unittest.TestCase):
         self.s.set_setting(sharing.SETTING, '0', 'test')
         r = c.post('/api/shares', json={'how': 'link', 'message': self.mid})
         self.assertEqual(r.status_code, 422)
-        self.assertIn('Share links on my network', r.json()['detail'])
+        self.assertIn('Share links on your network', r.json()['detail'])
 
     def test_the_share_port_serves_nothing_but_share_pages(self):
         tok = self.make()['url'].rsplit('/', 1)[1]

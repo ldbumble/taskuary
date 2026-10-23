@@ -73,7 +73,7 @@ export function useShareParts(owner, result, on = true, { onShared, summary = nu
         ))}
         {offersSetting(ways) && (
           <MenuItem dense data-tq-share="setting" onClick={() => { setAt(null); openAppLink(SETTING_HREF); }} sx={{ fontSize: 12, color: DIM }}>
-            Share links on my network…</MenuItem>)}
+            Share links on your network…</MenuItem>)}
       </Menu>
       <Dialog open={mailOpen} onClose={() => busy !== "email" && setMailOpen(false)} fullWidth maxWidth="sm" PaperProps={{ sx: { borderRadius: 3 } }}>
         <DialogTitle>{rows[0]?.word} · {result.title || ""}</DialogTitle>

@@ -21,7 +21,8 @@ from . import lanes
 
 SEEN_KEY, CLOSED_KEY, GREETED_KEY = 'assistant_seen_at', 'assistant_closed_at', 'assistant_greeted_on'
 GAP_HOURS, DAY_STARTS = 16, 5          # "welcome back" after this long away; no "good morning" before 5am
-AWAY_KEY = 'assistant_away_from'       # where the gap the day's greeting covered began: the opening screen counts from it all day
+AWAY_KEY = 'assistant_away_from'       # where the owner's latest away began (the greeting's gap, or any silence of AWAY_MINUTES since)
+ACTIVE_KEY, AWAY_MINUTES = 'assistant_active_at', 45   # the owner's last press, send or focus; this long without one is an away
 AWAY_MAX_DAYS, EVENING = 21, 18        # never reach back past three weeks; with nobody here before, "away" is since six last evening
 CATCHUP_WAIT = 300                     # a greeting waits this long (seconds) for the startup catch-up, then says it is still reading
 MAIL_APPS = {'outlook': 'Outlook', 'gmail': 'Gmail', 'imap': 'your mailbox'}
@@ -91,6 +92,21 @@ def last_here(store):
     got = [d for d in (_at(store.get_setting(SEEN_KEY)), _at(store.get_setting(CLOSED_KEY))) if d]
     return max(got) if got else None
 
+def last_active(store):
+    """The owner's last sign of life: a look, a close, or anything they pressed or sent since (touch)."""
+    got = [d for d in (last_here(store), _at(store.get_setting(ACTIVE_KEY))) if d]
+    return max(got) if got else None
+
+def touch(store, now: datetime = None, key: str = ACTIVE_KEY):
+    """The owner did something - a press, a send, the window's focus. THE one place presence is written, in the store so it
+    outlives a restart. A silence of AWAY_MINUTES before it was an away, and where that began is what "while you were away"
+    counts from (AWAY_KEY). Presses write ACTIVE_KEY, never SEEN_KEY: the greeting's own gap (due) reads SEEN_KEY, and a click
+    landing before the window's arrive must not spend it."""
+    now = now or datetime.now(); prev = last_active(store)
+    if prev and now - prev >= timedelta(minutes=AWAY_MINUTES): store.set_setting(AWAY_KEY, _stamp(prev), 'assistant')
+    if key == ACTIVE_KEY and prev and timedelta(0) <= now - prev < timedelta(minutes=1): return      # a write a minute is plenty
+    store.set_setting(key, _stamp(now), 'assistant')
+
 
 # ── what happened while they were gone ───────────────────────────────────────────────────────────
 def came_in(store, since: datetime) -> int:
@@ -126,10 +142,13 @@ def away_window(store, now: datetime = None) -> tuple:
     """(start, word): where "while you were away" begins, for EVERY reader of it - the greeting, the opening screen's counts,
     "did I miss anything?", the Morning digest. Each used to keep its own clock (six last evening, two days back, midnight), so on
     a Monday the asks of Friday afternoon fell between them and the counts disagreed (B5, 2026-10-11). The gap a greeting is held
-    for or already covered today, else the last time the owner was here; never past AWAY_MAX_DAYS. Nobody here before: last night."""
+    for; else, gone AWAY_MINUTES now, their last sign of life; else the latest away they came back from. The morning's gap held
+    all day read "While you were away · since 2:05 AM" at eleven at night over a day of presses (2026-10-22). Never past
+    AWAY_MAX_DAYS. Nobody here before: last night."""
     now = now or datetime.now()
-    greeted = _at(store.get_setting(AWAY_KEY)) if str(store.get_setting(GREETED_KEY) or '') == now.strftime('%Y-%m-%d') else None
-    got = _HELD.get('prev') or greeted or last_here(store)
+    got, last, away = _HELD.get('prev'), last_active(store), _at(store.get_setting(AWAY_KEY))
+    if not got and last:
+        got = last if now - last >= timedelta(minutes=AWAY_MINUTES) or not away or away > last else away
     if not got: return (now - timedelta(days=1)).replace(hour=EVENING, minute=0, second=0, microsecond=0), 'Since last night'
     got = max(got, now - timedelta(days=AWAY_MAX_DAYS))
     return got, away_word(got, now)
@@ -264,7 +283,10 @@ def arrive(store, now: datetime = None, actor: str = 'owner', leaving: bool = Fa
     now = now or datetime.now()
     new_day, back, prev = due(store, now)
     if leaving or not (new_day or back) or remote_assistant.handoff(store):
-        store.set_setting(SEEN_KEY, _stamp(now), 'assistant'); return {'said': ''}
+        # leaving says they were here until now; only coming back can end an away
+        if leaving: store.set_setting(SEEN_KEY, _stamp(now), 'assistant')
+        else: touch(store, now, SEEN_KEY)
+        return {'said': ''}
     reading = _reading(now)
     tid = general.dock_task(store, actor)[0]['TaskId']
     if reading == 'wait':
@@ -300,7 +322,7 @@ def phone_lead(store, now: datetime = None) -> str:
     now = now or datetime.now()
     new_day, back, prev = due(store, now)
     if not (new_day or back):
-        store.set_setting(SEEN_KEY, _stamp(now), 'assistant'); return ''
+        touch(store, now, SEEN_KEY); return ''
     reading = _reading(now)
     if reading == 'wait':                     # the next message hears it, with the mail in
         _HELD.setdefault('prev', prev); return ''

@@ -903,6 +903,8 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
         task, _ = general.dock_task(store, f'owner-{channel}')
         tid = task['TaskId']
         spend_morning(store)                  # already talking: the day's opener would land mid-conversation
+        from . import welcome
+        welcome.touch(store)                  # a word on the phone is the owner here: "while you were away" ends with it
         store.audit('task', tid, 'assistant_chat_question', f'owner-{channel}',
                     detail={'channel': channel, 'chat': chat, 'chars': len(question)})
         with concierge.delivering(concierge.PHONE):

@@ -31,7 +31,7 @@ export function mergeDurableTurns(local = [], durable = []) {
       if (at >= 0 && JSON.stringify(messages[at].card) !== JSON.stringify(turn.card)) messages[at] = { ...messages[at], text: turn.text, card: turn.card };
       // ...and a press the server stamped on a line already drawn (concierge._stamp_pressed): its badge, at once
       const was = turn.card?.pressed ? messages.findIndex((m) => m.id === turn.id || m.commentId === turn.id) : -1;
-      if (was >= 0 && !messages[was].pressed) messages[was] = { ...messages[was], pressed: turn.card.pressed };
+      if (was >= 0 && !messages[was].pressed) messages[was] = { ...messages[was], pressed: turn.card.pressed, ...(turn.card.pressed_note ? { pressedNote: turn.card.pressed_note } : {}) };
       continue;
     }
     const at = messages.findIndex((candidate, i) => !claimed.has(i) && optimistic(candidate) && sameTurn(candidate, turn));
@@ -52,7 +52,7 @@ export function mergeDurableTurns(local = [], durable = []) {
       // next read found the oldest of them unknown, pushed it at the end, and oneCopy kept that copy - the item the walk had left
       // came back live on the table, under a rail ringing the new one, until the next press
       // ...and a send's fold (`sent`, AssistantView sent): its Mark done and Next stay on the row, not only Next
-      messages[at] = { ...turn, id: bubble.id, commentId: turn.id, ...(bubble.done ? { done: true } : {}), ...(bubble.pressed ? { pressed: bubble.pressed } : {}), ...(bubble.alias?.length ? { alias: bubble.alias } : {}),
+      messages[at] = { ...turn, id: bubble.id, commentId: turn.id, ...(bubble.done ? { done: true } : {}), ...(bubble.pressed ? { pressed: bubble.pressed } : {}), ...(bubble.pressedNote ? { pressedNote: bubble.pressedNote } : {}), ...(bubble.alias?.length ? { alias: bubble.alias } : {}),
                        ...(bubble.sent ? { sent: true } : {}),
                        ...(bubble.proposal ? { proposal: bubble.proposal, card: bubble.card } : {}),
                        ...(bubble.chips?.length && !turn.chips?.length ? { chips: bubble.chips } : {}),
@@ -100,10 +100,11 @@ export function oneCopy(messages = []) {
 // carrying the item gets the button's own label. Nothing found, nothing changes - and still no line.
 const holds = (m, it) => !!m?.card && m.role === "assistant" && !m.proposal && !NOT_ITEM.has(m.card.kind)
   && ((!!it?.key && m.card.key === it.key) || (it?.tid != null && it.tid !== "" && String(m.card.tid ?? "") === String(it.tid)));
-export function pressLine(messages = [], it, label) {
+// ...and a Close with a note carries its note (`note`), drawn after the badge (the owner, 2026-10-23: "write on it marked done with note")
+export function pressLine(messages = [], it, label, note = "") {
   if (!label) return messages;
   const at = messages.map((m) => holds(m, it)).lastIndexOf(true);
-  return at < 0 ? messages : messages.map((m, i) => (i === at ? { ...m, pressed: label } : m));
+  return at < 0 ? messages : messages.map((m, i) => (i === at ? { ...m, pressed: label, ...(note ? { pressedNote: note } : {}) } : m));
 }
 // ...and a word pressed under a line (a send's Mark done, a Not ours taken further) marks THAT line, and leaves it, so it is not pressed twice
 const sameChip = (a, b) => a?.verb === b?.verb && a?.label === b?.label && (a?.tid ?? null) === (b?.tid ?? null);
@@ -114,3 +115,4 @@ export function pressChip(messages = [], chip) {
 }
 // the badge's label: the page's own at the press, the server's stamp after a read
 export const pressedOf = (m) => m?.pressed || m?.card?.pressed || "";
+export const pressedNoteOf = (m) => m?.pressedNote || m?.card?.pressed_note || "";

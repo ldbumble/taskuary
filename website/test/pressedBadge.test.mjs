@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { mergeDurableTurns, pressChip, pressLine, pressedOf } from "../src/assistantTurns.js";
+import { mergeDurableTurns, pressChip, pressLine, pressedNoteOf, pressedOf } from "../src/assistantTurns.js";
 import { label as btn } from "../src/buttons.js";
 import { chipsOf, lastActIndex, sentChips } from "../src/funnelPile.js";
 
@@ -69,6 +69,19 @@ test("the server's stamp reaches a line already drawn, and the press's own badge
   const bubble = [{ ...item("a2", "task:8", 8), pressed: "Send to coding agent" }];
   const read = mergeDurableTurns(bubble, [{ id: 52, role: "assistant", text: "", card: bubble[0].card }]).messages;
   assert.equal(read[0].pressed, "Send to coding agent");
+});
+
+// A TYPED CLOSE WITH A NOTE (the owner, 2026-10-23: "it should collapse the task and write on it marked done with note"): the folded card
+// wears "✓ Close with a note" and the owner's reason after it - at the press, and from the server's stamp after a read
+test("a Close with a note wears its note beside the badge, at the press and after a read", () => {
+  const ms = [item("a1", "task:7", 7)];
+  const out = pressLine(ms, { key: "task:7", tid: 7 }, btn("close_note"), "Paula sent it herself");
+  assert.equal(pressedOf(out[0]), "Close with a note"); assert.equal(pressedNoteOf(out[0]), "Paula sent it herself");
+  assert.equal(pressedNoteOf(pressLine(ms, { tid: 7 }, btn("close"))[0]), "", "a bare Mark done has no note");
+  const local = [{ ...item("a2", "task:8", 8), commentId: 44 }];
+  const { messages } = mergeDurableTurns(local, [{ id: 44, role: "assistant", text: "",
+    card: { ...local[0].card, pressed: "Close with a note", pressed_note: "done on the phone" } }]);
+  assert.equal(pressedOf(messages[0]), "Close with a note"); assert.equal(pressedNoteOf(messages[0]), "done on the phone");
 });
 
 test("no button press writes a 'Done - <button>' line or a free-text receipt on the desk", () => {

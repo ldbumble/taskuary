@@ -108,7 +108,8 @@ PURPOSE = {
     'review.each':              ('"approve all the drafts": brings the next draft waiting for a Send up with its Send lit, and says how many '
                                  'are left - each one still goes only by its own press; CALL it again for the one after'),
     'button.light':             ('light any button a row draws, by its name - `button`: the verb (THE BUTTONS BY NAME, or a row\'s own: '
-                                 'review_changes, run_another, attach, pick_repo, change_kind...), `ref` when it is not the row on the table'),
+                                 'review_changes, run_another, attach, pick_repo, change_kind...), `ref` when it is not the row on the table; `note`: a close_note\'s '
+                                 'note, the owner\'s reason in their words. A put-down (close, close_note with its note, remove, not_ours) is pressed'),
     'task.setup':               'open a walk-through with the assistant, for a set-up that needs digging first - `text`; `title`: a few words naming the job for the task list',
     # (the owner, 2026-09-07: "are you adding endpoints for report setup and connector setup and
     # taskuary setup. Include that as well"). Each goes down the same handler the tab's own form
@@ -382,7 +383,7 @@ BUCKETS = (
 
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
-HINTS = {'button.light': 'button, ref?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
+HINTS = {'button.light': 'button, ref?, note?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?', 'task.share': 'who, about?', 'task.complete': 'note?',
          'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?, note?', 'task.checklist': 'add?, items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until'}
 

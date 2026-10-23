@@ -140,8 +140,8 @@ test("the Advisor's suggestion reaches the Tasks tab and a phone's own row (U12)
   assert.match(page, /notDone && taskAdvice\?\.line && \(/);
   assert.doesNotMatch(page, /Suggested: \{taskAdvice\.label\}/);
   // ...with its line docked to it: the line and the button it lights are one unit at the view's foot (2026-10-19)
-  // ...and the Assistant's lit button, when it lit one, with its line (verify, 2026-10-19: the strip stood empty over it)
-  assert.match(item, /\{phone && <div className="tq-docked"><div className="tq-strip" data-tq-strip="">\s*\{lit && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">\{lit\.line\}<\/div><\/div>\}[\s\S]{0,400}\{!noAi && <AdvisorNext advice=\{advised\} onPropose=\{onPropose\} \/>\}<\/div>\s*<ActionRow inline advised=\{pick\} \/><\/div>\}/);
+  // ...and the Assistant's lit button's line, when a light carries one - none since 2026-10-23: the filled button says it
+  assert.match(item, /\{phone && <div className="tq-docked"><div className="tq-strip" data-tq-strip="">\s*\{lit\?\.line && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">\{lit\.line\}<\/div><\/div>\}[\s\S]{0,400}\{!noAi && <AdvisorNext advice=\{advised\} onPropose=\{onPropose\} \/>\}<\/div>\s*<ActionRow inline advised=\{pick\} \/><\/div>\}/);
   assert.match(item, /const advised = lit \? null : adviceShown\(read, \{ key: card\.key, lane: card\.lane \}, busy\)/);
   // ...no Thinking while it is read (the owner, 2026-10-23), and the Advisor's own move pressed from the phone's row as from the page's
   assert.match(item, /const read = useItemAdvice\(card, phone\);/);

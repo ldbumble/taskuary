@@ -123,7 +123,7 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
           the dock, and the box is sized once, so Expand must not add or take away a row. */}
       {/* ...and the Advisor's line rides WITH the row it lights: pinned over the composer, it stood a screen away (2026-10-19) */}
       {phone && <div className="tq-docked"><div className="tq-strip" data-tq-strip="">
-        {lit && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">{lit.line}</div></div>}
+        {lit?.line && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">{lit.line}</div></div>}
         {noAi && <div className="tq-next" role="status" data-tq-advice="no_ai"><div className="tq-next-txt">{adviceNone("no_ai").line}</div>
           <button type="button" className={rowHas ? "tq-chip" : "tq-chip primary"} onClick={connectAi}>{CONNECT_AI}</button></div>}
         {!noAi && <AdvisorNext advice={advised} onPropose={onPropose} />}</div>

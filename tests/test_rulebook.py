@@ -1,0 +1,298 @@
+"""THE ONE RULEBOOK (the Advisor design, phase A; the owner's rulings, 2026-10-23): every state the design's table names, decided from
+facts the app keeps, read the same by every surface - the desk canvas (the rail's key), the Tasks tab (task:N), a phone chat
+(remote_assistant.primary and the card's line) - with a line only where the card does not show the fact, and Next lit where nothing
+needs the owner. The desk at phone width is the page's (website/test/rulebookMatrix.test.mjs). Invented Northwind people only."""
+import json
+from datetime import date, datetime, timedelta
+from unittest import mock
+import pytest
+from taskuary import advisor, calwrite, concierge, faults, funnel, lanes, remote_assistant, rulebook, terminal, words
+from taskuary.store import MemoryStore
+from taskuary.testing import Factory
+from tests import advisor_cases as C
+
+ERIN, RAY = ('Erin Blake', 'erin@northwind.example'), ('Ray Colton', 'ray@northwind.example')
+def at(d=0, h=0): return (datetime.now() - timedelta(days=d, hours=h)).strftime('%Y-%m-%d %H:%M:%S')
+
+
+# ── the state x surface matrix, over the eval's world (the demo, the advisor matrix's faults, and the states they lack) ─────────────
+@pytest.fixture(scope='module')
+def world():
+    sessions = dict(terminal.SESSIONS)
+    with mock.patch.object(faults, 'scratch_home', lambda: True): s, by, syn = C.world()
+    yield s, by, syn
+    for sid in [k for k in terminal.SESSIONS if k not in sessions]: terminal.SESSIONS.pop(sid, None)
+
+
+def _decide(s, syn, item, key=None):
+    orig = advisor._item
+    with mock.patch.object(advisor, '_item', lambda store, tk, ti, key=None: syn.get(key) or (item if key == item.get('key') else orig(store, tk, ti, key))), \
+         mock.patch.object(advisor, 'notice'):
+        return advisor.decide(s, key or item['key'], preread=False)
+
+
+# (case, the state the rule reads, the verb lit with no model read, whether a line is said)
+MATRIX = [
+    ('Badge access for the new AP clerk', 'asked', 'reply', False),
+    ('did the overnight import finish', 'unsendable', 'copy', False),
+    ('AP cutover - Thursday?', 'draft_ready', 'approve', False),
+    ('Lease renewal for the Elm Street office', 'failed_cause', 'new_task', True),
+    ('Spendly card limits', 'idea', 'mine', False),
+    ('Q3 accruals file', 'agent_done', 'close', False),
+    ('Helpdesk tickets by day', 'report_ok', 'next', False),
+    ('Vendor portal maintenance', 'fyi', 'next', False),
+    ('Reconcile the August GL export', 'working', 'next', False),
+    ('agent asking (coding)', 'agent_asking', None, False),
+    ('agent finished (general)', 'agent_done', 'close', False),
+    ('agent failed (general)', 'failed_cause', 'continue', True),
+    ('agent stopped-saved (coding)', 'stopped', 'continue', True),
+    ('Close the August books', 'done_list', 'close', False),
+    ('Move payroll to Payworth', 'goal', 'next', False),
+    ('Migrate the census export', 'goal_late', 'chase', True),
+    ('Ray: schema sign-off', 'waiting', 'defer', False),
+    ('Vendor W-9 for the new supplier', 'waiting_late', 'chase', True),
+    ('Budget figures for Q4', 'waiting_late', 'chase', True),
+]
+
+
+@pytest.mark.parametrize('case,state,verb,says', MATRIX)
+def test_each_state_is_one_decision_on_every_surface(world, case, state, verb, says):
+    s, by, syn = world
+    item = by[case]
+    d = _decide(s, syn, item)
+    assert (d.get('state'), d.get('verb'), bool(d.get('line'))) == (state, verb, says), d
+    assert len(d.get('line') or '') <= 64, 'a line is read whole on a phone'
+    assert not words.jargon_in(d.get('line') or ''), d['line']
+    # THE ADVISOR PICKS ONLY FROM THE BUTTONS THE ROW DRAWS (offered: row_buttons, plus Chase where a wait ran past its day)
+    if verb and verb != 'next': assert verb in [v['verb'] for v in advisor.offered(s, syn.get(item['key']) or item)]
+    # THE PHONE READS THE SAME DECISION: its lead is the Advisor's verb wherever its chips carry it, and Next leads where Next is lit
+    chips = concierge.chips_for(s, syn.get(item['key']) or item)
+    lead = remote_assistant.primary({'chips': chips, 'item': item}, d)
+    if verb == 'next': assert lead['verb'] == 'next'
+    elif verb in {c['verb'] for c in chips}: assert lead['verb'] == verb
+    assert remote_assistant.advice_line({'item': item}, d) == (d.get('line') or '')
+
+
+def test_the_tasks_tab_reads_the_same_decision_as_the_canvas(world):
+    """The Tasks tab asks for task:N; the canvas for the rail's key - one task, one decision (U12: they read apart)."""
+    s, by, syn = world
+    for case in ('Badge access for the new AP clerk', 'Close the August books', 'Ray: schema sign-off', 'Migrate the census export'):
+        item = by[case]
+        desk, tab = _decide(s, syn, item), _decide(s, syn, item, key=f"task:{item['tid']}")
+        assert (desk['verb'], desk['line']) == (tab['verb'], tab['line']), case
+
+
+def test_every_state_has_its_words_and_every_lit_verb_is_a_button():
+    from taskuary import buttons
+    for st, w in words.ADVICE_RULE.items():
+        assert set(w) <= {'line', 'lit', 'ask'}, st
+        for v in w['lit']: assert v == 'next' or buttons.label(v), (st, v)
+        assert not words.jargon_in(w['line']), (st, w['line'])
+        for gone in ('No suggestion', 'Nothing to decide', 'Thinking', 'the choice is yours'): assert gone not in w['line']
+    # the states the design's table names, each with a rule
+    assert {'asked', 'draft_ready', 'unsendable', 'duplicate', 'working', 'agent_asking', 'unpushed', 'stopped', 'failed', 'agent_done',
+            'report_ok', 'report_failed', 'fyi_batch', 'fyi', 'invite_free', 'invite_clash', 'invite_no_cal', 'waiting', 'waiting_late',
+            'goal_late', 'goal', 'idea', 'unsorted', 'closed', 'stranger'} <= set(words.ADVICE_RULE)
+
+
+def test_rule_answers_are_fast_and_spend_nothing_of_the_cap(world):
+    """Under 50 ms a state, and no model row - the hourly cap counts model calls only (the design, 1.1)."""
+    import time
+    s, by, syn = world
+    before = (s._one('SELECT COUNT(*) AS n FROM advice WHERE Model IS NOT NULL') or {}).get('n')
+    t0 = time.perf_counter()
+    for case, *_ in MATRIX: _decide(s, syn, by[case])
+    assert (time.perf_counter() - t0) / len(MATRIX) < 0.05
+    assert (s._one('SELECT COUNT(*) AS n FROM advice WHERE Model IS NOT NULL') or {}).get('n') == before
+
+
+# ── the states the world lacks, each built from its facts ─────────────────────────────────────────────────────────────────────────
+@pytest.fixture
+def s(monkeypatch):
+    s = MemoryStore(); s.set_setting('calendar_enabled', '0', 'test')
+    monkeypatch.setattr(terminal, 'live_sessions', lambda tail=0: [])
+    monkeypatch.setattr(funnel, '_agenda', lambda _s, **kw: [])
+    funnel.invalidate(); yield s; funnel.invalidate()
+
+
+def _asked(s, title, who=ERIN, d=0, cid=None):
+    f = Factory(s)
+    t = f.task(title=title, kind='task')
+    m = f.message(task_id=t, subject=title, body='can you?', from_name=who[0], from_email=who[1], sent_at=at(d=d), conversation_id=cid or f'email:{title}')
+    return t, m, {'key': f'task:{t}', 'kind': 'asked', 'lane': 'asked', 'tid': t, 'mid': m, 'title': title}
+
+
+def _verbs(*vs): return [{'verb': v, 'label': v} for v in vs]
+
+
+def test_someone_asked_says_how_long_only_from_a_day_on(s):
+    t, m, it = _asked(s, 'Badge access', d=3)
+    d = rulebook.decide(s, it, _verbs('reply', 'regular_agent', 'remove'))
+    assert (d['state'], d['verb'], d['line'], d['ask']) == ('asked', 'reply', 'Erin Blake asked 3 days ago.', True)
+    u, _m, it2 = _asked(s, 'Trainly seats', who=RAY)
+    assert rulebook.decide(s, it2, _verbs('reply'))['line'] == '', 'asked this morning: the card says the age already'
+
+
+def test_a_duplicate_needs_the_thread_never_the_same_sender_alone(s):
+    a, _m, it = _asked(s, 'Payworth export', cid='email:payworth')
+    b, _n, _ = _asked(s, 'Payworth export (again)', cid='email:payworth')
+    c, _o, it3 = _asked(s, 'Lease renewal')                        # Erin again, another thread: another ask
+    d = rulebook.decide(s, {**it, 'tid': b, 'key': f'task:{b}'}, _verbs('reply', 'remove'))
+    assert (d['state'], d['verb'], d['line']) == ('duplicate', 'remove', 'Same ask as TQ-0001.')
+    assert rulebook.decide(s, it3, _verbs('reply', 'remove'))['state'] == 'asked'
+
+
+def test_a_first_mail_from_an_unknown_address_is_reply_never_an_agent(s):
+    from taskuary.ingest import HOLD_TAG
+    t, m, it = _asked(s, 'Your quote', who=('Sam Ortiz', 'sam@vendor.example'))
+    s.add_task_tag(t, HOLD_TAG) if hasattr(s, 'add_task_tag') else s._exec("UPDATE task SET Tags=? WHERE TaskId=?", (HOLD_TAG, t))
+    with mock.patch.object(remote_assistant, 'stranger_held', return_value=True):
+        d = rulebook.decide(s, it, _verbs('reply', 'regular_agent'))
+    assert (d['state'], d['verb'], d['line']) == ('stranger', 'reply', 'First mail from vendor.example.')
+
+
+def _invite(s, start, end):
+    t = Factory(s).task(title='Budget sync', kind='task')
+    cal = {'kind': 'request', 'provider': 'outlook', 'event_id': 'ev-1', 'update': False, 'answered': False, 'asks': True,
+           'subject': 'Budget sync', 'start': start, 'end': end, 'all_day': False, 'organizer': 'Erin Blake'}
+    m = Factory(s).message(task_id=t, subject='Invitation: Budget sync', from_name=ERIN[0], from_email=ERIN[1], MailMetaJson=json.dumps({'cal': cal}))
+    return {'key': f'task:{t}', 'kind': 'asked', 'lane': 'asked', 'tid': t, 'mid': m}
+
+
+def test_an_invite_is_accept_when_free_propose_when_it_clashes_and_next_with_no_calendar(s):
+    day = date.today() + timedelta(days=1)
+    while day.weekday() >= 5: day += timedelta(days=1)
+    it = _invite(s, f'{day} 14:30', f'{day} 15:00')
+    vs = _verbs('accept_invite', 'decline_invite', 'propose_time')
+    busy = [{'start': f'{day} 14:00', 'end': f'{day} 15:00', 'subject': '1:1 with Omar', 'all_day': False}]
+    with mock.patch.object(rulebook, 'calendar_on', return_value=True), mock.patch.object(calwrite, 'busy', return_value=busy):
+        d = rulebook.decide(s, it, vs)
+    assert (d['state'], d['verb']) == ('invite_clash', 'propose_time') and d['line'].startswith('Clashes with 1:1 with Omar')
+    with mock.patch.object(rulebook, 'calendar_on', return_value=True), mock.patch.object(calwrite, 'busy', return_value=[]):
+        assert rulebook.decide(s, it, vs) | {'ask': 0} == {'state': 'invite_free', 'verb': 'accept_invite', 'line': 'Free then.', 'ask': 0}
+    # the owner, 2026-10-23 (ruling 4): no calendar connected - nothing to check, so nothing pushed: Next
+    with mock.patch.object(rulebook, 'calendar_on', return_value=False):
+        assert (rulebook.decide(s, it, vs)['state'], rulebook.decide(s, it, vs)['verb']) == ('invite_no_cal', 'next')
+
+
+def test_an_agent_with_work_not_pushed_is_review_changes(s):
+    t = Factory(s).task(title='Fix the export', kind='coding')
+    it = {'key': f'agent:{t}', 'kind': 'agentdone', 'lane': 'done', 'tid': t}
+    assert rulebook.decide(s, it, _verbs('close', 'review_changes'))['verb'] == 'close', 'nothing shows unpushed work: Mark done'
+    s._exec("INSERT INTO boardnote (TaskId, Agent, Cwd, Kind, Body, CreatedAt) VALUES (?, 'coding', 'C:/x', 'ready', 'ready to push', ?)", (t, at()))
+    d = rulebook.decide(s, it, _verbs('close', 'review_changes'))
+    assert (d['state'], d['verb'], d['line']) == ('unpushed', 'review_changes', 'Changes ready - not pushed.')
+    s._exec("INSERT INTO boardnote (TaskId, Agent, Cwd, Kind, Body, CreatedAt) VALUES (?, 'coding', 'C:/x', 'done', 'pushed', ?)", (t, at()))
+    assert rulebook.decide(s, it, _verbs('close', 'review_changes'))['verb'] == 'close'
+
+
+def test_waiting_on_someone_is_chase_after_three_working_days(s):
+    f = Factory(s)
+    t = f.task(title='Vendor W-9', kind='task', status='waiting'); s._exec("UPDATE task SET WaitingOn='ray.colton@northwind.example' WHERE TaskId=?", (t,))
+    it = {'key': f'task:{t}', 'kind': 'todo', 'lane': 'theirs', 'tid': t}
+    f.message(task_id=t, subject='W-9?', direction='out', sent_at=at(d=1))
+    assert rulebook.decide(s, it, _verbs('defer', 'chase'))['verb'] == 'defer', 'not late: Remind me, silent'
+    s._exec("UPDATE message SET SentAt=? WHERE TaskId=?", (at(d=7), t))
+    d = rulebook.decide(s, it, _verbs('defer', 'chase'))
+    assert (d['state'], d['verb']) == ('waiting_late', 'chase') and d['line'].startswith('Ray Colton: ') and d['line'].endswith('days, no answer.')
+    assert rulebook.adds(s, it) == ['chase'], 'Chase joins the row on a wait past its day'
+    assert rulebook.working_days(datetime(2026, 10, 23), datetime(2026, 10, 26)) == 1, 'a Friday ask is one day old on Monday'
+
+
+def test_a_goal_step_past_its_day_is_chase_named_in_the_line(s):
+    g = s.create_task({'Title': 'Move payroll', 'Status': 'open', 'DoneWhen': 'payroll runs on the new system'}, 'owner')
+    s.set_task_checklist(g, ['Export the pay rules', 'schema sign-off'], 'owner')
+    k = s.create_task({'Title': 'schema sign-off', 'Status': 'waiting', 'Assignee': 'person:ray.colton@northwind.example', 'ParentId': g,
+                       'DueAt': (date.today() - timedelta(days=2)).isoformat()}, 'owner')
+    s.link_step(g, s.checklist_id('schema sign-off'), k, 'owner')
+    it = {'key': f'task:{g}', 'kind': 'goal_slipped', 'lane': 'yours', 'tid': g}
+    d = rulebook.decide(s, it, _verbs('close', 'defer', 'chase'))
+    assert (d['state'], d['verb'], d['line']) == ('goal_late', 'chase', "Ray Colton's schema sign-off: 2 days late.")
+    s._exec("UPDATE task SET DueAt=? WHERE TaskId=?", ((date.today() + timedelta(days=2)).isoformat(), k))
+    assert rulebook.decide(s, it, _verbs('close', 'defer', 'chase'))['verb'] == 'next', 'on track: Next, silent'
+
+
+def test_unsorted_mail_a_batch_a_closed_task_and_a_failed_report(s):
+    assert rulebook.decide(s, {'kind': 'fyi', 'lane': 'unjudged', 'mid': 1}, _verbs('retriage'))['verb'] == 'retriage'
+    assert rulebook.decide(s, {'kind': 'fyis', 'lane': 'fyi'}, [])['verb'] == 'next'
+    t = Factory(s).task(title='Done already', status='done')
+    assert rulebook.decide(s, {'kind': 'todo', 'lane': 'yours', 'tid': t}, _verbs('reopen'))['verb'] is None, "Reopen stays outlined"
+    d = rulebook.decide(s, {'kind': 'report', 'lane': 'broken', 'bad': True, 'why': 'mailbox signed out'}, _verbs('rerun'))
+    assert (d['state'], d['verb'], d['line']) == ('report_failed', 'rerun', 'Report failed: mailbox signed out')
+
+
+# ── the tiers: habit over model over rule, never over a safety rule ──────────────────────────────────────────────────────────────────
+def _habit(s, text, key):
+    s.save_doc('learned', f"# Learned\n\n## How you sort mail\n\n## What you do next\n- {text} [s:5 | ev: pr1, pr2, pr3 | seen: 2026-10-20 | k: {key}]\n", 'test')
+
+
+def test_an_in_use_habit_lights_its_button_and_a_safety_rule_outranks_it(s, monkeypatch):
+    """The owner, 2026-10-23 (rulings 3, 9, 11): an in-use habit may change the lit button by itself - only lights it, never presses it -
+    and press habits are the Advisor's alone ("## What you do next"); triage reads "## How you sort mail"."""
+    t, m, it = _asked(s, 'Weekly report', who=('Vendor Desk', 'desk@vendor.example'))
+    monkeypatch.setattr(advisor, '_item', lambda store, tk, ti, key=None: it)
+    monkeypatch.setattr(advisor, 'notice', lambda *a, **k: None)
+    assert advisor.decide(s, it['key'], preread=False)['verb'] == 'reply', 'no habit section yet: the hook changes nothing'
+    _habit(s, 'On asks from vendor.example, {{owner_first}} presses Mark done (5 of 6)', 'move asked email vendor.example')
+    d = advisor.decide(s, it['key'], preread=False)
+    assert (d['verb'], d['by'], d['line']) == ('close', 'habit', '')
+    # ...a habit somewhere else, or in another section, lights nothing here
+    _habit(s, 'On asks from northwind.example, {{owner_first}} presses Mark done (5 of 6)', 'move asked email northwind.example')
+    assert advisor.decide(s, it['key'], preread=False)['by'] == 'rule'
+    # ...and never over what failed: the fix leads whatever the owner usually presses
+    _habit(s, 'On asks from vendor.example, {{owner_first}} presses Mark done (5 of 6)', 'move asked email vendor.example')
+    monkeypatch.setattr(advisor, 'failure', lambda store, item: {'what': 'the reply was not sent', 'why': 'mailbox signed out', 'fix': None, 'unknown': False, 'kind': 'send'})
+    assert advisor.decide(s, it['key'], preread=False)['by'] != 'habit'
+
+
+def test_send_is_never_lit_on_a_draft_the_check_flagged_not_even_by_a_habit(s, monkeypatch):
+    t, m, it = _asked(s, 'Invoice 4410', who=('Vendor Desk', 'desk@vendor.example'))
+    rid = Factory(s).review(t, m, draft="It goes out in Friday's payment run.")
+    it = {**it, 'kind': 'review', 'lane': 'approve', 'rid': rid, 'draft': True, 'key': f'review:{rid}'}
+    monkeypatch.setattr(advisor, '_item', lambda store, tk, ti, key=None: it)
+    monkeypatch.setattr(advisor, 'notice', lambda *a, **k: None)
+    _habit(s, 'On drafts to vendor.example, {{owner_first}} presses Send (5 of 6)', 'move review email vendor.example')
+    rev = advisor.revision(s, 'task', t)
+    advisor._write(s, target_kind='task', target_id=t, key=it['key'], event=advisor.SHOWN, revision=rev, tier=2,
+                   line='Draft promises Friday - nothing here shows it.', verb='redraft', label='Redraft', model='m')
+    d = advisor.decide(s, it['key'], preread=False)
+    assert (d['verb'], d['by'], d['line']) == ('redraft', 'model', 'Draft promises Friday - nothing here shows it.')
+
+
+def test_the_model_agreeing_with_the_rule_says_nothing_more(s, monkeypatch):
+    """Ruling 1: the obvious button is not explained. The model's verb stands where it differs from the rule's, with its line; agreeing,
+    its sentence goes and the rule's own fact (or silence) stands."""
+    t, m, it = _asked(s, 'Badge access')
+    monkeypatch.setattr(advisor, '_item', lambda store, tk, ti, key=None: it)
+    monkeypatch.setattr(advisor, 'notice', lambda *a, **k: None)
+    rev = advisor.revision(s, 'task', t)
+    advisor._write(s, target_kind='task', target_id=t, key=it['key'], event=advisor.SHOWN, revision=rev, tier=2,
+                   line='Erin is waiting on you - answer her.', verb='reply', label='Reply', model='m')
+    d = advisor.decide(s, it['key'], preread=False)
+    assert (d['verb'], d['line'], d['by']) == ('reply', '', 'rule')
+
+
+def test_the_next_two_are_read_ahead_where_the_model_must_read_them(s, monkeypatch):
+    items = [{'key': f'k{n}', 'kind': 'asked' if n % 2 else 'report', 'lane': 'asked', 'tid': n} for n in range(5)]
+    monkeypatch.setattr(funnel, 'pile', lambda store, quiet=False: {'items': items})
+    monkeypatch.setattr(advisor, 'target_of', lambda store, key: ('task', int(key[1:])))
+    monkeypatch.setattr(advisor, 'offered', lambda store, it: _verbs('reply'))
+    monkeypatch.setattr(rulebook, 'decide', lambda store, it, vs: {'ask': it['kind'] == 'asked'})
+    got = []
+    monkeypatch.setattr(advisor, 'notice', lambda store, ev, tk, ti, **kw: got.append((ti, kw.get('tier'), kw.get('key'))))
+    class T:
+        def __init__(self, target, **kw): self.f = target
+        def start(self): self.f()
+    monkeypatch.setattr(advisor.threading, 'Thread', T)
+    monkeypatch.setattr(advisor, 'BACKGROUND', True)
+    advisor._preread(s, 'k0')
+    assert got == [(1, 1, 'k1')], 'the next two: k1 is asked (read ahead), k2 is a report (the rule decides it)'
+
+
+# ── one census for every count ──────────────────────────────────────────────────────────────────────────────────────────────────
+def test_one_census_for_on_you_the_walks_end_and_the_rails_tasks():
+    items = [{'key': 'a', 'lane': 'asked', 'kind': 'asked'}, {'key': 'b', 'lane': 'theirs', 'kind': 'todo'},
+             {'key': 'c', 'lane': 'fyi', 'kind': 'fyi'}, {'key': 'd', 'lane': 'asked', 'kind': 'asked', 'settling': True}]
+    c = lanes.census(items)
+    assert (c['on_you'], c['tasks']) == (sum(map(lanes.on_you, items)), sum(1 for i in items if not i.get('settling') and lanes.level_of(i) == 'task'))
+    assert c['on_you'] < c['tasks'], 'waiting on them is under Tasks and not on you'

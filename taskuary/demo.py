@@ -192,7 +192,7 @@ def _list_line(store) -> str:
     try: items = funnel.pile(store)['items'] if store is not None else None
     except Exception: items = None
     if items is None: return 'Everything on it is in front of you on the left.'
-    yours = sum(map(lanes.on_you, items))
+    yours = lanes.census(items)['on_you']
     if not yours: return 'Nothing is on you right now.'
     return f"{_n(yours, 'thing is', 'things are')} on you - they lead your rail, under {funnel.SECTION_WORDS['task'].upper()}."
 
@@ -202,54 +202,54 @@ def _list_line(store) -> str:
 # someone waiting makes right, with a plain line - and like the real one says nothing on a newsletter: "Make a task" over an
 # fyi is the wrong suggestion that is worse than none.
 _VERBS = re.compile(r'^VERBS OFFERED: (.*)$', re.M)
-ADVICE = {'answer_agent': 'The agent is waiting on your answer.', 'approve': 'The draft is ready - read it, then send it.',
-          'reply': 'Someone is waiting on an answer from you.', 'continue': 'The agent stopped partway - pick it up where it left off.'}
+# EACH LINE IS A FACT, NEVER THE BUTTON EXPLAINED (the owner, 2026-10-23: "buttons do the talking"; at most 60 characters) - and where the
+# script's verb is the rule's own, the strip says the rule's fact and drops this one (advisor.decide)
+ADVICE = {'answer_agent': 'The agent is waiting on your answer.', 'approve': '',
+          'reply': 'Someone is waiting on an answer from you.', 'continue': 'The agent stopped partway.'}
 # ...and like the real one it reads what was already done: a reply that went, with nothing written since, is closed, not answered
 # again - the scripted "Someone is waiting on an answer" stood over a close-out reading Sent (2026-10-19)
-SENT = {'close': 'Your reply went and nothing has come back since - mark it done.',
-        'defer': 'Your reply went - set a day to look again if nothing comes back.'}
+SENT = {'close': 'Your reply went; nothing has come back since.',
+        'defer': 'Your reply went; nothing has come back since.'}
 
 # ...and like the real one, WHEN SOMETHING FAILED (a WHAT FAILED line) it offers the way past it and never the act that just failed: after
 # a refused send the scripted line still said "read it, then send it" over "Not sent", with Send lit (2026-10-19). The fix the failure
 # names leads, then the draft written again, then a task to fix it.
 # ...each line naming WHAT failed: "That did not go through" stood over a card whose error had gone, saying nothing of which act it meant
 # (the advisor matrix, 2026-10-19)
-FAILED = {'fix': '{what} - {label} is the way past it.', 'redraft': '{what} - redraft it, then send it again.',
-          'new_task': '{what}, and nothing here fixes it - make it a task.', 'report_bug': 'That step stopped - report it so it gets fixed.',
-          'close': '{what}, and it cannot be fixed from here - mark it done if nothing more is owed.'}
+FAILED = {'fix': '{what}: {why}.', 'redraft': '{what}: {why}.', 'new_task': '{what}: {why}.', 'report_bug': 'That step stopped: {why}.',
+          'close': '{what}: {why}.'}
 # ...a send nobody can confirm is checked first, never sent again blind
-CHECK = {'approve': 'Nobody can say whether it went - check delivery before sending it again.', **FAILED}
+CHECK = {'approve': 'Nobody can say whether it went.', **FAILED}
 # ...and what the demo itself refused goes nowhere here, whatever is pressed: "redraft it" would loop the visitor through a canned brain
 # that writes no drafts - the item is closed or put off instead
-REFUSED = {'close': 'This is the demo, so that goes nowhere - mark it done to move on.',
-           'defer': 'This is the demo, so that goes nowhere - set a day to see it come back.'}
+REFUSED = {'close': 'This is the demo - nothing goes out from it.',
+           'defer': 'This is the demo - nothing goes out from it.'}
 # ...and A DRAFT ITS CHANNEL ANSWERS WHERE IT CAME FROM (a chat: no Send offered) is copied there and closed - with no line the strip
 # said "nothing needs a move" over a question nobody had answered (2026-10-19). Read off the item's channel, never the verbs alone: an
 # email whose draft could not be written offers no Send either, and was told to copy it (the advisor matrix, 2026-10-19)
-COPIED = {'close': 'The reply is drafted - copy it to where the question came from, then mark it done.'}
+COPIED = {'close': 'It cannot be sent from here - copy it to the chat.'}
 
 # ...and like the real one it reads what is over: an agent whose run finished, a task with every todo ticked, is closed once nobody
 # waits on a reply (the advisor matrix, 2026-10-19: both stood under "No suggestion")
-DONE = {'approve': ADVICE['approve'], 'reply': ADVICE['reply'], 'close': 'The work on it is done - read what it says, then mark it done.'}
+DONE = {'approve': ADVICE['approve'], 'reply': ADVICE['reply'], 'close': 'The work on it is done.'}
 
 # ...and like the real one (advisor.SYSTEM's rules, the deep dive 2026-10-20): an agent's failed run is made a task, never continued
 # blind; a send refused for its ADDRESS is fixed at the address, never redrafted; a draft promising what nothing shows is written again,
 # never sent; an issue with a traceback goes to an agent; someone quiet past their day is chased. The script reads the prompt's own
 # lines for these - the real Advisor reads their meaning.
 # ...a general agent's run is tried again (advisor.offered's Try again - it is offered no New task); a coding agent's is made a task
-AGENT_RAN = {'fix': "{what} - {label} is the way past it.", 'new_task': "{what}: {why}. Make it a task to fix that first.",
-             'continue': "{what}: {why}. {label} runs it once more."}
-BOUNCED = {'fix': 'The address was refused - {label} is the way past it.', 'new_task': 'The address was refused - fix the address, not the words.'}
+AGENT_RAN = {'fix': "{what}: {why}.", 'new_task': "{what}: {why}.", 'continue': "{what}: {why}."}
+BOUNCED = {'fix': 'The address was refused: {why}.', 'new_task': 'The address was refused: {why}.'}
 _BOUNCE = re.compile(r'no such user|unknown recipient|recipient\w* refused|refused [^\s]+@|bounced', re.I)
 _PROMISE = re.compile(r"\b(?:sending\b[^.]*\bnow|attached|goes out in|payment run|paid on)\b", re.I)
-PROMISED = {'redraft': 'The draft promises what nothing here shows - check it, then redraft.',
-            'reply': 'The draft promises what nothing here shows - write it again.'}
-AGENT_WORK = {'regular_agent': 'An agent can take this - it is an issue with a traceback in it.'}
-CHASED = {'chase': 'They are quiet past their day - send a short nudge.'}
+PROMISED = {'redraft': 'The draft promises what nothing here shows.',
+            'reply': 'The draft promises what nothing here shows.'}
+AGENT_WORK = {'regular_agent': 'An issue with a traceback in it.'}
+CHASED = {'chase': 'They are quiet past their day.'}
 # ...and a goal and an idea, as the real one reads THE GOAL and THE IDEA lines
-GOAL_LATE = {'chase': '{step} is {days} days late - send a short nudge.', 'defer': '{step} is {days} days late - set a day to check on it.'}
-GOAL_QUIET = {'defer': 'Nothing has moved on this goal yet - set a day to look again.'}
-IDEA = {'mine': 'Worth doing - put it on your list.', 'defer': 'Worth a look later - set a day for it.'}
+GOAL_LATE = {'chase': '{step} is {days} days late.', 'defer': '{step} is {days} days late.'}
+GOAL_QUIET = {'defer': 'Nothing has moved on this goal yet.'}
+IDEA = {'mine': '', 'defer': ''}
 _LATE = re.compile(r'step \d+ "([^"]+)"[^|\n]*? - (\d+) days late')
 
 
@@ -293,14 +293,15 @@ def _advice(text: str) -> str:
     fits = lambda v: v in offered and (redo or v != 'redraft') and (said is not CHECK or v != 'approve' or offered[v] == buttons.label('approve', 'check'))
     verb = next((v for v in said if fits(v)), None)
     what = failed.split(' - ')[0].strip() or 'That did not go through'
-    line = said[verb].format(label=offered[verb], what=what[:1].upper() + what[1:]) if verb else ''
+    why = failed.split(' - ', 1)[1].rstrip('.') if ' - ' in failed else 'no reason was given'
+    line = said[verb].format(label=offered[verb], what=what[:1].upper() + what[1:], why=why) if verb else ''
     # ...and like the real one it reads the tasks that may already cover the ask: an agent already on one is said, never a second answer blind
     dup = re.search(r'^- (TQ-\d+) [^\n]*an agent is on it$', text.split('POSSIBLE DUPLICATES', 1)[1], re.M) if 'POSSIBLE DUPLICATES' in text else None
     # ...and the button agrees with the line (advisor.SYSTEM): never Reply over "it may already be covered" - Remind me, to look again once
     # that agent is done, else nothing (the UI audit's C2, 2026-10-21)
     if verb == 'reply' and dup:
         verb = 'defer' if 'defer' in offered else None
-        line = f'{dup[1]} may already cover this, and an agent is on it - look again later.' if verb else ''
+        line = f'{dup[1]} may already cover this - an agent is on it.' if verb else ''
     return json.dumps({'verb': verb, 'line': line, 'evidence': []})
 
 

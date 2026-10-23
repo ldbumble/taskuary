@@ -309,8 +309,10 @@ def arrive(store, now: datetime = None, actor: str = 'owner', leaving: bool = Fa
     chips = concierge.walk_chips(len(items))
     # the headline counts what is ON YOU; reports and notices are reading, never "waiting" (U6: "Waiting · 30" over rows that said
     # "Nothing to decide") - the greeting's own count (needs_you), the header's and the page's opener all ask lanes.on_you
+    # ...one census (lanes.census) for every count the owner reads, so the opener, the rail and the walk's end never disagree
+    c = lanes.census(items)
     card = {'key': 'brief', 'kind': 'brief', 'lane': 'report', 'title': 'Today', 'n': len(items),
-            'on_you': sum(map(lanes.on_you, items)), 'to_read': sum(map(lanes.to_read, items)),
+            'on_you': c['on_you'], 'to_read': c['to_read'], 'tasks': c['tasks'],
             'mail': sum(map(lanes.is_mail, items)), 'chips': chips, 'away': away}
     if cid: concierge.rewrite(store, cid, say, card)
     else: concierge.record(store, tid, 'assistant', say, card)

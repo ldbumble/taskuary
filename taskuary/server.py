@@ -5090,8 +5090,8 @@ def concierge_chips(key: str):
 
 @app.get('/api/advice')
 def advice_for(key: str):
-    """The Advisor's line and pill for the item on the table, at its current revision - or why there is none: still being judged
-    ({"pending": true}) or left alone ({"none": why}) - advisor.status."""
+    """The Advisor's one decision for the item on the table, at its current revision (advisor.decide): the verb it lights and the line it
+    says ('' is silent) - the same for the canvas, the Tasks tab and the phone - or {"none": why} where nothing is lit."""
     from . import advisor
     return advisor.status(store, key)
 

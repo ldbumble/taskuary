@@ -2904,7 +2904,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // nothing - a reload lands on the server's own table. Never while a turn is landing (the table is about to move) or a link is still
   // on its way (the address is the link's), nor over setup or an old conversation, which are not places
   const liveBrowse = shown.find((x) => x.id === browsing) || null;
-  const placeHash = liveBrowse ? hashFor(liveBrowse.area, liveBrowse.state) : litTable.tid ? `#task=${litTable.tid}` : "";
+  // ...and a task its X folded away is not where the owner is: the address stopped naming it (UX walk, 2026-10-22)
+  const placeHash = liveBrowse ? hashFor(liveBrowse.area, liveBrowse.state) : litTable.tid && !table.folded ? `#task=${litTable.tid}` : "";
   // ...and not in the commit that serves one: its page is drawn on the next, and this one still showed the table - written then, the
   // address became the table's before the link's own hashchange was heard, and the link opened the task instead (found by PLACE)
   const reqSeen = useRef(0);
@@ -3184,16 +3185,19 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   );
 
 
+  // A TASK FOLDED BY ITS X IS PUT AWAY (UX walk, 2026-10-22): its rail row lost the "on the table" mark and the address its #task, which
+  // said it was still in view - so its row is an ordinary row now, and a click on it opens it again in place, as its folded line does
+  const unfoldTable = () => { setRailOpen(false); setFoldedKey(null); browseDown(); putOnTable(null, "view"); };
   return (
     <>
     {DEMO && <DemoJourney onChanged={() => { loadPile(true); onChanged?.(); }} />}
     <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active} onGo={(tab, key) => browse(key)} navOn={navOn}
       onInventoryFilter={inventoryFilterChanged} unreadInventory={pile}
       top={<Pile pile={railPile} settingUp={firstRun ? setupTodo || "finish setting up" : ""} noAi={!!state && !(state.providers || []).length}
-        current={old || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem}
+        current={old || table.folded || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
-        onPull={(key, asUser) => { sectionRef.current = null; pull(key, asUser); }}
-        onSection={walkSection} onMoreFyi={moreFyi} tag={tableSays.tag} onCurrent={() => { setRailOpen(false); if (table.folded || table.place) { setFoldedKey(null); browseDown(); putOnTable(null, "view"); } }} />}
+        onPull={(key, asUser) => { sectionRef.current = null; if (table.folded && key === table.key) unfoldTable(); else pull(key, asUser); }}
+        onSection={walkSection} onMoreFyi={moreFyi} tag={tableSays.tag} onCurrent={() => { setRailOpen(false); if (table.folded || table.place) unfoldTable(); }} />}
       stage={chat}
       onPull={(r, o) => pull(keyForRow(r), o?.quiet ? null : `Tell me about “${r.Subject || r.Title || "this"}”`)}
       railOnNarrow={railOpen} setupMode={firstRun} setupRail={firstRun ? <SetupSteps /> : null} />

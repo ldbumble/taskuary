@@ -27,7 +27,7 @@ test("a press is heard once it settles, so the advice is read again for the item
   // ...and the page and a phone's row both listen, as does the draft's own Send under the card
   assert.match(read("AssistantView.jsx"), /onPressed\(\(\) => \{ if \(onTableRef\.current\) readAdvice\(onTableRef\.current, true\); \}\)/);
   assert.match(read("CanvasItem.jsx"), /onPressed\(\(\) => read\(\)\)/);
-  assert.equal((read("ReviewDecision.jsx").match(/finally \{ acted\(no\(/g) || []).length, 3, "decide, decideBoth and redraft");
+  assert.equal((read("ReviewDecision.jsx").match(/finally \{ acted\(no\(/g) || []).length, 4, "decide, decideBoth, redraft and copy");
 });
 
 test("the advice only tints: the same buttons in the same places with and without it, whatever it picks", () => {

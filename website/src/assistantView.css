@@ -701,6 +701,8 @@
 .tq-ab.q:hover:not(:disabled) { background: #f1eee8; border-color: transparent; }
 .tq-ab:focus-visible { outline: 2px solid #55697a; outline-offset: 2px; }
 .tq-ab:disabled { opacity: .5; cursor: default; }
+/* the draft's Send keeps its place on the bar, empty: its button is under the draft (the owner, 2026-10-22), and the row must not shift */
+.tq-ab.slot { visibility: hidden; display: inline-flex; align-items: center; pointer-events: none; }
 .tq-ab.p:disabled { background: #b9c1c8; border-color: #b9c1c8; opacity: 1; }   /* a greyed decision reads as off, not as a fainter blue */
 .tq-ab.next::after { content: "\2192"; margin-left: 6px; }   /* the arrow is drawn, so the button's text stays exactly "Next" */
 /* setup's Back takes the same slot and points the way it goes (FirstRun: setup:back) */

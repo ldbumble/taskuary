@@ -43,6 +43,7 @@
     "failed_cause":  {"line": "Failed: {why}", "lit": ["continue", "report_bug", "new_task"], "ask": true},
     "report_failed": {"line": "Report failed: {why}", "lit": ["fix", "rerun"]},
     "report_ok":     {"line": "", "lit": ["next"]},
+    "dashboard":     {"line": "", "lit": ["next"]},
     "fyi_batch":     {"line": "", "lit": ["next"]},
     "meeting":       {"line": "", "lit": ["next"]},
     "connection":    {"line": "", "lit": ["test_connection"]},

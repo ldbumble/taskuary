@@ -304,3 +304,20 @@ def test_a_failure_line_says_what_failed_in_plain_words_never_our_refusal():
     assert rulebook._plain_why('TQ-0012 needs a repository first - working directory does not exist', 'Send to agent did not start') == 'Send to agent did not start'
     assert rulebook._plain_why('the mailbox is signed out') == 'the mailbox is signed out'
     assert rulebook._plain_why('needs a repository first', None) == 'it stopped without saying why'
+
+
+# ── a dashboard, and Share, as the rule reads them ──────────────────────────────────────────────────────────────────────────────────
+def test_a_dashboard_row_is_silent_with_next_lit_and_share_is_seen_but_never_lit(s):
+    """A dashboard's refresh lands under Reports like a report run, and Next walks past it (the owner, 2026-10-23): no line, Next lit.
+    Share is on a report's and a dashboard's row for the Advisor to see - and no rule lights it, whatever else the row carries."""
+    m = Factory(s).message(subject='Open work - Open tasks 12', body='Open tasks: 12', from_name='Open work', from_email='')
+    rep = {'key': f'msg:{m}', 'kind': 'report', 'lane': 'report', 'mid': m}
+    dash = {**rep, 'dashboard': True}
+    have = [b['verb'] for b in concierge.row_buttons(s, dash)]
+    assert 'share_result' in have and 'share_result' in [b['verb'] for b in concierge.row_buttons(s, rep)]
+    assert 'share_result' not in [b['verb'] for b in concierge.row_buttons(s, {**rep, 'bad': True})], 'a failed run has nothing to share'
+    assert 'share_result' in [v['verb'] for v in advisor.offered(s, dash)], 'the Advisor sees the row has Share'
+    assert rulebook.decide(s, dash, _verbs(*have)) == {'state': 'dashboard', 'verb': 'next', 'line': '', 'ask': False}
+    assert rulebook.decide(s, rep, _verbs(*have))['verb'] == 'next'
+    assert not any('share_result' in w['lit'] or 'share' in w['lit'] for w in words.ADVICE_RULE.values()), 'no state lights Share'
+    assert 'share_result' not in [c['verb'] for c in concierge.chips_for(s, dash)], "the phone's chips have no Share menu"

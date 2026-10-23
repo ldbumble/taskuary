@@ -144,3 +144,14 @@ export const itemLink = (r) => r?.task_id ? `task=${r.task_id}` : r?.message_id 
 
 // the grid: four columns at full width, two on a tablet, one on a phone - a stat is a quarter, a chart half, a table the row
 export const spanOf4 = (c) => Math.max(1, Math.min(4, Number(c.w) || (c.kind === "stat" || c.kind === "progress" ? 1 : c.kind === "table" ? 4 : 2)));
+
+// WHAT A SHARED DASHBOARD CARRIES (Share.jsx's useShare): its stat tiles as lines, over the spec's own range, and the rows it drew -
+// one source's rows as they are, several sources' each marked with its label so one table still says which read a row came from.
+// The share is frozen when pressed, so a filter the owner set on the page is not the dashboard; the spec's default range is.
+export const snapshotOf = (spec, data, now = new Date()) => {
+  const days = Number(spec?.filters?.range) || 0, srcs = Object.entries(data?.sources || {}).filter(([, s]) => (s?.rows || []).length);
+  const text = (spec?.components || []).filter((c) => c.kind === "stat")
+    .map((c) => `${c.title || "value"}: ${fmt(aggregate(componentRows(spec, data, c, { days, now }), c.agg, c.y))}`).join("\n");
+  const rows = srcs.length === 1 ? srcs[0][1].rows : srcs.flatMap(([k, s]) => s.rows.map((r) => ({ source: s.label || k, ...r })));
+  return { text, data: rows };
+};

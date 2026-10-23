@@ -883,7 +883,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
     reply: <ReplyCard card={c} onDone={actions.done} onSent={actions.sent} onOpenTask={actions.openTask} onTimeline={actions.timeline} />,
     meeting: <MeetingCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
     report: <ReportCard card={c} onOpenTask={actions.openTask} onTimeline={actions.timeline} onDone={actions.done} />,
-    dashboard: <DashboardCard card={c} onDone={actions.done} />,
+    dashboard: <DashboardCard card={c} onOpenTask={actions.openTask} onDone={actions.done} />,
     idea: <IdeaCard card={c} onOpenTask={actions.openTask} onTimeline={actions.timeline} onNavigate={actions.navigate} onDone={actions.done} />,
     message: <MessageCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} onSurface={actions.surface} onNavigate={actions.navigate} />,
     setup: <SetupCard card={m.card} onNavigate={actions.navigate} onHandOff={actions.handOff} />,
@@ -2218,6 +2218,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: [], card: { kind: "words", chips: data.chips || [] } }]);
       return data;
     }
+    // a move the server runs AT ONCE (concierge.AUTO: Not ours, Mark done, Stop) draws no card: its caller runs it on the spot, and the
+    // card it drew stood with Cancel and its own From now on until the run came back (remove-undo.test's race, 2026-10-23)
+    if (data.auto) return data;
     setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: [], proposal: data,
                             card: { kind: "proposal", key: data.key, title: data.label, op: data.id, tid: data.tid, ref: data.ref } }]);
     say(data.say);
@@ -2249,7 +2252,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     }
     // a move that is no proposal (it drafts, asks for a day, or asks what to add) takes the chip's own road - the server refuses it
     if (["reply", "redraft", "defer", "continue"].includes(liveVerb(a.verb))) { await runChip({ verb: liveVerb(a.verb) }); return null; }
-    try { return await proposeDirect(a.verb, key, true, a.revision); }
+    // ...and a move the server runs AT ONCE from the row (concierge.AUTO: Not ours files just this once, its From now on under the
+    // receipt) runs at once from here too: the Advisor's copy of Not ours drew a proposal card with Cancel the row's own never does
+    // (remove-undo.test, 2026-10-23) - one press, one behaviour, whichever button it was
+    try { const pr = await proposeDirect(a.verb, key, true, a.revision); if (pr?.auto) await runProposal(pr); return pr; }
     catch (e) {
       if (demoNo(e)) { setErr(errText(e)); return null; }          // the demo saying no is a line in the chat, not the row's error
       if (e?.response?.status !== 409) throw e;
@@ -2375,7 +2381,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       const verb = liveVerb(c.verb);
       if (!verb) return;
       const pr = c.revision ? await pressAdvice({ verb, key, revision: c.revision }) : await proposeDirect(verb, key, true, null);
-      if (pr?.auto) await runProposal(pr);
+      if (pr?.auto && !c.revision) await runProposal(pr);          // ...pressAdvice runs an AUTO move itself
     } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
   };
   // a dry run of a proposed report (PW-195): the server refuses anything that could write

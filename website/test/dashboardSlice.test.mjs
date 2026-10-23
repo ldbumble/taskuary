@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { OTHER, aggregate, componentRows, daysAgo, delta, fmt, groupBy, inRange, inSegment, itemLink, segmentValues, seriesSlots,
-  sortRows, spanOf4, stacked, timeSeries } from "../src/dashboard/slice.js";
+  snapshotOf, sortRows, spanOf4, stacked, timeSeries } from "../src/dashboard/slice.js";
 import { canvasRequestFromHash, hashFor } from "../src/canvasLinks.js";
 import { DRAFT_HASH } from "../src/draftHandoff.js";
 import { DASH, placeHref } from "../src/words.js";
@@ -111,4 +111,15 @@ test("every way to the dashboards' shelf lands on it, and reads back to the same
     assert.equal(canvasRequestFromHash(hashFor("reports", r.state)).state.section, "dashboards", h);
   }
   assert.ok(DASH.new.startsWith("+ New"));
+});
+
+test("a shared dashboard carries its tiles as lines and the rows it drew - several sources each marked by its label", () => {
+  const spec = { filters: { range: 7 }, sources: [{ key: "t", date: "created" }, { key: "m" }],
+    components: [{ kind: "stat", title: "Open tasks", source: "t" }, { kind: "bar", title: "By kind", source: "t", x: "kind" }] };
+  const data = { sources: { t: { label: "Tasks", rows: [{ kind: "task", created: d(1) }, { kind: "task", created: d(20) }] },
+    m: { label: "Mail", rows: [{ channel: "email" }] }, x: { label: "Empty", rows: [] } } };
+  const snap = snapshotOf(spec, data, NOW);
+  assert.equal(snap.text, "Open tasks: 1", "the tile over the spec's own range, not a filter the page had set");
+  assert.deepEqual(snap.data.map((r) => r.source), ["Tasks", "Tasks", "Mail"]);
+  assert.deepEqual(snapshotOf({ components: [] }, { sources: { t: { rows: [{ a: 1 }] } } }, NOW), { text: "", data: [{ a: 1 }] }, "one source: its rows as they are");
 });

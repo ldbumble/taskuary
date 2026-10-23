@@ -64,3 +64,17 @@ test("only waiting on you and ready to send wear a badge; every other state is t
   // every lane, kind and state: a badge is only ever the hand or the flag
   for (const key of [...Object.keys(LANE_META)]) assert.ok(["", "👋", "🏁"].includes(stateStatus(key).badge), key);
 });
+
+test("a draft its channel cannot send wears no flag and no 'ready to send' - on the rail row and the header pill alike", () => {
+  const teams = { lane: "approve", kind: "review", channel: "teams" };
+  const row = railStatus(teams, true), pill = taskStatus({ rail: teams, cantSend: true });
+  assert.equal(row.key, "unsendable"); assert.equal(row.badge, ""); assert.notEqual(row.word, "ready to send");
+  assert.deepEqual(pill, row, "the header says what the rail says");
+  // ...with no rail row (the Tasks tab) the server's approve state reads the same
+  assert.equal(taskStatus({ state: "approve", cantSend: true }).key, "unsendable");
+  // a channel that sends, an agent's proposed action, and a refused send keep their own words
+  assert.equal(railStatus(teams, false).word, "ready to send");
+  assert.equal(railStatus({ lane: "approve", kind: "action" }, true).key, "approve");
+  assert.equal(taskStatus({ rail: { lane: "approve", kind: "action" }, cantSend: true }).key, "approve");
+  assert.equal(railStatus({ ...teams, not_sent: true }, true).key, "not_sent");
+});

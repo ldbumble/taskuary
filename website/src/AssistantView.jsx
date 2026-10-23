@@ -68,7 +68,7 @@ import { lightOf, litAfter, litPick, litPull } from "./assistantLight.js";
 import DigestText from "./DigestText.jsx";
 import { firstAppLink, openAppLink, recordPlace } from "./appLinks.js";
 import { hashFor } from "./canvasLinks.js";
-import { useCapabilities } from "./capabilities.js";
+import { canSend, useCapabilities } from "./capabilities.js";
 import { place } from "./words.js";
 import ConnectAi, { CONNECT_AI, connectAi } from "./ConnectAi.jsx";
 // FirstRun, the walk's workspace and the browse cards are drawn after the pile or a click, never on the first frame: out of the entry chunk
@@ -277,6 +277,7 @@ class BeforeCommit extends React.Component {
 
 function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onMoreFyi, settingUp = false, noAi = false, tag = "on the table" }) {
   const items = pile?.items || [];
+  const sendCaps = useCapabilities();       // a draft its channel cannot send wears "draft to copy", never the flag (railStatus)
   // the plain FYI the page has not asked for whole yet (funnel.page_fyi): counted with their band, drawn when it is opened
   const tail = fyiTail(pile).length;
   // A full account can return dozens of canonical rows together. Painting that entire stack in
@@ -671,7 +672,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                 // state's words are the icon's label and hover. A row in a band whose heading already says it (fyi, report) wears none;
                 // a goal keeps its own mark. Urgent is the row's shading, a meeting its time.
                 const goal = String(i.kind || "").startsWith("goal");
-                const st = i.settling || goal || i.kind === "meeting" ? null : railStatus(i);
+                const st = i.settling || goal || i.kind === "meeting" ? null : railStatus(i, !canSend(sendCaps, i.channel));
                 const shown = st && (st.spins || meta.word !== BAND_SAYS[level]) ? st : null;
                 const word = i.settling ? ""
                   : i.kind === "meeting" ? `invite · ${fmtTime12(i.when)}`

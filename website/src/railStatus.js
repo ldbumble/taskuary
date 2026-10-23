@@ -15,11 +15,15 @@ const said = (key, m, spins) => ({ key, mark: m.mark, word: m.word, role: m.role
   badge: spins ? "" : BADGE[key] || "", anim: spins ? "ring" : ANIM[key] || null });
 
 // a RAIL ROW (a funnel item: lane, kind, not_sent, settling) as the rail draws it - a kind's word over its lane's, a refused send over both
-export const railStatus = (item) => {
+// ...and A DRAFT ITS CHANNEL CANNOT SEND (`cantSend`: capabilities.canSend / draftCanSend, the caller's live answer) is no flag and no
+// "ready to send": a Teams row wore both over a reply nothing here can send (the UI walk, 2026-10-22) - it is a draft to copy
+const UNSENDABLE = "unsendable";
+export const railStatus = (item, cantSend = false) => {
   if (!item?.lane) return null;
-  const key = item.not_sent ? "not_sent" : KIND_META[item.kind] ? item.kind : item.lane;
+  const copy = cantSend && !item.not_sent && item.lane === "approve" && item.kind === "review";
+  const key = copy ? UNSENDABLE : item.not_sent ? "not_sent" : KIND_META[item.kind] ? item.kind : item.lane;
   const spins = item.lane === "working" && !item.settling;
-  return said(key, rowMeta(item), spins);
+  return said(key, copy ? { ...rowMeta(item), ...KIND_META[UNSENDABLE] } : rowMeta(item), spins);
 };
 // a TASK'S STATE (taskstate.py: a lane, or `theirs`, `agentdone`, `closed`, `dropped`) - the Tasks list's row, and a task with no rail row
 export const stateStatus = (key) => {
@@ -32,10 +36,12 @@ export const stateStatus = (key) => {
 // (the Tasks list's row, or the detail's own for a task with no row - a closed one).
 // A CLOSED task has no rail row of its own - one pulled onto the table by a link or a search wears whatever lane it was read in - so
 // its state is the server's: done, the agent finished, or dropped.
-export const taskStatus = ({ live = null, rail = null, state = null, closed = false } = {}) => {
+// `cantSend`: the task's pending draft cannot leave from here (TaskPage's cantSend) - its pill is the rail's "draft to copy", not the flag
+export const taskStatus = ({ live = null, rail = null, state = null, closed = false, cantSend = false } = {}) => {
   if (live?.alive) return railStatus({ lane: live.waiting ? "blocked" : "working" });
   if (closed && stateStatus(state)) return stateStatus(state);
-  return railStatus(rail) || stateStatus(state);
+  const st = railStatus(rail, cantSend) || stateStatus(state);
+  return cantSend && st?.key === "approve" && rail?.kind !== "action" ? said(UNSENDABLE, KIND_META[UNSENDABLE], false) : st;
 };
 
 // what a row's icon says to a reader that cannot see it: the state's words (a screen reader, a hover, a reader without colour)

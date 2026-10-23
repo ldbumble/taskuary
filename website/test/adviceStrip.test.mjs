@@ -53,7 +53,7 @@ test("no line is still an answer: only no AI is a sentence, and every other sile
   assert.doesNotMatch(view, /AdviceNone|Thinking about this one/);
   assert.doesNotMatch(read("ActionRow.jsx"), /export function AdviceNone/);
   // ...in one strip that holds its height from Thinking to the answer, so the row under it never jumps
-  assert.match(view, /<div className="tq-strip" data-tq-strip=\{busy \? "busy" : ""\}>/);
+  assert.match(view, /<div className="tq-strip" data-tq-strip=\{busy( \|\| \(reading && reading === onTable\))? \? "busy" : ""\}>/);
   // ...and the dead-end walk holds the page to all of it (STILL, STRIP, REREAD, LIT)
   const walk = fs.readFileSync(path.join(process.cwd(), "deadend_check.mjs"), "utf8");
   for (const rule of ["STILL", "STRIP", "REREAD", "LIT"]) assert.ok(walk.includes(`note("${rule}"`), rule);

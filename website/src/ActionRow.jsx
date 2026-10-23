@@ -111,7 +111,7 @@ function Cluster({ g, btn }) {
 }
 
 // the row says what to do, by type - not which task or how long it waited: the card above says both (the owner, 2026-10-13)
-export default function ActionRow({ inline = false, advised = null }) {
+export default function ActionRow({ inline = false, advised = null, hold = false }) {
   // a "none" answer lights its one move: no AI lights the row's own Connect an AI where the row has one (a failure's fix named after
   // its place) - it lit nothing, a move named "ai" no button carries (the design, phase A) - and any other none lights Next
   const verbs = useRowVerbs();
@@ -137,7 +137,9 @@ export default function ActionRow({ inline = false, advised = null }) {
       title={(v.disabled && v.why) || v.title || undefined} onClick={(e) => press(v.id, e, e.currentTarget)}>{v.label}</button>
   );
   return (
-    <div className={inline ? "tq-arow inline" : "tq-arow"} role="toolbar" aria-label={ref ? `What to do with ${ref}` : "What to do with this one"} data-tq-row="">
+    // `hold`: the item's first decision is still being read - the row keeps its room and shows nothing until its lit button lands with it
+    <div className={inline ? "tq-arow inline" : "tq-arow"} role="toolbar" aria-label={ref ? `What to do with ${ref}` : "What to do with this one"} data-tq-row=""
+      aria-busy={hold || undefined} style={hold ? { visibility: "hidden" } : undefined}>
       <div className="tq-arow-verbs">
         {next && <div className="tq-cl" role="group" aria-label="Move on">
           <div className="tq-cl-b"><button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} title={next.title || undefined} disabled={next.disabled}

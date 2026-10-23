@@ -5,15 +5,20 @@ import assert from "node:assert/strict";
 import { adviceKeyFor, stripWord } from "../src/advice.js";
 
 // C2 (the UI audit, 2026-10-21): the strip's word and the lit button are one decision (advice.stripWord)
-test("a working agent's strip says it is working and lights Next, even with no AI connected", () => {
+test("a working agent lights Next and says nothing, even with no AI connected", () => {
   const w = stripWord({ speaks: true, aiOff: true, key: "task:9", lane: "working" });
-  assert.equal(w.noAi, false); assert.equal(w.none.none, "working"); assert.equal(w.pick.none, "working");
+  assert.equal(w.noAi, false); assert.deepEqual(w.pick, { verb: "next", line: "", for: "task:9" });
   const n = stripWord({ speaks: true, advice: { none: "no_ai", for: "task:9" }, key: "task:9", lane: "working" });
-  assert.equal(n.none.none, "working", "a no-AI answer read for a working agent is said as working");
-  const p = stripWord({ speaks: true, aiOff: true, key: "task:3", lane: "asked" });
-  assert.equal(p.noAi, true); assert.equal(p.pick.none, "no_ai", "elsewhere the strip asks for an AI, and the row lights nothing of its own");
+  assert.equal(n.pick.verb, "next", "a no-AI answer read for a working agent is Next");
+  // ...no AI is said only where the move needs one (advisor.decide's needs_ai) - a rule decides the rest with none connected
+  const ask = { verb: "reply", line: "", needs_ai: true, for: "task:3" };
+  const p = stripWord({ speaks: true, aiOff: true, shown: ask, advice: ask, key: "task:3", lane: "asked" });
+  assert.equal(p.noAi, true); assert.equal(p.pick.none, "no_ai", "the strip asks for an AI, and its own Connect is the lit move");
+  const rule = { verb: "continue", line: "", needs_ai: false, for: "task:4" };
+  assert.equal(stripWord({ speaks: true, aiOff: true, shown: rule, advice: rule, key: "task:4", lane: "stopped" }).pick, rule, "the rule's own move needs no AI");
   const s = { verb: "reply", line: "x" };
-  assert.equal(stripWord({ speaks: true, shown: s, key: "k", lane: "asked" }).pick, s, "a line lights its verb");
+  assert.equal(stripWord({ speaks: true, shown: s, key: "k", lane: "asked" }).pick, s, "a decision lights its verb");
+  assert.deepEqual(stripWord({ speaks: true, advice: { none: "off", for: "k" }, key: "k", lane: "asked" }).pick, { verb: "next", line: "", for: "k" }, "any other none: Next, silent");
 });
 
 test("an advice event is about the item on the table when it names its key or one of its aliases", () => {
@@ -26,19 +31,20 @@ test("an advice event is about the item on the table when it names its key or on
   assert.equal(adviceKeyFor({}, cur), null);
 });
 
-// WHEN THE STRIP SPEAKS (the owner, 2026-10-13: "not while waiting or walking through things"): only the line read for the
-// item on the table now, only at rest, and never over an agent at work.
-test("the strip speaks only for the item on the table, at rest, and never over an agent at work", async () => {
+// WHEN THE STRIP SPEAKS (the owner, 2026-10-13: "not while waiting or walking through things"): only the decision read for the
+// item on the table now, only at rest; an agent at work is Next; and the OBVIOUS move is silent - lit, said by nothing (2026-10-23)
+test("the strip speaks only for the item on the table, at rest, and an agent at work is Next", async () => {
   const { adviceShown } = await import("../src/advice.js");
   const a = { verb: "continue", line: "You usually continue it.", for: "processing:7" };
   const item = { key: "processing:7", lane: "blocked" };
   assert.equal(adviceShown(a, item, false), a);
   assert.equal(adviceShown(a, { key: "processing:8", lane: "blocked" }, false), null, "the last item's line over the next one");
   assert.equal(adviceShown(a, item, true), null, "an act in flight");
-  assert.equal(adviceShown(a, { ...item, lane: "working" }, false), null, "an agent continued and at work");
+  assert.deepEqual(adviceShown(a, { ...item, lane: "working" }, false), { ...a, verb: "next", line: "", state: "working" }, "an agent continued and at work");
   assert.equal(adviceShown({ ...a, for: undefined }, item, false), null, "a line nobody read for this table");
   assert.equal(adviceShown(a, null, false), null);
-  assert.equal(adviceShown({ ...a, line: "" }, item, false), null);
+  assert.deepEqual(adviceShown({ ...a, line: "" }, item, false), { ...a, line: "" }, "a silent decision still lights its button");
+  assert.equal(adviceShown({ ...a, verb: null }, item, false), null, "a decision that lights nothing (an agent asking) is not shown");
 });
 
 test("the page draws the gated line, starts each item with none, and drops a read the table outran", async () => {
@@ -53,7 +59,7 @@ test("the page draws the gated line, starts each item with none, and drops a rea
   // the read is for the key ON THE TABLE - the walk's item or a task opened by name - and shown only for it
   assert.match(src, /useEffect\(\(\) => \{ readAdvice\(onTable\); setChanged\(null\); \}, \[onTable, readAdvice\]\);/);
   assert.match(src, /table\.speaks && !litNow \? adviceShown\(advice, \{ key: table\.key, lane: currentItem\?\.lane \}, busy\) : null/);
-  // ...and while it is out, a quiet line - no button - says the advice is coming
-  assert.match(src, /data-tq-advice-thinking=""><div className="tq-next-txt">Thinking about this one…<\/div>/);
+  // ...and while it is out, nothing: no "Thinking..." (the owner, 2026-10-23) - the rule's button is lit at once
+  assert.doesNotMatch(src, /data-tq-advice-thinking|Thinking about this one/);
   assert.doesNotMatch(src, /picks up where it left off, and comes back here/, "the continue receipt is gone");
 });

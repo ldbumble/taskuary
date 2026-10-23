@@ -682,6 +682,12 @@
 .tq-next::before { content: ""; flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: #55697a; }
 .tq-next-txt { flex: 0 1 auto; min-width: 0; font: 500 14px/1.4 'IBM Plex Sans', system-ui, sans-serif; color: #262521;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* ONE line, always - the whole sentence is its tooltip (oneLine.js) */
+/* ...but ON A PHONE IT WRAPS TO TWO LINES, NEVER CUT (the owner's ruling 6, 2026-10-22; the design phase A): a line is a fact of at most
+   ~60 characters, so two lines always hold it whole */
+@media (max-width: 600px) {
+  .tq-strip .tq-next-txt { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+  .tq-strip .tq-next { padding-top: 6px; padding-bottom: 6px; }
+}
 .tq-next > *:not(.tq-next-txt) { flex-shrink: 0; }   /* ...and Why? and a lit button stay on it, whole */
 .tq-next-why { flex: 0 0 auto; border: 0; background: transparent; padding: 4px 6px; border-radius: 6px; cursor: pointer; font: 600 12.5px/1 'IBM Plex Sans', system-ui, sans-serif; color: #55697a; text-decoration: underline; text-underline-offset: 3px; }
 .tq-next-why:hover { background: #ece9e3; }

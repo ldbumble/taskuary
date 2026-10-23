@@ -70,7 +70,7 @@ import DigestText from "./DigestText.jsx";
 import { firstAppLink, openAppLink, recordPlace } from "./appLinks.js";
 import { hashFor } from "./canvasLinks.js";
 import { canSend, useCapabilities } from "./capabilities.js";
-import { place } from "./words.js";
+import { adviceNone, place } from "./words.js";
 import ConnectAi, { CONNECT_AI, connectAi } from "./ConnectAi.jsx";
 // FirstRun, the walk's workspace and the browse cards are drawn after the pile or a click, never on the first frame: out of the entry chunk
 const FirstRun = lazyView(() => import("./FirstRun.jsx"));
@@ -84,7 +84,7 @@ import { MORE_PX, backAt, dueWord, placed, pulledRow, sectionDone, sectionNext }
 import { age, ago, band, bandUntil, plural } from "./timeWords.js";
 const GeneralWorkspace = lazyView(loadGeneral);
 import CanvasItem, { CANVAS_ITEM_HEIGHT, showsTask } from "./CanvasItem.jsx";
-import ActionRow, { AdviceNone, AdvisorNext } from "./ActionRow.jsx";
+import ActionRow, { AdvisorNext } from "./ActionRow.jsx";
 import { floorOf } from "./inView.js";
 const CanvasBrowse = lazyView(() => import("./CanvasBrowse.jsx"));
 import { ROADS, roadOfCard } from "./timelineState.js";
@@ -1480,13 +1480,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // ...stamped with the key it was read FOR, and a read that comes back after the table moved on is dropped
   const adviceAsk = useRef(0);
   const unconfirmedRef = useRef(null), adviceHeld = useRef(null);   // the key drawn ahead of its press's answer, until it lands (readAdvice)
-  // `asking`: the key a read is out for - the strip says "Thinking about this one…" while the table waits on it, so the row with
-  // nothing dark is never read as having nothing to do
-  const [asking, setAsking] = useState(null);
-  const readAdvice = useCallback(async (key, keep, again = false) => {
+  // NO "THINKING..." (the owner, 2026-10-23): the Advisor answers at once with the rule's lit button, and the model's read, where one
+  // is wanted, arrives by the `advice` event - nothing is drawn while a read is out
+  const readAdvice = useCallback(async (key, keep) => {
     const n = ++adviceAsk.current;
     if (!keep) setAdvice(null);                     // a new item starts with no line, never the last item's
-    setAsking(key || null);
     if (!key) return;
     // ...and not while the card is one drawn ahead of its press's answer (drawAhead): the Advisor reads the rail, and
     // a rail rebuilt under the press between its admission and its commit check refused the press as stale (PW-118). The
@@ -1494,14 +1492,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (unconfirmedRef.current === key) { adviceHeld.current = key; return; }
     let got = null;
     // ...and {"none":"no_ai"}: no AI connected is said once, with the way to connect one, instead of a strip that stays empty (U3)
-    let read = { advice: null, asking: null };
-    try { read = adviceRead((await api.get("/api/advice", { params: { key } })).data, key); got = read.advice; }
+    try { got = adviceRead((await api.get("/api/advice", { params: { key } })).data, key).advice; }
     catch { got = null; }
     if (n !== adviceAsk.current) return;
-    // ...pending is the Advisor judging it now: the line comes by the `advice` event. One that never lands is asked again once, and
-    // then the quiet line goes - never a "Thinking" that stands for good
-    setAdvice(got); setAsking(again ? null : read.asking);
-    if (read.asking && !again) setTimeout(() => { if (n === adviceAsk.current) readAdvice(key, true, true); }, 20000);
+    setAdvice(got);
   }, []);
   // ...re-read when the table changes AND when the card on it refreshes (a reply landing keeps the key and moves the
   // revision: the old pill must go), and when the Advisor's own event names this item or one of its aliases
@@ -2846,7 +2840,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // ...and every other reason there is no line, said (words.json advice_none) - an agent at work included, whose line is hidden.
   // ONE DECISION for the strip's word and the button it lights (advice.stripWord): they were chosen apart, and "Connect an AI" stood
   // over a dark Stop and save on an agent that needed nothing (the UI audit's C2, 2026-10-21)
-  const { noAi, none: noneSaid, pick: stripPick } = stripWord({ speaks: table.speaks, busy, shown: shownAdvice, lit: litNow, aiOff: caps.ai === false,
+  const { noAi, pick: stripPick } = stripWord({ speaks: table.speaks, busy, shown: shownAdvice, lit: litNow, aiOff: caps.ai === false,
     advice, key: table.key, lane: currentItem?.lane });
   // ON A PHONE THE LINE RIDES WITH ITS ROW: the row is drawn at the task view's foot there (CanvasItem), and the line pinned over the
   // composer stood a screen away from the button it lit (2026-10-19) - the view draws both, and the dock none
@@ -3125,9 +3119,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           <div className="tq-dock">
           {firstRun ? <SetupLine /> : noAi ? (
             <div className="tq-next" role="status" data-tq-advice="no_ai">
-              <div className="tq-next-txt">Connect an AI to get a suggestion on each item</div>
-              {/* quiet: the row below keeps the one filled button */}
-              <button type="button" className="tq-chip" onClick={() => openAppLink(place("ai").href)}>Connect an AI</button>
+              <div className="tq-next-txt">{adviceNone("no_ai").line}</div>
+              {/* THE ONE LIT MOVE: the row's own Connect an AI when it has one (ActionRow lights it), else this one (the design, phase A:
+                  the strip asked for an AI over a row that lit nothing) */}
+              <button type="button" className={rowVerbs.list.some((v) => v.label === CONNECT_AI && !v.disabled) ? "tq-chip" : "tq-chip primary"}
+                onClick={() => openAppLink(place("ai").href)}>{CONNECT_AI}</button>
             </div>
           ) : <>
             {/* THE ADVICE IS ON ITS WAY: the row has nothing dark until it lands (rowOf), and a quiet line says so - no button.
@@ -3136,13 +3132,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             {/* THE ASSISTANT'S LIT BUTTON SAYS SO HERE, over the row it lit: the strip stood empty over a dark Mark done, and "Press Mark done"
                 was only up in the chat (verify, 2026-10-19) - it goes out with the light */}
             {table.speaks && !!litNow && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">{litNow.line}</div></div>}
-            {table.speaks && !litNow && !shownAdvice && !noneSaid && !changed && !busy && asking === onTable && currentItem?.lane !== "working" && (
-              <div className="tq-next" role="status" data-tq-advice-thinking=""><div className="tq-next-txt">Thinking about this one…</div></div>)}
             {table.speaks && !litNow && changed && changed.for === onTable && <div className="tq-next" role="status" data-tq-advice-changed="">
               <div className="tq-next-txt">{changed.reading ? "This changed - reading it again…" : shownAdvice ? "This changed - here's the updated suggestion."
-                : "This changed - nothing to suggest on it now."}</div></div>}
+                : "This changed."}</div></div>}
             <AdvisorNext advice={shownAdvice} onPropose={pressAdvice} />
-            {!changed && !litNow && <AdviceNone advice={noneSaid} />}
             </div>}
           </>}
           {/* ...and during setup its line is the Advisor's (SetupLine): the move setup fills (FirstRun's tone) is the one lit - nothing

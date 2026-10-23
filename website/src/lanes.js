@@ -58,6 +58,13 @@ export const isOwnersMove = (item) => LANE[item?.lane]?.on_you !== false;
 // owner's move - waiting on THEM, or an agent working, sits under Tasks as the owner's task, but it is on somebody else
 export const onYou = (item, level = levelOf(item)) => !item?.settling && !!SECTION[level]?.on_you && isOwnersMove(item);
 export const toRead = (item, level = levelOf(item)) => !item?.settling && !!SECTION[level]?.to_read;
+// ONE COUNT FOR EVERY SURFACE (the design, phase A): "N on you", the walk's end and the rail's Tasks heading counted their own ways, and
+// 12 sat beside 13 (the 2026-10-22 UX walk) - lanes.py census is the same rule. { tasks: rows under Tasks, onYou: those that are the
+// owner's move, toRead: rows to read }
+export const census = (items = []) => {
+  const lv = (items || []).filter((i) => !i?.settling).map((i) => [i, levelOf(i)]);
+  return { tasks: lv.filter(([, l]) => l === "task").length, onYou: lv.filter(([i, l]) => onYou(i, l)).length, toRead: lv.filter(([i, l]) => toRead(i, l)).length };
+};
 
 // EVERY KIND OF ROW: how a sentence counts it, whether it came in as mail, whether it is an agent's own news
 export const KIND = vocab.item_kinds;

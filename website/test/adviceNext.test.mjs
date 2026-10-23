@@ -49,7 +49,10 @@ test("the next step sits over the row and the box is plain: no ghost text, no pi
   assert.match(src, /<ActionRow [^>]*advised=\{stripPick \|\| setupLit\}/);
   assert.doesNotMatch(src, /ghostText|tq-pill|tq-advised/);
   assert.doesNotMatch(css, /\.tq-pill|tq-advised/);
-  assert.match(row, /if \(!advice\?\.verb \|\| !advice\.line\) return null;/);                // nothing to say draws nothing
+  assert.match(row, /if \(!advice\?\.verb\) return null;/);                                   // no decision draws nothing
+  // ...and an OBVIOUS move draws no sentence - its button is lit and the strip carries only an empty mark (the owner, 2026-10-23)
+  assert.match(row, /const mark = <div hidden data-tq-advice="" data-tq-silent="" \/>;/);
+  assert.match(row, /if \(!advice\.line\) return mark;/);
   assert.match(css, /\.tq-next \{/);
 });
 
@@ -75,7 +78,7 @@ test("the strip has no NEXT tag and no button of its own; a move the row lacks j
   assert.doesNotMatch(strip, /NEXT/);
   assert.doesNotMatch(strip, /<button type="button" className="tq-ab/, "the line draws no button - the row has them all");
   assert.match(strip, /useVerbs\("advice", lacks \? \[\{ id: `advice:\$\{advice\.verb\}`/);
-  assert.match(strip, /const lacks = !!\(advice\?\.verb && advice\.line && onPropose\) && !advisedAny\(theirs, advice\);/);
+  assert.match(strip, /const lacks = !!\(advice\?\.verb && advice\.verb !== "next" && onPropose\) && !advisedAny\(theirs, advice\);/);
   assert.match(strip, /suggestion\(advice\.line, advice\.label, advice\.verb\)/);
   assert.match(strip, /className="tq-next-why"[^>]*>Why\?<\/button>/);
   assert.match(strip, /api\.get\("\/api\/advice\/notes", \{ params: \{ key: advice\.key/);

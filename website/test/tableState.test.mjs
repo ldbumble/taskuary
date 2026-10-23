@@ -31,15 +31,15 @@ test("a page over the item: the rail's tag and the box say it is under the page,
   assert.match(src, /placeholder=\{phone \? tableSays\.phone : tableSays\.box\}/, "and the box its words");
 });
 
-test("Thinking shows only while the server says a judgement is in flight", () => {
-  assert.deepEqual(adviceRead({ pending: true }, "task:7"), { advice: null, asking: "task:7" });
-  // EVERY REASON IS KEPT (2026-10-19): dropped, the strip went blank under the row; each is said as a sentence (words.json)
-  for (const why of ["quiet", "working", "no_actions", "nothing", "off"])
-    assert.deepEqual(adviceRead({ none: why }, "task:7"), { advice: { none: why, for: "task:7" }, asking: null }, why);
-  assert.equal(adviceRead({ verb: "reply", line: "Erin asked." }, "task:7").advice.for, "task:7");
-  assert.equal(adviceRead({ none: "no_ai" }, "task:7").advice.none, "no_ai");
-  assert.equal(adviceRead({ none: "cap" }, "task:7").advice.none, "cap");
-  assert.deepEqual(adviceRead({}, "task:7"), { advice: null, asking: null }, "an old server's bare {} is no spinner");
+// NO "THINKING..." (the owner, 2026-10-23): the server answers at once with the Advisor's one decision - a lit verb, silent or with its
+// fact - and the page keeps every answer it reads for the key it asked about
+test("the Advisor's decision is read whole, silent or not, and nothing is ever a spinner", () => {
+  assert.deepEqual(adviceRead({ pending: true }, "task:7"), { advice: null }, "an old server's pending is no spinner");
+  assert.equal(adviceRead({ verb: "reply", line: "" }, "task:7").advice.verb, "reply", "an obvious move: lit, said by nothing");
+  assert.equal(adviceRead({ verb: "chase", line: "Ray Colton: 4 days, no answer." }, "task:7").advice.for, "task:7");
+  assert.equal(adviceRead({ verb: null, state: "agent_asking", line: "" }, "task:7").advice.state, "agent_asking", "nothing lit is an answer too");
+  for (const why of ["no_ai", "off", "nothing"]) assert.equal(adviceRead({ none: why }, "task:7").advice.none, why, why);
+  assert.deepEqual(adviceRead({}, "task:7"), { advice: null });
 });
 
 test("a task opened by name hears the Advisor's event, which names it by the rail's key", () => {

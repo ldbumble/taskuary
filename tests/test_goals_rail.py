@@ -1,4 +1,4 @@
-"""One row per goal: under Tasks when it has news, For later when quiet, never gone (spec 2026-10-12, build step 1); its steps
+"""One row per goal, under Tasks - with news or quiet, walked past or not (the owner, 2026-10-22) - and never gone; its steps
 are task rows of their own whoever holds them - they folded into it while an agent or a person had them (the owner, 2026-10-21)."""
 import unittest
 from datetime import datetime, timedelta
@@ -36,17 +36,17 @@ def card(s, tid): return next(i for i in rail(s, include_read=True) if i.get('ti
 
 
 class GoalRowTests(unittest.TestCase):
-    def test_a_goal_with_no_boxes_is_fresh_and_in_later(self):
+    def test_a_goal_with_no_boxes_is_fresh_and_in_tasks(self):
         s, settle = settled(); g = goal(s, steps=()); settle()
         c = card(s, g)
         self.assertEqual((c['kind'], c['steps'], c['steps_done'], c['due']), ('goal_fresh', 0, 0, day(50)))
-        self.assertEqual(funnel.level_of(c), 'later'); self.assertTrue(c['back_at'].startswith(day(50)))
+        self.assertEqual(funnel.level_of(c), 'task'); self.assertTrue(c['back_at'].startswith(day(50)))
 
-    def test_a_quiet_goal_on_track_sits_in_later_with_its_count(self):
+    def test_a_quiet_goal_on_track_sits_in_tasks_with_its_count(self):
         s, settle = settled(); g = goal(s)
         s.tick_checklist_item(g, checklist_id('Inventory the fields'), True, 'owner'); settle()
         c = card(s, g)
-        self.assertEqual(c['kind'], 'goal'); self.assertEqual(funnel.level_of(c), 'later')
+        self.assertEqual(c['kind'], 'goal'); self.assertEqual(funnel.level_of(c), 'task')
         self.assertTrue(c['why'].startswith('1 of 3'), c['why'])
 
     def test_a_goal_past_its_date_is_slipped_and_in_tasks(self):
@@ -66,6 +66,22 @@ class GoalRowTests(unittest.TestCase):
         s.update_task(c, {'Status': 'done'}, 'agent:coding'); settle()
         k = card(s, g)
         self.assertTrue(k['news']); self.assertEqual(funnel.level_of(k), 'task')
+
+    def test_a_goal_walked_past_stays_in_tasks_and_only_remind_me_puts_it_for_later(self):
+        """GOALS STAY IN TASKS (the owner, 2026-10-22): Next walking past a goal with news moved it to For later (spec 2026-10-12)
+        - a row jumping sections under the owner's hand, which the rail-order rule forbids."""
+        row = {'kind': 'goal', 'lane': 'yours', 'order_band': 2, 'news': True}
+        for seen in ({}, {'surfaced': True, 'put_down': True}, {'news': False}): self.assertEqual(funnel.level_of(row | seen), 'task', seen)
+        self.assertEqual(funnel.level_of(row | {'deferred': True}), 'later')
+
+    def test_a_goal_and_its_steps_made_in_one_second_keep_one_order(self):
+        """A goal and the steps made with it arrive in the same second, and the tie fell to the rows' keys - hashes, so a step could
+        stand above its goal. The tie goes to the task number: the goal first, then its steps as they were made."""
+        at = ago(1)
+        rows = [{'key': f'processing:{h}', 'tid': t, 'lane': 'yours', 'order_band': 2, 'arrived_at': at, **({'goal': 'TQ-0010'} if t > 10 else {'kind': 'goal'})}
+                for h, t in (('a1', 12), ('ff', 10), ('0c', 11))]
+        self.assertEqual([r['tid'] for r in sorted(rows, key=funnel.order_key)], [10, 11, 12])
+        self.assertEqual([r['tid'] for r in sorted(rows[::-1], key=funnel.order_key)], [10, 11, 12])
 
 
 class StepRowTests(unittest.TestCase):
@@ -121,9 +137,9 @@ class FixPassTests(unittest.TestCase):
         c = s.create_task({'Title': 'Map the schema', 'Kind': 'general', 'ParentId': g}, 'owner'); s.link_step(g, checklist_id('Map the schema'), c, 'owner')
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()      # reads register once active
         k = card(s, g); funnel.settle(s, k['key'], 'surfaced', read=True, shown={k['key']: k.get('view_revision')}, put_down=True); settle()
-        k = card(s, g); self.assertTrue(k['surfaced']); self.assertFalse(k['actionable']); self.assertEqual(funnel.level_of(k), 'later')
+        k = card(s, g); self.assertTrue(k['surfaced']); self.assertFalse(k['actionable']); self.assertEqual(funnel.level_of(k), 'task')   # read: walked past till news, still in Tasks (2026-10-22)
         later = datetime.now() + timedelta(hours=4)                         # past the quiet hours, with no news
         k = next(i for i in rail(s, include_read=True, now=later) if i.get('tid') == g)
-        self.assertTrue(k['surfaced']); self.assertFalse(k['actionable']); self.assertEqual(funnel.level_of(k), 'later')
+        self.assertTrue(k['surfaced']); self.assertFalse(k['actionable']); self.assertEqual(funnel.level_of(k), 'task')
         s.update_task(c, {'Status': 'done'}, 'agent:coding'); settle()      # news: a step closed since you read it
         k = card(s, g); self.assertFalse(k.get('surfaced')); self.assertTrue(k['actionable']); self.assertEqual(funnel.level_of(k), 'task')

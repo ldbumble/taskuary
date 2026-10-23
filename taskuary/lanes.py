@@ -77,10 +77,9 @@ def level_of(item: dict) -> str:
     """The rail section a row is drawn in - website/src/lanes.js levelOf is the same rule, and tests/fixtures/rail_levels.json
     holds both to the same answers."""
     band = stamped_band(item)
-    # A GOAL is one row and never gone: under Tasks while it has news you have not walked past, For later - scheduled to come
-    # back on its next news - once you have (spec 2026-10-12). `surfaced` is the Passed mark: a read open task stays unread on
-    # purpose, so unread cannot be the signal.
-    if str(item.get('kind') or '').startswith('goal'): return 'task' if item.get('news') and not item.get('surfaced') else 'later'
+    # A GOAL is one row and never gone - and it STAYS IN TASKS (the owner, 2026-10-22): it moved to For later once Next walked past it
+    # or it had no news (spec 2026-10-12), and the rail-order rule wins - a row moves only by leaving its section. Its news decides
+    # whether the walk brings it back as yours (processing_unread `back`), never its section; Remind me puts it For later like any task.
     # FOR LATER IS WHAT YOU PUT THERE WITH A DATE - Remind me - never a card merely shown (the owner, 2026-10-08: "it moved 1003
     # automatically to later?"), and no longer Next either: Next moves the walk on and the task stays in Tasks, where it was
     # (the owner, 2026-10-21). The walk skips it by its mark (put_down), not by moving it.

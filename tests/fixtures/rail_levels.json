@@ -147,7 +147,7 @@
       "news": true,
       "surfaced": true
     },
-    "later"
+    "task"
   ],
   [
     {
@@ -157,13 +157,23 @@
       "news": false,
       "surfaced": false
     },
-    "later"
+    "task"
   ],
   [
     {
       "kind": "goal_fresh",
       "lane": "yours",
       "order_band": 2
+    },
+    "task"
+  ],
+  [
+    {
+      "kind": "goal",
+      "lane": "yours",
+      "order_band": 2,
+      "news": false,
+      "deferred": true
     },
     "later"
   ]

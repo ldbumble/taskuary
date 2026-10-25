@@ -9,7 +9,7 @@ const src = new URL("../src/", import.meta.url);
 const read = (f) => readFileSync(new URL(f, src), "utf8");
 const SPLIT = {   // view: the modules allowed a static import of it (all in split chunks)
   "CanvasBrowse.jsx": ["FirstRun.jsx"], "FirstRun.jsx": [], "GeneralWorkspace.jsx": ["DemoJourney.jsx"], "DemoJourney.jsx": [],
-  "ConnectorsView.jsx": ["FirstRun.jsx"], "ReportsView.jsx": ["WorkflowSteps.jsx"], "SettingsView.jsx": [],
+  "ConnectorsView.jsx": ["FirstRun.jsx"], "ReportsView.jsx": ["WorkflowSteps.jsx", "DashboardEditor.jsx"], "SettingsView.jsx": [],
   "BoardView.jsx": ["AssistantGame.jsx", "WallView.jsx"],
 };
 const files = readdirSync(src).filter((f) => /\.(jsx?|mjs)$/.test(f));

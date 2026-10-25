@@ -43,7 +43,7 @@ const TipRows = ({ k, rows }) => (
 export function Card({ c, w, children, table, stale, onPress, className = "" }) {
   const [asTable, setAsTable] = useState(false);
   return (
-    <section className={`tq-dash-card w${w} ${stale ? "stale" : ""} ${className}`} data-tq-dash-kind={c.kind} aria-label={c.title}
+    <section className={`tq-dash-card w${w} ${stale ? "stale" : ""} ${className}`} data-tq-dash-kind={c.kind} aria-label={c.title} style={{ "--i": c.i ?? 0 }}
       onClick={onPress} onKeyDown={onPress ? (e) => { if (e.key === "Enter") onPress(e); } : undefined} tabIndex={onPress ? 0 : undefined}>
       <div className="tq-dash-h"><h3 title={c.title}>{c.title}</h3>
         {table && <button type="button" className="tq-dash-flip" aria-pressed={asTable} onClick={(e) => { e.stopPropagation(); setAsTable(!asTable); }}>
@@ -59,23 +59,36 @@ function Spark({ points }) {
   const vals = points.map((p) => p.value ?? 0), max = Math.max(1, ...vals), n = Math.max(1, vals.length - 1);
   const xy = vals.map((v, i) => [(i / n) * 100, 28 - (v / max) * 26]);
   if (vals.length < 2) return null;
-  const last = xy[xy.length - 1];
+  const last = xy[xy.length - 1], line = xy.map(([x, y]) => `${x},${y}`).join(" ");
   return (
     <svg className="tq-dash-spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
-      <polyline className="ln" points={xy.map(([x, y]) => `${x},${y}`).join(" ")} />
+      <polygon className="ar" points={`0,30 ${line} 100,30`} />
+      <polyline className="ln" points={line} />
       <rect className="now" x={last[0] - 1.2} y={last[1] - 1.2} width="2.4" height="2.4" rx="1.2" />
     </svg>
   );
 }
 
+// a value and its unit: the unit is set smaller, in the muted ink, so the number stays the thing read
+const Value = ({ v, unit, of }) => (
+  <div className="tq-dash-value">{fmt(v)}{unit && v !== null && v !== undefined && <span className="u">{unit}</span>}{of}</div>
+);
+// the change: its sign, coloured only when a direction is good ("good": "none" is a measure with no better way), and its share
+const Delta = ({ d, good, days }) => {
+  const g = good === "down" ? -1 : good === "none" ? 0 : 1, dir = !d.change || !g ? "" : d.change * g > 0 ? "up" : "down";
+  return (
+    <div className="tq-dash-delta"><b className={dir}>{signed(d.change)}{d.pct !== null && d.change ? ` (${Math.round(Math.abs(d.pct) * 100)}%)` : ""}</b>
+      <span>vs the {days} days before</span></div>
+  );
+};
+
 export function StatTile({ c, rows, all, date, days, now, onDrill, stale }) {
   const v = aggregate(rows, c.agg, c.y), d = delta(all, date, days, c.agg, c.y, now);
-  const good = c.good === "down" ? -1 : 1, dir = !d || !d.change ? "" : d.change * good > 0 ? "up" : "down";
   const pts = date ? timeSeries(rows, date, c.agg, c.y, { days: days || 30, now }) : [];
   return (
     <Card c={c} w={1} stale={stale} className="tq-dash-stat" onPress={() => onDrill({ title: c.title, rows })}>
-      <div className="tq-dash-value">{fmt(v)}</div>
-      {d && <div className="tq-dash-delta"><b className={dir}>{signed(d.change)}</b><span>vs the {days} days before</span></div>}
+      <Value v={v} unit={c.unit} />
+      {d ? <Delta d={d} good={c.good} days={days} /> : <div className="tq-dash-delta"><span>{date ? DASH.no_change : DASH.right_now}</span></div>}
       {pts.length > 1 && <Spark points={pts} />}
     </Card>
   );
@@ -83,12 +96,13 @@ export function StatTile({ c, rows, all, date, days, now, onDrill, stale }) {
 
 export function Progress({ c, rows, onDrill, stale }) {
   const v = aggregate(rows, c.agg, c.y) ?? 0, t = Number(c.target) || 0, pct = t ? Math.max(0, Math.min(1, v / t)) : 0;
+  const left = Math.max(0, t - v);
   return (
     <Card c={c} w={1} stale={stale} className="tq-dash-stat" onPress={() => onDrill({ title: c.title, rows })}>
-      <div className="tq-dash-value">{fmt(v)}<span style={{ fontSize: 14, fontWeight: 500, color: "var(--d-muted)" }}> / {fmt(t)}</span></div>
+      <Value v={v} of={<span className="u">/ {fmt(t)}</span>} />
+      <div className="tq-dash-delta"><b>{Math.round(pct * 100)}%</b><span>{left ? `${fmt(left)} ${DASH.to_go}` : DASH.target_met}</span></div>
       <div className="tq-dash-track" role="meter" aria-valuemin={0} aria-valuemax={t} aria-valuenow={v} aria-label={c.title}>
         <div className="tq-dash-fill" style={{ width: `${pct * 100}%` }} /></div>
-      <div className="tq-dash-delta"><span>{Math.round(pct * 100)}%</span></div>
     </Card>
   );
 }
@@ -103,7 +117,10 @@ const TwinTable = ({ head, rows }) => (
 export function Bars({ c, groups, onDrill, stale }) {
   const [tipEl, show, hide] = useTip();
   const max = Math.max(1, ...groups.map((g) => g.value ?? 0));
-  const table = <TwinTable head={[cleanCol(c.x), c.agg && c.agg !== "count" ? `${c.agg} ${cleanCol(c.y)}` : "count"]} rows={groups.map((g) => [label(g.key), g.value])} />;
+  // "share": each bar also said as a part of the first - a funnel's stages read as what is left of what came in
+  const first = groups[0]?.value || 0, pct = (g) => (c.share && first ? `${Math.round(((g.value ?? 0) / first) * 100)}%` : "");
+  const table = <TwinTable head={[cleanCol(c.x), c.agg && c.agg !== "count" ? `${c.agg} ${cleanCol(c.y)}` : "count", ...(c.share ? ["share"] : [])]}
+    rows={groups.map((g) => [label(g.key), g.value, ...(c.share ? [pct(g)] : [])])} />;
   return (
     <Card c={c} w={c.w || 2} stale={stale} table={table}>
       {!groups.length ? <div className="tq-dash-none">{DASH.no_rows}</div> : (
@@ -116,7 +133,7 @@ export function Bars({ c, groups, onDrill, stale }) {
                 onPointerMove={(e) => show(e, <TipRows k={label(g.key)} rows={[["", g.value]]} />)} onPointerLeave={hide} onBlur={hide}>
                 <div className="bar" style={{ width: `${((g.value ?? 0) / max) * 100}%`, ...(g.other ? { background: "var(--d-other)" } : {}) }} />
               </button>
-              <span className="val">{fmt(g.value)}</span>
+              <span className="val">{fmt(g.value)}{pct(g) && <span className="pct">{pct(g)}</span>}</span>
             </React.Fragment>
           ))}
         </div>
@@ -183,7 +200,7 @@ export function Line({ c, points, onDrill, stale }) {
             {[0, 0.5, 1].map((f) => <g key={f}><line className={f === 0 ? "axis" : "grid"} x1={L} x2={L + iw} y1={y(top * f)} y2={y(top * f)} />
               <text x={L - 6} y={y(top * f) + 4} textAnchor="end">{fmt(top * f)}</text></g>)}
             {c.kind === "area" && segs.map((s, i) => <path key={`a${i}`} className="ar" d={`M${s[0][0]},${y(0)} ${s.map(([a, b]) => `L${a},${b}`).join(" ")} L${s[s.length - 1][0]},${y(0)} Z`} />)}
-            {segs.map((s, i) => s.length > 1 ? <polyline key={i} className="ln" points={s.map(([a, b]) => `${a},${b}`).join(" ")} />
+            {segs.map((s, i) => s.length > 1 ? <polyline key={i} className="ln" pathLength="1" points={s.map(([a, b]) => `${a},${b}`).join(" ")} />
               : <circle key={i} className="dot" cx={s[0][0]} cy={s[0][1]} r={4} />)}
             {[0, Math.floor((points.length - 1) / 2), points.length - 1].filter((v, i, a) => a.indexOf(v) === i).map((i) => (
               <text key={i} x={x(i)} y={H - 6} textAnchor={i === 0 ? "start" : i === points.length - 1 ? "end" : "middle"}>{shortDay(points[i].key)}</text>))}

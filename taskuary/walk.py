@@ -204,15 +204,17 @@ def _fact_reports(s) -> str:
     and "3 reports" on a card about both leaves you wondering which three (the owner, 2026-09-17:
     "for reports show the reports setup and workflows")."""
     import json as _json
-    reports, flows = [], []
+    reports, dashes, flows = [], [], []
     for row in s.list_sources():
         if row['Channel'] != 'report': continue
         try: cfg = _json.loads(row['ConfigJson'] or '{}')
         except ValueError: cfg = {}
-        (flows if cfg.get('is_workflow') else reports).append(cfg.get('title') or row['Address'] or '')
-    if not reports and not flows: return 'none yet'
+        # a dashboard is said as one: the built-in Taskuary at a glance is not a third "report"
+        (flows if cfg.get('is_workflow') else dashes if cfg.get('type') == 'dashboard' else reports).append(cfg.get('title') or row['Address'] or '')
+    if not reports and not flows and not dashes: return 'none yet'
     said = []
     if reports: said.append(f"{plural(len(reports), 'report')}: {', '.join(x for x in reports[:3] if x)}")
+    if dashes: said.append(f"{plural(len(dashes), 'dashboard')}: {', '.join(x for x in dashes[:3] if x)}")
     if flows: said.append(f"{plural(len(flows), 'workflow')}: {', '.join(x for x in flows[:3] if x)}")
     return ' · '.join(said)
 

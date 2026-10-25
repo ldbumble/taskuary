@@ -251,7 +251,7 @@ class TheScriptedBrainRoutesTests(unittest.TestCase):
         self.assertTrue(self.ask('open TQ-9999').startswith(demo.OUT_OF_SCRIPT))              # no such task: never a dead link
 
     def test_a_report_brings_up_that_report_or_reports(self):
-        self.assertEqual(self.ask('what did the helpdesk report say?'), 'Here: [Helpdesk tickets by day, last 14](#report=5).')
+        self.assertEqual(self.ask('what did the helpdesk report say?'), 'Here: [Helpdesk tickets by day, last 14](#report=6).')
         self.assertEqual(self.ask('list my reports'), 'Here: [Reports](#report=reports).')
 
     def test_a_set_a_person_to_act_toward_and_a_shared_word_bring_nothing_up(self):

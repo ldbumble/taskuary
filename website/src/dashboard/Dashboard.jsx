@@ -6,7 +6,7 @@ import "./dashboard.css";
 import { DASH } from "../words.js";
 import { openAppLink } from "../appLinks.js";
 import { Bars, Drill, Line, List, Progress, Stacked, StatTile, Table } from "./charts.jsx";
-import { RANGES, componentRows, dateOf, groupBy, inSegment, rowsOf, segmentValues, seriesSlots, spanOf4, stacked, timeSeries, where } from "./slice.js";
+import { RANGES, componentRows, dateOf, groupBy, inSegment, rowsOf, segmentValues, seriesSlots, spanOf, spanOf4, stacked, timeSeries, where } from "./slice.js";
 
 export default function Dashboard({ spec, data, stale = false, onOpen = openAppLink, now: nowAt }) {
   const f = spec?.filters || {};
@@ -23,14 +23,14 @@ export default function Dashboard({ spec, data, stale = false, onOpen = openAppL
   const draw = (c, i) => {
     const key = `${i}-${c.kind}-${c.title}`, w = spanOf4(c);
     const rows = componentRows(spec, data, c, cut), failed = data?.sources?.[c.source]?.failed;
-    const props = { c: { ...c, w }, onDrill: setDrill, stale: stale || failed };
+    const props = { c: { ...c, w, i }, onDrill: setDrill, stale: stale || failed };
     if (c.kind === "stat") {
       // the delta reads the period before the range, so it takes the rows before the range cut (segment and where still apply)
       const all = where(inSegment(rowsOf(data, c.source), segment, value), c.where);
-      return <StatTile key={key} {...props} rows={rows} all={all} date={dateOf(spec, c)} days={days} now={now} />;
+      return <StatTile key={key} {...props} rows={rows} all={all} date={dateOf(spec, c)} days={spanOf(c, days)} now={now} />;
     }
     if (c.kind === "progress") return <Progress key={key} {...props} rows={rows} />;
-    if (c.kind === "bar") return <Bars key={key} {...props} groups={groupBy(rows, c.x, c.agg, c.y, { limit: Number(c.limit) || 8 })} />;
+    if (c.kind === "bar") return <Bars key={key} {...props} groups={groupBy(rows, c.x, c.agg, c.y, { limit: Number(c.limit) || 8, order: c.order })} />;
     if (c.kind === "line" || c.kind === "area") return <Line key={key} {...props} points={timeSeries(rows, c.x, c.agg, c.y, { days, now })} />;
     if (c.kind === "stacked") {
       const slots = seriesSlots(rowsOf(data, c.source), c.series);      // dealt before any filter: colour follows the entity

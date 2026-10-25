@@ -32,6 +32,7 @@ export const aggregate = (rows, agg = "count", y) => {
   if (!vals.length) return null;
   if (agg === "sum") return vals.reduce((a, b) => a + b, 0);
   if (agg === "avg") return vals.reduce((a, b) => a + b, 0) / vals.length;
+  if (agg === "median") { const s = [...vals].sort((a, b) => a - b), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
   if (agg === "min") return Math.min(...vals);
   if (agg === "max") return Math.max(...vals);
   return null;
@@ -39,14 +40,18 @@ export const aggregate = (rows, agg = "count", y) => {
 
 // the date a component is cut by: its source's - unless it counts what is true NOW ("range": false, open tasks), which no range cuts
 export const dateOf = (spec, c) => (c?.range === false ? null : sourceOf(spec, c?.source).date || null);
+// a component's own window: "range": 7 is always the last week (a weekly target), whatever range the page is on
+export const spanOf = (c, days) => (typeof c?.range === "number" ? c.range : days);
 // a component's rows: its source's, through the range, the segment and its own where - the one cut every component takes
 export const componentRows = (spec, data, c, { days, segment, value, now } = {}) =>
-  where(inSegment(inRange(rowsOf(data, c.source), dateOf(spec, c), days, now), segment, value), c.where);
+  where(inSegment(inRange(rowsOf(data, c.source), dateOf(spec, c), spanOf(c, days), now), segment, value), c.where);
 
-// ranked categories, the tail folded into Other so a bar chart never grows a ninth bar
-export const groupBy = (rows, x, agg, y, { limit = 8 } = {}) => {
+// ranked categories, the tail folded into Other so a bar chart never grows a ninth bar - or, given an `order` (a funnel's stages),
+// those in that order, an empty stage drawn at zero rather than dropped
+export const groupBy = (rows, x, agg, y, { limit = 8, order = null } = {}) => {
   const by = new Map();
   for (const r of rows) { const k = r[x] === null || r[x] === undefined || r[x] === "" ? "(blank)" : String(r[x]); if (!by.has(k)) by.set(k, []); by.get(k).push(r); }
+  if (order?.length) return order.map(String).map((key) => ({ key, value: aggregate(by.get(key) || [], agg, y), rows: by.get(key) || [] }));
   const all = [...by].map(([key, rs]) => ({ key, value: aggregate(rs, agg, y), rows: rs })).sort((a, b) => (b.value ?? -Infinity) - (a.value ?? -Infinity) || a.key.localeCompare(b.key));
   if (all.length <= limit) return all;
   const rest = all.slice(limit - 1).flatMap((g) => g.rows);
@@ -151,7 +156,8 @@ export const spanOf4 = (c) => Math.max(1, Math.min(4, Number(c.w) || (c.kind ===
 export const snapshotOf = (spec, data, now = new Date()) => {
   const days = Number(spec?.filters?.range) || 0, srcs = Object.entries(data?.sources || {}).filter(([, s]) => (s?.rows || []).length);
   const text = (spec?.components || []).filter((c) => c.kind === "stat")
-    .map((c) => `${c.title || "value"}: ${fmt(aggregate(componentRows(spec, data, c, { days, now }), c.agg, c.y))}`).join("\n");
+    .map((c) => { const v = aggregate(componentRows(spec, data, c, { days, now }), c.agg, c.y); return `${c.title || "value"}: ${fmt(v)}${c.unit && v !== null ? ` ${c.unit}` : ""}`; })
+    .join("\n");
   const rows = srcs.length === 1 ? srcs[0][1].rows : srcs.flatMap(([k, s]) => s.rows.map((r) => ({ source: s.label || k, ...r })));
   return { text, data: rows };
 };

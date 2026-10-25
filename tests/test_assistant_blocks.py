@@ -634,7 +634,7 @@ class OwnershipHealTests(unittest.TestCase):
         seeded = {r['Address']: (r['Owner'], json.loads(r['ConfigJson'] or '{}').get('type'))
                   for r in s.list_sources(active_only=False) if r['Channel'] == 'report'}
         settings = s.get_settings()
-        self.assertEqual(len(SEEDED_REPORTS), 2)
+        self.assertEqual(len(SEEDED_REPORTS), 3)          # the Advisor, the End of day checkup, Taskuary at a glance
         live = {s_ for s_, _a, _k in SEEDED_REPORTS}
         for sentinel, address, kind in RETIRED_SEEDS:                    # retired: no longer written, still healed
             self.assertNotIn(address, seeded)

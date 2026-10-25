@@ -173,10 +173,10 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
       </Box>
       {open !== r.m.MessageId && (files.has(r.m.MessageId) || fetchFor === r.m.MessageId) && (
         <Box data-tq-row-files="" sx={{ pl: narrow ? 0 : { xs: 0, sm: "122px" }, mt: -0.5, mb: 0.4, minWidth: 0 }}>
-          <Attachments messageId={r.m.MessageId} canFetch={fetchFor === r.m.MessageId} dense /></Box>
+          <Attachments messageId={r.m.MessageId} canFetch={fetchFor === r.m.MessageId} dense original={r.m.SourceLink} /></Box>
       )}
       {open === r.m.MessageId && (
-        <Box sx={{ my: 0.6, p: 1.1, border: `1px solid ${BORDER}`, borderRadius: 1, bgcolor: PANEL, minWidth: 0 }}>
+        <Box data-tq-letter={r.m.MessageId} sx={{ my: 0.6, p: 1.1, border: `1px solid ${BORDER}`, borderRadius: 1, bgcolor: PANEL, minWidth: 0, scrollMarginBottom: 8 }}>
           <Box sx={{ display: "flex", gap: 0.75, alignItems: "baseline", flexWrap: "wrap" }}>
             <Typography sx={{ color: INK, fontSize: 11.5, fontWeight: 600 }}>{r.m.who}</Typography>
             <Typography variant="caption" sx={{ color: FAINT }}>{channelName(r.m.Channel)}{r.m.SentAt ? ` · ${fmtDateTime(r.m.SentAt)}` : ""}</Typography>
@@ -191,7 +191,7 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
               : <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
                   <LinkedText text={cleanText(r.m.Channel === "report" ? r.m.BodyText : (r.m.ReadText ?? r.m.BodyText))} /></Typography>}
           </Box>
-          <Attachments messageId={r.m.MessageId} canFetch={r.m.Channel === "email" && mentionsPicture(r.m.BodyText)} dense />
+          <Attachments messageId={r.m.MessageId} canFetch={r.m.Channel === "email" && mentionsPicture(r.m.BodyText)} dense original={r.m.SourceLink} />
         </Box>
       )}
     </React.Fragment>
@@ -651,6 +651,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     cameFromRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
     setSeekCameFrom(false);
   }, [seekCameFrom]);
+  // ...and its "1 attachment · 2 links" pill opens the message they rode in with and brings that letter's foot - where its files are
+  // drawn - into view (TQ-1197: the pill looked pressable and did nothing, with the files under a 420px letter below the fold)
+  const [seekLetter, setSeekLetter] = useState(null);
+  useEffect(() => {
+    if (seekLetter == null) return;
+    cameFromRef.current?.querySelector(`[data-tq-letter="${seekLetter}"]`)?.scrollIntoView({ block: "end", behavior: "smooth" });
+    setSeekLetter(null);
+  }, [seekLetter]);
   // the menu the old pills were: { what: "menu" | "kind" | "priority" | "assign", at } - opened from the row or the Tasks tab's bar
   const [pick, setPick] = useState(null);
   // a batch's items start FOLDED to their progress line: with them open, the agent's session - the thing being watched -
@@ -1823,7 +1831,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       <Part label="Came from" sub={fromWorkflow && !sources.length ? "a workflow run" : cameFromLabel(sources).replace(/^Came from · /, "").replace(" in ", " · ")} data-tq-came-from="">
                         <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap", "&:empty": { display: "none" } }}>
                           {!!(detail.attachments?.length || detail.links?.length) && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
-                            label={filesLine(detail.attachments?.length || 0, detail.links?.length || 0)}
+                            label={filesLine(detail.attachments?.length || 0, detail.links?.length || 0)} data-tq-files-pill="" title="Open the message they came with"
+                            onClick={() => {
+                              const mid = detail.attachments?.[0]?.MessageId ?? inbound[0]?.MessageId ?? sources[0]?.msgs[0]?.MessageId;
+                              if (mid == null) return;
+                              if (!sources.some((g) => fromRows(g, 3, showAll).some((r) => r.m?.MessageId === mid))) setShowAll(true);
+                              setOpenMsg(mid); setSeekLetter(mid);
+                            }}
                             sx={{ height: 19, fontSize: 10, bgcolor: PANEL2 }} />}
                           {fromExpands(sources) && <Link component="button" type="button" underline="hover" onClick={() => setShowAll((v) => !v)}
                             sx={{ ml: "auto", fontSize: 12 }}>{showAll ? "Show less" : `Show all ${sourceCount}`}</Link>}

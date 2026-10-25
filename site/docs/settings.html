@@ -278,8 +278,14 @@ is what you see if those cards cannot load.</li>
 <p>The default for a channel that has never been asked. Each channel above answers for itself once you set it.</p>
 <p>Name the Assistant chat on the WhatsApp or Telegram card under Connections first. Taskuary then listens only to messages you send in that exact private chat. Other people, other chats and groups cannot command it. This is separate from the Notifications role, so the Assistant chat is not subscribed to ordinary Taskuary alerts.</p>
 <p>It is the SAME walk the Assistant tab runs, on the same conversation and the same pipe: the item on the table stays where it was, a reply you ask for is drafted, and a yes sends it. The choices arrive as a poll on WhatsApp and as buttons on Telegram; typing a choice&#39;s number works on both.</p>
-<p>This switch is the standing permission. The Assistant tab&#39;s own &quot;in WhatsApp&quot; button hands the walk over for a session whether or not it is on, and locks the tab while the walk is there.</p>
+<p>This switch is the standing permission. The Assistant tab&#39;s own &quot;in WhatsApp&quot; button hands the walk over for a session whether or not it is on; the tab keeps working beside it.</p>
+<p>The chat only ever answers you: Taskuary writes to it only while you are talking to it there (your last message within 30 minutes, until you say stop) - never a reminder, a follow-up or a summary on its own, and not an urgent item either unless you turn on &quot;Text me urgent items even when I haven&#39;t written&quot;.</p>
 <p>Because answers can contain private workspace information, use a chat only you can read — WhatsApp&#39;s Message yourself, or your own private chat with the Telegram bot. Off (default) leaves your messages ignored as before.</p>
+<h3 id="text-me-urgent-items-even-when-i-havent-written">Text me urgent items even when I haven&#39;t written<a class="anchor" href="#text-me-urgent-items-even-when-i-havent-written" aria-label="Link to this section">#</a></h3>
+<p><code>phone_urgent_unasked</code> · type: switch · default: off</p>
+<p>Off (default): the Assistant chat stays quiet until you write to it, however urgent something is. On: urgent items may reach it anyway.</p>
+<p>Taskuary writes to your own WhatsApp or Telegram chat only while you are talking to it there. Off (the default), that holds for urgent items too: they are shaded on the desktop and wait there.</p>
+<p>On: an urgent item may reach the chat even when you have not written - a move on a task marked urgent, an urgent by-the-way while the walk is handed to the chat, and a report&#39;s alert aimed at your own chat. Nothing else changes: reminders, follow-ups, the morning line and summaries still wait until you write. Replies to other people are not affected by this switch.</p>
 <h3 id="which-chat-the-assistant-tab-offers">Which chat the Assistant tab offers<a class="anchor" href="#which-chat-the-assistant-tab-offers" aria-label="Link to this section">#</a></h3>
 <p><code>phone_walk_channel</code> · type: select</p>
 <p>The &quot;Walk me through them in ...&quot; button on the Assistant tab: WhatsApp, Telegram, or both.</p>
@@ -289,7 +295,7 @@ is what you see if those cards cannot load.</li>
 <p><code>phone_morning_line</code> · type: switch</p>
 <p>Once a day, the assistant&#39;s chat says what is waiting and offers the two ways in: walk me through my tasks, set up a report.</p>
 <p>Off by default: the chat says nothing until you write to it or press Walk me through them. On: the first check after 6:00 sends one line to the Assistant chat on every channel that has one - the count in the pipe and how many are on you, then the two scripts as numbered options, so one reply starts the walk there. Quiet on a day the pipe is empty; never twice in a day.</p>
-<p>Off: the chat speaks first only for a hand-off, a review ping or a report aimed at it.</p>
+<p>Even on, it goes only into a conversation you started there in the last 30 minutes: the chat never speaks first.</p>
 <h2 id="advisor">Advisor<a class="anchor" href="#advisor" aria-label="Link to this section">#</a></h2>
 <h3 id="lines-per-post-at-most">Lines per post, at most<a class="anchor" href="#lines-per-post-at-most" aria-label="Link to this section">#</a></h3>
 <p><code>assistant_max_lines</code> · type: number · default: <code>5</code></p>
@@ -527,7 +533,7 @@ answer to &quot;why did this happen&quot; and &quot;who did this&quot; for anyth
 
     </article>
     <nav class="pager"><a class="pn prev" href="./phone"><span>Previous</span>On your phone</a><a class="pn next" href="./faq"><span>Next</span>FAQ</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.32 · updated 2026-10-24</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.33 · updated 2026-10-24</p>
   </main>
 </div>
 <script src="./docs.js"></script>

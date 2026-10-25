@@ -84,6 +84,15 @@ test("a channel card: Enable saves at once, Sync now never stands beside an unsa
   await until(page, () => [...document.querySelectorAll(".MuiStepLabel-label")].some((e) => e.innerText.trim() === "Enable"), undefined, 120000);
   await step("Enable");
   await until(page, () => /Off — flip on once Test passes/.test(document.body.innerText));
+  // ...pressed once it STANDS STILL (2026-10-25): the Enable step was still opening when its words were up - the switch sat below the fold
+  // and slid 16px right and ~280px up after the press was aimed, so the click landed beside it and the card said Off for good (CI's first
+  // try since 0.3.9.37, and every try on 0.3.9.40's runner). The press is the owner's: on the switch, where it is drawn
+  await page.evaluate(() => document.querySelector("[data-tq-card-on]").scrollIntoView({ block: "center" }));
+  await until(page, () => {
+    const r = document.querySelector("[data-tq-card-on] input").getBoundingClientRect(), at = `${r.x},${r.y}`, hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    const still = window.__switchAt === at; window.__switchAt = at;
+    return still && !!hit?.closest("[data-tq-card-on]");
+  });
   await page.click("[data-tq-card-on] input");
   // ...on a CI runner the first poll after the switch can take past the default 30s (it failed there three times and passed on each
   // rerun, 2026-10-25) - the wait is for the server's own word, so a longer wait cannot pass a wrong card

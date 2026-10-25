@@ -146,7 +146,9 @@ def below(items: list[dict], ready: list[dict], exclude, place=None, at_key=None
             if k[:4] != p[:4]: return k[:4] > p[:4]
             if len(p) < 6: return True
             if not (k[4] or p[4]): return k[5] >= p[5]
-            return len(p) < 9 or not (k[4] and p[4]) or k[6] or p[6] or k[7] >= p[7]
+            if len(p) < 9 or not (k[4] and p[4]): return True
+            if not (k[6] or p[6]): return k[7] >= p[7]
+            return len(p) < 10 or not (k[6] and p[6]) or k[8] >= p[8]       # ...and neither has a message: their first member
         down = [i for i in ready if from_place(i)]
     return down
 

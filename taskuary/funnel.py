@@ -1143,7 +1143,15 @@ def place_id(item) -> tuple:
     tid = _num(item.get('tid'))
     mids = [n for m in item.get('member_ids') or () if str(m).startswith('message:') for n in [_num(str(m)[8:])] if n is not None]
     mid = None if tid is not None else min(mids) if mids else _num(item.get('mid'))
-    return (tid is None, tid or 0, mid is None, mid or 0, str(item.get('key') or ''))
+    # ...and a row with neither - an idea, a review, a run filed on its own - by its first member, kind then number, before the hash
+    # (the release walk's sweep, 2026-10-25: two such rows of one second still drawn over each other)
+    return (tid is None, tid or 0, mid is None, mid or 0, '' if tid is not None or mid is not None else first_member(item), str(item.get('key') or ''))
+
+
+def first_member(item) -> str:
+    """The smallest of a row's own members as `kind:000000000012` - zero-padded so the text sorts as the number does, on the page too."""
+    ids = [f"{k}:{n:012d}" for m in item.get('member_ids') or () for k, _, v in [str(m).partition(':')] for n in [_num(v)] if n is not None and n >= 0]
+    return min(ids, default='')
 
 
 def _order(items: list) -> list:

@@ -399,9 +399,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </Typography>
                   {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: PILL_COLORS.red.bg,
                     color: PILL_COLORS.red.fg, height: 17, fontSize: 9.5, flexShrink: 0 }} />}
-                  {/* important beside it, in a calmer colour than urgent's - a mark, never a move (the owner, 2026-10-25) */}
-                  {level(task.Priority) === "important" && <Chip size="small" label="important" data-tq-important="" sx={{ bgcolor: PILL_COLORS.info.bg,
-                    color: PILL_COLORS.info.fg, height: 17, fontSize: 9.5, flexShrink: 0 }} />}
+                  {/* important beside it, in the theme's slate (theme PRIORITY_COLOR), calmer than urgent's oxblood - a mark, never a move (the owner, 2026-10-25) */}
+                  {level(task.Priority) === "important" && <Chip size="small" label="important" data-tq-important="" sx={{ bgcolor: PILL_COLORS.working.bg,
+                    color: PILL_COLORS.working.fg, height: 17, fontSize: 9.5, flexShrink: 0 }} />}
                   {/* the state says it once - "agent stopped" had its own chip beside it (T1) */}
                   <Box component="span" role="button" tabIndex={0} sx={{ cursor: "pointer", display: "inline-flex" }}
                     title={only ? "Show everything in progress again" : `Show only “${st.label}”`}

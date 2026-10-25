@@ -65,9 +65,10 @@ test("the rail shades an urgent row in place and says urgent to a screen reader;
   assert.match(view, /data-tq-urgent=\{hot \? "" : undefined\}/);
   assert.match(view, /aria-label=\{hot \? `\$\{i\.title\} - urgent` : imp \? `\$\{i\.title\} - important` : undefined\}/);
   assert.match(css, /\.tq-pile-row\.urgent \.card \{ background: rgba\(138, 54, 70, \.06\)/);
-  // IMPORTANT is its own quieter mark in its place (the owner, 2026-10-25): urgent outranks it, it never shades, never moves a row
+  // IMPORTANT is the dot's colour, the theme's slate, in its place (the owner, 2026-10-25): urgent outranks it, no edge, no shade, no move
   assert.match(view, /const imp = isImportant\(i, hot\);/);
-  assert.match(css, /\.tq-pile-row\.important \.card \{ box-shadow: inset 2px 0 0 rgba\(64, 96, 128, \.5\); \}/);
+  assert.match(view, /background: imp \? PRIORITY_COLOR\.important : LEVEL_COLOR\[level\]/);
+  assert.doesNotMatch(css, /\.tq-pile-row\.important \.card/);
   assert.doesNotMatch(css, /\.tq-pile-row\.important[^{]*\{[^}]*background/, "important never shades the row");
   assert.doesNotMatch(css, /lvl-urgent/);
   const sum = summarize([task("task:1", 19), task("task:2", 11, { lane: "time", order_band: 1 }), report("report:1", 3)]);

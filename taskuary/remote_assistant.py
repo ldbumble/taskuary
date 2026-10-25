@@ -2630,6 +2630,10 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
     hold = stranger_held(store, it) and state != 'working'
     if hold: word, state = lanes.word('held'), ''
     head = ' · '.join(x for x in (word, str(it.get('ref') or '')) if x)
+    # IMPORTANT SAYS SO ON THE CARD, in the words urgent's heads-up uses (the owner, 2026-10-25: the phone says "(important)" too) - the
+    # desktop's slate dot has no colour here; urgent outranks it, as on the rail
+    from .processing_order import level
+    if head and not is_urgent(it) and level(it.get('priority')) == 'important': head = f'{head} (important)'
     mark = funnel.mark_for({**it, 'lane': 'stopped'} if state.startswith('failed') and kind == 'agent' else it)
     if head and mark: head = f'{mark} {head}'
     age = concierge.funnel_age(it)

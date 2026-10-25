@@ -12,6 +12,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import api from "./api";
 import { ALERT, ALERT_INK, BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
+import { PRIORITIES, level } from "./priority.js";
 import { SourceCard } from "./ReportsView.jsx";
 import { Dot, StepResult } from "./RunSteps.jsx";
 import { KIND_WORDS, ONLY_IF, badRefs, canAddAgent, insertStep, missingIn, moveStep, recHead, removeStep, runWords, testWords, toSaved,
@@ -112,6 +113,11 @@ function KindConfig({ step, flow, index, set, typeOptions, connectors, agents, t
       <Select size="small" displayEmpty value={step.assignee || ""} sx={{ ...field, fontSize: 12.5, maxWidth: 260 }} onChange={(e) => set({ assignee: e.target.value })}>
         <MenuItem value="" sx={{ fontSize: 12.5 }}>for you</MenuItem>
         {agents.map((a) => <MenuItem key={a} value={a} sx={{ fontSize: 12.5 }}>for the {a} agent</MenuItem>)}
+      </Select>
+      {/* the task it opens takes one of the three priorities and no other word (the owner, 2026-10-25) - a step saved as high reads important */}
+      <Select size="small" value={level(step.priority)} sx={{ ...field, fontSize: 12.5, maxWidth: 200 }} data-tq-step-priority=""
+        onChange={(e) => set({ priority: e.target.value })}>
+        {PRIORITIES.map((p) => <MenuItem key={p} value={p} sx={{ fontSize: 12.5 }}>{p} priority</MenuItem>)}
       </Select>
       {test}
     </>

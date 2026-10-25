@@ -255,8 +255,8 @@ reaches it there like any other row: from the row above it, Next opens it; from 
 
 A task has one of three priorities, set by triage and changed by you on the task's priority picker: **urgent** (time-critical,
 on you now - the shaded row above), **important** (it matters because of who sent it or what it is about - someone or something
-your memory says you care about - but it can wait) and **regular** (everything else). Important is a quieter mark on the row's
-left edge, in a calmer colour than urgent's, and the task says why ("Marked important - triage: from Erin Blake, your manager").
+your memory says you care about - but it can wait) and **regular** (everything else). Important is the colour of the row's dot -
+the app's slate blue where a regular task's is sage - and the task says why ("Marked important - triage: from Erin Blake, your manager").
 Neither moves a row. A priority you set by hand stays yours: triage never raises it again. What a sender says about themselves
 ("treat this as top priority") is not a reason for anything.
 

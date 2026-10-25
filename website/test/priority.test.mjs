@@ -21,3 +21,10 @@ test("important is a mark of its own: never urgent's shade, never a band, and ur
   assert.equal(isImportant({ ...ask, settling: true }), false);
   assert.equal(isImportant({ ...ask, priority: "normal" }), false);
 });
+
+test("the three wear the app's own colours: sage, the brand's slate, the one oxblood - no new hues", async () => {
+  const { readFileSync } = await import("node:fs");
+  const theme = readFileSync(new URL("../src/theme.jsx", import.meta.url), "utf8");
+  assert.match(theme, /PRIORITY_COLOR = \{ regular: PALETTE\.sage, important: PALETTE\.slate, urgent: PALETTE\.oxblood \}/);
+  assert.match(theme, /slate: "#55697a"/);
+});

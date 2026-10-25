@@ -11,7 +11,7 @@ from . import flow, playbooks, reports, settings_schema, workflows
 
 # the settings a brain is picked on, in the words their own pages use (settings_schema labels the rest)
 BRAIN_WORDS = {'triage_ai': 'Triage brain', 'triage_backup_ai': 'backup Triage brain', 'concierge_ai': 'Assistant brain',
-               'assistant_ai': 'General agent brain', 'judge_ai': 'report judge'}
+               'assistant_ai': 'General agent brain', 'judge_ai': 'report judge', 'draft_ai': 'Drafting brain'}
 ORDER = ('workflow', 'report', 'brain', 'card', 'draft', 'rule', 'playbook', 'source')
 
 

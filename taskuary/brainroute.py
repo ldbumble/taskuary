@@ -25,7 +25,8 @@ JOBS = ('triage', 'draft', 'summary', 'advisor', 'memory', 'rank', 'assistant', 
 # the one-message jobs: read, judge, write - none of them can act, so asking again cannot do anything twice
 ONE_SHOT = ('triage', 'draft', 'summary', 'advisor', 'memory', 'rank', 'judge', 'report')
 # A job with no slot of its own rides the triage brain, as every unnamed build_llm always has (llm.build_llm).
-SLOT_OF = {**{j: 'triage_ai' for j in ONE_SHOT}, 'general': 'assistant_ai', 'coding': 'default_brain', 'assistant': 'concierge_ai'}
+SLOT_OF = {**{j: 'triage_ai' for j in ONE_SHOT}, 'draft': 'draft_ai', 'general': 'assistant_ai', 'coding': 'default_brain',
+           'assistant': 'concierge_ai'}
 JOB_WORDS = {'triage': 'triage', 'draft': 'a draft', 'summary': 'a summary', 'advisor': 'the Advisor', 'memory': 'memory',
              'rank': 'ranking', 'assistant': 'the Assistant', 'general': 'general work', 'coding': 'coding',
              'judge': 'a judgement', 'report': 'a report'}
@@ -123,6 +124,11 @@ def session_chain(store, brain: str = None) -> list:
 def _fixed(store, job: str, task=None, want_pick=None, want_model=None, gear=None) -> tuple:
     "(pick, model, gear, chain) - today's answer for this job, asked of the resolver that has always given it."
     from . import agents, llm
+    if job == 'draft' and want_pick is None:
+        # Drafting's own card (the owner, 2026-10-25), blank = the triage brain exactly as before; its model box, blank = that brain's own
+        own = '' if agents.stale(store, 'draft_ai') else str(store.get_setting('draft_ai') or '').strip()
+        pick = llm.effective_pick(store, own or store.get_setting('triage_ai') or '')
+        return pick, want_model or str(store.get_setting('draft_model') or '').strip(), gear or 'light', _backups(store)
     if job in ONE_SHOT:
         # the same reading llm._build_llm makes: the named pick, else the triage brain, else what blank means
         pick = llm.effective_pick(store, want_pick if want_pick is not None else store.get_setting('triage_ai') or '')

@@ -64,3 +64,18 @@ def says(hits: list) -> str:
     if not hits: return 'No message in Taskuary matches that. Try fewer words, only --from, or a wider date range.'
     return '\n\n'.join(f"[{h['id']}] {h['when']} - {h['from']}\n{h['subject']}" + (f"  ({h['task']})" if h['task'] else '')
                        + (f"\nthread {h['thread']}" if h['thread'] else '') + (f"\n{h['snippet']}" if h['snippet'] else '') for h in hits)
+
+
+def meeting_reads(store, who: list, subject: str, per: int = 3, cap: int = 12) -> list:
+    """What the saved mail already says about a meeting's people and its subject - the opening reads of Prepare (the owner,
+    2026-10-25: "an agent to research about person and topic through your mails"). Handed to the agent in its brief, so a brain
+    with no shell starts from the same history a CLI would search; the agent searches on from there."""
+    out, seen = [], set()
+    asks = [{'sender': w} for w in (who or [])[:6] if str(w or '').strip()] + ([{'words': subject}] if str(subject or '').strip() else [])
+    for q in asks:
+        try: hits = search(store, limit=per if 'sender' in q else per + 2, **q)
+        except Exception: hits = []
+        for h in hits:
+            if h['id'] in seen: continue
+            seen.add(h['id']); out.append(h)
+    return out[:cap]

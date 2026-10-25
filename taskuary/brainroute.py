@@ -229,8 +229,9 @@ def save_rules(store, rs: list, actor: str = 'owner') -> list:
 
 
 def _people(store, task) -> set:
-    """Who the task is with, as the people model keys them - the person seam (the memory redesign). With no people model in this
-    build there is nobody to match, so a person rule matches nothing rather than guessing at a name."""
+    """Who the task is with, as the people model keys them - the person seam: `people.keys_of_task(store, task) -> [key]`, which the
+    memory redesign provides. Only the owner writes a person rule (none ships). With no people model in this build, or one that
+    fails, there is nobody to match, so a person rule matches nothing rather than guessing at a name."""
     try: from . import people
     except ImportError: return set()
     f = getattr(people, 'keys_of_task', None)

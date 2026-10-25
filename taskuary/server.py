@@ -1509,8 +1509,21 @@ def _run_kind(op: dict, background: BackgroundTasks):
         from . import remote_assistant
         return _rerun_report(tid, asked=remote_assistant.asking(), by='assistant')
     if kind == 'memory.remember':
-        from . import concierge
+        from . import concierge, memoryedit
+        # ...a fact about how the owner works with someone or something goes where its readers read it (LEARNED.md), and closes the line
+        # it makes untrue; any other fact is a saved note, as it always was
+        if p.get('about') or p.get('section') or p.get('replaces'):
+            try: return {'learned': memoryedit.remember(store, str(p.get('note') or ''), str(p.get('about') or ''), str(p.get('section') or ''),
+                                                        str(p.get('replaces') or ''))}
+            except LookupError as e: raise HTTPException(404, f"{e} The line to replace was not found - read memory.about for its key.")
+            except ValueError as e: raise HTTPException(422, str(e))
         return {'memoryId': concierge.remember_fact(store, str(p.get('note') or ''), ACTOR)}
+    if kind == 'memory.wrong':
+        from . import memoryedit
+        how = str(p.get('how') or 'wrong').strip().lower()
+        try: return memoryedit.close(store, str(p.get('key') or '')) | {'how': 'ended'} if how == 'ended' else memoryedit.mark(store, str(p.get('key') or ''), how)
+        except LookupError as e: raise HTTPException(404, str(e))
+        except ValueError as e: raise HTTPException(409, str(e))
     if kind == 'people.relate':
         from . import orgchart
         try: return orgchart.relate(store, p.get('who'), p.get('relation'), p.get('owns'), p.get('drops'), bool(p.get('forget')), ACTOR)

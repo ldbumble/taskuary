@@ -1142,6 +1142,31 @@ def _relate(store, tid: int, p: dict, actor: str) -> dict:
     return _did(store, tid, f"Org chart: {who} - {orgchart.words(r) or 'nothing now'}.", 'people.relate')
 
 
+def _memory(store, tid: int, kind: str, p: dict) -> dict:
+    """memory.remember (a fact about how the owner works) and memory.wrong, run: the memory changed and said in one line, with the words
+    of the line - or a miss the model fixes (no such line; Wrong on the owner's own line)."""
+    from . import memoryedit
+    q = lambda t: f'\u201c{_title_cut(str(t or ""), 120)}\u201d'
+    try:
+        if kind == 'memory.remember':
+            r = memoryedit.remember(store, str(p.get('note') or ''), str(p.get('about') or ''), str(p.get('section') or ''), str(p.get('replaces') or ''))
+            c = r.get('closed') or {}
+            return _did(store, tid, f"Remembered under {r.get('title') or 'your memory'}: {q(r['text'])}"
+                        + (f" - {q(c['text'])} is kept as history, true until {c['until']}." if c else '.'), kind)
+        how = str(p.get('how') or 'wrong').strip().lower()
+        if how not in ('wrong', 'forget', 'ended'): raise ValueError(f'memory.wrong how is wrong, forget or ended - not {how!r}')
+        key = str(p.get('key') or '')
+        if how == 'ended':
+            c = memoryedit.close(store, key)
+            return _did(store, tid, f"{q(c['text'])} is kept as history - no longer true.", kind)
+        r = memoryedit.mark(store, key, how)
+        return _did(store, tid, (f"Took {q(r['text'])} out - it will not be learned again." if how == 'wrong'
+                                 else f"Took {q(r['text'])} out for now - it comes back only if much more says it again."), kind)
+    except LookupError as e: raise CallMiss(f"No line in the memory has the key {str(p.get('key') or p.get('replaces') or '')!r} ({str(e).strip(chr(39))}). Read memory.about for "
+                                            'the keys, or say so in plain words. Nothing was changed.')
+    except ValueError as e: raise CallMiss(f'{e} Say so in plain words. Nothing was changed.')
+
+
 def _page(store, tid: int, table: dict | None, href: str, said: str) -> dict:
     """An act whose button lives on a page: that page, opened beside the answer (appLinks), and where to press on it - said by the page's
     name, never "beside this", so the line is still true after a reload, when nothing is beside it."""
@@ -2313,6 +2338,10 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # WHO IS WHO, KEPT AND SAID (orgchart.py, 2026-10-22): the owner's word on a person - "Erin is my manager" - is a fact about their own
     # organisation, kept at once on the desk and the phone alike, like a note on a task: nothing leaves, and the chart has no page to bring up
     if kind == 'people.relate': return _relate(store, tid, params, actor)
+    # ...and HOW THE OWNER WORKS WITH THEM, said in the chat (slice 7, approved 2026-10-25: "Gail moved to Ops", "forget that Ray does
+    # payroll"): kept at once, the same way - written where the memory's readers read it, the line it makes untrue closed as history
+    if kind == 'memory.wrong' or (kind == 'memory.remember' and (params.get('about') or params.get('section') or params.get('replaces'))):
+        return _memory(store, tid, kind, params)
     # ON THE DESK A NEW JOB IS NEW, FILLED IN (routes): the words on the tab that starts it, its own button the one to press
     if routes() and kind in ('task.create_from_text', 'task.setup'):
         return _new(store, tid, item, str(params.get('kind') or 'general') if kind == 'task.create_from_text' else 'general',
@@ -2579,6 +2608,11 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     if tk == 'text': named = named or str(params.get('title') or params.get('text') or '').strip()[:120]
     # ...and a fact is what it says: "Remember it: memory.remember" put the tool's name on the card (real-AI check, 2026-10-18)
     if kind == 'memory.remember': named = named or str(params.get('note') or '').strip()[:120].rstrip('.')    # the line adds its own stop
+    # ...and a line taken out is what it said, read from the memory - never its key
+    if kind == 'memory.wrong':
+        from .memoryedit import find
+        _r, _l, _own = find(store.get_doc('learned') or '', str(params.get('key') or ''))
+        named = named or str((_l or {}).get('text') or (store._one('SELECT Text FROM learned_line WHERE Key=?', (str(params.get('key') or ''),)) or {}).get('Text') or '')[:120].rstrip('.')
     if tk == 'task' and (wrote := _task_writes(store, tid, kind, int(target or 0), params, named, actor)) is not None: return wrote
     if routes(): return _route(store, tid, kind, int(target or 0), params, named, it, item, text, actor)
     # the phone's words: one yes-or-no, whatever the kind
@@ -3991,7 +4025,8 @@ def op_label(kind: str, p: dict) -> str:
              'review.reject': 'Reject the draft', 'task.split': L('split', 'split'), 'report.rerun': L('rerun'), 'connection.test': L('test_connection'),
              'message.retriage': L('retriage'), 'task.share': L('share'),
              # PURPOSE is written for the model: read as a label it put "how work like this should be ROUTED" on the button (2026-10-18)
-             'memory.remember': 'Remember it', 'routing.remember': 'Remember where work like this goes'}.get(kind, label)
+             'memory.remember': 'Remember it', 'routing.remember': 'Remember where work like this goes',
+             'memory.wrong': {'forget': 'Forget it', 'ended': 'No longer true'}.get(str(p.get('how') or '').lower(), 'Wrong - take it out')}.get(kind, label)
     if kind == 'dispatch.prepare' and str(p.get('kind')) == 'coding': label = L('coding_agent')
     if kind == 'idea.act': label = {'task': L('mine'), 'agent': L('regular_agent'), 'dismiss': L('not_ours'),
                                     'dismiss_kind': L('not_ours_kind')}.get(str(p.get('verb')), label)
@@ -4085,7 +4120,13 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
         if o.get('started') or o.get('chat'): return " It's being worked on now - moving on."
     if kind == 'item.settle' and o.get('closed'): return f" {task_ref(int(o['closed']))} closed."
     if kind == 'agent.stop': return ' The task stays open - say close it when you want it closed.'
-    if kind == 'memory.remember': return ' I will use it from now on; whatever you were on stays where it was.'
+    if kind == 'memory.remember':
+        c = (o.get('learned') or {}).get('closed') or {}
+        tail = f" - and what it replaces is kept as history, true until {c['until']}" if c.get('until') else ''
+        return f" I will use it from now on{tail}; whatever you were on stays where it was."
+    if kind == 'memory.wrong':
+        return {'forget': ' It is out of what I read; it comes back only if much more says it again.', 'ended': ' It is kept as history, no longer true.'}.get(
+            str(o.get('how') or ''), ' It is out, and I will not learn it again.')
     if kind == 'report.create' and o.get('sourceId'):
         return f" \"{o.get('title')}\" is under Reports{' and runs on its schedule' if o.get('enabled') else ', switched off'}."
     if kind == 'connection.create' and o.get('connectorId'):

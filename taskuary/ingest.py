@@ -1548,11 +1548,18 @@ def addressed_to(store, msg: dict, me=()) -> list:
     to = [str(a).strip().lower() for a in msg.get('to') or [] if a]
     mine = {str(a).lower() for a in me if a}
     if not to or set(to) & mine: return []
+    return names_on_thread(store, msg, to)[:5]
+
+
+def names_on_thread(store, msg: dict, addrs) -> list:
+    """Each address as the name this thread knows it by, else "someone at <domain>" - what a prompt is told instead of the
+    address itself. Shared by triage's `addressed_to` and the reply writer's To/Cc lines."""
+    addrs = [str(a).strip().lower() for a in addrs or [] if a]
     names = {}
     for m in store.thread_messages(msg.get('conversation_id'), msg.get('subject')) or []:
         a = str(m.get('FromEmail') or '').lower()
-        if a in to and m.get('FromName'): names[a] = ' '.join(str(m['FromName']).split())
-    return [names.get(a) or f"someone at {a.rsplit('@', 1)[-1]}" for a in to][:5]
+        if a in addrs and m.get('FromName'): names[a] = ' '.join(str(m['FromName']).split())
+    return [names.get(a) or f"someone at {a.rsplit('@', 1)[-1]}" for a in addrs]
 
 
 # ── a chat room is not a task ────────────────────────────────────────────────────────────

@@ -7461,9 +7461,11 @@ def sendfilter_list():
     what a card shows so the owner can correct it. Reading it starts a scan when the last one is stale."""
     from . import sendfilter
     scanning = sendfilter.refresh(store)
-    at = float((sendfilter._load(store, sendfilter.CACHE, {}) or {}).get('at') or 0)
+    cache = sendfilter._load(store, sendfilter.CACHE, {}) or {}
+    at, ai = float(cache.get('at') or 0), cache.get('claudeai') or {}
     return {'claude': sendfilter.verdicts(store, 'claude'), 'codex': sendfilter.verdicts(store, 'codex'),
-            'scanned_at': at or None, 'scanning': scanning or sendfilter._RUNNING['on']}
+            'scanned_at': at or None, 'scanning': scanning or sendfilter._RUNNING['on'],
+            'claudeai': {'at': ai.get('at') or None, 'error': ai.get('error') or ''}}
 
 class SendFilterFix(BaseModel): server: str; tool: str = '*'; verdict: str = ''
 

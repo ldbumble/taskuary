@@ -2090,6 +2090,17 @@ def remind_task(task_id: int, body: RemindBody):
         except Exception as e: logger.debug(f'no receipt recorded for the reminder on {task_id}: {e}')
     return out
 
+@app.get('/api/tasks/{task_id}/remind/usual')
+def remind_usual(task_id: int):
+    """The day Remind me opens on (the owner's ruling 7, 2026-10-23: "Remind me opens with the learned day pre-chosen"): the weekday the
+    owner puts this sender's mail off to, counted from their own put-offs (usual.remind_day) - {} while no day has held. Pre-chosen is
+    not chosen: the picker shows it first, and nothing is set until the owner presses."""
+    from . import usual
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    try: return usual.remind_day(store, task_id) or {}
+    except Exception as e:
+        logger.debug(f'no usual day for {task_id}: {e}'); return {}
+
 @app.patch('/api/tasks/{task_id}')
 def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None):
     t = store.get_task(task_id)

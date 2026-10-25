@@ -23,7 +23,8 @@ CHASE_DAYS = 3           # the owner, 2026-10-23: "Chase lights after 3 working 
 SAFE = frozenset({'closed', 'working', 'agent_asking', 'failed', 'failed_cause', 'report_failed', 'unsendable'})
 FAILED = frozenset({'failed', 'failed_cause', 'report_failed'})
 # where the lit move needs an AI to work: with none connected the strip asks for one there, and only there
-NEEDS_AI = frozenset({'asked', 'stranger'})
+NEEDS_AI = frozenset({'asked', 'asked_late', 'stranger'})
+EV = '_evidence'         # a fact's own ids (usual.py), carried beside the line's facts and handed on as the decision's evidence
 
 
 def asks(state: str) -> bool: return bool((RULES.get(state) or {}).get('ask'))
@@ -194,6 +195,12 @@ def state(store, item: dict, verbs: list) -> tuple:
         return ('goal_late', {'step': late[0], 'days': late[1]}) if late else ('goal', {})
     if lane == 'theirs' and t:
         who, days = waited(store, it, t)
+        # ...LEARNED PER PERSON (ruling 8): once three of their answers say how soon this person answers, a silence is late on THEIR day,
+        # and the line says their usual beside this wait (usual.chase_usual) - before that, the three working days stand
+        from . import usual
+        held = next((str(x).split(':', 1)[-1].strip().lower() for x in (t.get('WaitingOn'), t.get('Assignee')) if '@' in str(x or '')), '')
+        u = usual.chase_usual(store, held) if held else None
+        if u: return ('waiting_late_usual', {'who': who, 'days': days, 'usual': usual.days(u['median'])}) if days >= u['days'] else ('waiting', {})
         return ('waiting_late', {'who': who, 'days': days}) if days >= CHASE_DAYS else ('waiting', {})
     if kind == 'idea': return 'idea', {}
     if kind == 'fyi': return 'fyi', {}
@@ -207,6 +214,11 @@ def state(store, item: dict, verbs: list) -> tuple:
         if dup and 'remove' in offered:
             from .store import task_ref
             return 'duplicate', {'ref': task_ref(dup)}
+        # LATE FOR THIS PERSON, BY THE OWNER'S OWN USUAL (the owner, 2026-10-25: "Reply: you usually answer Erin within the hour; this is
+        # 3h") - one line, the reason beside the lit Reply, counted from the answers it cites (usual.late_reply)
+        from . import usual
+        if (late := usual.late_reply(store, ins[-1])):
+            return 'asked_late', {'who': late['who'], 'usual': late['usual'], 'age': late['age'], EV: late['evidence']}
         return 'asked', {'who': _name(ins[-1]), 'ago': ago(ins[-1].get('SentAt') or ins[-1].get('CreatedAt'))}
     if t and (cl := advisor._checklist(t)) and all(c.get('done') for c in cl): return 'done_list', {}
     return 'own', {}
@@ -243,13 +255,14 @@ def decide(store, item: dict, verbs: list) -> dict:
     except Exception as e:
         logger.warning(f"rulebook: {(item or {}).get('key')} not decided - {e}"); st, facts = 'own', {}
     offered = {v['verb'] for v in verbs or []}
+    ev = facts.pop(EV, None) or []
     verb = _lit(st, offered)
     # a line only over the move it is the fact for: "Erin Blake asked yesterday" over a lit Next would be a reason for another button
     # ...save what failed: the failure is the fact whatever is lit - the demo's refused Send leaves only Next, and "Failed: ..." over it
     line = _say(st, **facts) if verb and (verb != 'next' or st in FAILED) else ''
     # ...and an age under a day is on the card already ("2h"): the line speaks from yesterday on
     if st == 'asked' and not re.search(r'yesterday|days ago', line): line = ''
-    return {'state': st, 'verb': verb, 'line': _cut(line, 64), 'ask': asks(st)}
+    return {'state': st, 'verb': verb, 'line': _cut(line, 64), 'ask': asks(st), **({'evidence': ev} if ev and line else {})}
 
 
 def chase_thread(store, item: dict) -> dict | None:

@@ -2502,7 +2502,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     let pile = null;
     // `only` rides along so the rail comes back captured under the scope this page walks with
     if (current) {
-      try { pile = (await api.post("/api/funnel/settle", { key: current, verb: "done", only: only.current, fyi: fyiWant.current })).data?.pile || null; }
+      try { pile = (await api.post("/api/funnel/settle", { key: current, verb: "done", only: only.current, fyi: fyiWant.current, ...(pressed ? { pressed } : {}) })).data?.pile || null; }
       catch (e) {
         // A receipt means the act already landed (a close, a sent reply) and only the settle after it failed - often with
         // the 422 "unavailable" that closing a task causes: walk on. Without one, gone already (404/422) is done too;

@@ -4310,12 +4310,13 @@ def next_badge(card: dict) -> str:
     return buttons.label('next', 'batch' if c.get('kind') == 'fyis' else 'read' if read else None)
 
 
-def _stamp_next(store, dock_tid: int, key: str) -> bool:
-    """Next's badge on the card it left, from the server too, so a reload draws it - only on a card nothing else was pressed on."""
+def _stamp_next(store, dock_tid: int, key: str, label: str = None) -> bool:
+    """Next's badge on the card it left, from the server too, so a reload draws it - only on a card nothing else was pressed on.
+    `label`: a card's own verb that walked on through the settle road (an fyi batch's "All read, next"), in place of Next's word."""
     try:
         c, card = _item_line(store, dock_tid, {key})
         if not c or card.get('pressed'): return False
-        rewrite(store, int(c['CommentId']), _MARK.sub('', c.get('Body') or ''), {**card, 'pressed': next_badge(card)})
+        rewrite(store, int(c['CommentId']), _MARK.sub('', c.get('Body') or ''), {**card, 'pressed': label or next_badge(card)})
         return True
     except Exception as e:
         logger.debug(f'concierge: Next left no badge on {key} - {e}'); return False

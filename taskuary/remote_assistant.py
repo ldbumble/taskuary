@@ -420,11 +420,32 @@ def in_session(store, channel: str, chat: str) -> bool:
     return time.time() - at < session_minutes(store) * 60
 
 
-def held_back(store, channel: str, chat: str, what: str) -> bool:
-    """True, with a debug line, when `what` must not go to this chat now: no conversation the owner started there is live."""
+# URGENT DOES NOT BREAK THE RULE (the owner, 2026-10-24, of a line that reached the phone unasked: "it was quote and quote urgent so
+# it sent it out but don't want that or at least it should be a setting"). Off (default): urgent waits on the desktop like the rest.
+# On: an urgent item - an urgent task's move, an urgent by-the-way, a report's alert - may reach the owner's own chat unasked.
+URGENT_KEY = 'phone_urgent_unasked'
+
+
+def urgent_rings(store) -> bool: return str(store.get_setting(URGENT_KEY) or '').strip().lower() in ('1', 'true', 'on')
+
+
+def held_back(store, channel: str, chat: str, what: str, urgent: bool = False) -> bool:
+    """True, with a debug line, when `what` must not go to this chat now: no conversation the owner started there is live -
+    and `what` is not an urgent item the owner let through (urgent_rings)."""
     if in_session(store, channel, chat): return False
+    if urgent and urgent_rings(store):
+        logger.info(f'{channel}: {what} goes unasked - it is urgent, and urgent items may text you (Settings)'); return False
     logger.debug(f'{channel}: held back {what} - the owner is not talking to Taskuary there')
     return True
+
+
+def may_hear(store, channel: str, to, what: str, urgent: bool = False) -> list:
+    """`to` without the owner's own Assistant chat when it must not hear `what` now - the same gate (held_back) for a send that
+    leaves through outbound rather than send(): a report's alert or automatic delivery addressed to the owner's own chat."""
+    ch = str(channel or '').strip().lower()
+    to = list(to if isinstance(to, (list, tuple, set)) else [x.strip() for x in str(to or '').split(',') if x.strip()])
+    if ch not in CHANNELS: return to
+    return [t for t in to if not (connector_for_chat(store, ch, t) and held_back(store, ch, str(t).strip(), what, urgent))]
 
 
 def quiet(store, channel: str, chat: str) -> bool:
@@ -450,7 +471,10 @@ def push_alerts(store, force: bool = False) -> int:
     try: keep_promises(store, force=force)
     except Exception as e: logger.warning(f'could not follow up in the chat: {e}')
     h = handoff(store)
-    if not h or held_back(store, h['channel'], h['chat'], 'a by-the-way'): return 0     # a hand-off the owner walked away from is no session
+    if not h: return 0
+    # a hand-off the owner walked away from is no session: only an urgent by-the-way may go, and only when they allowed it
+    live = in_session(store, h['channel'], h['chat'])
+    if not live and held_back(store, h['channel'], h['chat'], 'a by-the-way', urgent=True): return 0
     if not force and not quiet(store, h['channel'], h['chat']): return 0          # mid-conversation: the next look tries again
     from . import concierge, funnel, general
     try: p = funnel.pile(store)
@@ -468,7 +492,9 @@ def push_alerts(store, force: bool = False) -> int:
     band = funnel._band(cur) if cur else 99
     fresh = [a for a in (p.get('alerts') or [])
              if a.get('key') not in told and a.get('item') != on_the_table
-             and (a.get('kind') == 'meeting' or a.get('order_band', 3) < band)][:3]
+             and (a.get('kind') == 'meeting' or a.get('order_band', 3) < band)]
+    byk = {i['key']: i for i in items}
+    fresh = [a for a in fresh if live or is_urgent(byk.get(a.get('item')) or {})][:3]       # unasked: the urgent alone
     if not fresh: return 0
     named = [' '.join(x for x in (funnel.mark_for(a), f"{a['text']}"
                                   f"{' (' + refs[a['item']] + ')' if refs.get(a['item']) and refs[a['item']] not in a['text'] else ''}") if x)
@@ -479,7 +505,7 @@ def push_alerts(store, force: bool = False) -> int:
     # "or keep going" read as the Continue button, which this line does not offer
     tail = (f'Say {handle} to take it now, or carry on with this one.' if handle
             else 'Name it and I will take you to it, or carry on with this one.')
-    send(store, h['channel'], h['chat'], f'{say}\n\n{tail}', h.get('connector_id'))
+    send(store, h['channel'], h['chat'], f'{say}\n\n{tail}', h.get('connector_id'), urgent=not live)
     concierge.record(store, task['TaskId'], 'assistant', say)
     # ...onto the hand-off as it is NOW: a Take it back that landed while this was sending must stay taken back - writing
     # the record read a moment ago put the walk back in the chat and locked the desk again
@@ -3121,10 +3147,11 @@ def _deliver(channel: str, out, store, chat: str, body: str, connector_id=None, 
             logger.warning(f'{channel}: a message did not go ({plain(e)}) - trying again in {pauses[i]:.0f}s'); _pause(pauses[i])
 
 
-def send(store, channel: str, chat: str, text: str, connector_id: int = None, page: int = 0, choices: list = None, asked: bool = False):
+def send(store, channel: str, chat: str, text: str, connector_id: int = None, page: int = 0, choices: list = None, asked: bool = False,
+         urgent: bool = False):
     """Everything we say to the owner leaves through here, so this is where it is SPELLED - and where it is HELD: outside a
     conversation the owner started in this chat (in_session) nothing goes. `asked`: the owner's own press this moment named this
-    chat (hello_chat) - the one exception.
+    chat (hello_chat) - the one exception. `urgent`: an urgent item, which goes unasked only when the owner allowed it (urgent_rings).
 
     WhatsApp formats client-side, so its own emphasis reaches it; Telegram renders nothing
     without a parse mode and neither sender sets one, so it gets the words bare. A producer
@@ -3133,7 +3160,7 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None, pa
     Only the opening bubble wears the name. Four of them labelled "Taskuary (2/4):" over a
     heading that already says what it is read as machinery rather than somebody talking."""
     from . import chatformat, messengers
-    if not asked and held_back(store, channel, chat, f'{len(str(text or ""))} chars'): return
+    if not asked and held_back(store, channel, chat, f'{len(str(text or ""))} chars', urgent): return
     out = messengers.tg_send if channel == 'telegram' else messengers.wa_send
     talked(store, channel, chat)
     # A VOICE NOTE IS SAID BACK before it is acted on (A17, 2026-10-22): the owner could not tell what was transcribed - once, on the turn's

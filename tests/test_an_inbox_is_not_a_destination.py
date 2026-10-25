@@ -74,6 +74,9 @@ def test_nothing_was_filed_for_the_refused_alert(store):
 # 1 line(s)" then the finding: the name twice and a plural nobody writes, on a phone screen.
 def sent_text(store, cfg, why, head, body):
     from unittest import mock
+    from taskuary import remote_assistant
+    # the owner's own chat hears an alert only while they are talking there (test_phone_only_when_asked): here they are
+    remote_assistant.owner_spoke(store, 'whatsapp', cfg['alert']['to'])
     with mock.patch('taskuary.outbound.send_out', return_value={'ok': True}):
         reports.send_alert(store, {'SourceId': 140, 'Address': 'x'}, cfg, why, head, body)
     return store.scan_messages()[0]['BodyText']

@@ -729,6 +729,8 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     # the owner's messages in one private WhatsApp notify chat open the same
                     # durable guide conversation as the floating desktop assistant
                     'phone_assistant': '0',
+                    # the phone hears only what the owner started there; ON lets an URGENT item through unasked (remote_assistant.urgent_rings)
+                    'phone_urgent_unasked': '0',
                     # which channels Taskuary drafts and sends replies on (csv). github also
                     # needs its card's 'Reply to issue/PR authors'; the read-only trackers
                     # can never carry one - see outbound.can_reply

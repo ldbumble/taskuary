@@ -34,6 +34,9 @@ ASK_WAIT, ASK_TIMEOUT = 540, 600
 # teammate is refused, a trusted one noted on the task, and ask_user is the owner's approval card instead of Reason's
 # pop-up. Its own mark and command, printed back like the ask hook's; held as long as an ask.
 REASON_MARK, REASON_MATCH = '/api/hooks/claude/reason', 'mcp__reason-network__.*'
+# THE BROWSER HOOK (browsergate.py, 2026-10-25): every shell command a session of ours runs is read before it runs, and a browser
+# act that can't be undone is held for the owner's press. Its own mark and command, its stdout the decision like the ask hook's.
+BROWSER_MARK, BROWSER_MATCH = '/api/hooks/claude/browser', 'Bash|PowerShell'
 # Claude's events. The last five arrived 2026-09-20 and are the ones the screen could never tell apart:
 # a turn that died on a wall (StopFailure: rate_limit, max_output_tokens, overloaded, billing_error...),
 # the agent asking inside its own TUI (Notification agent_needs_input / idle_prompt), the permission
@@ -156,6 +159,15 @@ def reason_command(base: str, token: str = '', home: str = None) -> str:
     return f'{curl} -s -f -m {ASK_WAIT + 30} -X POST {base}{REASON_MARK} -H "Content-Type: application/json"{token_arg(token, home)} --data-binary @-'
 
 
+def browser_command(base: str, token: str = '', home: str = None) -> str:
+    "The browser hook: like the ask hook, its stdout is the decision; a failure prints nothing and leaves the command to Claude."
+    curl = 'curl.exe' if os.name == 'nt' else 'curl'
+    return f'{curl} -s -f -m {int(BROWSER_WAIT)} -X POST {base}{BROWSER_MARK} -H "Content-Type: application/json"{token_arg(token, home)} --data-binary @-'
+
+
+BROWSER_WAIT = 120                  # a snapshot and one light verdict; past this curl gives up and Claude runs the command
+
+
 def spool_path(home: str = None) -> str:
     """Where Codex's hooks leave their payloads: <taskuary home>/hooks/codex.jsonl."""
     if home: return os.path.join(home, CODEX_MARK)
@@ -187,7 +199,8 @@ def session_hooks(token: str = None, base: str = None) -> dict:
     ev = {'type': 'command', 'command': command(base, token, 'claude'), 'timeout': 5}
     d = {e: [{'hooks': [ev]}] for e in EVENTS}
     d['PreToolUse'] = [{'matcher': 'AskUserQuestion', 'hooks': [{'type': 'command', 'command': ask_command(base, token), 'timeout': ASK_TIMEOUT}]},
-                       {'matcher': REASON_MATCH, 'hooks': [{'type': 'command', 'command': reason_command(base, token), 'timeout': ASK_TIMEOUT}]}]
+                       {'matcher': REASON_MATCH, 'hooks': [{'type': 'command', 'command': reason_command(base, token), 'timeout': ASK_TIMEOUT}]},
+                       {'matcher': BROWSER_MATCH, 'hooks': [{'type': 'command', 'command': browser_command(base, token), 'timeout': BROWSER_WAIT + 10}]}]
     return d
 
 
@@ -245,11 +258,13 @@ def install_user(cli: str, base: str = None, token: str = None, home: str = None
     if cli == 'claude':
         ask = {'type': 'command', 'command': ask_command(base or base_url(), agent_token() if token is None else token, th), 'timeout': ASK_TIMEOUT}
         hooks['PreToolUse'] = [g for g in (hooks.get('PreToolUse') or []) if isinstance(g, dict)
-                               and not any(m in str(h.get('command') or '') for m in (ASK_MARK, REASON_MARK)
+                               and not any(m in str(h.get('command') or '') for m in (ASK_MARK, REASON_MARK, BROWSER_MARK)
                                            for h in (g.get('hooks') or []) if isinstance(h, dict))]
         hooks['PreToolUse'].append({'matcher': 'AskUserQuestion', 'hooks': [ask]})
         rn = reason_command(base or base_url(), agent_token() if token is None else token, th)
         hooks['PreToolUse'].append({'matcher': REASON_MATCH, 'hooks': [{**ask, 'command': rn}]})
+        bw = browser_command(base or base_url(), agent_token() if token is None else token, th)
+        hooks['PreToolUse'].append({'matcher': BROWSER_MATCH, 'hooks': [{'type': 'command', 'command': bw, 'timeout': BROWSER_WAIT + 10}]})
     if json.dumps(cur, sort_keys=True) == before: return False
     try: _write_json(p, cur)
     except OSError as e:
@@ -699,6 +714,19 @@ def reason(payload: dict, wait: float = None) -> dict:
     st = getattr(t, 'store', None) if t else None
     if not t or not st: return {}
     return reasonnet.pre_tool(st, t.task_id, run_sid(payload, t.task_id), tool[len(reasonnet.TOOL):], payload.get('tool_input') or {}, wait)
+
+
+def browser(payload: dict, brain=None) -> dict:
+    """Before one of OUR sessions runs a shell command (browsergate.check): a browser act that can't be undone is refused and held
+    for the owner. Not our pane, not a shell tool, nothing of agent-browser in it: {} at once - the command is Claude's."""
+    from . import browsergate
+    if str(payload.get('tool_name') or '') not in ('Bash', 'PowerShell'): return {}
+    cmd = str((payload.get('tool_input') or {}).get('command') or '')
+    if browsergate.EXE not in cmd.lower(): return {}                 # the cheap test first: this hook sees every shell command
+    t = _pane(payload, 'claude')
+    st = getattr(t, 'store', None) if t else None
+    if not t or not st: return {}
+    return browsergate.check(st, t.task_id, t.sid, cmd, brain)
 
 
 def run_sid(payload: dict, tid: int) -> str:

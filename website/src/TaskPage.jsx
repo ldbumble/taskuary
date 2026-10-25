@@ -81,7 +81,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { adviceKeyFor, suggestion } from "./advice.js";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
-import { CLOSE_BY_HAND, closeOut, fromLine as fromLineOf, layoutOf, workPane } from "./taskLayout.js";
+import { CLOSE_BY_HAND, closeOut, fromLine as fromLineOf, layoutOf, sameWords, waitingOn, workPane } from "./taskLayout.js";
 import { taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
 import { ASK_TAG } from "./newTask.js";
@@ -991,8 +991,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // so the ask can be checked against what it came from - "nothing about uncleared checks in there" was the ask built on a mail From never showed
   const sources = groupConversations([...taskMessages, ...(detail?.earlier || [])], { ms: tsMs, clean: cleanText });
   const sourceCount = sources.reduce((n, g) => n + g.count, 0);
-  // a task that came from ONE message reads it whole from the start, as an email does; a row closed by hand stays closed
-  const shownMsg = openMsg !== undefined ? openMsg : sourceCount === 1 ? sources[0]?.msgs[0]?.MessageId ?? null : null;
   // ...and what they SENT with each message - the photo or screenshot is often the whole ask (the owner, 2026-09-30: "don't see the
   // image on the task incoming message") - drawn under its own row inside the thread; a mail that names a picture it does not
   // carry offers the fetch on the message that opened the task
@@ -1014,6 +1012,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // read as the sender's voice ("Assistant for Backend Monitoring flags…") with the point cut off
   // ...never Taskuary's own brief to the agent (ownwork.BRIEFED: a playbook built with AI) - its title is the ask (taskAsk)
   const askText = (t?.SourceRef === "assistant:playbook" ? "" : cleanText(verdict?.summary || t?.Summary || opener?.ReadText || opener?.BodyText || "")) || taskAsk;
+  // a task that came from ONE message reads it whole from the start, as an email does; a row closed by hand stays closed
+  // ...unless the ask under the title IS that message's words (the task-view cleanup, owner-approved 2026-10-25): then From keeps its
+  // one row, and the words are read once
+  const askIsBody = sourceCount === 1 && sameWords(askText, opener?.ReadText || opener?.BodyText);
+  const shownMsg = openMsg !== undefined ? openMsg : sourceCount === 1 && !askIsBody ? sources[0]?.msgs[0]?.MessageId ?? null : null;
+  // ...and a task handed to a person opens on who it waits on, and when it was due (taskLayout.waitingOn)
+  const waitFor = waitingOn({ task: t || {}, messages: storedMessages });
   const made = t ? madeLine(t, timeAgo(t.CreatedAt)) : "";   // "sorted 1m ago", never "created ... by triage" (taskSources.madeLine)
   // WHAT RUNS THIS, in the vocabulary the brain layer landed on 2026-09-16: a ROLE picks the
   // document (every coding task's role is the profile of kind coding), a BRAIN is the CLI that runs it, and the model
@@ -1156,7 +1161,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const co = closeOut({ hasSender: !!replyMessage, result: resultShown, writeup });
   const replyHas = !!(pendingReview || proposals.length || owesEmails || emailsWaiting || ended || sentOutside.length
     || ["done", "dropped"].includes(t?.Status) || co.writeupAt === "closeout");
-  const pane = workPane({ stage, kind: t?.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas, picked: !!openStage });
+  // ...and NEITHER half on a task waiting on a person (the owner, 2026-10-25): nothing is yours until they answer, so Agent work and Close out
+  // are a line each, one click to open - the Send to agent form stood open over a task nobody needed an agent for
+  const pane = waitFor && !openStage ? "" : workPane({ stage, kind: t?.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas, picked: !!openStage });
   // the one line From folds to while an agent works (sessionView)
   const fromLine = fromLineOf({ sender: sourceMessage, count: sourceCount, workflow: fromWorkflow, made: t ? `${detail.ref} · ${made}` : "" });
   // the note a close was written with (server task.complete: "Closed out: ...") - Close out shows it under the close
@@ -1651,7 +1658,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* NO CHIPS BESIDE THE TITLE (the redesign, owner-approved 2026-10-21): what triage made of it is the last line of From,
                       and the state is the one pill at the right - the title has the row */}
                   <Typography title={t.Title} sx={{ color: INK, flex: 1, fontWeight: 600,
-                    fontSize: liveSession ? 12.5 : 13,
+                    fontSize: liveSession ? 12.5 : 14,
                     minWidth: headControls ? { xs: 90, sm: 180 } : 0,
                     flexBasis: headControls ? { xs: "calc(100% - 90px)", sm: "auto" } : "auto",
                     letterSpacing: "-.005em" }} noWrap>
@@ -1705,6 +1712,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     <IconButton aria-label={sessionView ? "Back to task" : "Close task"} size="small" onClick={() => (sessionView ? setPeek(true) : dismiss())}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
                   </Tooltip>
                 </Box>
+                {/* THE ASK LEADS, UNDER THE TITLE AND ACROSS BOTH COLUMNS (the task-view cleanup, owner-approved 2026-10-25): what is wanted is
+                    read first, before where it came from or what to do about it - and a task handed to a person opens on who it waits on.
+                    Where the work takes the whole width (an agent ran) the ask stays in From, over the agent's room. */}
+                {!wide && (waitFor || askText) && <Box data-tq-ask="" sx={{ mt: 0.5, minWidth: 0, maxWidth: "92ch" }}>
+                  {waitFor && <Typography data-tq-waiting-on="" sx={{ color: INK, fontSize: 13.5, fontWeight: 600, lineHeight: 1.45 }}>{waitFor.line}</Typography>}
+                  {askText && !(waitFor && sameWords(askText, t.Title)) && <Typography title={askText} sx={{ color: waitFor ? DIM : INK, fontSize: 13.5, lineHeight: 1.5,
+                    overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{askText}</Typography>}
+                </Box>}
               </Box>
               {/* a flex column so the terminal takes exactly what is left between the strip above and the
                   waiting room below - a fixed-height formula clipped its bottom line on shorter screens */}
@@ -1790,7 +1805,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           strip stands under the canvas it says what to do, so this one goes (assistantView.css .advising) */}
                       {news && <Typography className="tq-news" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>Open again: {news.line}</Typography>}
                       {/* THE ASK - one line of what is wanted; the whole summary is the tooltip when the line cut it */}
-                      {askText && <Part label="The ask" data-tq-ask="">
+                      {wide && askText && <Part label="The ask" data-tq-ask="">
                         <Typography title={askText} sx={{ color: INK, fontSize: 14, lineHeight: 1.45, overflowWrap: "anywhere",
                           display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{askText}</Typography>
                       </Part>}

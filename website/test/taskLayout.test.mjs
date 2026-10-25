@@ -1,7 +1,7 @@
 // THE TASK PAGE'S LAYOUT (the redesign, owner-approved 2026-10-21): From | Work, and the work alone - full width - while an agent works
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CLOSE_BY_HAND, closeOut, fromLine, layoutOf, workPane } from "../src/taskLayout.js";
+import { CLOSE_BY_HAND, closeOut, fromLine, holderName, layoutOf, sameWords, waitingOn, workPane } from "../src/taskLayout.js";
 import { taskSource } from "./taskSource.mjs";
 
 test("two columns at rest, the whole width while an agent works - coding or general, working or waiting on you", () => {
@@ -130,4 +130,24 @@ test("From reads newest on top, the older ones folded behind Show N older", asyn
   assert.equal(thread.length, 1, "one thread");
   assert.deepEqual(fromRows(thread[0]).map((r) => r.m.who), ["Gail Moreno", "You", "Gail Moreno"]);
   assert.equal(fromExpands(thread), false, "three letters: nothing folded");
+});
+
+// THE TASK-VIEW CLEANUP (owner-approved 2026-10-25): the ask said once, and a task handed to a person opens on who it waits on
+test("the ask is the message's own words only when they are the same words, spacing aside", () => {
+  assert.ok(sameWords("Are we still on\nfor Thursday?","Are we still on  for Thursday? "));
+  assert.ok(!sameWords("Confirm the Thursday cutover", "Are we still on for Thursday?"));
+  assert.ok(!sameWords("", ""), "no ask is not the body");
+});
+
+test("a task waiting on a person says who and when it was due", () => {
+  const now = new Date(2026, 9, 25, 9, 0);
+  const task = { Status: "waiting", Assignee: "person:erin.blake@northwind.example", DueAt: "2026-10-23" };
+  assert.equal(holderName("erin.blake@northwind.example"), "Erin Blake");
+  assert.match(waitingOn({ task, now }).line, /^Waiting on Erin Blake\. Due Oct 23, 2 days late\.$/);
+  // ...the name their own mail signs with, where the task has it
+  assert.equal(waitingOn({ task, now, messages: [{ FromEmail: "Erin.Blake@northwind.example", FromName: "Erin B." }] }).name, "Erin B.");
+  assert.equal(waitingOn({ task: { ...task, DueAt: "" }, now }).line, "Waiting on Erin Blake.");
+  assert.equal(waitingOn({ task: { ...task, DueAt: "2026-10-30" }, now }).line, "Waiting on Erin Blake. Due Oct 30.");
+  assert.equal(waitingOn({ task: { ...task, Status: "open" }, now }), null, "not waiting");
+  assert.equal(waitingOn({ task: { ...task, Assignee: "agent:coding" }, now }), null, "an agent is not a person it waits on");
 });

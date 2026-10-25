@@ -160,17 +160,121 @@ def _fixed(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
     return pick, model or '', gear or 'main', _backups(store)
 
 
+# ── Auto mode: the rules ───────────────────────────────────────────────────────────────────────────────────────────────────────
+# What Auto turns on, each shown as a sentence with its own switch (the owner, 2026-10-25: Auto is off on a fresh install, and in it
+# each card is its job's STANDARD tier - every model still lives in one place). A rule matches judgement values and ids only, never
+# words from the mail; the first rule that sets a tier wins.
+TIERS = ('light', 'standard', 'strong')
+GEAR_OF = {'light': 'light', 'standard': 'main', 'strong': 'strong'}
+DEFAULT_RULES = [
+    {'id': 'quick-jobs', 'when': {'job': ['triage', 'rank', 'memory', 'advisor', 'summary']}, 'use': {'tier': 'light'}},
+    {'id': 'hard-work', 'when': {'job': ['draft', 'general', 'coding'], 'difficulty': ['hard']}, 'use': {'tier': 'strong'}},
+    {'id': 'work', 'when': {'job': ['draft', 'general', 'coding']}, 'use': {'tier': 'standard'}},
+]
+WHEN_KEYS = ('job', 'difficulty', 'data_class', 'origin', 'person')
+
+
+def rules(store) -> list:
+    """The rules in the order they are tried: the owner's saved list (ai_route_rules), then any default it does not hold yet - a
+    default the owner switched off stays off, and one added in a later release arrives as shipped."""
+    import json
+    try: saved = json.loads(str(store.get_setting('ai_route_rules') or '').strip() or '[]')
+    except ValueError: saved = []
+    saved = [r for r in saved if isinstance(r, dict) and r.get('id') and isinstance(r.get('when'), dict) and isinstance(r.get('use'), dict)]
+    have = {r['id'] for r in saved}
+    out = [*saved, *({**d, 'by': 'default'} for d in DEFAULT_RULES if d['id'] not in have)]
+    return [{**r, 'on': r.get('on', True) is not False, 'by': r.get('by') or 'owner'} for r in out]
+
+
+def save_rules(store, rs: list, actor: str = 'owner') -> list:
+    "The owner's list, checked: known conditions and uses only - a rule nothing could ever match is refused, never stored."
+    import json
+    clean = []
+    for r in rs or []:
+        when, use = dict(r.get('when') or {}), dict(r.get('use') or {})
+        if set(when) - set(WHEN_KEYS): raise ValueError(f"a rule can only match on {', '.join(WHEN_KEYS)}")
+        if any(j not in JOBS for j in when.get('job') or []): raise ValueError('a rule names a job the router does not know')
+        if 'tier' in use and use['tier'] not in TIERS: raise ValueError(f"a rule's tier is one of {', '.join(TIERS)}")
+        if not set(use) & {'tier', 'escalate', 'only'}: raise ValueError('a rule must say what it does')
+        clean.append({'id': str(r.get('id') or f'r{len(clean) + 1}')[:40], 'when': {k: [str(x) for x in v] for k, v in when.items() if v},
+                      'use': use, 'on': r.get('on', True) is not False, 'by': r.get('by') or 'owner'})
+    if len({r['id'] for r in clean}) < len(clean): raise ValueError('two rules share one name')
+    store.set_setting('ai_route_rules', json.dumps(clean), actor)
+    return rules(store)
+
+
+def _people(store, task) -> set:
+    """Who the task is with, as the people model keys them - the person seam (the memory redesign). With no people model in this
+    build there is nobody to match, so a person rule matches nothing rather than guessing at a name."""
+    try: from . import people
+    except ImportError: return set()
+    f = getattr(people, 'keys_of_task', None)
+    try: return set(f(store, task)) if f and task else set()
+    except Exception: return set()
+
+
+def facts(store, job: str, task=None) -> dict:
+    "What a rule may match on: the job and the task's judgements - an unjudged task reads as standard and ordinary."
+    j, o = judged(store, task) if task else {}, ''
+    if task:
+        from . import origin
+        try: o = origin.of_task(store, task['TaskId'])[0]
+        except Exception: o = ''
+    return {'job': job, 'difficulty': j.get('difficulty') or 'standard', 'data_class': j.get('data_class') or 'ordinary', 'origin': o,
+            'person': _people(store, task)}
+
+
+def matches(rule: dict, f: dict) -> bool:
+    for k, want in (rule.get('when') or {}).items():
+        got = f.get(k)
+        if not (set(want) & got if isinstance(got, set) else got in want): return False
+    return True
+
+
+def _first(store, f: dict, use: str):
+    return next((r for r in rules(store) if r['on'] and use in r['use'] and matches(r, f)), None)
+
+
 def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=None) -> Route:
     """The brain for one call of `job`. An explicit pick or model (`want_*`: the owner's picker, a saved session, a
-    report's own brain, a workflow's model) always wins. `task` is the task dict or id the call is about, if any."""
+    report's own brain, a workflow's model) always wins. `task` is the task dict or id the call is about, if any.
+
+    In Auto mode the rules pick the TIER - light, standard or strong - on the brain the cards (or an explicit pick) name. An
+    explicit model is never overridden, the Assistant keeps its own model, and the guide chat keeps its quick gear."""
     if job not in JOBS: raise ValueError(f'unknown AI job {job!r} - one of {", ".join(JOBS)}')
-    if isinstance(task, int): task = store.get_task(task)
+    if task is not None and not isinstance(task, dict): task = store.get_task(int(task)) if str(task).isdigit() else None
     pick, model, g, chain = _fixed(store, job, task, want_pick, want_model, gear)
     j = judged(store, task) if task else {}
     from . import agents
+    from .general import is_dock
     chosen = want_pick is not None or bool(want_model)
-    rule = 'you chose it' if chosen else 'fixed'
+    rule, tier = ('you chose it' if chosen else 'fixed'), 'fixed'
     if not pick: why = f'{agents.NO_AI}, so {JOB_WORDS[job]} waits'
     else: why = f"{JOB_WORDS[job]} on {_said(store, pick)}{f', {model}' if model else ''}, {'as picked for it' if chosen else 'as its card says'}"
-    return Route(job, 'fixed', pick, model, g, [c for c in chain if c and c != pick], rule, why[0].upper() + why[1:],
+    if pick and mode(store) == 'auto' and not want_model and not (job == 'general' and is_dock(task)):
+        f = facts(store, job, task); r = _first(store, f, 'tier')
+        if r:
+            tier, rule, said = r['use']['tier'], r['id'], ''
+            if tier == 'strong':
+                # the brain's own strong gear, else the first backup that has one - and for coding only ever a CLI's. A brain picked
+                # explicitly is kept: without a strong model it does the work at standard
+                ok = lambda p: bool(strong_of(store, p)) and (job != 'coding' or p.startswith('cli:'))
+                to = pick if ok(pick) else '' if want_pick is not None else next((c for c in chain if c and ok(c)), '')
+                if not to: tier, said = 'standard', f"; {'it has no' if want_pick is not None else 'no brain here has a'} strong model, so standard"
+                elif to != pick: said, chain, pick = f'; {_said(store, pick)} has no strong model', [pick, *chain], to
+            # the card's model IS the standard tier; strong runs the brain's strong gear and light its quick one
+            g, model = GEAR_OF[tier], (model if tier == 'standard' else '')
+            hard = f" judged {f['difficulty']}" if 'difficulty' in r['when'] else ''
+            why = f"{JOB_WORDS[job]}{hard} -> {tier} on {_said(store, pick)}{f', {model}' if model else ''} (rule {rule}){said}"
+    return Route(job, tier, pick, model, g, [c for c in chain if c and c != pick], rule, why[0].upper() + why[1:],
                  (j or {}).get('difficulty', ''), (j or {}).get('data_class', ''))
+
+
+def for_session(store, task, brain: str = None) -> tuple:
+    """(brain, model) a coding pane opens on. Fixed mode, or no rule asking for more: (brain, None) - exactly today's choice. In
+    Auto, hard work opens on a CLI's strong gear, and the route is logged; a coding pane never lands on an API connector."""
+    if mode(store) != 'auto': return brain, None
+    r = choose(store, 'coding', task, want_pick=f'cli:{brain}' if brain else None)
+    log(store, r, (task or {}).get('TaskId') if isinstance(task, dict) else task)
+    if r.gear != 'strong' or not r.pick.startswith('cli:'): return brain, None
+    return r.pick[4:], strong_of(store, r.pick) or None

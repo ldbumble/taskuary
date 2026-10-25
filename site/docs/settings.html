@@ -177,6 +177,11 @@ is what you see if those cards cannot load.</li>
 <p><code>draft_model</code> · type: text · default: blank · set on a card at the top of the page</p>
 <p>A different model for drafting, if you want one. Blank = the drafting brain&#39;s own light model, as before.</p>
 <p>For an API connector this is its model or deployment name; for a CLI, its --model, and model@effort sets how hard it thinks.</p>
+<h3 id="which-ai-does-each-job">Which AI does each job<a class="anchor" href="#which-ai-does-each-job" aria-label="Link to this section">#</a></h3>
+<p><code>ai_route_mode</code> · type: select · default: <code>fixed</code> · set on a card at the top of the page</p>
+<p>Fixed runs every job exactly as its card says. Auto picks a quick, standard or strong model by the job and how hard triage judged the work.</p>
+<p>Options: <code>fixed</code>, <code>auto</code></p>
+<p>Normally set on the line above the AI cards; this row is the fallback if that panel cannot load. In Auto each card is its job&#39;s standard model, and the rules under it say when the quick gear or the strong model runs instead - each shown as a sentence with its own switch. A brain whose strong model box is blank never steps up. An explicit pick - yours, a report&#39;s, a workflow&#39;s - always wins, and nothing is sent without your press either way.</p>
 <h3 id="general-agent-model">General agent model<a class="anchor" href="#general-agent-model" aria-label="Link to this section">#</a></h3>
 <p><code>assistant_model</code> · type: text · default: blank · set on a card at the top of the page</p>
 <p>Override the model for the brain above. Blank = the provider&#39;s own default.</p>

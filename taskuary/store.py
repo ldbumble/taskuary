@@ -695,6 +695,8 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     'assistant_ai': '', 'assistant_model': '',
                     # Drafting's own brain and model (aidefaults, brainroute) - blank = the triage brain, as before
                     'draft_ai': '', 'draft_model': '',
+                    # which AI does each job (brainroute): fixed = the cards, exactly as before; auto = the rules, '' = the shipped ones
+                    'ai_route_mode': 'fixed', 'ai_route_rules': '',
                     # the agent's context file (context.py): history, past work and the brief, written to
                     # ~/.taskuary/context/TQ-xxxx.md and pointed at from the seed - not crammed into it
                     'agent_context_file': '1',

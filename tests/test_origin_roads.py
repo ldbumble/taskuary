@@ -22,6 +22,8 @@ def _stranger(s):
     t = s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'email'}, 'router')
     s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'someone@vendor.example', 'Status': 'routed'}); return t
 
+TOOLBOX = ('--mcp-config', '--disallowedTools')       # what trusted work on a task adds (agenttools.session_args), each with its value
+
 def _owner(s): return s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'manual', 'OriginBase': 'owner'}, 'owner')
 
 def _store(cmd='claude', name='coding'):
@@ -51,7 +53,9 @@ def test_an_owner_pane_is_unchanged(tmp_path):
     argv, kw = _pane(s, t, tmp_path)
     assert '--dangerously-skip-permissions' in argv and '--permission-mode' not in argv and kw.get('mode', 'full') == 'full'
     base, _ = _pane(s, None, tmp_path)          # the same launch as a pane with no task behind it, flag for flag
-    strip = lambda a: [x for i, x in enumerate(a) if not (i and a[i - 1] in ('--session-id',)) and x != '--session-id']
+    # ...but for Taskuary's own tools, which trusted work on a task gets (agenttools.session_args, 2026-10-25)
+    assert '--mcp-config' in argv and '--mcp-config' not in base
+    strip = lambda a: [x for i, x in enumerate(a) if not (i and a[i - 1] in ('--session-id', *TOOLBOX)) and x not in ('--session-id', *TOOLBOX)]
     assert strip(argv) == strip(base)
 
 def test_a_pane_on_the_owner_s_own_mail_is_unchanged(tmp_path):
@@ -147,7 +151,12 @@ def test_a_stranger_s_headless_run_is_in_auto_mode_in_its_own_folder_outside_tas
 
 def test_an_owner_s_headless_run_is_unchanged():
     s = _store(); t = _owner(s)
-    assert _headless(s, t) == _headless(s, None)
+    mine, base = _headless(s, t), _headless(s, None)
+    assert '--mcp-config' in mine['args']                 # Taskuary's own tools are the one difference (2026-10-25)
+    a = mine['args']
+    from taskuary.clis import preset_args
+    assert [x for i, x in enumerate(a) if x not in TOOLBOX and not (i and a[i - 1] in TOOLBOX)] == (base.get('args') or preset_args('claude'))
+    assert {k: v for k, v in mine.items() if k != 'args'} == {k: v for k, v in base.items() if k != 'args'}
 
 def test_a_stranger_s_headless_run_on_a_cli_with_no_reviewer_is_refused():
     s = _store('gemini'); t = _stranger(s)

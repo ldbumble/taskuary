@@ -124,6 +124,25 @@ def run_sharepoint_file(cfg):
     return f'{name} - last {min(tail, len(lines))} of {len(lines)} lines', '\n'.join(lines[-tail:])[:BODY_CHARS]
 
 
+def run_sharepoint_save(cfg):
+    """{"site": "contoso.sharepoint.com/sites/Ops", "path": "Shared Documents/Reports/summary.md", "text": "..."} (or "data" as base64) -
+    an agent saves a file into a document library. A file is not a message (the owner, 2026-10-25): it runs at the card's write
+    Authority with no press, a taken name is renamed rather than overwritten, and the answer says where it landed."""
+    from urllib.parse import quote
+    from .sharing import file_bytes
+    path = str(cfg.get('path') or '').strip().strip('/')
+    if not path or str(cfg.get('path')).endswith('/'): raise RuntimeError('name the file - e.g. Shared Documents/Reports/summary.md')
+    b, ctype = file_bytes(cfg)
+    tok = _token(cfg)
+    sid = site_id(tok, cfg.get('site'))
+    r = requests.put(f'{GRAPH}/sites/{sid}/drive/root:/{quote(path)}:/content', params={'@microsoft.graph.conflictBehavior': 'rename'},
+                     headers={'Authorization': f'Bearer {tok}', 'Content-Type': ctype}, data=b, timeout=60)
+    if r.status_code == 403: raise RuntimeError('Graph refused (403) - saving needs the Sites.ReadWrite.All APPLICATION permission, admin-consented')
+    if r.status_code >= 300: raise RuntimeError(f'Graph {r.status_code}: {r.text[:200]}')
+    j = r.json() or {}
+    return f"saved {j.get('name') or path.rsplit('/', 1)[-1]} to SharePoint", f"Saved to SharePoint: {cfg.get('site')}/{path} - {j.get('webUrl') or ''}"
+
+
 def test(store, c) -> str:
     cfg = sharepoint_connection(store)
     tok = _token(cfg)

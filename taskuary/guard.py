@@ -125,10 +125,12 @@ AGENT_WRITES = (
     (r'POST', r'^/api/hooks/claude/reason$', "the Reason Network hook - a message to someone untrusted is refused, an approval goes to the owner"),
     (r'POST', r'^/api/agent/(reply|done|draft|item|tick|waiting)$',
      "`taskuary --reply/--done/--draft/--item/--tick/--waiting-on` on the session's OWN task (owns_task); nothing leaves"),
+    (r'POST', r'^/api/agent/propose$', "an act only the owner's press runs (proposals.queue), filed on the session's OWN task; nothing runs"),
+    (r'POST', r'^/api/mcp$', "Taskuary's own tools for the session (agenttools): each one is a door on this list or a read, on its OWN task"),
     (r'POST', r'^/api/board/notes$', 'the wall agents leave lines for each other on'),
     (r'POST', r'^/api/(hub|handbook)(/\d+/(comment|vote|retire|restore))?$',
      "the Hub - post, correct, vote, retire what is no longer true; gated again by the card's hub_write scope"),
-    (r'POST', r'^/api/tools/run$', 'a data tool, gated per card by scopes.require'),
+    (r'POST', r'^/api/tools/run$', 'a data tool, gated per card by scopes.require - and a send waits as a proposal (scopes.reaches)'),
     (r'POST', r'^/api/reports/\d+/rerun$', 'a report run as its schedule would run it (concierge.tools_block) - no configuration changes'),
 )
 
@@ -146,6 +148,8 @@ AGENT_READS = (
 # listed so that test_guard walks app.routes and FAILS on a write route nobody classified: a new
 # door is a decision, not something that inherits whatever the table happened to say.
 OWNER_ONLY = (
+    # the first thing a cornered model would do is mark the send tool it was denied as one that does not send (sendfilter)
+    (r'POST', r'^/api/sendfilter/(correct|scan)$', "which of the owner's own MCP tools count as sends is the owner's word"),
     (r'POST', r'^/api/(bug-report/draft|open-url)$', "a bug report is drafted from the owner's own screen, and only the owner's click opens a page on their desktop"),
     (r'POST', r'^/api/messages/\d+/unsubscribe$', "leaving a mailing list is the owner's press - a newsletter's words never reach it (unsubscribe.py)"),
     (r'POST', r'^/api/messages/\d+/calendar$',"answering an invite or drafting one is the owner's - drafted for their Send (calwrite)"),

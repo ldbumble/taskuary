@@ -478,6 +478,14 @@ def _fname(snap) -> str:
 
 def onedrive(store, snap: dict, actor: str = 'owner') -> dict:
     """The page as a file in Taskuary/ on the owner's OneDrive (a tenant app: the mailbox's own drive). Returns its link."""
+    url = onedrive_put(store, f'{FOLDER}/{_fname(snap)}', document(snap).encode('utf-8'), 'text/html; charset=utf-8')
+    _audit(store, 0, 'onedrive', actor, snap, where=url)
+    return {'ok': True, 'how': 'onedrive', 'url': url}
+
+
+def onedrive_put(store, path: str, data: bytes, ctype: str = 'application/octet-stream') -> str:
+    """One file onto the owner's OneDrive at `path` (folders made as needed, a name taken renamed), through the Microsoft card that may
+    save files. Returns its link. Share's page and an agent's saved file (run_onedrive_save) both come through here."""
     if why := onedrive_block(store): raise PermissionError(why)
     c = _ms_card(store)
     cfg, tok = _ms_token(store, c)
@@ -488,13 +496,34 @@ def onedrive(store, snap: dict, actor: str = 'owner') -> dict:
                     and (not s.get('ConnectorId') or s['ConnectorId'] == c['ConnectorId'])), '')
         if not box: raise PermissionError('the Outlook card names no mailbox whose OneDrive to put it in')
         root = f'{GRAPH}/users/{quote(box)}/drive'
-    r = requests.put(f'{root}/root:/{FOLDER}/{quote(_fname(snap))}:/content', params={'@microsoft.graph.conflictBehavior': 'rename'},
-                     headers={'Authorization': f'Bearer {tok}', 'Content-Type': 'text/html; charset=utf-8'},
-                     data=document(snap).encode('utf-8'), timeout=60)
+    r = requests.put(f'{root}/root:/{quote(path.strip("/"))}:/content', params={'@microsoft.graph.conflictBehavior': 'rename'},
+                     headers={'Authorization': f'Bearer {tok}', 'Content-Type': ctype}, data=data, timeout=60)
     if r.status_code >= 300: raise RuntimeError(f'OneDrive refused the upload ({r.status_code}): {r.text[:200]}')
-    url = (r.json() or {}).get('webUrl') or ''
-    _audit(store, 0, 'onedrive', actor, snap, where=url)
-    return {'ok': True, 'how': 'onedrive', 'url': url}
+    return (r.json() or {}).get('webUrl') or ''
+
+
+def file_bytes(cfg: dict) -> tuple:
+    """(bytes, content type) of a file an agent saves: `text` as UTF-8, or `data` as base64 - never a path, so the server opens nothing
+    it is handed. Capped at Graph's one-request upload (4 MB)."""
+    import base64, binascii, mimetypes
+    if cfg.get('data'):
+        try: b = base64.b64decode(str(cfg['data']), validate=True)
+        except (binascii.Error, ValueError): raise ValueError('data must be base64 - or send the words as text')
+    elif cfg.get('text') is not None: b = str(cfg['text']).encode('utf-8')
+    else: raise ValueError('nothing to save - send text, or data as base64')
+    if len(b) > 4 * 1024 * 1024: raise ValueError('the file is over 4 MB - save it in parts, or say where it is and the owner moves it')
+    return b, mimetypes.guess_type(str(cfg.get('path') or ''))[0] or ('text/plain; charset=utf-8' if cfg.get('text') is not None else 'application/octet-stream')
+
+
+def run_onedrive_save(cfg):
+    """{"path": "Taskuary/Q3 summary.md", "text": "..."} or {"path", "data": "<base64>"} - an agent saves a file to the owner's OneDrive.
+    A file is not a message (the owner, 2026-10-25), so it runs at the card's write Authority with no press - and the answer is where it
+    landed, which the agent says in its report. `store` arrives via resolve_cfg."""
+    path = str(cfg.get('path') or '').strip().strip('/')
+    if not path or path.endswith('/'): raise ValueError('name the file - e.g. Taskuary/Q3 summary.md')
+    b, ctype = file_bytes(cfg)
+    url = onedrive_put(cfg['store'], path, b, ctype)
+    return f'saved {path.rsplit("/", 1)[-1]} to OneDrive', f'Saved to OneDrive: {path} - {url}'
 
 
 def gdrive(store, snap: dict, actor: str = 'owner') -> dict:

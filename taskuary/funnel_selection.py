@@ -133,7 +133,17 @@ def below(items: list[dict], ready: list[dict], exclude, place=None, at_key=None
     # found nothing below and the walk ended on a task waiting right there (tests/test_lifecycle.py)
     # ...nor its task number (the tie-break after the arrival): `msg:<id>` has none, `agent:<task>` has one. So the place is the
     # section and the arrival - the first four parts, which is also all a place saved before the task number joined the key holds
-    else: down = [i for i in ready if funnel.order_key(i)[:4] >= tuple(place)[:4]]
+    # ...BUT A ROW IN THE SAME SECOND WITH A LOWER TASK NUMBER IS ABOVE IT: a goal and the steps made with it arrive together, and with the
+    # step put down (Remind me, Mark done) its goal - drawn just above it - matched the place's clock and Next walked back UP to it (the
+    # 2026-10-25 sweep: "Remind me on the last task lands on the goal above it"). Where both carry a number it decides; a key with none
+    # (`msg:<id>`) is still the place's own row under another name
+    else:
+        p = tuple(place)
+        def from_place(i):
+            k = funnel.order_key(i)
+            if k[:4] != p[:4]: return k[:4] > p[:4]
+            return len(p) < 6 or k[4] or p[4] or k[5] >= p[5]
+        down = [i for i in ready if from_place(i)]
     return down
 
 

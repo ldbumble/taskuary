@@ -262,11 +262,8 @@ export default function DashboardEditor({ sourceId = null, draft = null, types =
       </Box>
       {err && <Alert severity="error">{err}</Alert>}
       {shown.length > 0 && <Alert severity="warning" sx={{ fontSize: 12.5 }}>{shown.map((p) => <div key={p}>{p}</div>)}</Alert>}
-      {busy === "preview" && !data ? <CircularProgress size={20} />
-        // ...drawn afresh when what it opens on changes: the page's range and segment are its own state from then on
-        : data ? <Dashboard key={`${spec.filters?.range}-${spec.filters?.segment}`} spec={spec} data={data} stale={busy === "run" || busy === "preview"} />
-          : sourceId != null && <Typography sx={{ fontSize: 12.5, color: INK }}>{DASH.never}</Typography>}
 
+      {/* THE SETTINGS GO ABOVE THE DASHBOARD (the owner, 2026-10-25): what it reads and what it shows, then the page they make */}
       {/* ── what it reads: a report's own source cards, laid out as a report lays them (ReportsView.SourceCard) ── */}
       <Section title={DASH.sources} hint={DASH.sources_hint}>
         {srcs.map((s, i) => (
@@ -309,6 +306,11 @@ export default function DashboardEditor({ sourceId = null, draft = null, types =
         {comps.length < MAX_COMPONENTS && <AddCard label={DASH.add} data-tq-dashboard-add-component=""
           onClick={() => setComps((cur) => [...cur, { kind: "stat", title: DASH.kinds.stat, source: srcs[0]?.key || "", agg: "count" }])} />}
       </Section>
+
+      {busy === "preview" && !data ? <CircularProgress size={20} />
+        // ...drawn afresh when what it opens on changes: the page's range and segment are its own state from then on
+        : data ? <Box data-tq-dashboard-preview=""><Dashboard key={`${spec.filters?.range}-${spec.filters?.segment}`} spec={spec} data={data} stale={busy === "run" || busy === "preview"} /></Box>
+          : sourceId != null && <Typography sx={{ fontSize: 12.5, color: INK }}>{DASH.never}</Typography>}
     </Box>
   );
 }

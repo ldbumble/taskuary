@@ -206,7 +206,7 @@ def claude_config(task_id) -> str:
     """The session's --mcp-config file: our server over HTTP, the token and task proof named by env var (Claude expands ${VAR} in an
     MCP config), so no secret is written. In Taskuary's home, one per task, rewritten only when it changes."""
     from . import config, guard
-    d = config.home() / 'sessions'; d.mkdir(parents=True, exist_ok=True)
+    d = config.home() / 'agent-tools'; d.mkdir(parents=True, exist_ok=True)
     f = d / f'TQ-{int(task_id)}.mcp.json'
     body = json.dumps({'mcpServers': {SERVER: {'type': 'http', 'url': url(task_id),
                                                'headers': {'X-Taskuary-Token': '${%s}' % guard.AGENT_ENV,

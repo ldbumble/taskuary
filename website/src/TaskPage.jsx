@@ -51,7 +51,7 @@ import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT, ALERT_BD, ALERT_INK, ALERT_TINT, BRAND } from "./theme.jsx";
 import RunSteps from "./RunSteps.jsx";
-import { cameFromLabel, channelName, filesByMessage, fromExpands, fromRows, groupConversations, groupMeta, headerFacts, isChat, latestRows, madeLine, rowText, todoSources, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
+import { cameFromLabel, channelName, filesByMessage, fromExpands, fromRows, groupConversations, groupMeta, headerFacts, isChat, madeLine, rowText, todoSources, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
 import { latestTriageVerdict, legacyTriageVerdict, parseTriageVerdict, routeIntent } from "./triageVerdict.js";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
@@ -135,8 +135,8 @@ const whenShort = (s) => {
 // leaves room for - the terminal's rule, every row the page can give - and never shorter than the box it was; past that it scrolls
 const THREAD_MAX = "max(360px, calc(100vh - 160px))";
 // A CONVERSATION CONDENSED: one line a message - who, the words, when - and "· · · N more" where rows are left out; a row opens its
-// message in full under it. Task's Came from and Close out draw this SAME list (the owner, 2026-10-16: "full chat should be in task
-// (condensed and full). in close out chats condensed version?"), so the two cannot tell one conversation two ways.
+// message in full under it. Came from draws it; Close out drew it too (the owner, 2026-10-16) until it became one "Answering ..." line
+// that opens this list (the task-view cleanup, owner-approved 2026-10-25).
 // THE GAP IS THE WAY IN (the owner, 2026-10-20: "··· 4 more - Gail Moreno, You" sat between the messages and Show all was at the top, where
 // nobody looked): with `onExpand` the line itself opens the whole conversation - the same action as Show all above it. `files` is each
 // message's attachments (taskSources.filesByMessage): what rode in with a message is drawn under ITS row, never loose under the card.
@@ -1001,9 +1001,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     : sources.find((g) => g.msgs.some((m) => m.MessageId === sourceMessage?.MessageId)) || sources[0] || null;
   // ...and what you sent outside Taskuary in some OTHER conversation still says so under it, newest first
   const sentApart = newestFirst(sentOutside.filter((m) => !closeGroup?.msgs.some((x) => x.MessageId === m.MessageId)));
+  // ...and the one message in it the draft answers: the reply's source, else the conversation's newest from them
+  const answering = !closeGroup ? null : closeGroup.msgs.find((m) => m.MessageId === sourceMessage?.MessageId)
+    || newestFirst(closeGroup.msgs.filter((m) => m.Status !== "context" && m.Direction !== "out" && !m.ReviewSent))[0] || null;
   // ...From is always open now (the redesign, 2026-10-21): the link opens the whole conversation there and brings it into view, and the
   // work column stays where it was - the reply you were reading does not fold under you
-  const seeWholeConversation = () => { setShowAll(true); setFromOpen(true); setSeekCameFrom(true); };
+  // ...and where the work has the whole width (an agent ran), From is the sidebar over it: the link opens that
+  const seeWholeConversation = () => { setShowAll(true); setFromOpen(true); if (wide) setFromSide(true); setSeekCameFrom(true); };
   const triaged = triageLine({ route: sourceRoute, verdict, task: t || {}, messages: storedMessages, ms: tsMs });
   // THE ASK: the task's summary, else what triage summed it up as, else the message itself - its first sentence, on one line
   // ...and with no summary, the message that OPENED it: the newest is often "and by the 15th", which is not the ask
@@ -2268,19 +2272,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     onDraft={() => openReply(true)} draftLabel={replyPrimary} />}
                   {pane === "reply" && !writeup && ((pendingReview || proposals.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
                     <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-                      {/* THE CONVERSATION OVER THE DRAFT (the owner, 2026-10-15: "add it to close out too"), CONDENSED: the latest lines of the
-                          conversation being answered, newest first - the draft answers the top one - and the rest a click away in Task. The
-                          full bubbles here and again in step 1 were one conversation drawn twice (the owner, 2026-10-16: "in close out you
-                          have the full chat, it's too confusing. full chat should be in task (condensed and full). in close out chats
-                          condensed version?"). An email task reads the same rows, so Close out reads one way for every channel. */}
-                      {closeGroup && <Box data-tq-close-conversation="" sx={{ mb: 1.2, minWidth: 0, maxWidth: 900 }}>
-                        <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap", mb: 0.25, minWidth: 0 }}>
-                          <Typography sx={{ ...label }}>The conversation</Typography>
-                          <Link component="button" type="button" underline="hover" onClick={seeWholeConversation}
-                            sx={{ ml: "auto", fontSize: 12 }}>the whole conversation is in From</Link>
-                        </Box>
-                        <ConversationRows rows={latestRows(closeGroup, 4)} open={openMsg ?? null} onOpen={setOpenMsg} />
-                      </Box>}
+                      {/* WHAT THE DRAFT ANSWERS, IN ONE LINE (the task-view cleanup, owner-approved 2026-10-25 - it replaces the 2026-10-16 condensed
+                          rows here): "Answering <who>: <their words>", and the line opens the whole conversation in From. Four rows of the
+                          conversation over the draft were the same messages From shows beside it, said a second time. */}
+                      {closeGroup && answering && <Box component="button" type="button" data-tq-answering="" onClick={seeWholeConversation}
+                        title="Read the whole conversation in From"
+                        sx={{ appearance: "none", font: "inherit", display: "block", width: "100%", maxWidth: 900, textAlign: "left", bgcolor: "transparent", border: 0,
+                          cursor: "pointer", p: 0, mb: 1, fontSize: 12.5, color: FAINT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                          "&:hover": { color: INK }, "&:hover [data-tq-answering-words]": { textDecoration: "underline", textUnderlineOffset: "2px" },
+                          "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
+                        Answering <Box component="span" sx={{ color: DIM, fontWeight: 600 }}>{answering.who}</Box>:{" "}
+                        <Box component="span" data-tq-answering-words="">{rowText(answering, sourceFiles.get(answering.MessageId))}</Box>
+                        {answering.SentAt && <Box component="span" sx={{ ml: 1, fontSize: 11.5 }}>{whenShort(answering.SentAt)}</Box>}</Box>}
                       {/* THE INVITE, AND WHAT IT CLASHES WITH (calwrite.of_task), over the row's Accept / Decline / Propose a new time */}
                       {calAsk?.invite && <Typography data-tq-invite="" variant="body2" sx={{ mb: 1, color: INK }}>{calAsk.line}
                         {!!calAsk.clash && <Box component="span" sx={{ color: "#7a2f3c", fontWeight: 600 }}> - it {calAsk.clash}</Box>}</Typography>}

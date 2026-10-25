@@ -11,7 +11,7 @@ UNSUPPORTED = {'archive all the read mail', 'use dark mode', 'make the font bigg
 # ...and the row buttons a phone chat cannot reach - each opens something only a screen has (the diff, a second agent's form, a file picker)
 # ...and Copy, which puts an unsendable draft on the screen's own clipboard - a phone chat's draft is already text to copy
 # ...and a result's Share: its link goes on the screen's clipboard and its Email it picks people in a dialog (ASK OWNER: Email it by phone)
-PHONE_UNREACHABLE = {'review_changes', 'run_another', 'attach', 'copy', 'share_result'}
+PHONE_UNREACHABLE = {'review_changes', 'run_another', 'attach', 'copy', 'share_result', 'strong_again'}   # strong_again: the task page's own press (the router, 2026-10-25)
 
 
 class EverydayAsks(unittest.TestCase):

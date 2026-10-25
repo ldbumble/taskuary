@@ -85,7 +85,9 @@ test("a channel card: Enable saves at once, Sync now never stands beside an unsa
   await step("Enable");
   await until(page, () => /Off — flip on once Test passes/.test(document.body.innerText));
   await page.click("[data-tq-card-on] input");
-  await until(page, () => /polling on schedule/.test(document.body.innerText) && [...document.querySelectorAll("button")].some((b) => /^Sync/.test(b.innerText.trim()) && !b.disabled));
+  // ...on a CI runner the first poll after the switch can take past the default 30s (it failed there three times and passed on each
+  // rerun, 2026-10-25) - the wait is for the server's own word, so a longer wait cannot pass a wrong card
+  await until(page, () => /polling on schedule/.test(document.body.innerText) && [...document.querySelectorAll("button")].some((b) => /^Sync/.test(b.innerText.trim()) && !b.disabled), undefined, 120000);
   assert.equal((await api("/api/connectors")).data.find((c) => c.ConnectorId === imap.ConnectorId).Active, 1, "saved on the press");
   assert.doesNotMatch(await text(), /unsaved change/, "Sync now beside an unsaved change");
 

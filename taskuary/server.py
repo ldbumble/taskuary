@@ -4111,6 +4111,20 @@ def cli_hook_reason(payload: dict):
         logger.debug(f'reason network hook ignored: {e}'); return {}
 
 
+@app.post('/api/hooks/claude/browser')
+async def cli_hook_browser(payload: dict):
+    """Before one of our sessions runs a shell command (hooks.browser -> browsergate.check): a browser act that can't be undone is
+    refused and held on the task for the owner's press. On the permits' threads - a snapshot and a model verdict take seconds, and
+    on anyio's shared forty they would queue behind every other sync route. A failure IN the judging holds (check); a failure
+    around it - an unreadable payload - lets the command go, as every hook here does."""
+    from . import hooks
+    def go():
+        try: return hooks.browser(payload if isinstance(payload, dict) else {})
+        except Exception as e:
+            logger.warning(f'browser hook: {e}'); return {}
+    return await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, go)
+
+
 @app.post('/api/hooks/claude/floor')
 def cli_hook_floor(payload: dict, task: int, request: Request):
     """A stranger's session asks, before every tool call, whether the floor allows it (floor.check). An error here is a

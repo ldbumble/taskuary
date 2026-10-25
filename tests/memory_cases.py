@@ -285,6 +285,29 @@ def advisors() -> dict:
     return {'advisor_cases': dict(a), 'rail_advisor_cases': dict(r)}
 
 
+# ── E1: does a reflection over the world recover what was planted? ──────────────────────────────────────────────────────────────
+JUDGE = ('You grade a learned profile against the habits planted in the data it was learned from. For each PLANTED habit, answer '
+         'whether some IN-USE line says the same thing in substance. Also list any line that counts button presses or names a button, '
+         'and any line that claims a relationship (manager, report, owns) the planted habits and org chart do not show. JSON only: '
+         '{"recovered": ["trait key", ...], "press_lines": ["...", ...], "invented": ["...", ...]}')
+
+
+def e1(llm, judge=None) -> dict:
+    """One reflection over world() with `llm`, its in-use lines graded by `judge` (default: the same brain) - {lines, recovered,
+    press_lines, invented}. The design's bar: 6 of 8 recovered, no press line, no invented relationship. Opt-in and live
+    (TASKUARY_LIVE_MEMORY=1, tests/test_memory_yardstick.py): no committed test calls a model."""
+    from taskuary import learn, learnedgraph
+    s, _ = world()
+    s.set_setting('learn_last_reflect', _stamp(datetime.now() - timedelta(days=61)), 'test')
+    ok = learn.reflect(s, llm)
+    lines = [l['text'] for l in learnedgraph.lines(s.get_doc('learned')) if l['status'] == 'live']
+    ask = 'PLANTED:\n' + '\n'.join(f'- {k}: {t}' for k, _, t in TRAITS) + '\n\nIN-USE LINES:\n' + '\n'.join(f'- {l}' for l in lines)
+    try: got = json.loads(re.sub(r'^```\w*|```$', '', str((judge or llm)(JUDGE, ask, max_tokens=600) or '').strip(), flags=re.M)) if lines else {}
+    except ValueError: got = {}
+    return {'reflected': ok, 'lines': lines, 'recovered': [k for k in got.get('recovered') or [] if k in {t[0] for t in TRAITS}],
+            'press_lines': got.get('press_lines') or [], 'invented': got.get('invented') or []}
+
+
 def yardstick(full: bool = False) -> dict:
     """The numbers later slices are held to; `full` adds the Advisor evals' grades (a minute of scripted runs)."""
     pr = run_priority()

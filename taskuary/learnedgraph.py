@@ -26,7 +26,7 @@ PROMOTE_AT = 4          # mirrors learn.REFLECT_SYSTEM: s:4 with evidence from 3
 DECAY_EVERY = 10        # reflections that read the evidence and left a line alone, per point off it
 DECAYS = ('hypothesis', 'proposed')   # only what is still a guess: a promoted rule earned its s, an adopted one is the owner's
 LOG, LOG_KEEP = 'learn_reflect_log', 200   # the dates reflections ran on; 200 is 20 points of decay, past any live score
-_EV = re.compile(r'^(mem|rv|task|out|pr)(\d+)$')
+_EV = re.compile(r'^(mem|rv|task|out|pr|msg|fs|sv|idea)(\d+)$')
 
 
 def _today(): return datetime.now().strftime('%Y-%m-%d')
@@ -118,8 +118,9 @@ def record(store, old_doc: str, new_doc: str, actor: str = 'learn'):
         # a line that went because nothing confirmed it for long enough FADED (learn.settle drops it at effective 0); one that was
         # simply removed - by the owner, or by a reflection that rewrote it away - was deleted. The history says which.
         log = reflect_log(store)
+        ended = {r['Key'] for r in store._rows("SELECT Key FROM learned_line WHERE Status IN ('closed','retired')")}   # its history says so already
         for k, o in before.items():
-            if k not in after: store.add_learned_event(k, o['text'], o['status'], 0, '', 'faded' if effective(o, log) <= 0 else 'deleted', actor)
+            if k not in after and k not in ended: store.add_learned_event(k, o['text'], o['status'], 0, '', 'faded' if effective(o, log) <= 0 else 'deleted', actor)
     except Exception:
         pass
 
@@ -142,6 +143,22 @@ def _resolve(store, ev_id: str) -> dict:
         r = store._one('SELECT * FROM advice_press WHERE Id=?', (n,)) or {}
         return {'id': ev_id, 'kind': 'press', 'date': r.get('CreatedAt'),
                 'label': f"pressed {r.get('Pressed')} on an item from {r.get('Scope') or '?'}" if r else ev_id}
+    if kind == 'msg':                      # an inbound message the owner answered (episodes.py)
+        r = store.get_message(n) or {}
+        return {'id': ev_id, 'kind': 'message', 'date': r.get('SentAt'),
+                'label': f"from {r.get('FromName') or r.get('FromEmail')}: {(r.get('Subject') or '')[:90]}" if r else ev_id}
+    if kind == 'fs':                       # a task the owner put off, and to when
+        r = store.get_task(n) or {}
+        return {'id': ev_id, 'kind': 'deferred', 'date': r.get('UpdatedAt') or r.get('CreatedAt'),
+                'label': f"put off to {str(r.get('RemindAt') or '?')[:16]}: {(r.get('Title') or '')[:90]}" if r else ev_id}
+    if kind == 'sv':                       # a promise in the owner's sent mail (sentjudge.py)
+        r = store.sent_verdict(n) or {}
+        return {'id': ev_id, 'kind': 'promise', 'date': (store.get_message(n) or {}).get('SentAt'),
+                'label': f"you promised {r.get('What') or 'something'}" + (f" by {r['Due']}" if r.get('Due') else '') if r else ev_id}
+    if kind == 'idea':                     # an Advisor idea and what the owner did with it
+        r = store._one('SELECT * FROM idea WHERE IdeaId=?', (n,)) or {}
+        return {'id': ev_id, 'kind': 'idea', 'date': r.get('DecidedAt') or r.get('LastSaid'),
+                'label': f"{r.get('Status') or 'idea'}: {(r.get('Text') or '')[:90]}" if r else ev_id}
     if kind == 'out':
         r = store._one('SELECT * FROM outcome WHERE Id=?', (n,)) or {}
         return {'id': ev_id, 'kind': 'outcome', 'date': r.get('ResolvedAt') or r.get('At'),
@@ -149,6 +166,18 @@ def _resolve(store, ev_id: str) -> dict:
     r = store.get_task(n) or {}
     return {'id': ev_id, 'kind': 'task', 'date': r.get('UpdatedAt') or r.get('CreatedAt'),
             'label': f"{r.get('Status') or 'task'}: {(r.get('Title') or '')[:90]}" if r else ev_id}
+
+
+def resolves(store, ev_id: str) -> bool:
+    """Does this evidence id name a real row? A line citing one that does not is a line the model made up (learn._books)."""
+    m = _EV.match(ev_id or '')
+    if not m: return False
+    kind, n = m.group(1), int(m.group(2))
+    q = {'mem': 'SELECT 1 FROM memory WHERE MemoryId=?', 'rv': 'SELECT 1 FROM review WHERE ReviewId=?', 'task': 'SELECT 1 FROM task WHERE TaskId=?',
+         'fs': 'SELECT 1 FROM task WHERE TaskId=?', 'out': 'SELECT 1 FROM outcome WHERE Id=?', 'pr': 'SELECT 1 FROM advice_press WHERE Id=?',
+         'msg': 'SELECT 1 FROM message WHERE MessageId=?', 'sv': 'SELECT 1 FROM sent_verdict WHERE MessageId=?', 'idea': 'SELECT 1 FROM idea WHERE IdeaId=?'}[kind]
+    try: return bool(store._one(q, (n,)))
+    except Exception: return False
 
 
 def graph(store) -> dict:

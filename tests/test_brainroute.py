@@ -126,8 +126,8 @@ def test_an_explicit_pick_wins_with_exactly_its_own_model(real):
         # a session's own pick keeps the model it came with - '' is the brain's own, not the saved assistant_model
         r = brainroute.choose(s, 'general', want_pick='cli:claude')
         assert (r.pick, r.model) == ('cli:claude', '')
-        # ...and an empty pick stays empty, for build_llm to read as "what blank means", exactly as before
-        assert brainroute.choose(s, 'general', want_pick='').pick == ''
+        # ...and an empty pick is what blank means - the reading build_llm always made of it, now said on the route
+        assert brainroute.choose(s, 'general', want_pick='').pick == llm.effective_pick(s, '')
 
 
 def test_a_browser_task_still_takes_the_brain_with_hands(real):

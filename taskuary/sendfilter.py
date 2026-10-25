@@ -13,6 +13,10 @@ WHICH TOOLS SEND is decided per tool, never from a word list over names:
 Each verdict is cached by the tool's own words, so a server that changes a description is asked again. FAIL CLOSED: a tool no model
 has judged yet, and a server whose tools could not be listed (an OAuth server Taskuary cannot open), are left out until they are -
 "never sent without the owner's press" outranks keeping a tool.
+
+CLAUDE.AI ACCOUNT CONNECTORS (mcp__claude_ai_*) live on the owner's claude.ai account, not in any file here, and Taskuary cannot open
+them. Their names are read ONCE from the init event of a short `claude -p` start that is stopped before the model is asked anything
+(claude_ai_list), cached, and read again only on the owner's "Check again". Only the names are known, so the model judges a name.
 """
 import hashlib, json, os, re, threading, time
 from pathlib import Path
@@ -59,6 +63,57 @@ def codex_servers() -> dict:
         return {}
 
 
+def _bare(name: str) -> str: return re.sub(r'[^A-Za-z0-9_-]', '_', name)     # Claude's own spelling of a server in a tool's name
+
+
+def claude_ai_list(timeout: float = 90) -> dict:
+    """The claude.ai account connectors and their tool names, from the init event of `claude -p --output-format stream-json`
+    (verified on Claude Code 2.1.310, 2026-10-25: init lists every server with its `source` and `status`, and the tools of the
+    connected ones). The process is stopped the moment init arrives, so no turn is spent. The owner's own hooks are not loaded
+    (--setting-sources project,local in an empty folder), so the start posts nothing to a running Taskuary.
+    {name: {'status', 'tools': [tool names]}}; raises when Claude is not installed or no init came."""
+    import subprocess, tempfile
+    from . import clis, spawn
+    exe = clis.which('claude')
+    if not exe: raise RuntimeError('Claude Code is not installed')
+    env = {k: v for k, v in os.environ.items() if not k.startswith('TASKUARY_')}      # nothing of this server's goes to the child
+    with tempfile.TemporaryDirectory(prefix='tq-claudeai-') as d:
+        p = spawn.popen([exe, '-p', '--output-format', 'stream-json', '--verbose', '--setting-sources', 'project,local', '--max-turns', '1',
+                         'Reply OK.'], cwd=d, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        def stop():
+            if os.name == 'nt': spawn.run(['taskkill', '/PID', str(p.pid), '/T', '/F'], capture_output=True)   # the npm shim's node too
+            else: p.kill()
+        timer = threading.Timer(timeout, stop); timer.start()
+        init = None
+        try:
+            for line in p.stdout:
+                try: e = json.loads(line)
+                except ValueError: continue
+                if e.get('type') == 'system' and e.get('subtype') == 'init': init = e; break
+        finally:
+            timer.cancel()
+            if p.poll() is None: stop()
+            p.wait(10)
+    if not init: raise RuntimeError('Claude started but never said which connectors it has')
+    tools = [str(t) for t in init.get('tools') or []]
+    out = {}
+    for s in init.get('mcp_servers') or []:
+        if s.get('source') != 'claudeai' or not s.get('name'): continue
+        pre = f"mcp__{_bare(s['name'])}__"
+        out[s['name']] = {'status': str(s.get('status') or ''), 'tools': [t[len(pre):] for t in tools if t.startswith(pre)]}
+    return out
+
+
+def _claude_ai(cache: dict, relist: bool) -> dict:
+    "The cached claude.ai listing, read once (and on the owner's Check again). A failed read keeps the last one and is tried next scan."
+    old = cache.get('claudeai') or {}
+    if old.get('at') and not relist: return old
+    try: return {'at': time.time(), 'servers': claude_ai_list(), 'error': ''}
+    except Exception as e:
+        logger.info(f'claude.ai connectors not read for the send filter: {e}')
+        return {**old, 'at': 0, 'error': str(e)[:200], 'servers': old.get('servers') or {}}
+
+
 def _expand(v):
     "${VAR} in a server's config, the way the CLI expands it (the owner's own environment)."
     if isinstance(v, str): return os.path.expandvars(v)
@@ -79,6 +134,14 @@ def _list(cfg: dict) -> list:
     try: return [{'name': t['name'], 'description': str(t.get('description') or '')[:600], 'annotations': t.get('annotations') or {}}
                  for t in s.list_tools()]
     finally: s.close()
+
+
+def _ai_tools(v: dict) -> list:
+    "A claude.ai connector's tools: names only. One that lists none (it needs signing in) cannot be judged, so it is left out whole."
+    if not v.get('tools'):
+        raise RuntimeError('it needs signing in on claude.ai before its tools can be read' if v.get('status') == 'needs-auth'
+                           else f"Claude listed no tools for it ({v.get('status') or 'no status'})")
+    return [{'name': t, 'description': '', 'annotations': {}} for t in v['tools']]
 
 
 def _key(server: str, t: dict) -> str:
@@ -108,30 +171,32 @@ def judge(store, server: str, t: dict, verdicts: dict, brain=None) -> dict:
     return v
 
 
-def scan(store, brain=None) -> dict:
+def scan(store, brain=None, relist: bool = False) -> dict:
     """List every server's tools and judge each one that is not marked read-only. Slow (each stdio server is started once), so it runs
-    in the background (refresh); its answer is cached for the launches in between."""
+    in the background (refresh); its answer is cached for the launches in between. `relist` reads the claude.ai connectors again."""
+    cache = _load(store, CACHE, {})
+    ai = _claude_ai(cache, relist)
     every = [(cli, n, c) for cli, found in (('claude', claude_servers()), ('codex', codex_servers())) for n, c in found.items()]
+    every += [('claude', n, {'claudeai': v}) for n, v in (ai.get('servers') or {}).items() if n not in claude_servers()]
     if brain is None and every:                      # no servers, no brain started
         try:
             from .llm import build_llm
             brain = build_llm(store)
         except Exception as e: logger.info(f'send filter has no brain to judge with ({e}) - unjudged tools stay out'); brain = None
-    cache = _load(store, CACHE, {})
     verdicts = cache.get('verdicts') or {}
     servers = {}
     for cli, name, cfg in every:
-        try: tools = _list(cfg); err = ''
+        try: tools = _ai_tools(cfg['claudeai']) if 'claudeai' in cfg else _list(cfg); err = ''
         except Exception as e: tools, err = [], str(e)[:200]
         servers[f'{cli}:{name}'] = {'cli': cli, 'name': name, 'error': err,
                                     'tools': [{**t, **judge(store, name, t, verdicts, brain)} for t in tools]}
-    out = {'at': time.time(), 'servers': servers, 'verdicts': verdicts}
+    out = {'at': time.time(), 'servers': servers, 'verdicts': verdicts, 'claudeai': ai}
     store.set_setting(CACHE, json.dumps(out), 'sendfilter')
     return out
 
 
 def refresh(store, force: bool = False) -> bool:
-    "Start a background scan when the cached one is stale or missing. True when one was started."
+    "Start a background scan when the cached one is stale or missing. True when one was started. `force` also re-reads claude.ai."
     from . import demo
     if demo.enabled(): return False                    # the demo world starts nobody's servers
     cache = _load(store, CACHE, {})
@@ -140,7 +205,7 @@ def refresh(store, force: bool = False) -> bool:
         if _RUNNING['on']: return False
         _RUNNING['on'] = True
     def go():
-        try: scan(store)
+        try: scan(store, relist=force)
         except Exception as e: logger.warning(f'send filter scan failed: {e}')
         finally: _RUNNING['on'] = False
     threading.Thread(target=go, daemon=True, name='sendfilter').start()
@@ -154,18 +219,21 @@ def verdicts(store, cli: str) -> list:
     cache, fix = _load(store, CACHE, {}), _load(store, OVERRIDES, {})
     seen = cache.get('servers') or {}
     out = []
-    for name in (claude_servers() if cli == 'claude' else codex_servers()):
+    names = list(claude_servers() if cli == 'claude' else codex_servers())
+    if cli == 'claude': names += [n for n in ((cache.get('claudeai') or {}).get('servers') or {}) if n not in names]
+    for name in names:
         s = seen.get(f'{cli}:{name}')
         whole = fix.get(f'{name}/*')
         if not s or s.get('error') or not s.get('tools'):
             why = (s or {}).get('error') or ('its tools are not listed yet' if not s else 'it lists no tools')
-            out.append({'server': name, 'error': why, 'blocked': whole != 'keep', 'tools': []}); continue
+            out.append({'server': name, 'error': why, 'blocked': whole != 'keep', 'unchecked': not s, 'by': 'owner' if whole else '',
+                        'tools': []}); continue
         tools = []
         for t in s['tools']:
             mine = fix.get(f'{name}/{t["name"]}')
             sends = {'keep': False, 'block': True}.get(mine, t.get('sends'))
             tools.append({'name': t['name'], 'sends': sends, 'why': t.get('why'), 'by': 'owner' if mine else t.get('by'),
-                          'blocked': sends is not False})
+                          'blocked': sends is not False, 'unchecked': sends is None})
         out.append({'server': name, 'error': '', 'blocked': False, 'tools': tools})
     return out
 
@@ -175,7 +243,7 @@ def claude_denied(store) -> list:
     refresh(store)
     out = []
     for s in verdicts(store, 'claude'):
-        n = re.sub(r'[^A-Za-z0-9_-]', '_', s['server'])          # Claude's own spelling of a server in a tool's name
+        n = _bare(s['server'])
         if s['blocked']: out.append(f'mcp__{n}')
         out += [f"mcp__{n}__{t['name']}" for t in s['tools'] if t['blocked']]
     return out

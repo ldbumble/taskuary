@@ -2,6 +2,7 @@
 // WORK or the reply on the right - in place of the Task / Agent work / Close out accordion. Pure, so node --test reads it.
 import { channelName } from "./taskSources.js";
 import { plural } from "./timeWords.js";
+import { fmtDate } from "./dates.js";
 
 // WHILE AN AGENT WORKS THE WORK TAKES THE WHOLE WIDTH: a live session - coding or general, working or waiting on you (the rail's
 // spinning ring, or its hand) - and From folds to one line over it; the terminal is never covered or squeezed. `sessionView` is the
@@ -42,4 +43,26 @@ export const fromLine = ({ sender = null, count = 0, workflow = null, made = "" 
   if (count && sender) return [sender.FromName || sender.FromEmail || channelName(sender.Channel), plural(count, "message")].join(" · ");
   if (workflow) return `Workflow · ${workflow.title}`;
   return made || "";
+};
+
+// THE ASK IS THE MESSAGE'S OWN WORDS when triage left no summary of its own (the task-view cleanup, owner-approved 2026-10-25): said
+// once, under the title, and From does not open the same words again as the message under it. Spacing and line breaks aside.
+const squash = (s) => String(s || "").replace(/\s+/g, " ").trim();
+export const sameWords = (a, b) => !!squash(a) && squash(a) === squash(b);
+
+// WHO A TASK WAITS ON (the owner, 2026-10-25): a task handed to a person opens on them - "Waiting on Ray. Due Oct 23, 2 days late."
+// The name is the one their own mail on the task signs with, else the address read as a name, the way the server reads a step's
+// holder (processing_unread.holder_name). Null where the task waits on nobody: not waiting, or held by an agent.
+export const holderName = (addr) => String(addr || "").split("@")[0].split(/[._-]+/).filter(Boolean)
+  .map((p) => p[0].toUpperCase() + p.slice(1)).join(" ");
+export const waitingOn = ({ task = {}, messages = [], now = new Date() } = {}) => {
+  const who = String(task.Assignee || "");
+  if (task.Status !== "waiting" || !who.startsWith("person:")) return null;
+  const addr = who.slice(7), mail = messages.find((m) => String(m.FromEmail || "").toLowerCase() === addr.toLowerCase() && m.FromName);
+  const name = mail?.FromName || holderName(addr) || addr;
+  const due = /^\d{4}-\d{2}-\d{2}/.test(String(task.DueAt || "")) ? new Date(`${String(task.DueAt).slice(0, 10)}T00:00:00`) : null;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const late = due ? Math.round((today - due) / 86400000) : 0;
+  const when = !due ? "" : ` Due ${fmtDate(due, [], { month: "short", day: "numeric" })}${late > 0 ? `, ${plural(late, "day")} late` : late === 0 ? ", today" : ""}.`;
+  return { name, line: `Waiting on ${name}.${when}` };
 };

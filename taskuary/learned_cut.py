@@ -16,7 +16,9 @@ SECTIONS = {'people': '## Your people', 'care': '## What you care about', 'work'
 PEOPLE, CARE, WORK, PROMISES, BRING = SECTIONS.values()
 # who reads what (the design's reader matrix, 2026-10-25). Triage reads what the owner cares about - learned from sorting verdicts,
 # so a press, a defer or a reply lag never decides whether mail is a task (ruling 11, 2026-10-23)
-READS = {'triage': ('care',), 'drafter': ('people',), 'advisor': ('people', 'care', 'work', 'promises'), 'assistant': tuple(SECTIONS),
+# ...and the people lines about whoever is on the mail, for its PRIORITY only - important is "it matters because of who" (the owner,
+# 2026-10-25); the triage prompt says they never decide whether mail is a task
+READS = {'triage': ('care', 'people'), 'drafter': ('people',), 'advisor': ('people', 'care', 'work', 'promises'), 'assistant': tuple(SECTIONS),
          'agents': ('people', 'care', 'promises')}
 TITLE = {'people': 'Your people', 'care': 'What you care about', 'work': 'How you work', 'promises': 'Promises', 'bring': 'What to bring up'}
 BUDGET = {'triage': 1500, 'drafter': 600, 'agents': 2500, 'assistant': 2000, 'advisor': 2000}
@@ -71,6 +73,17 @@ def rank(raw: str, key: str, about: dict) -> int:
     if a.get('sender') and a['sender'] in t: return 0
     if any(a.get(f) and a[f] in t for f in ('domain', 'repo', 'scope')): return 1
     return 3
+
+
+def people_of(msg: dict) -> set:
+    """Everyone on a mail: its sender and its To and Cc, lowercased (an ingest dict or a message row)."""
+    import json as _j
+    m = msg or {}
+    rec = m.get('RecipientsJson')
+    try: rec = _j.loads(rec) if isinstance(rec, str) else rec
+    except ValueError: rec = None
+    to, cc = (m.get('to') or (rec or {}).get('to') or []), (m.get('cc') or (rec or {}).get('cc') or [])
+    return {str(a).strip().lower() for a in [m.get('from_email') or m.get('FromEmail'), *to, *cc] if a and '@' in str(a)}
 
 
 def about_mail(msg: dict) -> dict:

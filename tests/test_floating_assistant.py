@@ -100,7 +100,7 @@ class FloatingAssistantTests(unittest.TestCase):
         self.assertIn('NEEDS THE OWNER NOW', snapshot)
         self.assertIn('Export still broken', snapshot)
         self.assertIn('ACTIVE TASKS', snapshot)
-        self.assertIn('TQ-0001 | waiting | high | Fix the export', snapshot)
+        self.assertIn('TQ-0001 | waiting | important | Fix the export', snapshot)
         self.assertIn('PENDING REVIEW', snapshot)
         self.assertIn('rv1 | TQ-0001', snapshot)
         self.assertIn('Draft ready: Attached.', snapshot)

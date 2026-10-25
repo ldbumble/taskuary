@@ -14,6 +14,7 @@ import json
 from datetime import datetime, timedelta
 from loguru import logger
 
+from .processing_order import level
 from .store import task_ref
 
 # kind -> (bindings it cannot draw without, the width it takes on a four-column grid)
@@ -43,7 +44,7 @@ def _tasks(store, days):
         ORDER BY t.TaskId DESC LIMIT ?""", (_since(days), ROWS))
     return [{'task_id': r['TaskId'], 'ref': task_ref(r['TaskId']), 'title': r['Title'] or '', 'kind': r['Kind'] or 'general',
              'status': r['Status'] or 'open', 'state': 'closed' if r['Status'] in ('done', 'dropped') else 'open',
-             'priority': r['Priority'] or 'normal', 'arrived': (a := str(r['FirstAt'] or r['CreatedAt'] or '')[:10]),
+             'priority': level(r['Priority']), 'arrived': (a := str(r['FirstAt'] or r['CreatedAt'] or '')[:10]),
              # a task closed before ClosedAt was stamped on every close says when it was last touched instead
              'closed': str(r['ClosedAt'] or (r['UpdatedAt'] if r['Status'] in ('done', 'dropped') else '') or '')[:10], 'waiting': _waited(a)}
             for r in rows]
@@ -129,7 +130,7 @@ def _replies(store, days):
              'hours': round(max(0.0, r['Hrs']), 1) if r['Hrs'] is not None else None} for r in rows]
 
 
-DATASETS = {'tasks': (_tasks, 'task_id, ref, title, kind, status, state (open|closed), priority, arrived (date), closed (date), '
+DATASETS = {'tasks': (_tasks, 'task_id, ref, title, kind, status, state (open|closed), priority (regular|important|urgent), arrived (date), closed (date), '
                              'waiting (how long since it arrived, in words)'),
             'mail': (_mail, 'message_id, task_id, day (date), channel, sender, became_task (yes|no)'),
             'flow': (_flow, 'message_id, task_id, day (date), channel, stage (Came in|Triaged|On a task|Task closed - one row per stage reached)'),

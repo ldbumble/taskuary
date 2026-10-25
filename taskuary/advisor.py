@@ -403,6 +403,9 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     for k, col in (('due', 'DueAt'), ('priority', 'Priority'), ('remind me on', 'RemindAt'), ('done when', 'DoneWhen')):
         if (t or {}).get(col): facts[k] = str(t[col])[:160]
     if item.get('priority') and 'priority' not in facts: facts['priority'] = item['priority']
+    if facts.get('priority'):
+        from .processing_order import level
+        facts['priority'] = level(facts['priority'])          # regular, important or urgent - the three words (2026-10-25)
     lines = [f'EVENT: {event}', 'THE ITEM: ' + json.dumps(facts), f"PREVIEW: {str(item.get('preview') or '')[:300]}",
              'VERBS OFFERED: ' + ', '.join(f"{v['verb']} ({v['label']})" for v in verbs)]
     # AN IDEA AND A GOAL ARE ADVISED TOO (the deep dive, 2026-10-20): an idea had no target at all, and a goal's card said "0 of 2" with

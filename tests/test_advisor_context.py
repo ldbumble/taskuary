@@ -58,7 +58,7 @@ def test_the_tasks_dates_and_weight_are_facts_of_the_item(s):
     tid, _ = asked(s, 'Badge access', 'by Friday?', Priority='high')
     s.update_task(tid, {'DueAt': '2026-10-23', 'RemindAt': '2026-10-22 09:00:00'}, 'owner')
     item = json.loads(prompt(s, tid).split('THE ITEM: ', 1)[1].split('\n', 1)[0])
-    assert (item['due'], item['priority'], item['remind me on']) == ('2026-10-23', 'high', '2026-10-22 09:00:00')
+    assert (item['due'], item['priority'], item['remind me on']) == ('2026-10-23', 'important', '2026-10-22 09:00:00')   # high reads important (2026-10-25)
 
 
 def test_another_open_task_on_the_same_thread_is_flagged_a_possible_duplicate_and_the_same_sender_alone_is_not(s):

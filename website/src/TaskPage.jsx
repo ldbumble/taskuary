@@ -23,6 +23,7 @@ import { SlotPicker } from "./CalendarPick.jsx";
 import { onPressed, useVerbs } from "./actionRow.js";
 import { notePress, pagePress } from "./pressLog.js";
 import { choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
+import { PRIORITIES, level } from "./priority.js";
 import BlockIcon from "@mui/icons-material/Block";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import DifferenceIcon from "@mui/icons-material/Difference";
@@ -116,7 +117,7 @@ export const newestFirst = (ms = []) => [...ms].sort((a, b) => String(b.SentAt |
 
 // `assistant` is a legacy alias from Timeline discussions. New discussions use `general`, but
 // old ones must still open here instead of falling through to the coding terminal.
-const PRIORITIES = ["low", "normal", "high", "urgent"];
+
 // the list row's "agent stopped" for a task Taskuary closed under a working agent, said on the status pill's hover
 const INTERRUPTED = "Taskuary closed while an agent was working this. Nothing restarts until you choose one.";
 const NAT_TITLE = "Removes this task. Taskuary stops making tasks from messages like this; the email itself is kept, and search finds it.";
@@ -2486,7 +2487,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       {t && <Menu open={!!pick} anchorEl={pick?.at || null} onClose={() => setPick(null)}>
         {pick?.what === "menu" && [
           <MenuItem key="kind" sx={{ fontSize: 12.5 }} onClick={() => setPick({ ...pick, what: "kind" })}>Who does it · {kindLabel(t.Kind || "task")}</MenuItem>,
-          <MenuItem key="priority" sx={{ fontSize: 12.5 }} onClick={() => setPick({ ...pick, what: "priority" })}>Priority · {t.Priority || "normal"}</MenuItem>,
+          <MenuItem key="priority" sx={{ fontSize: 12.5 }} onClick={() => setPick({ ...pick, what: "priority" })}>Priority · {level(t.Priority)}</MenuItem>,
           <MenuItem key="assign" sx={{ fontSize: 12.5 }} onClick={() => setPick({ ...pick, what: "assign" })}>Assigned to · {t.Assignee ? assigneeLabel(t.Assignee) : "nobody"}</MenuItem>,
           ...(!isGeneral && canCode ? [<MenuItem key="repo" sx={{ fontSize: 12.5 }} onClick={() => { setPick(null); pickRepo(); }}>Repository · {repoOf(t) || "pick a repo"}</MenuItem>] : []),
         ]}
@@ -2497,7 +2498,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           </MenuItem>)}
         {/* no Status here: status is DERIVED - Start, Mark done, Remind me and Reopen set it (T12) */}
         {pick?.what === "priority" && PRIORITIES.map((p) =>
-          <MenuItem key={p} selected={p === (t.Priority || "normal")} sx={{ fontSize: 12 }} onClick={() => { setPick(null); if (p !== (t.Priority || "normal")) change("task.update", { priority: p }); }}>{p}</MenuItem>)}
+          <MenuItem key={p} selected={p === level(t.Priority)} sx={{ fontSize: 12 }} onClick={() => { setPick(null); if (p !== level(t.Priority)) change("task.update", { priority: p }); }}>{p}</MenuItem>)}
         {pick?.what === "assign" && [
           ["", "unassigned"], ["owner", "you"], ...agents.map((name) => [agentAssignee(name), name]),
           ...(t.Assignee && t.Assignee !== "owner" && !assignedAgent(t.Assignee) ? [[t.Assignee, t.Assignee]] : []),

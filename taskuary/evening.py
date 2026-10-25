@@ -15,6 +15,7 @@ import json, sqlite3
 from datetime import datetime, timedelta
 
 from .categories import category_of, team_domains_of
+from .processing_order import level
 from .counsel import is_invite
 
 
@@ -141,7 +142,7 @@ def _row_line(row: dict, state: str) -> str:
     meta = _mail_meta(row)
     if str(meta.get('flag') or '').lower() == 'flagged': bits.append('flagged=yes')
     if meta.get('focus'): bits.append(f"inbox_lane={meta['focus']}")
-    if row.get('Priority'): bits.append(f"priority={row['Priority']}")
+    if row.get('Priority'): bits.append(f"priority={level(row['Priority'])}")
     if row.get('TaskStatus'): bits.append(f"task_status={row['TaskStatus']}")
     if row.get('ReviewStatus'): bits.append(f"reply_status={row['ReviewStatus']}")
     if row.get('RouteReason'): bits.append(f"triage={_one_line(row['RouteReason'], 160)}")
@@ -237,12 +238,12 @@ def collect(store, hours: int = HOURS) -> dict:
     done = store._rows("SELECT TaskId, Title, Priority FROM task WHERE Status='done' AND ClosedAt>=? "
                        "ORDER BY ClosedAt DESC LIMIT 80", (since,))
     open_ = store._rows("SELECT TaskId, Title, Priority, Status FROM task WHERE Status IN ('open','in_progress','waiting') "
-                        "ORDER BY CASE Priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END, COALESCE(UpdatedAt, CreatedAt) DESC "
+                        "ORDER BY CASE Priority WHEN 'urgent' THEN 0 WHEN 'important' THEN 1 WHEN 'high' THEN 1 ELSE 2 END, COALESCE(UpdatedAt, CreatedAt) DESC "
                         "LIMIT 40", ())
     runs = store._rows("SELECT r.AgentName, r.Status, r.LastError, r.TaskId, t.Title FROM run r LEFT JOIN task t ON t.TaskId=r.TaskId "
                        "WHERE COALESCE(r.FinishedAt, r.UpdatedAt, r.StartedAt)>=? ORDER BY r.RunId DESC LIMIT 80", (since,))
     def task_line(t, state):
-        return f"state={state} | task={task_ref(t['TaskId'])} | title={_one_line(t.get('Title'), 140)} | priority={t.get('Priority') or 'normal'}"
+        return f"state={state} | task={task_ref(t['TaskId'])} | title={_one_line(t.get('Title'), 140)} | priority={level(t.get('Priority'))}"
     def run_line(r):
         bits = [f"agent={_one_line(r.get('AgentName'), 60)}", f"status={r.get('Status') or 'running'}"]
         if r.get('TaskId'): bits.append(f"task={task_ref(r['TaskId'])} {_one_line(r.get('Title'), 120)}")

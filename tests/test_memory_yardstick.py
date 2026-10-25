@@ -7,11 +7,7 @@ import pytest
 from tests import memory_cases as C
 
 # what misses today, and which slice fixes it
-KNOWN_PRIORITY = {
-    'manager_next_week': 'slice 3: triage has no word for important yet',
-    'cared_person_question': 'slice 3: triage has no word for important, and reads no people lines',
-    'cared_topic': 'slice 3: triage has no word for important, and reads no "What you care about"',
-}
+KNOWN_PRIORITY = {}       # slice 3 (2026-10-25): triage says regular / important / urgent, with the people lines as evidence
 KNOWN_SAME_DOMAIN = None      # slice 1 (2026-10-25): no press count lights a button any more
 
 

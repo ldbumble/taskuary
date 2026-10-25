@@ -1865,12 +1865,34 @@ class SQLiteStore:
         # ...and it must be issued ONCE: the allocation is three reads and a write, each taking the
         # statement lock on its own, so a poll and a click creating tasks together computed the same
         # id and one of them hit the primary key (audit 2026-09-02)
+        # one of the three priorities, whatever word the caller used (processing_order.level, 2026-10-25) - regular when it gave none
+        from .processing_order import level
+        fields = {**fields, 'Priority': level(fields.get('Priority'))}
         with self.idlock:
             tid = self._insert('task', {**fields, 'TaskId': self._next_task_id() if numbered else self._next_internal_id()},
                                 TASK_COLS + ('TaskId',), {'CreatedBy': actor, 'CreatedAt': _now()})
         self._bump_snapshots()
         self._poke('task-changed', task_id=tid)
         return tid
+
+    def migrate_priorities(self) -> dict:
+        """THE OLD FOUR AS THE NEW THREE, once (the owner, 2026-10-25): normal is regular and high is important - renames, one word for
+        one word - and low is regular too. Low is the one word that merges with another, so each task it changes keeps an audit row
+        with the word it had ('priority_renamed'): nothing is lost. A DueRaised the due day saved is read the same way. Returns what
+        changed; {} when there was nothing left to do."""
+        from .processing_order import LEGACY
+        out = {}
+        for old, new in LEGACY.items():
+            rows = self._rows('SELECT TaskId FROM task WHERE lower(IFNULL(Priority,\'\'))=?', (old,))
+            if not rows: continue
+            if old == 'low':
+                for r in rows: self.audit('task', r['TaskId'], 'priority_renamed', 'migrate', 'system', {'from': old, 'to': new})
+            self._exec('UPDATE task SET Priority=? WHERE lower(IFNULL(Priority,\'\'))=?', (new, old))
+            out[old] = len(rows)
+        for old, new in LEGACY.items(): self._exec('UPDATE task SET DueRaised=? WHERE lower(IFNULL(DueRaised,\'\'))=?', (new, old))
+        self._exec("UPDATE task SET Priority='regular' WHERE IFNULL(Priority,'')=''")
+        if out: self._bump_snapshots()
+        return out
 
     def _next_internal_id(self) -> int:
         """The same never-reused rule, in the range no TQ number reaches (INTERNAL_TASK_BASE)."""
@@ -1890,6 +1912,9 @@ class SQLiteStore:
                    'ON CONFLICT(Name) DO UPDATE SET Value=excluded.Value', ('task_id_mark', str(nxt), 'store'))
         return nxt
     def update_task(self, task_id, fields, actor):
+        if 'Priority' in fields:
+            from .processing_order import level
+            fields = {**fields, 'Priority': level(fields['Priority'])}
         cols = [c for c in TASK_COLS if c in fields]
         if not cols: return
         was_row = (self._one('SELECT Status, Assignee, DueAt, Tags FROM task WHERE TaskId=?', (task_id,)) or {}) if 'Status' in fields else {}

@@ -3,6 +3,7 @@
 import { assignedAgent } from "./agentIdentity.js";
 import { routeIntent, routeWhy } from "./triageVerdict.js";
 import { plural } from "./timeWords.js";
+import { level } from "./priority.js";
 
 const CHANNEL_NAMES = { email: "Email", whatsapp: "WhatsApp", telegram: "Telegram", slack: "Slack", teams: "Teams", github: "GitHub",
   monday: "Monday", jira: "Jira", linear: "Linear", imessage: "iMessage", discord: "Discord", report: "Report", assistant: "Assistant",
@@ -164,7 +165,7 @@ export function headerFacts({ verdict = null, route = null, task = {}, workflow 
   const intent = INTENT[said] || "";
   const repo = kind === "coding" ? repoTag(task?.Tags) || repoTag(task?.Tags, "triage-repo") || verdict?.repository || "" : "";
   const profile = kind === "general" ? assignedAgent(task?.Assignee) || verdict?.profile || "" : "";
-  const pri = task?.Priority || "normal";
+  const pri = level(task?.Priority);
   const by = run ? startedBy(task, workflow) : "";
   return {
     triaged: !!intent,
@@ -182,7 +183,7 @@ export function headerFacts({ verdict = null, route = null, task = {}, workflow 
       repo && { key: "repo", label: "Repository", value: repo, mono: true },
       // a start that stopped on "which repository?" (funnel.HELD_REPO) says so where the repository would be; the pick is on the bar
       !repo && kind === "coding" && /(?:^|[\s,])held:repo(?:$|[\s,])/.test(String(task?.Tags || "")) && { key: "repo", label: "Repository", value: "none - not started", tone: "alert" },
-      { key: "priority", label: "Priority", value: pri, tone: pri === "urgent" ? "alert" : "" },
+      { key: "priority", label: "Priority", value: pri, tone: pri === "urgent" ? "alert" : pri === "important" ? "info" : "" },
     ].filter(Boolean),
   };
 }
@@ -196,7 +197,7 @@ const whatOf = (facts, kind) => { const intent = factOf(facts, "intent");
 export const sortedLine = (facts, kind) => {
   const what = whatOf(facts, kind), repo = factOf(facts, "repo");
   const head = facts.triaged ? `Sorted as: ${what}` : what.charAt(0).toUpperCase() + what.slice(1);
-  return [head, repo && `in ${repo}`, `${factOf(facts, "priority") || "normal"} priority`].filter(Boolean).join(" · ");
+  return [head, repo && `in ${repo}`, `${facts.pills.find((p) => p.key === "priority")?.value || "regular"} priority`].filter(Boolean).join(" · ");
 };
 // ...AT THE FOOT OF FROM (the redesign, owner-approved 2026-10-21): "Sorted as: <what> · <priority> · <why>" - the why is the one
 // triage recorded (triageLine), never written here

@@ -64,7 +64,7 @@ PURPOSE = {
     'task.split':               'split one arrival into two jobs - `text`',
     # THE TASK PAGE, as tools (2026-09-25). A task tool acts on the task on the table, or on the one `ref` names
     # (TQ-0123) - never a guess. Each is the page's own button.
-    'task.update':              ("change a task's priority, title, owner or due day - any of `priority`: low | normal | high | urgent, "
+    'task.update':              ("change a task's priority, title, owner or due day - any of `priority`: regular | important | urgent, "
                                  "`title`, `assignee`: exactly `owner` (the owner takes it) or `agent:<profile>` (a worker on the roster), "
                                  "`due`: the day the work is due (2026-10-30, \"friday\", \"2 weeks\", or \"none\" to clear it); `ref` when "
                                  "it is not the one on the table. Any other value is refused with the allowed ones"),

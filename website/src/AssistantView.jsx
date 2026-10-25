@@ -477,6 +477,9 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // THE RAIL IS ONE TAB STOP (owner-approved, 2026-10-20): a listbox with a roving tabindex - Tab lands on the row on the table (else
   // the first), Up/Down move the focus ring, Enter opens the row as a click does, Escape gives focus back to where it came from
   const [kbdKey, setKbdKey] = useState(null);
+  // ...and the stop goes with the table: a row picked by keyboard, then a mouse Next, left the tab stop on the row the walk had left, so Tab
+  // back in and Enter put it on the table again (the 2026-10-25 sweep)
+  useEffect(() => { setKbdKey(null); }, [current?.key]);
   const kbdBack = useRef(null);
   const stops = bands.flatMap(({ level, items: rows }) => shownIn(level, rows)).filter((i) => !i.settling).map((i) => i.key);
   const tabKey = stops.includes(kbdKey) ? kbdKey : stops.includes(curKey) ? curKey : stops[0];

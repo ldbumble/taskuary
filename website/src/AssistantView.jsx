@@ -354,10 +354,14 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   const [landing, setLanding] = useState(new Set());
   // ...and only into a rail that had rows: after an empty one (a read that failed, a first sync) every row would fall at once, the
   // whole band squeezed above the pipe and drawn over itself on the way down (G8)
-  const arrivalsOf = (was) => (was?.size ? arrivals(was, items) : new Set());
+  // ...and never a row this rail has drawn before: a report put on the list leaves the rail and comes back a read later as its task, and it
+  // fell in from above the pipe across every row of Tasks (the dead-end walk's SWAP, 2026-10-25) - it comes back in its slot
+  const ever = useRef(new Set());
+  const arrivalsOf = (was) => (was?.size ? new Set([...arrivals(was, items)].filter((k) => !ever.current.has(k))) : new Set());
   useEffect(() => {
     const fresh = arrivalsOf(prev.current);
     prev.current = keysOf(items);
+    for (const k of prev.current) ever.current.add(k);
     if (!fresh.size) return undefined;
     setLanding(fresh);
     const t = setTimeout(() => setLanding(new Set()), 40);       // one frame above the pipe, then it falls to its slot
@@ -2526,10 +2530,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const clearTable = () => { selectionRef.current = null; putOnTable(null, "sync"); };
   // `settled`: the server has answered already (a Mark done or Remind me that closed the task before calling here)
   const advance = (pile = null, settled = false) => {
-    leave(currentRef.current || leavingRef.current);             // what this put-down took off the table (leftRef)
     // a close that drew the next item at its press leaves that item up: the walk's surface fills it in place (carryRef) - only the
     // table it reads its scope from is empty, as clearTable leaves it
     const early = earlyRef.current; earlyRef.current = null;
+    // ...and what this put-down took off the table is recorded (leftRef) - never the item that early draw already put up: Mark done on
+    // the first task recorded the second, and the walk then put the second down unseen (the canvas's putDown recorded the first itself)
+    if (!early) leave(currentRef.current);
     if (early) { selectionRef.current = null; currentRef.current = null; carryRef.current = early; }
     else clearTable();
     onChanged?.();                                     // a draft may have gone out: the Review badge recounts

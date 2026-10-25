@@ -1165,6 +1165,16 @@ class ForLaterLine(unittest.TestCase):
             self.assertEqual(([c['verb'] for c in out['chips']], out['say']), (['walk'], ''))
             with concierge.delivering(concierge.PHONE):
                 self.assertFalse(any(c.get('verb') == 'walk' for c in concierge.surface(MemoryStore(), llm=lambda *a, **k: 'never')['chips']))
+        # ...and when all that is left is an agent's work, the Walk button says it: no "Nothing else needs you right now; 1 in progress." on
+        # the desk (the owner, 2026-10-25) - the phone, with no button there, keeps the words
+        from types import SimpleNamespace
+        rows = [{'key': 'task:4', 'tid': 4, 'ref': 'TQ-0004', 'title': 'Reconcile the export', 'lane': 'working', 'surfaced': True}]
+        at_end = lambda: SimpleNamespace(pile={'items': rows}, selected=None, pending={'working': 1, 'settling': 0, 'scheduled': 0}, member_keys=())
+        out = concierge.surface(MemoryStore(), llm=lambda *a, **k: 'never', selection=at_end())
+        self.assertEqual(([c['verb'] for c in out['chips']], out['say']), (['walk'], ''))
+        with concierge.delivering(concierge.PHONE):
+            self.assertEqual(concierge.surface(MemoryStore(), llm=lambda *a, **k: 'never', selection=at_end())['say'],
+                             'Nothing else needs you right now; 1 in progress.')
 
 
 class NonCoderWordsTests(unittest.TestCase):

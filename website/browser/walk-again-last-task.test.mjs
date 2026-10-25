@@ -40,7 +40,8 @@ test("Next on the last task, one waiting on someone else, offers Walk me through
   for (let i = 0; i < 30 && await until(() => press(page, /^(Next|All read, next)$/), 6000); i += 1) await sleep(1500);
   await sleep(2000);
   assert.ok((await row(page)).includes(WALK), `the end of the walk offers the walk again: ${JSON.stringify(await row(page))}`);
-  assert.ok(!(await said(page)).some((s) => s === "Nothing's waiting."), "no sentence over a task still on the rail");
+  // ...nor "Nothing else needs you right now; 1 in progress." where an agent's work is what is left: the Walk button says it (the owner, 2026-10-25)
+  assert.ok(!(await said(page)).some((s) => s === "Nothing's waiting." || s.startsWith("Nothing else needs you right now")), "no sentence over a task still on the rail");
   // ...and walking again brings the task up, and Next on it - the last thing - offers the walk again
   await press(page, /^Walk me through my tasks$/);
   assert.ok(await until(() => page.evaluate((ref) => [...document.querySelectorAll(".tq-asst-col")].some((c) => c.textContent.includes(ref)), theirs.ref)),

@@ -81,6 +81,16 @@ def why_for_task(store, task_id) -> str:
     return f'{why}.' + (f' {_said(store, said[9:])} answered instead, as its backup.' if said.startswith('fallback:') else '') if why else ''
 
 
+def judged(store, task) -> dict:
+    """{difficulty, sure, data_class, by} - triage's judgements on this task, or the owner's correction of them; '' / None where no
+    verdict gave one. Standard and ordinary are what an unjudged task reads as: nothing steps up on a judgement nobody made."""
+    tid = task.get('TaskId') if isinstance(task, dict) else task
+    try: j = store.task_judged(int(tid)) if str(tid or '').isdigit() else {}
+    except Exception: j = {}
+    return {'difficulty': j.get('Difficulty') or '', 'sure': None if j.get('Sure') is None else bool(j['Sure']),
+            'data_class': j.get('DataClass') or '', 'by': j.get('By') or ''}
+
+
 def mode(store) -> str:
     "'fixed' (the cards, exactly as today) or 'auto'. Fixed on a fresh install: nothing changes until the owner turns Auto on."
     return 'auto' if str(store.get_setting('ai_route_mode') or '').strip().lower() == 'auto' else 'fixed'
@@ -156,9 +166,11 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
     if job not in JOBS: raise ValueError(f'unknown AI job {job!r} - one of {", ".join(JOBS)}')
     if isinstance(task, int): task = store.get_task(task)
     pick, model, g, chain = _fixed(store, job, task, want_pick, want_model, gear)
+    j = judged(store, task) if task else {}
     from . import agents
     chosen = want_pick is not None or bool(want_model)
     rule = 'you chose it' if chosen else 'fixed'
     if not pick: why = f'{agents.NO_AI}, so {JOB_WORDS[job]} waits'
     else: why = f"{JOB_WORDS[job]} on {_said(store, pick)}{f', {model}' if model else ''}, {'as picked for it' if chosen else 'as its card says'}"
-    return Route(job, 'fixed', pick, model, g, [c for c in chain if c and c != pick], rule, why[0].upper() + why[1:])
+    return Route(job, 'fixed', pick, model, g, [c for c in chain if c and c != pick], rule, why[0].upper() + why[1:],
+                 (j or {}).get('difficulty', ''), (j or {}).get('data_class', ''))

@@ -1779,6 +1779,8 @@ def task_detail(task_id: int):
             'ranOn': _ran_on(task_id, tr),
             # ...and why the router put its last AI call on that brain, for the AI pill's tooltip (brainroute.why_for_task)
             'routeWhy': _brainroute().why_for_task(store, task_id),
+            # ...and how hard its work is, how sure its reader was, what data it carries - triage's word or the owner's (brainroute.judged)
+            'judged': _brainroute().judged(store, task_id),
             # ...and what the agent step says when nothing is live: why it never started, or what it did before it went
             'agentStory': _agent_story(task_id),
             # ...and whether Fix it can run on its items: an outsider's only in GitHub's cloud, and only once the owner turned that

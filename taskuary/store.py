@@ -539,6 +539,9 @@ CREATE TABLE IF NOT EXISTS lore_vote (LoreId INTEGER, Actor TEXT, Delta INTEGER,
 CREATE TABLE IF NOT EXISTS brainroute (Id INTEGER PRIMARY KEY, At TEXT, Job TEXT, TaskId INTEGER, MessageId INTEGER, Pick TEXT,
   Model TEXT, Tier TEXT, Rule TEXT, Why TEXT, Difficulty TEXT, DataClass TEXT, EscalatedFrom INTEGER, Outcome TEXT, Ms INTEGER);
 CREATE INDEX IF NOT EXISTS idx_brainroute_task ON brainroute(TaskId, Id);
+-- How hard a task's work is, whether its reader could tell, and what kind of data it carries - triage's judgements, apart from the
+-- priority, kept per task (brainroute.judged). `By` is 'owner' once they correct one: their word stands until they change it again.
+CREATE TABLE IF NOT EXISTS task_judged (TaskId INTEGER PRIMARY KEY, Difficulty TEXT, Sure INTEGER, DataClass TEXT, By TEXT, At TEXT);
 """
 # the knowledge base's search index (knowledge.py). A VIRTUAL table, kept out of SCHEMA: a Python
 # built without FTS5 must still open the store - search then falls back to LIKE over kb_chunk.
@@ -3957,6 +3960,23 @@ class SQLiteStore:
         n = (self._one('SELECT COUNT(*) AS n FROM brainroute WHERE At<?', (before,)) or {}).get('n') or 0
         if n: self._exec_unseen('DELETE FROM brainroute WHERE At<?', (before,))
         return n
+    # ── how hard a task's work is, and what data it carries (triage's judgements; brainroute reads them) ────────
+    def task_judged(self, task_id) -> dict:
+        return self._one('SELECT * FROM task_judged WHERE TaskId=?', (int(task_id),)) or {}
+    def judge_task(self, task_id, v: dict, by: str) -> dict:
+        """Triage's newest word on how hard and how sure, unless the owner corrected it - theirs stands. The data class only ever
+        goes UP from a reading: one sensitive message makes the task sensitive (the worst wins, as origin does), and only the owner
+        brings it back down. A judgement the verdict did not give is left as it was."""
+        was = self.task_judged(task_id); owner = by == 'owner'
+        held = was.get('By') == 'owner' and not owner
+        d, sure, dc = v.get('difficulty'), v.get('sure'), v.get('data_class')
+        new = {'Difficulty': was.get('Difficulty') if held or d not in ('quick', 'standard', 'hard') else d,
+               'Sure': was.get('Sure') if held or not isinstance(sure, bool) else int(sure),
+               'DataClass': dc if dc in ('ordinary', 'sensitive') and (owner or dc == 'sensitive' or not was.get('DataClass')) else was.get('DataClass')}
+        if was and all(new[k] == was.get(k) for k in new) and not owner: return was
+        self._exec_unseen('INSERT OR REPLACE INTO task_judged (TaskId,Difficulty,Sure,DataClass,By,At) VALUES (?,?,?,?,?,?)',
+                          (int(task_id), new['Difficulty'], new['Sure'], new['DataClass'], 'owner' if owner else was.get('By') or by, _now()))
+        return self.task_judged(task_id)
     # ── a report's run history (reports.run_report_source; the Reports tab's History) ────────
     REPORT_RUNS_KEPT = 60          # per report - a month of half-hourly assistant checks is 1400, and nobody reads past the last few dozen
     def add_report_run(self, sid: int, rec: dict) -> int:
@@ -4430,6 +4450,7 @@ class SQLiteStore:
         if isinstance(verdict, dict) and 'danger' in verdict and mid: self.set_message_danger(mid, verdict.get('danger'))
         if isinstance(verdict, dict) and isinstance(verdict.get('meet'), dict) and mid:
             self._exec('UPDATE message SET MeetJson=? WHERE MessageId=?', (json.dumps(verdict['meet']), mid))
+        if isinstance(verdict, dict) and tid: self.judge_task(tid, verdict, 'triage')     # how hard, how sure, what data (the router)
         return self._exec('''INSERT INTO route
             (MessageId,TaskId,Decision,Score,Reason,CandidatesJson,RoutedBy,CreatedAt,RawOutput,ParseError,VerdictJson)
             VALUES (?,?,?,?,?,?,?,?,?,?,?)''',

@@ -133,6 +133,9 @@ def _bullet(name: str) -> str:
 TASK_FIELDS = shipped_section('## 5.') + '\n\n' + shipped_section('## 7.')
 URGENT, DUE, SENDER, GOAL, DANGER, MEET = (_bullet('urgent'), _bullet('due'), _bullet('sender_class'), _bullet('goal'), _bullet('danger'),
                                            _bullet('meet'))
+# how much thought the work takes and whether the reader could tell - a verdict apart from priority, read by the router (2026-10-25)
+DIFFICULTY, SURE = _bullet('difficulty'), _bullet('sure')
+DIFFICULTIES = ('quick', 'standard', 'hard')
 
 
 def meet_of(j: dict, sent=None) -> dict | None:
@@ -200,6 +203,9 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
     if same: p['same_as'] = {'type': ['integer', 'null']}
     # the earlier lines of the exchange the ask rests on - shown with the task so its ask can be checked (2026-10-22)
     if earlier: p['rests_on'] = {'type': ['array', 'null'], 'items': {'type': 'integer'}}
+    # how hard the WORK is and whether the reader could tell (the router, 2026-10-25): its own verdict, never the priority. Shown on
+    # the task, the owner can correct it, and in Auto mode it picks the model tier - an unsure quick answer may be asked again higher up
+    p.update(difficulty={'type': ['string', 'null'], 'enum': [*DIFFICULTIES, None]}, sure={'type': ['boolean', 'null']})
     if goals: p['serves'] = {'type': ['object', 'null'], 'additionalProperties': False, 'required': ['task', 'step', 'done'],
                              'properties': {'task': {'type': 'integer'}, 'step': {'type': 'string'}, 'done': {'type': 'boolean'}}}
     return {'name': 'triage_verdict',
@@ -688,6 +694,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if not shape and 'done_when' not in base: system += '\n\n' + GOAL       # ...and whether it is a goal (2026-10-12)
             if not shape and '"danger"' not in base: system += '\n\n' + DANGER     # ...and what it tries to make an AI do (2026-10-15)
             if not shape and '"meet"' not in base: system += '\n\n' + MEET         # ...and whether it asks for a time to meet (2026-10-20)
+            if not shape and '"difficulty"' not in base: system += '\n\n' + DIFFICULTY + '\n' + SURE   # ...and how hard, how sure (2026-10-25)
             # the last thing asked for, after every block that says how to JUDGE: the output shape
             if shape: system += '\n\n' + TASK_FIELDS
             # ...and the shape goes on the WIRE as well, where the brain has one: a schema the
@@ -772,6 +779,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 # a GOAL needs its done-when sentence: "goal" on a two-line question with nothing to stop on is a task
                 dw = ' '.join(str(j.get('done_when') or '').split())[:1000]
                 if out['intent'] == 'task' and j.get('goal') is True and dw: out.update(goal=True, done_when=dw)
+                if j.get('difficulty') in DIFFICULTIES: out['difficulty'] = j['difficulty']
+                if isinstance(j.get('sure'), bool): out['sure'] = j['sure']
                 return out
             parse_error = f"invalid intent {j.get('intent')!r}; expected task, reply_only, or fyi"
         except Exception as e:

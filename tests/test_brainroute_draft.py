@@ -60,3 +60,14 @@ def test_the_drafting_model_is_its_own_never_the_light_gear_triage_rides():
 def test_an_explicit_pick_still_wins_over_the_drafting_card():
     s = MemoryStore(); o = _keyed(s, 'openai'); s.set_setting('draft_ai', 'cli:claude', 'owner')
     assert brainroute.choose(s, 'draft', want_pick=f'connector:{o}').pick == f'connector:{o}'
+
+
+def test_the_drafting_model_waits_for_a_drafting_brain():
+    # the owner, 2026-10-25: blank Drafting is the triage brain on its own model, so the drafting model box is shut until a brain is chosen
+    s = MemoryStore(); a, o = _keyed(s, 'anthropic'), _keyed(s, 'openai'); s.set_setting('triage_ai', f'connector:{a}', 'owner')
+    try: aidefaults.apply(s, {}, 'draft_ai', model='gpt-5'); assert False, 'a model saved on a blank Drafting card'
+    except ValueError as e: assert 'choose a drafting brain first' in str(e)
+    aidefaults.apply(s, {}, 'draft_ai', value=f'connector:{o}'); aidefaults.apply(s, {}, 'draft_ai', model='gpt-5')
+    assert brainroute.choose(s, 'draft').model == 'gpt-5'
+    aidefaults.apply(s, {}, 'draft_ai', value='')                  # back to blank: the triage brain, and no drafting model left riding it
+    assert (s.get_setting('draft_model'), brainroute.choose(s, 'draft').model) == ('', '')

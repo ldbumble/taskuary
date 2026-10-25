@@ -331,6 +331,8 @@ def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor:
     s = SLOT[slot_key]
     if value is not None:
         store.set_setting(slot_key, str(value), actor)
+        # Drafting back to blank is the triage brain on ITS model: a drafting model left behind would ride it unseen (2026-10-25)
+        if slot_key == 'draft_ai' and not str(value).strip(): store.set_setting('draft_model', '', actor)
     if strong is not None:
         # the strong gear lives where the brain's other gears do: the CLI connection, or the AI card's own config
         home, strong = _strong_home(store, cfg, resolve(store, cfg, slot_key)), str(strong).strip()
@@ -343,6 +345,8 @@ def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor:
             store.set_connector_config(home[1], conf)
         store.audit('setting', 0, 'save', actor, detail=f'{slot_key} strong_model={strong or "(none)"}')
     if model is None and effort is None: return resolve(store, cfg, slot_key)
+    # the Drafting model box is shut until a drafting brain is chosen - blank is the triage brain, whose model is its own card's
+    if slot_key == 'draft_ai' and not str(store.get_setting('draft_ai') or '').strip(): raise ValueError('choose a drafting brain first')
 
     cur = resolve(store, cfg, slot_key)
     model = cur['model'] if model is None else str(model).strip()

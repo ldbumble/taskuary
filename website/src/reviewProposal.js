@@ -53,6 +53,7 @@ export const reviewText = (review) => {
   // a workflow repair reads as what was wrong and what changes, never the step list's JSON (flow.repair)
   if (proposal?.action === "repair_workflow") return [proposal.why, proposal.changes].filter(Boolean).join("\n\n");
   if (proposal?.action === "run_tool") return toolBody(proposal);
+  if (proposal?.action === "browser_act") return [proposal.what, proposal.command].filter(Boolean).join("\n\n");
   return PAGES.has(proposal?.action) && proposal.text ? proposal.text : review?.DraftText || "";
 };
 
@@ -105,6 +106,19 @@ export const proposalPresentation = (review) => {
     context: review.Reason || "Proposed action · nothing will be sent to the conversation",
     destinationLabel: "Where",
     destination: toolWhere(proposal),
+    approveLabel: APPROVE,
+    busyLabel: "running…",
+    rejectLabel: "Dismiss",
+    readOnly: true,
+  };
+  // A HELD BROWSER ACT (browsergate.py, 2026-10-25): what the agent's browser would do and on which page, in words - Approve runs that
+  // exact command there, so the words are read-only like a tool run's
+  if (proposal?.action === "browser_act") return {
+    kind: "action",
+    title: "The agent's browser waits for your yes",
+    context: review.Reason || "Held before it ran · it can't be undone",
+    destinationLabel: "On",
+    destination: proposal.url || proposal.site || "the agent's browser",
     approveLabel: APPROVE,
     busyLabel: "running…",
     rejectLabel: "Dismiss",

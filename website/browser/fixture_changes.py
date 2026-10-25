@@ -23,6 +23,7 @@ def install_processing_changes(app, store):
         '/api/fixture/task/coding-saved',
         '/api/fixture/task/chat-burst',
         '/api/fixture/task/chat-saved',
+        '/api/fixture/task/closed-asked',
         '/api/fixture/general/canvas',
         '/api/fixture/processing/arrive-during-next',
     })
@@ -54,6 +55,29 @@ def install_processing_changes(app, store):
         out = selfclose.declare(store, tid, body['said'], 'assistant')
         if not out.get('closed'): raise HTTPException(409, f"the agent's close was refused: {out.get('why')}")
         return {'taskId': tid}
+
+    @app.post('/api/fixture/task/closed-asked')
+    def closed_asked(body: dict):
+        """A finished email task, and a day later its sender asking the owner a question on the same thread - ingested through the real
+        door with triage scripted (reply_only, asks_owner true). The owner, 2026-10-25: it stayed closed, off the rail, with no draft."""
+        if body: raise HTTPException(422, 'this fixed fixture accepts only an empty object')
+        import json
+        from unittest import mock
+        from taskuary import ingest
+        conv, then = 'fixture-closed-asked', datetime.now() - timedelta(hours=1)
+        tid = store.create_task({'Title': 'Investigate the missing ledger accounts', 'Kind': 'task', 'Status': 'done', 'Source': 'email'}, 'router')
+        store.add_message({'TaskId': tid, 'Channel': 'email', 'ExternalId': f'{conv}-1', 'ConversationId': conv, 'FromName': 'Erin Blake',
+                           'FromEmail': 'erin@northwind.example', 'Subject': 'Missing ledger accounts', 'BodyText': 'Some accounts are missing from the pull.',
+                           'SentAt': (then - timedelta(days=1)).isoformat(' '), 'Status': 'routed'})
+        said = {'intent': 'reply_only', 'why': 'Erin asks Alex directly', 'title': 'Erin asks what separates the 4100 accounts',
+                'summary': 'Erin Blake wants the difference between the 4100 accounts explained.', 'asks_owner': True}
+        with mock.patch.object(ingest, '_spawn'):          # the draft is its own job; this fixture shows the row, not the drafter
+            out = ingest.ingest_message(store, {'external_id': f'{conv}-2', 'channel': 'email', 'from_email': 'erin@northwind.example',
+                                                'from_name': 'Erin Blake', 'conversation_id': conv, 'subject': 'RE: Missing ledger accounts',
+                                                'body': 'Can you explain the difference between the 4100 accounts?', 'sent_at': then.isoformat(' ')},
+                                         llm=lambda system, user, **k: json.dumps(said))
+        if out.get('task_id') != tid: raise HTTPException(409, f'the question did not join its task: {out}')
+        return {'taskId': tid, 'status': store.get_task(tid)['Status']}
 
     @app.post('/api/fixture/task/chat-burst')
     def chat_burst(body: dict):

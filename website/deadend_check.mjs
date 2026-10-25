@@ -10,7 +10,7 @@
 //   walk      the demo, refusals ON: Next through the day, doing what each card's first button invites
 //   sweep     the demo, refusals ON: every button every row shows, in its row and its More menus, pressed once
 //   faults    a seeded world with a mocked mailbox: each failure failures.classify knows, forced, then its way out pressed
-//   cards     a proposal card cancelled, then pressed; a task folded by its X, then opened again from its line and the rail
+//   cards     a row press that must run at once, with no card to confirm it; a task folded by its X, then opened again from its line and the rail
 //   links     the demo: links to a connector and a setting, from a fresh page and over their open page, Back, and Next's address
 //   search    the demo: Enter typed over an earlier answer and before any, the count past the cap, a connection by name, a phone
 //   table     the demo, its brain linking a task it is asked to show: a task opened by the rail, Next, the Board, a deep link, search,
@@ -118,6 +118,8 @@ const WALK_SKIP = {
   "split": "opens the split-or-merge drawer; its own press is walked, the reshape itself is the task tests'",
   "review_changes": "opens the agent's diff drawer - walked when an agent row carries it",
   "run_another": "starts a second agent - the demo refuses starts and the faults pass starts one through Send to agent",
+  "prepare": "starts a research agent on a meeting (the owner, 2026-10-25) - the demo refuses every start; its road is tests/test_meeting_prepare.py",
+  "decline_invite": "folded behind the meeting row's ▾ since Prepare joined the row (2026-10-25); Accept, walked, takes the same calendar road (tests/test_calendar_write.py)",
   "retriage": "asks the AI to sort it again - no AI in either world",
   "share": "Email a summary - one of Share's ways since 2026-10-23, no row button of its own; mailing someone is refused in the demo",
   "share_result": "opens the result's Share menu - the demo shares nothing (sharing.ways greys every way), and no demo report or Result is shared by the walk",
@@ -418,7 +420,7 @@ const readPage = (page) => page.evaluate(() => {
     covered: !(hit && (hit === litEl || litEl.contains(hit))) } : null;
   // From is the sender's own words, quoted (the two-column page, 0.3.9.21): a mail that says "Traceback ... null" is the ask, not
   // our jargon - so the words check reads the card without it, and everything Taskuary writes stays held to the list
-  const quoted = card ? [...card.querySelectorAll("[data-tq-from], [data-tq-from-line]")].map((el) => el.innerText).filter(Boolean) : [];
+  const quoted = card ? [...card.querySelectorAll("[data-tq-from], [data-tq-from-line], [data-tq-quoted]")].map((el) => el.innerText).filter(Boolean) : [];
   const own = quoted.reduce((t, q) => t.split(q).join(" "), card?.innerText || "");
   const read = [own, row?.innerText || "", adviceEl?.innerText || "", ...errs].join("\n");
   const pops = [...document.querySelectorAll('.MuiPopover-paper, [role="dialog"], .MuiDrawer-paper')].filter(vis).map((p) => p.innerText.replace(/\s+/g, " ").slice(0, 80));
@@ -792,21 +794,22 @@ async function faults() {
 // ── CARDS: a proposal cancelled then pressed; a task folded by its X then opened again ────────────────────────────────────────
 async function cards() {
   const srv = await serve(3), page = await pageOn(srv, "cards");
-  // a proposal card: Put it on my list proposes. (Not ours no longer asks - it files at once, just this once, with From now on after
-  // it - the owner, 2026-10-21 - so it draws no card to cancel)
+  // A PRESS IS THE DECISION: no row button draws a card to confirm it any more (Not ours since 2026-10-21; Put it on my list, Chase them
+  // and every other desk press since the 2026-10-25 sweep - assistant-is-a-router: "no confirm cards"), so the cancel path is gone. Put it
+  // on my list is pressed and must run at once; a card standing after it is a confirm card, which is the dead end now
   page.step = "cards cancel";
-  let card = null;
+  let card = null, pressed = false;
   for (const r of (await look(page)).rail) {
-    for (const verb of ["mine"]) {
-      if (!(await openItem(page, r.key)) || !(await pressVerb(page, verb))) continue;
-      await wait(4000);
-      card = await page.$(".tq-proposal");
-      if (card) break;
-    }
-    if (card) break;
+    if (!(await openItem(page, r.key)) || !(await pressVerb(page, "mine"))) continue;
+    pressed = true; await wait(4000);
+    card = await page.$(".tq-proposal");
+    judge(await look(page), `${page.step} Put it on my list`);
+    break;
   }
-  if (!card) note("LIVE", page.step, "no press drew a proposal card to cancel - the cancel path was not walked");
-  else {
+  if (pressed && !card) walked.push("press: Put it on my list ran at once - no card to confirm it");
+  if (!pressed) note("COVER", page.step, "no item on the rail had Put it on my list to press");
+  else if (card) {
+    note("INLINE", page.step, "a press drew a card to confirm it - the row's button is the confirmation");
     const btns = await card.$$("button");
     const words = await Promise.all(btns.map((b) => b.evaluate((e) => e.innerText.trim())));
     const ci = words.findIndex((w) => /^(cancel|not now|no|never mind)/i.test(w));

@@ -237,6 +237,8 @@ async def _lifespan(_app):
     chatgptauth.on_rotate = lambda cid, rt: store.save_connector({'ConnectorId': cid, 'Secret': rt}, 'chatgptauth')   # ...and a ChatGPT one
     from . import sharing   # imported here, before the first request: imported on the start's own thread it raced the first requests (a card's Enable read back Off)
     threading.Thread(target=share_start, name='taskuary-share-start', daemon=True).start()   # links on: their own port
+    from . import awake
+    awake.start(store)             # the computer stays awake while an agent or a workflow runs, and only then (awake.py)
     try:
         async with processing_all.membership_lifecycle(store):
             yield
@@ -244,6 +246,7 @@ async def _lifespan(_app):
         t = _WALK_THREAD[0]
         if t is not None and t.is_alive(): t.join(WALK_WAIT)   # never close the store under it
         _WALK_READY.set()
+        awake.stop()               # ...and sleep is allowed again once nothing here can run
         _close_permits()           # a permit holds for days: released, its thread returns and the process can exit
         if not _close_drain_workers(timeout=DRAIN_WAIT, target_store=store):
             logger.warning('triage drain still stopping during shutdown')
@@ -614,6 +617,21 @@ def signin_remove(site: str, request: Request):
     return {'ok': True}
 
 
+class SigninKeyBody(BaseModel):
+    key: str = ''
+
+
+# A SAVED SIGN-IN'S AUTHENTICATOR KEY (2026-10-25): kept, or (empty) dropped. Write-only: no route ever reads a key back
+@app.post('/api/signins/{site}/code')
+def signin_code(site: str, body: SigninKeyBody, request: Request):
+    from . import signin
+    _owner_only(request, "the saved sign-ins are the owner's")
+    try: ok = signin.set_key(store, site, body.key.strip(), ACTOR)
+    except ValueError as e: raise HTTPException(400, str(e))
+    if not ok: raise HTTPException(404, 'nothing is saved for that site')
+    return {'ok': True, 'code': bool(body.key.strip())}
+
+
 # The fill page sits outside /api on purpose: it is opened as a page, so no header can ride on it - the one-time token in its address
 # IS its key, and only that token's hash is kept. Its POST is same-origin only (the token gate checks Origin on /api alone).
 @app.get('/signin/{token}', include_in_schema=False)
@@ -627,12 +645,16 @@ def signin_page(token: str):
 @app.post('/signin/{token}', include_in_schema=False)
 async def signin_submit(token: str, request: Request):
     from urllib.parse import parse_qs
-    from . import signin
+    from . import signin, totp
     if not guard.origin_ok(request.headers):
         return HTMLResponse(signin.gone_html('This sign-in came from another page, so nothing was typed.'), 403, headers=signin.HEADERS)
     form = parse_qs((await request.body())[:16384].decode('utf-8', 'replace'), keep_blank_values=True)
     one = lambda k: (form.get(k) or [''])[0]
-    try: out = await run_in_threadpool(signin.by_owner, store, token, one('username'), one('password'), one('save') == '1')
+    try: out = await run_in_threadpool(signin.by_owner, store, token, one('username'), one('password'), one('save') == '1', None, one('key'))
+    except totp.BadKey as e:            # said on the same page, the link not spent: the owner fixes the key and presses again
+        r = signin.peek(store, token)
+        if r: return HTMLResponse(signin.form_html(r['Site'], max(1, int((r['ExpiresAt'] - time.time()) // 60)), f'{e}.'), 400, headers=signin.HEADERS)
+        return HTMLResponse(signin.gone_html('This sign-in page was used already or has expired.'), 410, headers=signin.HEADERS)
     except LookupError as e: return HTMLResponse(signin.gone_html(str(e)), 410, headers=signin.HEADERS)
     except (signin.SignInError, ValueError) as e:
         return HTMLResponse(signin.gone_html(f'Nothing was signed in: {e}.'), 409, headers=signin.HEADERS)
@@ -750,16 +772,14 @@ def version(): return {'version': _ver, 'started': _started, 'cli_installer_revi
 # ── update in place (update.py): Settings → Updates ─────────────────────────────────────
 @app.get('/api/update')
 def update_check(force: int = 0):
-    from . import update
-    return update.check(force=bool(force))
+    from . import awake, update
+    # ...with what an Update now would wait for, and whether one already waits (update.when_idle)
+    return {**update.check(force=bool(force)), 'waits': update.waits_line(awake.running(store)),
+            'queued': update.QUEUED['at'] is not None, 'queued_error': update.QUEUED['error']}
 
-@app.post('/api/update')
-def update_apply():
-    """Fetch the latest release and swap it in. The answer goes out first; the process ends a
-    moment later so the new build can start. Owner-only: guard.py refuses an agent token."""
+def _update_now(info: dict) -> dict:
     from . import update
-    try: out = update.apply()
-    except Exception as e: raise HTTPException(422, str(e))
+    out = update.apply(info=info)
     # Once apply() returns, the swap helper is ALREADY RUNNING and waiting for this process to go.
     # Anything that throws between here and exit_soon strands it on a PID that never dies - which
     # is how one machine was left with no app and a console spinning on `find "<pid>"`
@@ -768,6 +788,39 @@ def update_apply():
     except Exception as e: logger.warning(f'update: could not write the audit row, restarting anyway - {e}')
     if out.get('restarting'): update.exit_soon()
     return out
+
+@app.post('/api/update')
+def update_apply():
+    """Fetch the latest release and swap it in. The answer goes out first; the process ends a
+    moment later so the new build can start. With an agent or a workflow run live it WAITS for
+    them, and says so (update.when_idle). Owner-only: guard.py refuses an agent token."""
+    from . import awake, update
+    try: info = update.ready()
+    except Exception as e: raise HTTPException(422, str(e))
+    try: return update.when_idle(lambda: awake.running(store), lambda: _update_now(info))
+    except Exception as e: raise HTTPException(422, str(e))
+
+
+# ── Quit, from the browser's top line (the owner, 2026-10-25) ─────────────────────────────────────
+@app.get('/api/quit')
+def quit_would_stop():
+    """What a Quit would stop right now - the button's hover says it, so the press is the decision with no box asking (awake.live)."""
+    from . import awake
+    agents, flows = awake.live(store)
+    return {'agents': agents, 'workflows': flows, 'running': awake.said(agents, flows)}
+
+@app.post('/api/quit')
+def quit_app():
+    """Stop Taskuary the way Ctrl+C does: the answer goes out, then the server is told to exit and its lifespan stops what it
+    started - agents, CLI children, the share port. Says what it stopped, for the page left behind. Owner-only (guard.py)."""
+    from . import welcome, workerstate
+    srv = workerstate.SERVER[0]
+    if srv is None: raise HTTPException(409, "this Taskuary was not started in a way it can stop itself - close the window or the terminal that runs it")
+    try: stopped = [task_ref(t['TaskId']) for t in welcome.working(store)]
+    except Exception: stopped = []
+    store.audit('app', 0, 'quit', ACTOR, detail={'stopped': stopped})
+    threading.Timer(0.5, lambda: setattr(srv, 'should_exit', True)).start()
+    return {'quitting': True, 'stopped': stopped}
 
 def _send_block(channel, has_message=True) -> str:
     """The reason an approved reply could not leave on this channel - outbound.send_block's words,
@@ -1377,6 +1430,15 @@ def _run_kind(op: dict, background: BackgroundTasks):
     if kind == 'preference.sender_rule': return ignore_sender(mid, IgnoreSenderBody(how='rule'), background)
     # the bigger hammer, down the SAME road the card's own button took (ignore_sender, how='rule')
     if kind == 'preference.sender_rule': return ignore_sender(mid, IgnoreSenderBody(how='rule'), background)
+    if kind == 'calendar.prepare':
+        # the meeting card's Prepare, from the row, the phone or a lit chip: the event as the rail holds it (funnel.calendar_items)
+        from . import funnel
+        key = str(p.get('key') or ''); item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
+        e = (item or {}).get('event')
+        if not e: raise HTTPException(404, 'that meeting is not on the rail any more')
+        return calendar_prepare(MeetingPrepBody(**{k: e.get(k) for k in ('subject', 'start', 'end', 'where', 'organizer', 'about')},
+                                                who=[w for w in e.get('who') or [] if w], link=e.get('join'),
+                                                instruction=str(p.get('text') or '') or None), background)
     if kind == 'calendar.answer':
         # THE CALENDAR'S ANSWERS, by words (a phone chat; on the desk the words only light the row's button): drafted, never sent - a
         # new time with none named is the first free one the row's picker would offer, there to change before Send
@@ -3336,8 +3398,9 @@ def unsubscribe_message(mid: int, request: Request, body: UnsubscribeBody = None
 def working_numbers():
     """"Is it working?" (the owner, 2026-10-22): whether the app's drafts, triage verdicts and agent results stood, over the last 7
     and 30 days - counted from the owner's own next moves (working.py)."""
-    from . import working
-    return {'windows': working.windows(store)}
+    from . import trackrecord, working
+    # ...and the drafts' track record by kind and recipient domain (2026-10-25) - read-only: nothing sends on it
+    return {'windows': working.windows(store), 'record': trackrecord.patterns(store, 30)}
 
 @app.get('/api/messages/{mid}/not-mine/suggest')
 def not_mine_suggest(mid: int, scope: str = None, topic: str = None):
@@ -4092,6 +4155,20 @@ def cli_hook_reason(payload: dict):
         logger.debug(f'reason network hook ignored: {e}'); return {}
 
 
+@app.post('/api/hooks/claude/browser')
+async def cli_hook_browser(payload: dict):
+    """Before one of our sessions runs a shell command (hooks.browser -> browsergate.check): a browser act that can't be undone is
+    refused and held on the task for the owner's press. On the permits' threads - a snapshot and a model verdict take seconds, and
+    on anyio's shared forty they would queue behind every other sync route. A failure IN the judging holds (check); a failure
+    around it - an unreadable payload - lets the command go, as every hook here does."""
+    from . import hooks
+    def go():
+        try: return hooks.browser(payload if isinstance(payload, dict) else {})
+        except Exception as e:
+            logger.warning(f'browser hook: {e}'); return {}
+    return await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, go)
+
+
 @app.post('/api/hooks/claude/floor')
 def cli_hook_floor(payload: dict, task: int, request: Request):
     """A stranger's session asks, before every tool call, whether the floor allows it (floor.check). An error here is a
@@ -4482,6 +4559,58 @@ def agent_tick(body: AgentTickBody, request: Request):
     store.tick_checklist_item(body.task_id, hit['id'], body.done, 'agent')
     return {'ok': True, 'item': hit['id'], 'text': hit['text'], 'done': bool(body.done)}
 
+class AgentProposeBody(BaseModel):
+    model_config = {'extra': 'allow'}
+    task_id: int; action: str; why: str = ''
+
+@app.post('/api/agent/propose')
+def agent_propose(body: AgentProposeBody, request: Request):
+    """An agent asks for one act only the owner's press runs (proposals.py) - a GitHub comment, a pull request, a send on a system -
+    on its OWN task. The TASKUARY-PROPOSE mark in a transcript files the same review; this is the door a tool call takes (agenttools).
+    A Jira or GitHub comment is a send (the owner, 2026-10-25), so it is always this road, never a direct call."""
+    from . import agenttools, proposals
+    _own_task_only(request, body.task_id)
+    if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
+    try: p = agenttools.proposal_of(body.model_dump())
+    except ValueError as e: raise HTTPException(403, str(e))
+    q = proposals.queue(store, body.task_id, p, 'agent')
+    if not q: raise HTTPException(422, 'the proposal was refused - the reason is on the task')
+    return {'ok': True, 'queued': True, 'review': q['reviewId'], 'says': "Waiting on the owner's press - nothing happens until they approve it."}
+
+@app.post('/api/mcp')
+async def mcp_rpc(request: Request, task: int = 0):
+    """Taskuary's tools as an MCP server (agenttools) for the session on `task` - its agent token and task proof in the headers, which
+    the middleware already read: a stranger's token never gets here (guard.stranger_denied), and every door below checks the task is
+    the session's own. JSON-RPC answered as plain JSON; a notification gets 202. Reads of the owner's history refuse a stranger's task."""
+    from . import agenttools
+    try: msg = await request.json()
+    except ValueError: return JSONResponse({'jsonrpc': '2.0', 'id': None, 'error': {'code': -32700, 'message': 'not JSON'}}, status_code=400)
+    if not task or not store.get_task(task):
+        return JSONResponse({'jsonrpc': '2.0', 'id': (msg or {}).get('id') if isinstance(msg, dict) else None,
+                             'error': {'code': -32602, 'message': 'this server answers for one task: /api/mcp?task=<id>'}}, status_code=404)
+    if not guard.owns_task(cfg['server'], request.headers, task):
+        return JSONResponse({'jsonrpc': '2.0', 'id': (msg or {}).get('id') if isinstance(msg, dict) else None,
+                             'error': {'code': -32001, 'message': 'agents cannot do this: a session uses the tools of its OWN task'}}, status_code=403)
+    doors = {'tool_run': lambda b: tool_run(b, request),
+             'tick': lambda tid, item, done: agent_tick(AgentTickBody(task_id=tid, item=item, done=done), request),
+             'reply': lambda tid, text: agent_reply(AgentReplyBody(task_id=tid, text=text), request),
+             'draft': lambda tid, text, to, subject: agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject), request),
+             'propose': lambda tid, a: agent_propose(AgentProposeBody(**{**a, 'task_id': tid}), request)}
+    def run(name, args):
+        cls = agenttools.TOOLS[name][0]
+        if cls == 'read' and name not in ('my_task', 'list_systems', 'run_system'): _owner_history(request, task)
+        out = agenttools.call(store, task, name, args, doors)
+        return out.body.decode() if isinstance(out, JSONResponse) else out
+    def one(m): return agenttools.rpc(m, run) if isinstance(m, dict) else {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32600, 'message': 'not a request'}}
+    out = await run_in_threadpool(lambda: [r for r in map(one, msg if isinstance(msg, list) else [msg]) if r is not None])   # the doors are sync
+    if not out: return Response(status_code=202)
+    return JSONResponse(out if isinstance(msg, list) else out[0])
+
+@app.get('/api/mcp')
+def mcp_stream():
+    "No server-sent stream here: every answer comes back on its own POST (the spec lets a server say so with 405)."
+    return Response(status_code=405, headers={'Allow': 'POST'})
+
 class BatchActBody(BaseModel): action: str
 
 @app.post('/api/tasks/{tid}/batch/{idx}')
@@ -4636,11 +4765,38 @@ def calendar_prep(body: MeetingPrepBody):
     tag is exactly what the Board and + New create, so the chat opens with the brief already
     asked (website/src/newTask.js, GeneralWorkspace).
     """
+    tid = _prep_task(body, (body.instruction or '').strip() or 'Get me ready for this meeting.')
+    return {'taskId': tid, 'ref': task_ref(tid), 'agent': 'assistant', 'chat': True}
+
+# PREPARE (the owner, 2026-10-25: "add prepare that creates agent to research about person and topic through your mails"): the
+# meeting card's button. An agent - the general profile - reads what the saved mail and chats say about each person on the invite
+# and about its subject, and its answer is the brief, filed on the meeting's own task. It reads and writes to nobody.
+PREPARE_ASK = ("Prepare me for this meeting. Research the people on the invite and its subject through my saved mail and chats in "
+               "Taskuary: who each person is to me, what we last said to each other, what is still open between us, and what has been "
+               "said about the subject. The reads below are where to start - search further for anything they leave open. Then answer "
+               "with a SHORT brief: a line or two per person, the open questions, and what I should be ready to answer. Write to nobody.")
+
+@app.post('/api/calendar/prepare')
+def calendar_prepare(body: MeetingPrepBody, background: BackgroundTasks):
+    """Prepare on a meeting card: the meeting's task, with what the mail says about its people and subject, and the general
+    agent started on it. Pressed twice it is the same task - the agent already on it is not started again."""
+    from . import mailsearch
+    subject = (body.subject or 'the meeting').strip()[:120]
+    ref = f"calendar:{body.start or ''}:{subject}"[:200]
+    tid = (store._one("SELECT TaskId FROM task WHERE SourceRef=? AND Status NOT IN ('done','dropped') ORDER BY TaskId DESC LIMIT 1", (ref,)) or {}).get('TaskId')
+    if not tid:
+        reads = mailsearch.meeting_reads(store, [*(body.who or []), *([body.organizer] if body.organizer else [])], subject)
+        said = (body.instruction or '').strip()                # the owner's own words lead, the research under them
+        tid = _prep_task(body, f'{said}\n\n{PREPARE_ASK}' if said else PREPARE_ASK,
+                         f"\n\nWHAT YOUR SAVED MAIL ALREADY SAYS (ids open with `taskuary --message ID`):\n{mailsearch.says(reads)}" if reads else '')
+    out = dispatch_task(tid, DispatchBody(kind='general'), background)
+    return {**out, 'taskId': tid, 'ref': task_ref(tid)} if isinstance(out, dict) else out
+
+def _prep_task(body: MeetingPrepBody, ask: str, reads: str = '') -> int:
     from . import calendar as cal, ownwork
     subject = (body.subject or 'the meeting').strip()[:120]
     brief = cal.prep_brief(body.model_dump())
-    ask = (body.instruction or '').strip() or 'Get me ready for this meeting.'
-    tid = store.create_task({'Title': f'Prep: {subject}'[:200], 'Summary': f'{ask}\n\n{brief}',
+    tid = store.create_task({'Title': f'Prep: {subject}'[:200], 'Summary': f'{ask}\n\n{brief}{reads}',
                              'Kind': 'general', 'Tags': ASK_TAG, 'Source': 'calendar',
                              'SourceRef': f"calendar:{body.start or ''}:{subject}"[:200]}, ACTOR)
     # The row for this work belongs to the INVITE. Left to ownwork.ensure it became a separate
@@ -4652,7 +4808,7 @@ def calendar_prep(body: MeetingPrepBody):
                        'Subject': f'Prep: {subject}'[:200], 'FromName': 'You', 'Status': 'routed',
                        'SentAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'BodyText': ask})
     store.audit('task', tid, 'create_from_meeting', ACTOR, detail={'subject': subject, 'start': body.start})
-    return {'taskId': tid, 'ref': task_ref(tid), 'agent': 'assistant', 'chat': True}
+    return tid
 
 @app.get('/api/calendar/upcoming')
 def calendar_upcoming(hours: int = 72, force: bool = False):
@@ -5270,6 +5426,8 @@ def advice_notes(key: str, limit: int = 10):
 
 class ConciergeProposeBody(BaseModel):
     verb: str; key: str; text: str | None = None; table: bool = False; exact: bool = False; revision: str | None = None
+    # A BUTTON PRESSED ON THE DESK (concierge.propose_direct `press`): it runs at once, with no line in the owner's name and no card to confirm
+    press: bool = False
     # THE AGENT BOX'S ANSWERS (RunForm.AgentAsk): which profile, brain and model a hand-off runs on - the words ride in `text`
     agent: str | None = None; brain: str | None = None; pick: str | None = None; model: str | None = None
 
@@ -5283,7 +5441,7 @@ def concierge_propose(body: ConciergeProposeBody):
         if tgt and advisor.revision(store, *tgt) != body.revision:
             raise HTTPException(409, 'That one changed since the Advisor looked at it - read it again before pressing.')
     picks = {'agent': body.agent, 'brain': body.brain, 'pick': body.pick, 'model': body.model}
-    try: return concierge.propose_direct(store, body.verb, body.key, body.text or '', ACTOR, table=body.table, exact=body.exact, picks=picks)
+    try: return concierge.propose_direct(store, body.verb, body.key, body.text or '', ACTOR, table=body.table, exact=body.exact, picks=picks, press=body.press)
     except ValueError as e: raise HTTPException(422, str(e))
 
 class SetupBody2(BaseModel): text: str
@@ -6559,6 +6717,12 @@ def tool_run(body: dict, request: Request):
     hub_tools = {'handbook_search', 'handbook_write', 'handbook_vote',
                  'hub_search', 'hub_write', 'hub_vote', 'hub_comment'}
     actor = _hub_actor(request, (body or {}).get('author')) if t in hub_tools else ACTOR
+    # AN AGENT NEVER SENDS FROM HERE (the owner, 2026-10-25): a post, an invoice sent, an order, an MCP tool its server does not call
+    # read-only - each waits as a proposal on the agent's own task, at any Authority, and the owner's press runs it. Before the scope
+    # check on purpose: at read, the proposal was always the road, and the refusal only said so.
+    if guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
+        tool = _mcp_tool(conn, body) if t == 'mcp' else None
+        if why := scopes.reaches(t, body, tool): return _agent_proposes(request, t, conn, body, why)
     try:
         scopes.require(conn, t)
     except PermissionError as e:
@@ -6581,6 +6745,41 @@ def tool_run(body: dict, request: Request):
         return {'ok': False, 'error': str(e)[:1000]}
     store.audit('tool', (conn or {}).get('ConnectorId', 0), 'run', actor, detail={'type': t, 'headline': str(head)[:200]})
     return {'ok': True, 'headline': head, 'output': (out or '')[:20000]}
+
+def _mcp_tool(conn, body):
+    """The MCP tool an agent named, as its own server describes it - None when the server cannot be asked or does not list it, which
+    scopes.reaches reads as "not read-only": a tool that cannot say what it is waits for the owner."""
+    from .mcp import list_tools
+    from .reports import query_only, resolve_cfg
+    try: hit = next((x for x in list_tools(resolve_cfg(store, {**query_only(body), 'type': 'mcp', 'connector_id': conn['ConnectorId']}))
+                     if x['name'] == (body or {}).get('tool')), None)
+    except Exception as e:
+        logger.info(f'mcp tool list for an agent call failed ({e}) - it waits for the owner'); return None
+    return {'annotations': {'readOnlyHint': True}} if hit and hit.get('read_only') else None
+
+# what an agent may not put on a proposal: where it runs is the card's, and a workflow's own resume or a close-out is Taskuary's
+_NOT_PROPOSED = ('task_id', 'why', 'action', 'flow_run', 'closeout', '_write')
+
+def _agent_proposes(request: Request, t: str, conn: dict, body: dict, why: str):
+    """An agent's call that would reach a person, filed as a run_tool proposal on its OWN task (proposals.queue): 202 with the review
+    the owner presses. Nothing ran. No task named is a refusal that says how, never a silent drop."""
+    from . import proposals
+    from .reports import query_only
+    tid = (body or {}).get('task_id')
+    if not str(tid or '').isdigit():
+        raise HTTPException(422, f"this {why} - so it waits for the owner's press on your task. Send task_id ($TASKUARY_TASK) with "
+                                 'the call and it is filed there as a proposal; nothing is sent until they press Approve.')
+    tid = int(tid)
+    _own_task_only(request, tid)
+    if not store.get_task(tid): raise HTTPException(404, 'no such task')
+    p = {**{k: v for k, v in query_only(body).items() if k not in _NOT_PROPOSED},
+         'action': 'run_tool', 'type': t, 'connector_id': conn['ConnectorId'], 'why': str((body or {}).get('why') or '')[:300]}
+    q = proposals.queue(store, tid, p, 'agent')
+    if not q: raise HTTPException(403, 'the proposal was refused - the reason is on the task')
+    store.audit('tool', conn['ConnectorId'], 'run_proposed', 'agent', detail={'type': t, 'task': tid, 'review': q['reviewId']})
+    return JSONResponse({'ok': True, 'queued': True, 'review': q['reviewId'],
+                         'says': f"Waiting on the owner's press: this {why}. Nothing was sent; it runs only when they press Approve."},
+                        status_code=202)
 
 @app.post('/api/reports/compose')
 def report_compose(body: dict):
@@ -7361,6 +7560,34 @@ def mcp_tools(body: dict):
         return {'ok': True, 'data': list_tools(body)}
     except Exception as e:
         return {'ok': False, 'error': str(e)[:500]}
+
+@app.get('/api/sendfilter')
+def sendfilter_list():
+    """The owner's own MCP servers per CLI and each tool's verdict - kept, or left out of agent sessions because it sends (sendfilter):
+    what a card shows so the owner can correct it. Reading it starts a scan when the last one is stale."""
+    from . import sendfilter
+    scanning = sendfilter.refresh(store)
+    cache = sendfilter._load(store, sendfilter.CACHE, {}) or {}
+    at, ai = float(cache.get('at') or 0), cache.get('claudeai') or {}
+    return {'claude': sendfilter.verdicts(store, 'claude'), 'codex': sendfilter.verdicts(store, 'codex'),
+            'scanned_at': at or None, 'scanning': scanning or sendfilter._RUNNING['on'],
+            'claudeai': {'at': ai.get('at') or None, 'error': ai.get('error') or ''}}
+
+class SendFilterFix(BaseModel): server: str; tool: str = '*'; verdict: str = ''
+
+@app.post('/api/sendfilter/correct')
+def sendfilter_correct(body: SendFilterFix):
+    "The owner's word on one tool ('keep' / 'block'), or on a server whose tools could not be read (tool '*'); '' clears it."
+    from . import sendfilter
+    try: sendfilter.correct(store, body.server, body.tool, body.verdict, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+    return sendfilter_list()
+
+@app.post('/api/sendfilter/scan')
+def sendfilter_scan():
+    "List and judge the servers again now, in the background (a server just added, a description that changed)."
+    from . import sendfilter
+    return {'started': sendfilter.refresh(store, force=True)}
 
 @app.post('/api/mssql/test')
 def mssql_test(body: dict):

@@ -2,6 +2,7 @@
 // WORK or the reply on the right - in place of the Task / Agent work / Close out accordion. Pure, so node --test reads it.
 import { channelName } from "./taskSources.js";
 import { plural } from "./timeWords.js";
+import { fmtDate } from "./dates.js";
 
 // WHILE AN AGENT WORKS THE WORK TAKES THE WHOLE WIDTH: a live session - coding or general, working or waiting on you (the rail's
 // spinning ring, or its hand) - and From folds to one line over it; the terminal is never covered or squeezed. `sessionView` is the
@@ -9,7 +10,17 @@ import { plural } from "./timeWords.js";
 // ...AND ONCE IT HAS ACTED (the owner, 2026-10-22): an agent that stopped or finished with its Result (`result`), or whose run failed
 // (`failed`, its reason and Try again), keeps the whole width too, From folded over it. Two columns - From | Reply - only where no
 // agent ran or none was ever started: a plain mail or chat task with its draft, a held task.
-export const layoutOf = ({ sessionView = false, result = false, failed = false }) => (sessionView || result || failed ? "full" : "columns");
+// ...UNTIL 2026-10-25 (the owner: "keep agent working and everything the same with full agent screen ... but keep the 2 columns for when
+// agent is not working"): only a LIVE session takes the whole width now. A finished, failed or closed agent is back in two columns - Came
+// from on the left, its Result and Close out on the right - and the shade says which section to read (focusOf).
+export const layoutOf = ({ sessionView = false }) => (sessionView ? "full" : "columns");
+
+// THE FOCUS (the owner, 2026-10-25: "shading for what to focus on"): with no agent live the card's body is shaded and one section is white -
+// the agent's part once it has a Result (or its run failed, Try again being the move); Close out where the reply is the move; and where the
+// open half is the agent's box (a to-do, a goal) the task's own LIST instead (the owner's answer, 2026-10-25): a goal's Steps, a to-do's
+// checklist (`list`), else the block that carries the ask's source ("source"). A task waiting on a person has nothing white ("none").
+export const focusOf = ({ live = false, result = false, failed = false, pane = "", waiting = false, list = false } = {}) =>
+  live ? null : waiting ? "none" : result || failed ? "agent" : pane === "agent" ? (list ? "list" : "source") : "reply";
 
 // WHICH HALF OF THE WORK COLUMN IS OPEN. The page's focus (taskLifecycle.focusStage) still decides between the agent and the
 // reply; where it named the task itself - now the always-open From column - the work column opens on what the task is for: the
@@ -42,4 +53,26 @@ export const fromLine = ({ sender = null, count = 0, workflow = null, made = "" 
   if (count && sender) return [sender.FromName || sender.FromEmail || channelName(sender.Channel), plural(count, "message")].join(" · ");
   if (workflow) return `Workflow · ${workflow.title}`;
   return made || "";
+};
+
+// THE ASK IS THE MESSAGE'S OWN WORDS when triage left no summary of its own (the task-view cleanup, owner-approved 2026-10-25): said
+// once, under the title, and From does not open the same words again as the message under it. Spacing and line breaks aside.
+const squash = (s) => String(s || "").replace(/\s+/g, " ").trim();
+export const sameWords = (a, b) => !!squash(a) && squash(a) === squash(b);
+
+// WHO A TASK WAITS ON (the owner, 2026-10-25): a task handed to a person opens on them - "Waiting on Ray. Due Oct 23, 2 days late."
+// The name is the one their own mail on the task signs with, else the address read as a name, the way the server reads a step's
+// holder (processing_unread.holder_name). Null where the task waits on nobody: not waiting, or held by an agent.
+export const holderName = (addr) => String(addr || "").split("@")[0].split(/[._-]+/).filter(Boolean)
+  .map((p) => p[0].toUpperCase() + p.slice(1)).join(" ");
+export const waitingOn = ({ task = {}, messages = [], now = new Date() } = {}) => {
+  const who = String(task.Assignee || "");
+  if (task.Status !== "waiting" || !who.startsWith("person:")) return null;
+  const addr = who.slice(7), mail = messages.find((m) => String(m.FromEmail || "").toLowerCase() === addr.toLowerCase() && m.FromName);
+  const name = mail?.FromName || holderName(addr) || addr;
+  const due = /^\d{4}-\d{2}-\d{2}/.test(String(task.DueAt || "")) ? new Date(`${String(task.DueAt).slice(0, 10)}T00:00:00`) : null;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const late = due ? Math.round((today - due) / 86400000) : 0;
+  const when = !due ? "" : ` Due ${fmtDate(due, [], { month: "short", day: "numeric" })}${late > 0 ? `, ${plural(late, "day")} late` : late === 0 ? ", today" : ""}.`;
+  return { name, line: `Waiting on ${name}.${when}` };
 };

@@ -156,7 +156,10 @@ purpose — the bill and the terms differ far more than the results do.
 
 What is deliberately NOT here is anything that DRIVES a browser — logging in, clicking, filling a
 form. That runs over CDP through a real browser session and cannot be reached from an API, so a
-card promising it would be a card that never works.
+card promising it would be a card that never works. Driving a browser is the optional
+`agent-browser` tool's job instead: signing in, authenticator codes and the browser acts that wait
+for your press are described under
+[When the agent opens a browser](tasks-and-agents#when-the-agent-opens-a-browser).
 
 **Social** — **LinkedIn**, **Bluesky** and **Mastodon**. Nothing from these reaches the Timeline as
 work: a public timeline is not an inbox, so they are report sources and tools rather than triggers.

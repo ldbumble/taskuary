@@ -90,7 +90,8 @@ test("the task page opens exactly one stage and lets you open the others by hand
   // opens what the task is for where the focus names the task (taskLayout.workPane)
   assert.ok(!source.includes(`stage !== "task" && (`), "no folded Task strip");
   assert.match(source, /\{\(!wide \|\| fromSide\) && \(\s*<Box data-tq-from="" data-tq-task-section=""/);
-  assert.match(source, /const pane = workPane\(\{ stage, kind: t\?\.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas, picked: !!openStage \}\);/);
+  // ...neither half on a task waiting on a person (the owner, 2026-10-25): both fold to a line
+  assert.match(source, /const pane = waitFor && !openStage \? "" : workPane\(\{ stage, kind: t\?\.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas, picked: !!openStage \}\);/);
 });
 
 test("a general chat that has answered is agent state, not \"not started\"", () => {
@@ -106,7 +107,7 @@ test("closing the task never hides behind a fold, and a finished chat can be clo
   const bar = source.slice(source.indexOf('<Box data-tq-task-bar=""'), source.indexOf('labelOfRow("nat")}</Button>'));
   assert.ok(bar.includes('labelOfRow("done")}</Button>'), "the bar carries the done control");
   assert.ok(bar.includes("onClick={askFinish}"), "and it must run the same completion road (askFinish -> finish(\"done\"))");
-  assert.match(source, /const WorkflowHeading = \(\{ number, title, description, chip, tone, folded, onToggle, action, tools \}\)/);
+  assert.match(source, /const WorkflowHeading = \(\{ number, title, description, chip, tone, folded, onToggle, action, tools, quiet = false \}\)/);
   // ...and a general conversation is wrappable once its provider session is gone (server.py/wrapup.py, 2026-09-07)
   assert.match(source, /const canWrap = !!term \|\| !!detail\?\.transcript \|\| hasGeneralHistory/);
   assert.match(source, /conversation: generalStarted/);

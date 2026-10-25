@@ -827,7 +827,8 @@ class TerminalTests(unittest.TestCase):
         # characters alone and 1111 in a full run, where forty other tests have filled the store
         # and its temp-dir path joins the prompt. Its LENGTH is a property of the machine's temp
         # directory, not of the prompt, so it is not what this budget is about.
-        with mock.patch('taskuary.context.write', return_value=None):
+        # the browser line rides only on a machine with agent-browser installed, so it is the machine's, not the prompt's, too
+        with mock.patch('taskuary.context.write', return_value=None), mock.patch('taskuary.browserview.hint', return_value=''):
             seed = terminal.seed_text(server.store, tid)
         # Back to 1000. Switching the handbook on briefly pushed this to 1100 by adding a line
         # about how to write an entry - and a longer seed takes longer to type into a real TUI,

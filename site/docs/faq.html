@@ -57,7 +57,7 @@
 <div class="entry">
       <a class="page" href="./security">Security</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Security's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./security#the-risk-is-the-text-not-the-network">The risk is the text, not the network</a><a class="sec" href="./security#what-taskuary-does-today">What Taskuary does today</a><a class="sec" href="./security#a-strangers-task-runs-in-auto-mode">A stranger's task runs in auto mode</a><a class="sec" href="./security#what-it-does-not-do-yet">What it does not do yet</a><a class="sec" href="./security#what-you-can-set-today">What you can set today</a><a class="sec" href="./security#what-comes-next">What comes next</a></div>
+      <div class="secs" hidden><a class="sec" href="./security#the-risk-is-the-text-not-the-network">The risk is the text, not the network</a><a class="sec" href="./security#what-taskuary-does-today">What Taskuary does today</a><a class="sec" href="./security#what-an-agent-can-call">What an agent can call</a><a class="sec" href="./security#a-strangers-task-runs-in-auto-mode">A stranger's task runs in auto mode</a><a class="sec" href="./security#what-it-does-not-do-yet">What it does not do yet</a><a class="sec" href="./security#what-you-can-set-today">What you can set today</a><a class="sec" href="./security#what-comes-next">What comes next</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./assistant">Assistant buttons</a>
@@ -122,8 +122,10 @@ and cannot reach a real system.</p>
 the AI you chose. With a <a href="#do-i-need-to-buy-tokens">local model</a>, the AI calls never leave the machine.</p>
 <p>When an agent needs a website, it drives a real browser on your machine (the optional
 <code>agent-browser</code> tool), so it reaches whatever your machine can reach, over your network and VPN.
-The page shows live beside the agent&#39;s terminal. It never types a password or a 2FA code: you
-press <strong>Take over</strong>, sign in yourself, and hand it back. Sites it should only <em>read</em> can go through
+The page shows live beside the agent&#39;s terminal. The agent never sees a password or a 2FA code: you
+press <strong>Take over</strong> and sign in yourself, or Taskuary types a sign-in you gave it (and, if you kept
+the site&#39;s authenticator key, its code). A click that would pay, send or delete waits for your
+<strong>Approve</strong>. Sites it should only <em>read</em> can go through
 a search or reader connector instead, with no browser at all. See
 <a href="tasks-and-agents#when-the-agent-opens-a-browser">When the agent opens a browser</a>.</p>
 <h2 id="do-i-need-to-buy-tokens">Do I need to buy tokens?<a class="anchor" href="#do-i-need-to-buy-tokens" aria-label="Link to this section">#</a></h2>
@@ -189,7 +191,7 @@ model on it.</p>
 
     </article>
     <nav class="pager"><a class="pn prev" href="./settings"><span>Previous</span>Settings reference</a><a class="pn next" href="./troubleshooting"><span>Next</span>When something is wrong</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.34 · updated 2026-10-24</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.37 · updated 2026-10-25</p>
   </main>
 </div>
 <script src="./docs.js"></script>

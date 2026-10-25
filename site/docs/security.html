@@ -57,7 +57,7 @@
 <div class="entry on">
       <a class="page" href="./security" aria-current="page">Security</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide Security's sections"></button>
-      <div class="secs"><a class="sec" href="#the-risk-is-the-text-not-the-network" data-sec="the-risk-is-the-text-not-the-network">The risk is the text, not the network</a><a class="sec" href="#what-taskuary-does-today" data-sec="what-taskuary-does-today">What Taskuary does today</a><a class="sec" href="#a-strangers-task-runs-in-auto-mode" data-sec="a-strangers-task-runs-in-auto-mode">A stranger's task runs in auto mode</a><a class="sec" href="#what-it-does-not-do-yet" data-sec="what-it-does-not-do-yet">What it does not do yet</a><a class="sec" href="#what-you-can-set-today" data-sec="what-you-can-set-today">What you can set today</a><a class="sec" href="#what-comes-next" data-sec="what-comes-next">What comes next</a></div>
+      <div class="secs"><a class="sec" href="#the-risk-is-the-text-not-the-network" data-sec="the-risk-is-the-text-not-the-network">The risk is the text, not the network</a><a class="sec" href="#what-taskuary-does-today" data-sec="what-taskuary-does-today">What Taskuary does today</a><a class="sec" href="#what-an-agent-can-call" data-sec="what-an-agent-can-call">What an agent can call</a><a class="sec" href="#a-strangers-task-runs-in-auto-mode" data-sec="a-strangers-task-runs-in-auto-mode">A stranger's task runs in auto mode</a><a class="sec" href="#what-it-does-not-do-yet" data-sec="what-it-does-not-do-yet">What it does not do yet</a><a class="sec" href="#what-you-can-set-today" data-sec="what-you-can-set-today">What you can set today</a><a class="sec" href="#what-comes-next" data-sec="what-comes-next">What comes next</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./assistant">Assistant buttons</a>
@@ -159,6 +159,20 @@ decide whether to press Start. It is a warning, not a gate.</p>
 the recipient. It answers the message on file. Pushes, pull requests and tool runs an agent
 <em>proposes</em> are checked again when you approve them. Approving one never grants permission it did not
 already have.</p>
+<p><strong>A browser act that can&#39;t be undone waits for you.</strong> Every shell command a Claude Code session of
+Taskuary&#39;s runs is read before it runs. An <code>agent-browser</code> command that only looks passes. Any other
+goes to your AI with the page it would act on, and one that would pay, order, send, delete or submit
+for real is refused to the agent and put on the task for your <strong>Approve</strong>. Unsure, or no answer, is
+a hold too. With no AI connected, typing into a box passes, read from the command&#39;s own verb, and
+every other act waits. Approving runs that exact command, only while the browser is on the page it
+was held on.</p>
+<p><strong>The agent never holds a sign-in.</strong> The agent asks; Taskuary types the user name, password and
+authenticator code into the browser itself, over Chrome&#39;s own DevTools connection, only into the
+page&#39;s top document, only on the site the sign-in was saved for, checked again with the box focused.
+None of it is in a command line, a file, a prompt or a log, and the live view of the page pauses
+while it is typed. Saved sign-ins and authenticator keys are sealed with Windows DPAPI or the
+system keychain, and are not saved where neither exists. Each fill is recorded: the site, the task,
+whether it went in, never what was typed.</p>
 <p><strong>Agents have less authority than you in Taskuary&#39;s own interface.</strong> Each session runs with its own
 token, and the routes that send, approve or change settings refuse it. The app page does not carry
 your own token either: Taskuary opens your browser with a one-time key, <code>taskuary --link</code> makes a new
@@ -198,6 +212,37 @@ formatted text. A picture in that text could be a request carrying your data to 
 serves it, so the app loads pictures only from itself and shows any other picture as a link.</p>
 <p><strong>Credentials are scrubbed from prompts.</strong> A key or password pasted into a message is replaced before
 the text reaches any AI provider. The stored message keeps it, because it is your mail.</p>
+<h2 id="what-an-agent-can-call">What an agent can call<a class="anchor" href="#what-an-agent-can-call" aria-label="Link to this section">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Taskuary&#39;s own tools (search your saved mail and chats, read a message or attachment, tasks, people, the knowledge base, your calendar)</td>
+<td>They read. Claude and Codex sessions get them as the <code>taskuary</code> MCP server.</td>
+</tr>
+<tr>
+<td>A reply, an email, a GitHub comment, a post</td>
+<td>The agent proposes it. It waits on the task with a Send or Approve button.</td>
+</tr>
+<tr>
+<td>A connection that sends, posts, pays or places an order (LinkedIn, Bluesky, Mastodon, Robinhood, treg, an MCP tool its server does not mark read-only, a GraphQL mutation)</td>
+<td>It waits as a proposal at any permission level, even full. Your press runs it.</td>
+</tr>
+<tr>
+<td>A file saved to SharePoint or OneDrive</td>
+<td>It runs when the connection allows writing, and the agent says where the file went.</td>
+</tr>
+<tr>
+<td>Your own MCP servers in Claude and Codex</td>
+<td>The agent keeps them, except the tools that send mail, chat or comments. A tool its server marks read-only stays. A model judges each of the others, and a tool nobody has judged yet stays out. Your claude.ai connectors are read once from a short Claude start and judged the same way. <strong>Settings &gt; Agent permissions</strong> lists every tool left out, with why, and a Keep switch.</td>
+</tr>
+</tbody></table>
+<p><strong>This removes the send tools an agent is handed. It does not remove what the agent can do.</strong> A
+session with full permissions still runs as your Windows user and has a shell.</p>
 <h2 id="a-strangers-task-runs-in-auto-mode">A stranger&#39;s task runs in auto mode<a class="anchor" href="#a-strangers-task-runs-in-auto-mode" aria-label="Link to this section">#</a></h2>
 <p>Every task knows <strong>where its words came from</strong>: you, a trusted sender, or a stranger. The least trusted
 text on it decides, and a stranger who writes on your colleague&#39;s thread makes it a stranger&#39;s task.
@@ -240,6 +285,10 @@ not stop a model that is talked round. A trusted session also reads its context 
 the whole thread without marks.</li>
 <li><strong>A second data folder&#39;s Codex, Devin and Copilot sessions report no hook events.</strong> Only Claude
 Code takes hooks per session. Those CLIs&#39; status there comes from the screen and their own logs.</li>
+<li><strong>Only Claude Code&#39;s browser acts are held.</strong> Codex, Devin and Copilot hooks report but cannot
+refuse a call, so their browser acts are not held. Neither is a Claude session whose hook could
+not reach Taskuary (Taskuary closed), nor an agent that drives Chrome some way other than
+<code>agent-browser</code>.</li>
 <li><strong>Connections start at full permission.</strong> An agent can use a connection marked <em>tool</em> to do anything
 that connection can do, unless you narrow it.</li>
 <li><strong>Anything your own agents write for later can carry what they read.</strong> Hub entries and wall notes
@@ -266,7 +315,7 @@ prompt.</p>
 
     </article>
     <nav class="pager"><a class="pn prev" href="./tasks-and-agents"><span>Previous</span>Tasks and agents</a><a class="pn next" href="./assistant"><span>Next</span>Assistant buttons</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.34 · updated 2026-10-24</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.37 · updated 2026-10-25</p>
   </main>
 </div>
 <script src="./docs.js"></script>

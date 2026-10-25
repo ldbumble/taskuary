@@ -20,7 +20,7 @@ async function request(h, path, method = "GET", body) {
 const rail = (page) => page.$$eval("[data-tq-rail] .tq-pile-row", (els) => els
   .map((r) => ({ key: r.getAttribute("data-tq-key"), level: r.closest("[data-tq-run]")?.getAttribute("data-tq-run"),
     urgent: r.hasAttribute("data-tq-urgent"), label: r.querySelector(".card")?.getAttribute("aria-label") || "",
-    shade: getComputedStyle(r.querySelector(".card")).backgroundColor }))
+    shade: getComputedStyle(r.querySelector(".card")).backgroundColor, dot: getComputedStyle(r.querySelector(".rail i")).backgroundColor }))
   .filter((r) => r.key));
 const stamp = (s) => Date.parse(String(s || "").replace(" ", "T")) || 0;
 
@@ -44,9 +44,6 @@ test("an urgent task is shaded in its place under Tasks, with no Urgent heading,
   await request(harness, `/api/tasks/${byKey[mid.key].tid}`, "PATCH", { Priority: "urgent" });
   await page.waitForFunction((k) => document.querySelector(`[data-tq-rail] .tq-pile-row[data-tq-key="${k}"]`)?.hasAttribute("data-tq-urgent"),
     { timeout: 30000 }, mid.key).catch(async () => assert.fail(`the urgent task was never shaded: ${JSON.stringify(await rail(page))}`));
-  // ...and the shade itself: the card's background fades in (transition: background .15s), so a read in the same frame saw transparent
-  await page.waitForFunction((k) => { const c = document.querySelector(`[data-tq-rail] .tq-pile-row[data-tq-key="${k}"] .card`);
-    return c && getComputedStyle(c).backgroundColor !== "rgba(0, 0, 0, 0)"; }, { timeout: 5000 }, mid.key).catch(() => {});
 
   const after = await rail(page);
   assert.equal(await page.$("[data-tq-section-head=urgent]"), null, "an Urgent heading was drawn");
@@ -55,7 +52,9 @@ test("an urgent task is shaded in its place under Tasks, with no Urgent heading,
   const row = after.find((r) => r.key === mid.key);
   assert.equal(row.level, "task", "the urgent task left Tasks");
   assert.match(row.label, /urgent$/, "the urgent row does not say urgent to a screen reader");
-  assert.notEqual(row.shade, "rgba(0, 0, 0, 0)", "the urgent row is not shaded");
+  // ...marked by its dot, not a shaded row: a shade read as the selected row (the owner, 2026-10-25)
+  assert.equal(row.dot, "rgb(138, 54, 70)", "the urgent row's dot is not the attention colour");
+  assert.equal(row.shade, "rgba(0, 0, 0, 0)", "the urgent row is shaded like a selected one");
   assert.deepEqual(after.filter((r) => r.urgent).map((r) => r.key), [mid.key], "only the marked task is shaded");
   // ...and IN ITS PLACE: the rows of Tasks keep their order
   const kept = (rows) => rows.filter((r) => r.level === "task").map((r) => r.key).filter((k) => before.some((r) => r.key === k) && after.some((r) => r.key === k));

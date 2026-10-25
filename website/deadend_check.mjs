@@ -418,7 +418,7 @@ const readPage = (page) => page.evaluate(() => {
     covered: !(hit && (hit === litEl || litEl.contains(hit))) } : null;
   // From is the sender's own words, quoted (the two-column page, 0.3.9.21): a mail that says "Traceback ... null" is the ask, not
   // our jargon - so the words check reads the card without it, and everything Taskuary writes stays held to the list
-  const quoted = card ? [...card.querySelectorAll("[data-tq-from], [data-tq-from-line]")].map((el) => el.innerText).filter(Boolean) : [];
+  const quoted = card ? [...card.querySelectorAll("[data-tq-from], [data-tq-from-line], [data-tq-quoted]")].map((el) => el.innerText).filter(Boolean) : [];
   const own = quoted.reduce((t, q) => t.split(q).join(" "), card?.innerText || "");
   const read = [own, row?.innerText || "", adviceEl?.innerText || "", ...errs].join("\n");
   const pops = [...document.querySelectorAll('.MuiPopover-paper, [role="dialog"], .MuiDrawer-paper')].filter(vis).map((p) => p.innerText.replace(/\s+/g, " ").slice(0, 80));

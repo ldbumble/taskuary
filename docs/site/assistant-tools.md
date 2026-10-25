@@ -9,7 +9,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 
 | Bucket | What it is for | Tools, and what each needs |
 |---|---|---|
-| **table** | decide about the item on the table | reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, accept_invite, decline_invite, propose_time, find_time, elsewhere |
+| **table** | decide about the item on the table | reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, accept_invite, decline_invite, propose_time, find_time, prepare, elsewhere |
 | **task** | change any task - the table's, or one named by ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?, note?), task.checklist(add?, items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?), review.approve, review.reject |
 | **agents** | start, continue, answer or stop a task's agent; teach where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value), task.ask_agent(who, text) |
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text) |
@@ -190,6 +190,14 @@ The "Propose a new time" button: propose another time for the invite from its fr
 ### `find_time`
 
 The "Find a time" button: free times for the meeting a thread asks for - the pick drafted as an invite for their Send.
+
+<p class="runs">Brings up its button for you to press.</p>
+
+### `prepare`
+
+The "Prepare" button: a meeting on the table only: an agent researches its people and subject through the owner's saved mail and chats and files a short brief on the meeting's task. Nothing is sent.
+
+- `text` - anything the owner wants it to look into
 
 <p class="runs">Brings up its button for you to press.</p>
 

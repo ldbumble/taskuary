@@ -1029,6 +1029,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // read as the sender's voice ("Assistant for Backend Monitoring flags…") with the point cut off
   // ...never Taskuary's own brief to the agent (ownwork.BRIEFED: a playbook built with AI) - its title is the ask (taskAsk)
   const askText = (t?.SourceRef === "assistant:playbook" ? "" : cleanText(verdict?.summary || t?.Summary || opener?.ReadText || opener?.BodyText || "")) || taskAsk;
+  const askQuoted = !verdict?.summary && !t?.Summary && !!(opener?.ReadText || opener?.BodyText);   // the sender's words, not triage's
   // a task that came from ONE message reads it whole from the start, as an email does; a row closed by hand stays closed
   // ...unless the ask under the title IS that message's words (the task-view cleanup, owner-approved 2026-10-25): then From keeps its
   // one row, and the words are read once
@@ -1675,7 +1676,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   provenance line moved into the card (Came from, under its messages), where you go
                   and look at it rather than read it every time. */}
               <Box data-tq-task-head="" sx={{ px: liveSession ? 1.5 : 1.75, py: liveSession ? 0.7 : 1,
-                bgcolor: "#fff", borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+                bgcolor: "#fff", borderBottom: !wide && (waitFor || askText) ? 0 : `1px solid ${BORDER}`, flexShrink: 0 }}>
                 {/* on a phone the strip WRAPS: ref and title keep the first line, the controls take the next - one line
                     pushed Next, Expand and the X off the right edge (the canvas redesign's phone pass, 2026-09-29) */}
                 {/* ...only while there ARE controls to wrap. On the assistant's canvas there are none up here, and the strip still
@@ -1741,15 +1742,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     <IconButton aria-label={sessionView ? "Back to task" : "Close task"} size="small" onClick={() => (sessionView ? setPeek(true) : dismiss())}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
                   </Tooltip>
                 </Box>
+              </Box>
                 {/* THE ASK LEADS, UNDER THE TITLE AND ACROSS BOTH COLUMNS (the task-view cleanup, owner-approved 2026-10-25): what is wanted is
                     read first, before where it came from or what to do about it - and a task handed to a person opens on who it waits on.
-                    Where the work takes the whole width (an agent ran) the ask stays in From, over the agent's room. */}
-                {!wide && (waitFor || askText) && <Box data-tq-ask="" sx={{ mt: 0.5, minWidth: 0, maxWidth: "92ch" }}>
+                    Where the work takes the whole width (an agent ran) the ask stays in From, over the agent's room. It is its own band under the
+                    header, not a second line OF it: the header stays one row (the dead-end walk's HEAD), and an ask that is the sender's own words
+                    is marked quoted, so a mail that says "Traceback ... null" is read as theirs, not as our jargon (WORDS) */}
+                {!wide && (waitFor || askText) && <Box data-tq-ask="" data-tq-quoted={askQuoted ? "" : undefined}
+                  sx={{ px: 1.75, pt: 0, pb: 1, mt: -0.5, bgcolor: "#fff", borderBottom: `1px solid ${BORDER}`, flexShrink: 0, minWidth: 0 }}><Box sx={{ maxWidth: "92ch" }}>
                   {waitFor && <Typography data-tq-waiting-on="" sx={{ color: INK, fontSize: 13.5, fontWeight: 600, lineHeight: 1.45 }}>{waitFor.line}</Typography>}
                   {askText && !(waitFor && sameWords(askText, t.Title)) && <Typography title={askText} sx={{ color: waitFor ? DIM : INK, fontSize: 13.5, lineHeight: 1.5,
                     overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{askText}</Typography>}
-                </Box>}
-              </Box>
+                </Box></Box>}
               {/* a flex column so the terminal takes exactly what is left between the strip above and the
                   waiting room below - a fixed-height formula clipped its bottom line on shorter screens */}
               {/* SHADED BUT FOR THE FOCUS (the owner, 2026-10-25): with no agent live the body takes a warm shade and only the section to act

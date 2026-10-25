@@ -173,27 +173,21 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
     await cdp.detach();
   });
 
-  // ...and AN AGENT THAT HAS ACTED keeps the whole width (the owner, 2026-10-22): its Result alone, From the folded line over it
-  await t.test("an agent that stopped and saved: its Result has the whole width, From folded over it", async () => {
+  // ...and AN AGENT THAT HAS ACTED is back in two columns (the owner, 2026-10-25, reversing the 2026-10-22 fold for the states with no
+  // agent live): Came from on the left, its Result the one white section on the shaded body, Close out under it on the shade
+  await t.test("an agent that stopped and saved: two columns, its Result the white focus beside Came from", async () => {
     const made = await post(page, "/api/fixture/task/coding-saved");
     assert.ok(made.taskId, JSON.stringify(made));
     await open(page, made.taskId);
     await page.waitForSelector("[data-tq-work] [data-tq-result]", { timeout: 20000 });
     const l = await layout(page);
-    assert.equal(l.layout, "full");
-    assert.equal(l.from, null, "no From column beside the Result");
-    assert.match(l.line, /^From\s*\S/, `From folded to one line: "${l.line}"`);
-    assert.equal(await page.$eval("[data-tq-from-line]", (e) => e.getAttribute("aria-expanded")), "false", "closed by default");
-    const view = await page.evaluate(() => document.querySelector("[data-tq-task-page] [data-tq-task-head]").parentElement.getBoundingClientRect().width);
-    const result = () => page.$eval("[data-tq-result]", (e) => { const r = e.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }; });
-    const before = await result();
-    assert.ok(before.w / view > 0.8, `the Result has the whole width (${Math.round(before.w / view * 100)}%)`);
-    await page.click("[data-tq-from-line]");
-    await page.waitForSelector("[data-tq-from-side]", { visible: true, timeout: 5000 });
-    assert.match(await page.$eval("[data-tq-from-side]", (e) => e.innerText), /Came from/, "the same From every other task shows");
-    assert.deepEqual(await result(), before, "the sidebar is laid over the Result, which keeps its size and place");
-    await page.click("[data-tq-from-close]");
-    await page.waitForFunction(() => !document.querySelector("[data-tq-from-side]"), { timeout: 5000 });
+    assert.equal(l.layout, "columns");
+    assert.ok(l.from && l.work && l.from.right <= l.work.x + 1, `Came from beside the Result, on its left: ${JSON.stringify(l)}`);
+    assert.equal(await page.$("[data-tq-from-line]"), null, "no folded From line: From is its column");
+    const shade = await page.evaluate(() => ({ focus: [...document.querySelectorAll("[data-tq-focus]")].map((e) => (e.querySelector("[data-tq-result]") ? "result" : e.matches("[data-tq-closeout]") ? "closeout" : "other")),
+      body: getComputedStyle(document.querySelector("[data-tq-work]").closest("[data-tq-columns]").parentElement).backgroundColor }));
+    assert.deepEqual(shade.focus, ["result"], "the Result is the one white section");
+    assert.equal(shade.body, "rgb(245, 242, 237)", "the body is shaded");
     assert.ok(await page.$("[data-tq-work] [data-tq-closeout]"), "Close out stays under the Result");
     assert.equal(l.statusKey, "saved");
     assert.match(l.status, /stopped and saved$/);
@@ -215,7 +209,7 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
   // the agent report/close out"): a task the owner made, its agent stopped and saved and its write-up still running - the card had
   // shrunk to its words (~300px), the Result folded to two lines, the From sidebar cut off, and Close out offered the advice for an
   // open task nobody sent ("Work it, or write what you found") with a "reply · not available" pill
-  await t.test("a saved agent on a task nobody sent: its Result open at full width, the card its own height, From full height, no empty reply section", async () => {
+  await t.test("a saved agent on a task nobody sent: its Result open beside Came from, the card its own height, no empty reply section", async () => {
     const made = await post(page, "/api/fixture/task/coding-saved", { mine: true, writing: true });
     assert.ok(made.taskId, JSON.stringify(made));
     await open(page, made.taskId);
@@ -230,10 +224,8 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
       const sc = [...v.querySelectorAll("*")].find((e) => e.scrollHeight > e.clientHeight + 2 && getComputedStyle(e).overflowY === "auto");
       return { scrolls: !!sc }; }, String(made.taskId));
     assert.ok(fit.scrolls || item.h < area.h * 0.98, `no blank under the task (${Math.round(item.h)}px of ${Math.round(area.h)}px)`);
-    const view = await page.evaluate(() => document.querySelector("[data-tq-task-page] [data-tq-task-head]").parentElement.getBoundingClientRect().width);
     const result = await box("[data-tq-result]");
-    assert.ok(result.w / view > 0.8, `the Result has the whole width (${Math.round(result.w / view * 100)}%)`);
-    assert.equal((await layout(page)).layout, "full");
+    assert.equal((await layout(page)).layout, "columns", "two columns with no agent live (2026-10-25)");
     // the write-up's progress is a line of the Result, under it - not a box of its own in Close out
     const line = await box("[data-tq-writeup-at=result]");
     assert.ok(line.y >= result.bottom, "the write-up line sits under the Result");
@@ -244,18 +236,9 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
     assert.doesNotMatch(text, /Nobody sent this one/, "no advice for an open task under a Result");
     assert.doesNotMatch(text, /not available/i, "no reply pill where no reply exists");
     assert.equal(await page.$eval("[data-tq-closeout]", (e) => e.innerText.trim()), "Close out", "folded under the Result, Close out is its heading");
-    // From opens the full height of the card and scrolls inside itself
-    await page.click("[data-tq-from-line]");
-    await page.waitForSelector("[data-tq-from-side]", { visible: true, timeout: 5000 });
-    const side = await box("[data-tq-from-side]"), steps = await page.$eval("[data-tq-from-side]", (e) => {
-      const p = e.offsetParent.getBoundingClientRect(); return { bottom: p.bottom, overflow: getComputedStyle(e).overflowY }; });
-    const head = await box("[data-tq-from-line]");
-    assert.ok(Math.abs(side.y - head.bottom) < 4 && Math.abs(side.bottom - steps.bottom) < 4, `From runs from its line to the card's foot: ${JSON.stringify({ side, steps, head })}`);
-    assert.ok(side.h >= area.h * 0.6, `From opens the card to the canvas's height, not cut off (${Math.round(side.h)}px of ${Math.round(area.h)}px)`);
-    assert.equal(steps.overflow, "auto", "From scrolls inside itself");
-    if (process.env.TASKUARY_SHOTS) await page.screenshot({ path: `${process.env.TASKUARY_SHOTS}/task-page-saved-mine-from.png` });
-    await page.click("[data-tq-from-close]");
-    await page.waitForFunction(() => !document.querySelector("[data-tq-from-side]"), { timeout: 5000 });
+    // From is its own column beside the Result now, scrolling on its own (2026-10-25: the sidebar is a live session's alone)
+    assert.equal(await page.$("[data-tq-from-line]"), null);
+    assert.equal(await page.$eval("[data-tq-from]", (e) => getComputedStyle(e).overflowY), "auto", "From scrolls inside itself");
     // ...and opened by hand, Close out says what closes it - still no advice and no pill - and the write-up stays the Result's line
     await page.$eval('[data-tq-closeout] [data-tq-step="3"]', (dot) => dot.parentElement.click());
     await page.waitForFunction(() => /Mark done closes it, or close it with a note\./.test(document.querySelector("[data-tq-closeout]")?.innerText || ""), { timeout: 5000 });

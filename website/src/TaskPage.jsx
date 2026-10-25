@@ -81,7 +81,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { adviceKeyFor, suggestion } from "./advice.js";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
-import { CLOSE_BY_HAND, closeOut, fromLine as fromLineOf, layoutOf, sameWords, waitingOn, workPane } from "./taskLayout.js";
+import { CLOSE_BY_HAND, closeOut, focusOf, fromLine as fromLineOf, layoutOf, sameWords, waitingOn, workPane } from "./taskLayout.js";
 import { taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
 import { ASK_TAG } from "./newTask.js";
@@ -213,6 +213,10 @@ const COLUMNS = { display: "grid", gridTemplateColumns: "minmax(0, 1fr)", rowGap
     "& > [data-tq-from]": { pr: 2.5, maxHeight: "max(420px, calc(var(--tq-work-h, 280px) * 1.5))" },
     "& > [data-tq-from] [data-tq-chat-thread], & > [data-tq-from] [data-tq-thread-box]": { maxHeight: "none", overflowY: "visible" },
     "& > [data-tq-work]": { pl: 2.5, borderLeft: `1px solid ${BORDER}` } } };
+// THE SHADE AND THE FOCUS (the owner, 2026-10-25: "shading for what to focus on"): the card's body a warm shade, the one section to act on
+// white with a hairline - no heavy shadow, just white against the shade
+const SHADE = "#f5f2ed", FOCUS_EDGE = "#e4ded4";
+const FOCUS = { bgcolor: "#fff", border: `1px solid ${FOCUS_EDGE}`, borderRadius: "10px", boxShadow: "0 1px 2px rgba(40, 30, 20, 0.04)", px: 2, py: 1.5 };
 // FROM AS A SIDEBAR while an agent works (item 6, the owner 2026-10-21): laid OVER the agent's left edge - absolutely placed in the steps
 // box, so nothing under it moves or resizes - from under the folded line to the foot, scrolling on its own
 const FROM_SIDE = (top) => ({ position: "absolute", top, left: 0, bottom: 0, width: "min(420px, 88%)", zIndex: 6, overflowY: "auto",
@@ -1139,8 +1143,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and THE WORK TAKES THE WHOLE WIDTH once an agent has acted (the owner, 2026-10-22: "on a regular agent that is completed we should
   // also only show the agent result with the From expandable over the top"): working or waiting, finished with its Result, or failed
   // with its Try again - From folds to its one line over it. Two columns only where no agent ever ran (taskLayout.layoutOf).
-  const layout = layoutOf({ sessionView, result: resultShown, failed: failedRun }), wide = layout === "full";
-  const settled = wide && !term?.alive;   // the agent acted and is gone: its Result, or the run that failed
+  const layout = layoutOf({ sessionView }), wide = layout === "full";
+  const settled = (resultShown || failedRun) && !term?.alive;   // the agent acted and is gone: its Result, or the run that failed
   const replyState = replyPhase(detail?.reviews || []);
   // ONE question per page. A running session is itself the agent stage, so it is never folded; the
   // hand-picked stage wins over the computed one until you leave the task (start an agent on a task
@@ -1179,6 +1183,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const storyAt = storyPlace(news ? null : story, { open: pane === "agent" && !sessionView, hasRecord });
   // the Agent work row with nothing in it: no agent at work, none ran, no story to tell, and not the open half
   const agentEmpty = !term?.alive && !wide && pane !== "agent" && !hasRecord && !["line", "story", "summary"].includes(storyAt);
+  // the one white section on the shaded body (taskLayout.focusOf); a live session has no shade and no focus - it is the page
+  const focus = focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, pane });
+  const chatBelow = focus === "agent" && workspaceMode === "general" && pane === "agent" && !liveSession;   // its chat joins the focus under it
   // A START THAT STOPPED ON "WHICH REPOSITORY?" (funnel.HELD_REPO): the chip says so and the pick resumes the start, whichever
   // chip you press (the owner, 2026-10-12: "if i don't fill it out it should warn me at least?")
   const heldRepo = String(t?.Tags || "").split(/[\s,]+/).includes("held:repo");
@@ -1732,7 +1739,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               </Box>
               {/* a flex column so the terminal takes exactly what is left between the strip above and the
                   waiting room below - a fixed-height formula clipped its bottom line on shorter screens */}
-              <Box ref={stepsBox} sx={{ px: liveSession ? 1 : { xs: 1.25, sm: 1.5 }, py: liveSession ? 0.65 : 1.25,
+              {/* SHADED BUT FOR THE FOCUS (the owner, 2026-10-25): with no agent live the body takes a warm shade and only the section to act
+                  on is white (FOCUS); the header stays white, and a live session's screen is exactly as it was */}
+              <Box ref={stepsBox} sx={{ px: liveSession ? 1 : { xs: 1.25, sm: 1.5 }, py: liveSession ? 0.65 : 1.25, ...(focus ? { bgcolor: SHADE } : {}),
                 overflowY: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", containerType: "inline-size", position: "relative" }}>
                 {/* FROM, FOLDED TO ONE LINE while an agent works, or once it has finished or failed (`wide`, 2026-10-22) - owner-approved
                     2026-10-21: the work has the whole width and the terminal is never covered or squeezed. The line opens From as a
@@ -1980,7 +1989,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {/* THE WORK COLUMN: the agent and the reply - the agent's own pane, full width while it works */}
                 {/* ...ONCE AN AGENT HAS ACTED (`settled`: its Result, or the run that failed) the work shrinks to the card and the agent's part scrolls in it,
                     so Close out stays on screen under it at a laptop (the owner, 2026-10-25) - never past a report or a diff */}
-                <Box ref={workBox} data-tq-work="" sx={sessionView ? { display: "contents" } : { minWidth: 0, display: "flex", flexDirection: "column", ...(settled ? { flex: "0 1 auto", minHeight: 0 } : {}) }}>
+                <Box ref={workBox} data-tq-work="" sx={sessionView ? { display: "contents" } : { minWidth: 0, display: "flex", flexDirection: "column", containerType: "inline-size", ...(settled ? { flex: "0 1 auto", minHeight: 0 } : {}) }}>
                 {/* ONE SHORT LINE, LIVE OR NOT. A running session has always been a single strip -
                     heading, chip, controls - while the stopped card answered with a heading, a
                     sentence under it, and a row of buttons under that: three lines for the same
@@ -1991,12 +2000,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {!liveSession && listRow?.State === "queued" && listRow?.Queued && <Box sx={{ mb: 1 }}>
                   <QueuedStart taskId={t.TaskId} queued={listRow.Queued} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
                 </Box>}
-                {!codeRun && <Box ref={agentHead} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
+                {!codeRun && <Box ref={agentHead} data-tq-focus={focus === "agent" ? "" : undefined} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
                   px: liveSession ? 1 : sessionView ? 1.5 : 0, py: liveSession ? 0.55 : pane === "agent" ? (agentBar ? 0.8 : 1.5) : 1.1,
                   ...(sessionView ? {} : { borderTop: 0, pt: 0 }),
                   flexShrink: settled ? 1 : 0, ...(settled ? { minHeight: 0, overflowY: "auto", scrollbarWidth: "thin" } : {}),
                   display: liveSession ? "flex" : "block", alignItems: "center",
-                  gap: liveSession ? 1 : 0, flexWrap: "wrap" }}>
+                  gap: liveSession ? 1 : 0, flexWrap: "wrap",
+                  ...(focus === "agent" ? { ...FOCUS, ...(chatBelow ? { borderBottom: 0, borderRadius: "10px 10px 0 0", pb: 0.5 } : {}) } : {}) }}>
                   <Box sx={{ minWidth: 0, flex: liveSession ? "0 1 auto" : "initial" }}>
                     {/* the agent by NAME, not by which binary is running: "Agent running · <CLI>
                         · <profile> (your CLI)" named a product and a profile (the owner, 2026-09-08) */}
@@ -2013,7 +2023,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         : `${agentName(t)} is working`}
                     /* ...and once the agent has acted - its Result, or the run that failed - its "stopped" or "failed" chip is the header's pill
                        again (the owner, 2026-10-25); a working agent's chip stays where it is */
-                    chip={<>{wide && !term?.alive ? null : story && STORY_CHIP[story.kind] ? <StoryChip kind={story.kind} text={STORY_CHIP[story.kind]} />
+                    chip={<>{settled ? null : story && STORY_CHIP[story.kind] ? <StoryChip kind={story.kind} text={STORY_CHIP[story.kind]} />
                       : agentState ? <LifecycleChip kind="agent" phase={agentState} compact /> : null}{resultShown && shareBadge}</>} tone={PALETTE.sage} {...stageProps("agent")}
                     tools={inRow && workspaceMode === "general" && (liveSession || pane === "agent")
                       ? <Box ref={setChatTools} sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }} /> : null}
@@ -2187,7 +2197,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 },
                     // ...except while its agent is starting and has said nothing: the room is that one line (GeneralWorkspace `quiet`)
                     "&:has([data-tq-starting])": { flex: "0 0 auto", minHeight: 0, "& > *": { flex: "0 0 auto" } } }
-                    : { flex: "0 1 auto", minHeight: 0, mb: canvas ? 1 : 0, display: "flex", flexDirection: "column", "& > *": { flex: "0 1 auto", minHeight: 0 } }}>
+                    : { flex: "0 1 auto", minHeight: 0, mb: canvas ? 1 : 0, display: "flex", flexDirection: "column", "& > *": { flex: "0 1 auto", minHeight: 0 },
+                      ...(chatBelow ? { bgcolor: "#fff", border: `1px solid ${FOCUS_EDGE}`, borderTop: 0, borderRadius: "0 0 10px 10px", overflow: "hidden" } : {}) }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession}
                         onAnswered={() => { findTerm(selected); onChanged?.(); }}
@@ -2250,7 +2261,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
 
                 {/* ...the draft a little heavier than the words round it (the owner, 2026-10-25: "subtly focus the reply"): the eye lands on what goes out */}
                 {!sessionView && <Box ref={closeOutRef} data-tq-closeout="" sx={{ ...card, ...step, borderTop: 0, mt: 1, px: 0, py: pane === "reply" ? 1.25 : 1, flexShrink: 0,
-                  "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }}>
+                  ...(focus === "reply" ? { ...FOCUS, mt: 1.25 } : {}),
+                  "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }} data-tq-focus={focus === "reply" ? "" : undefined}>
                   {/* CLOSE OUT, not Reply (the owner, 2026-09-27): what finishes a task is not always a reply - a pull
                       request merges, an issue closes. The label only: the stage's key is still "reply" everywhere. */}
                   <WorkflowHeading number="3" title="Close out"

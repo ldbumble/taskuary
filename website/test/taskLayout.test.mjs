@@ -1,7 +1,7 @@
 // THE TASK PAGE'S LAYOUT (the redesign, owner-approved 2026-10-21): From | Work, and the work alone - full width - while an agent works
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CLOSE_BY_HAND, closeOut, fromLine, holderName, layoutOf, sameWords, waitingOn, workPane } from "../src/taskLayout.js";
+import { CLOSE_BY_HAND, closeOut, focusOf, fromLine, holderName, layoutOf, sameWords, waitingOn, workPane } from "../src/taskLayout.js";
 import { taskSource } from "./taskSource.mjs";
 
 test("two columns at rest, the whole width while an agent works - coding or general, working or waiting on you", () => {
@@ -10,10 +10,11 @@ test("two columns at rest, the whole width while an agent works - coding or gene
   const src = taskSource();
   // the page's own "the session fills the page" decides it: a live session (term.alive - a terminal or a general agent's chat)
   assert.match(src, /const sessionView = liveSession && !peek;/);
-  assert.match(src, /const layout = layoutOf\(\{ sessionView, result: resultShown, failed: failedRun \}\), wide = layout === "full";/);
+  // ...and only a live session since 2026-10-25 (the owner: "keep the 2 columns for when agent is not working")
+  assert.match(src, /const layout = layoutOf\(\{ sessionView \}\), wide = layout === "full";/);
   assert.match(src, /<Box ref=\{columnsBox\} data-tq-columns="" data-tq-layout=\{layout\} sx=\{wide \? \{ display: "contents" \} : COLUMNS\}>/);
   // ...the work column steps aside (display: contents) so the terminal stays a flex child of the page, sized as it always was
-  assert.match(src, /<Box ref=\{workBox\} data-tq-work="" sx=\{sessionView \? \{ display: "contents" \} : \{ minWidth: 0, display: "flex", flexDirection: "column", \.\.\.\(settled \? \{ flex: "0 1 auto", minHeight: 0 \} : \{\}\) \}\}>/);
+  assert.match(src, /<Box ref=\{workBox\} data-tq-work="" sx=\{sessionView \? \{ display: "contents" \} : \{ minWidth: 0, display: "flex", flexDirection: "column", containerType: "inline-size", \.\.\.\(settled \? \{ flex: "0 1 auto", minHeight: 0 \} : \{\}\) \}\}>/);
   // and From is one line over it, which opens From as a sidebar laid OVER the agent's left edge (item 6, the owner 2026-10-21):
   // absolutely placed, so the pane underneath is never resized; closed by default, by the line, its X or Escape
   assert.match(src, /\{wide && <Box component="button" type="button" ref=\{fromLineRef\} data-tq-from-line=""\s+title=\{fromSide \? "Hide where this came from" : "Show where this came from"\}\s+aria-expanded=\{fromSide\} aria-controls="tq-from-side" onClick=\{\(\) => setFromSide\(\(v\) => !v\)\}/);
@@ -25,20 +26,27 @@ test("two columns at rest, the whole width while an agent works - coding or gene
   assert.match(src, /useEffect\(\(\) => \{ if \(!sessionView\) setFromSide\(false\); \}, \[sessionView\]\);/);
 });
 
-// ...AND ONCE AN AGENT HAS ACTED (the owner, 2026-10-22): its Result, or its failure, keeps the whole width with From folded over it;
-// two columns only where no agent ran or none was ever started
-test("the layout: columns with no agent or one never started, the whole width while working, with a Result, or failed", () => {
+// THE WHOLE WIDTH IS A LIVE SESSION'S ALONE (the owner, 2026-10-25, reversing the 2026-10-22 fold for the states with no agent live): a
+// finished, failed or closed agent is back in two columns - its Result the white focus on the right, Close out under it on the shade
+test("the layout: two columns whenever no agent is live - a Result and a failure too; the whole width only while working or waiting", () => {
   const cases = [
     ["no agent at all", {}, "columns"],
-    ["never started (handed or queued, nothing run)", { sessionView: false, result: false, failed: false }, "columns"],
+    ["never started (handed or queued, nothing run)", { sessionView: false }, "columns"],
     ["working or waiting on you", { sessionView: true }, "full"],
-    ["finished, stopped or saved with its Result", { result: true }, "full"],
-    ["failed, with its reason and Try again", { failed: true }, "full"],
+    ["finished, stopped or saved with its Result", { result: true }, "columns"],
+    ["failed, with its reason and Try again", { failed: true }, "columns"],
   ];
   for (const [what, page, want] of cases) assert.equal(layoutOf(page), want, what);
-  // the page reads it once, after its Result and its failure are known, and the From line, its sidebar and its X all follow it
+  // the focus: the Result (or the failed run) once an agent acted, else the open half - the reply for the rest; none while live
+  assert.equal(focusOf({ result: true, pane: "reply" }), "agent");
+  assert.equal(focusOf({ failed: true }), "agent");
+  assert.equal(focusOf({ pane: "reply" }), "reply");
+  assert.equal(focusOf({ pane: "" }), "reply", "a task waiting on a person: Close out");
+  assert.equal(focusOf({ pane: "agent" }), "agent");
+  assert.equal(focusOf({ live: true, result: true }), null);
+  // the page reads its Result and its failure before the focus, and the From line, its sidebar and its X follow the layout
   const src = taskSource(), at = (re) => src.search(re);
-  assert.ok(at(/const resultShown = /) < at(/const layout = layoutOf\(/) && at(/const failedRun = /) < at(/const layout = layoutOf\(/));
+  assert.ok(at(/const resultShown = /) < at(/const focus = focusOf\(/) && at(/const failedRun = /) < at(/const focus = focusOf\(/));
   // the "From" title and its X head only the sidebar (2026-10-22: the columns have no title over From)
   assert.match(src, /\{wide && <Box sx=\{\{ display: "flex", alignItems: "center" \}\}>\s+<Typography sx=\{\{ \.\.\.label, flex: 1 \}\}>From<\/Typography>\s+<IconButton size="small" aria-label="Close From" data-tq-from-close=""/);
   assert.match(src, /onClickCapture=\{wide \? undefined : phoneFromTap\}/);

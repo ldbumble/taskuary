@@ -216,6 +216,8 @@ async def _lifespan(_app):
     learn.migrate(store)           # one section per subject, once (2026-10-25) - before anything else writes the doc
     try:                           # ...and the old four priorities as the new three, once (2026-10-25)
         if (moved := store.migrate_priorities()): logger.info(f'priorities renamed to regular / important / urgent: {moved}')
+        from . import dashboards                                   # ...and a saved dashboard's cuts on them
+        if (n := dashboards.migrate_priorities(store)): logger.info(f'{n} dashboard(s) now cut on regular / important / urgent')
     except Exception as e: logger.warning(f'priority rename skipped: {e}')
     learn.note_verdicts(store)     # the evidence block in LEARNED.md tracks the verdict table
     try: blackboard.schedule_due(store)   # a retry that was backing off when the app closed is re-armed, not reset (PW-085)

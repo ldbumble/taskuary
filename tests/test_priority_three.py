@@ -113,3 +113,44 @@ def test_the_guide_asks_for_the_three_and_binds_them():
     assert 'priority' in triage.verdict_schema()['schema']['required'] and 'urgent' not in triage.verdict_schema()['schema']['properties']
     assert triage.verdict_schema()['schema']['properties']['priority']['enum'] == ['regular', 'important', 'urgent']
     for w in ('"urgent"', '"important"', '"regular"', 'priority_why', 'what a sender says about themselves'): assert w in triage.SHIPPED
+
+
+# ── the owner's rulings on the three, 2026-10-25 ───────────────────────────────────────────────────────────────────────────
+def test_the_phone_card_says_important_the_way_urgent_says_itself():
+    from taskuary import remote_assistant as ra
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Q4 hiring plan', 'Kind': 'task', 'Status': 'open', 'Priority': 'important'}, 'triage')
+    item = {'kind': 'asked', 'lane': 'asked', 'tid': tid, 'ref': 'TQ-0001', 'who': 'Erin Blake', 'channel': 'email', 'priority': 'important'}
+    assert '(important)' in ra.story_block(s, item).split('\n')[0]
+    assert '(important)' not in ra.story_block(s, {**item, 'priority': 'regular'})
+    assert '(important)' in ra.story_block(s, {**item, 'priority': 'high'}).split('\n')[0], 'a task saved as high reads important'
+
+
+def test_a_saved_dashboard_cuts_on_the_three_and_a_second_run_changes_nothing():
+    from taskuary import dashboards as d
+    s = MemoryStore()
+    spec = {'type': 'dashboard', 'title': 'Mine',
+            'sources': [{'key': 't', 'type': 'taskuary_data', 'dataset': 'tasks'}, {'key': 'q', 'type': 'sqlite', 'db': 'x.db', 'query': 'select 1'}],
+            'components': [{'kind': 'stat', 'source': 't', 'where': {'priority': 'high', 'state': 'open'}},
+                           {'kind': 'bar', 'source': 't', 'x': 'priority', 'order': ['low', 'normal', 'high', 'urgent']},
+                           {'kind': 'stat', 'source': 'q', 'where': {'priority': 'high'}}]}
+    sid = s.save_source({'Channel': 'report', 'Address': 'Mine', 'ConfigJson': json.dumps(spec)}, 'owner')
+    assert d.migrate_priorities(s) == 1
+    c = d.cfg_of(s.get_source(sid))['components']
+    assert c[0]['where'] == {'priority': 'important', 'state': 'open'}
+    assert c[1]['order'] == ['regular', 'important', 'urgent'], 'low and normal both land on regular, once'
+    assert c[2]['where'] == {'priority': 'high'}, "another system's priority column keeps its own words"
+    assert d.migrate_priorities(s) == 0
+
+
+def test_a_workflow_step_opens_its_task_in_one_of_the_three():
+    from taskuary import flow
+    s, ctx = MemoryStore(), flow.context({'title': 'Weekly'}, 'manual', None)
+    for said, lands in (('important', 'important'), ('high', 'important'), (None, 'regular')):
+        rec = flow.run_step(s, {'id': 's1', 'kind': 'task', 'title': 'Check the bills', **({'priority': said} if said else {})}, ctx, None)
+        assert s.get_task(rec['task_id'])['Priority'] == lands
+    ok, why = flow.validate(s, [{'id': 's1', 'kind': 'task', 'title': 't', 'priority': 'critical'}])
+    assert not ok and 'regular, important, urgent' in why
+    from pathlib import Path
+    ui = (Path(__file__).resolve().parents[1] / 'website' / 'src' / 'WorkflowSteps.jsx').read_text(encoding='utf-8')
+    assert 'PRIORITIES.map((p)' in ui and 'value={level(step.priority)}' in ui

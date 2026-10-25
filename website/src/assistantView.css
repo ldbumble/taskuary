@@ -101,9 +101,8 @@
 .tq-pile-row.urgent .card { background: rgba(138, 54, 70, .06); box-shadow: inset 2px 0 0 rgba(138, 54, 70, .45); }
 .tq-pile-row.urgent .card:hover { background: rgba(138, 54, 70, .1); }
 .tq-pile-row.urgent.current .card { background: rgba(138, 54, 70, .08); }
-/* IMPORTANT: a calmer mark than urgent's oxblood - a thin slate-blue accent and no shade, in the row's own place (the owner, 2026-10-25:
-   it matters for who or what, and can wait; the rail never moves for it) */
-.tq-pile-row.important .card { box-shadow: inset 2px 0 0 rgba(64, 96, 128, .5); }
+/* IMPORTANT wears no edge and no shade: its mark is the dot's colour, the theme's slate (AssistantView Pile, theme PRIORITY_COLOR) -
+   in the row's own place, never a move (the owner, 2026-10-25) */
 /* NEXT wears nothing: the ring is what is ON THE TABLE, and the row after it is a row like any other (the owner,
    2026-10-01: "the next one needs nothing"). The class stays - the walk and its tests find the next row by it. */
 .tq-pile-row.current { height: 54px; }

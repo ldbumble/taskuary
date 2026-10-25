@@ -47,7 +47,7 @@ import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./
 // the speaker's mark is TASKUARY'S OWN LOGO, never a second drawing of it (the owner, 2026-10-06: "logo should match the
 // taskuary one not a different one")
 const AssistantMark = () => <TaskuaryMark size={24} />;
-import { DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, ROLES } from "./theme.jsx";
+import { DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, PRIORITY_COLOR, ROLES } from "./theme.jsx";
 import { railShort } from "./batchItems.js";
 import ProposalCard from "./ProposalCard.jsx";
 import { adviceRead, tableOf, tableWords } from "./tableState.js";
@@ -706,7 +706,9 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                         : level === "later" ? bandUntil(backAt(i)) : band(i.kind === "meeting" ? i.when : arrivedAt(i))}</span>
                     {/* the dot is the BAND's colour, the pill's own (the owner, 2026-10-06: one palette, everywhere) - where it
                         came from is the logo inside the row */}
-                    <span className="rail"><i style={{ background: LEVEL_COLOR[level] || sourceColor(i) }} /></span>
+                    {/* ...and an IMPORTANT row's dot is the theme's slate instead - the category IS the dot's colour, in the app's own
+                        scheme (the owner, 2026-10-25: "match the app's scheme", no new hues); urgent keeps its shade as it was */}
+                    <span className="rail"><i style={{ background: imp ? PRIORITY_COLOR.important : LEVEL_COLOR[level] || sourceColor(i) }} /></span>
                     {/* the row already on the table SHOWS it - on a phone that means closing the drawer over it. Any other row is pulled
                         QUIETLY, as a search hit is: a 'Show me "..."' bubble per click was free text saying what the click did (2026-10-22) */}
                     <div className="card" role="option" aria-selected={isCur} aria-disabled={i.settling ? true : undefined}

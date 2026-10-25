@@ -154,7 +154,7 @@ test("Mark done and Remind me put the task down AT THE PRESS, as Next does, and 
   assert.match(finish, /onStay\?\.\(msg\)/);
   assert.ok(remind.indexOf("onLeave?.()") < remind.indexOf("api.post"), "the reminder too");
   assert.match(remind, /if \(leaving\) onStay\?\.\(msg\)/);
-  assert.match(view, /putDown: \(key, tid = null\) => \{ setExpanded\(false\); setFoldedKey\(key\); setNextComing\(true\); setLeavingTid\(tid\); drawNextEarlyRef\.current\?\.\(key\); \}/, "folded, and the next drawn under it");
+  assert.match(view, /putDown: \(key, tid = null\) => \{ leave\(\{ key, tid \}\); leavingRef\.current = \{ key, tid \}; setExpanded\(false\); setFoldedKey\(key\); setNextComing\(true\); setLeavingTid\(tid\); drawNextEarlyRef\.current\?\.\(key\); \}/, "folded, and the next drawn under it");
   // ...and off the RAIL at the press as well, a live session's Mark done included: it waited on an 18-second write-up
   // first, sitting under For later the whole time (the owner, 2026-10-01: "it first went to Later ... did not disappear")
   const stop = task.slice(task.indexOf("const stopAndFinish = async"), task.indexOf("const markDoneHint"));
@@ -304,9 +304,9 @@ test("one border around the three layers: the suggestion, the row and the box si
   assert.match(css, /\.tq-dock \.tq-compose-box \{[^}]*border: 0;/);
 });
 
-// The draft's own Send lives UNDER THE DRAFT only (the owner, 2026-10-22, reversing the bar's copy of 2026-10-19): the bar keeps an
-// empty slot of its width from the first render, so nothing reshuffles when the advice lands. Advised, it is lit on the card.
-test("the draft's own Send is never on the bar: an empty slot holds its place, and advised it is lit on the card, the bar unchanged", async () => {
+// The draft's own Send lives UNDER THE DRAFT only (the owner, 2026-10-22, reversing the bar's copy of 2026-10-19), and the bar keeps no
+// empty slot for it (2026-10-25: "we should not have empty space here"). Advised, it is lit on the card, the bar unchanged.
+test("the draft's own Send is never on the bar and leaves no empty slot; advised it is lit on the card, the bar unchanged", async () => {
   const { advisedAny, advisedIn, clustersOf, holdsMove } = await import("../src/actionRow.js");
   const list = [v("12:approve", "decide", { tone: "p", label: "Send", card: true }), v("12:redraft", "decide", { label: "Redraft", card: true }),
     v("remind", "more", { label: "Remind me" }), v("done", "more", { promote: false, onCard: true, label: "Mark done" }), v("next", "next")];
@@ -315,15 +315,15 @@ test("the draft's own Send is never on the bar: an empty slot holds its place, a
   assert.equal(advisedIn(list, { verb: "approve", label: "Send" })?.id, "12:approve", "the Advisor's line finds the Send under the draft");
   const quiet = rowOf({ ref: "", list });
   assert.deepEqual([...quiet.decide, ...quiet.agent, ...quiet.more].filter((x) => x.card).map((x) => x.id), [], "no card verb on the bar - not Send, not Redraft");
-  assert.deepEqual([quiet.decide[0].id, quiet.decide[0].slot, quiet.decide[0].label], ["slot:12:approve", true, "Send"], "its slot, as wide as its word");
+  assert.ok(![...quiet.decide, ...quiet.agent, ...quiet.more].some((x) => x.slot || String(x.id).startsWith("slot:")), "no empty slot on the bar");
   // ...in the reply group, where the Send stood, and never behind ▾
   const reply = clustersOf(quiet).find((g) => g.type === "reply");
-  assert.equal(reply.shown[0].slot, true); assert.ok(!clustersOf(quiet).some((g) => g.rest.some((x) => x.slot)));
+  assert.ok(!clustersOf(quiet).some((g) => [...g.shown, ...g.rest].some((x) => x.slot)), reply ? "the reply group holds only real buttons" : "");
   assert.deepEqual(filled(quiet), []);
   const sent = rowOf({ ref: "", list }, { verb: "approve", label: "Send" }), ids = (r) => [...r.decide, ...r.agent, ...r.more].map((x) => x.id);
   assert.deepEqual(filled(sent), []); assert.equal(sent.lit, "12:approve", "lit where it stands, under the draft"); assert.equal(sent.next.tone, "s");
   const row = fs.readFileSync(path.join(process.cwd(), "src", "ActionRow.jsx"), "utf8");
-  assert.match(row, /v\.slot \? <span key=\{v\.id\} className="tq-ab s slot" aria-hidden="true" data-tq-slot="">/, "drawn empty and unpressable");
+  assert.doesNotMatch(row, /data-tq-slot/, "no empty slot is drawn");
   assert.equal(rowOf({ ref: "", list }, { verb: "redraft", label: "Redraft" }).lit, "12:redraft", "a card verb with no slot is lit on the card");
   assert.deepEqual(ids(sent), ids(quiet), "the bar is the same with and without the advice");
   const later = rowOf({ ref: "", list }, { verb: "defer", label: "Remind me" });

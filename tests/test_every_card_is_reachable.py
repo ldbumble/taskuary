@@ -33,7 +33,7 @@ KEYLESS = {'reader', 'coingecko', 'frankfurter', 'yahoo', 'sec_edgar', 'fred', '
 # Two executors that reach for their own card instead of taking a resolved cfg - Calendar reads
 # whichever mailbox card carries the OAuth fields, and the Zoho report drives its own token
 # refresh. They predate this guard; they are named rather than quietly skipped.
-SELF_FETCHING = {'calendar', 'zoho_monthly_invoices'}
+SELF_FETCHING = {'calendar', 'zoho_monthly_invoices', 'onedrive_save'}   # onedrive_save reads the Outlook sign-in from the store itself (STORE_BACKED)
 
 
 class ASavedSecretReachesItsExecutor(unittest.TestCase):

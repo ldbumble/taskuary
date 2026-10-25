@@ -1,7 +1,7 @@
 // THE TASK PAGE'S LAYOUT (the redesign, owner-approved 2026-10-21): From | Work, and the work alone - full width - while an agent works
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CLOSE_BY_HAND, closeOut, fromLine, layoutOf, workPane } from "../src/taskLayout.js";
+import { CLOSE_BY_HAND, closeOut, focusOf, fromLine, holderName, layoutOf, sameWords, waitingOn, workPane } from "../src/taskLayout.js";
 import { taskSource } from "./taskSource.mjs";
 
 test("two columns at rest, the whole width while an agent works - coding or general, working or waiting on you", () => {
@@ -10,10 +10,11 @@ test("two columns at rest, the whole width while an agent works - coding or gene
   const src = taskSource();
   // the page's own "the session fills the page" decides it: a live session (term.alive - a terminal or a general agent's chat)
   assert.match(src, /const sessionView = liveSession && !peek;/);
-  assert.match(src, /const layout = layoutOf\(\{ sessionView, result: resultShown, failed: failedRun \}\), wide = layout === "full";/);
-  assert.match(src, /<Box data-tq-columns="" data-tq-layout=\{layout\} sx=\{wide \? \{ display: "contents" \} : COLUMNS\}>/);
+  // ...and only a live session since 2026-10-25 (the owner: "keep the 2 columns for when agent is not working")
+  assert.match(src, /const layout = layoutOf\(\{ sessionView \}\), wide = layout === "full";/);
+  assert.match(src, /<Box ref=\{columnsBox\} data-tq-columns="" data-tq-layout=\{layout\} sx=\{wide \? \{ display: "contents" \} : COLUMNS\}>/);
   // ...the work column steps aside (display: contents) so the terminal stays a flex child of the page, sized as it always was
-  assert.match(src, /<Box data-tq-work="" sx=\{sessionView \? \{ display: "contents" \} : \{ minWidth: 0, display: "flex", flexDirection: "column" \}\}>/);
+  assert.match(src, /<Box ref=\{workBox\} data-tq-work="" sx=\{sessionView \? \{ display: "contents" \} : \{ minWidth: 0, display: "flex", flexDirection: "column", containerType: "inline-size", \.\.\.\(settled \? \{ flex: "0 1 auto", minHeight: 0 \} : \{\}\) \}\}>/);
   // and From is one line over it, which opens From as a sidebar laid OVER the agent's left edge (item 6, the owner 2026-10-21):
   // absolutely placed, so the pane underneath is never resized; closed by default, by the line, its X or Escape
   assert.match(src, /\{wide && <Box component="button" type="button" ref=\{fromLineRef\} data-tq-from-line=""\s+title=\{fromSide \? "Hide where this came from" : "Show where this came from"\}\s+aria-expanded=\{fromSide\} aria-controls="tq-from-side" onClick=\{\(\) => setFromSide\(\(v\) => !v\)\}/);
@@ -25,20 +26,30 @@ test("two columns at rest, the whole width while an agent works - coding or gene
   assert.match(src, /useEffect\(\(\) => \{ if \(!sessionView\) setFromSide\(false\); \}, \[sessionView\]\);/);
 });
 
-// ...AND ONCE AN AGENT HAS ACTED (the owner, 2026-10-22): its Result, or its failure, keeps the whole width with From folded over it;
-// two columns only where no agent ran or none was ever started
-test("the layout: columns with no agent or one never started, the whole width while working, with a Result, or failed", () => {
+// THE WHOLE WIDTH IS A LIVE SESSION'S ALONE (the owner, 2026-10-25, reversing the 2026-10-22 fold for the states with no agent live): a
+// finished, failed or closed agent is back in two columns - its Result the white focus on the right, Close out under it on the shade
+test("the layout: two columns whenever no agent is live - a Result and a failure too; the whole width only while working or waiting", () => {
   const cases = [
     ["no agent at all", {}, "columns"],
-    ["never started (handed or queued, nothing run)", { sessionView: false, result: false, failed: false }, "columns"],
+    ["never started (handed or queued, nothing run)", { sessionView: false }, "columns"],
     ["working or waiting on you", { sessionView: true }, "full"],
-    ["finished, stopped or saved with its Result", { result: true }, "full"],
-    ["failed, with its reason and Try again", { failed: true }, "full"],
+    ["finished, stopped or saved with its Result", { result: true }, "columns"],
+    ["failed, with its reason and Try again", { failed: true }, "columns"],
   ];
   for (const [what, page, want] of cases) assert.equal(layoutOf(page), want, what);
-  // the page reads it once, after its Result and its failure are known, and the From line, its sidebar and its X all follow it
+  // the focus: the Result (or the failed run) once an agent acted, the reply where that is the move; none while live
+  assert.equal(focusOf({ result: true, pane: "reply" }), "agent");
+  assert.equal(focusOf({ failed: true }), "agent");
+  assert.equal(focusOf({ pane: "reply" }), "reply");
+  assert.equal(focusOf({ live: true, result: true }), null);
+  // ...and the owner's answers (2026-10-25): a to-do or a goal whitens its own list, else the block with the ask's source - never
+  // Send to agent; a task waiting on a person whitens nothing
+  assert.equal(focusOf({ pane: "agent", list: true }), "list");
+  assert.equal(focusOf({ pane: "agent" }), "source");
+  assert.equal(focusOf({ pane: "", waiting: true }), "none");
+  // the page reads its Result and its failure before the focus, and the From line, its sidebar and its X follow the layout
   const src = taskSource(), at = (re) => src.search(re);
-  assert.ok(at(/const resultShown = /) < at(/const layout = layoutOf\(/) && at(/const failedRun = /) < at(/const layout = layoutOf\(/));
+  assert.ok(at(/const resultShown = /) < at(/const focus = focusOf\(/) && at(/const failedRun = /) < at(/const focus = focusOf\(/));
   // the "From" title and its X head only the sidebar (2026-10-22: the columns have no title over From)
   assert.match(src, /\{wide && <Box sx=\{\{ display: "flex", alignItems: "center" \}\}>\s+<Typography sx=\{\{ \.\.\.label, flex: 1 \}\}>From<\/Typography>\s+<IconButton size="small" aria-label="Close From" data-tq-from-close=""/);
   assert.match(src, /onClickCapture=\{wide \? undefined : phoneFromTap\}/);
@@ -92,7 +103,8 @@ test("Close out under a Result on a task nobody sent: no 'Nobody sent this one',
   assert.equal(CLOSE_BY_HAND, "Mark done closes it, or close it with a note.");
   const src = taskSource();
   assert.match(src, /\|\| \(co\.advice \? "Nobody sent this one[^"]*" : CLOSE_BY_HAND\)/);
-  assert.match(src, /: co\.chip \? <LifecycleChip kind="reply" phase=\{replyMessage \? replyState : "not available"\} compact \/> : null/);
+  // ...and no reply pill on Close out at all now: the header's pill says it, once (the task-view cleanup, owner-approved 2026-10-25)
+  assert.doesNotMatch(src, /<LifecycleChip kind="reply"/);
   assert.match(src, /pane === "reply" && co\.writeupAt === "closeout" && <WriteupBlock/);
   assert.match(src, /co\.writeupAt === "result" && <WriteupLine view=\{writeup\} \/>/);
   assert.doesNotMatch(src, /Closing the session and writing up what is on screen — the agent is not asked anything\.\s*<\/Typography>\s*\) : workspaceMode === "live" && peek/,
@@ -130,4 +142,24 @@ test("From reads newest on top, the older ones folded behind Show N older", asyn
   assert.equal(thread.length, 1, "one thread");
   assert.deepEqual(fromRows(thread[0]).map((r) => r.m.who), ["Gail Moreno", "You", "Gail Moreno"]);
   assert.equal(fromExpands(thread), false, "three letters: nothing folded");
+});
+
+// THE TASK-VIEW CLEANUP (owner-approved 2026-10-25): the ask said once, and a task handed to a person opens on who it waits on
+test("the ask is the message's own words only when they are the same words, spacing aside", () => {
+  assert.ok(sameWords("Are we still on\nfor Thursday?","Are we still on  for Thursday? "));
+  assert.ok(!sameWords("Confirm the Thursday cutover", "Are we still on for Thursday?"));
+  assert.ok(!sameWords("", ""), "no ask is not the body");
+});
+
+test("a task waiting on a person says who and when it was due", () => {
+  const now = new Date(2026, 9, 25, 9, 0);
+  const task = { Status: "waiting", Assignee: "person:erin.blake@northwind.example", DueAt: "2026-10-23" };
+  assert.equal(holderName("erin.blake@northwind.example"), "Erin Blake");
+  assert.match(waitingOn({ task, now }).line, /^Waiting on Erin Blake\. Due Oct 23, 2 days late\.$/);
+  // ...the name their own mail signs with, where the task has it
+  assert.equal(waitingOn({ task, now, messages: [{ FromEmail: "Erin.Blake@northwind.example", FromName: "Erin B." }] }).name, "Erin B.");
+  assert.equal(waitingOn({ task: { ...task, DueAt: "" }, now }).line, "Waiting on Erin Blake.");
+  assert.equal(waitingOn({ task: { ...task, DueAt: "2026-10-30" }, now }).line, "Waiting on Erin Blake. Due Oct 30.");
+  assert.equal(waitingOn({ task: { ...task, Status: "open" }, now }), null, "not waiting");
+  assert.equal(waitingOn({ task: { ...task, Assignee: "agent:coding" }, now }), null, "an agent is not a person it waits on");
 });

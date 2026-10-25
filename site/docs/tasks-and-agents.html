@@ -57,7 +57,7 @@
 <div class="entry">
       <a class="page" href="./security">Security</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Security's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./security#the-risk-is-the-text-not-the-network">The risk is the text, not the network</a><a class="sec" href="./security#what-taskuary-does-today">What Taskuary does today</a><a class="sec" href="./security#a-strangers-task-runs-in-auto-mode">A stranger's task runs in auto mode</a><a class="sec" href="./security#what-it-does-not-do-yet">What it does not do yet</a><a class="sec" href="./security#what-you-can-set-today">What you can set today</a><a class="sec" href="./security#what-comes-next">What comes next</a></div>
+      <div class="secs" hidden><a class="sec" href="./security#the-risk-is-the-text-not-the-network">The risk is the text, not the network</a><a class="sec" href="./security#what-taskuary-does-today">What Taskuary does today</a><a class="sec" href="./security#what-an-agent-can-call">What an agent can call</a><a class="sec" href="./security#a-strangers-task-runs-in-auto-mode">A stranger's task runs in auto mode</a><a class="sec" href="./security#what-it-does-not-do-yet">What it does not do yet</a><a class="sec" href="./security#what-you-can-set-today">What you can set today</a><a class="sec" href="./security#what-comes-next">What comes next</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./assistant">Assistant buttons</a>
@@ -406,6 +406,26 @@ the terminal.</p>
 the terminal. <strong>Take over</strong> hands you the mouse and keyboard for a password or a 2FA code the
 agent must never type; <strong>Snapshot</strong> keeps the frame on the task as an attachment. On the Wall, a
 narrow tile shows a &quot;browser&quot; chip that opens the page over the session.</p>
+<p><strong>Signing in.</strong> At a sign-in page the agent stops and asks, and the task waits on &quot;Sign in to
+<em>site</em> to continue&quot;. Take over the pane, or press <strong>Sign in here</strong> for a one-time page that shows
+the site and takes the user name and password. Taskuary types them into the browser itself; the
+agent never sees them. Tick <strong>Save to vault for next time</strong> and the next sign-in on that site
+happens without you. Saved sign-ins are listed under <strong>Settings → Agent permissions</strong>.</p>
+<p><strong>Authenticator codes.</strong> A site that asks for a six-digit code after the password can have its
+authenticator key kept with its saved sign-in: paste the key shown beside the site&#39;s QR code, or
+the <code>otpauth://</code> link the QR code holds, into the optional key field on the sign-in page, or press
+<strong>Add authenticator key</strong> on its row under Saved sign-ins. Taskuary then works out the code and
+types it after the password, or on its own when the site asks only for the code.
+<strong>Remove authenticator key</strong> forgets it, and the code is yours to type again.</p>
+<p><strong>Browser acts that can&#39;t be undone wait for you.</strong> Before a Claude Code agent runs an
+<code>agent-browser</code> command, Taskuary reads it. Commands that only look (a snapshot, reading the page,
+moving between pages) run at once. Anything else is judged by your AI against the page it would
+act on: paying, ordering, sending, posting, deleting, or submitting a form for real is held. The
+agent is told it is waiting, and the act appears on the task as a card with <strong>Approve</strong> and
+<strong>Dismiss</strong>. Approve runs that exact command in the agent&#39;s browser, and only while the browser
+is still on the same page; Dismiss tells the agent it was not done. With no AI connected nothing
+can judge, so typing into a box (<code>fill</code>, <code>type</code>, <code>keyboard type</code>) runs and every other act waits
+for you.</p>
 <h2 id="the-general-agent">The general agent<a class="anchor" href="#the-general-agent" aria-label="Link to this section">#</a></h2>
 <p>Not every job is code. A <code>general</code> task opens a conversation instead of a terminal: research,
 planning, writing, weighing an option, working out what to ask. No system is touched.</p>
@@ -656,7 +676,7 @@ moves it down without deleting it.</p>
 
     </article>
     <nav class="pager"><a class="pn prev" href="./connections"><span>Previous</span>Connections</a><a class="pn next" href="./security"><span>Next</span>Security</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.34 · updated 2026-10-24</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.37 · updated 2026-10-25</p>
   </main>
 </div>
 <script src="./docs.js"></script>

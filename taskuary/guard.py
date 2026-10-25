@@ -82,6 +82,7 @@ DENIED = (
     (r'POST', r'^/api/skills/fetch$', 'pulling a document off the internet to propose a worker is the same half, from further away'),
     (r'POST', r'^/api/skills/list$', 'reading what a link or a folder holds is where hiring one starts, and it reaches the internet to do it'),
     (r'POST', r'^/api/update$', 'replacing the program is the owner\'s decision'),
+    (r'POST', r'^/api/quit$', 'stopping Taskuary stops every agent with it - the owner\'s decision'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/(invoice-batches|reports/\d+/invoice-batches)(/|$)',
      'preparing or changing an invoice batch is the owner\'s decision'),
     (r'POST', r'^/api/deps/', 'installing software on this machine is the owner\'s decision'),
@@ -123,12 +124,15 @@ AGENT_WRITES = (
     (r'POST', r'^/api/hooks/claude/ask$', 'the ask hook - it shows the question; the owner answers it'),
     (r'POST', r'^/api/hooks/claude/(floor|permit)$', "a stranger's session asking the floor, or the owner, before a tool call"),
     (r'POST', r'^/api/hooks/claude/reason$', "the Reason Network hook - a message to someone untrusted is refused, an approval goes to the owner"),
+    (r'POST', r'^/api/hooks/claude/browser$', "the browser hook - an act that can't be undone is held for the owner (browsergate)"),
     (r'POST', r'^/api/agent/(reply|done|draft|item|tick|waiting)$',
      "`taskuary --reply/--done/--draft/--item/--tick/--waiting-on` on the session's OWN task (owns_task); nothing leaves"),
+    (r'POST', r'^/api/agent/propose$', "an act only the owner's press runs (proposals.queue), filed on the session's OWN task; nothing runs"),
+    (r'POST', r'^/api/mcp$', "Taskuary's own tools for the session (agenttools): each one is a door on this list or a read, on its OWN task"),
     (r'POST', r'^/api/board/notes$', 'the wall agents leave lines for each other on'),
     (r'POST', r'^/api/(hub|handbook)(/\d+/(comment|vote|retire|restore))?$',
      "the Hub - post, correct, vote, retire what is no longer true; gated again by the card's hub_write scope"),
-    (r'POST', r'^/api/tools/run$', 'a data tool, gated per card by scopes.require'),
+    (r'POST', r'^/api/tools/run$', 'a data tool, gated per card by scopes.require - and a send waits as a proposal (scopes.reaches)'),
     (r'POST', r'^/api/reports/\d+/rerun$', 'a report run as its schedule would run it (concierge.tools_block) - no configuration changes'),
 )
 
@@ -146,6 +150,8 @@ AGENT_READS = (
 # listed so that test_guard walks app.routes and FAILS on a write route nobody classified: a new
 # door is a decision, not something that inherits whatever the table happened to say.
 OWNER_ONLY = (
+    # the first thing a cornered model would do is mark the send tool it was denied as one that does not send (sendfilter)
+    (r'POST', r'^/api/sendfilter/(correct|scan)$', "which of the owner's own MCP tools count as sends is the owner's word"),
     (r'POST', r'^/api/(bug-report/draft|open-url)$', "a bug report is drafted from the owner's own screen, and only the owner's click opens a page on their desktop"),
     (r'POST', r'^/api/messages/\d+/unsubscribe$', "leaving a mailing list is the owner's press - a newsletter's words never reach it (unsubscribe.py)"),
     (r'POST', r'^/api/messages/\d+/calendar$',"answering an invite or drafting one is the owner's - drafted for their Send (calwrite)"),
@@ -177,7 +183,7 @@ OWNER_ONLY = (
     (r'POST|PATCH', r'^/api/memory(/\d+)?$', 'memory notes steer triage - an agent proposes one, it does not write it'),
     (r'POST', r'^/api/notes$', "a note to self is the owner's"),
     (r'POST', r'^/api/ingest/(poll|push)$', 'putting a message in the inbox would let an agent write its own next prompt'),
-    (r'POST', r'^/api/(ai/defaults|setup/(adopt-brain|dismiss|seen|walk|walk/reset)|knowledge/reindex|calendar/prep|prompt-image)$',
+    (r'POST', r'^/api/(ai/defaults|setup/(adopt-brain|dismiss|seen|walk|walk/reset)|knowledge/reindex|calendar/prep(are)?|prompt-image)$',
      "set-up, the brains, the index and the owner's own starts"),
     (r'POST', r'^/api/reports/(\d+/replay|due)$', "replaying a judge or running every due report is the owner's"),
     (r'POST', r'^/api/roles/[a-z0-9_-]+$', "a role decides where the owner's mail goes and narrows a ledger's authority"),

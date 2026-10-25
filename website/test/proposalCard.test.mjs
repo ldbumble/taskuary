@@ -141,7 +141,7 @@ test("a failed act's way on runs from the chat: Try again, GitHub's own buttons,
   assert.match(view, /if \(c\.verb === "closeout" && c\.rid\) \{/);             // Update branch / Re-run checks
   assert.match(view, /if \(c\.verb === "repo" && c\.op\) \{/);                  // the checkout a stopped hand-off waits for
   assert.match(view, /if \(c\.verb === "open" && c\.key\) \{ surface\(c\.key\); return; \}/);
-  assert.match(view, /\{m\.status && m\.status !== "done" \? "✗" : "✓"\}/);   // a failure never wears a tick
+  assert.match(view, /\{m\.status === "warn" \? "" : m\.status && m\.status !== "done" \? "✗ " : "✓ "\}/);   // a failure never wears a tick, nor a warning
 });
 
 // the owner, 2026-10-23: "we used to have that if we were talking on the phone it would lock the screen on desktop but we should

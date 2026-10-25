@@ -789,8 +789,8 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
   );
 }
 
-// a meeting inside two hours: when, who, what the invite says - Join when it has a link. No "Getting prepped" line: nothing on
-// this card preps (the owner, 2026-10-02 - prep is the game view's and the phone's word)
+// a meeting inside two hours: when, who, what the invite says - Join when it has a link. No "Getting prepped" line (the owner,
+// 2026-10-02); Prepare is the row's button beside Next (concierge.CHIPS, 2026-10-25), never a second one on the card
 export function MeetingCard({ card }) {
   const e = card.event || {};
   return (

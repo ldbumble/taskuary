@@ -9,4 +9,9 @@ export const WORKING_ROWS = [
 // one cell: the count, then its non-zero parts - "12: 8 as drafted · 3 edited · 1 redrafted"; "none" for an empty window
 export const workingCell = (n, parts) => (n ? `${n}: ${parts.filter(([k]) => k > 0).map(([k, w]) => `${k} ${w}`).join(" · ")}` : "none");
 
+// THE TRACK RECORD (the owner, 2026-10-25: "show the earned-trust track record, but NEVER send without approval"): each draft
+// pattern - its kind, the recipient's domain - and what became of it over 30 days (taskuary/trackrecord.py). Read-only numbers.
+export const recordRow = (t) => ({ label: `${t.kind} to ${t.domain}`,
+  cell: workingCell(t.total, [[t.as_drafted, "sent as drafted"], [t.edited, "edited"], [t.rejected, "rejected"]]) });
+
 export const workingTable = (windows) => WORKING_ROWS.map(([label, n, parts]) => ({ label, cells: (windows || []).map((w) => workingCell(n(w), parts(w))) }));

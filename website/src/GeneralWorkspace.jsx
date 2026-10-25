@@ -594,7 +594,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
 
 export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, dock = false, toolsAt = null,
   dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  onDockNewChat }) {
+  onDockNewChat, noAiSaid = false, noTools = false }) {
   const [data, setData] = useState(null);
   const [connectorId, setConnectorId] = useState("");
   const [model, setModel] = useState("");
@@ -801,8 +801,10 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       {/* the strip wraps when its box is narrow - a phone, or a half-width Wall pane; scrolled sideways it hid its buttons entirely.
           On the canvas the task's own step heading holds it (toolsAt) and the answer gets the line - until Full screen, which
           leaves that heading behind */}
-      {!dock && toolsAt && !full && createPortal(tools, toolsAt)}
-      {!dock && !(toolsAt && !full) && <Box sx={{ minHeight: 39, px: 1.25, py: { xs: 0.5, md: 0 }, display: "flex", alignItems: "center", gap: 0.8, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL,
+      {/* ...and none at all on a card whose session is not live (`noTools`, the owner 2026-10-25): a failed or closed agent's heading carried
+          the agent picker, "provider default" and Full screen for a chat nothing is running in - the bar's Run another agent starts one */}
+      {!dock && !noTools && toolsAt && !full && createPortal(tools, toolsAt)}
+      {!dock && !noTools && !(toolsAt && !full) && <Box sx={{ minHeight: 39, px: 1.25, py: { xs: 0.5, md: 0 }, display: "flex", alignItems: "center", gap: 0.8, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL,
         flexWrap: "wrap", flexShrink: 0 }}>
         <Box sx={{ width: 7, height: 7, borderRadius: 99, bgcolor: session?.alive ? "#78a17b" : "#c7a258" }} />
         {/* the strip named the window after the concierge; it belongs to the agent working in it */}
@@ -864,7 +866,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       {/* "Connections → AI", as the chat says it (concierge.py, no AI connected): the AI CLI agents page's own name is a word the owner never reads
           (words.json jargon), and the walk read it here on a box with no AI (WORDS, 2026-10-20) */}
       {/* ...with the button that does it (owner-approved, 2026-10-21): every "no AI" line carries Connect an AI */}
-      {!data?.providers?.length && <Alert severity="info" data-tq-no-ai="" sx={{ borderRadius: 0, py: 0, alignItems: "center" }}
+      {/* ...but not where it is already said or no longer matters (`noAiSaid`, the owner 2026-10-25): a closed task, or a failure whose own
+          line is that no AI is connected - the banner was the same fact a third time under it */}
+      {!data?.providers?.length && !noAiSaid && <Alert severity="info" data-tq-no-ai="" sx={{ borderRadius: 0, py: 0, alignItems: "center" }}
         action={<ConnectAi variant="outlined" />}>No AI is connected, so this work cannot run yet - connect one under {placeName("ai")}.</Alert>}
       {session?.resume_notice && <Typography sx={{ px: 1.5, py: 0.5, fontSize: 12, color: FAINT }}>{session.resume_notice}</Typography>}
       <input ref={fileRef} hidden type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple onChange={(e) => upload(e.target.files)} />

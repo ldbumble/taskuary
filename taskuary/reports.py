@@ -829,6 +829,8 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             # files & sheets people already keep: a Google Sheet, a SharePoint list, a file in a library
             'google_sheets': _lazy('sheets', 'run_google_sheets'),
             'sharepoint_list': _lazy('sharepoint', 'run_sharepoint_list'), 'sharepoint_file': _lazy('sharepoint', 'run_sharepoint_file'),
+            # ...and an agent's file saved into a library or onto the owner's OneDrive: a write that reaches nobody (scopes.QUIET_WRITES)
+            'sharepoint_save': _lazy('sharepoint', 'run_sharepoint_save'), 'onedrive_save': _lazy('sharing', 'run_onedrive_save'),
             # the knowledge base: documents indexed in this store (knowledge.py) - searched, and refreshed on a schedule
             'kb_search': _lazy('knowledge', 'run_kb_search'), 'kb_reindex': _lazy('knowledge', 'run_kb_reindex'),
             'image_generate': _lazy('images', 'run_image_generate'),   # a picture, filed on the message
@@ -882,7 +884,7 @@ CARD_OF = {'postgresql': 'postgresql', 'mysql': 'mysql', 'clickhouse': 'clickhou
            's3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 'azure_logs': 'azure', 'calendar': 'outlook',
            'entra_users': 'azure', 'entra_groups': 'azure', 'entra_signins': 'azure', 'entra_licenses': 'azure',
            'intacct_fields': 'intacct', 'intacct_create': 'intacct', 'intacct_update': 'intacct',
-           'sharepoint_list': 'sharepoint', 'sharepoint_file': 'sharepoint',
+           'sharepoint_list': 'sharepoint', 'sharepoint_file': 'sharepoint', 'sharepoint_save': 'sharepoint', 'onedrive_save': 'outlook',
            'smb_read': 'smb_file', 'smb_write': 'smb_file', 'smb_move': 'smb_file',
            'sftp_list': 'sftp', 'sftp_get': 'sftp', 'sftp_put': 'sftp', 'sftp_move': 'sftp',
            'quickbooks_vendors': 'quickbooks', 'quickbooks_accounts': 'quickbooks', 'quickbooks_bill': 'quickbooks', 'quickbooks_expense': 'quickbooks',
@@ -1113,7 +1115,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  **{t: _simplefin_connection for t in ('simplefin_accounts', 'simplefin_transactions',
                                                        'simplefin_balances', 'simplefin_spend')},
                  # both borrow: SharePoint the Outlook tenant app, Sheets the Gmail card's Google client
-                 'sharepoint_list': _sharepoint_connection, 'sharepoint_file': _sharepoint_connection,
+                 'sharepoint_list': _sharepoint_connection, 'sharepoint_file': _sharepoint_connection, 'sharepoint_save': _sharepoint_connection,
                  'google_sheets': _sheets_connection,
                  **{t: smb_connection for t in ('smb_read', 'smb_write', 'smb_move')},
                  **{t: sftp_connection for t in ('sftp_list', 'sftp_get', 'sftp_put', 'sftp_move')},
@@ -1123,7 +1125,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
 # Report types whose data IS the store - they reach no further than the local database, so they
 # can neither be slow nor unreachable. Everything else dials out: a SQL box, an API, a share.
 # run_due_reports runs these FIRST for that reason, so keep the two uses of this list together.
-STORE_BACKED = ('taskuary', 'taskuary_data', 'dashboard', 'digest', 'evening_inbox', 'automate', 'assistant', 'agent', 'calendar', 'kb_search', 'kb_reindex',
+STORE_BACKED = ('onedrive_save', 'taskuary', 'taskuary_data', 'dashboard', 'digest', 'evening_inbox', 'automate', 'assistant', 'agent', 'calendar', 'kb_search', 'kb_reindex',
                 'metric', 'metric_check', 'handbook_search', 'handbook_write', 'handbook_vote',
                 'hub_search', 'hub_write', 'hub_vote', 'hub_comment')
 

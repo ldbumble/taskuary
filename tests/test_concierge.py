@@ -130,6 +130,26 @@ class TurnTests(unittest.TestCase):
         self.assertNotIn('corrected file', last_receipt(s))
         self.assertFalse([c for c in s.list_comments(t) if 'corrected file' in (c.get('Body') or '')])
 
+    def test_a_typed_digit_is_kept_as_typed(self):
+        """The 2026-10-25 sweep: "2" typed on the desk was saved as the button it numbered ("Mark done") - a second owner bubble beside the
+        page's own "2", and after a reload the owner's line read words they never typed."""
+        s = store()
+        t, m, r = drafted(s)
+        concierge.surface(s, key=f'review:{r}', llm=lambda *a, **k: 'Dana needs the corrected export.')
+        concierge.say(s, '2', key=f'review:{r}', llm=lambda *a, **k: 'Which one did you mean?')
+        said = [h['text'] for h in concierge.history(s, general.dock_task(s)[0]['TaskId']) if h['role'] == 'user']
+        self.assertEqual(said, ['2'])
+
+    def test_a_typed_next_leaves_its_badge_on_the_card_through_a_reload(self):
+        """The 2026-10-25 sweep: Next's button stamps the card it leaves (_stamp_next), so a reload draws the badge - a typed "next" only
+        moved on, and the badge the page drew was gone after a reload (0fd0a151 closed the same gap for All read, next)."""
+        s = store()
+        t, m, r = drafted(s)
+        concierge.surface(s, key=f'review:{r}', llm=lambda *a, **k: 'Dana needs the corrected export.')
+        concierge.say(s, 'next', key=f'review:{r}', llm=lambda *a, **k: 'Next.\nCALL: {"kind": "next", "params": {}}')
+        card = next(h['card'] for h in concierge.history(s, general.dock_task(s)[0]['TaskId']) if (h.get('card') or {}).get('rid') == r)
+        self.assertEqual(card.get('pressed'), concierge.next_badge(card))
+
     def test_what_is_said_about_an_item_is_kept_against_the_item_not_only_in_the_browser(self):
         """PW-132: the chat's turns about an item lived in the dock conversation and the browser's receipts; the
         durable per-item record (operations.discuss) never saw them."""
@@ -472,6 +492,22 @@ class FyiWalkTests(unittest.TestCase):
             out = concierge.surface(s, llm=lambda *a, **k: 'never')
         self.assertEqual(sorted(i['title'] for i in out['item']['items']), ['Note 0', 'Note 1', 'Note 2'])
         self.assertNotIn('fyi;', out['say']); self.assertNotIn('someone', out['say'])
+
+    def test_done_said_over_the_batch_on_the_table_lights_its_own_button(self):
+        """The 2026-10-25 sweep: "done" over the open 4 fyi said "There is nothing to close on 4 fyi ... Open it if you want its own buttons"
+        with its All read, next on screen, and nothing lit. The router lights the batch's real button and says nothing."""
+        s = store()
+        s.set_setting('team_domains', 'ours.com', 't')
+        for n in range(4):
+            m = s.add_message({'ExternalId': f'f{n}', 'ConversationId': f'c{n}', 'Channel': 'email', 'Subject': f'Note {n}', 'FromName': f'Person {n}',
+                               'FromEmail': f'p{n}@ours.com', 'SentAt': ago(n), 'BodyText': f'FYI number {n}, done.', 'Status': 'filed'})
+            s.add_route(m, None, 'file', None, 'triage: fyi - a colleague keeping you in the loop', [], 'triage')
+        with mock.patch.object(concierge, 'brain', return_value=None):
+            batch = concierge.surface(s)['item']
+        out = concierge.say(s, 'done', key=batch['key'], llm=lambda *a, **k: 'CALL: {"kind": "close", "params": {}}')
+        self.assertEqual(out['say'], '')
+        self.assertEqual((out['light']['verb'], out['light']['label'], out['light']['key']), ('next', buttons.label('next', 'batch'), batch['key']))
+        self.assertNotIn(concierge.OPEN_IT.strip(), json.dumps(concierge.history(s, general.dock_task(s)[0]['TaskId'])))
 
     def test_fyis_come_four_at_a_time_and_a_mail_walk_still_stops_for_a_waiting_agent(self):
         s = store()
@@ -932,6 +968,20 @@ class ActTests(unittest.TestCase):
         prop = concierge.propose_direct(s, 'not_ours', key, table=True)
         self.assertEqual((prop['kind'], prop['target'], prop['params']), ('idea.act', i['IdeaId'], {'verb': 'dismiss'}))
 
+    def test_a_desk_press_runs_at_once_and_writes_nothing_in_the_owners_name(self):
+        """The 2026-10-25 sweep: a row button's press was written into the chat as an owner line nobody typed ("Not ours: ..."), with a
+        card of its own that folded the next item, and a verb that was not AUTO drew "Nothing happens until you say yes" over a button
+        already pressed. The press is the decision (assistant-is-a-router); the phone's picks keep their lines."""
+        s, i, key = self._idea()
+        dock = general.dock_task(s, 'owner')[0]['TaskId']
+        before = len(general.chat_rows(s, dock))
+        prop = concierge.propose_direct(s, 'mine', key, table=True, press=True)
+        self.assertTrue(prop['auto'], 'a pressed Make a task waits for a second yes')
+        self.assertEqual(len(general.chat_rows(s, dock)), before, 'the press wrote lines into the chat')
+        self.assertIn(prop['id'], concierge.PRESSED)
+        concierge.propose_direct(s, 'mine', key, table=True)                       # ...the phone's pick keeps its record
+        self.assertEqual([r['ActorType'] == general.USER_TYPE for r in general.chat_rows(s, dock)[before:]][:1], [True])
+
 
 class ApiTests(unittest.TestCase):
     def test_the_page_reads_the_pile_pulls_the_next_and_lists_its_chats(self):
@@ -1107,6 +1157,24 @@ class ForLaterLine(unittest.TestCase):
         # ...and a walk that ends with nothing waiting offers no walk to start
         with mock.patch.object(concierge.funnel, 'pile', return_value={'items': []}), mock.patch.object(concierge.funnel, 'next_item', return_value=None):
             self.assertFalse(any(c.get('verb') == 'walk' for c in concierge.surface(MemoryStore(), llm=lambda *a, **k: 'never')['chips']))
+        # ...but a task still under Tasks that waits on someone else is walked again: Walk, not "Nothing's waiting." and a bare Next
+        # (the owner, 2026-10-25: "I hit next when a task is the last thing and the walk through again did not show up")
+        rows = [{'key': 'task:9', 'tid': 9, 'ref': 'TQ-0009', 'title': 'Schema sign-off', 'lane': 'theirs', 'surfaced': True, 'put_down': True}]
+        with mock.patch.object(concierge.funnel, 'pile', return_value={'items': rows}), mock.patch.object(concierge.funnel, 'next_item', return_value=None):
+            out = concierge.surface(MemoryStore(), llm=lambda *a, **k: 'never')
+            self.assertEqual(([c['verb'] for c in out['chips']], out['say']), (['walk'], ''))
+            with concierge.delivering(concierge.PHONE):
+                self.assertFalse(any(c.get('verb') == 'walk' for c in concierge.surface(MemoryStore(), llm=lambda *a, **k: 'never')['chips']))
+        # ...and when all that is left is an agent's work, the Walk button says it: no "Nothing else needs you right now; 1 in progress." on
+        # the desk (the owner, 2026-10-25) - the phone, with no button there, keeps the words
+        from types import SimpleNamespace
+        rows = [{'key': 'task:4', 'tid': 4, 'ref': 'TQ-0004', 'title': 'Reconcile the export', 'lane': 'working', 'surfaced': True}]
+        at_end = lambda: SimpleNamespace(pile={'items': rows}, selected=None, pending={'working': 1, 'settling': 0, 'scheduled': 0}, member_keys=())
+        out = concierge.surface(MemoryStore(), llm=lambda *a, **k: 'never', selection=at_end())
+        self.assertEqual(([c['verb'] for c in out['chips']], out['say']), (['walk'], ''))
+        with concierge.delivering(concierge.PHONE):
+            self.assertEqual(concierge.surface(MemoryStore(), llm=lambda *a, **k: 'never', selection=at_end())['say'],
+                             'Nothing else needs you right now; 1 in progress.')
 
 
 class NonCoderWordsTests(unittest.TestCase):

@@ -230,10 +230,11 @@ class AllowListTests(unittest.TestCase):
                          if guard.classify(m, self._fill(r.path))[0] == 'agent')
         self.assertEqual(allowed, sorted([
             'POST /api/agent/done', 'POST /api/agent/draft', 'POST /api/agent/item', 'POST /api/agent/reply', 'POST /api/agent/tick', 'POST /api/agent/waiting',
+            'POST /api/agent/propose', 'POST /api/mcp',     # the toolbox (2026-10-25): a proposal on its own task, and its tools' one door
             'POST /api/board/notes',
             'POST /api/handbook', 'POST /api/handbook/{lid}/comment', 'POST /api/handbook/{lid}/restore',
             'POST /api/handbook/{lid}/retire', 'POST /api/handbook/{lid}/vote',
-            'POST /api/hooks/claude/ask', 'POST /api/hooks/claude/floor',
+            'POST /api/hooks/claude/ask', 'POST /api/hooks/claude/browser', 'POST /api/hooks/claude/floor',
             'POST /api/hooks/claude/permit', 'POST /api/hooks/claude/reason', 'POST /api/hooks/{cli}',
             'POST /api/hub', 'POST /api/hub/{lid}/comment', 'POST /api/hub/{lid}/restore', 'POST /api/hub/{lid}/retire',
             'POST /api/hub/{lid}/vote',

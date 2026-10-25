@@ -294,15 +294,63 @@ def _apply_pip(progress=None) -> dict:
     return {'how': 'pip', 'restarting': True, 'pip': (r.stdout or '').strip()[-300:]}
 
 
-def apply(progress=None) -> dict:
-    """Do it. Returns what happened; the caller ends the process (exit_soon) when 'restarting'."""
-    road = how()
-    if road == 'source':
+def ready() -> dict:
+    """The release to install, or the reason there is none - asked BEFORE an update waits, so it never waits for an update it cannot do."""
+    if how() == 'source':
         raise RuntimeError('this is a source checkout - update it with `git pull` in the repository, then restart')
     info = check(force=True)
     if info.get('error'): raise RuntimeError(info['error'])
     if not info.get('newer'): raise RuntimeError(f'already on the latest release ({__version__})')
-    return _apply_exe(info.get('url') or EXE_URL, progress) if road == 'exe' else _apply_pip(progress)
+    return info
+
+
+def apply(progress=None, info: dict = None) -> dict:
+    """Do it. Returns what happened; the caller ends the process (exit_soon) when 'restarting'."""
+    info = info or ready()
+    return _apply_exe(info.get('url') or EXE_URL, progress) if how() == 'exe' else _apply_pip(progress)
+
+
+# AN UPDATE WAITS FOR RUNNING WORK (the owner, 2026-10-25): the swap ends this process, and with it every agent and workflow run it
+# holds. So Update now with work live is kept, said ("Update waits for 1 running agent"), and done the moment the last one stops -
+# never by itself otherwise: only the owner's press queues it, and quitting forgets it.
+IDLE_POLL = 5.0
+QUEUED = {'at': None, 'error': None}
+_QLOCK = threading.Lock()
+
+
+def waits_line(running: str) -> str: return f'Update waits for {running}' if running else ''
+
+
+def status_line(running: str = '', lit: bool = True) -> str:
+    """For the Assistant, beside Settings → Updates (concierge app.find): what is known now about a newer release, from the last check -
+    the header's own, never a fresh call in a chat turn - and that the page's button is lit for the owner, never pressed by the chat."""
+    r = _cache['result'] or {}
+    if r.get('latest'):
+        s = (f"v{r['latest']} is out (this is v{r['current']}) - " + (f"the page's Update to v{r['latest']} button is lit for the owner to press"
+             if lit else f"Update to v{r['latest']} on that screen, at their desk, installs it") if r.get('newer') else f"v{r['current']} is the latest release - nothing to install")
+    else: s = f"this is v{__version__}; whether a newer release is out shows on the page as it opens"
+    if running and r.get('newer'): s += f'. {waits_line(running)} once pressed'
+    return s + '. Nothing installs unless the owner presses it.'
+
+
+def when_idle(running, go, poll: float = IDLE_POLL) -> dict:
+    """Run `go()` once `running()` says '' - now, or on a thread that looks every `poll` seconds. One wait at a time: a second press
+    while it waits is told the same thing. `go` returns apply()'s answer; its failure is kept for the card (QUEUED['error'])."""
+    busy = running()
+    if not busy: return go()
+    with _QLOCK:
+        if QUEUED['at'] is None:
+            QUEUED.update(at=time.time(), error=None)
+            def wait():
+                try:
+                    while running(): time.sleep(poll)
+                    go()
+                except Exception as e:
+                    logger.warning(f'update: the waiting update did not go - {e}'); QUEUED['error'] = str(e)
+                finally: QUEUED['at'] = None
+            threading.Thread(target=wait, name='taskuary-update-wait', daemon=True).start()
+            logger.info(f'update: {waits_line(busy)}')
+    return {'waiting': True, 'waits': waits_line(busy), 'restarting': False}
 
 
 STOP_WAIT = 20.0                # what the children get to stop in before we go regardless: the helper is waiting on us

@@ -12,7 +12,9 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import GridViewIcon from "@mui/icons-material/GridViewOutlined";
 import SportsEsportsIcon from "@mui/icons-material/SportsEsportsOutlined";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import api from "./api";
+import { inDesktop, quitTitle, stoppedLines } from "./appQuit.js";
 import { track } from "./demoTrack";
 import { fmtStamp } from "./dates.js";
 import { theme, ACCENT, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT, BRAND } from "./theme.jsx";
@@ -274,6 +276,45 @@ export const ViewSwitch = ({ view, onView }) => (
   </Box>
 );
 
+// QUIT, ON THE TOP LINE (the owner, 2026-10-25: "Quit is an explicit option ... in the browser version's top line"). In the browser
+// nothing else stops the server; the desktop window has the tray's Quit, so it is not drawn there. No box asks: the hover says what
+// stops with it, read when the pointer arrives (GET /api/quit), and the press is the decision.
+function QuitButton({ onStopped }) {
+  const [running, setRunning] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");             // a Quit that did not stop it says why, on the button itself
+  if (inDesktop() || DEMO) return null;
+  const read = () => api.get("/api/quit").then(({ data }) => setRunning(data.running || "")).catch(() => {});
+  const quit = async () => {
+    setBusy(true); setErr("");
+    try { onStopped((await api.post("/api/quit", {})).data.stopped || []); }
+    catch (e) { setBusy(false); setErr(e?.response?.data?.detail || "Taskuary did not stop - close the terminal that runs it"); }
+  };
+  return (
+    <Tooltip title={err || quitTitle(running)}>
+      <span onMouseEnter={read} onFocus={read}>
+        <IconButton size="small" onClick={quit} disabled={busy} aria-label="Quit Taskuary" data-tq-quit="">
+          {busy ? <CircularProgress size={14} /> : <PowerSettingsNewIcon sx={{ fontSize: 17, color: DIM }} />}
+        </IconButton>
+      </span>
+    </Tooltip>
+  );
+}
+
+// ...and what the tab shows once it has: plain, and nothing left on it that would call a server that is gone
+export function Stopped({ stopped }) {
+  const [title, line] = stoppedLines(stopped);
+  return (
+    <Box data-tq-stopped="" sx={{ minHeight: "100vh", display: "grid", placeItems: "center", bgcolor: BG, px: 2, textAlign: "center" }}>
+      <Box sx={{ maxWidth: 440 }}>
+        <TaskuaryMark size={30} sx={{ borderRadius: 1.5, mb: 1.5 }} />
+        <Typography sx={{ fontWeight: 600, fontSize: 15, color: INK }}>{title}</Typography>
+        <Typography sx={{ mt: 0.75, fontSize: 13.5, color: DIM, lineHeight: 1.6 }}>{line}</Typography>
+      </Box>
+    </Box>
+  );
+}
+
 export default function TaskHubPage() {
   // Honor a deep link on the first render. Starting every reload on Assistant meant its hidden
   // conversation, feed and funnel all fetched before #task=356 (or a report) was allowed to load.
@@ -290,6 +331,7 @@ export default function TaskHubPage() {
   useEffect(() => { const f = (e) => setBug({ error: e.detail || null }); window.addEventListener(REPORT_EVENT, f); return () => window.removeEventListener(REPORT_EVENT, f); }, []);
   const [pending, setPending] = useState(0);
   const [tick, setTick] = useState(0);
+  const [stopped, setStopped] = useState(null);   // Quit pressed: the list of what stopped with it (QuitButton)
   // the counter, and the panel it opens
   const [setup, reloadSetup] = useSetup(tick);
   useEffect(() => { window.addEventListener("tq-setup-changed", reloadSetup); return () => window.removeEventListener("tq-setup-changed", reloadSetup); }, [reloadSetup]);
@@ -416,6 +458,7 @@ export default function TaskHubPage() {
     if (tab !== "Assistant") { setTab("Assistant"); tabRef.current = "Assistant"; }
   };
 
+  if (stopped) return <ThemeProvider theme={theme}><CssBaseline /><Stopped stopped={stopped} /></ThemeProvider>;
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -484,6 +527,7 @@ export default function TaskHubPage() {
           <Tooltip title="Refresh">
             <IconButton size="small" onClick={() => setTick(tick + 1)}><RefreshIcon sx={{ fontSize: 17, color: DIM }} /></IconButton>
           </Tooltip>
+          <QuitButton onStopped={setStopped} />
         </Box>
 
         {/* tighter side padding than top/bottom: the horizontal margin is dead space on a wide

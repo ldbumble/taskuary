@@ -255,6 +255,12 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     if extra_args:
         from .clis import preset_args
         prof['args'] = list(prof.get('args') or preset_args(prof['cmd']) or ['-p']) + list(extra_args)
+    # a trusted run with hands gets Taskuary's own tools and loses the owner's send tools, as a pane does (agenttools.session_args)
+    if task_id and not no_hands and stranger_mode not in ('auto', 'look'):
+        from .clis import preset_args
+        from . import agenttools
+        args = list(prof.get('args') or preset_args(prof['cmd']) or ['-p'])
+        prof['args'] = agenttools.insert(['', *args], agenttools.session_args(store, hub_agents.cli_of(prof, agent_name), task_id, args))[1:]
     # WHICH GEAR this job rides. Session work - coding and general alike - takes the MAIN model;
     # the light gear is for the one-message jobs (triage, drafts, summaries, the digest). A
     # general worker session used to fall through to light whenever no main model was set, so

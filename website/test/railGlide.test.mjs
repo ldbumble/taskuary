@@ -21,7 +21,7 @@ test("a row joining a band waits for the glide, a reordered row starts from wher
   assert.match(view, /falls\(i\.key\) \? "landing" : entering\.has\(i\.key\) \? "entering" : ""/);
   assert.match(view, /style=\{\{ top: falls\(i\.key\) \? -ROW_H : top \}\}/);
   assert.match(view, /const d = was\.has\(k\) && drawn\?\.get\(k\);\n\s+if \(d\) return \[el, \.\.\.d\];/, "a moved node is sent back to where it was drawn");
-  assert.match(view, /const arrivalsOf = \(was\) => \(was\?\.size \? arrivals\(was, items\) : new Set\(\)\);/, "after an empty rail nothing falls at once");
+  assert.match(view, /const arrivalsOf = \(was\) => \(was\?\.size \? new Set\(\[\.\.\.arrivals\(was, items\)\]\.filter\(\(k\) => !ever\.current\.has\(k\)\)\) : new Set\(\)\);/, "after an empty rail nothing falls at once");
 });
 
 // ...AND A GLIDE THAT CHANGES COURSE (a close rings the next row at once, then the pile's answer lands mid-glide) restarts every row

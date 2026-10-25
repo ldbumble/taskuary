@@ -75,3 +75,17 @@ test("an amend_playbook proposal shows the page and saves to its playbook", () =
   assert.match(p.destination, /vendor-onboarding\.md/);
   assert.match(p.context, /ledger/);
 });
+
+// the owner, 2026-10-25: "browser acts that can't be undone (submit, pay, delete, send) wait as a proposal the owner presses" - the card
+// says what the browser would do and on which page, in words, with the command under it; Approve runs it there (browsergate.perform)
+test("a held browser act reads as what it does and where, never its JSON", () => {
+  const review = { Kind: "action", Reason: "held before it ran, in the agent's browser: pays the $412.50 order on toll.example - it can't be undone",
+    DraftText: JSON.stringify({ action: "browser_act", sid: "run1", args: ["click", "@e12"], command: "agent-browser click @e12",
+      url: "https://pay.toll.example/checkout/review", site: "toll.example", what: "pays the $412.50 order on toll.example" }) };
+  const shown = proposalPresentation(review);
+  assert.equal(shown.title, "The agent's browser waits for your yes");
+  assert.equal(shown.destination, "https://pay.toll.example/checkout/review");
+  assert.equal(shown.approveLabel, "Approve");
+  assert.equal(shown.readOnly, true);
+  assert.equal(reviewText(review), "pays the $412.50 order on toll.example\n\nagent-browser click @e12");
+});

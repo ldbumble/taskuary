@@ -1128,6 +1128,11 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
             argv, theme = _take_settings(argv)          # one --settings: the session's own file carries the theme
             # ...and an option straight after it closes --add-dir's list, so the prompt is never read as a folder
             argv = _clis.auto_args(cli_named(profile, argv), list(argv)) + ['--add-dir', sd, '--settings', _origin.session_settings(store, task_id, theme)]
+        # TRUSTED WORK GETS TASKUARY'S OWN TOOLS, and the owner's own MCP tools minus the ones that send (the owner, 2026-10-25):
+        # Claude and Codex, whose flags for both are proven (agenttools.session_args); a stranger's session keeps its strict mode
+        elif mode == 'full':
+            from . import agenttools
+            argv = agenttools.insert(argv, agenttools.session_args(store, cli_named(profile, argv), task_id, argv))
     # Reopening the CLI's own conversation, by its own id. The prompt is TYPED into a resumed pane
     # rather than handed over on the command line: `claude --resume <id> "..."` and its equivalents
     # differ per CLI, and the typed road is the one verified against every TUI here.
@@ -1735,6 +1740,9 @@ def with_fence_rule(rules: str) -> str:
     if not rules: return rules
     if FENCE_OPEN not in rules: rules = f'{rules} {FENCE_LINE}'
     if '--tick' not in rules: rules = f'{rules} {TICK_LINE}'
+    if 'Taskuary tools' not in rules:                   # the toolbox (2026-10-25): an owner's copy from before it still hears of it
+        from .agenttools import TOOLS_LINE
+        rules = f'{rules} {TOOLS_LINE}'
     return rules if 'Big results' in rules else f'{rules} {BIG_LINE}'
 
 

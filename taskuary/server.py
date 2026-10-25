@@ -237,6 +237,8 @@ async def _lifespan(_app):
     chatgptauth.on_rotate = lambda cid, rt: store.save_connector({'ConnectorId': cid, 'Secret': rt}, 'chatgptauth')   # ...and a ChatGPT one
     from . import sharing   # imported here, before the first request: imported on the start's own thread it raced the first requests (a card's Enable read back Off)
     threading.Thread(target=share_start, name='taskuary-share-start', daemon=True).start()   # links on: their own port
+    from . import awake
+    awake.start(store)             # the computer stays awake while an agent or a workflow runs, and only then (awake.py)
     try:
         async with processing_all.membership_lifecycle(store):
             yield
@@ -244,6 +246,7 @@ async def _lifespan(_app):
         t = _WALK_THREAD[0]
         if t is not None and t.is_alive(): t.join(WALK_WAIT)   # never close the store under it
         _WALK_READY.set()
+        awake.stop()               # ...and sleep is allowed again once nothing here can run
         _close_permits()           # a permit holds for days: released, its thread returns and the process can exit
         if not _close_drain_workers(timeout=DRAIN_WAIT, target_store=store):
             logger.warning('triage drain still stopping during shutdown')
@@ -750,16 +753,14 @@ def version(): return {'version': _ver, 'started': _started, 'cli_installer_revi
 # ── update in place (update.py): Settings → Updates ─────────────────────────────────────
 @app.get('/api/update')
 def update_check(force: int = 0):
-    from . import update
-    return update.check(force=bool(force))
+    from . import awake, update
+    # ...with what an Update now would wait for, and whether one already waits (update.when_idle)
+    return {**update.check(force=bool(force)), 'waits': update.waits_line(awake.running(store)),
+            'queued': update.QUEUED['at'] is not None, 'queued_error': update.QUEUED['error']}
 
-@app.post('/api/update')
-def update_apply():
-    """Fetch the latest release and swap it in. The answer goes out first; the process ends a
-    moment later so the new build can start. Owner-only: guard.py refuses an agent token."""
+def _update_now(info: dict) -> dict:
     from . import update
-    try: out = update.apply()
-    except Exception as e: raise HTTPException(422, str(e))
+    out = update.apply(info=info)
     # Once apply() returns, the swap helper is ALREADY RUNNING and waiting for this process to go.
     # Anything that throws between here and exit_soon strands it on a PID that never dies - which
     # is how one machine was left with no app and a console spinning on `find "<pid>"`
@@ -768,6 +769,39 @@ def update_apply():
     except Exception as e: logger.warning(f'update: could not write the audit row, restarting anyway - {e}')
     if out.get('restarting'): update.exit_soon()
     return out
+
+@app.post('/api/update')
+def update_apply():
+    """Fetch the latest release and swap it in. The answer goes out first; the process ends a
+    moment later so the new build can start. With an agent or a workflow run live it WAITS for
+    them, and says so (update.when_idle). Owner-only: guard.py refuses an agent token."""
+    from . import awake, update
+    try: info = update.ready()
+    except Exception as e: raise HTTPException(422, str(e))
+    try: return update.when_idle(lambda: awake.running(store), lambda: _update_now(info))
+    except Exception as e: raise HTTPException(422, str(e))
+
+
+# ── Quit, from the browser's top line (the owner, 2026-10-25) ─────────────────────────────────────
+@app.get('/api/quit')
+def quit_would_stop():
+    """What a Quit would stop right now - the button's hover says it, so the press is the decision with no box asking (awake.live)."""
+    from . import awake
+    agents, flows = awake.live(store)
+    return {'agents': agents, 'workflows': flows, 'running': awake.said(agents, flows)}
+
+@app.post('/api/quit')
+def quit_app():
+    """Stop Taskuary the way Ctrl+C does: the answer goes out, then the server is told to exit and its lifespan stops what it
+    started - agents, CLI children, the share port. Says what it stopped, for the page left behind. Owner-only (guard.py)."""
+    from . import welcome, workerstate
+    srv = workerstate.SERVER[0]
+    if srv is None: raise HTTPException(409, "this Taskuary was not started in a way it can stop itself - close the window or the terminal that runs it")
+    try: stopped = [task_ref(t['TaskId']) for t in welcome.working(store)]
+    except Exception: stopped = []
+    store.audit('app', 0, 'quit', ACTOR, detail={'stopped': stopped})
+    threading.Timer(0.5, lambda: setattr(srv, 'should_exit', True)).start()
+    return {'quitting': True, 'stopped': stopped}
 
 def _send_block(channel, has_message=True) -> str:
     """The reason an approved reply could not leave on this channel - outbound.send_block's words,

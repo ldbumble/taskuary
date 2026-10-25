@@ -81,11 +81,18 @@ def goodbye(store, busy: list = None) -> str:
     if home: return stop + f"While I'm closed I can't watch what comes in, but it waits safely in {home} and your other sources. I'll catch up the moment you open me."
     return stop + "While I'm closed I can't watch for anything new. " + ('' if busy else 'Nothing is lost - ') + "I'll catch up the moment you open me."
 
-def closing(store, now: datetime = None) -> str:
-    """The window is going: write down when (the next arrival counts from here), and say goodbye."""
+def tray_goodbye(store, busy: list = None) -> str:
+    """CLOSING IS NOT QUITTING where the desktop has a tray (2026-10-25): the window goes, I stay - watching, and the work runs on.
+    So this goodbye says I am still here, where to find me, and what really stops me."""
+    busy = working(store) if busy is None else busy
+    run = f"the work on {_refs(busy)} carries on, and " if busy else ''
+    return f"I'm still running in the tray - {run}I keep watching what comes in. Open me again from the Taskuary icon there; Quit in its menu stops me."
+
+def closing(store, now: datetime = None, tray: bool = False) -> str:
+    """The window is going: write down when (the next arrival counts from here), and say goodbye - the tray's own when I stay running."""
     t = _stamp(now or datetime.now())
     for k in (CLOSED_KEY, SEEN_KEY): store.set_setting(k, t, 'assistant')
-    return goodbye(store)
+    return tray_goodbye(store) if tray else goodbye(store)
 
 def last_here(store):
     """When the owner was last in front of Taskuary: the later of the last look and the last close."""

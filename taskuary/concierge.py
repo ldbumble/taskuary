@@ -2146,8 +2146,13 @@ def read_op(store, kind: str, params: dict) -> str:
         # ...and on a phone no link opens: the screen is named, at the desk (phone_screens)
         say = (lambda h: f"no link opens on a phone - name it, at their desk: {h.get('where') + ' → ' if h['type'] == 'setting' and h.get('where') else ''}"
                f"{h['title']}") if DELIVERY.get() == PHONE else (lambda h: f"link it as [{h['title']}]({h['href']})")
-        return NEWLINE.join(f"{h['title']} ({h['type']}{' - ' + h['where'] if h.get('where') else ''}{', ' + h['sub'] if h.get('sub') else ''}): {say(h)}"
-                            for h in hits)
+        out = [f"{h['title']} ({h['type']}{' - ' + h['where'] if h.get('where') else ''}{', ' + h['sub'] if h.get('sub') else ''}): {say(h)}" for h in hits]
+        # ...and Updates with what is known about a newer release (the owner, 2026-10-25: "is there an update" answered, its button lit -
+        # never installed from the chat)
+        if any(h.get('href') == places.href('updates') for h in hits):
+            from . import awake, update
+            out.append(f"{places.name('updates')} now: {update.status_line(awake.running(store), lit=DELIVERY.get() != PHONE)}")
+        return NEWLINE.join(out)
     # THE APP ITSELF, by name - appfacts reads the tables the tabs read. A miss lists what exists, so
     # the second try finds it; an id is printed with every row, so the next call can be exact.
     if kind == 'report.read':

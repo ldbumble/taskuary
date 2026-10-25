@@ -502,6 +502,7 @@ def _page(body: str) -> str:
 
 def form_html(site: str, minutes: int, err: str = '') -> str:
     """The fill page. The SITE leads, big - it is the one thing to check before typing a password into anything."""
+    from .timewords import plural
     s = H.escape(site)
     return _page(f'<p class="k">Sign in to</p><p class="site">{s}</p>'
                  + (f'<p class="err" role="alert">{H.escape(err)}</p>' if err else '')
@@ -511,7 +512,7 @@ def form_html(site: str, minutes: int, err: str = '') -> str:
                  '<label class="keep"><input type="checkbox" name="save" value="1"> Save to vault for next time</label>'
                  '<button type="submit">Sign in</button></form>'
                  f'<p class="note">Taskuary types this into the {s} page open in the task\'s browser - only if that page is still on {s}. '
-                 f'The agent never sees it. This page works once, for {minutes} more minute{"s" if minutes != 1 else ""}.</p>')
+                 f'The agent never sees it. This page works once, for {plural(minutes, "more minute", "more minutes")}.</p>')
 
 
 def done_html(site: str, saved: bool, kept: str = '') -> str:

@@ -413,7 +413,7 @@ def _ask(store, brain, f) -> dict:
     """The model's title and explanation, or {} - a draft without them is still a report."""
     from . import llm as ai
     try:
-        brain = brain or ai.build_llm(store, gear='light')
+        brain = brain or ai.build_llm(store, gear='light', job='summary')
         if not brain: return {}
         user = '\n'.join([f"Where: {f['where'] or 'unknown'}", f"Recent actions: {', '.join(f['actions']) or 'none'}",
                           f"Error:\n{f['error'] or 'none reported'}", f"Environment: {f['env']}", f"Log lines:\n{f['log'][-3000:]}"])

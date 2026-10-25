@@ -339,14 +339,18 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
 
 def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,
               cli_tools: bool = False, extra_env: dict = None, research: bool = False, fallback_user=None,
-              gear: str = 'light', keep: str = None, task_id=None):
+              gear: str = 'light', keep: str = None, task_id=None, job: str = None):
     """The brain, or the demo's script. Everything in the app asks for its brain here, which is
     the one place a demo can be told to answer without a key, a CLI, or a request that leaves
-    the machine (demo.py)."""
-    from . import demo
+    the machine (demo.py).
+
+    `job` says what the call is FOR (brainroute.JOBS) and brainroute.choose says which brain runs it. Every call
+    site in taskuary/ names one (tests/test_brainroute.py); a caller that does not is triage, as it always was."""
+    from . import demo, brainroute
     # the demo answers from a script: no key, no CLI, no request leaving the machine
     if demo.enabled(): return demo.brain()
-    brain = _build_llm(store, pick, model, trace, cancel, resume, cli_tools, extra_env, research, fallback_user, gear, keep, task_id)
+    r = brainroute.choose(store, job or 'triage', task=task_id, want_pick=pick, want_model=model, gear=gear)
+    brain = _build_llm(store, r.pick, r.model or None, trace, cancel, resume, cli_tools, extra_env, research, fallback_user, r.gear, keep, task_id)
     return _Scrubbed(brain) if brain else brain
 
 

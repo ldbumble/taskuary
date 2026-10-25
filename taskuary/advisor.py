@@ -628,7 +628,7 @@ def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1
     # rulebook's, at once and outside the hourly cap, so an event on it asks nothing of the model
     from . import rulebook
     if not rulebook.decide(store, item, verbs)['ask']: return W(dropped='left to the rule')
-    brain = llm or build_llm(store)
+    brain = llm or build_llm(store, job='advisor')
     if not brain:
         # once per revision, and said: the strip asks for an AI (for_key's {"none": "no_ai"}) - a repeat would loop the re-read
         last = next(iter(_at(store, target_kind, target_id, rev, own)), None)

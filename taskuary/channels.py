@@ -149,7 +149,7 @@ def github_discover(store, c: dict, actor='owner') -> dict:
             store.delete_source(s['SourceId']); gone += 1
     from .docsync import sync_connections, update_repo_map
     from .llm import build_llm
-    try: llm = build_llm(store)
+    try: llm = build_llm(store, job='triage')
     except Exception: llm = None
     update_repo_map(store, repos, actor, tok=tok, llm=llm)
     sync_connections(store, actor)
@@ -2048,7 +2048,7 @@ def poll_channels(store, backfill_hours: float = 0, progress=None, only=None) ->
     Independent HTTP waits overlap. SQLite writes hop onto one writer thread. Drain of
     the same conversation stays sequential - that is a later pass, not this one."""
     from .llm import build_llm
-    try: llm = build_llm(store)
+    try: llm = build_llm(store, job='triage')
     except Exception: llm = None
     read_it = wants_read(store)   # asked once per run, not once per message
     # a mailbox card whose source row was never created polls nothing at all, and looks connected

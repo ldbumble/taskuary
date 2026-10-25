@@ -584,6 +584,62 @@ def share_revoke(sid: int, request: Request):
 # server on its own port that knows /share/<token> and nothing else, running only while "Share links on your network" is on.
 
 
+# ── SIGNING IN FOR THE BROWSER AGENT (signin.py): the fill link, the fill page, and the saved sign-ins. None of it an agent's ──
+@app.post('/api/tasks/{task_id}/signin/link')
+def signin_link(task_id: int, request: Request, open: int = 0):
+    """A one-time fill page for the sign-in this task waits on. Only its hash is kept; the link is shown here, once - or, for the
+    desktop app (no browser of its own, as /api/open-url), opened in the default browser and not shown at all."""
+    import webbrowser
+    from . import hooks, signin
+    _owner_only(request, "signing in is the owner's")
+    try: out = signin.link(store, task_id)
+    except LookupError as e: raise HTTPException(404, str(e))
+    if not open: return out
+    threading.Thread(target=webbrowser.open, args=(hooks.base_url() + out['url'],), daemon=True).start()
+    return {'opened': True, 'site': out['site'], 'minutes': out['minutes']}
+
+
+@app.get('/api/signins')
+def signins(request: Request):
+    from . import signin
+    _owner_only(request, "the saved sign-ins are the owner's")
+    return {'data': signin.listing(store)}
+
+
+@app.delete('/api/signins/{site}')
+def signin_remove(site: str, request: Request):
+    from . import signin
+    _owner_only(request, "the saved sign-ins are the owner's")
+    if not signin.remove(store, site, ACTOR): raise HTTPException(404, 'nothing is saved for that site')
+    return {'ok': True}
+
+
+# The fill page sits outside /api on purpose: it is opened as a page, so no header can ride on it - the one-time token in its address
+# IS its key, and only that token's hash is kept. Its POST is same-origin only (the token gate checks Origin on /api alone).
+@app.get('/signin/{token}', include_in_schema=False)
+def signin_page(token: str):
+    from . import signin
+    r = signin.peek(store, token)
+    if not r: return HTMLResponse(signin.gone_html('This sign-in page was used already or has expired.'), 410, headers=signin.HEADERS)
+    return HTMLResponse(signin.form_html(r['Site'], max(1, int((r['ExpiresAt'] - time.time()) // 60))), headers=signin.HEADERS)
+
+
+@app.post('/signin/{token}', include_in_schema=False)
+async def signin_submit(token: str, request: Request):
+    from urllib.parse import parse_qs
+    from . import signin
+    if not guard.origin_ok(request.headers):
+        return HTMLResponse(signin.gone_html('This sign-in came from another page, so nothing was typed.'), 403, headers=signin.HEADERS)
+    form = parse_qs((await request.body())[:16384].decode('utf-8', 'replace'), keep_blank_values=True)
+    one = lambda k: (form.get(k) or [''])[0]
+    try: out = await run_in_threadpool(signin.by_owner, store, token, one('username'), one('password'), one('save') == '1')
+    except LookupError as e: return HTMLResponse(signin.gone_html(str(e)), 410, headers=signin.HEADERS)
+    except (signin.SignInError, ValueError) as e:
+        return HTMLResponse(signin.gone_html(f'Nothing was signed in: {e}.'), 409, headers=signin.HEADERS)
+    finally: form.clear()
+    return HTMLResponse(signin.done_html(out['site'], out['saved'], out['kept'] if out['kept'] != 'saved' else ''), headers=signin.HEADERS)
+
+
 MAX_BUG_BODY = 200_000       # the scrub matches every private string against every field: a client does not get to make it chew megabytes
 
 

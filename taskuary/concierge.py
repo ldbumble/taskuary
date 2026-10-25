@@ -830,6 +830,8 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     return ''
 
 
+# THE WALK RAN OUT WITH WORK STILL ON ITS WAY (surface): said on the phone; on the desk the Walk button stands in its place
+PENDING = 'Nothing else needs you right now; '
 # ...said of an item that is NOT on the table: the one in front of the owner is open already (_say drops it there)
 OPEN_IT = ' Open it if you want its own buttons.'
 
@@ -3158,7 +3160,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             parts = ([f"{pending['working']} in progress"] if pending['working'] else [])
             parts += ([f"{pending['settling']} still being read"] if pending['settling'] else [])
             parts += ([f"{pending['scheduled']} scheduled for a little later"] if pending['scheduled'] else [])
-            say = "Nothing else needs you right now; " + ', '.join(parts) + '.'
+            say = PENDING + ', '.join(parts) + '.'
         else: say = all_done(store)
         over, desk = not key and not (only and left), DELIVERY.get() != PHONE
         # ...and THE WAY TO WALK AGAIN, on the row by the prompt box, before the Opens: the day card's own button, not a card and not a
@@ -3169,6 +3171,9 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         again = over and desk and any(i.get('tid') and not i.get('deferred') for i in left)
         if over and desk and (opens or again):
             if not opens and say.startswith(ALL_DONE): say = ''            # buttons do the talking (2026-10-23), and it is not true
+            # ...nor "Nothing else needs you right now; 1 in progress." when all that is left is an agent's work: the Walk button says it (the
+            # owner, 2026-10-25, on the walk-again fix's question). The phone has no button there and keeps its words
+            if not opens and say.startswith(PENDING): say = ''
             opens = [buttons.chip('walk'), *opens]
         with guarded():
             put_down()

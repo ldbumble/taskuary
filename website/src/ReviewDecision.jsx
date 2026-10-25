@@ -63,6 +63,12 @@ export const InvoiceLine = ({ meta }) => (
 
 // A CALENDAR ANSWER (calwrite.py) says what the calendar will be told - the act, the meeting, the time, and what it clashes with -
 // where an email says who it goes to. The box under it is the note that rides along, and may be left empty.
+// THE OWNER'S EDIT OUTLIVES THE CARD (the 2026-10-25 sweep): it lived in the card's own state, so a look at Reports or another row - anything
+// that drew the task again - put the filed draft back and " Regards, Alex" was gone, with nothing said. Held per draft as filed: a new draft
+// (Redraft, the server's own) starts from itself.
+const edits = new Map();
+const heldEdit = (r) => { const e = edits.get(r?.ReviewId); return e && e.filed === reviewText(r) ? e.text : null; };
+
 const CAL_ACT = { accept: btn("accept_invite"), decline: btn("decline_invite"), propose: "Propose", schedule: "Invite" };
 // The times are the server's words (calwrite.when): the envelope carries them as they will be said.
 export const CalendarLine = ({ meta }) => (
@@ -85,7 +91,8 @@ export const CalendarLine = ({ meta }) => (
 // `toRow`: the decision's buttons are drawn by the action row above the chat line (layout B), not here - the same handlers, registered.
 // `onEmailInstead`: the task's Send out results - a chat reply that has to carry a file is answered by email instead (U17).
 export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, toRow = false, simulated = false, onDrop = null, onEmailInstead = null }) {
-  const [text, setText] = useState(null);           // the owner's edit; null means "the draft as filed"
+  const [text, setTextNow] = useState(() => heldEdit(r));   // the owner's edit; null means "the draft as filed"
+  const setText = (v) => { if (v == null) edits.delete(r.ReviewId); else edits.set(r.ReviewId, { text: v, filed: reviewText(r) }); setTextNow(v); };
   const [cc, setCc] = useState(null);               // null means "the CC the draft was filed with"
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");

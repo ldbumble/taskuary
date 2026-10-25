@@ -10,7 +10,7 @@
 //   walk      the demo, refusals ON: Next through the day, doing what each card's first button invites
 //   sweep     the demo, refusals ON: every button every row shows, in its row and its More menus, pressed once
 //   faults    a seeded world with a mocked mailbox: each failure failures.classify knows, forced, then its way out pressed
-//   cards     a proposal card cancelled, then pressed; a task folded by its X, then opened again from its line and the rail
+//   cards     a row press that must run at once, with no card to confirm it; a task folded by its X, then opened again from its line and the rail
 //   links     the demo: links to a connector and a setting, from a fresh page and over their open page, Back, and Next's address
 //   search    the demo: Enter typed over an earlier answer and before any, the count past the cap, a connection by name, a phone
 //   table     the demo, its brain linking a task it is asked to show: a task opened by the rail, Next, the Board, a deep link, search,
@@ -792,21 +792,22 @@ async function faults() {
 // ── CARDS: a proposal cancelled then pressed; a task folded by its X then opened again ────────────────────────────────────────
 async function cards() {
   const srv = await serve(3), page = await pageOn(srv, "cards");
-  // a proposal card: Put it on my list proposes. (Not ours no longer asks - it files at once, just this once, with From now on after
-  // it - the owner, 2026-10-21 - so it draws no card to cancel)
+  // A PRESS IS THE DECISION: no row button draws a card to confirm it any more (Not ours since 2026-10-21; Put it on my list, Chase them
+  // and every other desk press since the 2026-10-25 sweep - assistant-is-a-router: "no confirm cards"), so the cancel path is gone. Put it
+  // on my list is pressed and must run at once; a card standing after it is a confirm card, which is the dead end now
   page.step = "cards cancel";
-  let card = null;
+  let card = null, pressed = false;
   for (const r of (await look(page)).rail) {
-    for (const verb of ["mine"]) {
-      if (!(await openItem(page, r.key)) || !(await pressVerb(page, verb))) continue;
-      await wait(4000);
-      card = await page.$(".tq-proposal");
-      if (card) break;
-    }
-    if (card) break;
+    if (!(await openItem(page, r.key)) || !(await pressVerb(page, "mine"))) continue;
+    pressed = true; await wait(4000);
+    card = await page.$(".tq-proposal");
+    judge(await look(page), `${page.step} Put it on my list`);
+    break;
   }
-  if (!card) note("LIVE", page.step, "no press drew a proposal card to cancel - the cancel path was not walked");
-  else {
+  if (pressed && !card) walked.push("press: Put it on my list ran at once - no card to confirm it");
+  if (!pressed) note("COVER", page.step, "no item on the rail had Put it on my list to press");
+  else if (card) {
+    note("INLINE", page.step, "a press drew a card to confirm it - the row's button is the confirmation");
     const btns = await card.$$("button");
     const words = await Promise.all(btns.map((b) => b.evaluate((e) => e.innerText.trim())));
     const ci = words.findIndex((w) => /^(cancel|not now|no|never mind)/i.test(w));

@@ -26,6 +26,6 @@ test("otherwise the newest card leads, as before", () => {
 
 test("the chat draws, and asks about, the table's card", () => {
   const src = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
-  assert.match(src, /const lastCardIdx = useMemo\(\(\) => tableCardIndex\(shown, old \? null : current \|\| cardKey\), \[shown, old, current, cardKey\]\);/);
+  assert.match(src, /const lastCardIdx = useMemo\(\(\) => \{ const i = tableCardIndex\(shown, old \? null : current \|\| cardKey\)/);
   assert.match(src, /const table = msgs\[tableCardIndex\(msgs, current \|\| cardRef\.current\)\]\?\.card;/);
 });

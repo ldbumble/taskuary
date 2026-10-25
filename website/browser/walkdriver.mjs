@@ -3,11 +3,22 @@
 import { startHarness } from "./harness.mjs";
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-export async function boot(t, { width = 0, height = 1000, ...opts } = {}) {
+export async function boot(t, { width = 0, height = 1000, slow = 0, ...opts } = {}) {
   const h = await startHarness(opts);
   t.after(() => h.close());
   const page = await h.newPage(), errors = [];
   if (width) await page.setViewport({ width, height, deviceScaleFactor: 1 });
+  // `slow`: a close the server takes that long to answer - it has done the work, the page hears of it late (a close over a live agent
+  // writes it up first: 18 s on 2026-10-01). The answer is held in the page, so everything else stays as fast as it is
+  if (slow) await page.evaluateOnNewDocument((ms) => {
+    const open = XMLHttpRequest.prototype.open, send = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function (m, url, ...rest) { this.__url = String(url); return open.call(this, m, url, ...rest); };
+    XMLHttpRequest.prototype.send = function (...a) {
+      if (/\/api\/operations\/[^/]+\/execute|\/api\/tasks\/\d+\/remind/.test(this.__url))
+        for (const k of ["onreadystatechange", "onloadend", "onload"]) { const f = this[k]; if (f) this[k] = (...e) => setTimeout(() => f.apply(this, e), ms); }
+      return send.apply(this, a);
+    };
+  }, slow);
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(h.ui, { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 40000 });

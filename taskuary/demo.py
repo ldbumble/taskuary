@@ -937,11 +937,8 @@ def seed_dashboard(store) -> int:
     # ...and the built-in one every install gets (store.SEEDED_REPORTS), filled the same way: the demo's showcase dashboard
     for src in store.list_sources(active_only=False):
         if src.get('Owner') == 'template' and json.loads(src.get('ConfigJson') or '{}').get('type') == 'dashboard':
-            out = reports.run_one(store, src, None, 'schedule')
-            # ...a minute after the showcase one: filed in the same second, the two tied on arrival and the processing rail broke the tie
-            # by a hashed key, so a walk past them drew them over each other (the dead-end walk's SWAP). A real install files them at their
-            # own times; the tie itself is the rail's to settle (see the 0.3.9.34 notes).
-            if out.get('message_id'): store._exec("UPDATE message SET SentAt=datetime(SentAt, '+1 minute') WHERE MessageId=?", (out['message_id'],))
+            # ...in the same second as the showcase one: the rail settles that tie by the first filed (funnel.place_id, 2026-10-25)
+            reports.run_one(store, src, None, 'schedule')
     return sid
 
 

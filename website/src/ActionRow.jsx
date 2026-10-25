@@ -103,7 +103,7 @@ function Cluster({ g, btn }) {
             slotProps={{ paper: { sx: { minWidth: 200, borderRadius: 2 } } }}>
             {g.rest.map((v) => (
               <MenuItem key={v.id} dense disabled={v.disabled} title={(v.disabled && v.why) || v.title || undefined} data-tq-verb={v.id}
-                onClick={(e) => { const a = at; setAt(null); press(v.id, e, a); }} sx={{ fontSize: 13 }}>{v.label}</MenuItem>
+                onClick={(e) => { const a = at; setAt(null); press(v.id, e, a, v.of); }} sx={{ fontSize: 13 }}>{v.label}</MenuItem>
             ))}
           </Menu></>}
       </div>
@@ -156,7 +156,7 @@ export default function ActionRow({ inline = false, advised = null, hold = false
   // a short bar word ("Snooze", "Stop") beside a long hover one was two names for one button
   const btn = (v) => (
     <button key={v.id} type="button" className={`tq-ab ${v.tone}`} disabled={v.disabled} data-tq-verb={v.id} data-tq-own={v.own ? "" : undefined}
-      title={(v.disabled && v.why) || v.title || (fit.tight ? v.label : undefined)} onClick={(e) => press(v.id, e, e.currentTarget)}>{v.label}</button>
+      title={(v.disabled && v.why) || v.title || (fit.tight ? v.label : undefined)} onClick={(e) => press(v.id, e, e.currentTarget, v.of)}>{v.label}</button>
   );
   return (
     // `hold`: the item's first decision is still being read - the row keeps its room and shows nothing until its lit button lands with it
@@ -165,7 +165,7 @@ export default function ActionRow({ inline = false, advised = null, hold = false
       <div className={fit.tight ? "tq-arow-verbs tight" : "tq-arow-verbs"} ref={setBox} data-tq-fold={fit.level}>
         {next && <div className="tq-cl tq-cl-next" role="group" aria-label="Move on">
           <div className="tq-cl-b"><button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} title={next.title || undefined} disabled={next.disabled}
-            onClick={(e) => press(next.id, e, e.currentTarget)}>{next.label}</button></div></div>}
+            onClick={(e) => press(next.id, e, e.currentTarget, next.of)}>{next.label}</button></div></div>}
         {fit.groups.map((g) => <Cluster key={g.type} g={g} btn={btn} />)}
       </div>
       {why && <div className="tq-arow-why" role="status" data-tq-row-why="">{why}</div>}

@@ -38,8 +38,9 @@ test("the freshness poll adopts the server's Current, except while a turn of our
   const poll = view.slice(view.indexOf('const { data: st } = await api.get("/api/concierge")'),
                           view.indexOf("if (data.events?.length)"));
   assert.match(poll, /const said = st\.current \|\| null;/);
-  assert.match(poll, /if \(!turnFlight\.current && !cardRef\.current && !mid && moves === tableMoves\.current\)/,
-    "a local answer is the newer truth, a task opened by name here is what this tab shows, and a read sent mid-turn or before a move here is older");
+  assert.match(poll, /if \(!turnFlight\.current && !cardRef\.current && !mid && !earlyRef\.current && moves === tableMoves\.current\)/,
+    "a local answer is the newer truth, a task opened by name here is what this tab shows, a read sent mid-turn or before a move here is older, "
+    + "and the item a close drew at its press is the table's until the close lands (2026-10-25)");
   // the table follows through the one road - the rail's mark, the advice and the card move together - without jumping the view
   assert.match(poll, /putOnTable\(said, "sync"\);/);
 });

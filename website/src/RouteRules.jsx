@@ -52,6 +52,18 @@ export function RouteRules() {
       </Typography>
       {say && <Alert severity="warning" sx={{ mt: 1, fontSize: 12.5 }}>{say}</Alert>}
       {p.warning && <Alert severity="warning" sx={{ mt: 1, fontSize: 12.5 }} data-tq-route-warning="">{p.warning}</Alert>}
+      {/* the DATA rules hold in either mode (a constraint, not a tier), so Fixed shows them too */}
+      {!auto && !!rules.filter((r) => r.use?.only).length && (
+        <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+          {rules.filter((r) => r.use?.only).map((r) => (
+            <Box key={r.id} data-tq-route-rule={r.id} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+              <Switch size="small" checked={!!r.on} onChange={() => put(rules.map((x) => (x.id === r.id ? { ...x, on: !x.on } : x)))}
+                inputProps={{ "aria-label": r.sentence }} />
+              <Typography sx={{ fontSize: 12.5, color: r.on ? INK : FAINT, flex: 1 }}>{r.sentence}</Typography>
+            </Box>
+          ))}
+        </Box>
+      )}
       {auto && (
         <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px solid ${BORDER}` }}>
           {rules.map((r) => (

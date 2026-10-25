@@ -8,7 +8,7 @@
 // writes each half back to the screen that owns it. Nothing is stored twice: the connector card
 // and Connections → AI CLI agents remain the truth and keep working.
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, AlertTitle, Autocomplete, Box, CircularProgress, MenuItem, Select, TextField, Typography } from "@mui/material";
+import { Alert, AlertTitle, Autocomplete, Box, Checkbox, CircularProgress, FormControlLabel, MenuItem, Select, TextField, Typography } from "@mui/material";
 import api from "./api";
 import { ACCENT2, BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
 import { RecentRoutes, RouteRules } from "./RouteRules.jsx";
@@ -99,6 +99,13 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 600 }}>strong model</Typography>
             <Model slot={slot} onSave={onSave} field="strong_model" label="strong model" hint="none, this brain doesn't step up" />
           </Box>
+        )}
+        {/* the owner's own mark, off by default and never set by code: once the data rule is on, sensitive work reaches only a
+            brain marked here (the router's data seam, 2026-10-25) */}
+        {!isJudge && slot.sensitive_ok !== undefined && (
+          <FormControlLabel sx={{ ml: 0, mt: 2.25 }} control={<Checkbox size="small" checked={!!slot.sensitive_ok} data-tq-sensitive-ok=""
+            onChange={(e) => onSave({ sensitive_ok: e.target.checked })} />}
+            label={<Typography sx={{ fontSize: 12.5, color: DIM }}>may read sensitive data</Typography>} />
         )}
         {/* effort only where the CLI can actually be told one - climodels leaves it empty for
             the CLIs whose flag we cannot spell, and a dead dropdown would imply otherwise */}

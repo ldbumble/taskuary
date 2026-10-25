@@ -112,19 +112,37 @@ def _said(store, pick: str) -> str:
     return (c.get('Name') or c.get('Type')) if c else pick
 
 
-def strong_of(store, pick: str, cfg=None) -> str:
-    """This brain's STRONG gear - the owner's strong_model on its CLI connection or its AI card - or '' when it has none.
-    Blank is no strong tier, and nothing is inferred from a model's name (setup never assumes an AI)."""
+def _own(store, pick: str, field: str, cfg=None) -> str:
+    "A value the owner set on this brain itself - its CLI connection, or its AI card's config - or ''."
     import json
     if str(pick or '').startswith('cli:'):
         from . import agents, config
         cfg = config.load() if cfg is None else cfg
         key = agents.brain_key(store, pick, cfg)
-        return str(((cfg.get('cli_connections') or {}).get(key) or {}).get('strong_model') or '').strip()
+        return str(((cfg.get('cli_connections') or {}).get(key) or {}).get(field) or '').strip()
     cid = str(pick or '')[10:] if str(pick or '').startswith('connector:') else ''
     c = store.get_connector(int(cid)) if cid.isdigit() else None
-    try: return str(json.loads((c or {}).get('ConfigJson') or '{}').get('strong_model') or '').strip()
+    try: return str(json.loads((c or {}).get('ConfigJson') or '{}').get(field) or '').strip()
     except ValueError: return ''
+
+
+def strong_of(store, pick: str, cfg=None) -> str:
+    """This brain's STRONG gear - the owner's strong_model on its CLI connection or its AI card - or '' when it has none.
+    Blank is no strong tier, and nothing is inferred from a model's name (setup never assumes an AI)."""
+    return _own(store, pick, 'strong_model', cfg)
+
+
+# ── the data-type seam ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+# Triage judges whether a task carries sensitive data; each AI card has the owner's own "may read sensitive data" flag, off by
+# default and never set by code (no card is pre-marked - a gateway's card included). Once the owner turns the rule on, a sensitive
+# task reaches only a marked AI, its failover included, and with none it WAITS and says why: it never falls back to one the rule
+# keeps out. HIPAA later is a class and a flag, not a new engine (the router, 2026-10-25).
+SENSITIVE_OK = 'sensitive_ok'
+NO_SENSITIVE = 'No AI here may read sensitive data; mark one on its card in Settings'
+
+
+def may_read_sensitive(store, pick: str, cfg=None) -> bool:
+    return _own(store, pick, SENSITIVE_OK, cfg) in ('1', 'true', 'yes')
 
 
 def session_chain(store, brain: str = None) -> list:
@@ -175,6 +193,8 @@ DEFAULT_RULES = [
     # an answer that could not be read, or one its model said it was unsure of, is asked once of a strong model - only for the jobs
     # that read and write; an agent that can act is never re-run by itself (it may have done half its work), it offers a press
     {'id': 'unsure', 'when': {'job': list(ESCALATES)}, 'use': {'escalate': True}},
+    # sensitive data only to an AI whose card is marked for it - off until the owner turns it on, in either mode: a constraint, not a tier
+    {'id': 'sensitive', 'when': {'data_class': ['sensitive']}, 'use': {'only': 'flagged'}, 'on': False},
 ]
 WHEN_KEYS = ('job', 'difficulty', 'data_class', 'origin', 'person')
 
@@ -254,9 +274,16 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
     from .general import is_dock
     chosen = want_pick is not None or bool(want_model)
     rule, tier = ('you chose it' if chosen else 'fixed'), 'fixed'
-    if not pick: why = f'{agents.NO_AI}, so {JOB_WORDS[job]} waits'
-    else: why = f"{JOB_WORDS[job]} on {_said(store, pick)}{f', {model}' if model else ''}, {'as picked for it' if chosen else 'as its card says'}"
-    f = facts(store, job, task) if pick and mode(store) == 'auto' else {}
+    f = facts(store, job, task) if pick and (task or mode(store) == 'auto') else {}
+    # FIRST, THE DATA (a hard constraint, failing closed - in either mode, once the owner turns its rule on): over an explicit pick too
+    only, held = (_first(store, f, 'only') if task and f else None), ''
+    if only:
+        ok = [p for p in [pick, *chain] if p and may_read_sensitive(store, p)]
+        if not ok: pick, chain, held, rule, tier = '', [], NO_SENSITIVE, only['id'], 'held'
+        elif ok[0] != pick: held, model = f"; only an AI marked for sensitive data may read it (rule {only['id']})", ''
+        if ok: pick, chain = ok[0], ok[1:]
+    if not pick: why = f"{held or agents.NO_AI}, so {JOB_WORDS[job]} waits"
+    else: why = f"{JOB_WORDS[job]} on {_said(store, pick)}{f', {model}' if model else ''}, {'as picked for it' if chosen else 'as its card says'}{held}"
     if pick and mode(store) == 'auto' and not want_model and not (job == 'general' and is_dock(task)):
         r = _first(store, f, 'tier')
         if r:
@@ -421,8 +448,24 @@ def recent(store, limit: int = 20) -> list:
 
 
 def coverage_warning(store) -> str:
-    "Filled in by the data-type seam: '' while no rule limits which AI may read what."
-    return ''
+    """Triage reads every message BEFORE its data is judged, so once a rule keeps sensitive data to marked AIs, the triage brain has
+    to be one of them or it reads what the rule keeps from the rest of the work. Said in Settings; '' while that holds."""
+    if not any(r['on'] and 'only' in r['use'] for r in rules(store)): return ''
+    t = choose(store, 'triage')
+    if not t.pick or may_read_sensitive(store, t.pick): return ''
+    return (f"Triage reads every message before it is judged, and {_said(store, t.pick)} is not marked to read sensitive data - "
+            'mark it on its card, or sensitive mail is read by an AI your rule keeps from the rest of the work.')
+
+
+def session_allowed(store, task, chain: list) -> tuple:
+    """(chain, why) for a coding pane: only the CLIs that may read this task's data once the owner's data rule is on - none at all
+    is ([], the reason), and the pane does not open. Any other task keeps its chain exactly."""
+    if not task: return chain, ''
+    f = facts(store, 'coding', task)
+    if not _first(store, f, 'only'): return chain, ''
+    from . import agents
+    ok = [c for c in chain if may_read_sensitive(store, f"cli:{c or agents.default_brain(store) or ''}")]
+    return (ok, '') if ok else ([], f'{NO_SENSITIVE}, so the coding agent does not start')
 
 
 def strong_for(store, job: str, task, first: str = None) -> tuple:

@@ -54,7 +54,7 @@ def test_the_first_matching_rule_wins_and_a_switched_off_one_is_skipped(s):
     rs = [{**r, 'on': False} if r['id'] == 'drafts-strong' else r for r in brainroute.rules(s)]
     brainroute.save_rules(s, rs)
     assert brainroute.choose(s, 'draft', task=_task(s)).rule == 'work'
-    assert [r['id'] for r in brainroute.rules(s)] == ['drafts-strong', 'quick-jobs', 'hard-work', 'work', 'unsure']
+    assert [r['id'] for r in brainroute.rules(s)] == ['drafts-strong', 'quick-jobs', 'hard-work', 'work', 'unsure', 'sensitive']
 
 
 def test_a_rule_names_only_what_the_router_knows(s):

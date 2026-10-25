@@ -74,15 +74,18 @@ test("the '··· N more' line in Came from opens the whole conversation, the sa
   assert.doesNotMatch(closeOut, /onExpand=/, "Close out's gap stays a count - the whole conversation is in From");
 });
 
-test("Close out draws the conversation it answers condensed - the same rows as Task - and points to Task for the whole", () => {
+// ...AND CLOSE OUT NAMES THE ONE MESSAGE IT ANSWERS (the task-view cleanup, owner-approved 2026-10-25 - it supersedes the 2026-10-16
+// condensed rows here, and with them "one component, two places"): "Answering <who>: <their words>", the line opening the whole
+// conversation in From. The four rows over the draft were the messages From shows beside it, a second time.
+test("Close out says what the draft answers in one line, and the line opens the whole conversation in From", () => {
   assert.doesNotMatch(closeOut, /<ChatThread/, "never the full bubbles twice");
   assert.doesNotMatch(page, /mailThread|data-tq-mail-thread/);
-  assert.match(closeOut, /\{closeGroup && <Box data-tq-close-conversation=""/);
-  assert.match(closeOut, /<ConversationRows rows=\{latestRows\(closeGroup, 4\)\} open=\{openMsg \?\? null\} onOpen=\{setOpenMsg\} \/>/);
-  assert.match(closeOut, /onClick=\{seeWholeConversation\}[\s\S]{0,80}the whole conversation is in From/);
-  assert.match(page, /const seeWholeConversation = \(\) => \{ setShowAll\(true\); setFromOpen\(true\); setSeekCameFrom\(true\); \};/);
+  assert.doesNotMatch(closeOut, /<ConversationRows /, "no condensed rows in Close out");
+  assert.match(closeOut, /\{closeGroup && answering && <Box component="button" type="button" data-tq-answering="" onClick=\{seeWholeConversation\}/);
+  assert.match(closeOut, /Answering <Box component="span"[^>]*>\{answering\.who\}<\/Box>/);
+  assert.match(page, /const seeWholeConversation = \(\) => \{ setShowAll\(true\); setFromOpen\(true\); if \(wide\) setFromSide\(true\); setSeekCameFrom\(true\); \};/);
   assert.match(page, /<Box ref=\{cameFromRef\}/);
-  assert.equal(page.match(/<ConversationRows /g).length, 2, "one component, two places");
+  assert.equal(page.match(/<ConversationRows /g).length, 1, "one component, in From");
 });
 
 test("an email task's Close out is the answered thread's rows; what was sent in another conversation still shows, once", () => {

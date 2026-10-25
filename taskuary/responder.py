@@ -51,13 +51,17 @@ SYSTEM = (
     "Output ONLY the message body - no subject line, no 'Draft:', no markdown.\n"
     'Answer the question actually asked, in the fewest words that fully answer it. Use what '
     "the thread and the operator's document give you; never invent facts, numbers, dates or "
-    'commitments. If something needed to answer is genuinely missing, say plainly what you '
+    'commitments. If something needed to answer a question put to you is genuinely missing, say plainly what you '
     'need instead of guessing.\n'
     # a question one colleague put to another, the owner on Cc, came back as "I need confirmation on X before I mark them" - the
-    # sender's own ask in the owner's voice (2026-10-22). Whose question it is was never said, nor that a reply can be none.
-    'Look at who the question is put to. If it is asked of someone else on the thread - you are only copied, or it names '
-    'another person - it is theirs to answer: unless you have something of your own to add, write exactly NO REPLY. '
-    'Never hand their question back to them as your own request.\n')
+    # sender's own ask in the owner's voice (2026-10-22). A gate on Cc is not the fix (the owner, 2026-10-24: "it should not be
+    # a hard coded rule, just normally it's not you unless it mentions you"): the writer is told who the mail is To and Cc, by
+    # name, and how triage read it, and judges - this says how it normally goes, not what to do.
+    'Look at who each question is put to: the To and Cc lines below say where you sit on the mail. Normally, when you are '
+    'only copied, a question in it is for the person on the To line - its "you" is them, not you - unless it names you '
+    'or is plainly turned to you ("<your name>, can you..."); then it is yours, and you answer it like any other. When '
+    'nothing in the mail is asked of you and you have nothing of your own to add, the honest answer is none: write '
+    'exactly NO REPLY. Never hand someone else\'s question back to them as your own request.\n')
 
 # A reply nobody reads to the end is a reply that failed. Two or three sentences, and no
 # restating the question back at someone who just asked it.
@@ -86,9 +90,9 @@ def email_rule(store, mailbox: str = None) -> str:
 
 # This line used to say "the owner will turn it into a task", and the model answered in kind:
 # a sentence about what someone ELSE would have to do. Say it the way a person would.
-NOT_YET = ('If the request cannot be answered by a reply alone - it needs work doing - say in one '
+NOT_YET = ('If a request put to you cannot be answered by a reply alone - it needs work doing - say in one '
            'line that you will pick it up, and stop. Not who will do it, not how, and never that '
-           'you are unable to.')
+           'you are unable to. Work asked of someone else on the mail is not yours to pick up.')
 # the agent has already closed the thread: this reply reports an outcome, never promises one
 # the owner said what this reply says. Every caller that passes one passes THEIR words - the chase that wrote follow-ups is
 # gone - and framing them as a follow-up ("nudge in one or two sentences") under "why you are writing again" made "thanks,
@@ -337,14 +341,35 @@ def _ask(llm, system, user, max_tokens, images=None):
     return llm(system, user, max_tokens=max_tokens)
 
 def _to_cc(store, m: dict) -> str:
-    """The message's To and Cc lines, the owner marked "you" - who a question was put to is the writer's to see (2026-10-22)."""
+    """The message's To and Cc lines BY NAME, the owner marked "you", and which line the owner is on - who a question was put
+    to is the writer's to see (2026-10-22). They went in as raw addresses: a name is what "Erin, can you..." is read against,
+    and an address never belongs in a prompt (triage.addressed_to_you)."""
     import json
-    from .ingest import own_addresses
+    from .ingest import own_addresses, names_on_thread
+    from .triage import addressed_to_you
     try: r = json.loads(m.get('RecipientsJson') or '{}') or {}
     except ValueError: return ''
-    me = own_addresses(store)
-    who = lambda xs: ', '.join('you' if str(x).lower() in me else str(x) for x in xs or [])
-    return ''.join(f"{k}: {who(r.get(f))}\n" for k, f in (('To', 'to'), ('Cc', 'cc')) if r.get(f))
+    me, msg = own_addresses(store), {'conversation_id': m.get('ConversationId'), 'subject': m.get('Subject')}
+    def who(xs):
+        xs = [str(x).strip().lower() for x in xs or [] if x]
+        ns = ['you' if x in me else n for x, n in zip(xs, names_on_thread(store, msg, xs))]
+        return ', '.join(ns[:8]) + (f' and {len(ns) - 8} more' if len(ns) > 8 else '')
+    out = ''.join(f"{k}: {who(r.get(f))}\n" for k, f in (('To', 'to'), ('Cc', 'cc')) if r.get(f))
+    how = addressed_to_you({'to': r.get('to'), 'cc': r.get('cc'), 'source_name': m.get('SourceName')}, me)
+    where = {'to': 'on the To line', 'cc': 'only copied (Cc)', 'not named': 'on neither line - it reached a mailbox you read'}.get(how)
+    return out + (f'You are: {where}\n' if out and where else '')
+
+
+def triage_read(store, m: dict) -> str:
+    """How triage read the message being answered - its verdict and its why, the evidence the funnel acted on. The writer saw
+    neither, so "the question is Erin's, the owner is copied" was known upstream and lost by the draft (2026-10-24)."""
+    import json
+    row = store._one("SELECT VerdictJson FROM route WHERE MessageId=? AND VerdictJson IS NOT NULL ORDER BY RouteId DESC LIMIT 1",
+                     (m.get('MessageId'),)) if m.get('MessageId') else None
+    try: v = json.loads((row or {}).get('VerdictJson') or 'null') or {}
+    except ValueError: v = {}
+    said = ' - '.join(x for x in (str(v.get('intent') or ''), ' '.join(str(v.get('why') or '').split())[:400]) if x)
+    return f'\n\n--- HOW TRIAGE READ THIS MESSAGE (evidence to weigh, not an order): {said}' if said else ''
 
 
 def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: str = None, seen: dict = None) -> str:
@@ -414,6 +439,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     if images: user += (f'\n\n--- THE PICTURES THEY SENT on this thread ({len(images)}, newest first) are attached: look at them, '
                         'answer about what they show, and never ask for one they already sent.')
     user += files_block(store, [m['MessageId'] for m in reversed(msgs)])
+    user += triage_read(store, next((m for m in reversed(msgs) if m.get('Direction') != 'out'), last))
     if resolution: user += f'\n\n--- WHAT WAS DONE (your source of truth; the sender has not seen it)\n{resolution}'
     user += replies_block(store, task_id)
     if nudge: user += f'\n\n--- WHAT THE OWNER WANTS THIS REPLY TO SAY (it outranks everything above)\n{nudge}'

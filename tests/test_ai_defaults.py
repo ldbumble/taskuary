@@ -73,7 +73,8 @@ class ResolveTests(unittest.TestCase):
         r = aidefaults.resolve(s, {}, 'triage_ai')
         self.assertEqual(r['model'], '')
         self.assertIn('muse-spark-1.2', r['note'])          # blank is not "unconfigured"
-        self.assertIn('muse-spark-1.2-contributor', r['choices'])
+        # ...and the picker's choices are the provider's own list for this key (/api/ai/models), never a typed-in one (2026-10-25)
+        self.assertEqual(r['choices'], [])
 
     def test_no_key_anywhere_is_reported_not_guessed(self):
         r = aidefaults.resolve(_store(), {}, 'triage_ai')

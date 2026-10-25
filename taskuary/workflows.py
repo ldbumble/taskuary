@@ -220,13 +220,14 @@ def brain_of_task(store, task) -> dict | None:
 
 def brain_options(store) -> dict:
     """What the editor's Model and Effort offer: the general agents' brain, its models, and per model only the efforts it takes."""
-    from . import climodels
-    from .aidefaults import _conn_models
+    from . import climodels, llm
     b = brain(store, {})
     if b['cli']: cat = climodels.catalog(b['cli'])
     else:
-        row = store.get_connector(int(b['pick'][10:])) if b['pick'].startswith('connector:') and b['pick'][10:].isdigit() else None
-        cat = {'models': [{'id': m, 'label': m} for m in _conn_models((row or {}).get('Type') or '')]}
+        # an AI connection offers what its own key can call - the provider's list, never a typed-in one (llm.connector_models)
+        cid = b['pick'][10:] if b['pick'].startswith('connector:') else ''
+        listed = (llm.connector_models(store, int(cid)) or {}).get('models') if cid.isdigit() else []
+        cat = {'models': [{'id': m, 'label': m} for m in listed or []]}
     models = [{'id': m['id'], 'label': m.get('label') or m['id'], 'efforts': efforts_for(b['cli'], cat, m['id'])} for m in cat.get('models') or []]
     return {**b, 'models': models, 'efforts': efforts_for(b['cli'], cat, b['base'])}
 

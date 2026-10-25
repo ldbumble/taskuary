@@ -99,6 +99,21 @@ def _said(store, pick: str) -> str:
     return (c.get('Name') or c.get('Type')) if c else pick
 
 
+def strong_of(store, pick: str, cfg=None) -> str:
+    """This brain's STRONG gear - the owner's strong_model on its CLI connection or its AI card - or '' when it has none.
+    Blank is no strong tier, and nothing is inferred from a model's name (setup never assumes an AI)."""
+    import json
+    if str(pick or '').startswith('cli:'):
+        from . import agents, config
+        cfg = config.load() if cfg is None else cfg
+        key = agents.brain_key(store, pick, cfg)
+        return str(((cfg.get('cli_connections') or {}).get(key) or {}).get('strong_model') or '').strip()
+    cid = str(pick or '')[10:] if str(pick or '').startswith('connector:') else ''
+    c = store.get_connector(int(cid)) if cid.isdigit() else None
+    try: return str(json.loads((c or {}).get('ConfigJson') or '{}').get('strong_model') or '').strip()
+    except ValueError: return ''
+
+
 def session_chain(store, brain: str = None) -> list:
     "A coding pane's brains in order, head first: `brain`, then backup_brains (agents.brain_chain) - what terminal.start_on_task walks."
     from . import agents

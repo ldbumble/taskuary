@@ -205,6 +205,8 @@ const TYPE_OF = {
   let_go: "task", defer: "task", split: "task", test_connection: "task",
   // the calendar's answers (calwrite.py) are what goes back: an invite's yes, no or other time, and a thread's meeting
   accept_invite: "reply", decline_invite: "reply", propose_time: "reply", find_time: "reply",
+  // ...and a meeting's Prepare starts a researcher: an agent's verb (2026-10-25)
+  prepare: "agent",
   // a result's Share (Share.jsx) stands in a band of its own at the row's end: it acts on the whole result, never on a reply or the task
   share: "share",
 };

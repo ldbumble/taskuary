@@ -73,11 +73,14 @@ class VerdictTests(unittest.TestCase):
 
 
 class MeetingTests(unittest.TestCase):
-    def test_a_meeting_offers_next_alone(self):
-        # the owner, 2026-10-02: "Meeting card should only have a next button like what it has on desktop no?"
-        self.assertEqual(concierge.CHIPS['meeting'], ('next',))
+    def test_a_meeting_offers_prepare_and_next(self):
+        # the owner, 2026-10-02: "Meeting card should only have a next button" - and 2026-10-25: "add prepare that creates agent to
+        # research about person and topic through your mails". Prepare needs the invite itself; without one, Next alone
+        self.assertEqual(concierge.CHIPS['meeting'], ('prepare', 'next'))
         item = {'key': 'meeting:1', 'kind': 'meeting', 'title': 'Weekly sync with Northwind finance'}
         self.assertEqual([c['verb'] for c in concierge.chips_for(MemoryStore(), item)], ['next'])
+        ev = {**item, 'event': {'subject': 'Weekly sync with Northwind finance', 'start': '2026-10-26T09:00:00', 'who': ['Erin Blake']}}
+        self.assertEqual([c['verb'] for c in concierge.chips_for(MemoryStore(), ev)], ['prepare', 'next'])
 
 
 if __name__ == '__main__': unittest.main()

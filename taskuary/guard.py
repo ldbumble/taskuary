@@ -177,7 +177,7 @@ OWNER_ONLY = (
     (r'POST|PATCH', r'^/api/memory(/\d+)?$', 'memory notes steer triage - an agent proposes one, it does not write it'),
     (r'POST', r'^/api/notes$', "a note to self is the owner's"),
     (r'POST', r'^/api/ingest/(poll|push)$', 'putting a message in the inbox would let an agent write its own next prompt'),
-    (r'POST', r'^/api/(ai/defaults|setup/(adopt-brain|dismiss|seen|walk|walk/reset)|knowledge/reindex|calendar/prep|prompt-image)$',
+    (r'POST', r'^/api/(ai/defaults|setup/(adopt-brain|dismiss|seen|walk|walk/reset)|knowledge/reindex|calendar/prep(are)?|prompt-image)$',
      "set-up, the brains, the index and the owner's own starts"),
     (r'POST', r'^/api/reports/(\d+/replay|due)$', "replaying a judge or running every due report is the owner's"),
     (r'POST', r'^/api/roles/[a-z0-9_-]+$', "a role decides where the owner's mail goes and narrows a ledger's authority"),

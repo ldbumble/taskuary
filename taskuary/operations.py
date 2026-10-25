@@ -42,7 +42,8 @@ KINDS = {
     'task.chase':               ('item', ('key',), None),          # the slipped card's answers (spec 2026-10-12)
     'task.let_go':              ('item', ('key',), None),
     'task.elsewhere':           ('item', ('key',), None),
-    'calendar.answer':          ('message', ('act',), None),     # an invite's answer or a thread's meeting, DRAFTED (calwrite.draft)
+    'calendar.answer':          ('message', ('act',), None),
+    'calendar.prepare':         ('item', ('key',), None),        # a meeting's Prepare: a researcher on its people and subject (server.calendar_prepare)     # an invite's answer or a thread's meeting, DRAFTED (calwrite.draft)
     'idea.act':                 ('idea', ('verb',), None),        # an Advisor idea's own words (assistant.act)
     'review.approve':           ('review', (), None),
     'agent.answer':             ('task', ('text',), None),

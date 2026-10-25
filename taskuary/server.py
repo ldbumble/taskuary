@@ -1377,6 +1377,15 @@ def _run_kind(op: dict, background: BackgroundTasks):
     if kind == 'preference.sender_rule': return ignore_sender(mid, IgnoreSenderBody(how='rule'), background)
     # the bigger hammer, down the SAME road the card's own button took (ignore_sender, how='rule')
     if kind == 'preference.sender_rule': return ignore_sender(mid, IgnoreSenderBody(how='rule'), background)
+    if kind == 'calendar.prepare':
+        # the meeting card's Prepare, from the row, the phone or a lit chip: the event as the rail holds it (funnel.calendar_items)
+        from . import funnel
+        key = str(p.get('key') or ''); item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
+        e = (item or {}).get('event')
+        if not e: raise HTTPException(404, 'that meeting is not on the rail any more')
+        return calendar_prepare(MeetingPrepBody(**{k: e.get(k) for k in ('subject', 'start', 'end', 'where', 'organizer', 'about')},
+                                                who=[w for w in e.get('who') or [] if w], link=e.get('join'),
+                                                instruction=str(p.get('text') or '') or None), background)
     if kind == 'calendar.answer':
         # THE CALENDAR'S ANSWERS, by words (a phone chat; on the desk the words only light the row's button): drafted, never sent - a
         # new time with none named is the first free one the row's picker would offer, there to change before Send
@@ -4636,11 +4645,38 @@ def calendar_prep(body: MeetingPrepBody):
     tag is exactly what the Board and + New create, so the chat opens with the brief already
     asked (website/src/newTask.js, GeneralWorkspace).
     """
+    tid = _prep_task(body, (body.instruction or '').strip() or 'Get me ready for this meeting.')
+    return {'taskId': tid, 'ref': task_ref(tid), 'agent': 'assistant', 'chat': True}
+
+# PREPARE (the owner, 2026-10-25: "add prepare that creates agent to research about person and topic through your mails"): the
+# meeting card's button. An agent - the general profile - reads what the saved mail and chats say about each person on the invite
+# and about its subject, and its answer is the brief, filed on the meeting's own task. It reads and writes to nobody.
+PREPARE_ASK = ("Prepare me for this meeting. Research the people on the invite and its subject through my saved mail and chats in "
+               "Taskuary: who each person is to me, what we last said to each other, what is still open between us, and what has been "
+               "said about the subject. The reads below are where to start - search further for anything they leave open. Then answer "
+               "with a SHORT brief: a line or two per person, the open questions, and what I should be ready to answer. Write to nobody.")
+
+@app.post('/api/calendar/prepare')
+def calendar_prepare(body: MeetingPrepBody, background: BackgroundTasks):
+    """Prepare on a meeting card: the meeting's task, with what the mail says about its people and subject, and the general
+    agent started on it. Pressed twice it is the same task - the agent already on it is not started again."""
+    from . import mailsearch
+    subject = (body.subject or 'the meeting').strip()[:120]
+    ref = f"calendar:{body.start or ''}:{subject}"[:200]
+    tid = (store._one("SELECT TaskId FROM task WHERE SourceRef=? AND Status NOT IN ('done','dropped') ORDER BY TaskId DESC LIMIT 1", (ref,)) or {}).get('TaskId')
+    if not tid:
+        reads = mailsearch.meeting_reads(store, [*(body.who or []), *([body.organizer] if body.organizer else [])], subject)
+        said = (body.instruction or '').strip()                # the owner's own words lead, the research under them
+        tid = _prep_task(body, f'{said}\n\n{PREPARE_ASK}' if said else PREPARE_ASK,
+                         f"\n\nWHAT YOUR SAVED MAIL ALREADY SAYS (ids open with `taskuary --message ID`):\n{mailsearch.says(reads)}" if reads else '')
+    out = dispatch_task(tid, DispatchBody(kind='general'), background)
+    return {**out, 'taskId': tid, 'ref': task_ref(tid)} if isinstance(out, dict) else out
+
+def _prep_task(body: MeetingPrepBody, ask: str, reads: str = '') -> int:
     from . import calendar as cal, ownwork
     subject = (body.subject or 'the meeting').strip()[:120]
     brief = cal.prep_brief(body.model_dump())
-    ask = (body.instruction or '').strip() or 'Get me ready for this meeting.'
-    tid = store.create_task({'Title': f'Prep: {subject}'[:200], 'Summary': f'{ask}\n\n{brief}',
+    tid = store.create_task({'Title': f'Prep: {subject}'[:200], 'Summary': f'{ask}\n\n{brief}{reads}',
                              'Kind': 'general', 'Tags': ASK_TAG, 'Source': 'calendar',
                              'SourceRef': f"calendar:{body.start or ''}:{subject}"[:200]}, ACTOR)
     # The row for this work belongs to the INVITE. Left to ownwork.ensure it became a separate
@@ -4652,7 +4688,7 @@ def calendar_prep(body: MeetingPrepBody):
                        'Subject': f'Prep: {subject}'[:200], 'FromName': 'You', 'Status': 'routed',
                        'SentAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'BodyText': ask})
     store.audit('task', tid, 'create_from_meeting', ACTOR, detail={'subject': subject, 'start': body.start})
-    return {'taskId': tid, 'ref': task_ref(tid), 'agent': 'assistant', 'chat': True}
+    return tid
 
 @app.get('/api/calendar/upcoming')
 def calendar_upcoming(hours: int = 72, force: bool = False):

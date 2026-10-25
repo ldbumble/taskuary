@@ -12,6 +12,10 @@ of ours runs is read here BEFORE it runs:
 - ANY OTHER agent-browser command (click, press, fill, eval, find ... click) goes to the model with the page it would act on: its
   address and its interactive elements (`agent-browser snapshot -i`, the @refs the command names). The model says whether it can
   be undone. Not a word list: "Submit" on a search box is nothing, "Continue" on a checkout's last step is a payment.
+- NO AI CONNECTED (the owner, 2026-10-25): plain typing into a box - agent-browser's fill, type, keyboard type/inserttext, and a
+  find whose action is fill or type - passes, since nothing has left the page until something is pressed; every other act waits.
+  Typing is read from the command's verb (TYPES), agent-browser's fixed vocabulary, not judged over words. Text with a line break
+  in it is not plain typing: a newline typed into a form can be its Enter.
 - IRREVERSIBLE, OR UNSURE, OR NO VERDICT AT ALL (no brain, a timeout, an unreadable answer): HELD. The tool call is refused with
   why, and the act goes on the task as a proposal (proposals.ACTIONS 'browser_act') - the existing card with Approve and Dismiss.
 - APPROVED, Taskuary runs that exact command in that session's browser itself (perform) - only while the browser is still on the
@@ -35,6 +39,8 @@ tab tabs console errors read pdf session sessions skills help version close'''.s
 # its global options that take a value, so the value is not read as the command
 VALUED = frozenset('--session --profile --state --args --user-agent --proxy --proxy-bypass --executable-path --cdp --idle-timeout '
                    '--headers --extension --provider --device --color-scheme --download-path --timeout'.split())
+# its commands that only TYPE into a box: what passes when no AI is connected to judge (`keyboard` and `find` by their sub-action)
+TYPES, KEY_TYPES = frozenset('fill type'.split()), frozenset('type inserttext'.split())
 SNAP_MAX = 6000                 # the page as the model reads it: the interactive elements, enough for a checkout or a settings page
 JUDGE_WAIT = 45.0
 HELD = 'Taskuary held this for the owner'
@@ -90,6 +96,19 @@ def acts(cmd: str) -> list:
         verb = a[i].lower() if i < len(a) else ''
         if verb and verb not in LOOKS: out.append({'args': a, 'verb': verb})
     return out
+
+
+def typing(act: dict) -> bool:
+    "Is this act only typing into a box? By agent-browser's verb, never by its text - and text that breaks a line is not plain typing."
+    a, i = act.get('args') or [], 0
+    while i < len(a) and a[i].startswith('-'): i += 2 if a[i] in VALUED and '=' not in a[i] else 1     # as acts() found the verb
+    if i >= len(a) or a[i].lower() != act.get('verb'): return False
+    # `keyboard <sub>` and `find <locator> <value> <action>` are read only where their words stand bare: an option among them could
+    # take the next word as its value or not, and a guess that turns a click into typing would wave the click through
+    sub = lambda n: a[i + n].lower() if i + n < len(a) and not any(t.startswith('-') for t in a[i + 1:i + n + 1]) else ''
+    v = act['verb']
+    ok = v in TYPES or (v == 'keyboard' and sub(1) in KEY_TYPES) or (v == 'find' and sub(3) in TYPES)
+    return ok and not any('\n' in t or '\r' in t for t in a)
 
 
 # ── the page it would act on, and the model's verdict ─────────────────────────────────────────────────────────────────────
@@ -149,7 +168,8 @@ def judge(store, act: dict, pg: dict, brain=None) -> dict:
     try:
         from .llm import build_llm, ask_json
         b = brain or build_llm(store)
-        if not b: return {'hold': True, 'what': cmd, 'why': 'no AI is set up to judge it, so it waits for you'}
+        if not b: return ({'hold': False, 'what': cmd, 'why': ''} if typing(act) else
+                          {'hold': True, 'what': cmd, 'why': 'no AI is set up to judge it, so it waits for you'})
         user = (f"THE PAGE THE AGENT IS ON: {fence(pg.get('url') or 'unknown')}\n"
                 f"ITS INTERACTIVE ELEMENTS (@refs are what a command names):\n{fence(pg.get('elements') or '(could not be read)')}\n"
                 f"THE COMMAND THE AGENT IS ABOUT TO RUN: {fence(cmd)}")

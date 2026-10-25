@@ -268,10 +268,19 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
                 to = pick if ok(pick) else '' if want_pick is not None else next((c for c in chain if c and ok(c)), '')
                 if not to: tier, said = 'standard', f"; {'it has no' if want_pick is not None else 'no brain here has a'} strong model, so standard"
                 elif to != pick: said, chain, pick = f'; {_said(store, pick)} has no strong model', [pick, *chain], to
+            if tier == 'strong' and not cap_left(store): tier, said = 'standard', f"; today's {cap(store)} strong calls are spent, so standard"
             # the card's model IS the standard tier; strong runs the brain's strong gear and light its quick one
             g, model = GEAR_OF[tier], (model if tier == 'standard' else '')
             hard = f" judged {f['difficulty']}" if 'difficulty' in r['when'] else ''
             why = f"{JOB_WORDS[job]}{hard} -> {tier} on {_said(store, pick)}{f', {model}' if model else ''} (rule {rule}){said}"
+    # a brain resting on its usage limit hands the call to the first backup that is not (Auto mode; the cards stand in Fixed)
+    if pick and mode(store) == 'auto' and pick in (cold := cooldowns(store)):
+        to = next((c for c in chain if c and c not in cold and (job != 'coding' or c.startswith('cli:'))), '')
+        if to:
+            why += f"; {_said(store, pick)} is limited until {cold[pick].strftime('%H:%M')}, so {_said(store, to)}"
+            # ...on its own model, as a failover always is: the resting brain's model id means nothing to another provider
+            chain, pick, model = [pick, *chain], to, ''
+            if tier == 'strong' and not strong_of(store, pick): tier, g = 'standard', GEAR_OF['standard']
     up = ''
     if pick and mode(store) == 'auto' and tier != 'strong' and job in ESCALATES and _first(store, f, 'escalate'): up = 'strong'
     return Route(job, tier, pick, model, g, [c for c in chain if c and c != pick], rule, why[0].upper() + why[1:],
@@ -311,6 +320,48 @@ def step_up(store, r: 'Route', rid, task_id, why: str, build):
     return brain
 
 
+# ── health and the day's cap (Auto mode) ─────────────────────────────────────────────────────────────────────────────────────
+# A CLI refused on its usage allowance says when it comes back; until then the router hands its calls to the next brain instead
+# of to one that will refuse again. Kept in a setting, not a module global: the poller and the server are separate processes.
+COOL_KEY, CAP_KEY = 'ai_route_cooldown', 'ai_route_strong_cap'
+
+
+def cooldowns(store, now: datetime = None) -> dict:
+    "{pick: until} for every brain still resting - a reset already past is dropped."
+    import json
+    try: d = json.loads(str(store.get_setting(COOL_KEY) or '').strip() or '{}')
+    except ValueError: d = {}
+    now = now or datetime.now()
+    out = {}
+    for p, u in (d.items() if isinstance(d, dict) else ()):
+        try: t = datetime.fromisoformat(str(u))
+        except ValueError: continue
+        if t > now: out[p] = t
+    return out
+
+
+def cool(store, pick: str, until: datetime) -> None:
+    "Rest `pick` until `until` (the CLI's own reset time). Never longer than a week: a misread stamp must not shelve a brain for good."
+    import json
+    if not pick or not until: return
+    until = min(until, datetime.now() + timedelta(days=7))
+    d = {p: t.isoformat(sep=' ', timespec='minutes') for p, t in cooldowns(store).items()}
+    d[pick] = until.isoformat(sep=' ', timespec='minutes')
+    try: store.set_setting(COOL_KEY, json.dumps(d), 'router')
+    except Exception as e: logger.debug(f'brainroute: could not rest {pick} - {e}')
+
+
+def cap(store):
+    "The owner's limit on strong calls a day, or None (blank, the default: no cap)."
+    v = str(store.get_setting(CAP_KEY) or '').strip()
+    return int(v) if v.isdigit() else None
+
+
+def strong_today(store, now: datetime = None) -> int:
+    return store.count_brain_routes(since=(now or datetime.now()).strftime('%Y-%m-%d'), tier='strong')
+
+
 def cap_left(store) -> bool:
     "Whether a strong call is still allowed today. Blank cap (the default) is no cap."
-    return True
+    n = cap(store)
+    return n is None or strong_today(store) < n

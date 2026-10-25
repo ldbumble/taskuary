@@ -12,6 +12,7 @@
     "draft_ai",
     "draft_model",
     "ai_route_mode",
+    "ai_route_strong_cap",
     "phone_assistant"
   ],
   "groups": [
@@ -174,6 +175,13 @@
       "optionLabels": {"fixed": "Fixed - the cards", "auto": "Auto - by how hard the work is"},
       "desc": "Fixed runs every job exactly as its card says. Auto picks a quick, standard or strong model by the job and how hard triage judged the work.",
       "help": "Normally set on the line above the AI cards; this row is the fallback if that panel cannot load. In Auto each card is its job's standard model, and the rules under it say when the quick gear or the strong model runs instead - each shown as a sentence with its own switch. A brain whose strong model box is blank never steps up. An explicit pick - yours, a report's, a workflow's - always wins, and nothing is sent without your press either way."
+    },
+    "ai_route_strong_cap": {
+      "group": "How mail is sorted",
+      "label": "Strong calls a day",
+      "type": "text",
+      "desc": "At most this many calls a day on a strong model, in Auto. Blank = no cap.",
+      "help": "Normally set on the line under the rules; this row is the fallback if that panel cannot load. Past the cap, work that would step up runs on the standard model and its route says why, and an unsure answer is not asked again. The count is of today's strong routes in the route log, so you can see what used it."
     },
     "assistant_model": {
       "group": "How mail is sorted",

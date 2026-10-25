@@ -59,7 +59,9 @@ TOOLS = {
                       ('POST', '/api/agent/draft')),
     'propose': ('propose', "Ask the owner to approve one act Taskuary runs on their press: comment_issue {body} (a public GitHub "
                 "comment), close_issue, open_pr, land, run_tool {type, connector_id, ...} (a send, post or order on one of their "
-                "systems), write_playbook {slug, text}, settings {changes}. Always give `why`. It puts an Approve button in front of "
+                "systems), write_playbook {slug, text}, settings {changes}. On a Jira, Monday or Linear item: run_tool with type "
+                "jira_comment {body}, jira_move {status}, jira_assign {assignee}, jira_close {body?} (monday_ and linear_ the same); `item` "
+                "is the one this task came from unless you name another. Always give `why`. It puts an Approve button in front of "
                 "the owner - nothing happens until they press it.",
                 {'type': 'object', 'properties': {'action': _STR, 'why': _STR}, 'required': ['action', 'why'],
                  'additionalProperties': True}, ('POST', '/api/agent/propose')),
@@ -67,7 +69,7 @@ TOOLS = {
 ANNOTATIONS = {'read': {'readOnlyHint': True, 'openWorldHint': False}, 'own': {'readOnlyHint': False, 'destructiveHint': False},
                'propose': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}}
 # a stranger's session reaches its own task and nothing else (guard.stranger_denied) - and /mcp is not one of its doors yet
-NOT_PROPOSABLE = ('merge_pr', 'repair_workflow', 'push_direct')     # the owner's close-out, a workflow's own repair, a push past review
+NOT_PROPOSABLE = ('merge_pr', 'close_item', 'repair_workflow', 'push_direct')     # the owner's close-out, a workflow's own repair, a push past review
 
 
 def listing() -> list:

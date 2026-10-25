@@ -65,6 +65,9 @@ ACTIONS = {
     # the close-out of a task whose work is an open pull request (CLOSEOUT below): raised by the finish, never by an agent
     'merge_pr': ('merge the pull request this task opened', ('repo', 'number'), 'agent_push_enabled'),
     'run_tool': ('run a step in a connected system', ('type',), None),
+    # the close-out of a task from a Jira, Monday or Linear item (trackers.py, 2026-10-25): its comment, and the move to done - raised by
+    # the finish like merge_pr, never by an agent (an agent's own comment or move is a run_tool on jira_comment, linear_move, ...)
+    'close_item': ('comment on the tracker item this task came from and move it to done', ('tracker', 'item'), None),
     # a workflow step that failed, fixed by the model on the owner's say-so (flow.repair): the new list is saved only past their yes
     'repair_workflow': ("change this workflow's steps to the repaired list", ('source_id', 'flow'), None),
     # the on-close "did this session do a kind of job that will recur?" answer (playbooks.draft),
@@ -128,7 +131,7 @@ def parse(text: str) -> list:
         # raised by the run itself (flow._repair_now): an agent that read a mail asking for one could rewrite any workflow, with
         # its own words for what changes on the card the owner approves
         # ...and `flow_run` is the run a workflow's own write waits in: an agent's run_tool naming one would mark that step done
-        if a in ACTIONS and a not in ('merge_pr', 'repair_workflow', 'browser_act'): out.append({**{k: v for k, v in j.items() if k not in ('closeout', 'flow_run')}, 'action': a})
+        if a in ACTIONS and a not in ('merge_pr', 'close_item', 'repair_workflow', 'browser_act'): out.append({**{k: v for k, v in j.items() if k not in ('closeout', 'flow_run')}, 'action': a})
         if len(out) >= MAX: break
     return out
 
@@ -165,6 +168,8 @@ def validate(store, p: dict) -> tuple:
         return True, 'change ' + '; '.join(f"{c['name']} -> {c['value']}" for c in changes)
     missing = [k for k in need if not str(p.get(k) or '').strip()]
     if missing: return False, f'{a} needs {", ".join(missing)}'
+    from . import trackers
+    if (a == 'close_item' or p.get('type') in trackers.TYPES) and (why := trackers.check(p)): return False, why
     # A CLOSE-OUT IS THE OWNER'S OWN ACT (the owner, 2026-09-27: "ask me before merge then do it"): the switches gate what
     # an AGENT may ask for; the owner pressing Merge or Close issue on their own task needs no agent permission turned on.
     # Only Taskuary raises one (parse strips the mark from anything an agent wrote).
@@ -182,12 +187,13 @@ def collect(store, task_id: int, transcript: str, actor='agent') -> list:
 # WHAT A TOOL RUN WILL DO, in words (the owner, 2026-10-21): the card said "run one query/script through a tool connection" over the
 # proposal's raw JSON for what was a file written to the HR share. The verb is the action's scope (scopes.needs), the place is the
 # first key that says where, the connection by its own name.
-WHERE_KEYS = ('path', 'to', 'folder', 'table', 'url', 'bucket', 'key', 'container', 'blob', 'channel', 'list', 'database')
+WHERE_KEYS = ('path', 'to', 'folder', 'table', 'url', 'bucket', 'key', 'container', 'blob', 'channel', 'list', 'database', 'item')
 
 
 def tool_words(store, p: dict) -> str:
-    from . import reports, scopes
+    from . import reports, scopes, trackers
     t = str(p.get('type') or '')
+    if t in trackers.TYPES: return trackers.words(p)
     verb = {'read': 'read', 'write': 'write', 'admin': 'run'}.get(scopes.needs(t), 'run')
     if t.endswith('_move'): verb = 'move'
     where = next((str(p[k]) for k in WHERE_KEYS if p.get(k)), '')
@@ -201,6 +207,11 @@ def tool_words(store, p: dict) -> str:
 
 def queue(store, task_id: int, p: dict, actor='agent') -> dict | None:
     """ONE proposal through the gate: a pending review when it validates, a recorded refusal (None) when not."""
+    from . import trackers
+    # an agent's comment or move on "the ticket" means the item this task came from: named on the proposal, so the card says which
+    if p.get('action') == 'run_tool' and p.get('type') in trackers.TYPES and not str(p.get('item') or '').strip():
+        it = trackers.item_of(store, task_id)
+        if it and it['tracker'] == trackers.TYPES[p['type']][0]: p = {**p, 'item': it['item']}
     ok, why = validate(store, p)
     if not ok:
         store.add_comment(task_id, actor, 'agent', f'PROPOSAL REFUSED ({p.get("action")}): {why}')
@@ -211,7 +222,7 @@ def queue(store, task_id: int, p: dict, actor='agent') -> dict | None:
     said = tool_words(store, p) if p['action'] == 'run_tool' else why
     # ...nor a held browser act: the agent did not propose it, it tried it, and the hook stopped it (browsergate.check)
     reason = (f"held before it ran, in the agent's browser: {p.get('what') or p.get('command')}" + (f" - {p['why']}" if p.get('why') else '') if p['action'] == 'browser_act' else
-              f"the close-out: {'merge pull request #' + str(p.get('number')) if p['action'] == 'merge_pr' else 'close the issue it came from'}"
+              f"the close-out: {'merge pull request #' + str(p.get('number')) if p['action'] == 'merge_pr' else trackers.words(p) if p['action'] == 'close_item' else 'close the issue it came from'}"
               if p.get('closeout') else f"the {'workflow asks' if actor == 'workflow' else 'agent proposes'} to {said}" + (f" - {p['why'][:200]}" if p.get('why') else ''))
     rid = store.add_review({'TaskId': task_id, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p), 'Reason': reason})
     store.audit('review', rid, 'proposed', actor, detail={'action': p['action']})
@@ -228,7 +239,8 @@ def queue(store, task_id: int, p: dict, actor='agent') -> dict | None:
 # - approve, as it shows on an agent's proposal (buttons.json: Approve) - and per action only the sentence saying what it does
 # there. A new connector adds a line here, never a word.
 CLOSE_WORD = buttons.label('approve', 'action')
-CLOSEOUT = {'merge_pr': 'merges the pull request on GitHub', 'close_issue': 'closes the issue on GitHub'}
+CLOSEOUT = {'merge_pr': 'merges the pull request on GitHub', 'close_issue': 'closes the issue on GitHub',
+            'close_item': 'posts the comment on the item and moves it to done in its tracker'}
 _ISSUE = re.compile(r'github\.com/([^/]+/[^/]+)/issues/(\d+)')
 _PULL = re.compile(r'github\.com/([^/]+/[^/]+)/pull/(\d+)')
 
@@ -325,7 +337,10 @@ def closeout_due(store, tid: int):
     elif _ISSUE.search(ref):
         if not ghcloseout.cfg(store, _ISSUE.search(ref).group(1))['issue']: return None
         p = {'action': 'close_issue', 'closeout': True, 'why': 'the issue this task came from is still open'}
-    else: return None
+    else:
+        from . import trackers
+        p = trackers.closeout_due(store, tid)          # a Jira, Monday or Linear item: comment and move it to done, read from the tracker now
+        if not p: return None
     return p if validate(store, p)[0] else None
 
 
@@ -340,7 +355,8 @@ def backfill(store) -> int:
         # waiting on its reply, or a saved session whose answer is drafted - finished work either way (TQ-0767)
         if t.get('Status') not in ('waiting', 'open') or tid in busy: continue
         if t.get('Status') == 'open' and not store._one("SELECT 1 x FROM review WHERE TaskId=? AND Status='pending' AND Kind<>'action'", (tid,)): continue
-        if not (_PULL.search(ref) or _ISSUE.search(ref) or (ci.landing_of(store, tid) or {}).get('kind') == 'pr'): continue
+        from . import trackers
+        if not (_PULL.search(ref) or _ISSUE.search(ref) or (ci.landing_of(store, tid) or {}).get('kind') == 'pr' or trackers.item_of(store, tid)): continue
         if not _report(store, tid) and not any(str(c.get('Body') or '').startswith('The agent closed this itself') for c in store.list_comments(tid)): continue
         if store._rows("SELECT 1 x FROM review WHERE TaskId=? AND Kind='action' AND DraftText LIKE '%\"closeout\": true%'", (tid,)): continue
         due = closeout_due(store, tid)
@@ -427,6 +443,8 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
     edited = str(final_text or '').strip() and not str(final_text).lstrip().startswith('{')
     if edited and (p.get('action') in ('write_playbook', 'amend_playbook') or (p.get('action') in CLOSEOUT and p.get('text'))):
         p['text'] = final_text.strip()
+    # a tracker close-out's box IS its comment: what the owner left there goes, emptied included (None = pressed off the card, as filed)
+    if p.get('action') == 'close_item' and final_text is not None and not str(final_text).lstrip().startswith('{'): p['text'] = str(final_text).strip()
     ok, why = validate(store, p)
     if not ok: raise RuntimeError(f'refused at execution: {why}')
     tid, a = rv.get('TaskId'), p['action']
@@ -510,6 +528,10 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
     elif a == 'browser_act':
         from . import browsergate
         out = browsergate.perform(store, tid, p)
+    elif a == 'close_item':
+        from . import trackers
+        out = trackers.close_out(store, p)
+        out['said'] = trackers.said(out)
     else:                                   # run_tool
         from .reports import REGISTRY, resolve_cfg
         # the owner approved THIS query, so it may commit - the one road to a write on a read-level SQL card

@@ -22,7 +22,10 @@ export const CLOSEOUT = {
     // the other answer, where the system has one: the work is not wanted - the PR closes unmerged
     alt: { verb: "close_pr", label: "Decline", busy: "declining…", then: "closes the pull request without merging it" } },
   close_issue: { label: APPROVE, busy: "closing…", then: "closes the issue on GitHub", reject: null },
+  // a Jira, Monday or Linear item (trackers.py, 2026-10-25): the comment, then the move to the tracker's own done state
+  close_item: { label: APPROVE, busy: "closing…", then: "posts the comment and moves the item to done", reject: null },
 };
+const TRACKER = { jira: "Jira", monday: "Monday", linear: "Linear" };
 export const closeoutOf = (review) => CLOSEOUT[proposalFrom(review)?.action] || null;
 
 // a playbook's file name from its title - playbooks.slugify's rule: lower case, every other run of characters one "-", cut, trimmed
@@ -33,7 +36,7 @@ export const PAGES = new Set(["write_playbook", "amend_playbook"]);
 
 // a tool run's place (proposals.WHERE_KEYS, the same order) and what it carries: the text it writes, the query or script it runs,
 // else its other settings one per line - the plumbing (the action, the run it belongs to, the connection id) left out
-const WHERE_KEYS = ["path", "to", "folder", "table", "url", "bucket", "key", "container", "blob", "channel", "list", "database"];
+const WHERE_KEYS = ["path", "to", "folder", "table", "url", "bucket", "key", "container", "blob", "channel", "list", "database", "item"];
 const PLUMBING = new Set(["action", "type", "flow_run", "connector_id", "why", ...WHERE_KEYS]);
 export const toolWhere = (p) => {
   const k = WHERE_KEYS.find((x) => p?.[x]);
@@ -61,6 +64,25 @@ export const proposalPresentation = (review) => {
   if (review?.Kind !== "action") return null;
   const proposal = proposalFrom(review);
   const co = CLOSEOUT[proposal?.action];
+  // A TRACKER ITEM'S CLOSE-OUT (2026-10-25): where it goes, and the done state the tracker itself names - or, where it names none or its
+  // workflow has no move there, that it is the comment alone, said before the press
+  if (co && proposal.action === "close_item") {
+    const sys = TRACKER[proposal.tracker] || "the tracker", at = `${proposal.item || ""} in ${sys}`;
+    return {
+      kind: "closeout",
+      title: review.Title || review.Subject || `Close ${proposal.item || "the item"} in ${sys}`,
+      context: proposal.no_done ? `The agent finished · ${proposal.no_done}, so ${APPROVE} posts the comment alone`
+        : `The agent finished · ${APPROVE} comments on ${proposal.item || "the item"} and moves it to ${proposal.status || "done"}`,
+      destinationLabel: "Close",
+      destination: proposal.no_done ? `${at} · comment only` : `${at} → ${proposal.status || "its done state"}`,
+      approveLabel: co.label,
+      then: proposal.no_done ? `posts the comment on ${at}` : `posts the comment on ${at} and moves it to ${proposal.status || "done"}`,
+      busyLabel: co.busy,
+      rejectLabel: co.reject,
+      alt: null,
+      placeholder: proposal.no_done ? "Write the comment to post" : "No comment - only the move to done",
+    };
+  }
   if (co) {
     const pr = proposal.action === "merge_pr";
     return {

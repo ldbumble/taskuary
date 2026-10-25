@@ -194,7 +194,7 @@ export function rowOf({ list, ref }, pick = null) {
 export const TYPES = [["reply", "Reply"], ["agent", "Agent"], ["close", "Close"], ["task", "Task"]];
 const TYPE_OF = {
   reply: "reply", approve: "reply", redraft: "reply", palt: "reply", reject: "reply", email: "reply", "ask-sender": "reply", hand: "reply", attach: "reply", "email-file": "reply", copy: "reply",
-  "start-agent": "agent", "run-another": "agent", continue: "agent", "send-general": "agent", diff: "agent", "save-end": "agent",
+  "start-agent": "agent", "run-another": "agent", "strong-again": "agent", continue: "agent", "send-general": "agent", diff: "agent", "save-end": "agent",
   done: "close", "close-note": "close", reopen: "close",
   remind: "task", nat: "task", reshape: "task",
   // what the task's pills used to change (section 1's redesign, 2026-10-16): the pills read now, the row changes

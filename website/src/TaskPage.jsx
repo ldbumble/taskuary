@@ -556,6 +556,24 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
 
   // THE MENUS' CHANGES ARE THE TASK TOOLS (Stream B, the owner 2026-10-18: "every act leaves a receipt"): who does it, priority and
   // who holds it run down the operations road, so each is recorded and said in the chat when the task is on the Assistant's table
+  // HOW HARD, WHAT DATA (the router, 2026-10-25): triage's judgement, shown only when it is not ordinary, and the owner's word over it
+  const [judgeAt, setJudgeAt] = useState(null);
+  const judge = async (patch) => {
+    setJudgeAt(null);
+    try { await api.post(`/api/tasks/${selected}/judged`, patch); } catch (e) { setErr(opError(e, "That correction didn't go through - pick it again.")); }
+    loadDetail(selected);
+  };
+  // RUN AGAIN ON THE STRONG MODEL (owner-approved, 2026-10-25): a failed or unsure agent, run once more from a fresh start on a strong
+  // model - a press in the ▾, never by itself: an agent that can act may have done half its work
+  const [strongGoing, setStrongGoing] = useState(false);
+  const strongAgain = async () => {
+    const id = selected;
+    if (!id || strongGoing) return;
+    setStrongGoing(true); setErr("");
+    try { await api.post(`/api/tasks/${id}/strong-again`); loadDetail(id); }
+    catch (e) { setErr(opError(e, "It could not run again on the strong model.")); }
+    finally { setStrongGoing(false); }
+  };
   const change = async (kind, params) => {
     try { await runOperation(api, kind, selected, params); } catch (e) { setErr(opError(e, "That change didn't go through - pick it again.")); }
     loadDetail(selected); loadTasks(); onChanged?.();
@@ -1481,6 +1499,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       { id: "reshape", group: "more", label: labelOfRow("reshape"), run: () => setReshape(true), title: hintOfRow("reshape") },
       // ...whenever an agent has worked it and the bar's lead is not already the agent step (a paused general session had neither)
       ...(!liveSession && notDone && (ranBefore || generalStarted) && !startHere ? [runAnother] : []),
+      ...(!liveSession && notDone && detail?.strongAgain && (failedRun || ((ranBefore || generalStarted) && detail?.judged?.sure === false))
+        ? [{ id: "strong-again", group: "more", label: strongGoing ? "Starting…" : labelOfRow("strong-again"), disabled: strongGoing || !!startingAgent,
+          run: strongAgain, title: `${hintOfRow("strong-again")} - on ${detail.strongAgain.brain}, ${detail.strongAgain.model}` }] : []),
       // WHAT THE PILLS USED TO CHANGE, on the row now that the pills only read (section 1's redesign, 2026-10-16): the same PATCHes
       // and the same repository picker, each a menu at the row's button
       ...changeVerbs,
@@ -1825,6 +1846,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           {!!(detail.attachments?.length || detail.links?.length) && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
                             label={filesLine(detail.attachments?.length || 0, detail.links?.length || 0)}
                             sx={{ height: 19, fontSize: 10, bgcolor: PANEL2 }} />}
+                          {/* ...and how hard triage judged the work, or that it carries sensitive data - only when it is not ordinary, and a
+                              press corrects it (the router, 2026-10-25) */}
+                          {(detail?.judged?.difficulty === "hard" || detail?.judged?.data_class === "sensitive") && <Chip size="small" data-tq-judged=""
+                            label={[detail.judged.difficulty === "hard" && "hard work", detail.judged.data_class === "sensitive" && "sensitive data"].filter(Boolean).join(" · ")}
+                            title={`${detail.judged.by === "owner" ? "You said so" : "Triage judged it so"} - in Auto, hard work runs on the strong model. Click to correct it.`}
+                            onClick={(e) => setJudgeAt(e.currentTarget)} sx={{ height: 19, fontSize: 10, bgcolor: PANEL2, cursor: "pointer" }} />}
+                          <Menu open={!!judgeAt} anchorEl={judgeAt} onClose={() => setJudgeAt(null)}>
+                            {["quick", "standard", "hard"].map((d) => <MenuItem key={d} selected={detail?.judged?.difficulty === d} sx={{ fontSize: 12 }}
+                              onClick={() => judge({ difficulty: d })}>{d === "quick" ? "Quick work" : d === "hard" ? "Hard work" : "Ordinary work"}</MenuItem>)}
+                            {[["ordinary", "Ordinary data"], ["sensitive", "Sensitive data"]].map(([k, l]) => <MenuItem key={k} selected={(detail?.judged?.data_class || "ordinary") === k}
+                              sx={{ fontSize: 12 }} onClick={() => judge({ data_class: k })}>{l}</MenuItem>)}
+                          </Menu>
                           {fromExpands(sources) && <Link component="button" type="button" underline="hover" onClick={() => setShowAll((v) => !v)}
                             sx={{ ml: "auto", fontSize: 12 }}>{showAll ? "Show less" : `Show all ${sourceCount}`}</Link>}
                         </Box>

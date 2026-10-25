@@ -1781,6 +1781,8 @@ def task_detail(task_id: int):
             'routeWhy': _brainroute().why_for_task(store, task_id),
             # ...and how hard its work is, how sure its reader was, what data it carries - triage's word or the owner's (brainroute.judged)
             'judged': _brainroute().judged(store, task_id),
+            # ...and whether a re-run on a strong model is there to offer (the ▾'s "Run again on the strong model"), and on which brain
+            'strongAgain': (lambda j: {'pick': j[1], 'brain': _brainroute()._said(store, j[1]), 'model': j[2]} if j[1] else None)(_strong_again_of(d['task'])),
             # ...and what the agent step says when nothing is live: why it never started, or what it did before it went
             'agentStory': _agent_story(task_id),
             # ...and whether Fix it can run on its items: an outsider's only in GitHub's cloud, and only once the owner turned that
@@ -9667,7 +9669,89 @@ def set_assistant_listens(body: ListensBody):
 @app.get('/api/ai/routes')
 def ai_routes(task: int = None, limit: int = 20):
     """The newest brain routes - which AI each call ran on and why - for one task or all. Read-only; no prompt or answer is kept."""
+    if task is None: return {'routes': _brainroute().recent(store, limit=max(1, min(int(limit), 200)))}
     return {'routes': store.brain_routes(task, limit=max(1, min(int(limit), 200)))}
+
+
+class RouteRulesBody(BaseModel):
+    mode: str = None                    # 'fixed' | 'auto'; None = leave alone
+    rules: list = None                  # the whole ordered list; None = leave alone
+    cap: str = None                     # strong calls a day; '' = no cap; None = leave alone
+
+
+@app.get('/api/ai/route_rules')
+def ai_route_rules():
+    """The router's part of Settings: the mode line, the rules as sentences with their switches, the day's cap and what used it."""
+    return _brainroute().panel(store)
+
+
+@app.post('/api/ai/route_rules')
+def set_ai_route_rules(body: RouteRulesBody):
+    try: out = _brainroute().set_panel(store, body.mode, body.rules, body.cap, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+    store.audit('setting', 0, 'route_rules', ACTOR, detail={k: v for k, v in (('mode', body.mode), ('cap', body.cap)) if v is not None}
+                | ({'rules': len(body.rules)} if body.rules is not None else {}))
+    return out
+
+
+class JudgedBody(BaseModel):
+    difficulty: str = None              # quick | standard | hard
+    data_class: str = None              # ordinary | sensitive
+
+
+@app.post('/api/tasks/{task_id}/judged')
+def correct_judged(task_id: int, body: JudgedBody):
+    """The owner's correction of how hard a task's work is, or what data it carries. It stands over triage's next reading, and
+    it teaches triage the way every other correction does (routingmemory) - the next message like it is judged with it in view."""
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    if body.difficulty not in (None, 'quick', 'standard', 'hard'): raise HTTPException(422, 'difficulty is quick, standard or hard')
+    if body.data_class not in (None, 'ordinary', 'sensitive'): raise HTTPException(422, 'the data is ordinary or sensitive')
+    v = {k: x for k, x in (('difficulty', body.difficulty), ('data_class', body.data_class)) if x}
+    if not v: raise HTTPException(422, 'say what to correct')
+    store.judge_task(task_id, v, 'owner')
+    from . import routingmemory
+    for k, x in v.items(): routingmemory.learn_correction(store, task_id, k, x, ACTOR)
+    store.audit('task', task_id, 'judged', ACTOR, detail=v)
+    return {'judged': _brainroute().judged(store, task_id)}
+
+
+def _strong_again_of(task: dict) -> tuple:
+    """(job, pick, model) a re-run on the strong model would use for this task - its last brain first - or ('', '', '')."""
+    from . import general
+    job = 'general' if general.handles(task) else 'coding'
+    if job == 'general':
+        saved = store.saved_session(task['TaskId']) or {}
+        first = saved.get('Pick') or None
+    else:
+        last = store.last_transcript(task['TaskId']) or {}
+        first = f"cli:{last['Brain']}" if last.get('Brain') else None
+    pick, model = _brainroute().strong_for(store, job, task, first)
+    return (job, pick, model) if pick else ('', '', '')
+
+
+@app.post('/api/tasks/{task_id}/strong-again')
+def strong_again(task_id: int):
+    """RUN AGAIN ON THE STRONG MODEL (the owner, 2026-10-25): an agent that failed, or whose task triage was unsure of, run once
+    more from a fresh start on a strong model. A press, never automatic - an agent that can act may have done half its work - and
+    nothing it drafts is sent without the owner's Send."""
+    task = store.get_task(task_id)
+    if not task: raise HTTPException(404, 'task not found')
+    if task.get('Status') == 'dropped': raise HTTPException(409, 'This task was dismissed.')
+    job, pick, model = _strong_again_of(task)
+    if not pick: raise HTTPException(422, "No AI here has a strong model - put one in the strong model box on its card in Settings.")
+    from . import brainroute, continuity, general
+    said = f"{brainroute.JOB_WORDS[job]} run again on {brainroute._said(store, pick)}'s strong model, {model}, as you pressed"
+    brainroute.log(store, brainroute.Route(job, 'strong', pick, model, 'strong', [], 'you chose it', said[0].upper() + said[1:]), task_id)
+    store.audit('task', task_id, 'strong-again', ACTOR, detail={'job': job, 'pick': pick, 'model': model})
+    if job == 'general':
+        if task.get('Status') not in ('open', 'waiting', 'in_progress'): store.update_task(task_id, {'Status': 'in_progress'}, ACTOR)
+        def go():
+            try: general.start_session(store, task_id, actor=ACTOR).send_prompt(continuity.RESUME_PROMPT, pick=pick, model=model, as_owner=False)
+            except Exception as e: _walk_cannot(task_id, f'The session could not run again on the strong model: {e}. Your saved conversation is still here.')
+        threading.Thread(target=go, daemon=True, name=f'strong-again-{task_id}').start()
+        return {'started': True, 'taskId': task_id, 'kind': 'general', 'pick': pick, 'model': model}
+    out = continue_task(task_id, CodeBody(brain=pick[4:], model=model, instruction=continuity.RESUME_PROMPT))
+    return {'started': True, 'taskId': task_id, 'kind': 'coding', 'pick': pick, 'model': model, **(out if isinstance(out, dict) else {})}
 
 
 @app.get('/api/ai/defaults')

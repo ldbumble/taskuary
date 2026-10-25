@@ -14,8 +14,10 @@ import { ACCENT2, BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
 
 // A model box left blank is not "unconfigured" — it means the provider's own default, and the
 // server says which. Shown as the placeholder so an empty field never reads as broken.
-const Model = ({ slot, onSave }) => {
-  const [v, setV] = useState(slot.model || "");
+// `field` is which gear the box sets: the card's own model, or the brain's STRONG model - what hard work steps up to (the
+// router, 2026-10-25). The strong box is blank by default, and blank means this brain does not step up: nothing is guessed.
+const Model = ({ slot, onSave, field = "model", label = "model", hint, locked }) => {
+  const [v, setV] = useState(slot[field] || "");
   // the provider's own list of what this key can call, on top of the static suggestions; a failed read leaves the typed box working
   const [live, setLive] = useState([]);
   useEffect(() => {
@@ -24,17 +26,17 @@ const Model = ({ slot, onSave }) => {
     api.get(`/api/ai/models/${slot.connector}`).then((r) => on && setLive(r.data?.models || [])).catch(() => {});
     return () => { on = false; };
   }, [slot.connector, slot.ready]);
-  useEffect(() => { setV(slot.model || ""); }, [slot.model, slot.value]);
-  const commit = (next) => { if ((next || "") !== (slot.model || "")) onSave({ model: next || "" }); };
+  useEffect(() => { setV(slot[field] || ""); }, [slot[field], slot.value]);
+  const commit = (next) => { if ((next || "") !== (slot[field] || "")) onSave({ [field]: next || "" }); };
   return (
     // A DROPDOWN THAT LOOKS LIKE ONE (the owner, 2026-10-01: "i thought you were going to get dropdown of models?"): freeSolo hid
     // the arrow and opened only on typing, so a list of five deployments read as an empty text box. Typing a name still works.
-    <Autocomplete freeSolo forcePopupIcon openOnFocus size="small" options={[...new Set([...live, ...(slot.choices || [])])]} value={v} disabled={!slot.ready}
+    <Autocomplete freeSolo forcePopupIcon openOnFocus size="small" options={[...new Set([...live, ...(slot.choices || [])])]} value={v} disabled={!slot.ready || !!locked}
       onInputChange={(_e, next) => setV(next)}
       onChange={(_e, next) => { setV(next || ""); commit(next || ""); }}
       onBlur={() => commit(v)}
       sx={{ minWidth: 260 }}
-      renderInput={(p) => <TextField {...p} label="model" placeholder={slot.default_hint || "provider default"}
+      renderInput={(p) => <TextField {...p} label={label} placeholder={hint ?? (slot.default_hint || "provider default")}
         sx={{ bgcolor: "#fff" }} />} />
   );
 };
@@ -86,7 +88,15 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
         {!isJudge && (
           <Box>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 600 }}>model</Typography>
-            <Model slot={slot} onSave={onSave} />
+            {/* Drafting's model is shut until a drafting brain is chosen: blank is the triage brain on its own model (2026-10-25) */}
+            <Model slot={slot} onSave={onSave} locked={slot.key === "draft_ai" && slot.default}
+              hint={slot.key === "draft_ai" && slot.default ? "choose a drafting brain first" : undefined} />
+          </Box>
+        )}
+        {!isJudge && slot.strong_model !== undefined && (
+          <Box>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 600 }}>strong model</Typography>
+            <Model slot={slot} onSave={onSave} field="strong_model" label="strong model" hint="none, this brain doesn't step up" />
           </Box>
         )}
         {/* effort only where the CLI can actually be told one - climodels leaves it empty for

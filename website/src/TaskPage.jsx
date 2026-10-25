@@ -2160,8 +2160,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {runRole && <Box sx={{ ...chipBtnStatic }} title="Which instructions this agent follows - set in Settings.">
                         <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>works as</Box>&nbsp;{runRole}</Box>}
                       {brainPill && <Box sx={{ ...chipBtnStatic }}
-                        title={brainPill === detail?.ranOn?.brain ? "The AI that did this work. Which AI the agents use is set in Settings, not per task."
-                          : "The AI that does the work. Which AI the agents use is set in Settings, not per task."}>
+                        title={(brainPill === detail?.ranOn?.brain ? "The AI that did this work. Which AI the agents use is set in Settings, not per task."
+                          : "The AI that does the work. Which AI the agents use is set in Settings, not per task.")
+                          + (detail?.routeWhy ? ` Last AI call: ${detail.routeWhy}` : "")}>
                         <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>AI</Box>&nbsp;{brainPill}</Box>}
                       {/* the repository pill only where a coding tool is connected (B3) */}
                       {!isGeneral && canCode && <Button size="small" variant="outlined" sx={chipBtn}

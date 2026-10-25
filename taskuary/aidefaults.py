@@ -30,6 +30,12 @@ SLOTS = [
      'desc': 'Reads every inbound message and decides: a task to do, a question to answer, or FYI to file. '
              'Also runs the Advisor and writes what Taskuary remembers.',
      'why': 'One message in, one line of JSON out - so this wants your cheapest fast model, not your best one.'},
+    # DRAFTING HAS ITS OWN CARD (the owner, 2026-10-25): every reply was written by the triage brain - the cheapest model, chosen
+    # for one line of JSON - and no card said so. Blank is exactly that brain, as before; once set, the replies, the messages and
+    # their subject lines are written on it. Nothing is sent without the owner's press either way.
+    {'key': 'draft_ai', 'label': 'Drafting', 'pick': 'brain', 'gear': 'light', 'model_setting': 'draft_model',
+     'desc': 'Writes the replies and messages you approve before anything goes out, and their subject lines.',
+     'why': 'A reply in your voice is worth more than a triage verdict. Blank uses the triage brain, as before.'},
     # the CLI tool itself, never a profile (the owner, 2026-10-15: "it's models or cli tools only") - it held `default_agent`,
     # a profile name, which is how a profile came to be read as a brain
     {'key': 'default_brain', 'label': 'Default coding CLI', 'pick': 'cli', 'gear': 'main',
@@ -103,7 +109,29 @@ def auto_target(store):
     return None
 
 
+def _strong_home(store, cfg, out: dict) -> tuple:
+    "('cli', key) or ('connector', id) - where this card's brain keeps its strong gear; () for a card with no brain to keep one."
+    if out.get('connector'): return ('connector', out['connector'])
+    if not out.get('cli'): return ()
+    if SLOT[out['key']]['pick'] == 'cli': return ('cli', out['value'])
+    from .agents import brain_key
+    return ('cli', brain_key(store, out['value'], cfg))
+
+
 def resolve(store, cfg, slot_key: str) -> dict:
+    """What this slot is set to, what will run, and which screen owns the model - and the brain's STRONG model, what hard work
+    steps up to (the router, 2026-10-25). It belongs to the brain like the other gears, so two cards on one brain show one.
+    Blank is no strong tier: nothing is guessed from a model's name."""
+    out = _resolve(store, cfg, slot_key)
+    home = () if out.get('kind') == 'decision' else _strong_home(store, cfg, out)
+    if home and home[0] == 'cli': out['strong_model'] = str(_conn(cfg, home[1]).get('strong_model') or '')
+    elif home:
+        try: out['strong_model'] = str(json.loads((store.get_connector(home[1]) or {}).get('ConfigJson') or '{}').get('strong_model') or '')
+        except ValueError: out['strong_model'] = ''
+    return out
+
+
+def _resolve(store, cfg, slot_key: str) -> dict:
     """What this slot is set to, what will run, and which screen owns the model."""
     s, settings = SLOT[slot_key], store.get_settings()
     value = str(settings.get(slot_key) or '')
@@ -156,8 +184,11 @@ def resolve(store, cfg, slot_key: str) -> dict:
     # brain it is, never "auto - first active AI connector" (the owner, 2026-09-24: "first connected should not matter")
     if not value:
         from .agents import default_pick
-        value = default_pick(store)
+        from .llm import effective_pick
+        # ...except Drafting, whose blank is the TRIAGE brain - what wrote every reply before it had a card
+        value = effective_pick(store) if slot_key == 'draft_ai' else default_pick(store)
         if value: out.update(value=value, default=True)
+        if value and slot_key == 'draft_ai': out['note'] = 'blank = the triage brain, as before'
     if value.startswith('cli:'):
         from .llm import ASSISTANT_DEFAULT, LIGHT_DEFAULT
         from .agents import brain_key
@@ -169,6 +200,9 @@ def resolve(store, cfg, slot_key: str) -> dict:
             # what concierge.brain runs: its own model, else the Assistant default - never the brain's light model,
             # which is triage's (this card said "the coding model, the expensive gear" while every turn ran on haiku)
             light, dflt, owner = str(settings.get(s['model_setting']) or ''), ASSISTANT_DEFAULT.get(cli, ''), 'this page'
+        elif slot_key == 'draft_ai':
+            # its own model box, blank = what drafts ran on before: the brain's light gear (shared with triage, never written by this card)
+            light, dflt, owner = str(settings.get(s['model_setting']) or ''), light or LIGHT_DEFAULT.get(cli, ''), 'this page'
         else: dflt, owner = LIGHT_DEFAULT.get(cli, ''), f'the {key} connection (light model)'
         model, effort = ('', light[7:]) if light.startswith('effort:') else climodels.split_pick(light)
         if slot_key == 'concierge_ai' and not effort:
@@ -254,19 +288,17 @@ def _resolved(cat: dict, model: str) -> str:
     return i if i != model else ''
 
 
-# What a blank model box actually means per provider, copied from llm.make_llm so the UI can
-# say it rather than showing an empty field that looks unconfigured.
-_CONN_DEFAULT = {'anthropic': 'claude-opus-5', 'openai': 'gpt-4o-mini', 'openrouter': 'openrouter/auto',
-                 'meta': 'muse-spark-1.2', 'ollama': '(required - name the model you pulled)',
-                 'azure_openai': '(the deployment name on the card)', 'vertex_ai': 'google/gemini-3.8-flash','chatgpt': '(the first model your plan lists)'}
-_CONN_MODELS = {'anthropic': ['claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'],
-                'openai': ['gpt-4o-mini', 'gpt-4o'],
-                'openrouter': ['openrouter/auto', 'meta-llama/llama-3.3-70b-instruct'],
-                'meta': ['muse-spark-1.2', 'muse-spark-1.3', 'muse-spark-1.2-contributor']}
+# What a blank model box means per AI connection, said rather than left to look unconfigured: the model make_llm runs
+# (llm.PROVIDER_DEFAULT, the one table), else what the owner has to name. No model id is typed here - the picker's choices
+# are the provider's own list for that key (/api/ai/models), and a box takes any name typed into it (the router, 2026-10-25).
+_CONN_HINT = {'ollama': '(required - name the model you pulled)', 'azure_openai': '(the deployment name on the card)',
+              'chatgpt': '(the first model your plan lists)'}
 
 
-def _conn_default(t: str) -> str: return _CONN_DEFAULT.get(t, '')
-def _conn_models(t: str) -> list: return list(_CONN_MODELS.get(t, []))
+def _conn_default(t: str) -> str:
+    from .llm import PROVIDER_DEFAULT
+    return PROVIDER_DEFAULT.get(t) or _CONN_HINT.get(t, '')
+def _conn_models(t: str) -> list: return []
 
 
 def state(store, cfg) -> dict:
@@ -292,14 +324,29 @@ def judge_options(store) -> list:
     return out
 
 
-def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor: str = 'owner') -> dict:
+def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor: str = 'owner', strong=None) -> dict:
     """Point a slot at a brain/agent and set the model it runs on, writing each half to the
-    screen that owns it. `model`/`effort` of None mean "leave alone"; '' means "clear"."""
+    screen that owns it. `model`/`effort`/`strong` of None mean "leave alone"; '' means "clear"."""
     if slot_key not in SLOT: raise ValueError(f'unknown slot: {slot_key}')
     s = SLOT[slot_key]
     if value is not None:
         store.set_setting(slot_key, str(value), actor)
+        # Drafting back to blank is the triage brain on ITS model: a drafting model left behind would ride it unseen (2026-10-25)
+        if slot_key == 'draft_ai' and not str(value).strip(): store.set_setting('draft_model', '', actor)
+    if strong is not None:
+        # the strong gear lives where the brain's other gears do: the CLI connection, or the AI card's own config
+        home, strong = _strong_home(store, cfg, resolve(store, cfg, slot_key)), str(strong).strip()
+        if not home: raise ValueError('no brain on this card to set a strong model on')
+        if home[0] == 'cli': _save_gear(store, cfg, home[1], 'strong_model', strong)
+        else:
+            conf = json.loads(store.get_connector(home[1]).get('ConfigJson') or '{}')
+            if strong: conf['strong_model'] = strong
+            else: conf.pop('strong_model', None)
+            store.set_connector_config(home[1], conf)
+        store.audit('setting', 0, 'save', actor, detail=f'{slot_key} strong_model={strong or "(none)"}')
     if model is None and effort is None: return resolve(store, cfg, slot_key)
+    # the Drafting model box is shut until a drafting brain is chosen - blank is the triage brain, whose model is its own card's
+    if slot_key == 'draft_ai' and not str(store.get_setting('draft_ai') or '').strip(): raise ValueError('choose a drafting brain first')
 
     cur = resolve(store, cfg, slot_key)
     model = cur['model'] if model is None else str(model).strip()
@@ -307,7 +354,8 @@ def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor:
     now = str(store.get_setting(slot_key) or '')
     if not now and s['pick'] == 'brain':               # a blank card IS the default brain - its model goes there
         from .agents import default_pick
-        now = default_pick(store)
+        from .llm import effective_pick
+        now = effective_pick(store) if slot_key == 'draft_ai' else default_pick(store)
 
     if s['pick'] == 'cli':
         from .agents import default_brain
@@ -316,6 +364,9 @@ def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor:
         _save_gear(store, cfg, key, 'model', f'{model}@{effort}' if (model and effort) else model)
     elif now.startswith('cli:') and slot_key == 'concierge_ai':
         store.set_setting(s['model_setting'], f'effort:{effort}' if (effort and not model) else model, actor)
+    elif now.startswith('cli:') and slot_key == 'draft_ai':
+        # its own setting, never the connection's light gear, which triage rides; '@low' is the brain's own model at that effort
+        store.set_setting(s['model_setting'], f'{model}@{effort}' if effort else model, actor)
     elif now.startswith('cli:'):
         from .agents import brain_key
         # codex on a ChatGPT plan has no smaller model, so its cheap gear is effort alone -

@@ -137,6 +137,10 @@ def readable_images(store, message_ids, cap: int = VISION_MAX) -> list:
 MAX_TOKENS = 400
 # the newest Flash on Google's Agent Platform: 2.5 Flash retires there on 2026-10-20 (the owner, 2026-10-15: "use the latest flash")
 VERTEX_DEFAULT = 'gemini-3.8-flash'
+# What a blank model box runs per AI connection, read by make_llm and said by the AI cards (aidefaults) - ONE table. The cards
+# kept a copy, and it drifted: it said Vertex ran 'google/gemini-3.8-flash' while it ran this (the router, 2026-10-25).
+PROVIDER_DEFAULT = {'anthropic': 'claude-opus-5', 'openai': 'gpt-4o-mini', 'openrouter': 'openrouter/auto', 'meta': 'muse-spark-1.2',
+                    'vertex_ai': VERTEX_DEFAULT}
 # AN ANSWER CUT OFF BY THE LIMIT IS ASKED AGAIN WITH ROOM. A thinking model (Gemini 2.5+, the reasoning GPTs) spends its token budget
 # thinking before it writes, so a 400-token triage came back with no message at all - read as a refused format, then as an error with
 # no reason, and a connected Vertex AI sorted no mail (2026-10-15). Once more with this much room; empty after that says so.
@@ -266,11 +270,11 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     # general worker session used to fall through to light whenever no main model was set, so
     # the analyst answered on the classifier's cheap model (the owner, 2026-09-16: general agents
     # use the same brain on high level like coding by default).
-    light = str(prof.get('light_model') or '') if gear != 'main' else ''
+    light = str(prof.get('light_model') or '') if gear == 'light' else ''
     # a profile that names no light model still gets the CLI's small one: blank used to mean the MAIN model, so triage,
     # drafts and summaries ran on the coding tier (the owner, 2026-09-24: "lower model for triage/assistant")
     cli = hub_agents.cli_of(prof, agent_name)
-    if gear != 'main' and not light and not model: light = LIGHT_DEFAULT.get(cli, '')
+    if gear == 'light' and not light and not model: light = LIGHT_DEFAULT.get(cli, '')
     if light.startswith('effort:'):
         # codex on a ChatGPT plan serves ONLY the plan's models - no mini/nano tier exists -
         # so its cheap gear is reasoning effort on the same model (verified: -c
@@ -281,6 +285,12 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         from .climodels import split_pick
         m, eff = split_pick(light)
         prof['model'] = f'{m}@{eff}' if eff else m      # agents.run_cli spells the effort in this CLI's own flag
+    # ...and the STRONG gear is what hard work steps up to (brainroute): the owner's own strong_model on this brain. Blank is
+    # no strong tier - the router never asks for one then, and a caller that does gets the main model, never a guessed one.
+    if gear == 'strong' and str(prof.get('strong_model') or '').strip():
+        from .climodels import split_pick
+        m, eff = split_pick(str(prof['strong_model']).strip())
+        prof['model'] = f'{m}@{eff}' if eff else m
     if model: prof['model'] = model     # an explicit per-job model outranks the light gear
     # 300s is the CLASSIFIER's leash - one message, one verdict, and a brain that hangs for twenty
     # minutes on a mail run is a bug. An agent the owner scheduled INTO a repo (cwd) is not
@@ -345,14 +355,25 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
 
 def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,
               cli_tools: bool = False, extra_env: dict = None, research: bool = False, fallback_user=None,
-              gear: str = 'light', keep: str = None, task_id=None):
+              gear: str = 'light', keep: str = None, task_id=None, job: str = None):
     """The brain, or the demo's script. Everything in the app asks for its brain here, which is
     the one place a demo can be told to answer without a key, a CLI, or a request that leaves
-    the machine (demo.py)."""
-    from . import demo
-    # the demo answers from a script: no key, no CLI, no request leaving the machine
-    if demo.enabled(): return demo.brain()
-    brain = _build_llm(store, pick, model, trace, cancel, resume, cli_tools, extra_env, research, fallback_user, gear, keep, task_id)
+    the machine (demo.py).
+
+    `job` says what the call is FOR (brainroute.JOBS) and brainroute.choose says which brain runs it. Every call
+    site in taskuary/ names one (tests/test_brainroute.py); a caller that does not is triage, as it always was."""
+    from . import demo, brainroute, origin
+    r = brainroute.choose(store, job or 'triage', task=task_id, want_pick=pick, want_model=model, gear=gear)
+    # the demo answers from a script: no key, no CLI, no request leaving the machine - and its route is logged, so its reason shows
+    if demo.enabled():
+        brainroute.log(store, r, task_id, pick='demo'); return demo.brain()
+    rid = brainroute.log(store, r, task_id)
+    try: brain = _build_llm(store, r.pick, r.model or None, trace, cancel, resume, cli_tools, extra_env, research, fallback_user, r.gear, keep, task_id,
+                            backups=r.chain)
+    except Exception as e:
+        brainroute.outcome(store, rid, f'refused:{type(e).__name__}' if isinstance(e, (origin.RefusedForStranger, origin.Refusal)) else 'error'); raise
+    if brain is None: brainroute.outcome(store, rid, 'error' if r.pick else 'refused:no AI')
+    elif getattr(brain, 'is_failover', False): brain.route = (store, rid)
     return _Scrubbed(brain) if brain else brain
 
 
@@ -413,7 +434,7 @@ class _Scrubbed:
 
 def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,
                cli_tools: bool = False, extra_env: dict = None, research: bool = False, fallback_user=None,
-               gear: str = 'light', keep: str = None, task_id=None):
+               gear: str = 'light', keep: str = None, task_id=None, backups: list = None):
     """The brain named by `pick` ('' = first active AI connector, 'connector:<id>',
     'cli:<agent>'), defaulting to the triage_ai setting - callers like reports may name
     their OWN brain and model per job instead of riding the triage tier. The owner's ordered
@@ -421,13 +442,16 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
     fresh conversation - provider-specific model/session identifiers never cross that line."""
     settings = store.get_settings()
     primary = effective_pick(store, pick if pick is not None else settings.get('triage_ai') or '')   # blank = the default brain
-    backups = [x.strip() for x in str(settings.get('triage_backup_ai') or '').split(',') if x.strip()]
+    # the route's chain (brainroute.Route.chain) is the one list a failover walks; read here only for a caller that has none
+    if backups is None: backups = [x.strip() for x in str(settings.get('triage_backup_ai') or '').split(',') if x.strip()]
     # This dedupe SURVIVES the role/brain split, unlike its twin in agent_chain. A session's chain
     # is of brains now, so that one went; but `triage_ai` and `triage_backup_ai` still spell a
     # brain as `cli:<agent>` - the classifier is built from an agent ROW (make_cli_llm) - so two
     # settings can still name two profiles backed by one executable, and trying claude twice is
     # not failover: it repeats the same paid failure. It can go when the brain settings name
-    # brains, which is a change beyond the 2026-09-16 spec.
+    # brains, which is a change beyond the 2026-09-16 spec. Still true on 2026-10-25: brain VALUES
+    # became connection keys, but make_cli_llm resolves `cli:<x>` through an agent row, and an
+    # install saved before then still holds a profile name here - so the router keeps it.
     picks, identities = [], set()
     for candidate in [primary, *backups]:
         identity = candidate
@@ -468,6 +492,9 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
             if c['Type'] in AI_TYPES and ready and selected:
                 full = store.get_connector(c['ConnectorId'], with_secret=True)
                 config = {**json.loads(full.get('ConfigJson') or '{}'), '_cid': full['ConnectorId']}   # a rotated sign-in token is saved back to its card
+                # an API key's strong gear is the card's own strong_model, swapped in for the call (blank: no strong tier)
+                if gear == 'strong' and not chosen_model and str(config.get('strong_model') or '').strip():
+                    config = {**config, 'model': str(config['strong_model']).strip()}
                 if chosen_model: config = {**config, 'model': chosen_model}
                 return make_llm(full['Type'], config, full.get('Secret'))
         return None
@@ -492,6 +519,9 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
                 out = brain(system, context, **kw)
                 failover.last_pick = candidate
                 failover.session_id = getattr(brain, 'session_id', None)
+                if candidate != primary and failover.route:
+                    from . import brainroute
+                    brainroute.outcome(*failover.route, f'fallback:{candidate}')
                 return out
             except Exception as e:
                 last = e
@@ -500,6 +530,7 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
                                 f'{candidate or "automatic AI"} is unavailable; trying {brains[i + 1][0]}')
         raise last
     failover.last_pick, failover.session_id = primary, resume
+    failover.is_failover, failover.route = True, None     # build_llm hands it its route row, for a backup to be written on
     failover.takes_want = True          # it forwards one to each brain that can carry it, and drops it for the rest
     failover.takes_web = any(getattr(b, 'takes_web', False) for _, b in brains)
     return failover
@@ -625,6 +656,26 @@ def list_models(t, cfg: dict, key: str) -> list:
     return [m for m in _list_models(t, cfg, key) if not _NOT_A_BRAIN.search(m)]
 
 
+MODELS_TTL, _models_cache = 600, {}      # a provider's list, per connector, for ten minutes - a cache, not a setting
+
+
+def connector_models(store, cid: int) -> dict | None:
+    """{'models': [...]} this connector's own key can call, cached; a failed read is {'models': [], 'error': ...} so every picker
+    falls back to its typed box. None for no such AI connector. The one list the AI cards, the workflow editor and the strong
+    box offer - no model id is typed into the app for them (the router, 2026-10-25)."""
+    import time
+    hit = _models_cache.get(cid)
+    if hit and time.time() - hit[0] < MODELS_TTL: return hit[1]
+    c = store.get_connector(int(cid), with_secret=True)
+    if not c or c['Type'] not in AI_TYPES: return None
+    try: conf = json.loads(c.get('ConfigJson') or '{}')
+    except ValueError: conf = {}
+    try: out = {'models': list_models(c['Type'], conf, c.get('Secret') or '')}
+    except Exception as e: return {'models': [], 'error': str(e)[:200]}
+    _models_cache[cid] = (time.time(), out)
+    return out
+
+
 def _list_models(t, cfg: dict, key: str) -> list:
     """The model ids this key can actually call, from the provider's own list endpoint - so the picker never offers a name the
     account does not have. Azure names what you DEPLOYED (that is what a request carries), so it is its deployments, or the resource's base models when the
@@ -661,7 +712,7 @@ def make_llm(t, cfg: dict, key: str):
     if t == 'anthropic':
         import anthropic
         cli = anthropic.Anthropic(api_key=key)
-        model = cfg.get('model') or 'claude-opus-5'
+        model = cfg.get('model') or PROVIDER_DEFAULT['anthropic']
         def llm(system, user, max_tokens=MAX_TOKENS, images=None, want=None, web=False):
             # images FIRST: every provider reads a picture better when the question follows it
             content = ([{'type': 'image', 'source': {'type': 'base64', 'media_type': ct, 'data': b64}}
@@ -686,13 +737,13 @@ def make_llm(t, cfg: dict, key: str):
         return llm
     if t == 'openai':
         urls = ['https://api.openai.com/v1/chat/completions']
-        headers, model = {'Authorization': f'Bearer {key}'}, cfg.get('model') or 'gpt-4o-mini'
+        headers, model = {'Authorization': f'Bearer {key}'}, cfg.get('model') or PROVIDER_DEFAULT['openai']
     elif t == 'openrouter':
         # one key, the whole catalog behind the OpenAI schema - open-weights models included.
         # Model strings are OpenRouter's names ('meta-llama/llama-3.3-70b-instruct', ...);
         # 'openrouter/auto' lets their router pick, so an empty model box still works.
         urls = ['https://openrouter.ai/api/v1/chat/completions']
-        headers, model = {'Authorization': f'Bearer {key}', 'X-Title': 'Taskuary'}, cfg.get('model') or 'openrouter/auto'
+        headers, model = {'Authorization': f'Bearer {key}', 'X-Title': 'Taskuary'}, cfg.get('model') or PROVIDER_DEFAULT['openrouter']
     elif t == 'meta':
         # Meta Model API - Muse Spark behind the OpenAI chat-completions schema, so it needs no
         # branch of its own beyond the base url. This is the road to Muse Spark on a machine that
@@ -703,7 +754,7 @@ def make_llm(t, cfg: dict, key: str):
         # the default stays on the private tier, and the card says so rather than deciding for you.
         base = (cfg.get('base_url') or 'https://api.meta.ai/v1').rstrip('/')
         urls = [f'{base}/chat/completions']
-        headers, model = {'Authorization': f'Bearer {key}'}, cfg.get('model') or 'muse-spark-1.2'
+        headers, model = {'Authorization': f'Bearer {key}'}, cfg.get('model') or PROVIDER_DEFAULT['meta']
     elif t == 'ollama':
         # a LOCAL server speaking the OpenAI surface. Ollama's port out of the box, but base_url
         # reaches LM Studio (:1234), llama.cpp, vLLM - anything /v1-compatible - so open-source

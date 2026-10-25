@@ -273,7 +273,7 @@ def roll_daily(store, llm=None) -> int:
     store.set_setting(ROLLED_ON, today, 'system')
     if llm is None:
         from .llm import build_llm
-        llm = build_llm(store)
+        llm = build_llm(store, job='summary')
     return roll_up(store, today, llm)
 
 
@@ -360,7 +360,7 @@ def likely_overlap(store, tid: int, ps: list) -> tuple:
     from .llm import build_llm
     t = store.get_task(tid) or {}
     try:
-        llm = build_llm(store)
+        llm = build_llm(store, job='rank')
         if not llm: return None, ''
         running = '\n'.join(f"- {p['ref']} \"{'a task of a stranger' if _stranger(store, p) else p['title']}\" - files so far: "
                             + (', '.join(p['files'][:15]) or 'none yet') for p in ps)

@@ -537,7 +537,7 @@ def main():
         try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
         except (AttributeError, OSError): pass
         store = SQLiteStore(config.db_path())
-        brain = _llm.build_llm(store)
+        brain = _llm.build_llm(store, job='summary')
         if not brain:
             from . import words
             print('No AI is connected, so the summaries will only be stripped of their footers '

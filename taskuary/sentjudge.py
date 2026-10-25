@@ -57,7 +57,7 @@ def _date(v) -> str | None:
 def _brain(store, llm):
     if llm is not None: return llm
     from .llm import build_llm
-    try: return build_llm(store)
+    try: return build_llm(store, job='triage')
     except Exception as e:
         logger.debug(f'sentjudge: no model - {e}'); return None
 

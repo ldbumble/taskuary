@@ -1036,7 +1036,7 @@ class GeneralSession:
             # classifying one message. The dock is the Assistant's own chat and keeps the quick
             # gear it shares with triage (aidefaults). See the 2026-09-16 spec.
             build_args['gear'] = 'light' if is_dock(self.store.get_task(self.task_id)) else 'main'
-            brain = llm_mod.build_llm(self.store, **build_args)
+            brain = llm_mod.build_llm(self.store, **build_args, job='general')
             if not brain: raise RuntimeError('the AI chosen for this is not available - pick another, or connect it again')
             if self.cli_sid:
                 # an opening turn's 'turn' IS the instruction, which the history never saw
@@ -1085,7 +1085,7 @@ class GeneralSession:
                 if browser_tools or hands:
                     build_args.update(cli_tools=True, extra_env=browser_env)
                 build_args['gear'] = 'light' if is_dock(self.store.get_task(self.task_id)) else 'main'
-                brain = llm_mod.build_llm(self.store, **build_args)
+                brain = llm_mod.build_llm(self.store, **build_args, job='general')
                 limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS
                 with llm_mod.watching(visible):          # an API brain's own web searches are steps too (llm.watching)
                     reply = str(brain(system, user, max_tokens=limit, images=_images(paths), **_web(brain)) or '').strip()
@@ -1271,7 +1271,7 @@ class GeneralSession:
             transcript = conversation_text(self.store, self.task_id)
             if transcript and hub.enabled(self.store):
                 try:
-                    brain = llm_mod.build_llm(self.store, pick=self.pick or None, model=self.model or None)
+                    brain = llm_mod.build_llm(self.store, pick=self.pick or None, model=self.model or None, job='memory')
                     hub.learn_from_session(self.store, self.task_id, transcript, 'assistant', llm=brain)
                 except Exception as e:
                     logger.debug(f'hub: assistant conversation {self.task_id} learned nothing - {e}')

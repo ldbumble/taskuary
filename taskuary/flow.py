@@ -509,7 +509,7 @@ def header(defn: dict, steps: list, trigger: str, when: str) -> str:
 
 def _llm(store):
     from .llm import build_llm
-    try: return build_llm(store)
+    try: return build_llm(store, job='report')
     except Exception as e: logger.warning(f'workflow: no brain for its AI steps - {e}'); return None
 
 

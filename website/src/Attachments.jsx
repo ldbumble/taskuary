@@ -40,15 +40,19 @@ const LINK_KIND = [["sheet", "SHEET"], ["spreadsheet", "SHEET"], ["slides", "SLI
 const kindOf = (a) => a.link ? (LINK_KIND.find(([k]) => String(a.kind || "").toLowerCase().includes(k))?.[1] || "LINK")
   : Object.entries(KIND).find(([k]) => (a.content_type + " " + a.name).toLowerCase().includes(k))?.[1]
   || (a.name.split(".").pop() || "file").slice(0, 5).toUpperCase();
-// where a chip opens: a file's own bytes here (with the token), a linked document at its own address (never with it)
-const hrefOf = (a) => a.link ? a.external_url : a.url ? attUrl(a, true) : undefined;
-const titleOf = (a) => a.link ? `${a.kind} — ${a.note ? `not read: ${a.note}` : a.read ? (a.rows != null ? `read, ${a.rows} rows` : "read") : "opens where it lives"}`
-  : a.url ? "open it" : "not saved here — open the original message";
+// where a chip opens: a file's own bytes here (with the token), a linked document at its own address (never with it) - and a file
+// kept without its bytes (a cloud link Outlook attaches, one over the size limit) at the original message, where it still opens
+// (TQ-1197: "can't click the link to open" - the chip was a greyed div pointing at an original nothing linked to)
+const SAVE_MAX = 12 * 1024 * 1024;   // channels.ATT_BYTES
+const hrefOf = (a, original) => a.link ? a.external_url : a.url ? attUrl(a, true) : original || undefined;
+const unsaved = (a) => (a.size > SAVE_MAX ? `over ${kb(SAVE_MAX)}, so not saved here` : "no copy came with the mail - a cloud file's link, or a forwarded mail");
+const titleOf = (a, original) => a.link ? `${a.kind} — ${a.note ? `not read: ${a.note}` : a.read ? (a.rows != null ? `read, ${a.rows} rows` : "read") : "opens where it lives"}`
+  : a.url ? "open it" : `${unsaved(a)} — ${original ? "opens in the original message" : "open it from the mail in your mailbox"}`;
 
 // a mail whose body points at a picture it does not carry ([image: ...], cid:) - worth a "look for attachments" offer
 export const mentionsPicture = (body) => /\[(image|cid|inline image)|cid:/i.test(String(body || ""));
 
-export const Attachments = ({ messageId, canFetch, dense }) => {
+export const Attachments = ({ messageId, canFetch, dense, original }) => {
   const [items, setItems] = useState(null);
   const [big, setBig] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -131,15 +135,18 @@ export const Attachments = ({ messageId, canFetch, dense }) => {
           </Typography>
         <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mt: 0.5 }}>
           {files.map((a) => (
-            <Box key={a.id} component={hrefOf(a) ? "a" : "div"} href={hrefOf(a)} data-tq-linked-doc={a.link ? "" : undefined}
-              target="_blank" rel={a.link ? "noopener noreferrer" : "noopener"} title={titleOf(a)}
+            <Box key={a.id} component={hrefOf(a, original) ? "a" : "div"} href={hrefOf(a, original)} data-tq-linked-doc={a.link ? "" : undefined}
+              data-tq-unsaved={!a.link && !a.url ? "" : undefined}
+              target="_blank" rel={a.link || !a.url ? "noopener noreferrer" : "noopener"} title={titleOf(a, original)}
               sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.9, py: 0.4, borderRadius: 1.5,
                 border: `1px solid ${BORDER}`, bgcolor: PANEL2, textDecoration: "none", maxWidth: 260,
-                cursor: hrefOf(a) ? "pointer" : "default", opacity: hrefOf(a) ? 1 : 0.6,
-                "&:hover": { borderColor: hrefOf(a) ? "#d8cfbe" : BORDER } }}>
+                cursor: hrefOf(a, original) ? "pointer" : "default", opacity: hrefOf(a, original) ? 1 : 0.6,
+                "&:hover": { borderColor: hrefOf(a, original) ? "#d8cfbe" : BORDER } }}>
               <Typography variant="caption" sx={{ ...mono, fontSize: 9, fontWeight: 600, color: "#55697a" }}>{kindOf(a)}</Typography>
               <Typography variant="caption" sx={{ color: INK, flex: 1, minWidth: 0 }} noWrap>{a.name}</Typography>
-              <Typography variant="caption" sx={{ color: FAINT, fontSize: 9.5 }}>{a.link ? (a.note ? "not read" : "") : kb(a.size)}</Typography>
+              {/* ...and a file it could not keep says so on the chip, not only on hover */}
+              <Typography variant="caption" sx={{ color: FAINT, fontSize: 9.5, whiteSpace: "nowrap" }}>
+                {a.link ? (a.note ? "not read" : "") : a.url ? kb(a.size) : original ? "in the original" : "not saved"}</Typography>
             </Box>
           ))}
         </Box>

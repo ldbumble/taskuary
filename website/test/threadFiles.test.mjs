@@ -32,7 +32,19 @@ test("nothing is drawn loose under the card: each row draws its own message's fi
   assert.match(cameFrom, /files=\{sourceFiles\} fetchFor=\{fetchFor\}/);
   assert.match(page, /const sourceFiles = filesByMessage\(detail\?\.attachments\);/);
   assert.match(rowsFn, /open !== r\.m\.MessageId && \(files\.has\(r\.m\.MessageId\) \|\| fetchFor === r\.m\.MessageId\) && \(/);
-  assert.match(rowsFn, /<Attachments messageId=\{r\.m\.MessageId\} canFetch=\{fetchFor === r\.m\.MessageId\} dense \/>/);
+  assert.match(rowsFn, /<Attachments messageId=\{r\.m\.MessageId\} canFetch=\{fetchFor === r\.m\.MessageId\} dense original=\{r\.m\.SourceLink\} \/>/);
+});
+
+// TQ-1197: "1 attachment" under Came from looked pressable and did nothing, the file itself under a 420px letter below the fold
+test("the files pill opens the message they came with and brings its letter's foot into view", () => {
+  const pill = cameFrom.slice(cameFrom.indexOf("data-tq-files-pill"), cameFrom.indexOf("sx={{ height: 19"));
+  assert.match(pill, /onClick=/);
+  assert.match(pill, /detail\.attachments\?\.\[0\]\?\.MessageId/);
+  assert.match(pill, /setOpenMsg\(mid\); setSeekLetter\(mid\);/);
+  assert.match(pill, /setShowAll\(true\)/, "a message folded under Show older is shown first");
+  assert.match(rowsFn, /data-tq-letter=\{r\.m\.MessageId\}/);
+  assert.match(page, /querySelector\(`\[data-tq-letter="\$\{seekLetter\}"\]`\)\?\.scrollIntoView\(\{ block: "end"/);
+  assert.match(rowsFn, /mentionsPicture\(r\.m\.BodyText\)\} dense original=\{r\.m\.SourceLink\} \/>/, "the open letter's files reach the original too");
 });
 
 test("a voice note named by the bridge's hash is called a voice note; a named file keeps its name", () => {

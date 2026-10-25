@@ -265,7 +265,7 @@ def _prove(store) -> str:
     said = {}
     def go():
         try:
-            v = triage.classify_intent(dict(PROOF), llm=llm_mod.build_llm(store), system=store.doc('triage'))
+            v = triage.classify_intent(dict(PROOF), llm=llm_mod.build_llm(store, job='triage'), system=store.doc('triage'))
             if v.get('degraded') or v.get('intent') not in ('task', 'reply_only', 'fyi'):
                 said['e'] = f"it couldn't sort a test email - {v.get('parse_error') or v.get('error') or 'its answer was not a verdict'}"
         except Exception as e: said['e'] = f"it couldn't sort a test email - {str(e)[:300]}"
@@ -633,7 +633,7 @@ def suggest_about(store) -> dict:
     """The mail's own answer to name, organisation, title and systems - {'error'} when it cannot, and the questions still work."""
     from . import llm as llm_mod
     try:
-        ans = llm_mod.ask_json(llm_mod.build_llm(store), ABOUT_SYSTEM, f"SYSTEMS OFFERED: {', '.join(_offered())}\n\n{about_evidence(store)}",
+        ans = llm_mod.ask_json(llm_mod.build_llm(store, job='summary'), ABOUT_SYSTEM, f"SYSTEMS OFFERED: {', '.join(_offered())}\n\n{about_evidence(store)}",
                                want=ABOUT_WANT, max_tokens=1200)
         d = ans.data if isinstance(ans.data, dict) else None
         if not d: return {'error': f"couldn't read a suggestion from your mail ({ans.error or 'no answer'})"}
@@ -835,7 +835,7 @@ def suggest_connections(store) -> dict:
                           'CARDS (type: title - section, planned when not connectable yet):',
                           *[f"{c['type']}: {c['title']} - {c['group']}{' (planned)' if c.get('planned') else ''}" for c in cards if c['type'] not in GENERIC],
                           f"CONNECTED: {', '.join(sorted(connected)) or '(none)'}"])
-        ans = llm_mod.ask_json(llm_mod.build_llm(store), CONN_SYSTEM, user, want=CONN_WANT, max_tokens=1200)
+        ans = llm_mod.ask_json(llm_mod.build_llm(store, job='summary'), CONN_SYSTEM, user, want=CONN_WANT, max_tokens=1200)
         d = ans.data if isinstance(ans.data, dict) else {}
         picks, line = rows([str(x) for x in d.get('picks') or []]), ' '.join(str(d.get('line') or '').split())
         # the sentence stands without picks: "none of yours can be connected yet" is an answer, and it was dropped for the plain line

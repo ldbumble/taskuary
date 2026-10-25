@@ -238,7 +238,7 @@ def set_due(store, tid: int, day: str, actor: str = 'triage'):
     store.update_task(tid, {'DueAt': day}, actor)
     store._exec('UPDATE task SET DueSaid=NULL WHERE TaskId=?', (tid,))
     if t.get('DueRaised') and t.get('Priority') == 'urgent' and not (day and step(day)):
-        store.update_task(tid, {'Priority': t['DueRaised']}, 'assistant')
+        store.update_task(tid, {'Priority': t['DueRaised']}, 'assistant')         # update_task reads an older word as its new one
 
 
 def deadlines(store, now: datetime = None) -> int:
@@ -257,7 +257,8 @@ def deadlines(store, now: datetime = None) -> int:
         if t.get('Priority') != 'urgent':
             # ...remembering what it was, so a day moved out puts it back (set_due); written after, as update_task clears it
             store.update_task(t['TaskId'], {'Priority': 'urgent'}, 'assistant')
-            store._exec('UPDATE task SET DueRaised=? WHERE TaskId=?', (t.get('Priority') or 'normal', t['TaskId']))
+            from .processing_order import level
+            store._exec('UPDATE task SET DueRaised=? WHERE TaskId=?', (level(t.get('Priority')), t['TaskId']))
         store.add_comment(t['TaskId'], 'assistant', 'agent', line)      # the note IS the saying: the desktop chat hears nothing (asks._say)
         store._exec('UPDATE task SET DueSaid=? WHERE TaskId=?', (s, t['TaskId'])); n += 1
         if s == 'late':                              # the Advisor on the event (advisor.py): a step slipped

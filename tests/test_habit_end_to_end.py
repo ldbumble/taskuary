@@ -1,10 +1,10 @@
-"""PRESS -> HABIT -> LIT BUTTON, END TO END (phases A, B and C together, 2026-10-23). Phase B keeps every press, phase C turns 3+
-real choices from 2+ people into an in-use line under "## What you do next", phase A's habit tier lights that line's button - on the
-desk and on the phone, the same decision - and the line never reaches triage (ruling 11: "why would we want button presses to do
-with triage"). Each piece had its own test with the others stubbed; this one runs the real road. Invented Northwind people only."""
-from unittest import mock
+"""A PRESS IS KEPT, AND TEACHES NOTHING (the memory redesign, 2026-10-25), END TO END. Phase B keeps every press, on every surface; it
+used to become "On asks from vendor.example, presses Mark done (3 of 3)" under "## What you do next" and light Mark done by itself on
+the next ask from the domain, with a habit mark. The owner: stop learning from presses and remove the habit mark - context decides,
+and a button press is not a fact about a person. This runs the real road: presses on the desk, the decision on the desk and the phone,
+the triage prompt, and LEARNED.md. Invented Northwind people only."""
 import pytest
-from taskuary import advisor, concierge, funnel, ingest, learn, learned_cut, learnedlines, remote_assistant, terminal
+from taskuary import advisor, concierge, funnel, ingest, learn, learned_cut, remote_assistant, terminal
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -35,57 +35,30 @@ def _press(s, key, verb):
     return advisor.press(s, key, None, verb, surface='desk', lit=d.get('verb') or '', live=live)
 
 
-def test_three_choices_from_two_people_become_a_habit_that_lights_its_button_and_never_reaches_triage(s):
-    keys = [_ask(s, f'Statement question {i}', who) for i, who in enumerate(PEOPLE)]
+def test_presses_are_kept_and_never_become_a_line_or_a_lit_button(s):
     nxt = _ask(s, 'Statement question 4', PEOPLE[1])
     before = advisor.decide(s, nxt, preread=False)
-    assert before['verb'] != 'close' and before['by'] != 'habit', before
-    assert 'close' in [v['verb'] for v in advisor.offered(s, advisor._item(s, *advisor.target_of(s, nxt), key=nxt))]
-    for k in keys[:2]: assert _press(s, k, 'done')
-    assert learned_cut.lines(s.doc('learned'), learned_cut.NEXT) == [], 'two episodes are watching, not in use'
-    assert _press(s, keys[2], 'done')
-    # PHASE C: an in-use line under the Advisor's own section, recorded as in use
-    ls = learned_cut.lines(s.doc('learned'), learned_cut.NEXT)
-    assert len(ls) == 1 and 'presses Mark done (3 of 3)' in ls[0][0], ls
-    key = ls[0][1]
-    assert key.startswith('move ') and key.endswith('vendor.example'), key
-    assert learnedlines.row(s, key)['Status'] == 'in_use' and learnedlines.row(s, key)['Reader'] == 'advisor'
-    # PHASE A: the habit tier lights that button on the next such item, with nothing said - and never presses it (ruling 9)
+    it = advisor._item(s, *advisor.target_of(s, nxt), key=nxt)
+    phone = remote_assistant.primary({'chips': concierge.chips_for(s, it), 'item': it}, remote_assistant.decision(s, it))['verb']
+    doc = s.doc('learned')
+    for n in range(6):
+        for i, who in enumerate(PEOPLE): assert _press(s, _ask(s, f'Statement question {n}-{i}', who), 'done')
+    assert s._one('SELECT COUNT(*) n FROM advice_press')['n'] == 18, 'every press is kept, as a record'
+    assert s.doc('learned') == doc and 'presses' not in s.doc('learned'), 'no line from any number of presses'
     d = advisor.decide(s, nxt, preread=False)
-    assert (d['verb'], d['by'], d['line']) == ('close', 'habit', ''), d
-    assert s._one('SELECT COUNT(*) n FROM advice_press')['n'] == 3, 'a habit lights a button; it presses nothing'
+    assert (d['verb'], d['by'], d['line']) == (before['verb'], before['by'], before['line']) and d['by'] != 'habit', d
+    assert 'says' not in d and d['pill'] == d['label'], 'no "Your own habit..." line and no "n of m times" mark'
     # ...the same on the phone: its card leads with the button the desk lit
     it = advisor._item(s, *advisor.target_of(s, nxt), key=nxt)
-    chips = concierge.chips_for(s, it)
     said = remote_assistant.decision(s, it)
-    assert said['verb'] == 'close' and said['by'] == 'habit'
-    assert 'close' in {c['verb'] for c in chips}, chips
-    assert remote_assistant.primary({'chips': chips, 'item': it}, said)['verb'] == 'close'
-    assert remote_assistant.advice_line({'item': it}, said) == ''
-    # RULING 11: triage reads "How you sort mail" only - the habit is nowhere in its prompt
+    assert said['verb'] == d['verb'] and said['by'] != 'habit'
+    assert remote_assistant.primary({'chips': concierge.chips_for(s, it), 'item': it}, said)['verb'] == phone
+
+
+def test_a_press_never_reaches_triage(s):
+    for i, who in enumerate(PEOPLE): _press(s, _ask(s, f'Remittance {i}', who), 'done')
     seen = {}
     ingest.ingest_message(s, {'external_id': 'e2e-1', 'channel': 'email', 'from_email': 'desk@vendor.example', 'subject': 'Another statement',
                               'body': 'Statement attached.'}, llm=lambda sys_, usr, **k: (seen.update(p=sys_ + usr), '{"intent":"fyi","why":"x"}')[1])
-    assert seen['p'] and 'presses Mark done' not in seen['p'] and learn.NEXT not in seen['p'] and key not in seen['p']
-    assert 'presses' not in learned_cut.for_reader(s, 'triage')
-
-
-def test_a_habit_the_owner_removed_lights_nothing(s):
-    """The owner deletes the line (a tombstone - phase D's Forget hangs on it): the Advisor goes back to its rule at once."""
-    keys = [_ask(s, f'Remittance {i}', who) for i, who in enumerate(PEOPLE)]
-    nxt = _ask(s, 'Remittance 4', PEOPLE[0])
-    for k in keys: _press(s, k, 'done')
-    assert advisor.decide(s, nxt, preread=False)['by'] == 'habit'
-    doc = s.doc('learned')
-    raw = learned_cut.lines(doc, learned_cut.NEXT)[0][0]
-    s.save_doc('learned', doc.replace(raw + '\n', ''), 'owner')
-    assert advisor.decide(s, nxt, preread=False)['by'] != 'habit'
-
-
-def test_a_habit_line_left_in_the_doc_but_marked_wrong_lights_nothing(s):
-    keys = [_ask(s, f'Credit memo {i}', who) for i, who in enumerate(PEOPLE)]
-    nxt = _ask(s, 'Credit memo 4', PEOPLE[1])
-    for k in keys: _press(s, k, 'done')
-    key = learned_cut.lines(s.doc('learned'), learned_cut.NEXT)[0][1]
-    s._exec("UPDATE learned_line SET Status='wrong' WHERE Key=?", (key,))
-    assert advisor.decide(s, nxt, preread=False)['by'] != 'habit'
+    assert seen['p'] and 'presses Mark done' not in seen['p'] and learn.OLD_NEXT not in seen['p']
+    assert 'presses' not in learned_cut.for_reader(s, 'triage') and s.get_setting('learn_pending') in (None, '', '0')

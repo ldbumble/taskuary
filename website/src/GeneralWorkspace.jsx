@@ -31,6 +31,7 @@ import { placeShown } from "./shownPages.js";
 import { outputRefs, outputRow, uncited } from "./taskOutputs.js";
 import { SessionPane } from "./TerminalView.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
+import { level } from "./priority.js";
 import "./generalWorkspace.css";
 import { MicButton, ModelSelect, TaskuaryMark } from "./ui.jsx";
 import { hint as btnHint, label as btn } from "./buttons.js";
@@ -331,7 +332,7 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
       {focusedTask && <>
         <div className="tq-dock-action-head">
           <div><b>{focusedTask.ref || `TQ-${String(focusedTask.TaskId).padStart(4, "0")}`} · {focusedTask.Title}</b>
-            <span>{focusedTask.Status} · {focusedTask.Priority || "normal"} priority</span></div>
+            <span>{focusedTask.Status} · {level(focusedTask.Priority)} priority</span></div>
         </div>
         <div className="tq-dock-action-buttons">
           <Button size="small" variant="contained" onClick={() => openTask(focusedTask.TaskId)}>Open task</Button>

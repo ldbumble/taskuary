@@ -84,7 +84,7 @@ test("the header says what triage decided, and the task's own facts when triage 
   const general = headerFacts({ verdict: { intent: "task", kind: "general" }, task: { Kind: "general", Assignee: "agent:assistant", Priority: "normal" } });
   assert.equal(general.triaged, true);
   assert.deepEqual(general.pills.map((p) => [p.label, p.value]),
-    [["What it is", "task"], ["Who does it", "an agent"], ["Agent", "assistant"], ["Priority", "normal"]]);
+    [["What it is", "task"], ["Who does it", "an agent"], ["Agent", "assistant"], ["Priority", "regular"]]);
   const coding = headerFacts({ verdict: { intent: "task" }, task: { Kind: "coding", Tags: "triage-repo:northwind/ledger", Priority: "urgent" } });
   assert.deepEqual(coding.pills.map((p) => p.value), ["task", "a coding agent", "northwind/ledger", "urgent"]);
   assert.equal(coding.pills.at(-1).tone, "alert", "urgent wears the alert tint");
@@ -97,7 +97,7 @@ test("the header says what triage decided, and the task's own facts when triage 
     { key: "repo", label: "Repository", value: "none - not started", tone: "alert" }, "a start held for a repository says so");
   const byHand = headerFacts({ task: { Kind: "task", Priority: "low" } });
   assert.equal(byHand.triaged, false, "no label claims triage decided a task you made");
-  assert.deepEqual(byHand.pills.map((p) => p.value), ["yours", "low"]);
+  assert.deepEqual(byHand.pills.map((p) => p.value), ["yours", "regular"], "a task saved as low reads as regular, one of the three (2026-10-25)");
   assert.ok(!headerFacts({ task: { Kind: "coding", Assignee: "agent:assistant" } }).pills.some((p) => p.key === "profile"), "a profile is a general task's");
 });
 
@@ -153,7 +153,7 @@ test("a workflow run's header names the workflow and who started it, never Triag
   assert.deepEqual(facts.pills.slice(0, 2).map((p) => [p.label, p.value]),
     [["Workflow", "Vendor bill sweep"], ["Started by", "its schedule (Mondays 08:00)"]]);
   assert.ok(!facts.pills.some((p) => p.key === "intent"));
-  assert.deepEqual(facts.pills.slice(2).map((p) => p.value), ["an agent", "ap", "normal"]);
+  assert.deepEqual(facts.pills.slice(2).map((p) => p.value), ["an agent", "ap", "regular"]);
   // the list row has no detail: the tag alone still says who started it, and the run's own title still names the workflow
   assert.equal(startedBy({ Tags: "needs:browser,workflow-trigger:manual" }), "you (Run now)");
   assert.equal(startedBy({ Tags: "workflow-trigger:assistant" }), "the assistant");

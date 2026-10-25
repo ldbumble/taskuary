@@ -20,7 +20,7 @@ PAGE_SCHEMA = "taskuary.processing.inventory.page.v1"
 CURSOR_VERSION = 1
 MAX_PAGE_LIMIT = 500
 
-from .processing_order import PRIORITY_RANK as _PRIORITY_RANK, attention_band
+from .processing_order import PRIORITY_RANK as _PRIORITY_RANK, attention_band, known as _known_priority, level as _level
 _SIGNAL_BAND = {          # the signals already name work and results apart; the levels now do too
     "urgent_request": 1,
     "owner_input": 2,
@@ -191,7 +191,7 @@ def _derived_priority(item: dict[str, Any]) -> dict[str, Any]:
         return {"state": "unknown", "value": None, "rank": None,
                 "provenance": provenance, "raw": None, "diagnostics": diagnostics}
     raw = selected.get("Priority")
-    value = str(raw).strip().lower() if raw is not None else ""
+    value = _level(raw) if _known_priority(raw) else ""
     if value not in _PRIORITY_RANK:
         diagnostics.extend(([f"unrecognized_priority:{raw}"] if raw not in (None, "") else []) +
                            ["priority_unknown"])
@@ -230,9 +230,9 @@ def _normalize_priority(value: Any) -> dict[str, Any]:
         return {"state": "unknown", "value": None, "rank": None,
                 "provenance": provenance, "raw": None,
                 "diagnostics": ["explicit_priority_unknown"]}
-    if not isinstance(raw, str) or raw.lower() not in _PRIORITY_RANK:
-        raise ValueError("triage_priority.value must be urgent, high, normal, low, or null")
-    normalized = raw.lower()
+    if not isinstance(raw, str) or not _known_priority(raw):
+        raise ValueError("triage_priority.value must be urgent, important, regular (or an older high, normal, low), or null")
+    normalized = _level(raw)
     return {"state": "known", "value": normalized, "rank": _PRIORITY_RANK[normalized],
             "provenance": provenance, "raw": raw, "diagnostics": []}
 

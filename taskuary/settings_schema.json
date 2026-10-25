@@ -9,6 +9,9 @@
     "assistant_ai",
     "assistant_model",
     "judge_ai",
+    "draft_ai",
+    "draft_model",
+    "ai_route_mode",
     "phone_assistant"
   ],
   "groups": [
@@ -148,6 +151,29 @@
       "type": "brain",
       "desc": "Which AI decides whether a finished report waits under Reports, reaches you right away, or goes out.",
       "help": "Normally set on the 'Where runs go' card at the top of this section; this row is the fallback if that panel cannot load. Four yes/nos about a result somebody else wrote, judged against the sentences on the report's own card - it never has to write anything, so a decision model belongs here and a chat model is wasted on it. Blank = the brain that writes each report judges its own run."
+    },
+    "draft_ai": {
+      "group": "How mail is sorted",
+      "label": "Drafting brain",
+      "type": "brain",
+      "desc": "Which AI writes the replies and messages you approve, and their subject lines. Blank = the triage brain, as before.",
+      "help": "Normally set on the Drafting card at the top of this section; this row is the fallback if that panel cannot load. Every reply used to be written by the triage brain, which wants your cheapest, quickest model; a reply in your voice is worth a better one. Nothing is sent without your press, whichever writes it."
+    },
+    "draft_model": {
+      "group": "How mail is sorted",
+      "label": "Drafting model",
+      "type": "text",
+      "desc": "A different model for drafting, if you want one. Blank = the drafting brain's own light model, as before.",
+      "help": "For an API connector this is its model or deployment name; for a CLI, its --model, and model@effort sets how hard it thinks."
+    },
+    "ai_route_mode": {
+      "group": "How mail is sorted",
+      "label": "Which AI does each job",
+      "type": "select",
+      "options": ["fixed", "auto"],
+      "optionLabels": {"fixed": "Fixed - the cards", "auto": "Auto - by how hard the work is"},
+      "desc": "Fixed runs every job exactly as its card says. Auto picks a quick, standard or strong model by the job and how hard triage judged the work.",
+      "help": "Normally set on the line above the AI cards; this row is the fallback if that panel cannot load. In Auto each card is its job's standard model, and the rules under it say when the quick gear or the strong model runs instead - each shown as a sentence with its own switch. A brain whose strong model box is blank never steps up. An explicit pick - yours, a report's, a workflow's - always wins, and nothing is sent without your press either way."
     },
     "assistant_model": {
       "group": "How mail is sorted",

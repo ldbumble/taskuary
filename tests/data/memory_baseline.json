@@ -1,0 +1,116 @@
+{
+ "written": "2026-10-25",
+ "priority": {
+  "n": 9,
+  "right": 6,
+  "needs_met": 7,
+  "intent_right": 9,
+  "rows": [
+   {
+    "id": "manager_next_week",
+    "want": "important",
+    "got": "regular",
+    "intent": "task",
+    "intent_got": "task",
+    "needs_missing": []
+   },
+   {
+    "id": "manager_noon_today",
+    "want": "urgent",
+    "got": "urgent",
+    "intent": "task",
+    "intent_got": "task",
+    "needs_missing": []
+   },
+   {
+    "id": "cared_person_question",
+    "want": "important",
+    "got": "regular",
+    "intent": "reply_only",
+    "intent_got": "reply_only",
+    "needs_missing": [
+     "runs headcount with you"
+    ]
+   },
+   {
+    "id": "same_question_no_memory",
+    "want": "regular",
+    "got": "regular",
+    "intent": "reply_only",
+    "intent_got": "reply_only",
+    "needs_missing": []
+   },
+   {
+    "id": "cared_topic",
+    "want": "important",
+    "got": "regular",
+    "intent": "task",
+    "intent_got": "task",
+    "needs_missing": [
+     "Month-end close is your top priority"
+    ]
+   },
+   {
+    "id": "cared_person_trivial_fyi",
+    "want": "regular",
+    "got": "regular",
+    "intent": "fyi",
+    "intent_got": "fyi",
+    "needs_missing": []
+   },
+   {
+    "id": "stranger_urgent",
+    "want": "urgent",
+    "got": "urgent",
+    "intent": "task",
+    "intent_got": "task",
+    "needs_missing": []
+   },
+   {
+    "id": "stranger_claims_importance",
+    "want": "regular",
+    "got": "regular",
+    "intent": "reply_only",
+    "intent_got": "reply_only",
+    "needs_missing": []
+   },
+   {
+    "id": "colleague_routine",
+    "want": "regular",
+    "got": "regular",
+    "intent": "reply_only",
+    "intent_got": "reply_only",
+    "needs_missing": []
+   }
+  ]
+ },
+ "same_domain": {
+  "press_history_moves_the_button": true,
+  "by": [
+   "habit",
+   "habit"
+  ]
+ },
+ "world": {
+  "traits": 8,
+  "planted": {
+   "erin_fast": 6,
+   "renewals_friday": 4,
+   "payroll_ray": 4,
+   "phishguard_unread": 8,
+   "gail_monday": 7,
+   "paula_short": 3,
+   "monthend_care": 3,
+   "newsletter_ideas": 3
+  },
+  "messages": 44
+ },
+ "advisor_cases": {
+  "right": 36
+ },
+ "rail_advisor_cases": {
+  "hit": 19,
+  "quiet": 28,
+  "said": 3
+ }
+}

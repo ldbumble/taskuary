@@ -66,7 +66,7 @@ def draft_message(store, channel: str, to, about: str, resolution: str = None, l
     from .knowledge import block as kb_block
     from .llm import build_llm
     from .responder import email_rule, signature_for, signed, strip_signoff
-    llm = llm or build_llm(store)
+    llm = llm or build_llm(store, job='draft')
     if not llm: raise RuntimeError('no AI connector is set up to write messages')
     ident, soul, sty, lrn, brevity, chat, _ = _voice(store)
     is_chat = str(channel or '').lower() in ('teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord')
@@ -100,7 +100,7 @@ def subject_for(store, about: str, llm=None) -> str:
     fallback = ' '.join(str(about or 'No subject').split())[:78]
     try:
         from .llm import build_llm
-        llm = llm or build_llm(store)
+        llm = llm or build_llm(store, job='draft')
         if not llm: return fallback
         line = ' '.join(str(llm(SUBJECT_SYSTEM, about, max_tokens=40) or '').split()).strip('"\'. ')
         return line[:120] or fallback

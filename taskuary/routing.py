@@ -98,7 +98,7 @@ def score_candidate(msg, task):
 # phrase tuple beside them, went the same way on 2026-10-11.)
 
 
-def draft_task_fields(msg, urgent: bool = False, kind: str = None):
+def draft_task_fields(msg, urgent: bool = False, kind: str = None, important: bool = False):
     """Title/summary/kind/priority for a task created from a message. `kind` routes the work:
     coding = an agent on a checkout, reply = the responder and Review, general = the assistant's
     chat, task = the owner's own list with nothing working it.
@@ -143,4 +143,4 @@ def draft_task_fields(msg, urgent: bool = False, kind: str = None):
     # which on a forwarded mail belongs to whoever was quoted (own_words, TQ-0665).
     from .triage import own_words
     return {'title': subj[:300].capitalize(), 'summary': own_words(body)[:1000], 'kind': kind,
-            'priority': 'urgent' if urgent else 'normal'}
+            'priority': 'urgent' if urgent else 'important' if important else 'regular'}

@@ -1,10 +1,25 @@
 """Shared owner-attention bands; presentation lanes and read state are separate."""
 
-PRIORITY_RANK = {'urgent': 0, 'high': 1, 'normal': 2, 'low': 3}
+# THREE PRIORITIES (the owner, 2026-10-25: "be careful when updating triage to have 3 categories, important/urgent/regular and make
+# sure it makes sense"). Urgent is time-critical and on the owner now - today's meaning, and the only one that shades a row or bands
+# it. Important matters because of WHO or WHAT (people and topics the owner cares about) but can wait: a mark in the row's own place,
+# never a move. Regular is everything else. The old four read in them: low and normal are regular, high is important.
+LEVELS = ('regular', 'important', 'urgent')
+LEGACY = {'low': 'regular', 'normal': 'regular', 'medium': 'regular', 'high': 'important'}
+PRIORITY_RANK = {'urgent': 0, 'important': 1, 'regular': 2}
+
+
+def level(value) -> str:
+    """Any priority word, old or new, as one of the three - 'regular' for none or one nobody knows."""
+    v = str(value or '').strip().lower()
+    return v if v in PRIORITY_RANK else LEGACY.get(v, 'regular')
+
+
+def known(value) -> bool: return str(value or '').strip().lower() in PRIORITY_RANK or str(value or '').strip().lower() in LEGACY
 
 
 def priority_rank(value):
-    return PRIORITY_RANK.get(str(value or '').strip().lower(), 99)
+    return PRIORITY_RANK[level(value)] if known(value) else 99
 
 
 def attention_band(*, urgent=False, owner_wait=False, working=False, actionable=False, result=False):

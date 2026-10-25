@@ -26,7 +26,7 @@ PROMOTE_AT = 4          # mirrors learn.REFLECT_SYSTEM: s:4 with evidence from 3
 DECAY_EVERY = 10        # reflections that read the evidence and left a line alone, per point off it
 DECAYS = ('hypothesis', 'proposed')   # only what is still a guess: a promoted rule earned its s, an adopted one is the owner's
 LOG, LOG_KEEP = 'learn_reflect_log', 200   # the dates reflections ran on; 200 is 20 points of decay, past any live score
-_EV = re.compile(r'^(mem|rv|task|out|pr)(\d+)$')
+_EV = re.compile(r'^(mem|rv|task|out|pr|msg|fs|sv|idea)(\d+)$')
 
 
 def _today(): return datetime.now().strftime('%Y-%m-%d')
@@ -118,8 +118,9 @@ def record(store, old_doc: str, new_doc: str, actor: str = 'learn'):
         # a line that went because nothing confirmed it for long enough FADED (learn.settle drops it at effective 0); one that was
         # simply removed - by the owner, or by a reflection that rewrote it away - was deleted. The history says which.
         log = reflect_log(store)
+        ended = {r['Key'] for r in store._rows("SELECT Key FROM learned_line WHERE Status IN ('closed','retired')")}   # its history says so already
         for k, o in before.items():
-            if k not in after: store.add_learned_event(k, o['text'], o['status'], 0, '', 'faded' if effective(o, log) <= 0 else 'deleted', actor)
+            if k not in after and k not in ended: store.add_learned_event(k, o['text'], o['status'], 0, '', 'faded' if effective(o, log) <= 0 else 'deleted', actor)
     except Exception:
         pass
 
@@ -138,12 +139,26 @@ def _resolve(store, ev_id: str) -> dict:
         r = store.get_review(n) or {}
         return {'id': ev_id, 'kind': 'review', 'date': r.get('DecidedAt') or r.get('CreatedAt'),
                 'label': f"{r.get('Status') or 'review'}: {(r.get('Subject') or r.get('Title') or '')[:90]}" if r else ev_id}
-    if kind == 'pr':                       # a press while the Advisor's line was shown (advisor.press): what was lit, what was pressed
+    if kind == 'pr':                       # a press: no line is learned from one any more (2026-10-25), but a retired line still cites it
         r = store._one('SELECT * FROM advice_press WHERE Id=?', (n,)) or {}
-        from .learn import moment
         return {'id': ev_id, 'kind': 'press', 'date': r.get('CreatedAt'),
-                'label': f"pressed {r.get('Pressed')} on {moment(r.get('ItemKind'), r.get('Channel'), r.get('Scope') or '?')}"
-                         + (f" (the Advisor lit {r['Advised']})" if r.get('Advised') and r.get('Advised') != r.get('Pressed') else '') if r else ev_id}
+                'label': f"pressed {r.get('Pressed')} on an item from {r.get('Scope') or '?'}" if r else ev_id}
+    if kind == 'msg':                      # an inbound message the owner answered (episodes.py)
+        r = store.get_message(n) or {}
+        return {'id': ev_id, 'kind': 'message', 'date': r.get('SentAt'),
+                'label': f"from {r.get('FromName') or r.get('FromEmail')}: {(r.get('Subject') or '')[:90]}" if r else ev_id}
+    if kind == 'fs':                       # a task the owner put off, and to when
+        r = store.get_task(n) or {}
+        return {'id': ev_id, 'kind': 'deferred', 'date': r.get('UpdatedAt') or r.get('CreatedAt'),
+                'label': f"put off to {str(r.get('RemindAt') or '?')[:16]}: {(r.get('Title') or '')[:90]}" if r else ev_id}
+    if kind == 'sv':                       # a promise in the owner's sent mail (sentjudge.py)
+        r = store.sent_verdict(n) or {}
+        return {'id': ev_id, 'kind': 'promise', 'date': (store.get_message(n) or {}).get('SentAt'),
+                'label': f"you promised {r.get('What') or 'something'}" + (f" by {r['Due']}" if r.get('Due') else '') if r else ev_id}
+    if kind == 'idea':                     # an Advisor idea and what the owner did with it
+        r = store._one('SELECT * FROM idea WHERE IdeaId=?', (n,)) or {}
+        return {'id': ev_id, 'kind': 'idea', 'date': r.get('DecidedAt') or r.get('LastSaid'),
+                'label': f"{r.get('Status') or 'idea'}: {(r.get('Text') or '')[:90]}" if r else ev_id}
     if kind == 'out':
         r = store._one('SELECT * FROM outcome WHERE Id=?', (n,)) or {}
         return {'id': ev_id, 'kind': 'outcome', 'date': r.get('ResolvedAt') or r.get('At'),
@@ -151,6 +166,18 @@ def _resolve(store, ev_id: str) -> dict:
     r = store.get_task(n) or {}
     return {'id': ev_id, 'kind': 'task', 'date': r.get('UpdatedAt') or r.get('CreatedAt'),
             'label': f"{r.get('Status') or 'task'}: {(r.get('Title') or '')[:90]}" if r else ev_id}
+
+
+def resolves(store, ev_id: str) -> bool:
+    """Does this evidence id name a real row? A line citing one that does not is a line the model made up (learn._books)."""
+    m = _EV.match(ev_id or '')
+    if not m: return False
+    kind, n = m.group(1), int(m.group(2))
+    q = {'mem': 'SELECT 1 FROM memory WHERE MemoryId=?', 'rv': 'SELECT 1 FROM review WHERE ReviewId=?', 'task': 'SELECT 1 FROM task WHERE TaskId=?',
+         'fs': 'SELECT 1 FROM task WHERE TaskId=?', 'out': 'SELECT 1 FROM outcome WHERE Id=?', 'pr': 'SELECT 1 FROM advice_press WHERE Id=?',
+         'msg': 'SELECT 1 FROM message WHERE MessageId=?', 'sv': 'SELECT 1 FROM sent_verdict WHERE MessageId=?', 'idea': 'SELECT 1 FROM idea WHERE IdeaId=?'}[kind]
+    try: return bool(store._one(q, (n,)))
+    except Exception: return False
 
 
 def graph(store) -> dict:
@@ -161,8 +188,8 @@ def graph(store) -> dict:
     doc = store.get_doc('learned') or ''
     ls, log = lines(doc), reflect_log(store)
     hist, named = store.learned_history(), _named(store)
-    from .learnedlines import reader_of, rows as line_rows
-    from .learned_cut import over_budget
+    from .learnedlines import section_of, rows as line_rows
+    from .learned_cut import over_budget, readers_of
     rows, over = {r['Key']: r for r in line_rows(store)}, over_budget(store)
     by_key = {}
     for h in hist: by_key.setdefault(h['Key'], []).append(h)
@@ -188,7 +215,7 @@ def graph(store) -> dict:
         # budget left it out - the data the memory list's Keep / Wrong / Forget (phase D) hangs on
         out.append({**l, 'text': named(l.get('text')), 'evidence': evs, 'steps': steps, 'effective': eff,
                     'eligible': l['status'] == 'hypothesis' and eff >= PROMOTE_AT and len(dated) >= 3 and len(people) >= 2,
-                    'reads': reader_of(l), 'standing': r.get('Status') or ('in_use' if l['status'] == 'live' else 'watching'),
+                    'reads': ', '.join(readers_of(section_of(l))), 'section_slug': section_of(l), 'standing': r.get('Status') or ('in_use' if l['status'] == 'live' else 'watching'),
                     'in_use_at': r.get('InUseAt'), 'over_budget': over.get(l['key'], [])})
     live_keys = {l['key'] for l in ls}
     deleted = []
@@ -222,11 +249,12 @@ def soul_rules(store, limit: int = 5) -> list:
 SAYS = {'born': 'New guess', 'strengthened': 'Seen again', 'promoted': 'Now a rule', 'demoted': 'Weaker',
         'merged': 'Merged into a line that says the same', 'faded': 'Faded - nothing confirmed it for a while', 'deleted': 'Removed',
         'back': 'Back', 'edited': 'Reworded by you', 'forgotten': 'Removed by you - stays removed', 'withdrawn': 'Withdrawn - its note was switched off',
-        'watching': 'Back to watching - you pressed otherwise twice in a row', 'moved': 'Moved to STYLE.md - the drafter reads it there'}
+        'watching': 'Back to watching', 'moved': 'Moved to STYLE.md - the drafter reads it there',
+        'retired': 'Retired - a count of button presses, not how you work', 'closed': 'No longer true - kept as history'}
 
 
 def _named(store):
-    """A line as the owner reads it: LEARNED.md keeps {{owner_first}} where the name goes (learn.moves writes it so), and the
+    """A line as the owner reads it: LEARNED.md keeps {{owner_first}} where the name goes (the passes write it so), and the
     What changed list showed "{{owner_first}} presses Next" raw (the UI audit, 2026-10-21)."""
     from .store import render_doc
     who = store.owner()

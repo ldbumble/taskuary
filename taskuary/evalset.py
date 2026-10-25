@@ -83,6 +83,20 @@ def _labels(store, mine=()) -> dict:
     return out
 
 
+def _priority_labels(store) -> dict:
+    """MessageId -> the priority the OWNER set by hand on the task that mail made (their last word on it), in the three words - the
+    labels that say whether triage's regular / important / urgent matches the owner (the owner, 2026-10-25). Only the first inbound
+    mail of a task carries it: the later ones only joined."""
+    from .processing_order import level
+    out = {}
+    for a in store._rows("SELECT EntityId, Detail FROM audit WHERE EntityType='task' AND Action='priority' AND Actor='owner' ORDER BY Id"):
+        try: to = (json.loads(a.get('Detail') or '{}') or {}).get('to')
+        except ValueError: continue
+        m = store._one("SELECT MessageId FROM message WHERE TaskId=? AND IFNULL(Direction,'in')<>'out' ORDER BY MessageId LIMIT 1", (a['EntityId'],))
+        if m and to: out[m['MessageId']] = level(to)
+    return out
+
+
 def _triage_call(store) -> dict:
     """MessageId -> the funnel's OWN first call on it: decision, intent, and which layer spoke."""
     out = {}
@@ -109,7 +123,7 @@ def build(store, include_weak: bool = True) -> list:
     from .ingest import owner_addresses
     mine = owner_addresses(store)
     domains = {a.rsplit('@', 1)[-1] for a in mine if '@' in a}
-    labels, calls = _labels(store, mine), _triage_call(store)
+    labels, calls, pri = _labels(store, mine), _triage_call(store), _priority_labels(store)
     rows = store._rows("SELECT * FROM message WHERE (Direction='in' OR Direction IS NULL) AND Status != 'skipped' ORDER BY MessageId")
     by_conv = {}
     for m in rows: by_conv.setdefault(m.get('ConversationId'), []).append(m)
@@ -136,7 +150,7 @@ def build(store, include_weak: bool = True) -> list:
                                'from_kind': _kind_of(p.get('FromEmail'), p.get('FromName'), mine, domains)} for p in prior[-12:]],
             'owner_ruled_thread_before': _owner_ruled_before(store, m.get('ConversationId'), m['MessageId']),
             'triage': calls.get(m['MessageId']) or {'decision': None, 'intent': None, 'by': None},
-            'label': label, 'label_source': source, 'weak': weak})
+            'label': label, 'label_source': source, 'weak': weak, **({'priority_label': pri[m['MessageId']]} if m['MessageId'] in pri else {})})
     return cases
 
 
@@ -228,10 +242,13 @@ MEMORY_ARMS = {                      # what the classifier is allowed to remembe
     'asof':  dict(notes='asof',  learned=False),   # the notes that existed when the message arrived (what the funnel really had)
     'notes': dict(notes='today', learned=False),   # every note on file today, LEARNED.md withheld
     'today': dict(notes='today', learned=True),    # everything - what `evaluate` measures
+    # ...and everything but the people lines (2026-10-25): triage reads who the sender is to the owner for the priority alone, and
+    # this arm against `today` is what shows the intent does not get worse for it
+    'nopeople': dict(notes='today', learned=True, people=False),
 }
 
 
-def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learned: bool = True, system: str = None) -> dict:
+def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learned: bool = True, system: str = None, people: bool = True) -> dict:
     """The configured classifier over the local (full-text) cases, told what the funnel would
     have told it. `notes` = 'today' (every standing note on file), 'asof' (only those written
     before the message arrived - see _AsOf) or 'none'; `learned` = whether LEARNED.md's
@@ -245,8 +262,8 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
     from .ingest import own_addresses
     me = own_addresses(store)          # the To/Cc signal is measured against the owner, not the shared boxes
     soul, job, system = store.doc('soul'), job_doc(store), (system if system is not None else store.doc('triage'))
-    lrn = learned_cut.for_reader(store, 'triage') if learned else ''
     conf, rows, by_signal = Counter(), [], {'colleague_replied': Counter(), 'alone': Counter()}
+    pconf = Counter()                  # (the owner's priority, triage's) where the owner set one by hand
     by_channel = {}
     for c in cases:
         if not c.get('body'): continue
@@ -254,6 +271,9 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
         thread = others_on_thread(thread_store(c), msg, mine)
         src = store if notes == 'today' else _AsOf(store, c.get('sent_at')) if notes == 'asof' else None
         ns, left = relevant_notes(src, [msg['from_email'] or ''], f"{msg['subject']} {msg['body']}"[:4000], subject=msg['subject']) if src else ([], 0)
+        # the memory as the funnel reads it for THIS mail: what the owner cares about, and the people lines about whoever is on it
+        lrn = (learned_cut.for_reader(store, 'triage', learned_cut.about_mail(msg), people=learned_cut.people_of(msg),
+                                      sections=None if people else ('care',)) if learned else '')
         v = {'intent': 'fyi', 'why': 'a calendar invite'} if msg.get('invite') else None      # the funnel's only no-model verdict
         for attempt in range(RETRIES + 1):
             if v and not v.get('degraded'): break
@@ -265,24 +285,30 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
         # work); no model at all is no verdict - scored as such, never as a keyword guess (2026-10-11)
         got = 'fyi' if v.get('degraded') else v.get('intent') or 'unjudged'
         conf[(c['label'], got)] += 1
+        if c.get('priority_label'): pconf[(c['priority_label'], v.get('priority') or 'regular')] += 1
         by_signal['colleague_replied' if thread.get('others_replied') else 'alone'][got == c['label']] += 1
         by_channel.setdefault(c.get('channel') or '?', Counter())[got == c['label']] += 1
         rows.append({'id': c['id'], 'label': c['label'], 'got': got, 'ok': got == c['label'], 'source': c['label_source'],
                      'channel': c.get('channel'), 'notes_seen': len(ns), 'why': v.get('why') or '', 'degraded': bool(v.get('degraded')),
                      # what the regex layer would make of a task (coding/general) - the second, unmeasured verdict
                      'regex_kind': draft_task_fields(msg)['kind'], 'model_kind': v.get('kind'),
+                     # how hard and how sure the reader said it was (the router's judgements, 2026-10-25) - unlabelled, so shown, not scored
+                     'difficulty': v.get('difficulty'), 'sure': v.get('sure'),
                      'others_replied': thread.get('others_replied') or [], 'subject': c.get('subject')})
     n = sum(conf.values()); ok = sum(v for (a, b), v in conf.items() if a == b)
     out = {'n': n, 'accuracy': (ok / n) if n else None, 'confusion': {f'{a}->{b}': v for (a, b), v in sorted(conf.items())},
            'degraded': sum(r['degraded'] for r in rows),
            'by_signal': {k: {'right': v[True], 'wrong': v[False]} for k, v in by_signal.items()},
-           'by_channel': {k: {'right': v[True], 'wrong': v[False]} for k, v in sorted(by_channel.items())}, 'rows': rows}
+           'by_channel': {k: {'right': v[True], 'wrong': v[False]} for k, v in sorted(by_channel.items())}, 'rows': rows,
+           'priority': {'n': sum(pconf.values()), 'right': sum(v for (a, b), v in pconf.items() if a == b),
+                        'confusion': {f'{a}->{b}': v for (a, b), v in sorted(pconf.items())}}}
     if verbose:
         print(f"{n} cases, accuracy {out['accuracy']:.0%}" + (f" ({out['degraded']} model answers unusable - scored as filed)" if out['degraded'] else '')
               if n else 'no cases with a body to classify')
         for k, v in out['confusion'].items(): print(f'  {k:22s} {v}')
         for k, v in out['by_signal'].items(): print(f"  {k:18s} right {v['right']:3d}  wrong {v['wrong']:3d}")
         for k, v in out['by_channel'].items(): print(f"  {k:18s} right {v['right']:3d}  wrong {v['wrong']:3d}")
+        if out['priority']['n']: print(f"  priority (where you set one by hand): {out['priority']['right']} of {out['priority']['n']} {out['priority']['confusion']}")
         for r in rows:
             if not r['ok']: print(f"  MISS {r['id']:7s} owner={r['label']:10s} triage={r['got']:10s} [{r['source']}] {r['subject'][:60]}")
     return out
@@ -378,7 +404,7 @@ def run(store, what: str, home: Path, share_to=None, llm=None):
     if what in ('evaluate', 'ablate'):
         if llm is None:
             from .llm import build_llm
-            llm = build_llm(store)
+            llm = build_llm(store, job='triage')
         if llm is None: raise SystemExit(f"no AI connector is configured - connect one under {words.name('ai')} first")
         strong = [c for c in cases if not c['weak']]
         return evaluate(store, strong, llm) if what == 'evaluate' else ablate(store, strong, llm, save=Path(home) / 'eval' / 'ablate_last.json')

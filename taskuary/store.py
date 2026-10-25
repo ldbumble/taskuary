@@ -428,6 +428,9 @@ CREATE TABLE IF NOT EXISTS learned_history (Id INTEGER PRIMARY KEY, Key TEXT, Te
 -- own wording, the tombstone that keeps a removed line from being written back. LEARNED.md is the readable face of the in-use rows.
 CREATE TABLE IF NOT EXISTS learned_line (Key TEXT PRIMARY KEY, Reader TEXT, Text TEXT, OwnerText TEXT, Status TEXT, Score INTEGER,
   Ev TEXT, InDoc INTEGER DEFAULT 1, InUseAt TEXT, ForgotEv INTEGER, Source TEXT, UpdatedAt TEXT);
+-- THE USE-RECEIPT (the memory redesign, 2026-10-25): which lines a reader was given for which item, so "why?" and the evals can say
+-- what the memory said when it mattered (learned_cut.for_reader writes one per read)
+CREATE TABLE IF NOT EXISTS memory_use (Id INTEGER PRIMARY KEY, Reader TEXT, Target TEXT, KeysJson TEXT, At TEXT);
 CREATE TABLE IF NOT EXISTS idea (IdeaId INTEGER PRIMARY KEY, Key TEXT UNIQUE, Kind TEXT, Text TEXT, ActionJson TEXT, Sig TEXT,
   Status TEXT DEFAULT 'open', SnoozeUntil TEXT, MessageId INTEGER, FirstSeen TEXT, LastSaid TEXT, SaidCount INTEGER DEFAULT 0,
   DecidedBy TEXT, DecidedAt TEXT);
@@ -537,6 +540,13 @@ CREATE TABLE IF NOT EXISTS lore_comment (CommentId INTEGER PRIMARY KEY, LoreId I
   Author TEXT, CreatedAt TEXT);
 CREATE INDEX IF NOT EXISTS idx_lore_comment ON lore_comment(LoreId, CommentId);
 CREATE TABLE IF NOT EXISTS lore_vote (LoreId INTEGER, Actor TEXT, Delta INTEGER, At TEXT, PRIMARY KEY (LoreId, Actor));
+-- Which brain each AI call was built on, and why (brainroute.py) - never what it was asked or what it said. Trimmed at 30 days.
+CREATE TABLE IF NOT EXISTS brainroute (Id INTEGER PRIMARY KEY, At TEXT, Job TEXT, TaskId INTEGER, MessageId INTEGER, Pick TEXT,
+  Model TEXT, Tier TEXT, Rule TEXT, Why TEXT, Difficulty TEXT, DataClass TEXT, EscalatedFrom INTEGER, Outcome TEXT, Ms INTEGER);
+CREATE INDEX IF NOT EXISTS idx_brainroute_task ON brainroute(TaskId, Id);
+-- How hard a task's work is, whether its reader could tell, and what kind of data it carries - triage's judgements, apart from the
+-- priority, kept per task (brainroute.judged). `By` is 'owner' once they correct one: their word stands until they change it again.
+CREATE TABLE IF NOT EXISTS task_judged (TaskId INTEGER PRIMARY KEY, Difficulty TEXT, Sure INTEGER, DataClass TEXT, By TEXT, At TEXT);
 """
 # the knowledge base's search index (knowledge.py). A VIRTUAL table, kept out of SCHEMA: a Python
 # built without FTS5 must still open the store - search then falls back to LIKE over kb_chunk.
@@ -688,6 +698,10 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     # the conversational assistant has its own saved brain. API connectors are
                     # the fast/native path; a CLI remains available for tool-heavy work.
                     'assistant_ai': '', 'assistant_model': '',
+                    # Drafting's own brain and model (aidefaults, brainroute) - blank = the triage brain, as before
+                    'draft_ai': '', 'draft_model': '',
+                    # which AI does each job (brainroute): fixed = the cards, exactly as before; auto = the rules, '' = the shipped ones
+                    'ai_route_mode': 'fixed', 'ai_route_rules': '',
                     # the agent's context file (context.py): history, past work and the brief, written to
                     # ~/.taskuary/context/TQ-xxxx.md and pointed at from the seed - not crammed into it
                     'agent_context_file': '1',
@@ -1097,8 +1111,8 @@ class SQLiteStore:
                             'Dropped TEXT, CreatedAt TEXT)')
             self.cx.execute('CREATE INDEX IF NOT EXISTS advice_target ON advice(TargetKind, TargetId)')
             # ...AND WHAT THE OWNER PRESSED while it was shown (the deep dive, 2026-10-20): nothing recorded whether the lit button was the
-            # one pressed. One row per press - advised and pressed verb, whether they matched, and what kind of item from whom - the
-            # evidence the moves in LEARNED.md are learned from (advisor.press, learn.moves)
+            # one pressed. One row per press - advised and pressed verb, whether they matched, and what kind of item from whom - a record
+            # only: nothing in LEARNED.md is learned from a press (the owner, 2026-10-25)
             self.cx.execute('CREATE TABLE IF NOT EXISTS advice_press (Id INTEGER PRIMARY KEY, Key TEXT, TargetKind TEXT, TargetId INTEGER, '
                             'Revision TEXT, Advised TEXT, Pressed TEXT, Match INTEGER, ItemKind TEXT, Channel TEXT, Sender TEXT, '
                             'SenderDomain TEXT, Scope TEXT, Thread TEXT, Stale INTEGER, CreatedAt TEXT)')
@@ -1110,6 +1124,11 @@ class SQLiteStore:
             for col, typ in (('Surface', 'TEXT'), ('Lit', 'TEXT'), ('Live', 'TEXT'), ('Choice', 'INTEGER'), ('Repo', 'TEXT')):
                 if col not in apcols: self.cx.execute(f'ALTER TABLE advice_press ADD COLUMN {col} {typ}')
             self.cx.execute('CREATE INDEX IF NOT EXISTS advice_press_at ON advice_press(CreatedAt)')
+            # ...and each learned line's SECTION (Reader holds its slug now), whom it is about (Subject: the address in a people line)
+            # and when it stopped being true (ValidTo, status closed) - a fact that ended is closed, never deleted (2026-10-25)
+            llcols = {r[1] for r in self.cx.execute('PRAGMA table_info(learned_line)')}
+            for col in ('Subject', 'ValidTo'):
+                if col not in llcols: self.cx.execute(f'ALTER TABLE learned_line ADD COLUMN {col} TEXT')
             # a verified 'this mailbox wrote to them' hit, remembered so the mail server is asked once per address (PW-080)
             self.cx.execute('CREATE TABLE IF NOT EXISTS sender_trust (Mailbox TEXT, Address TEXT, Reason TEXT, CheckedAt TEXT, '
                             'PRIMARY KEY (Mailbox, Address))')
@@ -1863,12 +1882,34 @@ class SQLiteStore:
         # ...and it must be issued ONCE: the allocation is three reads and a write, each taking the
         # statement lock on its own, so a poll and a click creating tasks together computed the same
         # id and one of them hit the primary key (audit 2026-09-02)
+        # one of the three priorities, whatever word the caller used (processing_order.level, 2026-10-25) - regular when it gave none
+        from .processing_order import level
+        fields = {**fields, 'Priority': level(fields.get('Priority'))}
         with self.idlock:
             tid = self._insert('task', {**fields, 'TaskId': self._next_task_id() if numbered else self._next_internal_id()},
                                 TASK_COLS + ('TaskId',), {'CreatedBy': actor, 'CreatedAt': _now()})
         self._bump_snapshots()
         self._poke('task-changed', task_id=tid)
         return tid
+
+    def migrate_priorities(self) -> dict:
+        """THE OLD FOUR AS THE NEW THREE, once (the owner, 2026-10-25): normal is regular and high is important - renames, one word for
+        one word - and low is regular too. Low is the one word that merges with another, so each task it changes keeps an audit row
+        with the word it had ('priority_renamed'): nothing is lost. A DueRaised the due day saved is read the same way. Returns what
+        changed; {} when there was nothing left to do."""
+        from .processing_order import LEGACY
+        out = {}
+        for old, new in LEGACY.items():
+            rows = self._rows('SELECT TaskId FROM task WHERE lower(IFNULL(Priority,\'\'))=?', (old,))
+            if not rows: continue
+            if old == 'low':
+                for r in rows: self.audit('task', r['TaskId'], 'priority_renamed', 'migrate', 'system', {'from': old, 'to': new})
+            self._exec('UPDATE task SET Priority=? WHERE lower(IFNULL(Priority,\'\'))=?', (new, old))
+            out[old] = len(rows)
+        for old, new in LEGACY.items(): self._exec('UPDATE task SET DueRaised=? WHERE lower(IFNULL(DueRaised,\'\'))=?', (new, old))
+        self._exec("UPDATE task SET Priority='regular' WHERE IFNULL(Priority,'')=''")
+        if out: self._bump_snapshots()
+        return out
 
     def _next_internal_id(self) -> int:
         """The same never-reused rule, in the range no TQ number reaches (INTERNAL_TASK_BASE)."""
@@ -1888,6 +1929,9 @@ class SQLiteStore:
                    'ON CONFLICT(Name) DO UPDATE SET Value=excluded.Value', ('task_id_mark', str(nxt), 'store'))
         return nxt
     def update_task(self, task_id, fields, actor):
+        if 'Priority' in fields:
+            from .processing_order import level
+            fields = {**fields, 'Priority': level(fields['Priority'])}
         cols = [c for c in TASK_COLS if c in fields]
         if not cols: return
         was_row = (self._one('SELECT Status, Assignee, DueAt, Tags FROM task WHERE TaskId=?', (task_id,)) or {}) if 'Status' in fields else {}
@@ -3935,6 +3979,45 @@ class SQLiteStore:
         the last task id of the previous page)."""
         if before: return self._rows('SELECT * FROM task WHERE SourceRef=? AND TaskId<? ORDER BY TaskId DESC LIMIT ?', (tag, int(before), int(limit)))
         return self._rows('SELECT * FROM task WHERE SourceRef=? ORDER BY TaskId DESC LIMIT ?', (tag, int(limit)))
+    # ── which brain each AI call ran on (brainroute.log) ────────
+    # A route row is on no screen's road but the log's own, so it does not move this connection's write counter: the display
+    # caches are keyed on it (feed_tag, PROCESSING_DIRTY_TABLES), and every AI call writes one - the rail would rebuild for nothing.
+    BRAIN_ROUTE_COLS = ('At', 'Job', 'TaskId', 'MessageId', 'Pick', 'Model', 'Tier', 'Rule', 'Why', 'Difficulty', 'DataClass',
+                        'EscalatedFrom', 'Outcome', 'Ms')
+    def add_brain_route(self, rec: dict) -> int:
+        cols = [c for c in self.BRAIN_ROUTE_COLS if rec.get(c) is not None]
+        return self._exec_unseen(f"INSERT INTO brainroute ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", [rec[c] for c in cols])
+    def _exec_unseen(self, q, p=()):
+        with self.lock:
+            cur = self.cx.execute(q, p); self.cx.commit(); return cur.lastrowid
+    def set_brain_route(self, rid: int, **fields) -> None:
+        cols = [c for c in fields if c in self.BRAIN_ROUTE_COLS]
+        if not cols: return
+        self._exec_unseen(f"UPDATE brainroute SET {','.join(f'{c}=?' for c in cols)} WHERE Id=?", [fields[c] for c in cols] + [int(rid)])
+    def brain_routes(self, task_id: int = None, limit: int = 20) -> list:
+        if task_id is not None: return self._rows('SELECT * FROM brainroute WHERE TaskId=? ORDER BY Id DESC LIMIT ?', (int(task_id), int(limit)))
+        return self._rows('SELECT * FROM brainroute ORDER BY Id DESC LIMIT ?', (int(limit),))
+    def trim_brain_routes(self, before: str) -> int:
+        n = (self._one('SELECT COUNT(*) AS n FROM brainroute WHERE At<?', (before,)) or {}).get('n') or 0
+        if n: self._exec_unseen('DELETE FROM brainroute WHERE At<?', (before,))
+        return n
+    # ── how hard a task's work is, and what data it carries (triage's judgements; brainroute reads them) ────────
+    def task_judged(self, task_id) -> dict:
+        return self._one('SELECT * FROM task_judged WHERE TaskId=?', (int(task_id),)) or {}
+    def judge_task(self, task_id, v: dict, by: str) -> dict:
+        """Triage's newest word on how hard and how sure, unless the owner corrected it - theirs stands. The data class only ever
+        goes UP from a reading: one sensitive message makes the task sensitive (the worst wins, as origin does), and only the owner
+        brings it back down. A judgement the verdict did not give is left as it was."""
+        was = self.task_judged(task_id); owner = by == 'owner'
+        held = was.get('By') == 'owner' and not owner
+        d, sure, dc = v.get('difficulty'), v.get('sure'), v.get('data_class')
+        new = {'Difficulty': was.get('Difficulty') if held or d not in ('quick', 'standard', 'hard') else d,
+               'Sure': was.get('Sure') if held or not isinstance(sure, bool) else int(sure),
+               'DataClass': dc if dc in ('ordinary', 'sensitive') and (owner or dc == 'sensitive' or not was.get('DataClass')) else was.get('DataClass')}
+        if was and all(new[k] == was.get(k) for k in new) and not owner: return was
+        self._exec_unseen('INSERT OR REPLACE INTO task_judged (TaskId,Difficulty,Sure,DataClass,By,At) VALUES (?,?,?,?,?,?)',
+                          (int(task_id), new['Difficulty'], new['Sure'], new['DataClass'], 'owner' if owner else was.get('By') or by, _now()))
+        return self.task_judged(task_id)
     # ── a report's run history (reports.run_report_source; the Reports tab's History) ────────
     REPORT_RUNS_KEPT = 60          # per report - a month of half-hourly assistant checks is 1400, and nobody reads past the last few dozen
     def add_report_run(self, sid: int, rec: dict) -> int:
@@ -4408,6 +4491,7 @@ class SQLiteStore:
         if isinstance(verdict, dict) and 'danger' in verdict and mid: self.set_message_danger(mid, verdict.get('danger'))
         if isinstance(verdict, dict) and isinstance(verdict.get('meet'), dict) and mid:
             self._exec('UPDATE message SET MeetJson=? WHERE MessageId=?', (json.dumps(verdict['meet']), mid))
+        if isinstance(verdict, dict) and tid: self.judge_task(tid, verdict, 'triage')     # how hard, how sure, what data (the router)
         return self._exec('''INSERT INTO route
             (MessageId,TaskId,Decision,Score,Reason,CandidatesJson,RoutedBy,CreatedAt,RawOutput,ParseError,VerdictJson)
             VALUES (?,?,?,?,?,?,?,?,?,?,?)''',

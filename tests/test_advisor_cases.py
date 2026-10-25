@@ -40,3 +40,9 @@ def test_the_eval_is_the_whole_world(results):
     """No case silently dropped: every one found its item, and the grades add up."""
     assert not [c for c, r in results.items() if r['grade'] == 'missing']
     assert len(results) == len(C.CASES) >= 36
+
+
+@pytest.mark.parametrize('case', sorted(C.LINES))
+def test_a_memory_fact_is_the_one_line_beside_the_lit_move(results, case):
+    """The owner's own usual, said as the line (the owner, 2026-10-25: "Reply: you usually answer Erin within the hour; this is 3h")."""
+    assert results[case]['line'] == C.LINES[case]

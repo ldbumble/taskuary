@@ -58,7 +58,7 @@ def test_the_tasks_dates_and_weight_are_facts_of_the_item(s):
     tid, _ = asked(s, 'Badge access', 'by Friday?', Priority='high')
     s.update_task(tid, {'DueAt': '2026-10-23', 'RemindAt': '2026-10-22 09:00:00'}, 'owner')
     item = json.loads(prompt(s, tid).split('THE ITEM: ', 1)[1].split('\n', 1)[0])
-    assert (item['due'], item['priority'], item['remind me on']) == ('2026-10-23', 'high', '2026-10-22 09:00:00')
+    assert (item['due'], item['priority'], item['remind me on']) == ('2026-10-23', 'important', '2026-10-22 09:00:00')   # high reads important (2026-10-25)
 
 
 def test_another_open_task_on_the_same_thread_is_flagged_a_possible_duplicate_and_the_same_sender_alone_is_not(s):
@@ -91,15 +91,19 @@ def test_the_owners_notes_on_the_sender_and_the_head_of_soul_and_job_ride_along(
     assert 'You work for Alex Doyle.' in p and 'Alex runs facilities for Northwind.' in p and 'a comment' not in p and 'y' * 601 not in p
 
 
-def test_the_advisor_reads_what_you_do_next_and_nothing_else(s):
-    """One section per reader (the owner, 2026-10-23): the Advisor reads "What you do next"; the sorting lines are triage's."""
+def test_the_advisor_reads_how_the_owner_works_and_never_a_press_count(s):
+    """One section per subject (the owner, 2026-10-25): the Advisor reads your people, what you care about, how you work and your
+    promises - "What to bring up" is the rail's - and a press count left in an old section reaches nobody."""
     tid, _ = asked(s, 'x', 'y')
-    s.save_doc('learned', '# LEARNED.md\n\n## How you sort mail\n- Vendor statements are fyi [s:5 | ev: mem1 | seen: 2026-10-01]\n\n'
-                          '## What you do next\n_(nothing\nyet)_\n- On asks from northwind.example, Alex presses Reply (4 of 4) [s:5 | ev: pr1 | seen: 2026-10-01]\n', 'owner')
+    s.save_doc('learned', '# LEARNED.md\n\n## Your people\n_(nothing\nyet)_\n- Gail Moreno (gail@northwind.example) gets the headcount questions [s:5 | ev: out1 | seen: 2026-10-01]\n\n'
+                          '## What you care about\n- Vendor statements are fyi [s:5 | ev: mem1 | seen: 2026-10-01]\n\n'
+                          '## What to bring up\n- Newsletter ideas are dismissed [s:5 | ev: out2 | seen: 2026-10-01]\n\n'
+                          '## What you do next\n- On asks from northwind.example, Alex presses Reply (4 of 4) [s:5 | ev: pr1 | seen: 2026-10-01]\n', 'owner')
     p = prompt(s, tid)
-    assert '## What you do next' in p and 'presses Reply (4 of 4)' in p and 'Vendor statements' not in p and 'nothing' not in p
-    s.save_doc('learned', '# LEARNED.md\n\n## What you do next\n_(nothing learned yet)_\n', 'owner')
-    assert 'LEARNED' not in prompt(s, tid)
+    assert 'WHAT YOU KNOW ABOUT HOW THE OWNER WORKS' in p and 'gets the headcount questions' in p and 'Vendor statements' in p
+    assert 'presses Reply' not in p and 'Newsletter ideas' not in p and 'nothing' not in p and 'from their own presses' not in p
+    s.save_doc('learned', '# LEARNED.md\n\n## Your people\n_(nothing learned yet)_\n', 'owner')
+    assert 'HOW THE OWNER WORKS' not in prompt(s, tid)
 
 
 def test_the_prompt_is_bounded_and_keeps_the_item_and_its_verbs(s):

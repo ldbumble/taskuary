@@ -202,10 +202,10 @@ def test_feed_review_report_and_task_producers_keep_saved_priority(store):
     standalone = message(store, "Plain FYI", status="filed")
     feed = store.feed(live_state=[])
     produced = {row["key"]: row for row in funnel.from_feed(store, feed)}
-    assert produced[f"msg:{ask_mid}"]["priority"] == "low"
+    assert produced[f"msg:{ask_mid}"]["priority"] == "regular"          # low and normal are regular, high important (2026-10-25)
     review = produced[f"review:{rid}"]
     assert (review["priority"], review["mid"], review["when"], funnel._band(review)) == ("urgent", latest, stamp(-1), 2)
-    assert produced[f"report:{report_mid}"]["priority"] == "high"
+    assert produced[f"report:{report_mid}"]["priority"] == "important"
     by_mid = {row["MessageId"]: row for row in feed}
     # an ask, a draft to approve and a check that could not run are all one level: the owner's task
     for mid, band in ((ask_mid, 2), (review_mid, 2), (report_mid, 2), (standalone, 4)):
@@ -287,7 +287,7 @@ def test_wrapup_keeps_task_priority_and_actual_completion_activity(store):
     store._exec("UPDATE review SET DecidedAt=? WHERE ReviewId=?", (stamp(-2), rid))
     result = funnel.from_wrapped(store, NOW, set())
     assert len(result) == 1
-    assert (result[0]["priority"], result[0]["when"], funnel._band(result[0])) == ("high", stamp(-2), 3)
+    assert (result[0]["priority"], result[0]["when"], funnel._band(result[0])) == ("important", stamp(-2), 3)
 
 
 def test_priority_reorder_invalidates_captured_next_without_changing_read_or_task_state(store):

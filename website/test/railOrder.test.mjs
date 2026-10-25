@@ -61,12 +61,17 @@ test("the rail marks an urgent row's dot in place and says urgent to a screen re
   const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
   const css = readFileSync(fileURLToPath(new URL("../src/assistantView.css", import.meta.url)), "utf8");
   assert.match(view, /const hot = !i\.settling && isUrgent\(i\);/);
-  assert.match(view, /hot \? "urgent" : ""/);
+  assert.match(view, /hot \? "urgent" : imp \? "important" : ""/);
   assert.match(view, /data-tq-urgent=\{hot \? "" : undefined\}/);
-  assert.match(view, /aria-label=\{hot \? `\$\{i\.title\} - urgent` : undefined\}/);
+  assert.match(view, /aria-label=\{hot \? `\$\{i\.title\} - urgent` : imp \? `\$\{i\.title\} - important` : undefined\}/);
   // urgent is the rail's dot, never a shaded row - a shade read as selected (the owner, 2026-10-25)
   assert.match(css, /\.tq-pile-row\.urgent \.rail i, \.tq-pile-row\.urgent\.current \.rail i \{ background: #8a3646 !important/);
   assert.doesNotMatch(css, /\.tq-pile-row\.urgent[^{]*\.card \{/);
+  // IMPORTANT is the dot's colour, the theme's slate, in its place (the owner, 2026-10-25): urgent outranks it, no edge, no shade, no move
+  assert.match(view, /const imp = isImportant\(i, hot\);/);
+  assert.match(view, /background: imp \? PRIORITY_COLOR\.important : LEVEL_COLOR\[level\]/);
+  assert.doesNotMatch(css, /\.tq-pile-row\.important \.card/);
+  assert.doesNotMatch(css, /\.tq-pile-row\.important[^{]*\{[^}]*background/, "important never shades the row");
   assert.doesNotMatch(css, /lvl-urgent/);
   const sum = summarize([task("task:1", 19), task("task:2", 11, { lane: "time", order_band: 1 }), report("report:1", 3)]);
   assert.deepEqual(sum.groups.map((g) => [g.key, g.n, g.urgent]), [["task", 2, 1], ["reports", 1, 0]]);

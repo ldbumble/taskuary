@@ -3,10 +3,11 @@
 import { startHarness } from "./harness.mjs";
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-export async function boot(t, opts = {}) {
+export async function boot(t, { width = 0, height = 1000, ...opts } = {}) {
   const h = await startHarness(opts);
   t.after(() => h.close());
   const page = await h.newPage(), errors = [];
+  if (width) await page.setViewport({ width, height, deviceScaleFactor: 1 });
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(h.ui, { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 40000 });

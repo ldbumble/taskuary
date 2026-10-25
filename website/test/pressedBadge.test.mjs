@@ -90,7 +90,8 @@ test("no button press writes a 'Done - <button>' line or a free-text receipt on 
     "The rule is made", "again once the checks pass"])
     assert.ok(!view.includes(gone) && !cards.includes(gone), `still says: ${gone}`);
   // a press that went through and carries no way on adds no receipt line - it marks its card
-  assert.match(view, /quiet \? pressLine\(/);
+  assert.match(view, /const worn = out\.status === "done" \? pressLine\(/);
+  assert.match(view, /return quiet && worn !== ms \? worn/);
   // ...and the badge is drawn on the folded card, as the button's own label
   assert.match(view, /<Pressed label=\{pressedOf\(m\)\} \/>/);
   assert.match(src("assistantView.css"), /\.tq-pressed \{[^}]*animation: tq-pressed-in/);

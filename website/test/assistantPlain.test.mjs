@@ -23,7 +23,7 @@ test("a press refused as changed reads the advice again and says so (B6)", () =>
   assert.match(press, /status !== 409\) throw e/);
   assert.match(press, /await readAdvice\(key\)/);
   assert.match(view, /This changed - here's the updated suggestion\./);
-  assert.match(view, /c\.revision \? await pressAdvice\(/, "a pressed chip carrying the Advisor's stamp takes the same road");
+  assert.match(view, /if \(c\.revision\) await pressAdvice\(/, "a pressed chip carrying the Advisor's stamp takes the same road");
 });
 
 test("an Advisor press presses the row's REAL button when the row has it - only a verb it lacks is proposed (the walk's INLINE)", () => {

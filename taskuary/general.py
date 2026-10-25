@@ -351,7 +351,8 @@ def dock_snapshot(store) -> str:
     for t in tasks:
         run = f" | agent {t.get('RunAgent')}: {t.get('RunStatus')}" if t.get('RunAgent') else ''
         review = f" | review {t.get('ReviewStatus')}" if t.get('ReviewStatus') else ''
-        lines.append(f"- {task_ref(t['TaskId'])} | {t.get('Status') or 'open'} | {t.get('Priority') or 'normal'} | {one_line(t.get('Title'))}{run}{review}")
+        from .processing_order import level
+        lines.append(f"- {task_ref(t['TaskId'])} | {t.get('Status') or 'open'} | {level(t.get('Priority'))} | {one_line(t.get('Title'))}{run}{review}")
 
     lines.append('\nPENDING REVIEW')
     if not reviews: lines.append('- Nothing is waiting on the task.')

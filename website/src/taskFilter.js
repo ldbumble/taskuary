@@ -57,3 +57,9 @@ export const completionTransition = (liveIds, current, status = "done") => ({
 // History does have an age, and that is what "show older" is for.
 export const cutAway = (stateKey, touchedToday, older) =>
   !older && ["done", "dropped"].includes(stateKey) && !touchedToday;
+
+// THE LEARNED DAY, PRE-CHOSEN (the owner's ruling 7, 2026-10-23: "Remind me opens with the learned day pre-chosen"): the weekday the
+// owner puts this sender's mail off to, counted by the server from their own put-offs (GET .../remind/usual, usual.remind_day) - shown
+// first and filled, with whose habit it is; nothing is set until it is pressed. A day nobody's habit holds shows nothing.
+export const usualLabel = (u) => (u?.on && u?.day ? `${u.day} ${Number(u.on.slice(8, 10))}` : "");
+export const usualWhy = (u) => (u?.by ? `your usual for ${u.by}` : "");

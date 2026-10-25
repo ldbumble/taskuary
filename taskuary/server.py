@@ -213,7 +213,12 @@ async def _lifespan(_app):
     except Exception as e: logger.warning(f'whatsapp log trim skipped: {e}')
     _heal_owner_docs()
     _refresh_soul_connections()
-    learn.migrate(store)           # one section per reader, once (phase C, 2026-10-23) - before anything else writes the doc
+    learn.migrate(store)           # one section per subject, once (2026-10-25) - before anything else writes the doc
+    try:                           # ...and the old four priorities as the new three, once (2026-10-25)
+        if (moved := store.migrate_priorities()): logger.info(f'priorities renamed to regular / important / urgent: {moved}')
+        from . import dashboards                                   # ...and a saved dashboard's cuts on them
+        if (n := dashboards.migrate_priorities(store)): logger.info(f'{n} dashboard(s) now cut on regular / important / urgent')
+    except Exception as e: logger.warning(f'priority rename skipped: {e}')
     learn.note_verdicts(store)     # the evidence block in LEARNED.md tracks the verdict table
     try: blackboard.schedule_due(store)   # a retry that was backing off when the app closed is re-armed, not reset (PW-085)
     except Exception as e: logger.warning(f'retry scheduling skipped: {e}')
@@ -1338,9 +1343,11 @@ def _run_kind(op: dict, background: BackgroundTasks):
         store.update_task(tid, {'Status': 'open', 'RemindAt': ''}, ACTOR); return {'status': 'open'}
     # THE TASK PAGE AS TOOLS (2026-09-25): each is the page's own handler, so the card and the click agree
     if kind == 'task.update':
+        from .processing_order import known, level
         want = {'Priority': str(p.get('priority') or '').lower() or None, 'Title': str(p.get('title') or '').strip()[:200] or None}
-        if want['Priority'] and want['Priority'] not in ('low', 'normal', 'high', 'urgent'):
-            raise HTTPException(422, f"priority is low, normal, high or urgent - not {p.get('priority')!r}")
+        if want['Priority'] and not known(want['Priority']):
+            raise HTTPException(422, f"priority is regular, important or urgent - not {p.get('priority')!r}")
+        if want['Priority']: want['Priority'] = level(want['Priority'])      # an older word (high, normal, low) lands on its new one
         # A STRICT CONTRACT (concierge.task_contract): a value off it is refused with the allowed ones, never guessed
         # ...and the due day (B18, 2026-10-11): the late line's "Move the due day" had no road - triage was the only writer of it
         from . import concierge, remind
@@ -2145,6 +2152,17 @@ def remind_task(task_id: int, body: RemindBody):
         except Exception as e: logger.debug(f'no receipt recorded for the reminder on {task_id}: {e}')
     return out
 
+@app.get('/api/tasks/{task_id}/remind/usual')
+def remind_usual(task_id: int):
+    """The day Remind me opens on (the owner's ruling 7, 2026-10-23: "Remind me opens with the learned day pre-chosen"): the weekday the
+    owner puts this sender's mail off to, counted from their own put-offs (usual.remind_day) - {} while no day has held. Pre-chosen is
+    not chosen: the picker shows it first, and nothing is set until the owner presses."""
+    from . import usual
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    try: return usual.remind_day(store, task_id) or {}
+    except Exception as e:
+        logger.debug(f'no usual day for {task_id}: {e}'); return {}
+
 @app.patch('/api/tasks/{task_id}')
 def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None):
     t = store.get_task(task_id)
@@ -2170,8 +2188,11 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
     if closing: fields.pop('Status')
     store.update_task(task_id, fields, ACTOR)
     # the owner's own priority call is evidence: every task from one sender marked urgent by hand is a rule worth asking about (promote.py)
-    if fields.get('Priority') and fields['Priority'] != t.get('Priority'):
-        store.audit('task', task_id, 'priority', ACTOR, detail={'from': t.get('Priority'), 'to': fields['Priority']})
+    if fields.get('Priority'):
+        from .processing_order import level
+        fields['Priority'] = level(fields['Priority'])
+    if fields.get('Priority') and fields['Priority'] != level(t.get('Priority')):
+        store.audit('task', task_id, 'priority', ACTOR, detail={'from': level(t.get('Priority')), 'to': fields['Priority']})
     if closing:
         from . import concierge
         concierge.close_task(store, task_id, ACTOR)

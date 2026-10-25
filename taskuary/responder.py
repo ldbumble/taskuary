@@ -270,9 +270,16 @@ VOICE_HEAD = '\n\nHow you write to the people this goes to (learned from the dra
 def voice_line(store, to) -> str:
     """STYLE.md's "By recipient" lines for `to`, closest first (byrecipient.block) - the voice lessons the drafter finally reads (phase C,
     2026-10-23: they were learned into LEARNED.md, which no drafter reads)."""
-    from . import byrecipient
+    from . import byrecipient, learned_cut
     b = byrecipient.block(store, to)
-    return VOICE_HEAD + b if b else ''
+    # ...and who they are to the owner, from LEARNED.md's people lines about THEM and nobody else ("Paula Vance is an exec; you keep it
+    # to a few lines" - the memory redesign, 2026-10-25). It shapes the draft; nothing here sends it
+    who = {str(a).strip().lower() for a in (to or []) if a and '@' in str(a)}
+    ppl = learned_cut.for_reader(store, 'drafter', people=who, target='draft:' + ','.join(sorted(who))) if who else ''
+    return (VOICE_HEAD + b if b else '') + (PEOPLE_HEAD + ppl.split('\n', 1)[1] if ppl else '')
+
+
+PEOPLE_HEAD = '\n\nWho they are to you and how you deal with them (learned from what you did - weigh it, the thread outranks it):\n'
 
 def history_block(store, m: dict) -> str:
     """What this mailbox already knows about the sender and the topic BEYOND this thread - their

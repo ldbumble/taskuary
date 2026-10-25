@@ -157,7 +157,7 @@ OWNER_ONLY = (
     (r'POST', r'^/api/messages/\d+/calendar$',"answering an invite or drafting one is the owner's - drafted for their Send (calwrite)"),
     (r'POST', r'^/api/concierge/chats/\d+/continue$', "continuing an earlier Assistant chat is the owner's own conversation"),
     (r'PATCH', r'^/api/tasks/\d+/checklist/[^/]+/note$', "a note on one of a task's to-dos is the owner's (the agent writes through its own task tools)"),
-    (r'POST', r'^/api/advice/press$', "the owner's own press, recorded against what the Advisor lit (learn.moves)"),
+    (r'POST', r'^/api/advice/press$', "the owner's own press, recorded against what the Advisor lit (presses.py)"),
     (r'POST', r'^/api/launch-key$', "a launch key opens a page that carries the owner token (launchkey.py, R29)"),
     (r'POST', r'^/api/tasks/\d+/trust$', "raising a task's origin is the owner's decision (origin.raise_to) - never a session's"),
     (r'POST', r'^/api/reason/(trusted|gate|folder|held/[0-9A-Za-z]+)$', "who may reach the owner's agents over Reason Network is the owner's"),

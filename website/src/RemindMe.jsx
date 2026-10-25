@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Box, Button, IconButton, Popover, Tooltip, Typography } from "@mui/material";
 import EventIcon from "@mui/icons-material/Event";
 import api from "./api.js";
-import { remindDay, remindWaiting } from "./taskFilter.js";
+import { remindDay, remindWaiting, usualLabel, usualWhy } from "./taskFilter.js";
 import { hint, label } from "./buttons.js";
 
 // REMIND ME (the owner, 2026-09-25): put an open task away until a day - "remind me of this in 2 weeks, or
@@ -23,6 +23,15 @@ export function RemindPicker({ task, anchor, onClose, onDone, path, onLeave, onS
   const [busy, setBusy] = useState(false);
   const away = remindWaiting(task);
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  // an idea's Remind me (its own `path`) and a task with no id have no sender's habit to read
+  const reads = !!anchor && !path && /^\d+$/.test(String(task?.TaskId ?? ""));
+  const [usual, setUsual] = useState(null);
+  useEffect(() => {
+    if (!reads) return undefined;
+    let on = true;
+    api.get(`/api/tasks/${task.TaskId}/remind/usual`).then(({ data }) => on && setUsual(data || {})).catch(() => on && setUsual({}));
+    return () => { on = false; };
+  }, [reads, task?.TaskId]);
   const set = async (until) => {
     setBusy(true); setErr("");
     const leaving = until !== "none";
@@ -45,6 +54,15 @@ export function RemindPicker({ task, anchor, onClose, onDone, path, onLeave, onS
           <Typography sx={{ fontSize: 12, color: "#7a2f3c" }}>
             An agent is still open on this task. Press Stop and save first, then put it away.</Typography>
         ) : <>
+          {/* the learned day leads, filled - its row keeps its height while it is read, so the days under it never jump */}
+          {reads && !away && (usual === null || usualLabel(usual)) && (
+            <Box sx={{ minHeight: 26, display: "flex", alignItems: "center", gap: 0.75 }} data-tq-remind-usual="">
+              {usualLabel(usual) && <>
+                <Button size="small" variant="contained" disabled={busy} onClick={() => set(usual.on)} disableElevation
+                  sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1, bgcolor: "#55697a", "&:hover": { bgcolor: "#46586a" } }}>{usualLabel(usual)}</Button>
+                <Typography component="span" sx={{ fontSize: 11, color: "#6b6459" }}>{usualWhy(usual)}</Typography>
+              </>}
+            </Box>)}
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
             {QUICK.map(([label, until]) => (
               <Button key={until} size="small" variant="outlined" disabled={busy} onClick={() => set(until)}

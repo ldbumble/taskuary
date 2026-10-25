@@ -29,6 +29,7 @@ from loguru import logger
 from .timewords import plural
 from . import redact
 from .store import task_ref
+from . import processing_order as po
 
 KINDS = ('source', 'ai', 'task', 'draft', 'agent')
 KIND_WORDS = {'source': 'Read/write a system', 'ai': 'AI judgment', 'task': 'Open a task', 'draft': 'Draft a message', 'agent': 'Hand to an agent'}
@@ -218,6 +219,7 @@ def validate(store, flow, strict: bool = False) -> tuple:
             if (s.get('output') or 'text') not in OUTPUTS: return False, f"{at}: the answer is one of {', '.join(OUTPUTS)}"
             if s.get('output') == 'fields' and not [f for f in s.get('fields') or [] if str(f).strip()]: return False, f'{at}: name the fields it fills'
         elif kind == 'task' and not str(s.get('title') or '').strip(): return False, f'{at}: the task has no title'
+        elif kind == 'task' and s.get('priority') and not po.known(s['priority']): return False, f"{at}: the priority is one of {', '.join(po.LEVELS)}"
         elif kind == 'draft':
             if (s.get('channel') or 'email') != 'email': return False, f'{at}: a draft step writes email'
             if not str(s.get('to') or '').strip() or not str(s.get('about') or '').strip(): return False, f'{at}: say who it goes to and what it is about'
@@ -374,7 +376,7 @@ def _task(store, step, ctx, llm, tid, dry, warns, title):
     if dry: return {'status': 'dry', 'head': f"would open a task '{t[:120]}'" + (f' for {who}' if who else ''), 'body': summary}
     sid = ctx['run'].get('source_id')
     new = store.create_task({'Title': t, 'Summary': summary, 'Kind': 'general' if who else 'task', 'Status': 'open',
-                             'Priority': step.get('priority') or 'normal', 'Source': 'workflow', 'SourceRef': f'workflow:{sid}',
+                             'Priority': po.level(step.get('priority')), 'Source': 'workflow', 'SourceRef': f'workflow:{sid}',
                              'Assignee': f'agent:{who}' if who else 'owner', **({'ParentId': tid} if tid else {})}, 'workflow')
     return {'head': task_ref(new), 'ref': task_ref(new), 'task_id': new, 'body': t}
 

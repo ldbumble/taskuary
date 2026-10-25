@@ -522,6 +522,8 @@ const write = (method, url, body) => {
     return { say: `${said} - in the demo that only changes this page.`, chips: [{ verb: "next", label: label("next") }] };
   }
 
+  // the demo has no put-offs of yours to count: Remind me opens on no usual day (RemindMe.jsx, usual.remind_day)
+  if (method === "get" && /^\/api\/tasks\/\d+\/remind\/usual$/.test(p)) return {};
   if (method === "post" && (m = p.match(/^\/api\/tasks\/(\d+)\/remind$/))) {
     scriptedAssistant.pile.items = scriptedAssistant.pile.items.filter((i) => String(i.tid) !== m[1]);
     for (const t of taskRows()) if (String(t.TaskId) === m[1]) t.RemindAt = body?.until || null;

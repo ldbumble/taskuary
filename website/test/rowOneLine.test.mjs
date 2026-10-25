@@ -117,9 +117,9 @@ test("nothing measured is the widest layout; a phone starts at the phone's; an o
   assert.equal(fitRow(row, model(390, row), 40).tight, true, "too narrow for even that: the one move's label shortens, the line stays one");
 });
 
-test("an empty slot never becomes the phone's one move or a menu item", () => {
+test("a draft's Send leaves no empty slot, on the bar or the phone's row (2026-10-25)", () => {
   const row = rowOf({ ref: "", list: [...draft(7), v("remind", "more"), next] });
-  assert.equal(row.decide[0].slot, true);
+  assert.ok(!row.decide.some((x) => x.slot));
   const ph = phoneRow(row);
   assert.ok(![...ph.shown, ...ph.rest].some((x) => x.slot));
   assert.deepEqual(ph.shown, [], "no decision, no session verb: Next and the ▾");

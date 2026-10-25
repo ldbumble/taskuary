@@ -30,7 +30,7 @@ import { lazyView } from "./lazyView.jsx";
 import { loadGeneral } from "./lazyGeneral.js";
 // the static demo's guided journey: nothing outside the demo build ever draws it, so nothing there fetches it
 const DemoJourney = DEMO ? lazyView(() => import("./DemoJourney.jsx")) : () => null;
-import { advisedIn, onPressed, onPressing, press as pressRow, rowNow, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { advisedIn, aimed, onPressed, onPressing, press as pressRow, rowNow, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
 import { deskPress, notePress as notePressed } from "./pressLog.js";
 import { forgetTasks, heldTask, heldTerm, notePile, pageRead, prefetchTask, watchReads } from "./taskDetail.js";
 import { readLists } from "./connectorLists.js";
@@ -1430,7 +1430,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // it jumped back to the deep dive one, then right back"). A rail click draws its task at once and its pull runs for seconds on a real
     // brain; a live event mid-pull read the conversation while the server still had the old task as Current, that answer came back after
     // the pull had landed, and it put the old task back up until the next read. The latest click wins: only a read sent after it may move it.
-    if (!turnFlight.current && !cardRef.current && !mid && moves === tableMoves.current) {
+    // ...NOR OVER THE ITEM A CLOSE DREW AT ITS PRESS (drawNextEarly) while that close is on its way (2026-10-25): the close's own receipt
+    // woke this read, the server still held the closed task as Current, and the table under the next task was cleared - a Next pressed on
+    // it then left nothing, and the task kept no badge. That item is the table's until the close lands and the walk asks after it.
+    if (!turnFlight.current && !cardRef.current && !mid && !earlyRef.current && moves === tableMoves.current) {
       const said = st.current || null;
       if (turns === turnsBegun.current && (said?.key || null) !== (currentRef.current?.key || null)) putOnTable(said, "sync");
     }
@@ -1607,6 +1610,21 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     notePressed(api, { key, surface: "desk", ...deskPress(rowNow(), pickRef.current, id), advised: a?.verb || null, revision: a?.revision || null });
   }, []);
   useEffect(() => onPressing(notePress), [notePress]);
+  // ONE GESTURE, ONE ITEM (2026-10-25): a double-click on Mark done closed two tasks - the close drew the next task up at its press
+  // (drawNextEarly) and the second click landed on that task's own Mark done. Every press on the canvas, the row under it and the menus
+  // they open is held to the item it lands on (actionRow.aimed): the view under the pointer, else what is on the table. The second click
+  // of a double-click, or a press within one press of the last, on another item does nothing at all. The rail is never held - a row
+  // clicked is the owner naming the item. Captured on the window, so no card's own handler sees a press that is not one.
+  useEffect(() => {
+    const gate = (e) => {
+      const b = e.target?.closest?.("button, [role=button], [role=menuitem]");
+      if (!b || b.closest("[data-tq-rail]") || !b.closest(".tq-asst-col, [role=menu], .MuiPopover-paper")) return;
+      const item = b.closest("[data-tq-canvas-item]")?.getAttribute("data-tq-canvas-item") || currentRef.current?.key || "";
+      if (!aimed(item, e)) { e.stopPropagation(); e.preventDefault(); }
+    };
+    window.addEventListener("click", gate, true);
+    return () => window.removeEventListener("click", gate, true);
+  }, []);
   // ARRIVING (welcome.arrive): the page opening, or the window coming back into focus, is the owner sitting down - the
   // first time on a new day, or after a long gap, the chat opens with the day in a breath. Leaving is noted too, so "what
   // came in while you were away" counts from when they actually went. Code on the server, never a model; a miss is silent.
@@ -1817,6 +1835,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // the next item a close drew at its press, before the server recorded the close (drawNextEarly) - handed to the walk's next
   // surface by advance (carryRef), or taken down with the closed item put back when the close fails (canvas pickUp)
   const earlyRef = useRef(null), carryRef = useRef(null), adoptRef = useRef(null);
+  const movedOnRef = useRef(false);   // that early draw was taken over by another walk move before its close landed (adopt, advance)
   const tableNow = () => ({ item: currentRef.current, cardKey: cardRef.current, openCard: openCardRef.current, pin: pin.current });
   const drawAhead = useCallback((line, hash = null) => {
     if (isLeft(line.card)) return null;                           // the early draw paints FROM the one rule, never past it (leftRef)
@@ -2053,6 +2072,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // from a held read; never in a section walk, which picks its own next); a close that fails takes it down again (canvas pickUp)
   const drawNextEarly = (leaving) => {
     if (earlyRef.current || sectionRef.current || turnFlight.current) return;
+    movedOnRef.current = false;
     const cap = selectionRef.current, nk = cap?.expected_next_key;
     if (!nk || nk === leaving || (cap.expected_next_members || []).length > 1) return;
     const it = (pileRef.current?.items || []).find((i) => i.key === nk && !i.settling);
@@ -2061,11 +2081,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   };
   const drawNextEarlyRef = useRef(null); drawNextEarlyRef.current = drawNextEarly;
   // ...and the close failed: the drawn item comes down and the closed one is back on the table (its fold undone by pickUp)
-  const takeEarlyBack = () => { const e = earlyRef.current; earlyRef.current = null; if (e) unshow(e); };
+  const takeEarlyBack = () => { const e = earlyRef.current; earlyRef.current = null; movedOnRef.current = false; if (e) unshow(e); };
   // ...and a walk move other than the close's own makes it the table's own: an item line like any other, its Advisor read made now
   const adopt = () => {
     const e = earlyRef.current; earlyRef.current = null;
     if (!e) return;
+    movedOnRef.current = true;
     const held = unconfirmedRef.current === e.key && adviceHeld.current;
     unconfirmedRef.current = null; adviceHeld.current = null;
     setMsgs((m) => { const x = m.find((y) => y.id === e.id); return x ? placeLine(m.filter((y) => y !== x), { ...x, ahead: false }) : m; });
@@ -2537,6 +2558,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const clearTable = () => { selectionRef.current = null; putOnTable(null, "sync"); };
   // `settled`: the server has answered already (a Mark done or Remind me that closed the task before calling here)
   const advance = (pile = null, settled = false) => {
+    // THE WALK WENT ON WITHOUT IT (2026-10-25): Next pressed on the item a close drew at its press, while the close was still on its way.
+    // The close landing then put down the table - by then the item Next brought - and asked for the next one again: the walk came back
+    // to that item, put it down as one already left, and stood on an empty table; the task Next walked past kept no badge. That Next is
+    // the walk's move now, so the close only counts.
+    if (movedOnRef.current) { movedOnRef.current = false; onChanged?.(); setNextComing(false); return; }
     // a close that drew the next item at its press leaves that item up: the walk's surface fills it in place (carryRef) - only the
     // table it reads its scope from is empty, as clearTable leaves it
     const early = earlyRef.current; earlyRef.current = null;

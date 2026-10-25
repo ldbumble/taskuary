@@ -437,6 +437,24 @@ const soonest = (a, b) => (Date.parse(String(backAt(a) || "").replace(" ", "T"))
 // owner, 2026-10-22: "set by time, oldest to newest and then never move") - oldest first inside every section, reports too (2026-10-22:
 // "reports should go oldest first like everything else")
 const walkAt = (i) => Date.parse(String(i?.arrived_at || i?.sort_at || i?.since || i?.when || "").replace(" ", "T")) || 0;
+// ...and a TIE IN THE SAME SECOND by ids that never change - the task number, then the row's first message, then the key - the server's
+// own rule (funnel.place_id), line for line. A row put back by arrival alone went after every row of its second while the server had
+// it before them: two dashboards filed together swapped and were drawn over each other as the rail moved (the dead-end walk's SWAP,
+// 2026-10-25). Never insertion order, never a hash alone.
+const num = (x) => (x === null || x === undefined || x === "" || x === true || x === false || !Number.isInteger(Number(x)) ? null : Number(x));
+export const placeId = (i) => {
+  const tid = num(i?.tid);
+  const mids = (i?.member_ids || []).map(String).filter((m) => m.startsWith("message:")).map((m) => num(m.slice(8))).filter((n) => n !== null);
+  const mid = tid !== null ? null : mids.length ? Math.min(...mids) : num(i?.mid);       // a task's own rows keep their key between them
+  return [tid === null ? 1 : 0, tid ?? 0, mid === null ? 1 : 0, mid ?? 0, String(i?.key || "")];
+};
+// a row's place inside its section (funnel.order_key past the section): today's brief, a known arrival, the arrival, then placeId
+const placeOf = (i) => [i?.brief_today ? 0 : 1, walkAt(i) ? 0 : 1, walkAt(i), ...placeId(i)];
+export const placeOrder = (a, b) => {
+  const x = placeOf(a), y = placeOf(b);
+  for (let k = 0; k < x.length; k += 1) if (x[k] !== y[k]) return x[k] < y[k] ? -1 : 1;
+  return 0;
+};
 // ...and the age the rail's gutter says is that same clock, so the column reads in the order the rows are drawn
 // (the last message was tried on 2026-10-22: placed by arrival, labelled by its newest mail, the column read 1d, 1d, 2h, 1d, 2h - a
 // user reported the tasks out of order; the owner, 2026-10-23, chose the arrival)
@@ -453,8 +471,8 @@ export const latestLine = (i) => (i?.latest?.text ? [i.latest.who, i.latest.text
 // order: it was drawn first, above every row of its section, so the row on the table jumped to the top (2026-10-22: "on the table
 // should never move them")
 export const inOrder = (rows, extra) => (extra || []).reduce((out, x) => {
-  const level = levelOf(x), t = walkAt(x);
-  const at = out.findIndex((r) => levelOf(r) === level && walkAt(r) > t);
+  const level = levelOf(x);
+  const at = out.findIndex((r) => levelOf(r) === level && placeOrder(r, x) > 0);
   return at < 0 ? [...out, x] : [...out.slice(0, at), x, ...out.slice(at)];
 }, [...(rows || [])]);
 // `pin` {key, level}: the row on the table keeps the band it was in when it was opened (AssistantView's Pile). A task whose agent
@@ -469,8 +487,8 @@ export const bandsOf = (items, pin = null) => {
       if (level === "later") return { level, items: [...rows].sort(soonest) };
       const moved = rows.find((i) => held(i) && levelOf(i) !== level);
       if (!moved) return { level, items: rows };
-      const rest = rows.filter((i) => i !== moved), t = walkAt(moved);
-      const at = rest.findIndex((i) => walkAt(i) > t);
+      const rest = rows.filter((i) => i !== moved);
+      const at = rest.findIndex((i) => placeOrder(i, moved) > 0);
       return { level, items: at < 0 ? [...rest, moved] : [...rest.slice(0, at), moved, ...rest.slice(at)] };
     })
     .filter((b) => b.items.length);

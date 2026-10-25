@@ -47,8 +47,10 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
     assert.equal(l.statusKey, "approve");
     assert.match(l.status, /ready to send$/, "the status is the rail's word");
     assert.equal(await page.$$eval("[data-tq-task-head] [data-tq-fact], [data-tq-task-head] .MuiChip-root", (els) => els.length), 0, "no chips by the title");
-    // the one message it came from reads whole, and the reply is the open half of the work
-    assert.ok(await page.$("[data-tq-from] [data-tq-conversation-row][aria-expanded=true]"), "a lone message opens whole");
+    // the ask leads under the title, and where it is the one message's own words From does not open them again (the task-view
+    // cleanup, owner-approved 2026-10-25 - a lone message opened whole before); the reply is the open half of the work
+    assert.ok(await page.$("[data-tq-task-head] [data-tq-ask]"), "the ask is under the title");
+    assert.equal(await page.$("[data-tq-from] [data-tq-conversation-row][aria-expanded=true]"), null, "the ask's words are read once");
     assert.ok(await page.$("[data-tq-work] [data-tq-closeout] textarea"), "the draft is in the work column");
     // ...and the header's status is the rail row's own: the same words on the row's icon
     await page.waitForSelector(".tq-pile-row.current .tq-mark[role=img]", { timeout: 20000 });
@@ -200,7 +202,8 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
     assert.deepEqual(r.parts, ["What it found", "How it resolved it", "Summary", "write-up"]);
     assert.match(r.text, /A site with no manager stopped the whole census run/);
     assert.match(r.text, /Not pushed - yours to approve/);
-    assert.match(r.diff, /1 file changed · \+2 −1/);
+    // ...the diff folded behind its count (the task-view cleanup, owner-approved 2026-10-25)
+    assert.match(r.diff, /1 file changed \+2 −1/);
     assert.equal(await page.$("[data-tq-work] .xterm"), null, "no terminal: the session is one line");
     const heading = await page.$eval('[data-tq-work] [data-tq-step="2"]', (dot) => dot.parentElement.querySelector("p")?.textContent);
     assert.equal(heading, "Result", "the agent half is called Result");

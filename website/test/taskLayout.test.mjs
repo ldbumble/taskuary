@@ -11,9 +11,9 @@ test("two columns at rest, the whole width while an agent works - coding or gene
   // the page's own "the session fills the page" decides it: a live session (term.alive - a terminal or a general agent's chat)
   assert.match(src, /const sessionView = liveSession && !peek;/);
   assert.match(src, /const layout = layoutOf\(\{ sessionView, result: resultShown, failed: failedRun \}\), wide = layout === "full";/);
-  assert.match(src, /<Box data-tq-columns="" data-tq-layout=\{layout\} sx=\{wide \? \{ display: "contents" \} : COLUMNS\}>/);
+  assert.match(src, /<Box ref=\{columnsBox\} data-tq-columns="" data-tq-layout=\{layout\} sx=\{wide \? \{ display: "contents" \} : COLUMNS\}>/);
   // ...the work column steps aside (display: contents) so the terminal stays a flex child of the page, sized as it always was
-  assert.match(src, /<Box data-tq-work="" sx=\{sessionView \? \{ display: "contents" \} : \{ minWidth: 0, display: "flex", flexDirection: "column" \}\}>/);
+  assert.match(src, /<Box ref=\{workBox\} data-tq-work="" sx=\{sessionView \? \{ display: "contents" \} : \{ minWidth: 0, display: "flex", flexDirection: "column", \.\.\.\(settled \? \{ flex: "0 1 auto", minHeight: 0 \} : \{\}\) \}\}>/);
   // and From is one line over it, which opens From as a sidebar laid OVER the agent's left edge (item 6, the owner 2026-10-21):
   // absolutely placed, so the pane underneath is never resized; closed by default, by the line, its X or Escape
   assert.match(src, /\{wide && <Box component="button" type="button" ref=\{fromLineRef\} data-tq-from-line=""\s+title=\{fromSide \? "Hide where this came from" : "Show where this came from"\}\s+aria-expanded=\{fromSide\} aria-controls="tq-from-side" onClick=\{\(\) => setFromSide\(\(v\) => !v\)\}/);

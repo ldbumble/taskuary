@@ -442,6 +442,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // checking briefly so the page cannot freeze forever on the pre-close status it last saw.
   const sessionSettleUntil = useRef(0);
   const [diffOpen, setDiffOpen] = useState(false);   // the pre-push review, in its own drawer
+  const [diffShown, setDiffShown] = useState(false);   // a Result's own diff, unfolded under What it made
+  useEffect(() => { setDiffShown(false); }, [selected]);
   // THE TASK BEHIND THE SESSION. A live session takes the whole task page, and with it went the
   // one thing the X was expected to reach: the task itself - what it is, where it came from, its
   // thread (the owner, 2026-09-18: "even if the coding cli is open i want to be able to go back to
@@ -1138,6 +1140,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // also only show the agent result with the From expandable over the top"): working or waiting, finished with its Result, or failed
   // with its Try again - From folds to its one line over it. Two columns only where no agent ever ran (taskLayout.layoutOf).
   const layout = layoutOf({ sessionView, result: resultShown, failed: failedRun }), wide = layout === "full";
+  const settled = wide && !term?.alive;   // the agent acted and is gone: its Result, or the run that failed
   const replyState = replyPhase(detail?.reviews || []);
   // ONE question per page. A running session is itself the agent stage, so it is never folded; the
   // hand-picked stage wins over the computed one until you leave the task (start an agent on a task
@@ -1975,7 +1978,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   </Box>
                 )}
                 {/* THE WORK COLUMN: the agent and the reply - the agent's own pane, full width while it works */}
-                <Box ref={workBox} data-tq-work="" sx={sessionView ? { display: "contents" } : { minWidth: 0, display: "flex", flexDirection: "column" }}>
+                {/* ...ONCE AN AGENT HAS ACTED (`settled`: its Result, or the run that failed) the work shrinks to the card and the agent's part scrolls in it,
+                    so Close out stays on screen under it at a laptop (the owner, 2026-10-25) - never past a report or a diff */}
+                <Box ref={workBox} data-tq-work="" sx={sessionView ? { display: "contents" } : { minWidth: 0, display: "flex", flexDirection: "column", ...(settled ? { flex: "0 1 auto", minHeight: 0 } : {}) }}>
                 {/* ONE SHORT LINE, LIVE OR NOT. A running session has always been a single strip -
                     heading, chip, controls - while the stopped card answered with a heading, a
                     sentence under it, and a row of buttons under that: three lines for the same
@@ -1989,7 +1994,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {!codeRun && <Box ref={agentHead} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
                   px: liveSession ? 1 : sessionView ? 1.5 : 0, py: liveSession ? 0.55 : pane === "agent" ? (agentBar ? 0.8 : 1.5) : 1.1,
                   ...(sessionView ? {} : { borderTop: 0, pt: 0 }),
-                  flexShrink: 0,
+                  flexShrink: settled ? 1 : 0, ...(settled ? { minHeight: 0, overflowY: "auto", scrollbarWidth: "thin" } : {}),
                   display: liveSession ? "flex" : "block", alignItems: "center",
                   gap: liveSession ? 1 : 0, flexWrap: "wrap" }}>
                   <Box sx={{ minWidth: 0, flex: liveSession ? "0 1 auto" : "initial" }}>
@@ -2093,12 +2098,19 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* ...and a session that ENDED is this one block too - its state, what happened, More - where a "Session closed"
                       card under the step told the same run a second time, and the story above it a third (the owner, 2026-10-12) */}
                   {!sessionView && hasRecord && (() => {
+                    // A RESULT'S DIFF IS FOLDED (the task-view cleanup, owner-approved 2026-10-25): "N files changed +a −b · Show diff" in What
+                    // it made, so Close out stays on screen at a laptop - the raw diff pushed it under the dock. Once the card is 1200px wide
+                    // the diff stands open beside the report instead, where the room is
+                    const foldDiff = !!diffRun && resultShown;
                     const record = (
-                      <Box sx={{ mt: 1.25, "&:empty": { display: "none" } }}>
+                      <Box sx={{ mt: 1.25, "&:empty": { display: "none" }, ...(foldDiff ? { "@container (min-width: 1200px)": { display: "grid",
+                        gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", columnGap: 2, alignItems: "start",
+                        "& [data-tq-diff-toggle]": { display: "none" }, "& > [data-tq-diff]": { display: "block", mt: 0 } } } : {}) }}>
                         {/* a chat shows its pages under the answer that made them; a terminal's are kept here */}
                         <AgentRecord {...recordProps} story={storyAt === "record" ? story : null} inChat={workspaceMode === "general"}
-                          result={resultShown} diff={diffRun ? diffStat(diffRun.DiffText) : null} />
-                        {diffRun && <Box sx={{ mt: 0.75 }}><DiffBlock text={diffRun.DiffText} /></Box>}
+                          result={resultShown} diff={diffRun ? diffStat(diffRun.DiffText) : null}
+                          diffOpen={diffShown} onDiff={foldDiff ? () => setDiffShown((v) => !v) : null} />
+                        {diffRun && <Box data-tq-diff="" sx={{ mt: 0.75, display: foldDiff && !diffShown ? "none" : "block" }}><DiffBlock text={diffRun.DiffText} /></Box>}
                         {co.writeupAt === "result" && <WriteupLine view={writeup} />}
                       </Box>
                     );

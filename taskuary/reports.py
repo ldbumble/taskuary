@@ -110,7 +110,8 @@ CONNECTION_KEYS = frozenset({'base_url', 'site', 'account', 'gateway', 'server',
                              # ...and WHERE THE FILES ARE (files.py). Same lesson one connector later:
                              # a tool call carrying its own share/root would walk straight out of the
                              # folder the owner configured, which is the whole authority of those cards.
-                             'share', 'root', 'port', 'hostkey', 'private_key'})
+                             'share', 'root', 'port', 'hostkey', 'private_key',
+                             '_card'})      # a tracker's whole card, secret and all (trackers.connection) - only ever the saved one
 def query_only(body: dict) -> dict:
     """The body minus every connection field - what an agent may say about a tool call. `_write` goes too: whether a
     query may commit is the card's Authority (tools/run) or the owner's approval, never the caller's say-so."""
@@ -724,6 +725,15 @@ def _calendar(cfg):
     return run_calendar(cfg)
 
 
+def _lazy_tracker(t):
+    def run(cfg):
+        from .trackers import run as tracker
+        return tracker(t)(cfg)
+    from .trackers import run as tracker
+    run.__doc__ = tracker(t).__doc__
+    return run
+
+
 def _lazy(module, fn):
     """An executor that lives in its own module, imported on first use - and the composer's
     catalog still sees the real docstring (compose._keys_doc reads it off the wrapper)."""
@@ -838,6 +848,9 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'handbook_vote': _lazy('handbook', 'run_handbook_vote'),
             'hub_search': _lazy('hub', 'run_hub_search'), 'hub_write': _lazy('hub', 'run_hub_write'),
             'hub_vote': _lazy('hub', 'run_hub_vote'), 'hub_comment': _lazy('hub', 'run_hub_comment'),
+            # write-back to the trackers (trackers.py): comment, move, assign, close - each reaches people, so an agent's waits for a press
+            **{t: _lazy_tracker(t) for t in ('jira_comment', 'jira_move', 'jira_assign', 'jira_close', 'monday_comment', 'monday_move',
+                                             'monday_assign', 'monday_close', 'linear_comment', 'linear_move', 'linear_assign', 'linear_close')},
             # files in and files out (files.py): the network share and the SFTP server. The first
             # connectors here that can PUT a file somewhere - reads reuse run_local_file's parsers,
             # writes are proposal-gated below scope 'write' like a bill.
@@ -906,7 +919,8 @@ CARD_OF = {'postgresql': 'postgresql', 'mysql': 'mysql', 'clickhouse': 'clickhou
            'markets_screen': 'screen',
            'kb_search': 'knowledge', 'kb_reindex': 'knowledge',
            'handbook_search': 'handbook', 'handbook_write': 'handbook', 'handbook_vote': 'handbook',
-           'hub_search': 'handbook', 'hub_write': 'handbook', 'hub_vote': 'handbook', 'hub_comment': 'handbook'}
+           'hub_search': 'handbook', 'hub_write': 'handbook', 'hub_vote': 'handbook', 'hub_comment': 'handbook',
+           **{f'{t}_{v}': t for t in ('jira', 'monday', 'linear') for v in ('comment', 'move', 'assign', 'close')}}
 
 def card_of(t): return CARD_OF.get(t, t)
 
@@ -1000,6 +1014,13 @@ def datadog_connection(store, connector_id=None) -> dict:
 def _sharepoint_connection(store, connector_id=None) -> dict:
     from .sharepoint import sharepoint_connection
     return sharepoint_connection(store, connector_id)
+
+
+def _tracker_connection(t):
+    def conn(store, connector_id=None) -> dict:
+        from .trackers import connection
+        return connection(t)(store, connector_id)
+    return conn
 
 
 def _sheets_connection(store, connector_id=None) -> dict:
@@ -1119,7 +1140,8 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'google_sheets': _sheets_connection,
                  **{t: smb_connection for t in ('smb_read', 'smb_write', 'smb_move')},
                  **{t: sftp_connection for t in ('sftp_list', 'sftp_get', 'sftp_put', 'sftp_move')},
-                 'markets_screen': _screen_connection}
+                 'markets_screen': _screen_connection,
+                 **{f'{t}_{v}': _tracker_connection(t) for t in ('jira', 'monday', 'linear') for v in ('comment', 'move', 'assign', 'close')}}
 
 
 # Report types whose data IS the store - they reach no further than the local database, so they
@@ -1135,6 +1157,9 @@ def gate(store, cfg: dict) -> None:
     action - on a schedule exactly as in a preview (the owner, 2026-09-27: a switched-off card kept
     writing on its schedule). The error is the run's failure, in words that say what to do."""
     t = cfg.get('type')
+    # A REPORT READS (2026-10-25): a comment or a move on a tracker reaches people, and a schedule is nobody's press
+    from .trackers import TYPES
+    if t in TYPES: raise RuntimeError(f'{t} writes to a tracker - it runs only as a proposal you approve on a task, never as a report source')
     if t in STORE_BACKED or not (c := _connector(store, card_of(t), cfg.get('connector_id'))): return
     if not c.get('Active'): raise RuntimeError(f'the {card_of(t)} connection is off - turn it on under Connections')
     from . import scopes

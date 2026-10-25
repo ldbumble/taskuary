@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Box, Button, CircularProgress, Typography } from "@mui/material";
 import SystemUpdateAltIcon from "@mui/icons-material/SystemUpdateAlt";
 import api from "./api";
+import { updateWaiting, waitingNote } from "./appQuit.js";
 import { BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 
 const HOW = {
@@ -13,11 +14,15 @@ const HOW = {
   source: "a source checkout — update it with `git pull` in the repository, then restart; nothing here can do that for you",
 };
 
-export default function UpdateCard() {
+// `asked`: the Assistant brought this page up for its button ("update the app", "is there an update") - it is lit, outlined the way an
+// asked knob row is, until the owner presses it. The Assistant never presses it (assistant-is-a-router, 2026-10-25)
+export default function UpdateCard({ asked = false, at = 0 }) {
   const [info, setInfo] = useState(null);
-  const [busy, setBusy] = useState("");          // "check" | "apply" | "restarting"
+  const [busy, setBusy] = useState("");          // "check" | "apply" | "waiting" | "restarting"
   const [err, setErr] = useState("");
   const [note, setNote] = useState("");
+  const [lit, setLit] = useState(asked);
+  useEffect(() => { setLit(asked); }, [asked, at]);
   const startedRef = useRef(null);
 
   const check = useCallback(async (force) => {
@@ -48,11 +53,29 @@ export default function UpdateCard() {
     }
   }, []);
 
+  // AN UPDATE WAITS FOR RUNNING WORK (update.when_idle): the server holds the press until no agent or workflow run is live, and the card
+  // says what it waits for, read again every few seconds. Once the server goes away the wait is the swap - the new build is looked for.
+  const waitForIdle = useCallback(async (was) => {
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 4000));
+      let data;
+      try { data = (await api.get("/api/update")).data; } catch { setBusy("restarting"); setNote("swapping the program and reopening…"); await waitForNew(was); return; }
+      if (data.current && data.current !== was) { window.location.reload(); return; }
+      if (data.queued_error) { setBusy(""); setNote(""); setErr(data.queued_error); setInfo(data); return; }
+      if (!updateWaiting(data)) { setBusy("restarting"); setNote("swapping the program and reopening…"); await waitForNew(was); return; }
+      setNote(waitingNote(data));
+    }
+  }, [waitForNew]);
+  useEffect(() => {       // ...and a page opened while one already waits shows it waiting, not a fresh button
+    if (updateWaiting(info) && !busy) { setBusy("waiting"); setNote(waitingNote(info)); waitForIdle(info.current); }
+  }, [info]);             // on a new answer only: `busy` and the waiter are read, not watched
+
   const apply = async () => {
-    setBusy("apply"); setErr(""); setNote("");
+    setLit(false); setBusy("apply"); setErr(""); setNote("");
     try {
       const { data } = await api.post("/api/update", {});
       if (data.restarting) { setBusy("restarting"); setNote(data.how === "exe" ? "downloaded — swapping the program and reopening…" : "installed — relaunching…"); await waitForNew(info?.current); }
+      else if (updateWaiting(data)) { setBusy("waiting"); setNote(waitingNote(data)); await waitForIdle(info?.current); }
       else { setNote(data.detail || "done"); setBusy(""); }
     } catch (e) { setErr(e?.response?.data?.detail || "the update did not start"); setBusy(""); }
   };
@@ -90,10 +113,12 @@ export default function UpdateCard() {
             startIcon={busy === "check" ? <CircularProgress size={12} /> : null}>Check now</Button>
           {/* data-tq-knob: the Assistant's "update taskuary" lights this one (#settings=updates&key=update, SettingsView's knob) */}
           <Button size="small" variant="contained" disableElevation disabled={!canApply || !!busy} onClick={apply} data-tq-knob="update"
-            startIcon={busy === "apply" || busy === "restarting" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}
-            title={how === "source" ? "a source checkout updates with git pull" : info?.newer ? `install v${info.latest} and reopen`
+            {...(lit && canApply && !busy ? { "data-tq-asked": "" } : {})}
+            sx={lit && canApply && !busy ? { outline: "2px solid #6f8a6e", outlineOffset: 3 } : undefined}
+            startIcon={["apply", "waiting", "restarting"].includes(busy) ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}
+            title={how === "source" ? "a source checkout updates with git pull" : info?.newer ? `install v${info.latest} and reopen - it waits for running agents and workflows to finish first`
               : unknown ? "the check did not reach the release page - press Check now to try again" : "nothing newer to install"}>
-            {busy === "restarting" ? "Reopening…" : busy === "apply" ? "Updating…" : info?.newer ? `Update to v${info.latest}`
+            {busy === "restarting" ? "Reopening…" : busy === "waiting" ? "Waiting…" : busy === "apply" ? "Updating…" : info?.newer ? `Update to v${info.latest}`
               : unknown ? "Couldn't check" : info ? "Up to date" : "Checking…"}
           </Button>
         </Box>
@@ -108,7 +133,7 @@ export default function UpdateCard() {
       </Box>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.25, lineHeight: 1.6 }}>
         Releases come from the project's GitHub page; the desktop build is the same file you would download there.
-        Any agent session that is open when you update is closed with the program — its transcript is kept on its task.
+        An update waits for running agents and workflow runs to finish, then swaps the program — nothing is cut off halfway.
       </Typography>
     </Box>
   );

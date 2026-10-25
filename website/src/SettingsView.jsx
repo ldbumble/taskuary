@@ -915,7 +915,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
 
     if (page === "about") return <AboutYou />;
     if (page === "docs") return <DocsView sel={docSel} onSel={setDocSel} onCatalog={onCatalog} />;
-    if (page === "updates") return <UpdateCard />;
+    // ...its Update button lit when the Assistant brought the page up for it (#settings=updates&key=update), the way a knob row is
+    if (page === "updates") return <UpdateCard asked={only?.knob === "update"} at={only?.at} />;
 
     if (page === "audit") {
       return (

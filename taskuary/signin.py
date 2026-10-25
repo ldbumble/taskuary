@@ -27,8 +27,14 @@ sign-in from the phone was a dead end. Now:
   stays with the owner.
 - EVERY FILL IS AUDITED: site, task, how, whether it went in. Never what was typed.
 
-Not built yet (next phase): authenticator/TOTP keys, reading a code out of the mail, a fill link on the phone (the share port is
-LAN-only), and a 1Password/Bitwarden provider.
+- AN AUTHENTICATOR CODE (2026-10-25, totp.py): the owner may keep the site's authenticator key with its sign-in, sealed the same
+  way. After the password, when the site's page asks for a one-time code, the server computes it (RFC 6238) and types it under the
+  same checks - top document, the pinned site, the box focused - and the box is emptied after, like the password's. A page that
+  is ONLY a code prompt (the agent was signed in, the site asks again) is filled with the code alone. The receipt says a code was
+  typed, never which.
+
+Not built yet (next phase): reading a code out of the mail, a code split over one box per digit, a fill link on the phone (the share
+port is LAN-only), and a 1Password/Bitwarden provider.
 """
 import hashlib, html as H, ipaddress, json, logging, re, secrets, shutil, subprocess, tempfile, threading, time
 from pathlib import Path
@@ -38,6 +44,7 @@ from loguru import logger
 TTL = 15 * 60                   # a fill link lives this long, and opens once
 AGAIN = 10 * 60                 # a saved sign-in the site asks for again inside this is not tried a second time
 STEP_WAIT = 20.0                # a two-step sign-in: how long the password page is given to appear after the user name
+CODE_WAIT = 15.0                # after the password: how long a site is given to show its code prompt before none is taken as asked
 PREFIX = 'signin:'              # the request id of a sign-in ask: `signin:<site>`
 DONE = 'Signed in'
 LOOPBACK = ('localhost', '127.0.0.1', '::1')
@@ -118,36 +125,64 @@ def _tables(store):
                          'SavedBy TEXT, LastUsed REAL)')
         store.cx.execute('CREATE TABLE IF NOT EXISTS signin_token (TokenHash TEXT PRIMARY KEY, TaskId INTEGER, Sid TEXT, Site TEXT, '
                          'RequestId TEXT, CreatedAt REAL, ExpiresAt REAL, UsedAt REAL)')
+        # the authenticator key (2026-10-25) came a release after the table: a 0.3.9.34 home gains the column, its rows untouched
+        if 'Totp' not in {r[1] for r in store.cx.execute('PRAGMA table_info(signin_vault)')}:
+            store.cx.execute('ALTER TABLE signin_vault ADD COLUMN Totp TEXT')
         store.cx.commit()
 
 
 def saved(store, site) -> dict | None:
     _tables(store)
-    return store._one('SELECT Site, User, Secret, SavedAt, LastUsed FROM signin_vault WHERE Site=?', (str(site or '').lower(),))
+    return store._one('SELECT Site, User, Secret, Totp, SavedAt, LastUsed FROM signin_vault WHERE Site=?', (str(site or '').lower(),))
 
 
 def listing(store) -> list:
-    """Settings -> Saved sign-ins: the site, when it was saved, when it was last used. Never the user name or the secret."""
+    """Settings -> Saved sign-ins: the site, when it was saved, when it was last used, whether a code key is kept. Never the user
+    name, the secret or the key."""
     _tables(store)
-    return [{'site': r['Site'], 'saved': r['SavedAt'], 'used': r['LastUsed']}
-            for r in store._rows('SELECT Site, SavedAt, LastUsed FROM signin_vault ORDER BY Site')]
+    return [{'site': r['Site'], 'saved': r['SavedAt'], 'used': r['LastUsed'], 'code': bool(r['Totp'])}
+            for r in store._rows('SELECT Site, SavedAt, LastUsed, Totp FROM signin_vault ORDER BY Site')]
 
 
-def save(store, site, user, pw, by='owner'):
-    """Keep a sign-in for `site`, sealed. The site is the one the owner saw on the fill page - pinned there, at save time."""
+def _seal_key(key) -> str:
+    "An authenticator key, checked and sealed - or ValueError. Never kept in the clear, as a password is not."
+    from . import totp, vault
+    k = vault.seal(totp.dumps(totp.parse(key)))
+    if not vault.sealed(k): raise ValueError('this computer has no keychain to seal it in, so it was not saved')
+    return k
+
+
+def save(store, site, user, pw, by='owner', key=None):
+    """Keep a sign-in for `site`, sealed. The site is the one the owner saw on the fill page - pinned there, at save time. `key`: an
+    authenticator key to keep with it; None keeps the one already saved (a changed password is not a new authenticator)."""
     from . import vault
     site = str(site or '').lower()
     if not site or registrable(site) != site: raise ValueError('that is not a site a sign-in can be kept for')
     if not pw: raise ValueError('there is no password to keep')
+    k = _seal_key(key) if key else None
     u, p = vault.seal(user or '') if user else '', vault.seal(pw)
     # sealed or not at all: a password vault that falls back to plain text in the database is worse than none
     if not vault.sealed(p): raise ValueError('this computer has no keychain to seal it in, so it was not saved')
     _tables(store)
-    old = saved(store, site)
-    store._exec('INSERT OR REPLACE INTO signin_vault (Site, User, Secret, SavedAt, SavedBy, LastUsed) VALUES (?,?,?,?,?,?)',
-                (site, u, p, _now(), by, None))
-    for v in (old or {}).get('User'), (old or {}).get('Secret'): vault.forget(v)
-    store.audit('signin', 0, 'signin_saved', by, detail={'site': site})
+    old = saved(store, site) or {}
+    store._exec('INSERT OR REPLACE INTO signin_vault (Site, User, Secret, Totp, SavedAt, SavedBy, LastUsed) VALUES (?,?,?,?,?,?,?)',
+                (site, u, p, k or old.get('Totp'), _now(), by, None))
+    for v in old.get('User'), old.get('Secret'), (old.get('Totp') if k else None): vault.forget(v)
+    store.audit('signin', 0, 'signin_saved', by, detail={'site': site, **({'code': True} if k else {})})
+
+
+def set_key(store, site, key, by='owner') -> bool:
+    """Settings -> Saved sign-ins: keep (or, with '', drop) the authenticator key of a sign-in already saved. False: none is saved
+    for that site - a key alone would type a code into a sign-in the owner never kept."""
+    from . import vault
+    site = str(site or '').lower()
+    row = saved(store, site)
+    if not row: return False
+    k = _seal_key(key) if key else None
+    store._exec('UPDATE signin_vault SET Totp=? WHERE Site=?', (k, site))
+    vault.forget(row.get('Totp'))
+    store.audit('signin', 0, 'signin_code_saved' if k else 'signin_code_removed', by, detail={'site': site})
+    return True
 
 
 def remove(store, site, by='owner') -> bool:
@@ -157,7 +192,7 @@ def remove(store, site, by='owner') -> bool:
     row = saved(store, site)
     if row:
         store._exec('DELETE FROM signin_vault WHERE Site=?', (site,))
-        for v in row.get('User'), row.get('Secret'): vault.forget(v)
+        for v in row.get('User'), row.get('Secret'), row.get('Totp'): vault.forget(v)
     n = browserview.forget_site(site)
     _forget_live(site)
     store.audit('signin', 0, 'signin_removed', by, detail={'site': site, 'had_saved': bool(row), 'cookie_files': n})
@@ -272,23 +307,44 @@ def _auto(store, tid, sid, site, rid, fill):
     try:
         user, pw = vault.unseal(row.get('User') or '') or '', vault.unseal(row.get('Secret') or '')
         if not pw: raise SignInError('the saved password could not be opened on this computer')
-        fill(sid, site, user, pw)
+        code = _code_of(row.get('Totp'))
+        got = fill(sid, site, user, pw, **({'code': code} if code else {})) or {}
         _used(store, site)
-        _audit(store, tid, site, 'vault', True)
-        _continue(store, tid, rid, site, 'taskuary')
+        _audit(store, tid, site, 'vault', True, code=bool(got.get('code')) if code else None)
+        _continue(store, tid, rid, site, 'taskuary', bool(got.get('code')))
     except Exception as e:
         why = str(e) if isinstance(e, SignInError) else 'the browser could not be reached'
         _audit(store, tid, site, 'vault', False, why)
         store.add_comment(tid, 'taskuary', 'agent', f'The saved sign-in for {site} was not used: {why}. Sign in yourself to continue.')
 
 
-def by_owner(store, tok, user, pw, keep: bool, fill=None) -> dict:
-    """The fill page's Sign in: spend the link, type it into the task's browser, keep it sealed when asked, and tell the agent."""
+def _code_of(key):
+    """What types the code: a function the filler calls at the moment it types, so the code is the one current THEN - and one in
+    its last seconds is waited out, never typed to arrive stale. `key` is sealed (a saved row's) or as the owner typed it. None
+    when there is none, or it will not open on this computer."""
+    from . import totp, vault
+    raw = vault.unseal(key) if key else ''
+    if not raw: return None
+    try: cfg = totp.loads(raw) if raw.lstrip().startswith('{') else totp.parse(raw)
+    except (ValueError, KeyError, TypeError): return None
+    def now():
+        if totp.left(cfg) < 3: time.sleep(totp.left(cfg) + .2)
+        return totp.code(cfg)
+    return now
+
+
+def by_owner(store, tok, user, pw, keep: bool, fill=None, key: str = '') -> dict:
+    """The fill page's Sign in: spend the link, type it into the task's browser, keep it sealed when asked, and tell the agent. `key`:
+    an authenticator key typed on the page - its code goes in this time, and it is kept with the sign-in when that is."""
+    from . import totp
+    key = str(key or '').strip()
+    if key: totp.parse(key)                                  # a mistyped key is said before the link is spent, not after
     r = take(store, tok)
     if not r: raise LookupError('this sign-in link was used already or has expired - open a new one from the task')
     tid, site = r['TaskId'], r['Site']
     if not pw: raise ValueError('type the password')
-    try: (fill or type_in)(r['Sid'], site, user, pw)
+    code = _code_of(key or (saved(store, site) or {}).get('Totp'))
+    try: got = (fill or type_in)(r['Sid'], site, user, pw, **({'code': code} if code else {})) or {}
     except SignInError as e:
         _audit(store, tid, site, 'typed', False, str(e)); raise
     except Exception:
@@ -296,34 +352,37 @@ def by_owner(store, tok, user, pw, keep: bool, fill=None) -> dict:
         raise SignInError("the task's browser could not be reached - is the task still open?")
     kept = ''
     if keep:
-        try: save(store, site, user, pw); kept = 'saved'
+        try: save(store, site, user, pw, key=key or None); kept = 'saved'
         except ValueError as e: kept = str(e)
-    _audit(store, tid, site, 'typed', True, saved=kept == 'saved')
-    threading.Thread(target=_continue, args=(store, tid, r['RequestId'], site, 'owner'), daemon=True).start()
+    _audit(store, tid, site, 'typed', True, saved=kept == 'saved', code=bool(got.get('code')) if code else None)
+    threading.Thread(target=_continue, args=(store, tid, r['RequestId'], site, 'owner', bool(got.get('code'))), daemon=True).start()
     return {'site': site, 'task': tid, 'saved': kept == 'saved', 'kept': kept}
 
 
-def _continue(store, tid, rid, site, actor):
+def _continue(store, tid, rid, site, actor, code=False):
     """Tell the agent - the words it was promised, nothing else - and close the ask. Not workerstate.answer: that answers a pty's
     question with choices by its NUMBER, and "1" typed into a CLI's prompt is not "you are signed in"."""
     from . import terminal as term, workerstate as ws
     sess, said = ws._live(tid), f'{DONE} to {site} - continue.'
+    # the receipt (2026-10-25): that a code went in too, so the owner knows the vault answered the site's second question
+    did = f"Signed in to {site}{' with the saved sign-in' if actor != 'owner' else ''}{' and its authenticator code' if code else ''}"
     if not sess:
-        store.add_comment(tid, actor, 'agent', f'Signed in to {site}, but no agent is running on this task to tell - open it to continue.')
+        store.add_comment(tid, actor, 'agent', f'{did}, but no agent is running on this task to tell - open it to continue.')
         return
     try:
         if hasattr(sess, 'send_prompt'): sess.send_prompt(said, as_owner=False)
         else: term.type_into(sess, said)
     except Exception as e:
         logger.warning(f'signin: task {tid} signed in to {site}, but the agent was not told - {e}')
-        store.add_comment(tid, actor, 'agent', f'Signed in to {site}, but the agent could not be told - say "{said}" to it.')
+        store.add_comment(tid, actor, 'agent', f'{did}, but the agent could not be told - say "{said}" to it.')
         return
     ws.record(store, tid, sess.sid, 'answered', request_id=rid, text=DONE, source='owner' if actor == 'owner' else 'api')
-    store.add_comment(tid, actor, 'agent', f"Signed in to {site}{' with the saved sign-in' if actor != 'owner' else ''} - the agent goes on.")
+    store.add_comment(tid, actor, 'agent', f'{did} - the agent goes on.')
 
 
-def _audit(store, tid, site, how, ok, why='', saved=None):
-    d = {'site': site, 'how': how, 'ok': bool(ok), **({'why': why} if why else {}), **({'saved': saved} if saved is not None else {})}
+def _audit(store, tid, site, how, ok, why='', saved=None, code=None):
+    d = {'site': site, 'how': how, 'ok': bool(ok), **({'why': why} if why else {}), **({'saved': saved} if saved is not None else {}),
+         **({'code': code} if code is not None else {})}
     store.audit('task', tid, 'signin_fill', 'taskuary' if how == 'vault' else 'owner', 'system' if how == 'vault' else 'human', d)
 
 
@@ -344,12 +403,19 @@ FIELDS = r'''(want) => {
   const before = pw ? ins.slice(0, ins.indexOf(pw)).filter(texty) : [];
   const user = before.reverse().find(named) || before[0] || (!pw && (ins.find((e) => texty(e) && named(e)) || null));
   const frames = [...document.querySelectorAll('iframe')].filter(vis).map((e) => e.src || '');
-  const el = want === 'password' ? pw : want === 'user' ? user : null;
+  // THE CODE BOX (2026-10-25): the one the page itself marks as a one-time code, else a short numeric-looking box that names a
+  // code - never the user name or password box. A page of six one-digit boxes is not one this types into (not built).
+  const coded = (e) => /otp|one.?time|totp|2fa|mfa|passcode|verif|auth.*code|security.?code|^code$/i
+    .test([e.name, e.id, e.getAttribute('aria-label'), e.placeholder].join(' ').trim());
+  const otp = ins.find((e) => e.autocomplete === 'one-time-code') || (!pw && ins.find((e) => e !== user
+    && ['text', 'tel', 'number', ''].includes(e.type) && !(e.maxLength > 0 && e.maxLength < 4) && coded(e))) || null;
+  const el = want === 'password' ? pw : want === 'user' ? user : want === 'otp' ? otp : null;
   if (el) { el.focus(); try { el.select(); } catch (_) { el.value = ''; } }
-  return { origin: location.origin, href: location.href, top: window === window.top, password: !!pw, user: !!user, frames,
+  if (el && want === 'otp') el.setAttribute('data-tq-code', '');
+  return { origin: location.origin, href: location.href, top: window === window.top, password: !!pw, user: !!user, otp: !!otp, frames,
            focused: !!el && document.activeElement === el };
 }'''
-CLEAR = "document.querySelectorAll('input[type=password]').forEach((e) => { e.value = ''; })"
+CLEAR = "document.querySelectorAll('input[type=password], input[data-tq-code]').forEach((e) => { e.value = ''; })"
 SETTLE = 2.0                    # after the submit, before the boxes are emptied and the agent hears: the page's own post goes first
 STILL = "(() => ({ href: location.href, password: !!document.activeElement && document.activeElement.type === 'password' }))()"
 
@@ -432,13 +498,39 @@ def _guard(c: Cdp, site: str, want: str) -> dict:
     f = c.fields(want)
     if not f.get('top') or not on_site(f.get('href'), site):
         raise SignInError(f'the page is no longer on {site} - nothing was typed')
-    if want and not f.get('focused'): raise SignInError(f'the {"password" if want == "password" else "user name"} box on {site} could not be found')
+    if want and not f.get('focused'):
+        raise SignInError(f'the {({"password": "password", "otp": "code"}).get(want, "user name")} box on {site} could not be found')
     return f
 
 
-def fill_page(c: Cdp, site: str, user: str, pw: str, wait: float = STEP_WAIT):
-    """Type a sign-in into the page `c` is on - the whole of the checking lives here, so a test drives it with a stand-in page."""
+def _type_code(c: Cdp, site: str, code) -> bool:
+    "The code box focused on the pinned site, looked at once more, then the code - made now, not when the sign-in began."
+    _guard(c, site, 'otp'); _guard(c, site, 'otp')        # the second is the last look, with the box already focused
+    c.type(code()); c.enter()
+    return True
+
+
+def _await_code(c: Cdp, site: str, code, wait: float) -> bool:
+    """After the password: type the code when the site's next page asks for one. No prompt within `wait`, the password box back (a
+    wrong password), or the page gone to another site - no code is typed, and that is no failure: most sign-ins ask none."""
+    end = time.time() + wait
+    while time.time() < end:
+        time.sleep(.5)
+        try: f = _guard(c, site, '')
+        except SignInError as e:
+            if 'no longer on' in str(e): return False
+            continue                                         # mid-navigation: the page cannot be read for a moment
+        if f.get('otp'): return _type_code(c, site, code)
+        if f.get('password'): return False
+    return False
+
+
+def fill_page(c: Cdp, site: str, user: str, pw: str, wait: float = STEP_WAIT, code=None, code_wait: float = CODE_WAIT) -> dict:
+    """Type a sign-in into the page `c` is on - the whole of the checking lives here, so a test drives it with a stand-in page.
+    `code`: makes the authenticator code, when one is kept. {'code': whether one was typed}."""
     f = _guard(c, site, '')
+    # ONLY A CODE PROMPT: the session was signed in and the site asks for its second factor again - the code alone goes in
+    if code and f.get('otp') and not f.get('password'): return {'code': _type_code(c, site, code)}
     if not f.get('password') and not f.get('user'):
         # what tells "the form is in another site's frame" from "no form": the page's own frames, by their address. Not the
         # DevTools frame tree - a cross-site frame runs in a process of its own and is not in it (measured, Chrome 2026-10)
@@ -463,20 +555,22 @@ def fill_page(c: Cdp, site: str, user: str, pw: str, wait: float = STEP_WAIT):
     if not s.get('password') or not on_site(s.get('href'), site): raise SignInError('the page changed under the sign-in - nothing was typed')
     c.type(pw)
     c.enter()
+    return {'code': bool(code) and _await_code(c, site, code, code_wait)}
 
 
-def type_in(sid: str, site: str, user: str, pw: str):
+def type_in(sid: str, site: str, user: str, pw: str, code=None) -> dict:
     """Sign the session's browser in on `site`: the screencast held while it types, the socket closed after."""
     from . import browserview
     with browserview.filling(sid):
         c = connect(sid)
         try:
-            fill_page(c, site, user, pw)
+            out = fill_page(c, site, user, pw, code=code)
             # THE PASSWORD DOES NOT STAY IN THE PAGE for the agent to read back (`agent-browser eval` on the box) when the site keeps
             # the form up - a wrong password, a captcha, a page that submits by script. Whatever box still holds it is emptied.
             time.sleep(SETTLE)
             try: c.js(CLEAR)
             except SignInError: pass                          # the page moved on: nothing of it is left to clear
+            return out
         finally: c.close()
 
 
@@ -509,6 +603,9 @@ def form_html(site: str, minutes: int, err: str = '') -> str:
                  + '<form method="post" autocomplete="off">'
                  '<label for="u">Username</label><input id="u" name="username" type="text" autocomplete="username" autofocus>'
                  '<label for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required>'
+                 # the site's authenticator key, when it asks a code after the password (2026-10-25): optional, and typed as a secret
+                 '<label for="k">Authenticator key <span class="k">(optional - the key beside the QR code, or its otpauth:// link)</span></label>'
+                 '<input id="k" name="key" type="password" autocomplete="off" spellcheck="false">'
                  '<label class="keep"><input type="checkbox" name="save" value="1"> Save to vault for next time</label>'
                  '<button type="submit">Sign in</button></form>'
                  f'<p class="note">Taskuary types this into the {s} page open in the task\'s browser - only if that page is still on {s}. '

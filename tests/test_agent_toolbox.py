@@ -142,4 +142,23 @@ class TheTable(unittest.TestCase):
         self.assertEqual(agenttools.insert(['claude'], ['--mcp-config', 'f']), ['claude', '--mcp-config', 'f'])
 
 
+class EverySessionGetsThem(unittest.TestCase):
+    def test_a_trusted_general_run_gets_our_server_and_a_strangers_does_not(self):
+        from test_general_agent_permissions import a_claude, turn
+        s = MemoryStore(); a_claude(self)
+        mine = s.create_task({'Title': 'Pull the renewal numbers', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        args = turn(s, mine)['profile']['args']
+        self.assertIn('--mcp-config', args)
+        self.assertIn(f'TQ-{mine}.mcp.json', args[args.index('--mcp-config') + 1])
+        self.assertLess(args.index('--mcp-config'), args.index('-p'))           # before the options: the list is closed
+        theirs = s.create_task({'Title': 'Look at this', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'stranger'}, 'triage')
+        with mock.patch('taskuary.origin.launch_mode', return_value='auto'):
+            self.assertNotIn('--mcp-config', turn(s, theirs)['profile']['args'])
+
+    def test_older_agent_rules_still_hear_of_the_tools(self):
+        from taskuary import terminal
+        self.assertIn('None of them sends', terminal.with_fence_rule('Rules from before the toolbox.'))
+        self.assertIn('Your Taskuary tools', open(terminal.__file__.replace('terminal.py', 'templates/agent.md'), encoding='utf-8').read())
+
+
 if __name__ == '__main__': unittest.main()

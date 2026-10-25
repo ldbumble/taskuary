@@ -37,7 +37,7 @@ test("the advice only tints: the same buttons in the same places with and withou
   const plain = layout(rowOf({ ref: "", list }));
   for (const pick of [{ verb: "approve", label: "Send" }, { verb: "reply", label: "Reply" }, { verb: "close", label: "Mark done" }, { verb: "next" }])
     assert.deepEqual(layout(rowOf({ ref: "", list }, pick)), plain, pick.verb);
-  assert.equal(layout(rowOf({ ref: "", list })).find(([t]) => t === "reply")[1][0], "slot:12:approve", "the card's own Send keeps an empty slot from the first render - its button is under the draft (2026-10-22)");
+  assert.ok(!JSON.stringify(layout(rowOf({ ref: "", list }))).includes("slot:"), "the card's own Send leaves no empty slot on the bar - its button is under the draft (2026-10-22, 2026-10-25)");
 });
 
 // THE OBVIOUS MOVE IS SILENT (the owner, 2026-10-23: "No suggestion...", "Nothing to decide...", "Thinking..." and every sentence

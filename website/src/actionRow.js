@@ -138,12 +138,10 @@ export function rowOf({ list, ref }, pick = null) {
   const head = by("decide").find((v) => v.tone === "p") || null;
   const plain = (xs) => xs.map((v) => (v.tone === "p" ? { ...v, tone: "s" } : v));
   // THE CARD'S MAIN MOVE LIVES UNDER THE DRAFT ONLY (the owner, 2026-10-22: Send under the draft, never the same press twice on
-  // screen) - the bar's copy of it (2026-10-19) is gone. Its SLOT stays, empty, from the first render: the copy was put there so the
-  // row would not reshuffle when the advice landed - pushing the row along and "Attach a file" into ▾ under the owner's hand - and an
-  // empty slot of the same width keeps that. Advised, the Send is lit where it stands, on the card (`lit`).
-  const main = list.find((v) => v.card && v.group === "decide" && v.tone === "p") || null;
-  const slot = main && { id: `slot:${main.id}`, label: main.label, group: "decide", tone: "s", title: "", disabled: true, why: "", slot: true };
-  let decide = plain([...(slot ? [slot] : []), ...by("decide")]), more = plain(by("more")), agent = plain(by("agent"));
+  // screen) - the bar's copy of it (2026-10-19) is gone, and so is the empty slot that kept its width (the owner, 2026-10-25: "we should
+  // not have empty space here"). The row does not reshuffle without it: the bar is the same with and without advice, which only tints.
+  // Advised, the Send is lit where it stands, on the card (`lit`).
+  let decide = plain(by("decide")), more = plain(by("more")), agent = plain(by("agent"));
   // THE ADVISOR PICKS THE FILLED BUTTON (the owner, 2026-10-13: "the advisor should pick which button is dark based off its advice")
   // - AND ONLY TINTS IT, IN PLACE: the layout is the same with and without advice. A verb in More is filled where it stands
   // (clustersOf keeps the filled one in view); a card's other verb advised (its Redraft) is lit on the card (`lit`, useLit); Next is

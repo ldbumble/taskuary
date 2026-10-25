@@ -2237,6 +2237,9 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
     if model is None and brain is None and not resume and not _chain:
         b = workflows.brain_of_task(store, t)
         if b and b['key']: model, brain = b['model'] or None, b['key']
+    # ...and in Auto mode, hard work opens on the CLI's strong gear (brainroute, 2026-10-25); a model or a resume named here keeps its own
+    from . import brainroute
+    if model is None and not resume and not _chain: brain, model = brainroute.for_session(store, t, brain)
     # The chain is of BRAINS, not of workers: the ROLE stays `agent` throughout, because failing
     # over is about which CLI can start, never about what the job is (the 2026-09-16 spec).
     from . import brainroute

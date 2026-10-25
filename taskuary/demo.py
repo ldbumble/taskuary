@@ -761,6 +761,7 @@ def seed(store) -> int:
                     ((datetime.now() - timedelta(minutes=37 * i + 11)).strftime('%Y-%m-%d %H:%M:%S'), m['MessageId']))
 
     # the week behind today: finished, so it reads as history rather than a backlog
+    past = []
     for days, hour, channel, who, subject, body, verdict, why in HISTORY:
         name, email = PEOPLE[who]
         when = f.ago(hours=days * 24 + (22 - hour))
@@ -776,7 +777,9 @@ def seed(store) -> int:
                         status='filed' if verdict == 'fyi' else 'routed',
                         conversation_id=f'{channel}:{email or name}:{days}', source_name=source)
         f.route(mid, tid, 'file' if verdict == 'fyi' else 'create', why)
+        if tid: past.append((tid, mid, when, channel, verdict))
         made += 1
+    seed_history_work(store, f, past)
 
     store.save_doc('soul', SOUL, 'demo')
     store.save_doc('job', JOB, 'demo')
@@ -928,7 +931,36 @@ def seed_dashboard(store) -> int:
     from . import reports
     sid = store.save_source({'Channel': 'report', 'Address': DASHBOARD['title'], 'Active': 1, 'ConfigJson': json.dumps(DASHBOARD)}, 'demo')
     reports.run_one(store, store.get_source(sid), None, 'schedule')      # its clock moves, so the server's start does not run it again
+    # ...and the built-in one every install gets (store.SEEDED_REPORTS), filled the same way: the demo's showcase dashboard
+    for src in store.list_sources(active_only=False):
+        if src.get('Owner') == 'template' and json.loads(src.get('ConfigJson') or '{}').get('type') == 'dashboard':
+            reports.run_one(store, src, None, 'schedule')
     return sid
+
+
+# what the week behind today's finished work left: each task closed a few hours after its ask, the replies were answered some
+# hours after theirs (the Median reply time), and the coding asks and a few others had an agent session on them - most finished,
+# one failed, one stopped (the dashboard's agent rows read worker events, as a real session's hooks write them). Fixed offsets,
+# so every demo draws the same picture.
+REPLY_HOURS = (0.6, 2.5, 1.2, 4.0, 0.8, 3.1, 1.6)
+SESSIONS = ((38, 'finished'), (12, 'finished'), (55, 'failed'), (21, 'finished'), (9, 'stopped'), (27, 'finished'))
+
+
+def seed_history_work(store, f, past) -> None:
+    import uuid
+    at = lambda s, mins: (datetime.strptime(s, '%Y-%m-%d %H:%M:%S') + timedelta(minutes=mins)).strftime('%Y-%m-%d %H:%M:%S')
+    for tid, _m, when, _c, _v in past:            # closed a few hours after it arrived, not at the moment the demo was built
+        store._exec("UPDATE task SET ClosedAt=? WHERE TaskId=? AND Status='done'", (at(when, 150), tid))
+    replies = [p for p in past if p[4] == 'reply']
+    for (tid, mid, when, _c, _v), hrs in zip(replies, REPLY_HOURS):
+        rid = f.review(tid, mid, status='approved', draft='Done.', final='Done.')
+        store._exec('UPDATE review SET DecidedAt=?, DecidedBy=? WHERE ReviewId=?', (at(when, int(hrs * 60)), 'owner', rid))
+    worked = [p for p in past if p[3] == 'github'] + [p for p in past if p[4] == 'task' and p[3] != 'github']
+    for (tid, _m, when, _c, _v), (mins, end) in zip(worked, SESSIONS):
+        sid, start = uuid.uuid4().hex[:12], at(when, 25)
+        for kind, t in (('working', start), (end, at(start, mins))):
+            eid = store.add_worker_event({'TaskId': tid, 'Sid': sid, 'Kind': kind, 'Source': 'demo', 'EventId': f'demo-{sid}-{kind}'})
+            store._exec('UPDATE worker_event SET CreatedAt=? WHERE Id=?', (t, eid))
 
 
 class Replay:

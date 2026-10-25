@@ -2,6 +2,7 @@
 are kept for the page to slice, and its one row under Reports says it is fresh and opens the dashboard (dashboards.py)."""
 import json
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -206,3 +207,136 @@ def test_the_card_under_the_line_keeps_the_dashboard_mark_and_no_other_card_grow
     from taskuary import concierge
     assert concierge.card_for({'kind': 'report', 'dashboard': True})['dashboard'] is True
     assert 'dashboard' not in concierge.card_for({'kind': 'report'})
+
+
+# ── the built-in dashboard: Taskuary at a glance (what the End of day checkup is to reports) ─────────────────────────
+def _glance_store():
+    """A small world with every shape the template reads: mail that became a task, one whose task closed, an fyi, one still
+    waiting for an AI; two replies answered; three agent sessions - finished, failed, still going. Invented people only."""
+    from taskuary.testing import Factory
+    s = MemoryStore(); f = Factory(s)
+    at = lambda h: (datetime.now() - timedelta(hours=h)).strftime('%Y-%m-%d %H:%M:%S')
+    t1 = f.task(title='Reconcile the GL export', status='open', kind='general')
+    t2 = f.task(title='Resend the Q3 numbers', status='done', kind='reply')
+    s._exec('UPDATE task SET ClosedAt=? WHERE TaskId=?', (at(2), t2))
+    m1 = f.message(task_id=t1, subject='GL export is short', from_name='Erin Blake', sent_at=at(30))
+    m2 = f.message(task_id=t2, channel='teams', subject='Q3 numbers?', from_name='Gail Moreno', sent_at=at(20))
+    m3 = f.message(status='filed', subject='Portal maintenance Sunday', from_name='Paula Vance', sent_at=at(10))
+    m4 = f.message(status='error', subject='Can you look at this', from_name='Erin Blake', sent_at=at(5))
+    f.route(m1, t1); f.route(m2, t2); f.route(m3, None, 'file', 'a notice, nothing asked'); f.route(m4, None, 'file', 'awaiting AI triage')
+    for mid, tid, decided in ((m1, t1, 28), (m2, t2, 16)):     # answered 2h and 4h after the ask: the median is 3
+        rid = f.review(tid, mid, status='approved', draft='Done.', final='Done.')
+        s._exec('UPDATE review SET DecidedAt=? WHERE ReviewId=?', (at(decided), rid))
+    for sid, tid, kinds in (('s1', t1, (('working', 9), ('finished', 8.5))), ('s2', t2, (('working', 7), ('failed', 6))), ('s3', t1, (('working', 1),))):
+        for kind, h in kinds:
+            eid = s.add_worker_event({'TaskId': tid, 'Sid': sid, 'Kind': kind, 'Source': 'test', 'EventId': f'{sid}-{kind}'})
+            s._exec('UPDATE worker_event SET CreatedAt=? WHERE Id=?', (at(h), eid))
+    return s
+
+
+def test_the_template_is_offered_and_every_install_has_it_like_the_end_of_day_checkup():
+    from taskuary.store import SEEDED_REPORTS
+    assert [t['key'] for t in dashboards.templates()] == ['glance'] and dashboards.template('nope') is None
+    assert ('glance_dashboard_seeded', 'Taskuary at a glance', 'dashboard') in SEEDED_REPORTS
+    rows = [r for r in MemoryStore().list_sources(active_only=False) if r['Address'] == 'Taskuary at a glance']
+    cfg = json.loads(rows[0]['ConfigJson'])          # ...as written, plus what every report row is given (its routing)
+    assert len(rows) == 1 and rows[0]['Owner'] == 'template' and {k: cfg[k] for k in dashboards.GLANCE} == dashboards.GLANCE
+    t = dashboards.template('glance'); t['config']['title'] = 'changed'
+    assert dashboards.GLANCE['title'] == 'Taskuary at a glance'          # a copy: using it never edits the shared spec
+
+
+def test_the_template_validates_reads_only_taskuary_data_and_fits_one_screen():
+    spec = dashboards.GLANCE
+    assert dashboards.validate(spec, MemoryStore()) == (True, '')
+    assert {x['type'] for x in spec['sources']} == {'taskuary_data'}
+    assert len(spec['components']) <= dashboards.MAX_COMPONENTS
+    assert [c['kind'] for c in spec['components'][:4]] == ['stat'] * 4      # the numbers first
+
+
+def test_the_template_runs_deterministically_over_the_apps_own_rows():
+    s = _glance_store()
+    one, two = dashboards.collect(s, dashboards.GLANCE), dashboards.collect(s, dashboards.GLANCE)
+    assert one['sources'] == two['sources'] and not dashboards.problems(dashboards.GLANCE, one)
+    src = one['sources']
+    stages = [r['stage'] for r in src['flow']['rows']]
+    assert [stages.count(x) for x in dashboards.STAGES] == [4, 3, 2, 1]      # came in, triaged (not the one waiting on an AI), on a task, closed
+    runs = {r['run_id']: r for r in src['agents']['rows']}
+    assert {k: r['outcome'] for k, r in runs.items()} == {'s1': 'finished', 's2': 'failed', 's3': 'working'}
+    assert runs['s1']['minutes'] == 30 and runs['s3']['minutes'] is None
+    tiles = dict(dashboards.headline(dashboards.GLANCE, one))
+    assert tiles == {'Came in': '4', 'New tasks': '2', 'Open now': '1', 'Median reply time': '3 h', 'Agent time per session': '45 min'}
+    closed = next(c for c in dashboards.GLANCE['components'] if c['kind'] == 'progress')
+    week = dashboards.in_range(src['closed']['rows'], 'closed', dashboards.span(closed, 90))
+    assert dashboards.span(closed, 90) == 7 and dashboards.aggregate(dashboards.where(week, closed['where'])) == 1
+
+
+def test_a_components_own_range_and_the_median_are_checked():
+    bad = {**SPEC, 'components': [{'kind': 'progress', 'title': 'P', 'source': 'tasks', 'target': 5, 'range': 12}]}
+    assert 'own "range"' in dashboards.validate(bad, MemoryStore())[1]
+    assert dashboards.aggregate([{'v': 1}, {'v': 9}, {'v': 3}], 'median', 'v') == 3
+    assert dashboards.aggregate([{'v': 1}, {'v': 4}], 'median', 'v') == 2.5
+
+
+def test_the_template_endpoint_hands_it_drawn_over_this_installs_rows():
+    from unittest import mock
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    s = _glance_store()
+    with mock.patch.object(server, 'store', s):
+        c = TestClient(server.app)
+        assert [t['key'] for t in c.get('/api/dashboards/templates').json()['templates']] == ['glance']
+        got = c.get('/api/dashboards/templates/glance').json()
+        assert c.get('/api/dashboards/templates/nope').status_code == 404
+    assert got['config'] == dashboards.GLANCE and len(got['data']['sources']['mail']['rows']) == 4 and got['problems'] == []
+
+
+def test_the_built_in_one_is_an_ordinary_dashboard_edited_and_kept_like_any_other():
+    """The owner, 2026-10-24: configurable, in the Dashboards section like reports. The seeded row is a dashboard row like any other:
+    its components and their targets change through the same save and the same check, and nothing puts the shipped spec back."""
+    from unittest import mock
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    s = MemoryStore()
+    row = next(r for r in s.list_sources(active_only=False) if r['Address'] == dashboards.GLANCE['title'])
+    cfg = json.loads(row['ConfigJson'])
+    goal = next(c for c in cfg['components'] if c['kind'] == 'progress'); goal['target'] = 20
+    cfg['components'] = [c for c in cfg['components'] if c['title'] != 'Who writes most']
+    post = lambda c, spec: c.post('/api/sources', json={'SourceId': row['SourceId'], 'Channel': 'report', 'Address': spec['title'],
+                                                        'ConfigJson': json.dumps(spec), 'Active': True})
+    with mock.patch.object(server, 'store', s):
+        c = TestClient(server.app)
+        assert post(c, cfg).status_code == 200
+        assert post(c, {**cfg, 'components': [{**goal, 'source': 'gone'}]}).status_code == 422     # ...the check any dashboard's save runs
+        got = c.get(f"/api/dashboards/{row['SourceId']}").json()['config']
+    assert next(x for x in got['components'] if x['kind'] == 'progress')['target'] == 20
+    assert 'Who writes most' not in [x['title'] for x in got['components']]
+    s._heal_seeded_report_owner()                                       # the heal that runs on start leaves an edited one alone
+    assert json.loads(s.get_source(row['SourceId'])['ConfigJson'])['components'] == got['components']
+
+
+def test_an_s3_source_on_a_dashboard_reads_its_object_path_and_keeps_its_own_name():
+    """A dashboard source's `key` is its name (what a component reads); an S3 executor reads `key` as the object path. On a dashboard
+    the path is `object_key`, handed over as the executor's `key`; a dashboard saved with the path in `key` itself still reads it."""
+    from unittest import mock
+    seen, real = [], reports.executor_for
+    def s3(cfg): seen.append(dict(cfg)); return 'ok', '{"day": "%s", "file": "a.csv"}\n{"day": "%s", "file": "b.csv"}' % (_day(0), _day(1))
+    spec = {'type': 'dashboard', 'title': 'Exports',
+            'sources': [{'key': 's1', 'label': 'Exports', 'type': 's3_object', 'bucket': 'northwind-exports', 'object_key': 'reports/latest.jsonl', 'date': 'day'},
+                        {'key': 'reports/old.jsonl', 'label': 'Old', 'type': 's3_object', 'bucket': 'northwind-exports'},      # saved before object_key
+                        {'key': 'listing', 'label': 'Listing', 'type': 's3_object', 'bucket': 'northwind-exports', 'prefix': 'reports/'}],
+            'components': [{'kind': 'stat', 'title': 'Files', 'source': 's1', 'agg': 'count'}]}
+    with mock.patch.object(reports, 'executor_for', lambda t: s3 if t == 's3_object' else real(t)), \
+         mock.patch.object(reports, 'gate', lambda store, sub: None), mock.patch.object(reports, 'resolve_cfg', lambda store, cfg: cfg):
+        data = dashboards.collect(MemoryStore(), spec)
+    assert [c.get('key') for c in seen] == ['reports/latest.jsonl', 'reports/old.jsonl', None]      # the listing reads no object
+    assert all('object_key' not in c for c in seen) and seen[2]['prefix'] == 'reports/'
+    assert list(data['sources']) == ['s1', 'reports/old.jsonl', 'listing'] and len(data['sources']['s1']['rows']) == 2
+    assert dict(dashboards.headline(spec, data)) == {'Files': '2'} and not dashboards.problems(spec, data)
+    # ...any other type only loses its name (no other executor reads a `key`), and a report never passes through run_cfg at all
+    assert dashboards.run_cfg({'type': 'rest', 'key': 'tasks', 'url': 'https://api.example.com'}) == {'type': 'rest', 'url': 'https://api.example.com'}
+    assert 'object_key' in compose.dashboard_system()
+
+
+def test_the_editors_dataset_picker_lists_every_dataset_the_server_serves():
+    words = json.loads(Path(dashboards.__file__).with_name('words.json').read_text(encoding='utf-8'))
+    assert set(words['dashboard']['datasets']) == set(dashboards.DATASETS)

@@ -266,6 +266,7 @@ diffbot: Diffbot (Agentic web)
 NAMED IN THE OWNER'S OWN SETUP:
 [N1] report: Advisor
 [N2] report: End of day checkup
+[N3] report: Taskuary at a glance
 
 THREADS (sender's domain | subject; '-' is the owner's own company):
 [T1] client.example | Automatic reply: Audit questions
@@ -539,6 +540,7 @@ diffbot: Diffbot (Agentic web)
 NAMED IN THE OWNER'S OWN SETUP:
 [N1] report: Advisor
 [N2] report: End of day checkup
+[N3] report: Taskuary at a glance
 
 THREADS (sender's domain | subject; '-' is the owner's own company):
 [T1] client.example | Automatic reply: Audit questions

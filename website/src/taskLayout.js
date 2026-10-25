@@ -10,7 +10,16 @@ import { fmtDate } from "./dates.js";
 // ...AND ONCE IT HAS ACTED (the owner, 2026-10-22): an agent that stopped or finished with its Result (`result`), or whose run failed
 // (`failed`, its reason and Try again), keeps the whole width too, From folded over it. Two columns - From | Reply - only where no
 // agent ran or none was ever started: a plain mail or chat task with its draft, a held task.
-export const layoutOf = ({ sessionView = false, result = false, failed = false }) => (sessionView || result || failed ? "full" : "columns");
+// ...UNTIL 2026-10-25 (the owner: "keep agent working and everything the same with full agent screen ... but keep the 2 columns for when
+// agent is not working"): only a LIVE session takes the whole width now. A finished, failed or closed agent is back in two columns - Came
+// from on the left, its Result and Close out on the right - and the shade says which section to read (focusOf).
+export const layoutOf = ({ sessionView = false }) => (sessionView ? "full" : "columns");
+
+// THE FOCUS (the owner, 2026-10-25: "shading for what to focus on"): with no agent live the card's body is shaded and one section is white -
+// the agent's part once it has a Result (or its run failed, Try again being the move), else the half the work column opened on (`pane`):
+// the agent's box where that is the move, and Close out - the reply to write or send - for everything else, a task waiting on a person too.
+export const focusOf = ({ live = false, result = false, failed = false, pane = "" } = {}) =>
+  live ? null : result || failed || pane === "agent" ? "agent" : "reply";
 
 // WHICH HALF OF THE WORK COLUMN IS OPEN. The page's focus (taskLifecycle.focusStage) still decides between the agent and the
 // reply; where it named the task itself - now the always-open From column - the work column opens on what the task is for: the

@@ -148,7 +148,7 @@ def test_the_backups_ride_the_route_for_one_message_jobs():
 def test_build_llm_asks_the_router_and_builds_what_it_says(monkeypatch):
     s = MemoryStore()
     seen = {}
-    monkeypatch.setattr(llm, '_build_llm', lambda store, pick, model, *a: seen.update(pick=pick, model=model, gear=a[-3]) or (lambda *x, **k: 'ok'))
+    monkeypatch.setattr(llm, '_build_llm', lambda store, pick, model, *a, **kw: seen.update(pick=pick, model=model, gear=a[-3]) or (lambda *x, **k: 'ok'))
     monkeypatch.setattr(llm, 'effective_pick', lambda store, pick=None: str(pick if pick is not None else store.get_setting('triage_ai') or '') or 'cli:claude')
     llm.build_llm(s, job='draft')
     assert seen == {'pick': 'cli:claude', 'model': None, 'gear': 'light'}
@@ -159,3 +159,51 @@ def test_build_llm_asks_the_router_and_builds_what_it_says(monkeypatch):
 def test_the_demo_still_answers_from_its_script(monkeypatch):
     monkeypatch.setattr(demo, 'enabled', lambda: True)
     assert llm.build_llm(MemoryStore(), job='draft') is not None
+
+
+# ── slice 2: one fallback path ─────────────────────────────────────────────────────────────────────────────────────────────
+
+def _cli_rows(s, **rows):
+    for name, cmd in rows.items(): s.upsert_agent(name, 'coding', 'cli', json.dumps({'cmd': cmd}))
+
+
+def _calls(s, fail=('claude',)):
+    called = []
+    def made(store, name, *args, **kwargs):
+        def answer(system, user, **kw):
+            called.append(name)
+            if name in fail: raise RuntimeError("You've hit your session limit; resets at noon")
+            return f'{name} answered'
+        return answer
+    return called, mock.patch.object(llm, 'make_cli_llm', side_effect=made)
+
+
+def test_a_failover_walks_the_route_s_chain():
+    s = MemoryStore(); _cli_rows(s, claude='claude', codex='codex')
+    s.set_setting('triage_ai', 'cli:claude', 'owner'); s.set_setting('triage_backup_ai', 'cli:codex', 'owner')
+    called, made = _calls(s)
+    with made, mock.patch.object(brainroute, '_backups', return_value=['cli:codex']) as chain:
+        assert llm.build_llm(s, job='draft')('sys', 'user') == 'codex answered'
+    assert called == ['claude', 'codex'] and chain.called       # the backups came from the route, not a second reading
+
+
+def test_two_settings_naming_one_cli_do_not_try_it_twice():
+    "Two profiles over one executable: trying claude again is not failover, it is the same paid failure twice."
+    s = MemoryStore(); _cli_rows(s, writer='claude', reader='claude', codex='codex')
+    s.set_setting('triage_ai', 'cli:writer', 'owner'); s.set_setting('triage_backup_ai', 'cli:reader, cli:codex', 'owner')
+    called, made = _calls(s, fail=('writer', 'reader'))
+    with made: assert llm.build_llm(s, job='summary')('sys', 'user') == 'codex answered'
+    assert called == ['writer', 'codex']
+
+
+def test_a_general_session_keeps_the_backups_it_always_had():
+    s = MemoryStore(); s.set_setting('triage_backup_ai', 'cli:codex', 'owner')
+    assert brainroute.choose(s, 'general', want_pick='cli:claude').chain == ['cli:codex']
+    assert brainroute.choose(s, 'assistant', want_pick='cli:claude').chain == ['cli:codex']
+
+
+def test_a_coding_pane_walks_backup_brains(monkeypatch):
+    s = MemoryStore(); s.set_setting('backup_brains', 'codex', 'owner')
+    monkeypatch.setattr(config, 'load', lambda: {'cli_connections': {'claude': {'cmd': 'claude'}, 'codex': {'cmd': 'codex'}}})
+    assert brainroute.session_chain(s, 'claude') == agents.brain_chain(s, 'claude') == ['claude', 'codex']
+    assert brainroute.choose(s, 'coding', want_pick='cli:claude').chain == ['cli:codex']

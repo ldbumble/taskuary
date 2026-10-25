@@ -2239,7 +2239,8 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
         if b and b['key']: model, brain = b['model'] or None, b['key']
     # The chain is of BRAINS, not of workers: the ROLE stays `agent` throughout, because failing
     # over is about which CLI can start, never about what the job is (the 2026-09-16 spec).
-    chain = list(_chain or hub_agents.brain_chain(store, brain))
+    from . import brainroute
+    chain = list(_chain or brainroute.session_chain(store, brain))
     if not chain: chain = [brain or '']
     # a saved conversation belongs to the CLI that held it: a backup harness handed an id it has
     # never heard of would either refuse to start or quietly begin a blank session under its name

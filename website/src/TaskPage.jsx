@@ -1174,6 +1174,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const closedNote = String([...(detail?.comments || [])].reverse().find((c) => /^Closed out: /.test(String(c.Body || "")))?.Body || "").replace(/^Closed out: /, "");
   // the news line is said once, at the top of the task stage; open, the agent step is just its record
   const storyAt = storyPlace(news ? null : story, { open: pane === "agent" && !sessionView, hasRecord });
+  // the Agent work row with nothing in it: no agent at work, none ran, no story to tell, and not the open half
+  const agentEmpty = !term?.alive && !wide && pane !== "agent" && !hasRecord && !["line", "story", "summary"].includes(storyAt);
   // A START THAT STOPPED ON "WHICH REPOSITORY?" (funnel.HELD_REPO): the chip says so and the pick resumes the start, whichever
   // chip you press (the owner, 2026-10-12: "if i don't fill it out it should warn me at least?")
   const heldRepo = String(t?.Tags || "").split(/[\s,]+/).includes("held:repo");
@@ -1998,7 +2000,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         "agent · needs you" - on an agent that had been parked on a question for an
                         hour (the owner, 2026-09-11, TQ-0499). agentState is the session's own word
                         (taskLifecycle.agentPhase); the heading now says what the chip says. */}
-                    <WorkflowHeading number="2" title={!term?.alive ? (resultShown ? "Result" : "Agent work")
+                    {/* AN EMPTY AGENT WORK ROW IS QUIET (the owner, 2026-10-25: Agent work stays where it is, the reply is what the eye should
+                        land on): no agent ran, nothing to say - a smaller, dimmer line, the same press opening it */}
+                    <WorkflowHeading number="2" quiet={agentEmpty} title={!term?.alive ? (resultShown ? "Result" : "Agent work")
                       : answered ? `${agentName(t)} answered`
                       : agentState === AGENT.waiting ? says(subState(term), agentName(t))   /* asked, approval, stuck (T6) */
                         : `${agentName(t)} is working`}
@@ -2228,7 +2232,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   </>
                 ) : null}
 
-                {!sessionView && <Box ref={closeOutRef} data-tq-closeout="" sx={{ ...card, ...step, borderTop: 0, mt: 1, px: 0, py: pane === "reply" ? 1.25 : 1, flexShrink: 0 }}>
+                {/* ...the draft a little heavier than the words round it (the owner, 2026-10-25: "subtly focus the reply"): the eye lands on what goes out */}
+                {!sessionView && <Box ref={closeOutRef} data-tq-closeout="" sx={{ ...card, ...step, borderTop: 0, mt: 1, px: 0, py: pane === "reply" ? 1.25 : 1, flexShrink: 0,
+                  "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }}>
                   {/* CLOSE OUT, not Reply (the owner, 2026-09-27): what finishes a task is not always a reply - a pull
                       request merges, an issue closes. The label only: the stage's key is still "reply" everywhere. */}
                   <WorkflowHeading number="3" title="Close out"
@@ -2681,15 +2687,16 @@ const Fold = ({ title, children }) => (
 // ONE ROW ON A DESKTOP, TWO ON A PHONE. The bar is flexShrink: 0 so it never loses a button, which
 // at 390px meant it kept its width by sitting ON the title ("A… w…" under the continue button,
 // the save button cut off at the card's edge, 2026-09-18). Below sm the bar takes the whole next line.
-const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle, action, tools }) => (
-  <Box {...pressable(onToggle)} aria-expanded={onToggle ? !folded : undefined}
+// `quiet`: a step with nothing in it - smaller and dimmer, so the step that holds the move is the one read (2026-10-25)
+const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle, action, tools, quiet = false }) => (
+  <Box {...pressable(onToggle)} aria-expanded={onToggle ? !folded : undefined} data-tq-quiet={quiet ? "" : undefined}
     sx={{ ...FOCUS_RING, display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" },
-    cursor: onToggle ? "pointer" : "default", opacity: folded ? 0.72 : 1,
+    cursor: onToggle ? "pointer" : "default", opacity: quiet ? 0.6 : folded ? 0.72 : 1,
     "&:hover": onToggle ? { opacity: 1 } : undefined }}>
     {/* no step number any more: From is a column of its own, not step 1 (the redesign, 2026-10-21) - the tone says whose move it is */}
-    <Box data-tq-step={number} sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: tone, flexShrink: 0 }} />
+    <Box data-tq-step={number} sx={{ width: quiet ? 7 : 9, height: quiet ? 7 : 9, borderRadius: "50%", bgcolor: tone, flexShrink: 0 }} />
     <Box sx={{ minWidth: 0, flex: 1 }}>
-      <Typography sx={{ color: INK, fontSize: 14, fontWeight: 600, lineHeight: 1.3 }}>{title}</Typography>
+      <Typography sx={{ color: quiet ? DIM : INK, fontSize: quiet ? 12.5 : 14, fontWeight: 600, lineHeight: 1.3 }}>{title}</Typography>
       {description && !folded && <Typography sx={{ color: FAINT, fontSize: 12, display: "block", lineHeight: 1.4 }}>{description}</Typography>}
     </Box>
     {/* the one action a stage cannot afford to hide when it folds. Its click is its own, not the fold's. */}

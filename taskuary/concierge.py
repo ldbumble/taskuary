@@ -3233,7 +3233,11 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         funnel.settle(store, item['key'], 'surfaced', actor, note=item.get('sig'), read=True)
         closed = bool(item.get('tid')) and (store.get_task(item['tid']) or {}).get('Status') in ('done', 'dropped')
         set_current(store, tid, item['key'], actor, closed=closed)           # on the table, written down (PW-162)
-        funnel.mark_place(store, item)                                         # ...and where the walk is: Next goes on below it
+        # ...and where the walk is: Next goes on below it - from where the RAIL draws it. A closed task opened by name is no row of the
+        # pile, and the page draws it under Tasks, where it was (funnelPile.pulledRow); keyed by its lane, fyi, the place sat past every
+        # task and report still below it and Next jumped to the fyi batch (the 2026-10-25 sweep)
+        pulled = closed and not any(i.get('key') == item.get('key') for i in (p.get('items') or []))
+        funnel.mark_place(store, {**item, 'order_band': 2, 'deferred': False} if pulled else item)
         record_related(store, tid, item, 'assistant', say + (f"\nOPTIONS: {' | '.join(options)}" if options else ''),
                        card_for(item) | {'chips': chips})
     return {'item': item | {'chips': chips}, 'say': say, 'options': options, 'chips': chips, 'left': len(p['items']) - 1}

@@ -173,3 +173,16 @@ def test_a_step_put_down_never_walks_back_up_to_its_goal():
     assert keys(below(items, items, None, place, at_key='task:9')) == ['report:1'], 'the walk went back up to the goal above the step'
     again = {'key': 'msg:3', 'lane': 'yours', 'kind': 'todo', 'order_band': 2, 'arrived_at': at}
     assert keys(below([again], [again], None, place, at_key='task:9')) == ['msg:3'], "the place's own row under a key with no number was lost"
+
+
+def test_a_closed_task_opened_by_name_walks_on_from_its_row_in_tasks(db):
+    """The 2026-10-25 sweep: Mark done on the first task, then "open TQ-0001" - the page draws the closed task in Tasks, where it was (a task
+    pulled from outside the pile, funnelPile.pulledRow), but the walk's place was keyed by its lane, fyi, so Next jumped past every task and
+    report still below it to the fyi batch."""
+    store, tids = db
+    first = next(i for i in rail(store) if i.get('tid') == tids[0])
+    concierge.surface(store, first['key'])
+    store.update_task(tids[0], {'Status': 'done'}, 'owner'); funnel.settle(store, first['key'], 'done', 'owner'); funnel.invalidate()
+    concierge.surface(store, f'task:{tids[0]}')                 # opened again by name, closed
+    out = concierge.surface(store, leaving=f'task:{tids[0]}')
+    assert out['item'] and out['item'].get('tid') == tids[1], f"Next from the closed task went to {out['item'] and out['item'].get('title')}"

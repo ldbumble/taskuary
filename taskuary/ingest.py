@@ -640,8 +640,8 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     project = context_for_message(store, msg)
     from .triage import job_doc
     intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), job=job_doc(store), thread=thread, seen=carried,
-                             # "How you sort mail" and nothing else - press habits never reach triage (the owner, 2026-10-23)
-                             learned=learned_cut.for_reader(store, 'triage', learned_cut.about_mail(msg)),
+                             # "What you care about", learned from sorting verdicts - presses never reach triage (the owner, 2026-10-23)
+                             learned=learned_cut.for_reader(store, 'triage', learned_cut.about_mail(msg), target=f"mail:{msg.get('external_id') or ''}"),
                              notes=notes, notes_left=notes_left, images=msg.get('images'),
                              system=store.doc('triage'), mine=me,
                              # a scheduled report carries its own brief - what the owner

@@ -109,7 +109,7 @@ def _notes(store, o):
 def _learned(store, o):
     # what the owner's verdicts taught (learn.injectable: promoted lines only, never a hypothesis) - the event pass read it, the
     # clock pass never did (2026-10-12). The seed is headings and placeholders: a document with no line yet says nothing.
-    # ...its own section, "How you sort mail" (learned_cut.READS) - the press habits are the Advisor's alone (the owner, 2026-10-23)
+    # ...every section: their people, what they care about, how they work, their promises, what to bring up (learned_cut.READS, 2026-10-25)
     from . import learned_cut
     return learned_cut.for_reader(store, 'assistant', budget=o.get('cap')), []
 

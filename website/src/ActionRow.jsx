@@ -74,8 +74,7 @@ export function AdvisorNext({ advice, onPropose }) {
         <div className="tq-next-pop" role="dialog" aria-label="Why the Advisor suggests this">
           <div className="pick">Suggested: <b>{word}</b> - the dark button</div>
           <div className="said">{advice.line}</div>
-          {/* each count in words of what it measures (advisor.says) - a close that held is not an answer to a chase */}
-          {!!advice.says && <div className="fact">{advice.says}</div>}
+
           {/* what it rests on, in words: an evidence id ("out13") or the model's name tells someone who never wrote code nothing */}
           {note === null ? <div className="fact">Reading its notes…</div> : (note.evidence || []).some((e) => e.label) && (
             <div className="rests"><div className="head">What it rests on</div>

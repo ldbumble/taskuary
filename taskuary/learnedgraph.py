@@ -138,12 +138,10 @@ def _resolve(store, ev_id: str) -> dict:
         r = store.get_review(n) or {}
         return {'id': ev_id, 'kind': 'review', 'date': r.get('DecidedAt') or r.get('CreatedAt'),
                 'label': f"{r.get('Status') or 'review'}: {(r.get('Subject') or r.get('Title') or '')[:90]}" if r else ev_id}
-    if kind == 'pr':                       # a press while the Advisor's line was shown (advisor.press): what was lit, what was pressed
+    if kind == 'pr':                       # a press: no line is learned from one any more (2026-10-25), but a retired line still cites it
         r = store._one('SELECT * FROM advice_press WHERE Id=?', (n,)) or {}
-        from .learn import moment
         return {'id': ev_id, 'kind': 'press', 'date': r.get('CreatedAt'),
-                'label': f"pressed {r.get('Pressed')} on {moment(r.get('ItemKind'), r.get('Channel'), r.get('Scope') or '?')}"
-                         + (f" (the Advisor lit {r['Advised']})" if r.get('Advised') and r.get('Advised') != r.get('Pressed') else '') if r else ev_id}
+                'label': f"pressed {r.get('Pressed')} on an item from {r.get('Scope') or '?'}" if r else ev_id}
     if kind == 'out':
         r = store._one('SELECT * FROM outcome WHERE Id=?', (n,)) or {}
         return {'id': ev_id, 'kind': 'outcome', 'date': r.get('ResolvedAt') or r.get('At'),
@@ -161,8 +159,8 @@ def graph(store) -> dict:
     doc = store.get_doc('learned') or ''
     ls, log = lines(doc), reflect_log(store)
     hist, named = store.learned_history(), _named(store)
-    from .learnedlines import reader_of, rows as line_rows
-    from .learned_cut import over_budget
+    from .learnedlines import section_of, rows as line_rows
+    from .learned_cut import over_budget, readers_of
     rows, over = {r['Key']: r for r in line_rows(store)}, over_budget(store)
     by_key = {}
     for h in hist: by_key.setdefault(h['Key'], []).append(h)
@@ -188,7 +186,7 @@ def graph(store) -> dict:
         # budget left it out - the data the memory list's Keep / Wrong / Forget (phase D) hangs on
         out.append({**l, 'text': named(l.get('text')), 'evidence': evs, 'steps': steps, 'effective': eff,
                     'eligible': l['status'] == 'hypothesis' and eff >= PROMOTE_AT and len(dated) >= 3 and len(people) >= 2,
-                    'reads': reader_of(l), 'standing': r.get('Status') or ('in_use' if l['status'] == 'live' else 'watching'),
+                    'reads': ', '.join(readers_of(section_of(l))), 'section_slug': section_of(l), 'standing': r.get('Status') or ('in_use' if l['status'] == 'live' else 'watching'),
                     'in_use_at': r.get('InUseAt'), 'over_budget': over.get(l['key'], [])})
     live_keys = {l['key'] for l in ls}
     deleted = []
@@ -222,11 +220,12 @@ def soul_rules(store, limit: int = 5) -> list:
 SAYS = {'born': 'New guess', 'strengthened': 'Seen again', 'promoted': 'Now a rule', 'demoted': 'Weaker',
         'merged': 'Merged into a line that says the same', 'faded': 'Faded - nothing confirmed it for a while', 'deleted': 'Removed',
         'back': 'Back', 'edited': 'Reworded by you', 'forgotten': 'Removed by you - stays removed', 'withdrawn': 'Withdrawn - its note was switched off',
-        'watching': 'Back to watching - you pressed otherwise twice in a row', 'moved': 'Moved to STYLE.md - the drafter reads it there'}
+        'watching': 'Back to watching', 'moved': 'Moved to STYLE.md - the drafter reads it there',
+        'retired': 'Retired - a count of button presses, not how you work', 'closed': 'No longer true - kept as history'}
 
 
 def _named(store):
-    """A line as the owner reads it: LEARNED.md keeps {{owner_first}} where the name goes (learn.moves writes it so), and the
+    """A line as the owner reads it: LEARNED.md keeps {{owner_first}} where the name goes (the passes write it so), and the
     What changed list showed "{{owner_first}} presses Next" raw (the UI audit, 2026-10-21)."""
     from .store import render_doc
     who = store.owner()

@@ -32,7 +32,7 @@ def _blocks_triage(store, msg: dict, mid: int) -> list:
     how = addressed_to_you(m, mine)
     out = [('the classifier instructions', 'TRIAGE.md' if doc.strip() else 'triage.INTENT_SYSTEM (the doc is blank)', base)]
     if soul: out.append(("the operator's document", 'SOUL.md', soul[:2500]))
-    if learned: out.append(('the learned profile', 'LEARNED.md "How you sort mail" (in-use lines, closest to this sender first, within budget)', learned))
+    if learned: out.append(('the learned profile', 'LEARNED.md "What you care about" (in-use lines, closest to this sender first, within budget)', learned))
     if notes:
         out.append(('standing notes that apply to THIS message', f'memory table - {len(notes)} of '
                     f'{len(notes) + left} applied, ranked by ingest.relevant_notes',

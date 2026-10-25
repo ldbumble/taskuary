@@ -314,6 +314,29 @@ def test_the_built_in_one_is_an_ordinary_dashboard_edited_and_kept_like_any_othe
     assert json.loads(s.get_source(row['SourceId'])['ConfigJson'])['components'] == got['components']
 
 
+def test_an_s3_source_on_a_dashboard_reads_its_object_path_and_keeps_its_own_name():
+    """A dashboard source's `key` is its name (what a component reads); an S3 executor reads `key` as the object path. On a dashboard
+    the path is `object_key`, handed over as the executor's `key`; a dashboard saved with the path in `key` itself still reads it."""
+    from unittest import mock
+    seen, real = [], reports.executor_for
+    def s3(cfg): seen.append(dict(cfg)); return 'ok', '{"day": "%s", "file": "a.csv"}\n{"day": "%s", "file": "b.csv"}' % (_day(0), _day(1))
+    spec = {'type': 'dashboard', 'title': 'Exports',
+            'sources': [{'key': 's1', 'label': 'Exports', 'type': 's3_object', 'bucket': 'northwind-exports', 'object_key': 'reports/latest.jsonl', 'date': 'day'},
+                        {'key': 'reports/old.jsonl', 'label': 'Old', 'type': 's3_object', 'bucket': 'northwind-exports'},      # saved before object_key
+                        {'key': 'listing', 'label': 'Listing', 'type': 's3_object', 'bucket': 'northwind-exports', 'prefix': 'reports/'}],
+            'components': [{'kind': 'stat', 'title': 'Files', 'source': 's1', 'agg': 'count'}]}
+    with mock.patch.object(reports, 'executor_for', lambda t: s3 if t == 's3_object' else real(t)), \
+         mock.patch.object(reports, 'gate', lambda store, sub: None), mock.patch.object(reports, 'resolve_cfg', lambda store, cfg: cfg):
+        data = dashboards.collect(MemoryStore(), spec)
+    assert [c.get('key') for c in seen] == ['reports/latest.jsonl', 'reports/old.jsonl', None]      # the listing reads no object
+    assert all('object_key' not in c for c in seen) and seen[2]['prefix'] == 'reports/'
+    assert list(data['sources']) == ['s1', 'reports/old.jsonl', 'listing'] and len(data['sources']['s1']['rows']) == 2
+    assert dict(dashboards.headline(spec, data)) == {'Files': '2'} and not dashboards.problems(spec, data)
+    # ...any other type only loses its name (no other executor reads a `key`), and a report never passes through run_cfg at all
+    assert dashboards.run_cfg({'type': 'rest', 'key': 'tasks', 'url': 'https://api.example.com'}) == {'type': 'rest', 'url': 'https://api.example.com'}
+    assert 'object_key' in compose.dashboard_system()
+
+
 def test_the_editors_dataset_picker_lists_every_dataset_the_server_serves():
     words = json.loads(Path(dashboards.__file__).with_name('words.json').read_text(encoding='utf-8'))
     assert set(words['dashboard']['datasets']) == set(dashboards.DATASETS)

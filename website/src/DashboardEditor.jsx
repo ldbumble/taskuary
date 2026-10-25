@@ -14,8 +14,8 @@ import api from "./api";
 import Composer from "./Composer.jsx";
 import Dashboard from "./dashboard/Dashboard.jsx";
 import { RANGES } from "./dashboard/slice.js";
-import { BINDS, MAX_COMPONENTS, MAX_SOURCES, freshKey, orphans, sigOf, whereOf, whereText, windowOf, withField, withKind, withWindow } from "./dashboard/setup.js";
-import { SourceCard } from "./ReportsView.jsx";
+import { BINDS, MAX_COMPONENTS, MAX_SOURCES, OWN_KEYS, runCfg, freshKey, orphans, sigOf, whereOf, whereText, windowOf, withField, withKind, withWindow } from "./dashboard/setup.js";
+import { SourceCard, SourceTest } from "./ReportsView.jsx";
 import { WORKFLOW_TYPES } from "./sourceShape.js";
 import { SchedulePicker, scheduleOf, withSchedule } from "./WorkflowEditor.jsx";
 import { removeNow } from "./Removed.jsx";
@@ -275,9 +275,11 @@ export default function DashboardEditor({ sourceId = null, draft = null, types =
             onDropHere={() => move("sources", setSrcs, i)}
             onChange={(patch) => setSrcs((cur) => cur.map((x, k) => (k === i ? { ...x, ...patch } : x)))}
             onRetype={(t) => setSrcs((cur) => cur.map((x, k) => (k === i ? { type: t, key: x.key, label: x.label } : x)))}
-            onFill={(one) => setSrcs((cur) => cur.map((x, k) => (k === i ? { ...one, key: x.key, label: one.label || x.label, date: one.date || x.date } : x)))}
+            onFill={(one) => setSrcs((cur) => cur.map((x, k) => (k === i ? { ...one, ...(OWN_KEYS[one.type] && one.key ? { [OWN_KEYS[one.type].key]: one.key } : {}),
+              key: x.key, label: one.label || x.label, date: one.date || x.date } : x)))}
             onCopy={srcs.length < MAX_SOURCES ? () => setSrcs((cur) => [...cur.slice(0, i + 1), { ...s, key: freshKey(cur), label: `${s.label || s.type} copy` }, ...cur.slice(i + 1)]) : undefined}
             onRemove={() => setSrcs((cur) => cur.filter((_, k) => k !== i))}
+            renames={OWN_KEYS[s.type] || {}} test={<SourceTest src={runCfg(s)} />}
             extra={<ColumnField label={DASH.date} value={s.date} cols={columns[s.key] || []}
               onChange={(v) => setSrcs((cur) => cur.map((x, k) => (k === i ? withField(x, "date", v) : x)))} />} />
         ))}

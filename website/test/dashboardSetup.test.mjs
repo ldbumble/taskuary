@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { BINDS, freshKey, orphans, sigOf, whereOf, whereText, windowOf, withField, withKind, withWindow } from "../src/dashboard/setup.js";
+import { BINDS, OWN_KEYS, runCfg, freshKey, orphans, sigOf, whereOf, whereText, windowOf, withField, withKind, withWindow } from "../src/dashboard/setup.js";
 import { DASH } from "../src/words.js";
 
 const src = (p) => readFileSync(new URL(`../src/${p}`, import.meta.url), "utf8");
@@ -47,9 +47,21 @@ test("a new source gets a key no other wears; a component reading a gone source 
   assert.equal(sigOf(spec), sigOf({ ...spec, components: [] }), "a component edit is not a source edit: the same rows redraw");
 });
 
+test("an S3 source on a dashboard keeps its path as object_key: its card's field and its Test hand the executor its key", () => {
+  const s = { key: "s1", label: "Exports", type: "s3_object", bucket: "northwind-exports", object_key: "reports/latest.jsonl", date: "day" };
+  assert.deepEqual(runCfg(s), { label: "Exports", type: "s3_object", bucket: "northwind-exports", key: "reports/latest.jsonl", date: "day" });
+  assert.equal(runCfg({ key: "reports/old.jsonl", type: "s3_object", bucket: "b" }).key, "reports/old.jsonl", "a path an older save kept in key");
+  assert.equal(runCfg({ key: "listing", type: "s3_object", bucket: "b", prefix: "reports/" }).key, undefined, "a listing reads no object");
+  assert.deepEqual(runCfg({ key: "tasks", type: "taskuary_data", dataset: "tasks" }), { type: "taskuary_data", dataset: "tasks" });
+  const ed = src("DashboardEditor.jsx"), rv = src("ReportsView.jsx");
+  assert.match(ed, /renames=\{OWN_KEYS\[s\.type\] \|\| \{\}\} test=\{<SourceTest src=\{runCfg\(s\)\} \/>\}/);
+  assert.match(rv, /\.map\(\(\[l, key, \.\.\.rest\]\) => \[l, renames\[key\] \|\| key, \.\.\.rest\]\)/);
+  assert.deepEqual(OWN_KEYS, { s3_object: { key: "object_key" } }, "dashboards.OWN_KEYS says the same");
+});
+
 test("the editor lays its sources out as a report does, and every dashboard - the built-in one too - has the same editor", () => {
   const ed = src("DashboardEditor.jsx"), rv = src("ReportsView.jsx");
-  assert.match(ed, /import \{ SourceCard \} from "\.\/ReportsView\.jsx";/, "a report's own source cards, not a second kind");
+  assert.match(ed, /import \{ SourceCard, SourceTest \} from "\.\/ReportsView\.jsx";/, "a report's own source cards, not a second kind");
   assert.match(ed, /<Section title=\{DASH\.sources\}[\s\S]*<SourceCard [\s\S]*<Section title=\{DASH\.shows\}[\s\S]*<ComponentCard /);
   assert.doesNotMatch(ed, /Owner|template'/, "nothing in the editor tells the built-in one apart");
   assert.match(rv, /<DashboardEditor [^\n]*types=\{types\} connectors=\{connectors\}/);

@@ -1957,7 +1957,7 @@ function IntacctFields({ object, connectorId, onPick }) {
 /* "What does this actually return?" - answerable on the card now, before the whole pipeline is
    assembled and without the AI pass in the way. The wizard's own Test showed the HEADLINE only
    ("12 items"), which is the one thing you can already guess; the rows are the question. */
-function SourceTest({ src }) {
+export function SourceTest({ src }) {
   const [out, setOut] = useState(null);
   const [busy, setBusy] = useState(false);
   const run = async () => {
@@ -2002,13 +2002,15 @@ function SourceTest({ src }) {
 const FILE_FIELD_FOR = { tail: ['', '.log', '.txt', '.md', '.out', '.err'], sheet: ['.xlsx'],
   path_expr: ['.json'] };
 
+/* `renames` is a dashboard's: a source's `key` is its own name there, so an S3 card's object path is kept as `object_key`
+   (dashboard/setup.js OWN_KEYS) and its Test hands the executor the config it will really run with. */
 /* `removable` is the Assistant's case: every one of its own sources can go, including the last,
    because zero of them is a valid Assistant - a report with zero sources is not a report. */
 /* `bare` is a workflow step's card (WorkflowSteps): the step is the frame and carries its own number, label and remove, and
    `test` is its Test this step in place of the card's own preview. */
 export function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDragStart, onDragEnd,
                       onDropHere, onChange, onRetype, onCopy, onRemove, onFill, removable = count > 1,
-                      writeEnabled = false, bare = false, test = null, extra = null }) {
+                      writeEnabled = false, bare = false, test = null, extra = null, renames = {} }) {
   const fields = (FIELDS[src.type] || []).filter(([, key]) => {
     if (key === "ai_prompt") return false;
     if (src.type !== "local_file") return true;
@@ -2019,7 +2021,7 @@ export function SourceCard({ src, index, count, typeOptions, connectors, draggin
     const dot = path.lastIndexOf(".");
     const suffix = dot > path.lastIndexOf("/") && dot > path.lastIndexOf("\\") ? path.slice(dot).toLowerCase() : "";
     return only.includes(suffix);
-  });
+  }).map(([l, key, ...rest]) => [l, renames[key] || key, ...rest]);   // a field a caller keeps under another name (a dashboard's S3 path)
   const cardType = CARD_OF[src.type] || src.type;
   const matching = connectors.filter((c) => c.Type === cardType);
   const conn = matching.find((c) => c.ConnectorId === Number(src.connector_id))

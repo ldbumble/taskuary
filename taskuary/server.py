@@ -5926,7 +5926,7 @@ def brains():
             for o in hub_agents.cli_agent_options(store, preferred=preferred)]
     # An API provider with no key cannot be picked, and fifteen greyed rows made the menu taller than the page with
     # the CLIs at the bottom (the owner, 2026-09-24: "drop down is too big"). One already in use stays listed.
-    used = {str(settings.get(k) or '') for k in ('triage_ai', 'triage_backup_ai', 'concierge_ai', 'assistant_ai', 'judge_ai')}
+    used = {str(settings.get(k) or '') for k in ('triage_ai', 'triage_backup_ai', 'concierge_ai', 'assistant_ai', 'judge_ai', 'draft_ai')}
     out = [o for o in out if o['kind'] != 'api' or o['ready'] or o['value'] in used]
     current = store.get_setting('triage_ai') or ''
     # Old settings named a type (connector:anthropic). Keep accepting that in llm.py, but

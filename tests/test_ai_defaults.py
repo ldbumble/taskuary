@@ -229,9 +229,10 @@ class ApiTests(unittest.TestCase):
         j = c.get('/api/ai/defaults').json()
         # one worker, one row: the general agent joined on 2026-09-16, because the page that exists
         # to say what will run was silent about the brain half the board's tasks use, and the judge
-        # on 2026-09-17, because where a finished run goes is a fifth thing an AI decides
+        # on 2026-09-17, because where a finished run goes is a fifth thing an AI decides, and Drafting on 2026-10-25, because
+        # every reply was written by the triage brain and no card said so
         self.assertEqual([s['key'] for s in j['slots']],
-                         ['triage_ai', 'default_brain', 'concierge_ai', 'assistant_ai', 'judge_ai'])
+                         ['triage_ai', 'draft_ai', 'default_brain', 'concierge_ai', 'assistant_ai', 'judge_ai'])
         for s in j['slots']:
             self.assertTrue(s['label'] and s['desc'] and s['why'])     # every row explains itself
             for k in ('model', 'effort', 'choices', 'efforts', 'owner', 'note'): self.assertIn(k, s)

@@ -201,9 +201,18 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
 // view itself (the steps box is an inline-size container), so the canvas beside the rail and the Tasks tab's pane each decide
 // by their own width, not the window's
 // ...one surface: no box round From, a hairline between the columns (the owner, 2026-10-22: "still so messy")
+// ...and HEIGHT FOLLOWS THE WORK (the task-view cleanup, owner-approved 2026-10-25: "messy and not clear what's next", a message ask
+// made the card too big): side by side from 760px, From clamp(300px, 36%, 520px) so prose keeps a measure at 1920; the card is as tall
+// as its content up to the canvas, each column its own one scroller, and a thread never scrolls inside a column. From may run to
+// max(1.5x the work, 420px) before it scrolls on its own (--tq-work-h, the work column measured), so Show all on a burst does not
+// stretch a short reply's card to the canvas
 const COLUMNS = { display: "grid", gridTemplateColumns: "minmax(0, 1fr)", rowGap: 2, alignItems: "stretch",
-  "@container (min-width: 720px)": { gridTemplateColumns: "minmax(0, 5fr) minmax(0, 7fr)",
-    "& > [data-tq-from]": { pr: 2.5 }, "& > [data-tq-work]": { pl: 2.5, borderLeft: `1px solid ${BORDER}` } } };
+  "@container (min-width: 760px)": { gridTemplateColumns: "minmax(0, clamp(300px, 36%, 520px)) minmax(0, 1fr)", gridTemplateRows: "minmax(0, 1fr)",
+    flex: "0 1 auto", minHeight: 0,
+    "& > [data-tq-from], & > [data-tq-work]": { minHeight: 0, overflowY: "auto", scrollbarWidth: "thin", overscrollBehaviorY: "contain" },
+    "& > [data-tq-from]": { pr: 2.5, maxHeight: "max(420px, calc(var(--tq-work-h, 280px) * 1.5))" },
+    "& > [data-tq-from] [data-tq-chat-thread], & > [data-tq-from] [data-tq-thread-box]": { maxHeight: "none", overflowY: "visible" },
+    "& > [data-tq-work]": { pl: 2.5, borderLeft: `1px solid ${BORDER}` } } };
 // FROM AS A SIDEBAR while an agent works (item 6, the owner 2026-10-21): laid OVER the agent's left edge - absolutely placed in the steps
 // box, so nothing under it moves or resizes - from under the folded line to the foot, scrolling on its own
 const FROM_SIDE = (top) => ({ position: "absolute", top, left: 0, bottom: 0, width: "min(420px, 88%)", zIndex: 6, overflowY: "auto",
@@ -1322,6 +1331,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // on screen"): on the canvas the folded Task strip scrolls above the view, so "2 Agent work" sits under the title and the chat
   // fills the rest (its box is sized for exactly that, below). Task is one scroll up, Close out one scroll down.
   const stepsBox = useRef(null), agentHead = useRef(null);
+  // the work column's own height, for From's cap beside it (COLUMNS --tq-work-h): its content, never the row - the row is From's too,
+  // and a cap read off it would grow by half again on every measure - set on the columns box as it changes
+  const columnsBox = useRef(null), workBox = useRef(null);
+  useLayoutEffect(() => {
+    const w = workBox.current, c = columnsBox.current;
+    if (!w || !c || typeof ResizeObserver === "undefined") return undefined;
+    const put = () => { const last = w.lastElementChild;
+      c.style.setProperty("--tq-work-h", `${last ? Math.round(last.getBoundingClientRect().bottom - w.getBoundingClientRect().top + w.scrollTop) : 0}px`); };
+    const ro = new ResizeObserver(put); put();
+    [...w.children].forEach((k) => ro.observe(k)); ro.observe(w);
+    return () => ro.disconnect();
+  });
   // ON THE CANVAS THE CHAT'S OWN STRIP RIDES IN THIS STEP'S HEADING: a row for "Agent work" and a second for the agent's name, its
   // brain and Full screen took two lines off the answer (the owner, 2026-10-18: "make the agent space take up more space")
   const [chatTools, setChatTools] = useState(null);
@@ -1749,7 +1770,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {/* TWO COLUMNS, ALWAYS OPEN (the task page redesign, owner-approved 2026-10-21): what it came FROM on the left, the WORK
                     or the reply on the right - they replace the Task / Agent work / Close out accordion. A narrow view stacks them. While
                     an agent works, has finished or has failed (wide), the work takes the whole width and From folds to the one line above it. */}
-                <Box data-tq-columns="" data-tq-layout={layout} sx={wide ? { display: "contents" } : COLUMNS}>
+                <Box ref={columnsBox} data-tq-columns="" data-tq-layout={layout} sx={wide ? { display: "contents" } : COLUMNS}>
                 {(!wide || fromSide) && (
                   <Box data-tq-from="" data-tq-task-section="" data-tq-from-open={fromOpen ? "" : undefined} data-tq-from-side={wide ? "" : undefined}
                     id={wide ? "tq-from-side" : undefined} role={wide ? "complementary" : undefined} aria-label={wide ? "From" : undefined}
@@ -1877,7 +1898,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                     thread as every row, each opening its letter. Each scrolls in its own box, so one long thread cannot bury the next. */}
                                 <Box sx={{ mt: 0.5, minWidth: 0 }}>
                                   {showAll && isChat(g.channel) ? <ChatThread messages={g.msgs} maxHeight={THREAD_MAX} />
-                                    : <Box sx={showAll ? { maxHeight: THREAD_MAX, overflowY: "auto", minWidth: 0 } : undefined}>
+                                    : <Box data-tq-thread-box="" sx={showAll ? { maxHeight: THREAD_MAX, overflowY: "auto", minWidth: 0 } : undefined}>
                                         <ConversationRows rows={fromRows(g, 3, showAll)} open={shownMsg} onOpen={(f) => setOpenMsg(f(shownMsg))} narrow
                                           onExpand={() => setShowAll(true)} files={sourceFiles} fetchFor={fetchFor} /></Box>}
                                 </Box>
@@ -1933,7 +1954,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   </Box>
                 )}
                 {/* THE WORK COLUMN: the agent and the reply - the agent's own pane, full width while it works */}
-                <Box data-tq-work="" sx={sessionView ? { display: "contents" } : { minWidth: 0, display: "flex", flexDirection: "column" }}>
+                <Box ref={workBox} data-tq-work="" sx={sessionView ? { display: "contents" } : { minWidth: 0, display: "flex", flexDirection: "column" }}>
                 {/* ONE SHORT LINE, LIVE OR NOT. A running session has always been a single strip -
                     heading, chip, controls - while the stopped card answered with a heading, a
                     sentence under it, and a row of buttons under that: three lines for the same

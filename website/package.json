@@ -13,6 +13,7 @@
     "test:walk": "node --test browser/deadends.test.mjs",
     "check:deadends": "node deadend_check.mjs",
     "test:browser:terminal": "node --test browser/terminal-replay.test.mjs",
+    "test:browser:task-layout": "node --test --test-concurrency=1 browser/task-page.test.mjs browser/task-responsive.test.mjs browser/row-one-line.test.mjs",
     "lint:undef": "eslint -c eslint.undef.mjs src/*.jsx src/*.js"
   },
   "dependencies": {

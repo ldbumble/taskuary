@@ -151,12 +151,12 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tr>
 <td><strong>app</strong></td>
 <td>settings, connections, roles, scripts and kept facts</td>
-<td>setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, script.start(name), memory.remember(note), people.relate(who), hub.publish(title, body, topic?, kind?, why_earned?)</td>
+<td>setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), script.start(name), memory.remember(note), people.relate(who), hub.publish(title, body, topic?, kind?, why_earned?)</td>
 </tr>
 <tr>
 <td><strong>look</strong></td>
 <td>look-ups - they run at once and change nothing</td>
-<td>app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, agents.list, repos.list, tools.list, tools.describe, knowledge.search</td>
+<td>app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search</td>
 </tr>
 </tbody></table>
 <p>A task you name goes in <code>ref</code> (&quot;TQ-0123&quot;); otherwise the tool acts on what is on the table.</p>
@@ -537,7 +537,13 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <ul>
 <li><code>name</code></li>
 </ul>
-<p class="runs">Brings up its button for you to press.</p><h3 id="script-start"><code>script.start</code><a class="anchor" href="#script-start" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="app-repair"><code>app.repair</code><a class="anchor" href="#app-repair" aria-label="Link to this section">#</a></h3>
+<p>Run the simple repair app.health named for a part of Taskuary, then read it again.</p>
+<ul>
+<li><code>name</code> - the connection</li>
+<li><code>how</code> - restart_bridge (the WhatsApp bridge this computer runs), sync or test, as app.health said</li>
+</ul>
+<p class="runs">Runs at once and says what it changed.</p><h3 id="script-start"><code>script.start</code><a class="anchor" href="#script-start" aria-label="Link to this section">#</a></h3>
 <p>Start a script by its name: walk me through my tasks | set up a report.</p>
 <ul>
 <li><code>name</code></li>
@@ -670,6 +676,11 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <ul>
 <li><code>name</code> - part of its name (or <code>connector_id</code>)</li>
 </ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="app-health"><code>app.health</code><a class="anchor" href="#app-health" aria-label="Link to this section">#</a></h3>
+<p>Why a part of Taskuary itself is not working, read now - the connection, the WhatsApp bridge asked directly, its log, the last sync and error - and the simple repair it has, if any.</p>
+<ul>
+<li><code>name</code> (optional) - the connection (whatsapp, telegram, outlook...), or none for everything failing</li>
+</ul>
 <p class="runs">Runs at once and changes nothing.</p><h3 id="agents-list"><code>agents.list</code><a class="anchor" href="#agents-list" aria-label="Link to this section">#</a></h3>
 <p>The agents and profiles, and which brain answers which job.</p>
 <p class="runs">Runs at once and changes nothing.</p><h3 id="repos-list"><code>repos.list</code><a class="anchor" href="#repos-list" aria-label="Link to this section">#</a></h3>
@@ -692,7 +703,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">Runs at once and changes nothing.</p>
     </article>
     <nav class="pager"><a class="pn prev" href="./assistant"><span>Previous</span>Assistant buttons</a><a class="pn next" href="./reports"><span>Next</span>Reports and the Advisor</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.33 · updated 2026-10-24</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.34 · updated 2026-10-24</p>
   </main>
 </div>
 <script src="./docs.js"></script>

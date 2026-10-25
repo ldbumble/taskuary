@@ -115,6 +115,8 @@ ACTIONS = {
     'create': 'write', 'update': 'write', 'comment': 'write', 'reply': 'write',
     'send': 'write', 'notify': 'write', 'assign': 'write', 'complete': 'write',
     'upload': 'write', 'push': 'write',
+    # the trackers' write-back (trackers.py): the everyday work on an item - and every one of them reaches people (REACHES below)
+    **{f'{t}_{v}': 'write' for t in ('jira', 'monday', 'linear') for v in ('comment', 'move', 'assign', 'close')},
     # GraphQL posts the query to the endpoint - and the same POST carries a mutation, so it is
     # not a read by construction the way run_rest's GET-only request is.
     'graphql': 'write',
@@ -133,6 +135,7 @@ ACTIONS = {
 FULL = 'admin'
 DEFAULT_SCOPE = {}                     # no per-type exceptions; kept as the /api/scopes shape
 
+_TRACKERS = {'jira': 'Jira', 'monday': 'Monday', 'linear': 'Linear'}
 # WHAT REACHES A PERSON (the owner, 2026-10-25: "never send without approval, for now"). Each executor here puts words in front of
 # somebody, publishes under the owner's name or moves money. An AGENT's call to one never runs at any Authority - full included - it
 # waits as a run_tool proposal on the agent's own task, and the owner's press runs it (server.tool_run). The owner's own calls are
@@ -145,6 +148,12 @@ REACHES = {
     # these two reach whatever the far side does with them, so the call itself decides (reaches below)
     'mcp': "runs a tool its server does not mark read-only - it may send, post or comment",
     'graphql': 'runs a GraphQL mutation - it may post a comment or change a record somebody reads',
+    # A TRACKER ITEM IS A CONVERSATION (2026-10-25): a comment is read by everyone on it, and a move, an assignment or a close is what
+    # Jira, Monday and Linear each tell the people following it - so none is a quiet write, and an agent's always waits for the press
+    **{f'{t}_comment': f'posts a comment on a {n} item - everyone on it reads it' for t, n in _TRACKERS.items()},
+    **{f'{t}_move': f'moves a {n} item to another status - {n} tells the people following it' for t, n in _TRACKERS.items()},
+    **{f'{t}_assign': f'assigns a {n} item to somebody - {n} tells them' for t, n in _TRACKERS.items()},
+    **{f'{t}_close': f'moves a {n} item to done - {n} tells the people following it' for t, n in _TRACKERS.items()},
 }
 # ...and the writes that reach nobody, named, so every executor is a decision (test_scopes walks reports.REGISTRY): a file saved, a
 # bill posted to the books, the Hub. Each keeps the card's Authority, per the owner's 2026-10-05 ruling. A file is not a message

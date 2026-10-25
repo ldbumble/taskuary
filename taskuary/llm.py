@@ -368,6 +368,10 @@ def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None
         brainroute.outcome(store, rid, f'refused:{type(e).__name__}' if isinstance(e, (origin.RefusedForStranger, origin.Refusal)) else 'error'); raise
     if brain is None: brainroute.outcome(store, rid, 'error' if r.pick else 'refused:no AI')
     elif getattr(brain, 'is_failover', False): brain.route = (store, rid)
+    # Auto mode: a one-shot job whose answer comes back unreadable or unsure may ask a strong model ONCE (brainroute.step_up)
+    if brain and r.escalate:
+        brain = _StepUp(brain, lambda why: brainroute.step_up(store, r, rid, task_id, why, lambda p: _scrub(_build_llm(
+            store, p, None, trace, cancel, None, cli_tools, extra_env, research, fallback_user, 'strong', None, task_id, backups=[]))))
     return _Scrubbed(brain) if brain else brain
 
 
@@ -422,6 +426,23 @@ class _Scrubbed:
     def __init__(self, brain): object.__setattr__(self, '_brain', brain)
     def __call__(self, system, user, *a, **kw):
         return self._brain(redact.scrub(system), redact.scrub(user), *a, **kw)
+    def __getattr__(self, k): return getattr(object.__getattribute__(self, '_brain'), k)
+    def __setattr__(self, k, v): setattr(object.__getattribute__(self, '_brain'), k, v)
+
+
+def _scrub(brain): return _Scrubbed(brain) if brain else brain
+
+
+class _StepUp:
+    """A one-shot brain that may ask a stronger one once (the router's escalation, Auto mode only). It answers exactly as the brain
+    it wraps; `step_up(why)` is what ask_json calls when the answer could not be used - it returns the strong brain, or None when
+    there is none, the day's cap is spent, or this item already stepped up once."""
+    is_step_up = True
+    def __init__(self, brain, up): object.__setattr__(self, '_brain', brain); object.__setattr__(self, '_up', up)
+    def __call__(self, *a, **kw): return self._brain(*a, **kw)
+    def step_up(self, why: str):
+        up = object.__getattribute__(self, '_up'); object.__setattr__(self, '_up', lambda why: None)    # once per brain built
+        return up(why)
     def __getattr__(self, k): return getattr(object.__getattribute__(self, '_brain'), k)
     def __setattr__(self, k, v): setattr(object.__getattribute__(self, '_brain'), k, v)
 
@@ -578,12 +599,28 @@ def ask_json(brain, system: str, user: str, want: dict = None, need=(), **kw) ->
     if want is not None and carries: kw['want'] = want
     def short(a): return [k for k in need if not (a.data or {}).get(k)] if carries is False else []
     first = ask(user)
-    if first.data is not None and not short(first): return first
+    if first.data is not None and not short(first): return _stepped(brain, system, user, want, need, kw, first)
     again = (f"\n\nYour last answer left out: {', '.join(short(first))}. Answer the whole JSON object "
              'again, including those.' if first.data is not None
              else '\n\nAnswer with the JSON object only - no prose, no code fence.')
     second = ask(user + again)
-    return second if second.data is not None and not short(second) else (second if second.data is not None else first)
+    out = second if second.data is not None and not short(second) else (second if second.data is not None else first)
+    return _stepped(brain, system, user, want, need, kw, out)
+
+
+def _stepped(brain, system, user, want, need, kw, out: JsonAnswer) -> JsonAnswer:
+    """An answer still unreadable after its own retry, or one the model said it was not sure of, is asked ONCE of a strong model -
+    where the owner turned that on (brainroute's 'unsure' rule, Auto mode). These jobs only read and write, so asking again cannot
+    act twice; a strong answer that is no better leaves the first one standing."""
+    if getattr(brain, 'is_step_up', False) is not True: return out      # said out loud: a stand-in brain answers any attribute
+    up = brain.step_up
+    bad = out.data is None or any(not out.data.get(k) for k in need)
+    unsure = not bad and out.data.get('sure') is False
+    if not (bad or unsure): return out
+    strong = up('unsure' if unsure else 'unreadable')
+    if strong is None: return out
+    again = ask_json(strong, system, user, want=want, need=need, **{k: v for k, v in kw.items() if k != 'want'})
+    return again if again.data is not None and not any(not again.data.get(k) for k in need) else out
 
 
 def retry_wait(last, attempt: int) -> float:

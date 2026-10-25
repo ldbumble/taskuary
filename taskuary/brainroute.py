@@ -24,6 +24,8 @@ from loguru import logger
 JOBS = ('triage', 'draft', 'summary', 'advisor', 'memory', 'rank', 'assistant', 'general', 'coding', 'judge', 'report')
 # the one-message jobs: read, judge, write - none of them can act, so asking again cannot do anything twice
 ONE_SHOT = ('triage', 'draft', 'summary', 'advisor', 'memory', 'rank', 'judge', 'report')
+# ...of which these may be asked again of a strong model (a report may research with tools, so it is not one of them)
+ESCALATES = ('triage', 'draft', 'summary', 'judge', 'advisor', 'rank', 'memory')
 # A job with no slot of its own rides the triage brain, as every unnamed build_llm always has (llm.build_llm).
 SLOT_OF = {**{j: 'triage_ai' for j in ONE_SHOT}, 'draft': 'draft_ai', 'general': 'assistant_ai', 'coding': 'default_brain',
            'assistant': 'concierge_ai'}
@@ -170,6 +172,9 @@ DEFAULT_RULES = [
     {'id': 'quick-jobs', 'when': {'job': ['triage', 'rank', 'memory', 'advisor', 'summary']}, 'use': {'tier': 'light'}},
     {'id': 'hard-work', 'when': {'job': ['draft', 'general', 'coding'], 'difficulty': ['hard']}, 'use': {'tier': 'strong'}},
     {'id': 'work', 'when': {'job': ['draft', 'general', 'coding']}, 'use': {'tier': 'standard'}},
+    # an answer that could not be read, or one its model said it was unsure of, is asked once of a strong model - only for the jobs
+    # that read and write; an agent that can act is never re-run by itself (it may have done half its work), it offers a press
+    {'id': 'unsure', 'when': {'job': list(ESCALATES)}, 'use': {'escalate': True}},
 ]
 WHEN_KEYS = ('job', 'difficulty', 'data_class', 'origin', 'person')
 
@@ -251,8 +256,9 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
     rule, tier = ('you chose it' if chosen else 'fixed'), 'fixed'
     if not pick: why = f'{agents.NO_AI}, so {JOB_WORDS[job]} waits'
     else: why = f"{JOB_WORDS[job]} on {_said(store, pick)}{f', {model}' if model else ''}, {'as picked for it' if chosen else 'as its card says'}"
+    f = facts(store, job, task) if pick and mode(store) == 'auto' else {}
     if pick and mode(store) == 'auto' and not want_model and not (job == 'general' and is_dock(task)):
-        f = facts(store, job, task); r = _first(store, f, 'tier')
+        r = _first(store, f, 'tier')
         if r:
             tier, rule, said = r['use']['tier'], r['id'], ''
             if tier == 'strong':
@@ -266,8 +272,10 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
             g, model = GEAR_OF[tier], (model if tier == 'standard' else '')
             hard = f" judged {f['difficulty']}" if 'difficulty' in r['when'] else ''
             why = f"{JOB_WORDS[job]}{hard} -> {tier} on {_said(store, pick)}{f', {model}' if model else ''} (rule {rule}){said}"
+    up = ''
+    if pick and mode(store) == 'auto' and tier != 'strong' and job in ESCALATES and _first(store, f, 'escalate'): up = 'strong'
     return Route(job, tier, pick, model, g, [c for c in chain if c and c != pick], rule, why[0].upper() + why[1:],
-                 (j or {}).get('difficulty', ''), (j or {}).get('data_class', ''))
+                 (j or {}).get('difficulty', ''), (j or {}).get('data_class', ''), up)
 
 
 def for_session(store, task, brain: str = None) -> tuple:
@@ -278,3 +286,31 @@ def for_session(store, task, brain: str = None) -> tuple:
     log(store, r, (task or {}).get('TaskId') if isinstance(task, dict) else task)
     if r.gear != 'strong' or not r.pick.startswith('cli:'): return brain, None
     return r.pick[4:], strong_of(store, r.pick) or None
+
+
+def _stepped_already(store, task_id, job: str) -> bool:
+    if not str(task_id or '').isdigit(): return False
+    return any(x.get('EscalatedFrom') and x.get('Job') == job for x in store.brain_routes(int(task_id), limit=200))
+
+
+def step_up(store, r: 'Route', rid, task_id, why: str, build):
+    """The strong brain for one more try at a one-shot answer that came back `why` ('unreadable' | 'unsure'), or None. Once per
+    item per job; never past the day's cap; the brain's own strong gear first, else the first backup with one. The try is logged
+    with EscalatedFrom, and the first route is marked 'escalated'. `build(pick)` makes the brain on its strong gear."""
+    if not r.escalate or _stepped_already(store, task_id, r.job): return None
+    if not cap_left(store): return None
+    to = next((p for p in [r.pick, *r.chain] if p and strong_of(store, p)), '')
+    if not to: return None
+    try: brain = build(to)
+    except Exception as e:                            # a stranger's task its strong brain refuses stays as the first answer had it
+        logger.debug(f'brainroute: no step up for {r.job} - {e}'); return None
+    if brain is None: return None
+    said = f"{JOB_WORDS[r.job]} came back {why} on {_said(store, r.pick)}, so it was asked once of {_said(store, to)}'s strong model"
+    up = Route(r.job, 'strong', to, '', 'strong', [], 'unsure', said[0].upper() + said[1:], r.difficulty, r.data_class)
+    log(store, up, task_id, escalated_from=rid); outcome(store, rid, 'escalated')
+    return brain
+
+
+def cap_left(store) -> bool:
+    "Whether a strong call is still allowed today. Blank cap (the default) is no cap."
+    return True

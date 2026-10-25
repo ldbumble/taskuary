@@ -2002,7 +2002,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       : answered ? `${agentName(t)} answered`
                       : agentState === AGENT.waiting ? says(subState(term), agentName(t))   /* asked, approval, stuck (T6) */
                         : `${agentName(t)} is working`}
-                    chip={<>{story && STORY_CHIP[story.kind] ? <StoryChip kind={story.kind} text={STORY_CHIP[story.kind]} />
+                    /* ...and once the agent has acted - its Result, or the run that failed - its "stopped" or "failed" chip is the header's pill
+                       again (the owner, 2026-10-25); a working agent's chip stays where it is */
+                    chip={<>{wide && !term?.alive ? null : story && STORY_CHIP[story.kind] ? <StoryChip kind={story.kind} text={STORY_CHIP[story.kind]} />
                       : agentState ? <LifecycleChip kind="agent" phase={agentState} compact /> : null}{resultShown && shareBadge}</>} tone={PALETTE.sage} {...stageProps("agent")}
                     tools={inRow && workspaceMode === "general" && (liveSession || pane === "agent")
                       ? <Box ref={setChatTools} sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }} /> : null}
@@ -2241,11 +2243,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       : owesEmails
                         ? "The emails this task owes - each waits for your yes. Mark done closes the task."
                         : closedLine(t, detail?.closedWhy) || (co.advice ? "Nobody sent this one, so there is nobody to answer. Work it, or write what you found on the task." : CLOSE_BY_HAND)}
-                    chip={emailsWaiting ? <LifecycleChip kind="emails" phase={`${emailsWaiting} waiting`} compact />
-                      : co.chip ? <LifecycleChip kind="reply" phase={replyMessage ? replyState : "not available"} compact /> : null}
-                    /* oxblood is the one colour that means "this is on you" - a draft or an email waiting for your yes. Every card
-                       wore it on this step, whatever it held (the 2026-10-07 design pass) */
-                    tone={pendingReview || emailsWaiting ? PALETTE.oxblood : PALETTE.oat} {...stageProps("reply")}
+                    /* SAID ONCE, IN THE HEADER (the task-view cleanup, owner-approved 2026-10-25): the reply's own pill ("reply · ready to send")
+                       and the oxblood dot said again what the header's pill says - the emails a task owes keep their count, a fact the pill
+                       does not carry */
+                    chip={emailsWaiting ? <LifecycleChip kind="emails" phase={`${emailsWaiting} waiting`} compact /> : null}
+                    tone={PALETTE.oat} {...stageProps("reply")}
                     action={!inRow && pane !== "reply" && replyMessage
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
                           <Button size="small" variant="contained" disableElevation disabled={!!openingReply}

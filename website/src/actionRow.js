@@ -142,7 +142,9 @@ export const ONE_PRESS_MS = 350;
 let lastPress = null;
 export const aimed = (item, e = null, now = Date.now()) => {
   const l = lastPress;
-  if (l && item !== l.item && (Number(e?.detail) > 1 || now - l.at < ONE_PRESS_MS)) return false;
+  // ...a press with nothing on the table (Walk me through my tasks, the opener's own buttons) was aimed at no item, so what comes up after
+  // it was never drawn under another item's press: the walk's first Next is the owner's (walk-again-last-task, 2026-10-25)
+  if (l?.item && item !== l.item && (Number(e?.detail) > 1 || now - l.at < ONE_PRESS_MS)) return false;
   lastPress = { item, at: now };
   return true;
 };

@@ -374,7 +374,11 @@ export const statusLine = (items, busy) => {
 // run whoever is waiting on it, a landed result is not work, an idea nobody has judged is an fyi. FOR LATER is work walked past
 // with Next or put away with Remind me (2026-09-23); ideas have a level of their own until made work or dismissed (2026-09-29).
 // The levels, their words, hints, bands and order all live in lanes.json `sections` (lanes.js).
-export const PLACEMENT = ["lane", "order_band", "surfaced", "surfaced_at", "put_down", "unread", "kind", "working", "state", "news"];
+// ...and the rail's CLOCK and ids, which place it among its section (placeOrder): the card on the table - a press's answer, a row drawn
+// ahead - can carry another arrival or none, and a pinned row put back by the card's clock went past rows of its own second while the
+// server kept it above them (the release walk's sweep SWAP, 2026-10-25)
+export const PLACEMENT = ["lane", "order_band", "surfaced", "surfaced_at", "put_down", "unread", "kind", "working", "state", "news",
+  "arrived_at", "sort_at", "since", "when", "member_ids", "mid", "brief_today"];
 export const placed = (row, card) => {
   const out = { ...row, ...card };
   for (const k of PLACEMENT) { if (k in row) out[k] = row[k]; else delete out[k]; }
@@ -446,7 +450,10 @@ export const placeId = (i) => {
   const tid = num(i?.tid);
   const mids = (i?.member_ids || []).map(String).filter((m) => m.startsWith("message:")).map((m) => num(m.slice(8))).filter((n) => n !== null);
   const mid = tid !== null ? null : mids.length ? Math.min(...mids) : num(i?.mid);       // a task's own rows keep their key between them
-  return [tid === null ? 1 : 0, tid ?? 0, mid === null ? 1 : 0, mid ?? 0, String(i?.key || "")];
+  // ...and a row with neither (an idea, a review on its own) by its first member, kind then number - funnel.first_member
+  const first = tid !== null || mid !== null ? "" : (i?.member_ids || []).map(String).map((m) => [m.slice(0, m.indexOf(":")), num(m.slice(m.indexOf(":") + 1))])
+    .filter(([k, n]) => k && n !== null && n >= 0).map(([k, n]) => `${k}:${String(n).padStart(12, "0")}`).sort()[0] || "";
+  return [tid === null ? 1 : 0, tid ?? 0, mid === null ? 1 : 0, mid ?? 0, first, String(i?.key || "")];
 };
 // a row's place inside its section (funnel.order_key past the section): today's brief, a known arrival, the arrival, then placeId
 const placeOf = (i) => [i?.brief_today ? 0 : 1, walkAt(i) ? 0 : 1, walkAt(i), ...placeId(i)];

@@ -84,3 +84,13 @@ def test_next_from_the_lower_of_a_tie_goes_on_down_not_up_to_its_twin(db):
     assert out['item'] is None or out['item']['key'] not in [i['key'] for i in rows[:-1]], \
         f"Next went back up the tie to {out['item'] and out['item'].get('title')}"
 
+
+
+def test_rows_with_no_task_and_no_message_tie_by_their_first_member():
+    """The release walk's sweep (2026-10-25): two rows of one second with neither a task nor a message (an idea, a review on its own) were
+    still settled by the hash. Their first member decides - kind, then the number as a number (idea:10 after idea:9), as the page does."""
+    rows = [{'key': f'processing:pi_{h}', 'lane': 'fyi', 'kind': 'idea', 'member_ids': [f'review:{n + 40}', f'idea:{n}'], 'arrived_at': STAMP}
+            for n, h in ((10, '00'), (9, 'ff'))]
+    assert [r['member_ids'][1] for r in sorted(rows, key=funnel.order_key)] == ['idea:9', 'idea:10']
+    assert funnel.first_member(rows[1]) == 'idea:000000000009'
+    assert funnel.place_id({'key': 'k', 'tid': 4, 'member_ids': ['idea:1']})[4] == ''

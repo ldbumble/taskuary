@@ -826,8 +826,14 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     if need and not item.get(need):
         # the item's own line, not "TQ-0006 is assistant asked you: Should I…?." glued into a sentence (2026-10-06)
         state = str(item.get('why') or funnel.LANE_WORDS.get(item.get('lane'), ('waiting',))[0]).strip().rstrip('.')
-        return f"There is nothing to {SAYS_VERB.get(verb, verb)} on {what} - {state}. Open it if you want its own buttons."
+        return f"There is nothing to {SAYS_VERB.get(verb, verb)} on {what} - {state}.{OPEN_IT}"
     return ''
+
+
+# THE WALK RAN OUT WITH WORK STILL ON ITS WAY (surface): said on the phone; on the desk the Walk button stands in its place
+PENDING = 'Nothing else needs you right now; '
+# ...said of an item that is NOT on the table: the one in front of the owner is open already (_say drops it there)
+OPEN_IT = ' Open it if you want its own buttons.'
 
 
 def brain_trouble(error) -> str:
@@ -3154,12 +3160,21 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             parts = ([f"{pending['working']} in progress"] if pending['working'] else [])
             parts += ([f"{pending['settling']} still being read"] if pending['settling'] else [])
             parts += ([f"{pending['scheduled']} scheduled for a little later"] if pending['scheduled'] else [])
-            say = "Nothing else needs you right now; " + ', '.join(parts) + '.'
+            say = PENDING + ', '.join(parts) + '.'
         else: say = all_done(store)
-        over = not key and not (only and left)
+        over, desk = not key and not (only and left), DELIVERY.get() != PHONE
         # ...and THE WAY TO WALK AGAIN, on the row by the prompt box, before the Opens: the day card's own button, not a card and not a
         # sentence (the owner, 2026-10-22: "just have ... button on bottom on top of the prompt box"). The phone has its own Walk.
-        if over and opens and DELIVERY.get() != PHONE: opens = [buttons.chip('walk'), *opens]
+        # ...whenever an open task is still under Tasks, whoever it waits on (2026-10-21: a finished walk shows them all again): one waiting
+        # on someone else, or an agent's, is no Open of the owner's, so the row had no Walk - only "Nothing's waiting." over a task on the
+        # rail and a bare Next (the owner, 2026-10-25: "I hit next when a task is the last thing and the walk through again did not show up")
+        again = over and desk and any(i.get('tid') and not i.get('deferred') for i in left)
+        if over and desk and (opens or again):
+            if not opens and say.startswith(ALL_DONE): say = ''            # buttons do the talking (2026-10-23), and it is not true
+            # ...nor "Nothing else needs you right now; 1 in progress." when all that is left is an agent's work: the Walk button says it (the
+            # owner, 2026-10-25, on the walk-again fix's question). The phone has no button there and keeps its words
+            if not opens and say.startswith(PENDING): say = ''
+            opens = [buttons.chip('walk'), *opens]
         with guarded():
             put_down()
             if not key: set_current(store, tid, None, actor)                  # the walk ran out: nothing is on the table
@@ -3227,7 +3242,11 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         funnel.settle(store, item['key'], 'surfaced', actor, note=item.get('sig'), read=True)
         closed = bool(item.get('tid')) and (store.get_task(item['tid']) or {}).get('Status') in ('done', 'dropped')
         set_current(store, tid, item['key'], actor, closed=closed)           # on the table, written down (PW-162)
-        funnel.mark_place(store, item)                                         # ...and where the walk is: Next goes on below it
+        # ...and where the walk is: Next goes on below it - from where the RAIL draws it. A closed task opened by name is no row of the
+        # pile, and the page draws it under Tasks, where it was (funnelPile.pulledRow); keyed by its lane, fyi, the place sat past every
+        # task and report still below it and Next jumped to the fyi batch (the 2026-10-25 sweep)
+        pulled = closed and not any(i.get('key') == item.get('key') for i in (p.get('items') or []))
+        funnel.mark_place(store, {**item, 'order_band': 2, 'deferred': False} if pulled else item)
         record_related(store, tid, item, 'assistant', say + (f"\nOPTIONS: {' | '.join(options)}" if options else ''),
                        card_for(item) | {'chips': chips})
     return {'item': item | {'chips': chips}, 'say': say, 'options': options, 'chips': chips, 'left': len(p['items']) - 1}
@@ -3578,12 +3597,23 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
             'clear': clear, 'repo_choices': choices, 'alts': alts_for(store, it, verb) if not elsewhere else []}
 
 
+# THE OPERATIONS A DESK BUTTON PROPOSED (propose_direct `press`): no proposal card is written for them, so receipt_turn knows them from
+# here - op id -> the item's key, which is also what _stamp_pressed marks (a processing row's key is not its message's `msg:<id>`)
+PRESSED: dict = {}
+
+
 def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'owner', table: bool = False, exact: bool = False,
-                   picks: dict | None = None) -> dict:
+                   picks: dict | None = None, press: bool = False) -> dict:
     """A card's own button on ONE entry (PW-151): the same proposal the words would make, without the interpreter -
     the target is explicit. From a card it never settles what is on the table and the entry's siblings are not
     touched; from the chips under the composer (`table`) the entry IS the table, so a plain verb runs at once and
-    settles it, exactly as the typed word would."""
+    settles it, exactly as the typed word would.
+
+    `press`: a BUTTON on the desk (/api/concierge/propose) - the press is the decision, so it runs at once (`auto`) whatever the verb,
+    and nothing is written in the owner's name or as a card to confirm (the 2026-10-25 sweep: "Not ours" drew an owner bubble "Not ours:
+    FW: ..." nobody typed and a second card that folded the batch after it; "Chase them" and "Put it on my list" drew "Nothing happens
+    until you say yes" over a button already pressed - assistant-is-a-router, 2026-10-19: no confirm cards, the row's button IS the
+    confirmation). The phone's picks keep the conversation's record: a chat has no buttons, its lines are what was said."""
     verb = handoff_verb(store, canon_verb(verb))
     if verb not in PROPOSALS: raise ValueError(f'{verb} is not something a card proposes')
     item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
@@ -3595,7 +3625,7 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
     tid = general.dock_task(store, actor)[0]['TaskId']
     why = cannot(item, verb, store)
     if why: raise ValueError(why)
-    record_related(store, tid, item, 'user', f"{PROPOSALS[verb][1]}: {item.get('title') or item.get('ref') or key}")
+    if not press: record_related(store, tid, item, 'user', f"{PROPOSALS[verb][1]}: {item.get('title') or item.get('ref') or key}")
     # `picks`: the agent box's profile, brain and model beside its words (AGENT_PICKS) - a hand-off's only
     picked = {k: v for k, v in (picks or {}).items() if k in AGENT_PICKS and v}
     try: prop = propose_for(store, tid, {'verb': verb, 'text': text or '', 'on_item': True, **picked}, item, text or '', actor, table=item if table else None)
@@ -3607,7 +3637,11 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
         record_related(store, tid, item, 'assistant', f"{str(e)[:1].upper()}{str(e)[1:]}.", {'kind': 'words', 'key': None, 'chips': way})
         return {'id': None, 'failed': True, 'say': f"{str(e)[:1].upper()}{str(e)[1:]}.", 'chips': way, 'key': key}
     prop['settles'] = bool(table and PROPOSALS[verb][2])
-    if table and verb in AUTO: prop.update(auto=True, say_card=prop.get('note') or '', say=f"{prop['label']} - {_where(item)}." + (f" {prop['note']}" if prop.get('note') else ''))
+    if press or (table and verb in AUTO): prop.update(auto=True, say_card=prop.get('note') or '', say=f"{prop['label']} - {_where(item)}." + (f" {prop['note']}" if prop.get('note') else ''))
+    if press:
+        if len(PRESSED) > 500: PRESSED.clear()
+        PRESSED[prop['id']] = item.get('key') or key
+        return prop
     record_related(store, tid, item, 'assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'], 'op': prop['id'],
                                                                'tid': prop.get('tid'), 'ref': prop.get('ref'), 'lane': item.get('lane')})
     return prop
@@ -4259,7 +4293,12 @@ def _past(store, op: dict, ref: str) -> str:
 
 
 def _item_of(store, op: dict) -> tuple:
-    """(task id, card keys) of what an act was about - the item line _stamp_pressed marks."""
+    """(task id, card keys) of what an act was about - the item line _stamp_pressed marks - and the row a desk button pressed it on"""
+    tid, keys = _item_of_target(store, op)
+    return tid, keys | ({PRESSED[op['id']]} if op.get('id') in PRESSED else set())
+
+
+def _item_of_target(store, op: dict) -> tuple:
     tk, target, p = op.get('targetKind'), op.get('target'), op.get('params') or {}
     try:
         if tk == 'task': return int(target), {f'task:{int(target)}', f'agent:{int(target)}'}
@@ -4348,7 +4387,7 @@ def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = 
     # ...and what was pressed on the item on its table (`table`, on_table): that is this chat, and the owner is looking at it
     raw = store.get_setting('assistant_dock_task_id')
     dock_tid = int(raw) if str(raw or '').isdigit() else None
-    proposed = bool(dock_tid) and _chat_proposed(store, dock_tid, op.get('id'))
+    proposed = bool(dock_tid) and (op.get('id') in PRESSED or _chat_proposed(store, dock_tid, op.get('id')))
     if not dock_tid or not (table or proposed): return {'say': line, 'chips': []}
     if st != 'done':
         way = recover(store, op, actor, llm)
@@ -4445,14 +4484,17 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # was just a digit for the model to interpret, so it answered about something else entirely (the
     # owner, 2026-09-15: "on the desktop when I hit 1 it shows the past message not matching what i
     # sent"). The action words under the line ARE numbered, in the order they are drawn.
+    # ...and the line kept is the one TYPED: "2" was saved as "Mark done", a second owner bubble the owner never wrote, and the only one
+    # a reload kept (the 2026-10-25 sweep) - the model reads what the digit names, the chat keeps what was said
+    typed = text
     if item and text.strip().lstrip('#').rstrip('.').strip().isdigit():
         words = [c['label'] for c in chips_for(store, item)]
         i = int(text.strip().lstrip('#').rstrip('.').strip())
         if 1 <= i <= len(words): text = words[i - 1]
     # the dock has the owner's words now; the item has them with the answer, once the turn knows it was about the item
-    record(store, tid, 'user', text)
+    record(store, tid, 'user', typed)
     turn = _TURN.get()
-    if item: turn.update(item=item, said=text)
+    if item: turn.update(item=item, said=typed)
     turn['trace'] = trace                           # the app's own trouble draws its steps as they happen (_trouble)
     rec = lambda role, body, card=None: record_related(store, tid, item, role, body, card)
     table = table_line(store, item)
@@ -4672,6 +4714,14 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         decision, verb = {**decision, 'verb': 'answer_agent', 'text': decision.get('text') or text}, 'answer_agent'
     if decision and verb and target_item:
         why = cannot(target_item, verb, store)
+        # A PUT-DOWN ON THE BATCH ON THE TABLE is its own button's (the 2026-10-25 sweep): "done" over the open 4 fyi was answered "There is
+        # nothing to close on 4 fyi ... Open it if you want its own buttons" with its All read, next on screen. The router lights that real
+        # button and says nothing (assistant-is-a-router, 2026-10-19); nothing runs
+        if why and not elsewhere and routes() and target_item.get('kind') == 'fyis' and verb in PUT_DOWN:
+            return {'say': '', 'options': [], 'chips': [], 'decision': None, 'light': {'verb': 'next', 'label': buttons.label('next', 'batch'),
+                    'line': '', 'key': target_item.get('key') or '', 'tid': None, 'ref': ''}}
+        # ...and of any other item on the table, never "Open it": it is open
+        if why and not elsewhere: why = why.replace(OPEN_IT, '')
         if why:
             rec('assistant', why)
             return {'say': why, 'options': [], 'chips': chips_for(store, target_item), 'decision': None}
@@ -4688,6 +4738,9 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # ...in the model's own words when it wrote any: a bare "Next." over a request that asked for something else read as the request
         # ignored (2026-10-20, "Clear all the FYI, please."). An "Ok." says less than Next does, and is not kept
         move_on(store, item['key'], actor)
+        # ...and the card it left wears Next's badge from the server, as the button's does (_stamp_next): a typed "next" drew it on the page
+        # and a reload took it off (the 2026-10-25 sweep; 0fd0a151 closed the same gap for All read, next)
+        _stamp_next(store, tid, item['key'])
         # ...and on the desk the receipt names what was put down: a bare "Next." is a word, not what it did (the owner, 2026-10-20: "it
         # should show what it chose to do")
         said = (reply if len(reply.split()) > 2 else

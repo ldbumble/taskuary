@@ -87,7 +87,7 @@ test("a rail row clicked before its task is read puts its frame up at the click,
 // A CLOSE PUTS THE NEXT ONE UP AT ITS PRESS (owner-approved, 2026-10-20): the next was drawn only after the server recorded the close
 test("Mark done, Remove and Remind me draw the next item at the press; a failed close takes it down and puts the closed one back", () => {
   const view = src("AssistantView.jsx");
-  assert.match(view, /putDown: \(key, tid = null\) => \{[^}]*drawNextEarlyRef\.current\?\.\(key\); \}/, "the press that folds the item draws the next");
+  assert.match(view, /putDown: \(key, tid = null\) => \{[^\n]*drawNextEarlyRef\.current\?\.\(key\); \}/, "the press that folds the item draws the next");
   assert.match(view, /pickUp: \(key, why\) => \{ takeEarlyBackRef\.current\?\.\(\);/, "a close that fails takes the drawn one down first");
   assert.match(view, /const takeEarlyBack = \(\) => \{ const e = earlyRef\.current; earlyRef\.current = null; if \(e\) unshow\(e\); \};/, "...and the closed item is back on the table");
   assert.match(view, /earlyRef\.current = drawAhead\(\{ id: `a\$\{Date\.now\(\)\}`, role: "assistant", text: "", options: \[\], chips: \[\], card: it \}\);/, "on the one road ahead");

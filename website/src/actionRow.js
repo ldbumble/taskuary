@@ -122,6 +122,11 @@ export const advisedIn = (list, pick) => {
 };
 // the row's button for the advised act, greyed or not - a greyed one hides the line; none at all gives the line its own button
 export const advisedAny = (list, pick) => (pick?.verb ? list.find((v) => v.group !== "next" && sameAct(v, pick)) || null : null);
+// THE STRIP'S "<X> is off" LINE (AdvisorNext): a move the row has and has greyed says why, in the row's own words - but NOT while a press is in
+// flight. The owner's own Send, Reply or Redraft greys the row's draft verbs while it runs (its label "Sending…", "Drafting…"), and the strip
+// read that as the advised move being unavailable: "Drafting… is off - it cannot be pressed right now." for half a second after every
+// Reply (the 2026-10-25 sweep). The press is not refused; the strip stays quiet until it lands.
+export const pressInFlight = (list) => (list || []).some((v) => v.busy || /…$/.test(String(v.label || "")));
 
 // A `card` verb is one the card draws itself, under the draft (ReviewDecision): registered so the Advisor can find it, drawn here
 // only when it is the advice. holdsMove: the card holds a move of its own under the draft (its filled button, or the task's Mark done

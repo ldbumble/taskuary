@@ -117,6 +117,10 @@ export const newestFirst = (ms = []) => [...ms].sort((a, b) => String(b.SentAt |
 // `assistant` is a legacy alias from Timeline discussions. New discussions use `general`, but
 // old ones must still open here instead of falling through to the coding terminal.
 const PRIORITIES = ["low", "normal", "high", "urgent"];
+// WHAT THE OWNER TYPED FOR THE NEXT AGENT, per task, past a remount (the 2026-10-25 sweep): "What should it do?" came back empty after a look
+// at Reports or another row - the box was this view's own state, as the reply draft's edit was (ReviewDecision) - and one task's words
+// stood in the next task's box on the Tasks tab. Let go once a start takes them.
+const heldAsks = new Map();
 // the list row's "agent stopped" for a task Taskuary closed under a working agent, said on the status pill's hover
 const INTERRUPTED = "Taskuary closed while an agent was working this. Nothing restarts until you choose one.";
 const NAT_TITLE = "Removes this task. Taskuary stops making tasks from messages like this; the email itself is kept, and search finds it.";
@@ -408,7 +412,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const pickerTask = useRef(null);         // initialize each task from its durable worker once
   const [err, setErr] = useState("");
   const [startFail, setStartFail] = useState(null);   // a failed agent start's ways past it (failures.py), drawn on the error line
-  const [run, setRun] = useState({ agent: "", model: "", instruction: "" });
+  const [run, setRun] = useState(() => ({ agent: "", model: "", instruction: heldAsks.get(selected) || "" }));
+  useEffect(() => { setRun((r) => ({ ...r, instruction: heldAsks.get(selected) || "" })); }, [selected]);
+  const askTaken = (id) => { heldAsks.delete(id); setRun((current) => ({ ...current, instruction: "" })); };
   // the next run's pictures - pasted, dropped or attached - ride in its instruction as paths, like Continue's (ContinueBox)
   const runPics = usePromptImages();
   // the repository the Start panel will open the coding session in (RepoSelect); null = not loaded / not offered
@@ -1212,7 +1218,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         model: run.model || null, instructions: withImages(run.instruction.trim(), runPics.paths) || null });
       if (!stale(id)) setTerm(data?.session || null);
       if (!stale(id)) {
-        setRun((current) => ({ ...current, instruction: "" })); runPics.clear();
+        askTaken(id); runPics.clear();
         setRestartOpen(false);
       }
     } catch (e) {
@@ -1242,7 +1248,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       if (!stale(id)) setTerm(outcome.state === "started" || outcome.state === "existing" ? (data.session || null) : null);
       // where the code is, still to say: the same question the coding start asks - it came back quietly and nothing opened
       if (!stale(id) && outcome.state === "needs_repo") { setRepoPick(true); setResumeAfterRepo({ dispatch: true }); }
-      if (!stale(id)) { setRun((current) => ({ ...current, instruction: "" })); runPics.clear(); setRestartOpen(false); }
+      if (!stale(id)) { askTaken(id); runPics.clear(); setRestartOpen(false); }
       await Promise.all([loadDetail(id), loadTasks()]);
       onChanged?.();
     } catch (e) {
@@ -1268,7 +1274,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // ...with what was said in the box: the owner's words are the step's ask, the step and the goal its material
       const { data } = await api.post(`/api/tasks/${child}/dispatch`, { kind: "general", agent: run.agent || null, pick: run.pick || null, model: run.model || null, via: id,
         instruction: withImages(run.instruction.trim(), runPics.paths) || null });
-      if (!stale(id)) { setRun((current) => ({ ...current, instruction: "" })); runPics.clear(); setRestartOpen(false); }
+      if (!stale(id)) { askTaken(id); runPics.clear(); setRestartOpen(false); }
       const outcome = outcomeOf(data);
       if (outcome.state === "needs_repo") setErr(`${outcome.text} - open the step and pick one.`);
       await Promise.all([loadDetail(id), loadTasks()]);
@@ -1557,7 +1563,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const generalOnly = handOff || !canCode || goalRun;
   // THE ONE BOX (RunForm, the owner 2026-10-23): what to do - typed or a voice note, pictures too - and which agent, before anything
   // starts. A goal's box starts its next step; a general task's, the regular agent; a coding task's, the coding agent or the other
-  const runText = (f) => setRun((r) => ({ ...r, instruction: typeof f === "function" ? f(r.instruction) : f }));
+  const runText = (f) => setRun((r) => { const instruction = typeof f === "function" ? f(r.instruction) : f;
+    if (instruction) heldAsks.set(selRef.current, instruction); else heldAsks.delete(selRef.current);
+    return { ...r, instruction }; });
   const nextRunForm = (
                     <RunForm title={report || detail?.transcript || term?.alive || generalStarted ? labelOfRow("run-another") : labelOfRow("start-agent")}
                       value={run.instruction} onValue={runText} pics={runPics} autoFocus={restartOpen}

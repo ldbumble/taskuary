@@ -96,6 +96,7 @@ const WALK_SKIP = {
   "sync_now": "fetches mail - the demo refuses ingest and the faults world has no mailbox",
   "sync_now:unknown": "as Sync now: no mailbox to check",
   "fix:card": "New report's 'Open the card' shows only when its source is not connected; the walk does not open New report",
+  "strong_again": "offered only on a failed or unsure agent run when a brain has a strong model - the demo's cards carry none, and its agents are recordings that start nothing new",
   "pick_repo": "offered only when triage could not tell the repository - the demo world names one for every coding task",
   "approve:action": "an agent's proposal: the demo's agents are recordings and never propose an act",
   "redraft": "redrafting asks the AI - the demo's canned brain writes no drafts, and the faults world has no AI",

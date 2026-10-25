@@ -74,6 +74,9 @@ ALLOWED_WRITES = (
     r'^/api/operations(/[^/]+)?$',
     r'^/api/operations/[^/]+/execute$',
     r'^/api/tasks/\d+/remind$',
+    # ...and the owner's correction of how hard a task is (the router's chip): a row in the demo's own database. Which AI does each
+    # job (/api/ai/route_rules) stays refused, as adopt-brain does: a visitor changing what reads the mail is not a tour
+    r'^/api/tasks/\d+/judged$',
     r'^/api/messages/\d+/reply$',                      # puts a draft on the table - only approving it sends
     r'^/api/messages/\d+/calendar$',                   # ...and a calendar answer the same way: drafted, never sent (calwrite.py)
     r'^/api/reviews/\d+/draft$',

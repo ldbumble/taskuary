@@ -42,6 +42,7 @@
     "hand_sound": "chime",
     "hand_desktop": "1",
     "phone_assistant": "0",
+    "phone_urgent_unasked": "0",
     "vision_enabled": "1",
     "report_images_enabled": "1",
     "poll_minutes": "10",

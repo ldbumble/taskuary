@@ -2217,9 +2217,15 @@ def send_alert(store, src: dict, cfg: dict, why: str, head: str, body: str) -> d
     # every run - #140 "Assistant for Backend Monitoring" was alerting into the WhatsApp group it
     # reads (the owner, 2026-09-17: "it should never send to input channels"). Delivery is not
     # guarded here: it waits on the task, so a person chose to send that one.
-    from . import outbound
+    from . import outbound, remote_assistant
     refuse = outbound.refuse_input_chat(store, a.get('channel') or 'whatsapp', to)
     if refuse: raise RuntimeError(f'the alert was not sent: {refuse}. Point it at your own chat under Reports.')
+    # THE OWNER'S OWN CHAT HEARS AN ALERT ONLY WHILE THEY ARE TALKING THERE - or, urgent being what an alert is, when they allowed
+    # urgent items to text them (remote_assistant.may_hear, 2026-10-24). Held, the run is still on Reports; nothing failed.
+    ch = a.get('channel') or 'whatsapp'
+    if to and not (to := remote_assistant.may_hear(store, ch, to, f'the alert of {title}', urgent=True)):
+        store.audit('source', src['SourceId'], 'alert_held', 'report', 'agent', {'channel': ch, 'why': why})
+        return {'held': True, 'why': why}
     subj = (a.get('subject') or f'{title} — {why}').strip()
     note = str(a.get('note') or '').strip()
     # THE TITLE ONCE. It led with "<title>: <why>." and then carried the headline, which for an
@@ -2231,12 +2237,10 @@ def send_alert(store, src: dict, cfg: dict, why: str, head: str, body: str) -> d
     text = '\n\n'.join(x for x in [lead, note, '' if _echoes(head, title) else str(head or '').strip(),
                                       str(body or '').strip()[:1500]] if x)
     stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    ch = a.get('channel') or 'whatsapp'
     mid = store.add_message({
         'ExternalId': f'alert:{src["SourceId"]}:{stamp}', 'ConversationId': f'report:{src["SourceId"]}',
         'Channel': ch, 'SourceName': title, 'Subject': subj, 'FromName': 'Taskuary', 'SentAt': stamp,
         'BodyText': text, 'Direction': 'out', 'Status': 'sent'})
-    from . import outbound
     sent = outbound.send_out(store, ch, to, subj, text)
     store.add_route(mid, None, 'send', None, f'alert - {why}; sent to {", ".join(to) or "nobody"} on {ch}', [], 'report')
     store.audit('message', mid, 'alert_sent', 'report', 'agent', {'to': to, 'channel': ch, 'why': why})
@@ -2343,6 +2347,13 @@ def deliver_report(store, src: dict, cfg: dict, subject: str, body: str) -> dict
         raise ValueError("invalid report delivery gate: choose 'review' or 'auto'")
     to = d.get('to') if isinstance(d.get('to'), list) else [x.strip() for x in str(d.get('to') or '').split(',') if x.strip()]
     subj = (d.get('subject') or subject or cfg.get('title') or 'Report').strip()
+    # a report sent to the owner's own chat BY ITSELF is a push nobody asked for: held outside a conversation there, the run still on
+    # Reports (remote_assistant.may_hear, 2026-10-24). A reviewed one goes when the owner presses its yes - that is them asking.
+    if gate == 'auto' and to:
+        from . import remote_assistant
+        if not (to := remote_assistant.may_hear(store, d.get('channel') or 'email', to, cfg.get('title') or 'a report')):
+            store.audit('source', src['SourceId'], 'delivery_held', 'report', 'agent', {'channel': d.get('channel')})
+            return {'gate': 'auto', 'held': True}
     stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     mid = store.add_message({
         'ExternalId': f'out:{src["SourceId"]}:{stamp}', 'ConversationId': f'report:{src["SourceId"]}',

@@ -95,15 +95,16 @@ def test_the_same_ask_is_said_while_the_owner_is_talking_there(phone_ask):
 
 
 def test_a_reminder_set_on_the_phone_comes_due_on_the_desk_when_the_phone_is_quiet(phone_ask):
-    from datetime import datetime
+    from datetime import datetime, timedelta
     from taskuary import remind
     s, tid = phone_ask
+    day = datetime.now() + timedelta(days=2)                                   # relative: a fixed date turns into "that day has gone"
     ra._ASKING.chat = {'channel': 'whatsapp', 'chat': 'c1@example.com', 'connector_id': 3}
-    try: remind.set_reminder(s, tid, '2026-10-24', 'owner')
+    try: remind.set_reminder(s, tid, day.strftime('%Y-%m-%d'), 'owner')
     finally: ra._ASKING.chat = None
     with mock.patch.object(ra, 'connector_for_chat', return_value={'ConnectorId': 3}), \
          mock.patch.object(ra, 'quiet', return_value=True), mock.patch.object(ra, 'send') as send:
-        remind.due(s, datetime(2026, 10, 24, 9, 0))
+        remind.due(s, day.replace(hour=9, minute=0))
     assert not send.called and not s.get_task(tid)['RemindOwed']
 
 
@@ -156,3 +157,79 @@ def test_a_reply_the_owner_approved_to_someone_else_still_goes():
     with mock.patch.object(outbound, 'can_reply', return_value=True), mock.patch.object(messengers, 'wa_send') as out:
         outbound.reply_to_message(s, s.get_message(mid), 'Yes - Thursday at 2 still works.')
     assert out.called and out.call_args.args[1] == '15550100200@s.whatsapp.net'
+
+
+# ── urgent does not break the rule - unless the owner turns it on (2026-10-24) ─────────────────────
+def test_an_urgent_task_move_waits_on_the_desk_by_default_and_reaches_the_phone_with_the_switch_on(phone_ask):
+    s, tid = phone_ask
+    s.update_task(tid, {'Priority': 'urgent'}, 'owner')
+    assert s.get_setting(ra.URGENT_KEY) in (None, '', '0')                    # off unless turned on
+    patches = lambda: (_lane(s, tid, 'blocked'), mock.patch.object(ra, 'connector_for_chat', return_value={'ConnectorId': 3}),
+                       mock.patch.object(ra, 'quiet', return_value=True))
+    a, b, c = patches()
+    with a, b, c, mock.patch.object(messengers, 'wa_send') as out: asks.check(s, tid)
+    assert not out.called
+    s._exec('UPDATE task SET AskedTold=NULL WHERE TaskId=?', (tid,)); s.set_setting(ra.URGENT_KEY, '1', 'owner')
+    a, b, c = patches()
+    with a, b, c, mock.patch.object(messengers, 'wa_send') as out: asks.check(s, tid)
+    assert out.called and out.call_args.args[1] == 'c1@example.com'
+
+
+def test_the_urgent_switch_lets_through_only_what_is_urgent():
+    s, c = armed_store(talking=False)
+    s.set_setting(ra.URGENT_KEY, '1', 'owner')
+    assert _sent(lambda: ra.send(s, 'whatsapp', JID, 'TQ-0007 moved.', c['ConnectorId'])) == []          # a plain line still waits
+    assert _sent(lambda: ra.send(s, 'whatsapp', JID, 'TQ-0007 is urgent.', c['ConnectorId'], urgent=True))
+    s.set_setting(ra.URGENT_KEY, '0', 'owner')
+    assert _sent(lambda: ra.send(s, 'whatsapp', JID, 'TQ-0007 is urgent.', c['ConnectorId'], urgent=True)) == []
+
+
+def test_an_urgent_by_the_way_goes_unasked_only_with_the_switch_on_and_only_the_urgent_one():
+    s, c = armed_store()
+    s.set_setting(ra.HANDOFF_KEY, json.dumps({'channel': 'whatsapp', 'chat': JID, 'connector_id': c['ConnectorId'], 'at': 'now'}), 't')
+    _quiet_phone(s)
+    items = [{'key': 'msg:1', 'lane': 'time', 'title': 'Board call', 'order_band': 1},
+             {'key': 'msg:2', 'lane': 'asked', 'title': 'Lunch next week', 'order_band': 2}]
+    alerts = [{'key': 'a1', 'item': 'msg:1', 'text': 'Board call with Ray Colton in ten minutes', 'kind': 'meeting', 'order_band': 1},
+              {'key': 'a2', 'item': 'msg:2', 'text': 'Omar Keller asked about lunch', 'kind': 'ask', 'order_band': 2}]
+    with mock.patch.object(funnel, 'pile', return_value={'items': items, 'alerts': alerts}):
+        assert _sent(lambda: ra.push_alerts(s, force=True)) == []
+        s.set_setting(ra.URGENT_KEY, '1', 'owner')
+        said = _sent(lambda: ra.push_alerts(s, force=True))
+    assert len(said) == 1 and 'Board call' in said[0] and 'lunch' not in said[0]
+
+
+def _report(to):
+    return ({'SourceId': 41, 'Address': 'report:41'},
+            {'title': 'Ledger check', 'alert': {'channel': 'whatsapp', 'to': [to]}, 'deliver': {'channel': 'whatsapp', 'to': [to], 'gate': 'auto'}})
+
+
+def test_a_report_alert_to_the_owners_own_chat_waits_unless_urgent_items_may_text():
+    from taskuary import reports
+    s, _c = armed_store(talking=False)
+    src, cfg = _report(JID)
+    with mock.patch.object(outbound, 'send_out', return_value={'channel': 'whatsapp'}) as out:
+        assert reports.send_alert(s, src, cfg, 'the totals do not match', 'Ledger check', '2 rows').get('held')
+        assert not out.called
+        s.set_setting(ra.URGENT_KEY, '1', 'owner')
+        reports.send_alert(s, src, cfg, 'the totals do not match', 'Ledger check', '2 rows')
+    assert out.called and out.call_args.args[2] == [JID]
+
+
+def test_a_report_sent_by_itself_to_the_owners_own_chat_waits_even_with_the_urgent_switch():
+    from taskuary import reports
+    s, _c = armed_store(talking=False)
+    s.set_setting(ra.URGENT_KEY, '1', 'owner')
+    src, cfg = _report(JID)
+    with mock.patch.object(outbound, 'send_out', return_value={'channel': 'whatsapp'}) as out:
+        assert reports.deliver_report(s, src, cfg, 'Ledger check', '2 rows').get('held')
+    assert not out.called
+
+
+def test_a_report_alert_to_someone_else_is_not_this_road():
+    from taskuary import reports
+    s, _c = armed_store(talking=False)
+    src, cfg = _report('15550100200@s.whatsapp.net')
+    with mock.patch.object(outbound, 'send_out', return_value={'channel': 'whatsapp'}) as out:
+        reports.send_alert(s, src, cfg, 'the totals do not match', 'Ledger check', '2 rows')
+    assert out.called

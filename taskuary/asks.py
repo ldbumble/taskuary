@@ -152,12 +152,14 @@ def _say(store, task: dict, line: str, via: str = None, lane: str = None, says: 
         # ONLY WHILE THE OWNER IS TALKING THERE (2026-10-23): an ask made from the phone two days before said every lane its agent
         # passed through, eight times in an afternoon spent at the desktop - "i never asked it anything today?". Out of a session
         # it is the desktop's, like any background line: said = told, nothing owed for later
-        if remote_assistant.held_back(store, channel, chat, f"TQ-{task.get('TaskId')}'s move"): continue
+        # ...and an urgent task's move goes unasked only when the owner allowed urgent items to (remote_assistant.urgent_rings)
+        urgent = str(task.get('Priority') or '') == 'urgent'
+        if remote_assistant.held_back(store, channel, chat, f"TQ-{task.get('TaskId')}'s move", urgent): continue
         if not remote_assistant.quiet(store, channel, chat): return False
         if lane:                                    # the phone gets what it is asked a yes for, and the picks to give it
             line, rows = phone_text(store, task, lane, says)
             remote_assistant._offer(rows)
-        remote_assistant.send(store, channel, chat, line, c['ConnectorId'])
+        remote_assistant.send(store, channel, chat, line, c['ConnectorId'], urgent=urgent)
         try: concierge.record(store, general.dock_task(store, 'owner')[0]['TaskId'], 'assistant', line, phone=True)
         except Exception as e: logger.warning(f'asks: said on the phone, not kept in the chat - {e}')   # never said twice
         return True

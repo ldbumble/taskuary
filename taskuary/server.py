@@ -4482,6 +4482,58 @@ def agent_tick(body: AgentTickBody, request: Request):
     store.tick_checklist_item(body.task_id, hit['id'], body.done, 'agent')
     return {'ok': True, 'item': hit['id'], 'text': hit['text'], 'done': bool(body.done)}
 
+class AgentProposeBody(BaseModel):
+    model_config = {'extra': 'allow'}
+    task_id: int; action: str; why: str = ''
+
+@app.post('/api/agent/propose')
+def agent_propose(body: AgentProposeBody, request: Request):
+    """An agent asks for one act only the owner's press runs (proposals.py) - a GitHub comment, a pull request, a send on a system -
+    on its OWN task. The TASKUARY-PROPOSE mark in a transcript files the same review; this is the door a tool call takes (agenttools).
+    A Jira or GitHub comment is a send (the owner, 2026-10-25), so it is always this road, never a direct call."""
+    from . import agenttools, proposals
+    _own_task_only(request, body.task_id)
+    if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
+    try: p = agenttools.proposal_of(body.model_dump())
+    except ValueError as e: raise HTTPException(403, str(e))
+    q = proposals.queue(store, body.task_id, p, 'agent')
+    if not q: raise HTTPException(422, 'the proposal was refused - the reason is on the task')
+    return {'ok': True, 'queued': True, 'review': q['reviewId'], 'says': "Waiting on the owner's press - nothing happens until they approve it."}
+
+@app.post('/api/mcp')
+async def mcp_rpc(request: Request, task: int = 0):
+    """Taskuary's tools as an MCP server (agenttools) for the session on `task` - its agent token and task proof in the headers, which
+    the middleware already read: a stranger's token never gets here (guard.stranger_denied), and every door below checks the task is
+    the session's own. JSON-RPC answered as plain JSON; a notification gets 202. Reads of the owner's history refuse a stranger's task."""
+    from . import agenttools
+    try: msg = await request.json()
+    except ValueError: return JSONResponse({'jsonrpc': '2.0', 'id': None, 'error': {'code': -32700, 'message': 'not JSON'}}, status_code=400)
+    if not task or not store.get_task(task):
+        return JSONResponse({'jsonrpc': '2.0', 'id': (msg or {}).get('id') if isinstance(msg, dict) else None,
+                             'error': {'code': -32602, 'message': 'this server answers for one task: /api/mcp?task=<id>'}}, status_code=404)
+    if not guard.owns_task(cfg['server'], request.headers, task):
+        return JSONResponse({'jsonrpc': '2.0', 'id': (msg or {}).get('id') if isinstance(msg, dict) else None,
+                             'error': {'code': -32001, 'message': 'agents cannot do this: a session uses the tools of its OWN task'}}, status_code=403)
+    doors = {'tool_run': lambda b: tool_run(b, request),
+             'tick': lambda tid, item, done: agent_tick(AgentTickBody(task_id=tid, item=item, done=done), request),
+             'reply': lambda tid, text: agent_reply(AgentReplyBody(task_id=tid, text=text), request),
+             'draft': lambda tid, text, to, subject: agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject), request),
+             'propose': lambda tid, a: agent_propose(AgentProposeBody(**{**a, 'task_id': tid}), request)}
+    def run(name, args):
+        cls = agenttools.TOOLS[name][0]
+        if cls == 'read' and name not in ('my_task', 'list_systems', 'run_system'): _owner_history(request, task)
+        out = agenttools.call(store, task, name, args, doors)
+        return out.body.decode() if isinstance(out, JSONResponse) else out
+    def one(m): return agenttools.rpc(m, run) if isinstance(m, dict) else {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32600, 'message': 'not a request'}}
+    out = await run_in_threadpool(lambda: [r for r in map(one, msg if isinstance(msg, list) else [msg]) if r is not None])   # the doors are sync
+    if not out: return Response(status_code=202)
+    return JSONResponse(out if isinstance(msg, list) else out[0])
+
+@app.get('/api/mcp')
+def mcp_stream():
+    "No server-sent stream here: every answer comes back on its own POST (the spec lets a server say so with 405)."
+    return Response(status_code=405, headers={'Allow': 'POST'})
+
 class BatchActBody(BaseModel): action: str
 
 @app.post('/api/tasks/{tid}/batch/{idx}')
@@ -7402,6 +7454,32 @@ def mcp_tools(body: dict):
         return {'ok': True, 'data': list_tools(body)}
     except Exception as e:
         return {'ok': False, 'error': str(e)[:500]}
+
+@app.get('/api/sendfilter')
+def sendfilter_list():
+    """The owner's own MCP servers per CLI and each tool's verdict - kept, or left out of agent sessions because it sends (sendfilter):
+    what a card shows so the owner can correct it. Reading it starts a scan when the last one is stale."""
+    from . import sendfilter
+    scanning = sendfilter.refresh(store)
+    at = float((sendfilter._load(store, sendfilter.CACHE, {}) or {}).get('at') or 0)
+    return {'claude': sendfilter.verdicts(store, 'claude'), 'codex': sendfilter.verdicts(store, 'codex'),
+            'scanned_at': at or None, 'scanning': scanning or sendfilter._RUNNING['on']}
+
+class SendFilterFix(BaseModel): server: str; tool: str = '*'; verdict: str = ''
+
+@app.post('/api/sendfilter/correct')
+def sendfilter_correct(body: SendFilterFix):
+    "The owner's word on one tool ('keep' / 'block'), or on a server whose tools could not be read (tool '*'); '' clears it."
+    from . import sendfilter
+    try: sendfilter.correct(store, body.server, body.tool, body.verdict, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+    return sendfilter_list()
+
+@app.post('/api/sendfilter/scan')
+def sendfilter_scan():
+    "List and judge the servers again now, in the background (a server just added, a description that changed)."
+    from . import sendfilter
+    return {'started': sendfilter.refresh(store, force=True)}
 
 @app.post('/api/mssql/test')
 def mssql_test(body: dict):

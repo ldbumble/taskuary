@@ -196,6 +196,9 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
          # what the text tries to make an AI do, or null - read here because triage already reads every word (the owner,
          # 2026-10-15: "not a separate call but part of the triage"); a stranger's card shows it, nothing is gated on it
          'danger': {'type': ['string', 'null']},
+         # the line still waits on the owner - a question or an ask put to them, not a thanks or a "sure" (the owner, 2026-10-25: a
+         # colleague's question on a closed task's thread was kept on it, closed, and nearly missed). It is what reopens a closed task
+         'asks_owner': {'type': ['boolean', 'null']},
          # the message asks the owner to find a time to meet: how long and which days (its row's Find a time, calwrite.py)
          'meet': {'type': ['object', 'null'], 'additionalProperties': False, 'required': ['minutes', 'from', 'to'],
                   'properties': {'minutes': {'type': ['integer', 'null']}, 'from': {'type': ['string', 'null']}, 'to': {'type': ['string', 'null']}}},
@@ -804,6 +807,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if out['intent'] == 'task' and j.get('goal') is True and dw: out.update(goal=True, done_when=dw)
                 if j.get('difficulty') in DIFFICULTIES: out['difficulty'] = j['difficulty']
                 if isinstance(j.get('sure'), bool): out['sure'] = j['sure']
+                if isinstance(j.get('asks_owner'), bool): out['asks_owner'] = j['asks_owner']
                 if j.get('data_class') in DATA_CLASSES: out['data_class'] = j['data_class']
                 return out
             parse_error = f"invalid intent {j.get('intent')!r}; expected task, reply_only, or fyi"

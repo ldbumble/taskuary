@@ -4721,6 +4721,9 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # ...in the model's own words when it wrote any: a bare "Next." over a request that asked for something else read as the request
         # ignored (2026-10-20, "Clear all the FYI, please."). An "Ok." says less than Next does, and is not kept
         move_on(store, item['key'], actor)
+        # ...and the card it left wears Next's badge from the server, as the button's does (_stamp_next): a typed "next" drew it on the page
+        # and a reload took it off (the 2026-10-25 sweep; 0fd0a151 closed the same gap for All read, next)
+        _stamp_next(store, tid, item['key'])
         # ...and on the desk the receipt names what was put down: a bare "Next." is a word, not what it did (the owner, 2026-10-20: "it
         # should show what it chose to do")
         said = (reply if len(reply.split()) > 2 else

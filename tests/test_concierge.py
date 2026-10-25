@@ -140,6 +140,16 @@ class TurnTests(unittest.TestCase):
         said = [h['text'] for h in concierge.history(s, general.dock_task(s)[0]['TaskId']) if h['role'] == 'user']
         self.assertEqual(said, ['2'])
 
+    def test_a_typed_next_leaves_its_badge_on_the_card_through_a_reload(self):
+        """The 2026-10-25 sweep: Next's button stamps the card it leaves (_stamp_next), so a reload draws the badge - a typed "next" only
+        moved on, and the badge the page drew was gone after a reload (0fd0a151 closed the same gap for All read, next)."""
+        s = store()
+        t, m, r = drafted(s)
+        concierge.surface(s, key=f'review:{r}', llm=lambda *a, **k: 'Dana needs the corrected export.')
+        concierge.say(s, 'next', key=f'review:{r}', llm=lambda *a, **k: 'Next.\nCALL: {"kind": "next", "params": {}}')
+        card = next(h['card'] for h in concierge.history(s, general.dock_task(s)[0]['TaskId']) if (h.get('card') or {}).get('rid') == r)
+        self.assertEqual(card.get('pressed'), concierge.next_badge(card))
+
     def test_what_is_said_about_an_item_is_kept_against_the_item_not_only_in_the_browser(self):
         """PW-132: the chat's turns about an item lived in the dock conversation and the browser's receipts; the
         durable per-item record (operations.discuss) never saw them."""

@@ -60,7 +60,8 @@ test("a line drawn ahead asks the Advisor nothing, and holds a card that would w
   // One whose read is held (prefetchTask) had that read already, and draws at once, as the rail's row does
   const surface = src.slice(src.indexOf("const surface = useCallback"), src.indexOf("useEffect(() => { surfaceRef.current = surface; }"));
   assert.match(surface, /\.\.\.\(drawsNow\(prep\.answer\.item\) \? \{\} : \{ held: true \}\)/);
-  assert.match(src, /function Line\(\{[^\n]*\n[^]*?if \(m\.held\) m = \{ \.\.\.m, card: null \};/);
+  // ...and its words with it: they are the card's lead, and alone they were a stray "Next up: 4 FYIs." bubble (2026-10-25)
+  assert.match(src, /function Line\(\{[^\n]*\n[^]*?if \(m\.held\) m = \{ \.\.\.m, card: null, text: "" \};/);
   // the answer's line is a fresh object: `held` and `ahead` go with the line they were on
   assert.match(landed, /placeLine\(ahead \? m\.filter\(\(x\) => x\.id !== ahead\.id\) : m, \{ id, role: "assistant", text: data\.say/);
 });

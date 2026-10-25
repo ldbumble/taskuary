@@ -130,6 +130,16 @@ class TurnTests(unittest.TestCase):
         self.assertNotIn('corrected file', last_receipt(s))
         self.assertFalse([c for c in s.list_comments(t) if 'corrected file' in (c.get('Body') or '')])
 
+    def test_a_typed_digit_is_kept_as_typed(self):
+        """The 2026-10-25 sweep: "2" typed on the desk was saved as the button it numbered ("Mark done") - a second owner bubble beside the
+        page's own "2", and after a reload the owner's line read words they never typed."""
+        s = store()
+        t, m, r = drafted(s)
+        concierge.surface(s, key=f'review:{r}', llm=lambda *a, **k: 'Dana needs the corrected export.')
+        concierge.say(s, '2', key=f'review:{r}', llm=lambda *a, **k: 'Which one did you mean?')
+        said = [h['text'] for h in concierge.history(s, general.dock_task(s)[0]['TaskId']) if h['role'] == 'user']
+        self.assertEqual(said, ['2'])
+
     def test_what_is_said_about_an_item_is_kept_against_the_item_not_only_in_the_browser(self):
         """PW-132: the chat's turns about an item lived in the dock conversation and the browser's receipts; the
         durable per-item record (operations.discuss) never saw them."""

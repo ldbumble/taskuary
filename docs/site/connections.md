@@ -111,6 +111,35 @@ and reviews) is read from GitHub for every pull request, and the card only offer
 A repository you follow can override the pull-request choice, the merge method and Close out anyway.
 **Check the token** asks GitHub, per repository, whether the token may do what these settings turn on.
 
+### Jira, Monday.com and Linear: what goes back
+
+These three trackers can be written to as well as read. Every write waits for your press, because
+each one reaches people: everyone on an item reads a comment, and the tracker tells the people
+following an item when it moves or changes hands.
+
+| Act | Jira (REST v3) | Monday.com | Linear |
+|---|---|---|---|
+| Comment | A comment on the issue | An update on the item | A comment on the issue |
+| Move | A transition the workflow offers from where the issue stands | A label of the item's status column | A state of the team's workflow |
+| Assign | One person Jira can assign it to | One person, set on the item's People column | One person in the workspace |
+| Close | The transition to a status in Jira's *done* category | The label the status column marks as done | The team's first *completed* state |
+
+**Close out on a tracker task.** When the agent on a task from one of these items finishes, Close
+out proposes **comment and move to done**, with the comment drafted from the agent's result. You can
+edit the comment, then press **Approve**. Taskuary reads the item again when the card is drawn. If
+the tracker has no done state, or the workflow offers no move to it from the item's current status,
+the card says so and Approve posts the comment alone. If the item is already done, it posts only the
+comment.
+
+**What an agent can do.** An agent proposes these acts with the types `jira_comment`, `jira_move`,
+`jira_assign` and `jira_close`, and the same four for `monday_` and `linear_`. Without an item named,
+the proposal is for the item its task came from. Each one waits on the task with an Approve button,
+whatever permission the card has. A name that matches two people, or a status the workflow does not
+offer, is refused and nothing is changed. A scheduled report never runs them.
+
+Monday's board can have several status and People columns. The first of each is used unless the
+card's settings name one (`status_column`, `people_column`).
+
 ## Data and report sources
 
 The full list is long and grows; these are the ones worth knowing about by shape.

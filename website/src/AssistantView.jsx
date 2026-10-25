@@ -860,7 +860,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
     </div>
   );
   if (m.role === "receipt") return (
-    <div className="tq-msg receipt"><span /><div className="body">{m.status && m.status !== "done" ? "✗" : "✓"} {m.text}{pressedOf(m) && <Pressed label={pressedOf(m)} note={pressedNoteOf(m)} />}
+    <div className="tq-msg receipt"><span /><div className="body">{m.status === "warn" ? "" : m.status && m.status !== "done" ? "✗ " : "✓ "}{m.text}{pressedOf(m) && <Pressed label={pressedOf(m)} note={pressedNoteOf(m)} />}
       {/* a receipt can carry the walk's own word: a sweep puts the table down and OFFERS Next rather
           than jumping to the next thing by itself (the owner, 2026-09-11). Same strip, same buttons.
           ...and its Open and Report this bug go there too: a button in the line is against "no button in line ever" (2026-10-06),
@@ -2881,7 +2881,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // went to is on the rail's Later row and on the task; a warning about that day is still worth saying
   const remindReceipt = (out, tid, ref, key = null) => {
     setMsgs((m) => { const ms = pressLine(m, { key, tid }, btn("defer"));
-      return out?.warn ? [...ms, { id: `r${Date.now()}`, role: "receipt", tid, ref, text: out.warn }] : ms; });
+      // ...as a warning, not a success: "✓ That is after it is due" ticked a line saying the day picked may be wrong (the 2026-10-25 sweep)
+      return out?.warn ? [...ms, { id: `r${Date.now()}`, role: "receipt", status: "warn", tid, ref, text: out.warn }] : ms; });
   };
   // ...the Advisor's own move (a task to fix what failed, a proposal) pressed from a phone's row as from this one: the phone's strip had
   // none, so a move the row lacks drew no line and no button there (the matrix's phone pass, 2026-10-20)

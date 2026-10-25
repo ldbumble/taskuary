@@ -1098,6 +1098,20 @@ class NextBadge(unittest.TestCase):
         self.assertEqual([c.get('pressed') for c in cards()], ['Read', buttons.label('close'), 'Next'])
         self.assertFalse(concierge._stamp_next(s, dock, 'report:99'))      # nothing drawn, nothing stamped
 
+    def test_a_card_the_page_drew_ahead_of_any_answer_gets_its_line_wearing_next(self):
+        """2026-10-25: Mark done draws the next task at its press, and Next pressed on it before the close's walk-on was asked for left a
+        card the server had never written - no line to stamp, so the task the owner walked past was gone on reload. Given its row, it is
+        written then, wearing Next, before the line Next brings; an fyi batch is never written so (its members are not one card)."""
+        s = MemoryStore(); dock = general.dock_task(s)[0]['TaskId']
+        cards = lambda: [json.loads(m.group(1)) for c in s.list_comments(dock) if (m := concierge._MARK.search(c.get('Body') or ''))]
+        row = {'key': 'task:9', 'kind': 'task', 'lane': 'yours', 'tid': 9, 'ref': 'TQ-0009', 'title': 'Book the auditors'}
+        self.assertTrue(concierge._stamp_next(s, dock, 'task:9', row=row))
+        self.assertEqual([(c['key'], c.get('pressed')) for c in cards()], [('task:9', 'Next')])
+        self.assertFalse(concierge._stamp_next(s, dock, 'task:9', row=row))  # written once: the line it now has already wears it
+        self.assertFalse(concierge._stamp_next(s, dock, 'fyis:1,2', row={'key': 'fyis:1,2', 'kind': 'fyis', 'lane': 'fyi'}))
+        self.assertEqual(len(cards()), 1)
+        self.assertIs(concierge._row_of({'items': [{'key': 'msg:3', 'aliases': ['task:9']}]}, 'task:9')['key'], 'msg:3')
+
 
 class ForLaterLine(unittest.TestCase):
     def test_the_line_counts_what_the_rail_holds_for_later_and_says_when_each_is_back(self):

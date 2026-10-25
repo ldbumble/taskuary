@@ -9,6 +9,7 @@ import { label, liveVerb, verbOfRow } from "./buttons.js";
 //   `why`: what a DISABLED verb is waiting for, said in the row itself ("write the reply first") - a greyed button that does not say why is a dead end
 //   `blank`: what an advised move does now that the text it acts on is gone (the draft box emptied) - said in place of the line judged over it
 const live = new Map();          // id -> the latest verb (its run closes over the freshest state)
+const ofs = new Map();           // id -> the card that registered it: the item a button drawn from it was drawn for (press)
 const owners = new Map();        // owner -> { verbs, ref }
 const subs = new Set();
 const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", ...(v.blank ? { blank: v.blank } : {}), promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.fill ? { fill: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}), ...(v.card ? { card: true } : {}) });
@@ -16,11 +17,13 @@ let snap = { list: [], ref: "" }, sig = "";
 
 export function put(owner, verbs, ref = "") {
   const old = owners.get(owner)?.verbs || [];
-  old.forEach((v) => { if (live.get(v.id) === v) live.delete(v.id); });   // not one a newer owner has since taken over
-  if (verbs?.length) { owners.set(owner, { verbs, ref }); verbs.forEach((v) => live.set(v.id, v)); } else owners.delete(owner);
+  old.forEach((v) => { if (live.get(v.id) === v) { live.delete(v.id); ofs.delete(v.id); } });   // not one a newer owner has since taken over
+  if (verbs?.length) { owners.set(owner, { verbs, ref }); verbs.forEach((v) => { live.set(v.id, v); ofs.set(v.id, owner); }); } else owners.delete(owner);
   const all = [...owners.values()];
   // one button per id: two mounted copies of a card (each its own owner, see useVerbs) carry the same verbs
-  const seen = new Set(), list = all.flatMap((o) => o.verbs).filter((v) => !seen.has(v.id) && seen.add(v.id)).map(view);
+  // ...and each drawn button says which card it was drawn for (`of`), so its press acts on that card or on nothing (press)
+  const seen = new Set(), list = [...owners].flatMap(([o, { verbs: vs }]) => vs.map((v) => [o, v]))
+    .filter(([, v]) => !seen.has(v.id) && seen.add(v.id)).map(([o, v]) => ({ ...view(v), of: ofs.get(v.id) || o }));
   const next = { list, ref: all.map((o) => o.ref).find(Boolean) || "" }, s = JSON.stringify(next);
   if (s === sig) return;
   sig = s; snap = next; subs.forEach((f) => f());
@@ -38,7 +41,12 @@ export const onPressing = (f) => { pressing.add(f); return () => pressing.delete
 // ...a card's own button that acts without the row (the draft's Send, Redraft and Copy under it) is heard the same way, before it runs
 // (phase B, 2026-10-23: they were never recorded). Told twice when the row ran it - the server keeps one
 export const announce = (id) => pressing.forEach((f) => { try { f(id); } catch { /* a lost record never stops the press */ } });
-export const press = (id, e, anchor) => {
+// A PRESS ACTS ON THE ITEM ITS BUTTON WAS DRAWN FOR, OR ON NOTHING (2026-10-25): a double-click on Mark done closed two tasks - the second
+// click landed on the same button after the close had drawn the next task up (drawNextEarly), and the row ran whatever verb now answered
+// to "done": the next task's. `of`, the card the drawn button came from (the row passes it): another card's verb under the same id is
+// not this press's. A press from the code itself (the Advisor's pick of a real button) names none and runs the verb there is.
+export const press = (id, e, anchor, of = null) => {
+  if (of && ofs.get(id) !== of) return undefined;
   announce(id);
   const out = live.get(id)?.run?.(e, anchor);
   Promise.resolve(out).catch(() => {}).then(() => acted(id));
@@ -126,6 +134,18 @@ export const advisedAny = (list, pick) => (pick?.verb ? list.find((v) => v.group
 // flight. The owner's own Send, Reply or Redraft greys the row's draft verbs while it runs (its label "Sending…", "Drafting…"), and the strip
 // read that as the advised move being unavailable: "Drafting… is off - it cannot be pressed right now." for half a second after every
 // Reply (the 2026-10-25 sweep). The press is not refused; the strip stays quiet until it lands.
+// ...AND ONE GESTURE IS ONE PRESS: the second click of a double-click, or a press within ONE_PRESS_MS of the last, on ANOTHER item than
+// that press was on is the same hand still moving - the item it lands on was drawn under it a moment ago, never read. Mark done, Next,
+// Remind me and Close with a note all draw the next item at the press, so all of them would hand it the second click. `item`: the key of
+// the item the press is on (AssistantView's gate reads it off the view under the pointer, else the table). True when it may act.
+export const ONE_PRESS_MS = 350;
+let lastPress = null;
+export const aimed = (item, e = null, now = Date.now()) => {
+  const l = lastPress;
+  if (l && item !== l.item && (Number(e?.detail) > 1 || now - l.at < ONE_PRESS_MS)) return false;
+  lastPress = { item, at: now };
+  return true;
+};
 export const pressInFlight = (list) => (list || []).some((v) => v.busy || /…$/.test(String(v.label || "")));
 
 // A `card` verb is one the card draws itself, under the draft (ReviewDecision): registered so the Advisor can find it, drawn here

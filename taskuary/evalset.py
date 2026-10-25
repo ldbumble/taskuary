@@ -271,6 +271,8 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
                      'channel': c.get('channel'), 'notes_seen': len(ns), 'why': v.get('why') or '', 'degraded': bool(v.get('degraded')),
                      # what the regex layer would make of a task (coding/general) - the second, unmeasured verdict
                      'regex_kind': draft_task_fields(msg)['kind'], 'model_kind': v.get('kind'),
+                     # how hard and how sure the reader said it was (the router's judgements, 2026-10-25) - unlabelled, so shown, not scored
+                     'difficulty': v.get('difficulty'), 'sure': v.get('sure'),
                      'others_replied': thread.get('others_replied') or [], 'subject': c.get('subject')})
     n = sum(conf.values()); ok = sum(v for (a, b), v in conf.items() if a == b)
     out = {'n': n, 'accuracy': (ok / n) if n else None, 'confusion': {f'{a}->{b}': v for (a, b), v in sorted(conf.items())},

@@ -119,3 +119,13 @@ def test_a_coding_pane_opens_on_the_strong_gear_only_in_auto(s):
         s.set_setting('ai_route_mode', 'auto', 'owner')
         assert brainroute.for_session(s, s.get_task(tid), 'claude') == ('claude', 'opus@high')
         assert brainroute.for_session(s, s.get_task(_task(s)), 'claude') == ('claude', None)
+
+
+def test_a_reply_to_a_hard_task_is_written_on_the_strong_model(s):
+    from taskuary import responder
+    s.set_setting('ai_route_mode', 'auto', 'owner'); tid = _task(s, 'hard'); seen = []
+    s.add_message({'TaskId': tid, 'Channel': 'email', 'FromEmail': 'erin@northwind.example', 'FromName': 'Erin Blake',
+                   'Subject': 'Board pack', 'BodyText': 'Can you pull the board pack together by Thursday?', 'Status': 'routed'})
+    with mock.patch.object(llm, 'make_llm', lambda t, conf, key: seen.append(conf['model']) or (lambda *a, **k: 'Yes - by Thursday.')):
+        responder.draft_reply(s, tid)
+    assert seen == ['claude-opus-5'] and s.brain_routes(tid, limit=1)[0]['Rule'] == 'hard-work'

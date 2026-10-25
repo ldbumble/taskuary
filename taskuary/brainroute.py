@@ -365,3 +365,70 @@ def cap_left(store) -> bool:
     "Whether a strong call is still allowed today. Blank cap (the default) is no cap."
     n = cap(store)
     return n is None or strong_today(store) < n
+
+
+# ── what Settings shows: the mode line, the rules as sentences, the cap line, the recent routes ───────────────────────────────
+PLURAL = {'triage': 'triage', 'draft': 'drafts', 'summary': 'summaries', 'advisor': 'the Advisor', 'memory': 'memory', 'rank': 'ranking',
+          'assistant': 'the Assistant', 'general': 'general work', 'coding': 'coding', 'judge': 'judgements', 'report': 'reports'}
+USE_WORDS = {'light': 'the quick model', 'standard': "the card's own model", 'strong': 'the strong model'}
+
+
+def _and(xs) -> str:
+    xs = [str(x) for x in xs if x]
+    return '' if not xs else xs[0] if len(xs) == 1 else f"{', '.join(xs[:-1])} and {xs[-1]}"
+
+
+def sentence(r: dict) -> str:
+    """A rule as the owner reads it - "Hard drafts, general work and coding -> the strong model" - built from its values, so the
+    sentence can never say something the rule does not do."""
+    w, u = r.get('when') or {}, r.get('use') or {}
+    jobs = _and(PLURAL.get(j, j) for j in w.get('job') or []) or 'every job'
+    who = ' '.join(x for x in (_and(w.get('difficulty') or []), jobs) if x)
+    if w.get('data_class'): who += f" carrying {_and(w['data_class'])} data"
+    if w.get('origin'): who += f" written by {_and('a stranger' if o == 'stranger' else 'you' if o == 'owner' else 'people you trust' for o in w['origin'])}"
+    if w.get('person'): who += f" with {_and(w['person'])}"
+    if u.get('escalate'): s = f'Unreadable or unsure answers from {who} -> ask the strong model once'
+    elif u.get('only'): s = f'{who} -> only an AI whose card says it may read sensitive data'
+    else: s = f"{who} -> {USE_WORDS.get(u.get('tier'), u.get('tier'))}"
+    return s[0].upper() + s[1:]
+
+
+def panel(store) -> dict:
+    "Everything the router's part of Settings draws, in one read."
+    n = cap(store)
+    return {'mode': mode(store), 'rules': [{**r, 'sentence': sentence(r)} for r in rules(store)], 'cap': '' if n is None else n,
+            'used_today': strong_today(store), 'jobs': list(JOBS), 'tiers': list(TIERS), 'difficulties': ['quick', 'standard', 'hard'],
+            'warning': coverage_warning(store)}
+
+
+def set_panel(store, mode_: str = None, rs: list = None, cap_: str = None, actor: str = 'owner') -> dict:
+    if mode_ is not None:
+        if mode_ not in ('fixed', 'auto'): raise ValueError('the mode is fixed or auto')
+        store.set_setting('ai_route_mode', mode_, actor)
+    if rs is not None: save_rules(store, rs, actor)
+    if cap_ is not None:
+        c = str(cap_).strip()
+        if c and not c.isdigit(): raise ValueError('the cap is a whole number of strong calls a day, or blank for none')
+        store.set_setting(CAP_KEY, c, actor)
+    return panel(store)
+
+
+def recent(store, limit: int = 20) -> list:
+    "The newest routes, each one line: job, task, tier -> brain and model, and why. Read-only."
+    from .store import task_ref
+    return [{**x, 'ref': task_ref(x['TaskId']) if x.get('TaskId') else '', 'brain': _said(store, x.get('Pick') or '')}
+            for x in store.brain_routes(None, limit=limit)]
+
+
+def coverage_warning(store) -> str:
+    "Filled in by the data-type seam: '' while no rule limits which AI may read what."
+    return ''
+
+
+def strong_for(store, job: str, task, first: str = None) -> tuple:
+    """(pick, model) for "Run again on the strong model": `first` (the brain that ran it) or the job's own brain when it has a strong
+    model, else the first backup with one - a coding pane only ever a CLI's. ('', '') when no brain here has one."""
+    r = choose(store, job, task, want_pick=first or None)
+    ok = lambda p: bool(strong_of(store, p)) and (job != 'coding' or p.startswith('cli:'))
+    to = next((p for p in [r.pick, *r.chain] if p and ok(p)), '')
+    return (to, strong_of(store, to)) if to else ('', '')

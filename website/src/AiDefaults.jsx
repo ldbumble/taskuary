@@ -11,6 +11,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Alert, AlertTitle, Autocomplete, Box, CircularProgress, MenuItem, Select, TextField, Typography } from "@mui/material";
 import api from "./api";
 import { ACCENT2, BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
+import { RecentRoutes, RouteRules } from "./RouteRules.jsx";
 
 // A model box left blank is not "unconfigured" — it means the provider's own default, and the
 // server says which. Shown as the placeholder so an empty field never reads as broken.
@@ -205,10 +206,13 @@ export default function AiDefaults({ brains, agents, onGo, onLoaded }) {
       {/* a payload without slots is a payload, not a crash: the public demo serves one and the
           whole Settings view fell into the error boundary - "Something in this view failed to
           draw" - over a page of knobs that simply had nothing to list (2026-09-22) */}
+      {/* the mode line and its rules sit above the cards they govern (the router, 2026-10-25) - Fixed is the cards alone */}
+      {!!(state.slots || []).length && <RouteRules />}
       {(state.slots || []).map((s) => (
         <Slot key={s.key} slot={s} brains={brains} agents={state.agent_options || agents || state.agents || []}
           judgeOptions={state.judge_options || []} onSave={(patch) => save(s, patch)} onGo={onGo} />
       ))}
+      {!!(state.slots || []).length && <RecentRoutes />}
     </Box>
   );
 }

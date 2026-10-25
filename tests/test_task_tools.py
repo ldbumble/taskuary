@@ -268,7 +268,8 @@ class OneLineTests(unittest.TestCase):
         # ...7650 since the org chart's people.relate (2026-10-22): its parameters are in its description, not the index
         # ...7800 since the app's own trouble is looked into in the chat (app.health on WHERE, app.repair in the app bucket, 2026-10-24)
         # ...7850 since a meeting can be Prepared from the chat (prepare in the time bucket, 2026-10-25)
-        self.assertLess(len(toolcatalog.block()), 7850, 'the index rides every turn - keep it an index')
+        # ...7950 since the chat corrects the memory as well (memory.remember's about / replaces, memory.wrong, memory.about - 2026-10-25)
+        self.assertLess(len(toolcatalog.block()), 7950, 'the index rides every turn - keep it an index')
         # ...and it names every look-up, so a question finds its tool without guessing a bucket (the 2026-10-20 query walk)
         for k in toolcatalog.READS: self.assertIn(k, toolcatalog.block(), k)   # 7000 until the four calendar tools (2026-10-20)
 

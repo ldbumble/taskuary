@@ -20,6 +20,16 @@ PEOPLE, CARE, WORK, PROMISES, BRING = SECTIONS.values()
 # 2026-10-25); the triage prompt says they never decide whether mail is a task
 READS = {'triage': ('care', 'people'), 'drafter': ('people',), 'advisor': ('people', 'care', 'work', 'promises'), 'assistant': tuple(SECTIONS),
          'agents': ('people', 'care', 'promises')}
+# who reads a section, as the owner reads it - triage takes the people lines for a task's PRIORITY only (the owner, 2026-10-25)
+READER_WORDS = {'triage': 'triage', 'drafter': 'drafts', 'advisor': 'the Advisor', 'assistant': 'the Assistant', 'agents': 'agents'}
+
+
+def reads_label(slug: str) -> str:
+    """'read by triage (priority only) · drafts · the Advisor · the Assistant · agents' - the matrix said in words."""
+    rs = [READER_WORDS[r] + (' (priority only)' if r == 'triage' and slug == 'people' else '') for r in READS if slug in READS[r]]
+    return 'read by ' + ' · '.join(rs) if rs else 'read by nobody yet'
+
+
 TITLE = {'people': 'Your people', 'care': 'What you care about', 'work': 'How you work', 'promises': 'Promises', 'bring': 'What to bring up'}
 BUDGET = {'triage': 1500, 'drafter': 600, 'agents': 2500, 'assistant': 2000, 'advisor': 2000}
 OVER = 'learned_over_budget'          # {reader: [keys]} - the lines a reader's budget left out on its last read

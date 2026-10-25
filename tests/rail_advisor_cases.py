@@ -158,6 +158,39 @@ def _promise_delivered(s): _thread(s, 'email:budget', ERIN, 'Q4 budget', theirs_
 def _promise_tasked(s):
     _promise_plus(s); m = s._one("SELECT MessageId FROM message WHERE Direction='out'")
     s.task_for_promise(m['MessageId'], 'send the Q4 budget', None)
+GAIL = ('Gail Moreno', 'gail@northwind.example')
+def _every(s, sent_this_time=False):
+    """The headcount sheet to Gail on the same weekday four weeks running, each promised and delivered - this week's day was yesterday."""
+    day = (datetime.now() - timedelta(days=1)).replace(hour=9, minute=30, second=0, microsecond=0)
+    s.add_message({'ConversationId': 'email:gail-hello', 'Channel': 'email', 'Subject': 'Headcount', 'FromName': GAIL[0], 'FromEmail': GAIL[1],
+                   'SentAt': at(d=40), 'BodyText': 'Thanks for the sheet.', 'Status': 'filed'})
+    for k in range(1, 5):
+        d = day - timedelta(weeks=k)
+        mid = s.add_message({'ConversationId': f'email:headcount-{k}', 'Channel': 'email', 'Subject': 'Headcount sheet', 'FromName': 'Alex Doyle',
+                             'FromEmail': OWNER, 'SentAt': d.strftime('%Y-%m-%d %H:%M:%S'), 'BodyText': "Attached is this week's headcount sheet, as promised.",
+                             'Status': 'context', 'Direction': 'out', 'RecipientsJson': json.dumps({'to': [GAIL[1]], 'cc': []})})
+        s.put_sent_verdict(mid, f'email:headcount-{k}', False, True, 'the headcount sheet', d.strftime('%Y-%m-%d'), 'eval', mid)
+    if sent_this_time:
+        s.add_message({'ConversationId': 'email:headcount-0', 'Channel': 'email', 'Subject': 'Headcount sheet', 'FromName': 'Alex Doyle', 'FromEmail': OWNER,
+                       'SentAt': (day + timedelta(minutes=20)).strftime('%Y-%m-%d %H:%M:%S'), 'BodyText': "This week's headcount sheet.",
+                       'Status': 'context', 'Direction': 'out', 'RecipientsJson': json.dumps({'to': [GAIL[1]], 'cc': []})})
+def _every_due(s): _every(s)
+def _every_sent(s): _every(s, sent_this_time=True)
+NEWSLETTERS = ('PhishGuard News', 'Trainly Tips', 'Spendly Digest')
+def _said_no_to_newsletters(s):
+    """Three Advisor ideas to unsubscribe from a newsletter, each dismissed - and a fourth newsletter arrives."""
+    for i, n in enumerate(NEWSLETTERS):
+        idea = s.upsert_idea({'key': f'idea:unsubscribe-{i}', 'kind': 'idea', 'text': f'You never open {n} - unsubscribe?', 'sig': f'u{i}',
+                              'section': 'ideas', 'action': {'type': 'unsubscribe'}}, at(d=20 - i * 5))
+        s.set_idea_status(idea['IdeaId'], 'dismissed', 'owner')
+    _newsletter(s)
+def _newsletter(s):
+    s.add_message({'ConversationId': 'email:payworth-news', 'Channel': 'email', 'Subject': 'Payworth Pulse - October', 'FromName': 'Payworth Pulse',
+                   'FromEmail': 'pulse@payworth.example', 'SentAt': at(h=5), 'BodyText': 'Our monthly newsletter.', 'Status': 'filed', 'SenderClass': 'bulk'})
+def newsletter_idea(user):
+    """The scripted model, following the contract: an idea of a kind the owner said no to again and again stays unsaid."""
+    no = len(re.findall(r'^- \(dismissed\) You never open .* - unsubscribe\?', user, re.M))
+    return [] if no >= 3 else [{'key': 'idea:unsubscribe-payworth', 'text': 'You never open Payworth Pulse - unsubscribe?', 'why': 'scripted', 'section': 'ideas'}]
 def _cold_plus(s): _task(s, 'Renew the PhishGuard licence', quiet_d=6)
 def _cold_fresh(s): _task(s, 'Renew the PhishGuard licence', quiet_d=1)
 def _cold_running(s):
@@ -260,6 +293,10 @@ CASES = [
     ('promise', 'promised a budget by Friday, not sent', True, _promise_plus, None),
     ('promise', 'the budget went', False, _promise_delivered, None),
     ('promise', 'already a task on the owner', False, _promise_tasked, None),
+    # ...and a promise kept on a schedule (slice 5, 2026-10-25): the Monday sheet not sent this week is raised, and quiet once it went
+    ('promise', 'the weekly headcount sheet has not gone this week', True, _every_due, None),
+    ('promise', 'the weekly headcount sheet went this week', False, _every_sent, None),
+    ('promise', 'the weekly sheet, put down, the next check the same week', False, _every_due, 'dismiss'),
     # cold: open work nothing has touched for the window
     ('cold', 'open task untouched for six days', True, _cold_plus, None),
     ('cold', 'touched yesterday', False, _cold_fresh, None),
@@ -292,6 +329,9 @@ CASES = [
     ('idea', "the model's own line about a mail", True, _idea_plus, None),
     ('idea', 'about a task closed yesterday', False, _idea_closed, None),
     ('idea', 'the same thought again after a No', False, _idea_plus, 'dismiss'),
+    # what to bring up (slice 5): three newsletter ideas said no to - a fourth, about another newsletter, is not raised; with no such No it is
+    ('idea', 'a newsletter idea, nothing said no to yet', True, _newsletter, None),
+    ('idea', 'a fourth newsletter idea after three were said no to', False, _said_no_to_newsletters, None),
     # rule: a learned pattern clear-cut enough to be a rule (promote.py)
     ('rule', 'twelve mails put down, none taken up', True, _rule_plus, None),
     ('rule', 'Not ours pressed on nine mails (the press log only)', True, _rule_pressed, None),
@@ -311,6 +351,8 @@ EXTRA = {"the model's own line about a mail": lambda s: idea_says('Gail says the
                                                                    lambda: (s._one("SELECT MessageId FROM message WHERE Subject='Lease renewal'") or {}).get('MessageId')),
          'about a task closed yesterday': lambda s: idea_says('The vendor loop Gail flagged is back.',
                                                                lambda: (s._one("SELECT MessageId FROM message WHERE Subject='Vendor loop'") or {}).get('MessageId')),
+         'a newsletter idea, nothing said no to yet': lambda s: newsletter_idea,
+         'a fourth newsletter idea after three were said no to': lambda s: newsletter_idea,
          'four threads about QuickBooks': lambda s: connect_says('QuickBooks'),
          'two threads - under the floor': lambda s: connect_says('QuickBooks'),
          'already connected': lambda s: connect_says('QuickBooks'),

@@ -50,6 +50,8 @@ KINDS = {
     'agent.stop':               ('task', (), None),
     'report.rerun':             ('source', (), None),
     'memory.remember':          ('memory', ('note',), None),
+    # ...and a learned line taken out (slice 7 of the memory redesign, the owner, 2026-10-25: "forget that Ray does payroll")
+    'memory.wrong':             ('memory', ('key',), None),
     # ...and who is who to the owner (orgchart.py): "Erin is my manager", "Ray owns payroll" - the org chart triage and agents read
     'people.relate':            ('person', ('who',), None),
     # ...and the routing memory, which the chat could not reach at all. Teaching only: it says how

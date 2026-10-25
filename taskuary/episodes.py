@@ -132,6 +132,16 @@ def build(store, since: str) -> list:
             who = str(to[0] if to else '').lower()
             out.append((f"sv{v['MessageId']}", v['SentAt'], who, f"you promised {who or 'them'}{_relation(store, who)} \"{v.get('What') or 'something'}\""
                         + (f" by {v['Due']}" if v.get('Due') else '') + f" ({_day(v['SentAt'])[:3]})" + (' · then: delivered' if v.get('DeliveredBy') else '')))
+        # ...and the promises kept ON A SCHEDULE, said once as what they are (slice 5, 2026-10-25): one person, one weekday, three weeks
+        # or more - the shape the reflection writes a Promises line from ("You send Gail Moreno the headcount sheet every Monday")
+        every = {}
+        for eid, at, who, _ in [e for e in out if e[0].startswith('sv')]:
+            d = _dt(at)
+            if who and d: every.setdefault((who, d.strftime('%A')), []).append((eid, d))
+        for (who, day), xs in every.items():
+            if len({d.isocalendar()[:2] for _, d in xs}) < 3: continue
+            out.append((xs[-1][0], xs[-1][1].strftime('%Y-%m-%d %H:%M:%S'), who, f"you keep a promise to {who}{_relation(store, who)} on {day}s: "
+                        f"{len(xs)} weeks ({', '.join(e for e, _ in xs[-4:])})"))
         from . import outcomes
         for r in store._rows("SELECT * FROM outcome WHERE ResolvedAt IS NOT NULL AND Verdict!='unknown' AND At>=? AND IFNULL(Actor,'') NOT LIKE 'agent%' ORDER BY Id", (since,)):
             who = str((json.loads(r.get('FactsJson') or '{}') or {}).get('who') or '').lower()

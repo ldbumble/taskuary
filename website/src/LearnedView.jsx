@@ -11,9 +11,13 @@ import { Box, Button, Chip, Typography } from "@mui/material";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, ROLES, mono } from "./theme.jsx";
 import { plural } from "./timeWords.js";
+import { MARKS, MARK_HINT, groupLines, marksFor, personDoc } from "./learnedGroups.js";
+import ConnectAi from "./ConnectAi.jsx";
 
+// a line's colours by where it stands; the HEADINGS are the subjects and who reads each (learnedGroups.groupLines) - "rides into every
+// prompt" was never true once each reader took its own sections (the memory redesign, 2026-10-25)
 const STATUS = {
-  live:       { label: "LIVE · rides into every prompt", color: ROLES.handled.solid, tint: ROLES.handled.tint, bd: ROLES.handled.bd },
+  live:       { label: "IN USE", color: ROLES.handled.solid, tint: ROLES.handled.tint, bd: ROLES.handled.bd },
   proposed:   { label: "PROPOSED · your call — would hide mail", color: ROLES.info.solid, tint: ROLES.info.tint, bd: ROLES.info.bd },
   hypothesis: { label: "HYPOTHESES · still earning it", color: ROLES.muted.solid, tint: PANEL, bd: BORDER },
 };
@@ -95,7 +99,18 @@ const Fan = ({ line, promoteAt }) => {
   );
 };
 
-export default function LearnedView({ onChanged }) {
+// KEEP / WRONG / FORGET on the line itself (the owner's ruling 2, 2026-10-23; on Visualize too, 2026-10-25) - quiet words, never a row
+// of filled buttons: the line is what you read, the three are how you correct it
+export const MarkRow = ({ marks, onMark, busy }) => (
+  <Box sx={{ display: "inline-flex", gap: 0.25, flexShrink: 0 }} data-tq-learned-marks="">
+    {marks.map((m) => (
+      <Button key={m} size="small" disabled={busy} data-tq-mark={m} title={MARK_HINT[m]} onClick={(e) => { e.stopPropagation(); onMark(m); }}
+        sx={{ fontSize: 10.5, py: 0, px: 0.75, minWidth: 0, minHeight: 22, color: m === "wrong" ? RED_INK : DIM }}>{MARKS[m]}</Button>
+    ))}
+  </Box>
+);
+
+export default function LearnedView({ onChanged, onPerson, people = [] }) {
   const [g, setG] = useState(null);
   const [err, setErr] = useState("");
   const [open, setOpen] = useState(null);        // the line whose fan is showing
@@ -109,35 +124,39 @@ export default function LearnedView({ onChanged }) {
     try { setG((await api.get("/api/learned/graph")).data); } catch (e) { setErr(e?.response?.data?.detail || "Could not read LEARNED.md"); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  const [busy, setBusy] = useState(""), [said, setSaid] = useState(null);      // said: {key, msg} - why a mark did not take, by its line
+  const mark = async (key, how) => {
+    setBusy(key); setSaid(null);
+    try { await api.post("/api/learned/mark", { key, how }); await load(); onChanged?.(); }
+    catch (e) { setSaid({ key, msg: e?.response?.data?.detail || "That did not go through - nothing was changed." }); if (e?.response?.status === 404) await load(); }
+    finally { setBusy(""); }
+  };
   if (err) return <Typography variant="body2" sx={{ color: RED_INK }}>{err}</Typography>;
   if (!g) return <Typography variant="caption" sx={{ color: FAINT }}>Reading LEARNED.md…</Typography>;
-  const lines = g.lines || [];
-  const adopt = async (key) => { await api.post("/api/learn/adopt", { key }); await load(); onChanged?.(); };
-  const groups = ["live", "proposed", "hypothesis"].map((s) => [s, lines.filter((l) => l.status === s)]);
+  const groups = groupLines(g);
   const loose = g.loose_evidence || [];
 
   const Card = ({ l }) => {
-    const st = STATUS[l.status]; const isOpen = open === l.key; const isPinned = pinned === l.key;
+    const st = STATUS[l.status]; const isOpen = open === l.key && !l.own; const isPinned = pinned === l.key;
     return (
       <Box onMouseEnter={() => enter(l.key)} onMouseLeave={leave}
         sx={{ p: 1.25, borderRadius: 2, bgcolor: st.tint, border: `${isOpen ? 1.5 : 1}px solid ${isOpen ? st.color : st.bd}`,
           boxShadow: isPinned ? "0 1px 4px rgba(30,50,38,.14)" : "none" }}>
-        <Box onClick={() => pin(l.key)} sx={{ cursor: "pointer" }} title={isPinned ? "Click to unpin" : "Click to keep this open"}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.4 }}>
-            <Score s={l.score} eff={l.effective} color={st.color} />
-            <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}
-              title={l.effective !== l.score ? `Nothing has confirmed this since ${l.seen}, so it counts as s:${l.effective}` : ""}>seen {l.seen}</Typography>
-            <Typography variant="caption" sx={{ ...mono, color: st.color, fontSize: 10, fontWeight: 600 }}>
-              {isOpen ? "▾" : "▸"} {plural(l.evidence.length, "verdict")}{isPinned ? " · pinned" : ""}
-            </Typography>
+        <Box onClick={() => !l.own && pin(l.key)} sx={{ cursor: l.own ? "default" : "pointer" }} title={l.own ? undefined : isPinned ? "Click to unpin" : "Click to keep this open"}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.4 }} data-tq-learned-line={l.key}>
+            {l.own ? <Typography variant="caption" sx={{ ...mono, color: st.color, fontSize: 10, fontWeight: 600 }}>YOURS · as you wrote it</Typography> : <>
+              <Score s={l.score} eff={l.effective} color={st.color} />
+              <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}
+                title={l.effective !== l.score ? `Nothing has confirmed this since ${l.seen}, so it counts as s:${l.effective}` : ""}>seen {l.seen}</Typography>
+              <Typography variant="caption" sx={{ ...mono, color: st.color, fontSize: 10, fontWeight: 600 }}>
+                {isOpen ? "▾" : "▸"} {plural(l.evidence.length, "act")}{isPinned ? " · pinned" : ""}
+              </Typography></>}
             <Box sx={{ flex: 1 }} />
             {l.eligible && l.status === "hypothesis" && <Chip size="small" label="earned it" sx={{ height: 16, fontSize: 9.5, bgcolor: ROLES.handled.tint, color: ROLES.handled.ink }} />}
-            {l.status !== "live" && (
-              <Button size="small" onClick={(e) => { e.stopPropagation(); adopt(l.key); }} sx={{ fontSize: 10.5, py: 0, minWidth: 0 }}
-                title="Move this line into the live section — it rides into every prompt from now on">Adopt</Button>
-            )}
+            <MarkRow marks={marksFor(l)} busy={busy === l.key} onMark={(how) => mark(l.key, how)} />
           </Box>
           <Typography variant="body2" sx={{ fontSize: 12.5, lineHeight: 1.4, color: INK }}>{l.text}</Typography>
+          {said?.key === l.key && <Typography variant="caption" role="alert" sx={{ color: RED_INK, display: "block", mt: 0.4 }}>{said.msg}</Typography>}
         </Box>
         {isOpen && <Fan line={l} promoteAt={g.promote_at} />}
       </Box>
@@ -146,9 +165,16 @@ export default function LearnedView({ onChanged }) {
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, p: 2, bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2 }}>
+      {/* nothing is learned with no AI connected - said once, with its way out (the design, 3.8; ConnectAi, 2026-10-21) */}
+      {g.ai === false && (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, p: 1, borderRadius: 1.5, bgcolor: PANEL2, border: `1px solid ${BORDER}` }} data-tq-learn-no-ai="">
+          <Typography variant="body2" sx={{ fontSize: 12.5, color: INK, flex: 1 }}>Connect an AI to learn how you work. What you write here is read either way.</Typography>
+          <ConnectAi />
+        </Box>
+      )}
       <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
         <b style={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT }}>WHAT DRIVES WHAT · </b>
-        every line shows how many of your verdicts fed it. Point at one and they fan out underneath — red where one contradicted — with the line's ledger: every point it gained or lost, on one clock. Click to keep it open.
+        every learned line shows how many of your own acts fed it. Keep makes a line yours, Wrong takes it out for good, Forget takes it out for now. Point at one and they fan out underneath — red where one contradicted — with the line's ledger: every point it gained or lost, on one clock. Click to keep it open.
         {g.history_since ? "" : " History records from now; today's ledgers are reconstructed from the evidence dates."}
       </Typography>
       <Box sx={{ display: "grid", gridTemplateColumns: "200px minmax(0, 1fr)", gap: 3, alignItems: "start" }}>
@@ -160,11 +186,23 @@ export default function LearnedView({ onChanged }) {
           <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>A learned line never overrides these; where they disagree, SOUL wins.</Typography>
         </Box>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-          {groups.map(([status, ls]) => (
-            <Box key={status} sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-              <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: status === "proposed" ? RED : FAINT, fontWeight: 600 }}>{STATUS[status].label}</Typography>
-              {ls.length === 0 && <Typography variant="caption" sx={{ color: FAINT }}>nothing here yet</Typography>}
-              {ls.map((l) => <Card key={l.key} l={l} />)}
+          {groups.map((sec) => (
+            <Box key={sec.slug} sx={{ display: "flex", flexDirection: "column", gap: 1 }} data-tq-learned-section={sec.slug}>
+              <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: sec.slug === "proposed" ? RED : FAINT, fontWeight: 600 }}>
+                {sec.title.toUpperCase()} · <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none" }}>{sec.reads}</span></Typography>
+              {sec.lines.length === 0 && <Typography variant="caption" sx={{ color: FAINT }}>nothing here yet</Typography>}
+              {/* YOUR PEOPLE under the person each line is about, with their page in the Docs tree where the ledger keeps one */}
+              {sec.people ? sec.people.map(({ subject, lines: ls }) => {
+                const page = personDoc(subject, people);
+                return (
+                  <Box key={subject || "-"} sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
+                    {subject && <Typography variant="caption" sx={{ ...mono, fontSize: 10, color: DIM }}>
+                      {subject}{page && onPerson ? <> · <Box component="button" type="button" data-tq-person-link={page} onClick={() => onPerson(page)}
+                        sx={{ border: 0, p: 0, bgcolor: "transparent", color: "#55697a", font: "inherit", textDecoration: "underline", cursor: "pointer" }}>their page</Box></> : null}
+                    </Typography>}
+                    {ls.map((l) => <Card key={l.key} l={l} />)}
+                  </Box>);
+              }) : sec.lines.map((l) => <Card key={l.key} l={l} />)}
             </Box>
           ))}
           {(g.deleted || []).length > 0 && (

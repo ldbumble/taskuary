@@ -298,6 +298,19 @@ def asks_list(store, p: dict) -> str:
     from . import asks
     return asks.listing(store, p)
 
+def memory_about(store, p: dict) -> str:
+    """WHO SOMEONE IS TO THE OWNER (slice 7, 2026-10-25: "who's Gail to me"): the memory's lines about them, each with its key, and the
+    org chart's word - read, never guessed; nothing known is said so."""
+    from . import memoryedit
+    a = memoryedit.about(store, str(p.get('who') or p.get('sender') or ''))
+    out = [f"ABOUT {a['who']}" + (f" ({', '.join(n for n in a['names'] if '@' in n)})" if any('@' in n for n in a['names']) else '')
+           + (f" - the org chart: {a['relation']}" if a['relation'] else '')]
+    out += [f"  [key: {l['key']}] ({l['section']}{', yours' if l['own'] else ''}{', still being tested' if l['status'] == 'watching' else ''}) {_cut(l['text'], 300)}"
+            for l in a['lines']]
+    if not a['lines']: out.append('  The memory holds nothing about them yet' + (' beyond the org chart.' if a['relation'] else '.'))
+    return NL.join(out)
+
+
 def missed_check(store, p: dict) -> str:
     """"Did I miss anything?" - the morning brief's unanswered and waiting-on-them checks, and what could not be seen."""
     from . import welcome
@@ -311,7 +324,7 @@ def missed_check(store, p: dict) -> str:
 READ = {'tasks.list': tasks_list, 'message.read': message_read, 'sender.read': sender_read, 'docs.search': docs_search,
         'agents.now': agents_now, 'approvals.list': approvals_list, 'pipe.list': pipe_list, 'calendar.read': calendar_read,
         'activity.list': activity_list, 'errors.list': errors_list,
-        'memory.list': memory_list, 'rules.list': rules_list, 'asks.list': asks_list, 'missed.check': missed_check}
+        'memory.list': memory_list, 'memory.about': memory_about, 'rules.list': rules_list, 'asks.list': asks_list, 'missed.check': missed_check}
 
 def read(store, kind: str, p: dict) -> str:
     f = READ.get(kind)

@@ -51,7 +51,18 @@ PURPOSE = {
                                  'the owner\'s call, never this'),
     'agent.stop':               "save and end an agent's session - the one on the table, or the task `ref` names; never a guess at which",
     'report.rerun':             'run that report again',
-    'memory.remember':          'keep a fact - `note`',
+    # THE ASSISTANT EDITS THE MEMORY (slice 7, approved by the owner 2026-10-25): "Gail moved to Ops" is a fact about how the owner works,
+    # written into LEARNED.md where every reader of its section has it, and the line it makes untrue is closed - kept as history
+    'memory.remember':          ("keep a fact - `note`: the fact, in the owner's words. One about how they work with someone or something "
+                                 '("Gail moved to Ops", "Ray handles payroll for me", "I put renewals off to Friday") is kept at once where '
+                                 "the memory's readers read it, when you name it: `about`: the person's address or name; `section`: people | "
+                                 'care | work | promises | bring; `replaces`: the key of the line it makes untrue, closed and kept as history '
+                                 '(memory.about gives the keys). Any other fact brings up the notes page. Who reports to whom and who owns '
+                                 'what is people.relate'),
+    'memory.wrong':             ('take a line Taskuary learned out of its memory - `key` (from memory.about or memory.list), `how`: wrong '
+                                 '(it was never true: never written back) | forget (not now: back only on much more evidence) | ended (it '
+                                 'was true and stopped: kept as history). "forget that Ray does payroll", "that is wrong about Erin". A line '
+                                 'the owner wrote themselves takes forget only'),
     'people.relate':            ("who someone is to the owner, on their org chart - `who`: a name or address; `relation`: manager | report | none "
                                  '(none clears it); `owns`: areas they are responsible for ("payroll, benefits"), added; `drops`: areas taken off; '
                                  '`forget`: true takes them off the chart. "Erin is my manager", "Ray owns payroll", "Gail reports to me" - '
@@ -144,7 +155,8 @@ PURPOSE = {
 # THE APP'S OWN KNOBS - reports, settings, connections, scripts - named by what they do. They ran at once, put back from the receipt
 # (the tiers, 2026-09-18) until the owner ruled out undo and the chat's own acts (2026-10-19): each is its page's button now (concierge._route).
 # ...and a fact about the owner's own world with no button and no page to bring up: kept at once and said (concierge._relate)
-KEPT = frozenset({'people.relate'})
+# ...and how the owner works with them (slice 7, 2026-10-25): a line taken out of the memory is kept and said the same way (concierge._memory)
+KEPT = frozenset({'people.relate', 'memory.wrong'})
 INSTANT = frozenset({'report.run', 'report.pause', 'report.resume', 'report.route', 'report.edit', 'setting.set', 'task.defer', 'task.watch',
                      'connection.test', 'connection.pause', 'connection.resume', 'script.start'})
 
@@ -382,12 +394,12 @@ BUCKETS = (
     ('reports', 'reports and workflows', ('report.create', 'report.run', 'report.rerun', 'report.pause', 'report.resume',
                                           'report.route', 'report.edit', 'report.delete')),
     ('app', 'settings, connections, roles, scripts and kept facts', ('setting.set', 'connection.create', 'role.apply', 'connection.test', 'connection.pause',
-                                                             'connection.resume', 'app.repair', 'script.start', 'memory.remember', 'people.relate', 'hub.publish')),
+                                                             'connection.resume', 'app.repair', 'script.start', 'memory.remember', 'memory.wrong', 'people.relate', 'hub.publish')),
 )
 
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
-HINTS = {'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
+HINTS = {'memory.remember': 'note, about?, section?, replaces?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?', 'task.share': 'who, about?', 'task.complete': 'note?',
          'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?, note?', 'task.checklist': 'add?, items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until'}
 
@@ -461,6 +473,9 @@ READS = {
     'errors.list':      ('what is failing and what failed: the bell (dismissed ones marked), failed agent runs, report runs, '
                          'drafts, triage and actions over `days` (3 by default), and the last errors in the log. Use it for any '
                          '"what broke", "why did X not happen", "is anything wrong"'),
+    'memory.about':     ('who someone is to the owner: every line the memory holds about them, with its key, and what the org chart '
+                         'says - `who`: a name or address. Use it for "who\'s Gail to me", "what do you know about Ray", and before '
+                         'memory.remember replaces or memory.wrong takes out a line about them'),
     'memory.list':      ('everything kept about the owner: the saved notes (from "remember this", their verdicts, Settings) '
                          'and what LEARNED.md has learned from their verdicts. `about`: words to narrow it (a sender, a topic). '
                          'Use it for "what do you remember", "what do you know about me"'),
@@ -522,7 +537,7 @@ def valid(kind: str, params: dict) -> str:
                 'connections.list': (), 'connection.read': ('name', 'connector_id'), 'agents.list': (),
                 'knowledge.search': ('query',), 'tasks.list': (), 'asks.list': (), 'message.read': ('mid', 'id'),
                 'sender.read': ('who', 'sender'), 'docs.search': ('query',), 'agents.now': (), 'approvals.list': (), 'pipe.list': (),
-                'calendar.read': (), 'activity.list': (), 'errors.list': (), 'memory.list': (), 'rules.list': (), 'missed.check': (), 'app.health': (),
+                'calendar.read': (), 'activity.list': (), 'errors.list': (), 'memory.list': (), 'memory.about': ('who',), 'rules.list': (), 'missed.check': (), 'app.health': (),
                 'repos.list': (), 'tools.list': (), 'tools.describe': ('kind',)}[kind]
         if need and not any(str((params or {}).get(n) or '').strip() for n in need):
             return f"{kind} needs {' or '.join(need)}"

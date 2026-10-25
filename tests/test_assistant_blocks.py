@@ -861,7 +861,7 @@ class MemoryBlocksTests(unittest.TestCase):
         s = MemoryStore()
         s.save_doc('learned', s.get_doc('learned').replace('## What you care about', '## What you care about' + chr(10) + '- Short replies, no filler. [s:4 | ev: rv1,rv2,rv3 | seen: 2026-08-20]'), 'reflect')
         text = assistant.inputs(s, [])
-        self.assertIn('LEARNED (', text); self.assertIn('Short replies, no filler', text)
+        self.assertIn('WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (', text); self.assertIn('Short replies, no filler', text)
 
     def test_the_ledger_and_the_people_named_reach_the_clock_pass(self):
         from taskuary import assistant, outcomes, people_pages
@@ -877,4 +877,4 @@ class MemoryBlocksTests(unittest.TestCase):
         from taskuary import assistant
         from taskuary.store import MemoryStore
         text = assistant.inputs(MemoryStore(), [])
-        self.assertNotIn('LEARNED (', text); self.assertNotIn('THE OUTCOME LEDGER (', text)
+        self.assertNotIn('WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (', text); self.assertNotIn('THE OUTCOME LEDGER (', text)

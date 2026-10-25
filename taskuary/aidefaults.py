@@ -128,6 +128,10 @@ def resolve(store, cfg, slot_key: str) -> dict:
     elif home:
         try: out['strong_model'] = str(json.loads((store.get_connector(home[1]) or {}).get('ConfigJson') or '{}').get('strong_model') or '')
         except ValueError: out['strong_model'] = ''
+    # ...and the owner's own "may read sensitive data" mark on that brain, off by default and never set by code (the data seam)
+    if home:
+        from .brainroute import may_read_sensitive
+        out['sensitive_ok'] = may_read_sensitive(store, f'cli:{home[1]}' if home[0] == 'cli' else f'connector:{home[1]}', cfg)
     return out
 
 
@@ -324,7 +328,7 @@ def judge_options(store) -> list:
     return out
 
 
-def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor: str = 'owner', strong=None) -> dict:
+def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor: str = 'owner', strong=None, sensitive=None) -> dict:
     """Point a slot at a brain/agent and set the model it runs on, writing each half to the
     screen that owns it. `model`/`effort`/`strong` of None mean "leave alone"; '' means "clear"."""
     if slot_key not in SLOT: raise ValueError(f'unknown slot: {slot_key}')
@@ -344,6 +348,17 @@ def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor:
             else: conf.pop('strong_model', None)
             store.set_connector_config(home[1], conf)
         store.audit('setting', 0, 'save', actor, detail=f'{slot_key} strong_model={strong or "(none)"}')
+    if sensitive is not None:
+        # the mark lives on the brain like its gears: two cards on one brain show one mark
+        home = _strong_home(store, cfg, resolve(store, cfg, slot_key))
+        if not home: raise ValueError('no brain on this card to mark')
+        if home[0] == 'cli': _save_gear(store, cfg, home[1], 'sensitive_ok', '1' if sensitive else '')
+        else:
+            conf = json.loads(store.get_connector(home[1]).get('ConfigJson') or '{}')
+            if sensitive: conf['sensitive_ok'] = '1'
+            else: conf.pop('sensitive_ok', None)
+            store.set_connector_config(home[1], conf)
+        store.audit('setting', 0, 'save', actor, detail=f"{slot_key} sensitive_ok={'yes' if sensitive else 'no'}")
     if model is None and effort is None: return resolve(store, cfg, slot_key)
     # the Drafting model box is shut until a drafting brain is chosen - blank is the triage brain, whose model is its own card's
     if slot_key == 'draft_ai' and not str(store.get_setting('draft_ai') or '').strip(): raise ValueError('choose a drafting brain first')

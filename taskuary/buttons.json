@@ -44,6 +44,7 @@
     "forward":         {"label": "Hand it to a person", "hint": "Pass it to a colleague", "row": ["hand"]},
     "remove":          {"label": "Remove - not a task", "hint": "Taskuary stops making tasks from messages like this; the email itself is kept", "row": ["nat"]},
     "run_another":     {"label": "Run another agent", "hint": "Start a second agent on the same task", "row": ["run-another"]},
+    "strong_again":    {"label": "Run again on the strong model", "hint": "Runs this agent once more, from a fresh start, on a strong model - only when you press it", "row": ["strong-again"]},
     "retriage":        {"label": "Sort it again", "hint": "Ask the AI to read this one again and decide where it goes", "row": ["retriage"]},
     "fix":             {"label": "Fix it", "hint": "Opens where what failed is fixed - the button shows the fix's own words, this name only where it has none", "row": ["fix"],
                         "states": {"card": "Open the card"}, "state_hints": {"card": "Opens the connection's card in Connections, where it is set up"}},

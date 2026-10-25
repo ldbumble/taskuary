@@ -54,7 +54,7 @@ def test_the_first_matching_rule_wins_and_a_switched_off_one_is_skipped(s):
     rs = [{**r, 'on': False} if r['id'] == 'drafts-strong' else r for r in brainroute.rules(s)]
     brainroute.save_rules(s, rs)
     assert brainroute.choose(s, 'draft', task=_task(s)).rule == 'work'
-    assert [r['id'] for r in brainroute.rules(s)] == ['drafts-strong', 'quick-jobs', 'hard-work', 'work']
+    assert [r['id'] for r in brainroute.rules(s)] == ['drafts-strong', 'quick-jobs', 'hard-work', 'work', 'unsure', 'sensitive']
 
 
 def test_a_rule_names_only_what_the_router_knows(s):
@@ -119,3 +119,13 @@ def test_a_coding_pane_opens_on_the_strong_gear_only_in_auto(s):
         s.set_setting('ai_route_mode', 'auto', 'owner')
         assert brainroute.for_session(s, s.get_task(tid), 'claude') == ('claude', 'opus@high')
         assert brainroute.for_session(s, s.get_task(_task(s)), 'claude') == ('claude', None)
+
+
+def test_a_reply_to_a_hard_task_is_written_on_the_strong_model(s):
+    from taskuary import responder
+    s.set_setting('ai_route_mode', 'auto', 'owner'); tid = _task(s, 'hard'); seen = []
+    s.add_message({'TaskId': tid, 'Channel': 'email', 'FromEmail': 'erin@northwind.example', 'FromName': 'Erin Blake',
+                   'Subject': 'Board pack', 'BodyText': 'Can you pull the board pack together by Thursday?', 'Status': 'routed'})
+    with mock.patch.object(llm, 'make_llm', lambda t, conf, key: seen.append(conf['model']) or (lambda *a, **k: 'Yes - by Thursday.')):
+        responder.draft_reply(s, tid)
+    assert seen == ['claude-opus-5'] and s.brain_routes(tid, limit=1)[0]['Rule'] == 'hard-work'

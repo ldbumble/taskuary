@@ -74,6 +74,9 @@ ALLOWED_WRITES = (
     r'^/api/operations(/[^/]+)?$',
     r'^/api/operations/[^/]+/execute$',
     r'^/api/tasks/\d+/remind$',
+    # ...and the owner's correction of how hard a task is (the router's chip): a row in the demo's own database. Which AI does each
+    # job (/api/ai/route_rules) stays refused, as adopt-brain does: a visitor changing what reads the mail is not a tour
+    r'^/api/tasks/\d+/judged$',
     r'^/api/messages/\d+/reply$',                      # puts a draft on the table - only approving it sends
     r'^/api/messages/\d+/calendar$',                   # ...and a calendar answer the same way: drafted, never sent (calwrite.py)
     r'^/api/reviews/\d+/draft$',
@@ -86,7 +89,7 @@ ALLOWED_WRITES = (
 # agent.*) would start a program on the host, Send (review.approve, task.clarify, task.chase) would mail someone, and
 # reports, settings and connections reach systems - those stay refused, as before.
 LOCAL_OPS = {'task.complete', 'task.reopen', 'task.defer', 'item.settle', 'message.file', 'task.not_a_task', 'message.reply',
-             'preference.exclude_sender', 'preference.sender_rule', 'task.let_go', 'task.elsewhere', 'idea.act', 'memory.remember',
+             'preference.exclude_sender', 'preference.sender_rule', 'task.let_go', 'task.elsewhere', 'idea.act', 'memory.remember', 'memory.wrong',
              'routing.remember', 'task.split', 'task.update', 'task.check', 'task.checklist', 'task.watch', 'task.comment', 'task.merge',
              'review.reject', 'calendar.answer', 'hub.publish', 'pipe.clear', 'pipe.defer', 'pipe.close', 'script.start'}
 

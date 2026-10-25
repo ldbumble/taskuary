@@ -118,7 +118,7 @@ def record(store, old_doc: str, new_doc: str, actor: str = 'learn'):
         # a line that went because nothing confirmed it for long enough FADED (learn.settle drops it at effective 0); one that was
         # simply removed - by the owner, or by a reflection that rewrote it away - was deleted. The history says which.
         log = reflect_log(store)
-        ended = {r['Key'] for r in store._rows("SELECT Key FROM learned_line WHERE Status IN ('closed','retired')")}   # its history says so already
+        ended = {r['Key'] for r in store._rows("SELECT Key FROM learned_line WHERE Status IN ('closed','retired','forgotten','wrong')")}   # its history says so already
         for k, o in before.items():
             if k not in after and k not in ended: store.add_learned_event(k, o['text'], o['status'], 0, '', 'faded' if effective(o, log) <= 0 else 'deleted', actor)
     except Exception:
@@ -229,8 +229,17 @@ def graph(store) -> dict:
     used = {e for l in ls for e in l['ev']}
     loose = [{'id': f"mem{m['MemoryId']}", 'kind': 'verdict', 'date': m.get('CreatedAt'), 'label': m.get('Note') or '', 'scope': m.get('Scope'), 'key': m.get('ScopeKey')}
              for m in store.list_memories() if m.get('Source') == 'verdict' and f"mem{m['MemoryId']}" not in used][:12]
-    return {'lines': out, 'deleted': deleted, 'loose_evidence': loose, 'soul': soul_rules(store), 'promote_at': PROMOTE_AT,
-            'history_since': hist[0]['At'] if hist else None}
+    # THE OWNER'S OWN LINES, beside what was learned (slice 6, 2026-10-25): what they typed - or a person's page gave - is in use as written
+    from .learned_cut import SECTIONS, lines as section_lines, subject_of, reads_label, TITLE
+    own = [{'key': k, 'text': named(raw.strip()[2:].strip() if raw.strip().startswith(('- ', '* ')) else raw.strip()), 'own': True, 'status': 'live',
+            'section_slug': slug, 'subject': subject_of(raw), 'evidence': [], 'steps': [], 'score': None, 'effective': None, 'seen': ''}
+           for slug, head in SECTIONS.items() for raw, k in section_lines(doc, head) if not TAG.match(raw)]
+    for l in out: l['subject'] = subject_of(l.get('text'))
+    from .capabilities import has_ai
+    return {'lines': out + own, 'deleted': deleted, 'loose_evidence': loose, 'soul': soul_rules(store), 'promote_at': PROMOTE_AT,
+            'history_since': hist[0]['At'] if hist else None, 'ai': has_ai(store),
+            # each subject with who reads it, in the reader matrix's own words (learned_cut.READS) - never "rides into every prompt"
+            'sections': [{'slug': s, 'title': TITLE[s], 'reads': reads_label(s)} for s in SECTIONS]}
 
 
 def soul_rules(store, limit: int = 5) -> list:
@@ -250,7 +259,8 @@ SAYS = {'born': 'New guess', 'strengthened': 'Seen again', 'promoted': 'Now a ru
         'merged': 'Merged into a line that says the same', 'faded': 'Faded - nothing confirmed it for a while', 'deleted': 'Removed',
         'back': 'Back', 'edited': 'Reworded by you', 'forgotten': 'Removed by you - stays removed', 'withdrawn': 'Withdrawn - its note was switched off',
         'watching': 'Back to watching', 'moved': 'Moved to STYLE.md - the drafter reads it there',
-        'retired': 'Retired - a count of button presses, not how you work', 'closed': 'No longer true - kept as history'}
+        'retired': 'Retired - a count of button presses, not how you work', 'closed': 'No longer true - kept as history',
+        'kept': 'Kept by you - in your words from now on', 'wrong': 'Wrong, you said - never written back', 'said': 'Said by you'}
 
 
 def _named(store):
@@ -265,6 +275,16 @@ def changes(store, days: int = 30) -> list:
     """The history of the last `days`, newest first: [{at, action, says, text, status, score}]."""
     since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
     rows, named = [h for h in store.learned_history() if str(h.get('At') or '') >= since], _named(store)
-    return [{'at': h['At'], 'action': h['Action'], 'says': SAYS.get(h['Action'], h['Action']), 'text': named(h['Text']),
-             'status': h['Status'], 'score': h['Score']} for h in reversed(rows)]
+    # ...each with its key and where the line stands now, so What changed can carry Keep / Wrong / Forget on the newest row of a line
+    # (the owner's ruling 2, 2026-10-23) and none on a line already put down
+    from .learnedlines import rows as line_rows
+    from .memoryedit import find
+    st, seen, out, doc = {r['Key']: r.get('Status') for r in line_rows(store)}, set(), [], store.get_doc('learned') or ''
+    # a key with no row is an owner's own line: 'own' while it is still in the document (Forget alone), else 'gone' (nothing to press)
+    standing = lambda k: st.get(k) or ('own' if find(doc, k)[2] else 'gone')
+    for h in reversed(rows):
+        newest = h['Key'] not in seen; seen.add(h['Key'])
+        out.append({'at': h['At'], 'action': h['Action'], 'says': SAYS.get(h['Action'], h['Action']), 'text': named(h['Text']),
+                    'status': h['Status'], 'score': h['Score'], 'key': h['Key'], 'standing': standing(h['Key']), 'newest': newest})
+    return out
 

@@ -134,6 +134,16 @@ as over budget, never cut in half. The opening screen says how many lines went i
 and are still in use.
 `SOUL.md` always outranks `LEARNED.md`, and one setting switches the whole loop off.
 
+**Correcting it where you read it.** Settings → Docs → `LEARNED.md` has three views: the text you
+edit, **What changed** and **Visualize**. Visualize draws the five subjects, each saying who reads
+it, with your people under the person each line is about and a link to that person's page where
+the ledger keeps one; then Watching and Proposed. On a learned line, here and on its newest row in
+What changed, three words correct it: **Keep** makes it yours, in its words, and nothing rewrites
+it; **Wrong** takes it out for good - no reflection writes it back, whatever evidence comes;
+**Forget** takes it out for now - it comes back only if its evidence grows threefold. A line you
+wrote yourself takes Forget alone. None of this needs an AI; with none connected the page says
+"Connect an AI to learn how you work", since nothing new is learned until one is.
+
 ## Three brains, one voice
 
 Three always-on models do the thinking, and you talk to one voice. They are split by what each is

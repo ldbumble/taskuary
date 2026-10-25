@@ -2268,6 +2268,10 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
     # is one connected that starts here (agents.coding_ready - the fact triage and the pickers read), and which one runs is the
     # resolver's (agents.resolve_brain), never a tool found on the computer by itself.
     if not resume and not hub_agents.coding_ready(store): raise ValueError(NO_CODING_TOOL)
+    # ...and SENSITIVE DATA STAYS WITH THE AIs MARKED FOR IT, once the owner turns that rule on (brainroute): the pane opens on one of
+    # them or not at all - a backup the rule keeps out is no backup for it
+    chain, held = brainroute.session_allowed(store, t, chain)
+    if held: raise ValueError(held)
     agent = agent or hub_agents.coding_role(store)      # no profile named: the one whose kind is coding
     row = store.get_agent(agent or '')
     if not row:

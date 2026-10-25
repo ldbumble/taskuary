@@ -151,12 +151,12 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tr>
 <td><strong>app</strong></td>
 <td>settings, connections, roles, scripts and kept facts</td>
-<td>setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), script.start(name), memory.remember(note), people.relate(who), hub.publish(title, body, topic?, kind?, why_earned?)</td>
+<td>setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), hub.publish(title, body, topic?, kind?, why_earned?)</td>
 </tr>
 <tr>
 <td><strong>look</strong></td>
 <td>look-ups - they run at once and change nothing</td>
-<td>app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search</td>
+<td>app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.about, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search</td>
 </tr>
 </tbody></table>
 <p>A task you name goes in <code>ref</code> (&quot;TQ-0123&quot;); otherwise the tool acts on what is on the table.</p>
@@ -554,11 +554,20 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>name</code></li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="memory-remember"><code>memory.remember</code><a class="anchor" href="#memory-remember" aria-label="Link to this section">#</a></h3>
-<p>Keep a fact.</p>
+<p>Keep a fact. One about how they work with someone or something (&quot;Gail moved to Ops&quot;, &quot;Ray handles payroll for me&quot;, &quot;I put renewals off to Friday&quot;) is kept at once where the memory&#39;s readers read it, when you name it: <code>about</code>: the person&#39;s address or name. Any other fact brings up the notes page. Who reports to whom and who owns what is people.relate.</p>
 <ul>
-<li><code>note</code></li>
+<li><code>note</code> - the fact, in the owner&#39;s words</li>
+<li><code>about</code> (optional) - the person&#39;s address or name. Any other fact brings up the notes page. Who reports to whom and who owns what is people.relate</li>
+<li><code>section</code> (optional) - people | care | work | promises | bring</li>
+<li><code>replaces</code> (optional) - the key of the line it makes untrue, closed and kept as history (memory.about gives the keys)</li>
 </ul>
-<p class="runs">Brings up its button for you to press.</p><h3 id="people-relate"><code>people.relate</code><a class="anchor" href="#people-relate" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="memory-wrong"><code>memory.wrong</code><a class="anchor" href="#memory-wrong" aria-label="Link to this section">#</a></h3>
+<p>Take a line Taskuary learned out of its memory. &quot;forget that Ray does payroll&quot;, &quot;that is wrong about Erin&quot;. A line the owner wrote themselves takes forget only.</p>
+<ul>
+<li><code>key</code> - from memory.about or memory.list</li>
+<li><code>how</code> (optional) - wrong (it was never true: never written back) | forget (not now: back only on much more evidence) | ended (it was true and stopped: kept as history)</li>
+</ul>
+<p class="runs">Runs at once and says what it changed.</p><h3 id="people-relate"><code>people.relate</code><a class="anchor" href="#people-relate" aria-label="Link to this section">#</a></h3>
 <p>Who someone is to the owner, on their org chart. &quot;Erin is my manager&quot;, &quot;Ray owns payroll&quot;, &quot;Gail reports to me&quot; - never memory.remember for these: triage and agents read the chart.</p>
 <ul>
 <li><code>who</code> - a name or address</li>
@@ -645,6 +654,11 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <ul>
 <li><code>days</code> - 3 by default</li>
 </ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="memory-about"><code>memory.about</code><a class="anchor" href="#memory-about" aria-label="Link to this section">#</a></h3>
+<p>Who someone is to the owner: every line the memory holds about them, with its key, and what the org chart says. Use it for &quot;who&#39;s Gail to me&quot;, &quot;what do you know about Ray&quot;, and before memory.remember replaces or memory.wrong takes out a line about them.</p>
+<ul>
+<li><code>who</code> - a name or address</li>
+</ul>
 <p class="runs">Runs at once and changes nothing.</p><h3 id="memory-list"><code>memory.list</code><a class="anchor" href="#memory-list" aria-label="Link to this section">#</a></h3>
 <p>Everything kept about the owner: the saved notes (from &quot;remember this&quot;, their verdicts, Settings) and what LEARNED.md has learned from their verdicts. Use it for &quot;what do you remember&quot;, &quot;what do you know about me&quot;</p>
 <ul>
@@ -708,7 +722,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">Runs at once and changes nothing.</p>
     </article>
     <nav class="pager"><a class="pn prev" href="./assistant"><span>Previous</span>Assistant buttons</a><a class="pn next" href="./reports"><span>Next</span>Reports and the Advisor</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.38 · updated 2026-10-25</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.39 · updated 2026-10-25</p>
   </main>
 </div>
 <script src="./docs.js"></script>

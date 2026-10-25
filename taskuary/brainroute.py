@@ -24,6 +24,8 @@ from loguru import logger
 JOBS = ('triage', 'draft', 'summary', 'advisor', 'memory', 'rank', 'assistant', 'general', 'coding', 'judge', 'report')
 # the one-message jobs: read, judge, write - none of them can act, so asking again cannot do anything twice
 ONE_SHOT = ('triage', 'draft', 'summary', 'advisor', 'memory', 'rank', 'judge', 'report')
+# ...of which these may be asked again of a strong model (a report may research with tools, so it is not one of them)
+ESCALATES = ('triage', 'draft', 'summary', 'judge', 'advisor', 'rank', 'memory')
 # A job with no slot of its own rides the triage brain, as every unnamed build_llm always has (llm.build_llm).
 SLOT_OF = {**{j: 'triage_ai' for j in ONE_SHOT}, 'draft': 'draft_ai', 'general': 'assistant_ai', 'coding': 'default_brain',
            'assistant': 'concierge_ai'}
@@ -110,19 +112,37 @@ def _said(store, pick: str) -> str:
     return (c.get('Name') or c.get('Type')) if c else pick
 
 
-def strong_of(store, pick: str, cfg=None) -> str:
-    """This brain's STRONG gear - the owner's strong_model on its CLI connection or its AI card - or '' when it has none.
-    Blank is no strong tier, and nothing is inferred from a model's name (setup never assumes an AI)."""
+def _own(store, pick: str, field: str, cfg=None) -> str:
+    "A value the owner set on this brain itself - its CLI connection, or its AI card's config - or ''."
     import json
     if str(pick or '').startswith('cli:'):
         from . import agents, config
         cfg = config.load() if cfg is None else cfg
         key = agents.brain_key(store, pick, cfg)
-        return str(((cfg.get('cli_connections') or {}).get(key) or {}).get('strong_model') or '').strip()
+        return str(((cfg.get('cli_connections') or {}).get(key) or {}).get(field) or '').strip()
     cid = str(pick or '')[10:] if str(pick or '').startswith('connector:') else ''
     c = store.get_connector(int(cid)) if cid.isdigit() else None
-    try: return str(json.loads((c or {}).get('ConfigJson') or '{}').get('strong_model') or '').strip()
+    try: return str(json.loads((c or {}).get('ConfigJson') or '{}').get(field) or '').strip()
     except ValueError: return ''
+
+
+def strong_of(store, pick: str, cfg=None) -> str:
+    """This brain's STRONG gear - the owner's strong_model on its CLI connection or its AI card - or '' when it has none.
+    Blank is no strong tier, and nothing is inferred from a model's name (setup never assumes an AI)."""
+    return _own(store, pick, 'strong_model', cfg)
+
+
+# ── the data-type seam ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+# Triage judges whether a task carries sensitive data; each AI card has the owner's own "may read sensitive data" flag, off by
+# default and never set by code (no card is pre-marked - a gateway's card included). Once the owner turns the rule on, a sensitive
+# task reaches only a marked AI, its failover included, and with none it WAITS and says why: it never falls back to one the rule
+# keeps out. HIPAA later is a class and a flag, not a new engine (the router, 2026-10-25).
+SENSITIVE_OK = 'sensitive_ok'
+NO_SENSITIVE = 'No AI here may read sensitive data; mark one on its card in Settings'
+
+
+def may_read_sensitive(store, pick: str, cfg=None) -> bool:
+    return _own(store, pick, SENSITIVE_OK, cfg) in ('1', 'true', 'yes')
 
 
 def session_chain(store, brain: str = None) -> list:
@@ -170,6 +190,11 @@ DEFAULT_RULES = [
     {'id': 'quick-jobs', 'when': {'job': ['triage', 'rank', 'memory', 'advisor', 'summary']}, 'use': {'tier': 'light'}},
     {'id': 'hard-work', 'when': {'job': ['draft', 'general', 'coding'], 'difficulty': ['hard']}, 'use': {'tier': 'strong'}},
     {'id': 'work', 'when': {'job': ['draft', 'general', 'coding']}, 'use': {'tier': 'standard'}},
+    # an answer that could not be read, or one its model said it was unsure of, is asked once of a strong model - only for the jobs
+    # that read and write; an agent that can act is never re-run by itself (it may have done half its work), it offers a press
+    {'id': 'unsure', 'when': {'job': list(ESCALATES)}, 'use': {'escalate': True}},
+    # sensitive data only to an AI whose card is marked for it - off until the owner turns it on, in either mode: a constraint, not a tier
+    {'id': 'sensitive', 'when': {'data_class': ['sensitive']}, 'use': {'only': 'flagged'}, 'on': False},
 ]
 WHEN_KEYS = ('job', 'difficulty', 'data_class', 'origin', 'person')
 
@@ -204,8 +229,9 @@ def save_rules(store, rs: list, actor: str = 'owner') -> list:
 
 
 def _people(store, task) -> set:
-    """Who the task is with, as the people model keys them - the person seam (the memory redesign). With no people model in this
-    build there is nobody to match, so a person rule matches nothing rather than guessing at a name."""
+    """Who the task is with, as the people model keys them - the person seam: `people.keys_of_task(store, task) -> [key]`, which the
+    memory redesign provides. Only the owner writes a person rule (none ships). With no people model in this build, or one that
+    fails, there is nobody to match, so a person rule matches nothing rather than guessing at a name."""
     try: from . import people
     except ImportError: return set()
     f = getattr(people, 'keys_of_task', None)
@@ -249,10 +275,18 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
     from .general import is_dock
     chosen = want_pick is not None or bool(want_model)
     rule, tier = ('you chose it' if chosen else 'fixed'), 'fixed'
-    if not pick: why = f'{agents.NO_AI}, so {JOB_WORDS[job]} waits'
-    else: why = f"{JOB_WORDS[job]} on {_said(store, pick)}{f', {model}' if model else ''}, {'as picked for it' if chosen else 'as its card says'}"
+    f = facts(store, job, task) if pick and (task or mode(store) == 'auto') else {}
+    # FIRST, THE DATA (a hard constraint, failing closed - in either mode, once the owner turns its rule on): over an explicit pick too
+    only, held = (_first(store, f, 'only') if task and f else None), ''
+    if only:
+        ok = [p for p in [pick, *chain] if p and may_read_sensitive(store, p)]
+        if not ok: pick, chain, held, rule, tier = '', [], NO_SENSITIVE, only['id'], 'held'
+        elif ok[0] != pick: held, model = f"; only an AI marked for sensitive data may read it (rule {only['id']})", ''
+        if ok: pick, chain = ok[0], ok[1:]
+    if not pick: why = f"{held or agents.NO_AI}, so {JOB_WORDS[job]} waits"
+    else: why = f"{JOB_WORDS[job]} on {_said(store, pick)}{f', {model}' if model else ''}, {'as picked for it' if chosen else 'as its card says'}{held}"
     if pick and mode(store) == 'auto' and not want_model and not (job == 'general' and is_dock(task)):
-        f = facts(store, job, task); r = _first(store, f, 'tier')
+        r = _first(store, f, 'tier')
         if r:
             tier, rule, said = r['use']['tier'], r['id'], ''
             if tier == 'strong':
@@ -262,12 +296,23 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
                 to = pick if ok(pick) else '' if want_pick is not None else next((c for c in chain if c and ok(c)), '')
                 if not to: tier, said = 'standard', f"; {'it has no' if want_pick is not None else 'no brain here has a'} strong model, so standard"
                 elif to != pick: said, chain, pick = f'; {_said(store, pick)} has no strong model', [pick, *chain], to
+            if tier == 'strong' and not cap_left(store): tier, said = 'standard', f"; today's {cap(store)} strong calls are spent, so standard"
             # the card's model IS the standard tier; strong runs the brain's strong gear and light its quick one
             g, model = GEAR_OF[tier], (model if tier == 'standard' else '')
             hard = f" judged {f['difficulty']}" if 'difficulty' in r['when'] else ''
             why = f"{JOB_WORDS[job]}{hard} -> {tier} on {_said(store, pick)}{f', {model}' if model else ''} (rule {rule}){said}"
+    # a brain resting on its usage limit hands the call to the first backup that is not (Auto mode; the cards stand in Fixed)
+    if pick and mode(store) == 'auto' and pick in (cold := cooldowns(store)):
+        to = next((c for c in chain if c and c not in cold and (job != 'coding' or c.startswith('cli:'))), '')
+        if to:
+            why += f"; {_said(store, pick)} is limited until {cold[pick].strftime('%H:%M')}, so {_said(store, to)}"
+            # ...on its own model, as a failover always is: the resting brain's model id means nothing to another provider
+            chain, pick, model = [pick, *chain], to, ''
+            if tier == 'strong' and not strong_of(store, pick): tier, g = 'standard', GEAR_OF['standard']
+    up = ''
+    if pick and mode(store) == 'auto' and tier != 'strong' and job in ESCALATES and _first(store, f, 'escalate'): up = 'strong'
     return Route(job, tier, pick, model, g, [c for c in chain if c and c != pick], rule, why[0].upper() + why[1:],
-                 (j or {}).get('difficulty', ''), (j or {}).get('data_class', ''))
+                 (j or {}).get('difficulty', ''), (j or {}).get('data_class', ''), up)
 
 
 def for_session(store, task, brain: str = None) -> tuple:
@@ -278,3 +323,156 @@ def for_session(store, task, brain: str = None) -> tuple:
     log(store, r, (task or {}).get('TaskId') if isinstance(task, dict) else task)
     if r.gear != 'strong' or not r.pick.startswith('cli:'): return brain, None
     return r.pick[4:], strong_of(store, r.pick) or None
+
+
+def _stepped_already(store, task_id, job: str) -> bool:
+    if not str(task_id or '').isdigit(): return False
+    return any(x.get('EscalatedFrom') and x.get('Job') == job for x in store.brain_routes(int(task_id), limit=200))
+
+
+def step_up(store, r: 'Route', rid, task_id, why: str, build):
+    """The strong brain for one more try at a one-shot answer that came back `why` ('unreadable' | 'unsure'), or None. Once per
+    item per job; never past the day's cap; the brain's own strong gear first, else the first backup with one. The try is logged
+    with EscalatedFrom, and the first route is marked 'escalated'. `build(pick)` makes the brain on its strong gear."""
+    if not r.escalate or _stepped_already(store, task_id, r.job): return None
+    if not cap_left(store): return None
+    to = next((p for p in [r.pick, *r.chain] if p and strong_of(store, p)), '')
+    if not to: return None
+    try: brain = build(to)
+    except Exception as e:                            # a stranger's task its strong brain refuses stays as the first answer had it
+        logger.debug(f'brainroute: no step up for {r.job} - {e}'); return None
+    if brain is None: return None
+    said = f"{JOB_WORDS[r.job]} came back {why} on {_said(store, r.pick)}, so it was asked once of {_said(store, to)}'s strong model"
+    up = Route(r.job, 'strong', to, '', 'strong', [], 'unsure', said[0].upper() + said[1:], r.difficulty, r.data_class)
+    log(store, up, task_id, escalated_from=rid); outcome(store, rid, 'escalated')
+    return brain
+
+
+# ── health and the day's cap (Auto mode) ─────────────────────────────────────────────────────────────────────────────────────
+# A CLI refused on its usage allowance says when it comes back; until then the router hands its calls to the next brain instead
+# of to one that will refuse again. Kept in a setting, not a module global: the poller and the server are separate processes.
+COOL_KEY, CAP_KEY = 'ai_route_cooldown', 'ai_route_strong_cap'
+
+
+def cooldowns(store, now: datetime = None) -> dict:
+    "{pick: until} for every brain still resting - a reset already past is dropped."
+    import json
+    try: d = json.loads(str(store.get_setting(COOL_KEY) or '').strip() or '{}')
+    except ValueError: d = {}
+    now = now or datetime.now()
+    out = {}
+    for p, u in (d.items() if isinstance(d, dict) else ()):
+        try: t = datetime.fromisoformat(str(u))
+        except ValueError: continue
+        if t > now: out[p] = t
+    return out
+
+
+def cool(store, pick: str, until: datetime) -> None:
+    "Rest `pick` until `until` (the CLI's own reset time). Never longer than a week: a misread stamp must not shelve a brain for good."
+    import json
+    if not pick or not until: return
+    until = min(until, datetime.now() + timedelta(days=7))
+    d = {p: t.isoformat(sep=' ', timespec='minutes') for p, t in cooldowns(store).items()}
+    d[pick] = until.isoformat(sep=' ', timespec='minutes')
+    try: store.set_setting(COOL_KEY, json.dumps(d), 'router')
+    except Exception as e: logger.debug(f'brainroute: could not rest {pick} - {e}')
+
+
+def cap(store):
+    "The owner's limit on strong calls a day, or None (blank, the default: no cap)."
+    v = str(store.get_setting(CAP_KEY) or '').strip()
+    return int(v) if v.isdigit() else None
+
+
+def strong_today(store, now: datetime = None) -> int:
+    return store.count_brain_routes(since=(now or datetime.now()).strftime('%Y-%m-%d'), tier='strong')
+
+
+def cap_left(store) -> bool:
+    "Whether a strong call is still allowed today. Blank cap (the default) is no cap."
+    n = cap(store)
+    return n is None or strong_today(store) < n
+
+
+# ── what Settings shows: the mode line, the rules as sentences, the cap line, the recent routes ───────────────────────────────
+PLURAL = {'triage': 'triage', 'draft': 'drafts', 'summary': 'summaries', 'advisor': 'the Advisor', 'memory': 'memory', 'rank': 'ranking',
+          'assistant': 'the Assistant', 'general': 'general work', 'coding': 'coding', 'judge': 'judgements', 'report': 'reports'}
+USE_WORDS = {'light': 'the quick model', 'standard': "the card's own model", 'strong': 'the strong model'}
+
+
+def _and(xs) -> str:
+    xs = [str(x) for x in xs if x]
+    return '' if not xs else xs[0] if len(xs) == 1 else f"{', '.join(xs[:-1])} and {xs[-1]}"
+
+
+def sentence(r: dict) -> str:
+    """A rule as the owner reads it - "Hard drafts, general work and coding -> the strong model" - built from its values, so the
+    sentence can never say something the rule does not do."""
+    w, u = r.get('when') or {}, r.get('use') or {}
+    jobs = _and(PLURAL.get(j, j) for j in w.get('job') or []) or 'every job'
+    who = ' '.join(x for x in (_and(w.get('difficulty') or []), jobs) if x)
+    if w.get('data_class'): who += f" carrying {_and(w['data_class'])} data"
+    if w.get('origin'): who += f" written by {_and('a stranger' if o == 'stranger' else 'you' if o == 'owner' else 'people you trust' for o in w['origin'])}"
+    if w.get('person'): who += f" with {_and(w['person'])}"
+    if u.get('escalate'): s = f'Unreadable or unsure answers from {who} -> ask the strong model once'
+    elif u.get('only'): s = f'{who} -> only an AI whose card says it may read sensitive data'
+    else: s = f"{who} -> {USE_WORDS.get(u.get('tier'), u.get('tier'))}"
+    return s[0].upper() + s[1:]
+
+
+def panel(store) -> dict:
+    "Everything the router's part of Settings draws, in one read."
+    n = cap(store)
+    return {'mode': mode(store), 'rules': [{**r, 'sentence': sentence(r)} for r in rules(store)], 'cap': '' if n is None else n,
+            'used_today': strong_today(store), 'jobs': list(JOBS), 'tiers': list(TIERS), 'difficulties': ['quick', 'standard', 'hard'],
+            'warning': coverage_warning(store)}
+
+
+def set_panel(store, mode_: str = None, rs: list = None, cap_: str = None, actor: str = 'owner') -> dict:
+    if mode_ is not None:
+        if mode_ not in ('fixed', 'auto'): raise ValueError('the mode is fixed or auto')
+        store.set_setting('ai_route_mode', mode_, actor)
+    if rs is not None: save_rules(store, rs, actor)
+    if cap_ is not None:
+        c = str(cap_).strip()
+        if c and not c.isdigit(): raise ValueError('the cap is a whole number of strong calls a day, or blank for none')
+        store.set_setting(CAP_KEY, c, actor)
+    return panel(store)
+
+
+def recent(store, limit: int = 20) -> list:
+    "The newest routes, each one line: job, task, tier -> brain and model, and why. Read-only."
+    from .store import task_ref
+    return [{**x, 'ref': task_ref(x['TaskId']) if x.get('TaskId') else '', 'brain': _said(store, x.get('Pick') or '')}
+            for x in store.brain_routes(None, limit=limit)]
+
+
+def coverage_warning(store) -> str:
+    """Triage reads every message BEFORE its data is judged, so once a rule keeps sensitive data to marked AIs, the triage brain has
+    to be one of them or it reads what the rule keeps from the rest of the work. Said in Settings; '' while that holds."""
+    if not any(r['on'] and 'only' in r['use'] for r in rules(store)): return ''
+    t = choose(store, 'triage')
+    if not t.pick or may_read_sensitive(store, t.pick): return ''
+    return (f"Triage reads every message before it is judged, and {_said(store, t.pick)} is not marked to read sensitive data - "
+            'mark it on its card, or sensitive mail is read by an AI your rule keeps from the rest of the work.')
+
+
+def session_allowed(store, task, chain: list) -> tuple:
+    """(chain, why) for a coding pane: only the CLIs that may read this task's data once the owner's data rule is on - none at all
+    is ([], the reason), and the pane does not open. Any other task keeps its chain exactly."""
+    if not task: return chain, ''
+    f = facts(store, 'coding', task)
+    if not _first(store, f, 'only'): return chain, ''
+    from . import agents
+    ok = [c for c in chain if may_read_sensitive(store, f"cli:{c or agents.default_brain(store) or ''}")]
+    return (ok, '') if ok else ([], f'{NO_SENSITIVE}, so the coding agent does not start')
+
+
+def strong_for(store, job: str, task, first: str = None) -> tuple:
+    """(pick, model) for "Run again on the strong model": `first` (the brain that ran it) or the job's own brain when it has a strong
+    model, else the first backup with one - a coding pane only ever a CLI's. ('', '') when no brain here has one."""
+    r = choose(store, job, task, want_pick=first or None)
+    ok = lambda p: bool(strong_of(store, p)) and (job != 'coding' or p.startswith('cli:'))
+    to = next((p for p in [r.pick, *r.chain] if p and ok(p)), '')
+    return (to, strong_of(store, to)) if to else ('', '')

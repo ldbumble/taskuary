@@ -22,7 +22,7 @@ class EverydayAsks(unittest.TestCase):
         self.assertGreaterEqual(len(self.rows), 180)
         cats = {r['q'].cat for r in self.rows}
         self.assertEqual(cats, {'navigation', 'bulk', 'item', 'question', 'settings', 'agents', 'reports', 'chat', 'typos', 'short',
-                                'bring-up', 'connectors', 'phone'})
+                                'bring-up', 'connectors', 'phone', 'memory'})
 
     def test_every_row_action_is_reachable_on_the_desk_and_all_but_the_screens_own_on_a_phone(self):
         self.assertEqual({v for v, d, p in Q.reach() if not d}, set())

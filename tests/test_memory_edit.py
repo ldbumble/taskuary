@@ -123,3 +123,34 @@ def test_whos_gail_to_me_is_read_from_the_lines_and_the_org_chart(w):
     e = memoryedit.about(s, 'erin@northwind.example')
     assert e['relation'] and any('your manager' in l['text'] for l in e['lines'])
     assert memoryedit.about(s, 'Nobody Here')['lines'] == []
+
+
+def test_the_chat_keeps_gail_moved_to_ops_and_forgets_rays_payroll_line_at_once(w):
+    """The Assistant's road (concierge.call_turn), on the desk as on the phone: said, kept, receipted in the line's own words."""
+    from taskuary import concierge
+    s, facts, erin, ray, own = w
+    gail = f"- Gail Moreno (gail@northwind.example) runs headcount in Finance [s:4 | ev: sv{facts['gail_monday'][0]} | seen: 2026-10-01 | k: gail finance headcount]"
+    s.save_doc('learned', s.get_doc('learned').replace(lc.PEOPLE + '\n', lc.PEOPLE + '\n' + gail + '\n', 1), 'reflect')
+    dock = concierge.general.dock_task(s, 'owner')[0]['TaskId']
+    out = concierge.call_turn(s, dock, {'kind': 'memory.remember', 'params': {'note': 'Gail Moreno moved to Ops', 'about': 'gail@northwind.example',
+                                                                         'replaces': 'gail finance headcount'}}, None, 'Gail moved to Ops')
+    assert out['did'] == 'memory.remember' and out['say'].startswith('Remembered under Your people') and 'kept as history' in out['say']
+    assert learnedlines.row(s, 'gail finance headcount')['Status'] == 'closed' and 'moved to Ops' in s.get_doc('learned')
+    out = concierge.call_turn(s, dock, {'kind': 'memory.wrong', 'params': {'key': 'payroll ray', 'how': 'forget'}}, None, 'forget that Ray does payroll')
+    assert out['did'] == 'memory.wrong' and 'Ray Colton' in out['say'] and 'Ray Colton' not in s.get_doc('learned')
+    # ...a key nobody has, and Wrong on the owner's own line: said back for the model to put in words, nothing changed
+    paula = next(k for raw, k in lc.lines(s.get_doc('learned'), lc.PEOPLE) if 'Paula' in raw)
+    for p in ({'key': 'no such line', 'how': 'wrong'}, {'key': paula, 'how': 'wrong'}):
+        with pytest.raises(concierge.CallMiss, match='Nothing was changed'): concierge._memory(s, dock, 'memory.wrong', p)
+    assert 'Paula' in s.get_doc('learned')
+
+
+def test_the_tools_are_in_the_catalogue_and_a_plain_fact_is_still_a_saved_note(w):
+    from taskuary import operations, toolcatalog
+    s, *_ = w
+    assert 'memory.wrong' in operations.KINDS and toolcatalog.is_read('memory.about')
+    assert toolcatalog.valid('memory.about', {}) == 'memory.about needs who' and toolcatalog.valid('memory.wrong', {'key': 'x'}) == ''
+    assert 'memory.about' in toolcatalog.block() and 'memory.wrong' in toolcatalog.block()
+    with mock.patch.object(server, 'store', s):
+        out = server._run_operation({'kind': 'memory.remember', 'target': 0, 'params': {'note': 'The office opens at 8'}}, None)
+    assert out.get('memoryId') and 'opens at 8' not in s.get_doc('learned'), 'a fact about nobody is a saved note, as before'

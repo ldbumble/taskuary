@@ -15,8 +15,8 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text) |
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear, pipe.defer(select, until), pipe.close(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
 | **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how), report.edit(config), report.delete |
-| **app** | settings, connections, roles, scripts and kept facts | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), script.start(name), memory.remember(note), people.relate(who), hub.publish(title, body, topic?, kind?, why_earned?) |
-| **look** | look-ups - they run at once and change nothing | app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
+| **app** | settings, connections, roles, scripts and kept facts | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), hub.publish(title, body, topic?, kind?, why_earned?) |
+| **look** | look-ups - they run at once and change nothing | app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.about, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
 
 A task you name goes in `ref` ("TQ-0123"); otherwise the tool acts on what is on the table.
 
@@ -689,11 +689,23 @@ Start a script by its name: walk me through my tasks | set up a report.
 
 ### `memory.remember`
 
-Keep a fact.
+Keep a fact. One about how they work with someone or something ("Gail moved to Ops", "Ray handles payroll for me", "I put renewals off to Friday") is kept at once where the memory's readers read it, when you name it: `about`: the person's address or name. Any other fact brings up the notes page. Who reports to whom and who owns what is people.relate.
 
-- `note`
+- `note` - the fact, in the owner's words
+- `about` (optional) - the person's address or name. Any other fact brings up the notes page. Who reports to whom and who owns what is people.relate
+- `section` (optional) - people | care | work | promises | bring
+- `replaces` (optional) - the key of the line it makes untrue, closed and kept as history (memory.about gives the keys)
 
 <p class="runs">Brings up its button for you to press.</p>
+
+### `memory.wrong`
+
+Take a line Taskuary learned out of its memory. "forget that Ray does payroll", "that is wrong about Erin". A line the owner wrote themselves takes forget only.
+
+- `key` - from memory.about or memory.list
+- `how` (optional) - wrong (it was never true: never written back) | forget (not now: back only on much more evidence) | ended (it was true and stopped: kept as history)
+
+<p class="runs">Runs at once and says what it changed.</p>
 
 ### `people.relate`
 
@@ -832,6 +844,14 @@ What happened, from the audit trail: counts by kind and the latest entries.
 What is failing and what failed: the bell (dismissed ones marked), failed agent runs, report runs, drafts, triage and actions over `days` (3 by default), and the last errors in the log. Use it for any "what broke", "why did X not happen", "is anything wrong"
 
 - `days` - 3 by default
+
+<p class="runs">Runs at once and changes nothing.</p>
+
+### `memory.about`
+
+Who someone is to the owner: every line the memory holds about them, with its key, and what the org chart says. Use it for "who's Gail to me", "what do you know about Ray", and before memory.remember replaces or memory.wrong takes out a line about them.
+
+- `who` - a name or address
 
 <p class="runs">Runs at once and changes nothing.</p>
 

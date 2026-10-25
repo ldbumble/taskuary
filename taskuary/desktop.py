@@ -5,7 +5,8 @@ WebView2 on Windows) hosts the UI. No pywebview -> graceful fallback to the defa
 browser, so `taskuary-desktop` is useful even from a bare pip install. Build the single
 exe with `pyinstaller taskuary.spec` (see the spec at the repo root).
 """
-import http.client, io, socket, sys, threading, time, urllib.parse, webbrowser
+import http.client, io, os, socket, sys, threading, time, urllib.parse, webbrowser
+from pathlib import Path
 # Every import serving() needs is HERE. It runs on a thread while uvicorn imports taskuary.server
 # on another, and an import on both sides at once deadlocks on the import lock - which is how the
 # app came to start and then never open its port at all (2026-09-09).
@@ -31,7 +32,9 @@ def server_config(app, host, port) -> uvicorn.Config:
 
 class Server(uvicorn.Server):
     """uvicorn's server, whose exit flag also tells every held wait to let go (workerstate.STOP) - set by its own signal
-    handler (Ctrl+C, CTRL_BREAK) and by stop_server alike, before uvicorn starts waiting on the requests those waits hold."""
+    handler (Ctrl+C, CTRL_BREAK) and by stop_server alike, before uvicorn starts waiting on the requests those waits hold.
+    The newest one is the one Quit stops (workerstate.SERVER)."""
+    def __init__(self, config): super().__init__(config); _ws.SERVER[0] = self
     @property
     def should_exit(self): return self._should_exit
     @should_exit.setter
@@ -84,10 +87,83 @@ def splash(text: str = None):
     except Exception: pass
 
 
-# CLOSING IS QUITTING: the server stops with the window, and there is no tray to keep watching (the owner has not chosen
-# one). So the window says what is true before it goes - what Taskuary cannot see while it is closed, and where the mail
-# waits meanwhile (welcome.goodbye) - and the next open counts what came in from this moment.
+# CLOSING IS NOT QUITTING where there is a tray (the owner, 2026-10-25: "Close keeps Taskuary running. Quit is an explicit option"):
+# the X hides the window, the server and the work it runs carry on, and the tray icon says so (welcome.tray_goodbye). Open Taskuary
+# brings the window back; Quit is the only road that stops it, and it goes the way closing always went - asking first when work runs,
+# then the goodbye that says what Taskuary cannot see while it is closed (welcome.goodbye). With no tray (not Windows, or no .NET),
+# closing is still quitting, exactly as before.
 GOODBYE_SECS = 3.0
+BALLOON_MS = 6000
+
+
+class Tray:
+    """The Windows tray icon, with Open Taskuary and Quit. It has its own STA thread and message loop: pywebview's loop belongs to the
+    window, and the icon has to keep answering while that window is hidden. A press runs on a thread of its own, so the icon's loop
+    never waits on the window."""
+    def __init__(self, on_open, on_quit): self.on_open, self.on_quit, self.icon, self.ctx, self._wf = on_open, on_quit, None, None, None
+    def _go(self, f): threading.Thread(target=f, daemon=True).start()
+    def start(self, wait: float = 5.0) -> bool:
+        net = dotnet()
+        if not net: return False
+        WF, D, Thread, ThreadStart, ApartmentState = net
+        ready = threading.Event()
+        def run():
+            try:
+                ico = Path(__file__).parent / 'web' / 'favicon.ico'
+                n, m = WF.NotifyIcon(), WF.ContextMenuStrip()
+                n.Icon, n.Text = (D.Icon(str(ico)) if ico.is_file() else D.SystemIcons.Application), 'Taskuary'
+                o, q = m.Items.Add('Open Taskuary'), m.Items.Add('Quit')
+                o.Font = D.Font(o.Font, D.FontStyle.Bold)          # the default, as a double-click on the icon
+                o.Click += lambda *_: self._go(self.on_open); q.Click += lambda *_: self._go(self.on_quit)
+                n.DoubleClick += lambda *_: self._go(self.on_open)
+                n.ContextMenuStrip, n.Visible = m, True
+                self.icon, self.ctx, self._wf = n, WF.ApplicationContext(), WF
+            except Exception as e: logger.warning(f'tray: the icon did not come up - {e}'); return
+            finally: ready.set()
+            WF.Application.Run(self.ctx)
+        t = Thread(ThreadStart(run)); t.SetApartmentState(ApartmentState.STA); t.IsBackground = True; t.Start()
+        ready.wait(wait)
+        return self.icon is not None
+    def say(self, text: str):
+        """The goodbye, as the icon's balloon: the window it would have been shown in is already hidden."""
+        if not (self.icon and text): return
+        try: self.icon.ShowBalloonTip(BALLOON_MS, 'Taskuary', text[:250], getattr(self._wf.ToolTipIcon, 'None'))
+        except Exception as e: logger.debug(f'tray: the goodbye was not shown - {e}')
+    def stop(self):
+        """Gone with the app - an icon left behind sits in the tray until the mouse passes over it."""
+        n, self.icon = self.icon, None
+        try:
+            if n: n.Visible = False; n.Dispose()
+            if self.ctx: self.ctx.ExitThread()
+        except Exception as e: logger.debug(f'tray: not stopped cleanly - {e}')
+
+
+_NET = []
+
+
+def dotnet():
+    """The .NET pieces the tray is made of, imported once, or None off Windows or without .NET. IMPORTED on the main thread before the
+    window opens (the import-lock note at the top) - but the icon is CREATED only after pywebview has set its WinForms app up: that
+    calls SetCompatibleTextRenderingDefault, which throws once any window exists, and a NotifyIcon is one (2026-10-25)."""
+    if _NET: return _NET[0]
+    net = None
+    if sys.platform == 'win32':
+        try:
+            try: import clr
+            except Exception: os.environ['PYTHONNET_RUNTIME'] = 'coreclr'; import clr     # the order pywebview's winforms tries them in
+            clr.AddReference('System.Windows.Forms'); clr.AddReference('System.Drawing')
+            import System.Windows.Forms as WF, System.Drawing as D
+            from System.Threading import Thread, ThreadStart, ApartmentState
+            net = (WF, D, Thread, ThreadStart, ApartmentState)
+        except Exception as e: logger.info(f'tray: none on this machine, so closing quits - {e}')
+    _NET.append(net)
+    return net
+
+
+def tray(on_open, on_quit):
+    """A started Tray, or None where there is none - and then closing quits, as it always did."""
+    t = Tray(on_open, on_quit)
+    return t if t.start() else None
 
 
 def goodbye_html(text: str) -> str:
@@ -102,12 +178,12 @@ def _server_store():
     return getattr(sys.modules.get('taskuary.server'), 'store', None)
 
 
-def farewell(store) -> str:
+def farewell(store, tray: bool = False) -> str:
     """The goodbye, with the close written down; '' when it cannot be said - a goodbye never holds a window open."""
     if store is None: return ''
     try:
         from taskuary import welcome
-        return welcome.closing(store)
+        return welcome.closing(store, tray=tray)
     except Exception as e:
         logger.warning(f'closing: no goodbye - {e}'); return ''
 
@@ -156,12 +232,14 @@ def busy(store) -> list:
         logger.warning(f'closing: could not count running work - {e}'); return []
 
 
-def closing_handler(window, store_of=_server_store, secs: float = GOODBYE_SECS):
-    """pywebview's `closing` event. With work running, the first close ASKS (Keep working / Close anyway) and holds the window;
-    a second close while it asks is the answer. Then - or straight away when nothing runs - the goodbye goes in the window and
-    it closes `secs` later; returning False holds it for that moment, and a close after that goes straight through. The work
-    runs on its own thread: the event may arrive on the GUI thread, which load_html also needs."""
-    st = {'said': False, 'asking': None}
+def closing_handler(window, store_of=_server_store, secs: float = GOODBYE_SECS, shell: dict = None):
+    """pywebview's `closing` event. With a tray (`shell['tray']`) a close that is not a Quit HIDES the window and the tray says the
+    goodbye; nothing stops. A Quit (`shell['quit']`), or any close with no tray: with work running, the first close ASKS (Keep working /
+    Close anyway) and holds the window; a second close while it asks is the answer. Then - or straight away when nothing runs - the
+    goodbye goes in the window and it closes `secs` later; returning False holds it for that moment, and a close after that goes
+    straight through. `shell['gone']`: the server has already stopped (a Quit from the browser), so the window simply goes. The work
+    runs on its own thread: the event may arrive on the GUI thread, which load_html and hide also need."""
+    st, shell = {'said': False, 'asking': None}, shell if shell is not None else {}
     def bye():
         """Say goodbye and close - False when there is nothing to say and the window may simply go."""
         st['said'], st['asking'] = True, None
@@ -177,7 +255,7 @@ def closing_handler(window, store_of=_server_store, secs: float = GOODBYE_SECS):
         threading.Thread(target=show, daemon=True).start()
         return True
     def keep_working():
-        back, st['asking'] = st['asking'], None
+        back, st['asking'], shell['quit'] = st['asking'], None, False      # ...and the next X hides again
         if back:
             try: window.load_url(back)
             except Exception as e: logger.debug(f'closing: could not go back to the app - {e}')
@@ -201,8 +279,14 @@ def closing_handler(window, store_of=_server_store, secs: float = GOODBYE_SECS):
             logger.debug(f'closing: no question could be asked - {e}'); ok = True
         if ok: close_anyway()
         else: st['asking'] = None
+    def hide():
+        try: window.hide()
+        except Exception as e: logger.debug(f'closing: the window did not hide - {e}')
+        shell['tray'].say(farewell(store_of(), tray=True))
     def on_closing():
-        if st['said']: return True
+        if st['said'] or shell.get('gone'): return True
+        if shell.get('tray') and not shell.get('quit'):
+            threading.Thread(target=hide, daemon=True).start(); return False
         if st['asking'] is not None: return not bye()      # closed again while asked: that is the answer
         work = busy(store_of())
         if work:
@@ -372,16 +456,35 @@ def main():
         webview.start()
         return 0
 
-    # this window owns the server, so closing it is quitting - it says goodbye first (a view of another one does not)
-    try: window.events.closing += closing_handler(window, lambda: _server_store() if 'server' in held else None)
+    # this window owns the server: closing it hides it in the tray, and the tray's Quit quits - saying goodbye first (a view of another
+    # one does neither). No tray, and closing is quitting.
+    shell = {'tray': None, 'quit': False, 'gone': False}
+    def show():
+        try: window.show(); window.restore()
+        except Exception as e: logger.debug(f'tray: the window did not come back - {e}')
+    def quit_():
+        shell['quit'] = True; show()      # in view: a Quit with work running asks in the window first
+        try: window.destroy()
+        except Exception as e: logger.debug(f'tray: the window was already gone - {e}')
+    dotnet()                              # imported here, on the main thread; the icon comes up in opened(), once the window has
+    try: window.events.closing += closing_handler(window, lambda: _server_store() if 'server' in held else None, shell=shell)
     except Exception as e: logger.debug(f'closing: no goodbye on this pywebview - {e}')
+
+    def gone_with(server):
+        """Quit pressed in the browser stops the server (POST /api/quit): the window it served goes too, with nothing left to ask."""
+        wait_for_exit(server, poll=0.5)
+        shell['gone'] = True
+        try: window.destroy()
+        except Exception as e: logger.debug(f'quitting: the window was already gone - {e}')
 
     def opened():
         splash()                     # in case `shown` never fired on this pywebview
+        shell['tray'] = tray(show, quit_)
         try: held['server'], url = boot()
         except Exception:
             filed(); window.load_html(STALLED); return
         finally: booted.set()
+        threading.Thread(target=gone_with, args=(held['server'],), daemon=True).start()
         if serving(url): window.load_url(launchkey.link(url))
         else: window.load_html(STALLED)
 
@@ -397,6 +500,7 @@ def main():
     # boot its moment to hand the server over, or its lifespan never gets told to stop and the
     # tasks it owns stay in_progress until the next launch repairs them.
     booted.wait(BOOT_WAIT)
+    if shell['tray']: shell['tray'].stop()
     # the window is gone; the process is not - not until the server has stopped what it started
     server = held.get('server')
     return 0 if server is None or stop_server(server) != 'timeout' else 1

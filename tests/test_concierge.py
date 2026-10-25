@@ -1107,6 +1107,14 @@ class ForLaterLine(unittest.TestCase):
         # ...and a walk that ends with nothing waiting offers no walk to start
         with mock.patch.object(concierge.funnel, 'pile', return_value={'items': []}), mock.patch.object(concierge.funnel, 'next_item', return_value=None):
             self.assertFalse(any(c.get('verb') == 'walk' for c in concierge.surface(MemoryStore(), llm=lambda *a, **k: 'never')['chips']))
+        # ...but a task still under Tasks that waits on someone else is walked again: Walk, not "Nothing's waiting." and a bare Next
+        # (the owner, 2026-10-25: "I hit next when a task is the last thing and the walk through again did not show up")
+        rows = [{'key': 'task:9', 'tid': 9, 'ref': 'TQ-0009', 'title': 'Schema sign-off', 'lane': 'theirs', 'surfaced': True, 'put_down': True}]
+        with mock.patch.object(concierge.funnel, 'pile', return_value={'items': rows}), mock.patch.object(concierge.funnel, 'next_item', return_value=None):
+            out = concierge.surface(MemoryStore(), llm=lambda *a, **k: 'never')
+            self.assertEqual(([c['verb'] for c in out['chips']], out['say']), (['walk'], ''))
+            with concierge.delivering(concierge.PHONE):
+                self.assertFalse(any(c.get('verb') == 'walk' for c in concierge.surface(MemoryStore(), llm=lambda *a, **k: 'never')['chips']))
 
 
 class NonCoderWordsTests(unittest.TestCase):

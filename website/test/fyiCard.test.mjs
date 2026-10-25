@@ -33,7 +33,7 @@ test("each fyi entry shows its own summary and acts alone through the proposal r
   assert.doesNotMatch(fyis.slice(0, fyis.indexOf('variant="contained"')), /onDone\?\./);  // no entry action settles the handful
   assert.match(fyis, /\{open === i\.key && \(\s*<div className="tq-card-actions tq-fyi-acts"/);   // ...and they belong to the one you opened
   const view = read("AssistantView.jsx");
-  assert.match(view, /api\.post\("\/api\/concierge\/propose", \{ verb, key, table \}\)/);
+  assert.match(view, /api\.post\("\/api\/concierge\/propose", \{ verb, key, table, press: true \}\)/);
   assert.match(view, /onPropose=\{actions\.propose\}/);
   assert.match(view, /card: \{ kind: "proposal", key: data\.key, title: data\.label, op: data\.id/);   // the same card the words make
 });

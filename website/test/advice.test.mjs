@@ -52,9 +52,10 @@ test("the page draws the gated line, starts each item with none, and drops a rea
   const src = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
   assert.match(src, /<AdvisorNext advice=\{shownAdvice\} onPropose=\{pressAdvice\} \/>/);
   // ...and a move the server runs at once (Not ours) runs at once from the Advisor's copy too - never a proposal card with Cancel
-  assert.match(src, /try \{ const pr = await proposeDirect\(a\.verb, key, true, a\.revision\); if \(pr\?\.auto\) await runProposal\(pr\); return pr; \}/);
-  assert.match(src, /if \(pr\?\.auto && !c\.revision\) await runProposal\(pr\);/, "a stamped chip's AUTO move is not run twice");
-  assert.match(src, /if \(data\.auto\) return data;/, "an AUTO move draws no proposal card with Cancel while it runs");
+  // ...and every press runs where it is proposed (the 2026-10-25 sweep): proposeDirect runs it, so no caller runs it a second time
+  assert.match(src, /try \{ return await proposeDirect\(a\.verb, key, true, a\.revision\); \}/);
+  assert.match(src, /if \(c\.revision\) await pressAdvice\(\{ verb, key, revision: c\.revision \}\); else await proposeDirect\(verb, key, true, null\);/, "a stamped chip's move is not run twice");
+  assert.match(src, /if \(data\.auto\) \{ await runProposal\(data\); return \{ \.\.\.data, ran: true \}; \}/, "a press draws no proposal card with Cancel while it runs");
   assert.match(src, /advised=\{stripPick \|\| setupLit\}/);
   assert.doesNotMatch(src, /<AdvisorNext advice=\{advice\}/);
   assert.match(src, /if \(!keep\) setAdvice\(null\)/);

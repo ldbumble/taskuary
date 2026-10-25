@@ -98,7 +98,7 @@ DENIED = (
     (r'POST', r'^/api/tasks/\d+/(release|land|ci)$', 'releasing a held task or landing its work is the owner\'s decision'),
     (r'POST', r'^/api/tasks/\d+/dispatch/retry$', 'retrying a queued start is the owner\'s decision'),
     (r'DELETE', r'^/api/tasks/\d+/dispatch$', 'cancelling a queued start is the owner\'s decision'),
-    (r'POST', r'^/api/(soul|learn)(/|$)', 'SOUL.md and LEARNED.md are the owner\'s word - propose, do not write'),
+    (r'POST', r'^/api/(soul|learn|learned/mark)(/|$)', 'SOUL.md and LEARNED.md are the owner\'s word - propose, do not write'),
     (r'PUT|PATCH', r'^/api/(owner|whoami)$', 'who the owner is'),
     (r'POST', r'^/api/(mcp|mssql)/', 'runs a command, or sends saved credentials to a host of the caller\'s choosing'),
     (r'POST', r'^/api/(reports/(preview|compose|compose-sources)|workflows/compose|dashboards/(compose|preview))$',

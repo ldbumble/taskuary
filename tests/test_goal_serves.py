@@ -146,3 +146,18 @@ class GoalKindTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class ClosedStepQuestionTests(unittest.TestCase):
+    """2026-10-25: a question to the owner on a finished step's thread brings that step's task back, a thanks does not."""
+    def step(self):
+        s = MemoryStore(); g, ids = goal(s)
+        c = s.create_task({'Title': 'Export job', 'Status': 'open'}, 'owner'); s.link_step(g, ids[2], c, 'owner'); s.update_task(c, {'Status': 'done'}, 'owner')
+        return s, g, ids, c
+
+    def test_a_question_reopens_it_and_a_thanks_does_not(self):
+        for asks, st in ((True, 'open'), (False, 'done')):
+            s, g, ids, c = self.step()
+            ingest_one(s, mail(verdict(intent='reply_only', asks_owner=asks, serves={'task': g, 'step': ids[2], 'done': False}), subject='Which file?'))
+            self.assertEqual(s.get_task(c)['Status'], st)
+            self.assertEqual(bool(s.pending_review(c)), asks)

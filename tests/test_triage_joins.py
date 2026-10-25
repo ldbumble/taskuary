@@ -253,3 +253,93 @@ class EmailThreadRetitleTests(unittest.TestCase):
         tid = mail(s, 'a', brain('task', title='Advise on the missing budget facilities'), conv='t1', subject='Missing Budget')['task_id']
         mail(s, 'b', brain('fyi', title='Erin says thanks'), conv='t1', subject='RE: Missing Budget', body='Thanks!')
         self.assertEqual(s.get_task(tid)['Title'], 'Advise on the missing budget facilities')
+
+
+def asked(intent, asks, title, summary='s', **kw):
+    """Triage, scripted, with its own word on whether the line still waits on the owner."""
+    return lambda system, user, **k: json.dumps({'intent': intent, 'why': 'scripted', 'title': title, 'summary': summary, 'asks_owner': asks, **kw})
+
+
+class QuestionReopensTests(unittest.TestCase):
+    """The owner, 2026-10-25: "new message came in but it did not reopen task?" A finance task was closed after the owner explained a
+    ledger pull to two colleagues; a day later one asked on the same thread what the accounts differ by. Triage read it reply_only, the
+    2026-10-15 rule kept every reply_only on the closed task, and a direct question sat on a DONE card with no draft. Triage's own
+    asks_owner now tells a question to the owner from a "sure" or a thanks - only the first brings the task back."""
+    def setUp(self):
+        self.s = MemoryStore()
+        self.tid = mail(self.s, 'a', brain('task', title='Investigate the missing ledger accounts'), conv='gl', subject='Missing GL accounts')['task_id']
+        self.s.update_task(self.tid, {'Status': 'done'}, 'owner')
+
+    def again(self, llm, body):
+        return mail(self.s, 'b', llm, conv='gl', subject='RE: Missing GL accounts', body=body)
+
+    def test_a_question_on_a_closed_email_task_reopens_it_retitles_it_and_drafts(self):
+        back = self.again(asked('reply_only', True, 'Erin asks what separates the 4100 accounts', 'Erin Blake wants the difference explained.'),
+                          'Can you explain the difference between the 4100 accounts? Is the text after the comma a class?')
+        self.assertEqual((back['status'], back['task_id']), ('attached', self.tid))
+        t = self.s.get_task(self.tid)
+        self.assertEqual((t['Status'], t['Title'], t['Summary']), ('open', 'Erin asks what separates the 4100 accounts', 'Erin Blake wants the difference explained.'))
+        self.assertEqual(self.s.pending_review(self.tid, kind='draft')['MessageId'], back['message_id'])
+        self.assertTrue(any(c['Body'].startswith('Reopened - Erin Blake asked you something') for c in self.s.list_comments(self.tid)))
+
+    def test_a_thanks_on_a_closed_email_task_stays_filed_and_closed(self):
+        back = self.again(asked('reply_only', False, 'Erin thanks Alex for the explanation'), 'Thanks, that makes sense.')
+        self.assertEqual((back['status'], back['task_id']), ('filed', self.tid))
+        self.assertEqual((self.s.get_task(self.tid)['Status'], self.s.get_task(self.tid)['Title']), ('done', 'Investigate the missing ledger accounts'))
+        self.assertFalse(self.s.pending_review(self.tid))
+
+    def test_a_reply_only_without_the_bit_stays_closed_as_before(self):
+        back = self.again(brain('reply_only', title='Erin replies'), 'ok')                # an older brain that never answers asks_owner
+        self.assertEqual((back['status'], self.s.get_task(self.tid)['Status']), ('filed', 'done'))
+
+    def test_a_question_the_same_as_a_closed_task_reopens_it_too(self):
+        r = mail(self.s, 'c', asked('reply_only', True, 'Erin asks which accounts', same_as=self.tid), conv='other')
+        self.assertEqual((r['status'], r['task_id'], self.s.get_task(self.tid)['Status']), ('routed', self.tid, 'open'))
+        self.assertTrue(self.s.pending_review(self.tid, kind='draft'))
+
+
+class ChatQuestionReopensTests(ChatReopensTests):
+    """The chat side of the same rule (2026-10-25): a "sure" stays filed, a question put to the owner brings the task back."""
+    def joins(self, intent, title, summary='s', asks=None):
+        f = super().joins(intent, title, summary)
+        return lambda system, user, **k: json.dumps({**json.loads(f(system, user)), **({} if asks is None else {'asks_owner': asks})})
+
+    def test_a_sure_judged_as_asking_nothing_stays_closed(self):
+        back = self.chat('t3', 'sure', self.joins('reply_only', 'Erin agrees', asks=False))
+        self.assertEqual((back['status'], self.s.get_task(self.tid)['Status']), ('filed', 'done'))
+
+    def test_a_question_to_the_owner_in_the_chat_reopens_it_and_drafts(self):
+        back = self.chat('t3', 'which account did the August one go to?', self.joins('reply_only', 'Erin asks which account the statement used',
+                                                                                     'Erin Blake wants to know the account.', asks=True))
+        self.assertEqual((back['status'], back['task_id']), ('attached', self.tid))
+        t = self.s.get_task(self.tid)
+        self.assertEqual((t['Status'], t['Title']), ('open', 'Erin asks which account the statement used'))
+        self.assertTrue(self.s.pending_review(self.tid, kind='draft'))
+
+
+class AsksOwnerVerdictTests(unittest.TestCase):
+    def test_triage_is_asked_whether_the_line_waits_on_the_owner_and_its_answer_is_kept(self):
+        self.assertIn('asks_owner', triage.verdict_schema()['schema']['properties'])
+        self.assertIn('**asks_owner**', triage.SHIPPED)
+        out = triage.classify_intent({'from_email': 'erin@northwind.example', 'subject': 'Q', 'body': 'which file?'},
+                                     llm=asked('reply_only', True, 'Erin asks which file'))
+        self.assertIs(out['asks_owner'], True)
+
+
+class ReopenedQuestionOnTheRailTests(unittest.TestCase):
+    def test_the_reopened_task_is_back_on_the_rail_in_its_arrival_place(self):
+        """2026-10-25: the closed task had nothing on the rail. Back, it sits where it arrived (rows never move, 2026-10-22), not on top."""
+        from datetime import datetime, timedelta
+        from taskuary import funnel
+        def ago(h): return (datetime.now() - timedelta(hours=h)).strftime('%Y-%m-%d %H:%M:%S')
+        def m(ext, llm, conv, h, body='The export drops rows.'):
+            with mock.patch.object(ingest, '_spawn'):
+                return ingest.ingest_message(s, {'external_id': ext, 'channel': 'email', 'from_email': 'erin@northwind.example', 'from_name': 'Erin Blake',
+                                                 'conversation_id': conv, 'subject': 'Ledger', 'body': body, 'sent_at': ago(h)}, llm=llm)['task_id']
+        s = MemoryStore()
+        a, b, c = m('a', brain('task', title='Older'), 'c1', 3), m('b', brain('task', title='Ledger accounts'), 'c2', 2), m('c', brain('task', title='Newer'), 'c3', 1)
+        s.update_task(b, {'Status': 'done'}, 'owner')
+        rail = lambda: [r.get('tid') for r in sorted(funnel.build(s)['items'], key=funnel.order_key)]
+        self.assertEqual(rail(), [a, c])
+        m('d', asked('reply_only', True, 'Erin asks what separates the accounts'), 'c2', 0, 'Can you explain the difference?')
+        self.assertEqual(rail(), [a, b, c])

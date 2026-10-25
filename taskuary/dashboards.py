@@ -360,6 +360,11 @@ def file_run(store, src: dict, cfg: dict, trigger: str = 'schedule') -> dict:
         return {'message_id': None, 'subject': f'{title} — FAILED', 'files': 0, 'said': 0, 'failed': True,
                 'error': f'Skipped: no source could be read - {why}'[:600], 'summary': why[:2000]}
     store.save_dashboard_result(src['SourceId'], json.dumps(data, default=str))
+    # NOTHING TO SHOW is not news (reports.NothingToReport): a fresh install's own tables are empty, and a row on the rail saying so
+    # stood where the empty rail tells the owner what to connect. The page still draws its empty tiles; the rail gets nothing.
+    if srcs and not any(d['rows'] for d in srcs):
+        return {'message_id': None, 'subject': f'{title} — nothing to show yet', 'files': 0, 'said': 0, 'failed': False,
+                'summary': 'Every source was read and none has rows yet'}
     tiles = headline(cfg, data)
     bad = [d for d in srcs if d['failed']]
     note = ('Read without ' + '; '.join(f"{d['label']}: {d.get('error') or 'could not be read'}" for d in bad)) if bad else ''

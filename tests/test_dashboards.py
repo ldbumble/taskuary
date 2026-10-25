@@ -340,3 +340,13 @@ def test_an_s3_source_on_a_dashboard_reads_its_object_path_and_keeps_its_own_nam
 def test_the_editors_dataset_picker_lists_every_dataset_the_server_serves():
     words = json.loads(Path(dashboards.__file__).with_name('words.json').read_text(encoding='utf-8'))
     assert set(words['dashboard']['datasets']) == set(dashboards.DATASETS)
+
+
+def test_a_run_over_sources_with_no_rows_yet_puts_nothing_on_the_rail():
+    # a fresh install: Taskuary's own tables are empty, so the built-in dashboard has nothing to show - the empty rail's "connect an AI"
+    # stays where it is, and the page still opens over the empty rows
+    s = MemoryStore(); src = _save(s)
+    out = reports.run_one(s, src, None, 'schedule')
+    assert out['message_id'] is None and not out['failed'] and 'nothing to show yet' in out['subject']
+    funnel._SOURCES['at'] = 0
+    assert not any(i.get('source_id') == src['SourceId'] for i in funnel.pile(s, force=True)['items'])

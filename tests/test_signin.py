@@ -1,7 +1,7 @@
 """SIGNING IN FOR THE BROWSER AGENT (signin.py): the page's own origin decides where a password goes, never the agent's word or a
 mail's; a fill link works once and not for long; nothing typed reaches a prompt, a log, the audit or a comment; a sign-in is kept only
 when the owner ticks it, sealed, and filled by itself next time; Remove takes the password and the site's cookies with it."""
-import json, os, tempfile, threading, time, unittest
+import json, os, sys, tempfile, threading, time, unittest
 from pathlib import Path
 from unittest import mock
 from fastapi.testclient import TestClient
@@ -14,6 +14,19 @@ from taskuary.testing import Factory
 PW, USER = 'correct-horse-9!', 'alex@northwind.example'
 c = TestClient(server.app)
 AGENT = {'X-Taskuary-Token': config.load()['server']['agent_token']}
+
+
+class FakeKeyring:
+    def __init__(self): self.d = {}
+    def set_password(self, s, k, v): self.d[(s, k)] = v
+    def get_password(self, s, k): return self.d.get((s, k))
+    def delete_password(self, s, k): self.d.pop((s, k), None)
+
+
+# a saved sign-in is sealed somewhere real: DPAPI on Windows, an in-memory keychain elsewhere (CI's Linux and macOS have none)
+def setUpModule():
+    if sys.platform != 'win32':
+        p = mock.patch.object(vault, '_keyring', return_value=FakeKeyring()); p.start(); unittest.addModuleCleanup(p.stop)
 
 
 def on_page(url): return mock.patch.object(browserview, 'state', return_value={'open': True, 'url': url, 'port': 1})

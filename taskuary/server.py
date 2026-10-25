@@ -1846,6 +1846,10 @@ def task_detail(task_id: int):
                            'at': tr['CreatedAt'], 'chars': len(tr['Text'] or '')} if tr else None,
             # ...and WHICH BRAIN ACTUALLY RAN IT, for a session that has ended (_ran_on)
             'ranOn': _ran_on(task_id, tr),
+            # ...and why the router put its last AI call on that brain, for the AI pill's tooltip (brainroute.why_for_task)
+            'routeWhy': _brainroute().why_for_task(store, task_id),
+            # ...and how hard its work is, how sure its reader was, what data it carries - triage's word or the owner's (brainroute.judged)
+            'judged': _brainroute().judged(store, task_id),
             # ...and what the agent step says when nothing is live: why it never started, or what it did before it went
             'agentStory': _agent_story(task_id),
             # ...and whether Fix it can run on its items: an outsider's only in GitHub's cloud, and only once the owner turned that
@@ -1893,6 +1897,11 @@ def _agent_story(task_id: int):
     try: return funnel.agent_story(store, task_id)
     except Exception as e:
         logger.debug(f'task {task_id}: agent story skipped - {e}'); return None
+
+
+def _brainroute():
+    from . import brainroute
+    return brainroute
 
 
 def _ran_on(task_id: int, tr=None):
@@ -5747,7 +5756,7 @@ def _llm(target_store=None):
     target_store = target_store or store
     try:
         from .llm import build_llm
-        return build_llm(target_store)
+        return build_llm(target_store, job='triage')
     except Exception:
         return None
 
@@ -6098,7 +6107,7 @@ def brains():
             for o in hub_agents.cli_agent_options(store, preferred=preferred)]
     # An API provider with no key cannot be picked, and fifteen greyed rows made the menu taller than the page with
     # the CLIs at the bottom (the owner, 2026-09-24: "drop down is too big"). One already in use stays listed.
-    used = {str(settings.get(k) or '') for k in ('triage_ai', 'triage_backup_ai', 'concierge_ai', 'assistant_ai', 'judge_ai')}
+    used = {str(settings.get(k) or '') for k in ('triage_ai', 'triage_backup_ai', 'concierge_ai', 'assistant_ai', 'judge_ai', 'draft_ai')}
     out = [o for o in out if o['kind'] != 'api' or o['ready'] or o['value'] in used]
     current = store.get_setting('triage_ai') or ''
     # Old settings named a type (connector:anthropic). Keep accepting that in llm.py, but
@@ -7807,7 +7816,7 @@ def skills_fetch(body: SkillUrlBody):
 
 def _skill_proposals(entries: list) -> dict:
     from . import skillimport, llm as llm_mod
-    try: brain = llm_mod.build_llm(store)
+    try: brain = llm_mod.build_llm(store, job='memory')
     except Exception: brain = None
     # `flat` is the body's length AS A SESSION RECEIVES IT and `doc_chars` is where the seed cuts a
     # rules document: the wizard warns from these, not from a byte count of the file. Of the fifteen
@@ -9903,6 +9912,12 @@ def set_assistant_listens(body: ListensBody):
     try: return remote_assistant.set_listens(store, body.channel, body.listens)
     except ValueError as e: raise HTTPException(422, str(e))
 
+@app.get('/api/ai/routes')
+def ai_routes(task: int = None, limit: int = 20):
+    """The newest brain routes - which AI each call ran on and why - for one task or all. Read-only; no prompt or answer is kept."""
+    return {'routes': store.brain_routes(task, limit=max(1, min(int(limit), 200)))}
+
+
 @app.get('/api/ai/defaults')
 def ai_defaults():
     """The three AI defaults with the model each will ACTUALLY run, and which screen owns it."""
@@ -9910,23 +9925,13 @@ def ai_defaults():
     return aidefaults.state(store, cfg)
 
 
-_MODELS_TTL, _models_cache = 600, {}
-
-
 @app.get('/api/ai/models/{connector_id}')
 def ai_models(connector_id: int):
-    """Model ids the connector's own key can call, read from the provider (10 min cache). Failure is a 200 with `error`: the picker
-    falls back to its typed box, so a provider without a list endpoint costs nothing."""
+    """Model ids the connector's own key can call, read from the provider (10 min cache, llm.connector_models). Failure is a 200
+    with `error`: the picker falls back to its typed box, so a provider without a list endpoint costs nothing."""
     from . import llm
-    hit = _models_cache.get(connector_id)
-    if hit and time.time() - hit[0] < _MODELS_TTL: return hit[1]
-    c = store.get_connector(connector_id, with_secret=True)
-    if not c or c['Type'] not in llm.AI_TYPES: raise HTTPException(404, 'no such AI connector')
-    try: conf = json.loads(c.get('ConfigJson') or '{}')
-    except ValueError: conf = {}
-    try: out = {'models': llm.list_models(c['Type'], conf, c.get('Secret') or '')}
-    except Exception as e: return {'models': [], 'error': str(e)[:200]}
-    _models_cache[connector_id] = (time.time(), out)
+    out = llm.connector_models(store, connector_id)
+    if out is None: raise HTTPException(404, 'no such AI connector')
     return out
 
 
@@ -9935,12 +9940,13 @@ class AiDefaultBody(BaseModel):
     value: str = None                   # None = leave the brain/agent alone, only touch the model
     model: str = None                   # None = leave alone; '' = clear back to the provider default
     effort: str = None
+    strong_model: str = None            # None = leave alone; '' = no strong tier on this brain
 
 
 @app.post('/api/ai/defaults')
 def set_ai_default(body: AiDefaultBody):
     from . import aidefaults
-    try: return aidefaults.apply(store, cfg, body.slot, body.value, body.model, body.effort, ACTOR)
+    try: return aidefaults.apply(store, cfg, body.slot, body.value, body.model, body.effort, ACTOR, strong=body.strong_model)
     except ValueError as e: raise HTTPException(422, str(e))
 
 

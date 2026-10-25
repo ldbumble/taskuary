@@ -387,7 +387,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     measured where the thread is actually read, which is the only place that knows it."""
     from .llm import build_llm
     from .ingest import notes_for
-    llm = llm or build_llm(store)
+    llm = llm or build_llm(store, job='draft')
     if not llm: raise RuntimeError('no AI connector is set up to write replies')
     t = store.get_task(task_id) or {}
     # Redraft/open-reply callers do not pass the completed result again. Recover the durable final
@@ -570,7 +570,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     from .llm import build_llm
     from .ingest import notes_for
     from .triage import sender_body
-    llm = llm or build_llm(store)
+    llm = llm or build_llm(store, job='draft')
     if not llm: raise RuntimeError('no AI connector is set up to write replies')
     soul = store.doc('soul') or ''
     owner = owner_of(store, soul)

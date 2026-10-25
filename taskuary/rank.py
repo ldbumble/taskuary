@@ -90,7 +90,7 @@ def build_rank_llm(store):
     """The ranking brain. Its OWN seam, because ranking is not triage: a small prompt over subjects,
     no soul, no learned doc, no notes, no images - see RANK_SYSTEM."""
     from .llm import build_llm
-    return build_llm(store)
+    return build_llm(store, job='rank')
 
 
 def mode_for(store, msg_row: dict) -> str:
@@ -182,7 +182,7 @@ def rerank(store, force: bool = False) -> int:
         qs = [q for q in store.queued_dispatches() if q.get('Value') is not None][:HEAD]
         if len(qs) < 2: return 0
         from .llm import build_llm
-        llm = build_llm(store)
+        llm = build_llm(store, job='rank')
         if not llm: return 0
         items = []
         for q in qs:
@@ -369,7 +369,7 @@ def top_up(store, n: int = 1) -> int:
     # ...WITH the brain. This drained with none, and triage without a model can only say "awaiting AI triage": each
     # arrival a settle let in was marked failed, freed its place again, and the next one followed it down (the owner,
     # 2026-09-28: four waiting pull requests all read "triage failed"). No brain, the place stays open for the next one.
-    try: llm = build_llm(store)
+    try: llm = build_llm(store, job='rank')
     except Exception: llm = None
     if llm is None: return 0
     return ingest.drain(store, llm=llm, limit=max(0, int(n)), wait=False)

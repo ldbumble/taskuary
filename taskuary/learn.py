@@ -305,7 +305,7 @@ def learn_from(store, event: str, llm=None):
         except ValueError: n = 1
         store.set_setting('learn_pending', str(n), 'learn')       # ticks even with no AI: the first reflection catches up
         from .llm import build_llm
-        llm = llm or build_llm(store)
+        llm = llm or build_llm(store, job='memory')
         doc = store.get_doc(DOC) or ''
         hyp = _block(doc, HYP_START, HYP_END)
         if llm is None or hyp is None: return
@@ -420,7 +420,7 @@ def reflect(store, llm=None) -> bool:
     gather -> synthesize -> save_doc, but with NO no-AI fallback - a mechanical rewrite of a
     doc that feeds every prompt would poison them, and the old doc is always a valid answer."""
     from .llm import build_llm
-    llm = llm or build_llm(store)
+    llm = llm or build_llm(store, job='memory')
     doc, verdicts = _without_verdicts(store.get_doc(DOC) or '')   # RAW doc: {{owner}} tokens must survive the rewrite
     if not llm or not doc.strip(): return False
     since = (store.get_setting('learn_last_reflect')

@@ -256,7 +256,7 @@ def learn_from_session(store, task_id: int, transcript: str, agent: str = 'agent
     if not str(transcript or '').strip(): return []
     if from_stranger(store, task_id): return []          # post() would refuse each entry; nor is the model asked to write them
     try:
-        llm = llm or build_llm(store)
+        llm = llm or build_llm(store, job='memory')
         if not llm: return []
         topics = ', '.join(t['Topic'] for t in (existing if existing is not None else store.lore_topics())[:30])
         have = entries_for_writer(store)

@@ -8,14 +8,16 @@ import json
 import re
 from loguru import logger
 
-COMMAND_FIELDS = ('cmd', 'args', 'resume', 'resume_args', 'timeout', 'model_arg', 'acp', 'model', 'light_model')
-# The two GEARS, which are the half of COMMAND_FIELDS clis.KNOWN ships no preset for: what a brain
-# runs, as opposed to how it is invoked.
-GEAR_FIELDS = ('model', 'light_model')
+COMMAND_FIELDS = ('cmd', 'args', 'resume', 'resume_args', 'timeout', 'model_arg', 'acp', 'model', 'light_model', 'strong_model')
+# The GEARS, which are the half of COMMAND_FIELDS clis.KNOWN ships no preset for: what a brain
+# runs, as opposed to how it is invoked. `strong_model` is the third (the router, 2026-10-25): what
+# hard work steps up to, set by the owner and never guessed from a model's name - blank means this
+# brain has no strong tier, and nothing steps up on it.
+GEAR_FIELDS = ('model', 'light_model', 'strong_model')
 
 
 def gears(cfg, key: str) -> dict:
-    """A brain's two gears. MAIN runs the sessions - coding and general alike; LIGHT runs the
+    """A brain's gears. MAIN runs the sessions - coding and general alike; LIGHT runs the
     one-message jobs (triage, drafts, summaries, the digest). One brain, two gears, and still ONE
     brain: `claude-main` and `claude-light` are not two providers (the owner, 2026-09-16)."""
     c = cfg.get('cli_connections', {}).get(str(key or '')) or {}

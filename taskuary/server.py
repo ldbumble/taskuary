@@ -5270,6 +5270,8 @@ def advice_notes(key: str, limit: int = 10):
 
 class ConciergeProposeBody(BaseModel):
     verb: str; key: str; text: str | None = None; table: bool = False; exact: bool = False; revision: str | None = None
+    # A BUTTON PRESSED ON THE DESK (concierge.propose_direct `press`): it runs at once, with no line in the owner's name and no card to confirm
+    press: bool = False
     # THE AGENT BOX'S ANSWERS (RunForm.AgentAsk): which profile, brain and model a hand-off runs on - the words ride in `text`
     agent: str | None = None; brain: str | None = None; pick: str | None = None; model: str | None = None
 
@@ -5283,7 +5285,7 @@ def concierge_propose(body: ConciergeProposeBody):
         if tgt and advisor.revision(store, *tgt) != body.revision:
             raise HTTPException(409, 'That one changed since the Advisor looked at it - read it again before pressing.')
     picks = {'agent': body.agent, 'brain': body.brain, 'pick': body.pick, 'model': body.model}
-    try: return concierge.propose_direct(store, body.verb, body.key, body.text or '', ACTOR, table=body.table, exact=body.exact, picks=picks)
+    try: return concierge.propose_direct(store, body.verb, body.key, body.text or '', ACTOR, table=body.table, exact=body.exact, picks=picks, press=body.press)
     except ValueError as e: raise HTTPException(422, str(e))
 
 class SetupBody2(BaseModel): text: str

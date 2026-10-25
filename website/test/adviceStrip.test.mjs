@@ -85,3 +85,13 @@ test("a move whose text is gone says what it does now, still lit", () => {
   assert.match(read("actionRow.js"), /\.\.\.\(v\.blank \? \{ blank: v\.blank \} : \{\}\)/, "the row carries it to the strip");
   assert.match(read("ActionRow.jsx"), /if \(onRow\.blank\) return <div className="tq-next" role="status" data-tq-advice=""><div className="tq-next-txt">\{`\$\{onRow\.blank\}\.`\}/);
 });
+
+test("a move greyed only by the owner's own press in flight is not said to be off (the 2026-10-25 sweep)", async () => {
+  const { pressInFlight } = await import("../src/actionRow.js");
+  // the owner pressed Send: the draft's verbs grey while it goes, and the strip said "Redraft is off - it cannot be pressed right now."
+  assert.ok(pressInFlight([v("12:redraft", "decide", { label: "Redraft", disabled: true }), v("12:approve", "decide", { label: "Sending…", disabled: true, card: true })]));
+  assert.ok(pressInFlight([v("reply", "decide", { label: "Drafting…", disabled: true })]), "its own press, mid-way");
+  // ...a move that is truly greyed still says why
+  assert.ok(!pressInFlight([v("12:redraft", "decide", { label: "Redraft", disabled: true, why: "the reply was sent" })]));
+  assert.match(read("ActionRow.jsx"), /if \(!off\?\.disabled\) return null;\s*\/\/.*\s*if \(pressInFlight\(theirs\)\) return null;/);
+});

@@ -368,12 +368,18 @@ def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None
     if demo.enabled():
         brainroute.log(store, r, task_id, pick='demo'); return demo.brain()
     rid = brainroute.log(store, r, task_id)
+    # held by the owner's data rule: no AI here may read it, so it waits - never what blank means, which would be one the rule keeps out
+    if r.tier == 'held': brainroute.outcome(store, rid, 'refused:sensitive'); return None
     try: brain = _build_llm(store, r.pick, r.model or None, trace, cancel, resume, cli_tools, extra_env, research, fallback_user, r.gear, keep, task_id,
                             backups=r.chain)
     except Exception as e:
         brainroute.outcome(store, rid, f'refused:{type(e).__name__}' if isinstance(e, (origin.RefusedForStranger, origin.Refusal)) else 'error'); raise
     if brain is None: brainroute.outcome(store, rid, 'error' if r.pick else 'refused:no AI')
     elif getattr(brain, 'is_failover', False): brain.route = (store, rid)
+    # Auto mode: a one-shot job whose answer comes back unreadable or unsure may ask a strong model ONCE (brainroute.step_up)
+    if brain and r.escalate:
+        brain = _StepUp(brain, lambda why: brainroute.step_up(store, r, rid, task_id, why, lambda p: _scrub(_build_llm(
+            store, p, None, trace, cancel, None, cli_tools, extra_env, research, fallback_user, 'strong', None, task_id, backups=[]))))
     return _Scrubbed(brain) if brain else brain
 
 
@@ -432,6 +438,40 @@ class _Scrubbed:
     def __setattr__(self, k, v): setattr(object.__getattribute__(self, '_brain'), k, v)
 
 
+def _scrub(brain): return _Scrubbed(brain) if brain else brain
+
+
+class _Cooling:
+    """A CLI brain that, refused on its usage allowance with a time it comes back, says so to the router (brainroute.cool): the
+    next call goes to a backup until then, instead of to the brain that will refuse it again. The refusal itself still raises."""
+    def __init__(self, store, pick, brain):
+        for k, v in (('_store', store), ('_pick', pick), ('_brain', brain)): object.__setattr__(self, k, v)
+    def __call__(self, *a, **kw):
+        try: return self._brain(*a, **kw)
+        except Exception as e:
+            if getattr(e, 'until', None):
+                from . import brainroute
+                brainroute.cool(self._store, self._pick, e.until)
+            raise
+    def __bool__(self): return bool(object.__getattribute__(self, '_brain'))
+    def __getattr__(self, k): return getattr(object.__getattribute__(self, '_brain'), k)
+    def __setattr__(self, k, v): setattr(object.__getattribute__(self, '_brain'), k, v)
+
+
+class _StepUp:
+    """A one-shot brain that may ask a stronger one once (the router's escalation, Auto mode only). It answers exactly as the brain
+    it wraps; `step_up(why)` is what ask_json calls when the answer could not be used - it returns the strong brain, or None when
+    there is none, the day's cap is spent, or this item already stepped up once."""
+    is_step_up = True
+    def __init__(self, brain, up): object.__setattr__(self, '_brain', brain); object.__setattr__(self, '_up', up)
+    def __call__(self, *a, **kw): return self._brain(*a, **kw)
+    def step_up(self, why: str):
+        up = object.__getattribute__(self, '_up'); object.__setattr__(self, '_up', lambda why: None)    # once per brain built
+        return up(why)
+    def __getattr__(self, k): return getattr(object.__getattribute__(self, '_brain'), k)
+    def __setattr__(self, k, v): setattr(object.__getattribute__(self, '_brain'), k, v)
+
+
 def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,
                cli_tools: bool = False, extra_env: dict = None, research: bool = False, fallback_user=None,
                gear: str = 'light', keep: str = None, task_id=None, backups: list = None):
@@ -472,9 +512,9 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
         chosen_model, chosen_resume, chosen_keep = (model, resume, keep) if first else (None, None, None)
         if candidate.startswith('cli:'):
             try:
-                return make_cli_llm(store, candidate[4:], chosen_model, trace=trace, cancel=cancel,
+                return _Cooling(store, candidate, make_cli_llm(store, candidate[4:], chosen_model, trace=trace, cancel=cancel,
                                     resume=chosen_resume, cli_tools=cli_tools, extra_env=extra_env,
-                                    research=research, gear=gear, keep=chosen_keep, task_id=task_id)
+                                    research=research, gear=gear, keep=chosen_keep, task_id=task_id))
             # a BACKUP that cannot run a stranger's task is no backup for it; the first brain's refusal is the answer
             except origin_mod.RefusedForStranger:
                 if first: raise
@@ -584,12 +624,28 @@ def ask_json(brain, system: str, user: str, want: dict = None, need=(), **kw) ->
     if want is not None and carries: kw['want'] = want
     def short(a): return [k for k in need if not (a.data or {}).get(k)] if carries is False else []
     first = ask(user)
-    if first.data is not None and not short(first): return first
+    if first.data is not None and not short(first): return _stepped(brain, system, user, want, need, kw, first)
     again = (f"\n\nYour last answer left out: {', '.join(short(first))}. Answer the whole JSON object "
              'again, including those.' if first.data is not None
              else '\n\nAnswer with the JSON object only - no prose, no code fence.')
     second = ask(user + again)
-    return second if second.data is not None and not short(second) else (second if second.data is not None else first)
+    out = second if second.data is not None and not short(second) else (second if second.data is not None else first)
+    return _stepped(brain, system, user, want, need, kw, out)
+
+
+def _stepped(brain, system, user, want, need, kw, out: JsonAnswer) -> JsonAnswer:
+    """An answer still unreadable after its own retry, or one the model said it was not sure of, is asked ONCE of a strong model -
+    where the owner turned that on (brainroute's 'unsure' rule, Auto mode). These jobs only read and write, so asking again cannot
+    act twice; a strong answer that is no better leaves the first one standing."""
+    if getattr(brain, 'is_step_up', False) is not True: return out      # said out loud: a stand-in brain answers any attribute
+    up = brain.step_up
+    bad = out.data is None or any(not out.data.get(k) for k in need)
+    unsure = not bad and out.data.get('sure') is False
+    if not (bad or unsure): return out
+    strong = up('unsure' if unsure else 'unreadable')
+    if strong is None: return out
+    again = ask_json(strong, system, user, want=want, need=need, **{k: v for k, v in kw.items() if k != 'want'})
+    return again if again.data is not None and not any(not again.data.get(k) for k in need) else out
 
 
 def retry_wait(last, attempt: int) -> float:

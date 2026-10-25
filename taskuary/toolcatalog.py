@@ -340,6 +340,7 @@ CHIP_TOOL = {'defer': 'task.defer', 'continue': 'agent.continue', 'test_connecti
 # button in buttons.json to one of the three)
 PAGE_ONLY = {'new_task': "the page's own New task - the model makes one with task.create_from_text", 'fix': "wears the failure's own fix", 'try_again': 'repeats the press it stands under', 'trust_start': "a refused start's own way on - the owner's word on a stranger, never the model's", 'walk_here': 'the walk handed to a phone chat, brought back to the desk',
              'review_changes': "opens the agent's diff", 'run_another': 'a second agent from the task page',
+             'strong_again': "a failed or unsure agent's re-run on a strong model - the owner's press, never the model's (the router)",
              'new_task': 'the model makes one with task.create_from_text; naming the button too pushed the index over its cap',
              'report_bug': 'a failure the app cannot fix opens the bug report, which the owner reads before it goes',
              'attach': "opens the file picker on the draft - a file is the owner's to choose",

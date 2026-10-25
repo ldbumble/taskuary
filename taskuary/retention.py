@@ -57,5 +57,9 @@ def tick(store, now: datetime = None) -> dict | None:
     now = now or datetime.now()
     if str(store.get_setting(RAN_KEY) or '')[:10] == now.strftime('%Y-%m-%d'): return None
     out = cleanup(store, now)
+    # ...and the brain-route log past its month (brainroute.KEEP_DAYS): which AI ran what is worth a month, not for ever
+    from . import brainroute
+    try: out['routes_trimmed'] = brainroute.trim(store, now)
+    except Exception as e: logger.debug(f'retention: route log not trimmed - {e}')
     store.set_setting(RAN_KEY, now.strftime('%Y-%m-%d %H:%M:%S'), 'retention')
     return out

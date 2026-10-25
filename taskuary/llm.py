@@ -346,11 +346,17 @@ def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None
 
     `job` says what the call is FOR (brainroute.JOBS) and brainroute.choose says which brain runs it. Every call
     site in taskuary/ names one (tests/test_brainroute.py); a caller that does not is triage, as it always was."""
-    from . import demo, brainroute
-    # the demo answers from a script: no key, no CLI, no request leaving the machine
-    if demo.enabled(): return demo.brain()
+    from . import demo, brainroute, origin
     r = brainroute.choose(store, job or 'triage', task=task_id, want_pick=pick, want_model=model, gear=gear)
-    brain = _build_llm(store, r.pick, r.model or None, trace, cancel, resume, cli_tools, extra_env, research, fallback_user, r.gear, keep, task_id)
+    # the demo answers from a script: no key, no CLI, no request leaving the machine - and its route is logged, so its reason shows
+    if demo.enabled():
+        brainroute.log(store, r, task_id, pick='demo'); return demo.brain()
+    rid = brainroute.log(store, r, task_id)
+    try: brain = _build_llm(store, r.pick, r.model or None, trace, cancel, resume, cli_tools, extra_env, research, fallback_user, r.gear, keep, task_id)
+    except Exception as e:
+        brainroute.outcome(store, rid, f'refused:{type(e).__name__}' if isinstance(e, (origin.RefusedForStranger, origin.Refusal)) else 'error'); raise
+    if brain is None: brainroute.outcome(store, rid, 'error' if r.pick else 'refused:no AI')
+    elif getattr(brain, 'is_failover', False): brain.route = (store, rid)
     return _Scrubbed(brain) if brain else brain
 
 
@@ -490,6 +496,9 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
                 out = brain(system, context, **kw)
                 failover.last_pick = candidate
                 failover.session_id = getattr(brain, 'session_id', None)
+                if candidate != primary and failover.route:
+                    from . import brainroute
+                    brainroute.outcome(*failover.route, f'fallback:{candidate}')
                 return out
             except Exception as e:
                 last = e
@@ -498,6 +507,7 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
                                 f'{candidate or "automatic AI"} is unavailable; trying {brains[i + 1][0]}')
         raise last
     failover.last_pick, failover.session_id = primary, resume
+    failover.is_failover, failover.route = True, None     # build_llm hands it its route row, for a backup to be written on
     failover.takes_want = True          # it forwards one to each brain that can carry it, and drops it for the rest
     failover.takes_web = any(getattr(b, 'takes_web', False) for _, b in brains)
     return failover

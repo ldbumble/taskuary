@@ -16,7 +16,9 @@ golden matrix). AUTO is a switch the owner turns on; nothing about it runs until
 All router state lives in the store - settings and the `brainroute` log - never in module globals: the
 poller and the server are separate processes (dirty triggers are cross-process).
 """
+from datetime import datetime, timedelta
 from typing import NamedTuple
+from loguru import logger
 
 # What a call is FOR. Closed: a new call site picks one of these, and an AST test fails a build_llm without it.
 JOBS = ('triage', 'draft', 'summary', 'advisor', 'memory', 'rank', 'assistant', 'general', 'coding', 'judge', 'report')
@@ -39,6 +41,43 @@ class Route(NamedTuple):
     rule: str; why: str            # 'fixed' | 'you chose it' | a rule id; one sentence built from the inputs, never by a model
     difficulty: str = ''; data_class: str = ''
     escalate: str = ''             # the tier a retry would go up to, '' when none
+
+
+KEEP_DAYS = 30           # how long a route row is kept (retention.tick trims the rest)
+
+
+def log(store, r: 'Route', task_id=None, outcome: str = 'ok', pick: str = None, escalated_from=None) -> int | None:
+    """One row per brain built: the job, what runs it and why - never the prompt or the answer. A log that cannot be written
+    is never the reason a call fails, so a failure here is a debug line and None."""
+    try:
+        return store.add_brain_route({'At': datetime.now().isoformat(sep=' ', timespec='seconds'), 'Job': r.job,
+                                      'TaskId': int(task_id) if str(task_id or '').isdigit() else None, 'Pick': r.pick if pick is None else pick,
+                                      'Model': r.model, 'Tier': r.tier, 'Rule': r.rule, 'Why': r.why, 'Difficulty': r.difficulty or None,
+                                      'DataClass': r.data_class or None, 'EscalatedFrom': escalated_from, 'Outcome': outcome})
+    except Exception as e:
+        logger.debug(f'brainroute: could not log a {r.job} route - {e}'); return None
+
+
+def outcome(store, rid, said: str, why: str = None) -> None:
+    "How the call ended when it was not as built: 'fallback:<pick>', 'refused:<why>', 'error'."
+    if not rid: return
+    try: store.set_brain_route(rid, Outcome=said, **({'Why': why} if why else {}))
+    except Exception as e: logger.debug(f'brainroute: could not mark route {rid} {said} - {e}')
+
+
+def trim(store, now: datetime = None) -> int:
+    return store.trim_brain_routes(((now or datetime.now()) - timedelta(days=KEEP_DAYS)).isoformat(sep=' ', timespec='seconds'))
+
+
+def why_for_task(store, task_id) -> str:
+    "The reason behind the newest route on this task - the brain line's tooltip. '' when no AI call has been made for it."
+    try: rows = store.brain_routes(int(task_id), limit=1)
+    except Exception: return ''
+    if not rows: return ''
+    r = rows[0]
+    said = str(r.get('Outcome') or 'ok')
+    why = str(r.get('Why') or '').rstrip('.')
+    return f'{why}.' + (f' {_said(store, said[9:])} answered instead, as its backup.' if said.startswith('fallback:') else '') if why else ''
 
 
 def mode(store) -> str:
@@ -91,5 +130,5 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
     chosen = want_pick is not None or bool(want_model)
     rule = 'you chose it' if chosen else 'fixed'
     if not pick: why = f'{agents.NO_AI}, so {JOB_WORDS[job]} waits'
-    else: why = f"{JOB_WORDS[job]} on {_said(store, pick)}{f', {model}' if model else ''} ({'your pick' if chosen else 'its card'})"
+    else: why = f"{JOB_WORDS[job]} on {_said(store, pick)}{f', {model}' if model else ''}, {'as picked for it' if chosen else 'as its card says'}"
     return Route(job, 'fixed', pick, model, g, [c for c in chain if c and c != pick], rule, why[0].upper() + why[1:])

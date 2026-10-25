@@ -136,8 +136,10 @@ def _fixed(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
     if job == 'coding':
         pick = want_pick if want_pick is not None else agents.resolve_brain(store, 'coding', cli_only=True)  # a terminal or nothing
         return pick, want_model or '', gear or 'main', [f'cli:{k}' for k in session_chain(store, pick[4:] or None)] if pick else []
-    # an explicit pick is taken with exactly the model it came with - '' is the brain's own, as build_llm always read it
-    if want_pick is not None: return want_pick, want_model or '', gear or ('light' if job == 'assistant' else 'main'), _backups(store)
+    # an explicit pick is taken with exactly the model it came with - '' is the brain's own model - and an empty pick is what
+    # blank means (llm.effective_pick), the reading _build_llm makes of it anyway: the log names the brain that runs, not ''
+    if want_pick is not None:
+        return want_pick or llm.effective_pick(store, ''), want_model or '', gear or ('light' if job == 'assistant' else 'main'), _backups(store)
     if job == 'assistant':
         from . import concierge
         return concierge.pick(store), want_model or str(store.get_setting(concierge.MODEL_KEY) or '').strip(), gear or 'light', _backups(store)

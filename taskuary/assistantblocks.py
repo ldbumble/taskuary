@@ -204,7 +204,8 @@ CATALOGUE = (
           _notes, sql=NOTES_SQL, whole=True),
     # the two memories the clock pass never read while the event pass did (the owner, 2026-10-12: "it should be much better if it is")
     Block('learned', 'Learned', 'view', ('doc',),
-          "LEARNED (what the owner's own verdicts taught, with their counts - weigh it, never restate it as news)",
+          "WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (learned from what they did - their people, what they care about, how they work, their "
+          "promises and what to bring up; weigh it, never restate it as news)",
           _learned, cap=2000),
     Block('ledger', 'The outcome ledger', 'view', ('outcome', 'doc'),
           'THE OUTCOME LEDGER (the last {days} days of what came of actions, resolved, each with an id to cite)',

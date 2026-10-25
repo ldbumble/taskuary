@@ -1564,7 +1564,7 @@ def retry_stuck_ideas(store, report_id=None, report_title: str = None) -> int:
     if not stuck: return 0
     try:
         from .llm import build_llm
-        brain = build_llm(store)
+        brain = build_llm(store, job='triage')
     except Exception: brain = None
     if brain is None: return 0
     try: return len(triage_ideas(store, stuck, brain, report_title=report_title if own_identity(store, report_id) else None))
@@ -1783,7 +1783,7 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     from .firstrun import unchosen
     if llm is None and not unchosen(store):           # before the first run picks an AI there is none to ask - the facts stand
         from .llm import build_llm
-        try: llm = build_llm(store)
+        try: llm = build_llm(store, job='advisor')
         except Exception as e:
             logger.debug(f'assistant: no model - {e}'); llm = None
     # the owner's own sent words are read by the model BEFORE the candidates are found: which of them asked for
@@ -1924,7 +1924,7 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     if d is None or d.get('triage', True):
         try:
             from .llm import build_llm
-            try: brain = build_llm(store)
+            try: brain = build_llm(store, job='summary')
             except Exception: brain = None
             triage_ideas(store, rows, brain, report_title=name if own_post else None)
         except Exception as e: logger.warning(f'assistant: idea triage skipped - {e}')

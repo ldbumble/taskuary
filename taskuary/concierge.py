@@ -255,7 +255,7 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False, keep: str = N
                 try: return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep, **({'extra_args': fx} if fx else {}), **own)
                 finally: store.get_agent = store_get
             return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep, **({'extra_args': fx} if fx else {}), **own)
-        return llm_mod.build_llm(store, pick=p, model=str(store.get_setting(MODEL_KEY) or '').strip() or None, trace=trace, cancel=cancel)
+        return llm_mod.build_llm(store, pick=p, model=str(store.get_setting(MODEL_KEY) or '').strip() or None, trace=trace, cancel=cancel, job='assistant')
     except Exception as e:
         logger.debug(f'concierge: no brain - {e}'); return None
 

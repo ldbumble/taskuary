@@ -1944,7 +1944,7 @@ ENRICH_THREAD = 'press-enrich'
 def ask_later(store, tid: int, m: dict, plain: str):
     """Read the ask out of `m` off the press and put it on `tid`. No brain, nothing to wait for: `plain` is the answer."""
     from . import llm as _llm
-    llm = _llm.build_llm(store)
+    llm = _llm.build_llm(store, job='triage')
     if llm: threading.Thread(target=_enrich, args=(store, tid, m, plain, llm), daemon=True, name=ENRICH_THREAD).start()
 
 

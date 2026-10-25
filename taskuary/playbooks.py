@@ -348,7 +348,7 @@ def draft(store, task_id: int, transcript: str, agent: str = 'agent', llm=None) 
         if of_task(task): return None                     # the second run of a playbook is not a new kind of job
         # ...nor is a workflow's run (its job is written down already, as the workflow) or a playbook being written by hand
         if task.get('Source') == 'workflow' or task.get('SourceRef') == 'assistant:playbook': return None
-        llm = llm or build_llm(store)
+        llm = llm or build_llm(store, job='memory')
         if not llm: return None
         books = list_all()
         user = (f"Playbooks already on file (a job one of these covers is not new):\n{menu(books) or '(none yet)'}\n\n"

@@ -5568,7 +5568,7 @@ def _llm(target_store=None):
     target_store = target_store or store
     try:
         from .llm import build_llm
-        return build_llm(target_store)
+        return build_llm(target_store, job='triage')
     except Exception:
         return None
 
@@ -7559,7 +7559,7 @@ def skills_fetch(body: SkillUrlBody):
 
 def _skill_proposals(entries: list) -> dict:
     from . import skillimport, llm as llm_mod
-    try: brain = llm_mod.build_llm(store)
+    try: brain = llm_mod.build_llm(store, job='memory')
     except Exception: brain = None
     # `flat` is the body's length AS A SESSION RECEIVES IT and `doc_chars` is where the seed cuts a
     # rules document: the wizard warns from these, not from a byte count of the file. Of the fifteen

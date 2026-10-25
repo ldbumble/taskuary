@@ -40,7 +40,7 @@ def compile(store, who: str, llm=None):
     """One small call on the light brain: the numbers and the ledger's lines about them in, bullet facts out, spliced into
     the page. None when there is no brain or it had nothing to say - a page is never written empty."""
     who = str(who or '').lower()
-    brain = llm or build_llm(store)
+    brain = llm or build_llm(store, job='memory')
     if not brain: return None
     facts = facts_text(store, who)
     ev = [f"out{r['Id']}: {outcomes._sentence(store, r)}" for r in outcomes._rows_who(store, who) if r.get('ResolvedAt')][-20:]

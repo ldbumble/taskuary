@@ -30,7 +30,7 @@ def compile(store, slug: str, llm=None):
     as a proposal. The review id, or None when there is no brain, no playbook, an open proposal already, or nothing to say."""
     page = playbooks.read(slug)
     if not page or pending(store, slug): return None
-    brain = llm or build_llm(store)
+    brain = llm or build_llm(store, job='memory')
     if not brain: return None
     facts = facts_text(store, slug)
     ev = [f"out{r['Id']}: {outcomes._sentence(store, r)}" for r in store._rows(

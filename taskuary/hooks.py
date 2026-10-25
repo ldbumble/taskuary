@@ -507,7 +507,7 @@ def judge_turn(store, tid: int, sid: str, said: str, brain=None, wait: bool = Fa
         else:
             try:
                 from .llm import build_llm, ask_json
-                b = brain or build_llm(store)
+                b = brain or build_llm(store, job='judge')
                 if not b: return
                 v = ask_json(b, JUDGE_SYSTEM, f"THE AGENT'S LAST MESSAGE:\n{said[-4000:]}", want=JUDGE_WANT, need=('asks',)).data or {}
             except Exception as e: logger.debug(f'turn judge skipped for {sid}: {e}'); return
@@ -558,7 +558,7 @@ def judge_ended(store, tid: int, sid: str, said: str, brain=None, wait: bool = F
         else:
             try:
                 from .llm import build_llm, ask_json
-                b = brain or build_llm(store)
+                b = brain or build_llm(store, job='judge')
                 if not b: return
                 v = ask_json(b, ENDED_SYSTEM, f"THE AGENT'S LAST MESSAGE:\n{said[-4000:]}", want=ENDED_WANT, need=('unfinished',)).data or {}
             except Exception as e: logger.debug(f'turn-end judge skipped for {sid}: {e}'); return

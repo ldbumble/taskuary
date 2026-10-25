@@ -35,7 +35,7 @@ def report_from_transcript(store, task_id: int, transcript: str, agent: str = ''
     blank = dict.fromkeys(FIELDS, '')
     if not (transcript or '').strip(): return blank | {'summary': '(the session ended with nothing on screen)'}
     try:
-        llm = build_llm(store)
+        llm = build_llm(store, job='summary')
         if not llm: raise RuntimeError('no AI connector is set up to write the report')
         out = llm(TRANSCRIPT_SYSTEM, f"Task: {(store.get_task(task_id) or {}).get('Title') or ''}\n\n"
                                      f'Transcript:\n{transcript}', max_tokens=900)
@@ -80,7 +80,7 @@ def pause_note(store, task_id: int, transcript: str) -> str:
     from .llm import build_llm
     if not (transcript or '').strip(): return 'Nothing on screen - the session was paused before it did anything.'
     try:
-        llm = build_llm(store)
+        llm = build_llm(store, job='summary')
         if not llm: raise RuntimeError('no AI connector is set up to write the note')
         out = llm(PAUSE_SYSTEM, f"Task: {(store.get_task(task_id) or {}).get('Title') or ''}\n\n"
                                 f'Transcript:\n{transcript}', max_tokens=900)
@@ -637,7 +637,7 @@ def _ask_ahead(store, questions: list) -> dict:
     # what fails an ending - a brain that cannot be built here is built (and its failure handled) at the function's own place
     for q in questions:
         if q is None or q in out: continue
-        try: brain = build_llm(store)
+        try: brain = build_llm(store, job='summary')
         except Exception as e: logger.debug(f'wrap: not asked ahead - {e}'); continue
         if brain: out[q] = _AHEAD.submit(lambda b=brain, q=q: b(q[0], q[1], **dict(q[2])))
     return out
@@ -650,7 +650,7 @@ def _answered(store, ahead: dict):
     def llm(system, user, **kw):
         f = ahead.get((system, user, tuple(sorted(kw.items()))))
         if f is not None: return f.result()
-        brain = build_llm(store)                                # ...and one asked differently builds its brain then, as before
+        brain = build_llm(store, job='summary')                                # ...and one asked differently builds its brain then, as before
         return brain(system, user, **kw) if brain else None
     return llm
 

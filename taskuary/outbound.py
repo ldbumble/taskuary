@@ -907,7 +907,7 @@ def draft_handoff(store, task_id: int, to: str, note: str = None, llm=None) -> s
     """The AI writes the forward message from the task's own context."""
     from . import agents as hub_agents
     from .llm import build_llm
-    llm = llm or build_llm(store)
+    llm = llm or build_llm(store, job='draft')
     if not llm: raise RuntimeError('no AI connector is set up to write the message')
     ctx = hub_agents.task_context(store, task_id)
     # ONE HAND-OFF, WITH THE RESULT IN IT (the owner, 2026-10-02: "Send this result to someone" and "Hand it to a person" were

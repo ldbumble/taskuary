@@ -378,7 +378,7 @@ def run(store, what: str, home: Path, share_to=None, llm=None):
     if what in ('evaluate', 'ablate'):
         if llm is None:
             from .llm import build_llm
-            llm = build_llm(store)
+            llm = build_llm(store, job='triage')
         if llm is None: raise SystemExit(f"no AI connector is configured - connect one under {words.name('ai')} first")
         strong = [c for c in cases if not c['weak']]
         return evaluate(store, strong, llm) if what == 'evaluate' else ablate(store, strong, llm, save=Path(home) / 'eval' / 'ablate_last.json')

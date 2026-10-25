@@ -280,7 +280,7 @@ class QuestionReopensTests(unittest.TestCase):
         t = self.s.get_task(self.tid)
         self.assertEqual((t['Status'], t['Title'], t['Summary']), ('open', 'Erin asks what separates the 4100 accounts', 'Erin Blake wants the difference explained.'))
         self.assertEqual(self.s.pending_review(self.tid, kind='draft')['MessageId'], back['message_id'])
-        self.assertTrue(any(c['Body'].startswith('Reopened - Erin Blake asked you something') for c in self.s.list_comments(self.tid)))
+        self.assertTrue(any(c['Body'].startswith('Reopened - Erin Blake has a question for you') for c in self.s.list_comments(self.tid)))
 
     def test_a_thanks_on_a_closed_email_task_stays_filed_and_closed(self):
         back = self.again(asked('reply_only', False, 'Erin thanks Alex for the explanation'), 'Thanks, that makes sense.')

@@ -1813,7 +1813,7 @@ def _reopen(store, tid, msg: dict, actor: str, intent: dict = None) -> bool:
     selfclose.forget(tid)
     who = msg.get('from_name') or msg.get('from_email') or 'someone'
     asked = (intent or {}).get('intent') == 'reply_only'
-    store.add_comment(tid, actor, 'agent', f"Reopened - {who} {'asked you something' if asked else 'asked for something new'}: "
+    store.add_comment(tid, actor, 'agent', f"Reopened - {who} {'has a question for you' if asked else 'asked for something new'}: "
                       f"{msg.get('subject') or (msg.get('body') or '')[:80]}")
     store.audit('task', tid, 'reopen', actor, 'agent', {'why': 'a question to you on its thread' if asked else 'new work on its thread'})
     logger.info(f"ingest: {task_ref(tid)} reopened - {'a question to you' if asked else 'new work'} on its thread")

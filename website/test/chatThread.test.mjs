@@ -43,13 +43,21 @@ test("newest first, as every message list reads", () => {
   assert.match(src, /const list = \[\.\.\.messages\]\.sort\(\(a, b\) => tsMs\(b\.SentAt\) - tsMs\(a\.SentAt\)\);/);
   assert.doesNotMatch(src, /scrollTop = el\.scrollHeight/);
   assert.doesNotMatch(src, /maxWidth: 900/);                                  // as wide as the task section
-  assert.match(src, /maxWidth: \{ xs: "88%", md: "min\(70%, 640px\)" \}/);      // a bubble stays readable
+  // a bubble stays readable - 86% of From's column since the compact bubbles (the task-view cleanup, 2026-10-25), 70% of the old 800px box
+  assert.match(src, /maxWidth: \{ xs: "88%", md: "min\(86%, 640px\)" \}/);
 });
 
 // (the owner, 2026-10-15: "keep the width but center them in the chat ... test all different examples of this with newest message first
 // and then for email in both the task side and close out side")
 test("the conversation is a centred column with its own line around it", () => {
   assert.match(src, /data-tq-chat-thread="" sx={{ mt: 0.85, width: "100%", maxWidth: 800, mx: "auto"/);
+});
+
+// COMPACT BUBBLES (the task-view cleanup, owner-approved 2026-10-25): the name inside the bubble once per run, the time at the line's end
+test("Show all draws compact bubbles: the name inside once per run, the time on the line", () => {
+  assert.match(src, /\{newRun && !me && <Box component="span" sx=\{\{ fontWeight: 600, mr: 0\.75 \}\}>\{firstName\(m\)\}<\/Box>\}/);
+  assert.match(src, /display: "inline-block", color: FAINT, fontSize: 11, ml: 1\.25, whiteSpace: "nowrap"/);
+  assert.doesNotMatch(src, /mb: 0\.15 \}\}>\s*\{m\.FromName/, "no name line over the bubble");
 });
 
 // THE FULL CHAT IS IN TASK, CONDENSED IN CLOSE OUT (the owner, 2026-10-16: "in close out you have the full chat, it's too confusing.

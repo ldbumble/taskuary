@@ -14,6 +14,7 @@ import json
 from datetime import datetime, timedelta
 from loguru import logger
 
+from .processing_order import known, level
 from .store import task_ref
 
 # kind -> (bindings it cannot draw without, the width it takes on a four-column grid)
@@ -43,7 +44,7 @@ def _tasks(store, days):
         ORDER BY t.TaskId DESC LIMIT ?""", (_since(days), ROWS))
     return [{'task_id': r['TaskId'], 'ref': task_ref(r['TaskId']), 'title': r['Title'] or '', 'kind': r['Kind'] or 'general',
              'status': r['Status'] or 'open', 'state': 'closed' if r['Status'] in ('done', 'dropped') else 'open',
-             'priority': r['Priority'] or 'normal', 'arrived': (a := str(r['FirstAt'] or r['CreatedAt'] or '')[:10]),
+             'priority': level(r['Priority']), 'arrived': (a := str(r['FirstAt'] or r['CreatedAt'] or '')[:10]),
              # a task closed before ClosedAt was stamped on every close says when it was last touched instead
              'closed': str(r['ClosedAt'] or (r['UpdatedAt'] if r['Status'] in ('done', 'dropped') else '') or '')[:10], 'waiting': _waited(a)}
             for r in rows]
@@ -129,7 +130,7 @@ def _replies(store, days):
              'hours': round(max(0.0, r['Hrs']), 1) if r['Hrs'] is not None else None} for r in rows]
 
 
-DATASETS = {'tasks': (_tasks, 'task_id, ref, title, kind, status, state (open|closed), priority, arrived (date), closed (date), '
+DATASETS = {'tasks': (_tasks, 'task_id, ref, title, kind, status, state (open|closed), priority (regular|important|urgent), arrived (date), closed (date), '
                              'waiting (how long since it arrived, in words)'),
             'mail': (_mail, 'message_id, task_id, day (date), channel, sender, became_task (yes|no)'),
             'flow': (_flow, 'message_id, task_id, day (date), channel, stage (Came in|Triaged|On a task|Task closed - one row per stage reached)'),
@@ -183,6 +184,35 @@ def run_taskuary_data(cfg):
     rows = DATASETS[name][0](cfg['store'], cfg.get('days') or 90)
     lim, mine = row_limit(cfg)
     return rows_out(rows, lim, unit=name.replace('_', ' '), mine=mine)
+
+
+# A SAVED DASHBOARD SPEAKS THE THREE PRIORITIES TOO (the owner, 2026-10-25: migrate saved filters on high/normal/low): the tasks rows say
+# regular / important / urgent now, so a component cut on `priority: high` would draw empty and an `order` of the old four would draw
+# bars nobody has. Only Taskuary's own tasks rows are read this way - a SQL table's or a sheet's priority column is its own vocabulary.
+def _own_tasks(spec) -> set: return {_key(s, i) for i, s in enumerate(spec.get('sources') or [], 1)
+                                     if isinstance(s, dict) and s.get('type') == 'taskuary_data' and s.get('dataset') == 'tasks'}
+
+
+def three_priorities(spec: dict) -> dict:
+    """The spec with every priority it cuts or orders Taskuary's tasks on said in the three words; the same spec when nothing changed."""
+    if not is_dashboard(spec) or not (own := _own_tasks(spec)): return spec
+    out = json.loads(json.dumps(spec))
+    for c in out.get('components') or []:
+        if not isinstance(c, dict) or c.get('source') not in own: continue
+        w = c.get('where')
+        if isinstance(w, dict) and known(w.get('priority')): w['priority'] = level(w['priority'])
+        if 'priority' in (c.get('x'), c.get('series')) and isinstance(c.get('order'), list):
+            c['order'] = list(dict.fromkeys(level(v) if known(v) else v for v in c['order']))     # low and normal both land on regular
+    return out
+
+
+def migrate_priorities(store) -> int:
+    """Every saved dashboard, once each: how many changed (0 when none needed it - a second run is a no-op)."""
+    n = 0
+    for src in store.list_sources(active_only=False):
+        cfg = cfg_of(src)
+        if (new := three_priorities(cfg)) != cfg: store.save_source({'SourceId': src['SourceId'], 'ConfigJson': json.dumps(new)}, 'migrate'); n += 1
+    return n
 
 
 # ── the spec ────────────────────────────────────────────────────────────────────────────────

@@ -76,8 +76,8 @@ capped at 9,000 characters (whole sections drop from the end, the item and its v
 | Your notes | Standing notes and past verdicts about the sender or topic, and your corrections of triage there - the same evidence triage is handed |
 | The agent | What it last said, what it is asking, how its run ended, and mail that came in since its last turn |
 | The goal or the idea | A goal's open steps, who holds each, its day and how late, and when anything last moved. An idea's words, and for a follow-up how long the person has been quiet against their own day |
-| `LEARNED.md` | `## What you do next` and nothing else - your press habits in use, closest to this sender first, within its budget; the sorting lines are triage's |
-| The ledger | Outcome rows on the item, and your habit for each verb offered on this kind of item from this sender |
+| `LEARNED.md` | `## Your people`, `## What you care about`, `## How you work` and `## Promises` - the lines in use, closest to this sender first, within its budget |
+| The ledger | Outcome rows on the item, and what came of each verb offered with this sender before - evidence it weighs, never a line it says |
 | The playbook, `SOUL.md`, `JOB.md` | The matching playbook, and the opening of each document |
 | The bigger read | For the item on the table: what the hub knows about the people on it, and the month's outcomes |
 
@@ -87,25 +87,36 @@ redrafted; a draft that promises what nothing shows (a payment date, a file that
 is not sent; work an agent can do, like an issue with a traceback, goes to an agent; someone quiet
 past their day is chased, where the row draws Chase.
 
+What it knows about how you work is a reason too, said in the same one line beside the lit button,
+and only when it is a fact it can show. Each is counted from what you did, and **Why?** lists the
+acts it rests on:
+
+- **How soon you answer someone.** Once you have answered a person three times, an ask of theirs
+  that has waited well past your usual says so: *You usually answer Erin within the hour; this is 3h.*
+  Inside your usual, or for someone you have not answered yet, there is no line.
+- **Whom you hand that kind of ask to.** The Advisor reads whom you handed a sender's asks to before;
+  when this ask is the same kind of work, it lights **Hand it to a person** with *Ray handles payroll
+  for you.* What the ask is about is the model's to read, never a count's.
+- **The day you put it off to.** After two weeks in which you put a sender's mail off to the same
+  weekday, **Remind me** opens with that day first, filled, saying whose habit it is. Nothing is set
+  until you press it.
+- **A person's own day.** Chase lights after three working days; once three of someone's answers say
+  how soon they answer, it lights on their day instead: *Gail usually answers in a day; this is 3 days.*
+
 Those findings are never rows. They attach to the item at its revision and show when the walk
 reaches it, as one line in the strip at the foot of the canvas, above the action row, and the
 advised button on the row is the one dark button - the row's own, pressed through its own handler.
-**Why?** beside the line says what it rests on, and the count under it is your habit, not the
-Advisor's record: "Your own habit, not the Advisor's record: you pressed Send to agent 3 of the
-last 4 times on GitHub items from northwind/ledger". The number is read from your presses and the
-outcome ledger, never written by the model. A changed item drops its old line by one comparison.
+**Why?** beside the line says what it rests on. A changed item drops its old line by one comparison.
 The rail's order does not read advice, by construction: the test that pins it builds the rail with
 and without advice and asks for the same order. Two settings govern it, in Settings → Advisor: the
 switch, and a cap on judgements per hour.
 
-**What you pressed.** Every press on the row, and Next, while a line is shown is kept: the move it
-lit, the one you pressed, and what kind of item it was from whom. That log is where your moves are
-learned: a moment you answer the same way becomes a line in `LEARNED.md` - watching first, then
-under `## What you do next` once it is in use (three items, from two people or threads, the same
-press at least six times in ten) - and the Advisor reads it. Press otherwise twice in a row and it
-goes back to watching, the same line with its history. Press habits never reach triage: triage
-reads `## How you sort mail`, learned only from your sorting verdicts. Delete the line to undo it;
-that moment then counts only your presses from then on.
+**What you pressed.** Every press on the row, and Next, is kept: the move it lit, the one you
+pressed, and what kind of item it was from whom. It is a record, and nothing is learned from it: a
+button press is not a fact about how you work, and a count of them once lit the same button on two
+asks from one domain that had nothing else in common. What `LEARNED.md` knows comes from what you
+did, in context - who wrote, what they are to you, how soon you answered, what you put off and until
+when, whom you handed it to.
 
 **How it is tested.** `tests/advisor_cases.py` is the eval: every state the demo and the advisor
 matrix hold, plus a few they lack, each with the moves that are right there, the ones that never
@@ -180,9 +191,9 @@ facts mean is always the model's, at reflection.
 
 **Reflection distils it into the stores that exist.** The resolved rows reach reflection as
 evidence lines with their own ids, `out` beside the `mem`, `rv` and `task` ids a learned line
-already cites. Habits about you go to `LEARNED.md` with the same grammar, the same strength, the
-same decay: "green PR from the coding agent: you merge it, 8 of 8"; "the agent asks 'open the PR?': you
-always say yes". A habit carries the one number it never had, the regret count. Facts about other
+already cites. What you do goes to `LEARNED.md` with the same grammar, the same strength, the
+same decay: "a green PR from the coding agent is merged as it stands"; "when an agent asks to open
+the PR, you say yes". Facts about other
 people ("Ray answers in three days and needs a second chase") and about kinds of work ("closing
 from a thread with an open question reopens 40%; ask first") go elsewhere: a page per person
 derived from the ledger, and work facts proposed into the playbook they belong to (both below).

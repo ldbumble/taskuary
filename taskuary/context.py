@@ -12,7 +12,7 @@ The file lives under Taskuary's own home (~/.taskuary/context/TQ-0244.md), never
 a stray file in a shared checkout gets staged by somebody (commit 8abb175 exists because it did),
 and a .gitignore in every repo is not ours to write. The seed points at it: "read this first".
 """
-import re
+import json, re
 from datetime import datetime, timedelta
 from loguru import logger
 
@@ -246,6 +246,13 @@ def render_past(rows: list) -> str:
                        for r in rows)
 
 
+def _recipients(m: dict) -> list:
+    """The To and Cc addresses a message row carries (RecipientsJson), [] when it has none."""
+    try: r = json.loads(m.get('RecipientsJson') or 'null') or {}
+    except (TypeError, ValueError): return []
+    return [a for k in ('to', 'cc') for a in (r.get(k) or []) if isinstance(a, str)]
+
+
 def build(store, tid: int, msgs: list = None, repo: str = None, general: bool = False) -> str:
     """The file's text. Sections the hub has nothing for are left out; an empty file is not written.
     `general`: the same read for the general agent's prompt (for_prompt) - minus what its prompt already carries (who the owner
@@ -283,10 +290,13 @@ def build(store, tid: int, msgs: list = None, repo: str = None, general: bool = 
     if meet := _meetings(store): parts.append("## Today's meetings\n" + meet)
     if goals := render_goals(open_goals(store)): parts.append('## Open goals (what the owner is working toward)\n' + goals)
     # only a profile with lines in it: a fresh LEARNED.md is placeholders, and placeholders are not context
-    # ...and only "How you sort mail", closest to this task's sender and repository first (learned_cut): the press habits are the Advisor's
+    # ...their people, what they care about and their promises, closest to this task's sender and repository first (learned_cut) - and
+    # never on a stranger's task: what the owner knows about colleagues is not a stranger's to read (2026-10-25)
     from . import learned_cut
     who = str((last or {}).get('FromEmail') or '').lower()
-    lrn = learned_cut.for_reader(store, 'agents', {'sender': who, 'domain': who.rsplit('@', 1)[-1] if '@' in who else '', 'repo': repo})
+    task_people = {str(m.get('FromEmail') or '').lower() for m in msgs} | {str(a).lower() for m in msgs for a in _recipients(m)}
+    lrn = '' if stranger else learned_cut.for_reader(store, 'agents', {'sender': who, 'domain': who.rsplit('@', 1)[-1] if '@' in who else '', 'repo': repo},
+                                                     target=f'task:{tid}', people=task_people - {''})
     if lrn: parts.append("## The owner's learned profile (from their own verdicts)\n" + lrn.split('\n', 1)[1])
     # the documents the owner indexed that speak to this thread - a policy, a contract, a runbook
     from . import knowledge

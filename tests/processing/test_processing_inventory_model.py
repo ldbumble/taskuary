@@ -312,7 +312,7 @@ def test_default_priority_requires_one_unambiguous_task_and_preserves_unknown_ra
     page = processing_inventory_page(_snapshot([single, ambiguous, bad]))
     facts = {item["item_id"]: item["inventory_facts"]["triage_priority"] for item in page["items"]}
 
-    assert facts["single"]["value"] == "high"
+    assert facts["single"]["value"] == "important" and facts["single"]["raw"] == "HIGH", "an older word reads as its new one, raw kept"
     assert facts["ambiguous"]["state"] == "unknown"
     assert "priority_ambiguous_multiple_tasks" in facts["ambiguous"]["diagnostics"]
     assert facts["bad"]["raw"] == "critical"

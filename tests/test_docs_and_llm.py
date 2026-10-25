@@ -341,7 +341,7 @@ class LearnTests(unittest.TestCase):
         doc = s.get_doc('learned')
         self.assertIn(learn.HYP_START, doc); self.assertIn(learn.PROP_START, doc)
         inj = learn.injectable(doc)
-        self.assertIn('How you sort mail', inj)                 # active sections travel...
+        self.assertIn('What you care about', inj)               # active sections travel...
         self.assertNotIn('hypotheses:start', inj)               # ...the gated ones never do
         self.assertNotIn('Proposed rules', inj)
         self.assertNotIn('still being tested', inj)
@@ -369,8 +369,9 @@ class LearnTests(unittest.TestCase):
         s = MemoryStore()
         with mock.patch('taskuary.llm.build_llm', return_value=None):
             self.assertFalse(learn.reflect(s))                   # no brain: the old doc always stands
+        for _ in range(3): s.add_review({'Kind': 'reply', 'Status': 'edited', 'DraftText': 'a', 'FinalText': 'b'})   # rv1-3 resolve (learn._books)
         good = s.get_doc('learned').replace(
-            '## How you sort mail', '## How you sort mail\n- Short replies, no filler. [s:4 | ev: rv1,rv2,rv3 | seen: 2026-08-20]')
+            '## What you care about', '## What you care about\n- Short replies, no filler. [s:4 | ev: rv1,rv2,rv3 | seen: 2026-08-20]')
         self.assertTrue(learn.reflect(s, llm=lambda sys_, usr, **kw: good))
         self.assertIn('Short replies, no filler', learn.injectable(s.get_doc('learned')))   # promoted = injected
         self.assertEqual(s.get_settings().get('learn_pending'), '0')
@@ -472,7 +473,7 @@ class LearnTests(unittest.TestCase):
         # and the live path wires the doc in: a promoted line reaches the triage system prompt
         s = MemoryStore()
         s.save_doc('learned', s.get_doc('learned').replace(
-            '## How you sort mail', '## How you sort mail\n- Vendor invoices are FYI, never tasks. [s:5 | ev: rv1,rv2,rv3 | seen: 2026-08-01]'), 'reflect')
+            '## What you care about', '## What you care about\n- Vendor invoices are FYI, never tasks. [s:5 | ev: rv1,rv2,rv3 | seen: 2026-08-01]'), 'reflect')
         from taskuary.ingest import ingest_message
         seen.clear()
         ingest_message(s, {'external_id': 'lrn-1', 'channel': 'email', 'from_email': 'ap@vendor.example',

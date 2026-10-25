@@ -14,7 +14,7 @@ row for the full message, its attachments, what triage decided and why, any draf
 the actions available on it.
 
 Beside the Timeline, the **work rail** holds what is actually waiting on you, under Tasks,
-For later, Reports, Advisor ideas and FYI - an urgent row is shaded in its place, and Next reaches it there like any other row. Tasks is every open task, an agent working on it or not - a ring spins round the icon of
+For later, Reports, Advisor ideas and FYI - an urgent row is shaded in its place, an important one wears a quieter mark there, and Next reaches both in their places like any other row. Tasks is every open task, an agent working on it or not - a ring spins round the icon of
 one an agent is working, and the row stays where it is when the agent asks or stops. A thread or a step gone quiet past that person's usual day is
 *slipped*, inside Tasks, with Chase, Let it go, They answered elsewhere and Remind me under it (see [The Advisor](advisor#what-was-not-followed-up)).
 A finished or closed item gets no row: the rail is what still wants something from you, never a history. See [The work rail](tasks-and-agents#the-work-rail) for what
@@ -105,9 +105,12 @@ be drafted; **Not our task** teaches where your responsibility ends. The exact d
 with its date, sender and subject, so future triage can judge whether a new message is genuinely
 similar.
 
-Repeated patterns become lessons in `LEARNED.md`, one section per reader: triage reads
-`## How you sort mail` (learned only from your sorting verdicts), the Advisor reads
-`## What you do next` (learned from your presses), and nothing else reads either. How you write
+Repeated patterns become lessons in `LEARNED.md`, one section per subject: `## Your people`,
+`## What you care about`, `## How you work`, `## Promises` and `## What to bring up`. Each reader
+takes the sections that help it - triage reads what you care about (learned only from your sorting
+verdicts), the Advisor your people, what you care about, how you work and your promises, an agent
+the people on its own task (never on a stranger's), what you care about and your promises, and the
+Assistant all of it. Nothing is learned from a button press. How you write
 is kept in `STYLE.md` under `## By recipient`, for the drafter - with the instruction you typed into
 Redraft, once you have typed the same one twice for the same person. Each machine-written line
 carries its evidence:
@@ -157,9 +160,9 @@ merged, a promise made, a sender ignored - and a once-a-day sweep fills in what 
 facts already in the store: did more mail arrive on the thread, did the task reopen, did the
 person deliver and when, did the ignored sender's mail become work anyway. No model runs in the
 sweep. What the facts mean is reflection's: it reads the resolved rows as evidence (`out` ids,
-beside the `mem`, `rv` and `task` ids above) and writes habits into `LEARNED.md` with the same
-grammar and the same decay - "green PR from the coding agent: you merge it, 8 of 8". A derived line never
-acts on its own: it changes which button comes first and what a proposal says, and deleting it
+beside the `mem`, `rv` and `task` ids above) and writes what you do into `LEARNED.md` with the same
+grammar and the same decay - "a green PR from the coding agent is merged as it stands". A derived line never
+acts on its own: the Advisor weighs it when it picks a button and words a proposal, and deleting it
 from `LEARNED.md` is the whole undo. The whole of it - every input, the two clocks, the ledger's
 row kinds and verdicts - is on [The Advisor](advisor).
 
@@ -178,7 +181,7 @@ around the edges — they are what the models are actually told.
 | `STYLE.md` | Greeting, tone, length, phrasing | reply drafts |
 | `COUNSEL.md` | How the assistant speaks, and how readily it takes a position | the assistant, the morning brief, replies |
 | `CODING.md` | How coding agents work and close out | coding agents |
-| `LEARNED.md` | What was learned from what you do, one section per reader; always below `SOUL.md` | triage and agents (`How you sort mail`), the Advisor (`What you do next`) |
+| `LEARNED.md` | What was learned from what you do, one section per subject; always below `SOUL.md` | triage (`What you care about`), the Advisor, agents and the Assistant (the sections that help each) |
 | `DIGEST.md` | The current morning brief | you |
 | Playbooks | One page per kind of job: when it starts, which connections it uses, the steps, what an agent may do alone, what counts as done | triage's `when` line, and the agent working it |
 

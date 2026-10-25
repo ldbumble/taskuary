@@ -428,6 +428,9 @@ CREATE TABLE IF NOT EXISTS learned_history (Id INTEGER PRIMARY KEY, Key TEXT, Te
 -- own wording, the tombstone that keeps a removed line from being written back. LEARNED.md is the readable face of the in-use rows.
 CREATE TABLE IF NOT EXISTS learned_line (Key TEXT PRIMARY KEY, Reader TEXT, Text TEXT, OwnerText TEXT, Status TEXT, Score INTEGER,
   Ev TEXT, InDoc INTEGER DEFAULT 1, InUseAt TEXT, ForgotEv INTEGER, Source TEXT, UpdatedAt TEXT);
+-- THE USE-RECEIPT (the memory redesign, 2026-10-25): which lines a reader was given for which item, so "why?" and the evals can say
+-- what the memory said when it mattered (learned_cut.for_reader writes one per read)
+CREATE TABLE IF NOT EXISTS memory_use (Id INTEGER PRIMARY KEY, Reader TEXT, Target TEXT, KeysJson TEXT, At TEXT);
 CREATE TABLE IF NOT EXISTS idea (IdeaId INTEGER PRIMARY KEY, Key TEXT UNIQUE, Kind TEXT, Text TEXT, ActionJson TEXT, Sig TEXT,
   Status TEXT DEFAULT 'open', SnoozeUntil TEXT, MessageId INTEGER, FirstSeen TEXT, LastSaid TEXT, SaidCount INTEGER DEFAULT 0,
   DecidedBy TEXT, DecidedAt TEXT);
@@ -1097,8 +1100,8 @@ class SQLiteStore:
                             'Dropped TEXT, CreatedAt TEXT)')
             self.cx.execute('CREATE INDEX IF NOT EXISTS advice_target ON advice(TargetKind, TargetId)')
             # ...AND WHAT THE OWNER PRESSED while it was shown (the deep dive, 2026-10-20): nothing recorded whether the lit button was the
-            # one pressed. One row per press - advised and pressed verb, whether they matched, and what kind of item from whom - the
-            # evidence the moves in LEARNED.md are learned from (advisor.press, learn.moves)
+            # one pressed. One row per press - advised and pressed verb, whether they matched, and what kind of item from whom - a record
+            # only: nothing in LEARNED.md is learned from a press (the owner, 2026-10-25)
             self.cx.execute('CREATE TABLE IF NOT EXISTS advice_press (Id INTEGER PRIMARY KEY, Key TEXT, TargetKind TEXT, TargetId INTEGER, '
                             'Revision TEXT, Advised TEXT, Pressed TEXT, Match INTEGER, ItemKind TEXT, Channel TEXT, Sender TEXT, '
                             'SenderDomain TEXT, Scope TEXT, Thread TEXT, Stale INTEGER, CreatedAt TEXT)')
@@ -1110,6 +1113,11 @@ class SQLiteStore:
             for col, typ in (('Surface', 'TEXT'), ('Lit', 'TEXT'), ('Live', 'TEXT'), ('Choice', 'INTEGER'), ('Repo', 'TEXT')):
                 if col not in apcols: self.cx.execute(f'ALTER TABLE advice_press ADD COLUMN {col} {typ}')
             self.cx.execute('CREATE INDEX IF NOT EXISTS advice_press_at ON advice_press(CreatedAt)')
+            # ...and each learned line's SECTION (Reader holds its slug now), whom it is about (Subject: the address in a people line)
+            # and when it stopped being true (ValidTo, status closed) - a fact that ended is closed, never deleted (2026-10-25)
+            llcols = {r[1] for r in self.cx.execute('PRAGMA table_info(learned_line)')}
+            for col in ('Subject', 'ValidTo'):
+                if col not in llcols: self.cx.execute(f'ALTER TABLE learned_line ADD COLUMN {col} TEXT')
             # a verified 'this mailbox wrote to them' hit, remembered so the mail server is asked once per address (PW-080)
             self.cx.execute('CREATE TABLE IF NOT EXISTS sender_trust (Mailbox TEXT, Address TEXT, Reason TEXT, CheckedAt TEXT, '
                             'PRIMARY KEY (Mailbox, Address))')
@@ -1863,12 +1871,34 @@ class SQLiteStore:
         # ...and it must be issued ONCE: the allocation is three reads and a write, each taking the
         # statement lock on its own, so a poll and a click creating tasks together computed the same
         # id and one of them hit the primary key (audit 2026-09-02)
+        # one of the three priorities, whatever word the caller used (processing_order.level, 2026-10-25) - regular when it gave none
+        from .processing_order import level
+        fields = {**fields, 'Priority': level(fields.get('Priority'))}
         with self.idlock:
             tid = self._insert('task', {**fields, 'TaskId': self._next_task_id() if numbered else self._next_internal_id()},
                                 TASK_COLS + ('TaskId',), {'CreatedBy': actor, 'CreatedAt': _now()})
         self._bump_snapshots()
         self._poke('task-changed', task_id=tid)
         return tid
+
+    def migrate_priorities(self) -> dict:
+        """THE OLD FOUR AS THE NEW THREE, once (the owner, 2026-10-25): normal is regular and high is important - renames, one word for
+        one word - and low is regular too. Low is the one word that merges with another, so each task it changes keeps an audit row
+        with the word it had ('priority_renamed'): nothing is lost. A DueRaised the due day saved is read the same way. Returns what
+        changed; {} when there was nothing left to do."""
+        from .processing_order import LEGACY
+        out = {}
+        for old, new in LEGACY.items():
+            rows = self._rows('SELECT TaskId FROM task WHERE lower(IFNULL(Priority,\'\'))=?', (old,))
+            if not rows: continue
+            if old == 'low':
+                for r in rows: self.audit('task', r['TaskId'], 'priority_renamed', 'migrate', 'system', {'from': old, 'to': new})
+            self._exec('UPDATE task SET Priority=? WHERE lower(IFNULL(Priority,\'\'))=?', (new, old))
+            out[old] = len(rows)
+        for old, new in LEGACY.items(): self._exec('UPDATE task SET DueRaised=? WHERE lower(IFNULL(DueRaised,\'\'))=?', (new, old))
+        self._exec("UPDATE task SET Priority='regular' WHERE IFNULL(Priority,'')=''")
+        if out: self._bump_snapshots()
+        return out
 
     def _next_internal_id(self) -> int:
         """The same never-reused rule, in the range no TQ number reaches (INTERNAL_TASK_BASE)."""
@@ -1888,6 +1918,9 @@ class SQLiteStore:
                    'ON CONFLICT(Name) DO UPDATE SET Value=excluded.Value', ('task_id_mark', str(nxt), 'store'))
         return nxt
     def update_task(self, task_id, fields, actor):
+        if 'Priority' in fields:
+            from .processing_order import level
+            fields = {**fields, 'Priority': level(fields['Priority'])}
         cols = [c for c in TASK_COLS if c in fields]
         if not cols: return
         was_row = (self._one('SELECT Status, Assignee, DueAt, Tags FROM task WHERE TaskId=?', (task_id,)) or {}) if 'Status' in fields else {}

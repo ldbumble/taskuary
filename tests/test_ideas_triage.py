@@ -212,7 +212,7 @@ class MatrixTests(unittest.TestCase):
             assistant.triage_ideas(s, [hot], urgent_brain())
         tid = {k: json.loads(s.get_idea(r['IdeaId'])['ActionJson'])['tid'] for k, r in (('calm', calm), ('hot', hot))}
         self.assertEqual(s.get_task(tid['hot'])['Priority'], 'urgent')
-        self.assertEqual(s.get_task(tid['calm'])['Priority'], 'normal', "the model's own 'urgent' escalates nothing")
+        self.assertEqual(s.get_task(tid['calm'])['Priority'], 'regular', "the model's own 'urgent' escalates nothing")
         # ...shaded urgent on the shared rail, in its arrival place - urgent never moves a row (the owner, 2026-10-22)
         hot = {i['tid']: lanes.is_urgent(i) for i in pile(s) if i.get('tid') in tid.values()}
         self.assertEqual(hot, {tid['calm']: False, tid['hot']: True}, 'the escalated work is the urgent row')

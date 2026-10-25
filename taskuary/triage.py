@@ -131,8 +131,16 @@ def _bullet(name: str) -> str:
 # WHAT THE ANSWER MUST CONTAIN (title, summary, checklist...), as opposed to what the verdict should BE: appended when a
 # document never asks for it, because without it every task carried the whole email as its ask (2026-09-10, TQ-0665).
 TASK_FIELDS = shipped_section('## 5.') + '\n\n' + shipped_section('## 7.')
-URGENT, DUE, SENDER, GOAL, DANGER, MEET = (_bullet('urgent'), _bullet('due'), _bullet('sender_class'), _bullet('goal'), _bullet('danger'),
-                                           _bullet('meet'))
+def _bullets(name: str) -> str:
+    """A bullet and the indented lines under it - priority's three words ride with it."""
+    m = re.search(rf'^- \*\*{name}\*\*.*?(?=^- \*\*|^\s*$|\Z)', SHIPPED, re.M | re.S)
+    return m.group(0).rstrip() if m else ''
+
+
+PRIORITY = _bullets('priority') + '\n' + _bullet('priority_why')
+URGENT = PRIORITY        # the 2026-09-25 name for the one bullet an older document is given; it says the three now (2026-10-25)
+DUE, SENDER, GOAL, DANGER, MEET = (_bullet('due'), _bullet('sender_class'), _bullet('goal'), _bullet('danger'), _bullet('meet'))
+LEVELS = ('regular', 'important', 'urgent')
 
 
 def meet_of(j: dict, sent=None) -> dict | None:
@@ -173,7 +181,9 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
          'why': {'type': 'string'}, 'title': {'type': 'string'}, 'summary': {'type': 'string'},
          # no coding tool connected: the answer cannot say coding (agents.coding_ready)
          'kind': {'type': ['string', 'null'], 'enum': (['coding'] if coding else []) + ['general', 'task', None]},
-         'checklist': {'type': ['array', 'null'], 'items': {'type': 'string'}}, 'urgent': {'type': 'boolean'},
+         'checklist': {'type': ['array', 'null'], 'items': {'type': 'string'}},
+         # THREE PRIORITIES (the owner, 2026-10-25): urgent is time-critical, important matters for who or what, regular the rest
+         'priority': {'type': 'string', 'enum': list(LEVELS)}, 'priority_why': {'type': 'string'},
          'due': {'type': ['string', 'null']},
          # who wrote it (categories.sender_class) - the Timeline's info/automated/promo and the Advisor's people (2026-10-11)
          'sender_class': {'type': 'string', 'enum': ['person', 'automated', 'bulk']},
@@ -628,8 +638,10 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # `learned` is LEARNED.md's active sections: the profile distilled from the owner's
             # past verdicts. It refines the operator's document; explicit notes still outrank it.
             if learned:
-                system += ("\n\nLearned profile - patterns distilled from the owner's past verdicts "
-                           '(the document above outranks it where they disagree):\n' + learned)     # budgeted by learned_cut, whole lines
+                # ...its "Your people" lines are for the priority alone (the guide's section 6 says so too, 2026-10-25)
+                system += ("\n\nLearned profile - what the owner cares about, learned from their past verdicts, and who the people on "
+                           "this mail are to them, learned from what they did - the people lines weigh the priority only, never whether "
+                           'it is a task (the document above outranks it where they disagree):\n' + learned)     # budgeted by learned_cut
             if notes:
                 # already ranked and budgeted by ingest.relevant_notes. Evidence, never an order (PW-025): how much
                 # each counts for is the guide's to say (templates/triage.md, section 6).
@@ -682,7 +694,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # ...and "urgent" on its own (2026-09-25): a document written before triage decided urgency never asks for
             # it, and the owner's document is otherwise left as they wrote it
             # ...urgent and due are in the shape block, so they ride on their own only when it is not sent
-            if not shape and '"urgent"' not in base: system += '\n\n' + URGENT
+            if not shape and '"priority"' not in base: system += '\n\n' + PRIORITY
             if not shape and '"due"' not in base: system += '\n\n' + DUE          # ...and the due day (2026-10-06)
             if not shape and 'sender_class' not in base: system += '\n\n' + SENDER   # ...and who wrote it (2026-10-11)
             if not shape and 'done_when' not in base: system += '\n\n' + GOAL       # ...and whether it is a goal (2026-10-12)
@@ -762,8 +774,15 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if title: out['title'] = title
                 if summary: out['summary'] = summary
                 if j.get('sender_class') in ('person', 'automated', 'bulk'): out['sender_class'] = j['sender_class']
-                # urgent only means something on work: an fyi that says "urgent" is still an fyi
-                if j.get('urgent') is True and out['intent'] in ('task', 'reply_only'): out['urgent'] = True
+                # urgent only means something on work: an fyi that says "urgent" is still an fyi - and so does important (2026-10-25).
+                # `urgent: true` is how an answer to an older document's contract says it
+                pri = str(j.get('priority') or '').strip().lower()
+                pri = 'urgent' if j.get('urgent') is True else pri if pri in LEVELS else 'regular'
+                if out['intent'] in ('task', 'reply_only') and pri != 'regular':
+                    out['priority'] = pri
+                    why = ' '.join(str(j.get('priority_why') or '').split())[:200]
+                    if why: out['priority_why'] = why
+                    if pri == 'urgent': out['urgent'] = True
                 if out['intent'] in ('task', 'reply_only') and due_of(j, msg.get('sent_at')): out['due'] = due_of(j, msg.get('sent_at'))
                 if meet_of(j, msg.get('sent_at')): out['meet'] = meet_of(j, msg.get('sent_at'))
                 if out['intent'] == 'task' and isinstance(j.get('checklist'), list):

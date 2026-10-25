@@ -64,7 +64,7 @@ class SinceTests(unittest.TestCase):
         doc = s.get_doc('learned')
         live = '- Alex answers vendors himself. [s:5 | ev: mem1, mem2, mem3 | seen: 2026-10-20 | k: alex answers vendors himself]'
         guess = '- Alex files newsletters. [s:2 | ev: mem4 | seen: 2026-10-20 | k: alex files newsletters]'
-        doc = learn._put_block(doc.replace(learn.SORT + '\n', learn.SORT + '\n' + live + '\n', 1), learn.HYP_START, learn.HYP_END, guess)
+        doc = learn._put_block(doc.replace(learn.CARE + '\n', learn.CARE + '\n' + live + '\n', 1), learn.HYP_START, learn.HYP_END, guess)
         s.save_doc('learned', doc, 'reflect')
         for _ in range(3): s.save_doc('learned', doc.replace(live + '\n', ''), 'reflect'); s.save_doc('learned', doc, 'reflect')   # churn
         out = since.learned(s, datetime.now())

@@ -99,6 +99,9 @@ def phone_text(store, t: dict, lane: str, says: str) -> tuple:
     from . import slots
     from .store import task_ref
     tid = t['TaskId']
+    if lane == 'blocked':                           # a sign-in is done at the PC: the fill page is this computer's, not the phone's
+        from . import signin
+        says = signin.phone_line(store, tid) or says
     blocks, rows, ready = [f"{task_ref(tid)} {_title(t)} - {says or lane}."], [], []
     if lane == 'approve':
         emails = [(i, store.get_review(i['rid'])) for i in slots.open_(store, tid) if i.get('rid')]

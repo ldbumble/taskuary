@@ -17,6 +17,7 @@ import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
 import AddCommentOutlinedIcon from "@mui/icons-material/AddCommentOutlined";
 import api from "./api.js";
+import { howToOpen } from "./bugReportOpen.js";
 import { streamAssistant } from "./assistantStream.js";
 import { stepsOf } from "./agentSteps.js";
 import { wantsAsk, wantsBrowser, withoutAsk } from "./newTask.js";
@@ -361,8 +362,19 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
 // WHAT THE AGENT ASKED, AND THE BOX THAT ANSWERS IT (the UI audit's W6): the question in its own words, the answers it named as one
 // press each, and a box for anything else. `onAnswer(text)` delivers it - a reply in this conversation, or the worker's own answer road -
 // and throws with the reason when it could not; the card stays with the words still in it.
-export function AgentAsks({ asking, name, onAnswer }) {
+// A SIGN-IN it waits on (request id `signin:<site>`, signin.py) also offers the one-time fill page: Taskuary types it into the browser,
+// the agent never sees it. Taking over the browser beside it and pressing Signed in is the other way, as before.
+export function AgentAsks({ asking, name, onAnswer, taskId }) {
   const [text, setText] = useState(""), [going, setGoing] = useState(false), [err, setErr] = useState("");
+  const site = String(asking.request_id || "").startsWith("signin:") ? asking.request_id.slice(7) : "";
+  const fillPage = async () => {
+    setErr("");
+    try {
+      const app = howToOpen(window) === "app";
+      const { data } = await api.post(`/api/tasks/${taskId}/signin/link${app ? "?open=1" : ""}`);
+      if (!app) window.open(data.url, "_blank", "noopener");
+    } catch (e) { setErr(errText(e)); }
+  };
   useEffect(() => { setText(""); setErr(""); setGoing(false); }, [asking?.request_id]);
   const send = async (words) => {
     const w = String(words || "").trim();
@@ -374,8 +386,10 @@ export function AgentAsks({ asking, name, onAnswer }) {
     <div className="tq-aui-asking" data-tq-asking={asking.request_id}>
       <b>{says(subState({ request: asking }), name)}</b>
       <span className="tq-aui-asking-q">{asking.text}</span>
-      {!!asking.choices?.length && <div className="tq-aui-asking-choices">
-        {asking.choices.map((c) => <Button key={c} size="small" variant="outlined" disabled={going} onClick={() => send(c)}>{c}</Button>)}
+      {(!!asking.choices?.length || (site && taskId)) && <div className="tq-aui-asking-choices">
+        {site && taskId && <Button size="small" variant="outlined" onClick={fillPage}
+          title={`A one-time page to type the ${site} sign-in - Taskuary fills it into the browser and the agent never sees it`}>Sign in here</Button>}
+        {(asking.choices || []).map((c) => <Button key={c} size="small" variant="outlined" disabled={going} onClick={() => send(c)}>{c}</Button>)}
       </div>}
       <form className="tq-aui-asking-box" onSubmit={(e) => { e.preventDefault(); send(text); }}>
         <TextField size="small" fullWidth value={text} disabled={going} onChange={(e) => setText(e.target.value)}
@@ -536,7 +550,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               card said "Agent asked you something" over a pane that never showed what - the question lived only in the rail row's
               hover. It was taken out on 2026-10-19 as a repeat of the answer above; an agent asking from a terminal has no answer
               above at all, and an answer needs a box beside the question it answers. */}
-          {!dock && asking && <AgentAsks asking={asking} name={name} onAnswer={onAnswer} />}
+          {!dock && asking && <AgentAsks asking={asking} name={name} onAnswer={onAnswer} taskId={task.TaskId} />}
           {!dock && <PublishedPages pages={published} />}
           {/* not while it waits on your call: a run that stopped to ask is not one to schedule yet, and the offer took the room
               the answer needed */}

@@ -3177,7 +3177,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                   setNoteOn(null);
                   try { await on.close(note); } catch (e) { setNoteOn({ ...on, note }); throw e; }
                   // ...its badge on the item's card, not a sentence repeating the note - the note is on the task (the owner, 2026-10-22)
-                  setMsgs((m) => pressLine(m, { tid: on.task.TaskId }, btn("close")));
+                  // ...ITS OWN badge, and the note under it (typed-put-down-acts, 2026-10-23): it wore "Mark done" with no note until a reload
+                  // drew the server's stamp (the 2026-10-25 sweep)
+                  setMsgs((m) => pressLine(m, { tid: on.task.TaskId }, btn("close_note"), String(note || "").trim()));
                 }} />
             </div>
           )}

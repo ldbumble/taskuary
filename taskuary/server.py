@@ -9777,12 +9777,13 @@ class AiDefaultBody(BaseModel):
     model: str = None                   # None = leave alone; '' = clear back to the provider default
     effort: str = None
     strong_model: str = None            # None = leave alone; '' = no strong tier on this brain
+    sensitive_ok: bool = None           # None = leave alone; the owner's "may read sensitive data" mark on this brain
 
 
 @app.post('/api/ai/defaults')
 def set_ai_default(body: AiDefaultBody):
     from . import aidefaults
-    try: return aidefaults.apply(store, cfg, body.slot, body.value, body.model, body.effort, ACTOR, strong=body.strong_model)
+    try: return aidefaults.apply(store, cfg, body.slot, body.value, body.model, body.effort, ACTOR, strong=body.strong_model, sensitive=body.sensitive_ok)
     except ValueError as e: raise HTTPException(422, str(e))
 
 

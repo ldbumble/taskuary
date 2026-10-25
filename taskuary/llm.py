@@ -362,6 +362,8 @@ def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None
     if demo.enabled():
         brainroute.log(store, r, task_id, pick='demo'); return demo.brain()
     rid = brainroute.log(store, r, task_id)
+    # held by the owner's data rule: no AI here may read it, so it waits - never what blank means, which would be one the rule keeps out
+    if r.tier == 'held': brainroute.outcome(store, rid, 'refused:sensitive'); return None
     try: brain = _build_llm(store, r.pick, r.model or None, trace, cancel, resume, cli_tools, extra_env, research, fallback_user, r.gear, keep, task_id,
                             backups=r.chain)
     except Exception as e:

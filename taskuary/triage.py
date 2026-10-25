@@ -134,7 +134,8 @@ TASK_FIELDS = shipped_section('## 5.') + '\n\n' + shipped_section('## 7.')
 URGENT, DUE, SENDER, GOAL, DANGER, MEET = (_bullet('urgent'), _bullet('due'), _bullet('sender_class'), _bullet('goal'), _bullet('danger'),
                                            _bullet('meet'))
 # how much thought the work takes and whether the reader could tell - a verdict apart from priority, read by the router (2026-10-25)
-DIFFICULTY, SURE = _bullet('difficulty'), _bullet('sure')
+DIFFICULTY, SURE, DATA = _bullet('difficulty'), _bullet('sure'), _bullet('data_class')
+DATA_CLASSES = ('ordinary', 'sensitive')
 DIFFICULTIES = ('quick', 'standard', 'hard')
 
 
@@ -205,7 +206,9 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
     if earlier: p['rests_on'] = {'type': ['array', 'null'], 'items': {'type': 'integer'}}
     # how hard the WORK is and whether the reader could tell (the router, 2026-10-25): its own verdict, never the priority. Shown on
     # the task, the owner can correct it, and in Auto mode it picks the model tier - an unsure quick answer may be asked again higher up
-    p.update(difficulty={'type': ['string', 'null'], 'enum': [*DIFFICULTIES, None]}, sure={'type': ['boolean', 'null']})
+    p.update(difficulty={'type': ['string', 'null'], 'enum': [*DIFFICULTIES, None]}, sure={'type': ['boolean', 'null']},
+             # ...and what kind of data it carries: once the owner limits sensitive data to marked AIs, this is what is limited
+             data_class={'type': ['string', 'null'], 'enum': [*DATA_CLASSES, None]})
     if goals: p['serves'] = {'type': ['object', 'null'], 'additionalProperties': False, 'required': ['task', 'step', 'done'],
                              'properties': {'task': {'type': 'integer'}, 'step': {'type': 'string'}, 'done': {'type': 'boolean'}}}
     return {'name': 'triage_verdict',
@@ -695,6 +698,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if not shape and '"danger"' not in base: system += '\n\n' + DANGER     # ...and what it tries to make an AI do (2026-10-15)
             if not shape and '"meet"' not in base: system += '\n\n' + MEET         # ...and whether it asks for a time to meet (2026-10-20)
             if not shape and '"difficulty"' not in base: system += '\n\n' + DIFFICULTY + '\n' + SURE   # ...and how hard, how sure (2026-10-25)
+            if not shape and '"data_class"' not in base: system += '\n\n' + DATA                   # ...and what data it carries (2026-10-25)
             # the last thing asked for, after every block that says how to JUDGE: the output shape
             if shape: system += '\n\n' + TASK_FIELDS
             # ...and the shape goes on the WIRE as well, where the brain has one: a schema the
@@ -781,6 +785,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if out['intent'] == 'task' and j.get('goal') is True and dw: out.update(goal=True, done_when=dw)
                 if j.get('difficulty') in DIFFICULTIES: out['difficulty'] = j['difficulty']
                 if isinstance(j.get('sure'), bool): out['sure'] = j['sure']
+                if j.get('data_class') in DATA_CLASSES: out['data_class'] = j['data_class']
                 return out
             parse_error = f"invalid intent {j.get('intent')!r}; expected task, reply_only, or fyi"
         except Exception as e:

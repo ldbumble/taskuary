@@ -94,8 +94,8 @@ PROMPT = (
     '4. THE APP AND THE SYSTEMS PEOPLE NAME:\n[taskuary.systems]\n'
     '5. WHAT REPEATS - once a week, a month of my traffic counted:\n[taskuary.automation]\n'
     'The automation worth having IN THIS APP, ranked by the minutes it saves me a week and resting on the numbers: a skip rule on '
-    'a sender nobody reads, an auto-answer for the question that always gets the same reply, a standing prompt, a scheduled '
-    'report, auto-draft for drafts I always approve untouched. Never one the existing rules already cover; one a week is plenty, '
+    'a sender nobody reads, a playbook for the question that always gets the same reply (drafted for my Send - nothing is ever '
+    'sent without my press), a standing prompt, a scheduled report. Never one the existing rules already cover; one a week is plenty, '
     'none when nothing repeats enough.\n'
     '6. WHAT I ALREADY KNOW - never repeat anything under ALREADY SAID, reworded or not; use my notes; draw on the knowledge base by name:\n[taskuary.memory]\n'
     'Be useful, not busy: a check with nothing NEW posts nothing, and most checks are that. When you do speak, prefer the '
@@ -128,7 +128,9 @@ SYSTEMS_CONTRACT = (
 # to PROMPT (store.py) - 2026-09-25, the one before the automation card [taskuary.automation] joined it
 OLD_PROMPT_SHA = ('06a4ec48fcec9d8bbc9fc6f423f52360aa1b0a2e7f5affe31582e7da56d1e302',
                   # 2026-10-09, before the finding and the suggestion were said apart ("what I would do")
-                  'e37ca9e1a91e6880a304306482a0a682b5260bc402639cc94a9cc6e0f8a6ef3c')
+                  'e37ca9e1a91e6880a304306482a0a682b5260bc402639cc94a9cc6e0f8a6ef3c',
+                  # 2026-10-25, before the automation line stopped recommending an auto-answer (policy.py removed it)
+                  '1470c920581d783f70e98193ff6d6998fb7ec5f126b1ce4fb855979b8a21a138')
 OLD_PROMPT_HEADS = ('You are my assistant. Once an hour,', 'You are my assistant. Every 20 minutes you check in;',
                     'You are my assistant. Every 30 minutes you check in;',
                     'You are my assistant; every 30 minutes you check in.',

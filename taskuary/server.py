@@ -3345,8 +3345,9 @@ def unsubscribe_message(mid: int, request: Request, body: UnsubscribeBody = None
 def working_numbers():
     """"Is it working?" (the owner, 2026-10-22): whether the app's drafts, triage verdicts and agent results stood, over the last 7
     and 30 days - counted from the owner's own next moves (working.py)."""
-    from . import working
-    return {'windows': working.windows(store)}
+    from . import trackrecord, working
+    # ...and the drafts' track record by kind and recipient domain (2026-10-25) - read-only: nothing sends on it
+    return {'windows': working.windows(store), 'record': trackrecord.patterns(store, 30)}
 
 @app.get('/api/messages/{mid}/not-mine/suggest')
 def not_mine_suggest(mid: int, scope: str = None, topic: str = None):

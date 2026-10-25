@@ -112,4 +112,41 @@ class WhatReaches(unittest.TestCase):
         s.save_connector({'ConnectorId': card['ConnectorId'], 'Active': 0}, 'test')
 
 
+class AFileIsNotAMessage(unittest.TestCase):
+    """The owner, 2026-10-25: agents may save to SharePoint or OneDrive through a card with write Authority, with no press - and say
+    where it landed."""
+    def setUp(self):
+        s = server.store
+        self.card = s.get_connector_by_type('sharepoint')
+        s.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 1, 'Roles': 'tool', 'Scope': 'write',
+                          'ConfigJson': json.dumps({'tenant_id': 't', 'client_id': 'c'}), 'Secret': 's'}, 'test')
+
+    def tearDown(self): server.store.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 0, 'Scope': ''}, 'test')
+
+    def test_an_agent_saves_to_sharepoint_at_write_and_is_told_where(self):
+        put = mock.Mock(status_code=201, json=lambda: {'name': 'summary.md', 'webUrl': 'https://northwind.example/sites/Ops/summary.md'})
+        with mock.patch('taskuary.sharepoint._token', return_value='tok'), mock.patch('taskuary.sharepoint.site_id', return_value='sid'), \
+             mock.patch('taskuary.sharepoint.requests.put', return_value=put) as p:
+            r = c.post('/api/tools/run', headers=agent(), json={'type': 'sharepoint_save', 'site': 'northwind.example/sites/Ops',
+                                                                'path': 'Shared Documents/summary.md', 'text': '# Q3'})
+        j = r.json()
+        self.assertEqual(r.status_code, 200); self.assertTrue(j['ok'], j)
+        self.assertIn('https://northwind.example/sites/Ops/summary.md', j['output'])
+        self.assertEqual(p.call_args.kwargs['data'], b'# Q3')
+        self.assertEqual(p.call_args.kwargs['params'], {'@microsoft.graph.conflictBehavior': 'rename'})   # never overwrites
+
+    def test_at_read_the_save_is_refused(self):
+        server.store.save_connector({'ConnectorId': self.card['ConnectorId'], 'Scope': 'read'}, 'test')
+        r = c.post('/api/tools/run', headers=agent(), json={'type': 'sharepoint_save', 'path': 'a.md', 'text': 'x'})
+        self.assertEqual(r.status_code, 403); self.assertIn('write', r.json()['detail'])
+
+    def test_onedrive_save_says_where(self):
+        from taskuary import sharing
+        with mock.patch.object(sharing, 'onedrive_put', return_value='https://northwind.example/my/notes.md') as p:
+            head, body = sharing.run_onedrive_save({'store': server.store, 'path': 'Taskuary/notes.md', 'text': 'hi'})
+        self.assertIn('Taskuary/notes.md', body); self.assertIn('https://northwind.example/my/notes.md', body)
+        self.assertEqual(p.call_args.args[1:3], ('Taskuary/notes.md', b'hi'))
+        with self.assertRaises(ValueError): sharing.run_onedrive_save({'store': server.store, 'path': 'x.bin', 'data': 'not base64!'})
+
+
 if __name__ == '__main__': unittest.main()

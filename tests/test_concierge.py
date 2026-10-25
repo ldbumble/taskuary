@@ -1237,3 +1237,19 @@ class PhoneReceiptTests(unittest.TestCase):
         for err in ('unknown agent: ', 'the bridge failed.'):
             said = self.line({'kind': 'task.complete', 'targetKind': 'task', 'target': self.t, 'status': 'error', 'error': err})
             self.assertNotIn(': .', said); self.assertNotIn('..', said)
+
+
+class SettleBadge(unittest.TestCase):
+    """A CARD'S OWN WAY ON KEEPS ITS BADGE (the owner, 2026-10-24: "If we hit next let's show that as well on the task on the canvas"):
+    "All read, next" on an fyi batch walks on by the settle road, not Next's, and its badge was drawn on the page and gone on reload."""
+    def test_the_press_a_settle_carries_is_stamped_on_its_card_and_only_a_buttons_word(self):
+        s = MemoryStore(); dock = general.dock_task(s)[0]['TaskId']
+        cards = lambda: {(d := json.loads(m.group(1)))['key']: d.get('pressed') for c in s.list_comments(dock)
+                         if (m := concierge._MARK.search(c.get('Body') or ''))}
+        for k in ('fyis:msg:1,msg:2', 'fyis:msg:3'):
+            concierge.record(s, dock, 'assistant', '', {'key': k, 'kind': 'fyis', 'lane': 'fyi', 'title': '2 fyi'})
+        with mock.patch.object(server, 'store', s), mock.patch.object(funnel, 'settle', return_value={}),              mock.patch.object(server, '_pile_along', return_value=None):
+            c = TestClient(server.app)
+            self.assertEqual(c.post('/api/funnel/settle', json={'key': 'fyis:msg:1,msg:2', 'pressed': buttons.label('next', 'batch')}).status_code, 200)
+            c.post('/api/funnel/settle', json={'key': 'fyis:msg:3', 'pressed': 'Anything I like'})
+        self.assertEqual(cards(), {'fyis:msg:1,msg:2': 'All read, next', 'fyis:msg:3': None})

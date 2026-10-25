@@ -4717,7 +4717,7 @@ def funnel_waiting():
 def funnel_rerank(): return {'updated': rank.rerank(store, force=True)}
 
 # ── the pipe and the concierge (funnel.py, concierge.py): what comes next, said out loud ──────
-class SettleBody(BaseModel): key: str; verb: str = 'done'; hours: float | None = None; only: str | None = None; read: bool = False; shown: dict | None = None; put_down: bool = False; fyi: int | None = None
+class SettleBody(BaseModel): key: str; verb: str = 'done'; hours: float | None = None; only: str | None = None; read: bool = False; shown: dict | None = None; put_down: bool = False; fyi: int | None = None; pressed: str | None = None
 class SurfaceBody(BaseModel):
     key: str | None = None
     only: str | None = None
@@ -4815,6 +4815,10 @@ def funnel_settle(body: SettleBody):
     if body.verb in ('done', 'later', 'skip'):                              # settled: off the table, and nothing chosen in its place
         dock = general.dock_task(store, ACTOR)[0]['TaskId']
         if concierge.current_key(store, dock) == body.key: concierge.set_current(store, dock, None, ACTOR)
+        # ...and the card wears what its press did, from the server too, so a reload draws it: "All read, next" on an fyi batch folded with
+        # its badge on the page and lost it on the next read - this road, not Next's, is the one its button takes (concierge._stamp_next)
+        # ...a button's own word, never free text: anything else is not a press of this app's
+        if body.pressed and body.pressed in buttons.labels(): concierge._stamp_next(store, dock, body.key, body.pressed)
         # the table is empty now, so the page's next scope excludes nothing: the rail comes back captured that way
         out = {**out, 'pile': _pile_along(only=body.only, fyi=body.fyi)}
     return _encoded(out)

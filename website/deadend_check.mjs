@@ -118,6 +118,8 @@ const WALK_SKIP = {
   "split": "opens the split-or-merge drawer; its own press is walked, the reshape itself is the task tests'",
   "review_changes": "opens the agent's diff drawer - walked when an agent row carries it",
   "run_another": "starts a second agent - the demo refuses starts and the faults pass starts one through Send to agent",
+  "prepare": "starts a research agent on a meeting (the owner, 2026-10-25) - the demo refuses every start; its road is tests/test_meeting_prepare.py",
+  "decline_invite": "folded behind the meeting row's ▾ since Prepare joined the row (2026-10-25); Accept, walked, takes the same calendar road (tests/test_calendar_write.py)",
   "retriage": "asks the AI to sort it again - no AI in either world",
   "share": "Email a summary - one of Share's ways since 2026-10-23, no row button of its own; mailing someone is refused in the demo",
   "share_result": "opens the result's Share menu - the demo shares nothing (sharing.ways greys every way), and no demo report or Result is shared by the walk",

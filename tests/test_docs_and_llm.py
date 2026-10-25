@@ -369,6 +369,7 @@ class LearnTests(unittest.TestCase):
         s = MemoryStore()
         with mock.patch('taskuary.llm.build_llm', return_value=None):
             self.assertFalse(learn.reflect(s))                   # no brain: the old doc always stands
+        for _ in range(3): s.add_review({'Kind': 'reply', 'Status': 'edited', 'DraftText': 'a', 'FinalText': 'b'})   # rv1-3 resolve (learn._books)
         good = s.get_doc('learned').replace(
             '## What you care about', '## What you care about\n- Short replies, no filler. [s:4 | ev: rv1,rv2,rv3 | seen: 2026-08-20]')
         self.assertTrue(learn.reflect(s, llm=lambda sys_, usr, **kw: good))

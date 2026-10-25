@@ -2,7 +2,7 @@
 the redesign, held for every slice after it - triage's priority at its boundaries, its intent on the same mail (it must not get worse),
 whether a press count still moves the lit button, and the world's planted traits. A case that misses is listed with the slice that
 fixes it, strictly: one that passes without being crossed off fails too."""
-import json, re
+import json, os, re
 import pytest
 from tests import memory_cases as C
 
@@ -50,6 +50,32 @@ def test_a_press_count_does_not_choose_the_button(now):
     sd = now['same_domain']
     if KNOWN_SAME_DOMAIN and sd['moved']: pytest.xfail(KNOWN_SAME_DOMAIN)
     assert 'habit' not in sd['by'] and sd['verbs'] == sd['bare'], sd
+
+
+@pytest.mark.skipif(os.environ.get('TASKUARY_LIVE_MEMORY') != '1', reason='E1 calls the configured AI: TASKUARY_LIVE_MEMORY=1 to run it')
+def test_e1_a_live_reflection_recovers_the_planted_habits():
+    from taskuary.llm import build_llm
+    from taskuary.store import SQLiteStore
+    llm = build_llm(SQLiteStore(os.environ['TASKUARY_LIVE_DB'])) if os.environ.get('TASKUARY_LIVE_DB') else None
+    # TASKUARY_LIVE_DB is a COPY of a taskuary.db with an AI card on it - opening a store migrates it, so never the live one
+    if llm is None: pytest.skip('TASKUARY_LIVE_DB names no store with an AI connected')
+    r = C.e1(llm)
+    assert len(r['recovered']) >= 6 and not r['press_lines'] and not r['invented'], r
+
+
+def test_e1_runs_end_to_end_on_a_scripted_brain():
+    """The plumbing of E1, no model: the reflection reads the world's episodes, the judge sees its lines."""
+    seen = {}
+    def brain(system, user, **k):
+        if system == C.JUDGE: seen['judge'] = user; return '{"recovered": ["erin_fast"], "press_lines": [], "invented": []}'
+        seen['user'] = user
+        doc = user.split('CURRENT LEARNED.md:\n', 1)[1].split('\n\nSOUL.md', 1)[0]
+        ids = re.findall(r'^(msg\d+) \S+ · erin@northwind\.example', user, re.M)[:3]
+        line = f"- Erin Blake (erin@northwind.example) is your manager; you answer her within the hour [s:4 | ev: {', '.join(ids)} | seen: 2026-10-20]"
+        return doc.replace('## Your people\n', '## Your people\n' + line + '\n', 1)
+    r = C.e1(brain)
+    assert r['reflected'] and 'replied 12 min after it arrived' in seen['user'] and 'within the hour' in seen['judge']
+    assert r['recovered'] == ['erin_fast'] and any('within the hour' in l for l in r['lines'])
 
 
 def test_the_world_plants_every_trait_in_what_the_owner_did():

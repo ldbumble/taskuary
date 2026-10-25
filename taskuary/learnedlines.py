@@ -75,7 +75,7 @@ def sync(store, old: str, new: str, actor: str):
 def guard(store, doc: str) -> str:
     """A machine write as it may land: no line the owner marked wrong, no press count the redesign retired, no line they removed unless
     its evidence has since grown GROW-fold, and the owner's wording wherever they reworded one."""
-    rs = {r['Key']: r for r in store._rows("SELECT Key, Status, OwnerText, ForgotEv FROM learned_line WHERE Status IN ('wrong','forgotten','retired') "
+    rs = {r['Key']: r for r in store._rows("SELECT Key, Status, OwnerText, ForgotEv, Ev FROM learned_line WHERE Status IN ('wrong','forgotten','retired','closed') "
                                             "OR IFNULL(OwnerText,'')<>''")}
     if not rs or not doc: return doc
     from .learnedgraph import walk, fmt
@@ -84,6 +84,8 @@ def guard(store, doc: str) -> str:
         r = rs.get(l['key']) if l else None
         if r and r['Status'] in ('wrong', 'retired'): continue
         if r and r['Status'] == 'forgotten' and len(l['ev']) < GROW * max(1, int(r['ForgotEv'] or 0)): continue
+        # ...nor a fact that stopped being true, unless as much evidence again says it is true once more
+        if r and r['Status'] == 'closed' and len(set(l['ev']) - set(str(r.get('Ev') or '').split(','))) < GROW: continue
         if r and r.get('OwnerText') and l['text'] != r['OwnerText']: raw = fmt({**l, 'text': r['OwnerText']})
         out.append(raw)
     return '\n'.join(out) + ('\n' if doc.endswith('\n') else '')

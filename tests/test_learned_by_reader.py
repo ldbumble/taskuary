@@ -93,6 +93,13 @@ _(rules that hide things wait here)_
 """
 
 
+@pytest.fixture(autouse=True)
+def cited_ids_resolve(monkeypatch):
+    """These lines cite ids no row backs: here every id resolves, so what is tested is the reading. The books - an id that does not
+    resolve, a line resting on nothing the owner did - are tests/test_episodes.py's."""
+    monkeypatch.setattr(learnedgraph, 'resolves', lambda store, ev: True)
+
+
 def put(doc: str, head: str, *ls) -> str: return doc.replace(head + '\n', head + '\n' + '\n'.join(ls) + '\n', 1)
 
 

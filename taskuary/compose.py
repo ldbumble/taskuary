@@ -562,6 +562,7 @@ DASHBOARD_SYSTEM = (
     '{"type": "dashboard", "title": "<short>", "daily_at": "HH:MM" | "every_minutes": N | "cron": "...",\n'
     ' "sources": [{"key": "<short id>", "label": "<what a person calls it>", "type": "<a ready catalog type>", ...that type\'s keys,\n'
     '              "date": "<the column holding each row\'s date, when it has one>"}],\n'
+    '  A source\'s "key" is its own name here. An s3_object source puts its object path in "object_key", never in "key".\n'
     ' "filters": {"range": 7|30|90|0, "segment": "<a column several sources share, to slice every component by>"},\n'
     ' "components": [...]}\n'
     'COMPONENTS - only these presets, each {"kind", "title", "source": "<a source key>", ...its bindings, "w": 1-4 (of 4 columns)}:\n'

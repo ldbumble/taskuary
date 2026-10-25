@@ -189,6 +189,23 @@ def run_taskuary_data(cfg):
 def _key(s, i): return str(s.get('key') or f's{i}').strip()
 
 
+# A DASHBOARD SOURCE'S `key` IS ITS OWN NAME (what a component reads), and one executor reads a `key` of its own: an S3 source's object
+# path (aws.run_s3_object). On a dashboard that path is `object_key`, handed to the executor as its `key` at run time; a report's S3
+# source is untouched. A dashboard saved before this held the path in `key` itself - a key shaped like a path (a / or a .) still
+# reads as one, and the names this app gives a source (s1, tasks, mail) never are.
+OWN_KEYS = {'s3_object': 'object_key'}
+
+
+def run_cfg(s: dict) -> dict:
+    """The config a dashboard source's executor is handed: its own name dropped, a field it renamed (OWN_KEYS) put back as `key`."""
+    out = {k: v for k, v in s.items() if k != 'key'}
+    own = OWN_KEYS.get(s.get('type'))
+    if own:
+        path = out.pop(own, None) or (s.get('key') if '/' in str(s.get('key') or '') or '.' in str(s.get('key') or '') else None)
+        if path: out['key'] = path
+    return out
+
+
 def validate(spec: dict, store=None) -> tuple:
     """(ok, why). The shape only - every source a known, connected type with what it needs (compose.validate_source),
     every component a preset bound to a source the spec has. Whether the COLUMNS exist is the data's to say (problems)."""
@@ -202,7 +219,7 @@ def validate(spec: dict, store=None) -> tuple:
     if store is not None:
         from .compose import validate_source
         for s in srcs:
-            ok, why = validate_source(store, s)
+            ok, why = validate_source(store, run_cfg(s))
             if not ok: return False, why
     if not isinstance(comps, list) or not comps: return False, 'the dashboard shows nothing - it has no components'
     if len(comps) > MAX_COMPONENTS: return False, f'at most {MAX_COMPONENTS} components - one screen'
@@ -261,11 +278,12 @@ def rows_of(body: str) -> list:
 def collect(store, spec: dict) -> dict:
     """Run every source, once, as a report would - and keep the rows. No AI. One failing source is said in place."""
     from . import reports
-    subs = [{**s, 'max_rows': s.get('max_rows') or ROWS} for s in spec.get('sources') or []]
+    srcs = spec.get('sources') or []
+    subs = [{**run_cfg(s), 'max_rows': s.get('max_rows') or ROWS} for s in srcs]
     with reports.wide_rows():
         parts = reports.run_source_parts(store, subs)
     out = {}
-    for s, (_k, label, head, body) in zip(subs, parts):
+    for s, (_k, label, head, body) in zip(srcs, parts):
         key, failed = s.get('key'), head == 'FAILED'
         rows = [] if failed else rows_of(body)
         cols = list(dict.fromkeys(c for r in rows[:200] for c in r))

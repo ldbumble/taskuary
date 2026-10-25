@@ -68,6 +68,29 @@ class Judging(unittest.TestCase):
         with mock.patch('taskuary.llm.build_llm', return_value=None):
             self.assertTrue(bg.judge(self.s, self.act, {'url': CHECKOUT})['hold'])      # no AI at all: it waits for the owner
 
+    def test_with_no_ai_typing_passes_and_everything_else_waits(self):
+        typed = ('agent-browser fill @e1 "alex@northwind.example"', 'agent-browser type @e2 "hello"', 'agent-browser keyboard type "abc"',
+                 'agent-browser --session tq-1 keyboard inserttext "abc"', 'agent-browser find label "Email" fill "alex@northwind.example"',
+                 'agent-browser find role textbox fill "x" --name Email')
+        pressed = ('agent-browser click @e12', 'agent-browser press Enter', 'agent-browser keyboard press Enter', 'agent-browser check @e4',
+                   'agent-browser select @e5 "Express"', 'agent-browser find role button click --name Submit', 'agent-browser eval "1"',
+                   'agent-browser find role x --exact fill click', 'agent-browser keyboard --delay 5 type "x"', 'agent-browser click "@e12')
+        with mock.patch('taskuary.llm.build_llm', return_value=None):
+            for cmd in typed: self.assertFalse(bg.judge(self.s, bg.acts(cmd)[0], {'url': CHECKOUT})['hold'], cmd)
+            for cmd in pressed:
+                v = bg.judge(self.s, bg.acts(cmd)[0], {'url': CHECKOUT})
+                self.assertTrue(v['hold'], cmd); self.assertIn('no AI', v['why'])
+            self.assertFalse(bg.typing({'args': ['type', '@e2', 'hi\nthere'], 'verb': 'type'}))     # a line break can be the form's Enter
+            with on(): self.assertEqual(bg.check(self.s, self.tid, 'run1', 'agent-browser fill @e1 "a" && agent-browser fill @e2 "b"'), {})
+            with on(): self.assertEqual(bg.check(self.s, self.tid, 'run1', 'agent-browser fill @e1 "a" && agent-browser click @e3')
+                                        ['hookSpecificOutput']['permissionDecision'], 'deny')
+
+    def test_with_an_ai_typing_is_still_judged(self):
+        b = Brain(None)
+        with verdict({'irreversible': True, 'sure': True, 'what': 'x'}):
+            self.assertTrue(bg.judge(self.s, bg.acts('agent-browser fill @e1 "a"')[0], {'url': CHECKOUT}, b)['hold'])
+        self.assertTrue(b.seen)
+
     def test_a_reversible_act_sure_of_it_passes(self):
         with verdict({'irreversible': False, 'sure': True, 'what': 'opens the order summary'}):
             self.assertFalse(bg.judge(self.s, self.act, {'url': CHECKOUT}, Brain(None))['hold'])

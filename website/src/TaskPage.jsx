@@ -1687,7 +1687,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               </Box>
               {/* a flex column so the terminal takes exactly what is left between the strip above and the
                   waiting room below - a fixed-height formula clipped its bottom line on shorter screens */}
-              <Box ref={stepsBox} sx={{ px: liveSession ? 1 : 2, py: liveSession ? 0.65 : 1.5,
+              <Box ref={stepsBox} sx={{ px: liveSession ? 1 : { xs: 1.25, sm: 1.5 }, py: liveSession ? 0.65 : 1.25,
                 overflowY: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", containerType: "inline-size", position: "relative" }}>
                 {/* FROM, FOLDED TO ONE LINE while an agent works, or once it has finished or failed (`wide`, 2026-10-22) - owner-approved
                     2026-10-21: the work has the whole width and the terminal is never covered or squeezed. The line opens From as a
@@ -1763,7 +1763,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       <IconButton size="small" aria-label="Close From" data-tq-from-close="" onClick={() => setFromSide(false)}
                         sx={{ my: -0.5 }}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
                     </Box>}
-                    <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                    <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1.75 }}>
                       {/* OPEN AGAIN, AND WHY (funnel.news_since_agent): the message that reopened it, said first - the agent's last
                           session is the record under Agent work, not the news (the owner, 2026-10-12). Where the Advisor's NEXT
                           strip stands under the canvas it says what to do, so this one goes (assistantView.css .advising) */}
@@ -1866,11 +1866,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           <Box ref={cameFromRef} sx={{ mt: 0.5, minWidth: 0, scrollMarginTop: 8 }}>
                             {sources.map((g, gi) => (
                               <Box key={g.key} data-tq-conversation="" sx={{ py: 0.9, borderTop: gi ? "1px solid #ece7e0" : 0, minWidth: 0 }}>
-                                <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" } }}>
+                                <Box sx={{ display: "grid", gridTemplateColumns: "24px minmax(0, 1fr)", columnGap: 1, rowGap: 0.15, minWidth: 0 }}>
                                   <Box sx={{ width: 24, height: 24, borderRadius: 1, bgcolor: "#f1eee8", display: "grid", placeItems: "center", flexShrink: 0 }}>
                                     <ChannelIcon channel={g.channel} sx={{ fontSize: 14 }} /></Box>
                                   <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1, minWidth: 0, flexBasis: { xs: "calc(100% - 40px)", sm: "auto" } }} title={g.title}>{g.title}</Typography>
-                                  <Typography noWrap variant="caption" sx={{ color: DIM, fontSize: 11.5, flexShrink: 0, maxWidth: "100%", pl: { xs: 4, sm: 0 } }}>{groupMeta(g)}</Typography>
+                                  <Typography noWrap variant="caption" sx={{ color: DIM, fontSize: 11, gridColumn: 2, minWidth: 0 }}>{groupMeta(g)}</Typography>
                                 </Box>
                                 {/* SHOW ALL DRAWS EACH CONVERSATION IN ITS OWN FORM: a chat as the back-and-forth it is - bubbles, yours on the right
                                     (the owner, 2026-10-16: "wasn't this supposed to be a chat back and forth if you hit show all?") - and an email
@@ -2186,7 +2186,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   </>
                 ) : null}
 
-                {!sessionView && <Box ref={closeOutRef} data-tq-closeout="" sx={{ ...card, ...step, borderTop: 0, mt: 1, px: 0, py: pane === "reply" ? 1.5 : 1.1, flexShrink: 0 }}>
+                {!sessionView && <Box ref={closeOutRef} data-tq-closeout="" sx={{ ...card, ...step, borderTop: 0, mt: 1, px: 0, py: pane === "reply" ? 1.25 : 1, flexShrink: 0 }}>
                   {/* CLOSE OUT, not Reply (the owner, 2026-09-27): what finishes a task is not always a reply - a pull
                       request merges, an issue closes. The label only: the stage's key is still "reply" everywhere. */}
                   <WorkflowHeading number="3" title="Close out"

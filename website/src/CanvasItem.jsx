@@ -100,7 +100,9 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         // Result and Close out (the owner, 2026-10-22: "it should not take up the whole space though coding agents working we
         // want it to take up as much real estate as possible"). Only the From sidebar, laid over the work, asks for the room -
         // sized to the words it was cut off (the same day's "crunched down")
-        ...(!pin ? { "&:not(:has(.xterm, [class*='tq-aui'], canvas, iframe, [data-tq-from-side]))": { height: "auto", maxHeight: h } } : {}),
+        // ...and a general agent's chat is a pane only while its session is live (the owner, 2026-10-25): finished, failed or closed it is
+        // words too, and its room says so (TaskPage data-tq-agent-room)
+        ...(!pin ? { "&:not(:has(.xterm, [data-tq-agent-room='live'], [class*='tq-aui']:not([data-tq-agent-room='rest'] *), canvas, iframe, [data-tq-from-side]))": { height: "auto", maxHeight: h } } : {}),
         ...(pin ? { position: "fixed", top: 8, left: pin.left, width: pin.width, zIndex: 1350 } : {}) }}>
       {/* a COLUMN that shrinks to the box: the task view inside is a flex column too, so its own scroller gets what is left (TaskPage) */}
       <Box sx={{ flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>

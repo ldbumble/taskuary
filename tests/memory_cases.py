@@ -46,6 +46,26 @@ def _stamp(d: datetime) -> str: return d.strftime('%Y-%m-%d %H:%M:%S')
 def _friday(d: datetime) -> datetime: return (d + timedelta(days=(4 - d.weekday()) % 7 or 7)).replace(hour=9, minute=0, second=0)
 
 
+def put_off(s, who: str, days: int, now: datetime = None) -> int:
+    """One more of `who`'s notices, put off by the owner `days` ago to the coming Friday - as world() plants them. The task id."""
+    from taskuary.testing import Factory
+    f, at = Factory(s), (now or datetime.now()).replace(microsecond=0) - timedelta(days=days)
+    t = f.task(title=f'{P[who][0].split()[0]} notice', kind='task')
+    f.message(task_id=t, subject='Your renewal is coming up', body='Your annual subscription renews next month.', from_name=P[who][0],
+              from_email=P[who][1], conversation_id=f'email:putoff-{t}', sent_at=_stamp(at))
+    s.set_funnel_state(f'task:{t}', 'later', 'owner', until=_stamp(_friday(at)))
+    s._exec('UPDATE funnel_state SET At=? WHERE Key=?', (_stamp(at + timedelta(hours=2)), f'task:{t}'))
+    s._exec('UPDATE task SET RemindAt=? WHERE TaskId=?', (_stamp(_friday(at)), t))
+    return t
+
+
+def reflected(s, *_):
+    """One reflection by a brain that changes nothing itself - what is left is the app's own bookkeeping (the counted lines, settle)."""
+    from taskuary import learn
+    assert learn.reflect(s, lambda system, user, **k: user.split('CURRENT LEARNED.md:\n', 1)[1].split('\n\nSOUL.md', 1)[0])
+    return s.get_doc('learned')
+
+
 def world(now: datetime = None):
     """(store, facts) - the 60 days. `facts` names what was planted where, by id, so a test can check an episode or a line cites it."""
     from taskuary.store import MemoryStore

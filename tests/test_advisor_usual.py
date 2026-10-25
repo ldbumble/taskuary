@@ -9,6 +9,7 @@ import pytest
 from taskuary import advisor, funnel, rulebook, terminal, usual
 from taskuary.testing import Factory
 from tests import memory_cases as C
+from tests.memory_cases import put_off, reflected
 
 
 @pytest.fixture
@@ -47,34 +48,47 @@ def test_no_line_when_nothing_is_checkable(w):
         assert (d['state'], d['verb'], d['line']) == ('asked', 'reply', ''), d
 
 
-def test_a_payworth_renewal_opens_remind_me_on_friday(w):
+def test_a_payworth_renewal_opens_remind_me_on_the_day_its_how_you_work_line_says(w):
+    """Remind me's day comes from a How you work line the owner can see and correct (the owner, 2026-10-25) - the count alone sets none."""
     s, facts = w
     t = ask(s, 'payworth', 'Payworth renewal notice', 'Your annual subscription renews next month.')
+    assert usual.remind_day(s, t) is None, 'counted, but no line says it yet'
+    reflected(s, put_off(s, 'payworth', 13))
     d = usual.remind_day(s, t)
-    assert d['day'] == 'Friday' and d['by'] == 'renewals@payworth.example' and d['n'] >= 2
+    assert d['day'] == 'Friday' and d['by'] == 'renewals@payworth.example' and d['line'] == 'You put mail from renewals@payworth.example off to Friday'
     on = datetime.strptime(d['on'], '%Y-%m-%d').date()
     assert on.weekday() == 4 and on > datetime.now().date()
     from fastapi.testclient import TestClient
     from taskuary import server
     with mock.patch.object(server, 'store', s): got = TestClient(server.app).get(f'/api/tasks/{t}/remind/usual').json()
-    assert got['on'] == d['on'], 'the picker reads the same day'
+    assert got['on'] == d['on'] and got['line'] == d['line'], 'the picker reads the same day, and the line it came from'
     # ...and a sender whose mail was never put off has no usual day
     assert usual.remind_day(s, ask(s, 'gail', 'Rota', 'Can you check the rota?')) is None
 
 
-def test_the_learned_day_waits_for_two_weeks_of_data(w):
+def test_the_owner_rewords_the_day_and_the_default_follows_then_deletes_it_and_there_is_none(w):
     s, _ = w
-    near = datetime.now() - timedelta(days=3)          # two put-offs days old are not yet a habit
-    from taskuary.store import MemoryStore
-    s2 = MemoryStore(); f = Factory(s2)
-    for i in range(2):
-        t = f.task(title=f'Renewal {i}', kind='task')
-        f.message(task_id=t, subject='Renewal', body='Renews soon.', from_name='Payworth Renewals', from_email='renewals@payworth.example')
-        s2.set_funnel_state(f'task:{t}', 'later', 'owner', until=C._stamp(C._friday(near)))
-        s2._exec('UPDATE funnel_state SET At=? WHERE Key=?', (C._stamp(near), f'task:{t}'))
-    t = f.task(title='Renewal 3', kind='task')
-    f.message(task_id=t, subject='Renewal', body='Renews soon.', from_name='Payworth Renewals', from_email='renewals@payworth.example')
-    assert usual.remind_day(s2, t) is None
+    t = ask(s, 'payworth', 'Payworth renewal notice', 'Your annual subscription renews next month.')
+    reflected(s, put_off(s, 'payworth', 13))
+    doc = s.get_doc('learned')
+    s.save_doc('learned', doc.replace('off to Friday [', 'off to Thursday ['), 'owner')
+    assert usual.remind_day(s, t)['day'] == 'Thursday', 'the owner said Thursday'
+    reflected(s)
+    assert usual.remind_day(s, t)['day'] == 'Thursday', '...and the next reflection keeps their word'
+    line = next(l for l in s.get_doc('learned').splitlines() if 'k: put off renewals@payworth.example' in l)
+    s.save_doc('learned', s.get_doc('learned').replace(line + '\n', ''), 'owner')
+    assert usual.remind_day(s, t) is None
+    reflected(s)
+    assert usual.remind_day(s, t) is None and 'renewals@payworth.example off to' not in s.get_doc('learned'), 'deleted stays deleted'
+
+
+def test_an_owner_line_of_their_own_sets_the_day(w):
+    s, _ = w
+    t = ask(s, 'spendly', 'Spendly invoice', 'Your invoice is ready.')
+    doc = s.get_doc('learned')
+    s.save_doc('learned', doc.replace('## How you work\n', '## How you work\n- Mail from spendly.example waits for Monday\n', 1), 'owner')
+    d = usual.remind_day(s, t)
+    assert (d['day'], d['by'], d['evidence']) == ('Monday', 'spendly.example', [])
 
 
 def test_a_payroll_ask_lights_hand_off_with_the_ray_line(w):
@@ -90,6 +104,32 @@ def test_a_payroll_ask_lights_hand_off_with_the_ray_line(w):
     assert seen and 'WHOM YOU HANDED THEIR ASKS TO: ray@northwind.example, 2 of 2 times' in seen[-1]
     d = advisor.decide(s, f'task:{t}', preread=False)
     assert (d['verb'], d['by'], d['line']) == ('forward', 'model', 'Ray handles payroll for you.')
+
+
+def test_hand_it_to_a_person_opens_on_ray_for_a_payroll_ask_chosen_not_sent(w):
+    """The usual recipient, pre-filled (the owner, 2026-10-25): whom this sender's asks were handed to before. Nothing is sent."""
+    s, _ = w
+    t = ask(s, 'site1', 'Payroll correction for a site 6', 'Another rate was wrong last cycle - can this be fixed?', hours=1)
+    sent = s._one("SELECT COUNT(*) n FROM message WHERE Direction='out'")['n']
+    u = usual.handoff_usual(s, t)
+    assert (u['to'], u['channel'], u['from'], u['n']) == ('ray@northwind.example', 'email', 'east.manager@northwind.example', 2)
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    with mock.patch.object(server, 'store', s):
+        c = TestClient(server.app)
+        assert c.get(f'/api/tasks/{t}/handoff/usual').json()['to'] == 'ray@northwind.example'
+        assert c.get(f"/api/tasks/{ask(s, 'erin', 'Offsite agenda', 'Can you check the agenda?')}/handoff/usual").json() == {}, 'nobody learned'
+        assert c.get('/api/tasks/999999/handoff/usual').status_code == 404
+    assert s._one("SELECT COUNT(*) n FROM message WHERE Direction='out'")['n'] == sent
+    assert not s._rows("SELECT 1 FROM audit WHERE EntityId=? AND Action='handoff'", (t,)), 'chosen, not sent'
+
+
+def test_one_hand_off_is_no_usual(w):
+    s, _ = w
+    t = ask(s, 'omar', 'Travel booking', 'Can you book the travel?')
+    old = ask(s, 'omar', 'Earlier travel', 'Can you book it?')
+    s.audit('task', old, 'handoff', 'owner', 'human', {'to': 'gail@northwind.example', 'channel': 'email'})
+    assert usual.handoff_usual(s, t) is None
 
 
 def test_erins_usual_is_in_what_the_model_reads(w):

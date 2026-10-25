@@ -2179,13 +2179,25 @@ def remind_task(task_id: int, body: RemindBody):
 @app.get('/api/tasks/{task_id}/remind/usual')
 def remind_usual(task_id: int):
     """The day Remind me opens on (the owner's ruling 7, 2026-10-23: "Remind me opens with the learned day pre-chosen"): the weekday the
-    owner puts this sender's mail off to, counted from their own put-offs (usual.remind_day) - {} while no day has held. Pre-chosen is
-    not chosen: the picker shows it first, and nothing is set until the owner presses."""
+    How you work line about this sender says (usual.remind_day) - a line the owner can see and correct, written from their own put-offs
+    (the owner, 2026-10-25) - {} while no line says one. Pre-chosen is not chosen: the picker shows it first, and nothing is set until
+    the owner presses."""
     from . import usual
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     try: return usual.remind_day(store, task_id) or {}
     except Exception as e:
         logger.debug(f'no usual day for {task_id}: {e}'); return {}
+
+@app.get('/api/tasks/{task_id}/handoff/usual')
+def handoff_usual(task_id: int):
+    """Whom Hand it to a person opens on (the owner, 2026-10-25: "Hand it to a person pre-fills the usual recipient"): the person the
+    owner handed this sender's asks to, twice or more (usual.handoff_usual) - {} while there is nobody. Chosen, not sent: the drawer
+    fills the recipient, and the owner still presses Send it."""
+    from . import usual
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    try: return usual.handoff_usual(store, task_id) or {}
+    except Exception as e:
+        logger.debug(f'no usual recipient for {task_id}: {e}'); return {}
 
 @app.patch('/api/tasks/{task_id}')
 def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None):

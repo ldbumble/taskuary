@@ -19,7 +19,8 @@ test("New dashboard offers the ready ones under the composer, and Use this draws
   assert.match(ed, /api\.get\(`\/api\/dashboards\/templates\/\$\{encodeURIComponent\(key\)\}`\)/);
   assert.match(ed, /data-tq-dashboard-template=\{t\.key\}/);
   // the template came drawn: the preview effect does not run it again (the demo refuses /preview, and it would be the same rows)
-  assert.match(ed, /drawn\.current === spec\) return;/);
+  assert.match(ed, /read\.current = sigOf\(t\.config\);/);
+  assert.match(ed, /sig === read\.current/);
   for (const k of ["or_start", "use", "using", "to_go", "target_met", "no_change", "right_now"]) assert.ok(DASH[k], `words.json dashboard.${k}`);
 });
 

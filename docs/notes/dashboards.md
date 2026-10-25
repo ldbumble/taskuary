@@ -15,7 +15,20 @@ rows (`dashboard_result`) and files one row under Reports. The page slices those
 it (`store.SEEDED_REPORTS`, `Owner='template'`, deleting it is the off switch), and New dashboard offers it again under the
 composer in one press (`/api/dashboards/templates`, drawn over the install's own rows). It reads only `taskuary_data` - mail,
 `flow` (how far each message got: came in, triaged, on a task, its task closed), tasks, agent sessions (worker events) and
-replies - so it draws with nothing connected.
+replies - so it draws with nothing connected. Nothing else sets it apart: it is a row under Reports → Dashboards like any
+other, and it is edited in the same editor.
+
+## Editing one
+
+Every dashboard is configurable in `DashboardEditor.jsx`, the AI's draft included. The page is drawn at the top. Under it:
+
+- **Sources** are a report's own source cards (`ReportsView.SourceCard`), laid out as a report's are, each with its date
+  column. Changing a source reads the rows again (`/api/dashboards/preview`, once the typing stops).
+- **What it shows** has one card per component: its preset, title, source, the bindings that preset takes
+  (`dashboard/setup.js` `BINDS`), a where, its own window (the page's range, a fixed 7/30/90 days, or what is true now) and
+  its width. The default range and the segment sit above the cards. A component edit redraws the same rows in place.
+
+Save runs the same `dashboards.validate` as the composer, and reads the sources again when they changed.
 
 ## The presets
 

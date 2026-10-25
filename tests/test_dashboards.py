@@ -2,6 +2,7 @@
 are kept for the page to slice, and its one row under Reports says it is fresh and opens the dashboard (dashboards.py)."""
 import json
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -287,3 +288,32 @@ def test_the_template_endpoint_hands_it_drawn_over_this_installs_rows():
         got = c.get('/api/dashboards/templates/glance').json()
         assert c.get('/api/dashboards/templates/nope').status_code == 404
     assert got['config'] == dashboards.GLANCE and len(got['data']['sources']['mail']['rows']) == 4 and got['problems'] == []
+
+
+def test_the_built_in_one_is_an_ordinary_dashboard_edited_and_kept_like_any_other():
+    """The owner, 2026-10-24: configurable, in the Dashboards section like reports. The seeded row is a dashboard row like any other:
+    its components and their targets change through the same save and the same check, and nothing puts the shipped spec back."""
+    from unittest import mock
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    s = MemoryStore()
+    row = next(r for r in s.list_sources(active_only=False) if r['Address'] == dashboards.GLANCE['title'])
+    cfg = json.loads(row['ConfigJson'])
+    goal = next(c for c in cfg['components'] if c['kind'] == 'progress'); goal['target'] = 20
+    cfg['components'] = [c for c in cfg['components'] if c['title'] != 'Who writes most']
+    post = lambda c, spec: c.post('/api/sources', json={'SourceId': row['SourceId'], 'Channel': 'report', 'Address': spec['title'],
+                                                        'ConfigJson': json.dumps(spec), 'Active': True})
+    with mock.patch.object(server, 'store', s):
+        c = TestClient(server.app)
+        assert post(c, cfg).status_code == 200
+        assert post(c, {**cfg, 'components': [{**goal, 'source': 'gone'}]}).status_code == 422     # ...the check any dashboard's save runs
+        got = c.get(f"/api/dashboards/{row['SourceId']}").json()['config']
+    assert next(x for x in got['components'] if x['kind'] == 'progress')['target'] == 20
+    assert 'Who writes most' not in [x['title'] for x in got['components']]
+    s._heal_seeded_report_owner()                                       # the heal that runs on start leaves an edited one alone
+    assert json.loads(s.get_source(row['SourceId'])['ConfigJson'])['components'] == got['components']
+
+
+def test_the_editors_dataset_picker_lists_every_dataset_the_server_serves():
+    words = json.loads(Path(dashboards.__file__).with_name('words.json').read_text(encoding='utf-8'))
+    assert set(words['dashboard']['datasets']) == set(dashboards.DATASETS)

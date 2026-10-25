@@ -91,6 +91,7 @@ ACTIONS = {
     # place it can land is ~/.taskuary/sftp. The four that change something on the far side are writes.
     'smb_read': 'read', 'sftp_list': 'read', 'sftp_get': 'read',
     'smb_write': 'write', 'smb_move': 'write', 'sftp_put': 'write', 'sftp_move': 'write',
+    'sharepoint_save': 'write', 'onedrive_save': 'write',     # a file saved, not a message: no press, and the agent says where (2026-10-25)
     'kb_search': 'read',     # the knowledge base is Taskuary's own index; searching it moves nothing (kb_reindex writes it: default)
     # the handbook is Taskuary's own store and the whole point is that agents fill it, so reading
     # it is free. WRITING it is a write - not because it can reach anything (it cannot leave the

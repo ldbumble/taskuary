@@ -85,6 +85,7 @@ import { summarize } from "./walkSummary.js";
 import { refreshToday, useCalendarToday } from "./calendarToday.js";
 import FeedView from "./FeedView.jsx";
 import { MORE_PX, backAt, dueWord, placed, pulledRow, sectionDone, sectionNext } from "./funnelPile.js";
+import { isImportant } from "./priority.js";
 import { age, ago, band, bandUntil, plural } from "./timeWords.js";
 const GeneralWorkspace = lazyView(loadGeneral);
 import CanvasItem, { CANVAS_ITEM_HEIGHT, showsTask } from "./CanvasItem.jsx";
@@ -666,7 +667,10 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                 // URGENT IS A QUIET SHADE ON THE ROW, IN ITS PLACE (the owner, 2026-10-22: "remove the urgent section and just add quiet
                 // shading around it") - no heading of its own, no icon, no word; Next walks it in its place
                 const hot = !i.settling && isUrgent(i);
-                const cls = ["tq-pile-row", falls(i.key) ? "landing" : entering.has(i.key) ? "entering" : "", i.settling ? "settling" : "", hot ? "urgent" : "",
+                // ...and IMPORTANT a quieter mark of its own, in its place too - never a move (the owner, 2026-10-25: "show it as a mark
+                // in its row's place"); urgent outranks it, so an urgent row wears urgent's shade alone
+                const imp = isImportant(i, hot);
+                const cls = ["tq-pile-row", falls(i.key) ? "landing" : entering.has(i.key) ? "entering" : "", i.settling ? "settling" : "", hot ? "urgent" : imp ? "important" : "",
                   isCur ? "current" : inBatch ? "inbatch" : i.key === nextKey ? "next" : ""].filter(Boolean).join(" ");
                 // NO PILLS ON A ROW (the owner, 2026-09-28: "nothing else has pill"): a row's state is its mark and word, the same
                 // for every lane - "ready to send" and "agent waiting on you" included
@@ -692,7 +696,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                     // a goal says only that it SLIPPED (red); on track or not started, its steps say enough (the owner, 2026-10-21)
                     : goal ? (i.kind === "goal_slipped" ? meta.word : "") : "";
                 return (
-                  <div key={i.key} className={cls} data-tq-key={i.key} data-tq-urgent={hot ? "" : undefined} style={{ top: falls(i.key) ? -ROW_H : top }}>
+                  <div key={i.key} className={cls} data-tq-key={i.key} data-tq-urgent={hot ? "" : undefined} data-tq-important={imp ? "" : undefined}
+                    style={{ top: falls(i.key) ? -ROW_H : top }}>
                     {/* For later counts DOWN to when it comes back, in the same short form the age column uses */}
                     {/* ...every other row says its ARRIVAL; a reply since it was last opened is a quiet "+N" beside it, never a new age */}
                     <span className="when" title={level === "later" && backAt(i) ? `back ${ago(backAt(i))}` : goal || i.kind === "meeting" ? undefined : ageHover(i)}>
@@ -708,8 +713,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                       tabIndex={i.key === tabKey ? 0 : -1} onFocus={() => setKbdKey(i.key)}
                       onClick={() => (isCur ? onCurrent?.() : !i.settling && onPull(i.key))}
                       onPointerEnter={() => { if (!isCur && i.tid) prefetchTask(api, i.tid); }}
-                      aria-label={hot ? `${i.title} - urgent` : undefined}
-                      title={[i.who, st?.word || meta.word, i.ref, i.promoted ? 'moved up - it looked urgent' : '', why].filter(Boolean).join(" · ")}>
+                      aria-label={hot ? `${i.title} - urgent` : imp ? `${i.title} - important` : undefined}
+                      title={[i.who, st?.word || meta.word, i.ref, imp ? "important" : "", i.promoted ? 'moved up - it looked urgent' : '', why].filter(Boolean).join(" · ")}>
                       <div className="t">
                         {/* AN AGENT AT WORK is a ring spinning round the row's icon (the owner, 2026-10-21) - it stops when the agent
                             finishes, asks, fails or is stopped; the highlighted border stays the table's alone. A goal wears its mark. */}

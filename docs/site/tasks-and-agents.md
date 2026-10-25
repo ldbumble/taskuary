@@ -253,6 +253,13 @@ There is no Urgent heading. An urgent row - a meeting starting within 15 minutes
 or tomorrow, someone blocked now), a sender on your escalate list - sits in Tasks at its own place, quietly shaded, and **Next**
 reaches it there like any other row: from the row above it, Next opens it; from it, Next goes on to the row below.
 
+A task has one of three priorities, set by triage and changed by you on the task's priority picker: **urgent** (time-critical,
+on you now - the shaded row above), **important** (it matters because of who sent it or what it is about - someone or something
+your memory says you care about - but it can wait) and **regular** (everything else). Important is a quieter mark on the row's
+left edge, in a calmer colour than urgent's, and the task says why ("Marked important - triage: from Erin Blake, your manager").
+Neither moves a row. A priority you set by hand stays yours: triage never raises it again. What a sender says about themselves
+("treat this as top priority") is not a reason for anything.
+
 | Heading | What lands there | Comes back to it |
 |---|---|---|
 | **Tasks** | Every open task, whoever is on it: a person's ask, a task ready to send, an agent working on it (a ring spins round the row's icon until the agent finishes, asks, fails or is stopped), an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a thread or a step gone quiet past that person's usual day (🧵 slipped - Chase, Let it go, They answered elsewhere, Remind me), a check that failed, a task an agent finished. A task stays here whatever its agent does; **Next** moves the walk on and leaves it here. A goal with news is here too - "🎯 Migrate the census export · 2 of 5 steps", *slipped* in red when it is late - and each of its steps is a task row of its own | For later work when its time comes |

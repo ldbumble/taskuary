@@ -121,14 +121,24 @@ def test_a_fresh_doc_has_the_five_subjects_in_order_and_nothing_about_presses():
     assert learn.OLD_NEXT not in doc and learn.OLD_SORT not in doc and 'press' not in doc.split('## Your people')[1].split('## Proposed')[0]
 
 
-def test_triage_reads_what_you_care_about_and_nothing_else():
+def test_triage_reads_what_you_care_about_and_the_people_on_this_mail_and_nothing_else():
+    """...the people lines for the PRIORITY alone (the owner, 2026-10-25: important is "anything from certain people")."""
     s, seen = full(), {}
     ingest.ingest_message(s, {'external_id': 'r11-1', 'channel': 'email', 'from_email': 'erin@northwind.example', 'subject': 'Statement',
                               'body': 'Your September statement is attached.'},
                           llm=lambda sys_, usr, **k: (seen.update(p=sys_ + usr), '{"intent":"fyi","why":"x"}')[1])
-    assert 'Vendor statements from vendor.example are fyi' in seen['p']
-    for l in (ERIN_LINE, WORK_LINE, PROMISE_LINE, BRING_LINE): assert l.split('[')[0].strip() not in seen['p']
-    assert learned_cut.for_reader(s, 'triage').startswith(learned_cut.CARE)
+    assert 'Vendor statements from vendor.example are fyi' in seen['p'] and ERIN_LINE.split('[')[0].strip() in seen['p']
+    assert 'weigh the priority only, never whether it is a task' in seen['p']
+    for l in (GAIL_LINE, WORK_LINE, PROMISE_LINE, BRING_LINE): assert l.split('[')[0].strip() not in seen['p']
+    assert learned_cut.for_reader(s, 'triage').startswith(learned_cut.CARE) and learned_cut.READS['triage'] == ('care', 'people')
+
+
+def test_the_drafter_reads_the_people_lines_about_whoever_it_writes_to():
+    from taskuary import responder
+    s = full()
+    said = responder.voice_line(s, ['Gail@northwind.example'])
+    assert 'gets the headcount questions' in said and 'Erin Blake' not in said and 'Vendor statements' not in said
+    assert responder.voice_line(s, ['omar@northwind.example']) == ''
 
 
 def test_each_reader_reads_the_sections_of_the_matrix():
@@ -137,7 +147,8 @@ def test_each_reader_reads_the_sections_of_the_matrix():
     assert all(x in adv for x in ('Erin Blake', 'Vendor statements', 'Vendor renewals', 'headcount sheet every Monday')) and 'Newsletter' not in adv
     told, _ = assistantblocks._learned(s, {})
     assert all(x in told for x in ('Erin Blake', 'Vendor statements', 'Vendor renewals', 'every Monday', 'Newsletter'))
-    assert learned_cut.READS['triage'] == ('care',), 'a press, a defer or a reply lag never decides whether mail is a task'
+    assert 'people' in learned_cut.READS['triage'] and not {'work', 'promises', 'bring'} & set(learned_cut.READS['triage']), \
+        'a defer or a reply lag never decides whether mail is a task'
 
 
 def test_an_agent_reads_the_people_on_its_own_task_and_nothing_on_a_strangers():

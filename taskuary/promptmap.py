@@ -24,7 +24,7 @@ def _blocks_triage(store, msg: dict, mid: int) -> list:
          'source_name': msg.get('SourceName'), 'channel': msg.get('Channel')}
     doc = store.doc('triage') or ''
     base = doc.strip() or INTENT_SYSTEM
-    soul, learned = store.doc('soul') or '', learned_cut.for_reader(store, 'triage', learned_cut.about_mail(m))
+    soul, learned = store.doc('soul') or '', learned_cut.for_reader(store, 'triage', learned_cut.about_mail(m), people=learned_cut.people_of(msg))
     notes, left = relevant_notes(store, [m['from_email'] or ''],
                                  f"{m['subject'] or ''} {m['body'] or ''}"[:4000],
                                  subject=m['subject'] or '', source=m['source_name'] or '')
@@ -32,7 +32,7 @@ def _blocks_triage(store, msg: dict, mid: int) -> list:
     how = addressed_to_you(m, mine)
     out = [('the classifier instructions', 'TRIAGE.md' if doc.strip() else 'triage.INTENT_SYSTEM (the doc is blank)', base)]
     if soul: out.append(("the operator's document", 'SOUL.md', soul[:2500]))
-    if learned: out.append(('the learned profile', 'LEARNED.md "What you care about" (in-use lines, closest to this sender first, within budget)', learned))
+    if learned: out.append(('the learned profile', 'LEARNED.md "What you care about" and the people on this mail (in-use lines, closest to this sender first, within budget)', learned))
     if notes:
         out.append(('standing notes that apply to THIS message', f'memory table - {len(notes)} of '
                     f'{len(notes) + left} applied, ranked by ingest.relevant_notes',

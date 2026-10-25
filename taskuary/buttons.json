@@ -52,7 +52,7 @@
     "trust_start":     {"label": "Trust and start", "hint": "You know who wrote this: their words count as trusted and the agent starts", "row": []},
     "walk_here":       {"label": "Walk it here", "hint": "Brings the walk back from the phone chat to this screen", "row": []},
     "change_kind":     {"label": "Change who does it", "hint": "You, an assistant, or a drafted reply for you to approve", "row": ["kind"]},
-    "priority":        {"label": "Change priority", "hint": "Low, normal, high or urgent", "row": ["priority"]},
+    "priority":        {"label": "Change priority", "hint": "Regular, important or urgent", "row": ["priority"]},
     "assign":          {"label": "Assign it", "hint": "You, an agent's profile, or nobody", "row": ["assign"]},
     "pick_repo":       {"label": "Choose where the code is", "hint": "Which folder of code the agent works in", "row": ["repo"], "states": {"set": "Change where the code is"}},
     "attach":          {"label": "Attach a file", "hint": "Adds a file to the reply - nothing is sent until you approve it", "row": ["attach"],

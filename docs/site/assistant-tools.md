@@ -209,7 +209,7 @@ Change any task - the table's, or one named by ref.
 
 Change a task's priority, title, owner or due day. Any other value is refused with the allowed ones.
 
-- `priority` - low | normal | high | urgent
+- `priority` - regular | important | urgent
 - `title`
 - `assignee` - exactly `owner` (the owner takes it) or `agent:<profile>` (a worker on the roster)
 - `due` - the day the work is due (2026-10-30, "friday", "2 weeks", or "none" to clear it)

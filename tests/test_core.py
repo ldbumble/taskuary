@@ -992,7 +992,7 @@ class CoreTests(unittest.TestCase):
                                  {'title': 'Fix the PTO import mapping'}, [mid])
         self.assertEqual(s.get_task(tid)['Title'], 'Fix the PTO import mapping')      # the ref stays put
         t2 = s.get_task(new)
-        self.assertEqual((t2['Kind'], t2['Priority'], t2['Tags']), ('coding', 'high', 'repo:northwind/Census'))
+        self.assertEqual((t2['Kind'], t2['Priority'], t2['Tags']), ('coding', 'important', 'repo:northwind/Census'))   # high is important now
         self.assertEqual(s.get_message(mid)['TaskId'], new)                            # moved, with a route
         self.assertEqual([r['Decision'] for r in s.list_routes(new)], ['split'])
         self.assertIn(task_ref(new), s.list_comments(tid)[-1]['Body'])                 # each side says where

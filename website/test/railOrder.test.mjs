@@ -61,10 +61,14 @@ test("the rail shades an urgent row in place and says urgent to a screen reader;
   const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
   const css = readFileSync(fileURLToPath(new URL("../src/assistantView.css", import.meta.url)), "utf8");
   assert.match(view, /const hot = !i\.settling && isUrgent\(i\);/);
-  assert.match(view, /hot \? "urgent" : ""/);
+  assert.match(view, /hot \? "urgent" : imp \? "important" : ""/);
   assert.match(view, /data-tq-urgent=\{hot \? "" : undefined\}/);
-  assert.match(view, /aria-label=\{hot \? `\$\{i\.title\} - urgent` : undefined\}/);
+  assert.match(view, /aria-label=\{hot \? `\$\{i\.title\} - urgent` : imp \? `\$\{i\.title\} - important` : undefined\}/);
   assert.match(css, /\.tq-pile-row\.urgent \.card \{ background: rgba\(138, 54, 70, \.06\)/);
+  // IMPORTANT is its own quieter mark in its place (the owner, 2026-10-25): urgent outranks it, it never shades, never moves a row
+  assert.match(view, /const imp = isImportant\(i, hot\);/);
+  assert.match(css, /\.tq-pile-row\.important \.card \{ box-shadow: inset 2px 0 0 rgba\(64, 96, 128, \.5\); \}/);
+  assert.doesNotMatch(css, /\.tq-pile-row\.important[^{]*\{[^}]*background/, "important never shades the row");
   assert.doesNotMatch(css, /lvl-urgent/);
   const sum = summarize([task("task:1", 19), task("task:2", 11, { lane: "time", order_band: 1 }), report("report:1", 3)]);
   assert.deepEqual(sum.groups.map((g) => [g.key, g.n, g.urgent]), [["task", 2, 1], ["reports", 1, 0]]);

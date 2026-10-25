@@ -4,8 +4,10 @@ _Taskuary writes this document itself, from what you do: who you answer and how 
 off and until when, what you hand to whom, what you promise, which ideas you take up. Never from
 which button you pressed, never from personal mail, and never from what a sender says about
 themselves. Each section is about one subject, and each reader takes the parts that help it:
-triage reads what you care about, the Advisor your people, what you care about, how you work and
-your promises, the Assistant all of it. How you write is kept
+triage reads what you care about (and, for how important a task is, the lines about the people on
+the mail), the drafter the lines about whoever it writes to, the Advisor your people, what you care
+about, how you work and your promises, an agent the people on its own task, the Assistant all of
+it. How you write is kept
 in STYLE.md (By recipient). Machine-written lines carry a `[s:N | ev: … | seen: … | k: …]` tag —
 strength, the evidence behind it, when it last held, and the key that keeps it the same line as it
 gets reworded. A line is only read once it is in use: three episodes from two people or threads,

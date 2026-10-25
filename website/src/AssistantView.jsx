@@ -2251,9 +2251,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       const quiet = out.status === "done" && !chips.length;
       setMsgs((m) => {
         const ms = m.map((x) => (holdsProposal(x, p) ? { ...x, proposal: { ...x.proposal, ...(p.replaces ? p : {}), status: out.status, repo: out.repo || null, outcome: res?.outcome || null } } : x));
-        const worn = quiet ? pressLine(ms, { key: p.key, tid: p.tid || res?.outcome?.taskId }, String(p.label || p.title || "").split(": ")[0]) : ms;
-        return worn !== ms ? worn
-          : [...ms, { id: `r${Date.now()}`, role: "receipt", status: out.status, text: out.receipt, tid: p.tid || res?.outcome?.taskId, ref: p.ref || res?.outcome?.ref, chips }];
+        // ...and one that went through wears its badge even where its line stays for the way on: Not ours folded with no mark (the 2026-10-25 sweep)
+        const worn = out.status === "done" ? pressLine(ms, { key: p.key, tid: p.tid || res?.outcome?.taskId }, String(p.label || p.title || "").split(": ")[0]) : ms;
+        return quiet && worn !== ms ? worn
+          : [...worn, { id: `r${Date.now()}`, role: "receipt", status: out.status, text: out.receipt, tid: p.tid || res?.outcome?.taskId, ref: p.ref || res?.outcome?.ref, chips }];
       });
       onChanged?.();
       // the server already settled or closed the item; a settle proposal (later, tomorrow, done) must not be
@@ -2267,12 +2268,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       else { if (step === "offer") clearTable(); loadPile(); }
     } finally { setBusy(false); }
   };
-  // a card button on ONE entry (PW-151): the same proposal road the words take, minus the interpreter - the
-  // target is explicit. The card lands in the chat and runs from its own button, like any proposal.
+  // a card button on ONE entry (PW-151): the same proposal road the words take, minus the interpreter - the target is explicit
+  // ...AND THE PRESS IS THE DECISION (`press`, the 2026-10-25 sweep): it runs here at once, whatever the verb - "Chase them" and "Put it
+  // on my list" drew "Nothing happens until you say yes" with the button already pressed, and the server wrote the press into the chat
+  // as an owner line ("Not ours: FW: ...") with a second card that folded the item after it (assistant-is-a-router: no confirm cards)
   const proposeDirect = async (verb, key, table = false, revision = null) => {
     // the pill carries the stamp it was judged at, and a moved item refuses it (409); the plain road is unchanged
-    const { data } = revision ? await api.post("/api/concierge/propose", { verb, key, table, revision })
-      : await api.post("/api/concierge/propose", { verb, key, table });
+    const { data } = revision ? await api.post("/api/concierge/propose", { verb, key, table, revision, press: true })
+      : await api.post("/api/concierge/propose", { verb, key, table, press: true });
     // refused before any proposal existed: the reason and this item's other words, as a line of its own (no card to confirm)
     if (!data.id) {
       setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: [], card: { kind: "words", chips: data.chips || [] } }]);
@@ -2280,7 +2283,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     }
     // a move the server runs AT ONCE (concierge.AUTO: Not ours, Mark done, Stop) draws no card: its caller runs it on the spot, and the
     // card it drew stood with Cancel and its own From now on until the run came back (remove-undo.test's race, 2026-10-23)
-    if (data.auto) return data;
+    if (data.auto) { await runProposal(data); return { ...data, ran: true }; }
     setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: [], proposal: data,
                             card: { kind: "proposal", key: data.key, title: data.label, op: data.id, tid: data.tid, ref: data.ref } }]);
     say(data.say);
@@ -2317,7 +2320,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // ...and a move the server runs AT ONCE from the row (concierge.AUTO: Not ours files just this once, its From now on under the
     // receipt) runs at once from here too: the Advisor's copy of Not ours drew a proposal card with Cancel the row's own never does
     // (remove-undo.test, 2026-10-23) - one press, one behaviour, whichever button it was
-    try { const pr = await proposeDirect(a.verb, key, true, a.revision); if (pr?.auto) await runProposal(pr); return pr; }
+    try { return await proposeDirect(a.verb, key, true, a.revision); }
     catch (e) {
       if (demoNo(e)) { setErr(errText(e)); return null; }          // the demo saying no is a line in the chat, not the row's error
       if (e?.response?.status !== 409) throw e;
@@ -2338,7 +2341,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // once - the box was the confirmation. The walk then does what a hand-off always did: the task opens, working (runProposal)
   const startOnItem = async (item, o) => {
     const { data } = await api.post("/api/concierge/propose", { verb: o.verb, key: item.key, table: true, exact: true, text: o.text || null,
-      agent: o.agent || null, brain: o.brain || null, pick: o.pick || null, model: o.model || null });
+      agent: o.agent || null, brain: o.brain || null, pick: o.pick || null, model: o.model || null, press: true });
     if (!data?.id) throw new Error(data?.say || "It did not start.");
     setAgentOn(null);
     await runProposal({ ...data, key: data.key || item.key });
@@ -2463,8 +2466,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // Prep me is gone (buttons.json `removed`): an old saved chip of a removed verb runs as the verb it became, or not at all
       const verb = liveVerb(c.verb);
       if (!verb) return;
-      const pr = c.revision ? await pressAdvice({ verb, key, revision: c.revision }) : await proposeDirect(verb, key, true, null);
-      if (pr?.auto && !c.revision) await runProposal(pr);          // ...pressAdvice runs an AUTO move itself
+      if (c.revision) await pressAdvice({ verb, key, revision: c.revision }); else await proposeDirect(verb, key, true, null);
     } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
   };
   // a dry run of a proposed report (PW-195): the server refuses anything that could write

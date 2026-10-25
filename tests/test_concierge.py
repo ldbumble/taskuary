@@ -932,6 +932,20 @@ class ActTests(unittest.TestCase):
         prop = concierge.propose_direct(s, 'not_ours', key, table=True)
         self.assertEqual((prop['kind'], prop['target'], prop['params']), ('idea.act', i['IdeaId'], {'verb': 'dismiss'}))
 
+    def test_a_desk_press_runs_at_once_and_writes_nothing_in_the_owners_name(self):
+        """The 2026-10-25 sweep: a row button's press was written into the chat as an owner line nobody typed ("Not ours: ..."), with a
+        card of its own that folded the next item, and a verb that was not AUTO drew "Nothing happens until you say yes" over a button
+        already pressed. The press is the decision (assistant-is-a-router); the phone's picks keep their lines."""
+        s, i, key = self._idea()
+        dock = general.dock_task(s, 'owner')[0]['TaskId']
+        before = len(general.chat_rows(s, dock))
+        prop = concierge.propose_direct(s, 'mine', key, table=True, press=True)
+        self.assertTrue(prop['auto'], 'a pressed Make a task waits for a second yes')
+        self.assertEqual(len(general.chat_rows(s, dock)), before, 'the press wrote lines into the chat')
+        self.assertIn(prop['id'], concierge.PRESSED)
+        concierge.propose_direct(s, 'mine', key, table=True)                       # ...the phone's pick keeps its record
+        self.assertEqual([r['ActorType'] == general.USER_TYPE for r in general.chat_rows(s, dock)[before:]][:1], [True])
+
 
 class ApiTests(unittest.TestCase):
     def test_the_page_reads_the_pile_pulls_the_next_and_lists_its_chats(self):

@@ -32,8 +32,8 @@ def rpc(tid, method, params=None, headers=None, n=[0]):
                   json={'jsonrpc': '2.0', 'id': n[0], 'method': method, **({'params': params} if params else {})})
 
 
-def tool(tid, name, **args):
-    r = rpc(tid, 'tools/call', {'name': name, 'arguments': args})
+def tool(tid, tool_name, **args):
+    r = rpc(tid, 'tools/call', {'name': tool_name, 'arguments': args})
     assert r.status_code == 200, r.text
     res = r.json()['result']
     return res['content'][0]['text'], res['isError']
@@ -106,6 +106,18 @@ class TheServer(unittest.TestCase):
         with mock.patch.dict(REGISTRY, {'linkedin_post': lambda cfg: ran.append(1) or ('posted', '')}):
             text, err = tool(self.tid, 'run_system', type='linkedin_post', text='We shipped.')
         self.assertFalse(err, text); self.assertIn('"queued": true', text); self.assertEqual(ran, [])
+
+    def test_search_tasks_finds_a_task_by_its_words(self):
+        text, err = tool(self.tid, 'search_tasks', words='renewal')
+        self.assertFalse(err, text); self.assertIn('Brief Alex before the renewal call', text)
+
+    def test_person_knowledge_and_calendar_answer_in_words(self):
+        text, err = tool(self.tid, 'person', name='gail@northwind.example')
+        self.assertFalse(err, text); self.assertIn('Renewal terms', text)
+        text, err = tool(self.tid, 'search_knowledge', text='renewal')
+        self.assertFalse(err, text)
+        text, err = tool(self.tid, 'calendar', days=3)
+        self.assertFalse(err, text)
 
     def test_my_task_shows_the_checklist(self):
         text, _ = tool(self.tid, 'my_task')

@@ -120,7 +120,7 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if name == 'search_tasks':
         from . import search
         got = search.everything(store, a.get('words', ''))
-        return _out(_j([{k: h.get(k) for k in ('kind', 'id', 'ref', 'title', 'snippet', 'when', 'status') if h.get(k)} for h in got.get('hits', [])][:40]),
+        return _out(_j([{k: h.get(k) for k in ('type', 'id', 'ref', 'title', 'sub', 'snippet', 'when', 'status') if h.get(k)} for h in got.get('hits', [])][:40]),
                     fence_it=True)
     if name == 'person':
         from . import people

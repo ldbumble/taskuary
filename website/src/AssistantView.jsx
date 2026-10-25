@@ -53,6 +53,7 @@ import ProposalCard from "./ProposalCard.jsx";
 import { adviceRead, tableOf, tableWords } from "./tableState.js";
 import { ReportLink } from "./BugReportDialog.jsx";
 import { openBugReport, shownError } from "./bugReportOpen.js";
+import { AgentSteps } from "./AgentStepRows.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
 import { SlotPicker } from "./CalendarPick.jsx";
 import { agentOpen } from "./taskFilter.js";
@@ -969,6 +970,8 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
               don't need all this text") */}
           {/* ...and over a PROPOSAL only what its card does not say - the heading and its line were the sentence's
               first half (the owner, 2026-09-24: "if there is box don't show it again") */}
+          {/* WHAT IT LOOKED AT AND PRESSED, over what it says (troubleshoot.py): the general agent's own rows, kept on the line */}
+          {!!(m.steps?.length || m.card?.steps?.length) && <AgentSteps data={{ steps: m.steps?.length ? m.steps : m.card.steps }} />}
           {text && !(m.card && kind && !["proposal", "walk", "setup"].includes(kind)) ? (looksMd(text) ? <Md text={text} /> : text.split("\n").map((p, i) => <p key={i}>{p}</p>)) : null}
           {/* a word pressed under a line that carries no item (a failure's Update branch): its badge on that line */}
           {!kind && pressedOf(m) && <Pressed label={pressedOf(m)} />}
@@ -1089,6 +1092,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [resetting, setResetting] = useState(false);  // replacing a chat is housekeeping, never an AI turn
   const [work, setWork] = useState([]);              // the turn's tool calls and progress, as they stream
   const [words, setWords] = useState("");            // ...and the answer's words as they are written - the finished answer replaces them
+  const [steps, setSteps] = useState([]);            // ...and its own steps, looking into the app's trouble - kept on the answer after
   const [err, setErrRaw] = useState("");
   const setErr = useCallback((v) => {
     if (typeof v === "string" && DEMO_SAID.has(v)) { setMsgs((m) => [...m, { id: `d${Date.now()}`, role: "assistant", text: v, options: [] }]); return; }
@@ -1272,7 +1276,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const turnOnce = useCallback(async (body) => {
     turnsBegun.current += 1;
     if (body.mode === "next") body = { ...body, fyi: fyiWant.current };
-    setWork([]); setWords("");
+    setWork([]); setWords(""); setSteps([]);
     const stop = new AbortController(); stopRef.current = stop;
     const plain = async () => {
       const endpoint = body.mode === "open" ? "/api/concierge/open" : body.mode === "next" ? "/api/concierge/next" : "/api/concierge/say";
@@ -1299,6 +1303,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const answer = await readTurn(res.body, (ev) => {
       // the words as the model writes them (agents.spoken: never its CALL line) - drawn at once, replaced by the answer
       if (ev.type === "words") { setWords(String(ev.detail || "")); return; }
+      // ...and the steps it takes looking into the app's own trouble (troubleshoot.py), drawn as the general agent's are
+      if (ev.type === "steps") { setSteps(Array.isArray(ev.detail?.steps) ? ev.detail.steps : []); return; }
       if (ev.type === "error") {
         setWords("");
         const error = new Error(ev.error || "The assistant could not answer.");
@@ -1314,7 +1320,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       if (ev.type === "tool_call" && !/^(ToolSearch|TodoWrite|TaskCreate|TaskUpdate|TaskList|Skill)$/.test(ev.name || ""))
         setWork((w) => [...w, `${ev.name || "tool"} ${toolTarget(ev.detail?.args).slice(0, 90)}`].slice(-6));
     });
-    setWords("");
+    setWords(""); setSteps([]);
     if (answer) { setWork([]); return answer; }
     throw new Error("The assistant stopped without an answer.");
   }, []);
@@ -2096,7 +2102,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         const aid = `a${Date.now()}`;
         // ...and a lit button or a press is no line at all (the owner, 2026-10-23: "what the heck is Lit"): only words get one
         if (data.say || data.options?.length || data.chips?.length)
-          setMsgs((m) => [...m, { id: aid, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [] }]);
+          setMsgs((m) => [...m, { id: aid, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [], steps: data.steps || [] }]);
         // A TYPED PUT-DOWN WAS PRESSED (concierge._put_down - the owner, 2026-10-23: "it should collapse the task and write on it marked done
         // with note"): its card wears the button's badge, and on the table it is put down as the row's own press puts it down - folded, the
         // next item up - never a line saying so
@@ -2371,7 +2377,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (c.verb === "go" && c.href) { openAppLink(c.href); return; }
     // ...a receipt's own task, and its bug report, from the row (they were buttons in the line)
     if (c.verb === "opentask" && c.tid) { openTaskRef.current?.({ tid: c.tid }); return; }
-    if (c.verb === "bug") { openBugReport(shownError(c.text)); return; }
+    // ...and the app's own trouble the chat could not fix (troubleshoot.chips): drafted from what it found, not the page's last error
+    if (c.verb === "bug") { openBugReport(c.report || shownError(c.text)); return; }
     if (c.verb === "setupask") { askSetup(); return; }
     // ...and the end of the walk's way to walk again: the day card's own button and handler, on the row (the owner, 2026-10-22)
     if (c.verb === "walk") { start(null); return; }
@@ -3182,6 +3189,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                   <button type="button" className="tq-chip" style={{ marginLeft: 8 }} title="Stops the answer being written and gives you the chat back."
                     onClick={() => { api.post("/api/concierge/stop").catch(() => {}); stopRef.current?.abort(); }}>Stop</button>
                 )}
+                {busy && !!steps.length && <AgentSteps data={{ steps }} />}
                 {!!work.length && <div className="tq-work">{work.map((w, i) => <div key={i}>{w}</div>)}</div>}
               </div>
             </div>

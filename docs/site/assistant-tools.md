@@ -15,8 +15,8 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text) |
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear, pipe.defer(select, until), pipe.close(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
 | **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how), report.edit(config), report.delete |
-| **app** | settings, connections, roles, scripts and kept facts | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, script.start(name), memory.remember(note), people.relate(who), hub.publish(title, body, topic?, kind?, why_earned?) |
-| **look** | look-ups - they run at once and change nothing | app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
+| **app** | settings, connections, roles, scripts and kept facts | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), script.start(name), memory.remember(note), people.relate(who), hub.publish(title, body, topic?, kind?, why_earned?) |
+| **look** | look-ups - they run at once and change nothing | app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
 
 A task you name goes in `ref` ("TQ-0123"); otherwise the tool acts on what is on the table.
 
@@ -670,6 +670,15 @@ Switch a connection back on.
 
 <p class="runs">Brings up its button for you to press.</p>
 
+### `app.repair`
+
+Run the simple repair app.health named for a part of Taskuary, then read it again.
+
+- `name` - the connection
+- `how` - restart_bridge (the WhatsApp bridge this computer runs), sync or test, as app.health said
+
+<p class="runs">Runs at once and says what it changed.</p>
+
 ### `script.start`
 
 Start a script by its name: walk me through my tasks | set up a report.
@@ -889,6 +898,14 @@ Every live connection: name, type, whether it has a key, last sync, last error -
 One connection in full.
 
 - `name` - part of its name (or `connector_id`)
+
+<p class="runs">Runs at once and changes nothing.</p>
+
+### `app.health`
+
+Why a part of Taskuary itself is not working, read now - the connection, the WhatsApp bridge asked directly, its log, the last sync and error - and the simple repair it has, if any.
+
+- `name` (optional) - the connection (whatsapp, telegram, outlook...), or none for everything failing
 
 <p class="runs">Runs at once and changes nothing.</p>
 

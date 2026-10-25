@@ -8203,6 +8203,9 @@ def _refresh_chat_context(task_id: int = None, message_id: int = None, grace: bo
 
 from . import wrapup as _wrapup
 _wrapup.REFRESH = _refresh_for_finish
+# ...and the chat's own repair of a connection that stopped (troubleshoot.repair): one type through the chat lane, waited on
+from . import troubleshoot as _troubleshoot
+_troubleshoot.SYNC = lambda typ: _poll_reports(0, what=f'syncing {typ}', only=[typ], wait=True)
 
 
 _NOTICED = {}      # funnel key -> the message-set revision the owner was last told about (PW-052: once per revision)

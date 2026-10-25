@@ -47,3 +47,17 @@ export async function type(page, words) {
   const box = await page.waitForSelector(".tq-compose textarea:not([disabled])", { timeout: 20000 });
   await box.click({ clickCount: 3 }); await box.type(words); await page.keyboard.press("Enter");
 }
+// every line the chat draws from now on, with its time - a line that stood for a frame counts (MutationObserver)
+export const watch = (page) => page.evaluate(() => {
+  const t0 = performance.now(), log = [];
+  const add = (s, el) => { s = (s || "").trim(); if (s && el?.closest?.(".tq-msg")) log.push({ t: Math.round(performance.now() - t0), s: s.replace(/\s+/g, " ").slice(0, 200),
+    you: !!el.closest(".tq-msg.you") }); };
+  const mo = new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) add(n.innerText ?? n.textContent, n.nodeType === 1 ? n : n.parentElement); });
+  mo.observe(document.body, { subtree: true, childList: true });
+  window.__watchStop = () => { mo.disconnect(); return log; };
+});
+export const unwatch = (page) => page.evaluate(() => window.__watchStop?.() || []);
+export const liveCard = (page) => page.evaluate(() => {
+  const c = [...document.querySelectorAll(".tq-canvas-live [data-tq-canvas-item], .tq-canvas-live .tq-card")].filter((x) => x.getBoundingClientRect().height > 0 && !x.closest("[data-tq-folded]")).pop();
+  return (c?.innerText || "").replace(/\s+/g, " ").slice(0, 120);
+});

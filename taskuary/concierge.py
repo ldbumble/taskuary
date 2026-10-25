@@ -3584,12 +3584,23 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
             'clear': clear, 'repo_choices': choices, 'alts': alts_for(store, it, verb) if not elsewhere else []}
 
 
+# THE OPERATIONS A DESK BUTTON PROPOSED (propose_direct `press`): no proposal card is written for them, so receipt_turn knows them from
+# here - op id -> the item's key, which is also what _stamp_pressed marks (a processing row's key is not its message's `msg:<id>`)
+PRESSED: dict = {}
+
+
 def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'owner', table: bool = False, exact: bool = False,
-                   picks: dict | None = None) -> dict:
+                   picks: dict | None = None, press: bool = False) -> dict:
     """A card's own button on ONE entry (PW-151): the same proposal the words would make, without the interpreter -
     the target is explicit. From a card it never settles what is on the table and the entry's siblings are not
     touched; from the chips under the composer (`table`) the entry IS the table, so a plain verb runs at once and
-    settles it, exactly as the typed word would."""
+    settles it, exactly as the typed word would.
+
+    `press`: a BUTTON on the desk (/api/concierge/propose) - the press is the decision, so it runs at once (`auto`) whatever the verb,
+    and nothing is written in the owner's name or as a card to confirm (the 2026-10-25 sweep: "Not ours" drew an owner bubble "Not ours:
+    FW: ..." nobody typed and a second card that folded the batch after it; "Chase them" and "Put it on my list" drew "Nothing happens
+    until you say yes" over a button already pressed - assistant-is-a-router, 2026-10-19: no confirm cards, the row's button IS the
+    confirmation). The phone's picks keep the conversation's record: a chat has no buttons, its lines are what was said."""
     verb = handoff_verb(store, canon_verb(verb))
     if verb not in PROPOSALS: raise ValueError(f'{verb} is not something a card proposes')
     item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
@@ -3601,7 +3612,7 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
     tid = general.dock_task(store, actor)[0]['TaskId']
     why = cannot(item, verb, store)
     if why: raise ValueError(why)
-    record_related(store, tid, item, 'user', f"{PROPOSALS[verb][1]}: {item.get('title') or item.get('ref') or key}")
+    if not press: record_related(store, tid, item, 'user', f"{PROPOSALS[verb][1]}: {item.get('title') or item.get('ref') or key}")
     # `picks`: the agent box's profile, brain and model beside its words (AGENT_PICKS) - a hand-off's only
     picked = {k: v for k, v in (picks or {}).items() if k in AGENT_PICKS and v}
     try: prop = propose_for(store, tid, {'verb': verb, 'text': text or '', 'on_item': True, **picked}, item, text or '', actor, table=item if table else None)
@@ -3613,7 +3624,11 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
         record_related(store, tid, item, 'assistant', f"{str(e)[:1].upper()}{str(e)[1:]}.", {'kind': 'words', 'key': None, 'chips': way})
         return {'id': None, 'failed': True, 'say': f"{str(e)[:1].upper()}{str(e)[1:]}.", 'chips': way, 'key': key}
     prop['settles'] = bool(table and PROPOSALS[verb][2])
-    if table and verb in AUTO: prop.update(auto=True, say_card=prop.get('note') or '', say=f"{prop['label']} - {_where(item)}." + (f" {prop['note']}" if prop.get('note') else ''))
+    if press or (table and verb in AUTO): prop.update(auto=True, say_card=prop.get('note') or '', say=f"{prop['label']} - {_where(item)}." + (f" {prop['note']}" if prop.get('note') else ''))
+    if press:
+        if len(PRESSED) > 500: PRESSED.clear()
+        PRESSED[prop['id']] = item.get('key') or key
+        return prop
     record_related(store, tid, item, 'assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'], 'op': prop['id'],
                                                                'tid': prop.get('tid'), 'ref': prop.get('ref'), 'lane': item.get('lane')})
     return prop
@@ -4265,7 +4280,12 @@ def _past(store, op: dict, ref: str) -> str:
 
 
 def _item_of(store, op: dict) -> tuple:
-    """(task id, card keys) of what an act was about - the item line _stamp_pressed marks."""
+    """(task id, card keys) of what an act was about - the item line _stamp_pressed marks - and the row a desk button pressed it on"""
+    tid, keys = _item_of_target(store, op)
+    return tid, keys | ({PRESSED[op['id']]} if op.get('id') in PRESSED else set())
+
+
+def _item_of_target(store, op: dict) -> tuple:
     tk, target, p = op.get('targetKind'), op.get('target'), op.get('params') or {}
     try:
         if tk == 'task': return int(target), {f'task:{int(target)}', f'agent:{int(target)}'}
@@ -4354,7 +4374,7 @@ def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = 
     # ...and what was pressed on the item on its table (`table`, on_table): that is this chat, and the owner is looking at it
     raw = store.get_setting('assistant_dock_task_id')
     dock_tid = int(raw) if str(raw or '').isdigit() else None
-    proposed = bool(dock_tid) and _chat_proposed(store, dock_tid, op.get('id'))
+    proposed = bool(dock_tid) and (op.get('id') in PRESSED or _chat_proposed(store, dock_tid, op.get('id')))
     if not dock_tid or not (table or proposed): return {'say': line, 'chips': []}
     if st != 'done':
         way = recover(store, op, actor, llm)

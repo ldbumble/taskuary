@@ -284,7 +284,7 @@ class BeforeCommit extends React.Component {
   render() { return null; }
 }
 
-function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onMoreFyi, settingUp = false, noAi = false, tag = "on the table" }) {
+function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onMoreFyi, settingUp = false, noAi = false, tag = "on the table", coming = false }) {
   const items = pile?.items || [];
   const sendCaps = useCapabilities();       // a draft its channel cannot send wears "draft to copy", never the flag (railStatus)
   // a task read newer than this rail takes back its agent lane (railStatus.agentGone): the row draws again when one says something new
@@ -333,6 +333,10 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // `members` is the server's word for them; `items` is the same list as cards, and is what an
   // older server sends - read either, so the bracket cannot go missing on a version skew.
   const batchKeys = new Set(batch ? (batch.members || (batch.items || []).map((i) => i.key)) : []);
+  // BETWEEN TWO BATCHES the band keeps room for the one on its way (the 2026-10-25 sweep): "All read, next" lands the settled rail before the
+  // next batch is on the table, and for that moment the band fell to its floor - "6 more fyi" between 8 and 4, "2 more fyi" before none.
+  // The batch the server has chosen next (expected_next_members) holds its rows in view until it lands; it is not ringed before it is up.
+  const nextBatch = new Set(!current && coming && (pile?.expected_next_members || []).length > 1 ? pile.expected_next_members : []);
   const curKey = current && !batch ? current.key : null;
   // a task named in the chat is on the table without being in the pile: it joins its own band
   const known = curKey && visibleItems.some((i) => i.key === curKey);
@@ -473,7 +477,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   const caps = trimCaps(base, bands, trim);
   // what a band draws: its cap's worth, and whatever is on the table wherever in the band it sits
   const shownIn = (level, rows) => { const cap = opened.has(level) ? rows.length : (caps[level] ?? rows.length);
-    return rows.filter((i, n) => n < cap || i.key === curKey || batchKeys.has(i.key)); };
+    return rows.filter((i, n) => n < cap || i.key === curKey || batchKeys.has(i.key) || nextBatch.has(i.key)); };
   // THE RAIL IS ONE TAB STOP (owner-approved, 2026-10-20): a listbox with a roving tabindex - Tab lands on the row on the table (else
   // the first), Up/Down move the focus ring, Enter opens the row as a click does, Escape gives focus back to where it came from
   const [kbdKey, setKbdKey] = useState(null);
@@ -3311,7 +3315,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       onInventoryFilter={inventoryFilterChanged} unreadInventory={pile}
       // a task Removed as not a task leaves the rail with "Removed <title> - Undo" over it (Removed.jsx); Undo puts it back on the rail
       top={<><UndoLine kinds={["task"]} onRestored={() => { loadPile(true); onChanged?.(); }} sx={{ mx: 1, mt: 1, mb: 1 }} /><Pile pile={railPile} settingUp={firstRun ? setupTodo || "finish setting up" : ""} noAi={!!state && !(state.providers || []).length}
-        current={old || table.folded || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem}
+        current={old || table.folded || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem} coming={nextComing || busy}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
         onPull={(key, asUser) => { sectionRef.current = null; if (table.folded && key === table.key) unfoldTable(); else pull(key, asUser); }}
         onSection={walkSection} onMoreFyi={moreFyi} tag={tableSays.tag} onCurrent={() => { setRailOpen(false); if (table.folded || table.place) unfoldTable(); }} /></>}

@@ -89,7 +89,7 @@ test("Mark done, Remove and Remind me draw the next item at the press; a failed 
   const view = src("AssistantView.jsx");
   assert.match(view, /putDown: \(key, tid = null\) => \{[^\n]*drawNextEarlyRef\.current\?\.\(key\); \}/, "the press that folds the item draws the next");
   assert.match(view, /pickUp: \(key, why\) => \{ takeEarlyBackRef\.current\?\.\(\);/, "a close that fails takes the drawn one down first");
-  assert.match(view, /const takeEarlyBack = \(\) => \{ const e = earlyRef\.current; earlyRef\.current = null; if \(e\) unshow\(e\); \};/, "...and the closed item is back on the table");
+  assert.match(view, /const takeEarlyBack = \(\) => \{ const e = earlyRef\.current; earlyRef\.current = null; movedOnRef\.current = false; if \(e\) unshow\(e\); \};/, "...and the closed item is back on the table");
   assert.match(view, /earlyRef\.current = drawAhead\(\{ id: `a\$\{Date\.now\(\)\}`, role: "assistant", text: "", options: \[\], chips: \[\], card: it \}\);/, "on the one road ahead");
   assert.match(view, /!heldTask\(it\.tid\) \|\| heldTerm\(it\.tid\) === undefined\) return;/, "only from a held read, as a Next draws");
   assert.match(view, /if \(early\) \{ selectionRef\.current = null; currentRef\.current = null; carryRef\.current = early; \}\s+else clearTable\(\);/,

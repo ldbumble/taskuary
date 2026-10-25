@@ -3093,7 +3093,10 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
     if selection is not None and key is not None:
         raise ValueError('a captured automatic selection cannot name a different item')
     # ...and the card it left wears the press, as every press's does (_stamp_next): "Read" or "Next", surviving a reload
-    put_down = (lambda: (move_on(store, leaving, actor), _stamp_next(store, tid, leaving))) if leaving else (lambda: None)
+    # ...and a card the page drew AHEAD of any answer - the next task a close put up at its press (drawNextEarly), Next pressed on it
+    # before the close's own walk-on was asked for - has no line here to wear it, so it is written now, wearing it: the card was shown
+    # and walked past, and it was gone on reload (the owner's walk, 2026-10-25: the task after a Mark done kept no Next)
+    put_down = (lambda: (move_on(store, leaving, actor), _stamp_next(store, tid, leaving, row=_row_of(p, leaving)))) if leaving else (lambda: None)
     # ...and the row being left is not the next one: the pile is read BEFORE Next puts it down, and a task merely opened stays
     # walkable (processing_unread: actionable), so only this keeps Next from offering it straight back (the page sends it too)
     if leaving and selection is None: exclude = exclude or leaving
@@ -4361,11 +4364,20 @@ def next_badge(card: dict) -> str:
     return buttons.label('next', 'batch' if c.get('kind') == 'fyis' else 'read' if read else None)
 
 
-def _stamp_next(store, dock_tid: int, key: str, label: str = None) -> bool:
+def _row_of(p, key):
+    """The pile's row for `key` (by its key or an alias), else None - the pile is read before Next puts it down."""
+    return next((i for i in (p or {}).get('items') or [] if key in (i.get('key'), *(i.get('aliases') or ()))), None)
+
+
+def _stamp_next(store, dock_tid: int, key: str, label: str = None, row: dict = None) -> bool:
     """Next's badge on the card it left, from the server too, so a reload draws it - only on a card nothing else was pressed on.
-    `label`: a card's own verb that walked on through the settle road (an fyi batch's "All read, next"), in place of Next's word."""
+    `label`: a card's own verb that walked on through the settle road (an fyi batch's "All read, next"), in place of Next's word.
+    `row`: the item itself, for a card the page drew with no answer behind it (drawNextEarly): it has no line yet, so it gets one here."""
     try:
         c, card = _item_line(store, dock_tid, {key})
+        if not c and row and row.get('kind') != 'fyis':
+            record_related(store, dock_tid, row, 'assistant', brought_up(row), card_for(row) | {'chips': [], 'pressed': label or next_badge(row)})
+            return True
         if not c or card.get('pressed'): return False
         rewrite(store, int(c['CommentId']), _MARK.sub('', c.get('Body') or ''), {**card, 'pressed': label or next_badge(card)})
         return True

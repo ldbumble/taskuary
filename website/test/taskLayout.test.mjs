@@ -92,7 +92,8 @@ test("Close out under a Result on a task nobody sent: no 'Nobody sent this one',
   assert.equal(CLOSE_BY_HAND, "Mark done closes it, or close it with a note.");
   const src = taskSource();
   assert.match(src, /\|\| \(co\.advice \? "Nobody sent this one[^"]*" : CLOSE_BY_HAND\)/);
-  assert.match(src, /: co\.chip \? <LifecycleChip kind="reply" phase=\{replyMessage \? replyState : "not available"\} compact \/> : null/);
+  // ...and no reply pill on Close out at all now: the header's pill says it, once (the task-view cleanup, owner-approved 2026-10-25)
+  assert.doesNotMatch(src, /<LifecycleChip kind="reply"/);
   assert.match(src, /pane === "reply" && co\.writeupAt === "closeout" && <WriteupBlock/);
   assert.match(src, /co\.writeupAt === "result" && <WriteupLine view=\{writeup\} \/>/);
   assert.doesNotMatch(src, /Closing the session and writing up what is on screen — the agent is not asked anything\.\s*<\/Typography>\s*\) : workspaceMode === "live" && peek/,

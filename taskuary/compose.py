@@ -76,6 +76,7 @@ def catalog(store) -> list:
     the composer can answer "you would need to connect Datadog first" instead of inventing a
     config that will fail on its first scheduled run."""
     from .reports import REGISTRY, PLANNED, CONNECTION_OF, card_of
+    from .trackers import TYPES as TRACKER_WRITES
     conns = {}
     for c in store.list_connectors():
         if c['Type'] not in conns or (c.get('Active') and not conns[c['Type']].get('Active')):
@@ -83,6 +84,7 @@ def catalog(store) -> list:
     out = []
     for t, fn in sorted(REGISTRY.items()):
         if t in PLANNED or t == 'dashboard': continue      # a dashboard is built by its own composer, never a report's source
+        if t in TRACKER_WRITES: continue      # a tracker write is a proposal, never a source
         card = card_of(t)
         c = conns.get(card)
         needs = t in CONNECTION_OF

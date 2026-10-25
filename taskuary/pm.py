@@ -1,8 +1,9 @@
 """Project-management inboxes: Jira, Asana, Monday.com, ClickUp and Todoist as trigger
 channels. The item that matters from these systems is the one ASSIGNED TO YOU - it lands on
 the Timeline and goes through the same triage as mail, so "assigned in Jira" and "asked by
-email" end up in the one funnel. Each connector polls its own API with the owner's token;
-nothing is written back.
+email" end up in the one funnel. Each connector polls its own API with the owner's token.
+Writing back - a comment, a move, an assignment, the close-out - is trackers.py, and only ever
+on the owner's press (2026-10-25).
 
 Todoist is the odd one: it is a personal list, so most tasks have no assignee at all and
 "assigned to me" would match only shared projects. Its poll asks what Todoist itself says

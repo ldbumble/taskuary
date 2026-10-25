@@ -253,8 +253,9 @@ def send_teams(store, chat_id: str, body: str, connector_id=None) -> dict:
 # and they disagreed - a github task with replies off closed with no draft while the UI
 # still promised one.
 #
-# 'report' and the read-only trackers can never carry a reply: nothing is written back to
-# Jira or Sentry by design. github is gated on its own card switch (a public comment is the
+# 'report' and the trackers never carry a REPLY: Sentry is read-only by design, and what goes
+# back to Jira, Monday or Linear is a comment or a move the owner approves (trackers.py, 2026-10-25),
+# never a reply drafted to the item's reporter. github is gated on its own card switch (a public comment is the
 # owner's call). Everything else is the owner's setting.
 # The four chat servers that behave like Discord. Named here, not imported, so outbound stays
 # free of chatservers until a message actually goes to one.

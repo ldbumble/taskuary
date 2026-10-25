@@ -239,11 +239,11 @@ capped at 9,000 characters (whole sections drop from the end, the item and its v
 </tr>
 <tr>
 <td><code>LEARNED.md</code></td>
-<td><code>## What you do next</code> and nothing else - your press habits in use, closest to this sender first, within its budget; the sorting lines are triage&#39;s</td>
+<td><code>## Your people</code>, <code>## What you care about</code>, <code>## How you work</code> and <code>## Promises</code> - the lines in use, closest to this sender first, within its budget</td>
 </tr>
 <tr>
 <td>The ledger</td>
-<td>Outcome rows on the item, and your habit for each verb offered on this kind of item from this sender</td>
+<td>Outcome rows on the item, and what came of each verb offered with this sender before - evidence it weighs, never a line it says</td>
 </tr>
 <tr>
 <td>The playbook, <code>SOUL.md</code>, <code>JOB.md</code></td>
@@ -262,21 +262,16 @@ past their day is chased, where the row draws Chase.</p>
 <p>Those findings are never rows. They attach to the item at its revision and show when the walk
 reaches it, as one line in the strip at the foot of the canvas, above the action row, and the
 advised button on the row is the one dark button - the row&#39;s own, pressed through its own handler.
-<strong>Why?</strong> beside the line says what it rests on, and the count under it is your habit, not the
-Advisor&#39;s record: &quot;Your own habit, not the Advisor&#39;s record: you pressed Send to agent 3 of the
-last 4 times on GitHub items from northwind/ledger&quot;. The number is read from your presses and the
-outcome ledger, never written by the model. A changed item drops its old line by one comparison.
+<strong>Why?</strong> beside the line says what it rests on. A changed item drops its old line by one comparison.
 The rail&#39;s order does not read advice, by construction: the test that pins it builds the rail with
 and without advice and asks for the same order. Two settings govern it, in Settings → Advisor: the
 switch, and a cap on judgements per hour.</p>
-<p><strong>What you pressed.</strong> Every press on the row, and Next, while a line is shown is kept: the move it
-lit, the one you pressed, and what kind of item it was from whom. That log is where your moves are
-learned: a moment you answer the same way becomes a line in <code>LEARNED.md</code> - watching first, then
-under <code>## What you do next</code> once it is in use (three items, from two people or threads, the same
-press at least six times in ten) - and the Advisor reads it. Press otherwise twice in a row and it
-goes back to watching, the same line with its history. Press habits never reach triage: triage
-reads <code>## How you sort mail</code>, learned only from your sorting verdicts. Delete the line to undo it;
-that moment then counts only your presses from then on.</p>
+<p><strong>What you pressed.</strong> Every press on the row, and Next, is kept: the move it lit, the one you
+pressed, and what kind of item it was from whom. It is a record, and nothing is learned from it: a
+button press is not a fact about how you work, and a count of them once lit the same button on two
+asks from one domain that had nothing else in common. What <code>LEARNED.md</code> knows comes from what you
+did, in context - who wrote, what they are to you, how soon you answered, what you put off and until
+when, whom you handed it to.</p>
 <p><strong>How it is tested.</strong> <code>tests/advisor_cases.py</code> is the eval: every state the demo and the advisor
 matrix hold, plus a few they lack, each with the moves that are right there, the ones that never
 are, and what its prompt must carry. It runs in the suite against the demo&#39;s scripted Advisor.
@@ -370,9 +365,9 @@ when are facts already in the store, and the once-a-day sweep reads them without
 facts mean is always the model&#39;s, at reflection.</p>
 <p><strong>Reflection distils it into the stores that exist.</strong> The resolved rows reach reflection as
 evidence lines with their own ids, <code>out</code> beside the <code>mem</code>, <code>rv</code> and <code>task</code> ids a learned line
-already cites. Habits about you go to <code>LEARNED.md</code> with the same grammar, the same strength, the
-same decay: &quot;green PR from the coding agent: you merge it, 8 of 8&quot;; &quot;the agent asks &#39;open the PR?&#39;: you
-always say yes&quot;. A habit carries the one number it never had, the regret count. Facts about other
+already cites. What you do goes to <code>LEARNED.md</code> with the same grammar, the same strength, the
+same decay: &quot;a green PR from the coding agent is merged as it stands&quot;; &quot;when an agent asks to open
+the PR, you say yes&quot;. Facts about other
 people (&quot;Ray answers in three days and needs a second chase&quot;) and about kinds of work (&quot;closing
 from a thread with an open question reopens 40%; ask first&quot;) go elsewhere: a page per person
 derived from the ledger, and work facts proposed into the playbook they belong to (both below).</p>

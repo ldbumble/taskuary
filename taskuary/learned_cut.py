@@ -1,20 +1,46 @@
-"""EACH READER ITS OWN SECTION, WITHIN A BUDGET (phase C, 2026-10-23).
+"""EACH READER THE SECTIONS THAT HELP IT, WITHIN A BUDGET (phase C 2026-10-23; one section per SUBJECT since 2026-10-25).
 
 LEARNED.md reached every prompt whole and was cut at character 1500, 2000 or 2500 - triage's cut fell before most of the live
-rules, and the Advisor's habits rode into triage as if a button press were a sorting verdict. The owner (2026-10-23): "why would we
-want button presses to do with triage" - triage reads "How you sort mail" and nothing else, the Advisor "What you do next" and
-nothing else. Each reader asks for its section's in-use lines ranked closest scope first (this sender, their domain or repository,
-this kind of item, then general) and takes whole lines until its budget is spent. What does not fit is recorded as over budget
-(OVER), never dropped without a trace."""
+rules. Then it was one section per reader, and the Advisor's was a press count: "On asks from X, presses Next (1 of 1)" (the owner,
+2026-10-25: a button press is not a fact about a person). Now the sections are about what the owner is like at work - their
+people, what they care about, how they work, their promises, what to bring up - and each reader takes the sections that help it
+(READS), its in-use lines ranked closest scope first (this sender, their domain or repository, then general), whole lines until its
+budget is spent. What does not fit is recorded as over budget (OVER), never dropped without a trace, and every read leaves a
+receipt (memory_use) of the lines it was given for which item."""
 import json, re
+from datetime import datetime
 
-SORT, NEXT = '## How you sort mail', '## What you do next'
-READS = {'triage': SORT, 'agents': SORT, 'assistant': SORT, 'advisor': NEXT}
-TITLE = {SORT: 'How the owner sorts mail (learned from their own sorting verdicts)',
-         NEXT: 'What the owner does next (learned from their own presses)'}
-BUDGET = {'triage': 1500, 'agents': 2500, 'assistant': 2000, 'advisor': 2000}
+# the five subjects, in the document's order: slug -> heading
+SECTIONS = {'people': '## Your people', 'care': '## What you care about', 'work': '## How you work', 'promises': '## Promises',
+            'bring': '## What to bring up'}
+PEOPLE, CARE, WORK, PROMISES, BRING = SECTIONS.values()
+# who reads what (the design's reader matrix, 2026-10-25). Triage reads what the owner cares about - learned from sorting verdicts,
+# so a press, a defer or a reply lag never decides whether mail is a task (ruling 11, 2026-10-23)
+READS = {'triage': ('care',), 'drafter': ('people',), 'advisor': ('people', 'care', 'work', 'promises'), 'assistant': tuple(SECTIONS),
+         'agents': ('people', 'care', 'promises')}
+TITLE = {'people': 'Your people', 'care': 'What you care about', 'work': 'How you work', 'promises': 'Promises', 'bring': 'What to bring up'}
+BUDGET = {'triage': 1500, 'drafter': 600, 'agents': 2500, 'assistant': 2000, 'advisor': 2000}
 OVER = 'learned_over_budget'          # {reader: [keys]} - the lines a reader's budget left out on its last read
+USE_KEEP = 20_000                     # memory_use rows kept; the oldest go past it
 _PLACEHOLDER = re.compile(r'_\([^)]*\)_', re.S)
+_ADDR = re.compile(r'[\w.+-]+@[\w-]+(?:\.[\w-]+)+')
+
+
+def slug_of(heading: str) -> str:
+    """A section heading -> its slug ('people', 'care', ...), '' for any other heading."""
+    h = '## ' + str(heading or '').lstrip('#').strip()
+    return next((k for k, v in SECTIONS.items() if v == h), '')
+
+
+def readers_of(slug: str) -> list:
+    """The readers that take a section, in READS order."""
+    return [r for r, ss in READS.items() if slug in ss]
+
+
+def subject_of(text: str) -> str:
+    """Whom a line is about: the first address in it, lowercased - parsing, not meaning ('' when it names none)."""
+    m = _ADDR.search(str(text or ''))
+    return m.group(0).lower() if m else ''
 
 
 def section(doc: str, head: str) -> str:
@@ -39,12 +65,11 @@ def lines(doc: str, head: str) -> list:
 
 
 def rank(raw: str, key: str, about: dict) -> int:
-    """0 this sender, 1 their domain or repository, 2 this kind of item, 3 general. FACTS the app keeps about the item - its sender,
-    domain, repository, kind - against the line, never a list of words."""
+    """0 this sender, 1 their domain or repository, 3 general. FACTS the app keeps about the item - its sender, domain, repository -
+    against the line, never a list of words."""
     t, a = f'{raw} {key}'.lower(), {k: str(v or '').lower() for k, v in (about or {}).items()}
     if a.get('sender') and a['sender'] in t: return 0
     if any(a.get(f) and a[f] in t for f in ('domain', 'repo', 'scope')): return 1
-    if a.get('kind') and key.startswith('move ') and key.split(' ')[1:2] == [a['kind']]: return 2
     return 3
 
 
@@ -71,15 +96,47 @@ def _note_over(store, reader: str, over: list):
     store.set_setting(OVER, json.dumps({**was, reader: over}), 'learned_cut')
 
 
-def for_reader(store, reader: str, about: dict = None, budget: int = None, doc: str = None) -> str:
-    """The section `reader` reads, as its prompt block: the heading and the in-use lines that fit. '' when there is none - a fresh
-    LEARNED.md is placeholders, and placeholders are not context."""
-    head = READS[reader]
+def receipt(store, reader: str, target: str, keys: list):
+    """One memory_use row: what `reader` was given for `target`. Never raises - a lost receipt costs a "why?", not the read."""
+    try:
+        rid = store._exec('INSERT INTO memory_use (Reader, Target, KeysJson, At) VALUES (?,?,?,?)',
+                          (reader, str(target or ''), json.dumps(keys), datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        if rid and int(rid) % 500 == 0: store._exec('DELETE FROM memory_use WHERE Id <= ?', (int(rid) - USE_KEEP,))
+    except Exception: pass
+
+
+def used(store, target: str = None, reader: str = None, limit: int = 20) -> list:
+    """The receipts, newest first: [{reader, target, keys, at}]."""
+    q, a = 'SELECT * FROM memory_use WHERE 1=1', []
+    if target is not None: q += ' AND Target=?'; a.append(str(target))
+    if reader: q += ' AND Reader=?'; a.append(reader)
+    rows = store._rows(q + ' ORDER BY Id DESC LIMIT ?', (*a, limit))
+    return [{'reader': r['Reader'], 'target': r['Target'], 'keys': json.loads(r['KeysJson'] or '[]'), 'at': r['At']} for r in rows]
+
+
+def names(raw: str) -> set:
+    """Every address a line names, lowercased."""
+    return {a.lower() for a in _ADDR.findall(str(raw or ''))}
+
+
+def for_reader(store, reader: str, about: dict = None, budget: int = None, doc: str = None, target: str = '', sections=None,
+               people=None) -> str:
+    """The sections `reader` reads, as its prompt block: each heading with the in-use lines of it that fit, the reader's budget
+    shared across them, closest to this item first. '' when there is none - a fresh LEARNED.md is placeholders, and placeholders are
+    not context. `sections` narrows the matrix (the drafter's people only); `target` names the item the receipt is for; `people`
+    (addresses) keeps only the people lines about THEM - an agent reads how the owner deals with the people on its own task, never
+    the owner's notes on everyone else (the owner, 2026-10-25)."""
     doc = store.doc('learned') if doc is None else doc
-    keep, over = cut(lines(doc or '', head), budget or BUDGET[reader], about)
+    want = [s for s in READS[reader] if sections is None or s in sections]
+    who = None if people is None else {str(p).lower() for p in people if p}
+    ls = [(raw, k, s) for s in want for raw, k in lines(doc or '', SECTIONS[s]) if s != 'people' or who is None or names(raw) & who]
+    keep, over = cut([(raw, k) for raw, k, _ in ls], budget or BUDGET[reader], about)
+    at = {raw: i for i, raw in enumerate(keep)}
     try: _note_over(store, reader, over)
     except Exception: pass
-    return f'{head}\n' + '\n'.join(keep) if keep else ''
+    got = sorted([(raw, k, s) for raw, k, s in ls if raw in at], key=lambda x: at[x[0]])      # closest to this item first, in each section
+    receipt(store, reader, target, [k for _, k, _ in got])
+    return '\n\n'.join(f'{SECTIONS[s]}\n' + '\n'.join(raw for raw, _, x in got if x == s) for s in want if any(x == s for *_, x in got))
 
 
 def over_budget(store) -> dict:

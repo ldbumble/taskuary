@@ -12,7 +12,7 @@ KNOWN_PRIORITY = {
     'cared_person_question': 'slice 3: triage has no word for important, and reads no people lines',
     'cared_topic': 'slice 3: triage has no word for important, and reads no "What you care about"',
 }
-KNOWN_SAME_DOMAIN = 'slice 1: the press count lights Mark done on both asks from the domain'
+KNOWN_SAME_DOMAIN = None      # slice 1 (2026-10-25): no press count lights a button any more
 
 
 @pytest.fixture(scope='module')
@@ -48,7 +48,7 @@ def test_triage_is_never_worse_than_the_baseline(base, now):
 
 def test_a_press_count_does_not_choose_the_button(now):
     sd = now['same_domain']
-    if sd['moved']: pytest.xfail(KNOWN_SAME_DOMAIN)
+    if KNOWN_SAME_DOMAIN and sd['moved']: pytest.xfail(KNOWN_SAME_DOMAIN)
     assert 'habit' not in sd['by'] and sd['verbs'] == sd['bare'], sd
 
 

@@ -1,21 +1,35 @@
-# LEARNED.md — what the system has learned about {{owner_first}}
+# LEARNED.md — what the system has learned about how {{owner_first}} works
 
-_Taskuary writes this document itself, from what you do. Each section is read by ONE reader and no
-other: triage reads "How you sort mail", the Advisor reads "What you do next". How you write is
-kept in STYLE.md (By recipient), for the drafter. Machine-written lines carry a
-`[s:N | ev: … | seen: … | k: …]` tag — strength, the evidence behind it, when it last held, and the
-key that keeps it the same line as it gets reworded. A line is only read once it is in use: three
-episodes from two people, or your own correction. Delete a line and it stays deleted; reword one
-and your wording stays. Lines without a tag are yours and are never touched. **SOUL.md always
-outranks this file.**_
+_Taskuary writes this document itself, from what you do: who you answer and how soon, what you put
+off and until when, what you hand to whom, what you promise, which ideas you take up. Never from
+which button you pressed, never from personal mail, and never from what a sender says about
+themselves. Each section is about one subject, and each reader takes the parts that help it:
+triage reads what you care about, the Advisor your people, what you care about, how you work and
+your promises, the Assistant all of it. How you write is kept
+in STYLE.md (By recipient). Machine-written lines carry a `[s:N | ev: … | seen: … | k: …]` tag —
+strength, the evidence behind it, when it last held, and the key that keeps it the same line as it
+gets reworded. A line is only read once it is in use: three episodes from two people or threads,
+or your own word. Delete a line and it stays deleted; reword one and your wording stays. Lines
+without a tag are yours and are never touched. **SOUL.md always outranks this file.**_
 
-## How you sort mail
-_(triage reads only this: what you are responsible for and what becomes a task, learned from your
-sorting verdicts — Not ours, Not a task, a kind or repository you moved, rules you approved)_
+## Your people
+_(who matters to you, what they are to you, and how you deal with them: how fast you answer, what
+you hand them, who you copy - never what they are like)_
 
-## What you do next
-_(the Advisor reads only this: what you press on each kind of item, learned from your own presses —
-it lights that button, never presses it; delete a line to undo it)_
+## What you care about
+_(what you are responsible for, what deserves a task, which topics come first and which wait -
+learned from your sorting verdicts: Not ours, Not a task, a kind or repository you moved, rules
+you approved)_
+
+## How you work
+_(your rhythm: when you answer, what you put off and until when, what you hand to agents, what you
+batch)_
+
+## Promises
+_(what you owe on a schedule, and what others owe you, from your own sent words)_
+
+## What to bring up
+_(what the Advisor may raise without being asked: ideas you took up, and what you said no to)_
 
 ## Proposed rules — your call
 <!-- proposed:start -->

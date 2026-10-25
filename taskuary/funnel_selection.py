@@ -139,10 +139,14 @@ def below(items: list[dict], ready: list[dict], exclude, place=None, at_key=None
     # (`msg:<id>`) is still the place's own row under another name
     else:
         p = tuple(place)
+        # ...and two rows with no task number in the same second by their first message, the order's next tie-break (funnel.place_id):
+        # two dashboards filed by one run, the lower put down, and Next walked back up to it (2026-10-25). A place saved before it is shorter
         def from_place(i):
             k = funnel.order_key(i)
             if k[:4] != p[:4]: return k[:4] > p[:4]
-            return len(p) < 6 or k[4] or p[4] or k[5] >= p[5]
+            if len(p) < 6: return True
+            if not (k[4] or p[4]): return k[5] >= p[5]
+            return len(p) < 9 or not (k[4] and p[4]) or k[6] or p[6] or k[7] >= p[7]
         down = [i for i in ready if from_place(i)]
     return down
 

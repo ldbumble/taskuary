@@ -119,7 +119,9 @@ class JudgeTests(_Rail):
         r = s._one('SELECT * FROM advice WHERE Id=?', (rid,))
         self.assertEqual((r['Verb'], r['Line'], json.loads(r['CountJson']), r['Dropped']), ('close', 'Gail answered it herself.', [3, 3, 'with northwind.example'], None))
         self.assertIn('close (Mark done)', llm.calls[0][1]); self.assertIn('out1', llm.calls[0][1])
-        self.assertEqual(advisor.pill(r['Label'], json.loads(r['CountJson'])), f"{r['Label']} · 3 of 3 times")
+        # ...the count is the model's evidence (its ledger line), never a mark on the button (the owner, 2026-10-25)
+        self.assertIn('3 of the last 3 tasks the owner closed stayed closed', llm.calls[0][1])
+        self.assertEqual(advisor.notes(s, f'task:{t}')[0]['pill'], r['Label'])
 
     def test_the_same_revision_is_judged_once(self):
         s = MemoryStore(); t = self._asked_task(s)
@@ -519,15 +521,13 @@ class AuditFixTests(_Rail):
         p = advisor._prompt(s, 'agent.stopped', item, [{'verb': 'reply', 'label': 'Reply'}], 1, 'message', 1)
         self.assertIn('"where it stands": "asked you"', p); self.assertNotIn('"lane"', p); self.assertNotIn('"kind"', p)
 
-    def test_why_says_what_each_count_measures(self):
-        # ...and WHOSE count it is: the owner's habit, never the Advisor's record (the deep dive, 2026-10-20)
-        self.assertEqual(advisor.says('close', (2, 3)), "Your own habit, not the Advisor's record: 2 of the last 3 tasks you closed stayed closed.")
-        self.assertEqual(advisor.says('chase', (1, 4, 'with northwind.example')),
-                         "Your own habit, not the Advisor's record: 1 of your last 4 nudges got an answer with northwind.example.")
-        self.assertEqual(advisor.says('defer', (3, 4, 'press:drafts to vendor.example')),
-                         "Your own habit, not the Advisor's record: you pressed Remind me 3 of the last 4 times on drafts to vendor.example.")
-        self.assertEqual((advisor.says('defer', (3, 3)), advisor.says('close', (1, 1))), ('', ''))
-        self.assertTrue(all('moment like this' not in m for m in advisor.MEASURES.values()))
+    def test_each_count_is_evidence_in_words_of_what_it_measures(self):
+        # the counts are evidence the model reads, never a line on the strip (the owner, 2026-10-25: remove "Your own habit...")
+        self.assertEqual(advisor.measured('close', (2, 3)), '2 of the last 3 tasks the owner closed stayed closed.')
+        self.assertEqual(advisor.measured('chase', (1, 4, 'with northwind.example')), "1 of the owner's last 4 nudges got an answer with northwind.example.")
+        self.assertEqual((advisor.measured('defer', (3, 4)), advisor.measured('close', (1, 1))), ('', ''))
+        self.assertTrue(all('moment like this' not in m and 'habit' not in m for m in advisor.MEASURES.values()))
+        self.assertFalse(hasattr(advisor, 'says') or hasattr(advisor, 'habit_pick'))
 
     def test_the_chat_block_names_the_button_and_what_the_evidence_says(self):
         s = MemoryStore(); t = self._stopped_task(s)

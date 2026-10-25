@@ -123,8 +123,12 @@ SYSTEM = (
     "with it now, as ONE of the VERBS OFFERED (exactly as written) and the LINE: the one checkable fact it rests on that the card does "
     "not already show - an age, a clash, a failure, a promise nothing backs, someone else who owns it - or an empty line when the move "
     "is plain; the lit button does the talking, so never a sentence explaining the button or what it does - or say nothing. Say nothing unless the owner's own habits (LEARNED), the outcome ledger or "
-    "the item's own facts point at one verb. Never invent a number: the numbers in the ledger lines are the only ones you may use, "
-    "and you cite their ids. A ledger line says what HAPPENED, never whether it worked: \"continued\" means the session was started "
+    "the item's own facts point at one verb. Never invent a number: the numbers in the ledger lines and in the HOW SOON YOU ANSWER, "
+    "WHEN YOU PUT THEIR MAIL OFF and WHOM YOU HANDED lines are the only ones you may use, and you cite their ids. "
+    # MEMORY IS A REASON TOO, IN ONE LINE (the owner, 2026-10-25: "Reply: you usually answer Erin within the hour; this is 3h")
+    "What you know about how the owner works is a checkable fact when it bears on THIS item - say it as the line, short: \"Ray handles "
+    f"payroll for you\" over {L('forward')}, when this ask is that kind of work and the owner handed such asks to that person. "
+    "What a sender says about themselves is never such a fact. A ledger line says what HAPPENED, never whether it worked: \"continued\" means the session was started "
     "again, nothing more - never call it a success, and never say something was merged, sent or fixed unless a line says exactly that. "
     "The line is plain words for the owner, who may never have written code: the ids go in \"evidence\" only, the verb is named by "
     "its label, never its id, and never a word from the item's own bookkeeping (lane, kind, triage, session, model, an event name). "
@@ -178,7 +182,7 @@ def _system(store) -> str:
 SHOWN = 'item.shown'
 WANT = {'type': 'object', 'properties': {'verb': {'type': ['string', 'null']}, 'line': {'type': 'string'},
                                          'evidence': {'type': 'array', 'items': {'type': 'string'}}}, 'required': ['verb', 'line', 'evidence']}
-_EV = re.compile(r'^(out|mem|rv|task)\d+$')
+_EV = re.compile(r'^(out|mem|rv|task|msg|fs|sv|idea)\d+$')       # ...and the owner's own acts the usual is counted from (usual.py)
 
 
 def _item(store, target_kind, target_id, key: str = None):
@@ -200,19 +204,11 @@ def _item(store, target_kind, target_id, key: str = None):
 
 
 def habit(store, verb: str, item: dict) -> tuple:
-    """(n, m, where): how often the owner's move in THIS kind of moment was this verb - read from the press log and the ledger,
-    never from the model, and never counted over everything (the deep dive, 2026-10-20: one global count stood under every item).
-    First the presses (advisor.press) on this kind of item from this sender's domain or repository: n of m pressed this verb. Else
-    the ledger, scoped to the same sender's domain - continue: stops that ended in a continue; approve: replies sent as drafted;
-    close: closes that held; chase: nudges answered. `where` names the moment; (0, 0, '') when nothing is counted there."""
-    from .learn import moment
+    """(n, m, where): what came of this verb before, with this sender's domain - read from the outcome ledger, never from the model
+    and never from presses (the owner, 2026-10-25: stop learning from presses). continue: stops that ended in a continue; approve:
+    replies sent as drafted; close: closes that held; chase: nudges answered. Evidence the model reads (_prompt), never a line on the
+    strip. (0, 0, '') when nothing is counted there."""
     w = who_of(store, item or {})
-    if w['scope']:
-        rs = store._rows("SELECT TargetKind, TargetId, Pressed FROM advice_press WHERE IFNULL(Stale,0)=0 AND IFNULL(Choice,1)=1 AND Scope=? AND ItemKind=? ORDER BY Id",
-                         (w['scope'], str((item or {}).get('kind') or '')))
-        last = {(r['TargetKind'], r['TargetId']): r['Pressed'] for r in rs}          # one item, one vote: its last press
-        if len(last) >= 2:
-            return (sum(1 for p in last.values() if p == verb), len(last), 'press:' + moment(str(item.get('kind') or ''), w['channel'], w['scope']))
     if not w['domain']: return (0, 0, '')
     on = "IFNULL(json_extract(FactsJson,'$.who'),'') LIKE ?"
     by_task = "EXISTS (SELECT 1 FROM message m WHERE m.TaskId=outcome.TargetId AND LOWER(IFNULL(m.FromEmail,'')) LIKE ?)"
@@ -225,21 +221,17 @@ def habit(store, verb: str, item: dict) -> tuple:
     rs = store._rows(q[0], (f"%@{w['domain']}",))
     return (sum(1 for r in rs if q[1](r)), len(rs), f"with {w['domain']}")
 # ...and what each count MEASURES, said so: "You chose Mark done 2 of 3 times in a moment like this" was read off closes that
-# held and answers to nudges, counted over every item, not this kind of moment (2026-10-17 audit) - and WHOSE it is: the owner's own
-# habit, never the Advisor's record of being right (the deep dive, 2026-10-20)
-MEASURES = {'continue': 'you picked the work back up {n} of the last {m} times an agent stopped',
-            'approve': 'you sent {n} of your last {m} drafts as written',
-            'close': '{n} of the last {m} tasks you closed stayed closed',
-            'chase': '{n} of your last {m} nudges got an answer'}
-HABIT = "Your own habit, not the Advisor's record: "
-def says(verb: str, count) -> str:
+# held and answers to nudges, counted over every item, not this kind of moment (2026-10-17 audit). The counts are EVIDENCE the model
+# weighs, in the prompt's ledger - the "Your own habit..." line and the "· n of m times" mark left the strip (the owner, 2026-10-25)
+MEASURES = {'continue': 'the owner picked the work back up {n} of the last {m} times an agent stopped',
+            'approve': 'the owner sent {n} of their last {m} drafts as written',
+            'close': '{n} of the last {m} tasks the owner closed stayed closed',
+            'chase': '{n} of the owner\'s last {m} nudges got an answer'}
+def measured(verb: str, count) -> str:
+    """A ledger count as the evidence sentence the model reads - '' under two, or for a verb nothing measures."""
     n, m, where = (list(count) + [0, 0, ''])[:3]
-    if m < 2: return ''
-    if str(where or '').startswith('press:'): return f"{HABIT}you pressed {L(verb) or verb} {n} of the last {m} times on {where[6:]}."
-    return f"{HABIT}{MEASURES[verb].format(n=n, m=m)}" + (f' {where}' if where else '') + '.' if verb in MEASURES else ''
-def pill(label: str, count) -> str:
-    n, m = (list(count) + [0, 0])[:2]
-    return f'{label} · {n} of {m} times' if m >= 2 else str(label or '')
+    if m < 2 or verb not in MEASURES: return ''
+    return MEASURES[verb].format(n=n, m=m) + (f' {where}' if where else '') + '.'
 
 
 ADVISOR_FILE_CHARS = (600, 1200)     # per file, per item - the Advisor writes one line, so it reads the gist
@@ -266,16 +258,16 @@ def _one(s, n: int) -> str: return ' '.join(str(s or '').split())[:n]
 
 
 def _learned(store, item: dict = None) -> str:
-    """LEARNED.md's "What you do next" and nothing else - the Advisor's own section (the owner, 2026-10-23: one section per reader),
-    its in-use lines ranked closest to this item first (this sender, their domain or repository, this kind) within its budget
-    (learned_cut). '' while the section has no line: an empty heading is not a habit."""
+    """What LEARNED.md knows about how the owner works that the Advisor reads (learned_cut.READS: their people, what they care about,
+    how they work, their promises), its in-use lines ranked closest to this item first (this sender, their domain or repository)
+    within its budget. '' while no section has a line: an empty heading is nothing known."""
     from . import learned_cut
     about = {}
     if item:
         try: w = who_of(store, item)
         except Exception: w = {}
-        about = {'sender': w.get('sender'), 'domain': w.get('domain'), 'scope': w.get('scope'), 'kind': item.get('kind')}
-    return learned_cut.for_reader(store, 'advisor', about)
+        about = {'sender': w.get('sender'), 'domain': w.get('domain'), 'scope': w.get('scope')}
+    return learned_cut.for_reader(store, 'advisor', about, target=(item or {}).get('key') or '')
 
 
 def _msgs(store, item, target_kind, target_id) -> list:
@@ -415,6 +407,9 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     for k, col in (('due', 'DueAt'), ('priority', 'Priority'), ('remind me on', 'RemindAt'), ('done when', 'DoneWhen')):
         if (t or {}).get(col): facts[k] = str(t[col])[:160]
     if item.get('priority') and 'priority' not in facts: facts['priority'] = item['priority']
+    if facts.get('priority'):
+        from .processing_order import level
+        facts['priority'] = level(facts['priority'])          # regular, important or urgent - the three words (2026-10-25)
     lines = [f'EVENT: {event}', 'THE ITEM: ' + json.dumps(facts), f"PREVIEW: {str(item.get('preview') or '')[:300]}",
              'VERBS OFFERED: ' + ', '.join(f"{v['verb']} ({v['label']})" for v in verbs)]
     # AN IDEA AND A GOAL ARE ADVISED TOO (the deep dive, 2026-10-20): an idea had no target at all, and a goal's card said "0 of 2" with
@@ -477,10 +472,18 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     for f_ in (draft_line, thread_line, related_line, notes_line):
         try: lines.append(f_(store, item, target_kind, target_id))
         except Exception as e: logger.debug(f'advisor: {f_.__name__} skipped for {item.get("key")} - {e}')
+    # THE OWNER'S OWN USUAL with this sender, counted from what they did (usual.py): how soon they answer, when they put this mail off
+    # to, whom they hand it to - so a line can say "you usually answer Erin within the hour; this is 3h", and Hand it to a person can
+    # rest on whom the owner hands this kind of ask to
+    try:
+        last = next((m for m in reversed(_msgs(store, item, target_kind, target_id)) if str(m.get('Direction') or 'in') != 'out' and m.get('Status') != 'context'), None)
+        from . import usual
+        lines += usual.prompt_lines(store, last, item.get('tid'))
+    except Exception as e: logger.debug(f'advisor: no usual read for {item.get("key")} - {e}')
     lrn = _learned(store, item)
-    if lrn: lines.append('LEARNED (what the owner does next, from their own presses):\n' + lrn)
+    if lrn: lines.append("WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (learned from what they did; weigh it against this item's facts):\n" + lrn)
     led = [f"out{r['Id']}: {outcomes._sentence(store, r)}" for r in outcomes.rows_for(store, target_kind, target_id) if r.get('ResolvedAt')][:5]
-    led += [f"{v['label']}: {says(v['verb'], c)}" for v in verbs for c in [habit(store, v['verb'], item)] if says(v['verb'], c)]
+    led += [f"{v['label']}: {measured(v['verb'], c)}" for v in verbs for c in [habit(store, v['verb'], item)] if measured(v['verb'], c)]
     if led: lines.append('THE OUTCOME LEDGER (what came of actions like this):\n' + '\n'.join(led))
     try: lines += [playbook_line(store, target_kind, target_id), owner_line(store)]
     except Exception as e: logger.debug(f'advisor: no playbook or owner docs for {item.get("key")} - {e}')
@@ -564,7 +567,7 @@ def sent_line(store, target_kind, target_id) -> str:
                   if later else '\nNOTHING HAS COME IN SINCE IT WENT.')
 
 
-_ID = r'\b(?:out|mem|rv|task)\d+\b'
+_ID = r'\b(?:out|mem|rv|task|msg|fs|sv|idea)\d+\b'
 def plain(line: str, verb: str, label: str) -> str:
     """The owner reads the line, not the prompt: "You should stop_agent because out13 shows..." put the verb's id and the ledger's
     row id in the prompt box (2026-10-13). An id-shaped verb becomes its label; a cited id in brackets goes, one in the sentence
@@ -628,7 +631,7 @@ def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1
     # rulebook's, at once and outside the hourly cap, so an event on it asks nothing of the model
     from . import rulebook
     if not rulebook.decide(store, item, verbs)['ask']: return W(dropped='left to the rule')
-    brain = llm or build_llm(store)
+    brain = llm or build_llm(store, job='advisor')
     if not brain:
         # once per revision, and said: the strip asks for an AI (for_key's {"none": "no_ai"}) - a repeat would loop the re-read
         last = next(iter(_at(store, target_kind, target_id, rev, own)), None)
@@ -860,8 +863,8 @@ def _payload(r: dict) -> dict:
     if r.get('Verb') and not verb: r = {**r, 'Line': ''}                  # its button is gone (Prep me): the line pointed at nothing
     # a fix is named by the place it opens ("Connect a mailbox"), never the generic button word
     lbl = r['Label'] if r.get('Label') in buttons.labels() or (verb == 'fix' and r.get('Label')) else buttons.label(verb or '') or r.get('Label')
-    return {'key': r['Key'], 'line': plain(r['Line'] or '', r['Verb'] or '', lbl or '') if r.get('Line') else r.get('Line'), 'verb': verb, 'label': lbl, 'pill': pill(lbl, count), 'count': count[:2],
-            'says': says(r['Verb'] or '', count), 'evidence': json.loads(r.get('EvidenceJson') or '[]'), 'revision': r['Revision'], 'tier': r['Tier'], 'at': r['CreatedAt']}
+    return {'key': r['Key'], 'line': plain(r['Line'] or '', r['Verb'] or '', lbl or '') if r.get('Line') else r.get('Line'), 'verb': verb, 'label': lbl, 'pill': lbl or '', 'count': count[:2],
+            'evidence': json.loads(r.get('EvidenceJson') or '[]'), 'revision': r['Revision'], 'tier': r['Tier'], 'at': r['CreatedAt']}
 
 
 def _at_work(store, target_kind: str, target_id) -> bool:
@@ -878,36 +881,15 @@ def for_key(store, key: str) -> dict: return decide(store, key)
 
 # ── ONE DECISION (the design, phase A; the owner's rulings, 2026-10-23) ──────────────────────────────────────────────────────────────
 # Every surface - the desk canvas, the Tasks tab, a phone chat, the desk at phone width - reads THIS: the button lit and the line said,
-# picked only from the buttons the row draws (offered). Three tiers, the higher outranking the lower but never a safety rule:
-#   habit  a confirmed habit of the owner's ("## What you do next" in LEARNED.md, in use) - lights its button, never presses it (ruling 9)
-#   model  where intent must be read (rulebook `ask`): its verb stands where it differs from the rule's, with its line
+# picked only from the buttons the row draws (offered). Two tiers, the higher outranking the lower but never a safety rule (the press
+# habit that lit a button by itself, with its mark, went with the press learning - the owner, 2026-10-25):
+#   model  where intent must be read (rulebook `ask`): its verb stands where it differs from the rule's, with its line - and what the
+#          memory knows about how the owner works is in what it read
 #   rule   rulebook.py - every other state, at once, from facts the app keeps, with no "Thinking..." and outside the hourly cap
 # A line is said only for a fact the card does not show; the obvious move is an empty strip and its button lit (ruling 1). The item on
 # the table earns the model's bigger read, once (B5); the next two on the walk are read ahead, so their lines are there when Next is.
 PREREAD = 2
 
-
-def habit_pick(store, item: dict, verbs: list) -> str | None:
-    """THE CONFIRMED HABIT TIER: a line under "## What you do next" in LEARNED.md (learn.moves writes it from the press log) keyed
-    `move <kind> <channel> <scope>` (learn._move_key) for this kind of item from this sender's domain or repository, saying "presses <a
-    button's label> (n of m)" - lights that button where the row draws it. It reads the lines the Advisor's prompt reads (learned_cut:
-    the section's in-use lines within its budget, closest scope first), so a habit that lights a button is one the Advisor was told -
-    and never one the owner marked wrong or removed (learnedlines; phase D's Keep/Wrong/Forget hang there). The owner, 2026-10-23: an
-    in-use habit may change the lit button by itself; press habits never reach triage (it reads only "## How you sort mail")."""
-    from . import learned_cut, learnedlines
-    from .learn import _move_key
-    doc = str(store.doc('learned') or '')
-    if learned_cut.NEXT not in doc: return None
-    w = who_of(store, item or {})
-    k = _move_key(str((item or {}).get('kind') or ''), w['channel'], w['scope'])
-    ls = learned_cut.lines(doc, learned_cut.NEXT)
-    keep = set(learned_cut.cut(ls, learned_cut.BUDGET['advisor'], {**w, 'kind': (item or {}).get('kind')})[0])
-    raw = next((r for r, key in ls if key == k and r in keep), None)
-    if not raw or learnedlines.row(store, k).get('Status') in ('wrong', 'forgotten'): return None
-    m = re.search(r'presses (.+?) \(\d+ of \d+\)', raw)
-    if not m: return None
-    said = m.group(1).strip().lower()
-    return next((v['verb'] for v in verbs if said in (str(v['label']).lower(), buttons.label(v['verb']).lower())), None)
 
 
 def _label(verbs: list, verb: str, item: dict) -> str:
@@ -926,12 +908,12 @@ def decide(store, key: str, preread: bool = True) -> dict:
     rev = revision(store, *tgt)
     # an agent at work is nothing for the owner to do, whatever the card was judged as (the owner, 2026-10-13)
     if _at_work(store, *tgt): return {'key': key, 'state': 'working', 'verb': 'next', 'label': buttons.label('next'), 'line': '', 'by': 'rule',
-                                      'revision': rev, 'count': [0, 0], 'says': '', 'pill': '', 'evidence': [], 'ask': False, 'needs_ai': False}
+                                      'revision': rev, 'pill': '', 'evidence': [], 'ask': False, 'needs_ai': False}
     item = _item(store, *tgt, key=key)
     if not item: return {}
     verbs = offered(store, item)
     r = rulebook.decide(store, item, verbs)
-    verb, line, by, ev, flagged = r['verb'], r['line'], 'rule', [], False
+    verb, line, by, ev = r['verb'], r['line'], 'rule', list(r.get('evidence') or [])
     rs = _at(store, tgt[0], tgt[1], rev)
     # only the rows written for THIS item (keys_of): a line judged over the same task's other card is not this one's
     own = _own(store, tgt, key, rs); rs = [x for x in rs if x.get('Key') in own]
@@ -944,21 +926,16 @@ def decide(store, key: str, preread: bool = True) -> dict:
         if hit and mv != verb:
             verb, by, ev = mv, 'model', json.loads(m.get('EvidenceJson') or '[]')
             line = '' if r['state'] == 'idea' else _one(plain(m.get('Line') or '', m['Verb'], hit['label']), 64)
-        # SEND IS NEVER LIT ON A DRAFT THE CHECK FLAGGED - not by a habit either (the design, 1.1)
-        flagged = r['state'] == 'draft_ready' and bool(hit) and mv != 'approve'
+
         # NEVER LEFT GUESSING (the owner, 2026-10-15): the item on the table is read now, at this revision, once - the rule's button
         # stands lit meanwhile, and the model's answer arrives by the `advice` live event the page already reads
         if not mv and not judged(m, 2): notice(store, m['Event'] if m else SHOWN, tgt[0], tgt[1], tier=2, key=key)
         if not mv and r['state'] in rulebook.NEEDS_AI and rs and rs[0].get('Dropped') == 'no brain':
             return {'key': key, 'none': 'no_ai', 'state': r['state'], 'revision': rev, 'line': ''}
-    h = habit_pick(store, item, verbs) if r['state'] not in rulebook.SAFE and not flagged else None
-    if h and h != verb: verb, line, by = h, '', 'habit'
     if preread: _preread(store, key)
-    count = habit(store, verb, item) if verb and verb != 'next' else (0, 0, '')
     lbl = _label(verbs, verb, item) if verb else ''
-    out = {'key': key, 'state': r['state'], 'verb': verb, 'label': lbl, 'line': line, 'by': by, 'revision': rev, 'count': list(count[:2]),
-           'says': says(verb or '', count), 'pill': pill(lbl, count) if verb else '', 'evidence': ev, 'ask': r['ask'],
-           'needs_ai': r['state'] in rulebook.NEEDS_AI}
+    out = {'key': key, 'state': r['state'], 'verb': verb, 'label': lbl, 'line': line, 'by': by, 'revision': rev, 'pill': lbl, 'evidence': ev,
+           'ask': r['ask'], 'needs_ai': r['state'] in rulebook.NEEDS_AI}
     # a fix is a place, not a proposal: the page opens its href where the row has no '<rid>:fix' of its own to press (a failed act with
     # no draft on the table) - read live, so a fix already made carries no stale link
     if verb == 'fix':
@@ -1000,8 +977,8 @@ def status(store, key: str) -> dict:
 # ── LIT AND PRESSED (the deep dive, 2026-10-20) ─────────────────────────────────────────────────────────────────────────────────
 # Nothing recorded whether the button the Advisor lit was the one pressed, so its record and the owner's habits were the same guess.
 # Every press sends the advised verb (if a line showed) and the revision it was judged at; the row keeps what the item was and whom it
-# was from - the press log the moves in LEARNED.md are learned from (learn.moves). Since phase B (2026-10-23) every press on every
-# surface is kept, lit or not (presses.py). Nothing on screen changes.
+# was from. Since phase B (2026-10-23) every press on every surface is kept, lit or not (presses.py) - as a record: nothing is learned
+# from a press any more (the owner, 2026-10-25). Nothing on screen changes.
 _ROW = {r: v for v, d in buttons.VERBS.items() for r in d.get('row') or []}
 
 
@@ -1033,12 +1010,9 @@ def press(store, key: str, advised: str, pressed: str, rev: str = None, surface:
     """One press on `key`, on any surface, lit or not (presses.record keeps it - phase B, 2026-10-23: only a desk press under a line was
     kept). `advised`: the Advisor's verb if its line showed, judged at `rev`. Returns the row id, or 0 when nothing was kept."""
     from . import presses
-    rid, new = presses.kept(store, key, pressed, surface, lit=lit, live=live, rev=rev, advised=advised or '', item=item)
-    if not new: return rid
-    from . import learn
-    learn.moves(store)                      # ...and what it teaches lands in LEARNED.md at once, where the owner can read it (never raises)
-    # ...and only there: a press is not a correction for the reflection, which writes what TRIAGE reads (the owner, 2026-10-23: "why
-    # would we want button presses to do with triage") - the moves count presses, the reflection counts sorting verdicts
+    rid, _ = presses.kept(store, key, pressed, surface, lit=lit, live=live, rev=rev, advised=advised or '', item=item)
+    # ...and nothing more: a press is not a fact about how the owner works (the owner, 2026-10-25), and never a correction for the
+    # reflection, which writes what TRIAGE reads (2026-10-23)
     return rid
 
 
@@ -1051,7 +1025,7 @@ def notes(store, key: str, limit: int = 10) -> list:
     for r in rows(store, tgt[0], tgt[1], limit):
         ev = [{'id': e, **{k: v for k, v in _resolve(store, e).items() if k in ('kind', 'label')}} for e in json.loads(r.get('EvidenceJson') or '[]')]
         out.append({'at': r['CreatedAt'], 'event': r['Event'], 'tier': r['Tier'], 'line': r['Line'], 'verb': r['Verb'], 'label': r['Label'],
-                    'pill': pill(r['Label'], json.loads(r.get('CountJson') or '[0,0]')) if r.get('Verb') else '', 'dropped': r['Dropped'],
+                    'pill': (r['Label'] or '') if r.get('Verb') else '', 'dropped': r['Dropped'],
                     'model': r['Model'], 'evidence': ev})
     return out
 
@@ -1066,7 +1040,7 @@ def block(store, item: dict) -> str:
     # ...a silent decision is its lit button alone (the owner, 2026-10-23), decided by the rule from the item's own facts
     said = f"\"{d['line']}\" - its button is {d['label']}" if d.get('line') else f"no line - its lit button is {d['label']}"
     return (f"THE ADVISOR'S LINE on this item (if the owner asks why, this is the answer; the numbers are the ledger's): "
-            f"{said}" + (f" ({d['says']})" if d.get('says') else '') + f"; it rests on: {ev}.")
+            f"{said}; it rests on: {ev}.")
 
 
 def evidence_words(store, ev_id: str) -> str:

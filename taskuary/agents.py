@@ -483,7 +483,7 @@ def record_cli_test(store, key: str, ok: bool):
 
 # THE BRAIN SETTINGS A START READS, and who wrote each: 'owner' is the person's own pick (setup, Settings, the Assistant tab);
 # anything else - 'migration' from adopt_brain_setting and migrate_brain_settings, blank - was saved FOR them.
-HEALED = ('default_brain', 'triage_ai', 'concierge_ai', 'assistant_ai', 'judge_ai')
+HEALED = ('default_brain', 'triage_ai', 'concierge_ai', 'assistant_ai', 'judge_ai', 'draft_ai')
 
 def picked(store, name: str) -> bool: return store.setting_writer(name) == 'owner'
 
@@ -941,7 +941,7 @@ def adopt_brain_setting(store) -> bool:
     return True
 
 
-BRAIN_SETTINGS = ('triage_ai', 'triage_backup_ai', 'concierge_ai', 'assistant_ai', 'judge_ai')
+BRAIN_SETTINGS = ('triage_ai', 'triage_backup_ai', 'concierge_ai', 'assistant_ai', 'judge_ai', 'draft_ai')
 
 
 def migrate_brain_settings(store, cfg: dict = None) -> int:

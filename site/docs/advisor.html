@@ -239,11 +239,11 @@ capped at 9,000 characters (whole sections drop from the end, the item and its v
 </tr>
 <tr>
 <td><code>LEARNED.md</code></td>
-<td><code>## What you do next</code> and nothing else - your press habits in use, closest to this sender first, within its budget; the sorting lines are triage&#39;s</td>
+<td><code>## Your people</code>, <code>## What you care about</code>, <code>## How you work</code> and <code>## Promises</code> - the lines in use, closest to this sender first, within its budget</td>
 </tr>
 <tr>
 <td>The ledger</td>
-<td>Outcome rows on the item, and your habit for each verb offered on this kind of item from this sender</td>
+<td>Outcome rows on the item, and what came of each verb offered with this sender before - evidence it weighs, never a line it says</td>
 </tr>
 <tr>
 <td>The playbook, <code>SOUL.md</code>, <code>JOB.md</code></td>
@@ -259,24 +259,35 @@ Continue into the same wall; a send refused for its address is fixed at the addr
 redrafted; a draft that promises what nothing shows (a payment date, a file that is not attached)
 is not sent; work an agent can do, like an issue with a traceback, goes to an agent; someone quiet
 past their day is chased, where the row draws Chase.</p>
+<p>What it knows about how you work is a reason too, said in the same one line beside the lit button,
+and only when it is a fact it can show. Each is counted from what you did, and <strong>Why?</strong> lists the
+acts it rests on:</p>
+<ul>
+<li><strong>How soon you answer someone.</strong> Once you have answered a person three times, an ask of theirs
+that has waited well past your usual says so: <em>You usually answer Erin within the hour; this is 3h.</em>
+Inside your usual, or for someone you have not answered yet, there is no line.</li>
+<li><strong>Whom you hand that kind of ask to.</strong> The Advisor reads whom you handed a sender&#39;s asks to before;
+when this ask is the same kind of work, it lights <strong>Hand it to a person</strong> with <em>Ray handles payroll
+for you.</em> What the ask is about is the model&#39;s to read, never a count&#39;s.</li>
+<li><strong>The day you put it off to.</strong> After two weeks in which you put a sender&#39;s mail off to the same
+weekday, <strong>Remind me</strong> opens with that day first, filled, saying whose habit it is. Nothing is set
+until you press it.</li>
+<li><strong>A person&#39;s own day.</strong> Chase lights after three working days; once three of someone&#39;s answers say
+how soon they answer, it lights on their day instead: <em>Gail usually answers in a day; this is 3 days.</em></li>
+</ul>
 <p>Those findings are never rows. They attach to the item at its revision and show when the walk
 reaches it, as one line in the strip at the foot of the canvas, above the action row, and the
 advised button on the row is the one dark button - the row&#39;s own, pressed through its own handler.
-<strong>Why?</strong> beside the line says what it rests on, and the count under it is your habit, not the
-Advisor&#39;s record: &quot;Your own habit, not the Advisor&#39;s record: you pressed Send to agent 3 of the
-last 4 times on GitHub items from northwind/ledger&quot;. The number is read from your presses and the
-outcome ledger, never written by the model. A changed item drops its old line by one comparison.
+<strong>Why?</strong> beside the line says what it rests on. A changed item drops its old line by one comparison.
 The rail&#39;s order does not read advice, by construction: the test that pins it builds the rail with
 and without advice and asks for the same order. Two settings govern it, in Settings → Advisor: the
 switch, and a cap on judgements per hour.</p>
-<p><strong>What you pressed.</strong> Every press on the row, and Next, while a line is shown is kept: the move it
-lit, the one you pressed, and what kind of item it was from whom. That log is where your moves are
-learned: a moment you answer the same way becomes a line in <code>LEARNED.md</code> - watching first, then
-under <code>## What you do next</code> once it is in use (three items, from two people or threads, the same
-press at least six times in ten) - and the Advisor reads it. Press otherwise twice in a row and it
-goes back to watching, the same line with its history. Press habits never reach triage: triage
-reads <code>## How you sort mail</code>, learned only from your sorting verdicts. Delete the line to undo it;
-that moment then counts only your presses from then on.</p>
+<p><strong>What you pressed.</strong> Every press on the row, and Next, is kept: the move it lit, the one you
+pressed, and what kind of item it was from whom. It is a record, and nothing is learned from it: a
+button press is not a fact about how you work, and a count of them once lit the same button on two
+asks from one domain that had nothing else in common. What <code>LEARNED.md</code> knows comes from what you
+did, in context - who wrote, what they are to you, how soon you answered, what you put off and until
+when, whom you handed it to.</p>
 <p><strong>How it is tested.</strong> <code>tests/advisor_cases.py</code> is the eval: every state the demo and the advisor
 matrix hold, plus a few they lack, each with the moves that are right there, the ones that never
 are, and what its prompt must carry. It runs in the suite against the demo&#39;s scripted Advisor.
@@ -370,9 +381,9 @@ when are facts already in the store, and the once-a-day sweep reads them without
 facts mean is always the model&#39;s, at reflection.</p>
 <p><strong>Reflection distils it into the stores that exist.</strong> The resolved rows reach reflection as
 evidence lines with their own ids, <code>out</code> beside the <code>mem</code>, <code>rv</code> and <code>task</code> ids a learned line
-already cites. Habits about you go to <code>LEARNED.md</code> with the same grammar, the same strength, the
-same decay: &quot;green PR from the coding agent: you merge it, 8 of 8&quot;; &quot;the agent asks &#39;open the PR?&#39;: you
-always say yes&quot;. A habit carries the one number it never had, the regret count. Facts about other
+already cites. What you do goes to <code>LEARNED.md</code> with the same grammar, the same strength, the
+same decay: &quot;a green PR from the coding agent is merged as it stands&quot;; &quot;when an agent asks to open
+the PR, you say yes&quot;. Facts about other
 people (&quot;Ray answers in three days and needs a second chase&quot;) and about kinds of work (&quot;closing
 from a thread with an open question reopens 40%; ask first&quot;) go elsewhere: a page per person
 derived from the ledger, and work facts proposed into the playbook they belong to (both below).</p>
@@ -395,7 +406,7 @@ Next, kept in mind but not built: earned autonomy.</p>
 
     </article>
     <nav class="pager"><a class="pn prev" href="./reports"><span>Previous</span>Reports and the Advisor</a><a class="pn next" href="./phone"><span>Next</span>On your phone</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.37 · updated 2026-10-25</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.38 · updated 2026-10-25</p>
   </main>
 </div>
 <script src="./docs.js"></script>

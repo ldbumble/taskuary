@@ -20,13 +20,13 @@ BANNER = ('This email was sent from outside the organisation. ** Do not click li
 class PriorityIsNotGuessedTests(unittest.TestCase):
     def test_the_external_mail_banner_is_not_an_emergency(self):
         """The exact mail that came in urgent: 'download' contains 'down'."""
-        self.assertEqual(draft_task_fields({'subject': 'RE: Summit Bank', 'body': BANNER})['priority'], 'normal')
+        self.assertEqual(draft_task_fields({'subject': 'RE: Summit Bank', 'body': BANNER})['priority'], 'regular')
 
     def test_the_word_urgent_in_the_body_is_not_a_priority(self):
         """Senders call their own mail urgent constantly; that is their judgement, not yours."""
         for body in ['This is urgent, please handle today.', 'Need this ASAP.',
                      'The site is down.', 'Please action immediately.']:
-            self.assertEqual(draft_task_fields({'subject': 's', 'body': body})['priority'], 'normal', body)
+            self.assertEqual(draft_task_fields({'subject': 's', 'body': body})['priority'], 'regular', body)
 
     def test_a_rule_is_what_makes_a_task_urgent(self):
         f = draft_task_fields({'subject': 'RE: Summit Bank', 'body': BANNER}, urgent=True)
@@ -54,7 +54,7 @@ class EscalateIsTheUrgencyRuleTests(unittest.TestCase):
 
     def test_no_rule_means_normal(self):
         s, out = self._ingested([])
-        self.assertEqual(s.get_task(out['task_id'])['Priority'], 'normal')
+        self.assertEqual(s.get_task(out['task_id'])['Priority'], 'regular')
 
     def test_an_escalate_rule_on_the_sender_marks_it_urgent(self):
         s, out = self._ingested([{'Name': 'the bank', 'Kind': 'sender', 'Pattern': 'anna@valley.example',
@@ -64,7 +64,7 @@ class EscalateIsTheUrgencyRuleTests(unittest.TestCase):
     def test_a_rule_on_somebody_else_does_not(self):
         s, out = self._ingested([{'Name': 'someone else', 'Kind': 'sender', 'Pattern': 'other@x.example',
                                   'Action': 'escalate', 'Reason': 'r'}])
-        self.assertEqual(s.get_task(out['task_id'])['Priority'], 'normal')
+        self.assertEqual(s.get_task(out['task_id'])['Priority'], 'regular')
 
 
 class HandoffForwardsOnlyTests(unittest.TestCase):

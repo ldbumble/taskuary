@@ -99,6 +99,8 @@
 /* URGENT IS THE DOT, NOT THE ROW (the owner, 2026-10-25: a shaded row "makes it look like it's selected"): the row's circle on the
    rail goes the attention colour (theme ALERT, oxblood) with a thin ring, in the row's own place - there is no Urgent heading (2026-10-22) */
 .tq-pile-row.urgent .rail i, .tq-pile-row.urgent.current .rail i { background: #8a3646 !important; box-shadow: 0 0 0 2px #fffdfb, 0 0 0 3.5px rgba(138, 54, 70, .5); }
+/* IMPORTANT wears no edge and no shade: its mark is the dot's colour, the theme's slate (AssistantView Pile, theme PRIORITY_COLOR) -
+   in the row's own place, never a move (the owner, 2026-10-25) */
 /* NEXT wears nothing: the ring is what is ON THE TABLE, and the row after it is a row like any other (the owner,
    2026-10-01: "the next one needs nothing"). The class stays - the walk and its tests find the next row by it. */
 .tq-pile-row.current { height: 54px; }

@@ -153,7 +153,7 @@ def test_moving_the_day_weeks_out_lowers_only_the_urgent_the_assistant_raised(s)
     tid = due_task(s, 0); remind.deadlines(s)
     assert s.get_task(tid)['Priority'] == 'urgent'
     remind.set_due(s, tid, day(21))
-    assert s.get_task(tid)['Priority'] == 'normal'                              # back to what it was before the due day raised it
+    assert s.get_task(tid)['Priority'] == 'regular'                             # back to what it was before the due day raised it
     mine = due_task(s, 0, Priority='urgent'); remind.deadlines(s)               # urgent before the due day ever came near
     remind.set_due(s, mine, day(21)); assert s.get_task(mine)['Priority'] == 'urgent'
     later = due_task(s, 0); remind.deadlines(s)
@@ -187,6 +187,6 @@ def test_the_assistant_can_move_the_due_day(s):
     with mock.patch.object(server, 'store', s):
         out = server._run_operation({'kind': 'task.update', 'target': tid, 'params': {'due': '3 weeks'}}, None)
     t = s.get_task(tid)
-    assert t['DueAt'] == day(21) and t['Priority'] == 'normal' and not t['DueSaid'] and out['changed']['DueAt'] == day(21)
+    assert t['DueAt'] == day(21) and t['Priority'] == 'regular' and not t['DueSaid'] and out['changed']['DueAt'] == day(21)
     with mock.patch.object(server, 'store', s), pytest.raises(server.HTTPException):
         server._run_operation({'kind': 'task.update', 'target': tid, 'params': {'due': 'soonish'}}, None)

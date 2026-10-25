@@ -49,7 +49,7 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
     assert.equal(await page.$$eval("[data-tq-task-head] [data-tq-fact], [data-tq-task-head] .MuiChip-root", (els) => els.length), 0, "no chips by the title");
     // the ask leads under the title, and where it is the one message's own words From does not open them again (the task-view
     // cleanup, owner-approved 2026-10-25 - a lone message opened whole before); the reply is the open half of the work
-    assert.ok(await page.$("[data-tq-task-head] [data-tq-ask]"), "the ask is under the title");
+    assert.ok(await page.$("[data-tq-task-head] + [data-tq-ask]"), "the ask is under the title");
     assert.equal(await page.$("[data-tq-from] [data-tq-conversation-row][aria-expanded=true]"), null, "the ask's words are read once");
     assert.ok(await page.$("[data-tq-work] [data-tq-closeout] textarea"), "the draft is in the work column");
     // ...and the header's status is the rail row's own: the same words on the row's icon

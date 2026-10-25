@@ -224,31 +224,26 @@ def test_unsorted_mail_a_batch_a_closed_task_and_a_failed_report(s):
     assert (d['state'], d['verb'], d['line']) == ('report_failed', 'rerun', 'Report failed: mailbox signed out')
 
 
-# ── the tiers: habit over model over rule, never over a safety rule ──────────────────────────────────────────────────────────────────
+# ── the tiers: model over rule, never over a safety rule ─────────────────────────────────────────────────────────────────────────────
 def _habit(s, text, key):
+    """A press count where the 2026-10-23 doc kept it - an install the migration has not reached, or a model that wrote one anyway."""
     s.save_doc('learned', f"# Learned\n\n## How you sort mail\n\n## What you do next\n- {text} [s:5 | ev: pr1, pr2, pr3 | seen: 2026-10-20 | k: {key}]\n", 'test')
 
 
-def test_an_in_use_habit_lights_its_button_and_a_safety_rule_outranks_it(s, monkeypatch):
-    """The owner, 2026-10-23 (rulings 3, 9, 11): an in-use habit may change the lit button by itself - only lights it, never presses it -
-    and press habits are the Advisor's alone ("## What you do next"); triage reads "## How you sort mail"."""
+def test_a_press_count_lights_nothing(s, monkeypatch):
+    """The owner, 2026-10-25: stop learning from presses and remove the habit mark - a press count in the doc, wherever it sits, never
+    changes the lit button by itself; the rule (or the model, where intent must be read) decides."""
     t, m, it = _asked(s, 'Weekly report', who=('Vendor Desk', 'desk@vendor.example'))
     monkeypatch.setattr(advisor, '_item', lambda store, tk, ti, key=None: it)
     monkeypatch.setattr(advisor, 'notice', lambda *a, **k: None)
-    assert advisor.decide(s, it['key'], preread=False)['verb'] == 'reply', 'no habit section yet: the hook changes nothing'
+    before = advisor.decide(s, it['key'], preread=False)
+    assert before['verb'] == 'reply'
     _habit(s, 'On asks from vendor.example, {{owner_first}} presses Mark done (5 of 6)', 'move asked email vendor.example')
     d = advisor.decide(s, it['key'], preread=False)
-    assert (d['verb'], d['by'], d['line']) == ('close', 'habit', '')
-    # ...a habit somewhere else, or in another section, lights nothing here
-    _habit(s, 'On asks from northwind.example, {{owner_first}} presses Mark done (5 of 6)', 'move asked email northwind.example')
-    assert advisor.decide(s, it['key'], preread=False)['by'] == 'rule'
-    # ...and never over what failed: the fix leads whatever the owner usually presses
-    _habit(s, 'On asks from vendor.example, {{owner_first}} presses Mark done (5 of 6)', 'move asked email vendor.example')
-    monkeypatch.setattr(advisor, 'failure', lambda store, item: {'what': 'the reply was not sent', 'why': 'mailbox signed out', 'fix': None, 'unknown': False, 'kind': 'send'})
-    assert advisor.decide(s, it['key'], preread=False)['by'] != 'habit'
+    assert (d['verb'], d['by']) == ('reply', 'rule') and 'says' not in d and d['pill'] == d['label'], 'no habit, no count, no mark'
 
 
-def test_send_is_never_lit_on_a_draft_the_check_flagged_not_even_by_a_habit(s, monkeypatch):
+def test_send_is_never_lit_on_a_draft_the_check_flagged(s, monkeypatch):
     t, m, it = _asked(s, 'Invoice 4410', who=('Vendor Desk', 'desk@vendor.example'))
     rid = Factory(s).review(t, m, draft="It goes out in Friday's payment run.")
     it = {**it, 'kind': 'review', 'lane': 'approve', 'rid': rid, 'draft': True, 'key': f'review:{rid}'}

@@ -28,7 +28,7 @@ def test_migration_shares_commands_lifts_models_onto_the_brain_and_is_idempotent
     assert cfg['agents']['researcher']['provider'] == 'cli:claude'
     # analyst's opus and researcher's haiku both land on the one claude brain; researcher's sonnet
     # loses to the model already there rather than silently replacing it
-    assert cli_connections.gears(cfg, 'claude') == {'model': 'opus', 'light_model': 'haiku'}
+    assert cli_connections.gears(cfg, 'claude') == {'model': 'opus', 'light_model': 'haiku', 'strong_model': ''}   # no strong tier set
     assert all(not set(p).intersection(cli_connections.COMMAND_FIELDS) for p in cfg['agents'].values())
     assert not cli_connections.migrate(cfg)
     assert cfg['agents']['codex']['rules_doc'] == 'coding'

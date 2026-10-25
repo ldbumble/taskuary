@@ -102,7 +102,7 @@ def _transcript(answers: list[dict]) -> str:
 def _brain(store, llm):
     if llm is not None: return llm
     from .llm import build_llm
-    return build_llm(store)
+    return build_llm(store, job='memory')
 
 
 def _json_object(raw: str) -> dict:

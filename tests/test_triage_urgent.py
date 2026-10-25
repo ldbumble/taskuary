@@ -29,8 +29,8 @@ class TriageDecidesUrgentTests(unittest.TestCase):
     def test_the_prompt_asks_and_the_schema_binds(self):
         seen = []
         mail(MemoryStore(), brain('task', False, seen=seen))
-        self.assertTrue(any('"urgent"' in s for s in seen), 'every triage prompt explains the field')
-        self.assertIn('urgent', triage.verdict_schema()['schema']['required'])
+        self.assertTrue(any('"urgent"' in s and '"important"' in s for s in seen), 'every triage prompt explains the three')
+        self.assertIn('priority', triage.verdict_schema()['schema']['required'])      # regular / important / urgent (2026-10-25)
 
     def test_an_urgent_ask_makes_an_urgent_task_saying_why(self):
         s = MemoryStore()

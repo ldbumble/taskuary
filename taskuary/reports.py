@@ -298,7 +298,7 @@ def run_agent(cfg):
         api = pick if pick.startswith('connector:') else hub_agents.resolve_brain(store, 'general')
         if api.startswith('connector:'):
             from .llm import build_llm
-            llm = build_llm(store, pick=api, model=cfg.get('model') or None, research=True)
+            llm = build_llm(store, pick=api, model=cfg.get('model') or None, research=True, job='report')
             name = name or 'your AI connection'
     if llm is None:
         from . import words
@@ -1236,7 +1236,7 @@ def report_llm(store, cfg: dict, default_llm):
     pings. Falls back to the caller's default (the triage brain) when unset or broken."""
     if not (cfg.get('ai_brain') or cfg.get('ai_model')): return default_llm
     from .llm import build_llm
-    try: return build_llm(store, cfg.get('ai_brain') or None, cfg.get('ai_model') or None) or default_llm
+    try: return build_llm(store, cfg.get('ai_brain') or None, cfg.get('ai_model') or None, job='report') or default_llm
     except Exception as e:
         logger.warning(f'report brain unavailable, using the default: {e}')
         return default_llm
@@ -1262,7 +1262,7 @@ def judge_for(store, cfg: dict, default_llm):
         # It comes back wearing the judge's contract rather than as a raw brain, so `decide_for`
         # never has to guess which of the two kinds of thing it was handed.
         from .llm import build_llm
-        try: brain = build_llm(store, pick)
+        try: brain = build_llm(store, pick, job='judge')
         except Exception as e:
             logger.warning(f"the routing judge brain is unavailable, using the report's own: {e}")
             return default_llm
@@ -2443,7 +2443,7 @@ def run_due_reports(store, startup: bool = False) -> int:
     after it and leaving them un-touched so the next poll started over.
     """
     from .llm import build_llm
-    try: llm = build_llm(store)
+    try: llm = build_llm(store, job='report')
     except Exception: llm = None
     n = 0
     for src in sorted(due_reports(store, startup), key=lambda s: not _own_data(s)):

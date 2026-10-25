@@ -12,6 +12,7 @@ import api from "./api";
 import { completionTransition, cutAway, filterForSelectedState, remindWaiting, remindDay } from "./taskFilter.js";
 import { onLive } from "./live.js";
 import { PANEL2, BORDER, DIM, FAINT, INK, card, ACCENT, PILL_COLORS, ALERT } from "./theme.jsx";
+import { PRIORITIES, level } from "./priority.js";
 import { StateChip, stateOf, TASK_STATES, asUtc, timeAgo, askedAgo, Empty, FilterPills, isWaiting, assignedAgent } from "./ui.jsx";
 import { ListItemText } from "@mui/material";
 import TaskPage from "./TaskPage.jsx";
@@ -56,7 +57,7 @@ const touchedToday = (t) => isToday(t.ClosedAt) || isToday(t.UpdatedAt) || isTod
 const bucketOf = (t) => (remindWaiting(t) ? "upcoming" : stateOf(t).key);
 const inBucket = (t, key) => (key === "live" ? !["done", "dropped"].includes(stateOf(t).key) && !remindWaiting(t)
                                              : bucketOf(t) === key);
-const PRIORITIES = ["low", "normal", "high", "urgent"];
+
 // what Create leads to, said for the kind picked - the caption promised a terminal and a draft that Create never made.
 // A reply is not offered here: a task you type yourself has nobody to answer, so its draft step was a dead end.
 const NEXT_STEP = {
@@ -117,7 +118,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [err, setErr] = useState("");
   const [newOpen, setNewOpen] = useState(false);
   const [creating, setCreating] = useState(false), [newErr, setNewErr] = useState("");
-  const [nt, setNt] = useState({ Title: "", Summary: "", Kind: "task", Priority: "normal" });
+  const [nt, setNt] = useState({ Title: "", Summary: "", Kind: "task", Priority: "regular" });
   useEffect(() => {
     const fromHash = () => {
       if (window.location.hash === "#new-task") {
@@ -178,7 +179,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     setCreating(true); setNewErr("");
     try {
       const { data } = await api.post("/api/tasks", { ...fields, ...(tags.length ? { Tags: tags.join(",") } : {}) });
-      setNewOpen(false); setNt({ Title: "", Summary: "", Kind: "task", Priority: "normal" });
+      setNewOpen(false); setNt({ Title: "", Summary: "", Kind: "task", Priority: "regular" });
       setFilter("live"); setOnly(null); loadTasks(); onSelect(data.taskId);
     } catch (e) {
       setNewErr(`The task wasn't made - ${e?.response?.data?.detail || "Taskuary didn't answer"}. What you typed is still here; try Create again.`);
@@ -398,6 +399,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </Typography>
                   {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: PILL_COLORS.red.bg,
                     color: PILL_COLORS.red.fg, height: 17, fontSize: 9.5, flexShrink: 0 }} />}
+                  {/* important beside it, in the theme's slate (theme PRIORITY_COLOR), calmer than urgent's oxblood - a mark, never a move (the owner, 2026-10-25) */}
+                  {level(task.Priority) === "important" && <Chip size="small" label="important" data-tq-important="" sx={{ bgcolor: PILL_COLORS.working.bg,
+                    color: PILL_COLORS.working.fg, height: 17, fontSize: 9.5, flexShrink: 0 }} />}
                   {/* the state says it once - "agent stopped" had its own chip beside it (T1) */}
                   <Box component="span" role="button" tabIndex={0} sx={{ cursor: "pointer", display: "inline-flex" }}
                     title={only ? "Show everything in progress again" : `Show only “${st.label}”`}

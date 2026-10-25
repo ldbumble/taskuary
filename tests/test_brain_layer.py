@@ -255,7 +255,7 @@ class GearTests(unittest.TestCase):
                 'agents': {'coding': {'kind': 'coding'}}}
 
     def test_gears_belong_to_the_connection(self):
-        self.assertEqual(clic.gears(self.cfg(), 'claude'), {'model': 'opus', 'light_model': 'haiku'})
+        self.assertEqual(clic.gears(self.cfg(), 'claude'), {'model': 'opus', 'light_model': 'haiku', 'strong_model': ''})
 
     def test_resolving_a_profile_takes_the_connection_gears(self):
         c = self.cfg()
@@ -266,10 +266,10 @@ class GearTests(unittest.TestCase):
         """The owner's rule: triage runs the main brain on a quicker model, and a CLI session
         always takes the main one. Not two providers."""
         c = self.cfg()
-        self.assertEqual(clic.gears(c, 'claude'), {'model': 'opus', 'light_model': 'haiku'})
+        self.assertEqual(clic.gears(c, 'claude'), {'model': 'opus', 'light_model': 'haiku', 'strong_model': ''})
 
     def test_an_unknown_brain_has_no_gears_rather_than_raising(self):
-        self.assertEqual(clic.gears(self.cfg(), 'nobody'), {'model': '', 'light_model': ''})
+        self.assertEqual(clic.gears(self.cfg(), 'nobody'), {'model': '', 'light_model': '', 'strong_model': ''})
 
     def test_gears_already_on_a_profile_are_lifted_onto_its_connection(self):
         """Adding them to COMMAND_FIELDS makes resolve() DROP whatever the profile holds, so an
@@ -278,7 +278,7 @@ class GearTests(unittest.TestCase):
         c = {'cli_connections': {'claude': {'cmd': 'claude'}},
              'agents': {'coding': {'kind': 'coding', 'provider': 'cli:claude', 'model': 'opus', 'light_model': 'haiku'}}}
         clic.migrate(c)
-        self.assertEqual(clic.gears(c, 'claude'), {'model': 'opus', 'light_model': 'haiku'})
+        self.assertEqual(clic.gears(c, 'claude'), {'model': 'opus', 'light_model': 'haiku', 'strong_model': ''})
         self.assertNotIn('model', c['agents']['coding'])
 
     def test_a_connection_that_already_has_gears_is_not_overwritten(self):

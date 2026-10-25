@@ -667,7 +667,7 @@ def generate(store, name: str, days: int = DAYS) -> str:
     _status('running', 'connecting…', doc=name, evidence=[])
     try:
         from .llm import build_llm
-        llm = build_llm(store)
+        llm = build_llm(store, job='summary')
         if not llm:
             from . import words
             raise RuntimeError(f"no active AI connector - set one up under {words.name('ai')}")

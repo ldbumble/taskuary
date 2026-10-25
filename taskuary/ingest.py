@@ -640,8 +640,10 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     project = context_for_message(store, msg)
     from .triage import job_doc
     intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), job=job_doc(store), thread=thread, seen=carried,
-                             # "How you sort mail" and nothing else - press habits never reach triage (the owner, 2026-10-23)
-                             learned=learned_cut.for_reader(store, 'triage', learned_cut.about_mail(msg)),
+                             # "What you care about", learned from sorting verdicts - presses never reach triage (the owner, 2026-10-23) -
+                             # and the people lines about whoever is on this mail, for its priority alone (2026-10-25)
+                             learned=learned_cut.for_reader(store, 'triage', learned_cut.about_mail(msg), target=f"mail:{msg.get('external_id') or ''}",
+                                                            people=learned_cut.people_of(msg)),
                              notes=notes, notes_left=notes_left, images=msg.get('images'),
                              system=store.doc('triage'), mine=me,
                              # a scheduled report carries its own brief - what the owner
@@ -866,7 +868,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         if (follow or {}).get('intent') in ('task', 'reply_only') and not follow.get('degraded'):
             _retitle(store, store.get_task(tid) or {}, msg, follow, actor)
         if pol['action'] == 'escalate': _escalate(store, tid, pol, actor)
-        elif (follow or {}).get('urgent'): _mark_urgent(store, tid, follow, actor)
+        elif (follow or {}).get('urgent') or (follow or {}).get('priority'): _mark_urgent(store, tid, follow, actor)
         if (follow or {}).get('due'): remind.set_due(store, tid, follow['due'], actor)
         store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''}")
         # Remind me holds a quiet task: the sender writing again with something that is not fyi brings it back now,
@@ -1004,7 +1006,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         same = intent.get('same_as')
         if same and store.get_task(same):
             if pol['action'] == 'escalate': _escalate(store, same, pol, actor)
-            elif intent.get('urgent'): _mark_urgent(store, same, intent, actor)
+            elif intent.get('urgent') or intent.get('priority'): _mark_urgent(store, same, intent, actor)
             if intent.get('due'): remind.set_due(store, same, intent['due'], actor)
             return _join_same(store, msg, same, intent, actor, _notes_note())
         if intent['intent'] == 'fyi':
@@ -1029,7 +1031,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # conversation, task = the owner's own list, reply = the responder and Review. It is
         # triage's judgement, made against TRIAGE.md; a kind it did not name is task, the owner's list
         # (draft_task_fields). Nothing downstream second-guesses it - auto_start_ok only asks who may start.
-        f = draft_task_fields(msg, urgent=pol['action'] == 'escalate' or bool(intent.get('urgent')), kind=intent.get('kind'))
+        f = draft_task_fields(msg, urgent=pol['action'] == 'escalate' or bool(intent.get('urgent')), kind=intent.get('kind'),
+                              important=intent.get('priority') == 'important')
         if intent['intent'] == 'reply_only': f['kind'] = 'reply'
         # CODING STAYS CODING (the owner, 2026-09-25: "why not ask the coding CLI to choose it instead of turning it
         # into a general agent?"). A coding job whose repository triage could not tell used to become the
@@ -1065,6 +1068,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                  **({'Tags': _pb.tag(intent['playbook'])} if intent.get('playbook') else {}),
                                  **({'Assignee': f'agent:{role}'} if role else {})}, actor)
         store.audit('task', tid, 'create', actor, 'agent', {'from': msg.get('from_email'), 'reason': r['reason']})
+        # ...and why it is important, said where the owner reads the task (the verdict text says why - the owner, 2026-10-25)
+        if f['priority'] == 'important': store.add_comment(tid, actor, 'agent', f"Marked important - triage: {_priority_why(intent)}")
         if msg.get('_workflow_held'): store.add_comment(tid, 'triage', 'agent', msg['_workflow_held'] + '. It was not started on its own.')
         if intent.get('checklist') and not goal: store.set_task_checklist(tid, intent['checklist'], 'triage')
         if intent.get('due'): remind.set_due(store, tid, intent['due'], actor)     # the day it is due, as triage read it
@@ -1316,10 +1321,31 @@ def _escalate(store, tid, pol: dict, actor: str):
 
 
 def _mark_urgent(store, tid, verdict: dict, actor: str):
-    """Triage called this line urgent: the task it lands on is urgent now - once, with triage's reason on it."""
+    """Triage called this line urgent: the task it lands on is urgent now - once, with triage's reason on it. A line it called
+    IMPORTANT marks a regular task important the same way (_mark_important); urgent is never lowered by it."""
+    if verdict.get('priority') and not verdict.get('urgent'): return _mark_important(store, tid, verdict, actor)
     if (store.get_task(tid) or {}).get('Priority') == 'urgent': return
     store.update_task(tid, {'Priority': 'urgent'}, actor)
     store.add_comment(tid, actor, 'agent', f"Marked urgent - triage: {verdict.get('why') or 'this cannot wait'}")
+
+
+def _mark_important(store, tid, verdict: dict, actor: str):
+    """IMPORTANT (the owner, 2026-10-25): it matters for who sent it or what it is about, and can wait. Only a regular task is raised
+    - urgent stays urgent - and never one whose priority the owner set by hand: their word stands. Said on the task with triage's
+    why ("Important: from Erin Blake, your manager"). The rail never moves for it: a mark in the row's place."""
+    if (verdict or {}).get('priority') != 'important': return
+    from .processing_order import level
+    t = store.get_task(tid) or {}
+    if level(t.get('Priority')) != 'regular': return
+    if store._one("SELECT 1 FROM audit WHERE EntityType='task' AND EntityId=? AND Action='priority' AND Actor='owner' LIMIT 1", (tid,)): return
+    store.update_task(tid, {'Priority': 'important'}, actor)
+    store.add_comment(tid, actor, 'agent', f"Marked important - triage: {_priority_why(verdict)}")
+
+
+def _priority_why(verdict: dict) -> str:
+    """Triage's reason for the priority, in the shape it was asked for ("Important: from ..."), its intent why when it gave none."""
+    w = str((verdict or {}).get('priority_why') or '').strip()
+    return re.sub(r'^(important|urgent)\s*[:-]\s*', '', w, flags=re.I) if w else (verdict or {}).get('why') or 'it matters to you'
 
 
 def _retitle(store, t: dict, msg: dict, intent: dict, actor: str) -> bool:
@@ -1402,7 +1428,7 @@ def _serve_step(store, msg: dict, sv: dict, intent: dict, actor: str, notes_note
     # ...and what same_as does for the task it joins (the review, 2026-10-12): the sender's escalation, triage's urgency, and - on the
     # step's own task only - the day it names; a step's day never moves the goal's date. A follow-up on a finished step reopens it.
     if (pol or {}).get('action') == 'escalate': _escalate(store, tid, pol, actor)
-    elif intent.get('urgent'): _mark_urgent(store, tid, intent, actor)
+    elif intent.get('urgent') or intent.get('priority'): _mark_urgent(store, tid, intent, actor)
     if intent.get('due') and tid != sv['task']: remind.set_due(store, tid, intent['due'], actor)
     if work and shut: _reopen(store, tid, msg, actor)
     if work and tid != sv['task'] and intent.get('checklist'): store.merge_task_checklist(tid, intent['checklist'], 'triage')
@@ -1944,7 +1970,7 @@ ENRICH_THREAD = 'press-enrich'
 def ask_later(store, tid: int, m: dict, plain: str):
     """Read the ask out of `m` off the press and put it on `tid`. No brain, nothing to wait for: `plain` is the answer."""
     from . import llm as _llm
-    llm = _llm.build_llm(store)
+    llm = _llm.build_llm(store, job='triage')
     if llm: threading.Thread(target=_enrich, args=(store, tid, m, plain, llm), daemon=True, name=ENRICH_THREAD).start()
 
 

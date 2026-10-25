@@ -181,7 +181,7 @@ def scan(store, brain=None, relist: bool = False) -> dict:
     if brain is None and every:                      # no servers, no brain started
         try:
             from .llm import build_llm
-            brain = build_llm(store)
+            brain = build_llm(store, job='judge')
         except Exception as e: logger.info(f'send filter has no brain to judge with ({e}) - unjudged tools stay out'); brain = None
     verdicts = cache.get('verdicts') or {}
     servers = {}

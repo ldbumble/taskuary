@@ -2981,13 +2981,21 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // opening it again was a pull - a write, and the walk's place taken again (PW-118, 0.3.9.9 CI)
     // ...read off the table NOW, not the boot's answer: a link to the task the page loaded with, pressed in the chat after Next had moved
     // on, was taken for that reload and opened nothing (the dead-end walk's RING, 2026-10-20)
+    // ...BUT A PAGE OPEN OVER IT IS PUT DOWN: Back from Reports or Settings opened over the task lands on that task's own address, and this
+    // took it for a reload and left the page drawn, the task hidden and no Back left (the 2026-10-25 sweep) - the 'home' road below, here
     else if (request.kind === "task" && request.fromUrl && !request.start && !request.act
-      && Number(currentRef.current?.tid ?? /^task:(\d+)$/.exec(currentRef.current?.key || cardRef.current || "")?.[1] ?? 0) === Number(request.tid)) navHow.current = "replace";
+      && Number(currentRef.current?.tid ?? /^task:(\d+)$/.exec(currentRef.current?.key || cardRef.current || "")?.[1] ?? 0) === Number(request.tid)) {
+      if (browsing) { setRailOpen(false); setFoldedKey(null); browseDownRef.current?.(); putOnTable(null, "view"); }
+      navHow.current = "replace";
+    }
     else if (request.kind === "task") openTaskRef.current?.(request);
     else if (request.kind === "msg") openMsgRef.current?.(request.mid);   // #msg=N: that message's card (canvasLinks)
     else if (request.kind === "new") browseRef.current?.("new", {});     // #new-task: the New card in the conversation
     // Back to the address with no place: the walk's own table, the page over it put down (appLinks.onPlace)
-    else if (request.kind === "home") { setRailOpen(false); setFoldedKey(null); browseDownRef.current?.(); putOnTable(null, "view"); }
+    // ...and on a chat that held nothing but pages, the empty chat comes back as it was - its greeting, day card and Walk button: the folded
+    // page headers stood in their place over a lone floor Next, one more for every trip (the 2026-10-25 sweep)
+    else if (request.kind === "home") { setRailOpen(false); setFoldedKey(null); browseDownRef.current?.(); putOnTable(null, "view");
+      setMsgs((m) => (m.length && m.every((x) => x.role === "browse") ? [] : m)); }
     if (request.fromUrl) navHow.current = "replace";
   }, [request, state]);   // eslint-disable-line react-hooks/exhaustive-deps
   // A COLD LINK TO A TASK (#task=N in a new tab) draws that task first: the conversation came back with the walk's last item on

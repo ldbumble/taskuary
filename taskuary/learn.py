@@ -192,6 +192,15 @@ def _books(store, old_doc: str, doc: str) -> str:
     return _to_watching(doc, bad)
 
 
+# A MACHINE LINE WITH NO BULLET (the live yardstick, 2026-10-25): a real model wrote every line of its rewrite as "Erin Blake ... [s:6 | ev:
+# ...]" with no "- ", and an unbulleted line is not a tagged line - it read as the OWNER'S OWN, in use at once, past every book the code
+# keeps (the ladder, the evidence rule, Wrong and Forget). A line that carries the tag is the machine's, whatever it starts with.
+_BARE_TAG = re.compile(r'^(?!\s*[-*] )\s*(\S[^\n]*\[s:\d+ \| ev: [^\]\n]*\| seen: [^\]\n]*\]\s*)$', re.M)
+
+
+def _bullets(text: str) -> str: return _BARE_TAG.sub(lambda m: '- ' + m.group(1).strip(), text or '')
+
+
 _CLOSED = re.compile(r'\n?<!--\s*closed:\s*([^>]*?)\s*-->\s*$')
 
 
@@ -309,8 +318,8 @@ def learn_from(store, event: str, llm=None):
         doc = store.get_doc(DOC) or ''
         hyp = _block(doc, HYP_START, HYP_END)
         if llm is None or hyp is None: return
-        out = _unfence(llm(LESSON_SYSTEM, f'(today: {_today()})\n\nCURRENT HYPOTHESES:\n{hyp[:3000]}'
-                                          f'\n\nNEW EVENT:\n{event[:2000]}', max_tokens=700))
+        out = _bullets(_unfence(llm(LESSON_SYSTEM, f'(today: {_today()})\n\nCURRENT HYPOTHESES:\n{hyp[:3000]}'
+                                          f'\n\nNEW EVENT:\n{event[:2000]}', max_tokens=700)))
         # a broken answer never lands in the doc - markers inside it would corrupt the block splice
         if not out or '<!--' in out or len(out) > 6000: return
         if out != hyp:
@@ -441,7 +450,7 @@ def reflect(store, llm=None) -> bool:
                            + f'EPISODES SINCE {since} (what the owner did, with its context - cite these ids):\n{eps or "(none)"}\n\n'
                            f'EVENTS SINCE {since}:\n{gather(store, since)[:5000]}', max_tokens=max(1800, len(sent) // 3 + 800)))
     except Exception as e: return _failed(store, e)
-    new = _close(store, new)
+    new = _close(store, _bullets(new))
     # the 120-line budget in the prompt is a request; this is the law. A doc past the cap is a
     # model that ignored its instructions, and an ever-growing LEARNED.md would silently lose
     # its tail to the injection caps - the old doc is always the better answer than a bloated one.

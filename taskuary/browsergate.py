@@ -167,7 +167,7 @@ def judge(store, act: dict, pg: dict, brain=None) -> dict:
     cmd = ' '.join([EXE, *act['args']]) if act['args'] else act.get('raw', '')
     try:
         from .llm import build_llm, ask_json
-        b = brain or build_llm(store)
+        b = brain or build_llm(store, job='judge')
         if not b: return ({'hold': False, 'what': cmd, 'why': ''} if typing(act) else
                           {'hold': True, 'what': cmd, 'why': 'no AI is set up to judge it, so it waits for you'})
         user = (f"THE PAGE THE AGENT IS ON: {fence(pg.get('url') or 'unknown')}\n"

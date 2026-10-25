@@ -6559,6 +6559,12 @@ def tool_run(body: dict, request: Request):
     hub_tools = {'handbook_search', 'handbook_write', 'handbook_vote',
                  'hub_search', 'hub_write', 'hub_vote', 'hub_comment'}
     actor = _hub_actor(request, (body or {}).get('author')) if t in hub_tools else ACTOR
+    # AN AGENT NEVER SENDS FROM HERE (the owner, 2026-10-25): a post, an invoice sent, an order, an MCP tool its server does not call
+    # read-only - each waits as a proposal on the agent's own task, at any Authority, and the owner's press runs it. Before the scope
+    # check on purpose: at read, the proposal was always the road, and the refusal only said so.
+    if guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
+        tool = _mcp_tool(conn, body) if t == 'mcp' else None
+        if why := scopes.reaches(t, body, tool): return _agent_proposes(request, t, conn, body, why)
     try:
         scopes.require(conn, t)
     except PermissionError as e:
@@ -6581,6 +6587,41 @@ def tool_run(body: dict, request: Request):
         return {'ok': False, 'error': str(e)[:1000]}
     store.audit('tool', (conn or {}).get('ConnectorId', 0), 'run', actor, detail={'type': t, 'headline': str(head)[:200]})
     return {'ok': True, 'headline': head, 'output': (out or '')[:20000]}
+
+def _mcp_tool(conn, body):
+    """The MCP tool an agent named, as its own server describes it - None when the server cannot be asked or does not list it, which
+    scopes.reaches reads as "not read-only": a tool that cannot say what it is waits for the owner."""
+    from .mcp import list_tools
+    from .reports import query_only, resolve_cfg
+    try: hit = next((x for x in list_tools(resolve_cfg(store, {**query_only(body), 'type': 'mcp', 'connector_id': conn['ConnectorId']}))
+                     if x['name'] == (body or {}).get('tool')), None)
+    except Exception as e:
+        logger.info(f'mcp tool list for an agent call failed ({e}) - it waits for the owner'); return None
+    return {'annotations': {'readOnlyHint': True}} if hit and hit.get('read_only') else None
+
+# what an agent may not put on a proposal: where it runs is the card's, and a workflow's own resume or a close-out is Taskuary's
+_NOT_PROPOSED = ('task_id', 'why', 'action', 'flow_run', 'closeout', '_write')
+
+def _agent_proposes(request: Request, t: str, conn: dict, body: dict, why: str):
+    """An agent's call that would reach a person, filed as a run_tool proposal on its OWN task (proposals.queue): 202 with the review
+    the owner presses. Nothing ran. No task named is a refusal that says how, never a silent drop."""
+    from . import proposals
+    from .reports import query_only
+    tid = (body or {}).get('task_id')
+    if not str(tid or '').isdigit():
+        raise HTTPException(422, f"this {why} - so it waits for the owner's press on your task. Send task_id ($TASKUARY_TASK) with "
+                                 'the call and it is filed there as a proposal; nothing is sent until they press Approve.')
+    tid = int(tid)
+    _own_task_only(request, tid)
+    if not store.get_task(tid): raise HTTPException(404, 'no such task')
+    p = {**{k: v for k, v in query_only(body).items() if k not in _NOT_PROPOSED},
+         'action': 'run_tool', 'type': t, 'connector_id': conn['ConnectorId'], 'why': str((body or {}).get('why') or '')[:300]}
+    q = proposals.queue(store, tid, p, 'agent')
+    if not q: raise HTTPException(403, 'the proposal was refused - the reason is on the task')
+    store.audit('tool', conn['ConnectorId'], 'run_proposed', 'agent', detail={'type': t, 'task': tid, 'review': q['reviewId']})
+    return JSONResponse({'ok': True, 'queued': True, 'review': q['reviewId'],
+                         'says': f"Waiting on the owner's press: this {why}. Nothing was sent; it runs only when they press Approve."},
+                        status_code=202)
 
 @app.post('/api/reports/compose')
 def report_compose(body: dict):

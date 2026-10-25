@@ -128,7 +128,7 @@ AGENT_WRITES = (
     (r'POST', r'^/api/board/notes$', 'the wall agents leave lines for each other on'),
     (r'POST', r'^/api/(hub|handbook)(/\d+/(comment|vote|retire|restore))?$',
      "the Hub - post, correct, vote, retire what is no longer true; gated again by the card's hub_write scope"),
-    (r'POST', r'^/api/tools/run$', 'a data tool, gated per card by scopes.require'),
+    (r'POST', r'^/api/tools/run$', 'a data tool, gated per card by scopes.require - and a send waits as a proposal (scopes.reaches)'),
     (r'POST', r'^/api/reports/\d+/rerun$', 'a report run as its schedule would run it (concierge.tools_block) - no configuration changes'),
 )
 

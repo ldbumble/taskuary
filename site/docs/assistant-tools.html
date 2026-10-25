@@ -121,7 +121,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tbody><tr>
 <td><strong>table</strong></td>
 <td>decide about the item on the table</td>
-<td>reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, accept_invite, decline_invite, propose_time, find_time, elsewhere</td>
+<td>reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, accept_invite, decline_invite, propose_time, find_time, prepare, elsewhere</td>
 </tr>
 <tr>
 <td><strong>task</strong></td>
@@ -238,6 +238,11 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p>The &quot;Propose a new time&quot; button: propose another time for the invite from its free times - drafted for their Send.</p>
 <p class="runs">Brings up its button for you to press.</p><h3 id="find-time"><code>find_time</code><a class="anchor" href="#find-time" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Find a time&quot; button: free times for the meeting a thread asks for - the pick drafted as an invite for their Send.</p>
+<p class="runs">Brings up its button for you to press.</p><h3 id="prepare"><code>prepare</code><a class="anchor" href="#prepare" aria-label="Link to this section">#</a></h3>
+<p>The &quot;Prepare&quot; button: a meeting on the table only: an agent researches its people and subject through the owner&#39;s saved mail and chats and files a short brief on the meeting&#39;s task. Nothing is sent.</p>
+<ul>
+<li><code>text</code> - anything the owner wants it to look into</li>
+</ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="elsewhere"><code>elsewhere</code><a class="anchor" href="#elsewhere" aria-label="Link to this section">#</a></h3>
 <p>The &quot;They answered elsewhere&quot; button: they answered elsewhere; the step somebody owed closes as done, or the follow-up is put down.</p>
 <ul>

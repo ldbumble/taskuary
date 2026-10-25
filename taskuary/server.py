@@ -614,6 +614,21 @@ def signin_remove(site: str, request: Request):
     return {'ok': True}
 
 
+class SigninKeyBody(BaseModel):
+    key: str = ''
+
+
+# A SAVED SIGN-IN'S AUTHENTICATOR KEY (2026-10-25): kept, or (empty) dropped. Write-only: no route ever reads a key back
+@app.post('/api/signins/{site}/code')
+def signin_code(site: str, body: SigninKeyBody, request: Request):
+    from . import signin
+    _owner_only(request, "the saved sign-ins are the owner's")
+    try: ok = signin.set_key(store, site, body.key.strip(), ACTOR)
+    except ValueError as e: raise HTTPException(400, str(e))
+    if not ok: raise HTTPException(404, 'nothing is saved for that site')
+    return {'ok': True, 'code': bool(body.key.strip())}
+
+
 # The fill page sits outside /api on purpose: it is opened as a page, so no header can ride on it - the one-time token in its address
 # IS its key, and only that token's hash is kept. Its POST is same-origin only (the token gate checks Origin on /api alone).
 @app.get('/signin/{token}', include_in_schema=False)
@@ -627,12 +642,16 @@ def signin_page(token: str):
 @app.post('/signin/{token}', include_in_schema=False)
 async def signin_submit(token: str, request: Request):
     from urllib.parse import parse_qs
-    from . import signin
+    from . import signin, totp
     if not guard.origin_ok(request.headers):
         return HTMLResponse(signin.gone_html('This sign-in came from another page, so nothing was typed.'), 403, headers=signin.HEADERS)
     form = parse_qs((await request.body())[:16384].decode('utf-8', 'replace'), keep_blank_values=True)
     one = lambda k: (form.get(k) or [''])[0]
-    try: out = await run_in_threadpool(signin.by_owner, store, token, one('username'), one('password'), one('save') == '1')
+    try: out = await run_in_threadpool(signin.by_owner, store, token, one('username'), one('password'), one('save') == '1', None, one('key'))
+    except totp.BadKey as e:            # said on the same page, the link not spent: the owner fixes the key and presses again
+        r = signin.peek(store, token)
+        if r: return HTMLResponse(signin.form_html(r['Site'], max(1, int((r['ExpiresAt'] - time.time()) // 60)), f'{e}.'), 400, headers=signin.HEADERS)
+        return HTMLResponse(signin.gone_html('This sign-in page was used already or has expired.'), 410, headers=signin.HEADERS)
     except LookupError as e: return HTMLResponse(signin.gone_html(str(e)), 410, headers=signin.HEADERS)
     except (signin.SignInError, ValueError) as e:
         return HTMLResponse(signin.gone_html(f'Nothing was signed in: {e}.'), 409, headers=signin.HEADERS)

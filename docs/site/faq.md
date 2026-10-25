@@ -22,8 +22,10 @@ the AI you chose. With a [local model](#do-i-need-to-buy-tokens), the AI calls n
 
 When an agent needs a website, it drives a real browser on your machine (the optional
 `agent-browser` tool), so it reaches whatever your machine can reach, over your network and VPN.
-The page shows live beside the agent's terminal. It never types a password or a 2FA code: you
-press **Take over**, sign in yourself, and hand it back. Sites it should only *read* can go through
+The page shows live beside the agent's terminal. The agent never sees a password or a 2FA code: you
+press **Take over** and sign in yourself, or Taskuary types a sign-in you gave it (and, if you kept
+the site's authenticator key, its code). A click that would pay, send or delete waits for your
+**Approve**. Sites it should only *read* can go through
 a search or reader connector instead, with no browser at all. See
 [When the agent opens a browser](tasks-and-agents#when-the-agent-opens-a-browser).
 

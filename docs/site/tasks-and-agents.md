@@ -135,6 +135,29 @@ the terminal. **Take over** hands you the mouse and keyboard for a password or a
 agent must never type; **Snapshot** keeps the frame on the task as an attachment. On the Wall, a
 narrow tile shows a "browser" chip that opens the page over the session.
 
+**Signing in.** At a sign-in page the agent stops and asks, and the task waits on "Sign in to
+*site* to continue". Take over the pane, or press **Sign in here** for a one-time page that shows
+the site and takes the user name and password. Taskuary types them into the browser itself; the
+agent never sees them. Tick **Save to vault for next time** and the next sign-in on that site
+happens without you. Saved sign-ins are listed under **Settings → Agent permissions**.
+
+**Authenticator codes.** A site that asks for a six-digit code after the password can have its
+authenticator key kept with its saved sign-in: paste the key shown beside the site's QR code, or
+the `otpauth://` link the QR code holds, into the optional key field on the sign-in page, or press
+**Add authenticator key** on its row under Saved sign-ins. Taskuary then works out the code and
+types it after the password, or on its own when the site asks only for the code.
+**Remove authenticator key** forgets it, and the code is yours to type again.
+
+**Browser acts that can't be undone wait for you.** Before a Claude Code agent runs an
+`agent-browser` command, Taskuary reads it. Commands that only look (a snapshot, reading the page,
+moving between pages) run at once. Anything else is judged by your AI against the page it would
+act on: paying, ordering, sending, posting, deleting, or submitting a form for real is held. The
+agent is told it is waiting, and the act appears on the task as a card with **Approve** and
+**Dismiss**. Approve runs that exact command in the agent's browser, and only while the browser
+is still on the same page; Dismiss tells the agent it was not done. With no AI connected nothing
+can judge, so typing into a box (`fill`, `type`, `keyboard type`) runs and every other act waits
+for you.
+
 ## The general agent
 
 Not every job is code. A `general` task opens a conversation instead of a terminal: research,

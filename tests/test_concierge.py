@@ -493,6 +493,22 @@ class FyiWalkTests(unittest.TestCase):
         self.assertEqual(sorted(i['title'] for i in out['item']['items']), ['Note 0', 'Note 1', 'Note 2'])
         self.assertNotIn('fyi;', out['say']); self.assertNotIn('someone', out['say'])
 
+    def test_done_said_over_the_batch_on_the_table_lights_its_own_button(self):
+        """The 2026-10-25 sweep: "done" over the open 4 fyi said "There is nothing to close on 4 fyi ... Open it if you want its own buttons"
+        with its All read, next on screen, and nothing lit. The router lights the batch's real button and says nothing."""
+        s = store()
+        s.set_setting('team_domains', 'ours.com', 't')
+        for n in range(4):
+            m = s.add_message({'ExternalId': f'f{n}', 'ConversationId': f'c{n}', 'Channel': 'email', 'Subject': f'Note {n}', 'FromName': f'Person {n}',
+                               'FromEmail': f'p{n}@ours.com', 'SentAt': ago(n), 'BodyText': f'FYI number {n}, done.', 'Status': 'filed'})
+            s.add_route(m, None, 'file', None, 'triage: fyi - a colleague keeping you in the loop', [], 'triage')
+        with mock.patch.object(concierge, 'brain', return_value=None):
+            batch = concierge.surface(s)['item']
+        out = concierge.say(s, 'done', key=batch['key'], llm=lambda *a, **k: 'CALL: {"kind": "close", "params": {}}')
+        self.assertEqual(out['say'], '')
+        self.assertEqual((out['light']['verb'], out['light']['label'], out['light']['key']), ('next', buttons.label('next', 'batch'), batch['key']))
+        self.assertNotIn(concierge.OPEN_IT.strip(), json.dumps(concierge.history(s, general.dock_task(s)[0]['TaskId'])))
+
     def test_fyis_come_four_at_a_time_and_a_mail_walk_still_stops_for_a_waiting_agent(self):
         s = store()
         s.set_setting('team_domains', 'ours.com', 't')

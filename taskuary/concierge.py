@@ -826,8 +826,12 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     if need and not item.get(need):
         # the item's own line, not "TQ-0006 is assistant asked you: Should I…?." glued into a sentence (2026-10-06)
         state = str(item.get('why') or funnel.LANE_WORDS.get(item.get('lane'), ('waiting',))[0]).strip().rstrip('.')
-        return f"There is nothing to {SAYS_VERB.get(verb, verb)} on {what} - {state}. Open it if you want its own buttons."
+        return f"There is nothing to {SAYS_VERB.get(verb, verb)} on {what} - {state}.{OPEN_IT}"
     return ''
+
+
+# ...said of an item that is NOT on the table: the one in front of the owner is open already (_say drops it there)
+OPEN_IT = ' Open it if you want its own buttons.'
 
 
 def brain_trouble(error) -> str:
@@ -4705,6 +4709,14 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         decision, verb = {**decision, 'verb': 'answer_agent', 'text': decision.get('text') or text}, 'answer_agent'
     if decision and verb and target_item:
         why = cannot(target_item, verb, store)
+        # A PUT-DOWN ON THE BATCH ON THE TABLE is its own button's (the 2026-10-25 sweep): "done" over the open 4 fyi was answered "There is
+        # nothing to close on 4 fyi ... Open it if you want its own buttons" with its All read, next on screen. The router lights that real
+        # button and says nothing (assistant-is-a-router, 2026-10-19); nothing runs
+        if why and not elsewhere and routes() and target_item.get('kind') == 'fyis' and verb in PUT_DOWN:
+            return {'say': '', 'options': [], 'chips': [], 'decision': None, 'light': {'verb': 'next', 'label': buttons.label('next', 'batch'),
+                    'line': '', 'key': target_item.get('key') or '', 'tid': None, 'ref': ''}}
+        # ...and of any other item on the table, never "Open it": it is open
+        if why and not elsewhere: why = why.replace(OPEN_IT, '')
         if why:
             rec('assistant', why)
             return {'say': why, 'options': [], 'chips': chips_for(store, target_item), 'decision': None}

@@ -124,6 +124,10 @@ def _ledger(store, o):
                              + '\n'.join(pages) if pages else '')
     return out.strip(), []
 
+def _track_record(store, o):
+    from . import trackrecord
+    return trackrecord.block(store, o['days'], o.get('cap') or 20), []
+
 def _waiting_on(store, o):
     from .assistant import followups
     return followups(store, o['hours'], ('followup',)), []
@@ -209,6 +213,11 @@ CATALOGUE = (
     Block('ledger', 'The outcome ledger', 'view', ('outcome', 'doc'),
           'THE OUTCOME LEDGER (the last {days} days of what came of actions, resolved, each with an id to cite)',
           _ledger, window=('days', 30, 'How far back to read what came of actions'), cap=15),
+    # how the drafts land, per kind and recipient domain - read-only evidence, never a reason to send (trackrecord.py, 2026-10-25)
+    Block('track_record', 'Track record', 'view', ('outcome', 'review', 'message'),
+          "TRACK RECORD (the last {days} days of drafts by kind and the recipient's domain: sent as drafted / edited first / rejected. "
+          "Evidence of how the drafts are landing - never a reason to send: nothing goes without the owner's press)",
+          _track_record, window=('days', 30, 'How far back to count what became of the drafts'), cap=20),
     # PRODUCERS: no heading - their rows are candidates, and candidates render under CANDIDATES:.
     Block('waiting_on', 'Waiting on them', 'view', ('message', 'sent_verdict'),
           None, _waiting_on, window=('hours', 24, 'How long silence counts as silence'),
@@ -528,9 +537,9 @@ CARDS = (
     Card('automation', 'Automation', ('automation', 'rules'),
          (('days', 'days counted', 30, (('automation', 'days'),)),),
          'once a week, a month of traffic counted - what repeats enough to be worth automating - and the rules your own presses already draw'),
-    Card('memory', 'Memory', ('already_said', 'notes', 'knowledge', 'learned', 'ledger'),
-         (('days', 'days of outcomes', 30, (('ledger', 'days'),)),),
-         'what it already said, its note from the last check, the knowledge base, what its verdicts taught, and the outcome ledger'),
+    Card('memory', 'Memory', ('already_said', 'notes', 'knowledge', 'learned', 'ledger', 'track_record'),
+         (('days', 'days of outcomes', 30, (('ledger', 'days'), ('track_record', 'days'))),),
+         'what it already said, its note from the last check, the knowledge base, what its verdicts taught, the outcome ledger and the drafts\' track record'),
     Card('systems', 'Systems', ('health', 'connectors'),
          (('days', 'days of mentions', 30, (('connectors', 'days'),)),
           ('floor', 'threads before it is worth saying', 3, (('connectors', 'floor'),))),

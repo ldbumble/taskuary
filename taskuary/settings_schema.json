@@ -486,10 +486,12 @@
     },
     "mark_read_enabled": {
       "group": "Sync & startup",
-      "label": "Mark items read at the source",
-      "type": "switch",
-      "desc": "Once the funnel has taken a message in, mark it read where it came from — the mail seen, the chat read.",
-      "help": "Off (default): Taskuary is a pure reader — your inbox still shows every message bold, so nothing about your mailbox changes because you connected it. On: anything the funnel ingests is marked read at the source, so the bold rows left over are exactly the ones the hub never saw.\n\nWHERE IT APPLIES: Outlook mail (needs the Mail.ReadWrite consent), Gmail/IMAP mailboxes (the \\Seen flag), Slack channels (the read cursor moves to the newest line taken), Teams (Graph marks the whole CHAT read — there is no per-message read state there) and WhatsApp (blue ticks, via the bridge).\n\nWHERE IT CANNOT: Telegram and Discord bots have no read state to set, and the trackers — Jira, Linear, GitHub, Sentry and friends — have nothing to mark. The switch is simply a no-op for them.\n\nMarking always runs AFTER the message is safely stored and is best-effort: a refused permission is logged and never costs you the ingest."
+      "label": "Handled mail, at the source",
+      "type": "select",
+      "options": ["0", "1", "archive"],
+      "optionLabels": {"0": "leave it as it is", "1": "mark it read", "archive": "mark it read, and move handled mail to Archive"},
+      "desc": "What Taskuary does to a message in your real mailbox: nothing, mark it read once the funnel took it in, or that and move it to Archive once it is handled here.",
+      "help": "Leave it (default): Taskuary is a pure reader — your inbox still shows every message bold, so nothing about your mailbox changes because you connected it. Mark it read: anything the funnel ingests is marked read at the source, so the bold rows left over are exactly the ones the hub never saw.\n\nMove handled mail to Archive: everything 'mark it read' does, and once a mail is HANDLED here — its task closed, or its row put down with Handled — it leaves your Inbox for Archive, so the Inbox holds only what is still owed. Outlook moves it to its own Archive folder (Mail.ReadWrite), Gmail takes the Inbox label off (All Mail), and another IMAP mailbox uses its Archive folder when it has one; with none, the mail stays where it is. Mail you handled before choosing this is left alone, and mail nobody has handled is never moved.\n\nWHERE IT APPLIES: Outlook mail (needs the Mail.ReadWrite consent), Gmail/IMAP mailboxes (the \\Seen flag), Slack channels (the read cursor moves to the newest line taken), Teams (Graph marks the whole CHAT read — there is no per-message read state there) and WhatsApp (blue ticks, via the bridge).\n\nWHERE IT CANNOT: Telegram and Discord bots have no read state to set, and the trackers — Jira, Linear, GitHub, Sentry and friends — have nothing to mark. This setting is simply a no-op for them.\n\nMarking always runs AFTER the message is safely stored and is best-effort: a refused permission is logged and never costs you the ingest."
     },
     "timezone": {
       "group": "Display",

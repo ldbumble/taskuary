@@ -345,6 +345,8 @@ CREATE TABLE IF NOT EXISTS message (MessageId INTEGER PRIMARY KEY, TaskId INTEGE
   ConversationId TEXT, Channel TEXT, SourceName TEXT, Subject TEXT, FromName TEXT, FromEmail TEXT,
   SentAt TEXT, BodyText TEXT, SourceLink TEXT, Status TEXT DEFAULT 'routed', CreatedAt TEXT,
   Direction TEXT DEFAULT 'in', RecipientsJson TEXT, MailMetaJson TEXT, OwnText TEXT, SenderClass TEXT);
+-- handled mail moved to its mailbox's Archive, or why it was not (filing.py): one try per message, never a retry loop
+CREATE TABLE IF NOT EXISTS mail_filed (MessageId INTEGER PRIMARY KEY, FiledAt TEXT, Result TEXT);
 CREATE TABLE IF NOT EXISTS attachment (AttachmentId INTEGER PRIMARY KEY, MessageId INTEGER, ExternalId TEXT,
   Name TEXT, ContentType TEXT, Size INTEGER, ContentId TEXT, Inline INTEGER DEFAULT 0, Path TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS transcript (TranscriptId INTEGER PRIMARY KEY, TaskId INTEGER, Sid TEXT,
@@ -1588,7 +1590,7 @@ class SQLiteStore:
             # current one (same deal the template docs get) - an owner-edited prompt is never touched
             from .digest import OLD_PROMPTS, PROMPT as DIGEST_PROMPT
             from .assistant import OLD_PROMPT_HEADS, OLD_PROMPT_SHA, PROMPT as ASSISTANT_PROMPT
-            from .toil import PROMPT as AUTOMATE_PROMPT
+            from .toil import OLD_PROMPTS as AUTOMATE_OLD, PROMPT as AUTOMATE_PROMPT
             from .evening import OLD_PROMPTS as EVENING_OLD, PROMPT as EVENING_NOW
             for sid_, cj in self.cx.execute("SELECT SourceId, ConfigJson FROM source WHERE Channel='report'").fetchall():
                 try: c = json.loads(cj or '{}')
@@ -1600,6 +1602,10 @@ class SQLiteStore:
                     c['ai_prompt'] = ASSISTANT_PROMPT
                     if c.get('every_minutes') in (60, 20): c['every_minutes'] = 30
                     c.setdefault('on_startup', True)
+                    self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), sid_))
+                # the stock Automation ideas on a shipped prompt that still advised an auto-answer takes today's (2026-10-25)
+                if c.get('type') == 'automate' and c.get('ai_prompt') in AUTOMATE_OLD:
+                    c['ai_prompt'] = AUTOMATE_PROMPT
                     self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), sid_))
                 # the stock Automation ideas was seeded on Mondays only; unedited, it also greets
                 # a launch - at most once a week (an owner-set cadence is kept as it is)

@@ -91,8 +91,9 @@ CHIP_HINTS = {v: buttons.hint(v) for v in buttons.VERBS if buttons.hint(v)}
 # useless - it should be redraft or close task")
 CHIPS ={'review': ('approve', 'redraft', 'close', 'defer', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
          # a meeting is read and passed: Join is a link on the card, not a verb (the owner, 2026-10-02: "Meeting card should
-         # only have a next button like what it has on desktop")
-         'agent': ('stop_agent', 'defer', 'next'), 'meeting': ('next',),
+         # only have a next button like what it has on desktop") - and Prepare beside it (the owner, 2026-10-25: "add prepare that
+         # creates agent to research about person and topic through your mails")
+         'agent': ('stop_agent', 'defer', 'next'), 'meeting': ('prepare', 'next'),
          'report': ('mine', 'regular_agent', 'next'), 'agentdone': ('close', 'reply', 'next'),
          'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'not_ours', 'defer', 'next'), 'task': ('close', 'defer', 'next'),
          'asked': ('reply', 'mine', 'regular_agent', 'defer', 'not_ours', 'next'),
@@ -692,11 +693,11 @@ NEEDS = {'reply': 'mid', 'approve': 'rid', 'redraft': 'rid', 'not_ours': 'mid', 
          'not_ours_sender': 'mid', 'block_sender': 'mid', 'mine': 'mid', 'forward': 'mid', 'archive': 'mid',
          'rerun': 'source_id', 'close': 'tid', 'answer_agent': 'tid', 'split': 'key', 'defer': 'tid', 'continue': 'tid',
          'chase': 'key', 'let_go': 'key', 'elsewhere': 'key',
-         'accept_invite': 'mid', 'decline_invite': 'mid', 'propose_time': 'mid', 'find_time': 'mid'}
+         'accept_invite': 'mid', 'decline_invite': 'mid', 'propose_time': 'mid', 'find_time': 'mid', 'prepare': 'event'}
 SAYS_VERB = {'approve': 'approve', 'redraft': 'redraft', 'not_ours': 'file', 'not_ours_remember': 'file',
              'not_ours_sender': 'file', 'block_sender': 'write an exclusion rule for', 'coding_agent': 'hand to a coding agent', 'regular_agent': 'hand to an agent', 'mine': 'put on your list', 'forward': 'forward',
              'archive': 'archive', 'rerun': 'rerun', 'close': 'close', 'answer_agent': 'answer', 'reply': 'reply to',
-             'split': 'split', 'defer': 'put away', 'continue': 'continue', 'chase': 'chase', 'let_go': 'let go', 'elsewhere': 'close as answered elsewhere'}
+             'split': 'split', 'defer': 'put away', 'continue': 'continue', 'chase': 'chase', 'let_go': 'let go', 'elsewhere': 'close as answered elsewhere', 'prepare': 'prepare for'}
 
 def _coding(store) -> bool:
     from . import capabilities
@@ -3306,7 +3307,9 @@ _OPS = {'coding_agent': ('task.create_from_message', True), 'regular_agent': ('t
         'stop_agent': ('agent.stop', True), 'rerun': ('report.rerun', True), 'continue': ('agent.continue', False),
         # the slipped card's answers (spec 2026-10-12): a chase is a draft for your yes; the other two settle the item
         'chase': ('task.chase', False), 'let_go': ('task.let_go', True), 'elsewhere': ('task.elsewhere', True),
-        'test_connection': ('connection.test', False), 'split': ('task.split', False)}
+        'test_connection': ('connection.test', False), 'split': ('task.split', False),
+        # a meeting's Prepare: a researcher on its people and subject, reading the saved mail - the meeting stays on the table
+        'prepare': ('calendar.prepare', False)}
 PROPOSALS = {v: (k, buttons.label(v), s) for v, (k, s) in _OPS.items()} | {
     'not_ours_remember': ('preference.exclude_sender', f"{buttons.label('not_ours')} - and remember this kind", True),
     'remember': ('memory.remember', 'Remember it', False), 'setup': ('task.setup', 'Open the walk-through', False)}
@@ -3320,9 +3323,10 @@ AUTO = ('close', 'stop_agent', 'continue',                              # settle
         'test_connection',                                              # ...and a connection test, which only asks and changes nothing
         # ...and the ANSWER to an agent that asked: the words matched to its Answer pill go to the run at once, desktop and phone alike -
         # the phone used to skip the AI for this and sent "next" to the agent (the owner, 2026-10-08: "ai should match to pill action")
-        'answer_agent')
+        'answer_agent',
+        'prepare')                                                      # ...and Prepare's press: a researcher that writes to nobody
 # the verbs that start or resume an agent: a press of their button runs them, typed words only ever PROPOSE them
-AGENT_STARTS = ('coding_agent', 'regular_agent', 'continue')
+AGENT_STARTS = ('coding_agent', 'regular_agent', 'continue', 'prepare')
 # the operations that take the item off the table, so the walk moves on after them (the page reads
 # `settles` off the proposal it is holding; a chat comes back a turn later and has only the kind)
 # (filing to the archive and putting the item down are no buttons any more, but still tools a CALL may name - and still settle)
@@ -3530,6 +3534,9 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     elif verb in CAL_ACT:
         if not it.get('mid'): raise ValueError('nothing is on the table')
         target, params = it['mid'], {'act': CAL_ACT[verb]}
+    elif verb == 'prepare':
+        if not it.get('event'): raise ValueError('there is no meeting on the table to prepare for')
+        target, params = 0, {'key': it['key'], 'text': d_text or None}
     elif verb in ('chase', 'let_go', 'elsewhere'):
         if not it.get('key'): raise ValueError('nothing is on the table')
         target, params = it.get('tid') or it.get('idea') or it.get('mid') or 0, {'key': it['key'], 'text': d_text or text or None}

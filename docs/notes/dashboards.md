@@ -20,7 +20,8 @@ other, and it is edited in the same editor.
 
 ## Editing one
 
-Every dashboard is configurable in `DashboardEditor.jsx`, the AI's draft included. The page is drawn at the top. Under it:
+Every dashboard is configurable in `DashboardEditor.jsx`, the AI's draft included. Its settings come first and the page they
+make is drawn under them (the owner, 2026-10-25: settings go above the dashboard):
 
 - **Sources** are a report's own source cards (`ReportsView.SourceCard`), laid out as a report's are, each with its date
   column. Changing a source reads the rows again (`/api/dashboards/preview`, once the typing stops).

@@ -101,7 +101,7 @@ REFUSALS = (
     (r'^/api/(tools/run|agents/[^/]+/test)', 'This is the demo - nothing runs, because there are no real systems here to run against.'),
     (r'^/api/(reviews?/\d+/(send|decide)|tasks/\d+/(handoff|clarify)|board/send|messages/\d+/send)', SENDS),
     (r'^/api/(terminals|agents)(/|$)|^/api/tasks/\d+/(dispatch|code|continue|continue-session|continue-work|resume)$'
-     r'|^/api/messages/\d+/dispatch$', STARTS),
+     r'|^/api/messages/\d+/dispatch$|^/api/calendar/prepare$', STARTS),
     (r'^/api/(sync|ingest|poll|msauth|hooks)', 'This is the demo - no mail is fetched; what you see was written in advance.'),
     (r'^/api/(doc|soul|semantic|reports?/[^/]*/(run|preview)|dashboards/(compose|preview))','This is the demo - editing your documents and running reports are switched off.'),
 )
@@ -120,7 +120,7 @@ def refuse_op(op) -> str:
     kind, p = op.get('kind'), op.get('params') or {}
     if kind in LOCAL_OPS or (kind == 'task.create_from_message' and str(p.get('kind') or 'task').lower() == 'task'): return ''
     if kind in ('review.approve', 'task.clarify', 'task.chase', 'task.handoff', 'task.share', 'task.ask_agent'): return SENDS
-    if kind in ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.stop', 'task.create_from_message', 'task.create_from_text'): return STARTS
+    if kind in ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.stop', 'task.create_from_message', 'task.create_from_text', 'calendar.prepare'): return STARTS
     return OFF
 
 

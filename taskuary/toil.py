@@ -1,9 +1,13 @@
 """What should you automate next? A weekly report that mines the funnel's OWN history for
 repeated toil - the same sender asking the same shape of thing, drafts you always approve
 untouched, noise you keep ignoring by hand - and proposes the concrete Taskuary object
-that kills each one: a skip policy, an auto-answer rule, a standing prompt, a scheduled
+that kills each one: a skip policy, a playbook for the reply, a standing prompt, a scheduled
 report. Ships seeded like the Morning digest: lands on the Timeline, prompt editable on
 the Reports tab, delete the source to turn it off.
+
+Never an auto-answer: that rule kind was removed (policy.py), and nothing is sent without the owner's press (the owner,
+2026-10-25: "show the earned-trust track record, but never send without approval for now"). A draft that always goes untouched
+earns a playbook that drafts it well, for the same Send.
 """
 from datetime import datetime, timedelta
 from .store import auto_code_enabled
@@ -12,12 +16,23 @@ from .policy import BODYLESS, matches
 PROMPT = (
     'You are looking at one operator\'s inbound-work statistics. Propose AT MOST five '
     'automations, ranked by minutes saved per week. Each proposal is 2-3 lines: the pattern '
+    '(with its numbers), the concrete fix IN THIS APP (a skip policy on a sender/domain, a '
+    'playbook that drafts the reply that always goes untouched - still sent only by the '
+    'owner\'s press, never automatically -, a standing prompt on a connector, a scheduled '
+    'report, flipping auto-dispatch on), and what to watch out for. Only propose what the '
+    'numbers actually support - several episodes, more than one week. If nothing repeats '
+    'enough to automate, say so in one line instead of inventing work. Skip anything the '
+    'EXISTING POLICIES section already covers.')
+# the shipped prompts before this one: an unedited seeded copy is healed to PROMPT (store.py), an owner-edited one is kept
+OLD_PROMPTS = (
+    'You are looking at one operator\'s inbound-work statistics. Propose AT MOST five '
+    'automations, ranked by minutes saved per week. Each proposal is 2-3 lines: the pattern '
     '(with its numbers), the concrete fix IN THIS APP (a skip policy on a sender/domain, an '
     'auto_answer policy, a standing prompt on a connector, a scheduled report, flipping '
     'auto-dispatch or auto-draft on), and what to watch out for. Only propose what the '
     'numbers actually support - several episodes, more than one week. If nothing repeats '
     'enough to automate, say so in one line instead of inventing work. Skip anything the '
-    'EXISTING POLICIES section already covers.')
+    'EXISTING POLICIES section already covers.',)
 
 
 def gather(store, days: int = 30) -> str:
@@ -63,7 +78,7 @@ def gather(store, days: int = 30) -> str:
                    + (f" · e.g. {' | '.join(d['subjects'])}" if d['subjects'] else ''))
     if len(out) == 1: out.append('  (nothing repeated 3+ times)')
     hot = [f'  {who}: {n} drafts sent unchanged' for who, n in sorted(approved.items(), key=lambda x: -x[1]) if n >= 3]
-    if hot: out += ['DRAFTS YOU ALWAYS APPROVE UNTOUCHED (auto_answer candidates):'] + hot
+    if hot: out += ['DRAFTS YOU ALWAYS APPROVE UNTOUCHED (playbook candidates - the Send stays yours):'] + hot
     if covered: out.append(f'  ({len(covered)} more senders left out: your rules already skip or ignore them, or the Advisor asks you about a rule for them)')
     out.append('EXISTING POLICIES (already automated - never propose these again):')
     out += [f"  [{p['Action']}] {p['Kind']}: {str(p.get('Pattern') or '')[:60]}" for p in pols] or ['  (none)']

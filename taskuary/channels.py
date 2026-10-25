@@ -1650,7 +1650,8 @@ def _gh_explicit(store, connector_id) -> bool:
 # are logged once and swallowed. Protocols with no read state for a bot - Telegram, Discord,
 # the trackers - simply have no marker, and the switch is a no-op for them.
 def wants_read(store) -> bool:
-    try: return str(store.get_setting('mark_read_enabled') or '0') == '1'
+    # 'archive' marks read too, then files handled mail away (filing.py, 2026-10-25)
+    try: return str(store.get_setting('mark_read_enabled') or '0') in ('1', 'archive')
     except Exception: return False
 
 
@@ -2073,7 +2074,7 @@ def poll_channels(store, backfill_hours: float = 0, progress=None, only=None) ->
     if len(jobs) == 1:
         c, file_only = jobs[0]
         _say(c['Type'], 0, store)
-        return _poll_one(store, c, file_only, backfill_hours, llm, read_it)
+        return _file_after(store, _poll_one(store, c, file_only, backfill_hours, llm, read_it))
 
     # said as it happens, not at the end: the timeline is refreshing while this runs, so
     # "reading Outlook" beside rows that are already arriving beats a spinner and a wait
@@ -2096,6 +2097,15 @@ def poll_channels(store, backfill_hours: float = 0, progress=None, only=None) ->
             for f in futs:
                 try: n += f.result()
                 except Exception as e: logger.warning(f'channel poll worker failed: {e}')
-            return n
+            return _file_after(store, n)
     finally:
         writer.close()
+
+
+def _file_after(store, n: int) -> int:
+    """After the mail is in, handled mail goes to Archive when the owner chose that (filing.py). Never costs the poll."""
+    try:
+        from . import filing
+        filing.file_handled(store)
+    except Exception as e: logger.warning(f'filing handled mail failed: {e}')
+    return n

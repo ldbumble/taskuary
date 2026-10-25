@@ -38,7 +38,7 @@ import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } f
 import { ChannelIcon, Empty } from "./ui.jsx";
 import { RecentlyDeleted, UndoLine, removeNow } from "./Removed.jsx";
 import { normalizeBrainOptions } from "./brainOptions.js";
-import { workingTable } from "./workingNumbers.js";
+import { recordRow, workingTable } from "./workingNumbers.js";
 import { mailboxChoices, mailboxValue } from "./ruleMailbox.js";
 import { ABOUT_SECTIONS, AUDIT_SECTIONS, secId, pageId, scrollToSection, sectionOffset, SCROLL_TOP } from "./settingsMap.js";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
@@ -1368,8 +1368,8 @@ const AssistantChanges = () => {
 
 // whether the app's calls stood, 7 and 30 days (workingNumbers.js) - a table of numbers and nothing said about them
 const WorkingNumbers = () => {
-  const [wins, setWins] = useState(null);
-  useEffect(() => { api.get("/api/working").then(({ data }) => setWins(data.windows || [])).catch(() => setWins([])); }, []);
+  const [wins, setWins] = useState(null), [record, setRecord] = useState([]);
+  useEffect(() => { api.get("/api/working").then(({ data }) => { setWins(data.windows || []); setRecord(data.record || []); }).catch(() => setWins([])); }, []);
   if (wins === null) return <CircularProgress size={16} sx={{ display: "block", mt: 1 }} />;
   if (!wins.length) return <Empty>Not counted - Taskuary did not answer.</Empty>;
   const cols = `130px repeat(${wins.length}, minmax(0, 1fr))`;
@@ -1382,6 +1382,16 @@ const WorkingNumbers = () => {
         <Box key={r.label} sx={{ display: "grid", gridTemplateColumns: cols, gap: 1.5, alignItems: "baseline", py: 0.75, borderBottom: `1px solid ${BORDER}` }}>
           <Typography variant="caption" sx={{ color: INK, fontWeight: 600 }}>{r.label}</Typography>
           {r.cells.map((c, i) => <Typography key={i} variant="caption" sx={{ color: DIM }}>{c}</Typography>)}
+        </Box>
+      ))}
+      {/* THE TRACK RECORD (2026-10-25): each draft pattern's last 30 days - read-only, and nothing is ever sent on it */}
+      <Typography sx={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT, mt: 2, pb: 0.5, borderBottom: `1px solid ${BORDER}` }}
+        data-tq-track-record>TRACK RECORD · LAST 30 DAYS · NOTHING IS SENT WITHOUT YOUR PRESS</Typography>
+      {!record.length && <Typography variant="caption" sx={{ color: FAINT, display: "block", py: 0.75 }}>No drafts in the last 30 days.</Typography>}
+      {record.map(recordRow).map((r) => (
+        <Box key={r.label} sx={{ display: "grid", gridTemplateColumns: "minmax(0, 260px) minmax(0, 1fr)", gap: 1.5, alignItems: "baseline", py: 0.75, borderBottom: `1px solid ${BORDER}` }}>
+          <Typography variant="caption" sx={{ color: INK, fontWeight: 600, overflowWrap: "anywhere" }}>{r.label}</Typography>
+          <Typography variant="caption" sx={{ color: DIM }}>{r.cell}</Typography>
         </Box>
       ))}
     </Box>

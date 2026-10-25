@@ -305,6 +305,9 @@ _DECIDE = {
     'decline_invite':  "decline the invite waiting on the owner - drafted for their Send",
     'propose_time':    "propose another time for the invite from its free times - drafted for their Send",
     'find_time':       "free times for the meeting a thread asks for - the pick drafted as an invite for their Send",
+    # ...and getting ready for one (the owner, 2026-10-25): a researcher, never a reply
+    'prepare':         ("a meeting on the table only: an agent researches its people and subject through the owner's saved mail and chats "
+                        "and files a short brief on the meeting's task - `text`: anything the owner wants it to look into. Nothing is sent"),
     'elsewhere':       "they answered elsewhere - `text`: where (a call, a meeting); the step somebody owed closes as done, or the follow-up is put down",
 }
 # ...each decision that IS a button says the button's name, read from buttons.json, so the model is told exactly today's buttons

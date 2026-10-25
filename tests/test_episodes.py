@@ -145,3 +145,16 @@ def test_a_promise_kept_every_week_is_an_episode_of_its_own():
     eps = [e for e in episodes.build(s, '2000-01-01') if 'you keep a promise to gail@northwind.example on Mondays' in e[3]]
     assert len(eps) == 1 and '7 weeks' in eps[0][3]
     assert eps[0][0] in {f'sv{m}' for m in facts['gail_monday']}, 'it cites a promise it was counted from'
+
+
+def test_a_machine_line_with_no_bullet_is_still_the_machines_and_kept_by_its_books(w):
+    """The live yardstick (2026-10-25): a real model wrote its lines with no "- ". Untagged reads as the owner's own, in use at once -
+    so a line that carries the tag is bulleted and goes through the same books as any machine line."""
+    s, facts = w
+    s.set_setting('learn_last_reflect', _since(), 'test')
+    bare = '- Sam Price (sam@vendor.example) is a key partner [s:5 | ev: msg999999 | seen: 2026-10-20 | k: sam partner]'[2:]
+    assert _reflect(s, lambda d: d.replace(learned_cut.PEOPLE + '\n', learned_cut.PEOPLE + '\n' + bare + '\n', 1))
+    doc = s.get_doc('learned')
+    assert 'key partner' not in learned_cut.section(doc, learned_cut.PEOPLE), 'it rests on nothing that resolves: it waits in Watching'
+    assert learn._bullets('Erin [s:4 | ev: msg1 | seen: 2026-10-20]\nyours, untagged\n- tagged [s:2 | ev: msg1 | seen: 2026-10-20]') == \
+        '- Erin [s:4 | ev: msg1 | seen: 2026-10-20]\nyours, untagged\n- tagged [s:2 | ev: msg1 | seen: 2026-10-20]'

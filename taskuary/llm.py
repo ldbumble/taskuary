@@ -433,6 +433,23 @@ class _Scrubbed:
 def _scrub(brain): return _Scrubbed(brain) if brain else brain
 
 
+class _Cooling:
+    """A CLI brain that, refused on its usage allowance with a time it comes back, says so to the router (brainroute.cool): the
+    next call goes to a backup until then, instead of to the brain that will refuse it again. The refusal itself still raises."""
+    def __init__(self, store, pick, brain):
+        for k, v in (('_store', store), ('_pick', pick), ('_brain', brain)): object.__setattr__(self, k, v)
+    def __call__(self, *a, **kw):
+        try: return self._brain(*a, **kw)
+        except Exception as e:
+            if getattr(e, 'until', None):
+                from . import brainroute
+                brainroute.cool(self._store, self._pick, e.until)
+            raise
+    def __bool__(self): return bool(object.__getattribute__(self, '_brain'))
+    def __getattr__(self, k): return getattr(object.__getattribute__(self, '_brain'), k)
+    def __setattr__(self, k, v): setattr(object.__getattribute__(self, '_brain'), k, v)
+
+
 class _StepUp:
     """A one-shot brain that may ask a stronger one once (the router's escalation, Auto mode only). It answers exactly as the brain
     it wraps; `step_up(why)` is what ask_json calls when the answer could not be used - it returns the strong brain, or None when
@@ -487,9 +504,9 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
         chosen_model, chosen_resume, chosen_keep = (model, resume, keep) if first else (None, None, None)
         if candidate.startswith('cli:'):
             try:
-                return make_cli_llm(store, candidate[4:], chosen_model, trace=trace, cancel=cancel,
+                return _Cooling(store, candidate, make_cli_llm(store, candidate[4:], chosen_model, trace=trace, cancel=cancel,
                                     resume=chosen_resume, cli_tools=cli_tools, extra_env=extra_env,
-                                    research=research, gear=gear, keep=chosen_keep, task_id=task_id)
+                                    research=research, gear=gear, keep=chosen_keep, task_id=task_id))
             # a BACKUP that cannot run a stranger's task is no backup for it; the first brain's refusal is the answer
             except origin_mod.RefusedForStranger:
                 if first: raise

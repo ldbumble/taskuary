@@ -307,6 +307,19 @@ def rate_limited(raw) -> dict:
     return {}
 
 
+def limit_resets(info: dict):
+    "When a refused allowance comes back, as the CLI said it (a datetime), or None when it did not say."
+    when = (info or {}).get('resetsAt') or (((info or {}).get('unifiedWindows') or {}).get((info or {}).get('rateLimitType')) or {}).get('resetsAt')
+    try: return datetime.fromtimestamp(int(when))
+    except (TypeError, ValueError, OSError, OverflowError): return None
+
+
+class RateLimited(RuntimeError):
+    """A CLI that refused on its usage allowance. `until` is when it comes back, or None - the router rests the brain till then
+    (brainroute.cool) instead of handing it the next call to refuse."""
+    def __init__(self, msg: str, info: dict = None): super().__init__(msg); self.until = limit_resets(info)
+
+
 def rate_limit_msg(name: str, info: dict) -> str:
     """What the owner needs: which allowance, when it comes back, and that nothing is broken."""
     window = _LIMIT_WINDOW.get(str(info.get('rateLimitType') or ''), str(info.get('rateLimitType') or '')).strip()
@@ -1440,7 +1453,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         # refusal lands on stderr, while the reason the owner reads now comes off stdout
         hay = f'{said}\n{err}'
         limit = rate_limited(raw) or rate_limited(hay)
-        if limit: raise RuntimeError(rate_limit_msg(name, limit))
+        if limit: raise RateLimited(rate_limit_msg(name, limit), limit)
         if _SIGNED_OUT.search(hay): raise RuntimeError(signed_out_msg(name, said, cmd[0] if cmd else ''))
         # a refusal to START, not a failed run: the CLI produced no output of its own and the
         # only thing on stderr is the refusal
@@ -1582,13 +1595,13 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
         said = str(e)
         if said == 'cancelled': raise
         limit = rate_limited(said)
-        if limit: raise RuntimeError(rate_limit_msg(name, limit))
+        if limit: raise RateLimited(rate_limit_msg(name, limit), limit)
         if _SIGNED_OUT.search(said): raise RuntimeError(signed_out_msg(name, said, cmd[0] if cmd else ''))
         raise RuntimeError(f'{name}: {said[:500]}')
     if final.get('is_error'):
         said = str(final.get('result') or final.get('subtype') or 'the CLI reported an error')
         limit = rate_limited(raw) or rate_limited(said)
-        if limit: raise RuntimeError(rate_limit_msg(name, limit))
+        if limit: raise RateLimited(rate_limit_msg(name, limit), limit)
         if _SIGNED_OUT.search(said): raise RuntimeError(signed_out_msg(name, said, cmd[0] if cmd else ''))
         raise RuntimeError(f'{name}: {said[:500]}')
     out = str(final.get('result') or '').strip()

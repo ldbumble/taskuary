@@ -783,6 +783,10 @@ def seed(store) -> int:
         if tid: past.append((tid, mid, when, channel, verdict))
         made += 1
     seed_history_work(store, f, past)
+    # THE USUAL RECIPIENT, SHOWN (the owner, 2026-10-25: "Hand it to a person" pre-fills the usual recipient): Priya's asks this week went
+    # on to Ruth, so Hand it to a person on her new-starter ask opens with Ruth chosen - and nothing goes until it is pressed
+    priya_asks = [p[0] for p in past if p[4] == 'task' and (store.get_message(p[1]) or {}).get('FromEmail') == PEOPLE[1][1]]
+    for tid in priya_asks[:2]: store.audit('task', tid, 'handoff', 'owner', 'human', {'to': PEOPLE[3][1], 'channel': 'email', 'closed': True})
 
     store.save_doc('soul', SOUL, 'demo')
     store.save_doc('job', JOB, 'demo')

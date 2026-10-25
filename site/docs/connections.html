@@ -352,7 +352,10 @@ that fights back) and <strong>Apify</strong> (when the crawl is one somebody alr
 purpose — the bill and the terms differ far more than the results do.</p>
 <p>What is deliberately NOT here is anything that DRIVES a browser — logging in, clicking, filling a
 form. That runs over CDP through a real browser session and cannot be reached from an API, so a
-card promising it would be a card that never works.</p>
+card promising it would be a card that never works. Driving a browser is the optional
+<code>agent-browser</code> tool&#39;s job instead: signing in, authenticator codes and the browser acts that wait
+for your press are described under
+<a href="tasks-and-agents#when-the-agent-opens-a-browser">When the agent opens a browser</a>.</p>
 <p><strong>Social</strong> — <strong>LinkedIn</strong>, <strong>Bluesky</strong> and <strong>Mastodon</strong>. Nothing from these reaches the Timeline as
 work: a public timeline is not an inbox, so they are report sources and tools rather than triggers.
 Like every connection they start at full authority, so an agent can post. A public post cannot be

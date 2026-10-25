@@ -65,6 +65,22 @@ the recipient. It answers the message on file. Pushes, pull requests and tool ru
 *proposes* are checked again when you approve them. Approving one never grants permission it did not
 already have.
 
+**A browser act that can't be undone waits for you.** Every shell command a Claude Code session of
+Taskuary's runs is read before it runs. An `agent-browser` command that only looks passes. Any other
+goes to your AI with the page it would act on, and one that would pay, order, send, delete or submit
+for real is refused to the agent and put on the task for your **Approve**. Unsure, or no answer, is
+a hold too. With no AI connected, typing into a box passes, read from the command's own verb, and
+every other act waits. Approving runs that exact command, only while the browser is on the page it
+was held on.
+
+**The agent never holds a sign-in.** The agent asks; Taskuary types the user name, password and
+authenticator code into the browser itself, over Chrome's own DevTools connection, only into the
+page's top document, only on the site the sign-in was saved for, checked again with the box focused.
+None of it is in a command line, a file, a prompt or a log, and the live view of the page pauses
+while it is typed. Saved sign-ins and authenticator keys are sealed with Windows DPAPI or the
+system keychain, and are not saved where neither exists. Each fill is recorded: the site, the task,
+whether it went in, never what was typed.
+
 **Agents have less authority than you in Taskuary's own interface.** Each session runs with its own
 token, and the routes that send, approve or change settings refuse it. The app page does not carry
 your own token either: Taskuary opens your browser with a one-time key, `taskuary --link` makes a new
@@ -170,6 +186,10 @@ These are honest limits.
   the whole thread without marks.
 - **A second data folder's Codex, Devin and Copilot sessions report no hook events.** Only Claude
   Code takes hooks per session. Those CLIs' status there comes from the screen and their own logs.
+- **Only Claude Code's browser acts are held.** Codex, Devin and Copilot hooks report but cannot
+  refuse a call, so their browser acts are not held. Neither is a Claude session whose hook could
+  not reach Taskuary (Taskuary closed), nor an agent that drives Chrome some way other than
+  `agent-browser`.
 - **Connections start at full permission.** An agent can use a connection marked *tool* to do anything
   that connection can do, unless you narrow it.
 - **Anything your own agents write for later can carry what they read.** Hub entries and wall notes

@@ -159,6 +159,20 @@ decide whether to press Start. It is a warning, not a gate.</p>
 the recipient. It answers the message on file. Pushes, pull requests and tool runs an agent
 <em>proposes</em> are checked again when you approve them. Approving one never grants permission it did not
 already have.</p>
+<p><strong>A browser act that can&#39;t be undone waits for you.</strong> Every shell command a Claude Code session of
+Taskuary&#39;s runs is read before it runs. An <code>agent-browser</code> command that only looks passes. Any other
+goes to your AI with the page it would act on, and one that would pay, order, send, delete or submit
+for real is refused to the agent and put on the task for your <strong>Approve</strong>. Unsure, or no answer, is
+a hold too. With no AI connected, typing into a box passes, read from the command&#39;s own verb, and
+every other act waits. Approving runs that exact command, only while the browser is on the page it
+was held on.</p>
+<p><strong>The agent never holds a sign-in.</strong> The agent asks; Taskuary types the user name, password and
+authenticator code into the browser itself, over Chrome&#39;s own DevTools connection, only into the
+page&#39;s top document, only on the site the sign-in was saved for, checked again with the box focused.
+None of it is in a command line, a file, a prompt or a log, and the live view of the page pauses
+while it is typed. Saved sign-ins and authenticator keys are sealed with Windows DPAPI or the
+system keychain, and are not saved where neither exists. Each fill is recorded: the site, the task,
+whether it went in, never what was typed.</p>
 <p><strong>Agents have less authority than you in Taskuary&#39;s own interface.</strong> Each session runs with its own
 token, and the routes that send, approve or change settings refuse it. The app page does not carry
 your own token either: Taskuary opens your browser with a one-time key, <code>taskuary --link</code> makes a new
@@ -271,6 +285,10 @@ not stop a model that is talked round. A trusted session also reads its context 
 the whole thread without marks.</li>
 <li><strong>A second data folder&#39;s Codex, Devin and Copilot sessions report no hook events.</strong> Only Claude
 Code takes hooks per session. Those CLIs&#39; status there comes from the screen and their own logs.</li>
+<li><strong>Only Claude Code&#39;s browser acts are held.</strong> Codex, Devin and Copilot hooks report but cannot
+refuse a call, so their browser acts are not held. Neither is a Claude session whose hook could
+not reach Taskuary (Taskuary closed), nor an agent that drives Chrome some way other than
+<code>agent-browser</code>.</li>
 <li><strong>Connections start at full permission.</strong> An agent can use a connection marked <em>tool</em> to do anything
 that connection can do, unless you narrow it.</li>
 <li><strong>Anything your own agents write for later can carry what they read.</strong> Hub entries and wall notes

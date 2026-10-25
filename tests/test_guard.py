@@ -234,7 +234,7 @@ class AllowListTests(unittest.TestCase):
             'POST /api/board/notes',
             'POST /api/handbook', 'POST /api/handbook/{lid}/comment', 'POST /api/handbook/{lid}/restore',
             'POST /api/handbook/{lid}/retire', 'POST /api/handbook/{lid}/vote',
-            'POST /api/hooks/claude/ask', 'POST /api/hooks/claude/floor',
+            'POST /api/hooks/claude/ask', 'POST /api/hooks/claude/browser', 'POST /api/hooks/claude/floor',
             'POST /api/hooks/claude/permit', 'POST /api/hooks/claude/reason', 'POST /api/hooks/{cli}',
             'POST /api/hub', 'POST /api/hub/{lid}/comment', 'POST /api/hub/{lid}/restore', 'POST /api/hub/{lid}/retire',
             'POST /api/hub/{lid}/vote',

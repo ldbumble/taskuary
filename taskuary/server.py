@@ -1777,6 +1777,8 @@ def task_detail(task_id: int):
                            'at': tr['CreatedAt'], 'chars': len(tr['Text'] or '')} if tr else None,
             # ...and WHICH BRAIN ACTUALLY RAN IT, for a session that has ended (_ran_on)
             'ranOn': _ran_on(task_id, tr),
+            # ...and why the router put its last AI call on that brain, for the AI pill's tooltip (brainroute.why_for_task)
+            'routeWhy': _brainroute().why_for_task(store, task_id),
             # ...and what the agent step says when nothing is live: why it never started, or what it did before it went
             'agentStory': _agent_story(task_id),
             # ...and whether Fix it can run on its items: an outsider's only in GitHub's cloud, and only once the owner turned that
@@ -1824,6 +1826,11 @@ def _agent_story(task_id: int):
     try: return funnel.agent_story(store, task_id)
     except Exception as e:
         logger.debug(f'task {task_id}: agent story skipped - {e}'); return None
+
+
+def _brainroute():
+    from . import brainroute
+    return brainroute
 
 
 def _ran_on(task_id: int, tr=None):
@@ -9654,6 +9661,12 @@ def set_assistant_listens(body: ListensBody):
     from . import remote_assistant
     try: return remote_assistant.set_listens(store, body.channel, body.listens)
     except ValueError as e: raise HTTPException(422, str(e))
+
+@app.get('/api/ai/routes')
+def ai_routes(task: int = None, limit: int = 20):
+    """The newest brain routes - which AI each call ran on and why - for one task or all. Read-only; no prompt or answer is kept."""
+    return {'routes': store.brain_routes(task, limit=max(1, min(int(limit), 200)))}
+
 
 @app.get('/api/ai/defaults')
 def ai_defaults():

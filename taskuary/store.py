@@ -535,6 +535,10 @@ CREATE TABLE IF NOT EXISTS lore_comment (CommentId INTEGER PRIMARY KEY, LoreId I
   Author TEXT, CreatedAt TEXT);
 CREATE INDEX IF NOT EXISTS idx_lore_comment ON lore_comment(LoreId, CommentId);
 CREATE TABLE IF NOT EXISTS lore_vote (LoreId INTEGER, Actor TEXT, Delta INTEGER, At TEXT, PRIMARY KEY (LoreId, Actor));
+-- Which brain each AI call was built on, and why (brainroute.py) - never what it was asked or what it said. Trimmed at 30 days.
+CREATE TABLE IF NOT EXISTS brainroute (Id INTEGER PRIMARY KEY, At TEXT, Job TEXT, TaskId INTEGER, MessageId INTEGER, Pick TEXT,
+  Model TEXT, Tier TEXT, Rule TEXT, Why TEXT, Difficulty TEXT, DataClass TEXT, EscalatedFrom INTEGER, Outcome TEXT, Ms INTEGER);
+CREATE INDEX IF NOT EXISTS idx_brainroute_task ON brainroute(TaskId, Id);
 """
 # the knowledge base's search index (knowledge.py). A VIRTUAL table, kept out of SCHEMA: a Python
 # built without FTS5 must still open the store - search then falls back to LIKE over kb_chunk.
@@ -3929,6 +3933,28 @@ class SQLiteStore:
         the last task id of the previous page)."""
         if before: return self._rows('SELECT * FROM task WHERE SourceRef=? AND TaskId<? ORDER BY TaskId DESC LIMIT ?', (tag, int(before), int(limit)))
         return self._rows('SELECT * FROM task WHERE SourceRef=? ORDER BY TaskId DESC LIMIT ?', (tag, int(limit)))
+    # ── which brain each AI call ran on (brainroute.log) ────────
+    # A route row is on no screen's road but the log's own, so it does not move this connection's write counter: the display
+    # caches are keyed on it (feed_tag, PROCESSING_DIRTY_TABLES), and every AI call writes one - the rail would rebuild for nothing.
+    BRAIN_ROUTE_COLS = ('At', 'Job', 'TaskId', 'MessageId', 'Pick', 'Model', 'Tier', 'Rule', 'Why', 'Difficulty', 'DataClass',
+                        'EscalatedFrom', 'Outcome', 'Ms')
+    def add_brain_route(self, rec: dict) -> int:
+        cols = [c for c in self.BRAIN_ROUTE_COLS if rec.get(c) is not None]
+        return self._exec_unseen(f"INSERT INTO brainroute ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", [rec[c] for c in cols])
+    def _exec_unseen(self, q, p=()):
+        with self.lock:
+            cur = self.cx.execute(q, p); self.cx.commit(); return cur.lastrowid
+    def set_brain_route(self, rid: int, **fields) -> None:
+        cols = [c for c in fields if c in self.BRAIN_ROUTE_COLS]
+        if not cols: return
+        self._exec_unseen(f"UPDATE brainroute SET {','.join(f'{c}=?' for c in cols)} WHERE Id=?", [fields[c] for c in cols] + [int(rid)])
+    def brain_routes(self, task_id: int = None, limit: int = 20) -> list:
+        if task_id is not None: return self._rows('SELECT * FROM brainroute WHERE TaskId=? ORDER BY Id DESC LIMIT ?', (int(task_id), int(limit)))
+        return self._rows('SELECT * FROM brainroute ORDER BY Id DESC LIMIT ?', (int(limit),))
+    def trim_brain_routes(self, before: str) -> int:
+        n = (self._one('SELECT COUNT(*) AS n FROM brainroute WHERE At<?', (before,)) or {}).get('n') or 0
+        if n: self._exec_unseen('DELETE FROM brainroute WHERE At<?', (before,))
+        return n
     # ── a report's run history (reports.run_report_source; the Reports tab's History) ────────
     REPORT_RUNS_KEPT = 60          # per report - a month of half-hourly assistant checks is 1400, and nobody reads past the last few dozen
     def add_report_run(self, sid: int, rec: dict) -> int:

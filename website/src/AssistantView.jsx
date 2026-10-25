@@ -843,7 +843,9 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
   // a PREPARED answer's line (drawAhead, `held`) says its words at once and draws its card once the press has answered: a card's
   // first reads write (a task's origin filed on its first detail read, the Advisor asked), and a write under a press between
   // its admission and its commit check refused the press as stale (PW-118, 2026-10-20)
-  if (m.held) m = { ...m, card: null };
+  // ...and not its words either: they are the card's own lead, shown only where no card hides them, so a held card's "Next up: 4 FYIs."
+  // stood alone as a bubble until the press answered (the owner, 2026-10-25: "saw a stray text showing next 4 fyi every once in a while")
+  if (m.held) m = { ...m, card: null, text: "" };
   if (m.role === "user") return <div className="tq-msg you"><div className="body">{m.text}
     {!!m.shots?.length && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>{m.shots.map((s) => (
       <img key={s.path} src={s.url} alt={s.name} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: "1px solid #ddd6cb" }} />))}</div>}</div></div>;

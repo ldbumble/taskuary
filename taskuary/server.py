@@ -7906,6 +7906,19 @@ def learned_changes(days: int = 30):
 
 class AdoptBody(BaseModel): key: str
 
+class MarkBody(BaseModel):
+    key: str
+    how: str
+
+@app.post('/api/learned/mark')
+def learned_mark(body: MarkBody):
+    """Keep, Wrong or Forget one line of LEARNED.md (the owner's ruling 2, 2026-10-23) - from What changed or Visualize. No AI needed.
+    409 with the reason in words when the line cannot take it (Wrong on a line the owner wrote); 404 when it changed under the page."""
+    from . import memoryedit
+    try: return memoryedit.mark(store, body.key, body.how)
+    except LookupError as e: raise HTTPException(404, str(e).strip("'\""))
+    except ValueError as e: raise HTTPException(409, str(e))
+
 @app.post('/api/learn/adopt')
 def learn_adopt(body: AdoptBody):
     try: return learn.adopt(store, body.key, ACTOR)

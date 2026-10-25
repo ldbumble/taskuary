@@ -29,6 +29,8 @@ test("the strong model box: blank says no step-up, a name is saved on the brain,
   // ...and Drafting has its own card beside it, blank meaning the triage brain it always wrote on (the owner, 2026-10-25)
   const drafting = await page.$eval('[data-tq-knob~="draft_ai"]', (e) => e.innerText);
   assert.match(drafting, /Drafting/); assert.match(drafting, /blank = the triage brain, as before/);
+  // ...whose model box stays shut until a drafting brain is chosen (the owner, 2026-10-25)
+  assert.equal(await page.$eval('[data-tq-knob~="draft_ai"] input[placeholder="choose a drafting brain first"]', (e) => e.disabled), true);
 
   // a name typed in and left: saved on the Anthropic card's own config, and read back on the card
   await page.click(STRONG); await page.keyboard.type("claude-opus-5"); await page.keyboard.press("Tab");

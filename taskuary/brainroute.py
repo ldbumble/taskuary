@@ -35,8 +35,8 @@ class Route(NamedTuple):
     job: str; tier: str            # 'light'|'standard'|'strong'|'fixed'
     pick: str; model: str          # 'cli:<key>'|'connector:<id>'|''; a model id, 'model@effort', or '' for the brain's own
     gear: str                      # what make_cli_llm runs: 'light'|'main'|'strong'
-    # the backups behind `pick`, in the owner's order: triage_backup_ai for the one-message jobs. A session's own (backup_brains)
-    # are agents.brain_chain, read where it launches - config.toml is read off disk, and a route is asked for on every call
+    # the backups behind `pick`, in the owner's order - the ONE list a failover walks. Everything build_llm builds rides
+    # triage_backup_ai, as it always has; a coding pane rides backup_brains (session_chain). Both settings keep their meaning.
     chain: list
     rule: str; why: str            # 'fixed' | 'you chose it' | a rule id; one sentence built from the inputs, never by a model
     difficulty: str = ''; data_class: str = ''
@@ -99,6 +99,12 @@ def _said(store, pick: str) -> str:
     return (c.get('Name') or c.get('Type')) if c else pick
 
 
+def session_chain(store, brain: str = None) -> list:
+    "A coding pane's brains in order, head first: `brain`, then backup_brains (agents.brain_chain) - what terminal.start_on_task walks."
+    from . import agents
+    return agents.brain_chain(store, brain)
+
+
 def _fixed(store, job: str, task=None, want_pick=None, want_model=None, gear=None) -> tuple:
     "(pick, model, gear, chain) - today's answer for this job, asked of the resolver that has always given it."
     from . import agents, llm
@@ -108,16 +114,16 @@ def _fixed(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
         return pick, want_model or '', gear or 'light', _backups(store)
     if job == 'coding':
         pick = want_pick if want_pick is not None else agents.resolve_brain(store, 'coding', cli_only=True)  # a terminal or nothing
-        return pick, want_model or '', gear or 'main', []
+        return pick, want_model or '', gear or 'main', [f'cli:{k}' for k in session_chain(store, pick[4:] or None)] if pick else []
     # an explicit pick is taken with exactly the model it came with - '' is the brain's own, as build_llm always read it
-    if want_pick is not None: return want_pick, want_model or '', gear or ('light' if job == 'assistant' else 'main'), []
+    if want_pick is not None: return want_pick, want_model or '', gear or ('light' if job == 'assistant' else 'main'), _backups(store)
     if job == 'assistant':
         from . import concierge
-        return concierge.pick(store), want_model or str(store.get_setting(concierge.MODEL_KEY) or '').strip(), gear or 'light', []
+        return concierge.pick(store), want_model or str(store.get_setting(concierge.MODEL_KEY) or '').strip(), gear or 'light', _backups(store)
     from . import general
     base, pick = general._selected(store), general.default_pick(store, task)
     model = want_model or (base[2] if pick == base[0] else general._selected(store, pick=pick)[2] if pick else '')
-    return pick, model or '', gear or 'main', []
+    return pick, model or '', gear or 'main', _backups(store)
 
 
 def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=None) -> Route:

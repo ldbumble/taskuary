@@ -352,7 +352,8 @@ def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None
     if demo.enabled():
         brainroute.log(store, r, task_id, pick='demo'); return demo.brain()
     rid = brainroute.log(store, r, task_id)
-    try: brain = _build_llm(store, r.pick, r.model or None, trace, cancel, resume, cli_tools, extra_env, research, fallback_user, r.gear, keep, task_id)
+    try: brain = _build_llm(store, r.pick, r.model or None, trace, cancel, resume, cli_tools, extra_env, research, fallback_user, r.gear, keep, task_id,
+                            backups=r.chain)
     except Exception as e:
         brainroute.outcome(store, rid, f'refused:{type(e).__name__}' if isinstance(e, (origin.RefusedForStranger, origin.Refusal)) else 'error'); raise
     if brain is None: brainroute.outcome(store, rid, 'error' if r.pick else 'refused:no AI')
@@ -417,7 +418,7 @@ class _Scrubbed:
 
 def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,
                cli_tools: bool = False, extra_env: dict = None, research: bool = False, fallback_user=None,
-               gear: str = 'light', keep: str = None, task_id=None):
+               gear: str = 'light', keep: str = None, task_id=None, backups: list = None):
     """The brain named by `pick` ('' = first active AI connector, 'connector:<id>',
     'cli:<agent>'), defaulting to the triage_ai setting - callers like reports may name
     their OWN brain and model per job instead of riding the triage tier. The owner's ordered
@@ -425,13 +426,16 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
     fresh conversation - provider-specific model/session identifiers never cross that line."""
     settings = store.get_settings()
     primary = effective_pick(store, pick if pick is not None else settings.get('triage_ai') or '')   # blank = the default brain
-    backups = [x.strip() for x in str(settings.get('triage_backup_ai') or '').split(',') if x.strip()]
+    # the route's chain (brainroute.Route.chain) is the one list a failover walks; read here only for a caller that has none
+    if backups is None: backups = [x.strip() for x in str(settings.get('triage_backup_ai') or '').split(',') if x.strip()]
     # This dedupe SURVIVES the role/brain split, unlike its twin in agent_chain. A session's chain
     # is of brains now, so that one went; but `triage_ai` and `triage_backup_ai` still spell a
     # brain as `cli:<agent>` - the classifier is built from an agent ROW (make_cli_llm) - so two
     # settings can still name two profiles backed by one executable, and trying claude twice is
     # not failover: it repeats the same paid failure. It can go when the brain settings name
-    # brains, which is a change beyond the 2026-09-16 spec.
+    # brains, which is a change beyond the 2026-09-16 spec. Still true on 2026-10-25: brain VALUES
+    # became connection keys, but make_cli_llm resolves `cli:<x>` through an agent row, and an
+    # install saved before then still holds a profile name here - so the router keeps it.
     picks, identities = [], set()
     for candidate in [primary, *backups]:
         identity = candidate

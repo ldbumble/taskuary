@@ -65,6 +65,11 @@ DENIED = (
     (r'POST|PUT|PATCH|DELETE', r'^/api/(connectors|sources)', 'credentials and where mail goes'),
     (r'GET', r'^/api/send-targets$', 'the address book of everywhere this install can send'),
     (r'POST|DELETE', r'^/api/shares(/\d+)?$', 'sharing a result puts it in front of someone else - a draft, a link, an upload (sharing.py)'),
+    # a sign-in is typed by the server and only on the owner's say-so: no session mints a fill page, reads which sites are kept, removes
+    # one, or opens a fill page it was never shown (signin.py) - reading the list alone would tell a session where the owner banks
+    (r'GET|POST|DELETE', r'^/api/signins(/|$)', "the owner's saved sign-ins (signin.py)"),
+    (r'POST', r'^/api/tasks/\d+/signin/link$', "a fill page types a password into the browser - only ever the owner's press"),
+    (r'GET|POST', r'^/signin/', "the fill page is the owner's"),
     # ...and anything that would let it widen its own reach
     (r'POST|PUT|PATCH', r'^/api/settings', 'the settings decide what agents may do'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/(policies|agents)', 'the rules and the agent profiles'),

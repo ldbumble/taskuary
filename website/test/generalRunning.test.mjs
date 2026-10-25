@@ -63,10 +63,19 @@ test("the picker names the brain that is actually answering, not the one it open
 // its next message; an agent asking from a terminal on the task gets it through the worker's answer road
 test("the general agent's question is drawn in its canvas with a box that answers it", () => {
   const view = read("GeneralWorkspace.jsx");
-  assert.match(view, /\{!dock && asking && <AgentAsks asking=\{asking\} name=\{name\} onAnswer=\{onAnswer\} \/>\}/);
+  assert.match(view, /\{!dock && asking && <AgentAsks asking=\{asking\} name=\{name\} onAnswer=\{onAnswer\} taskId=\{task\.TaskId\} \/>\}/);
   assert.match(view, /setOwnPrompt\(\{ id: `ask:\$\{req\.request_id\}`, text \}\)/);
   assert.match(view, /api\.post\(`\/api\/tasks\/\$\{task\.TaskId\}\/worker\/answer`, \{ request_id: req\.request_id, text \}\)/);
   assert.match(view, /data\.asking\.request_id !== answered/, "answered here, it goes at once - the snapshot still carries it");
+});
+
+// A SIGN-IN THE AGENT WAITS ON (signin.py) offers the one-time fill page beside its answers: minted by the owner's press, opened in a
+// tab - or, in the desktop app with no browser of its own, by the server - and never for any other question
+test("a sign-in ask offers the fill page, and no other ask does", () => {
+  const view = read("GeneralWorkspace.jsx");
+  assert.match(view, /String\(asking\.request_id \|\| ""\)\.startsWith\("signin:"\)/);
+  assert.match(view, /api\.post\(`\/api\/tasks\/\$\{taskId\}\/signin\/link\$\{app \? "\?open=1" : ""\}`\)/);
+  assert.match(view, /\{site && taskId && <Button[^>]*onClick=\{fillPage\}/);
 });
 
 test("the working dots animate from the general workspace's own stylesheet", () => {

@@ -29,11 +29,16 @@ test("the built-in dashboard is a row like a report's, and its components are ed
   assert.match(row.caption, /6 sources/);
   await page.evaluate((want) => [...document.querySelectorAll("p,span")].find((el) => el.textContent.trim() === want && el.offsetParent).click(), title);
 
-  // THE EDITOR: drawn, then its sources as source cards, then one card per component
+  // THE EDITOR: its sources as source cards, then one card per component, and the dashboard they make UNDER them - the settings
+  // go above the dashboard (the owner, 2026-10-25)
   await page.waitForSelector("[data-tq-dashboard-editor] [data-tq-dashboard]", { timeout: 30000 });
   await page.waitForSelector("[data-tq-dash-component]", { timeout: 10000 });
   const text = await page.$eval("[data-tq-dashboard-editor]", (el) => el.innerText);
   assert.match(text, /Sources/); assert.match(text, /What it shows/);
+  assert.ok(await page.$eval("[data-tq-dashboard-editor]", (ed) => {
+    const last = [...ed.querySelectorAll("[data-tq-dash-component]")].pop(), dash = ed.querySelector("[data-tq-dashboard]");
+    return !!(last.compareDocumentPosition(dash) & Node.DOCUMENT_POSITION_FOLLOWING);
+  }), "the dashboard is drawn below its settings");
   assert.match(text, /source 1 of 6/, "a report's own source card");
   assert.equal(await page.$$eval("[data-tq-dash-component]", (els) => els.length), 12);
   const meter = () => page.$eval('[role="meter"][aria-label="Closed this week"]', (el) => el.getAttribute("aria-valuemax"));

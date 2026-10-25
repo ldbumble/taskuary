@@ -9675,23 +9675,13 @@ def ai_defaults():
     return aidefaults.state(store, cfg)
 
 
-_MODELS_TTL, _models_cache = 600, {}
-
-
 @app.get('/api/ai/models/{connector_id}')
 def ai_models(connector_id: int):
-    """Model ids the connector's own key can call, read from the provider (10 min cache). Failure is a 200 with `error`: the picker
-    falls back to its typed box, so a provider without a list endpoint costs nothing."""
+    """Model ids the connector's own key can call, read from the provider (10 min cache, llm.connector_models). Failure is a 200
+    with `error`: the picker falls back to its typed box, so a provider without a list endpoint costs nothing."""
     from . import llm
-    hit = _models_cache.get(connector_id)
-    if hit and time.time() - hit[0] < _MODELS_TTL: return hit[1]
-    c = store.get_connector(connector_id, with_secret=True)
-    if not c or c['Type'] not in llm.AI_TYPES: raise HTTPException(404, 'no such AI connector')
-    try: conf = json.loads(c.get('ConfigJson') or '{}')
-    except ValueError: conf = {}
-    try: out = {'models': llm.list_models(c['Type'], conf, c.get('Secret') or '')}
-    except Exception as e: return {'models': [], 'error': str(e)[:200]}
-    _models_cache[connector_id] = (time.time(), out)
+    out = llm.connector_models(store, connector_id)
+    if out is None: raise HTTPException(404, 'no such AI connector')
     return out
 
 
@@ -9700,12 +9690,13 @@ class AiDefaultBody(BaseModel):
     value: str = None                   # None = leave the brain/agent alone, only touch the model
     model: str = None                   # None = leave alone; '' = clear back to the provider default
     effort: str = None
+    strong_model: str = None            # None = leave alone; '' = no strong tier on this brain
 
 
 @app.post('/api/ai/defaults')
 def set_ai_default(body: AiDefaultBody):
     from . import aidefaults
-    try: return aidefaults.apply(store, cfg, body.slot, body.value, body.model, body.effort, ACTOR)
+    try: return aidefaults.apply(store, cfg, body.slot, body.value, body.model, body.effort, ACTOR, strong=body.strong_model)
     except ValueError as e: raise HTTPException(422, str(e))
 
 

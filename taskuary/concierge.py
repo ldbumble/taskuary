@@ -639,7 +639,7 @@ def parse_call(text: str) -> tuple[str, dict | None]:
         # A REAL TOOL CALLED WRONG IS A DISCLOSURE, not a dead end (2026-09-25): the model picked task.handoff and
         # guessed `to` for `who`, and the turn quietly did nothing. It is handed the tool's own description as a
         # look-up and calls again in the same turn - the round budget still bounds it.
-        if kind in toolcatalog.PURPOSE or kind in toolcatalog.READS:
+        if kind in toolcatalog.PURPOSE or toolcatalog.runs_now(kind):
             return text[:m.start()].strip(), {'kind': 'tools.describe', 'params': {'kind': kind, 'why': why}}
         return text[:m.start()].strip(), None
     return text[:m.start()].strip(), {'kind': kind, 'params': params}
@@ -656,7 +656,7 @@ def parse_decision(text: str) -> tuple[str, dict | None]:
     except ValueError: return (text or '').strip(), None
     verb, p = canon_verb(str(got.get('kind') or '').lower()), got.get('params') or {}
     # a tool that does not exist at all is no line to show the owner either; an operation is parse_call's
-    if verb not in toolcatalog.DECISIONS and verb not in toolcatalog.PURPOSE and verb not in toolcatalog.READS:
+    if verb not in toolcatalog.DECISIONS and verb not in toolcatalog.PURPOSE and not toolcatalog.runs_now(verb):
         return text[:m.start()].strip(), None
     if verb not in toolcatalog.DECISIONS or verb not in VERBS or not isinstance(p, dict): return (text or '').strip(), None
     d = {'verb': verb, 'text': str(p.get('text') or '').strip()}
@@ -1499,7 +1499,9 @@ def pages_block(store) -> str:
 # said by what it holds (words.json `does`), and using the app is told apart from changing its code, which is a coding job like any other.
 THIS_APP = ('USING OR SETTING TASKUARY ITSELF - a setting, a connection, its own update to a new version - is done on its own screen or by '
             'its own tool, never handed to an agent and never a set-up: the owner presses it there. Changing Taskuary\'s CODE is a coding '
-            'job like any other.')
+            'job like any other. When a part of Taskuary is NOT WORKING - a connection, the WhatsApp or Telegram bridge, a sync - look into '
+            'it here, never as a task or an agent: CALL app.health with its name, then app.repair when that names a simple repair, and '
+            'say in a sentence or two what you found or did.')
 
 def _screens(link: bool = True) -> str:
     """The pages the Assistant brings up, each by what it holds (words.json `does`) - with its link on the desk, by name alone on a phone."""
@@ -1622,7 +1624,7 @@ def _about_table(item: dict | None, call: dict | None) -> bool:
     if kind == 'task.read': return bool(ref and item.get('tid') and int(ref.group(1)) == int(item['tid']))
     if kind == 'message.read': return bool(item.get('mid') and str(p.get('mid') or '').lstrip('m') == str(item['mid']))
     if kind == 'report.read': return bool(item.get('source_id') and str(p.get('source_id') or '') == str(item['source_id']))
-    if toolcatalog.is_read(kind): return False
+    if toolcatalog.runs_now(kind): return False
     return not ref or bool(item.get('tid') and int(ref.group(1)) == int(item['tid']))
 
 def _strays(item: dict | None, call: dict | None):
@@ -2089,11 +2091,26 @@ def _read(store, item: dict | None, call: dict) -> str:
     return found
 
 
+def _trouble(store, kind: str, p: dict) -> str:
+    """THE APP'S OWN TROUBLE, in the turn (troubleshoot.py): read, or its simple repair run - every step kept on the turn, drawn on the
+    page as it happens (the stream's `steps`) and on the answer after; what was found decides the buttons under it (_say)."""
+    from . import troubleshoot
+    turn = _TURN.get()
+    if turn is None: turn = {}
+    n, name = len(turn.get('steps') or []), str(p.get('name') or p.get('connection') or '').strip()
+    h = (troubleshoot.repair(store, name, str(p.get('how') or ''), n=n) if kind == 'app.repair'
+         else troubleshoot.health(store, name, p.get('connector_id'), n=n))
+    turn.update(steps=[*(turn.get('steps') or []), *h['steps']], trouble=h)
+    if turn.get('trace'): turn['trace']('steps', 'troubleshoot', {'steps': turn['steps']})
+    return troubleshoot.words(h, desk=routes())
+
+
 def read_op(store, kind: str, params: dict) -> str:
     """A LOOK-UP, run at once. Changes nothing, waits for no confirmation, and never moves what is on
     the table - asking about another task must not hijack the walk (the owner, 2026-09-07). The answer
     goes back to the model, which then speaks with it."""
     p = params or {}
+    if kind in ('app.health', 'app.repair'): return _trouble(store, kind, p)
     if kind == 'task.read':
         ref = str(p.get('ref') or '').strip()
         m = re.search(r'(\d+)', ref)
@@ -2260,7 +2277,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     A SET is counted before it is offered, so the card says how many and the owner is never told
     "done" about a number nobody checked (the owner, 2026-09-07: it cleared 13 of 72 and said done)."""
     kind, params = call['kind'], dict(call.get('params') or {})
-    if toolcatalog.is_read(kind): raise ValueError(f'{kind} is a look-up, not something to confirm')
+    if toolcatalog.runs_now(kind): raise ValueError(f'{kind} is a look-up, not something to confirm')
     it = item or {}
     # ONE ROAD TO AN AGENT. The model reaches a hand-off two ways - DECIDE coding_agent/regular_agent, or this tool with
     # kind coding/general - and only the first chose the worker, the checkout and whether to start at once: the
@@ -4435,6 +4452,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     record(store, tid, 'user', text)
     turn = _TURN.get()
     if item: turn.update(item=item, said=text)
+    turn['trace'] = trace                           # the app's own trouble draws its steps as they happen (_trouble)
     rec = lambda role, body, card=None: record_related(store, tid, item, role, body, card)
     table = table_line(store, item)
     llm = _brain_for(store, tid, llm, trace, cancel)
@@ -4495,7 +4513,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # ended on a bare CALL with no words, which read as "No AI is connected" (the owner, 2026-09-24:
         # "i asked it to research for me which should open a agent card but it did nothing")
         for n in range(READ_ROUNDS):
-            if not (call and toolcatalog.is_read(call['kind'])): break
+            if not (call and toolcatalog.runs_now(call['kind'])): break
             did_read = True; _strays(item, call)
             found = _read(store, item, call)
             trace and trace('tool', call['kind'], {'params': call['params']})
@@ -4507,7 +4525,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             raw, call = parse_call(raw)
         # the budget is spent and it still wants to read: that is as far as this turn goes. A read is
         # never handed on to call_turn, which only knows operations that CHANGE something.
-        out_of_reads = bool(call and toolcatalog.is_read(call['kind']))
+        out_of_reads = bool(call and toolcatalog.runs_now(call['kind']))
         if out_of_reads: call = None
         raw, decision = parse_decision(raw)
         reply, options = parse_options(raw)
@@ -4517,7 +4535,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             again = str(llm(system, asked + "\n\nYOUR LAST ANSWER WAS CUT OFF in the middle. Answer again, briefly - and a CALL, if one "
                                      "is needed, as one whole line at the end.", max_tokens=MAX_TOKENS) or '').strip()
             again, call = parse_call(again)
-            if call and toolcatalog.is_read(call['kind']): call = None              # no second round of look-ups on a retry
+            if call and toolcatalog.runs_now(call['kind']): call = None              # no second round of look-ups on a retry
             again, decision = parse_decision(again)
             reply, options = parse_options(again)
             reply, broken = gate(reply)
@@ -4537,7 +4555,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         miss = None
         for _ in range(LOOKUP_ROUNDS + 1):
             _strays(item, call)
-            if toolcatalog.is_read(call['kind']):
+            if toolcatalog.runs_now(call['kind']):
                 if _ == LOOKUP_ROUNDS: break                 # out of look-ups: said below, never the promise around it
                 found = _read(store, item, call)
                 trace and trace('tool', call['kind'], {'params': call['params']})
@@ -4751,8 +4769,16 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         options = [o for o in options if not unreal_refs(store, o, text)]
     # a brain that answered with nothing is not "no AI": say what happened, never the missing-connector line
     if not reply: reply = fallback(item, False, p['items'], brain=True, store=store)
+    said = reply + (f"\nOPTIONS: {' | '.join(options)}" if options else '')
+    # THE APP'S OWN TROUBLE, ANSWERED IN THE CHAT (troubleshoot.py): the steps it took ride on the line, and what it found decides the
+    # buttons under it - none when it works again, the fix's own place, else Report this bug. A phone has no buttons: the words say it
+    if turn.get('trouble') is not None:
+        from . import troubleshoot
+        chips, steps = troubleshoot.chips(turn['trouble']) if routes() else [], turn.get('steps') or []
+        rec('assistant', said, {'kind': 'words', 'key': None, 'chips': chips, 'steps': steps})
+        return {'say': reply, 'options': options, 'chips': chips, 'decision': None, 'steps': steps}
     chips = chips_for(store, item) or walk_chips(len(p['items']))
-    rec('assistant', reply + (f"\nOPTIONS: {' | '.join(options)}" if options else ''))
+    rec('assistant', said)
     return {'say': reply, 'options': options, 'chips': chips, 'decision': None}
 
 

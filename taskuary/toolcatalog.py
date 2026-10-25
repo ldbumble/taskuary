@@ -359,6 +359,7 @@ WHERE = (
     ('the repositories a coding agent can work in', 'repos.list', {}),
     ("the owner's meetings", 'calendar.read', {'from': 'tomorrow'}),
     ('what is failing, or failed', 'errors.list', {}),
+    ('a part of Taskuary NOT WORKING - a connection, a bridge, a sync', 'app.health', {'name': 'whatsapp'}),
     ('what you remember about the owner', 'memory.list', {}),
     ('whether the owner missed anything', 'missed.check', {}),
 )
@@ -378,12 +379,12 @@ BUCKETS = (
     ('reports', 'reports and workflows', ('report.create', 'report.run', 'report.rerun', 'report.pause', 'report.resume',
                                           'report.route', 'report.edit', 'report.delete')),
     ('app', 'settings, connections, roles, scripts and kept facts', ('setting.set', 'connection.create', 'role.apply', 'connection.test', 'connection.pause',
-                                                             'connection.resume', 'script.start', 'memory.remember', 'people.relate', 'hub.publish')),
+                                                             'connection.resume', 'app.repair', 'script.start', 'memory.remember', 'people.relate', 'hub.publish')),
 )
 
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
-HINTS = {'button.light': 'button, ref?, note?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
+HINTS = {'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?', 'task.share': 'who, about?', 'task.complete': 'note?',
          'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?, note?', 'task.checklist': 'add?, items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until'}
 
@@ -402,6 +403,7 @@ def describe(kind: str) -> str:
     if kind in DECISIONS:
         return f'{kind} (bucket table) - {DECISIONS[kind]}. Takes `on` for another item than the one on the table.'
     if kind in READS: return f'{kind} (a look-up - runs at once, changes nothing) - {READS[kind]}'
+    if kind in NOW: return f'{kind} (runs at once in the turn, its steps shown - nothing to press) - needs {HINTS[kind]} - {NOW[kind]}'
     if kind in PURPOSE:
         target, required, _ = operations.KINDS[kind]
         asks = [r for r in required if r not in CONTEXT_FILLED]
@@ -474,6 +476,10 @@ READS = {
     'setting.read':     'one setting, its value in words and what it does. `key` (or `label`: part of its name)',
     'connections.list': 'every live connection: name, type, whether it has a key, last sync, last error - and how many catalogue cards are off',
     'connection.read':  'one connection in full. `name`: part of its name (or `connector_id`)',
+    # THE APP'S OWN TROUBLE, looked into in the chat (troubleshoot.py, the owner 2026-10-23) - never a task, never an agent
+    'app.health':       ('why a part of Taskuary itself is not working, read now - the connection, the WhatsApp bridge asked directly, '
+                         'its log, the last sync and error - and the simple repair it has, if any. `name` optional: the connection '
+                         '(whatsapp, telegram, outlook...), or none for everything failing'),
     'agents.list':      'the agents and profiles, and which brain answers which job',
     'repos.list':       'the repositories a coding agent can work in, and what each one is for',
     'tools.list':       'every tool in one `bucket` (table, task, agents, new, pipe, reports, app, look) - what each does and needs',
@@ -495,17 +501,25 @@ ATTACH_AGENT = frozenset({'dispatch.prepare', 'agent.continue'})
 
 
 def is_read(kind: str) -> bool: return kind in READS
+# ...and the one that is not a look-up but runs in the turn all the same: the app's own simple repair, the press its card would make,
+# read again after (troubleshoot.repair). It reaches no one and starts nothing, so it is the chat's to run - and its steps show
+NOW = {'app.repair': ('run the simple repair app.health named for a part of Taskuary, then read it again - `name`: the connection; '
+                      '`how`: restart_bridge (the WhatsApp bridge this computer runs), sync or test, as app.health said')}
+def runs_now(kind: str) -> bool: return kind in READS or kind in NOW
 
 
 def valid(kind: str, params: dict) -> str:
     """'' when this CALL is one the registry actually runs, otherwise why not."""
+    if kind in NOW:
+        miss = [n for n in ('name', 'how') if not str((params or {}).get(n) or '').strip()]
+        return f"{kind} needs {', '.join(miss)}" if miss else ''
     if kind in READS:
         need = {'app.find': ('query',), 'task.read': ('ref', 'id'), 'report.read': ('title', 'source_id'), 'timeline.search': (),
                 'reports.list': (), 'settings.list': (), 'setting.read': ('key', 'label'),
                 'connections.list': (), 'connection.read': ('name', 'connector_id'), 'agents.list': (),
                 'knowledge.search': ('query',), 'tasks.list': (), 'asks.list': (), 'message.read': ('mid', 'id'),
                 'sender.read': ('who', 'sender'), 'docs.search': ('query',), 'agents.now': (), 'approvals.list': (), 'pipe.list': (),
-                'calendar.read': (), 'activity.list': (), 'errors.list': (), 'memory.list': (), 'rules.list': (), 'missed.check': (),
+                'calendar.read': (), 'activity.list': (), 'errors.list': (), 'memory.list': (), 'rules.list': (), 'missed.check': (), 'app.health': (),
                 'repos.list': (), 'tools.list': (), 'tools.describe': ('kind',)}[kind]
         if need and not any(str((params or {}).get(n) or '').strip() for n in need):
             return f"{kind} needs {' or '.join(need)}"
@@ -571,7 +585,7 @@ def _clauses(text: str) -> list:
 def _entry(k: str) -> list:
     """One tool: its name, what it does, each argument with what it means, and whether it waits for a yes. The argument
     words are the catalogue's own - a clause that opens on `name` is that argument's line - so the page cannot drift."""
-    text = READS.get(k) or DECISIONS.get(k) or PURPOSE.get(k) or ''
+    text = READS.get(k) or NOW.get(k) or DECISIONS.get(k) or PURPOSE.get(k) or ''
     names = [a for a in (HINTS.get(k) or '').replace('|', ',').split(',') if a.strip()] or \
             [r for r in operations.KINDS.get(k, ('', (), None))[1] if r not in CONTEXT_FILLED and k not in READS]
     args = {a.strip().rstrip('?'): '' for a in names}
@@ -603,7 +617,7 @@ def _entry(k: str) -> list:
                            'the task (TQ-0123) - always named, the one on the table included; a new job is task.create_from_text')
     prose = ''.join(s + c for s, c in keep).strip(' -;')
     runs = ('Runs at once and changes nothing.' if k in READS else DECISION_RUNS.get(k, '').capitalize() + '.' if k in DECISION_RUNS
-            else 'Runs at once and says what it changed.' if k in KEPT else 'Brings up its button for you to press.')
+            else 'Runs at once and says what it changed.' if k in KEPT or k in NOW else 'Brings up its button for you to press.')
     stop = '' if prose.endswith(('.', ')', '"')) else '.'
     out = [f'### `{k}`', '', f'{prose[:1].upper()}{prose[1:]}{stop}', '']
     out += [f"- `{a}`{' (optional)' if a in optional else ''}{' - ' + d if d else ''}" for a, d in args.items()]

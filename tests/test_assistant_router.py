@@ -555,5 +555,125 @@ class NoTakeItBack(unittest.TestCase):
         self.assertEqual([o for o in proposals(s) if o.get('Kind') == 'task.reopen'], [])
 
 
+# THE APP'S OWN TROUBLE IS LOOKED INTO IN THE CHAT (the owner, 2026-10-23: "it should start inline without task and if it can't solve it
+# create issue on github ... it could restart broken bridge or explain why something is not working simply" - and "we need to see what
+# it's thinking like general agent"). "whatsapp isn't working" thought for a minute and brought up the WhatsApp card. The model still
+# reads the words (scripted here); the app reads its own health, runs the card's own repair, and what it found picks the buttons.
+def the_model(answer):
+    "health first; the repair it names, when it names one; then the answer"
+    def llm(system, user, **kw):
+        if 'You looked up app.repair' in user: return answer
+        if 'You looked up app.health' in user:
+            return next((l.strip() for l in user.splitlines() if l.strip().startswith('A simple repair runs from here: CALL:')), answer
+                        ).replace('A simple repair runs from here: ', '')
+        return 'Let me look.\nCALL: ' + json.dumps({'kind': 'app.health', 'params': {'name': 'whatsapp'}})
+    return llm
+
+
+class TheAppsOwnTrouble(unittest.TestCase):
+    def setUp(self):
+        from taskuary import messengers, wabridge, channels
+        self.s = s = store()
+        self.cid = next(c['ConnectorId'] for c in s.list_connectors() if c['Type'] == 'whatsapp')
+        s.save_connector({'ConnectorId': self.cid, 'Active': 1}, 't'); s.touch_connector(self.cid, 'the WhatsApp bridge is not running')
+        self.up, self.restarts, self.bridge = [False], [], {'line': 'Connected · 2 chats', 'fix': ''}
+        def status(c):
+            if not self.up[0]: raise RuntimeError('the WhatsApp bridge is not running at http://127.0.0.1:3789 - Restart bridge starts it')
+            return self.bridge
+        def test(st, cid):
+            st.touch_connector(cid, None if self.up[0] else 'the WhatsApp bridge is not running')
+            return {'ok': self.up[0], 'detail': 'paired' if self.up[0] else 'the WhatsApp bridge is not running'}
+        self.cures = True
+        for o, k, v in ((messengers, 'wa_status', status), (channels, 'test_connector', test), (wabridge, 'managed', lambda c: True),
+                        (wabridge, 'node', lambda: 'node'), (wabridge, 'filter_policy', lambda *a: {}), (wabridge, 'state', lambda: {'phase': 'running'}),
+                        (wabridge, 'restart', lambda **kw: (self.restarts.append(1), self.up.__setitem__(0, self.cures))),
+                        (wabridge, 'wait_listening', lambda secs: self.up[0]), (wabridge, 'log', lambda: __import__('pathlib').Path('no-such.log'))):
+            p = mock.patch.object(o, k, v); p.start(); self.addCleanup(p.stop)
+
+    def ask(self, answer):
+        tasks = self.s._rows('SELECT TaskId FROM task')
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(ingest, '_spawn') as spawn:
+            out = concierge.say(self.s, "whatsapp isn't working", llm=the_model(answer))
+        spawn.assert_not_called()
+        # ...the dock's own conversation is the one task the chat may make
+        dock = concierge.general.dock_task(self.s, 'owner')[0]['TaskId']
+        self.assertEqual({r['TaskId'] for r in self.s._rows('SELECT TaskId FROM task')} - {r['TaskId'] for r in tasks} - {dock}, set(),
+                         'an app problem is never a task')
+        self.assertEqual(proposals(self.s), [], 'and never a card to confirm')
+        return out
+
+    def test_a_bridge_that_died_is_restarted_in_the_chat_and_checked_again(self):
+        out = self.ask("Restarted the WhatsApp bridge - it's connected again.")
+        self.assertEqual(self.restarts, [1])
+        said = [st['summary'] for st in out['steps']]
+        self.assertTrue(said[0].startswith('Checked WhatsApp'), said)
+        self.assertIn('Restarted the WhatsApp bridge', said)
+        self.assertTrue(any(x.startswith('Checked again: WhatsApp') for x in said), said)
+        self.assertEqual(out['chips'], [], 'it works: nothing to press')
+        self.assertEqual(out['say'], "Restarted the WhatsApp bridge - it's connected again.")
+        # ...and the steps stay on the line, for the chat read back later
+        self.assertEqual(chat_cards(self.s)[-1]['steps'], out['steps'])
+        self.assertFalse((self.s.get_connector(self.cid) or {}).get('LastError'))
+
+    def test_what_needs_the_phone_is_said_with_the_cards_own_button(self):
+        self.up[0], self.bridge = True, {'line': 'Logged out', 'fix': 'pair'}
+        out = self.ask('WhatsApp logged this computer out - pair it again from the card, with your phone.')
+        self.assertEqual(self.restarts, [], 'nothing it cannot fix is pressed')
+        self.assertEqual(out['chips'], [{'verb': 'go', 'href': '#connector=whatsapp', 'label': 'Open the connection'}])
+        self.assertIn('Asked the WhatsApp bridge: Logged out', [st['summary'] for st in out['steps']])
+
+    def test_what_a_restart_cannot_fix_offers_the_bug_report(self):
+        self.cures = False
+        out = self.ask("I restarted the bridge and it still doesn't answer.")
+        self.assertEqual(self.restarts, [1])
+        self.assertEqual([c['verb'] for c in out['chips']], ['bug'])
+        self.assertEqual(out['chips'][0]['label'], buttons.label('report_bug'))
+        self.assertIn('WhatsApp is not working', out['chips'][0]['report']['message'])
+        self.assertEqual(out['chips'][0]['report']['route'], 'connector whatsapp')
+        self.assertEqual([st['status'] for st in out['steps'] if st['kind'] == 'run'], ['error'])
+
+    def test_a_bridge_this_computer_does_not_run_is_never_restarted_from_here(self):
+        from taskuary import troubleshoot, wabridge
+        with mock.patch.object(wabridge, 'managed', lambda c: False):
+            h = troubleshoot.repair(self.s, 'whatsapp', 'restart_bridge')
+        self.assertEqual(self.restarts, [])
+        self.assertIn('no restart_bridge to run here', h['said'])
+
+    def test_the_steps_are_drawn_as_they_happen(self):
+        seen = []
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(ingest, '_spawn'):
+            concierge.say(self.s, "whatsapp isn't working", llm=the_model('Fixed.'), trace=lambda k, n, d: seen.append((k, d)))
+        drawn_ = [d['steps'] for k, d in seen if k == 'steps']
+        self.assertEqual(len(drawn_), 2, 'once for the look, once for the repair')
+        self.assertLess(len(drawn_[0]), len(drawn_[1]))
+
+    def test_the_phone_says_it_in_words(self):
+        self.up[0], self.bridge = True, {'line': 'Logged out', 'fix': 'pair'}
+        told = []
+        m = the_model('It needs pairing again - at your desk, Open the connection on its card.')
+        with concierge.delivering(concierge.PHONE), mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(ingest, '_spawn'):
+            out = concierge.say(self.s, "whatsapp isn't working", llm=lambda sy, u, **k: (told.append(u), m(sy, u))[1])
+        self.assertEqual(out['chips'], [], 'a phone has no buttons')
+        self.assertTrue(any('at their desk' in u for u in told))
+
+    def test_a_connection_with_no_bridge_is_asked_again(self):
+        from taskuary import troubleshoot
+        tg = next(c['ConnectorId'] for c in self.s.list_connectors() if c['Type'] == 'telegram')
+        self.s.save_connector({'ConnectorId': tg, 'Active': 1, 'Secret': 'bot-token'}, 't'); self.s.touch_connector(tg, 'Read timed out')
+        h = troubleshoot.health(self.s, 'telegram')
+        self.assertEqual((h['repair'], h['fix']), ('test', None))
+        self.up[0] = True                                     # the scripted test clears the error, as a good answer does
+        h = troubleshoot.repair(self.s, 'telegram', 'test')
+        self.assertTrue(h['worked']); self.assertEqual([st['summary'] for st in h['steps']][0], 'Asked Telegram again')
+        self.assertEqual(troubleshoot.chips(h), [])
+
+    def test_the_model_is_told_to_look_here_never_to_hand_it_off(self):
+        from taskuary import toolcatalog
+        self.assertIn('app.health', toolcatalog.block())
+        self.assertIn('app.repair', toolcatalog.describe('app.repair'))
+        self.assertIn('app.health', concierge.THIS_APP)
+        self.assertEqual(toolcatalog.valid('app.repair', {'name': 'whatsapp'}), 'app.repair needs how')
+
+
 if __name__ == '__main__':
     unittest.main()

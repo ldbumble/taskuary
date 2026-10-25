@@ -353,7 +353,22 @@ def without_ask(text: str) -> str:
     nowhere else, so a CLI that put its question in a progress line printed Taskuary's own plumbing
     into the middle of the agent's thinking - `[[TASKUARY-ASK]] Have you signed in? | Signed in |
     Login failed`, verbatim, on screen (2026-09-15). The question itself is shown as a question."""
-    return _ASK_RE.sub('', str(text or '')).rstrip()
+    return _SIGNIN_RE.sub('', _ASK_RE.sub('', str(text or ''))).rstrip()
+
+
+# ── ...and a sign-in it needs (signin.py) ────────────────────────────────────────────────────
+# The browser agent's "sign me in here". Its domain is only the agent's WORD, shown to the owner - what gets signed in is the page
+# the browser is on (signin.needs), so a marker a mail talked the agent into writing can name anything and fill nothing.
+SIGNIN_MARKER = '[[TASKUARY-SIGNIN]]'
+_SIGNIN_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?SIGN[-_ ]?IN\s*(?::\s*([^\]]*))?\]\][^\n]*', re.I)
+
+
+def signin_marker(text: str) -> tuple:
+    """(cleaned reply, the domain the agent named - '' when it named none) - or (text, None) when it asked for no sign-in."""
+    t = str(text or '')
+    m = _SIGNIN_RE.search(t)
+    if not m: return text, None
+    return _SIGNIN_RE.sub('', t).rstrip(), ' '.join((m.group(1) or '').split())[:200]
 
 
 def for_screen(text: str) -> str:

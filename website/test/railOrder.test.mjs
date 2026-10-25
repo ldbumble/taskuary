@@ -57,14 +57,16 @@ test("an urgent task sits in Tasks at its arrival place, and no Urgent band is d
   assert.equal(nextMarkerKey(null, rows, null), "task:1");
 });
 
-test("the rail shades an urgent row in place and says urgent to a screen reader; the opener still counts it", () => {
+test("the rail marks an urgent row's dot in place and says urgent to a screen reader; the opener still counts it", () => {
   const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
   const css = readFileSync(fileURLToPath(new URL("../src/assistantView.css", import.meta.url)), "utf8");
   assert.match(view, /const hot = !i\.settling && isUrgent\(i\);/);
   assert.match(view, /hot \? "urgent" : ""/);
   assert.match(view, /data-tq-urgent=\{hot \? "" : undefined\}/);
   assert.match(view, /aria-label=\{hot \? `\$\{i\.title\} - urgent` : undefined\}/);
-  assert.match(css, /\.tq-pile-row\.urgent \.card \{ background: rgba\(138, 54, 70, \.06\)/);
+  // urgent is the rail's dot, never a shaded row - a shade read as selected (the owner, 2026-10-25)
+  assert.match(css, /\.tq-pile-row\.urgent \.rail i, \.tq-pile-row\.urgent\.current \.rail i \{ background: #8a3646 !important/);
+  assert.doesNotMatch(css, /\.tq-pile-row\.urgent[^{]*\.card \{/);
   assert.doesNotMatch(css, /lvl-urgent/);
   const sum = summarize([task("task:1", 19), task("task:2", 11, { lane: "time", order_band: 1 }), report("report:1", 3)]);
   assert.deepEqual(sum.groups.map((g) => [g.key, g.n, g.urgent]), [["task", 2, 1], ["reports", 1, 0]]);

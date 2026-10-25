@@ -96,11 +96,9 @@
 .tq-pile-row .card:focus { outline: none; }
 .tq-pile-row .card:focus-visible { outline: 2px solid #55697a; outline-offset: -2px; }
 .tq-pile-row.settling .card { border-style: dashed; }
-/* URGENT: a quiet shade of the attention colour (theme ALERT, oxblood) and a thin left accent, in the row's own place - there is no
-   Urgent heading (the owner, 2026-10-22) */
-.tq-pile-row.urgent .card { background: rgba(138, 54, 70, .06); box-shadow: inset 2px 0 0 rgba(138, 54, 70, .45); }
-.tq-pile-row.urgent .card:hover { background: rgba(138, 54, 70, .1); }
-.tq-pile-row.urgent.current .card { background: rgba(138, 54, 70, .08); }
+/* URGENT IS THE DOT, NOT THE ROW (the owner, 2026-10-25: a shaded row "makes it look like it's selected"): the row's circle on the
+   rail goes the attention colour (theme ALERT, oxblood) with a thin ring, in the row's own place - there is no Urgent heading (2026-10-22) */
+.tq-pile-row.urgent .rail i, .tq-pile-row.urgent.current .rail i { background: #8a3646 !important; box-shadow: 0 0 0 2px #fffdfb, 0 0 0 3.5px rgba(138, 54, 70, .5); }
 /* NEXT wears nothing: the ring is what is ON THE TABLE, and the row after it is a row like any other (the owner,
    2026-10-01: "the next one needs nothing"). The class stays - the walk and its tests find the next row by it. */
 .tq-pile-row.current { height: 54px; }

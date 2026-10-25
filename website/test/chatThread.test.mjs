@@ -58,6 +58,9 @@ test("Show all draws compact bubbles: the name inside once per run, the time on 
   assert.match(src, /\{newRun && !me && <Box component="span" sx=\{\{ fontWeight: 600, mr: 0\.75 \}\}>\{firstName\(m\)\}<\/Box>\}/);
   assert.match(src, /display: "inline-block", color: FAINT, fontSize: 11, ml: 1\.25, whiteSpace: "nowrap"/);
   assert.doesNotMatch(src, /mb: 0\.15 \}\}>\s*\{m\.FromName/, "no name line over the bubble");
+  // ...in the darker well alone, no line round it (the owner, 2026-10-25)
+  assert.match(src, /borderRadius: 2, bgcolor: "#ece8e1"/);
+  assert.doesNotMatch(src.slice(src.indexOf('data-tq-chat-thread=""'), src.indexOf("{list.map(")), /border: `1px/);
 });
 
 // THE FULL CHAT IS IN TASK, CONDENSED IN CLOSE OUT (the owner, 2026-10-16: "in close out you have the full chat, it's too confusing.

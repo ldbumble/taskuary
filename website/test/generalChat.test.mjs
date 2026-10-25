@@ -50,8 +50,11 @@ test("an ended general session's chat gives the page back to the stage that is f
 // THE CHAT'S STRIP RIDES IN THE STEP'S HEADING ON THE CANVAS: "Agent work" on one row and the agent's name, brain and Full screen on
 // a second took two lines off the answer (the owner, 2026-10-18: "make the agent space take up more space")
 test("on the canvas the chat's brain and Full screen sit in the agent step's heading, and come home in full screen", () => {
-  assert.match(tasks, /tools=\{inRow && workspaceMode === "general" && \(liveSession \|\| pane === "agent"\)\s*\? <Box ref=\{setChatTools\}/);
+  // ...only while its session is live: a failed or closed agent's heading carries no picker, "provider default" or Full screen (the owner,
+  // 2026-10-25) - GeneralWorkspace draws none of them anywhere then (noTools)
+  assert.match(tasks, /tools=\{inRow && workspaceMode === "general" && liveSession\s*\? <Box ref=\{setChatTools\}/);
+  assert.match(tasks, /noTools=\{!liveSession\}/);
   assert.match(tasks, /toolsAt=\{canvas \? chatTools : null\}/);
-  assert.match(workspace, /\{!dock && toolsAt && !full && createPortal\(tools, toolsAt\)\}/);
-  assert.match(workspace, /\{!dock && !\(toolsAt && !full\) && <Box sx=\{\{ minHeight: 39,/);
+  assert.match(workspace, /\{!dock && !noTools && toolsAt && !full && createPortal\(tools, toolsAt\)\}/);
+  assert.match(workspace, /\{!dock && !noTools && !\(toolsAt && !full\) && <Box sx=\{\{ minHeight: 39,/);
 });

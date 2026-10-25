@@ -37,13 +37,16 @@ test("the layout: two columns whenever no agent is live - a Result and a failure
     ["failed, with its reason and Try again", { failed: true }, "columns"],
   ];
   for (const [what, page, want] of cases) assert.equal(layoutOf(page), want, what);
-  // the focus: the Result (or the failed run) once an agent acted, else the open half - the reply for the rest; none while live
+  // the focus: the Result (or the failed run) once an agent acted, the reply where that is the move; none while live
   assert.equal(focusOf({ result: true, pane: "reply" }), "agent");
   assert.equal(focusOf({ failed: true }), "agent");
   assert.equal(focusOf({ pane: "reply" }), "reply");
-  assert.equal(focusOf({ pane: "" }), "reply", "a task waiting on a person: Close out");
-  assert.equal(focusOf({ pane: "agent" }), "agent");
   assert.equal(focusOf({ live: true, result: true }), null);
+  // ...and the owner's answers (2026-10-25): a to-do or a goal whitens its own list, else the block with the ask's source - never
+  // Send to agent; a task waiting on a person whitens nothing
+  assert.equal(focusOf({ pane: "agent", list: true }), "list");
+  assert.equal(focusOf({ pane: "agent" }), "source");
+  assert.equal(focusOf({ pane: "", waiting: true }), "none");
   // the page reads its Result and its failure before the focus, and the From line, its sidebar and its X follow the layout
   const src = taskSource(), at = (re) => src.search(re);
   assert.ok(at(/const resultShown = /) < at(/const focus = focusOf\(/) && at(/const failedRun = /) < at(/const focus = focusOf\(/));

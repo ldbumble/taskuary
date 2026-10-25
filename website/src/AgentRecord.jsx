@@ -127,7 +127,8 @@ export const SessionRecord = ({ s, pages = [], draft = "", startOpen = false, ti
 // `result`: the agent has stopped and saved, and the work column shows its RESULT (the redesign, owner-approved 2026-10-21) - what it
 // found, how it resolved it, its write-up whole, what it made, and the session as one "Replay the session" line. `diff`: the run's own
 // diff counted (agentRecord.diffStat), where a run kept one.
-export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = null, folded = false, inChat = false, result = false, diff = null }) => {
+// `onDiff`: the run's diff is folded on the page, and the stat line opens it (`diffOpen`, TaskPage)
+export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = null, folded = false, inChat = false, result = false, diff = null, diffOpen = false, onDiff = null }) => {
   const [rec, setRec] = useState(null);
   useEffect(() => {
     let live = true;
@@ -164,7 +165,7 @@ export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = nul
   return (
     <Box sx={{ width: "100%", bgcolor: PANEL, px: 1.35, py: 1.15, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
       {state && <Box sx={{ mb: 1, pb: 1, borderBottom: `1px solid ${BORDER}` }}><StoryLine kind={state.kind} line={state.line} /></Box>}
-      {s && !chat && result ? <ResultView s={s} before={before} pages={[...pages, ...(outputs || [])]} diff={diff} since={since} draft={draft} story={story} />
+      {s && !chat && result ? <ResultView s={s} before={before} pages={[...pages, ...(outputs || [])]} diff={diff} since={since} draft={draft} story={story} diffOpen={diffOpen} onDiff={onDiff} />
         : s && !chat ? <RunSummaries sessions={[s, ...before]} pages={pages}
           full={<SessionRecord s={s} draft={draft} startOpen timeline={story?.steps || []} since={since} earlier={before} />} />
         : s ? <SessionRecord s={s} pages={pages} draft={draft} timeline={story?.steps || []} since={since} earlier={before} inChat={chat} />
@@ -175,7 +176,7 @@ export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = nul
 // THE RESULT (the redesign, owner-approved 2026-10-21): the write-up's own parts, each only where it recorded one - what it found, how
 // it resolved it, the summary and its last words whole - then what it made (the files it saved, the pages and files it made for the
 // task, the run's diff counted), and the terminal as ONE line that replays the session step by step. Never the raw log on top.
-const ResultView = ({ s, before, pages, diff, since, draft, story }) => {
+const ResultView = ({ s, before, pages, diff, since, draft, story, diffOpen = false, onDiff = null }) => {
   const [replay, setReplay] = useState(false);
   const { rows, summary, writeup } = resultParts(s), { mine } = splitFiles(s.files, s.cwd);
   const made = !!(mine.length || pages.length || diff);
@@ -189,7 +190,9 @@ const ResultView = ({ s, before, pages, diff, since, draft, story }) => {
       {made && <Box data-tq-result-files="" sx={sec}>
         <Typography sx={head}>What it made</Typography>
         {diff && <Typography data-tq-diff-stat="" sx={{ ...mono, fontSize: 11.5, color: DIM, mb: 0.4 }}>
-          {plural(diff.files, "file")} changed · <Box component="span" sx={{ color: "#47654a" }}>+{diff.added}</Box> <Box component="span" sx={{ color: "#6b2733" }}>−{diff.removed}</Box></Typography>}
+          {plural(diff.files, "file")} changed <Box component="span" sx={{ color: "#47654a" }}>+{diff.added}</Box> <Box component="span" sx={{ color: "#6b2733" }}>−{diff.removed}</Box>
+          {onDiff && <Box component="span" data-tq-diff-toggle="">{" · "}<Button size="small" aria-expanded={diffOpen} onClick={onDiff}
+            sx={{ ...link, fontSize: 11.5, verticalAlign: "baseline", textTransform: "none" }}>{diffOpen ? "Hide diff" : "Show diff"}</Button></Box>}</Typography>}
         {mine.map((f) => <Typography key={f} noWrap title={f} sx={{ ...mono, fontSize: 11.5, color: INK }}>{f}</Typography>)}
         {!!pages.length && <Box sx={{ mt: mine.length || diff ? 0.75 : 0 }}><PublishedPages pages={pages} /></Box>}
       </Box>}

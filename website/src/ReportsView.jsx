@@ -82,6 +82,8 @@ export const FIELDS = {
   // those current views together. The selector itself lives in ReportWizard below.
   assistant: [],
   taskuary: [["what it reads", "card", "taskuary_card", ""]],     // a card of Taskuary's own tables (assistantBlocks.TASKUARY_CARDS)
+  // ...and the same tables as plain rows, the ones a dashboard draws from (dashboards.DATASETS)
+  taskuary_data: [["what it reads", "dataset", "taskuary_dataset", ""], ["days back", "days", "text", "90"]],
   evening_inbox: [["hours back", "hours", "text", "8"], AI_FIELD],
   // the window starts at MIDNIGHT that many days back: 1 = all of yesterday plus today so far
   digest: [["days back (1 = all of yesterday + today so far; counted from midnight)", "days", "text", "1"], AI_FIELD],
@@ -193,7 +195,7 @@ const reportSchedule = (c) => [c.on_startup && startupText(c), c.cron && cronTex
   .filter(Boolean).join(" + ") || "only when you press Run now";
 
 export const TYPE_LABELS = {
-  zoho_monthly_invoices: "Monthly Zoho invoices", taskuary: "Taskuary",
+  zoho_monthly_invoices: "Monthly Zoho invoices", taskuary: "Taskuary", taskuary_data: "Taskuary - its own rows",
   mssql: "SQL Server", winrm: "Remote Windows", mcp: "MCP server", sqlite: "SQLite", rest: "REST / JSON", graphql: "GraphQL", rss: "RSS / Atom",
   database: "Any database", aws: "AWS (any call)", s3_object: "S3 object", cloudwatch_logs: "CloudWatch logs",
   azure: "Azure (ARM)", azure_blob: "Azure blob", azure_logs: "Azure Log Analytics",
@@ -249,7 +251,7 @@ const PLACEHOLDER_FOR = {
 };
 
 const TYPE_GROUPS = [
-  ["Taskuary itself", ["taskuary"]],
+  ["Taskuary itself", ["taskuary", "taskuary_data"]],
   ["This computer", ["local_file", "sqlite", "mcp"]],
   ["Files & sheets", ["google_sheets", "sharepoint_list", "sharepoint_file"]],
   ["Databases", ["mssql", "database"]],
@@ -557,7 +559,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   };
   const toInvoices = () => { setDraft(null); if (browse) onBrowseState?.({ section: "workflows", open: "new-invoices" }); else setBucket("new-invoices"); };
   const wizard = (onBack, onSaved) => dashOpen
-    ? <DashboardEditor key={String(bucketNow) + (dashDraft ? "-draft" : "")} sourceId={openId} draft={openId == null ? dashDraft : null}
+    ? <DashboardEditor key={String(bucketNow) + (dashDraft ? "-draft" : "")} sourceId={openId} draft={openId == null ? dashDraft : null} types={types} connectors={connectors}
         reload={load} onBack={() => { setDashDraft(null); onBack(); }} onSaved={(sid) => { setDashDraft(null); onSaved(sid); }} />
     : agentWorkflow
     ? <WorkflowEditor key={String(bucketNow)} sourceId={openId} sources={sources} connectors={connectors} types={types} draft={draft}
@@ -674,7 +676,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
       ) : (<>
       <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
         <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
-          {q ? `Matches for “${q}”` : workflowOverview ? "Scheduled workflows" : "Scheduled reports"}
+          {q ? `Matches for “${q}”` : workflowOverview ? "Scheduled workflows" : dashOverview ? "Dashboards" : "Scheduled reports"}
         </Typography>
         <Button size="small" variant="outlined" disableElevation onClick={syncNow} disabled={syncing} sx={{ mr: 1 }}
           startIcon={syncing ? <CircularProgress size={12} /> : <SyncIcon sx={{ fontSize: 15 }} />}>
@@ -2006,7 +2008,7 @@ const FILE_FIELD_FOR = { tail: ['', '.log', '.txt', '.md', '.out', '.err'], shee
    `test` is its Test this step in place of the card's own preview. */
 export function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDragStart, onDragEnd,
                       onDropHere, onChange, onRetype, onCopy, onRemove, onFill, removable = count > 1,
-                      writeEnabled = false, bare = false, test = null }) {
+                      writeEnabled = false, bare = false, test = null, extra = null }) {
   const fields = (FIELDS[src.type] || []).filter(([, key]) => {
     if (key === "ai_prompt") return false;
     if (src.type !== "local_file") return true;
@@ -2082,7 +2084,7 @@ export function SourceCard({ src, index, count, typeOptions, connectors, draggin
               sx={{ alignSelf: "flex-start", fontSize: 11.5 }}>{btnLabel("fix", "card")}</Button>}
         </>
       )}
-      {onFill && !["assistant", "taskuary"].includes(src.type) && <SourceComposer one typeHint={src.type} hint="say what you want out of it"
+      {onFill && !["assistant", "taskuary", "taskuary_data"].includes(src.type) && <SourceComposer one typeHint={src.type} hint="say what you want out of it"
         placeholder={PLACEHOLDER_FOR[src.type] || "the rows this card should return"}
         onSources={(list) => onFill(list[0])} />}
       {!bare && (count > 1 || removable) && (
@@ -2132,6 +2134,22 @@ export function SourceCard({ src, index, count, typeOptions, connectors, draggin
             </Box>
           );
         }
+        if (kind === "taskuary_dataset") {
+          // which of the app's own tables, as rows: the same list the dashboard composer is handed (dashboards.DATASETS)
+          return (
+            <Select key={key} size="small" displayEmpty value={src.dataset || ""} sx={{ fontSize: 12.5, bgcolor: "#fff" }}
+              inputProps={{ "aria-label": "which of Taskuary's tables" }}
+              onChange={(e) => onChange({ dataset: e.target.value, label: src.label || DASH.datasets[e.target.value]?.[0] })}>
+              <MenuItem value="" sx={{ fontSize: 12 }} disabled>choose what it reads…</MenuItem>
+              {Object.entries(DASH.datasets).map(([k, [name, says]]) => (
+                <MenuItem key={k} value={k} sx={{ fontSize: 12.5, display: "block", maxWidth: 420, whiteSpace: "normal" }}>
+                  <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>{name}</Typography>
+                  <Typography variant="caption" sx={{ color: DIM }}>{says}</Typography>
+                </MenuItem>
+              ))}
+            </Select>
+          );
+        }
         if (kind === "pick_file") {
           return (
             <Select key={key} size="small" value={src.pick || "newest"} sx={{ fontSize: 12.5, bgcolor: "#fff" }}
@@ -2165,6 +2183,7 @@ export function SourceCard({ src, index, count, typeOptions, connectors, draggin
           nothing at all when it comes back as one object - which the Test below makes obvious. */}
       {/* width:300 on a 300-wide card with padding on both sides: it hung out over the edge.
           Full width of whatever the card gives it, and a one-line hint instead of three. */}
+      {extra}
       {src.type !== "taskuary" && <TextField size="small" label="max rows" type="number" placeholder="200" value={src.max_rows ?? ""}
         helperText="blank = 200, and only for list results"
         FormHelperTextProps={{ sx: { fontSize: 10.5, mx: 0 } }}

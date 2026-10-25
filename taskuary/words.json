@@ -65,6 +65,7 @@
     "stopped":       {"line": "Stopped {ago}.", "lit": ["continue"]},
     "waiting":       {"line": "", "lit": ["defer"]},
     "waiting_late":  {"line": "{who}: {days} days, no answer.", "lit": ["chase"]},
+    "waiting_late_usual": {"line": "{who} usually answers in {usual}; this is {days} days.", "lit": ["chase"]},
     "goal_late":     {"line": "{step}: {days} days late.", "lit": ["chase"]},
     "goal":          {"line": "", "lit": ["next"]},
     "idea":          {"line": "", "lit": ["mine"], "ask": true},
@@ -72,6 +73,7 @@
     "stranger":      {"line": "First mail from {domain}.", "lit": ["reply"]},
     "duplicate":     {"line": "Same ask as {ref}.", "lit": ["remove"]},
     "asked":         {"line": "{who} asked {ago}.", "lit": ["reply"], "ask": true},
+    "asked_late":    {"line": "You usually answer {who} {usual}; this is {age}.", "lit": ["reply"], "ask": true},
     "done_list":     {"line": "", "lit": ["close"]},
     "own":           {"line": "", "lit": ["next"]}
   },

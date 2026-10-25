@@ -59,7 +59,11 @@ CASES = [
     ('Vendor W-9 for the new supplier', {'chase'}, {'let_go', 'close'}, []),
     ('Budget figures for Q4', {'chase'}, {'let_go'}, []),
     ('can you cover the Thursday call', {'reply'}, {'not_ours'}, ['whatsapp']),
+    # the owner's own usual (slice 4, 2026-10-25): Marcus is answered within the hour, and this ask has waited 3h - Reply, its lateness
+    # the one line beside it, with what it was counted from in the prompt
+    ('Q4 forecast numbers', {'reply'}, {'not_ours', 'defer'}, ['HOW SOON YOU ANSWER marcus@northwind.example: within the hour']),
 ]
+LINES = {'Q4 forecast numbers': 'You usually answer Marcus within the hour; this is 3h.'}
 
 RAIL = {'Vendor W-9 for the new supplier', 'Move payroll to Payworth', 'Migrate the census export'}     # judged as the processing rail draws them
 # a duplicate whose agent is at work while the case is judged: "an agent is on it" now needs a live session or run, not the task's
@@ -94,6 +98,18 @@ def world():
     wm = f.message(task_id=wt, channel='whatsapp', subject='can you cover the Thursday call', body='can you cover the Thursday call with the auditors? I am out',
                    from_name='Omar Keller', from_email='@omarkeller', source_name='Omar (whatsapp)', conversation_id='whatsapp:4410', sent_at=at(h=2))
     f.route(wm, wt, 'create', 'a question a sentence settles')
+    # Marcus Reed, answered within the hour three times - and a fourth ask, three hours old
+    marcus = ('Marcus Reed', 'marcus@northwind.example')
+    for i, lag in enumerate((20, 35, 15)):
+        mt, sent = f.task(title=f'Accruals check {i + 1}', status='done', kind='task'), datetime.now() - timedelta(days=10 + i * 7)
+        f.message(task_id=mt, subject=f'Accruals check {i + 1}', body='Can you check the accruals?', from_name=marcus[0], from_email=marcus[1],
+                  conversation_id=f'email:accruals-{i}', sent_at=sent.strftime('%Y-%m-%d %H:%M:%S'))
+        s.add_message({'ConversationId': f'email:accruals-{i}', 'Channel': 'email', 'Subject': f'Re: Accruals check {i + 1}', 'FromName': 'You',
+                       'FromEmail': 'alex@northwind.example', 'SentAt': (sent + timedelta(minutes=lag)).strftime('%Y-%m-%d %H:%M:%S'),
+                       'BodyText': 'Checked.', 'Status': 'sent', 'TaskId': mt, 'Direction': 'out'})
+    qt = f.task(title='Q4 forecast numbers', status='open', kind='task')
+    f.message(task_id=qt, subject='Q4 forecast numbers', body='Can you send me the Q4 forecast numbers for the sync?', from_name=marcus[0],
+              from_email=marcus[1], conversation_id='email:q4-forecast', sent_at=at(h=3))
     funnel.invalidate()
     pile = funnel.pile(s, quiet=True).get('items') or []
     seen, items = set(), []

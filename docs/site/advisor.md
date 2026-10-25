@@ -87,6 +87,22 @@ redrafted; a draft that promises what nothing shows (a payment date, a file that
 is not sent; work an agent can do, like an issue with a traceback, goes to an agent; someone quiet
 past their day is chased, where the row draws Chase.
 
+What it knows about how you work is a reason too, said in the same one line beside the lit button,
+and only when it is a fact it can show. Each is counted from what you did, and **Why?** lists the
+acts it rests on:
+
+- **How soon you answer someone.** Once you have answered a person three times, an ask of theirs
+  that has waited well past your usual says so: *You usually answer Erin within the hour; this is 3h.*
+  Inside your usual, or for someone you have not answered yet, there is no line.
+- **Whom you hand that kind of ask to.** The Advisor reads whom you handed a sender's asks to before;
+  when this ask is the same kind of work, it lights **Hand it to a person** with *Ray handles payroll
+  for you.* What the ask is about is the model's to read, never a count's.
+- **The day you put it off to.** After two weeks in which you put a sender's mail off to the same
+  weekday, **Remind me** opens with that day first, filled, saying whose habit it is. Nothing is set
+  until you press it.
+- **A person's own day.** Chase lights after three working days; once three of someone's answers say
+  how soon they answer, it lights on their day instead: *Gail usually answers in a day; this is 3 days.*
+
 Those findings are never rows. They attach to the item at its revision and show when the walk
 reaches it, as one line in the strip at the foot of the canvas, above the action row, and the
 advised button on the row is the one dark button - the row's own, pressed through its own handler.

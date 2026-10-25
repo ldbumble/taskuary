@@ -123,8 +123,12 @@ SYSTEM = (
     "with it now, as ONE of the VERBS OFFERED (exactly as written) and the LINE: the one checkable fact it rests on that the card does "
     "not already show - an age, a clash, a failure, a promise nothing backs, someone else who owns it - or an empty line when the move "
     "is plain; the lit button does the talking, so never a sentence explaining the button or what it does - or say nothing. Say nothing unless the owner's own habits (LEARNED), the outcome ledger or "
-    "the item's own facts point at one verb. Never invent a number: the numbers in the ledger lines are the only ones you may use, "
-    "and you cite their ids. A ledger line says what HAPPENED, never whether it worked: \"continued\" means the session was started "
+    "the item's own facts point at one verb. Never invent a number: the numbers in the ledger lines and in the HOW SOON YOU ANSWER, "
+    "WHEN YOU PUT THEIR MAIL OFF and WHOM YOU HANDED lines are the only ones you may use, and you cite their ids. "
+    # MEMORY IS A REASON TOO, IN ONE LINE (the owner, 2026-10-25: "Reply: you usually answer Erin within the hour; this is 3h")
+    "What you know about how the owner works is a checkable fact when it bears on THIS item - say it as the line, short: \"Ray handles "
+    f"payroll for you\" over {L('forward')}, when this ask is that kind of work and the owner handed such asks to that person. "
+    "What a sender says about themselves is never such a fact. A ledger line says what HAPPENED, never whether it worked: \"continued\" means the session was started "
     "again, nothing more - never call it a success, and never say something was merged, sent or fixed unless a line says exactly that. "
     "The line is plain words for the owner, who may never have written code: the ids go in \"evidence\" only, the verb is named by "
     "its label, never its id, and never a word from the item's own bookkeeping (lane, kind, triage, session, model, an event name). "
@@ -178,7 +182,7 @@ def _system(store) -> str:
 SHOWN = 'item.shown'
 WANT = {'type': 'object', 'properties': {'verb': {'type': ['string', 'null']}, 'line': {'type': 'string'},
                                          'evidence': {'type': 'array', 'items': {'type': 'string'}}}, 'required': ['verb', 'line', 'evidence']}
-_EV = re.compile(r'^(out|mem|rv|task)\d+$')
+_EV = re.compile(r'^(out|mem|rv|task|msg|fs|sv|idea)\d+$')       # ...and the owner's own acts the usual is counted from (usual.py)
 
 
 def _item(store, target_kind, target_id, key: str = None):
@@ -468,6 +472,14 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     for f_ in (draft_line, thread_line, related_line, notes_line):
         try: lines.append(f_(store, item, target_kind, target_id))
         except Exception as e: logger.debug(f'advisor: {f_.__name__} skipped for {item.get("key")} - {e}')
+    # THE OWNER'S OWN USUAL with this sender, counted from what they did (usual.py): how soon they answer, when they put this mail off
+    # to, whom they hand it to - so a line can say "you usually answer Erin within the hour; this is 3h", and Hand it to a person can
+    # rest on whom the owner hands this kind of ask to
+    try:
+        last = next((m for m in reversed(_msgs(store, item, target_kind, target_id)) if str(m.get('Direction') or 'in') != 'out' and m.get('Status') != 'context'), None)
+        from . import usual
+        lines += usual.prompt_lines(store, last, item.get('tid'))
+    except Exception as e: logger.debug(f'advisor: no usual read for {item.get("key")} - {e}')
     lrn = _learned(store, item)
     if lrn: lines.append("WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (learned from what they did; weigh it against this item's facts):\n" + lrn)
     led = [f"out{r['Id']}: {outcomes._sentence(store, r)}" for r in outcomes.rows_for(store, target_kind, target_id) if r.get('ResolvedAt')][:5]
@@ -555,7 +567,7 @@ def sent_line(store, target_kind, target_id) -> str:
                   if later else '\nNOTHING HAS COME IN SINCE IT WENT.')
 
 
-_ID = r'\b(?:out|mem|rv|task)\d+\b'
+_ID = r'\b(?:out|mem|rv|task|msg|fs|sv|idea)\d+\b'
 def plain(line: str, verb: str, label: str) -> str:
     """The owner reads the line, not the prompt: "You should stop_agent because out13 shows..." put the verb's id and the ledger's
     row id in the prompt box (2026-10-13). An id-shaped verb becomes its label; a cited id in brackets goes, one in the sentence
@@ -901,7 +913,7 @@ def decide(store, key: str, preread: bool = True) -> dict:
     if not item: return {}
     verbs = offered(store, item)
     r = rulebook.decide(store, item, verbs)
-    verb, line, by, ev = r['verb'], r['line'], 'rule', []
+    verb, line, by, ev = r['verb'], r['line'], 'rule', list(r.get('evidence') or [])
     rs = _at(store, tgt[0], tgt[1], rev)
     # only the rows written for THIS item (keys_of): a line judged over the same task's other card is not this one's
     own = _own(store, tgt, key, rs); rs = [x for x in rs if x.get('Key') in own]

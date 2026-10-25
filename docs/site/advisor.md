@@ -118,6 +118,14 @@ asks from one domain that had nothing else in common. What `LEARNED.md` knows co
 did, in context - who wrote, what they are to you, how soon you answered, what you put off and until
 when, whom you handed it to.
 
+**What it brings up is yours to teach.** The clock reads what you took up and what you said no
+to: the ideas you dismissed, and **What to bring up** in `LEARNED.md`. An idea of a kind you said no
+to again and again stays unsaid, however it is worded - three "unsubscribe from this newsletter"
+ideas put down, and the fourth newsletter gets none. A promise you keep on a schedule - the same
+person, the same weekday, three weeks or more - is raised when its day has passed with nothing sent
+to them: *The headcount sheet you send Gail on Mondays hasn't gone yet.* Anything you send them puts
+it down, and so does No, for that week.
+
 **How it is tested.** `tests/advisor_cases.py` is the eval: every state the demo and the advisor
 matrix hold, plus a few they lack, each with the moves that are right there, the ones that never
 are, and what its prompt must carry. It runs in the suite against the demo's scripted Advisor.

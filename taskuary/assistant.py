@@ -299,6 +299,48 @@ def promises_due(store, now=None) -> list:
     return out
 
 
+# A PROMISE KEPT ON A SCHEDULE (slice 5 of the memory redesign, 2026-10-25): "The headcount sheet you send Gail on Mondays hasn't gone
+# yet". The owner's own sent words, judged a promise (sentjudge), to one person on one weekday in EVERY_WEEKS or more of the last
+# EVERY_LOOK weeks, are a promise they keep on a schedule - what each one promised is shown to the model, which weighs whether it is the
+# same thing (code never reads the words). Raised once its day has passed this week, EVERY_GRACE hours after their usual hour, with
+# nothing sent to that person since; quiet the moment anything goes to them. Put down, it stays down for that week (its sig is the day).
+EVERY_WEEKS, EVERY_LOOK, EVERY_GRACE = 3, 6, 2
+DAY_NAMES = ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')
+
+
+def recurring(store, now: datetime = None) -> list:
+    """The owner's promises kept on a schedule whose day this week has passed with nothing sent - candidates keyed promise:every-<who>-<day>."""
+    now = now or datetime.now()
+    rows = store._rows("SELECT m.MessageId, m.SentAt, m.RecipientsJson, v.What FROM sent_verdict v JOIN message m ON m.MessageId=v.MessageId "
+                       "WHERE v.Promise=1 AND m.SentAt>=? ORDER BY m.SentAt", ((now - timedelta(weeks=EVERY_LOOK)).strftime('%Y-%m-%d %H:%M:%S'),))
+    by = {}
+    for r in rows:
+        try: to = [str(a).lower() for a in (json.loads(r.get('RecipientsJson') or '{}') or {}).get('to') or []]
+        except ValueError: to = []
+        d = _dt(r.get('SentAt'))
+        if to and d: by.setdefault((to[0], d.weekday()), []).append((d, r))
+    out = []
+    for (who, wd), xs in by.items():
+        weeks = {d.isocalendar()[:2] for d, _ in xs}
+        if len(weeks) < EVERY_WEEKS or now - max(d for d, _ in xs) > timedelta(weeks=3): continue
+        day = (now - timedelta(days=(now.weekday() - wd) % 7)).replace(hour=0, minute=0, second=0, microsecond=0)
+        hour = sorted(d.hour * 60 + d.minute for d, _ in xs)[len(xs) // 2]
+        if now < day + timedelta(minutes=hour, hours=EVERY_GRACE): continue
+        since = day.strftime('%Y-%m-%d %H:%M:%S')
+        if any(who in str(m.get('RecipientsJson') or '').lower() for m in store._rows(
+                "SELECT RecipientsJson FROM message WHERE Direction='out' AND SentAt>=?", (since,))): continue
+        name = next((str(m['FromName']) for m in store._rows("SELECT FromName FROM message WHERE lower(FromEmail)=? AND IFNULL(FromName,'')<>'' LIMIT 1", (who,))), '') or who
+        whats = list(dict.fromkeys(_short(r.get('What'), 60) for _, r in xs if r.get('What')))
+        ids = [f"sv{r['MessageId']}" for _, r in xs[-4:]]
+        last = xs[-1][1]
+        out.append({'key': f"promise:every-{who.split('@')[0]}-{DAY_NAMES[wd].lower()}", 'kind': 'promise', 'sig': since[:10],
+                    'facts': (f"On {DAY_NAMES[wd]}s you send {name} ({who}) what you promised them - in {len(weeks)} of the last {EVERY_LOOK} weeks "
+                              f"({', '.join(ids)}): " + '; '.join(f'"{w}"' for w in whats[:3]) + f". Nothing has gone to them since {day:%A %d %B}."),
+                    'text': f"{(whats or ['what you send them'])[-1][:1].upper()}{(whats or ['what you send them'])[-1][1:]} you send {name.split()[0]} on {DAY_NAMES[wd]}s hasn't gone yet.",
+                    'action': {'type': 'message', 'mid': last['MessageId']}, 'who': name, 'what': (whats or [''])[-1]})
+    return out
+
+
 ASKING = ('task', 'reply_only')       # the triage intents that want something of the owner
 
 
@@ -504,6 +546,7 @@ def _asks_and_promises(store, c: dict) -> list:
 def candidates(store, c: dict) -> list:
     out = []
     for name, fn in (('followup/promise', lambda: _asks_and_promises(store, c)),
+                     ('recurring promise', lambda: recurring(store) if 'promise' in c['producers'] else []),
                      ('prep', lambda: prep(store) if 'prep' in c['producers'] else []),
                      ('cold', lambda: cold(store, c['cold_d']) if 'cold' in c['producers'] else [])):
         try: out += fn()
@@ -774,6 +817,11 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s work rail - the short
             'At most ONE line may suggest a system to connect, keyed connect:<type> with a type listed under SYSTEMS NOTHING HERE '
             'READS - only when the owner\'s work clearly involves it, citing the threads really about it; a thread that only '
             'shares a word with its name is not about it. None clearly is -> no connect line. '
+            # WHAT TO BRING UP IS THE OWNER'S OWN ANSWER (slice 5, 2026-10-25): which kinds of line they took up and which they said no to
+            'What the owner took up and said no to is how they want you to choose: What to bring up (under WHAT YOU KNOW ABOUT HOW THE OWNER WORKS), and the ideas under '
+            'ALREADY SAID they dismissed, say which KINDS of line are worth their eye - an idea of a kind they said no to again and again '
+            'stays unsaid, however it is worded; a kind they took up is worth saying. A promise they keep on a schedule (promise:every-*) '
+            'that has not gone this time is worth saying. '
             'Facts only from what you are given; never invent a name, a date or a number. Nothing new to say -> {"say": []}.')
 
 

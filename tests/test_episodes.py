@@ -136,3 +136,12 @@ def test_no_brain_means_no_lines_and_no_error(w):
     from taskuary.store import MemoryStore
     s = MemoryStore()
     assert learn.reflect(s, llm=None) is False and learned_cut.for_reader(s, 'assistant') == ''
+
+
+def test_a_promise_kept_every_week_is_an_episode_of_its_own():
+    """Slice 5 (2026-10-25): the same person, the same weekday, three weeks or more - said once as the schedule it is."""
+    from tests import memory_cases as C
+    s, facts = C.world()
+    eps = [e for e in episodes.build(s, '2000-01-01') if 'you keep a promise to gail@northwind.example on Mondays' in e[3]]
+    assert len(eps) == 1 and '7 weeks' in eps[0][3]
+    assert eps[0][0] in {f'sv{m}' for m in facts['gail_monday']}, 'it cites a promise it was counted from'

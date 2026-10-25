@@ -209,7 +209,7 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
 const COLUMNS = { display: "grid", gridTemplateColumns: "minmax(0, 1fr)", rowGap: 2, alignItems: "stretch",
   "@container (min-width: 760px)": { gridTemplateColumns: "minmax(0, clamp(300px, 36%, 520px)) minmax(0, 1fr)", gridTemplateRows: "minmax(0, 1fr)",
     flex: "0 1 auto", minHeight: 0,
-    "& > [data-tq-from], & > [data-tq-work]": { minHeight: 0, overflowY: "auto", scrollbarWidth: "thin", overscrollBehaviorY: "contain" },
+    "& > [data-tq-from], & > [data-tq-work]": { minHeight: 0, overflowY: "auto", scrollbarWidth: "thin", overscrollBehaviorY: "contain", overflowAnchor: "none" },
     "& > [data-tq-from]": { pr: 2.5, maxHeight: "max(420px, calc(var(--tq-work-h, 280px) * 1.5))" },
     "& > [data-tq-from] [data-tq-chat-thread], & > [data-tq-from] [data-tq-thread-box]": { maxHeight: "none", overflowY: "visible" },
     "& > [data-tq-work]": { pl: 2.5, borderLeft: `1px solid ${BORDER}` } } };
@@ -265,9 +265,10 @@ const rowChecklist = (t) => {
 // a box with a task shows its ref and state and opens it. The parent's box ticks itself when the child closes (store).
 // ONE PART OF THE TASK SECTION, its name in its own column (the owner, 2026-10-16: "no line but we need way to show came from|to do|
 // the ask are separate sections"): the label column sets each part apart without drawing a rule; at phone width it sits above
-function Part({ label, sub, subTitle, children, ...rest }) {
+// `focus`: this part is the card's one white section (FOCUS, 2026-10-25)
+function Part({ label, sub, subTitle, children, focus = false, ...rest }) {
   return (
-    <Box {...rest} sx={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", columnGap: 2, rowGap: 0.4, minWidth: 0 }}>
+    <Box {...rest} data-tq-focus={focus ? "" : undefined} sx={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", columnGap: 2, rowGap: 0.4, minWidth: 0, ...(focus ? FOCUS : {}) }}>
       <Box sx={{ minWidth: 0, display: "flex", alignItems: "baseline", gap: 1 }}>
         <Typography sx={{ color: INK, fontSize: 14, fontWeight: 600, lineHeight: 1.3 }}>{label}</Typography>
         {sub && <Typography variant="caption" title={subTitle} sx={{ color: FAINT, display: "block", lineHeight: 1.35 }}>{sub}</Typography>}
@@ -1184,7 +1185,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // the Agent work row with nothing in it: no agent at work, none ran, no story to tell, and not the open half
   const agentEmpty = !term?.alive && !wide && pane !== "agent" && !hasRecord && !["line", "story", "summary"].includes(storyAt);
   // the one white section on the shaded body (taskLayout.focusOf); a live session has no shade and no focus - it is the page
-  const focus = focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, pane });
+  const focus = focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, pane, waiting: !!waitFor,
+    list: !!(detail?.batch || t?.DoneWhen || (!t?.DoneWhen && todo.length)) });
   const chatBelow = focus === "agent" && workspaceMode === "general" && pane === "agent" && !liveSession;   // its chat joins the focus under it
   // A START THAT STOPPED ON "WHICH REPOSITORY?" (funnel.HELD_REPO): the chip says so and the pick resumes the start, whichever
   // chip you press (the owner, 2026-10-12: "if i don't fill it out it should warn me at least?")
@@ -1357,6 +1359,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // the work column's own height, for From's cap beside it (COLUMNS --tq-work-h): its content, never the row - the row is From's too,
   // and a cap read off it would grow by half again on every measure - set on the columns box as it changes
   const columnsBox = useRef(null), workBox = useRef(null);
+  // A SETTLED CARD OPENS AT ITS TOP (the owner, 2026-10-25: the Result opened partway down at 1366): the work column and the Result's own
+  // scroller start at 0 for every task, whatever the record loading under them did to the scroll
+  useLayoutEffect(() => { for (const el of [workBox.current, agentHead.current]) if (el) el.scrollTop = 0; }, [selected, detail?.task?.TaskId]);
   useLayoutEffect(() => {
     const w = workBox.current, c = columnsBox.current;
     if (!w || !c || typeof ResizeObserver === "undefined") return undefined;
@@ -1741,7 +1746,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   waiting room below - a fixed-height formula clipped its bottom line on shorter screens */}
               {/* SHADED BUT FOR THE FOCUS (the owner, 2026-10-25): with no agent live the body takes a warm shade and only the section to act
                   on is white (FOCUS); the header stays white, and a live session's screen is exactly as it was */}
-              <Box ref={stepsBox} sx={{ px: liveSession ? 1 : { xs: 1.25, sm: 1.5 }, py: liveSession ? 0.65 : 1.25, ...(focus ? { bgcolor: SHADE } : {}),
+              <Box ref={stepsBox} sx={{ px: liveSession ? 1 : { xs: 1.25, sm: 1.5 }, py: liveSession ? 0.65 : 1.25, ...(!term?.alive ? { bgcolor: SHADE } : {}),
                 overflowY: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", containerType: "inline-size", position: "relative" }}>
                 {/* FROM, FOLDED TO ONE LINE while an agent works, or once it has finished or failed (`wide`, 2026-10-22) - owner-approved
                     2026-10-21: the work has the whole width and the terminal is never covered or squeezed. The line opens From as a
@@ -1831,12 +1836,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           closing the task stays the owner's separate decision. The WHOLE LINE is the target, not the 16px box: on a
                           manual task ticking these off IS the work (the owner, 2026-09-16). A batch lists its items, a goal its steps. */}
                       {/* a batch's items and a goal's steps are its to-do too, named the same way (the owner, 2026-10-16: "it's not 3 sections") */}
-                      {detail?.batch && <Part label="To do" data-tq-todo=""><BatchItems taskId={t?.TaskId} items={detail.batch}
+                      {detail?.batch && <Part label="To do" data-tq-todo="" focus={focus === "list"}><BatchItems taskId={t?.TaskId} items={detail.batch}
                         onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} /></Part>}
-                      {t?.DoneWhen && <Part label="Steps" data-tq-todo=""><GoalSteps task={t} onOpenTask={(tid) => (onOpenTask ? onOpenTask(tid) : onSelect?.(tid))}
+                      {t?.DoneWhen && <Part label="Steps" data-tq-todo="" focus={focus === "list"}><GoalSteps task={t} onOpenTask={(tid) => (onOpenTask ? onOpenTask(tid) : onSelect?.(tid))}
                         onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} /></Part>}
                       {!t?.DoneWhen && todo.length > 0 && (
-                        <Part label="To do" sub={`${todo.filter((i) => i.done).length} of ${todo.length}`} subTitle={progressLine(todo)} data-tq-todo="">
+                        <Part label="To do" sub={`${todo.filter((i) => i.done).length} of ${todo.length}`} subTitle={progressLine(todo)} data-tq-todo="" focus={focus === "list"}>
                           {todo.map((i) => (
                             <Box key={i.id}>
                               <Box onClick={() => tickItem(i)}
@@ -1874,7 +1879,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           how many are between and who wrote them. It replaces "Where this came from" and the stack of later messages under
                           the ask (the owner, 2026-10-16: "you will probably have to have a scroll if it goes really far back"). A row opens
                           its message in full under it, as the old disclosure did. */}
-                      <Part label="Came from" sub={fromWorkflow && !sources.length ? "a workflow run" : cameFromLabel(sources).replace(/^Came from · /, "").replace(" in ", " · ")} data-tq-came-from="">
+                      <Part label="Came from" sub={fromWorkflow && !sources.length ? "a workflow run" : cameFromLabel(sources).replace(/^Came from · /, "").replace(" in ", " · ")} data-tq-came-from="" focus={focus === "source"}>
                         <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap", "&:empty": { display: "none" } }}>
                           {!!(detail.attachments?.length || detail.links?.length) && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
                             label={filesLine(detail.attachments?.length || 0, detail.links?.length || 0)}
@@ -2003,7 +2008,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {!codeRun && <Box ref={agentHead} data-tq-focus={focus === "agent" ? "" : undefined} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
                   px: liveSession ? 1 : sessionView ? 1.5 : 0, py: liveSession ? 0.55 : pane === "agent" ? (agentBar ? 0.8 : 1.5) : 1.1,
                   ...(sessionView ? {} : { borderTop: 0, pt: 0 }),
-                  flexShrink: settled ? 1 : 0, ...(settled ? { minHeight: 0, overflowY: "auto", scrollbarWidth: "thin" } : {}),
+                  flexShrink: settled ? 1 : 0, ...(settled ? { minHeight: 0, overflowY: "auto", scrollbarWidth: "thin", overflowAnchor: "none" } : {}),
                   display: liveSession ? "flex" : "block", alignItems: "center",
                   gap: liveSession ? 1 : 0, flexWrap: "wrap",
                   ...(focus === "agent" ? { ...FOCUS, ...(chatBelow ? { borderBottom: 0, borderRadius: "10px 10px 0 0", pb: 0.5 } : {}) } : {}) }}>
@@ -2025,7 +2030,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                        again (the owner, 2026-10-25); a working agent's chip stays where it is */
                     chip={<>{settled ? null : story && STORY_CHIP[story.kind] ? <StoryChip kind={story.kind} text={STORY_CHIP[story.kind]} />
                       : agentState ? <LifecycleChip kind="agent" phase={agentState} compact /> : null}{resultShown && shareBadge}</>} tone={PALETTE.sage} {...stageProps("agent")}
-                    tools={inRow && workspaceMode === "general" && (liveSession || pane === "agent")
+                    tools={inRow && workspaceMode === "general" && liveSession
                       ? <Box ref={setChatTools} sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }} /> : null}
                     /* folded, this heading carried NOTHING - it passed no action at all, so the one
                        card that can actually be picked back up was the one row you could not act on.
@@ -2118,7 +2123,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         "& [data-tq-diff-toggle]": { display: "none" }, "& > [data-tq-diff]": { display: "block", mt: 0 } } } : {}) }}>
                         {/* a chat shows its pages under the answer that made them; a terminal's are kept here */}
                         <AgentRecord {...recordProps} story={storyAt === "record" ? story : null} inChat={workspaceMode === "general"}
-                          result={resultShown} diff={diffRun ? diffStat(diffRun.DiffText) : null}
+                          result={resultShown} diff={diffRun ? diffStat(diffRun.DiffText) : null} bare={focus === "agent"}
                           diffOpen={diffShown} onDiff={foldDiff ? () => setDiffShown((v) => !v) : null} />
                         {diffRun && <Box data-tq-diff="" sx={{ mt: 0.75, display: foldDiff && !diffShown ? "none" : "block" }}><DiffBlock text={diffRun.DiffText} /></Box>}
                         {co.writeupAt === "result" && <WriteupLine view={writeup} />}
@@ -2202,7 +2207,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession}
                         onAnswered={() => { findTerm(selected); onChanged?.(); }}
-                        toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} />
+                        toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} />
                     </React.Suspense>
                   </Box>
                 ) : workspaceMode === "wrapping" ? (

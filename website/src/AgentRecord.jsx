@@ -128,7 +128,7 @@ export const SessionRecord = ({ s, pages = [], draft = "", startOpen = false, ti
 // found, how it resolved it, its write-up whole, what it made, and the session as one "Replay the session" line. `diff`: the run's own
 // diff counted (agentRecord.diffStat), where a run kept one.
 // `onDiff`: the run's diff is folded on the page, and the stat line opens it (`diffOpen`, TaskPage)
-export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = null, folded = false, inChat = false, result = false, diff = null, diffOpen = false, onDiff = null }) => {
+export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = null, folded = false, inChat = false, result = false, diff = null, diffOpen = false, onDiff = null, bare = false }) => {
   const [rec, setRec] = useState(null);
   useEffect(() => {
     let live = true;
@@ -163,7 +163,8 @@ export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = nul
   const s = chat ? { ...now, result: "", report: {} } : now && !String(now.result || "").trim() && story?.said ? { ...now, result: story.said } : now;
   if (chat && !state && !pages.length && !moreParts(s, { earlier: before.length }).length) return null;
   return (
-    <Box sx={{ width: "100%", bgcolor: PANEL, px: 1.35, py: 1.15, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
+    // `bare`: the page's white focus is the box (the owner, 2026-10-25), and the record reads as plain sections inside it
+    <Box sx={bare ? { width: "100%" } : { width: "100%", bgcolor: PANEL, px: 1.35, py: 1.15, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
       {state && <Box sx={{ mb: 1, pb: 1, borderBottom: `1px solid ${BORDER}` }}><StoryLine kind={state.kind} line={state.line} /></Box>}
       {s && !chat && result ? <ResultView s={s} before={before} pages={[...pages, ...(outputs || [])]} diff={diff} since={since} draft={draft} story={story} diffOpen={diffOpen} onDiff={onDiff} />
         : s && !chat ? <RunSummaries sessions={[s, ...before]} pages={pages}

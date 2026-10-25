@@ -16,10 +16,11 @@ import { fmtDate } from "./dates.js";
 export const layoutOf = ({ sessionView = false }) => (sessionView ? "full" : "columns");
 
 // THE FOCUS (the owner, 2026-10-25: "shading for what to focus on"): with no agent live the card's body is shaded and one section is white -
-// the agent's part once it has a Result (or its run failed, Try again being the move), else the half the work column opened on (`pane`):
-// the agent's box where that is the move, and Close out - the reply to write or send - for everything else, a task waiting on a person too.
-export const focusOf = ({ live = false, result = false, failed = false, pane = "" } = {}) =>
-  live ? null : result || failed || pane === "agent" ? "agent" : "reply";
+// the agent's part once it has a Result (or its run failed, Try again being the move); Close out where the reply is the move; and where the
+// open half is the agent's box (a to-do, a goal) the task's own LIST instead (the owner's answer, 2026-10-25): a goal's Steps, a to-do's
+// checklist (`list`), else the block that carries the ask's source ("source"). A task waiting on a person has nothing white ("none").
+export const focusOf = ({ live = false, result = false, failed = false, pane = "", waiting = false, list = false } = {}) =>
+  live ? null : waiting ? "none" : result || failed ? "agent" : pane === "agent" ? (list ? "list" : "source") : "reply";
 
 // WHICH HALF OF THE WORK COLUMN IS OPEN. The page's focus (taskLifecycle.focusStage) still decides between the agent and the
 // reply; where it named the task itself - now the always-open From column - the work column opens on what the task is for: the

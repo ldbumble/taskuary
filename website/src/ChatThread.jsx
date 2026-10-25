@@ -38,7 +38,8 @@ const timeOf = (at) => { const d = new Date(tsMs(at)); return Number.isNaN(d.get
 
 // COMPACT (the task-view cleanup, owner-approved 2026-10-25: Show all on a six-message burst drew 476px, about 79px a message): the name
 // INSIDE the bubble, once per run of one sender's messages, and the time at the end of the line - about 34px for a one-line message.
-// Still the back-and-forth (2026-10-16), yours on the right, in its centred column with the line round it (2026-10-15). The first name
+// Still the back-and-forth (2026-10-16), yours on the right, in its centred column - the well alone now, no line round it (the owner,
+// 2026-10-25, over the 2026-10-15 line). The first name
 // only, the run being read down a column; the well a shade darker than the card's shaded body it sits on (2026-10-25); the full name is the bubble's hover. A bubble may take 86% of the column (70% before): the
 // thread is read in From's 300-520px now, where 70% broke a one-line message onto two.
 const firstName = (m) => String(m.FromName || m.FromEmail || m.Channel || "").split(/[\s@]+/)[0];
@@ -48,7 +49,7 @@ export default function ChatThread({ messages = [], maxHeight = 460 }) {
   const list = [...messages].sort((a, b) => tsMs(b.SentAt) - tsMs(a.SentAt));
   return (
     <Box data-tq-chat-thread="" sx={{ mt: 0.85, width: "100%", maxWidth: 800, mx: "auto", boxSizing: "border-box", maxHeight, overflowY: "auto", px: 1, py: 0.75,
-      border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: "#ece8e1", display: "flex", flexDirection: "column", gap: 0.35 }}>
+      borderRadius: 2, bgcolor: "#ece8e1", display: "flex", flexDirection: "column", gap: 0.35 }}>
       {list.map((m, i) => {
         const me = mine(m), prev = list[i - 1];
         const newDay = !prev || dayOf(prev.SentAt) !== dayOf(m.SentAt);

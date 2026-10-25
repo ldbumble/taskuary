@@ -2168,10 +2168,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                      so the agent takes all of it under the title and its own heading (the Task strip is scrolled above - agentUp):
                      its input on screen, Close out one scroll below. A fixed 420px floor in a shorter view put the input and the last
                      lines out of sight. 78px = the title strip + this step's heading + 8px under the chat, less the 26px the view gained. */
-                  <Box sx={{ flex: "1 1 0", minHeight: canvas ? "max(240px, calc(100cqh - 78px))" : { xs: 360, md: 420 }, mb: canvas ? 1 : 0,
+                  /* ...A LIVE ONE (the owner, 2026-10-25: "when agent is open we want to maximize space to agent working"). Finished, failed or
+                     closed, the room is as tall as what is in it, so the card fits its content and the canvas is not ~350px of empty chat
+                     well (CanvasItem keeps the whole height only for data-tq-agent-room="live") */
+                  <Box data-tq-agent-room={liveSession ? "live" : "rest"} sx={liveSession ? { flex: "1 1 0", minHeight: canvas ? "max(240px, calc(100cqh - 78px))" : { xs: 360, md: 420 }, mb: canvas ? 1 : 0,
                     display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 },
                     // ...except while its agent is starting and has said nothing: the room is that one line (GeneralWorkspace `quiet`)
-                    "&:has([data-tq-starting])": { flex: "0 0 auto", minHeight: 0, "& > *": { flex: "0 0 auto" } } }}>
+                    "&:has([data-tq-starting])": { flex: "0 0 auto", minHeight: 0, "& > *": { flex: "0 0 auto" } } }
+                    : { flex: "0 1 auto", minHeight: 0, mb: canvas ? 1 : 0, display: "flex", flexDirection: "column", "& > *": { flex: "0 1 auto", minHeight: 0 } }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession}
                         onAnswered={() => { findTerm(selected); onChanged?.(); }}

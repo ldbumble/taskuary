@@ -301,7 +301,11 @@ def e1(llm, judge=None) -> dict:
     s.set_setting('learn_last_reflect', _stamp(datetime.now() - timedelta(days=61)), 'test')
     ok = learn.reflect(s, llm)
     lines = [l['text'] for l in learnedgraph.lines(s.get_doc('learned')) if l['status'] == 'live']
-    ask = 'PLANTED:\n' + '\n'.join(f'- {k}: {t}' for k, _, t in TRAITS) + '\n\nIN-USE LINES:\n' + '\n'.join(f'- {l}' for l in lines)
+    # ...and the org chart the world pinned: graded without it, the judge called "Ray reports to you and owns payroll" invented - the
+    # chart says exactly that (the live run, 2026-10-25)
+    from taskuary import orgchart
+    ask = ('PLANTED:\n' + '\n'.join(f'- {k}: {t}' for k, _, t in TRAITS) + f'\n\nTHE ORG CHART:\n{orgchart.block(s)}'
+           + '\n\nIN-USE LINES:\n' + '\n'.join(f'- {l}' for l in lines))
     try: got = json.loads(re.sub(r'^```\w*|```$', '', str((judge or llm)(JUDGE, ask, max_tokens=600) or '').strip(), flags=re.M)) if lines else {}
     except ValueError: got = {}
     return {'reflected': ok, 'lines': lines, 'recovered': [k for k in got.get('recovered') or [] if k in {t[0] for t in TRAITS}],

@@ -128,6 +128,11 @@ CASES = [
     Q('question', 'what did I do yesterday', None, [c('activity.list', days=2), 'You closed six.'], 'read:activity.list', freq=2),
     Q('question', 'what did I ask you to do this week', None, [c('asks.list', status='all'), 'Two asks.'], 'read:asks.list', freq=2),
     Q('question', 'who is Ruth Bennett', None, [c('sender.read', who='Ruth Bennett'), 'She writes about the AP cutover.'], 'read:sender.read', freq=2),
+    # ── the memory, read and corrected in words (slice 7 of the memory redesign, approved 2026-10-25) ──
+    Q('memory', "who's Gail to me", None, [c('memory.about', who='Gail'), 'Nothing in the memory about her yet.'], 'read:memory.about', freq=3),
+    Q('memory', 'Gail moved to Ops', None, c('memory.remember', note='Gail Moreno moved to Ops', about='gail@northwind.example'), 'did:memory.remember', freq=2),
+    Q('memory', 'forget that Ray does payroll', None, [c('memory.about', who='Ray'), 'Nothing in the memory says that about Ray.'], 'read:memory.about', freq=2,
+      note='the demo world has learned nothing yet; the closing and forgetting itself is tests/test_memory_edit.py'),
     Q('question', 'summarize my day', None, [c('pipe.list'), 'Ten on you; two meetings.'], 'read:pipe.list', demo='list', freq=4),
     # ── settings ──
     Q('settings', 'turn off sounds', None, c('setting.set', setting='hand_sound', value='0'), 'open:#settings=config', freq=3),
@@ -331,7 +336,7 @@ def _guards(stack, sort=None, live=None):
 # THE ACT, SAID (the owner, 2026-10-20: "it should show what it chose to do"): an answer that acted or lit leads with what it did - never a
 # bare word. A proposal on a phone is its question; a look-up's answer and a link are the model's own words.
 ACTS = ('Opened ', 'Marked ', 'Wrote ', 'Put down ', 'Drafting ', 'Rewriting ', 'Snoozed ', 'Closed ', 'Added ', 'Set ', 'Noted ',
-        'Ticked ', 'Unticked ', 'Took ', 'Renamed ', 'Brought up ')
+        'Ticked ', 'Unticked ', 'Took ', 'Renamed ', 'Brought up ', 'Remembered ')
 def said_what(say: str, got: list, q) -> bool:
     acted = [g for g in got if g.split(':')[0] in ('open', 'new', 'next', 'draft', 'cleared', 'did')]
     # ...and a lit button or a press speaks for itself - the filled button, the card's badge - and says no line (the owner, 2026-10-23)

@@ -57,7 +57,7 @@
 <div class="entry on">
       <a class="page" href="./security" aria-current="page">Security</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide Security's sections"></button>
-      <div class="secs"><a class="sec" href="#the-risk-is-the-text-not-the-network" data-sec="the-risk-is-the-text-not-the-network">The risk is the text, not the network</a><a class="sec" href="#what-taskuary-does-today" data-sec="what-taskuary-does-today">What Taskuary does today</a><a class="sec" href="#a-strangers-task-runs-in-auto-mode" data-sec="a-strangers-task-runs-in-auto-mode">A stranger's task runs in auto mode</a><a class="sec" href="#what-it-does-not-do-yet" data-sec="what-it-does-not-do-yet">What it does not do yet</a><a class="sec" href="#what-you-can-set-today" data-sec="what-you-can-set-today">What you can set today</a><a class="sec" href="#what-comes-next" data-sec="what-comes-next">What comes next</a></div>
+      <div class="secs"><a class="sec" href="#the-risk-is-the-text-not-the-network" data-sec="the-risk-is-the-text-not-the-network">The risk is the text, not the network</a><a class="sec" href="#what-taskuary-does-today" data-sec="what-taskuary-does-today">What Taskuary does today</a><a class="sec" href="#what-an-agent-can-call" data-sec="what-an-agent-can-call">What an agent can call</a><a class="sec" href="#a-strangers-task-runs-in-auto-mode" data-sec="a-strangers-task-runs-in-auto-mode">A stranger's task runs in auto mode</a><a class="sec" href="#what-it-does-not-do-yet" data-sec="what-it-does-not-do-yet">What it does not do yet</a><a class="sec" href="#what-you-can-set-today" data-sec="what-you-can-set-today">What you can set today</a><a class="sec" href="#what-comes-next" data-sec="what-comes-next">What comes next</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./assistant">Assistant buttons</a>
@@ -198,6 +198,37 @@ formatted text. A picture in that text could be a request carrying your data to 
 serves it, so the app loads pictures only from itself and shows any other picture as a link.</p>
 <p><strong>Credentials are scrubbed from prompts.</strong> A key or password pasted into a message is replaced before
 the text reaches any AI provider. The stored message keeps it, because it is your mail.</p>
+<h2 id="what-an-agent-can-call">What an agent can call<a class="anchor" href="#what-an-agent-can-call" aria-label="Link to this section">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Taskuary&#39;s own tools (search your saved mail and chats, read a message or attachment, tasks, people, the knowledge base, your calendar)</td>
+<td>They read. Claude and Codex sessions get them as the <code>taskuary</code> MCP server.</td>
+</tr>
+<tr>
+<td>A reply, an email, a GitHub comment, a post</td>
+<td>The agent proposes it. It waits on the task with a Send or Approve button.</td>
+</tr>
+<tr>
+<td>A connection that sends, posts, pays or places an order (LinkedIn, Bluesky, Mastodon, Robinhood, treg, an MCP tool its server does not mark read-only, a GraphQL mutation)</td>
+<td>It waits as a proposal at any permission level, even full. Your press runs it.</td>
+</tr>
+<tr>
+<td>A file saved to SharePoint or OneDrive</td>
+<td>It runs when the connection allows writing, and the agent says where the file went.</td>
+</tr>
+<tr>
+<td>Your own MCP servers in Claude and Codex</td>
+<td>The agent keeps them, except the tools that send mail, chat or comments. A tool its server marks read-only stays. A model judges each of the others, and a tool nobody has judged yet stays out. Your claude.ai connectors are read once from a short Claude start and judged the same way. <strong>Settings &gt; Agent permissions</strong> lists every tool left out, with why, and a Keep switch.</td>
+</tr>
+</tbody></table>
+<p><strong>This removes the send tools an agent is handed. It does not remove what the agent can do.</strong> A
+session with full permissions still runs as your Windows user and has a shell.</p>
 <h2 id="a-strangers-task-runs-in-auto-mode">A stranger&#39;s task runs in auto mode<a class="anchor" href="#a-strangers-task-runs-in-auto-mode" aria-label="Link to this section">#</a></h2>
 <p>Every task knows <strong>where its words came from</strong>: you, a trusted sender, or a stranger. The least trusted
 text on it decides, and a stranger who writes on your colleague&#39;s thread makes it a stranger&#39;s task.

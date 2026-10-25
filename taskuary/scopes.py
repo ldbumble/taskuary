@@ -18,6 +18,7 @@ is unit-testable offline. `Scope` on the connector row is the owner's setting; t
 below are what each connection could already do before scopes existed, so switching a
 version on changes nothing until the owner tightens it.
 """
+import re
 
 SCOPES = ('read', 'write', 'admin')
 _RANK = {s: i for i, s in enumerate(SCOPES)}
@@ -90,6 +91,7 @@ ACTIONS = {
     # place it can land is ~/.taskuary/sftp. The four that change something on the far side are writes.
     'smb_read': 'read', 'sftp_list': 'read', 'sftp_get': 'read',
     'smb_write': 'write', 'smb_move': 'write', 'sftp_put': 'write', 'sftp_move': 'write',
+    'sharepoint_save': 'write', 'onedrive_save': 'write',     # a file saved, not a message: no press, and the agent says where (2026-10-25)
     'kb_search': 'read',     # the knowledge base is Taskuary's own index; searching it moves nothing (kb_reindex writes it: default)
     # the handbook is Taskuary's own store and the whole point is that agents fill it, so reading
     # it is free. WRITING it is a write - not because it can reach anything (it cannot leave the
@@ -130,6 +132,49 @@ ACTIONS = {
 # perimeter: these permissions also reach a spoofed sender's work (audit 2026-10-14).
 FULL = 'admin'
 DEFAULT_SCOPE = {}                     # no per-type exceptions; kept as the /api/scopes shape
+
+# WHAT REACHES A PERSON (the owner, 2026-10-25: "never send without approval, for now"). Each executor here puts words in front of
+# somebody, publishes under the owner's name or moves money. An AGENT's call to one never runs at any Authority - full included - it
+# waits as a run_tool proposal on the agent's own task, and the owner's press runs it (server.tool_run). The owner's own calls are
+# unchanged. It is a property of the executor, like ACTIONS above, never a reading of what the call says. Cards start at FULL, so
+# the older comments above about "the card ships at read, so an agent can only propose" stopped holding; this is what holds now.
+REACHES = {
+    'linkedin_post': 'posts on LinkedIn under your name', 'bluesky_post': 'posts on Bluesky under your name',
+    'mastodon_post': 'posts on Mastodon under your name', 'zoho_invoice_send': 'sends an invoice to a customer',
+    'robinhood_order': 'places an order with your money', 'treg_call': 'calls a paid endpoint that can publish or order',
+    # these two reach whatever the far side does with them, so the call itself decides (reaches below)
+    'mcp': "runs a tool its server does not mark read-only - it may send, post or comment",
+    'graphql': 'runs a GraphQL mutation - it may post a comment or change a record somebody reads',
+}
+# ...and the writes that reach nobody, named, so every executor is a decision (test_scopes walks reports.REGISTRY): a file saved, a
+# bill posted to the books, the Hub. Each keeps the card's Authority, per the owner's 2026-10-05 ruling. A file is not a message
+# (2026-10-25), so a save to SharePoint or OneDrive runs at write, and the agent says where it put it.
+QUIET_WRITES = frozenset({
+    'quickbooks_bill', 'quickbooks_expense', 'intacct_create', 'intacct_update', 'zoho_invoice_draft',
+    'smb_write', 'smb_move', 'sftp_put', 'sftp_move', 'sharepoint_save', 'onedrive_save',
+    'handbook_write', 'handbook_vote', 'hub_write', 'hub_vote', 'hub_comment', 'kb_reindex',
+    'winrm',                                       # runs on a box the owner named; its reach is that box, and admin gates it
+    # each answers the owner or Taskuary's own store: an agent run's words are drafts, and the Assistant posts to the owner
+    'agent', 'assistant', 'taskuary', 'calendar', 'google_sheets', 'sharepoint_list', 'sharepoint_file',
+    # named in the catalogue, not built (reports.PLANNED): they run nothing yet
+    'netsuite', 'sap', 'workday', 'adp', 'epic', 'cerner', 'pointclickcare', 'stooq'})
+
+
+def _gql_op(query) -> str:
+    "A GraphQL document's operation type: the grammar's first word ('{' alone is the query shorthand). Comments are skipped."
+    q = '\n'.join(l.split('#', 1)[0] for l in str(query or '').splitlines()).strip()
+    return 'query' if not q or q.startswith('{') else re.split(r'[\s({]', q, 1)[0].lower()
+
+
+def reaches(action, cfg: dict = None, tool: dict = None) -> str:
+    """'' when an agent's call to this executor reaches nobody, else what it would do, in words for the owner's card. An MCP tool
+    reaches unless its own server marks it read-only (mcp.read_only, fail closed); a GraphQL document unless it is a query."""
+    a = (action or '').strip().lower()
+    if a == 'mcp':
+        from .mcp import read_only
+        return '' if read_only(tool or {}) else REACHES['mcp']
+    if a == 'graphql': return '' if _gql_op((cfg or {}).get('query')) in ('query', 'subscription') else REACHES['graphql']
+    return REACHES.get(a, '')
 
 
 def rank(scope) -> int: return _RANK.get((scope or '').strip().lower(), 0)

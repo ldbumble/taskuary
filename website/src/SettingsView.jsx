@@ -28,6 +28,7 @@ import AiDefaults from "./AiDefaults.jsx";
 import AgentPermissions from "./AgentPermissions.jsx";
 import SharedLinks from "./SharedLinks.jsx";
 import SavedSignins from "./SavedSignins.jsx";
+import SendFilter from "./SendFilter.jsx";
 import AboutYou from "./AboutYou.jsx";
 import UpdateCard from "./UpdateCard.jsx";
 import SystemUpdateAltIcon from "@mui/icons-material/SystemUpdateAlt";
@@ -700,7 +701,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   // ...and what a section lists UNDER its knobs: the share links still open sit below the switch that allows them
   const after = {
     Sharing: <SharedLinks />,
-    "Agent permissions": <SavedSignins />,
+    "Agent permissions": <><SavedSignins /><SendFilter /></>,
   };
   // no coding tool connected: the Coding agent section has nothing to set (capabilities.js)
   const cfgGroups = GROUPS.filter((g) => (panels[g] || rowsOf(g).length) && (g !== "Coding agent" || canCode));

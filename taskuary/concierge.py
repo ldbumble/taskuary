@@ -4475,14 +4475,17 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # was just a digit for the model to interpret, so it answered about something else entirely (the
     # owner, 2026-09-15: "on the desktop when I hit 1 it shows the past message not matching what i
     # sent"). The action words under the line ARE numbered, in the order they are drawn.
+    # ...and the line kept is the one TYPED: "2" was saved as "Mark done", a second owner bubble the owner never wrote, and the only one
+    # a reload kept (the 2026-10-25 sweep) - the model reads what the digit names, the chat keeps what was said
+    typed = text
     if item and text.strip().lstrip('#').rstrip('.').strip().isdigit():
         words = [c['label'] for c in chips_for(store, item)]
         i = int(text.strip().lstrip('#').rstrip('.').strip())
         if 1 <= i <= len(words): text = words[i - 1]
     # the dock has the owner's words now; the item has them with the answer, once the turn knows it was about the item
-    record(store, tid, 'user', text)
+    record(store, tid, 'user', typed)
     turn = _TURN.get()
-    if item: turn.update(item=item, said=text)
+    if item: turn.update(item=item, said=typed)
     turn['trace'] = trace                           # the app's own trouble draws its steps as they happen (_trouble)
     rec = lambda role, body, card=None: record_related(store, tid, item, role, body, card)
     table = table_line(store, item)

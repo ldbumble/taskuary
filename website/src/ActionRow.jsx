@@ -5,7 +5,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Menu, MenuItem, Popover, useMediaQuery } from "@mui/material";
 import api from "./api.js";
 import { suggestion } from "./advice.js";
-import { TYPES, advisedAny, advisedIn, fitRow, press, rowOf, lightOnCard, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { TYPES, advisedAny, advisedIn, fitRow, press, pressInFlight, rowOf, lightOnCard, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
 import { adviceNone } from "./words.js";
 import { CONNECT_AI } from "./ConnectAi.jsx";
 
@@ -48,6 +48,8 @@ export function AdvisorNext({ advice, onPropose }) {
     // the strip went blank with nothing lit (the advisor matrix, 2026-10-19) - the line it was judged with is not true of this screen
     const off = advisedAny(theirs, advice);
     if (!off?.disabled) return null;
+    // ...and not while the owner's own press greys it (pressInFlight): "Drafting… is off" was said over the Reply just pressed
+    if (pressInFlight(theirs)) return null;
     return (
       <div className="tq-next" role="status" data-tq-advice="off">
         <div className="tq-next-txt">{`${off.label} is off - ${off.why || "it cannot be pressed right now"}.`}</div>

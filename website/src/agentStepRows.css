@@ -1,0 +1,27 @@
+/* ONE STEP A LINE: the general agent's trail and the Assistant's own steps (AgentStepRows.jsx) are the same rows. */
+.tq-aui-tool-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #78917a; }
+.tq-aui-tool-running .tq-aui-tool-dot { background: #c99b42; animation: tqAuiPulse 1.2s ease-in-out infinite; }
+.tq-aui-tool-error .tq-aui-tool-dot { background: #9a4e53; }
+/* WHAT IT DID, as plain lines (agentSteps.js): its own words in the answer's type, and one quiet row per thing it did. A row opens
+   on the raw call behind it - kept for debugging, never the first thing read. */
+.tq-aui-steps { margin: 0 0 12px; display: flex; flex-direction: column; gap: 1px; }
+.tq-aui-said { margin: 2px 0 6px; color: #4d514b; }
+.tq-aui-said p { margin: 0 0 4px; }
+.tq-aui-step { margin: 0; border-radius: 7px; }
+.tq-aui-step summary, .tq-aui-step-line { min-height: 24px; padding: 2px 6px; display: flex; align-items: center; gap: 8px; list-style: none;
+  font-size: 12.5px; line-height: 1.4; color: #5d6158; }
+.tq-aui-step summary { cursor: pointer; }
+.tq-aui-step summary::-webkit-details-marker { display: none; }
+.tq-aui-step summary::after { content: "▸"; margin-left: auto; padding-left: 8px; color: #aaa59b; font-size: 11px; }
+.tq-aui-step[open] summary::after { content: "▾"; }
+.tq-aui-step summary:hover { background: #f4f1ea; }
+.tq-aui-step summary:hover::after { color: #858078; }
+.tq-aui-step summary span:not(.tq-aui-tool-dot), .tq-aui-step-line span:not(.tq-aui-tool-dot) { overflow-wrap: anywhere; word-break: break-word; }
+.tq-aui-step em { color: #8a6d1f; font-size: 11px; font-style: normal; white-space: nowrap; }
+.tq-aui-step.tq-aui-tool-error em { color: #9a4e53; }
+.tq-aui-step-thought summary, .tq-aui-step-thought .tq-aui-step-line { font-style: italic; color: #858078; }
+.tq-aui-step pre { margin: 2px 0 6px 21px; padding: 8px 10px; max-height: 220px; overflow-x: hidden; overflow-y: auto; border-radius: 7px;
+  background: #22231f; color: #e8e4dc; font: 10.5px/1.45 'Cascadia Mono', Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+.tq-aui-note { margin: 0 0 4px; padding: 2px 6px; color: #858078; font-size: 11.5px; }
+.tq-aui-note-error { color: #9a4e53; }
+@keyframes tqAuiPulse { 50% { opacity: .3; } }

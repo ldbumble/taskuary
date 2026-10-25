@@ -34,32 +34,7 @@
 .tq-aui-tool summary b { color: #4d514b; }
 .tq-aui-tool summary span:not(.tq-aui-tool-dot) { color: #858078; overflow-wrap: anywhere; word-break: break-word; }
 .tq-aui-tool summary em { margin-left: auto; color: #8d897f; font: 9px/1.2 'Cascadia Mono', Consolas, monospace; font-style: normal; text-transform: uppercase; }
-.tq-aui-tool-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #78917a; }
-.tq-aui-tool-running .tq-aui-tool-dot { background: #c99b42; animation: tqAuiPulse 1.2s ease-in-out infinite; }
-.tq-aui-tool-error .tq-aui-tool-dot { background: #9a4e53; }
 .tq-aui-tool pre { margin: 0; padding: 8px 10px; max-height: 220px; overflow-x: hidden; overflow-y: auto; border-top: 1px solid #e5e0d8; background: #22231f; color: #e8e4dc; font: 10.5px/1.45 'Cascadia Mono', Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
-/* WHAT IT DID, as plain lines (agentSteps.js): its own words in the answer's type, and one quiet row per thing it did. A row opens
-   on the raw call behind it - kept for debugging, never the first thing read. */
-.tq-aui-steps { margin: 0 0 12px; display: flex; flex-direction: column; gap: 1px; }
-.tq-aui-said { margin: 2px 0 6px; color: #4d514b; }
-.tq-aui-said p { margin: 0 0 4px; }
-.tq-aui-step { margin: 0; border-radius: 7px; }
-.tq-aui-step summary, .tq-aui-step-line { min-height: 24px; padding: 2px 6px; display: flex; align-items: center; gap: 8px; list-style: none;
-  font-size: 12.5px; line-height: 1.4; color: #5d6158; }
-.tq-aui-step summary { cursor: pointer; }
-.tq-aui-step summary::-webkit-details-marker { display: none; }
-.tq-aui-step summary::after { content: "▸"; margin-left: auto; padding-left: 8px; color: #aaa59b; font-size: 11px; }
-.tq-aui-step[open] summary::after { content: "▾"; }
-.tq-aui-step summary:hover { background: #f4f1ea; }
-.tq-aui-step summary:hover::after { color: #858078; }
-.tq-aui-step summary span:not(.tq-aui-tool-dot), .tq-aui-step-line span:not(.tq-aui-tool-dot) { overflow-wrap: anywhere; word-break: break-word; }
-.tq-aui-step em { color: #8a6d1f; font-size: 11px; font-style: normal; white-space: nowrap; }
-.tq-aui-step.tq-aui-tool-error em { color: #9a4e53; }
-.tq-aui-step-thought summary, .tq-aui-step-thought .tq-aui-step-line { font-style: italic; color: #858078; }
-.tq-aui-step pre { margin: 2px 0 6px 21px; padding: 8px 10px; max-height: 220px; overflow-x: hidden; overflow-y: auto; border-radius: 7px;
-  background: #22231f; color: #e8e4dc; font: 10.5px/1.45 'Cascadia Mono', Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
-.tq-aui-note { margin: 0 0 4px; padding: 2px 6px; color: #858078; font-size: 11.5px; }
-.tq-aui-note-error { color: #9a4e53; }
 /* AN AGENT AT WORK. One band above the trail: who, what it is doing right now, how far in, how
    long - and the sources it is already holding. The dock never renders this; it is the assistant
    that helps you run Taskuary, not an agent on a job. */
@@ -101,7 +76,6 @@
 .tq-aui-thinking i:nth-child(2) { animation-delay: .15s; } .tq-aui-thinking i:nth-child(3) { animation-delay: .3s; }
 .tq-aui-thinking span { margin-left: 5px; color: #8b877e; font: 500 11px/1.2 'Cascadia Mono', Consolas, monospace; }
 @keyframes tqAuiThinking { 0%, 100% { opacity: .35; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
-@keyframes tqAuiPulse { 50% { opacity: .3; } }
 .tq-aui-footer { flex: 0 0 auto; padding: 10px 18px 8px; background: #fbfaf7; border-top: 1px solid #e4e0d9; }
 .tq-aui-composer { width: 100%; margin: 0 auto; min-height: 48px; display: flex; align-items: flex-end; gap: 5px; padding: 6px 7px; border: 1px solid #d5d0c7; background: #fff; border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
 .tq-aui-input { flex: 1; min-width: 0; resize: none; border: 0; outline: 0; background: transparent; color: #292824; font: inherit; font-size: 13px; line-height: 1.45; padding: 7px 5px; max-height: 150px; overflow-x: hidden; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }

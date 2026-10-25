@@ -152,6 +152,9 @@ AGENT_READS = (
 OWNER_ONLY = (
     # the first thing a cornered model would do is mark the send tool it was denied as one that does not send (sendfilter)
     (r'POST', r'^/api/sendfilter/(correct|scan)$', "which of the owner's own MCP tools count as sends is the owner's word"),
+    # the router's rules, a judgement's correction and a step up to the strong model are the owner's (the router, 2026-10-25)
+    (r'POST', r'^/api/ai/route_rules$', "which AI reads what is the owner's setting"),
+    (r'POST', r'^/api/tasks/\d+/(judged|strong-again)$', "correcting how hard a task is, or re-running it on the strong model, is the owner's press"),
     (r'POST', r'^/api/(bug-report/draft|open-url)$', "a bug report is drafted from the owner's own screen, and only the owner's click opens a page on their desktop"),
     (r'POST', r'^/api/messages/\d+/unsubscribe$', "leaving a mailing list is the owner's press - a newsletter's words never reach it (unsubscribe.py)"),
     (r'POST', r'^/api/messages/\d+/calendar$',"answering an invite or drafting one is the owner's - drafted for their Send (calwrite)"),

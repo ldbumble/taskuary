@@ -213,12 +213,14 @@ class OverTheApi(unittest.TestCase):
         self.assertTrue(guard.denied('POST', '/api/update'))
         self.assertFalse(guard.denied('GET', '/api/update'))
         # a refusal is a 422 with the reason, and the process is NOT told to exit
-        with mock.patch.object(update, 'apply', side_effect=RuntimeError('this is a source checkout - git pull')), \
+        with mock.patch.object(update, 'ready', side_effect=RuntimeError('this is a source checkout - git pull')), \
              mock.patch.object(update, 'exit_soon') as bye:
             r = c.post('/api/update', json={})
         self.assertEqual(r.status_code, 422); self.assertIn('git pull', r.json()['detail']); bye.assert_not_called()
-        # a real swap answers first, then exits
-        with mock.patch.object(update, 'apply', return_value={'how': 'exe', 'downloaded': 5, 'restarting': True}), \
+        # a real swap answers first, then exits - with nothing running, at once
+        with mock.patch.object(update, 'ready', return_value={'newer': True, 'url': 'u'}), \
+             mock.patch('taskuary.awake.running', return_value=''), \
+             mock.patch.object(update, 'apply', return_value={'how': 'exe', 'downloaded': 5, 'restarting': True}), \
              mock.patch.object(update, 'exit_soon') as bye:
             r = c.post('/api/update', json={})
         self.assertTrue(r.json()['restarting']); bye.assert_called_once()
@@ -272,7 +274,9 @@ class TheHelperDoesNotStrandTheOwner(unittest.TestCase):
         that now never goes, and the owner is left with no app and a console. The audit row is one
         such thing; an 89MB SQLite under load answers 'database is locked' often enough."""
         from taskuary import server
-        with mock.patch.object(update, 'apply', return_value={'how': 'exe', 'restarting': True}), \
+        with mock.patch.object(update, 'ready', return_value={'newer': True, 'url': 'u'}), \
+             mock.patch('taskuary.awake.running', return_value=''), \
+             mock.patch.object(update, 'apply', return_value={'how': 'exe', 'restarting': True}), \
              mock.patch.object(server.store, 'audit', side_effect=RuntimeError('database is locked')), \
              mock.patch.object(update, 'exit_soon') as bye:
             server.update_apply()

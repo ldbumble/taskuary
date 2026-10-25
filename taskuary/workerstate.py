@@ -281,6 +281,9 @@ def hold(tid: int, sid: str, group: str, rids: list) -> dict:
 # holds (release_all), so a permit held for the owner held the process open with it (R26, the task 10 live check). Every wait
 # watches this as well as its own event, and lets go the moment the server is told to exit.
 STOP = threading.Event()
+# ...and the server itself, so Quit in the browser (POST /api/quit) can tell it to exit. Here and not on desktop.Server: the exe runs
+# desktop.py as __main__, a second copy of that module, and this one is shared by both (2026-10-25)
+SERVER = [None]
 
 
 def wait_held(group: str, seconds: float, step: float = 1.0) -> dict | None:

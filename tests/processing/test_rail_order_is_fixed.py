@@ -158,3 +158,18 @@ def test_urgent_is_walked_in_its_place():
     assert keys(items) == ['task:1', 'task:2', 'task:3', 'urgent:1']
     assert keys(below(items, items, 'task:2')) == ['task:3', 'urgent:1']
     assert below(items, items, None) is None, 'a walk with nothing on the table and no place starts at the top'
+
+
+def test_a_step_put_down_never_walks_back_up_to_its_goal():
+    """The 2026-10-25 sweep: from the bottom task - a goal's step, made in the same second as its goal - Next went down to Reports, but
+    Remind me and Mark done walked UP to the goal: with the step gone from the rail the walk read on from its place's clock, and the
+    goal's arrival matched it to the second. The task number decides a tie; a key with none is still the place's own row."""
+    from taskuary.funnel_selection import below
+    at = ago(30)
+    row = lambda key, tid, band=2: {'key': key, 'tid': tid, 'lane': 'yours', 'kind': 'todo', 'order_band': band, 'arrived_at': at}
+    goal, step, report = row('task:7', 7), row('task:9', 9), {'key': 'report:1', 'lane': 'report', 'kind': 'report', 'order_band': 3, 'arrived_at': ago(300)}
+    place = list(funnel.order_key(step))
+    items = funnel._order([goal, report])                       # the step was put away: it is off the line
+    assert keys(below(items, items, None, place, at_key='task:9')) == ['report:1'], 'the walk went back up to the goal above the step'
+    again = {'key': 'msg:3', 'lane': 'yours', 'kind': 'todo', 'order_band': 2, 'arrived_at': at}
+    assert keys(below([again], [again], None, place, at_key='task:9')) == ['msg:3'], "the place's own row under a key with no number was lost"

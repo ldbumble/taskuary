@@ -701,7 +701,7 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     # Drafting's own brain and model (aidefaults, brainroute) - blank = the triage brain, as before
                     'draft_ai': '', 'draft_model': '',
                     # which AI does each job (brainroute): fixed = the cards, exactly as before; auto = the rules, '' = the shipped ones
-                    'ai_route_mode': 'fixed', 'ai_route_rules': '',
+                    'ai_route_mode': 'fixed', 'ai_route_rules': '', 'ai_route_strong_cap': '',
                     # the agent's context file (context.py): history, past work and the brief, written to
                     # ~/.taskuary/context/TQ-xxxx.md and pointed at from the seed - not crammed into it
                     'agent_context_file': '1',
@@ -3997,6 +3997,10 @@ class SQLiteStore:
     def brain_routes(self, task_id: int = None, limit: int = 20) -> list:
         if task_id is not None: return self._rows('SELECT * FROM brainroute WHERE TaskId=? ORDER BY Id DESC LIMIT ?', (int(task_id), int(limit)))
         return self._rows('SELECT * FROM brainroute ORDER BY Id DESC LIMIT ?', (int(limit),))
+    def count_brain_routes(self, since: str, tier: str = None) -> int:
+        q, p = 'SELECT COUNT(*) AS n FROM brainroute WHERE At>=?', [since]
+        if tier: q, p = q + ' AND Tier=?', p + [tier]
+        return (self._one(q, p) or {}).get('n') or 0
     def trim_brain_routes(self, before: str) -> int:
         n = (self._one('SELECT COUNT(*) AS n FROM brainroute WHERE At<?', (before,)) or {}).get('n') or 0
         if n: self._exec_unseen('DELETE FROM brainroute WHERE At<?', (before,))

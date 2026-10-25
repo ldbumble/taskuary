@@ -14,7 +14,8 @@ import MenuBookIcon from "@mui/icons-material/MenuBook";
 import AddIcon from "@mui/icons-material/Add";
 import api from "./api";
 import { Md } from "./md.jsx";
-import LearnedView from "./LearnedView.jsx";
+import LearnedView, { MarkRow } from "./LearnedView.jsx";
+import { changeMarks } from "./learnedGroups.js";
 import { AgentsPage } from "./AgentsPanel.jsx";
 import SoulInterview from "./SoulInterview.jsx";
 import NewPlaybookDialog from "./NewPlaybookDialog.jsx";
@@ -44,7 +45,8 @@ const DOCS = {
   digest: { label: "DIGEST.md", icon: <HistoryEduIcon sx={{ fontSize: 19, color: "#55697a" }} />,
     blurb: "Your morning brief — what's in flight, who waits on whom. Written by the Morning digest report: the same brief lands on your work rail daily, its prompt is edited under Reports (that decides what goes in here), and deleting that report turns it off." },
   learned: { label: "LEARNED.md", icon: <PsychologyIcon sx={{ fontSize: 19, color: "#55697a" }} />,
-    blurb: "What the system has learned about YOU — style, responsibilities, what deserves a task — distilled from your verdicts: edited drafts, rejections, reclassifications. Hypotheses graduate on evidence; every line is yours to edit or delete, and SOUL.md always outranks it." },
+    // WHAT IT HOLDS NOW (the memory redesign, 2026-10-25): how you work, learned from what you did - never which button you pressed
+    blurb: "How you work, learned from what you do: your people and how you deal with them, what you care about, your rhythm, the promises you keep, and what is worth bringing up. Each reader takes the parts that help it. A line waits in Watching until enough of your own acts say it; Keep, Wrong and Forget correct it, every line is yours to edit, and SOUL.md always outranks it." },
 };
 const NAMES = Object.keys(DOCS);
 // The rail in Settings draws these, so the list of operator documents lives in ONE place rather
@@ -55,11 +57,16 @@ export const OPERATOR_DOCS = NAMES.map((n) => ({ name: n, label: DOCS[n].label, 
 // evidence - the history the Visualize chart draws as dots, as a list you can read (the row-bot comparison, 2026-10-07)
 function LearnedChanges() {
   const [rows, setRows] = useState(null);
-  useEffect(() => {
-    let live = true;
-    api.get("/api/learned/changes").then(({ data }) => live && setRows(data.data || [])).catch(() => live && setRows([]));
-    return () => { live = false; };
-  }, []);
+  const [busy, setBusy] = useState(""), [said, setSaid] = useState(null);
+  const load = useCallback(() => api.get("/api/learned/changes").then(({ data }) => setRows(data.data || [])).catch(() => setRows([])), []);
+  useEffect(() => { load(); }, [load]);
+  // KEEP / WRONG / FORGET here too (the owner's ruling 2, 2026-10-23: "Keep / Wrong / Forget on See what changed"), on a line's newest row
+  const mark = async (key, how) => {
+    setBusy(key); setSaid(null);
+    try { await api.post("/api/learned/mark", { key, how }); await load(); }
+    catch (e) { setSaid({ key, msg: e?.response?.data?.detail || "That did not go through - nothing was changed." }); if (e?.response?.status === 404) await load(); }
+    finally { setBusy(""); }
+  };
   if (rows === null) return <Box sx={{ display: "grid", placeItems: "center", py: 6 }}><CircularProgress size={20} /></Box>;
   if (!rows.length) return <Typography sx={{ color: FAINT, fontSize: 13, py: 3 }}>Nothing changed in the last 30 days.</Typography>;
   const day = (at) => fmtDate(new Date(String(at).replace(" ", "T")), undefined, { month: "short", day: "numeric" });
@@ -70,9 +77,13 @@ function LearnedChanges() {
         <Box key={i} sx={{ display: "grid", gridTemplateColumns: "56px 1fr", gap: 1.25, py: 0.85, borderTop: i ? "1px solid #eee8e0" : "none" }}>
           <Typography sx={{ fontSize: 11.5, color: FAINT, pt: 0.2 }}>{day(r.at)}</Typography>
           <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: "#55697a" }}>{r.says}</Typography>
-            <Typography sx={{ fontSize: 13, color: INK, textDecoration: ["faded", "deleted"].includes(r.action) ? "line-through" : "none",
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: "#55697a", flex: 1 }}>{r.says}</Typography>
+              {changeMarks(r).length > 0 && <MarkRow marks={changeMarks(r)} busy={busy === r.key} onMark={(how) => mark(r.key, how)} />}
+            </Box>
+            <Typography sx={{ fontSize: 13, color: INK, textDecoration: ["faded", "deleted", "forgotten", "wrong", "closed"].includes(r.action) ? "line-through" : "none",
               textDecorationColor: "#c9c1b6" }}>{r.text}</Typography>
+            {said?.key === r.key && r.newest && <Typography role="alert" sx={{ fontSize: 11.5, color: "#7a2f3c" }}>{said.msg}</Typography>}
           </Box>
         </Box>
       ))}
@@ -767,7 +778,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
             </Box>
           </Box>
         )}
-        {docName === "learned" && view === "viz" ? <LearnedView onChanged={load} />
+        {docName === "learned" && view === "viz" ? <LearnedView onChanged={load} people={people} onPerson={openPerson} />
           : docName === "learned" && view === "changes" ? <LearnedChanges /> : (
         /* It FILLS what is left of the column and scrolls inside itself. minRows 22/maxRows 40 sized
            the field to the DOCUMENT, so SOUL.md pushed the footer - and the whole left column with

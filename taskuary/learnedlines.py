@@ -63,7 +63,9 @@ def sync(store, old: str, new: str, actor: str):
         for k, o in before.items():
             if k in after: continue
             r = have.get(k) or {}
-            if owner:
+            if owner and r.get('Status') == 'wrong':          # marked Wrong a moment ago (memoryedit.mark): it leaves as Wrong, said once
+                store._exec('UPDATE learned_line SET InDoc=0, UpdatedAt=? WHERE Key=?', (now, k))
+            elif owner:
                 store._exec('UPDATE learned_line SET Status=?, InDoc=0, ForgotEv=?, UpdatedAt=? WHERE Key=?', ('forgotten', len(o['ev']), now, k))
                 store.add_learned_event(k, o['text'], o['status'], 0, '', 'forgotten', actor)
             elif r.get('Status') not in ('wrong', 'forgotten', 'closed', 'retired'):

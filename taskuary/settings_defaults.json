@@ -17,6 +17,7 @@
     "draft_ai": "",
     "draft_model": "",
     "ai_route_mode": "fixed",
+    "ai_route_strong_cap": "",
     "assistant_model": "",
     "assistant_max_lines": "5",
     "assistant_followup_hours": "24",

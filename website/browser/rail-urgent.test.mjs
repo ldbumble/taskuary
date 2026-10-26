@@ -84,5 +84,19 @@ test("an urgent task is shaded in its place under Tasks, with no Urgent heading,
   assert.ok(reports.length >= 2, `the demo rail has reports to order: ${JSON.stringify(after)}`);
   const times = reports.map((i) => stamp(i.arrived_at || i.sort_at || i.since || i.when));
   assert.deepEqual(times, [...times].sort((a, b) => a - b), `reports are not oldest first: ${JSON.stringify(reports.map((i) => [i.title, i.arrived_at]))}`);
+
+  // THE DOT IS THE STORED PRIORITY, WHATEVER THE BAND (2026-10-26): a draft waiting for the owner's yes never reaches the urgent band,
+  // and marked urgent it drew regular's sage - lower than important's slate (the owner, 2026-10-25: the category IS the dot's colour)
+  const review = (pile.items || []).find((i) => i.kind === "review" && i.tid);
+  assert.ok(review, `the demo world has a draft waiting: ${JSON.stringify((pile.items || []).map((i) => [i.kind, i.lane]))}`);
+  const dotOf = (k) => page.evaluate((key) => {
+    const i = document.querySelector(`[data-tq-rail] .tq-pile-row[data-tq-key="${key}"] .rail i`);
+    return i ? getComputedStyle(i).backgroundColor : null;
+  }, k);
+  await request(harness, `/api/tasks/${review.tid}`, "PATCH", { Priority: "urgent" });
+  await page.waitForFunction((k) => {
+    const i = document.querySelector(`[data-tq-rail] .tq-pile-row[data-tq-key="${k}"] .rail i`);
+    return i && getComputedStyle(i).backgroundColor === "rgb(138, 54, 70)";
+  }, { timeout: 30000 }, review.key).catch(async () => assert.fail(`an urgent draft's dot is ${await dotOf(review.key)}, not the attention colour`));
   assert.deepEqual(errors, []);
 });

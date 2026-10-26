@@ -277,7 +277,8 @@ def test_report_rank_uses_saved_run_outcome_even_when_subject_disagrees(store, m
     if failed:
         assert produced["lane"] == "broken" and produced["bad"] is True
     else:
-        assert produced["lane"] == "time" and produced["kind"] == "asked"
+        # report work is the owner's own, never "asked you" - no person wrote it (2026-10-26)
+        assert produced["lane"] == "time" and produced["kind"] == "todo"
 
 
 def test_wrapup_keeps_task_priority_and_actual_completion_activity(store):

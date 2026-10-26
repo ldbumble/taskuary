@@ -41,6 +41,9 @@ def _tasks(store, days):
     rows = store._rows("""SELECT t.TaskId, t.Title, t.Kind, t.Status, t.Priority, t.CreatedAt, t.ClosedAt, t.UpdatedAt,
         (SELECT MIN(m.SentAt) FROM message m WHERE m.TaskId=t.TaskId) FirstAt
         FROM task t WHERE t.ParentId IS NULL AND (t.CreatedAt>=? OR t.Status NOT IN ('done','dropped'))
+        -- the Assistant's own chat records are not work (the rail and Tasks leave them out too): the owner, 2026-10-26, found a
+        -- "Taskuary guide" row on the built-in dashboard that opened an empty task
+        AND COALESCE(t.SourceRef,'') NOT IN ('assistant:dock','assistant:concierge')
         ORDER BY t.TaskId DESC LIMIT ?""", (_since(days), ROWS))
     return [{'task_id': r['TaskId'], 'ref': task_ref(r['TaskId']), 'title': r['Title'] or '', 'kind': r['Kind'] or 'general',
              'status': r['Status'] or 'open', 'state': 'closed' if r['Status'] in ('done', 'dropped') else 'open',

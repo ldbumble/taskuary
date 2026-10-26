@@ -153,3 +153,22 @@ def test_chase_is_late_on_the_persons_own_day_once_three_answers_say_it(w):
     st, f = rulebook.state(s, it, [{'verb': 'chase'}])
     assert st == 'waiting_late_usual'
     assert rulebook._say(st, **f) == f"Gail usually answers in a day; this is {f['days']} days."
+
+
+def test_a_learned_day_never_reaches_a_stranger_on_a_shared_mail_provider(w):
+    """A shared mail provider is nobody's organisation: a day learned from one freelancer there is not a stranger's day (people lines
+    reach a task's own people, never strangers - the owner, 2026-10-25). freemail.example stands in for the real providers."""
+    s, _ = w
+    f = Factory(s)
+    pub = getattr(usual, 'PUBLIC_MAIL', set()) | {'freemail.example'}
+    def mail(frm):
+        t = f.task(title=f'Note from {frm}', kind='task')
+        f.message(task_id=t, subject='A note', body='Can you look at this?', from_name=frm, from_email=frm, conversation_id=f'email:{frm}')
+        return t
+    jo, kim = mail('jo.freelance@freemail.example'), mail('kim.parent@freemail.example')
+    tag = f' [s:4 | ev: fs{jo} | seen: 2026-10-20 | k: put off jo.freelance@freemail.example]'
+    with mock.patch.object(usual, 'PUBLIC_MAIL', pub, create=True):
+        for line in ('- You put mail from jo.freelance@freemail.example off to Friday' + tag, '- Mail from jo.freelance@freemail.example waits for Friday'):
+            s.save_doc('learned', '## How you work\n' + line + '\n', 'owner')
+            assert usual.remind_day(s, jo)['day'] == 'Friday', line
+            assert usual.remind_day(s, kim) is None, line

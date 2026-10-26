@@ -1856,6 +1856,10 @@ def task_detail(task_id: int):
     batch_rows = store.batch_items(task_id)
     batch_outside = bool(batch_rows) and _batch.outside(store, task_id)
     session = hub_term.for_task(task_id, tail=3, details=False)
+    judged, ran, story = _brainroute().judged(store, task_id), _workerstate().ended(store, task_id), _agent_story(task_id)
+    # "Run again on the strong model" is offered only on an open task whose agent failed or whose reader was unsure (TaskPage's
+    # ▾): asking the router on every other open cost ~11 ms a task, 2.7x what an open cost in 0.3.9.34 (2026-10-26)
+    strong = _brainroute().strong_offered(d['task'], judged, ran, story)
     return {**d,'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])},
             'origin': {**dict(zip(('origin', 'why'), origin.of_task(store, task_id))),     # who's words are on it (origin.py)
                        # ...and what one of them tries to make an AI do, as triage or ranking read it (message.Danger)
@@ -1879,7 +1883,7 @@ def task_detail(task_id: int):
             # ...and who closed it and why, one line, when its agent did (taskstate.closed_why)
             'closedWhy': taskstate.closed_why(store, d['task'], d.get('comments')),
             # ...and how its last run ENDED, in the run's own word (finished / failed / stopped / disconnected) - what taskstate read
-            'runEnded': _workerstate().ended(store, task_id),
+            'runEnded': ran,
             'transcript': {'sid': tr['Sid'], 'agent': tr['Agent'], 'cwd': tr['Cwd'], 'brain': tr['Brain'],
                            'at': tr['CreatedAt'], 'chars': len(tr['Text'] or '')} if tr else None,
             # ...and WHICH BRAIN ACTUALLY RAN IT, for a session that has ended (_ran_on)
@@ -1887,11 +1891,11 @@ def task_detail(task_id: int):
             # ...and why the router put its last AI call on that brain, for the AI pill's tooltip (brainroute.why_for_task)
             'routeWhy': _brainroute().why_for_task(store, task_id),
             # ...and how hard its work is, how sure its reader was, what data it carries - triage's word or the owner's (brainroute.judged)
-            'judged': _brainroute().judged(store, task_id),
+            'judged': judged,
             # ...and whether a re-run on a strong model is there to offer (the ▾'s "Run again on the strong model"), and on which brain
-            'strongAgain': (lambda j: {'pick': j[1], 'brain': _brainroute()._said(store, j[1]), 'model': j[2]} if j[1] else None)(_strong_again_of(d['task'])),
+            'strongAgain': (lambda j: {'pick': j[1], 'brain': _brainroute()._said(store, j[1]), 'model': j[2]} if j[1] else None)(_strong_again_of(d['task']) if strong else ('', '', '')),
             # ...and what the agent step says when nothing is live: why it never started, or what it did before it went
-            'agentStory': _agent_story(task_id),
+            'agentStory': story,
             # ...and whether Fix it can run on its items: an outsider's only in GitHub's cloud, and only once the owner turned that
             # on - a button that could only say "turn it on" was offered anyway (the owner, 2026-10-12: "what does this do?")
             'batchOutside': batch_outside,
@@ -10043,6 +10047,11 @@ def correct_judged(task_id: int, body: JudgedBody):
 
 def _strong_again_of(task: dict) -> tuple:
     """(job, pick, model) a re-run on the strong model would use for this task - its last brain first - or ('', '', '')."""
+    from . import config as _c
+    with _c.once(): return _strong_again_read(task)
+
+
+def _strong_again_read(task: dict) -> tuple:
     from . import general
     job = 'general' if general.handles(task) else 'coding'
     if job == 'general':
@@ -10058,8 +10067,8 @@ def _strong_again_of(task: dict) -> tuple:
 @app.post('/api/tasks/{task_id}/strong-again')
 def strong_again(task_id: int):
     """RUN AGAIN ON THE STRONG MODEL (the owner, 2026-10-25): an agent that failed, or whose task triage was unsure of, run once
-    more from a fresh start on a strong model. A press, never automatic - an agent that can act may have done half its work - and
-    nothing it drafts is sent without the owner's Send."""
+    more on a strong model, picking up from its saved work. A press, never automatic - an agent that can act may have done half
+    its work, which is also why it picks up rather than starting blank - and nothing it drafts is sent without the owner's Send."""
     task = store.get_task(task_id)
     if not task: raise HTTPException(404, 'task not found')
     if task.get('Status') == 'dropped': raise HTTPException(409, 'This task was dismissed.')
@@ -10072,11 +10081,11 @@ def strong_again(task_id: int):
     if job == 'general':
         if task.get('Status') not in ('open', 'waiting', 'in_progress'): store.update_task(task_id, {'Status': 'in_progress'}, ACTOR)
         def go():
-            try: general.start_session(store, task_id, actor=ACTOR).send_prompt(continuity.RESUME_PROMPT, pick=pick, model=model, as_owner=False)
+            try: general.start_session(store, task_id, actor=ACTOR).send_prompt(continuity.STRONG_AGAIN_PROMPT, pick=pick, model=model, as_owner=False)
             except Exception as e: _walk_cannot(task_id, f'The session could not run again on the strong model: {e}. Your saved conversation is still here.')
         threading.Thread(target=go, daemon=True, name=f'strong-again-{task_id}').start()
         return {'started': True, 'taskId': task_id, 'kind': 'general', 'pick': pick, 'model': model}
-    out = continue_task(task_id, CodeBody(brain=pick[4:], model=model, instruction=continuity.RESUME_PROMPT))
+    out = continue_task(task_id, CodeBody(brain=pick[4:], model=model, instruction=continuity.STRONG_AGAIN_PROMPT))
     return {'started': True, 'taskId': task_id, 'kind': 'coding', 'pick': pick, 'model': model, **(out if isinstance(out, dict) else {})}
 
 

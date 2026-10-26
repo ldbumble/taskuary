@@ -114,7 +114,11 @@ def below(items: list[dict], ready: list[dict], exclude, place=None, at_key=None
     keys = ({k for k in exclude[5:].split(",") if k} if exclude and exclude.startswith("fyis:") else {exclude}) if exclude else set()
     # ...a row put away with Remind me has left the walk's line for For later: its place there is not where the walk stood, so the walk
     # goes on from its place's clock instead (Next after "later" found nothing below the For later row and ended on a new task above it)
-    gone = lambda i: i.get("deferred")
+    # ...and a row that LEFT ITS SECTION since the walk stood on it is no place on the line either: Put it on my list on a report made it
+    # a task in Tasks under the report's own key, and Next walked from there - back UP to TQ-0030 itself, then the task below it, a blank
+    # table for 1.7 s and the folded card's badge lost on the way (2026-10-26). The walk goes on from where it stood, in Reports
+    sect = tuple(place)[0] if place else None
+    gone = lambda i: i.get("deferred") or (sect is not None and funnel.order_key(i)[0] != sect)
     hit = [n for n, i in enumerate(items) if (i.get("key") in keys or keys.intersection(i.get("aliases") or [])) and not gone(i)]
     # ...and the walk's place is the rail's own ROW while it is still there (`at_key`, funnel.walk_place): the place's clock was read off
     # the card put on the table, built by key, whose arrival need not be the rail row's - Next then picked a different row than the

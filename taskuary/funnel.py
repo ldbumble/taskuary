@@ -419,6 +419,10 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             if group and threads.get(group) is None: threads[group] = out[-1]
         if cat in ('coding', 'todo') and (r.get('NeedsYou') or r.get('Working') or open_work):   # a worked row is kept, tagged, and let go in build()
             _work(); continue
+        # ...and a REPORT RUN that became a task - the owner's Put it on my list, a watch match, Reopen task on one - is that work: no person
+        # wrote it, so it never "asked you". It fell to the asked lane, drew 🙋 asked you and lit Reply over a report (2026-10-26)
+        if r.get('Channel') == 'report' and r.get('TaskId'):
+            _work(why='' if r.get('RouteReason') else 'your own work from a report'); continue
         # ANSWERED IS NOT ASKED (the owner, 2026-10-18: "sending and closing are two steps"): a reply sent leaves its task open, and
         # the thread behind it said "asked you" over an answer that had gone - the task stands as itself, on you, for its Mark done
         if r.get('TaskId') and r.get('TaskStatus') not in ('done', 'dropped') and (r.get('TheirTurn') or r.get('AnsweredAt')) \
@@ -1855,6 +1859,9 @@ def item_for_key(store, key: str) -> dict | None:
     Recent list pulls into the chat by hand. The pile's own producers run on that one row with the
     quiet filter off; the concierge can then talk about it like anything else."""
     t = re.match(r'^task:(\d+)$', key or '')
+    # A CLOSED TASK SAYS SO: brought up by its ref it carried no `closed`, so its row offered Mark done, Close with a note and Remove
+    # beside Reopen task, and a typed close ran task.complete on it a second time (2026-10-26). Only Reopen task reopens it.
+    shut = lambda it: it if not it or not it.get('tid') or (store.get_task(int(it['tid'])) or {}).get('Status') not in ('done', 'dropped')         else it | {'closed': True}
     if t:
         tid = int(t.group(1))
         task = store.get_task(tid)
@@ -1865,9 +1872,9 @@ def item_for_key(store, key: str) -> dict | None:
         row = next(iter(store.feed(limit=1, days=FEED_DAYS, task_id=tid) or store.feed(limit=1, days=3650, task_id=tid)), None)
         if row:
             got = from_feed(store, [row | {'Category': 'info' if row.get('Category') in _QUIET else row.get('Category')}])
-            if got: return _present_one(store, got[0] | {'lane': got[0]['lane'] if got[0]['lane'] != 'fyi' else 'asked'})
-        return _present_one(store, _item(f'task:{tid}', 'task', 'asked', task.get('Title'), when=task.get('UpdatedAt') or task.get('CreatedAt'), tid=tid,
-                                               summary=agent_found(store, tid), why=f"{STATUS_SAYS.get(task.get('Status'), 'Open')} - you asked about it"))
+            if got: return shut(_present_one(store, got[0] | {'lane': got[0]['lane'] if got[0]['lane'] != 'fyi' else 'asked'}))
+        return shut(_present_one(store, _item(f'task:{tid}', 'task', 'asked', task.get('Title'), when=task.get('UpdatedAt') or task.get('CreatedAt'), tid=tid,
+                                               summary=agent_found(store, tid), why=f"{STATUS_SAYS.get(task.get('Status'), 'Open')} - you asked about it")))
     m = re.match(r'^(msg|report):(\d+)$', key or '')
     if not m: return None
     mid = int(m.group(2))
@@ -1876,7 +1883,7 @@ def item_for_key(store, key: str) -> dict | None:
     items = from_feed(store, [row | {'Category': 'info' if row.get('Category') in _QUIET else row.get('Category')}])
     it = next((i for i in items if i.get('mid') == mid), None)
     if it and it['kind'] == 'fyi': it = it | {'lane': 'fyi', 'why': row.get('RouteReason') or it['why']}
-    return _present_one(store, it)
+    return shut(_present_one(store, it))
 
 
 VERBS = ('surfaced', 'done', 'later', 'skip', 'ack')

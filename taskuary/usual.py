@@ -21,6 +21,7 @@ import json, math, re
 from collections import Counter
 from datetime import datetime, timedelta
 from .episodes import _dt, _mine, _skip
+from .projects import PUBLIC_MAIL
 
 ANSWERS, PUT_OFFS = 3, 2            # what makes a habit: three answers, two put-offs to one weekday
 IN_USE = 3                          # ...and a put-off line is in use at three of them: the ladder every line climbs (three episodes)
@@ -126,7 +127,7 @@ def put_off_habits(store, now=None) -> list:
     by_who, by_dom = {}, {}
     for r in rows: by_who.setdefault(r[3], []).append(r); by_dom.setdefault(r[3].rsplit('@', 1)[1], []).append(r)
     return ([h for w, hs in by_who.items() if (h := habit(w, hs))]
-            + [h for d, hs in by_dom.items() if len({r[3] for r in hs}) > 1 and (h := habit(d, hs))])
+            + [h for d, hs in by_dom.items() if d not in PUBLIC_MAIL and len({r[3] for r in hs}) > 1 and (h := habit(d, hs))])
 
 
 _DAY = re.compile(r'\b(' + '|'.join(DAYS) + r')s?\b', re.I)
@@ -148,6 +149,9 @@ def put_off_line(store, who: str, doc: str = None) -> dict | None:
     who = str(who or '').strip().lower()
     if '@' not in who: return None
     dom = who.rsplit('@', 1)[1]
+    # A shared mail provider is no organisation: two strangers on gmail.com are not each other's people, and one's day never
+    # reaches the other (the owner, 2026-10-25: people lines reach a task's own people, never strangers) - 2026-10-26.
+    org = dom not in PUBLIC_MAIL
     doc = store.get_doc('learned') if doc is None else doc
     got = []
     for raw, key in section_lines(doc or '', WORK):
@@ -157,10 +161,10 @@ def put_off_line(store, who: str, doc: str = None) -> dict | None:
         if m:
             ev = [e.strip() for e in m.group('ev').split(',') if e.strip().startswith('fs')]
             senders = {_sender_of(store, e[2:]) for e in ev if e[2:].isdigit()}
-            near = 0 if who in senders else 1 if any(w.endswith('@' + dom) for w in senders) else None
+            near = 0 if who in senders else 1 if org and any(w.endswith('@' + dom) for w in senders) else None
         else:
             low, ev = text.lower(), []
-            near = 0 if who in low else 1 if re.search(rf'(?<![\w.-]){re.escape(dom)}\b', low) else None
+            near = 0 if who in low else 1 if org and re.search(rf'(?<![\w.-]){re.escape(dom)}\b', low) else None
         if near is not None: got.append((near, bool(m), {'text': text, 'key': key, 'by': who if near == 0 else dom, 'evidence': ev[:3]}))
     return min(got, key=lambda g: g[:2])[2] if got else None
 

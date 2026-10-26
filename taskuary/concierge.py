@@ -816,7 +816,8 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     # desktop and in the phone's poll (the owner, 2026-09-25: "why am i getting make this a task?? it already is")
     if verb == 'mine' and item.get('tid') and not _agent_holds(store, item):
         return f"{what} is already a task on your list."
-    if verb == 'close' and item.get('closed'): return f"{what} is already closed - the work on it is finished."
+    # ...and nor is any other put-down: a closed task's only way on is Reopen task (2026-10-26)
+    if verb in ('close', 'close_note', 'remove') and item.get('closed'): return f"{what} is already closed - the work on it is finished."
     if verb == 'stop_agent' and (item.get('paused') or item.get('lane') in ('stopped', 'saved') or item.get('kind') in ('agentdone', 'wrapup')):
         # a paused conversation has no live session: the pick answered "no agent is running right now" (A20, 2026-09-25)
         # ...nor has a session that already ENDED - failed, finished, or cut off by a restart (owner-approved, 2026-10-20): its
@@ -1041,10 +1042,21 @@ FIELD_BUTTON = {'priority': 'priority', 'assignee': 'assign'}
 WAITS = 'Nothing happens until you say yes.'
 
 
+def _story(store, t: int):
+    try: return funnel.agent_story(store, t)
+    except Exception: return None
+
+
 def _shows(store, it: dict, b: str) -> bool:
     """The task page's own button for `b` (buttons.json `row`) is drawn on this item now - the few whose being there turns on state."""
     if b == 'reopen': return bool(it.get('closed')) or str((store.get_task(int(it['tid'])) or {}).get('Status') or '') in ('done', 'dropped')
     if b == 'stop_agent': return _agent_running(it['tid'])
+    # the task page draws it only on an open task whose agent failed or whose reader was unsure (brainroute.strong_offered)
+    if b == 'strong_again':
+        from . import brainroute, workerstate
+        t = int(it['tid'])
+        return not it.get('closed') and brainroute.strong_offered(store.get_task(t), brainroute.judged(store, t), workerstate.ended(store, t),
+                                                                  _story(store, t))
     if b == 'continue': return bool(store.resumable_session(it['tid'])) and not _general(store, it)
     if b in ('review_changes', 'run_another', 'share'): return _agent_holds(store, it) or bool(store.resumable_session(it['tid']))
     # Share stands on a task's row whenever no agent is at work on it (TaskPage: a Result to share, or a summary to email)
@@ -1075,6 +1087,18 @@ def row_buttons(store, it: dict) -> list:
     if it.get('closeout'): out.insert(0, {'verb': 'approve', 'label': closeout_label(it)})
     seen = set()
     return [b for b in out if not (b['verb'] in seen or seen.add(b['verb']))]
+
+
+def _button_named(store, it: dict, said: str) -> str:
+    """The verb of the button `said` names on this item: by the label its row draws first - "Share" on a task's row is share_result,
+    not the verb id share (Email a summary) - then by verb id, then by any button's label. button.light {button: 'Remind me'} missed
+    with "has no remind me button - its row has ..., Remind me, ..." and "Run again on the strong model" lit nothing (2026-10-26)."""
+    low = ' '.join(said.lower().split())
+    row = next((b['verb'] for b in row_buttons(store, it) if b['label'].lower() == low), '')
+    if row: return row
+    v = canon_verb(low.replace(' ', '_') if low.replace(' ', '_') in buttons.VERBS else low)
+    if v in buttons.VERBS or v in BUTTON_OF: return v
+    return next((k for k, d in buttons.VERBS.items() if low in {d['label'].lower(), *(s.lower() for s in (d.get('states') or {}).values())}), v)
 
 
 def _lit(store, tid: int, table: dict | None, it: dict, verb: str, note: str = '') -> dict:
@@ -1250,6 +1274,13 @@ def _advice_block(store, item: dict | None) -> str:
         return advisor.block(store, item)
     except Exception as e:
         logger.debug(f'concierge: no advice block - {e}'); return ''
+
+
+# NOTHING ON THE TABLE, AND THEY WANT TO GO THROUGH WHAT WAITS: the walk draws each row as its card with its own buttons. Asked to walk
+# with an empty table the model read TQ-1141 out with task.read and narrated "First up is TQ-1141..." - no card, no ring, no buttons,
+# 0 of 6 turns (the 2026-10-26 sweep; the owner, 2026-10-21: "Free text should almost never be used in the assistant")
+EMPTY_TABLE = ('Nothing is on the table now: when they want to go through what waits - the next one, walk me through it, from the '
+               'top - CALL next, which brings that row up as its card with its buttons. Never read a task out in words in its place.')
 
 
 def table_line(store, item: dict | None) -> str:
@@ -1520,8 +1551,11 @@ def pages_block(store) -> str:
                'is set up with the Setup button at the top; say so\n' if _demo.enabled() else
                '- setup itself - their AI, their main source (email, chat or a task system), the questions about their work - has '
                'no link: it is the Setup button at the top of the page; say so\n') +
+            # ...and each shelf of the Reports page by its own address: "go to reports" opened the Workflows shelf, the one address the
+            # list had (2026-10-26)
             f"- a report or workflow: #report=<id>{' - ' + reps if reps else ''}; a new report #report=new; a new workflow "
-            '#report=new-agent; the workflows #report=workflows\n'
+            '#report=new-agent; the Reports page and its list of reports #report=reports; the workflows #report=workflows; the dashboards '
+            '#report=dashboards; the playbooks #report=playbooks\n'
             '- settings, page by page:\n' + _screens() + '\n' + THIS_APP + '\n\n')
 
 
@@ -2402,10 +2436,11 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # task `ref` names - never pressed, but for a put-down, which the words press (_press_or_light). A phone has no rows to light: its
     # acts are the tools and decisions, answered yes or no
     if kind == 'button.light':
-        b = canon_verb(str(params.get('button') or '').strip().lower())
+        said = str(params.get('button') or '').strip()
         ref = re.search(r'(\d+)', str(params.get('ref') or ''))
         on = funnel.item_for_key(store, f'task:{int(ref.group(1))}') if ref else (item or None)
         if not on: raise CallMiss('Name the task (TQ-0123) whose button to light, or bring it up first. Nothing was changed.')
+        b = _button_named(store, on, said)
         if not routes():
             raise CallMiss(f"A phone has no row to light - CALL the tool or decision {b!r} is (THE BUTTONS BY NAME) and it is asked yes or no.")
         return _press_or_light(store, tid, item, on, b, str(params.get('note') or ''), actor)
@@ -2749,8 +2784,9 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
         # THE NOTES GO WITH IT: "rerun the agent with these notes: use the new template" lit Continue and dropped the notes (the real-CLI
         # walk, 2026-10-20) - they are in Continue's box when it is pressed, and the line says so
         note = str(params.get('note') or params.get('text') or '').strip() if b in ('continue', 'close_note') else ''
-        # ...and a put-down is pressed, not lit (_press_or_light) - but a rule for "from now on" (preference.*) is the owner's own press
-        if kind in ('task.complete', 'item.settle', 'task.not_a_task', 'message.file', 'message.archive'):
+        # ...and a put-down is pressed, not lit (_press_or_light) - but a rule for "from now on" (preference.*) is the owner's own press;
+        # and only on the item in front of the owner: one named off the table comes up with its button lit (2026-10-26, as in turn())
+        if kind in ('task.complete', 'item.settle', 'task.not_a_task', 'message.file', 'message.archive') and on is table:
             return _press_or_light(store, tid, table, on, b, note, actor)
         return _lit(store, tid, table, on, b, note=note)
     if on and kind in ON_TASK:
@@ -4552,7 +4588,10 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # ...and the line kept is the one TYPED: "2" was saved as "Mark done", a second owner bubble the owner never wrote, and the only one
     # a reload kept (the 2026-10-25 sweep) - the model reads what the digit names, the chat keeps what was said
     typed = text
-    if item and text.strip().lstrip('#').rstrip('.').strip().isdigit():
+    # ...and only where numbered chips ARE drawn - the phone, or a card under its line. An item drawn as its task's view shows the task's
+    # own row, with no numbers and not those chips: "2" over TQ-1141 became Mark done, a button not on screen, and closed it (2026-10-26)
+    numbered = not routes() or not (item and item.get('tid') and item.get('kind') not in TASK_VIEW_NOT)
+    if item and numbered and text.strip().lstrip('#').rstrip('.').strip().isdigit():
         words = [c['label'] for c in chips_for(store, item)]
         i = int(text.strip().lstrip('#').rstrip('.').strip())
         if 1 <= i <= len(words): text = words[i - 1]
@@ -4610,7 +4649,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       + ("ATTACHED IMAGES (read these files - they are what the owner is showing you)\n" + "\n".join(images) + "\n" if images else '')
                       + f"Answer them, briefly. If a look-up would answer it, CALL it now instead of saying you will. "
                       + ('If their words mean one of the actions for the item on the table, CALL it.' if item else
-                         'If they ask for something to be done, CALL it now - its button is their confirmation.'))
+                         'If they ask for something to be done, CALL it now - its button is their confirmation. ' + EMPTY_TABLE))
         raw = str(llm(system, asked, max_tokens=MAX_TOKENS, **({'images': general._images(images)} if images else {})) or '').strip()
         raw, call = parse_call(raw)
         # A LOOK-UP runs at once and comes straight back, because it changes nothing and waits for
@@ -4815,8 +4854,11 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     if decision and verb in ('reply', 'redraft') and target_item:
         # A CLOSED TASK IS SAID SO: "approve the Fairhaven PO" drafted "Approved" on a task already marked done, and nothing said it
         # was (real-AI check, 2026-10-18). The draft is still theirs to send; it never reopens the task - Reopen task does
+        # ...and a REWRITE promises nothing before it has run: the page runs it after this line, and when the drafting AI failed the chat read
+        # "Rewriting the draft on TQ-1141 - it waits for your Send." over "I could not rewrite it here" (2026-10-26); its own receipt says
         said = (f"{'Drafting a reply' if verb == 'reply' else 'Rewriting the draft'} on {target_item.get('ref') or _title_cut(str(target_item.get('title') or 'it'), 60)}"
-                + (f" - it waits for your {buttons.label('approve')}." if routes() else ' - nothing goes out until you say yes.')) + closed_note(store, target_item)
+                + ('.' if verb == 'redraft' and routes() else f" - it waits for your {buttons.label('approve')}." if routes()
+                   else ' - nothing goes out until you say yes.')) + closed_note(store, target_item)
         rec('assistant', said)
         d = {'verb': verb, 'text': decision.get('text') or ''}
         if verb == 'reply' and decision.get('cc'): d['cc'] = decision['cc']            # LOOP THEM IN: the reply copies them (open_reply)
@@ -4834,8 +4876,11 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         if verb in ('coding_agent', 'regular_agent') and (own_job or not target_item):
             return _new(store, tid, item, 'coding' if verb == 'coding_agent' else 'general', decision.get('text') or text)
         if target_item:
-            # ...a put-down (Mark done, Not ours just this once) is pressed, not lit (_press_or_light)
-            try: return _press_or_light(store, tid, item, target_item, verb, str(decision.get('text') or '').strip() if verb == 'continue' else '', actor)
+            # ...a put-down (Mark done, Not ours just this once) is pressed, not lit (_press_or_light) - on the item IN FRONT of the owner only.
+            # One named off the table is brought up with its button lit: "walk me through my tasks" was narrated in words with no card,
+            # and the next "mark this done" closed TQ-1141, a task never on screen, because the model had named it (2026-10-26)
+            try: return (_lit(store, tid, item, target_item, verb) if elsewhere and verb in PUT_DOWN else
+                         _press_or_light(store, tid, item, target_item, verb, str(decision.get('text') or '').strip() if verb == 'continue' else '', actor))
             except CallMiss:                                           # no such button on its row: the model says so in words
                 # ...except a report asked to run again: Run it again is drawn only on a failed run, and the report's own page has Run now -
                 # "run the AP ageing again" over a good run was answered in words with the page one link away (the 2026-10-20 query walk)

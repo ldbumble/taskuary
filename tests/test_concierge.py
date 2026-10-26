@@ -130,6 +130,17 @@ class TurnTests(unittest.TestCase):
         self.assertNotIn('corrected file', last_receipt(s))
         self.assertFalse([c for c in s.list_comments(t) if 'corrected file' in (c.get('Body') or '')])
 
+    def test_a_rewrite_promises_nothing_before_it_has_run(self):
+        """The 2026-10-26 sweep: "Rewriting the draft on TQ-1141 - it waits for your Send." stood over the page's own "I could not rewrite
+        it here" when the drafting AI failed - the page runs the rewrite after this line, and its receipt says whether it worked."""
+        s = store()
+        t, m, r = drafted(s)
+        concierge.surface(s, key=f'review:{r}', llm=lambda *a, **k: 'Dana needs the corrected export.')
+        out = concierge.say(s, 'make it warmer', key=f'review:{r}', llm=lambda *a, **k: 'CALL: {"kind": "redraft", "params": {"text": "warmer"}}')
+        self.assertEqual(out['decision']['verb'], 'redraft')
+        self.assertTrue(out['say'].startswith('Rewriting the draft on'), out['say'])
+        self.assertNotIn('waits for', out['say'])
+
     def test_a_typed_digit_is_kept_as_typed(self):
         """The 2026-10-25 sweep: "2" typed on the desk was saved as the button it numbered ("Mark done") - a second owner bubble beside the
         page's own "2", and after a reload the owner's line read words they never typed."""

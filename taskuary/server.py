@@ -6780,9 +6780,19 @@ class FlowBody(BaseModel):
 
 
 # SIGN IN WITH GOOGLE FOR THE CALENDAR, on the Gmail card (googlecal.py; the owner, 2026-10-26: "yes" to the card offering it)
+@app.get('/api/connectors/{cid}/google/calendar')
+def google_calendar_state(cid: int):
+    """Whether this build can sign in with Google at all - the card says so on the button before anyone presses it."""
+    from . import googlecal
+    try: _, ccfg = googlecal._gmail(store, cid)
+    except LookupError as e: raise HTTPException(404, str(e))
+    return {'available': googlecal.available(ccfg), 'connected': googlecal.connected(ccfg),
+            'said': '' if googlecal.available(ccfg) else googlecal.UNAVAILABLE}
+
+
 @app.post('/api/connectors/{cid}/google/calendar')
 def google_calendar_signin(cid: int):
-    """Where the browser goes to allow calendar.readonly, and the flow the card polls. No OAuth client on the card: 409, in words."""
+    """Where the browser goes to allow calendar.readonly, and the flow the card polls. No Google client in this build: 409, in words."""
     from . import googlecal
     try: return googlecal.start(store, cid, cfg['server'])
     except LookupError as e: raise HTTPException(404, str(e))

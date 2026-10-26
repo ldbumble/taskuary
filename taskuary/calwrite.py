@@ -302,9 +302,10 @@ def ms_can_write(cfg: dict, tok: str = None) -> bool:
 
 def _google_token(cfg: dict) -> tuple:
     """(access token, granted scopes) off the Gmail card's refresh token."""
+    from .googlecal import client         # a token signed in on Taskuary's own client renews with it (googlecal.client)
+    gid, gsec = client(cfg)
     t = requests.post('https://oauth2.googleapis.com/token', timeout=20,
-                      data={'client_id': cfg.get('google_client_id'), 'client_secret': cfg.get('google_client_secret'),
-                            'refresh_token': cfg.get('google_refresh_token'), 'grant_type': 'refresh_token'})
+                      data={'client_id': gid, 'client_secret': gsec, 'refresh_token': cfg.get('google_refresh_token'), 'grant_type': 'refresh_token'})
     if t.status_code != 200: raise RuntimeError(f'Google token failed ({t.status_code})')
     j = t.json() or {}
     return j.get('access_token') or '', str(j.get('scope') or '')

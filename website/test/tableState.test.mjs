@@ -13,6 +13,11 @@ test("folded by its X or under a page, the item stays on the table and the Advis
   assert.deepEqual(tableOf({ current: "task:7", foldedKey: "task:7" }), { key: "task:7", folded: true, place: false, speaks: false });
   assert.equal(tableOf({ cardKey: "task:9", browsing: "b123" }).speaks, false, "a page opened over it: no strip, no button acting on it");
   assert.equal(tableOf({ current: "task:7", setup: true }).speaks, false);
+  // ...but a task opened over setup is in view, and its Advisor speaks (2026-10-26); folded or under a page it still keeps quiet
+  assert.equal(tableOf({ cardKey: "task:7", setup: true, over: true }).speaks, true);
+  assert.equal(tableOf({ cardKey: "task:7", setup: true, over: true, browsing: "b1" }).speaks, false);
+  assert.equal(tableOf({ cardKey: "task:7", foldedKey: "task:7", setup: true, over: true }).speaks, false);
+  assert.match(src, /tableOf\(\{ current, cardKey, foldedKey, browsing, setup: setupOn\.current, over: !!setupCard \}\)/, "the page says what is over setup");
   assert.equal(tableOf({}).key, null);
 });
 

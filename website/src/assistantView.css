@@ -699,11 +699,15 @@
 .tq-next::before { content: ""; flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: #55697a; }
 .tq-next-txt { flex: 0 1 auto; min-width: 0; font: 500 14px/1.4 'IBM Plex Sans', system-ui, sans-serif; color: #262521;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* ONE line, always - the whole sentence is its tooltip (oneLine.js) */
-/* ...but ON A PHONE IT WRAPS TO TWO LINES, NEVER CUT (the owner's ruling 6, 2026-10-22; the design phase A): a line is a fact of at most
-   ~60 characters, so two lines always hold it whole */
+/* ...and ON A PHONE ONE LINE TOO, GIVEN THE ROOM (2026-10-26, superseding ruling 6's two lines: the owner's rule is one line, read whole -
+   at 390px the line wrapped in a ~211px box): the dot goes, the gutters and the type tighten, and Why? keeps its place. A line past
+   what fits still ends in an ellipsis, never a second line - the whole sentence is in Why? (its "said") and the tooltip (oneLine.js) */
 @media (max-width: 600px) {
-  .tq-strip .tq-next-txt { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
-  .tq-strip .tq-next { padding-top: 6px; padding-bottom: 6px; }
+  .tq-strip .tq-next { gap: 2px; }
+  .tq-strip .tq-next::before { display: none; }
+  .tq-dock .tq-strip .tq-next, .tq-docked .tq-strip .tq-next { padding-left: 4px; padding-right: 0; }
+  .tq-strip .tq-next-txt { font-size: 13px; letter-spacing: -0.015em; }
+  .tq-strip .tq-next-why { padding: 4px 2px; font-size: 12px; }
 }
 .tq-next > *:not(.tq-next-txt) { flex-shrink: 0; }   /* ...and Why? and a lit button stay on it, whole */
 .tq-next-why { flex: 0 0 auto; border: 0; background: transparent; padding: 4px 6px; border-radius: 6px; cursor: pointer; font: 600 12.5px/1 'IBM Plex Sans', system-ui, sans-serif; color: #55697a; text-decoration: underline; text-underline-offset: 3px; }

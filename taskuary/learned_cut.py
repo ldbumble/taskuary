@@ -7,7 +7,7 @@ people, what they care about, how they work, their promises, what to bring up - 
 (READS), its in-use lines ranked closest scope first (this sender, their domain or repository, then general), whole lines until its
 budget is spent. What does not fit is recorded as over budget (OVER), never dropped without a trace, and every read leaves a
 receipt (memory_use) of the lines it was given for which item."""
-import json, re
+import json, re, zlib
 from datetime import datetime
 
 # the five subjects, in the document's order: slug -> heading
@@ -76,13 +76,21 @@ def lines(doc: str, head: str) -> list:
     return out
 
 
+_TOPIC = re.compile(r'[a-z0-9][a-z0-9-]{3,}')
 def rank(raw: str, key: str, about: dict) -> int:
-    """0 this sender, 1 their domain or repository, 3 general. FACTS the app keeps about the item - its sender, domain, repository -
-    against the line, never a list of words."""
-    t, a = f'{raw} {key}'.lower(), {k: str(v or '').lower() for k, v in (about or {}).items()}
-    if a.get('sender') and a['sender'] in t: return 0
-    if any(a.get(f) and a[f] in t for f in ('domain', 'repo', 'scope')): return 1
-    return 3
+    """0 this sender, 1 someone else on the item (by address or full name), 2 the item's own subject, 3 their domain or repository,
+    4 general. FACTS the app keeps about the item - its sender, the people on it, its title, its domain or repository - against the line,
+    never a list of words.
+    ...WHO IS ON IT, AND WHAT IT IS ABOUT (the memory audit, 2026-10-26): ranked by domain alone, every colleague tied - one company, one
+    domain - and the 2000-character budget cut the people lines in the document's order, whoever the item was about."""
+    a = about or {}
+    t, s = f'{raw} {key}'.lower(), {k: str(v or '').lower() for k, v in a.items() if isinstance(v, str)}
+    if any(s.get(f) and s[f] in t for f in ('sender', 'sender_name')): return 0
+    if any(str(p).lower() in t for p in a.get('people') or () if p): return 1
+    # ...the subject as two of its own longer words in the line: a ranking, so a near miss costs an order, never a read
+    if len(set(_TOPIC.findall(s.get('topic', ''))) & set(_TOPIC.findall(t))) >= 2: return 2
+    if any(s.get(f) and s[f] in t for f in ('domain', 'repo', 'scope')): return 3
+    return 4
 
 
 def people_of(msg: dict) -> set:
@@ -142,8 +150,23 @@ def names(raw: str) -> set:
     return {a.lower() for a in _ADDR.findall(str(raw or ''))}
 
 
+# A LINE THE MODEL CAN CITE (the memory audit, 2026-10-26): a line's own tag names the episodes it was learned from, and an owner's line
+# has none - so nothing said which memory line an answer rested on, and the strip could not tell a memory reason from a restated fact.
+# Each line the Advisor reads carries an id made from its key: stable while the line stands, gone when it is Forgotten or replaced.
+def cite_of(key: str) -> str: return f'lrn{zlib.crc32(str(key or "").encode()) % 1_000_000}'
+
+
+def cited(store, ids, reader: str = 'advisor', doc: str = None) -> dict:
+    """{cite id: (raw line, key, section slug)} - the lines `reader` reads today that `ids` name. A Forgotten or replaced line is no
+    longer in the document, so an answer judged on it rests on nothing."""
+    want = {str(i) for i in ids or ()}
+    if not want: return {}
+    doc = store.doc('learned') if doc is None else doc
+    return {c: (raw, k, s) for s in READS[reader] for raw, k in lines(doc or '', SECTIONS[s]) if (c := cite_of(k)) in want}
+
+
 def for_reader(store, reader: str, about: dict = None, budget: int = None, doc: str = None, target: str = '', sections=None,
-               people=None) -> str:
+               people=None, cite: bool = False) -> str:
     """The sections `reader` reads, as its prompt block: each heading with the in-use lines of it that fit, the reader's budget
     shared across them, closest to this item first. '' when there is none - a fresh LEARNED.md is placeholders, and placeholders are
     not context. `sections` narrows the matrix (the drafter's people only); `target` names the item the receipt is for; `people`
@@ -159,7 +182,8 @@ def for_reader(store, reader: str, about: dict = None, budget: int = None, doc: 
     except Exception: pass
     got = sorted([(raw, k, s) for raw, k, s in ls if raw in at], key=lambda x: at[x[0]])      # closest to this item first, in each section
     receipt(store, reader, target, [k for _, k, _ in got])
-    return '\n\n'.join(f'{SECTIONS[s]}\n' + '\n'.join(raw for raw, _, x in got if x == s) for s in want if any(x == s for *_, x in got))
+    say = (lambda raw, k: f'{raw} (id {cite_of(k)})') if cite else (lambda raw, k: raw)
+    return '\n\n'.join(f'{SECTIONS[s]}\n' + '\n'.join(say(raw, k) for raw, k, x in got if x == s) for s in want if any(x == s for *_, x in got))
 
 
 def over_budget(store) -> dict:

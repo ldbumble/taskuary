@@ -244,11 +244,11 @@ def real_brain():
     from taskuary.store import SQLiteStore
     db = SQLiteStore(os.environ['TASKUARY_LIVE_DB'])
     # a CLI brain is a connection in the home's config.toml, not in the db - a scratch home has none, so name the one the card picks
-    pick = brainroute.choose(db, 'report').pick
+    pick = brainroute.choose(db, 'advisor').pick
     if pick.startswith('cli:') and pick[4:] not in (config.load().get('cli_connections') or {}):
         c = config.load(); c.setdefault('cli_connections', {})[pick[4:]] = {'cmd': pick[4:]}; config.save(c)
-    # the scheduled Advisor is handed the REPORT brain (reports.run_due -> run_report_source), not job='advisor'
-    return build_llm(db, job='report')
+    # the scheduled Advisor runs on its own brain, job='advisor' (reports.run_due_reports, 2026-10-26)
+    return build_llm(db, job='advisor')
 
 
 def live(real, arms=('empty', 'filled')) -> dict:

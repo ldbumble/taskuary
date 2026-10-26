@@ -791,7 +791,8 @@ def reply_to(store, tid) -> int | None:
     message of their own, so "create reply from it to sender" had nothing to work with and the chat
     had to refuse (the owner, 2026-09-03: "why can\'t you create a draft from here")."""
     m = store.last_inbound_on_task(tid) if tid else None
-    return m['MessageId'] if m else None
+    # ...and a promise task's is the owner's own mail the promise was made in: it is owed to whom that went (store.promised_in)
+    return m['MessageId'] if m else (store.promised_in(store.get_task(tid)) or {}).get('MessageId') if tid else None
 
 
 def agent_found(store, tid) -> str:

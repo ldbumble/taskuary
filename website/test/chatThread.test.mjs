@@ -99,6 +99,17 @@ test("Close out says what the draft answers in one line, and the line opens the 
   assert.equal(page.match(/<ConversationRows /g).length, 1, "one component, in From");
 });
 
+// A PROMISE TASK ANSWERS WHOM IT OWES (the owner, 2026-10-26: "if the promise was to x it should save who to send to and draft response
+// to them"): with no message of its own, the reply source is the owner's own mail the promise was made in (server _owed), read as the
+// person it went to - Reply leads the row, Close out says "Answering <them>", and the To line names them, never "You"
+test("a promise task's reply source is its own sent mail, named by whom it was made to", () => {
+  assert.match(page, /const owed = !ownSource && detail\?\.owed \? \{ \.\.\.detail\.owed, FromName: detail\.owed\.OwedTo \|\| "them", FromEmail: "" \} : null;/);
+  assert.match(page, /const sourceMessage = ownSource \|\| owed \|\| undefined;/);
+  assert.match(page, /const closeGroup = detail\?\.batch \|\| !\(inbound\.length \|\| owed\) \? null/);
+  assert.match(page, /owedRow \? \{ \.\.\.owedRow, who: owed\.FromName \}/);
+  assert.match(page, /fromLineOf\(\{ sender: ownSource,/, "From still reads the task's own sender");
+});
+
 test("an email task's Close out is the answered thread's rows; what was sent in another conversation still shows, once", () => {
   assert.match(page, /sources\.find\(\(g\) => g\.msgs\.some\(\(m\) => m\.MessageId === sourceMessage\?\.MessageId\)\)/);
   assert.match(page, /const sentApart = newestFirst\(sentOutside\.filter\(\(m\) => !closeGroup\?\.msgs\.some/, "never the sent lines twice");

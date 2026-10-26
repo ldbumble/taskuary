@@ -17,6 +17,10 @@ from . import net as requests     # pooled Session + (connect, read) timeouts, s
 TG_API = 'https://api.telegram.org'
 TG_LIMIT = 25                # messages per poll, like the other channels
 WA_URL = 'http://127.0.0.1:8977'   # the bridge's default; override in the connector config
+def wa_url() -> str:
+    "The managed bridge's address - on WA_BRIDGE_PORT when it is set, where wabridge launches it (8977 was hard-wired here)."
+    from .wabridge import port
+    return f'http://127.0.0.1:{port()}'
 WA_FILTER_EVERY = 60          # seconds a sent /filter is trusted before poll_whatsapp re-states it
 _WA_FILTERED = {}             # bridge url -> (policy json, monotonic time it was sent)
 
@@ -244,7 +248,7 @@ class BridgeDown(RuntimeError):
 
 def _wa(c, path, body=None, timeout=20):
     from .wabridge import token
-    url, hdr = (_cfg(c).get('bridge_url') or WA_URL).rstrip('/'), {'X-Bridge-Token': token()}
+    url, hdr = (_cfg(c).get('bridge_url') or wa_url()).rstrip('/'), {'X-Bridge-Token': token()}
     try:
         r = requests.post(f'{url}{path}', json=body, timeout=timeout, headers=hdr) if body is not None \
             else requests.get(f'{url}{path}', timeout=timeout, headers=hdr)
@@ -515,7 +519,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     # beside every /messages doubled an idle phone chat's bridge traffic (P13). A restarted bridge comes
     # up closed unless it was launched with WA_BRIDGE_FILTER, so a seq that went backwards forgets what
     # was sent, and WA_FILTER_EVERY re-states it anyway in case a restart slipped past both.
-    url, policy, now = cfg.get('bridge_url') or WA_URL, json.dumps({'allDirect': False, 'jids': sorted(bridge_want)}), time.monotonic()
+    url, policy, now = cfg.get('bridge_url') or wa_url(), json.dumps({'allDirect': False, 'jids': sorted(bridge_want)}), time.monotonic()
     sent, at = _WA_FILTERED.get(url, (None, 0))
     if sent != policy or now - at > WA_FILTER_EVERY:
         try: _wa(c, '/filter', json.loads(policy))

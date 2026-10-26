@@ -424,9 +424,17 @@ http.createServer(async (req, res) => {
     }
     json(res, 404, { error: "unknown path" });
   } catch (e) { json(res, 500, { error: String(e?.message || e) }); }
-}).listen(PORT, "127.0.0.1", () => console.log(`bridge listening on http://127.0.0.1:${PORT}`));
-
-connect().catch((e) => {
-  console.error("could not connect:", e?.message || e);
-  scheduleReconnect(e?.message || e);
+}).on("error", (e) => {
+  // A PORT SOMEBODY HOLDS (#269): said in one line Taskuary can read off the log, and the exit code it checks (EADDRINUSE's
+  // errno on Linux) - not a stack trace. Before WhatsApp is touched: this copy shares wa-auth with whatever bridge holds the
+  // port, and connecting with it first would knock that one's session off WhatsApp ("connection replaced").
+  console.error(e?.code === "EADDRINUSE" ? `EADDRINUSE: port ${PORT} is in use - another program holds 127.0.0.1:${PORT}`
+    : `the bridge could not listen on 127.0.0.1:${PORT}: ${e?.message || e}`);
+  process.exit(e?.code === "EADDRINUSE" ? 98 : 1);
+}).listen(PORT, "127.0.0.1", () => {
+  console.log(`bridge listening on http://127.0.0.1:${PORT}`);
+  connect().catch((e) => {
+    console.error("could not connect:", e?.message || e);
+    scheduleReconnect(e?.message || e);
+  });
 });

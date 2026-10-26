@@ -25,3 +25,14 @@ test("the task view's fold closes its drawer at the press and moves on as after 
   const done = part(page, "const reshaped = (r) =>", "};");
   assert.match(done, /canvas && onFinish \? onFinish\("dropped", async \(\) => \{\}\)/, "the walk moves on - the server already dropped it");
 });
+
+// ANY TASK, OPEN OR CLOSED (the owner, 2026-10-26: "we can't merge this with other tasks only open tasks?"): what is typed asks the
+// server (?q=, a number or title words), a closed candidate says so, and folding into one says before the press that it reopens
+test("the fold picker searches the server, marks a closed task, and says a closed survivor is reopened", () => {
+  const fold = part(read("Reshape.jsx"), "const FoldIntoAnother", "\n};");
+  assert.match(fold, /merge-candidates`, \{ params: \{ q \} \}/, "typing searches every task server-side");
+  assert.match(fold, /options=\{found \?\? cands\}[^\n]*\n[^\n]*filterOptions=\{\(x\) => x\}/, "the server's answer is shown as it came");
+  assert.match(fold, /o\.closed && <span[^>]*> · closed<\/span>/);
+  assert.match(fold, /pick\.closed \? `, and \$\{pick\.ref\} is reopened`/, "said on the survivor chip before the press");
+  assert.match(fold, /done\.reopened \? `, and \$\{done\.ref\} is reopened`/, "and on the confirmation line");
+});

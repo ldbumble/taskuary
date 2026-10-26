@@ -1125,9 +1125,55 @@ class CoreTests(unittest.TestCase):
         b = s2.create_task({'Title': 'Headcount', 'Summary': 'the roster needs the 112 active employees'}, 'owner')
         self.assertGreater(reshape.merge_candidates(s2, b)[0]['score'], 0.1)
         self.assertEqual(reshape.merge_candidates(s2, b)[0]['task_id'], a)
-        # a task already closed is nothing to fold into
+        # a CLOSED task is still a home (the owner, 2026-10-26: "we can't merge this with other tasks only open tasks?"),
+        # marked as closed; a dropped one is folded away already and never offered
         s2.update_task(a, {'Status': 'done'}, 'owner')
+        self.assertEqual([(c['task_id'], c['closed']) for c in reshape.merge_candidates(s2, b)], [(a, True)])
+        s2.update_task(a, {'Status': 'dropped'}, 'owner')
         self.assertEqual(reshape.merge_candidates(s2, b), [])
+
+    def test_merge_candidates_put_open_ahead_of_an_equally_close_closed_one(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'PTO import mapping is wrong'}, 'owner')
+        shut = s.create_task({'Title': 'PTO import mapping is wrong'}, 'owner')
+        live = s.create_task({'Title': 'PTO import mapping is wrong'}, 'owner')
+        s.update_task(shut, {'Status': 'done'}, 'owner')
+        cands = reshape.merge_candidates(s, tid)
+        self.assertEqual([c['task_id'] for c in cands], [live, shut])
+        self.assertEqual(cands[0]['score'], cands[1]['score'])          # the same score shown; only the order leans open
+
+    def test_merge_candidates_search_any_task_by_number_or_title_words(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Order new laptops for the studio'}, 'owner')
+        old = s.create_task({'Title': 'Payworth export for Gail Moreno'}, 'owner')
+        other = s.create_task({'Title': 'Trainly seats renewal'}, 'owner')
+        gone = s.create_task({'Title': 'Payworth export again'}, 'owner')
+        s.update_task(old, {'Status': 'done'}, 'owner'); s.update_task(gone, {'Status': 'dropped'}, 'owner')
+        ids = lambda q: [c['task_id'] for c in reshape.merge_candidates(s, tid, q=q)]
+        for q in (str(old), task_ref(old), task_ref(old).lower(), f'TQ{old}'): self.assertEqual(ids(q), [old], q)
+        self.assertEqual(ids('payworth EXPORT'), [old])                   # every word, any case; the dropped one never
+        self.assertEqual(ids('trainly'), [other])
+        self.assertEqual(ids(str(tid)), [])                               # never the task itself
+        self.assertEqual(ids(str(gone)), [])
+
+    def test_folding_into_a_closed_task_reopens_it_and_moves_the_mail(self):
+        s = MemoryStore()
+        orig = s.create_task({'Title': 'Payworth export', 'Summary': 'send the export', 'RemindAt': '2026-11-02'}, 'owner')
+        s.update_task(orig, {'Status': 'done'}, 'owner')
+        dupe = s.create_task({'Title': 'Payworth export, again', 'Summary': 'Erin Blake asks where the export is'}, 'owner')
+        mid = s.add_message({'TaskId': dupe, 'Channel': 'email', 'Subject': 'export?', 'FromEmail': 'erin@northwind.example'})
+        out = reshape.merge_tasks(s, dupe, orig)
+        self.assertEqual((out['task_id'], out['moved'], out['reopened']), (orig, 1, True))
+        t = s.get_task(orig)
+        self.assertEqual((t['Status'], t.get('ClosedAt'), t.get('RemindAt') or ''), ('open', None, ''))
+        self.assertEqual(s.get_message(mid)['TaskId'], orig)
+        self.assertIn('Erin Blake asks', t['Summary'])
+        self.assertTrue(any(c['Body'].startswith('Reopened - ') for c in s.list_comments(orig)))
+        self.assertEqual(s.get_task(dupe)['Status'], 'dropped')
+        # an open survivor says nothing about reopening; a dropped one is no survivor at all
+        third = s.create_task({'Title': 'x'}, 'owner')
+        self.assertFalse(reshape.merge_tasks(s, third, orig)['reopened'])
+        with self.assertRaises(ValueError): reshape.merge_tasks(s, s.create_task({'Title': 'y'}, 'owner'), dupe)
 
 
 if __name__ == '__main__':

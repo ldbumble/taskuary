@@ -63,7 +63,7 @@ import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, putDownLanded, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory, withdrawSelection } from "./funnelPile.js";
-import { FYI_PAGE, ageHover, coveredByReload, fyiTail, heldSince, latestLine, pileRows, sentChips } from "./funnelPile.js";
+import { FYI_PAGE, ageHover, awayFromClear, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
 import { StatusLogo } from "./StatusMark.jsx";
@@ -386,11 +386,6 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   const nextTid = items.find((i) => i.key === nextKey)?.tid || 0;
   // ...again whenever the rail is drawn anew: a write in between let the held read go (taskDetail.js), and it is read once more here
   useEffect(() => { if (nextTid) prefetchTask(api, nextTid); }, [nextTid, displayRevision(pile)]);   // eslint-disable-line react-hooks/exhaustive-deps
-  // how close to empty, once that is worth saying (the owner asked for it at "halfway down the
-  // funnel", so from fifteen: the count is the encouragement - no header, no total)
-  const left = items.filter((i) => !i.settling).length + tail;
-  const cheer = !left || left > 15 ? "" : left === 1 ? "One more and you're clear."
-    : left <= 5 ? `${left} to go, then you're clear.` : `${left} away from clear.`;
 
   // ── the ranked tail, when a connector is in bulk mode ───────────────────────────────────────
   // The server says WHICH row wears the pill and how many wait behind it; on an install that ranks
@@ -434,6 +429,12 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   lastLevel.current = Object.fromEntries(bands.flatMap((b) => b.items.map((i) => [i.key, b.level])));
   // the FYI band is costed whole: its "N more fyi" stays while any of it is not here (fillCaps reads `total`)
   if (tail) for (const b of bands) if (b.level === "fyi") b.total = b.items.length + tail;
+  // how close to empty, once that is worth saying (the owner asked for it at "halfway down the
+  // funnel", so from fifteen: the count is the encouragement - no header, no total)
+  // ...and it is THE HEADINGS ADDED UP, the table's rows with them until they are put down (funnelPile.awayFromClear)
+  const left = awayFromClear(bands, tail);
+  const cheer = !left || left > 15 ? "" : left === 1 ? "One more and you're clear."
+    : left <= 5 ? `${left} to go, then you're clear.` : `${left} away from clear.`;
   const sig = bands.map((b) => `${b.level}:${b.items.length}`).join(",");
   const wrapRef = useRef(null);
   // what is on the table is ringed WHERE THE OWNER CAN SEE IT (railReveal.js): once per change, after the rows' .55s glide
@@ -450,16 +451,23 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
     if (!el || !scroller) return undefined;
     // only the SCROLLER is observed. Watching the pile too would be a feedback loop, because the
     // pile's own height is the thing this measurement decides.
+    // ...where the pile STARTS in the scroller's content, however far it is scrolled: read against the scroller's own top, a rail
+    // scrolled down (the ring revealed below the fold) measured a room the height of the scroll larger than it had
     const measure = () => {
-      const top = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      const top = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
       const next = Math.max(0, scroller.clientHeight - top - PILE_FOOT);
       setRoom((was) => (Math.abs(was - next) > 4 ? next : was));
     };
     measure();
     if (typeof ResizeObserver === "undefined") return undefined;
+    // ...and again when what sits ABOVE the pile comes, goes or changes height ("Removed <title> - Undo", UndoLine): the scroller keeps
+    // its size, so the room measured with the line there stayed after it was dismissed, and the reverse - rows held back under an empty rail
     const ro = new ResizeObserver(measure);
-    ro.observe(scroller);
-    return () => ro.disconnect();
+    const watch = () => { ro.disconnect(); ro.observe(scroller); for (let s = el.previousElementSibling; s; s = s.previousElementSibling) ro.observe(s); measure(); };
+    watch();
+    const mo = typeof MutationObserver === "undefined" ? null : new MutationObserver(watch);
+    mo?.observe(scroller, { childList: true });
+    return () => { ro.disconnect(); mo?.disconnect(); };
   }, [sig]);
   const [opened, setOpened] = useState(() => new Set());        // bands the owner opened by hand
   // ...and an OPEN fyi band asks for its next page as its "N more fyi" scrolls into view - more as the owner scrolls
@@ -476,14 +484,22 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // WHAT THE ESTIMATE MISSED. fillCaps costs what it expects the browser to paint; this is the
   // overflow it actually painted, measured once per change and given back in rows. Bounded by the
   // guard below so a band that cannot shrink any further can never spin.
-  const [trim, setTrim] = useState(0);
-  useLayoutEffect(() => { setTrim(0); }, [sig]);
+  // ...and it is given back when the room changes, and when the rail it was taken for has room again: a trim taken in one moment's
+  // overflow (a shorter window, a line above the pile) stayed until a band's count changed, so a tall rail kept "9 more fyi" over an
+  // empty half (the owner, 2026-10-26). Given back once per change, never right after it was taken, so the two can never take turns.
+  const [trim, setTrim] = useState(0), grew = useRef(false);
+  useLayoutEffect(() => { setTrim(0); grew.current = false; }, [sig, room]);
   // the row on the table is 24px taller than the rest, and it is drawn inside one of these bands
   const base = fillCaps(room - (curKey ? CUR_H - ROW_H : 0), bands);
   // how many rows the capped bands could still give back before they are at their floor. Past that
   // the rail genuinely does not fit and scrolls: tasks are never trimmed.
   const headroom = CAPPED.reduce((n, level) => n + Math.max(0, (base[level] ?? 0) - FLOOR), 0);
   const caps = trimCaps(base, bands, trim);
+  // ...and the FYI band asks for its next page while the rail has room for it (fyiHasRoom), not only once it is opened by hand - once
+  // per count it has, so a page that brings nothing new is never asked for again
+  const fyiHave = bands.find((b) => b.level === "fyi")?.items.length ?? 0, fyiAsked = useRef(-1);
+  const fyiFills = !!tail && !trim && fyiHasRoom(room - (curKey ? CUR_H - ROW_H : 0), bands);
+  useEffect(() => { if (fyiFills && fyiAsked.current !== fyiHave) { fyiAsked.current = fyiHave; onMoreFyi?.(); } }, [fyiFills, fyiHave]);   // eslint-disable-line react-hooks/exhaustive-deps
   // what a band draws: its cap's worth, and whatever is on the table wherever in the band it sits
   const shownIn = (level, rows) => { const cap = opened.has(level) ? rows.length : (caps[level] ?? rows.length);
     return rows.filter((i, n) => n < cap || i.key === curKey || batchKeys.has(i.key) || nextBatch.has(i.key)); };
@@ -570,13 +586,17 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   useLayoutEffect(() => {
     const el = wrapRef.current;
     const scroller = el?.closest("[data-tq-rail]");
-    if (!el || !scroller || trim >= headroom) return;
+    if (!el || !scroller) return;
     const over = scroller.scrollHeight - scroller.clientHeight;
-    if (over > 4) setTrim((was) => Math.min(headroom, was + Math.ceil(over / ROW_PX)));
+    if (over > 4 && trim < headroom) { grew.current = true; setTrim((was) => Math.min(headroom, was + Math.ceil(over / ROW_PX))); return; }
+    if (over > 0 || !trim || grew.current) return;
+    const box = scroller.getBoundingClientRect(), end = el.getBoundingClientRect().bottom - box.top + scroller.scrollTop;
+    const free = Math.floor((scroller.clientHeight - (parseFloat(getComputedStyle(scroller).paddingBottom) || 0) - end) / ROW_PX);
+    if (free > 0) setTrim((was) => Math.max(0, was - free));
   });
 
   return (
-    <div className="tq-pile" data-tq-keep ref={wrapRef} role="listbox" aria-label="Your list" onKeyDown={railKey}
+    <div className="tq-pile" data-tq-keep ref={wrapRef} role="listbox" aria-label="Your list" onKeyDown={railKey} data-tq-left={left}
       onFocus={(e) => { if (!wrapRef.current?.contains(e.relatedTarget)) kbdBack.current = e.relatedTarget || null; }}>
       <BeforeCommit take={takeDrawn} />
       {!pile ? (error ? (

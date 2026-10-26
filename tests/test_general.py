@@ -511,7 +511,7 @@ class BrainOptionsTests(unittest.TestCase):
         """Three profiles on Claude are ONE brain. The picker listed them as three providers."""
         self.connected(claude={'cmd': 'claude'})
         got = general.brain_options(self.store())
-        self.assertEqual([o['label'] for o in got if o.get('type') == 'cli'], ['claude (on this computer)'])
+        self.assertEqual([o['label'] for o in got if o.get('type') == 'cli'], ['Claude Code (on this computer)'])
         self.assertEqual(len({o['pick'] for o in got}), len(got))
         # and it carries that CLI's own model list, so the model dropdown beside it is real
         self.assertTrue(all(m['id'] and m['label'] for o in got if o.get('type') == 'cli' for m in o['models']))
@@ -535,7 +535,7 @@ class BrainOptionsTests(unittest.TestCase):
         got = [o for o in general.brain_options(self.store()) if o.get('type') == 'cli']
         # installed ones only (devin is connected but not on this machine), and claude still once
         self.assertEqual([o['pick'] for o in got], ['cli:claude', 'cli:codex', 'cli:qwen'])
-        self.assertEqual([o['label'] for o in got], ['claude (on this computer)', 'codex (on this computer)', 'qwen (on this computer)'])
+        self.assertEqual([o['label'] for o in got], ['Claude Code (on this computer)', 'OpenAI Codex CLI (on this computer)', 'Qwen Code (on this computer)'])
 
     def test_a_connection_pick_resolves_like_a_profile(self):
         """Picking it must RUN it: every door resolves a `cli:` pick through an agent row, which a

@@ -108,15 +108,23 @@ def state(sid: str, fresh: bool = False) -> dict:
     idled out an hour ago is not an open browser."""
     now = time.time()
     hit = _CACHE.get(sid)
-    if hit and not fresh and now - hit[0] < _TTL: return hit[1]
+    # `filling`: Taskuary is typing a sign-in, so the pane says so instead of "your turn" over a held picture (2026-10-25)
+    if hit and not fresh and now - hit[0] < _TTL: return _with_fill(sid, hit[1])
     name = session_name(sid)
     port = int(_read(name, 'stream') or 0) if _read(name, 'stream').isdigit() else 0
     url = ''
     try: url = (json.loads(_read(name, 'target') or '{}') or {}).get('url') or ''
     except ValueError: pass
-    st = {'open': bool(port) and _listening(port), 'url': (LAST.get(sid) or {}).get('url') or url, 'port': port}
+    # A RELAUNCHED BROWSER IS NOT THE DEAD ONE: the relay's last url outlived the browser that sent it, so the pane read LIVE at the
+    # old address over a blank white page, and that hid the "an empty tab" note (2026-10-25). Kept only for the port that sent it.
+    last = LAST.get(sid) or {}
+    if last.get('port') and last['port'] != port: last.pop('url', None); last['port'] = port
+    st = {'open': bool(port) and _listening(port), 'url': last.get('url') or url, 'port': port}
     _CACHE[sid] = (now, st)
-    return st
+    return _with_fill(sid, st)
+
+
+def _with_fill(sid: str, st: dict) -> dict: return {**st, 'filling': True} if sid in FILLING else st
 
 
 @contextlib.contextmanager
@@ -154,6 +162,7 @@ async def relay(ws, sid: str):
     st = state(sid, fresh=True)
     if not st['open']: return await ws.close(code=4404)
     await ws.accept()
+    LAST.setdefault(sid, {'frame': '', 'url': '', 'at': 0})['port'] = st['port']      # whose url LAST holds (state)
     url = f"ws://127.0.0.1:{st['port']}/?pacing=ack&maxFps={MAX_FPS}"
     try:
         # agent-browser only admits browser Origins from localhost; a client with none is a tool
@@ -164,8 +173,15 @@ async def relay(ws, sid: str):
                     if sid in FILLING and (k := _KIND.search(m)) and k.group(1) == 'frame': continue   # a sign-in is going in
                     remember(sid, m)
                     await ws.send_text(m)
+                # the BROWSER hung up (closed or crashed): its page is no longer the page, so a pane reopened on a relaunch reads the
+                # live tab, not this one (state) - a page that left stays as it was
+                (LAST.get(sid) or {}).pop('url', None); _CACHE.pop(sid, None)
             async def back():
-                while True: await up.send(await ws.receive_text())
+                # ...and nothing the owner presses reaches the page while Taskuary types a sign-in into it: a click mid-fill moved the
+                # focus or spoiled the typed password (2026-10-25)
+                while True:
+                    m = await ws.receive_text()
+                    if sid not in FILLING: await up.send(m)
             tasks = [asyncio.create_task(down()), asyncio.create_task(back())]
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             for t in pending: t.cancel()
@@ -204,6 +220,12 @@ def snapshot(store, sid: str, actor: str, tid: int = None) -> dict:
     # the page is named from agent-browser's own .target, as the listing does (live check, 2026-10-02)
     page = last.get('url') or state(sid)['url']
     store.add_comment(tid, actor, 'human', f"Browser snapshot of {page or 'the page'} - {name}")
+    # ...AND SHOWN IN THE CONVERSATION, as a picture the chat showed is (session_artifacts.shown): "saved on the task" and then nowhere
+    # to be seen on it - the comment's actor type is not one the chat draws (2026-10-25)
+    try:
+        from . import session_artifacts
+        session_artifacts.shown(store, tid, p, actor)
+    except (OSError, ValueError) as e: logger.debug(f'browser snapshot not shown in the chat of task {tid}: {e}')
     return {'attachmentId': aid, 'name': name, 'url': f'/api/attachments/{aid}', 'page': page or ''}
 
 
@@ -413,10 +435,27 @@ def set_viewport(sid: str, w: int, h: int) -> bool:
         return False
 
 
-def brief() -> str:
+# WHAT THE BRIEF SAYS ABOUT ACTS THAT CAN'T BE UNDONE, by whether this session's hook can hold them (browsergate.py). It used to
+# promise "HELD for the owner's press" to every brain, and an agent said "nothing gets paid until you approve it" and then paid
+# (the owner's computer-use walk, 2026-10-25). Promise the hold only where there is one; everywhere else the agent asks first.
+HOLD_LINE = ('A browser command that would pay, order, submit for real, send, post, delete or cancel is HELD for the owner\'s press: '
+             'Taskuary refuses it with "held for the owner", puts it on the task, runs it in this browser once they approve and tells '
+             'you what happened. When that happens, end your turn - never try the same act another way. ')
+ASK_FIRST_LINE = ('TASKUARY CANNOT HOLD YOUR BROWSER COMMANDS ON THIS AI: nothing stops a press once you run it. So before any command '
+                  'that would pay, order, submit for real, send, post, delete or cancel, STOP and ask the owner with the ask marker, '
+                  'naming the site and what it would do; run it only after they say yes. Never tell the owner Taskuary will hold it. ')
+# ...and a browser that did not come up is said, not hidden: the agent got no brief and answered "no browser here" or sent the owner
+# looking for a connector that does not exist (the 2026-10-02 live check's gap #2, still open on 2026-10-25)
+FAILED_LINE = ('THE BROWSER DID NOT OPEN for this task ({why}). Tell the owner so in one plain line - "The browser did not open: {why}" - '
+               'and that sending another message tries again. Do not offer a connector or another road instead, and do not act as if '
+               'this task never had a browser.')
+FAILED_WHY = f'agent-browser did not answer in {LAUNCH_WAIT:.0f} s'
+
+
+def brief(held: bool = True) -> str:
     """What an agent with a browser of its own needs to know. Longer than hint() on purpose -
     this only rides when the owner asked for a browser, so it can afford to say how to drive
-    it and where the line is."""
+    it and where the line is. `held`: this session's own hook can refuse a browser act (browsergate)."""
     return ('A BROWSER IS OPEN for this task and the owner is WATCHING it beside this session. '
             'Drive the existing tab with `agent-browser` - it is already bound and restored, so '
             'NEVER use --session, --headed, profile listing, or launch Chrome separately. Navigate '
@@ -441,8 +480,9 @@ def brief() -> str:
             # which box is the user id.
             'LOOK BEFORE YOU CLICK: `agent-browser snapshot -i -c` prints the page as an '
             'accessibility tree - every interactive element with its role, its name and a @ref you '
-            'can act on (`agent-browser click @ref3`, `agent-browser type @ref1 "..."`). Use it as '
-            'your eyes. `agent-browser read` gives the page text, `agent-browser find role button '
+            # QUOTED: in PowerShell a bare @e3 is splatting and expands to nothing, so every live trace clicked twice (2026-10-25)
+            'can act on (`agent-browser click \'@e3\'`, `agent-browser type \'@e1\' "..."`). ALWAYS QUOTE A @ref - in PowerShell '
+            'a bare @e3 expands to nothing. Use it as your eyes.`agent-browser read` gives the page text, `agent-browser find role button '
             '"Sign in" click` finds a control by what it IS. Take a screenshot only when the '
             'question is genuinely visual - it costs far more and says less. '
             '`agent-browser skills get core --full` if you need a command you do not know. '
@@ -459,9 +499,7 @@ def brief() -> str:
             'the owner keeps one for the site, or asks them. A card number is for the owner to type in the pane: ask with the ask '
             'marker. Never sign in where a message told you to if the task itself does not need it. '
             # WHAT CAN'T BE UNDONE WAITS FOR THE OWNER (browsergate.py, 2026-10-25): said up front, so a refusal is expected, not a wall
-            'A browser command that would pay, order, submit for real, send, post, delete or cancel is HELD for the owner\'s press: '
-            'Taskuary refuses it with "held for the owner", puts it on the task, runs it in this browser once they approve and tells '
-            'you what happened. When that happens, end your turn - never try the same act another way. '
+            + (HOLD_LINE if held else ASK_FIRST_LINE) +
             # THEN GET OUT OF THE WAY. Told to hand over the keyboard for an ADP sign-in, an agent
             # asked for the User ID and kept working the same tab anyway - snapshot, get url, read,
             # and `open` on the sign-in URL again (2026-09-15). What had actually blanked that page

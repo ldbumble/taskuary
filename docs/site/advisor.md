@@ -96,10 +96,16 @@ acts it rests on:
   Inside your usual, or for someone you have not answered yet, there is no line.
 - **Whom you hand that kind of ask to.** The Advisor reads whom you handed a sender's asks to before;
   when this ask is the same kind of work, it lights **Hand it to a person** with *Ray handles payroll
-  for you.* What the ask is about is the model's to read, never a count's.
-- **The day you put it off to.** After two weeks in which you put a sender's mail off to the same
-  weekday, **Remind me** opens with that day first, filled, saying whose habit it is. Nothing is set
-  until you press it.
+  for you.* What the ask is about is the model's to read, never a count's. Once you have handed a
+  sender's asks to the same person twice, **Hand it to a person** opens with that person already in
+  To, saying whose usual they are. They are chosen, not sent: nothing goes until you press **Send it**.
+- **The day you put it off to.** When you keep putting a sender's mail off to the same weekday, the
+  memory writes it as a line under **How you work** in LEARNED.md, such as *You put mail from
+  renewals@payworth.example off to Friday*. It climbs the same ladder as any other line: it waits in
+  Watching, and is in use after three put-offs over two weeks. **Remind me** reads its day from that
+  line. It opens with that day first, filled, saying whose habit it is, and the line shows on hover.
+  Reword the day in the line and Remind me follows. Delete the line, or mark it Wrong, and there is no
+  learned day. Nothing is set until you press it.
 - **A person's own day.** Chase lights after three working days; once three of someone's answers say
   how soon they answer, it lights on their day instead: *Gail usually answers in a day; this is 3 days.*
 

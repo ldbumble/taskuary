@@ -703,9 +703,15 @@ export const NoCodingTool = () => (
     <Button size="small" variant="outlined" onClick={() => openAppLink(place("ai_apps").href)}>Connect one</Button>
   </Box>);
 
+// WHAT MATTERS FOR COMPUTER USE, in the brain menu itself (2026-10-25): four equal items gave no basis for the key choice. Only on a
+// task that wants a browser, and only where it is not ordinary. Text in an existing control.
+export const brainNote = (b, browser) => [b?.signed_out ? "not signed in" : "",
+  browser ? (b?.browser === false ? "can't use the browser" : b?.holds === false ? "browser acts not held" : "") : ""]
+  .filter(Boolean).map((t) => ` · ${t}`).join("");
+
 export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, size = 30, kinds = {},
                              coding = false, brains = [], brain = "", onBrain, brainModels = {},
-                             generalBrains = [], brainsRead = false, codingReady = true, pick = "", onPick, has = "" }) => {
+                             generalBrains = [], brainsRead = false, codingReady = true, pick = "", onPick, has = "", browser = false }) => {
   // A coding picker chooses the BRAIN - which CLI runs the work. It always did in spirit ("chooses
   // the executable, not one of several instruction profiles backed by it") but it named a profile
   // to say so; the role is the coding profile for every coding task now, so that list would be one entry
@@ -749,9 +755,9 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
         <Select size="small" displayEmpty value={pick || ""} onChange={(e) => { onPick(e.target.value); onModel(""); }}
           sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 150 }}>
           <MenuItem value="" sx={{ fontSize: 12.5 }}>
-            {generalBrains.length ? "the brain it runs on" : "No AI connected"}
+            {!generalBrains.length ? "No AI connected" : browser ? "an AI that can use the browser" : "the brain it runs on"}
           </MenuItem>
-          {generalBrains.map((b) => <MenuItem key={b.pick} value={b.pick} sx={{ fontSize: 12.5 }}>{b.label}</MenuItem>)}
+          {generalBrains.map((b) => <MenuItem key={b.pick} value={b.pick} sx={{ fontSize: 12.5 }}>{b.label}{brainNote(b, browser)}</MenuItem>)}
         </Select>
       )}
       {/* "No AI connected" in the menu, and the button that connects one beside it (owner-approved, 2026-10-21) */}

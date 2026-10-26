@@ -44,6 +44,7 @@ TYPES, KEY_TYPES = frozenset('fill type'.split()), frozenset('type inserttext'.s
 SNAP_MAX = 6000                 # the page as the model reads it: the interactive elements, enough for a checkout or a settings page
 JUDGE_WAIT = 45.0
 HELD = 'Taskuary held this for the owner'
+AGAIN = 'Dismiss this, and ask the agent to open the page again - it will be held for you again.'
 
 
 # ── which part of a shell command is a browser act ────────────────────────────────────────────────────────────────────────
@@ -160,7 +161,44 @@ WANT = {'type': 'object', 'properties': {'irreversible': {'type': 'boolean'}, 's
         'required': ['irreversible', 'sure']}
 
 
-def judge(store, act: dict, pg: dict, brain=None) -> dict:
+# WHAT THE OWNER IS ASKED TO APPROVE, in the page's own words: "agent-browser click @e12" three times over was the whole card with no
+# AI (the owner's computer-use walk, 2026-10-25). The snapshot the gate already took names that @ref - its role and its name, the
+# accessibility tree's own grammar (`- button "Pay $412.50" [ref=e12]`), not a word list - so the card can say which control it is.
+_VERB = {'click': 'click', 'dblclick': 'double-click', 'press': 'press', 'fill': 'type into', 'type': 'type into', 'check': 'tick',
+         'uncheck': 'untick', 'select': 'choose in', 'upload': 'upload a file to', 'drag': 'drag', 'focus': 'focus'}
+_REF_LINE = r'^\s*-?\s*(?P<role>[\w-]+)\s*(?:"(?P<name>[^"]*)")?[^\n]*\bref=(?P<ref>{ref})\b'
+
+
+def target(act: dict, pg: dict) -> str:
+    "'click the \"Pay $412.50\" button on toll.example' - an act said by the control it names, read off the page's snapshot; '' when it names none."
+    a = list(act.get('args') or [])
+    ref = next((t.lstrip('@') for t in a if t.startswith('@') and len(t) > 1), '')
+    if not ref: return ''
+    m = re.search(_REF_LINE.format(ref=re.escape(ref)), str(pg.get('elements') or ''), re.M)
+    host = urlsplit(str(pg.get('url') or '')).hostname or ''
+    on, verb = (f' on {host}' if host else ''), _VERB.get(act.get('verb') or '', act.get('verb') or 'use')
+    if not m: return f'{verb} an element the page no longer shows{on}'
+    name, role = (m.group('name') or '').strip(), m.group('role')
+    return f'{verb} the "{name}" {role}{on}' if name else f'{verb} a {role}{on}'
+
+
+def judge(store, act: dict, pg: dict, brain=None, wait: float = None) -> dict:
+    """The verdict under JUDGE_WAIT. The hook's curl gives up at BROWSER_WAIT and then the command RUNS, so a slow verdict (a cold CLI
+    judge, a provider's 180 s read) let a payment through with no card - against "no verdict, a timeout included, is a hold"
+    (2026-10-25). Out of time it holds, well inside the curl's limit."""
+    import threading
+    out, done = {}, threading.Event()
+    def go():
+        try: out.update(_judge(store, act, pg, brain))
+        except Exception as e: logger.debug(f'browsergate: verdict failed - {e}')
+        finally: done.set()
+    threading.Thread(target=go, daemon=True).start()
+    if done.wait(JUDGE_WAIT if wait is None else wait) and out: return out
+    cmd = ' '.join([EXE, *act['args']]) if act.get('args') else act.get('raw', '')
+    return {'hold': True, 'what': target(act, pg) or cmd, 'why': 'the AI did not answer in time, so it waits for you'}
+
+
+def _judge(store, act: dict, pg: dict, brain=None) -> dict:
     """{hold, what, why}. Held unless the model says, sure of it, that the act can be undone - no brain, a failure or an answer
     that is not the shape is a hold, said as such."""
     from .terminal import fence
@@ -169,17 +207,17 @@ def judge(store, act: dict, pg: dict, brain=None) -> dict:
         from .llm import build_llm, ask_json
         b = brain or build_llm(store, job='judge')
         if not b: return ({'hold': False, 'what': cmd, 'why': ''} if typing(act) else
-                          {'hold': True, 'what': cmd, 'why': 'no AI is set up to judge it, so it waits for you'})
+                          {'hold': True, 'what': target(act, pg) or cmd, 'why': 'no AI is set up to judge it, so it waits for you'})
         user = (f"THE PAGE THE AGENT IS ON: {fence(pg.get('url') or 'unknown')}\n"
                 f"ITS INTERACTIVE ELEMENTS (@refs are what a command names):\n{fence(pg.get('elements') or '(could not be read)')}\n"
                 f"THE COMMAND THE AGENT IS ABOUT TO RUN: {fence(cmd)}")
         v = ask_json(b, SYSTEM, user, want=WANT, need=('irreversible', 'sure')).data or {}
     except Exception as e:
         logger.debug(f'browsergate: no verdict on {act["verb"]} - {e}')
-        return {'hold': True, 'what': cmd, 'why': 'the AI did not answer in time, so it waits for you'}
+        return {'hold': True, 'what': target(act, pg) or cmd, 'why': 'the AI did not answer in time, so it waits for you'}
     if not isinstance(v, dict) or not isinstance(v.get('irreversible'), bool) or not isinstance(v.get('sure'), bool):
-        return {'hold': True, 'what': cmd, 'why': "the AI's answer could not be read, so it waits for you"}
-    what = ' '.join(str(v.get('what') or '').split())[:200] or cmd
+        return {'hold': True, 'what': target(act, pg) or cmd, 'why': "the AI's answer could not be read, so it waits for you"}
+    what = ' '.join(str(v.get('what') or '').split())[:200] or target(act, pg) or cmd
     if v['irreversible']: return {'hold': True, 'what': what, 'why': "it can't be undone"}
     if not v['sure']: return {'hold': True, 'what': what, 'why': "the AI could not tell whether it can be undone"}
     return {'hold': False, 'what': what, 'why': ''}
@@ -235,9 +273,10 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
     sid, args = str(p.get('sid') or ''), list(p.get('args') or [])
     if not sid or not args: raise RuntimeError('this held act names no browser command')
     st = browserview.state(sid, fresh=True)
-    if not st.get('open'): raise RuntimeError("the agent's browser is closed - nothing was done")
+    # ...and the way on, said: the same Approve stayed and failed every time, with nothing saying Dismiss it (2026-10-25)
+    if not st.get('open'): raise RuntimeError(f"the agent's browser is closed - nothing was done. {AGAIN}")
     if not _same_page(str(st.get('url') or ''), str(p.get('url') or '')):
-        raise RuntimeError(f"the agent's browser has moved on from the page this was held on ({p.get('site') or 'its site'}) - nothing was done")
+        raise RuntimeError(f"the agent's browser has moved on from the page this was held on ({p.get('site') or 'its site'}) - nothing was done. {AGAIN}")
     rc, said = (run or (lambda s, a: _run(s, a, 60, 'act')))(sid, args)
     said = ' '.join(str(said or '').split())[-600:]
     if rc != 0: raise RuntimeError(f"the browser refused it: {said[-300:] or 'agent-browser failed'}")
@@ -253,12 +292,20 @@ def declined(store, tid: int, p: dict) -> None:
                       'carry on without it, or ask the owner what they want instead.')
 
 
-def _tell(store, tid: int, text: str) -> None:
-    "Words to the agent working the task, as a sign-in's are told (signin._continue); a task with none running gets the comment only."
+def _tell(store, tid: int, text: str, wait: bool = False) -> None:
+    """Words to the agent working the task, as a sign-in's are told (signin._continue) - ON A THREAD: a general chat's send_prompt is
+    the agent's whole next turn, so Approve sat on "running..." for minutes, or up to WAIT_TURN and then nobody was told (2026-10-25).
+    Not told, the task says so. A task with none running gets the comment only. `wait`: tests."""
+    import threading
     from . import terminal as term, workerstate as ws
     sess = ws._live(tid)
     if not sess: return store.add_comment(tid, 'taskuary', 'agent', f'{text} (No agent is running on this task to tell.)')
-    try:
-        if hasattr(sess, 'send_prompt'): sess.send_prompt(text, as_owner=False)
-        else: term.type_into(sess, text)
-    except Exception as e: logger.warning(f'browsergate: task {tid} - the agent was not told - {e}')
+    def go():
+        try:
+            if hasattr(sess, 'send_prompt'): sess.send_prompt(text, as_owner=False)
+            else: term.type_into(sess, text)
+        except Exception as e:
+            logger.warning(f'browsergate: task {tid} - the agent was not told - {e}')
+            store.add_comment(tid, 'taskuary', 'agent', f'{text} (The agent could not be told: {str(e)[:200]} - open the task and tell it.)')
+    th = threading.Thread(target=go, daemon=True); th.start()
+    if wait: th.join(30)

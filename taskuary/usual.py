@@ -7,20 +7,23 @@ and cited by the same ids, so Why? can show what it rests on:
 
     reply_lag    how soon the owner answers this person: the median of their last answers (msg ids, the asks they answered)
     late_reply   that usual, against how long THIS ask has waited - only when it has waited well past it
-    remind_day   the weekday the owner puts this sender's mail off to, once it has held for two weeks (ruling 7: Remind me opens with
-                 the learned day pre-chosen) - fs ids, the tasks put off
+    put_off_habits  the weekday the owner puts a sender's mail off to - fs ids, the tasks put off. The count writes or confirms a How
+                 you work line through the reflection (learn.put_off_lines), and it is THAT line Remind me reads (remind_day): the owner
+                 can see it and correct it, and the default follows (the owner, 2026-10-25: "Remind me's learned day comes from a How you
+                 work line ... the owner can see and correct")
     handed_to    whom the owner handed this sender's asks to - evidence the model weighs (a topic is the model's to read, never a
-                 count's), never a button lit by a count
+                 count's), never a button lit by a count; Hand it to a person opens with that person chosen, not sent (handoff_usual)
     chase_usual  the day a silence is late for this person (ruling 8: after 3 working days, then learned per person), from the ledger
 
 Times, addresses and weekdays are facts, not meaning: nothing here reads a mail's words. Fewer than three answers (or two put-offs) is
 no habit, and says nothing."""
-import json, math
+import json, math, re
 from collections import Counter
 from datetime import datetime, timedelta
 from .episodes import _dt, _mine, _skip
 
 ANSWERS, PUT_OFFS = 3, 2            # what makes a habit: three answers, two put-offs to one weekday
+IN_USE = 3                          # ...and a put-off line is in use at three of them: the ladder every line climbs (three episodes)
 LATE_X, LATE_MIN = 2, 60            # late is twice the usual, and an hour at least - "you usually answer in 10 min; this is 25" is noise
 LOOK_DAYS, REPLY_DAYS, KEEP = 90, 7, 10
 HELD_DAYS = 14                      # the owner's ruling 7: the learned day only after about two weeks of data
@@ -107,40 +110,96 @@ def _put_offs(store, now=None) -> list:
     return [(t, at, until) for t, (at, until) in out.items()]
 
 
-def remind_day(store, tid, now=None) -> dict | None:
-    """{on, day, evidence, of}: the day Remind me opens on for this task - the weekday the owner put this sender's mail off to, at least
-    PUT_OFFS times and two in three, the first of them HELD_DAYS ago or more; first by the sender's own address, else their domain. `on`
-    is the next such day after today (YYYY-MM-DD). None when no day has held."""
+def put_off_habits(store, now=None) -> list:
+    """[{by, day, n, of, held, evidence}] - THE COUNT a How you work line is written or confirmed from (learn.put_off_lines): each sender
+    whose put-offs went to one weekday, at least PUT_OFFS times and two in three, and each domain whose several senders did. `held`: the
+    first of them HELD_DAYS ago or more (the owner's ruling 7: about two weeks of data). It sets no default by itself - Remind me reads
+    the line, which the owner can see and correct (the owner, 2026-10-25)."""
     now = now or datetime.now()
-    who = _sender_of(store, tid)
+    rows = [(t, _dt(at), _dt(until), _sender_of(store, t)) for t, at, until in _put_offs(store, now)]
+    rows = [r for r in rows if r[1] and r[2] and '@' in r[3]]
+    def habit(by, hits):
+        (wd, n), = Counter(u.weekday() for _, _, u, _ in hits).most_common(1)
+        if n < PUT_OFFS or n * 3 < len(hits) * 2: return None
+        ev = [f'fs{t}' for t, _, u, _ in sorted(hits, key=lambda h: h[1]) if u.weekday() == wd][-KEEP:]
+        return {'by': by, 'day': DAYS[wd], 'n': n, 'of': len(hits), 'held': min(h[1] for h in hits) <= now - timedelta(days=HELD_DAYS), 'evidence': ev}
+    by_who, by_dom = {}, {}
+    for r in rows: by_who.setdefault(r[3], []).append(r); by_dom.setdefault(r[3].rsplit('@', 1)[1], []).append(r)
+    return ([h for w, hs in by_who.items() if (h := habit(w, hs))]
+            + [h for d, hs in by_dom.items() if len({r[3] for r in hs}) > 1 and (h := habit(d, hs))])
+
+
+_DAY = re.compile(r'\b(' + '|'.join(DAYS) + r')s?\b', re.I)
+
+
+def weekday_of(text: str):
+    """The one weekday a line names (0 = Monday), else None - two days, or none, is no day to open on."""
+    got = {m.group(1).capitalize() for m in _DAY.finditer(str(text or ''))}
+    return DAYS.index(got.pop()) if len(got) == 1 else None
+
+
+def put_off_line(store, who: str, doc: str = None) -> dict | None:
+    """{text, key, by, evidence}: the in-use How you work line Remind me's day comes from for mail from `who` - a learned line whose
+    put-offs (fs ids) were this sender's, else their domain's; or one of the owner's own lines there naming the address or domain. The
+    owner's own line first, then the closest. Whatever day the line says now is the day: reworded, the default follows; deleted, there
+    is none (the owner, 2026-10-25)."""
+    from .learnedgraph import TAG
+    from .learned_cut import WORK, lines as section_lines
+    who = str(who or '').strip().lower()
     if '@' not in who: return None
     dom = who.rsplit('@', 1)[1]
-    rows = [(t, _dt(at), _dt(until), _sender_of(store, t)) for t, at, until in _put_offs(store, now) if t != int(tid)]
-    for by, same in ((who, lambda w: w == who), (dom, lambda w: w.endswith('@' + dom))):
-        hits = [(t, at, until) for t, at, until, w in rows if at and until and same(w)]
-        if len(hits) < PUT_OFFS or min(at for _, at, _ in hits) > now - timedelta(days=HELD_DAYS): continue
-        (wd, n), = Counter(u.weekday() for _, _, u in hits).most_common(1)
-        if n < PUT_OFFS or n * 3 < len(hits) * 2: continue
-        on = now.date() + timedelta(days=(wd - now.weekday()) % 7 or 7)
-        return {'on': on.isoformat(), 'day': DAYS[wd], 'of': len(hits), 'n': n, 'by': by,
-                'evidence': [f'fs{t}' for t, _, u in hits if u.weekday() == wd][:3]}
-    return None
+    doc = store.get_doc('learned') if doc is None else doc
+    got = []
+    for raw, key in section_lines(doc or '', WORK):
+        m = TAG.match(raw)
+        text = m.group('text').strip() if m else raw.strip().lstrip('-* ').strip()
+        if weekday_of(text) is None: continue
+        if m:
+            ev = [e.strip() for e in m.group('ev').split(',') if e.strip().startswith('fs')]
+            senders = {_sender_of(store, e[2:]) for e in ev if e[2:].isdigit()}
+            near = 0 if who in senders else 1 if any(w.endswith('@' + dom) for w in senders) else None
+        else:
+            low, ev = text.lower(), []
+            near = 0 if who in low else 1 if re.search(rf'(?<![\w.-]){re.escape(dom)}\b', low) else None
+        if near is not None: got.append((near, bool(m), {'text': text, 'key': key, 'by': who if near == 0 else dom, 'evidence': ev[:3]}))
+    return min(got, key=lambda g: g[:2])[2] if got else None
+
+
+def remind_day(store, tid, now=None) -> dict | None:
+    """{on, day, by, line, key, evidence}: the day Remind me opens on for this task - the weekday its How you work line says (put_off_line),
+    `on` the next such day after today (YYYY-MM-DD). None while no line says one: the count alone sets no default."""
+    now = now or datetime.now()
+    l = put_off_line(store, _sender_of(store, tid))
+    if not l: return None
+    wd = weekday_of(l['text'])
+    on = now.date() + timedelta(days=(wd - now.weekday()) % 7 or 7)
+    return {'on': on.isoformat(), 'day': DAYS[wd], 'by': l['by'], 'line': l['text'], 'key': l['key'], 'evidence': l['evidence']}
 
 
 def handed_to(store, who: str, skip=None) -> dict | None:
-    """{to, n, of, evidence}: whom the owner handed this sender's asks to, when it was the same person at least twice - evidence for the
-    model (what the ask is ABOUT is its to read), never a lit button by itself."""
+    """{to, n, of, channel, evidence}: whom the owner handed this sender's asks to, when it was the same person at least twice, and on
+    the channel they last used for it - evidence for the model (what the ask is ABOUT is its to read), never a lit button by itself."""
     who = str(who or '').strip().lower()
     if '@' not in who: return None
     got = []
     for a in store._rows("SELECT EntityId, Detail FROM audit WHERE EntityType='task' AND Action='handoff' AND IFNULL(ActorType,'human')<>'agent' ORDER BY Id DESC LIMIT 200"):
         if skip and int(a['EntityId']) == int(skip): continue
-        try: to = str((json.loads(a.get('Detail') or '{}') or {}).get('to') or '').lower()
+        try: d = json.loads(a.get('Detail') or '{}') or {}
         except ValueError: continue
-        if to and _sender_of(store, a['EntityId']) == who: got.append((to, f"task{a['EntityId']}"))
+        to = str(d.get('to') or '').strip().lower()
+        if to and _sender_of(store, a['EntityId']) == who: got.append((to, f"task{a['EntityId']}", str(d.get('channel') or '')))
     if not got: return None
-    (to, n), = Counter(t for t, _ in got).most_common(1)
-    return {'to': to, 'n': n, 'of': len(got), 'evidence': [e for t, e in got if t == to][:3]} if n >= 2 else None
+    (to, n), = Counter(t for t, *_ in got).most_common(1)
+    return ({'to': to, 'n': n, 'of': len(got), 'channel': next(c for t, _, c in got if t == to), 'evidence': [e for t, e, _ in got if t == to][:3]}
+            if n >= 2 else None)
+
+
+def handoff_usual(store, tid) -> dict | None:
+    """{to, channel, from, n, of, evidence}: whom Hand it to a person opens on for this task - the person the owner handed its sender's
+    asks to (handed_to). Chosen, not sent: the drawer only fills the recipient, and the owner still presses (the owner, 2026-10-25)."""
+    who = _sender_of(store, tid)
+    h = handed_to(store, who, skip=tid)
+    return {**h, 'from': who} if h else None
 
 
 def chase_usual(store, who: str) -> dict | None:
@@ -163,7 +222,8 @@ def prompt_lines(store, m: dict, tid=None, now=None) -> list:
         out.append(f"HOW SOON YOU ANSWER {who}: {within(u['minutes'])} - the median of your last {u['n']} answers ({', '.join(u['evidence'][:3])})"
                    + ('; you have answered this one' if answered(store, m) else f'; this one has waited {waited}' if waited else ''))
     if tid and (d := remind_day(store, tid, now)):
-        out.append(f"WHEN YOU PUT THEIR MAIL OFF: to a {d['day']}, {d['n']} of {d['of']} times ({', '.join(d['evidence'])}) - Remind me opens on {d['on']}")
+        out.append(f"WHEN YOU PUT THEIR MAIL OFF (a How you work line the owner can correct): \"{d['line']}\""
+                   + (f" ({', '.join(d['evidence'])})" if d['evidence'] else '') + f" - Remind me opens on {d['on']}, a {d['day']}")
     if (h := handed_to(store, who, skip=tid)):
         out.append(f"WHOM YOU HANDED THEIR ASKS TO: {h['to']}, {h['n']} of {h['of']} times ({', '.join(h['evidence'])}) - whether THIS ask is "
                    "the same kind of work is yours to read")

@@ -48,7 +48,7 @@ class PromiseTests(unittest.TestCase):
         _theirs(s, 'Can we get the revised budget?', 4, 'c1'); mid = _mine(s, "I'll send the budget Friday.", 3, 'c1')
         self.assertEqual(judged(s, PROMISE), 1)
         t = s.promise_task(mid)
-        self.assertEqual((t['Title'], t['Status'], t['Assignee'], t['DueAt']), ('Send the budget', 'open', 'owner', _day(-1)))
+        self.assertEqual((t['Title'], t['Status'], t['Assignee'], t['DueAt']), ('Send the budget', 'open', 'owner', PROMISE["I'll send the budget Friday"]['due']))
         self.assertEqual(assistant.followups(s, 24), [])
         _theirs(s, 'Great, thanks!', 2, 'c1')                                    # their word is not the budget
         self.assertEqual(s.promise_task(mid)['Status'], 'open')
@@ -58,7 +58,7 @@ class PromiseTests(unittest.TestCase):
         s = _store()
         _theirs(s, 'Can we get the deck?', 4, 'c2'); mid = _mine(s, 'On it, by EOD.', 3, 'c2')
         judged(s, PROMISE)
-        self.assertEqual((s.promise_task(mid)['Title'], s.promise_task(mid)['DueAt']), ('Send the deck', _day(3)))   # the model's day
+        self.assertEqual((s.promise_task(mid)['Title'], s.promise_task(mid)['DueAt']), ('Send the deck', PROMISE['On it, by EOD']['due']))   # the model's day - read from the fixture, so a run across midnight cannot split it (2026-10-25)
         self.assertEqual(assistant.followups(s, 24, ('followup',)), [])
 
     def test_an_ask_of_them_is_a_followup_chosen_by_the_judge(self):

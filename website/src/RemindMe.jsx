@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Box, Button, IconButton, Popover, Tooltip, Typography } from "@mui/material";
 import EventIcon from "@mui/icons-material/Event";
 import api from "./api.js";
-import { remindDay, remindWaiting, usualLabel, usualWhy } from "./taskFilter.js";
+import { remindDay, remindWaiting, usualLabel, usualLine, usualWhy } from "./taskFilter.js";
 import { hint, label } from "./buttons.js";
 
 // REMIND ME (the owner, 2026-09-25): put an open task away until a day - "remind me of this in 2 weeks, or
@@ -60,7 +60,8 @@ export function RemindPicker({ task, anchor, onClose, onDone, path, onLeave, onS
               {usualLabel(usual) && <>
                 <Button size="small" variant="contained" disabled={busy} onClick={() => set(usual.on)} disableElevation
                   sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1, bgcolor: "#55697a", "&:hover": { bgcolor: "#46586a" } }}>{usualLabel(usual)}</Button>
-                <Typography component="span" sx={{ fontSize: 11, color: "#6b6459" }}>{usualWhy(usual)}</Typography>
+                {/* ...the line it is read from on hover: the owner corrects the day in LEARNED.md, How you work (2026-10-25) */}
+                <Typography component="span" sx={{ fontSize: 11, color: "#6b6459" }} title={usualLine(usual)}>{usualWhy(usual)}</Typography>
               </>}
             </Box>)}
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>

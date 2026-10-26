@@ -461,7 +461,7 @@ def reflect(store, llm=None) -> bool:
                               f'{sum(new.count(m) == 1 for m in markers)}/4 markers')
     # ...and every section is still there: a rewrite that lost "What you care about" lost everything triage reads
     if lost := [h for h in SECTIONS.values() if h in doc and h not in new]: return _failed(store, f'the rewrite dropped {", ".join(lost)}')
-    new = _restore(new, held)
+    new = put_off_lines(store, _restore(new, held))
     from . import learnedgraph
     # this reflection is itself an opportunity: it read the window, so every line it did not
     # touch has just gone one tick quieter. Recorded BEFORE settle, which measures against it.
@@ -488,6 +488,47 @@ def reflect(store, llm=None) -> bool:
         if done: logger.info(f"playbook facts proposed: {', '.join(done)}")
     except Exception as e: logger.warning(f'playbook facts skipped: {e}')
     return True
+
+
+# ── THE DAY YOU PUT MAIL OFF TO, AS A LINE YOU CAN CORRECT (the owner, 2026-10-25) ───────────────────────────────────────────────────────
+# "Remind me's learned day comes from a How you work line in LEARNED.md that the owner can see and correct, e.g. 'You put vendor renewals
+# off to Friday'." The count (usual.put_off_habits) no longer sets the day itself: each reflection it writes or confirms that line, the
+# line climbs the same ladder as any other (Watching, then How you work at three put-offs held two weeks) and passes the same books
+# (settle), and Remind me reads whatever day the line says now - reworded, the default follows; deleted or marked Wrong, there is none.
+def _buried(store, ev: list) -> bool:
+    """Whether the owner already put down a line resting on these put-offs (Wrong, Forget, or no longer true) - then a fresh line under a
+    new key must not bring it back by the side door; it returns only as learnedlines.guard would let its own key return."""
+    from .learnedlines import GROW
+    for r in store._rows("SELECT Status, Ev, ForgotEv FROM learned_line WHERE Status IN ('wrong','forgotten','closed')"):
+        was = {e.strip() for e in str(r.get('Ev') or '').split(',') if e.strip()}
+        if not was & set(ev): continue
+        if r['Status'] == 'wrong' or (r['Status'] == 'forgotten' and len(ev) < GROW * max(1, int(r.get('ForgotEv') or 0))) \
+           or (r['Status'] == 'closed' and len(set(ev) - was) < GROW): return True
+    return False
+
+
+def put_off_lines(store, doc: str, today: str = None) -> str:
+    """The doc with a How you work line for each put-off habit the count found: an existing line on those put-offs is confirmed (its
+    evidence grows, and it goes into use once the habit holds), else one is written in the count's own words. A line the owner reworded
+    keeps their words (guard); one about the same sender in their own hand is left to say it."""
+    from . import usual, learnedgraph as lg
+    from .learned_cut import lines as section_lines
+    today = today or _today()
+    for h in usual.put_off_habits(store):
+        key, ev = f"put off {h['by']}", h['evidence']
+        live, text = h['held'] and h['n'] >= usual.IN_USE, f"You put mail from {h['by']} off to {h['day']}"
+        if any(not lg.TAG.match(raw) and h['by'] in raw.lower() for raw, _ in section_lines(doc, WORK)): continue
+        hit = next(((raw, l) for raw, l in lg.walk(doc) if l and l['key'] == key), None) \
+              or next(((raw, l) for raw, l in lg.walk(doc) if l and l['status'] != 'proposed' and set(l['ev']) & set(ev)), None)
+        if not hit and _buried(store, ev): continue
+        raw, l = hit or (None, {'key': key, 'text': text, 'ev': [], 'score': 0, 'seen': today, 'status': 'hypothesis'})
+        l = {**l, 'ev': l['ev'] + [e for e in ev if e not in l['ev']], 'score': max(l['score'], h['n'] + 1),
+             **({'text': text} if l['key'] == key else {})}            # the count's own line says the counted day; a model's keeps its words
+        if raw is not None and (l['status'] == 'live' or not live):
+            doc = doc.replace(raw, lg.fmt(l), 1); continue
+        if raw is not None: doc = doc.replace(raw + '\n', '', 1).replace(raw, '', 1)
+        doc = _under(doc, WORK, lg.fmt(l)) if live else _to_watching(doc, [lg.fmt(l)])
+    return doc
 
 
 ADOPT_UNDER = CARE

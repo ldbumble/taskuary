@@ -18,8 +18,42 @@ export const floorOf = (body, el) => {
   return dock && dock.height && dock.top < b.bottom ? Math.min(b.bottom, dock.top) : b.bottom;
 };
 
+// ...AND NO ROW LEFT CUT IN HALF at a scroller's top (the owner, 2026-10-26: "why is this cut off" - a lit Send at the foot of a long
+// draft scrolled the work column so "Result" rested half under its edge). The row standing across the edge - a line-sized box, not the
+// draft's own text, which scrolls as text does - is shown whole when the move still fits below it, else scrolled fully past.
+const ROW = 64;
+export const rowAcross = (p, hit) => {
+  const top = p.getBoundingClientRect().top;
+  let row = null;
+  for (let e = hit; e && e !== p && p.contains(e); e = e.parentElement) {
+    const r = e.getBoundingClientRect();
+    if (r.height > ROW) break;
+    if (r.top < top - 0.5 && r.bottom > top + 0.5) row = e;
+  }
+  return row;
+};
+export function unclip(p, el) {
+  const b = p.getBoundingClientRect();
+  if (!b.height || typeof document.elementFromPoint !== "function") return;
+  const row = rowAcross(p, document.elementFromPoint(b.left + b.width / 2, b.top + 1));
+  if (!row) return;
+  const r = row.getBoundingClientRect(), m = el.getBoundingClientRect(), was = p.scrollTop;
+  const up = Math.ceil(b.top - r.top) + 4;   // the row whole, with a little air above it
+  p.scrollTo({ top: m.bottom + up <= b.bottom ? was - up : was + Math.ceil(r.bottom - b.top), behavior: "instant" });
+  const n = el.getBoundingClientRect();
+  if (n.top < b.top || n.bottom > b.bottom) p.scrollTo({ top: was, behavior: "instant" });   // the move first: never pushed out for the row
+}
+const scrollersOf = (el) => {
+  const out = [];
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) if (/auto|scroll/.test(getComputedStyle(p).overflowY) && p.scrollTop) out.push(p);
+  return out;
+};
+
 export function bringIntoView(el) {
   if (!el?.getBoundingClientRect || typeof document === "undefined") return;
+  try { place(el); } finally { scrollersOf(el).forEach((p) => unclip(p, el)); }
+}
+function place(el) {
   el.scrollIntoView?.({ block: "nearest" });
   for (let i = 0; i < 3; i++) {                 // a dock below, a pinned head above - each read again after the last move
     const r = el.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);

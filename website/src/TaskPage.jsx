@@ -919,12 +919,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // its stage. lanes.json has one lane for both ("a reply or an action is drafted and waits for
   // your yes"), and one lane on the rail is one section on the page (the owner, 2026-09-22: "put
   // playbook proposal combined into the reply ready section as it's part of the approval/action").
-  const pendingReview = pendingReplyReview(detail?.reviews || []);
-  const allProposals = pendingProposals(detail?.reviews || []);
+  // ...and only the task on the table's own: the last task's record, read until the new one lands, put its Send and Redraft on the row
+  // for a beat, then the row emptied and refilled (the owner, 2026-10-26: "when you load task the buttons load then go gray then reload")
+  const reviews = t ? detail?.reviews || [] : [];
+  const pendingReview = pendingReplyReview(reviews);
+  const allProposals = pendingProposals(reviews);
   // the task's close-out beside its reply is ONE decision on the reply's card; alone, it is its own card below
   const closeoutRv = allProposals.find((p) => closeoutOf(p)) || null;
   const proposals = allProposals.filter((p) => !(pendingReview && p === closeoutRv));
-  const sentReview = sentReplyReview(detail?.reviews || []);
+  const sentReview = sentReplyReview(reviews);
   const unsentReview = sentReview ? null : unsentReplyReview(detail?.reviews || []);
   // the agent's record, drawn once, on the Agent work step
   const recordProps = { taskId: selected, pages: isGeneral ? [] : (detail?.artifacts || []).filter((a) => isPublished(a) || a.kind === "shown"),

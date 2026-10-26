@@ -49,6 +49,9 @@ function useItemAdvice(card, on) {
 // ...and the body's PADDING is the view's too (2026-10-18, "top is not high enough"): its top meets the body's top (AssistantView
 // toEnd and the pin), so the 26px of padding plus 14 = the body's whole height less a 12px gap over the dock.
 export const CANVAS_ITEM_HEIGHT = "max(340px, calc(100cqh + 14px))";
+// ...and a view of WORDS stops a drop short of it (the owner, 2026-10-26: "size of the task looks too big, should we not leave a drop of
+// space under it" - and "if agent is open then use the full space"): the same 12px gap again under its cap; a pane keeps the whole height
+export const wordsCap = (h) => (typeof h === "number" ? h - 12 : `calc(${h} - 12px)`);
 
 // an item the canvas shows as a task view: it has a task, and it is not a proposal, a set-up step or a batch
 export const showsTask = (card, kind) => !!card?.tid && !["proposal", "setup", "walk", "brief", "fyis", "meeting"].includes(kind);
@@ -102,7 +105,7 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         // sized to the words it was cut off (the same day's "crunched down")
         // ...and a general agent's chat is a pane only while its session is live (the owner, 2026-10-25): finished, failed or closed it is
         // words too, and its room says so (TaskPage data-tq-agent-room)
-        ...(!pin ? { "&:not(:has(.xterm, [data-tq-agent-room='live'], [class*='tq-aui']:not([data-tq-agent-room='rest'] *), canvas, iframe, [data-tq-from-side]))": { height: "auto", maxHeight: h } } : {}),
+        ...(!pin ? { "&:not(:has(.xterm, [data-tq-agent-room='live'], [class*='tq-aui']:not([data-tq-agent-room='rest'] *), canvas, iframe, [data-tq-from-side]))": { height: "auto", maxHeight: wordsCap(h) } } : {}),
         ...(pin ? { position: "fixed", top: 8, left: pin.left, width: pin.width, zIndex: 1350 } : {}) }}>
       {/* a COLUMN that shrinks to the box: the task view inside is a flex column too, so its own scroller gets what is left (TaskPage) */}
       <Box sx={{ flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>

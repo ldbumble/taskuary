@@ -97,7 +97,9 @@ test("the page is given the pane's shape, at a desktop width", () => {
   // 2026-09-14). Matching the SHAPE removes the bars; holding the WIDTH keeps the desktop layout.
   assert.deepEqual(viewportFor(860, 1060), { w: 1200, h: 1479 });   // narrow pane: width floors at 1200
   assert.deepEqual(viewportFor(1600, 800), { w: 1600, h: 800 });    // a wide pane keeps its own width
-  assert.deepEqual(viewportFor(488, 605), { w: 1200, h: 1488 });
+  // ...but a laptop's pane (under NARROW_PANE) gets 980: at 1200 a 540px pane drew the page at 45% (2026-10-25)
+  assert.deepEqual(viewportFor(488, 605), { w: 980, h: 1215 });
+  assert.equal(viewportFor(538, 347).w, 980);
   assert.equal(viewportFor(0, 600), null);
   assert.equal(viewportFor(600, 0), null);
   assert.ok(viewportFor(1200, 10).h >= 400, "never a slit: a floor keeps the page usable");

@@ -665,6 +665,37 @@ def _pane(payload: dict, cli: str):
                  and sid and sid in (getattr(t, 'ext_id', ''), getattr(t, 'resumed_from', ''))), None)
 
 
+def _general(payload: dict, sid: str = ''):
+    """A general agent's headless chat (general.GeneralSession) - no argv, no cwd, no pane, so _pane never finds it, and its
+    browser acts went straight through while its brief said they were held (the owner's computer-use walk, 2026-10-25). Bound by
+    the session id its own --settings hook names (browser_settings), else by its CLI's conversation id once a turn gave it one."""
+    from . import terminal as term
+    from .general import GeneralSession
+    csid = str(payload.get('session_id') or '')
+    t = term.SESSIONS.get(str(sid)) if sid else None
+    if not isinstance(t, GeneralSession):
+        t = next((s for s in list(term.SESSIONS.values()) if isinstance(s, GeneralSession) and csid and s.cli_sid == csid), None)
+    return t if t is not None and t.alive and t.task_id else None
+
+
+def browser_settings(sid: str) -> str:
+    """Claude's --settings for ONE general chat with a browser: the browser hook, naming this session (`?sid=`), whatever user_wide()
+    says. The user-wide hook can't tell a headless chat from the owner's own Claude, and on a second home there is none at all - so
+    the hold rides with the session (2026-10-25). Claude ADDS these to the user's hooks; the strictest answer wins."""
+    from . import config
+    from urllib.parse import quote
+    base, token = base_url(), agent_token()
+    cmd = browser_command(base, token).replace(BROWSER_MARK, f'{BROWSER_MARK}?sid={quote(str(sid))}', 1)
+    d = {'hooks': {'PreToolUse': [{'matcher': BROWSER_MATCH, 'hooks': [{'type': 'command', 'command': cmd, 'timeout': BROWSER_WAIT + 10}]}]}}
+    p = config.home() / 'sessions'; p.mkdir(parents=True, exist_ok=True)
+    f = p / f'browser-{sid}.json'
+    want = json.dumps(d, indent=1)
+    try:
+        if not f.exists() or f.read_text(encoding='utf-8') != want: f.write_text(want, encoding='utf-8')
+    except OSError as e: logger.warning(f'browser hold not attached to {sid}: {e}'); return ''
+    return str(f)
+
+
 def ask(payload: dict, wait: float = None) -> dict:
     """AskUserQuestion, before it draws its form: record the questions as one group. The owner's own task: {} at once -
     Claude draws its form and the owner answers it in the terminal. A stranger's session: HOLD while the owner answers in
@@ -716,14 +747,14 @@ def reason(payload: dict, wait: float = None) -> dict:
     return reasonnet.pre_tool(st, t.task_id, run_sid(payload, t.task_id), tool[len(reasonnet.TOOL):], payload.get('tool_input') or {}, wait)
 
 
-def browser(payload: dict, brain=None) -> dict:
+def browser(payload: dict, brain=None, sid: str = '') -> dict:
     """Before one of OUR sessions runs a shell command (browsergate.check): a browser act that can't be undone is refused and held
     for the owner. Not our pane, not a shell tool, nothing of agent-browser in it: {} at once - the command is Claude's."""
     from . import browsergate
     if str(payload.get('tool_name') or '') not in ('Bash', 'PowerShell'): return {}
     cmd = str((payload.get('tool_input') or {}).get('command') or '')
     if browsergate.EXE not in cmd.lower(): return {}                 # the cheap test first: this hook sees every shell command
-    t = _pane(payload, 'claude')
+    t = _pane(payload, 'claude') or _general(payload, sid)
     st = getattr(t, 'store', None) if t else None
     if not t or not st: return {}
     return browsergate.check(st, t.task_id, t.sid, cmd, brain)

@@ -66,6 +66,10 @@ squarespace.com webflow.io bubbleapps.io notion.site'''.split())
 
 
 class SignInError(Exception): pass
+class NotAccepted(SignInError):
+    """Typed, and the site kept its password box up: not a sign-in. Every surface said "Signed in", the vault kept a password that never
+    worked and typed it again (the owner's computer-use walk, 2026-10-25). `again`: a fresh fill link's token, for the form shown again."""
+    again = ''
 def _now() -> float: return time.time()
 def _hash(tok) -> str: return hashlib.sha256(str(tok or '').encode('utf-8', 'surrogateescape')).hexdigest()
 
@@ -231,6 +235,31 @@ def peek(store, tok) -> dict | None:
     return r if r and not r['UsedAt'] and r['ExpiresAt'] > _now() else None
 
 
+def row_of(store, tok) -> dict | None:
+    "The link's row whatever its state - used, expired or good - so the page can say which (gone_html)."
+    _tables(store)
+    return store._one('SELECT * FROM signin_token WHERE TokenHash=?', (_hash(tok),)) if tok else None
+
+
+def for_line(store, tid) -> str:
+    """'for TQ-0001 · Pay the toll (Claude Code)' - the fill page opens outside the app, so it says which task and which agent the password
+    goes to: with two tasks on one portal, or a tab left from earlier, the owner could not tell (2026-10-25)."""
+    from .store import task_ref
+    from . import workerstate as ws
+    if not tid: return ''
+    t, sess = store.get_task(tid) or {}, ws._live(tid)
+    who = str(getattr(sess, 'provider', '') or getattr(sess, 'label', '') or '') if sess else ''
+    return f"for {task_ref(tid)} · {t.get('Title') or 'a task'}" + (f' ({who})' if who else '')
+
+
+def gone_why(store, tok) -> tuple:
+    "(why, tid) of a link that can no longer be used: used, and when - or expired, and how long one lasts."
+    r = row_of(store, tok)
+    if not r: return 'This sign-in page is not one Taskuary made, or it is long gone.', None
+    if r.get('UsedAt'): return f"This sign-in page was used already, at {time.strftime('%H:%M', time.localtime(r['UsedAt']))}.", r['TaskId']
+    return f'This sign-in page has expired - one lasts {TTL // 60} minutes.', r['TaskId']
+
+
 def take(store, tok) -> dict | None:
     """Spend the link: the first caller gets its sign-in, every later one None - checked and marked in one statement."""
     r = peek(store, tok)
@@ -282,7 +311,10 @@ def needs(store, tid: int, sid: str, claimed: str = '', fill=None) -> dict:
     site, said = (site_of(st.get('url')) if st.get('open') else ''), clean_claim(claimed)
     if not site:
         # no page to sign in on (or not one a password goes to): the owner reads the agent's words, and no fill is ever offered
-        text = f"Sign in to {said or 'the site'} to continue - the agent's browser is not on a sign-in page Taskuary can fill"
+        # ...said as what to DO (2026-10-25): "a sign-in page Taskuary can fill" explained the app, and plain-http portals are common
+        text = (f"Sign in to {said or 'the site'} yourself in the browser pane, then say {DONE} - Taskuary only types passwords into "
+                "secure (https) pages" if st.get('open') and st.get('url') and not str(st.get('url')).startswith('about:') else
+                f"Sign in to {said or 'the site'} to continue - the agent has no sign-in page open; ask it to open one")
         ws.record(store, tid, sid, 'input_needed', request_id=ws.request_id_for(text), text=text, choices=[DONE] if _chat(sid) else None,
                   source='api')
         return {'site': '', 'auto': False}
@@ -312,6 +344,10 @@ def _auto(store, tid, sid, site, rid, fill):
         _used(store, site)
         _audit(store, tid, site, 'vault', True, code=bool(got.get('code')) if code else None)
         _continue(store, tid, rid, site, 'taskuary', bool(got.get('code')))
+    except NotAccepted as e:
+        _audit(store, tid, site, 'vault', False, str(e))
+        store.add_comment(tid, 'taskuary', 'agent', f'The saved password for {site} did not work - {site} kept its sign-in form up. '
+                                                    'Press Sign in here and type the right one; tick Save to vault to update it.')
     except Exception as e:
         why = str(e) if isinstance(e, SignInError) else 'the browser could not be reached'
         _audit(store, tid, site, 'vault', False, why)
@@ -345,6 +381,10 @@ def by_owner(store, tok, user, pw, keep: bool, fill=None, key: str = '') -> dict
     if not pw: raise ValueError('type the password')
     code = _code_of(key or (saved(store, site) or {}).get('Totp'))
     try: got = (fill or type_in)(r['Sid'], site, user, pw, **({'code': code} if code else {})) or {}
+    except NotAccepted as e:
+        # nothing saved, nobody told "signed in" - the ask stays, and the form comes back on a fresh link with the reason
+        _audit(store, tid, site, 'typed', False, str(e))
+        e.again = mint(store, tid, r['Sid'], site, r['RequestId']); raise
     except SignInError as e:
         _audit(store, tid, site, 'typed', False, str(e)); raise
     except Exception:
@@ -355,8 +395,10 @@ def by_owner(store, tok, user, pw, keep: bool, fill=None, key: str = '') -> dict
         try: save(store, site, user, pw, key=key or None); kept = 'saved'
         except ValueError as e: kept = str(e)
     _audit(store, tid, site, 'typed', True, saved=kept == 'saved', code=bool(got.get('code')) if code else None)
+    from . import workerstate as ws
+    told = ws._live(tid) is not None            # what the done page may promise: "the agent goes on" only with an agent to tell
     threading.Thread(target=_continue, args=(store, tid, r['RequestId'], site, 'owner', bool(got.get('code'))), daemon=True).start()
-    return {'site': site, 'task': tid, 'saved': kept == 'saved', 'kept': kept}
+    return {'site': site, 'task': tid, 'saved': kept == 'saved', 'kept': kept, 'told': told}
 
 
 def _continue(store, tid, rid, site, actor, code=False):
@@ -558,6 +600,22 @@ def fill_page(c: Cdp, site: str, user: str, pw: str, wait: float = STEP_WAIT, co
     return {'code': bool(code) and _await_code(c, site, code, code_wait)}
 
 
+REJECT_WAIT = 4.0               # after SETTLE: how long a site is given to take its password box away before the password is called refused
+
+
+def accepted(c, site: str, wait: float = REJECT_WAIT) -> bool:
+    """Did the site take the sign-in? Its password box gone, a code asked, or the page off to another site (an SSO hop) - yes. The
+    password box still up on the same site after `wait` - no: a wrong password, a captcha, a form that would not submit."""
+    end = time.time() + wait
+    while True:
+        try: f = c.fields('')
+        except SignInError: f = None                          # mid-navigation: the page cannot be read for a moment
+        if f is not None:
+            if not f.get('top') or not on_site(f.get('href'), site) or not f.get('password') or f.get('otp'): return True
+        if time.time() >= end: return f is None
+        time.sleep(.5)
+
+
 def type_in(sid: str, site: str, user: str, pw: str, code=None) -> dict:
     """Sign the session's browser in on `site`: the screencast held while it types, the socket closed after."""
     from . import browserview
@@ -568,15 +626,19 @@ def type_in(sid: str, site: str, user: str, pw: str, code=None) -> dict:
             # THE PASSWORD DOES NOT STAY IN THE PAGE for the agent to read back (`agent-browser eval` on the box) when the site keeps
             # the form up - a wrong password, a captcha, a page that submits by script. Whatever box still holds it is emptied.
             time.sleep(SETTLE)
+            ok = out.get('code') or accepted(c, site)
             try: c.js(CLEAR)
             except SignInError: pass                          # the page moved on: nothing of it is left to clear
+            if not ok: raise NotAccepted(f'{site} did not accept that password')
             return out
         finally: c.close()
 
 
 # ── the fill page: one site, two boxes, one press - served by the app itself on 127.0.0.1, never on the share port ───────────
 CSP = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
-HEADERS = {'Cache-Control': 'no-store', 'Pragma': 'no-cache', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff',
+# SAME-ORIGIN, not no-referrer: a POST from a no-referrer page carries `Origin: null`, which guard.origin_ok refuses - so Chrome and Edge
+# answered every fill with "This sign-in came from another page" (2026-10-25). same-origin still sends nothing to another site.
+HEADERS = {'Cache-Control': 'no-store', 'Pragma': 'no-cache', 'Referrer-Policy': 'same-origin', 'X-Content-Type-Options': 'nosniff',
            'X-Frame-Options': 'DENY', 'Content-Security-Policy': CSP, 'X-Robots-Tag': 'noindex, nofollow'}
 _STYLE = ('body{margin:0;background:#f6f3ee;color:#2b2722;font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}'
           'main{max-width:420px;margin:8vh auto;padding:28px 24px;background:#fff;border:1px solid #e3ddd3;border-radius:10px}'
@@ -590,21 +652,25 @@ _STYLE = ('body{margin:0;background:#f6f3ee;color:#2b2722;font:15px/1.5 system-u
 
 def _page(body: str) -> str:
     return ('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-            f'<meta name="referrer" content="no-referrer"><title>Sign in - Taskuary</title><style>{_STYLE}</style></head>'
+            f'<meta name="referrer" content="same-origin"><title>Sign in - Taskuary</title><style>{_STYLE}</style></head>'
             f'<body><main>{body}</main></body></html>')
 
 
-def form_html(site: str, minutes: int, err: str = '') -> str:
-    """The fill page. The SITE leads, big - it is the one thing to check before typing a password into anything."""
+def _for(line: str) -> str: return f'<p class="k" data-tq-for="">{H.escape(line)}</p>' if line else ''
+
+
+def form_html(site: str, minutes: int, err: str = '', task: str = '', action: str = '') -> str:
+    """The fill page. The SITE leads, big - it is the one thing to check before typing a password into anything. `task`: which task and
+    agent it is for (for_line); `action`: where the form posts, when it is shown again on a fresh link (NotAccepted)."""
     from .timewords import plural
-    s = H.escape(site)
-    return _page(f'<p class="k">Sign in to</p><p class="site">{s}</p>'
+    s, act = H.escape(site), (f' action="{H.escape(action)}"' if action else '')
+    return _page(f'<p class="k">Sign in to</p><p class="site">{s}</p>' + _for(task)
                  + (f'<p class="err" role="alert">{H.escape(err)}</p>' if err else '')
-                 + '<form method="post" autocomplete="off">'
+                 + f'<form method="post" autocomplete="off"{act}>'
                  '<label for="u">Username</label><input id="u" name="username" type="text" autocomplete="username" autofocus>'
                  '<label for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required>'
                  # the site's authenticator key, when it asks a code after the password (2026-10-25): optional, and typed as a secret
-                 '<label for="k">Authenticator key <span class="k">(optional - the key beside the QR code, or its otpauth:// link)</span></label>'
+                 '<label for="k">Authenticator setup key <span class="k">(optional - the code the site shows under "Can\'t scan the QR code?")</span></label>'
                  '<input id="k" name="key" type="password" autocomplete="off" spellcheck="false">'
                  '<label class="keep"><input type="checkbox" name="save" value="1"> Save to vault for next time</label>'
                  '<button type="submit">Sign in</button></form>'
@@ -612,13 +678,17 @@ def form_html(site: str, minutes: int, err: str = '') -> str:
                  f'The agent never sees it. This page works once, for {plural(minutes, "more minute", "more minutes")}.</p>')
 
 
-def done_html(site: str, saved: bool, kept: str = '') -> str:
+def done_html(site: str, saved: bool, kept: str = '', told: bool = True, task: str = '', ref: str = '') -> str:
+    """`told`: an agent was running to hear it - with none, the page said "the agent goes on" over a task that stayed stuck (2026-10-25)."""
     s = H.escape(site)
-    keep = ('<p class="note">Saved for next time - Settings, Saved sign-ins, to remove it.</p>' if saved else
+    keep = ('<p class="note">Saved for next time - Settings &gt; Agent permissions &gt; Saved sign-ins, to remove it.</p>' if saved else
             f'<p class="note err">Not saved: {H.escape(kept)}.</p>' if kept else '')
-    return _page(f'<p class="k">Signed in to</p><p class="site">{s}</p><p class="ok">Typed into the task\'s browser - the agent goes on. '
-                 'You can close this page.</p>' + keep)
+    went = ("Typed into the task's browser - the agent goes on. You can close this page." if told else
+            f"Typed in. No agent is running on {H.escape(ref or 'the task')} - open it to continue.")
+    return _page(f'<p class="k">Signed in to</p><p class="site">{s}</p>' + _for(task) + f'<p class="ok">{went}</p>' + keep)
 
 
-def gone_html(why: str) -> str:
-    return _page(f'<p class="k">Sign in</p><p class="err" role="alert">{H.escape(why)}</p><p class="note">Open a new sign-in page from the task.</p>')
+def gone_html(why: str, task: str = '', ref: str = '') -> str:
+    "`ref`: the task to go back to - this tab was opened outside the app, and the page named no way back (2026-10-25)."
+    back = f'Open {H.escape(ref)} in Taskuary and press Sign in here again.' if ref else 'Open a new sign-in page from the task.'
+    return _page(f'<p class="k">Sign in</p>{_for(task)}<p class="err" role="alert">{H.escape(why)}</p><p class="note">{back}</p>')

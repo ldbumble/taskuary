@@ -29,7 +29,9 @@ export default function SavedSignins() {
     finally { setBusy(""); }
   };
   if (err) return <Typography variant="body2" role="alert" sx={{ color: "#a33b3b", py: 1.5 }}>{err}</Typography>;
-  if (!rows?.length) return null;
+  // ...and with none, one quiet line: an owner checking nothing is kept found no trace of the feature at all (2026-10-25)
+  if (!rows?.length) return <Typography data-tq-saved-signins="" variant="body2" sx={{ color: FAINT, py: 1.5, fontSize: 12.5 }}>
+    No saved sign-ins. When an agent asks you to sign in, tick Save to vault on its sign-in page to keep one here.</Typography>;
   return (
     <Box data-tq-saved-signins="" sx={{ py: 1.5 }}>
       <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5, mb: 0.5 }}>Saved sign-ins</Typography>
@@ -54,7 +56,7 @@ export default function SavedSignins() {
             <Box component="form" data-tq-signin-key="" sx={{ display: "flex", gap: 1, alignItems: "flex-start", mt: 1 }}
               onSubmit={(e) => { e.preventDefault(); if (key.trim()) saveKey(r.site, key.trim()); }}>
               <TextField size="small" type="password" autoComplete="off" autoFocus value={key} onChange={(e) => setKey(e.target.value)}
-                placeholder="The key beside the QR code, or its otpauth:// link" error={!!keyErr} helperText={keyErr || " "}
+                placeholder="Setup key - the code under &quot;Can't scan the QR code?&quot;" error={!!keyErr} helperText={keyErr || " "}
                 inputProps={{ "aria-label": `Authenticator key for ${r.site}`, spellCheck: false }} sx={{ flex: 1 }} />
               <Button size="small" variant="outlined" type="submit" disabled={!key.trim() || busy === r.site}
                 sx={{ color: INK, borderColor: BORDER }}>{busy === r.site ? "Saving…" : "Save"}</Button>

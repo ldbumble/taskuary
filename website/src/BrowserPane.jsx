@@ -14,12 +14,16 @@ const wsUrl = (sid) => {
   return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminals/${sid}/browser/ws${t ? `?token=${encodeURIComponent(t)}` : ""}`;
 };
 
+export const hostOf = (u) => { try { return new URL(u).host; } catch { return ""; } };
+
 const btn = { ...mono, fontSize: 10.5, lineHeight: 1, px: 0.9, py: 0.45, borderRadius: 1, cursor: "pointer",
   border: `1px solid ${BORDER}`, bgcolor: "transparent", color: "#b9b2a8", "&:hover": { color: "#e1dcd5", borderColor: "#6b655c" } };
 
 // `open`: the parent's poll of browserview.state - the relay refuses a session with no browser, so this
 // connects only while that says open (a caller that does not poll leaves it true and always tries).
-export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, onFold, overlay = false, yourTurn = false, clearRight = false }) {
+// `filling`: Taskuary is typing a sign-in into this page (browserview.filling) - the picture holds, and the pane says why
+export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, onFold, overlay = false, yourTurn = false, clearRight = false,
+  filling = false }) {
   const box = useRef(null), canvas = useRef(null), sendRef = useRef(null), img = useRef(null), fit = useRef(null);
   const [live, setLive] = useState(false);
   const [url, setUrl] = useState(url0);
@@ -138,7 +142,8 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
   // input reaches the page only while the owner is driving - a stray click on a watched pane
   // must not click the agent's page out from under it
   const forward = (m) => m && drivingRef.current && sendRef.current?.(m);
-  const takeOver = () => { setAsked(false); setDriving(true); fitViewport(true); requestAnimationFrame(() => canvas.current?.focus()); };
+  // preventScroll: focusing the canvas scrolled the task card 22px under the pointer, so the owner's next clicks missed (2026-10-25)
+  const takeOver = () => { setAsked(false); setDriving(true); fitViewport(true); requestAnimationFrame(() => canvas.current?.focus({ preventScroll: true })); };
   /* THE AGENT WAITING ON YOU HANDS YOU THE PAGE. Take over exists so a stray click does not land on a page an agent is
      driving; an agent that asked for a sign-in has stopped and said it will not touch the page, so asking for Take over
      as well was a second gate on one door (the owner, 2026-10-08: "if it asks me to put in info i should be able to do
@@ -169,7 +174,7 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
   const onMouse = (e) => {
     if (!drivingRef.current) return void (e.type === "mousedown" && setAsked(true));
     e.preventDefault();                      // ...which also stops the click focusing the canvas, so focus it: the keys follow the click
-    if (e.type === "mousedown") canvas.current?.focus();
+    if (e.type === "mousedown") canvas.current?.focus({ preventScroll: true });
     forward(mouseMessage(e.type, e.nativeEvent, fit.current));
   };
   const onWheel = (e) => { if (!drivingRef.current) return; e.preventDefault(); forward(wheelMessage(e.nativeEvent, fit.current)); };
@@ -205,7 +210,7 @@ Take over to drive it yourself; close the session to close it."
         <Box component="input" value={typed} disabled={going}
           onChange={(e) => setTyped(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") go(); if (e.key === "Escape") setTyped(""); e.stopPropagation(); }}
-          placeholder={shortUrl(url) || "the agent's browser \u2014 type an address to open one"}
+          placeholder={shortUrl(url) || "type an address to open a page"}
           title={url ? `${url}\n\ntype an address and press Enter to go somewhere else` : "type an address and press Enter to open a page"}
           sx={{ ...mono, fontSize: 11, color: "#c9c3b9", flex: 1, minWidth: 0, bgcolor: "transparent",
             border: "1px solid transparent", borderRadius: 1, px: 0.75, py: 0.25, outline: "none",
@@ -232,6 +237,14 @@ Take over to drive it yourself; close the session to close it."
         <Box component="canvas" ref={canvas} tabIndex={0} onMouseDown={onMouse} onMouseUp={onMouse} onMouseMove={onMouse}
           onWheel={onWheel} onKeyDown={onKey} onKeyUp={onKey} onContextMenu={(e) => e.preventDefault()}
           sx={{ display: "block", outline: "none", position: "absolute", inset: 0 }} />
+        {/* BEFORE ANYTHING ARRIVES, it says it is starting: a black box marked "…" is how the owner has described a broken pane
+            ("freezes and is just black") - the chip already said "browser · starting…" (2026-10-25) */}
+        {attached === null && !live && (
+          <Box data-tq-browser-starting="" sx={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+            pointerEvents: "none" }}>
+            <Typography sx={{ ...mono, fontSize: 11.5, color: "#a8a196" }}>starting the browser…</Typography>
+          </Box>
+        )}
         {/* Only before the first frame: once a page has painted, a momentary "not connected"
             is the browser moving between pages, not an empty pane. */}
         {attached === false && !live && (
@@ -258,7 +271,15 @@ Take over to drive it yourself; close the session to close it."
             </Typography>
           </Box>
         )}
-        {driving && (
+        {/* WHILE TASKUARY TYPES A SIGN-IN the picture holds and input is dropped (browserview.relay): said, instead of "your turn - click
+            the page and type" over a frozen LIVE pane (2026-10-25) */}
+        {filling && (
+          <Typography data-tq-browser-filling="" sx={{ ...mono, position: "absolute", left: 8, bottom: 6, fontSize: 10, color: "#e1dcd5",
+            bgcolor: "#000000cc", px: 0.75, py: 0.25, borderRadius: 1, pointerEvents: "none" }}>
+            {`Taskuary is signing in${hostOf(url) ? ` to ${hostOf(url)}` : ""} — the picture resumes in a moment`}
+          </Typography>
+        )}
+        {driving && !filling && (
           <Typography sx={{ ...mono, position: "absolute", left: 8, bottom: 6, fontSize: 10, color: CATPPUCCIN.yellow,
             bgcolor: "#000000aa", px: 0.75, py: 0.25, borderRadius: 1, pointerEvents: "none" }}>
             {handed.current ? "your turn — the agent is waiting on you; click the page and type" : "you are driving — the agent's next command still runs; hand back when done"}

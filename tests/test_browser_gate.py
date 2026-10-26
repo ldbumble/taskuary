@@ -1,7 +1,7 @@
 """BROWSER ACTS THAT CAN'T BE UNDONE WAIT FOR THE OWNER'S PRESS (browsergate.py): a look passes without a model; any other
 agent-browser command is judged by the model over the page; irreversible, unsure or unjudged is held as a proposal on the task and
 refused to the agent; the owner's Approve runs that exact command on that same page and tells the agent; Dismiss tells it no."""
-import json, unittest
+import json, time, unittest
 from types import SimpleNamespace
 from unittest import mock
 
@@ -106,6 +106,12 @@ class Holding(unittest.TestCase):
         with on(), verdict(v or {'irreversible': True, 'sure': True, 'what': 'pays the $412.50 order on toll.example'}):
             return bg.check(self.s, self.tid, 'run1', cmd, Brain(None))
 
+    def heard(self):
+        "What the agent was told - on its own thread now, since a chat's send_prompt is its whole next turn (browsergate._tell)."
+        end = time.time() + 5
+        while not self.told and time.time() < end: time.sleep(.01)
+        return self.told
+
     def pending(self): return self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (self.tid,))
 
     def test_an_irreversible_act_is_refused_and_put_on_the_task(self):
@@ -136,7 +142,7 @@ class Holding(unittest.TestCase):
             out = verdicts.decide(self.s, rv, 'approve')
         self.assertTrue(out['ok'], out)
         self.assertEqual(ran, [('run1', ['click', '@e12'])])
-        self.assertIn('The owner approved it', self.told[0]); self.assertIn('agent-browser click @e12', self.told[0])
+        self.assertIn('The owner approved it', self.heard()[0]); self.assertIn('agent-browser click @e12', self.told[0])
         self.assertEqual(self.pending(), [])
 
     def test_a_page_that_moved_on_is_not_acted_on(self):
@@ -153,7 +159,7 @@ class Holding(unittest.TestCase):
         with mock.patch('taskuary.workerstate._live', return_value=self.sess), mock.patch.object(bg, '_run') as run:
             self.assertTrue(verdicts.decide(self.s, rv, 'reject')['ok'])
         run.assert_not_called()
-        self.assertIn('did not approve it', self.told[0])
+        self.assertIn('did not approve it', self.heard()[0])
 
 
 class Hook(unittest.TestCase):

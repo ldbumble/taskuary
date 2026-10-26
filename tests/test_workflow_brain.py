@@ -124,7 +124,7 @@ class RoadTests(Base):
             self.opened.append({'tid': tid, 'model': model, 'brain': brain}); return t
         def fake_session(store_, tid, connector_id=None, model=None, pick=None):
             self.made.append({'tid': tid, 'pick': pick, 'model': model})
-            return mock.Mock(sid=f'g{tid}', task_id=tid, alive=True, browser_wanted=False, busy=False)
+            return mock.Mock(sid=f'g{tid}', task_id=tid, alive=True, browser_wanted=False, busy=False, pick=pick or '')
         # the router's start runs for real down to the session it builds (the conftest guard passes an owner's start through)
         guarded = general.start_session
         def start(st, tid, connector_id=None, model=None, actor='owner', pick=None): return guarded(st, tid, connector_id, model, 'owner', pick)

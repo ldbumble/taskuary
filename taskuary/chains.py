@@ -94,6 +94,8 @@ def _keep(store, conv: str, ext: str, m: dict, mailbox: str, before: str = None,
                        'Subject': m.get('subject'), 'FromName': 'You' if own else m.get('from_name'), 'FromEmail': frm or None,
                        'SentAt': m.get('sent_at'), 'BodyText': m.get('body'), 'OwnText': m.get('own_text') or None,
                        'SourceLink': m.get('source_link'),
+                       # its own ids, so a later reply naming this mail finds the thread (store.conversation_of_mail)
+                       'MailMetaJson': json.dumps(m['mail_meta']) if m.get('mail_meta') else None,
                        'Status': 'context' if own else 'history',
                        'RecipientsJson': json.dumps({'to': list(m.get('to') or []), 'cc': list(m.get('cc') or [])})
                                          if (m.get('to') or m.get('cc')) else None})
@@ -143,7 +145,7 @@ def refresh_imap(store, M, user: str, root: str, restore: str = 'INBOX', readonl
     The poll supplies its exact folder identity and protects every Inbox UID it still owns. That
     keeps history retrieval from duplicating a scoped row or swallowing pending work as history.
     """
-    from .imapmail import sent_folder, _dec, _hdr_addrs, _body_and_attachments, _external_id, _validity
+    from .imapmail import sent_folder, _dec, _hdr_addrs, _body_and_attachments, _external_id, _validity, mail_ids
     protected = {str(box): {int(uid) for uid in uids}
                  for box, uids in dict(protected or {}).items()}
     protected_after = {str(box): int(uid) for box, uid in dict(protected_after or {}).items()}
@@ -179,7 +181,8 @@ def refresh_imap(store, M, user: str, root: str, restore: str = 'INBOX', readonl
                 try: when = email.utils.parsedate_to_datetime(msg.get('Date')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
                 except Exception: when = None
                 added += _keep(store, root, ext, {'subject': _dec(msg.get('Subject')), 'body': body[:20000], 'from_name': name or addr,
-                                                  'from_email': addr, 'to': _hdr_addrs(msg, 'To'), 'cc': _hdr_addrs(msg, 'Cc'), 'sent_at': when}, user, before, atts)
+                                                  'from_email': addr, 'to': _hdr_addrs(msg, 'To'), 'cc': _hdr_addrs(msg, 'Cc'), 'sent_at': when,
+                                                  'mail_meta': mail_ids(msg)}, user, before, atts)
         cov = {'complete': failed == 0, 'listed': seen, 'added': added,
                'error': None if not failed else f'{plural(failed, "message")} of the thread could not be fetched'}
     except IMAPIdentityError as e:

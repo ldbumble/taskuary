@@ -174,6 +174,7 @@ def _from_row(r: dict, store=None) -> dict:
     except (TypeError, ValueError): meta = {}
     return {**({'invite': True} if meta.get('invite') else {}),       # judged later, it is still an invite (V5)
             **({'cal': meta['cal']} if isinstance(meta.get('cal'), dict) else {}),     # ...and still the invite it was (calwrite)
+            **({'mail_meta': {'dm': True}} if meta.get('dm') else {}),            # ...and still a one-to-one chat (chat_route)
             'external_id': r.get('ExternalId'), 'channel': r.get('Channel'), 'conversation_id': r.get('ConversationId'),
             'subject': r.get('Subject'), 'from_name': r.get('FromName'), 'from_email': r.get('FromEmail'), 'sent_at': r.get('SentAt'),
             'body': r.get('BodyText'), 'own_text': r.get('OwnText'), 'source_link': r.get('SourceLink'), 'source_name': r.get('SourceName'),
@@ -1864,7 +1865,8 @@ def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
     One FACT joins without a model: a line from the person who opened the task, arriving while an agent is
     live on it, is the round trip it asked for (how soon a line follows the last is evidence for triage, never a join). Everything else is the one triage verdict's
     `relationship`, judged among this room's same-day lines (chat_candidates): continues/answers
-    with a valid related line or task joins that task; new and uncertain open work of their own.
+    with a valid related line or task joins that task; new opens work of its own, and so does uncertain - in a group (in a
+    one-to-one chat it stays on the chat's task, 2026-10-26).
     The room id alone never joins (PW-018/PW-032); without a brain, nothing but the facts does."""
     cands = chat_candidates(store, msg)
     # NO TIMING GATE. "Typed within two minutes of their last line" used to join without a model, and a second
@@ -1900,6 +1902,18 @@ def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
         return ({'decision': 'attach', 'task_id': target, 'score': 1.0, 'candidates': [], 'reopen': closed,
                  'reason': f'{rel} the ask on {task_ref(target)} (same chat, same day)'
                            + (' - it was closed, and reopens only on new work or a question to you' if closed else '')}, (intent, fail))
+    # UNSURE JOINS IN A ONE-TO-ONE CHAT, NOT IN A GROUP (the owner, 2026-10-26: "yes on one" - join when unsure in one-to-one chats, new
+    # task when unsure in group chats). One person talking with the owner is mostly still on what they were on, as a mail thread is;
+    # a group carries many people's asks, and the 2026-09-24 ruling stands there. `new` is its own task in both. One-to-one is what
+    # the platform said on the line (the poller's mail_meta dm), never who has spoken.
+    if rel == 'uncertain' and (msg.get('mail_meta') or {}).get('dm'):
+        cur = target or next((c['task_id'] for c in reversed(cands) if _joinable_task(store, c['task_id'])), None) \
+              or _open_task(store, store.task_for_conversation(msg.get('conversation_id')))
+        if cur:
+            closed = (store.get_task(cur) or {}).get('Status') == 'done'
+            return ({'decision': 'attach', 'task_id': cur, 'score': 1.0, 'candidates': [], 'reopen': closed,
+                     'reason': f'unsure whether it continues {task_ref(cur)} - a one-to-one chat stays on its task unless the line is a new ask'
+                               + (' - it was closed, and reopens only on new work or a question to you' if closed else '')}, (intent, fail))
     why = ('a separate ask in the same chat' if rel == 'new' else
            'uncertain whether it continues an ask in this chat - not joined on a guess')
     return ({'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [], 'reason': why + apart}, (intent, fail))

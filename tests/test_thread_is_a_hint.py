@@ -105,5 +105,72 @@ class ChatRoomAsksOnce(unittest.TestCase):
         self.assertEqual(t['task_id'], first['task_id'])
 
 
+def wa(s, ext, body, llm, name='Ray Colton', num='15550100', at='2026-10-26 11:00:00', group=False):
+    room = f'whatsapp:{"120363001" if group else num}@{"g.us" if group else "s.whatsapp.net"}'
+    with mock.patch.object(ingest, '_spawn'):
+        return ingest.ingest_message(s, {'external_id': ext, 'channel': 'whatsapp', 'from_name': name, 'from_email': f'whatsapp:{num}',
+                                         'conversation_id': room, 'subject': None, 'body': body, 'sent_at': at,
+                                         **({} if group else {'mail_meta': {'dm': True}})}, llm=llm)
+
+
+class NameOnAnotherChannel(unittest.TestCase):
+    """The same person under a name on another channel is EVIDENCE for same_as (the owner, 2026-10-26: "the triage should decide if
+    it's about the same thing and same person"), never a join by itself."""
+    def setUp(self):
+        self.s = MemoryStore()
+        self.tid = mail(self.s, 'r', 'Alex, the ledger export for the Q3 close keeps timing out - can you look?',
+                        brain(title='Fix the ledger export timeout'), frm='ray@northwind.example', name='Ray Colton', conv='AAQk-ledger')['task_id']
+
+    def test_the_same_job_from_whatsapp_is_shown_with_both_names_and_same_as_joins(self):
+        seen = []
+        r = wa(self.s, 'w1', 'any luck with the ledger export timeout? close is tonight', brain(seen, relationship='new', same_as=self.tid))
+        user = seen[-1][1]
+        self.assertIn('a similar name on another channel - from: Ray Colton (WhatsApp', user)
+        self.assertIn("task's sender: Ray Colton <ray@northwind.example>", user)
+        self.assertIn('the same topic (', user, 'name and topic together')
+        self.assertEqual((r['status'], r['task_id']), ('routed', self.tid))
+
+    def test_the_same_name_on_another_job_is_shown_and_its_null_opens_a_task(self):
+        seen = []
+        r = wa(self.s, 'w2', 'can you book the room for Thursday offsite?', brain(seen, relationship='new', title='Book the offsite room'))
+        self.assertIn('a similar name on another channel', seen[-1][1])
+        self.assertEqual(r['status'], 'created'); self.assertNotEqual(r['task_id'], self.tid)
+
+    def test_an_unrelated_name_is_not_shown_by_name(self):
+        seen = []
+        wa(self.s, 'w3', 'can you book the room for Thursday offsite?', brain(seen, relationship='new'), name='Erin Blake', num='15550199')
+        self.assertNotIn('a similar name on another channel', seen[-1][1])
+
+    def test_name_likeness_reads_order_accents_and_initials_and_never_a_first_name_alone(self):
+        from taskuary.context import name_sim
+        for a in ('Colton, Ray', 'R. Colton', 'ray colton', 'Rây Coltón'): self.assertGreater(name_sim('Ray Colton', a), 0, a)
+        for a in ('Ray', 'Ray Smith', 'Erin Blake'): self.assertEqual(name_sim('Ray Colton', a), 0, a)
+
+
+class UnsureInOneToOne(unittest.TestCase):
+    """The owner, 2026-10-26: "yes on one" - join when unsure in one-to-one chats, new task when unsure in group chats."""
+    def setUp(self):
+        self.s = MemoryStore()
+        self.first = wa(self.s, 'd1', 'the portal login loops for me since this morning, can you check?',
+                        brain(relationship='new', title='Portal login loops'), name='Erin Blake', num='15550199', at='2026-10-26 09:00:00')
+
+    def test_an_unsure_line_in_a_one_to_one_chat_joins_its_task(self):
+        r = wa(self.s, 'd2', 'tried again just now', brain(relationship='uncertain'), name='Erin Blake', num='15550199', at='2026-10-26 09:20:00')
+        self.assertEqual(r['task_id'], self.first['task_id'])
+        self.assertIn('one-to-one chat', self.s.message_routes(r['message_id'])[-1]['Reason'])
+
+    def test_a_clearly_new_ask_in_a_one_to_one_chat_is_its_own_task(self):
+        r = wa(self.s, 'd3', 'different thing - can you renew my Trainly licence?', brain(relationship='new', title='Renew a Trainly licence'),
+               name='Erin Blake', num='15550199', at='2026-10-26 09:30:00')
+        self.assertEqual(r['status'], 'created'); self.assertNotEqual(r['task_id'], self.first['task_id'])
+
+    def test_an_unsure_line_in_a_group_is_still_its_own_task(self):
+        s = MemoryStore()
+        a = wa(s, 'g1', 'the portal login loops for me, can you check?', brain(relationship='new'), name='Erin Blake', num='15550199', group=True)
+        b = wa(s, 'g2', 'tried again just now', brain(relationship='uncertain'), name='Gail Moreno', num='15550177', group=True,
+               at='2026-10-26 11:20:00')
+        self.assertEqual(b['status'], 'created'); self.assertNotEqual(b['task_id'], a['task_id'])
+
+
 if __name__ == '__main__':
     unittest.main()

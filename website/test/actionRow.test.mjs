@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { press, put, rowNow, rowOf } from "../src/actionRow.js";
+import { leaveRow, press, put, rowNow, rowOf, rowTable } from "../src/actionRow.js";
 
 const v = (id, group, extra = {}) => ({ id, group, tone: "s", label: id, title: "", disabled: false, why: "", promote: true, lead: false, ...extra });
 const filled = (r) => [...r.decide, ...r.agent, r.next].filter((x) => x && x.tone === "p").map((x) => x.id);
@@ -369,4 +369,32 @@ test("a working agent's Stop and save is dark only when the strip says nothing; 
   assert.deepEqual(filled(rowOf({ ref: "", list })), ["save-end"], "nothing said: the row's own move");
   assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "next" })), ["next"], "'it says when it needs you': Next, and only Next");
   assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "ai" })), [], "'Connect an AI': its own chip is the move, nothing on the row");
+});
+
+// SWITCHING TASKS (the owner, 2026-10-26: "fix switching tasks thing of course"): the old task's Send stood on the row under the next task
+// until its card's cleanup ran. The row draws a card's verbs only while the table is its item, and none of the item a press is leaving
+test("the row draws only the table's own verbs: another item's go the moment the table moves, and a press that fails gives them back", () => {
+  const ran = [];
+  put("card:a", [{ id: "approve", group: "decide", label: "Send", run: () => ran.push("a") }], "TQ-0001", "task:1");
+  put("next:x", [{ id: "next", group: "next", label: "Next", run: () => {} }]);
+  const ids = () => rowNow().list.map((x) => x.id);
+  rowTable("task:1");
+  assert.deepEqual(ids(), ["approve", "next"]);
+  assert.equal(rowNow().list[0].at, "task:1", "a button says which item it was drawn for");
+  leaveRow("task:1");
+  assert.deepEqual(ids(), ["next"], "a press moving on: Next alone, nothing of the item it leaves");
+  leaveRow(null);
+  assert.deepEqual(ids(), ["approve", "next"], "the press failed: its buttons are back");
+  rowTable("task:2");
+  assert.deepEqual(ids(), ["next"], "the table moved: the old card, still mounted, draws nothing");
+  // ...and the new card's Send, registered before the old one let go of the same id, is the one drawn and the one a press runs
+  put("card:b", [{ id: "approve", group: "decide", label: "Send", run: () => ran.push("b") }], "TQ-0002", "task:2");
+  put("card:a", [{ id: "approve", group: "decide", label: "Send", run: () => ran.push("a") }], "TQ-0001", "task:1");
+  const send = rowNow().list.find((x) => x.id === "approve");
+  assert.equal(send.at, "task:2");
+  assert.equal(rowNow().ref, "TQ-0002");
+  press("approve", null, null, send.of);
+  assert.deepEqual(ran, ["b"], "the press acts on the task on the table, never the one put down");
+  for (const o of ["card:a", "card:b", "next:x"]) put(o, null);
+  rowTable(null);
 });

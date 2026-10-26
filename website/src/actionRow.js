@@ -2,7 +2,7 @@
 // one row above the chat line (ActionRow.jsx) draws them, in the same place for every item. A verb is the card's own handler,
 // unchanged: the row calls the LATEST one, so a press costs what the old button cost and nothing in the card re-renders for it.
 // Only a change in what the row SHOWS (a label, a disabled flag, a verb arriving or going) wakes the row; a fresh closure does not.
-import React, { useEffect, useId, useSyncExternalStore } from "react";
+import React, { createContext, useContext, useEffect, useId, useSyncExternalStore } from "react";
 import { label, liveVerb, verbOfRow } from "./buttons.js";
 
 // verb: { id, label, group: "decide" | "agent" | "more" | "next", tone: "p" | "s" | "q", title, disabled, why, run(event, anchorEl) }
@@ -10,21 +10,35 @@ import { label, liveVerb, verbOfRow } from "./buttons.js";
 //   `blank`: what an advised move does now that the text it acts on is gone (the draft box emptied) - said in place of the line judged over it
 const live = new Map();          // id -> the latest verb (its run closes over the freshest state)
 const ofs = new Map();           // id -> the card that registered it: the item a button drawn from it was drawn for (press)
-const owners = new Map();        // owner -> { verbs, ref }
+const owners = new Map();        // owner -> { verbs, ref, at }
 const subs = new Set();
-const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", ...(v.blank ? { blank: v.blank } : {}), promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.fill ? { fill: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}), ...(v.card ? { card: true } : {}) });
+const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", ...(v.blank ? { blank: v.blank } : {}), promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.fill ? { fill: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}), ...(v.card ? { card: true } : {}), ...(v.steady ? { steady: true } : {}) });
 let snap = { list: [], ref: "" }, sig = "";
 
-export function put(owner, verbs, ref = "") {
+export function put(owner, verbs, ref = "", at = null) {
   const old = owners.get(owner)?.verbs || [];
   old.forEach((v) => { if (live.get(v.id) === v) { live.delete(v.id); ofs.delete(v.id); } });   // not one a newer owner has since taken over
-  if (verbs?.length) { owners.set(owner, { verbs, ref }); verbs.forEach((v) => { live.set(v.id, v); ofs.set(v.id, owner); }); } else owners.delete(owner);
-  const all = [...owners.values()];
+  if (verbs?.length) { owners.set(owner, { verbs, ref, at }); verbs.forEach((v) => { live.set(v.id, v); ofs.set(v.id, owner); }); } else owners.delete(owner);
+  draw();
+}
+// THE ROW DRAWS ONLY THE TABLE'S OWN VERBS (the owner, 2026-10-26: "fix switching tasks thing of course"): a card's verbs went only when
+// its cleanup ran, so the row wore the old task's Send and Redraft after the switch had begun. A card's verbs carry the table key they
+// were registered for (`at`, TableVerbs), and the moment the table names another item they are not drawn - whether or not the old card
+// has unmounted yet. Verbs of no item (Next, the chat's chips, setup) are always drawn.
+// ...and from the PRESS that moves the table on (`leaving`, AssistantView.surface): the old item stays up the ~100 ms the pull takes,
+// and its Send under a ring already on the next row read as the next one's. A press that fails gives them back (leaveRow(null)).
+let table = null, leaving = null;
+export const rowTable = (key) => { if ((key || null) === table) return; table = key || null; draw(); };
+export const leaveRow = (key) => { if ((key || null) === leaving) return; leaving = key || null; draw(); };
+const shows = ({ at }) => !at || ((!table || at === table) && at !== leaving);
+function draw() {
+  const shown = [...owners].filter(([, o]) => shows(o));
   // one button per id: two mounted copies of a card (each its own owner, see useVerbs) carry the same verbs
   // ...and each drawn button says which card it was drawn for (`of`), so its press acts on that card or on nothing (press)
-  const seen = new Set(), list = [...owners].flatMap(([o, { verbs: vs }]) => vs.map((v) => [o, v]))
-    .filter(([, v]) => !seen.has(v.id) && seen.add(v.id)).map(([o, v]) => ({ ...view(v), of: ofs.get(v.id) || o }));
-  const next = { list, ref: all.map((o) => o.ref).find(Boolean) || "" }, s = JSON.stringify(next);
+  const seen = new Set(), mine = new Set(shown.map(([o]) => o)), list = shown.flatMap(([o, { verbs: vs, at }]) => vs.map((v) => [o, v, at]))
+    .filter(([, v]) => !seen.has(v.id) && seen.add(v.id))
+    .map(([o, v, at]) => ({ ...view(v), of: mine.has(ofs.get(v.id)) ? ofs.get(v.id) : o, ...(at ? { at } : {}) }));
+  const next = { list, ref: shown.map(([, o]) => o.ref).find(Boolean) || "" }, s = JSON.stringify(next);
   if (s === sig) return;
   sig = s; snap = next; subs.forEach((f) => f());
 }
@@ -46,9 +60,13 @@ export const announce = (id) => pressing.forEach((f) => { try { f(id); } catch {
 // to "done": the next task's. `of`, the card the drawn button came from (the row passes it): another card's verb under the same id is
 // not this press's. A press from the code itself (the Advisor's pick of a real button) names none and runs the verb there is.
 export const press = (id, e, anchor, of = null) => {
-  if (of && ofs.get(id) !== of) return undefined;
+  // ...the verb of THAT card: one put down a moment ago may still be mounted, registering the same id after it (rowTable) - and the
+  // code's own press runs the one the row draws, not the one put down
+  const by = of || snap.list.find((x) => x.id === id)?.of;
+  const v = by && ofs.get(id) !== by ? owners.get(by)?.verbs.find((x) => x.id === id) : live.get(id);
+  if (of && !v) return undefined;
   announce(id);
-  const out = live.get(id)?.run?.(e, anchor);
+  const out = v?.run?.(e, anchor);
   Promise.resolve(out).catch(() => {}).then(() => acted(id));
   return out;
 };
@@ -77,9 +95,11 @@ export function useHost(on) {
 // a card registers its verbs on every render (cheap: one stringify) and clears them when it goes; `ref` names the item they act on
 // Each mounted card registers as ITSELF: two copies under one name (a closed dialog and an open card, the opener and the chat)
 // cleared each other's verbs on every put, every put re-drew both, and React gave up (#185 - issue 263, the UI audit 2026-10-21)
+const AtTable = createContext(null);
+export const TableVerbs = AtTable.Provider;    // value: the table key of the item the cards inside it draw for (CanvasItem)
 export function useVerbs(owner, verbs, on = true, ref = "") {
-  const key = owner + useId();
-  useEffect(() => { put(key, on ? verbs : null, ref); });
+  const key = owner + useId(), at = useContext(AtTable);
+  useEffect(() => { put(key, on ? verbs : null, ref, at); });
   useEffect(() => () => put(key, null), [key]);
 }
 
@@ -208,7 +228,7 @@ export function rowOf({ list, ref }, pick = null) {
   const next = by("next")[0] || null;
   if (decide.length > ROOM) { more = [...decide.slice(ROOM), ...more]; decide = decide.slice(0, ROOM); }   // the row stays a short line of chips; the rest wait behind More
   // a greyed decision says why it is greyed - the advised one never is (advisedIn skips greyed verbs), so the card's own move speaks
-  return { ref, decide, agent, more, primary, lit: advised?.card ? advised.id : "", next: next && { ...next, tone: pick?.verb === "next" && !next.disabled ? "p" : "s" },
+  return { ref, decide, agent, more, primary, lit: advised?.card ? advised.id : "", next: next && { ...next, tone: pick?.verb === "next" && (!next.disabled || next.steady) ? "p" : "s" },
     why: head?.disabled && head.why ? `${head.label} is off - ${head.why}` : "" };
 }
 

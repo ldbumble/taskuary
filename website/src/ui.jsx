@@ -1980,6 +1980,8 @@ export const DraftField = ({ value, onChange, sx, inputProps, ...rest }) => {
     // this cut off" - a 60%-of-screen draft outgrew the column, the lit Send was scrolled up to, and "Result" rested half under the edge)
     const col = el.closest("[data-tq-work]");
     const fit = () => {
+      // ...64px under it: Send's row and its margins - at 56 Send stood 1-3px past the column's foot (1366, and 1440 once the silent
+      // strip gave the dock's 31px back, 2026-10-26), was scrolled to, and the column opened scrolled; four rows at least, so a short column keeps Send in view
       const room = col ? col.clientHeight - (el.getBoundingClientRect().top - col.getBoundingClientRect().top + col.scrollTop) - 64 : Infinity;
       setCap(Math.max(col ? 4 : 8, Math.floor(Math.min(window.innerHeight * 0.6, room) / line(el))));
     };

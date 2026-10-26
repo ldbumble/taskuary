@@ -102,7 +102,7 @@ function Cluster({ g, btn }) {
           <Menu open={!!at} anchorEl={at} onClose={() => setAt(null)} anchorOrigin={{ vertical: "top", horizontal: "center" }} transformOrigin={{ vertical: "bottom", horizontal: "center" }}
             slotProps={{ paper: { sx: { minWidth: 200, borderRadius: 2 } } }}>
             {g.rest.map((v) => (
-              <MenuItem key={v.id} dense disabled={v.disabled} title={(v.disabled && v.why) || v.title || undefined} data-tq-verb={v.id}
+              <MenuItem key={v.id} dense disabled={v.disabled} title={(v.disabled && v.why) || v.title || undefined} data-tq-verb={v.id} data-tq-for={v.at}
                 onClick={(e) => { const a = at; setAt(null); press(v.id, e, a, v.of); }} sx={{ fontSize: 13 }}>{v.label}</MenuItem>
             ))}
           </Menu></>}
@@ -155,7 +155,7 @@ export default function ActionRow({ inline = false, advised = null, hold = false
   // ONE NAME PER BUTTON (buttons.json, the owner, 2026-10-17): the bar says the same words the hover, the Advisor and the menu say -
   // a short bar word ("Snooze", "Stop") beside a long hover one was two names for one button
   const btn = (v) => (
-    <button key={v.id} type="button" className={`tq-ab ${v.tone}`} disabled={v.disabled} data-tq-verb={v.id} data-tq-own={v.own ? "" : undefined}
+    <button key={v.id} type="button" className={`tq-ab ${v.tone}`} disabled={v.disabled} data-tq-verb={v.id} data-tq-for={v.at} data-tq-own={v.own ? "" : undefined}
       title={(v.disabled && v.why) || v.title || (fit.tight ? v.label : undefined)} onClick={(e) => press(v.id, e, e.currentTarget, v.of)}>{v.label}</button>
   );
   return (
@@ -164,7 +164,7 @@ export default function ActionRow({ inline = false, advised = null, hold = false
       aria-busy={hold || undefined} style={hold ? { visibility: "hidden" } : undefined}>
       <div className={fit.tight ? "tq-arow-verbs tight" : "tq-arow-verbs"} ref={setBox} data-tq-fold={fit.level}>
         {next && <div className="tq-cl tq-cl-next" role="group" aria-label="Move on">
-          <div className="tq-cl-b"><button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} title={next.title || undefined} disabled={next.disabled}
+          <div className="tq-cl-b"><button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} data-tq-steady={next.steady ? "" : undefined} title={next.title || undefined} disabled={next.disabled}
             onClick={(e) => press(next.id, e, e.currentTarget, next.of)}>{next.label}</button></div></div>}
         {fit.groups.map((g) => <Cluster key={g.type} g={g} btn={btn} />)}
       </div>

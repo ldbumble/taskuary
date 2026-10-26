@@ -22,6 +22,19 @@ export const layoutOf = ({ sessionView = false }) => (sessionView ? "full" : "co
 export const focusOf = ({ live = false, result = false, failed = false, pane = "", waiting = false, list = false } = {}) =>
   live ? null : waiting ? "none" : result || failed ? "agent" : pane === "agent" ? (list ? "list" : "source") : "reply";
 
+// THE MAIN VIEW (the owner, 2026-10-26: "if task view is where the task opens to it should only open on that, and then right side arrow
+// should pull out the agent/close out screens. If up to agent or close out open those with coming from in left side draw"): the focus
+// says where the task is up to. A live agent, its Result or its failure, or Close out -> "work", Came from the left drawer; a to-do, a
+// goal's steps, an ask nothing has worked yet, a wait on a person -> "task", Agent and Close out the right drawer. `stacked`: a phone's
+// narrow body keeps its one stacked page (null).
+// ...and a reply with NOTHING DRAFTED yet opens on the task, its right tab lit (the owner, 2026-10-26: "you can open on task but highlight
+// the side bar so people know to go there"); `drafted` is anything of Close out's own - a draft, emails owed, a close, a write-up
+export const mainOf = ({ sessionView = false, stacked = false, focus = null, drafted = false } = {}) =>
+  sessionView ? "work" : stacked ? null : focus === "agent" || (focus === "reply" && drafted) || focus === null ? "work" : "task";
+// ...WHICH DRAWER HOLDS WHAT IS NEXT, so its tab is lit: the right one where the task is the page but the move is the reply (nothing
+// drafted yet) or an agent (an ask nothing has worked: "source"). A to-do's or a goal's list is itself the move; Came from is context only.
+export const nextInDrawer = ({ main = null, focus = null } = {}) => main === "task" && (focus === "reply" || focus === "source");
+
 // WHICH HALF OF THE WORK COLUMN IS OPEN. The page's focus (taskLifecycle.focusStage) still decides between the agent and the
 // reply; where it named the task itself - now the always-open From column - the work column opens on what the task is for: the
 // reply for a reply with somebody to answer, else the agent (its plan, its start, its record).
@@ -59,6 +72,13 @@ export const fromLine = ({ sender = null, count = 0, workflow = null, made = "" 
 // once, under the title, and From does not open the same words again as the message under it. Spacing and line breaks aside.
 const squash = (s) => String(s || "").replace(/\s+/g, " ").trim();
 export const sameWords = (a, b) => !!squash(a) && squash(a) === squash(b);
+// ...and THE ASK THAT IS THE TITLE is not said under it again (the owner, 2026-10-26, a playbook task on a laptop: "you can't see anything.
+// there are too many lines on top"): the same words, or a title cut from the ask's own start (a playbook's is its first 100 characters) -
+// whoever waits on it still gets the band, and the ask's whole words are the title's hover
+export const askIsTitle = (ask, title) => {
+  const a = squash(ask).toLowerCase(), t = squash(title).replace(/(…|\.\.\.)$/, "").trim().toLowerCase();
+  return !!a && (a === t || (t.length >= 24 && a.startsWith(t)) || (a.length >= 24 && t.endsWith(a)));
+};
 
 // WHO A TASK WAITS ON (the owner, 2026-10-25): a task handed to a person opens on them - "Waiting on Ray. Due Oct 23, 2 days late."
 // The name is the one their own mail on the task signs with, else the address read as a name, the way the server reads a step's

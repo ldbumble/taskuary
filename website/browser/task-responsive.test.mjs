@@ -36,8 +36,8 @@ test("task context, expanded messages and agent results fit short laptops and ph
       await page.evaluate((id) => { location.hash = `task=${id}`; }, id);
       await page.waitForSelector(`[data-tq-task-page="${id}"] [data-tq-task-head]`, { timeout: 20000 });
       if (name === "messages") {
-        // The phone's compact context opens before the older messages.
-        await page.evaluate(() => document.querySelector("[data-tq-from]")?.click());
+        // Came from's tab pulls its drawer out (the owner, 2026-10-26); the phone's compact context opens on a tap - before the older messages.
+        await page.evaluate(() => (document.querySelector("[data-tq-from-line]") || document.querySelector("[data-tq-from]"))?.click());
         await page.waitForSelector("[data-tq-show-older]", { timeout: 10000 });
         await page.evaluate(() => document.querySelector("[data-tq-show-older]").click());
         await page.waitForSelector("[data-tq-from] [data-tq-chat-thread]");
@@ -63,7 +63,7 @@ test("task context, expanded messages and agent results fit short laptops and ph
         return { pageOverflow: document.documentElement.scrollWidth - innerWidth, card: rect(card),
           from: from && rect(from), work: work && rect(work), rows, compose: compose && rect(compose),
           terminal: card.querySelector(".xterm-screen") && rect(card.querySelector(".xterm-screen")),
-          scrollable: from ? getComputedStyle(from).overflowY : null,
+          scrollable: from ? getComputedStyle(from).overflowY : null, drawer: !!from?.hasAttribute("data-tq-from-side"),
           // a scroller INSIDE the work column: the Result or a finished agent's chat shrunk into one of its own (TQ-1215)
           inner: work ? [...work.querySelectorAll("*")].filter((e) => visible(e) && /auto|scroll/.test(getComputedStyle(e).overflowY)
             && e.scrollHeight > e.clientHeight + 1 && !e.closest("textarea, .xterm")).length : 0 };
@@ -78,13 +78,14 @@ test("task context, expanded messages and agent results fit short laptops and ph
       if (metrics.compose) assert.ok(metrics.compose.h <= 48, say);
       if (name === "rest" || name === "result") assert.equal(metrics.inner, 0, `one scroller for the work: ${say}`);
       if (name === "agent") assert.ok(metrics.terminal?.h > 100 && metrics.terminal.right <= metrics.card.right, say);
-      if (metrics.from && metrics.work) {
-        const beside = metrics.work.x >= metrics.from.right;
-        assert.ok(beside || metrics.work.y >= metrics.from.bottom - 1, say);
-        if (beside) {
-          assert.ok(metrics.work.w > metrics.from.w && metrics.scrollable === "auto", say);
+      // Came from is a drawer laid over the work from the left, inside the card, scrolling on its own (the owner, 2026-10-26) - or, on a
+      // phone, the stacked page's top block
+      // ...or the page itself, the work shut in its right drawer (nothing drafted yet)
+      if (metrics.from && metrics.work?.w) {
+        if (metrics.drawer) {
+          assert.ok(metrics.from.x <= metrics.work.x + 1 && metrics.scrollable === "auto", say);
           assert.ok(metrics.from.bottom <= metrics.card.bottom + 1, say);
-        }
+        } else assert.ok(metrics.work.y >= metrics.from.bottom - 1, say);
       }
       if (shots) await page.screenshot({ path: `${shots}/${name}-${width}x${height}.png` });
       if (name === "messages" && metrics.scrollable === "auto") {

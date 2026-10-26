@@ -18,7 +18,7 @@ test("a stage heading wraps below sm and its bar takes the whole next line", () 
 // ...and From is a column now, three lines on a phone until a tap opens it (the redesign, owner-approved 2026-10-21)
 test("From shows three lines on a phone and opens on a tap; the bar wraps at the view's foot", () => {
   assert.match(src, /const PHONE_FROM = \(open\) => \(open \? \{\} : \{ \[`@media \$\{PHONE_MQ\}`\]: \{ maxHeight: 132, overflow: "hidden"/);
-  assert.match(src, /onClickCapture=\{wide \? undefined : phoneFromTap\}/);
+  assert.match(src, /onClickCapture=\{stacked \? phoneFromTap : undefined\}/);
   assert.match(src, /if \(fromOpen \|\| !window\.matchMedia\?\.\(PHONE_MQ\)\.matches\) return;\n\s+e\.preventDefault\(\); e\.stopPropagation\(\); setFromOpen\(true\);/);
   // ...one line, never wrapped (the owner, 2026-10-23): what does not fit folds into its ▾ (foldBar.js)
   assert.match(src, /\{!inRow && !sessionView && \(\s+<Box data-tq-task-bar="" ref=\{bar\.ref\}[^>]*flexWrap: "nowrap"/,"the bar it lost stays one line at the view's foot");

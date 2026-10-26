@@ -274,9 +274,43 @@ def sent_folder(M, strict=False) -> str:
     return next((lower[w.lower()] for w in SENT_NAMES if w.lower() in lower), '')
 
 
+_MSGID = re.compile(r'<[^<>\s]+>')
+
+
+def _ids(v) -> list:
+    """The message ids in one header. Split on whitespace, '<root>,<parent>' (commas, no space - some clients) and
+    "<id> (Dana's message of Monday)" each became one key no other mail shared; an id is what sits in angle brackets."""
+    s = str(v or '')
+    return _MSGID.findall(s) or s.split()[:1]
+
+
+def ancestry(msg) -> list:
+    """Every id this mail says it answers, root first: References, then In-Reply-To (some clients send only that)."""
+    return list(dict.fromkeys(_ids(msg.get('References')) + _ids(msg.get('In-Reply-To'))))
+
+
 def thread_key(msg):
-    """The thread a mail belongs to: the first of References, else In-Reply-To (some clients send only that), else its own id."""
-    return next(iter((msg.get('References') or msg.get('In-Reply-To') or msg.get('Message-ID') or '').split()), '')[:200] or None
+    """The thread a mail names from its own headers: the first of References, else In-Reply-To, else its own id.
+    What the poll files it under is conversation_key - the same, unless a mail already here says otherwise."""
+    return next(iter(ancestry(msg) + _ids(msg.get('Message-ID'))), '')[:200] or None
+
+
+def mail_ids(msg, gm_thread=None) -> dict:
+    """The ids kept on the stored row, so a later reply can find this mail's thread through it (store.meta_expr)."""
+    mid = next(iter(_ids(msg.get('Message-ID'))), '')[:200]
+    return {**({'mid': mid} if mid else {}), **({'gm_thread': str(gm_thread)} if gm_thread else {})}
+
+
+def conversation_key(store, msg, mailbox: str, gm_thread=None):
+    """ONE key for a thread's received and sent mail alike (TQ-1214, 2026-10-26: the owner's Gmail reply sat apart
+    from the mail it answered - "They should be combined into one task"). Graph hands every mail its conversationId;
+    over IMAP each mail named its thread from its own headers, and a reply whose In-Reply-To named the owner's answer
+    rather than the first mail started a thread of its own. So the thread a stored mail already files under wins:
+    Gmail's own thread id (X-GM-THRID, the same in INBOX and Sent), else any id this mail answers or is that is
+    already here. Only a thread new to this install takes the header root - which is also every key stored before
+    this, so a thread already running keeps the key it has."""
+    return (store.conversation_of_mail(ancestry(msg) + _ids(msg.get('Message-ID')), gm_thread, mailbox)
+            or thread_key(msg))
 
 
 def sent_window(c, days: int, cap: int = 300, progress=None) -> list:
@@ -391,9 +425,17 @@ def protocol_marks(msg, me=(), tz=None) -> dict:
     return out
 
 
+def _gmail(M) -> bool:
+    """Gmail says so in its CAPABILITY line (X-GM-EXT-1); only then is X-GM-THRID worth asking for."""
+    caps = getattr(M, 'capabilities', None)
+    return isinstance(caps, (tuple, list, set, frozenset)) and 'X-GM-EXT-1' in caps
+
+
 def _fetch_message(M, uid: int):
-    """Fetch and decode one message, distinguishing a retryable UID hole from local persistence."""
-    typ, parts = M.uid('fetch', str(uid), '(RFC822)')
+    """Fetch and decode one message, distinguishing a retryable UID hole from local persistence.
+    Returns (msg, body, attachments, Gmail's thread id or None) - the id rides the same FETCH, never a second trip."""
+    gm = _gmail(M)
+    typ, parts = M.uid('fetch', str(uid), '(X-GM-THRID RFC822)' if gm else '(RFC822)')
     if typ != 'OK' or not parts or parts[0] is None:
         raise _UIDFetchFailure(f'uid {uid} FETCH returned {typ}')
     try:
@@ -402,7 +444,10 @@ def _fetch_message(M, uid: int):
             raise ValueError('missing RFC822 bytes')
         msg = email.message_from_bytes(bytes(part[1]))
         body, atts = _body_and_attachments(msg)
-        return msg, body, atts
+        # the id sits in the response line before the literal, or in the closing piece after it
+        heads = b' '.join(bytes(p[0] if isinstance(p, (tuple, list)) else p) for p in parts if isinstance(p, (tuple, list, bytes, bytearray)))
+        thrid = (m := re.search(rb'X-GM-THRID (\d+)', heads)) and m.group(1).decode() if gm else None
+        return msg, body, atts, thrid or None
     except Exception as e:
         raise _UIDFetchFailure(f'uid {uid} could not be decoded: {e}') from e
 
@@ -596,7 +641,7 @@ def poll_sent(store, M, user: str, last_uid: int, days: int, state: dict = None)
         last_uid = 0
         selected_uids = _uids(M, last_uid, days)
     def read(uid) -> int:
-        msg, body, _atts = _fetch_message(M, uid)
+        msg, body, _atts, thrid = _fetch_message(M, uid)
         try: when = email.utils.parsedate_to_datetime(msg.get('Date')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
         except Exception: when = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         return ingest_own_message(store, {
@@ -605,7 +650,7 @@ def poll_sent(store, M, user: str, last_uid: int, days: int, state: dict = None)
             'channel': 'email', 'source_name': user,
             'subject': _dec(msg.get('Subject')), 'body': body[:20000], 'from_email': user, 'sent_at': when,
             # the SAME thread key the inbound side derives, or the reply lands on nothing
-            'conversation_id': thread_key(msg)},
+            'conversation_id': conversation_key(store, msg, user, thrid), 'mail_meta': mail_ids(msg, thrid)},
             'your reply on this thread - kept for context')
     def progress(uid, holes):
         state['uid'], state['holes'] = uid, set(holes)
@@ -714,7 +759,7 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
                               max(backfill_days, 1))
             return prepare(True, box, validity, sent_uids)
         def read(uid) -> int:
-            msg, body, atts = _fetch_message(M, uid)
+            msg, body, atts, thrid = _fetch_message(M, uid)
             try:
                 frm_name, frm_addr = email.utils.parseaddr(_dec(msg.get('From')))
                 if frm_addr.lower() == user.lower(): return 0       # my own mail is not inbound work
@@ -732,9 +777,12 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
                     'sent_at': sent_at, 'source_name': user}
                 from .calendar import tz_of
                 incoming.update(protocol_marks(msg, me=(user,), tz=tz_of(store)))
+                incoming['mail_meta'] = {**(incoming.get('mail_meta') or {}), **mail_ids(msg, thrid)}
             except Exception as e:
                 raise _UIDFetchFailure(f'uid {uid} headers could not be decoded: {e}') from e
-            conv = incoming['conversation_id']
+            # ...and the thread a mail already here files under wins over the header root. Outside the decode guard:
+            # a store that fails here must abort and replay the mail, never leave it a hole
+            conv = incoming['conversation_id'] = conversation_key(store, msg, user, thrid)
             from . import chains
             fresh_thread = bool(conv) and chains.needs_history(store, conv, user)
             incoming['images'] = images_for_triage(store, atts)

@@ -134,6 +134,7 @@ the text reaches any AI provider. The stored message keeps it, because it is you
 | Taskuary's own tools (search your saved mail and chats, read a message or attachment, tasks, people, the knowledge base, your calendar) | They read. Claude and Codex sessions get them as the `taskuary` MCP server. |
 | A reply, an email, a GitHub comment, a post | The agent proposes it. It waits on the task with a Send or Approve button. |
 | A connection that sends, posts, pays or places an order (LinkedIn, Bluesky, Mastodon, Robinhood, treg, an MCP tool its server does not mark read-only, a GraphQL mutation) | It waits as a proposal at any permission level, even full. Your press runs it. |
+| A comment, a status move, an assignment or a close on Jira, Monday.com or Linear | It waits as a proposal at any permission level, even full. Your press runs it. A task's close-out ("comment and move to done") is Taskuary's own proposal, and no agent can raise it. |
 | A file saved to SharePoint or OneDrive | It runs when the connection allows writing, and the agent says where the file went. |
 | Your own MCP servers in Claude and Codex | The agent keeps them, except the tools that send mail, chat or comments. A tool its server marks read-only stays. A model judges each of the others, and a tool nobody has judged yet stays out. Your claude.ai connectors are read once from a short Claude start and judged the same way. **Settings > Agent permissions** lists every tool left out, with why, and a Keep switch. |
 

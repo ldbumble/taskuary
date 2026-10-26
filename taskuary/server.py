@@ -4095,6 +4095,9 @@ def closeout_state(rid: int):
     rv = store.get_review(rid)
     if not rv or rv.get('Kind') != 'action' or proposals._action(rv) not in proposals.CLOSEOUT: raise HTTPException(404, 'no close-out here')
     p = json.loads(rv.get('DraftText') or '{}')
+    if p.get('action') == 'close_item':                  # a tracker item: where it stands now, and whether a move to done is there to make
+        from . import trackers
+        return trackers.assess(store, p)
     if p.get('action') != 'merge_pr': return {'state': 'open', 'ok': True, 'reason': '', 'note': '', 'offers': []}
     try: seen = ghcloseout.assess(store, p['repo'], int(p['number']))
     # FAIL CLOSED: an unreadable GitHub was drawn as a live Close out, and a token that could not see the repo merged into a 404

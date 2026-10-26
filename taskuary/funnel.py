@@ -1125,11 +1125,33 @@ def order_key(item) -> tuple:
     first. ONE key for the rail, desktop Next and phone Next (funnel_selection.below)."""
     level, at = level_of(item), arrived(item)
     t = (at - datetime.min).total_seconds() if at else 0.0
-    # ...a TIE in the same second goes to the task number before the key: a goal and the steps made with it arrive together, and their
-    # keys are hashes - a step stood above its goal, in an order nothing about them chose. The goal is made first, then its steps.
-    try: n = int(item.get('tid'))
-    except (TypeError, ValueError): n = None
-    return (_LEVEL_RANK.get(level, len(_LEVEL_RANK)), not todays_brief(item), at is None, t, n is None, n or 0, str(item.get('key') or ''))
+    return (_LEVEL_RANK.get(level, len(_LEVEL_RANK)), not todays_brief(item), at is None, t, *place_id(item))
+
+
+def _num(x):
+    if isinstance(x, bool) or (isinstance(x, float) and not x.is_integer()): return None
+    try: return int(x)
+    except (TypeError, ValueError): return None
+
+
+def place_id(item) -> tuple:
+    """A TIE IN THE SAME SECOND, settled by ids that never change: the task number, then the row's first message, and only then its key.
+    A goal and the steps made with it arrive together (the goal is made first); two dashboards filed by one run land in the same second
+    (the first filed first); rows of one task (its agent's, its draft's) keep their key between them. The key alone is a hash -
+    `processing:pi_<hex>` - and the page, placing a row it put back by arrival alone (funnelPile.placeOrder), disagreed with it: the two swapped, drawn over each other, while the rail moved (the dead-end walk's SWAP;
+    2026-10-25). ONE rule, mirrored line for line by funnelPile.placeId."""
+    tid = _num(item.get('tid'))
+    mids = [n for m in item.get('member_ids') or () if str(m).startswith('message:') for n in [_num(str(m)[8:])] if n is not None]
+    mid = None if tid is not None else min(mids) if mids else _num(item.get('mid'))
+    # ...and a row with neither - an idea, a review, a run filed on its own - by its first member, kind then number, before the hash
+    # (the release walk's sweep, 2026-10-25: two such rows of one second still drawn over each other)
+    return (tid is None, tid or 0, mid is None, mid or 0, '' if tid is not None or mid is not None else first_member(item), str(item.get('key') or ''))
+
+
+def first_member(item) -> str:
+    """The smallest of a row's own members as `kind:000000000012` - zero-padded so the text sorts as the number does, on the page too."""
+    ids = [f"{k}:{n:012d}" for m in item.get('member_ids') or () for k, _, v in [str(m).partition(':')] for n in [_num(v)] if n is not None and n >= 0]
+    return min(ids, default='')
 
 
 def _order(items: list) -> list:

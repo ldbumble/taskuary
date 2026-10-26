@@ -8,9 +8,12 @@ landed where it did.
 
 Two halves, one job: what needs you, one thing at a time.
 
-**The pipe** (left) is everything that could need you, ranked — not the order it arrived in. New
-things fall in at the top and slide to their slot; the bottom of the funnel is what comes out next.
-The lanes, in the order a sharp assistant would raise them:
+**The rail** (left) is everything that could need you, in three sections: Tasks, then Reports, then
+FYI. Inside a section rows sit in the order they arrived, oldest at the top, and they never move — not
+for being on the table, an agent starting or finishing, or a reply. **Next** takes the row directly
+below the one on the table, down Tasks, then Reports, then FYI; it never jumps back up. An urgent or
+important row stays in its place and says so with the colour of its dot. Each row's lane says why it
+is there:
 
 | lane | what it means |
 |---|---|
@@ -21,9 +24,9 @@ The lanes, in the order a sharp assistant would raise them:
 | **slipped** | the ask that went unanswered, the promise you made, the thread gone quiet |
 | **landed** | a report you set up arrived; an agent finished a job |
 | **fyi** | a person told you something — read it or don't |
-| **agent working** | in hand: nothing for you until it stops or asks. It rides above the funnel |
+| **agent working** | in hand: nothing for you until it stops or asks |
 
-The pipe is **unread**, the way an inbox is: showing something in the chat is reading it, and read is
+The rail is **unread**, the way an inbox is: showing something in the chat is reading it, and read is
 gone. What is still on you comes back on its own — a draft you skipped, an agent still parked, a
 follow-up nobody chased. Two knobs bound it (Settings → Assistant): how far back it reaches, and how
 much it holds at once. A task's number shows small on its row, and a row that stands for several
@@ -56,8 +59,8 @@ Deterministic first, always. A document only decides *what a message is*; every 
 verdict-on-thread and pipe rule runs outside the model — before it and after it.
 
 1. **Seen before?** A message with an id we already hold is dropped here.
-2. **The connector's own switch.** A source set to *feed* lands on the Timeline and nothing else
-   happens: no triage, no AI call, no task. GitHub's "use as tracker" and "may reply" are the same
+2. **The connector's own switch.** A source set to *feed* is kept for information and nothing
+   else happens: no triage, no AI call, no task. GitHub's "use as tracker" and "may reply" are the same
    class of switch, and they win over everything below.
 3. **Your policies** (Settings → Policies). Skip, ignore, escalate or draft, matched on a keyword, a
    sender, a domain, a no-reply address, or a first-time sender. Before any model runs.
@@ -76,7 +79,7 @@ verdict-on-thread and pipe rule runs outside the model — before it and after i
 7. **Gates on the answer.** A stranger's first mail never auto-starts an agent. A reply always enters
    Review. A thread already belonging to a task joins *that* task — never a third one that merely
    looks similar; if its task has closed, the reply is new work.
-8. **The pipe.** Marketing, filed items and your own sent mail never enter. Your window and cap bound
+8. **The rail.** Marketing, filed items and your own sent mail never enter. Your window and cap bound
    it. Your **standing rules** ("stop showing me the Northwind financial reports from Paula") hold a whole
    family back — quiet lanes only, so anything that actually asks you something still reaches you.
 
@@ -84,13 +87,12 @@ verdict-on-thread and pipe rule runs outside the model — before it and after i
 
 Four homes, and the difference matters:
 
-- **A setting or a connector switch** — deterministic, wins over everything. *"Turn PRs into Timeline
-  items, not tasks."* Ask in the chat and Taskuary puts the switch in front of you to approve; it
+- **A setting or a connector switch** — deterministic, wins over everything. *"Keep PRs for information,
+  not as tasks."* Ask in the chat and Taskuary puts the switch in front of you to approve; it
   never changes one itself, and only routing and visibility switches can be proposed at all.
 - **A policy** — deterministic, per sender/keyword/domain: skip, ignore, escalate. Settings → Policies.
 - **A standing rule** — deterministic, applied to the pipe: a sender plus the words that name the
-  family. Written when you sweep with a reason, or when you say it in advance. Nothing is deleted;
-  everything stays on the Timeline.
+  family. Written when you sweep with a reason, or when you say it in advance. Nothing is deleted.
 - **A memory note** — *evidence*, shown to triage, which judges how alike the next message really is.
   This is the one that argues rather than filters: it is how "resident refunds are not ours" teaches
   the classifier without hiding the one refund thread that does ask you something.

@@ -22,7 +22,7 @@ def test_a_note_and_a_setup_task_are_the_owner_s():
     assert server.store.get_task(t)['OriginBase'] == 'owner'
 
 def test_trust_this_task_is_the_owner_s_and_refused_to_an_agent():
-    tid = _stranger_task()
+    tid = _stranger_task(frm='vouched@vendor.example')          # Trust them remembers the address since 2026-10-26: its own sender
     assert origin.of_task(server.store, tid)[0] == 'stranger'
     assert c.post(f'/api/tasks/{tid}/trust', headers=agent()).status_code == 403
     assert c.post(f'/api/tasks/{tid}/trust').json()['origin'] == 'trusted'

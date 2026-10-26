@@ -8,7 +8,7 @@ import ContinueBox from "./ContinueBox.jsx";
 import { usePromptImages, withImages } from "./promptImages.jsx";
 import { ASK_WHAT, RunForm } from "./RunForm.jsx";
 import QueuedStart from "./QueuedStart.jsx";
-import { strangerLine } from "./strangerLine.js";
+import { strangerLine, trustInBox } from "./strangerLine.js";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { canSend, cannotStart, draftCanSend, useCapabilities } from "./capabilities.js";
 import {
@@ -1217,6 +1217,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const storyAt = storyPlace(news ? null : story, { open: pane === "agent" && !sessionView, hasRecord });
   // the Agent work row with nothing in it: no agent at work, none ran, no story to tell, and not the open half
   const agentEmpty = !term?.alive && !wide && pane !== "agent" && !hasRecord && !["line", "story", "summary"].includes(storyAt);
+  // A HELD STEP CARRIES ITS TRUST PRESSES (the owner, 2026-10-26: "we should have button on untrusted user to either trust user or trust
+  // domain and then we won't have issue again"): the box that says why nothing started holds them, and Came from then shows none.
+  // A press lifts the hold - the box says so and the normal Start is offered; nothing starts by itself
+  const trustBoxed = trustInBox(story) && ["line", "story"].includes(storyAt);
+  const trustPress = async (scope) => {
+    const word = scope === "org" ? strangerLine(detail)?.trustOrg : strangerLine(detail)?.trust;
+    try { await runOperation(api, "task.trust", selected, scope ? { scope } : undefined); loadDetail(selected); loadTasks(); onChanged?.(); }
+    catch (e) { setErr(`That didn't go through - ${opError(e, "Taskuary didn't answer")}.${word ? ` Press ${word} again.` : ""}`); }
+  };
   // the one white section on the shaded body (taskLayout.focusOf); a live session has no shade and no focus - it is the page
   const focus = focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, pane, waiting: !!waitFor,
     list: !!(detail?.batch || t?.DoneWhen || (!t?.DoneWhen && todo.length)) });
@@ -1952,27 +1961,21 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {detail?.repeats?.line && <Typography variant="body2" sx={{ color: DIM, mt: 0.4, fontSize: 12.5, overflowWrap: "anywhere" }}>{detail.repeats.line}</Typography>}
                         {/* WHOSE WORDS: a stranger's task runs in its CLI's auto mode (origin.py) - said once, quietly, with the reason on
                             hover and the one owner action that changes it, a link. Nothing for the owner's or trusted work. */}
+                        {/* ...its presses only where the Agent work box is not already carrying them (trustInBox): one place, one wording */}
                         {strangerLine(detail) && (
                           <Typography variant="body2" sx={{ color: DIM, mt: 0.4, fontSize: 12.5 }}>
                             <Tooltip title={strangerLine(detail).why}><span>{strangerLine(detail).text}</span></Tooltip>
-                            {" · "}
-                            <Link component="button" underline="hover" sx={{ fontSize: 12.5, verticalAlign: "baseline" }}
-                              onClick={async () => {
-                                try { await runOperation(api, "task.trust", selected); loadDetail(selected); loadTasks(); onChanged?.(); }
-                                catch (e) { setErr(`That didn't go through - ${opError(e, "Taskuary didn't answer")}. Press ${strangerLine(detail).trust} again.`); }
-                              }}>
+                            {!trustBoxed && <>{" · "}
+                            <Link component="button" underline="hover" sx={{ fontSize: 12.5, verticalAlign: "baseline" }} onClick={() => trustPress("")}>
                               {strangerLine(detail).trust}
                             </Link>
                             {/* ...or their whole organisation (the owner, 2026-10-22: "hit trust domain and then all users from that domain are
-                                good"): everyone at that domain, by mail or Teams, from now on (senders.trust_org) */}
+                                good"): everyone at that domain, Teams organisation or Slack workspace, from now on (senders.trust_org) */}
                             {strangerLine(detail).trustOrg && <>{" · "}
                             <Link component="button" underline="hover" data-tq-trust-org="" sx={{ fontSize: 12.5, verticalAlign: "baseline" }}
-                              onClick={async () => {
-                                try { await runOperation(api, "task.trust", selected, { scope: "org" }); loadDetail(selected); loadTasks(); onChanged?.(); }
-                                catch (e) { setErr(`That didn't go through - ${opError(e, "Taskuary didn't answer")}.`); }
-                              }}>
+                              onClick={() => trustPress("org")}>
                               {strangerLine(detail).trustOrg}
-                            </Link></>}
+                            </Link></>}</>}
                           </Typography>
                         )}
                         {/* ...and what its words read as trying to make an agent do: one line, before anyone presses Start */}
@@ -2117,7 +2120,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       : null} />
                   </Box>
                   {/* folded with no record, the step says its one sentence; open with none, the story is the whole account (storyPlace) */}
-                  {(storyAt === "line" || storyAt === "story") && <AgentStory story={story} compact={storyAt === "line"} />}
+                  {(storyAt === "line" || storyAt === "story") && <AgentStory story={story} compact={storyAt === "line"} onTrust={trustPress} />}
                   {/* ...folded over a record, its sentence and what happened - the draft it wrote opens below it (2026-09-22) */}
                   {storyAt === "summary" && <AgentRecord {...recordProps} story={story} folded />}
                   {storyAt === "summary" && co.writeupAt === "result" && <WriteupLine view={writeup} />}

@@ -38,42 +38,80 @@ def own_domains(store) -> set:
 
 def trusted_orgs(store) -> list:
     """The organisations the owner said are theirs (Trust their organisation, 2026-10-22: "hit trust domain and then all users from
-    that domain are good"): [{'domain', 'tenant'}] - a mail domain, and the Teams organisation it was learned with."""
+    that domain are good"): [{'domain', 'tenant'}] - a mail domain, and the Teams organisation it was learned with - or
+    [{'team', 'name'}], a Slack workspace (Slack has no domains, 2026-10-26)."""
     try: v = json.loads(store.get_setting('trusted_orgs') or '[]')
     except (TypeError, ValueError): return []
     return [o for o in v if isinstance(o, dict)] if isinstance(v, list) else []
 
 
-def org_of(store, domain: str = '', tenant: str = '') -> dict | None:
-    "The trusted organisation this domain or Teams tenant is, or None. A public mail domain is never one."
-    d, t = (domain or '').lower(), (tenant or '').lower()
-    if d in PUBLIC_MAIL: d = ''
-    return next((o for o in trusted_orgs(store) if (d and o.get('domain') == d) or (t and o.get('tenant') == t)), None)
+_ORG_KEYS = ('domain', 'tenant', 'team')
+
+def org_of(store, domain: str = '', tenant: str = '', team: str = '') -> dict | None:
+    "The trusted organisation this domain, Teams tenant or Slack workspace is, or None. A public mail domain is never one."
+    want = {'domain': (domain or '').lower(), 'tenant': (tenant or '').lower(), 'team': team or ''}
+    if want['domain'] in PUBLIC_MAIL: want['domain'] = ''
+    return next((o for o in trusted_orgs(store) if any(v and o.get(k) == v for k, v in want.items())), None)
 
 
-def trust_org(store, tid: int, actor: str) -> dict:
-    """The owner's word that the task's opener's whole organisation is theirs: its mail domain (and, from Teams, its tenant) joins
-    trusted_orgs, and the task is vouched for. Raises ValueError when there is no organisation to name (a public mail domain, a
-    sender nobody can place)."""
+def _opener(store, tid: int) -> dict | None:
+    "The task's first line that is not ours - whose organisation Trust their organisation names (ingest.from_opener's reading)."
     from .ingest import is_ours
-    from . import origin
-    m = next((m for m in store.list_messages(tid) if not is_ours(m)), None)
-    if not m: raise ValueError('nobody else wrote on this task')
-    addr, tenant = str(m.get('FromEmail') or '').lower(), str(_chat_meta(m).get('tenant') or '')
-    if (m.get('Channel') or '').lower() == 'teams' and (not tenant or '@' not in addr):
+    return next((m for m in store.list_messages(tid) if not is_ours(m)), None)
+
+
+def sender_org(store, m: dict) -> dict:
+    """Which organisation a stored line's sender is in, as far as can be told: {'domain', 'tenant'} by mail or Teams, {'team', 'name'}
+    on Slack; {} when there is none to name - a public mail domain, a chat with no organisations (WhatsApp, Telegram...), or a
+    Slack line recorded before its workspace was (2026-10-26): that one is judged per person, as it always was - no guessing."""
+    from .ingest import CHAT_CHANNELS
+    ch, meta = (m.get('Channel') or '').lower(), _chat_meta(m)
+    if ch == 'slack': return {k: v for k, v in (('team', str(meta.get('team') or '')), ('name', str(meta.get('team_name') or ''))) if v} if meta.get('team') else {}
+    if ch in CHAT_CHANNELS and ch != 'teams': return {}
+    addr, tenant = str(m.get('FromEmail') or '').lower(), str(meta.get('tenant') or '')
+    if ch == 'teams' and (not tenant or '@' not in addr):
         from .channels import teams_member
         got = teams_member(store, m.get('SourceName') or '', m.get('ConversationId') or '', addr)
         tenant, addr = tenant or got.get('tenant', ''), addr if '@' in addr else got.get('email', '')
     d = _domain(addr)
-    if d in PUBLIC_MAIL: raise ValueError(f'{d} is a public mail service, so it cannot be trusted as one organisation - use Trust them')
-    if not d and not tenant: raise ValueError("Taskuary can't tell which organisation they are from - use Trust them")
+    return {k: v for k, v in (('domain', '' if d in PUBLIC_MAIL else d), ('tenant', tenant)) if v}
+
+
+def trust_org(store, tid: int, actor: str) -> dict:
+    """The owner's word that the task's opener's whole organisation is theirs: its mail domain (and, from Teams, its tenant) - or its
+    Slack workspace - joins trusted_orgs, and the task is vouched for. Raises ValueError when there is no organisation to name (a
+    public mail domain, a sender nobody can place)."""
+    from . import origin
+    m = _opener(store, tid)
+    if not m: raise ValueError('nobody else wrote on this task')
+    if not (o := sender_org(store, m)):
+        d = _domain(m.get('FromEmail'))
+        raise ValueError(f'{d} is a public mail service, so it cannot be trusted as one organisation - use Trust them' if d in PUBLIC_MAIL
+                         else "Taskuary can't tell which organisation they are from - use Trust them")
     orgs = trusted_orgs(store)
-    hit = next((o for o in orgs if (d and o.get('domain') == d) or (tenant and o.get('tenant') == tenant)), None)
-    if hit: hit.update({k: v for k, v in (('domain', d), ('tenant', tenant)) if v and not hit.get(k)})
-    else: orgs.append({k: v for k, v in (('domain', d), ('tenant', tenant)) if v})
+    hit = next((x for x in orgs if any(o.get(k) and x.get(k) == o[k] for k in _ORG_KEYS)), None)
+    if hit: hit.update({k: v for k, v in o.items() if v and not hit.get(k)})
+    else: orgs.append(o)
     store.set_setting('trusted_orgs', json.dumps(orgs), actor)
     origin.raise_to(store, tid, 'trusted', actor)
-    return {'domain': d, 'tenant': tenant}
+    return {'domain': o.get('domain', ''), 'tenant': o.get('tenant', ''), **{k: o[k] for k in ('team', 'name') if o.get(k)}}
+
+
+def trust_offer(store, tid: int) -> dict | None:
+    """The two presses that lift a stranger's hold, worded for the channel (the owner, 2026-10-26: "we should have button on untrusted
+    user to either trust user or trust domain and then we won't have issue again"): {'person': 'Trust Erin', 'org': 'Trust everyone at
+    vendor.example' | 'Trust <workspace>' | None} - no organisation button where there is none to name, rather than one that fails."""
+    m = _opener(store, tid)
+    if not m: return None
+    meta, ch = _chat_meta(m), (m.get('Channel') or '').lower()
+    # a Slack line's name is a user id (U0...): its profile's real name when the poller recorded one, else "them"
+    words = str(meta.get('name') or ('' if ch == 'slack' else m.get('FromName')) or '').split()
+    first = words[0] if words and '@' not in words[0] else ''
+    # a From that failed verification may be forged: vouching for the person is the owner's call, a whole organisation never rides on it
+    o = {} if auth(m) == 'fail' else sender_org(store, m)
+    org = (f"Trust {o['name']}" if o.get('name') else 'Trust their Slack workspace') if o.get('team') else \
+          f"Trust everyone at {o['domain']}" if o.get('domain') else 'Trust their organisation on Teams' if o.get('tenant') else None
+    return {'person': f'Trust {first}' if first else 'Trust them', 'org': org}
 
 
 def own_addresses(store) -> set:
@@ -153,7 +191,7 @@ def known(store, msg: dict, exclude_mid=None, deep: bool = False) -> tuple:
         return False, _said(f'{who} is new here, and checking your Sent Items for people you know is switched off in Settings, {NOBODY}.', True)
     mailbox = (msg.get('source_name') or '').strip().lower()
     sent = _said(f'You have written to {addr} before - it is in your Sent Items.')
-    if store.trusted_sender(mailbox, addr): return True, sent
+    if (r := store.trusted_sender(mailbox, addr)): return True, sent if r == 'in your Sent Items' else _said(f'You vouched for {who}.')
     if store.wrote_to_locally(mailbox, addr, exclude_mid): return True, _said(f'You have written to {addr} before.')
     if deep:
         try: hit = wrote_to(store, mailbox, addr)
@@ -202,6 +240,18 @@ def _teams_org(store, msg: dict, who: str, vouched: list) -> bool:
     return 'internal' not in meta and bool(teams_org(store, acct, who))
 
 
+def _slack_own(store, msg: dict, team: str) -> bool:
+    """Is this Slack workspace the owner's own? The poller's word at ingest ('internal'), else - it could not ask auth.test then -
+    any Slack connection's own workspace as kept since (channels.slack_own_team)."""
+    meta = _chat_meta(msg)
+    if 'internal' in meta: return bool(meta['internal'])
+    for c in store.connectors_by_type('slack') or []:
+        try: own = json.loads(c.get('ConfigJson') or '{}').get('team_id')
+        except (TypeError, ValueError): own = None
+        if own and own == team: return True
+    return False
+
+
 ORG_TRUST = 'at an organisation you trust'
 
 def _teams_trusted_org(store, msg: dict, who: str, vouched: list) -> dict | None:
@@ -236,6 +286,12 @@ def _chat_known(store, msg: dict, ch: str, exclude_mid, on: bool) -> tuple:
     if ch == 'teams' and _teams_org(store, msg, who, vouched): return True, _said(f'{name} is in your own organisation on Teams.')
     if ch == 'teams' and (o := _teams_trusted_org(store, msg, who, vouched)):
         return True, _said(f"{name} is at {o.get('domain') or 'an organisation'} you trust.")
+    # SLACK HAS NO DOMAINS (the owner chose, 2026-10-26): a member of the owner's own workspace is known like Teams' own organisation;
+    # a guest or a Slack Connect sender from another company (another user_team) is judged per person, and Trust their organisation
+    # names their workspace. A line recorded before the workspace was (no 'team') is judged per person, as it always was.
+    if ch == 'slack' and (team := str(_chat_meta(msg).get('team') or '')):
+        if _slack_own(store, msg, team): return True, _said(f'{name} is in your own Slack workspace.')
+        if (o := org_of(store, team=team)): return True, _said(f"{name} is in {o.get('name') or 'a Slack workspace'}, a workspace you trust.")
     if vouched: return True, _said(f'You vouched for {name}.')
     how = store.talked_with(ch, who, exclude_mid, alias)
     # A TEAMS SENDER'S HISTORY BEFORE THEIR ID (2026-10-26, the owner: "we have talked to this person a million times"): until
@@ -258,6 +314,10 @@ def vouch(store, rows) -> None:
     m = next((m for m in rows if not is_ours(m)), None)
     ch = ((m or {}).get('Channel') or '').lower()
     if ch in CHAT_CHANNELS and (who := chat_key(m)): store.remember_trust(ch, who, 'you vouched for them')
+    # ...and a mail sender too, per mailbox like the Sent Items hit: their next mail is no stranger's either ("then we won't have issue
+    # again", 2026-10-26). A From that failed verification may be forged - the task is vouched for, the address is not remembered.
+    elif ch == 'email' and '@' in (addr := str(m.get('FromEmail') or '')) and auth(m) != 'fail':
+        store.remember_trust(m.get('SourceName') or '', addr, 'you vouched for them')
 
 
 def wrote_to(store, mailbox: str, addr: str) -> bool:

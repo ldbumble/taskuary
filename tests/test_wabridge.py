@@ -9,6 +9,9 @@ from taskuary.store import MemoryStore
 c_api = TestClient(server.app)
 
 
+NODE = ('node.exe', '"C:\\Program Files\\nodejs\\node.exe" bridge.mjs')     # what Windows says a bridge is
+
+
 class BridgeManagerTests(unittest.TestCase):
     def setUp(self):
         wabridge._STATE.update(phase='idle', detail='', pid=None, at=0.0)
@@ -19,7 +22,8 @@ class BridgeManagerTests(unittest.TestCase):
         """The owner's bridge predated the code that reports the paired number; only a restart picks the
         new code up, and the manager never started that process - so it finds it by the port."""
         netstat = 'Active Connections\n\n  Proto  Local Address          Foreign Address        State           PID\n  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       1234\n  TCP    127.0.0.1:8977         0.0.0.0:0              LISTENING       4242\n'
-        with mock.patch.object(wabridge.os, 'name', 'nt'), mock.patch.object(wabridge.subprocess, 'run', return_value=mock.Mock(stdout=netstat)) as run:
+        with mock.patch.object(wabridge.os, 'name', 'nt'), mock.patch.object(wabridge.subprocess, 'run', return_value=mock.Mock(stdout=netstat)) as run, \
+             mock.patch.object(wabridge, '_proc', return_value=NODE):
             self.assertEqual(wabridge.pid_on_port(8977), 4242)
             with mock.patch.object(wabridge, 'start', return_value={'phase': 'starting'}) as st, mock.patch.object(wabridge.time, 'sleep'):
                 self.assertEqual(wabridge.restart()['phase'], 'starting')
@@ -126,7 +130,8 @@ class BridgeManagerTests(unittest.TestCase):
         with mock.patch.object(wabridge, 'node', return_value='node'), mock.patch.object(wabridge, 'stage', return_value=wabridge.run_dir()) as stg, \
              mock.patch.object(wabridge.subprocess, 'run', return_value=mock.Mock(returncode=0, stdout='', stderr='')) as run, \
              mock.patch.object(wabridge.subprocess, 'Popen', return_value=P()) as pop, mock.patch.object(wabridge.time, 'sleep'), \
-             mock.patch('builtins.open', mock.mock_open()):
+             mock.patch('builtins.open', mock.mock_open()), mock.patch.object(wabridge, 'pid_on_port', return_value=0), \
+             mock.patch.object(wabridge, '_listening', return_value=True):
             self.assertEqual(wabridge.start(force_install=True, wait=True,
                              filter_policy={'allDirect': False, 'jids': ['picked@g.us']})['phase'], 'running')
         self.assertEqual(run.call_args[0][0][1:], ['install', '--no-audit', '--no-fund'])              # npm install first
@@ -141,11 +146,11 @@ class BridgeManagerTests(unittest.TestCase):
             pid = 1; returncode = 1
             def poll(self): return 1
         with mock.patch.object(wabridge, 'node', return_value='node'), mock.patch.object(wabridge.subprocess, 'Popen', return_value=Dead()), \
-             mock.patch.object(wabridge, 'stage', return_value=wabridge.run_dir()), \
+             mock.patch.object(wabridge, 'stage', return_value=wabridge.run_dir()), mock.patch.object(wabridge, 'pid_on_port', return_value=0), \
              mock.patch.object(wabridge.time, 'sleep'), mock.patch('builtins.open', mock.mock_open()), \
-             mock.patch.object(wabridge.Path, 'exists', return_value=True), mock.patch.object(wabridge.Path, 'read_bytes', return_value=b'Error: EADDRINUSE 8977'):
+             mock.patch.object(wabridge.Path, 'exists', return_value=True), mock.patch.object(wabridge.Path, 'read_bytes', return_value=b'Error: npm ERR'):
             self.assertEqual(wabridge.start(wait=True)['phase'], 'failed')
-        self.assertIn('EADDRINUSE', wabridge.state()['detail'])
+        self.assertIn('npm ERR', wabridge.state()['detail'])
         # and the threaded road hands back the phase it is entering, without blocking
         with mock.patch.object(wabridge.threading, 'Thread') as th:
             wabridge._STATE.update(phase='idle')
@@ -187,6 +192,101 @@ class BridgeManagerTests(unittest.TestCase):
             r = c_api.get(f"/api/connectors/{wa['ConnectorId']}/wa/status").json()
         self.assertEqual(r['bridge'], False); self.assertIn('phase', r['manager'])                    # the manager's phase rides along
         self.assertIn(r['node'], (True, False))                                                        # step 1 of the pairing box: is Node here
+
+
+class PortInUseTests(unittest.TestCase):
+    """#269: Start and Restart said yes and the bridge stayed down, its log ending in EADDRINUSE on 8977. A copy that died a
+    moment after the fixed 2.5s look was recorded as running; Restart then killed only that dead pid, and the old bridge on the
+    port outlived every press. Now the port's holder is looked at by its command line - ours is ended, a stranger is named."""
+    def setUp(self):
+        wabridge._STATE.update(phase='idle', detail='', pid=None, at=0.0)
+        if wabridge._LOCK.locked(): wabridge._LOCK.release()
+        wabridge._SUP.update(down=0.0, up=0.0, tries=0, next=0.0, held=False, gave_up='')
+        self.killed, self.port = [], [4242]          # the port's holder, as netstat would say, until it is killed
+        (wabridge.run_dir() / 'node_modules' / '@whiskeysockets').mkdir(parents=True, exist_ok=True)   # installed: no npm here
+        def kill(pid):
+            self.killed.append(pid)
+            if pid in self.port: self.port.remove(pid)
+        for x in (mock.patch.object(wabridge, '_kill', side_effect=kill), mock.patch.object(wabridge, 'pid_on_port', side_effect=lambda p=None: (self.port or [0])[0]),
+                  mock.patch.object(wabridge.time, 'sleep'), mock.patch.object(wabridge, 'node', return_value='node'),
+                  mock.patch.object(wabridge, 'stage', return_value=wabridge.run_dir()), mock.patch('builtins.open', mock.mock_open())):
+            x.start(); self.addCleanup(x.stop)
+
+    def popen(self, polls, code=98):
+        """A launched bridge that answers poll() with each of `polls` in turn (None: still running), exiting with `code`."""
+        it = iter(polls)
+        class P:
+            pid, returncode = 5150, code
+            def poll(self): return next(it, code)
+        return mock.patch.object(wabridge.subprocess, 'Popen', return_value=P())
+
+    def test_restart_ends_the_old_bridge_on_the_port_not_only_the_dead_pid_it_recorded(self):
+        wabridge._STATE.update(phase='running', pid=1111)                    # the copy that died late, called running
+        who = {1111: ('', ''), 4242: NODE}
+        with mock.patch.object(wabridge, '_proc', side_effect=lambda pid: who[pid]), self.popen([None] * 5) as pop, \
+             mock.patch.object(wabridge, '_listening', side_effect=[False, True, True]), mock.patch.object(wabridge, '_status', return_value=None):
+            self.assertEqual(wabridge.restart(wait=True)['phase'], 'running')
+        self.assertEqual(self.killed, [4242]); pop.assert_called_once(); self.assertEqual(wabridge.state()['pid'], 5150)
+
+    def test_a_stranger_on_the_port_is_named_and_left_alone(self):
+        with mock.patch.object(wabridge, '_proc', return_value=('svchost.exe', 'C:\\Windows\\system32\\svchost.exe -k netsvcs')), self.popen([None]) as pop:
+            wabridge.stop()
+            out = wabridge.restart(wait=True)
+        self.assertEqual(self.killed, []); pop.assert_not_called(); self.assertEqual(out['phase'], 'failed')
+        self.assertIn('port 8977 is in use by svchost.exe (pid 4242), which is not a WhatsApp bridge', out['detail'])
+        self.assertIn('WA_BRIDGE_PORT', out['detail'])
+        with mock.patch.object(wabridge, '_proc', return_value=None):                       # the machine would not say: still not ours
+            self.assertIn('could not identify', wabridge.start(wait=True)['detail'])
+        self.assertEqual(self.killed, [])
+
+    def test_a_bridge_that_dies_on_a_held_port_after_a_slow_start_is_failed_not_running(self):
+        self.port.clear()
+        def lost_race(*a, **k):                                                # somebody took the port while Baileys loaded
+            self.port.append(777); return P
+        P = mock.Mock(pid=5150, returncode=98, poll=mock.Mock(side_effect=[None, None, None, 98, 98, 98]))
+        with mock.patch.object(wabridge.subprocess, 'Popen', side_effect=lost_race), mock.patch.object(wabridge, '_listening', return_value=False), \
+             mock.patch.object(wabridge, '_proc', return_value=('java.exe', 'java -jar server.jar')):
+            out = wabridge.start(wait=True)
+        self.assertEqual(out['phase'], 'failed'); self.assertIsNone(out['pid'])
+        self.assertIn('port 8977 is in use by java.exe (pid 777)', out['detail'])
+
+    def test_start_adopts_a_current_bridge_and_replaces_an_old_one(self):
+        with mock.patch.object(wabridge, '_proc', return_value=NODE), mock.patch.object(wabridge, '_status', return_value={'code': wabridge.code()}), \
+             self.popen([None]) as pop:
+            out = wabridge.start(wait=True)
+        self.assertEqual((out['phase'], out['pid']), ('running', 4242)); pop.assert_not_called(); self.assertEqual(self.killed, [])
+        with mock.patch.object(wabridge, '_proc', return_value=NODE), mock.patch.object(wabridge, '_status', return_value={'code': 'old'}), \
+             self.popen([None] * 5) as pop, mock.patch.object(wabridge, '_listening', return_value=True):
+            self.assertEqual(wabridge.start(wait=True)['pid'], 5150)
+        self.assertEqual(self.killed, [4242]); pop.assert_called_once()
+
+    def test_a_bridge_with_another_token_is_not_ended_by_start_only_by_restart(self):
+        with mock.patch.object(wabridge, '_proc', return_value=NODE), mock.patch.object(wabridge, '_status', return_value={}), self.popen([None]):
+            out = wabridge.start(wait=True)
+        self.assertEqual(out['phase'], 'failed'); self.assertIn("does not know this Taskuary's token", out['detail'])
+        self.assertIn('Restart bridge replaces it', out['detail']); self.assertEqual(self.killed, [])
+
+    def test_the_bell_says_why_the_last_start_failed(self):
+        s = MemoryStore(); wa = s.get_connector_by_type('whatsapp')
+        s.save_connector({'ConnectorId': wa['ConnectorId'], 'Active': 1}, 'owner')
+        wabridge._STATE.update(phase='failed', detail='port 8977 is in use by java.exe (pid 777)')
+        said = wabridge.supervise(s, s.get_connector(wa['ConnectorId']), 'the WhatsApp bridge is not running', now=1000.0)
+        self.assertEqual(said, 'the WhatsApp bridge is not running (port 8977 is in use by java.exe (pid 777))')
+
+    def test_who_a_process_is_on_windows_and_posix(self):
+        ps = mock.Mock(returncode=0, stdout='node.exe\r\n"C:\\nodejs\\node.exe" bridge.mjs\r\n')
+        with mock.patch.object(wabridge.os, 'name', 'nt'), mock.patch.object(wabridge.spawn, 'run', return_value=ps):
+            self.assertEqual(wabridge._proc(4242), ('node.exe', '"C:\\nodejs\\node.exe" bridge.mjs'))
+        with mock.patch.object(wabridge.os, 'name', 'nt'), mock.patch.object(wabridge.spawn, 'run', return_value=mock.Mock(returncode=0, stdout='')):
+            self.assertEqual(wabridge._proc(4242), ('', ''))                  # gone
+        with mock.patch.object(wabridge.os, 'name', 'posix'), mock.patch.object(wabridge.subprocess, 'run',
+                return_value=mock.Mock(stdout='/usr/local/bin/node bridge.mjs\n')):
+            self.assertTrue(wabridge._ours(wabridge._proc(4242)))
+        self.assertFalse(wabridge._ours(('nginx', 'nginx -g daemon off;'))); self.assertFalse(wabridge._ours(None))
+
+    def test_the_poll_looks_where_the_bridge_listens(self):
+        from taskuary import messengers
+        with mock.patch.dict(os.environ, {'WA_BRIDGE_PORT': '9123'}): self.assertEqual(messengers.wa_url(), 'http://127.0.0.1:9123')
 
 
 class BridgePortTests(unittest.TestCase):
@@ -387,6 +487,7 @@ class HomeStagingTests(unittest.TestCase):
         (self.home / 'node_modules' / '@whiskeysockets').mkdir(parents=True, exist_ok=True)
         with mock.patch.object(wabridge, 'node', return_value='node'), mock.patch.object(wabridge.subprocess, 'Popen', return_value=P()) as pop, \
              mock.patch.object(wabridge.time, 'sleep'), mock.patch.object(wabridge, 'token', return_value='t'), \
+             mock.patch.object(wabridge, 'pid_on_port', return_value=0), mock.patch.object(wabridge, '_listening', return_value=True), \
              mock.patch.object(wabridge.threading, 'Thread', side_effect=lambda target, daemon: mock.Mock(start=target)):
             go()
         return pop.call_args_list

@@ -263,6 +263,19 @@ def start(force_install: bool = False, wait: bool = False, filter_policy: dict =
                 r = spawn.run([npm, 'install', '--no-audit', '--no-fund'], cwd=str(run), capture_output=True, text=True, timeout=900, shell=False)
                 if r.returncode != 0:
                     _set('failed', f'npm install failed: {(r.stderr or r.stdout)[-300:]}'); return
+            # WHO HOLDS THE PORT, before a launch (#269): a second copy only dies on EADDRINUSE - and it went on dying, Restart after
+            # Restart, while an old bridge nobody recorded kept the port. Ours is replaced; a stranger is named and left alone.
+            held = pid_on_port()
+            if held:
+                info = _proc(held)
+                if not _ours(info): _set('failed', _in_use(held, info)); return
+                st = _status()
+                if st and st.get('code') == code():
+                    _set('running', f'already listening on http://127.0.0.1:{port()}', pid=held); return
+                if st == {}: _set('failed', _in_use(held, info, token=False)); return
+                logger.info(f'wa bridge: an old bridge (pid {held}) holds port {port()} without answering as this code - ending it first')
+                _kill(held)
+                if not _freed({held}): _set('failed', f'port {port()} is still held by an old WhatsApp bridge (pid {held}) that would not stop'); return
             _set('starting', 'node bridge.mjs')
             out = open(lg, 'ab')
             kw = {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP | getattr(subprocess, 'DETACHED_PROCESS', 0)} if os.name == 'nt' else {'start_new_session': True}
@@ -271,11 +284,17 @@ def start(force_install: bool = False, wait: bool = False, filter_policy: dict =
             # bare: detached, outlives us by design - so it must hold nothing of the exe's unpack folder (spawn's note)
             p = spawn.bare([node(), 'bridge.mjs'], cwd=str(run), stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                  env=env, **kw)
-            time.sleep(2.5)
+            # until it answers or dies, not a fixed 2.5s: loading Baileys outlasts that on a cold Windows start, so a copy that died on
+            # EADDRINUSE a moment later was already called running - the card's Start said yes and the bridge stayed down (#269)
+            end = time.monotonic() + LAUNCH_SECS
+            while p.poll() is None and not _listening() and time.monotonic() < end: time.sleep(.5)
             if p.poll() is not None:
                 tail = lg.read_bytes()[-400:].decode('utf-8', 'replace') if lg.exists() else ''
+                if p.returncode == 98:          # bridge.mjs on a held port - not the log, which keeps every earlier run's lines
+                    held = pid_on_port(); _set('failed', _in_use(held, _proc(held) if held else None)); return
                 _set('failed', f'the bridge exited at once (code {p.returncode}): {tail}'); return
-            _set('running', f'listening on http://127.0.0.1:{port()} - log: {lg}', pid=p.pid)
+            _set('running', f'listening on http://127.0.0.1:{port()} - log: {lg}' if _listening()
+                 else f'started (pid {p.pid}) but not answering on http://127.0.0.1:{port()} yet - log: {lg}', pid=p.pid)
         except Exception as e:
             logger.warning(f'wa bridge start failed: {e}')
             _set('failed', str(e))
@@ -337,16 +356,71 @@ def pid_on_port(p: int = None) -> int:
     return 0
 
 
+LAUNCH_SECS = 30                     # how long a launched bridge has to answer, or die, before start() says which
+
+
+def _proc(pid: int):
+    """(name, command line) of a process; ('', '') when it is gone; None when this machine will not say. What tells our bridge
+    from a stranger on its port - only a `node ... bridge.mjs` is ever ended here (#269)."""
+    try:
+        if os.name == 'nt':
+            ps = f"$p = Get-CimInstance Win32_Process -Filter 'ProcessId={int(pid)}'; if ($p) {{ $p.Name; $p.CommandLine }}"
+            r = spawn.run(['powershell', '-NoProfile', '-NonInteractive', '-Command', ps], capture_output=True, text=True, timeout=20)
+            if r.returncode: return None
+            ls = [l.strip() for l in r.stdout.splitlines() if l.strip()]
+            return (ls[0], ' '.join(ls[1:])) if ls else ('', '')
+        cmd = spawn.run(['ps', '-p', str(int(pid)), '-o', 'args='], capture_output=True, text=True, timeout=10).stdout.strip()
+        return (cmd.split()[0].rsplit('/', 1)[-1], cmd) if cmd else ('', '')
+    except Exception as e:
+        logger.debug(f'wa bridge: who is pid {pid}: {e}'); return None
+
+
+def _ours(info) -> bool: return bool(info) and 'bridge.mjs' in info[1] and 'node' in (info[0] + info[1]).lower()
+
+
+def _in_use(pid: int, info, token: bool = True) -> str:
+    "The card's line for a held port - who holds it, and what the owner can do."
+    p = port()
+    if not pid: return f'port {p} was in use when the bridge started and is free now - Start bridge again'
+    if _ours(info):
+        return (f'port {p} is in use by another WhatsApp bridge (pid {pid})' + ('' if token else " that does not know this Taskuary's token - "
+                'another Taskuary home runs it') + ' - Restart bridge replaces it')
+    who = f'{info[0]} (pid {pid})' if info and info[0] else f'pid {pid}'
+    return (f'port {p} is in use by {who}, ' + ('which is not a WhatsApp bridge' if info else 'which Taskuary could not identify')
+            + ' - Taskuary leaves it alone. Close it, or set WA_BRIDGE_PORT to a free port and restart Taskuary')
+
+
+def _kill(pid: int):
+    try:
+        if os.name == 'nt': spawn.run(['taskkill', '/PID', str(pid), '/T', '/F'], capture_output=True)
+        else: os.kill(pid, 15)
+    except Exception as e: logger.warning(f'wa bridge stop: {e}')
+
+
+def _freed(pids: set, tries: int = 40) -> bool:
+    """Wait until none of `pids` holds the port: taskkill returns before Windows lets the socket go, and a start inside that gap
+    died on EADDRINUSE (restart used to sleep a flat second and hope)."""
+    for _ in range(tries):
+        if pid_on_port() not in pids: return True
+        time.sleep(.25)
+    return False
+
+
 def stop(hold: bool = False) -> dict:
-    """`hold`: the owner pressed Stop - the supervisor leaves the bridge down until somebody starts it."""
+    """`hold`: the owner pressed Stop - the supervisor leaves the bridge down until somebody starts it.
+
+    BOTH the bridge we recorded and whoever holds the port (#269). The record alone was the trap: a copy that died on EADDRINUSE
+    after start() had called it running left its dead pid behind, every Restart killed that pid and nothing else, and the old
+    bridge on the port outlived them all. The port's holder is ended only when it is a bridge - never a stranger's process."""
     if hold:
         with _SUP_LOCK: _SUP['held'] = True
-    pid = _STATE.get('pid') or pid_on_port()
-    if pid:
-        try:
-            if os.name == 'nt': spawn.run(['taskkill', '/PID', str(pid), '/T', '/F'], capture_output=True)
-            else: os.kill(pid, 15)
-        except Exception as e: logger.warning(f'wa bridge stop: {e}')
+    mine,held,gone = _STATE.get('pid'), pid_on_port(), set()
+    for pid in dict.fromkeys(x for x in (mine, held) if x):
+        info = _proc(pid)
+        # our own child when this machine will not say who it is; never a pid that is gone or that someone else now has
+        if _ours(info) or (pid == mine and info is None): _kill(pid); gone.add(pid)
+        elif pid == held: logger.warning(f'wa bridge stop: {_in_use(pid, info)}')
+    if held in gone and not _freed(gone): logger.warning(f'wa bridge stop: pid {held} still holds port {port()}')
     _set('idle', 'stopped')
     return state()
 
@@ -361,7 +435,7 @@ def stop_if_unpacked() -> bool:
 def restart(wait: bool = False, filter_policy: dict = None) -> dict:
     """Stop whatever holds the port and start the bridge from the code on disk - the way a bridge
     picks up a newer bridge.mjs (an old one kept answering /status without the paired number)."""
-    stop(); time.sleep(1.0)
+    stop()                                     # ...which waits for the port to be let go
     return start(wait=wait, filter_policy=filter_policy)
 
 
@@ -398,6 +472,12 @@ _SUP = {'down': 0.0, 'up': 0.0, 'tries': 0, 'next': 0.0, 'held': False, 'gave_up
 _SUP_LOCK = threading.Lock()
 
 
+def _why(err: str) -> str:
+    "The poll's error, with why the last start failed (a held port, no node) - the bell says what to do, not only that it is down."
+    d = _STATE['detail'] if _STATE['phase'] == 'failed' else ''
+    return f'{err} ({d})' if d and d not in err else err
+
+
 def supervise(store, c: dict, err: str, now: float = None) -> str:
     """The poll found no bridge answering. Log it once, start a managed bridge again on the backoff, and return the
     error the card should carry - the same words while it retries (a changed error is news again on the bell), the
@@ -414,7 +494,7 @@ def supervise(store, c: dict, err: str, now: float = None) -> str:
             logger.warning(f'whatsapp bridge is down: {err}' + (f' - starting it again in {S["next"] - now:.0f}s' if auto else ''))
         if not ours or S['held']: return err
         if S['gave_up']: return S['gave_up']
-        if _LOCK.locked() or now < S['next']: return err
+        if _LOCK.locked() or now < S['next']: return _why(err)
         if S['tries'] >= GIVE_UP:
             why = _STATE['detail'] if _STATE['phase'] == 'failed' else ''
             S['gave_up'] = (f'the WhatsApp bridge would not stay up after {GIVE_UP} starts in a row' + (f' ({why})' if why else '')

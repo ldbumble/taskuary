@@ -407,18 +407,21 @@ def _task_files(store, tid: int) -> list[dict]:
     return out
 
 
-def report_note(store, tid: int):
+def report_note(store, tid: int, lead: str = ''):
     """What the agent did, for a general session as for a coding one (the owner, 2026-10-09: "general agent should also have
     the summary like cli no? ... that's all people want to see, it's the core thing what the agent did"). A coding session
     ends with an AGENT REPORT note - its summary and LAST MESSAGE - and that note is what the task card shows; a chat ended
     with nothing but its turns unless the owner pressed Stop and save (wrapup.wrap) - closed by the agent or put away, it
-    left no result. Its last answer, filed verbatim (no model boils the conversation down), once: the same answer is not filed twice."""
+    left no result. Its last answer, filed verbatim (no model boils the conversation down), once: the same answer is not filed twice.
+    `lead` goes above it - what a session put away mid-question was still asking (wrapup.left_open) - and that note, filed first,
+    is the same answer to the plain one the session's close files after it."""
     last = next((str(c.get('Body') or '').strip() for c in reversed(chat_rows(store, tid)) if c.get('ActorType') == ASSISTANT_TYPE), '')
     if not last: return None
     filed = next((c.get('Body') for c in reversed(store.list_comments(tid)) if wrapup.is_report(c.get('Body'))), None)
     # by its body, not its marker: an answer filed under the old word is the same answer
-    if filed is not None and wrapup.report_body(filed) == last: return None
-    return store.add_comment(tid, 'assistant', 'agent', f'{wrapup.REPORT}\n{last}')
+    body, was = wrapup.with_left_open(last, lead), (wrapup.report_body(filed) if filed is not None else None)
+    if was is not None and (was == body or (not lead and was.endswith('\n\n' + last))): return None
+    return store.add_comment(tid, 'assistant', 'agent', f'{wrapup.REPORT}\n{body}')
 
 
 def _own_file(raw: str, paths: list):

@@ -62,6 +62,11 @@ CASES = [
     # the owner's own usual (slice 4, 2026-10-25): Marcus is answered within the hour, and this ask has waited 3h - Reply, its lateness
     # the one line beside it, with what it was counted from in the prompt
     ('Q4 forecast numbers', {'reply'}, {'not_ours', 'defer'}, ['HOW SOON YOU ANSWER marcus@northwind.example: within the hour']),
+    # ...whom the owner hands this sender's asks to, and the day their mail is put off to - read from the How you work line the owner can
+    # correct, never from the count (the memory follow-ups, 2026-10-25)
+    ('Night shift overtime rate', {'reply', 'forward'}, {'not_ours'}, ['WHOM YOU HANDED THEIR ASKS TO: ray@northwind.example, 2 of 2 times']),
+    ('Payworth seat count renewal', {'reply', 'defer'}, {'not_ours'},
+     ['WHEN YOU PUT THEIR MAIL OFF (a How you work line the owner can correct): "You put mail from renewals@payworth.example off to Friday"']),
 ]
 LINES = {'Q4 forecast numbers': 'You usually answer Marcus within the hour; this is 3h.'}
 
@@ -110,6 +115,24 @@ def world():
     qt = f.task(title='Q4 forecast numbers', status='open', kind='task')
     f.message(task_id=qt, subject='Q4 forecast numbers', body='Can you send me the Q4 forecast numbers for the sync?', from_name=marcus[0],
               from_email=marcus[1], conversation_id='email:q4-forecast', sent_at=at(h=3))
+    # the east site's manager, whose payroll asks the owner handed to Ray twice - and a third ask (the owner, 2026-10-25: "Hand it to a
+    # person" pre-fills the usual recipient; the model reads whom, the topic is its to read)
+    east = ('Site Manager East', 'east.manager@northwind.example')
+    for i in range(2):
+        ht = f.task(title=f'Payroll rate fix {i + 1}', status='waiting', kind='task')
+        f.message(task_id=ht, subject=f'Payroll rate fix {i + 1}', body='A rate was wrong last cycle - can it be fixed?', from_name=east[0],
+                  from_email=east[1], conversation_id=f'email:east-payroll-{i}', sent_at=at(d=20 - i * 7))
+        s.audit('task', ht, 'handoff', 'owner', 'human', {'to': 'ray@northwind.example', 'channel': 'email', 'closed': False})
+    nt = f.task(title='Night shift overtime rate', status='open', kind='task')
+    f.message(task_id=nt, subject='Night shift overtime rate', body='The night shift overtime came through at the day rate - can this be fixed?',
+              from_name=east[0], from_email=east[1], conversation_id='email:east-overtime', sent_at=at(h=2))
+    # Payworth's notices, put off to Friday three times over three weeks: the reflection writes the How you work line Remind me reads
+    from tests.memory_cases import put_off, reflected
+    for d in (30, 23, 16): put_off(s, 'payworth', d)
+    reflected(s)
+    pt = f.task(title='Payworth seat count renewal', status='open', kind='task')
+    f.message(task_id=pt, subject='Payworth seat count renewal', body='Your seats renew next month. Reply to change the count.', from_name='Payworth Renewals',
+              from_email='renewals@payworth.example', conversation_id='email:payworth-seats', sent_at=at(h=2))
     funnel.invalidate()
     pile = funnel.pile(s, quiet=True).get('items') or []
     seen, items = set(), []

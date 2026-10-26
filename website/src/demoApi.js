@@ -524,6 +524,8 @@ const write = (method, url, body) => {
 
   // the demo has no put-offs of yours to count: Remind me opens on no usual day (RemindMe.jsx, usual.remind_day)
   if (method === "get" && /^\/api\/tasks\/\d+\/remind\/usual$/.test(p)) return {};
+  // ...nor hand-offs: Hand it to a person opens on nobody (Handoff.jsx, usual.handoff_usual)
+  if (method === "get" && /^\/api\/tasks\/\d+\/handoff\/usual$/.test(p)) return {};
   if (method === "post" && (m = p.match(/^\/api\/tasks\/(\d+)\/remind$/))) {
     scriptedAssistant.pile.items = scriptedAssistant.pile.items.filter((i) => String(i.tid) !== m[1]);
     for (const t of taskRows()) if (String(t.TaskId) === m[1]) t.RemindAt = body?.until || null;

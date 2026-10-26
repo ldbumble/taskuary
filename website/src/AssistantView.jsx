@@ -2149,16 +2149,31 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // to set something up and it ran the email walk through welcome command?"). The welcome block is the
   // door now: what is waiting, in facts, and the walk starts on a button.
 
-  const send = async (line) => {
+  // A LINE TYPED WHILE A TASK COMES UP IS HELD, NEVER DROPPED (the owner, 2026-10-26: asked while a task was loading on the canvas,
+  // "it ignored it"): opening a row holds `busy` for its whole read - 9-10 s on a live day - and Enter returned below with no line
+  // and no word, the words left sitting in the box. The line is drawn at once and goes when the table is free (the effect beside
+  // openLater), about what is then on it - the task that was coming up. A picture still waits in its tray, the words with it.
+  const askLater = useRef([]), sending = useRef(null);
+  const send = async (line, held = false) => {
     // a picture alone is a line too: "what is this?" is what it means
     const images = line == null ? pics.paths : [];
     const t = String(line ?? text).trim() || (images.length ? "What is this?" : "");
-    if (!t || busy || resetting || turnFlight.current || pics.busy) return;
-    turnFlight.current = answering.current = true;
+    if (!t || pics.busy) return;
+    if (busy || resetting || turnFlight.current) {
+      // ...but never a second copy: Enter twice in one tick reaches here with the line already going (`sending`)
+      if (resetting || images.length || t === sending.current || askLater.current.includes(t)) return;
+      askLater.current = [...askLater.current, t];
+      if (line == null) setText("");
+      setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text: t, shots: [], heldAsk: true }]);
+      return;
+    }
+    turnFlight.current = answering.current = true; sending.current = t;
     setText(""); setBusy(true); setErr(""); setLit(null);
     const shots = line == null ? pics.imgs : [];
     if (images.length) pics.clear();
-    setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text: t, shots }]);
+    // ...a held line is on screen already: it is let go, not drawn twice
+    setMsgs((m) => { const i = held ? m.findIndex((x) => x.heldAsk && x.text === t) : -1;
+      return i >= 0 ? m.map((x, j) => (j === i ? { ...x, heldAsk: false } : x)) : [...m, { id: `u${Date.now()}`, role: "user", text: t, shots }]; });
     try {
       // a card browsed open is what "this" means - not the item folded above it (the final review)
       // ...and otherwise WHAT IS OPEN ON THE TABLE, whatever put it there (the owner, 2026-10-01: "the assistant has the open box in
@@ -2234,7 +2249,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         text: e?.name === "AbortError" ? "Stopped." : raw ? "I didn't get an answer through. Nothing was changed." : `Not answered - ${why}`,
         chips: [{ ask: t, label: btn("try_again") }, ...((pile?.items || []).length ? [{ verb: "next", label: btn("next") }] : [])] }]);
     }
-    turnFlight.current = answering.current = false;
+    turnFlight.current = answering.current = false; sending.current = null;
     setBusy(false);
   };
   // ...and a line the bell hands over (askAssistant.js), sent as if typed - or left in the box while a turn is running, never dropped
@@ -2894,6 +2909,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const req = openLater.current; openLater.current = null;
     if (req.kind === "msg") openMsgRef.current?.(req.mid); else if (req.kind === "pull") pullRef.current?.(req.key, req.asUser); else openTaskRef.current?.(req);
   }, [busy, resetting]);
+  // ...and a line typed while it came up (askLater, at send) goes once it is up - after an open queued above, which takes the turn first,
+  // and one at a time: each is its own turn, answered before the next goes
+  useEffect(() => {
+    if (busy || resetting || turnFlight.current || !askLater.current.length) return;
+    const [t, ...rest] = askLater.current; askLater.current = rest;
+    send(t, true);
+  }, [busy, resetting]);   // eslint-disable-line react-hooks/exhaustive-deps
   // a pull lands through surface() -> landed() -> putOnTable. ONE ASKED FOR WHILE A TURN IS IN FLIGHT WAITS for it, as Open from chat
   // does (above): a rail click mid-pull was refused as busy and did nothing at all - the owner clicked a third task while the second was
   // still coming up, and stayed on the second. The latest ask wins; one queued before it is dropped. A walk handed to a phone refuses nothing.

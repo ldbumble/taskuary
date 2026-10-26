@@ -419,6 +419,10 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             if group and threads.get(group) is None: threads[group] = out[-1]
         if cat in ('coding', 'todo') and (r.get('NeedsYou') or r.get('Working') or open_work):   # a worked row is kept, tagged, and let go in build()
             _work(); continue
+        # ...and a REPORT RUN that became a task - the owner's Put it on my list, a watch match, Reopen task on one - is that work: no person
+        # wrote it, so it never "asked you". It fell to the asked lane, drew 🙋 asked you and lit Reply over a report (2026-10-26)
+        if r.get('Channel') == 'report' and r.get('TaskId'):
+            _work(why='' if r.get('RouteReason') else 'your own work from a report'); continue
         # ANSWERED IS NOT ASKED (the owner, 2026-10-18: "sending and closing are two steps"): a reply sent leaves its task open, and
         # the thread behind it said "asked you" over an answer that had gone - the task stands as itself, on you, for its Mark done
         if r.get('TaskId') and r.get('TaskStatus') not in ('done', 'dropped') and (r.get('TheirTurn') or r.get('AnsweredAt')) \

@@ -73,7 +73,8 @@ test("task context, expanded messages and agent results fit short laptops and ph
       if (name === "agent") assert.ok(metrics.terminal?.h > 100 && metrics.terminal.right <= metrics.card.right, say);
       // Came from is a drawer laid over the work from the left, inside the card, scrolling on its own (the owner, 2026-10-26) - or, on a
       // phone, the stacked page's top block
-      if (metrics.from && metrics.work) {
+      // ...or the page itself, the work shut in its right drawer (nothing drafted yet)
+      if (metrics.from && metrics.work?.w) {
         if (metrics.drawer) {
           assert.ok(metrics.from.x <= metrics.work.x + 1 && metrics.scrollable === "auto", say);
           assert.ok(metrics.from.bottom <= metrics.card.bottom + 1, say);

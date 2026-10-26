@@ -542,6 +542,19 @@ export function fillCaps(avail, bands, { row = ROW_PX, head = HEAD_PX, more = MO
   }
   return caps;
 }
+// HOW FAR FROM CLEAR is the rail's headings added up - the FYI not paged in yet with theirs - and what is on the table counts until it is
+// put down. It counted the pile alone, and shown is read: a batch of 4 fyi on the table under "FYI 13", beside two other rows, said "11 away
+// from clear" (the owner, 2026-10-26: "the 11 away which is wrong?"). A row being read away (`settling`) is already going.
+export const awayFromClear = (bands, tail = 0) =>
+  (bands || []).reduce((n, b) => n + b.items.filter((i) => !i.settling).length + (b.level === "fyi" ? tail : 0), 0);
+// THE FYI BAND FILLS THE ROOM IT HAS (the owner, 2026-10-26: "why does the fyi items not scroll out? meaning why does it say 9 more
+// fyi"): rows of it the page has not asked for yet (`total` past its rows, pileRows' tail) were only fetched once the band was opened by
+// hand, so a tall rail drew a few rows, "N more fyi" and empty space under them. True while every row here is drawn and one more would fit.
+export const fyiHasRoom = (avail, bands) => {
+  const b = (bands || []).find((x) => x.level === "fyi");
+  if (!b || !((b.total ?? 0) > b.items.length)) return false;
+  return (fillCaps(avail, (bands || []).map((x) => (x === b ? { ...x, items: [...x.items, {}] } : x))).fyi ?? 0) > b.items.length;
+};
 
 // A live event says "something was written". If a FORCED pile load STARTED after the newest event
 // of the burst arrived, that load read the database after the write committed (the event is sent

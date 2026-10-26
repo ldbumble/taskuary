@@ -81,7 +81,9 @@ test("a sweep that took the table with it offers Next; one that did not just rel
 // The Next button itself: the receipt row carries chips, and a sweep that took the table puts one there.
 test("the receipt after a sweep carries Next, and the page puts the table down without walking on", () => {
   const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
-  assert.match(view, /: step === "offer" \|\| out\.status !== "done" \? \[\{ verb: "next", label: btn\("next"\) \}\] : followUps\(p, out\);/);   // nothing done, no recovery offered: Next at least; a Not ours done offers From now on
+  assert.match(view, /: step === "offer" \|\| out\.status !== "done" \? \[\{ verb: "next", label: btn\("next"\) \}\] : leaves \? \[\] : followUps\(p, out\);/);   // nothing done, no recovery offered: Next at least; a Not ours done offers From now on
+  // ...but only where the table stays: a press that walks on puts the next row in its place, and the way on went with it (2026-10-26)
+  assert.match(view, /const leaves = step === "settle" \|\| step === "advance";/);
   assert.match(view, /role: "receipt", status: out\.status, text: out\.receipt, tid: p\.tid \|\| res\?\.outcome\?\.taskId, ref: p\.ref \|\| res\?\.outcome\?\.ref, chips/);
   // ...and a failed act's receipt carries its way on (concierge.recover), not the sweep's lone Next
   assert.match(view, /const chips = \(out\.status !== "done" \|\| p\.kind === "review\.approve"\) && res\?\.chips\?\.length \? res\.chips/);

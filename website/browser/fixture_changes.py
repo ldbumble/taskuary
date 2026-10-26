@@ -30,6 +30,7 @@ def install_processing_changes(app, store):
         '/api/fixture/signin/terminal-ask',
         '/api/fixture/browser/last-frame',
         '/api/fixture/processing/arrive-during-next',
+        '/api/fixture/task/closed-elsewhere',
     })
 
     def fixture_refuse(method, path):
@@ -343,6 +344,16 @@ def install_processing_changes(app, store):
             return real(st, *a, **k)
         concierge.chips_for = chips_while_a_row_arrives
         return {'armed': True}
+
+    @app.post('/api/fixture/task/closed-elsewhere')
+    def closed_elsewhere(body: dict):
+        """The task on the table closed somewhere else - the phone, the Tasks page - so the rail's next read says it is gone and the
+        table clears under whatever the page was doing (the owner, 2026-10-26: Next said "The list moved while that was loading")."""
+        if set(body) != {'task_id'} or type(body['task_id']) is not int: raise HTTPException(422, 'exact task_id is required')
+        from taskuary import concierge, funnel
+        if not concierge.close_task(store, body['task_id'], 'owner'): raise HTTPException(409, 'that task was not open')
+        store.reconcile_processing_membership(); funnel.invalidate()
+        return {'closed': body['task_id']}
 
     @app.post('/api/fixture/processing/ordering')
     def ordering_arrivals(body: dict):

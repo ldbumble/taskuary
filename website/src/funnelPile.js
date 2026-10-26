@@ -99,6 +99,14 @@ export const sameSelectionScope = (left, right) => !!left && !!right
   && left.only === right.only
   && left.include_surfaced === right.include_surfaced
   && left.exclude === right.exclude;
+// THE TABLE SETTLED UNDER A PRESS, NOTHING MORE (the owner, 2026-10-26: "the list changed while you pressed next should be fixed"):
+// the scope a press captured for (`scope`, table `was`) is not the one standing when its rail read landed (`active`, table `now`). It may
+// capture again - and walk on in one press - when only the table settled: cleared because the server said its item is gone, or the same
+// item or task back under another key (msg:<id> -> agent:<task>). A filter changed under it, or another item put up in its place, may
+// not: the owner never saw that item, and Next past it would skip it (the 2026-09-09 guard).
+export const pressFollowsTable = (scope, active, was, now) => !!scope && !!active
+  && scope.only === active.only && scope.include_surfaced === active.include_surfaced
+  && (!now || (!!was && (now.key === was.key || (now.tid != null && was.tid != null && String(now.tid) === String(was.tid)))));
 export const hasNextSelection = (pile) => !!pile
   && (pile.selection_unavailable === true || pile.selection_invalidated === true
     || (typeof pile.selection_revision === "string"

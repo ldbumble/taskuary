@@ -11,7 +11,7 @@ test("a coding picker with no tool says Pick a coding tool first, with Connect o
   const ui = src("ui.jsx");
   // ...on the server's own fact (agents.coding_ready, served by /api/agents) - the one terminal.start_on_task refuses on
   assert.match(ui, /if \(coding && brainsRead && !codingReady\) return <NoCodingTool \/>/);
-  assert.match(ui, /setCodingReady\(data\.coding_ready/);
+  assert.match(ui, /codingReady: data\.coding_ready/);
   assert.match(src("capabilities.js"), /export const NO_CODING_TOOL = "Pick a coding tool first"/);
   assert.match(ui, /Connect one<\/Button>/);
 });

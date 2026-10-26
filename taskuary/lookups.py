@@ -200,10 +200,10 @@ def calendar_read(store, p: dict) -> str:
     # name one - and a Gmail card read over IMAP brings no calendar at all, which "an Outlook or Google mail connection brings its
     # calendar" told it the opposite of
     blind = cal.unread_mail(store)
-    unread = (f"NOT read - no calendar comes with these cards: {'; '.join(blind)} (a Gmail card reads its calendar only once its "
-              f"Google calendar fields are filled in; IMAP carries none). An event there is not in this answer either way." if blind else '')
-    if not ag['sources']: return NL.join(['No calendar is connected - an Outlook card brings its calendar with it, a Gmail card once its '
-                                          'Google calendar fields are filled in.'] + ([unread] if unread else []))
+    unread = (f"NOT read - no calendar comes with these cards: {'; '.join(blind)} (a Gmail card reads its calendar only once "
+              f"Sign in with Google for the calendar is done on it; IMAP carries none). An event there is not in this answer either way." if blind else '')
+    if not ag['sources']: return NL.join(['No calendar is connected - an Outlook card brings its calendar with it, a Gmail card once '
+                                          'Sign in with Google for the calendar is done on it.'] + ([unread] if unread else []))
     ev = [f"{e['start']}{'-' + e['end'][11:] if e.get('end') and not e['all_day'] else ''} {'(all day) ' if e['all_day'] else ''}"
           f"{e['subject']}{' @ ' + e['where'] if e.get('where') else ''}{' with ' + ', '.join(e['who'][:5]) if e.get('who') else ''}"
           for e in ag['events']]

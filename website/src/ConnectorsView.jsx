@@ -27,6 +27,7 @@ import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, SideRail, Confirm } from "./ui.jsx";
 import { UndoLine, removeNow } from "./Removed.jsx";
 import { AllowFiles, GoogleFiles, MS_FILES_HINT } from "./FileAccess.jsx";
+import { GoogleCalendar } from "./GoogleCalendar.jsx";
 import { hasLogo } from "./logos.jsx";
 import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
@@ -273,9 +274,9 @@ const META = {
       "Ask whether every chat should come in or only some; for some, add chat ids as sources (POST {base}/api/sources{hdr}, Channel imessage). Ask if they want history: lookback_days in ConfigJson reads that many days on the first sync; blank is from now on. Turn the connector on, SETUP DONE - and tell them the first reply will make macOS ask for Automation permission, which they should allow."] },
   gmail: { group: "Messaging", channel: "email", srcLabel: "Mailbox", srcPh: "you@gmail.com",
     fields: [["mailbox address", "address"],
-      ["Google OAuth client id (optional — calendar)", "google_client_id", "", "Only for calendar access: an OAuth client from Google Cloud with the Calendar API enabled"],
-      ["Google OAuth client secret (optional — calendar)", "google_client_secret"],
-      ["Google refresh token (optional — calendar)", "google_refresh_token", "", "From the OAuth consent flow with scope calendar.events; with it, replies about time check this calendar, and invites are answered from Taskuary (calendar.readonly only reads)"]],
+      ["Google OAuth client id (your own app - blank uses Taskuary's)", "google_client_id", "", "An admin's road: a Desktop OAuth client of your own, with the Calendar API enabled. Sign in with Google for the calendar needs none of this"],
+      ["Google OAuth client secret (your own app)", "google_client_secret"],
+      ["Google refresh token (your own app)", "google_refresh_token", "", "Pasted from your own client's consent round - with scope calendar.events, invites are answered from Taskuary too"]],
     secretLabel: "App Password (16 characters)",
     desc: "A Gmail or Google Workspace mailbox - IMAP in through triage, replies back over Gmail's own SMTP, in-thread. Optional OAuth fields add the calendar.",
     howto: ["Turn on 2-Step Verification for the Google account (App Passwords require it).",
@@ -2334,7 +2335,11 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   const [adminFields, setAdminFields] = useState(!MS_SIGNIN.includes(conn.Type) || (!!cfg.client_id && cfg.auth !== "user"));
   // ...only the tenant app's own fields fold: a Teams card's chat clock is the signed-in person's setting too (PW-003), and folding
   // it with tenant_id and client_id hid it behind "Admin?" the moment Teams signed in like Outlook
-  const ownFields = m.fields.filter(([, key]) => !MS_APP_KEYS.includes(key));
+  // ...and the Gmail card's Google client fields fold the same way: the calendar signs in on Taskuary's own client (googlecal.py; the
+  // owner, 2026-10-26: "don't want to create my own google client, want to use their own"), so a client of one's own is an admin's road
+  const [gOwn, setGOwn] = useState(!!cfg.google_client_id);
+  const appKeys = MS_SIGNIN.includes(conn.Type) ? MS_APP_KEYS : conn.Type === "gmail" && !gOwn ? G_APP_KEYS : [];
+  const ownFields = m.fields.filter(([, key]) => !appKeys.includes(key));
   const syncHere = async () => {
     setSrcSync(true);
     const r = await run(() => api.post("/api/ingest/poll"), { ok: "Syncing — new items appear in a minute", lead: "Sync didn't start — " });
@@ -2361,6 +2366,11 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
             Admin? Use a tenant app registration instead →
           </Button>
         )}
+        {conn.Type === "gmail" && !gOwn && (
+          <Button size="small" variant="text" onClick={() => setGOwn(true)} sx={{ alignSelf: "flex-start", fontSize: 12, color: DIM, px: 0.5 }}>
+            Admin? Use your own Google OAuth client instead →
+          </Button>
+        )}
         {conn.Type === "imap" && /@(outlook|hotmail|live|msn)\.|office365|outlook\.office/i.test(`${cfg.address || ""} ${cfg.imap_host || ""}`) && (
           <Typography variant="body2" sx={{ color: "#6b2733", fontWeight: 600 }}>
             Microsoft mailboxes no longer accept IMAP passwords — use the Outlook connector and “Sign in with Microsoft”.
@@ -2368,7 +2378,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         )}
         {(adminFields || ownFields.length > 0) && (
           <>
-            {(adminFields ? m.fields : ownFields).map((f) => <ConfigField key={f[1]} conn={conn} field={f} cfg={cfg} setCfg={setCfg} />)}
+            {(adminFields && MS_SIGNIN.includes(conn.Type) ? m.fields : ownFields).map((f) => <ConfigField key={f[1]} conn={conn} field={f} cfg={cfg} setCfg={setCfg} />)}
             {/* WhatsApp has no secret at all - the bridge holds the pairing, not us */}
             {adminFields && m.secretLabel && (
               <TextField label={conn.HasSecret ? `${m.secretLabel} (saved — type to replace)` : m.secretLabel} type="password"
@@ -2556,6 +2566,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
           It sits above the agent box too: one sign-in is the whole setup, the agent is the long road (B10) */}
       {MS_SIGNIN.includes(conn.Type) && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} reload={reload} onSignedIn={() => setStep(m.srcLabel ? 2 : 3)} /></Box>}
       {conn.Type === "chatgpt" && <Box sx={{ mb: 2 }}><ChatGptSignIn conn={conn} cfg={cfg} reload={reload} /></Box>}
+      {conn.Type === "gmail" && <GoogleCalendar conn={conn} cfg={cfg} reload={reload} />}
       {conn.Type === "gmail" && <Box sx={{ mb: 2 }}><GoogleFiles conn={conn} cfg={cfg} reload={reload} /></Box>}
       {conn.Type === "whatsapp" && <Box sx={{ mb: 2 }}><WaPair conn={conn} reload={reload} onStatus={setWaSt} onTurnedAway={openPicker} /></Box>}
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{m.desc}</Typography>
@@ -3298,6 +3309,7 @@ const MAIL_CARDS = ["outlook", "gmail", "imap"];
 // the cards that sign in with Microsoft, each its own account: Outlook for mail and calendar, Teams for chats (msauth.TEAMS_SCOPES)
 const MS_SIGNIN = ["outlook", "teams"];
 const MS_APP_KEYS = ["tenant_id", "client_id"];      // a tenant app registration's fields - an admin's road (adminFields)
+const G_APP_KEYS = ["google_client_id", "google_client_secret", "google_refresh_token"];   // the Gmail card's own Google client (gOwn)
 // ...and a card that reads more than one mailbox (a shared one on the same sign-in) is more than one hat: one field per
 // address, saved under `signatures`, until it is edited showing the card's own one that signs it today (TQ-1191)
 function MailSignature({ conn, addresses = [], reload }) {

@@ -279,5 +279,72 @@ class TheFillPagesOrigin(unittest.TestCase):
         self.assertFalse(server._signin_origin_ok({'origin': 'null'}))
 
 
+class SignedInIsAPressOnEveryAgent(unittest.TestCase):
+    """A terminal CLI's sign-in ask had no Signed in press, only a box - and the bare words typed into its prompt named no site and no
+    "continue". Its Signed in now goes the way a fill's does (signin._continue), never as a chooser's number (2026-10-25)."""
+    def test_a_terminals_signed_in_is_told_as_a_fill_is(self):
+        s = MemoryStore(); tid = Factory(s).task('Pay the toll', kind='coding'); signin._TRIED.clear()
+        pty = SimpleNamespace(sid='run1', alive=True, task_id=tid, agent='coding', label='Claude Code', argv=['claude'])
+        typed = []
+        with mock.patch.dict(terminal.SESSIONS, {'run1': pty}, clear=True),                 mock.patch.object(browserview, 'state', return_value={'open': True, 'url': 'https://login.toll.example/', 'port': 1}),                 mock.patch.object(terminal, 'type_into', lambda t, text: typed.append((t.sid, text))):
+            signin.needs(s, tid, 'run1')
+            self.assertEqual(ws.status(s, tid)['requests'][-1]['choices'], [])          # still no chooser on the pty: the card draws it
+            out = ws.answer(s, tid, 'signin:toll.example', 'Signed in', 'owner')
+            self.assertEqual(ws.status(s, tid)['requests'], [])
+        self.assertTrue(out['delivered'], out)
+        self.assertEqual(typed, [('run1', 'Signed in to toll.example - continue.')])
+        self.assertTrue(any('Signed in to toll.example - the agent goes on.' in (c.get('Body') or '') for c in s.list_comments(tid)))
+
+    def test_other_words_to_a_sign_in_ask_stay_the_owners(self):
+        self.assertTrue(signin.said_done('signin:toll.example', ' signed in. '))
+        self.assertFalse(signin.said_done('signin:toll.example', 'Signed in but it asks for a code'))
+        self.assertFalse(signin.said_done('r1', 'Signed in'))
+
+
+class TheLastFrameIsKeptOnlyOnAHeldOrFailedAct(unittest.TestCase):
+    """The browser closes with its session: a task that stopped on Approve, or on an act the browser refused, showed nothing of the page
+    it stood on. Kept then - and only then (the owner, 2026-10-25) - shown in the chat with a plain caption."""
+    def setUp(self):
+        import base64, tempfile
+        from taskuary import session_artifacts
+        from test_browser_gate import Brain, on, verdict
+        self.on, self.verdict, self.Brain = on, verdict, Brain
+        self.s = MemoryStore(); self.tid = Factory(self.s).task('Pay the toll invoice')
+        browserview.LAST['run1'] = {'frame': json.dumps({'type': 'frame', 'data': base64.b64encode(b'\xff\xd8jpeg').decode()}), 'url': ''}
+        self.addCleanup(browserview.LAST.pop, 'run1', None); self.addCleanup(browserview.ended_on, 'run1')
+        for p in (mock.patch.object(session_artifacts, 'root', return_value=Path(tempfile.mkdtemp())),
+                  mock.patch.object(browserview.shutil, 'which', return_value=None)):
+            p.start(); self.addCleanup(p.stop)
+
+    def act(self, cmd='agent-browser click @e12', hold=True):
+        with self.on(), self.verdict({'irreversible': hold, 'sure': True, 'what': 'pays the order on toll.example'}):
+            return bg.check(self.s, self.tid, 'run1', cmd, self.Brain(None))
+
+    def kept(self):
+        browserview.close('run1')
+        return [(a['Kind'], a['Name'], a['ContentType']) for a in self.s.list_task_artifacts(self.tid)]
+
+    def test_a_session_that_stops_on_a_held_act_keeps_where_it_waited(self):
+        self.act(); self.act('agent-browser fill @e1 "Northwind"', hold=False)      # it went on typing; the held act still waits
+        self.assertEqual(self.kept(), [('shown', 'Where the browser was when it waited for you', 'image/jpeg')])
+
+    def test_an_act_that_failed_keeps_where_it_stopped(self):
+        from taskuary import verdicts
+        self.act(); [rv] = self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (self.tid,))
+        with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': 'https://pay.toll.example/somewhere-else'}):
+            self.assertFalse(verdicts.decide(self.s, rv, 'approve')['ok'])
+        self.assertEqual(self.kept(), [('shown', 'Where the browser was when it stopped', 'image/jpeg')])
+
+    def test_a_normal_end_keeps_nothing(self):
+        self.act(hold=False)
+        self.assertEqual(self.kept(), [])
+
+    def test_a_held_act_dismissed_before_the_end_keeps_nothing(self):
+        from taskuary import verdicts
+        self.act(); [rv] = self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (self.tid,))
+        with mock.patch('taskuary.workerstate._live', return_value=None): self.assertTrue(verdicts.decide(self.s, rv, 'reject')['ok'])
+        self.assertEqual(self.kept(), [])
+
+
 if __name__ == '__main__':
     unittest.main()

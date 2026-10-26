@@ -33,7 +33,8 @@ test("a page over the item: the rail's tag and the box say it is under the page,
   assert.match(tableWords(tableOf({ cardKey: "task:9" })).box, /^Ask about this one/, "a task opened by name is on the table too");
   assert.match(tableWords(tableOf({ browsing: "b1" })).box, /^Ask Taskuary anything/, "a page with nothing under it");
   assert.match(src, /tag=\{tableSays\.tag\}/, "the rail draws the tag tableWords chose");
-  assert.match(src, /placeholder=\{phone \? tableSays\.phone : tableSays\.box\}/, "and the box its words");
+  // ...and the box its words - but the one-row bar's pill, at rest and widened, its own short ones (2026-10-26)
+  assert.match(src, /placeholder=\{phone \? tableSays\.phone : !popOn \? tableSays\.box : boxWide \? "[^"]+" : "Tell me what to do…"\}/, "and the box its words");
 });
 
 // NO "THINKING..." (the owner, 2026-10-23): the server answers at once with the Advisor's one decision - a lit verb, silent or with its

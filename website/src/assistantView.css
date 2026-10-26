@@ -569,6 +569,30 @@
 .tq-compose-box > span { width: 34px; height: 34px; flex: 0 0 34px; display: flex; align-items: center; justify-content: center; }
 .tq-send { width: 34px; height: 34px; flex: 0 0 34px; border: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; color: white; background: #738275; }
 .tq-send:disabled { opacity: .4; cursor: default; }
+/* THE ONE-ROW CHAT BAR (the owner, 2026-10-26: "try one row chat bar with ai pop up. let me see what it looks like"): the row's groups and
+   the box on one line - the box a pill at the line's end at rest, its tools hidden; used, it widens and the groups fold into their ▾ for
+   the room (ActionRow measures the room left). With no row on the line the box is the whole line, as before */
+.tq-dock-line { display: flex; align-items: center; min-width: 0; }
+.tq-dock-line > .tq-arow { flex: 1 1 0; min-width: 0; width: auto; }
+.tq-dock .tq-dock-line > .tq-arow { border-bottom: 0; padding-right: 8px; }
+.tq-compose-tools { display: contents; }
+.tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box { flex: 0 0 220px; width: auto; min-height: 34px; margin: 3px 6px 3px 0; padding: 0 3px 0 10px; gap: 2px;
+  border: 1px solid #d5d0c7; border-radius: 17px; background: #f8f7f3; transition: background-color .12s, border-color .12s; }
+.tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { flex-basis: min(560px, 46%); padding-left: 3px; background: #fff; border-color: #9fae9f; }
+.tq-dock-line:has(> .tq-arow) > .tq-compose-box:not([data-tq-open]) .tq-compose-tools { display: none; }
+.tq-dock-line:has(> .tq-arow) > .tq-compose-box textarea { min-height: 30px; padding: 5px 4px; }
+.tq-dock-line:has(> .tq-arow) > .tq-compose-box .tq-send { width: 28px; height: 28px; flex-basis: 28px; border-radius: 50%; }
+/* ...and what is said about the task comes up OVER it, anchored above the box: a few turns tall at most, scrolling inside, never moving the view */
+.tq-chat-pop { position: absolute; right: 20px; bottom: calc(100% - 2px); z-index: 5; width: min(600px, calc(100% - 40px)); box-sizing: border-box; display: flex; flex-direction: column;
+  border: 1px solid #d5d0c7; border-radius: 14px; background: #fffdfb; box-shadow: 0 10px 32px #39352d26, 0 2px 6px #39352d14; animation: tqPopIn .14s ease-out; }
+.tq-chat-pop[hidden] { display: none; }
+@keyframes tqPopIn { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) { .tq-chat-pop { animation: none; } }
+.tq-chat-pop-head { display: flex; align-items: center; gap: 6px; padding: 5px 6px 5px 12px; border-bottom: 1px solid #ece7de; font-size: 12px; color: #6e685f; }
+.tq-chat-pop-head b { color: #2f3a42; font-weight: 600; }
+.tq-chat-pop-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 14px 4px; }
+.tq-chat-pop-body > .tq-msg { margin-bottom: 10px; }
+.tq-chat-pop-body > .tq-msg:first-child > .avatar { visibility: visible; }
 /* the Advisor's pill sits where the arrow does and does what the card's primary button does; typing brings the arrow back */
 /* the walk is on the phone: the composer is replaced by the way back, never sat beside it */
 .tq-handed { margin: 0 20px 10px; padding: 10px 12px; border: 1px solid #d5d0c7; border-top-width: 1px; border-radius: 12px; background: #fffdfb; display: flex; align-items: center; gap: 10px; color: #4a5d4f; }

@@ -27,9 +27,10 @@ test("the dock's Advisor strip takes no room while it is silent, and shows its l
     const m = await page.evaluate(() => {
       const dock = document.querySelector(".tq-dock"), strip = dock?.querySelector("[data-tq-strip]"), row = dock?.querySelector("[data-tq-row]");
       const h = (e) => (e ? Math.round(e.getBoundingClientRect().height) : null);
-      const box = dock?.querySelector(".tq-compose-box");
-      return { dock: h(dock), strip: strip ? h(strip) : null, row: h(row), box: h(box), line: strip?.querySelector(".tq-next")?.textContent || "",
-        other: [...(dock?.children || [])].filter((e) => e !== strip && e !== row && e !== box && e.getBoundingClientRect().height > 0).map((e) => e.className).join(",") };
+      // ...the row and the box share one line (the one-row chat bar, 2026-10-26): the line is the band under the strip
+      const box = dock?.querySelector(".tq-compose-box"), bar = dock?.querySelector(".tq-dock-line");
+      return { dock: h(dock), strip: strip ? h(strip) : null, row: h(row), box: h(bar), line: strip?.querySelector(".tq-next")?.textContent || "",
+        other: [...(dock?.children || [])].filter((e) => e !== strip && e !== bar && e.getBoundingClientRect().height > 0).map((e) => e.className).join(",") };
     });
     seen.push({ k, ...m });
   }
@@ -38,13 +39,13 @@ test("the dock's Advisor strip takes no room while it is silent, and shows its l
   assert.ok(silent.length, `a silent strip was met: ${JSON.stringify(seen)}`);
   for (const s of silent) {
     assert.equal(s.strip, 0, `a silent strip takes no room: ${JSON.stringify(s)}`);
-    assert.ok(Math.abs(s.dock - (s.row + s.box + 2)) <= 2, `the dock is the row and the box: ${JSON.stringify(s)}`);
+    assert.ok(Math.abs(s.dock - (s.box + 2)) <= 2 && s.row <= s.box, `the dock is the one line of the row and the box: ${JSON.stringify(s)}`);
   }
   // ...and one with words shows them, in a band of its own: the dock is that band taller
   assert.ok(said.length, `a strip with a line was met: ${JSON.stringify(seen)}`);
   for (const s of said) {
     assert.ok(s.strip >= 30, `the line has its band: ${JSON.stringify(s)}`);
-    assert.ok(Math.abs(s.dock - (s.row + s.box + s.strip + 2)) <= 2, `the dock is the strip, the row and the box: ${JSON.stringify(s)}`);
+    assert.ok(Math.abs(s.dock - (s.box + s.strip + 2)) <= 2, `the dock is the strip and the line of the row and the box: ${JSON.stringify(s)}`);
   }
   assert.deepEqual(errors, []);
 });

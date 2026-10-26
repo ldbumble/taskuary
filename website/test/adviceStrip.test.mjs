@@ -52,12 +52,14 @@ test("no line is still an answer: only no AI is a sentence, and every other sile
   const view = read("AssistantView.jsx");
   assert.doesNotMatch(view, /AdviceNone|Thinking about this one/);
   assert.doesNotMatch(read("ActionRow.jsx"), /export function AdviceNone/);
-  // ...in one strip that holds its height from Thinking to the answer, so the row under it never jumps
+  // ...in one strip, which takes NO ROOM until it has a line (the owner, 2026-10-26: "remove it when it's not doing anything") -
+  // browser/dock-strip.test.mjs measures it
+  assert.match(read("assistantView.css"), /\.tq-dock \.tq-strip:not\(:has\(> \.tq-next\)\) \{ display: none; \}/);
   assert.match(view, /<div className="tq-strip" data-tq-strip=\{busy( \|\| \(reading && reading === onTable\))? \? "busy" : ""\}>/);
   // ...and the dead-end walk holds the page to all of it (STILL, STRIP, REREAD, LIT)
   const walk = fs.readFileSync(path.join(process.cwd(), "deadend_check.mjs"), "utf8");
   for (const rule of ["STILL", "STRIP", "REREAD", "LIT"]) assert.ok(walk.includes(`note("${rule}"`), rule);
-  // ...one line tall, and the same height whatever it says (30px since the owner's 2026-10-26 laptop: the dock was a third of it)
+  // ...one line tall when it speaks, and the same height whatever it says (30px since the owner's 2026-10-26 laptop: the dock was a third of it)
   assert.match(read("assistantView.css"), /\.tq-dock \.tq-strip \{ min-height: 30px;/);
   assert.match(read("assistantView.css"), /\.tq-dock \.tq-next \{ margin: 0; min-height: 30px;/);
 });

@@ -1,6 +1,7 @@
 // THE TASK PAGE'S LAYOUT (the redesign, owner-approved 2026-10-21): From | Work, and the work alone - full width - while an agent works
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { CLOSE_BY_HAND, closeOut, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, waitingOn, workPane } from "../src/taskLayout.js";
 import { taskSource } from "./taskSource.mjs";
 
@@ -92,6 +93,14 @@ test("the main view follows where the task is up to: the work with Came from on 
   assert.equal(nextInDrawer({ main: "task", focus: "source" }), true, "an ask nothing has worked: the agent is next");
   assert.equal(nextInDrawer({ main: "task", focus: "list" }), false, "a to-do's list is itself the move");
   assert.equal(nextInDrawer({ main: "work", focus: "agent" }), false, "Came from is context, never lit");
+  // ...and ONLY the task's own next move lights it (the owner, 2026-10-26: "advisor should not light drawer for no reason"): the page's
+  // focus, never a word of the Advisor's - the lit tab reads main and focus, and focus is read off the task alone
+  assert.equal(nextInDrawer({ main: "task", focus: "list", advice: { verb: "reply" } }), false, "advice lights no tab");
+  const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
+  assert.match(page, /workLit = nextInDrawer\(\{ main, focus \}\)/);
+  const focusLine = page.match(/const focus = focusOf\(\{[^;]*\}\);/)?.[0];
+  assert.ok(focusLine, "the page's focus is one focusOf");
+  assert.doesNotMatch(focusLine, /advi|lit/i, "the focus reads no advice");
   assert.equal(mainOf({ focus: "list" }), "task", "a to-do or a goal's steps");
   assert.equal(mainOf({ focus: "source" }), "task", "an ask nothing has worked yet");
   assert.equal(mainOf({ focus: "none" }), "task", "a wait on a person");

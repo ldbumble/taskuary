@@ -14,7 +14,7 @@ test("a rail read that moves the table under the press is captured again, bounde
   assert.match(surface, /let navigation = capture \? nextSelectionBody\(capture\) : \{ \.\.\.scope \};/);
   for (const said of ["The list moved while that was loading", "Next is still refreshing"]) assert.ok(!view.includes(said), `no "${said}" line`);
   // a new chat or a reset is the owner's own doing: the one quiet return left
-  assert.match(surface, /if \(epoch !== chatEpoch\.current \|\| resettingRef\.current\) \{ turnFlight\.current = false; setBusy\(false\); dropCarried\(\); return; \}/);
+  assert.match(surface, /if \(epoch !== chatEpoch\.current \|\| resettingRef\.current\) \{ turnFlight\.current = false; setBusy\(false\); setFlight\(null\); dropCarried\(\); return; \}/);
   // a read in flight for another table is waited out, not shared: it is dropped when it lands and its successor is this scope's
   const ensure = view.slice(view.indexOf("const ensureNextSelection = useCallback"), view.indexOf("const noteLine = useCallback"));
   assert.match(ensure, /if \(pileFlight\.current\) await pileFlight\.current;\s*else await loadPileRef\.current\?\.\(true\);/);

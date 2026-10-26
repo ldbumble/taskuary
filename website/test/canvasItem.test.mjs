@@ -93,7 +93,7 @@ test("expanding never changes the chat body's padding", () => {
 // the owner, 2026-09-29: Next "on the bottom like it used to be" - under the task view, never in its header's corner
 // (2026-09-30, layout B): Next moved again - into the ONE row above the chat line, with the task's other verbs; the view registers it
 test("a task's Next is the row's button: registered by the view, drawn above the chat line, in neither its header nor its foot", () => {
-  assert.match(item, /useVerbs\("next", \[\{ id: "next", group: "next", label: btnLabel\("next"\), disabled: !!busy, run: \(\) => onNext\(\)/);
+  assert.match(item, /useVerbs\("next", \[\{ id: "next", group: "next", label: btnLabel\("next"\), disabled: !!busy && !picking, steady: true, run: \(\) => onNext\(\)/);   // a pick in flight leaves it pressable (2026-10-26)
   assert.doesNotMatch(item, /data-tq-next/);
   assert.match(src("ActionRow.jsx"), /data-tq-next=""/);
   assert.match(view, /<ActionRow advised=\{stripPick \|\| setupLit\}( hold=\{[^}]*\})? \/>/);   // no task number or waiting words on the row (2026-10-13)

@@ -11,9 +11,9 @@ Two sources, both read-only, both riding credentials already on a connector card
   same app registration the mail comes through - it needs the APPLICATION permission
   Calendars.Read granted once (Test on the card says whether it is).
 - Google: the Gmail card is IMAP (an app password), which carries no calendar access, so a
-  Google calendar needs an OAuth client + refresh token pasted on the card (google_client_id,
-  google_client_secret, google_refresh_token). When present it is read; when absent it is
-  simply not one of the sources.
+  Google calendar needs a refresh token - minted by the card's "Sign in with Google for the
+  calendar" step on Taskuary's own Google client (googlecal.py), or pasted beside a client of the
+  card's own. When present it is read; when absent it is simply not one of the sources.
 The same read is a tool (`calendar` in reports.REGISTRY) so an agent can check before it
 commits anyone to a time.
 """
@@ -100,13 +100,10 @@ def about_text(preview: str, limit: int = 240) -> str:
 
 def google_events(cfg: dict, start: datetime, end: datetime, tz) -> list:
     """Google Calendar with an OAuth refresh token from the card - primary calendar, expanded."""
-    cid, sec, rt = cfg.get('google_client_id'), cfg.get('google_client_secret'), cfg.get('google_refresh_token')
-    if not (cid and sec and rt): return []
-    t = requests.post('https://oauth2.googleapis.com/token', timeout=20,
-                      data={'client_id': cid, 'client_secret': sec, 'refresh_token': rt, 'grant_type': 'refresh_token'})
-    if t.status_code != 200: raise RuntimeError(f'Google token failed ({t.status_code}): {t.text[:200]}')
+    from .googlecal import access_token, client     # cached until it expires: today, upcoming and every draft read the same calendar
+    if not (cfg.get('google_refresh_token') and all(client(cfg))): return []
     r = requests.get('https://www.googleapis.com/calendar/v3/calendars/primary/events', timeout=20,
-                     headers={'Authorization': f"Bearer {t.json()['access_token']}"},
+                     headers={'Authorization': f"Bearer {access_token(cfg)}"},
                      params={'timeMin': start.astimezone(tz).isoformat(), 'timeMax': end.astimezone(tz).isoformat(),
                              'singleEvents': 'true', 'orderBy': 'startTime', 'maxResults': MAX_EVENTS,
                              'timeZone': tz_name(tz)})

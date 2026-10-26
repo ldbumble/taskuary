@@ -1346,6 +1346,13 @@ class SQLiteStore:
             for cid, sec in self.cx.execute("SELECT ConnectorId, Secret FROM connector WHERE Secret IS NOT NULL AND Secret != '' "
                                             "AND Secret NOT LIKE 'vault:%'").fetchall():
                 if vault.sealed(new := vault.seal(sec)): self.cx.execute('UPDATE connector SET Secret=? WHERE ConnectorId=?', (new, cid))
+            # ...and a Google calendar refresh token pasted into a card's config before it was sealed there too (SEALED_CONFIG)
+            for cid, cj in self.cx.execute("SELECT ConnectorId, ConfigJson FROM connector WHERE ConfigJson LIKE '%google_refresh_token%'").fetchall():
+                try: c = json.loads(cj)
+                except (TypeError, ValueError): continue
+                if isinstance(c, dict) and c.get('google_refresh_token') and vault.sealed(new := vault.seal(c['google_refresh_token'])) \
+                        and new != c['google_refresh_token']:
+                    self.cx.execute('UPDATE connector SET ConfigJson=? WHERE ConnectorId=?', (json.dumps({**c, 'google_refresh_token': new}), cid))
             # The handbook ships ON - handbook.enabled has said so since it was written - but its
             # card is seeded like every other, at Active 0, and enabled() reads the card when one
             # exists. So the feature was off on every install that ever ran: wrapup.wrap skipped
@@ -5224,11 +5231,34 @@ class SQLiteStore:
     # channel connectors (secrets are write-only: list/get never return them)
     _CONN_SAFE = "ConnectorId, Type, Name, ConfigJson, Active, Roles, Scope, LastSyncAt, LastError, LastErrorAt, (Secret IS NOT NULL AND Secret != '') HasSecret"
     def list_connectors(self): return self._rows(f'SELECT {self._CONN_SAFE} FROM connector ORDER BY ConnectorId')
-    @staticmethod
-    def _opened(r):
-        """A with_secret row carries the secret itself: the column holds it sealed (vault.py)."""
+    # A REFRESH TOKEN KEPT IN ConfigJson IS SEALED LIKE THE Secret COLUMN: the Gmail card's Google calendar sign-in (googlecal.py,
+    # 2026-10-26) keeps its token there beside the App Password, and a copy of taskuary.db must not carry it in the clear either
+    SEALED_CONFIG = ('google_refresh_token',)
+    @classmethod
+    def _opened(cls, r):
+        """A with_secret row carries the secret itself: the column holds it sealed (vault.py) - and so do SEALED_CONFIG keys."""
         if r and r.get('Secret'): r['Secret'] = vault.unseal(r['Secret'])
+        if r and vault.PREFIX in (r.get('ConfigJson') or ''):
+            try: cfg = json.loads(r['ConfigJson'])
+            except (TypeError, ValueError): return r
+            if isinstance(cfg, dict) and any(vault.sealed(cfg.get(k)) for k in cls.SEALED_CONFIG):
+                r['ConfigJson'] = json.dumps({k: vault.unseal(v) if k in cls.SEALED_CONFIG else v for k, v in cfg.items()})
         return r
+    def _cfg_sealed(self, cid, cj):
+        """ConfigJson as stored: SEALED_CONFIG values sealed. A value that opens to what is stored keeps its seal - a card saved
+        from a with_secret read would otherwise mint a new keychain entry on every save - and one replaced is forgotten."""
+        try: cfg = json.loads(cj) if cj else None
+        except (TypeError, ValueError): return cj
+        if not isinstance(cfg, dict): return cj
+        try: old = json.loads((self._one('SELECT ConfigJson FROM connector WHERE ConnectorId=?', (cid,)) or {}).get('ConfigJson') or '{}') if cid else {}
+        except (TypeError, ValueError): old = {}
+        if not isinstance(old, dict): old = {}
+        if not any(cfg.get(k) or old.get(k) for k in self.SEALED_CONFIG): return cj
+        for k in self.SEALED_CONFIG:
+            v, was = cfg.get(k), old.get(k)
+            if v and not vault.sealed(v): cfg[k] = was if vault.sealed(was) and vault.unseal(was) == v else vault.seal(v)
+            if was and was != cfg.get(k): vault.forget(was)
+        return json.dumps(cfg)
     def get_connector(self, cid, with_secret=False):
         r = self._one(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector WHERE ConnectorId=?", (cid,))
         return self._opened(r) if with_secret else r
@@ -5247,6 +5277,7 @@ class SQLiteStore:
             fields = {**fields, 'Secret': vault.seal(fields['Secret'])}
             if old and old != fields['Secret']: vault.forget(old)
         cid = fields.get('ConnectorId')
+        if fields.get('ConfigJson'): fields = {**fields, 'ConfigJson': self._cfg_sealed(cid, fields['ConfigJson'])}
         cols = [c for c in ('Type', 'Name', 'ConfigJson', 'Secret', 'Active', 'Roles', 'Scope') if c in fields and fields[c] is not None]
         if cid:
             # nothing to change is not "UPDATE connector SET  WHERE" - a syntax error that failed the chat's Create (2026-10-06)
@@ -5256,12 +5287,13 @@ class SQLiteStore:
     def reset_connector(self, cid):
         """'Remove connection': wipe creds/config/test state, deactivate it and its sources."""
         vault.forget((self._one('SELECT Secret FROM connector WHERE ConnectorId=?', (cid,)) or {}).get('Secret'))
+        self._cfg_sealed(cid, '{}')                     # ...and the keychain entries of its sealed config keys
         self._exec('UPDATE connector SET Secret=NULL, ConfigJson=NULL, Active=0, LastSyncAt=NULL, LastError=NULL, Scope=NULL WHERE ConnectorId=?', (cid,))
         self._exec('UPDATE source SET Active=0 WHERE ConnectorId=?', (cid,))
     def set_connector_config(self, cid, cfg: dict):
         """Just the config JSON - how the pollers keep their watermark (Telegram's update
         offset, the WhatsApp bridge's sequence) without touching secrets or roles."""
-        self._exec('UPDATE connector SET ConfigJson=? WHERE ConnectorId=?', (json.dumps(cfg), cid))
+        self._exec('UPDATE connector SET ConfigJson=? WHERE ConnectorId=?', (self._cfg_sealed(cid, json.dumps(cfg)), cid))
         self._processing_ignored_writes += 1
     def patch_connector_poll_state(self, connector_id, *, config_set=None, config_remove=(),
                                    expect_fields=None, expect_config=None):

@@ -32,8 +32,8 @@ def _gmail(store, cid):
 def google_url(store, cid: int, server: dict, on: bool = True) -> str:
     """Where the browser goes to say yes. The scopes are the ones the card's token holds now, plus drive.file (on) or minus it (off)."""
     c, cfg = _gmail(store, cid)
-    if not (cfg.get('google_client_id') and cfg.get('google_client_secret')):
-        raise ValueError("the Gmail card has no Google OAuth client - add its client id and secret (the calendar fields) first")
+    from .googlecal import UNAVAILABLE, client      # the client the card's token was minted with: Taskuary's own, or the card's
+    if not all(client(cfg)): raise ValueError(UNAVAILABLE)
     held = []
     if cfg.get('google_refresh_token'):
         from .calwrite import _google_token
@@ -46,7 +46,7 @@ def google_url(store, cid: int, server: dict, on: bool = True) -> str:
     state, verifier = secrets.token_urlsafe(24), secrets.token_urlsafe(48)
     _STATES[state] = {'cid': int(cid), 'verifier': verifier, 'on': bool(on), 'at': time.time()}
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()
-    return G_AUTH + '?' + urlencode({'client_id': cfg['google_client_id'], 'redirect_uri': redirect_uri(server), 'response_type': 'code',
+    return G_AUTH + '?' + urlencode({'client_id': client(cfg)[0], 'redirect_uri': redirect_uri(server), 'response_type': 'code',
                                      'scope': ' '.join(scope), 'access_type': 'offline', 'prompt': 'consent', 'state': state,
                                      'include_granted_scopes': 'false', 'code_challenge': challenge, 'code_challenge_method': 'S256'})
 
@@ -59,7 +59,9 @@ def google_callback(store, server: dict, code: str, state: str, error: str = Non
     if not code: return False, 'Google sent no code back.'
     try: c, cfg = _gmail(store, f['cid'])
     except LookupError as e: return False, str(e)
-    r = requests.post(G_TOKEN, timeout=20, data={'client_id': cfg.get('google_client_id'), 'client_secret': cfg.get('google_client_secret'),
+    from .googlecal import client
+    gid, gsec = client(cfg)
+    r = requests.post(G_TOKEN, timeout=20, data={'client_id': gid, 'client_secret': gsec,
                                                 'code': code, 'code_verifier': f['verifier'], 'grant_type': 'authorization_code',
                                                 'redirect_uri': redirect_uri(server)})
     if r.status_code != 200: return False, f'Google refused the sign-in ({r.status_code}).'

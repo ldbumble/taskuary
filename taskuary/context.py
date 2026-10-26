@@ -124,13 +124,33 @@ def _threads(convs: set) -> dict:
     return {'pull_request_or_issue': gh} if gh else {}
 
 
-def recent_open(store, msg: dict, limit: int = RECENT) -> list:
-    """The OPEN work this arrival touches - the same thread, the same sender, or two words of the same
-    subject - so triage can say "this is TQ-x again" (same_as) instead of opening a second task for one job
+OPEN_SEATS = 4           # open tasks triage is shown: one more than RECENT, so a same-topic task on another thread still finds a seat
+TOPIC_CHARS = 1500       # how much of an arrival's body says what it is about - a forward's topic is in its chain, so the chain counts
+
+
+def _topic(words: set, title_toks: set, sum_toks: set):
+    """(why, rank) when the arrival's WORDS are about this task's job though nothing else ties them - another person, another
+    thread, another channel (the owner, 2026-10-26: "if someone sends a email to us, then another person sends us about same
+    topic will they get joined on one task ... also if there is teams message then email about same task will it join it? We
+    should join them as it's about same thing"). Only the subject was ever read against the title, so a second colleague's
+    differently-worded mail, or a Teams line whose subject is its first line, was never put in front of triage and opened a task
+    of its own. Three words shared with the task's title and summary, one of them the title's: a greeting and a weekday are not a
+    topic. Ranked under the same subject, by how much of the task's own words it carries; the model says if it is the same job."""
+    shared = words & (title_toks | sum_toks)
+    if len(shared) < 3 or not shared & title_toks: return None
+    return (f"the same topic ({', '.join(sorted(shared, key=lambda w: (w not in title_toks, w))[:5])})",
+            0.5 + 0.5 * len(shared) / len(title_toks | sum_toks))
+
+
+def recent_open(store, msg: dict, limit: int = OPEN_SEATS) -> list:
+    """The OPEN work this arrival touches - the same thread, the same sender, two words of the same subject, or the same topic
+    in its body - so triage can say "this is TQ-x again" (same_as) instead of opening a second task for one job
     (the owner, 2026-09-25). Ranked like recent_closures; the model decides whether it is the same."""
     from .routing import tokens
     conv, sender, toks, own = _arrival_keys(msg)
     ids = ids_of(f"{msg.get('subject') or ''} {msg.get('body') or ''}")
+    # ...a report's words are its body already (_arrival_keys), and its own earlier tasks keep their seats (2026-10-09)
+    words = set() if own else toks | set(tokens(str(msg.get('body') or '')[:TOPIC_CHARS]))
     out = []
     for t in store.tasks_open_linked():
         convs = {c for c in str(t.get('Convs') or '').split(',') if c}
@@ -138,10 +158,14 @@ def recent_open(store, msg: dict, limit: int = RECENT) -> list:
         title_toks = set(tokens(t.get('Title') or ''))
         same = _shared_ids(store, t, ids)
         hit = (f"the same run or record ({', '.join(sorted(same)[:3])})", 4.0) if same else _match(conv, sender, toks, own, convs, senders, title_toks)
+        # ...and the same job in other words when nothing stronger ties them: the same sender alone outranks no topic
+        topic = _topic(words, title_toks, set(tokens(t.get('Summary') or ''))) if words and (not hit or hit[1] < 1.0) else None
+        if topic and (not hit or topic[1] > hit[1]): hit = topic
         if not hit: continue
         why, rank = hit
         out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '', 'from': _who(sender, senders),
-                    'why': why, **_threads(convs), '_rank': rank})
+                    'why': why, **({'about': _short(t.get('Summary'), 200)} if hit is topic and t.get('Summary') else {}),
+                    **_threads(convs), '_rank': rank})
     out.sort(key=lambda r: -r['_rank'])
     return [{k: v for k, v in r.items() if k != '_rank'} for r in out[:limit]]
 

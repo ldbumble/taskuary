@@ -116,7 +116,7 @@ class SomeoneElsesAskTests(unittest.TestCase):
         mail(s, 'p', brain('task', seen=seen), conv='gh:northwind/ledger#65', frm='ray@vendor.example',
              subject='Send long Discord replies without truncation', body='Discord replies are cut off at 2,000 characters. Closes #53.')
         self.assertIn('"from": "someone else: alex@northwind.example - not this sender"', seen[-1]['usr'])
-        self.assertIn("someone else's new thread about a similar subject", seen[-1]['sys'])
+        self.assertIn("someone else's own ask on a similar subject", seen[-1]['sys'])
 
     def test_the_same_sender_again_is_told_so(self):
         s = MemoryStore()

@@ -200,7 +200,10 @@ CASES = [
     Q('typos', 'repyl to marcus', 'todo', c('reply'), 'draft:reply', freq=3),
     # ── WhatsApp-style short replies ──
     Q('short', 'yes', 'review', c('approve'), 'light:approve', freq=5),
-    Q('short', '2', 'todo', 'Ok.', 'words', tools=('digit',), demo='lit', freq=4),
+    # a digit names a numbered chip only where numbered chips are drawn - a card under its line; a task drawn as its own view has none,
+    # and "2" there pressed a Mark done that was not on screen (2026-10-26): the model reads it as typed
+    Q('short', '2', 'fyi', 'Ok.', 'words', tools=('digit',), demo='out', freq=4),
+    Q('short', '3', 'todo', 'Which one do you mean?', 'words', tools=('digit',), demo='out', freq=3),
     Q('short', 'skip', 'todo', c('next'), 'next', freq=4),
     Q('short', 'no', 'review', 'Then it stays as drafted - nothing is sent.', 'words', tools=('words',), freq=4),
     Q('short', 'ok', 'todo', 'Ok.', 'words', tools=('words',), freq=4),

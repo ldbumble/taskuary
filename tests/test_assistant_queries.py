@@ -66,6 +66,9 @@ class EverydayAsks(unittest.TestCase):
     def test_a_number_on_the_desk_is_the_action_word_it_numbers(self):
         r = next(r for r in self.rows if r['q'].text == '2')
         self.assertNotEqual(r['ideal']['heard'], '2', 'the digit reached the model as a digit')
+        # ...and over a task drawn as its own view, which numbers nothing, it is the owner's digit as typed - never a hidden chip (2026-10-26)
+        r = next(r for r in self.rows if r['q'].text == '3')
+        self.assertEqual((r['ideal']['heard'], [g for g in r['ideal']['got'] if g.startswith(('pressed', 'light'))]), ('3', []))
 
     def test_clear_all_the_fyi_clears_them_and_says_how_many(self):
         r = next(r for r in self.rows if r['q'].text == 'Clear all the FYI, please.')

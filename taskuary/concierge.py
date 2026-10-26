@@ -816,7 +816,8 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     # desktop and in the phone's poll (the owner, 2026-09-25: "why am i getting make this a task?? it already is")
     if verb == 'mine' and item.get('tid') and not _agent_holds(store, item):
         return f"{what} is already a task on your list."
-    if verb == 'close' and item.get('closed'): return f"{what} is already closed - the work on it is finished."
+    # ...and nor is any other put-down: a closed task's only way on is Reopen task (2026-10-26)
+    if verb in ('close', 'close_note', 'remove') and item.get('closed'): return f"{what} is already closed - the work on it is finished."
     if verb == 'stop_agent' and (item.get('paused') or item.get('lane') in ('stopped', 'saved') or item.get('kind') in ('agentdone', 'wrapup')):
         # a paused conversation has no live session: the pick answered "no agent is running right now" (A20, 2026-09-25)
         # ...nor has a session that already ENDED - failed, finished, or cut off by a restart (owner-approved, 2026-10-20): its
@@ -1045,6 +1046,8 @@ def _shows(store, it: dict, b: str) -> bool:
     """The task page's own button for `b` (buttons.json `row`) is drawn on this item now - the few whose being there turns on state."""
     if b == 'reopen': return bool(it.get('closed')) or str((store.get_task(int(it['tid'])) or {}).get('Status') or '') in ('done', 'dropped')
     if b == 'stop_agent': return _agent_running(it['tid'])
+    # the task page draws it only on an open task (TaskPage notDone)
+    if b == 'strong_again': return not it.get('closed') and str((store.get_task(int(it['tid'])) or {}).get('Status') or '') not in ('done', 'dropped')
     if b == 'continue': return bool(store.resumable_session(it['tid'])) and not _general(store, it)
     if b in ('review_changes', 'run_another', 'share'): return _agent_holds(store, it) or bool(store.resumable_session(it['tid']))
     # Share stands on a task's row whenever no agent is at work on it (TaskPage: a Result to share, or a summary to email)

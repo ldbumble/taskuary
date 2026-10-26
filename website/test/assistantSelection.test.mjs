@@ -159,13 +159,12 @@ test("Assistant echoes one captured selection and never retries a 409 through th
   assert.match(view, /selection_revision: body\.selection_revision, expected_next_key: body\.expected_next_key, expected_next_members: body\.expected_next_members/);
   assert.match(view, /if \(\[404, 405, 501\]\.includes\(res\.status\)\) return plain\(\)/);
   assert.doesNotMatch(view, /if \(!res\.ok \|\| !res\.body\).*return plain/);
-  assert.match(view, /const navigation = capture \? nextSelectionBody\(capture\) : scope/);
-  assert.match(view, /try \{ data = await turn\(\{ mode: "next", key, leaving, \.\.\.navigation \}\); \}/);
-  assert.match(view, /loadPile\(true\);\s*\/\/ refresh the rows, never retry the navigation/);
-  // ...save ONE retry for a BLIND press (the walk's start, a chat chip on an empty table: no pick shown, nothing to protect), and only
-  // on a plain stale refusal, which ran nothing - never an in-progress, completed or uncertain one (2026-10-13)
-  assert.match(view, /const g = blind && selectionGuardDetail\(e\), fresh = g && !g\.reason && g\.retryable !== false \? captureNextSelection\(g, scope\) : null;/);
-  assert.match(view, /if \(!fresh \|\| epoch !== chatEpoch\.current\) throw e;/);
+  assert.match(view, /let navigation = capture \? nextSelectionBody\(capture\) : \{ \.\.\.scope \}/);
+  assert.match(view, /try \{ data = await turn\(\{ mode: "next", key, leaving, \.\.\.navigation \}\); break; \}/);
+  assert.match(view, /loadPile\(true\);\s*\/\/ refresh the rows: the retries above are spent/);
+  // ...a plain stale refusal ran nothing, so it is retried, blind or not (the owner, 2026-10-26: "i hate the next list changed") -
+  // never an in-progress, completed or uncertain one (nextNeverAsksAgain.test.mjs)
+  assert.match(view, /if \(real \|\| tries >= 2 \|\| epoch !== chatEpoch\.current\) throw e;/);
   assert.match(view, /await surface\(null, null, null, true\)/);
 });
 
@@ -179,15 +178,11 @@ test("Walk validates Current without creating a turn and stale gestures remove t
   const surface = view.slice(view.indexOf("const surface = useCallback"), view.indexOf("useEffect(() => { surfaceRef.current"));
   assert.ok(surface.indexOf("const activeScope") < surface.indexOf("const optimisticId"),
     "an async capture is revalidated before drawing or posting its navigation");
-  // All three still gate the guard - the scope check is named now so it can also SAY so:
-  // returning silently is how a press could reach nothing at all (2026-09-09).
+  // A scope that moved under the capture is captured again, never refused (the owner, 2026-10-26) - and never silently dropped
+  // either: returning with no word is how a press could reach nothing at all (2026-09-09). Only a new chat or a reset returns quietly.
   assert.match(surface, /const scopeMoved = !key && !sameSelectionScope\(scope, activeScope\)/);
-  assert.match(surface, /epoch !== chatEpoch\.current \|\| resettingRef\.current \|\| scopeMoved/);
-  assert.match(surface, /if \(scopeMoved\) setErr/);
-  assert.ok(surface.indexOf("selectionContractSeen.current && !capture") < surface.indexOf("setMsgs((m) => pickLine(m"),
-    "an unavailable capture is rejected before drawing an optimistic owner turn");
+  assert.match(surface, /if \(epoch !== chatEpoch\.current \|\| resettingRef\.current\) \{ turnFlight\.current = false;/);
   assert.match(view, /m\.filter\(\(message\) => message\.id !== optimisticId\)/);
-  assert.match(view, /Next changed while the list refreshed/);
 });
 
 test("background events can notify but cannot choose, clear, or advance Current", () => {

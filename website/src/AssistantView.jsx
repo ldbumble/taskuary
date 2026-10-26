@@ -136,10 +136,10 @@ const EMOJI_REPLIES = [
 const errText = (e) => {
   const detail = e?.response?.data?.detail || e?.detail;
   if (detail?.code?.startsWith("selection_")) return detail.message || (detail.code === "selection_unavailable"
-    ? "Next is temporarily unavailable. Review the refreshed list and try again."
+    ? "Taskuary could not read the list just now. Press Next to try again."
     : detail.retryable === false
     ? "That Next request may already have completed. Review the refreshed conversation before acting again."
-    : "Next changed while the list refreshed. Review the updated Next item and press Next again.");
+    : "Taskuary could not move on just now. Press Next to try again.");
   if (demoNo(e)) DEMO_SAID.add(demoNo(e));
   return (typeof detail === "string" ? detail : null) || e?.message || "Taskuary could not answer.";
 };
@@ -1913,10 +1913,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
 
   const ensureNextSelection = useCallback(async (scope) => {
     if (pendingPile.current) await pendingPile.current;        // the rail riding behind the last card carries the next token
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
       const captured = selectionRef.current;
       if (captured && sameSelectionScope(captured.scope, scope)) return captured;
-      await loadPileRef.current?.(true);
+      // ...and a read already on its way is waited out, never taken as this scope's: it was asked for the table as it stood when it
+      // was sent, and one for another table is dropped when it lands (loadPile) - joined, it spent a try and brought nothing. The read
+      // that follows it is this scope's own
+      if (pileFlight.current) await pileFlight.current;
+      else await loadPileRef.current?.(true);
     }
     const captured = selectionRef.current;
     return captured && sameSelectionScope(captured.scope, scope) ? captured : null;
@@ -1956,28 +1960,23 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     pickedRef.current = !!key;
     if (!key) navHow.current = "replace";            // the walk's Next is a stream, not a stack: the address follows, Back does not
     const epoch = chatEpoch.current;
-    const scope = nextSelectionScope(key ? null : only.current, key ? null : currentRef.current?.key || null);
-    const capture = key ? null : await ensureNextSelection(scope);
-    const activeScope = nextSelectionScope(key ? null : only.current, key ? null : currentRef.current?.key || null);
-    const scopeMoved = !key && !sameSelectionScope(scope, activeScope);
-    if (epoch !== chatEpoch.current || resettingRef.current || scopeMoved) {
-      turnFlight.current = false;
-      setBusy(false);
-      // a new chat or a reset is the owner's own doing and stays quiet. The rail re-emitting under
-      // a slow pile is NOT: this returned with no error and no message, and between 08:20 and
-      // 08:47 on 2026-09-09 not one press reached the server while the button looked alive.
-      if (scopeMoved) setErr((m) => m || "The list moved while that was loading - press it again.");
-      dropCarried();
-      return;
-    }
-    // A failed modern capture (including selection_unavailable) never becomes an optimistic owner
-    // turn. The pile refresh already supplied the bounded error; a later explicit gesture retries.
-    if (!key && selectionContractSeen.current && !capture) {
-      setErr((message) => message || "Next is still refreshing. Review the updated list and press Next again.");
-      dropCarried();
-      turnFlight.current = false;
-      setBusy(false);
-      return;
+    // NEXT IS "SHOW ME THE NEXT THING" (the owner, 2026-10-26: "i hate the next list changed. No one cares. Think about it from user
+    // perspective"): a list moving under the press is the app's to absorb, never a line asking for another press. The rail read a press
+    // waits on can itself move the table - the server says its item is gone and the table clears, the same task comes back under a new
+    // key - so the press captures again for the table as it now stands, three rounds at most, and still moving after that it goes with
+    // no capture: the server takes its own pick for that table (no stale check) and the ring follows what came up. Nothing is skipped
+    // by it: a row the ring showed and the owner never saw stays unread on the rail and comes up later.
+    let scope, capture;
+    for (let round = 0; round < 3; round += 1) {
+      scope = nextSelectionScope(key ? null : only.current, key ? null : currentRef.current?.key || null);
+      capture = key ? null : await ensureNextSelection(scope);
+      // a new chat or a reset is the owner's own doing and stays quiet. 2026-09-09: a press that returned here with no word looked
+      // alive and reached nothing for half an hour - which is why the only quiet return left is the owner's own
+      if (epoch !== chatEpoch.current || resettingRef.current) { turnFlight.current = false; setBusy(false); dropCarried(); return; }
+      const activeScope = nextSelectionScope(key ? null : only.current, key ? null : currentRef.current?.key || null);
+      const scopeMoved = !key && !sameSelectionScope(scope, activeScope);
+      if (!scopeMoved) break;
+      scope = activeScope; capture = null;
     }
     const optimisticId = asUser ? `u${Date.now()}` : null;
     if (optimisticId) setMsgs((m) => pickLine(m, { id: optimisticId, role: "user", text: asUser, pick: key || undefined }));
@@ -2034,22 +2033,26 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       aheadRef.current = drawAhead({ ...line, text: "", card: aheadItem });
     try {
       // A named Timeline/pile row remains an explicit pull. Automatic Walk/Next echoes the exact
-      // server capture; demo/old-server payloads alone retain the legacy tokenless fallback.
-      const navigation = capture ? nextSelectionBody(capture) : scope;
+      // server capture; with none to be had (above), the server's own pick for this scope.
+      let navigation = capture ? nextSelectionBody(capture) : { ...scope };
       // ...and a press made with nothing on the table says so: the server then takes a pick that moved fresh rather than refusing
       // it - the walk's first press, made while the opener still reads what came in (the owner, 2026-10-20)
       if (blind && capture) navigation.blind = true;
       let data;
-      try { data = await turn({ mode: "next", key, leaving, ...navigation }); }
-      catch (e) {
-        // A BLIND PRESS HAS NO PICK TO PROTECT: the guard (PW-050) refuses a Next whose item is not the one the page shows,
-        // and nothing was shown - a reply landing between the morning card and its button made the owner press twice
-        // (2026-10-13). A plain stale refusal ran nothing, so the server's fresh capture is taken once, never more.
-        const g = blind && selectionGuardDetail(e), fresh = g && !g.reason && g.retryable !== false ? captureNextSelection(g, scope) : null;
-        if (!fresh || epoch !== chatEpoch.current) throw e;
-        selectionRef.current = fresh;
-        setPile((p) => replaceSelectionToken(p, g));
-        data = await turn({ mode: "next", key, leaving, ...nextSelectionBody(fresh), ...(blind ? { blind: true } : {}) });
+      for (let tries = 0; ; tries += 1) {
+        try { data = await turn({ mode: "next", key, leaving, ...navigation }); break; }
+        catch (e) {
+          // THE SERVER'S "THE LIST CHANGED" IS TAKEN, NEVER SAID (the owner, 2026-10-26: "i hate the next list changed. No one cares"):
+          // a plain stale refusal ran nothing, so the press goes again at once with the server's fresh pick, and refused once more, with
+          // its own pick (no capture). One press is still one move: a navigation in progress, done already or uncertain is not retried
+          const g = !key && selectionGuardDetail(e), real = !g || g.code !== "selection_stale" || g.retryable === false
+            || ["navigation_in_progress", "already_completed", "outcome_uncertain"].includes(g.reason);
+          if (real || tries >= 2 || epoch !== chatEpoch.current) throw e;
+          const fresh = tries === 0 ? captureNextSelection(g, scope) : null;
+          selectionRef.current = fresh;
+          setPile((p) => replaceSelectionToken(p, g));
+          navigation = fresh ? { ...nextSelectionBody(fresh), ...(blind ? { blind: true } : {}) } : { ...scope };
+        }
       }
       landed(data);
     } catch (e) {
@@ -2061,7 +2064,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         selectionContractSeen.current = true;
         selectionRef.current = freshCapture;
         setPile((p) => replaceSelectionToken(p, guard));
-        loadPile(true);                       // refresh the rows, never retry the navigation
+        loadPile(true);                       // refresh the rows: the retries above are spent, or this was no list change
       }
       if (putDown) { setFoldedKey((k) => (k === putDown ? null : k)); wear(false); }
       if (leftItem) { unleave(leftItem); putOnTable(leftItem, "sync"); }   // the Next did not happen: the item it left is the table's again

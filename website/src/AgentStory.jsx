@@ -8,6 +8,7 @@ import { Box, Button, Typography } from "@mui/material";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import { BORDER, DIM, FAINT, INK, PALETTE, mono } from "./theme.jsx";
 import { hhmm, storyAlarm } from "./agentStory.js";
+import { trustInBox } from "./strangerLine.js";
 
 const head = { fontSize: 11, fontWeight: 600, color: FAINT, letterSpacing: ".04em", textTransform: "uppercase", mb: 0.35 };
 const link = { fontSize: 11, minHeight: 0, p: 0, minWidth: 0 };
@@ -38,14 +39,24 @@ export const Timeline = ({ steps }) => (
     </React.Fragment>)}
   </Box>);
 
+// A HELD STEP'S WAY OUT, in the box that says why nothing started (the owner, 2026-10-26: "we should have button on untrusted user to
+// either trust user or trust domain"): the person, and their organisation when there is one to name (senders.trust_offer). A press
+// only lifts the hold - the step's own Start is still the owner's to press
+export const TrustButtons = ({ trust, onTrust }) => (
+  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 0.9, pl: 3 }}>
+    <Button size="small" variant="outlined" data-tq-trust="" sx={{ fontSize: 12, py: 0.2 }} onClick={() => onTrust("")}>{trust.person}</Button>
+    {trust.org && <Button size="small" variant="outlined" data-tq-trust-org="" sx={{ fontSize: 12, py: 0.2 }} onClick={() => onTrust("org")}>{trust.org}</Button>}
+  </Box>);
+
 // folded (`compact`) the step says its one sentence; open, the last thing it said leads and the timeline is behind More
-export default function AgentStory({ story, compact = false }) {
+export default function AgentStory({ story, compact = false, onTrust }) {
   const [more, setMore] = useState(false);
   if (!story?.line) return null;
   const steps = compact ? [] : story.steps || [], said = !compact && story.said;
   return (
     <Box sx={{ mt: 1, pl: { xs: 0, sm: 4 } }}>
       <StoryLine kind={story.kind} line={story.line} />
+      {onTrust && trustInBox(story) && <TrustButtons trust={story.trust} onTrust={onTrust} />}
       {(said || steps.length > 0) && (
         <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
           {said && <>

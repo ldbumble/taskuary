@@ -118,6 +118,7 @@ def _why(sig: dict) -> str:
 
 
 OPEN = ('open', 'in_progress', 'waiting')
+OPEN_EDGE, MAX_CLOSED, MAX_FOUND = 0.05, 200, 20
 
 def _snapshot(store, t: dict) -> dict:
     """A task as the router sees a candidate. Deliberately NOT store.snapshots(): that joins
@@ -130,23 +131,39 @@ def _snapshot(store, t: dict) -> dict:
             'conversation_ids': [m['ConversationId'] for m in ms if m['ConversationId']]}
 
 
-def merge_candidates(store, tid: int, limit: int = 8) -> list:
-    """Which open task is this one a duplicate of? The router's own signals, run backwards -
-    the same scoring that decided to open a second task in the first place."""
+def _match(t: dict, q: str) -> bool:
+    """The owner's search: a number is the task's ("1182", "TQ-1182"), anything else is words in its title, all of them."""
+    n = re.fullmatch(r'(?:tq-?)?\s*0*(\d+)', q.strip().lower())
+    if n: return t['TaskId'] == int(n.group(1))
+    return all(w in str(t.get('Title') or '').lower() for w in q.lower().split())
+
+
+def merge_candidates(store, tid: int, limit: int = 8, q: str = '') -> list:
+    """Which task is this one a duplicate of? The router's own signals, run backwards - the same scoring that decided
+    to open a second task in the first place. A CLOSED one too (the owner, 2026-10-26: "we can't merge this with other
+    tasks only open tasks?"): the real original is often last week's task on the same thread, already done. One ranking,
+    open ahead on a near-tie: a closed task on the same thread outranks an unrelated open one, but between two alike the
+    live one is the likelier home. Dropped ones never - they are folded away already. Unasked, only the latest closed
+    are scored (each is a read of its mail); `q` reaches any task by number or title words."""
     t = store.get_task(tid)
     if not t: raise ValueError(f'no task {tid}')
     mine = _snapshot(store, t)
     me = {'subject': mine['title'], 'body': mine['text'], 'from_email': next(iter(mine['senders']), None),
           'conversation_id': next(iter(mine['conversation_ids']), None)}
+    pool = [o for o in store.list_tasks() if o['TaskId'] != tid and (o.get('Status') in OPEN or o.get('Status') == 'done')]
+    if q.strip(): pool = sorted((o for o in pool if _match(o, q)), key=lambda o: -o['TaskId'])[:MAX_FOUND]
+    else:
+        shut = sorted((o for o in pool if o.get('Status') == 'done'), key=lambda o: str(o.get('ClosedAt') or o.get('UpdatedAt') or ''))
+        pool = [o for o in pool if o.get('Status') in OPEN] + shut[-MAX_CLOSED:]
     out = []
-    for other in store.list_tasks():
-        if other['TaskId'] == tid or other.get('Status') not in OPEN: continue
+    for other in pool:
         s = _snapshot(store, other)
         sig = score_candidate(me, s)
-        out.append({'task_id': s['task_id'], 'ref': task_ref(s['task_id']), 'title': s['title'],
-                    'score': round(min(1.0, sum(WEIGHTS[k] * v for k, v in sig.items())), 4), 'why': _why(sig)})
-    out.sort(key=lambda c: -c['score'])
-    return out[:limit]
+        score, closed = round(min(1.0, sum(WEIGHTS[k] * v for k, v in sig.items())), 4), other.get('Status') == 'done'
+        out.append({'task_id': s['task_id'], 'ref': task_ref(s['task_id']), 'title': s['title'], 'closed': closed,
+                    'score': score, 'why': _why(sig), '_rank': score - (OPEN_EDGE if closed else 0)})
+    out.sort(key=lambda c: -c['_rank'])
+    return [{k: v for k, v in c.items() if k != '_rank'} for c in out[:MAX_FOUND if q.strip() else limit]]
 
 
 def merge_tasks(store, src: int, dst: int, actor: str = 'owner') -> dict:
@@ -157,8 +174,18 @@ def merge_tasks(store, src: int, dst: int, actor: str = 'owner') -> dict:
     a, b = store.get_task(src), store.get_task(dst)
     if not a: raise ValueError(f'no task {src}')
     if not b: raise ValueError(f'no task {dst}')
+    if b.get('Status') == 'dropped': raise ValueError(f'{task_ref(dst)} was dropped - fold into the task it went to')
     if any(r['Status'] == 'running' for r in store.list_runs(src)):
         raise ValueError(f'{task_ref(src)} has an agent working on it - stop that session first')
+    # FOLDED INTO A CLOSED TASK, IT REOPENS (the owner, 2026-10-26): it now carries mail that is owed an answer - the same rule
+    # as a line on a closed thread (ingest._reopen, "a closed task reopens on what triage says is owed"), and the same reopen
+    # as the page's button (task.reopen: open, an old Remind me cleared). Said on it, so its history reads why it came back.
+    reopened = b.get('Status') == 'done'
+    if reopened:
+        from . import selfclose
+        store.update_task(dst, {'Status': 'open', 'RemindAt': ''}, actor); selfclose.forget(dst)
+        store.add_comment(dst, actor, 'human', f'Reopened - {task_ref(src)} was folded in, and its mail is still owed an answer.')
+        store.audit('task', dst, 'reopen', actor, detail={'why': f'{task_ref(src)} folded in'})
     msgs = store.list_messages(src)
     for m in msgs:
         store.attach_message(m['MessageId'], dst)
@@ -176,4 +203,4 @@ def merge_tasks(store, src: int, dst: int, actor: str = 'owner') -> dict:
     store.update_task(src, {'Status': 'dropped'}, actor)
     store.audit('task', src, 'merged_into_task', actor, detail={'into': dst, 'messages': [m['MessageId'] for m in msgs]})
     store.audit('task', dst, 'merged_from_task', actor, detail={'from_task': src, 'messages': len(msgs)})
-    return {'task_id': dst, 'ref': task_ref(dst), 'dropped': src, 'moved': len(msgs)}
+    return {'task_id': dst, 'ref': task_ref(dst), 'dropped': src, 'moved': len(msgs), 'reopened': reopened}

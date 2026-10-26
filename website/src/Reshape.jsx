@@ -138,10 +138,21 @@ const FoldIntoAnother = ({ taskId, taskRef, onDone, onLeave, onStay }) => {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null);
   const [err, setErr] = useState("");
+  const [q, setQ] = useState("");
+  const [found, setFound] = useState(null);      // the server's answer to what was typed; null = show the suggestions
   useEffect(() => {
-    setCands(null); setPick(null); setDone(null); setErr("");
+    setCands(null); setPick(null); setDone(null); setErr(""); setQ(""); setFound(null);
     api.get(`/api/tasks/${taskId}/merge-candidates`).then(({ data }) => setCands(data.data || [])).catch(() => setCands([]));
   }, [taskId]);
+  // ANY TASK BY NUMBER OR TITLE (the owner, 2026-10-26: "we can't merge this with other tasks only open tasks?"): the eight
+  // suggestions are the router's guess, and the real original may be one it scored low - so what is typed asks the server
+  useEffect(() => {
+    if (!q.trim()) { setFound(null); return; }
+    let live = true;
+    const t = setTimeout(() => api.get(`/api/tasks/${taskId}/merge-candidates`, { params: { q } })
+      .then(({ data }) => { if (live) setFound(data.data || []); }).catch(() => { if (live) setFound([]); }), 200);
+    return () => { live = false; clearTimeout(t); };
+  }, [q, taskId]);
   const go = async () => {
     setBusy(true); setErr("");
     const [src, dst] = keep === "other" ? [taskId, pick.task_id] : [pick.task_id, taskId];
@@ -158,7 +169,7 @@ const FoldIntoAnother = ({ taskId, taskRef, onDone, onLeave, onStay }) => {
     <Section>
       <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>
         ✓ folded together — {done.ref} carries the work now
-        {done.moved ? `, with ${plural(done.moved, "message")} moved over` : ""}.
+        {done.moved ? `, with ${plural(done.moved, "message")} moved over` : ""}{done.reopened ? `, and ${done.ref} is reopened` : ""}.
       </Typography>
     </Section>
   );
@@ -166,24 +177,26 @@ const FoldIntoAnother = ({ taskId, taskRef, onDone, onLeave, onStay }) => {
     <Section>
       <Head icon={<MergeIcon sx={{ fontSize: 17, color: "#6f8a6e" }} />} title="Fold it into another task"
         sub="One job filed twice. The messages move to the survivor; the other is dropped with a pointer at it — never deleted." />
-      {!cands ? <CircularProgress size={16} /> : !cands.length ? (
-        <Typography variant="caption" sx={{ color: FAINT }}>No other open task to fold into.</Typography>
-      ) : (
+      {!cands ? <CircularProgress size={16} /> : (
         <>
-          <Autocomplete size="small" options={cands} value={pick} onChange={(_e, v) => setPick(v)}
+          <Autocomplete size="small" options={found ?? cands} value={pick} onChange={(_e, v) => setPick(v)}
+            onInputChange={(_e, v, why) => { if (why !== "reset") setQ(v); }} filterOptions={(x) => x}
+            noOptionsText={q.trim() ? (found ? "No task like that." : "Looking…") : "No other task to fold into — type its number or words from its title."}
             getOptionLabel={(o) => `${o.ref} ${o.title}`}
             isOptionEqualToValue={(a, b) => a.task_id === b.task_id}
             renderOption={(props, o) => (
               <li {...props} style={{ display: "block", fontSize: 12.5 }}>
                 <span style={{ ...mono, color: "#55697a", fontWeight: 600 }}>{o.ref}</span> {o.title}
+                {o.closed && <span style={{ color: "#867f74", fontSize: 10.5 }}> · closed</span>}
                 <div style={{ color: "#867f74", fontSize: 10.5 }}>{o.why} · match {o.score.toFixed(2)}</div>
               </li>
             )}
-            renderInput={(params) => <TextField {...params} placeholder="the task this is really the same as" />} />
+            renderInput={(params) => <TextField {...params} placeholder="the task this is really the same as — or its number" />} />
           {pick && (
             <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", mt: 1, flexWrap: "wrap" }}>
               <Typography variant="caption" sx={{ color: DIM }}>Which one survives?</Typography>
-              {[["other", `${pick.ref} — this one closes`], ["this", `${taskRef || "this task"} — ${pick.ref} closes`]].map(([k, label]) => (
+              {/* a closed survivor reopens: it now carries mail owed an answer (reshape.merge_tasks) - said before the press */}
+              {[["other", `${pick.ref} — this one closes${pick.closed ? `, and ${pick.ref} is reopened` : ""}`], ["this", `${taskRef || "this task"} — ${pick.ref} closes`]].map(([k, label]) => (
                 <Chip key={k} size="small" label={label} onClick={() => setKeep(k)}
                   sx={{ height: 20, fontSize: 10.5, cursor: "pointer",
                     bgcolor: keep === k ? "#eae4d8" : PANEL2, color: keep === k ? "#55697a" : DIM,

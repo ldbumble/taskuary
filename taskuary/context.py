@@ -164,6 +164,15 @@ def worked_before(store, at: str, hours: float = WORKED_HOURS, limit: int = RECE
             for t in store.tasks_owner_worked(since, end.strftime('%Y-%m-%d %H:%M:%S'), limit)]
 
 
+def owner_started_work(store, msg: dict) -> list:
+    """A reply on a thread the owner STARTED from outside Taskuary (their own sent mail, on no task): the open work they were
+    in before they sent it, for triage's same_as (the owner, 2026-10-26: "Yes" - a reply to a mail sent from their mail app
+    about a task they made by hand opened a task of its own, as nothing put that task in front of triage). Evidence only."""
+    first = store.owner_started(msg.get('conversation_id'))
+    if not first: return []
+    return [w | {'why': w['why'].replace('you sent this', 'you started this thread')} for w in worked_before(store, first.get('SentAt'))]
+
+
 MEETINGS = 12            # a day's calendar, bounded so a packed one cannot crowd the mail out of the prompt
 
 def meetings_today_of(t: dict) -> list:

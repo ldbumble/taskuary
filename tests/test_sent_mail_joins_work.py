@@ -4,10 +4,11 @@ task that I opened?"). A task made by hand has no thread and no sender, and a "D
 the promise in the owner's mail became a task of its own, the thread became that task's, and the other side's question about
 the work joined it. The sent-words judge is now shown the open work the message may be part of - what touches it, and what the
 owner was working just before sending - and its `task` answer decides. The model is a stub (tests/sentjudge_fixture.py)."""
-import unittest
+import json, re, unittest
 from datetime import datetime, timedelta
+from unittest import mock
 
-from taskuary import context, sentjudge
+from taskuary import context, ingest, sentjudge
 from taskuary.ingest import identity_route
 from taskuary.store import MemoryStore
 from tests.sentjudge_fixture import judged
@@ -67,7 +68,7 @@ class SentMailJoinsWorkTests(unittest.TestCase):
         s = _store(); tid = _work(s, 1); mid = _sent(s)
         judged(s, SAID)
         self.assertEqual(s.get_message(mid)['TaskId'], s.promise_task(mid)['TaskId'])
-        self.assertFalse(any('kept on this task' in c['Body'] for c in s.list_comments(tid)))
+        self.assertFalse(any('Kept on this task' in c['Body'] for c in s.list_comments(tid)))
 
     def test_a_message_already_on_a_task_is_its_threads(self):
         s = _store(); _work(s, 1); mid = _sent(s)
@@ -79,6 +80,77 @@ class SentMailJoinsWorkTests(unittest.TestCase):
         s = _store(); now = _work(s, 1); _work(s, 6); _work(s, 2, status='done')
         self.assertEqual([w['tid'] for w in context.worked_before(s, _ago(0))], [now])
         self.assertEqual(context.worked_before(s, 'not a stamp'), [])
+
+
+def _day(days): return (datetime.now() + timedelta(days=days)).strftime('%Y-%m-%d')
+
+
+class PromiseDayTests(unittest.TestCase):
+    """The owner, 2026-10-26: "if date promised then due date otherwise just a note"."""
+    def _land(self, due=None, task_due=None):
+        s = _store(); tid = _work(s, 1); mid = _sent(s)
+        if task_due: s.update_task(tid, {'DueAt': task_due}, 'owner')
+        judged(s, {'the data is compiled': {'promise': True, 'what': 'finish verifying the accounts', 'due': due, 'task': tid}})
+        self.assertEqual(s.get_message(mid)['TaskId'], tid)
+        return s.get_task(tid), next(c['Body'] for c in s.list_comments(tid) if 'finish verifying' in c['Body'])
+
+    def test_a_promised_day_is_the_tasks_due_day(self):
+        t, note = self._land(due=_day(3))
+        self.assertEqual(str(t['DueAt'])[:10], _day(3))
+        self.assertIn(f"by {_day(3)} - set as this task's due date", note)
+
+    def test_no_day_is_only_a_note(self):
+        t, note = self._land()
+        self.assertFalse(t.get('DueAt'))
+        self.assertNotIn('due', note)
+
+    def test_an_earlier_due_day_is_never_pushed_out(self):
+        t, note = self._land(due=_day(5), task_due=_day(2))
+        self.assertEqual(str(t['DueAt'])[:10], _day(2))
+        self.assertIn(f'the task stays due {_day(2)}', note)
+
+    def test_a_later_due_day_is_brought_in(self):
+        t, _ = self._land(due=_day(2), task_due=_day(6))
+        self.assertEqual(str(t['DueAt'])[:10], _day(2))
+
+
+def triage_brain(seen):
+    """Triage, scripted to answer from its evidence: same_as the hand-made task only when it was shown it."""
+    def llm(system, user, **k):
+        seen.append(user)
+        tid = next((int(x) for x in re.findall(r'"tid": (\d+)', user)), None) if 'started this thread' in user else None
+        return json.dumps({'intent': 'task', 'kind': 'task', 'why': 'scripted', 'title': 'Explain the payer figures', 'summary': 's',
+                           **({'same_as': tid} if tid else {})})
+    return llm
+
+
+def _reply(s, conv, llm, ext='r1'):
+    with mock.patch.object(ingest, '_spawn'):
+        return ingest.ingest_message(s, {'external_id': ext, 'channel': 'email', 'from_email': RAY, 'from_name': 'Ray Colton',
+                                         'conversation_id': conv, 'subject': 'RE: Docs', 'sent_at': _ago(0),
+                                         'body': 'Row 17 on the by-payer tab - is that amount still collectable?'}, llm=llm)
+
+
+class OwnerStartedThreadTests(unittest.TestCase):
+    """The owner, 2026-10-26: "Yes" - a reply on a thread they started from their mail app sees the work they were in."""
+    def test_a_reply_joins_the_hand_made_task_the_owner_was_working(self):
+        s = _store(); tid = _work(s, 2); _sent(s, hours_ago=1); seen = []
+        self.assertEqual(ingest.identity_route(s, {'conversation_id': 'c-docs', 'channel': 'email'})['decision'], 'create')  # no task yet: triage decides
+        got = _reply(s, 'c-docs', triage_brain(seen))
+        self.assertIn('you started this thread', seen[-1])
+        self.assertEqual(got['task_id'], tid)
+        # ...and the next reply follows the thread there
+        r = ingest.identity_route(s, {'conversation_id': 'c-docs', 'channel': 'email'})
+        self.assertEqual((r['decision'], r['task_id']), ('attach', tid))
+
+    def test_an_unrelated_reply_still_makes_its_own_task(self):
+        s = _store(); tid = _work(s, 2); seen = []
+        s.add_message({'ExternalId': 'theirs', 'ConversationId': 'c-other', 'Channel': 'email', 'SourceName': ME, 'Subject': 'Docs',
+                       'FromName': 'Ray Colton', 'FromEmail': RAY, 'SentAt': _ago(1), 'BodyText': 'Hello', 'Status': 'filed'})
+        got = _reply(s, 'c-other', triage_brain(seen))                    # a thread THEY started: the owner's work is not shown
+        self.assertNotIn('started this thread', seen[-1])
+        self.assertNotEqual(got['task_id'], tid)
+        self.assertTrue(got['task_id'])
 
 
 if __name__ == '__main__': unittest.main()

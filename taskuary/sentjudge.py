@@ -137,9 +137,16 @@ def judge(store, llm=None, days: int = DAYS) -> int:
             except (TypeError, ValueError): tid = None
             on = tid in shown and store.sent_onto_task(m['MessageId'], tid, f"your sent mail - part of {task_ref(tid)}'s work, so its thread is that task's")
             if on and promise and not done:
-                due = _date(v.get('due'))
-                store.add_comment(tid, 'promise', 'agent', f"You told {store.promisee(m) or 'them'} you would {what or 'follow up'}"
-                                  + (f" by {due}" if due else '') + ' - kept on this task, the work it is part of.')
+                # ...its day is the task's due day (the owner, 2026-10-26: "if date promised then due date otherwise just a note") -
+                # never pushing an earlier one out, which the owner or the sender set for a reason
+                due, cur = _date(v.get('due')), str((store.get_task(tid) or {}).get('DueAt') or '')[:10]
+                sets = bool(due) and (not cur or due < cur)
+                if sets:
+                    from . import remind
+                    remind.set_due(store, tid, due, 'promise')
+                said = (f" by {due} - set as this task's due date" if sets else f" by {due} - the task stays due {cur}, the earlier day" if due else '')
+                store.add_comment(tid, 'promise', 'agent', f"You told {store.promisee(m) or 'them'} you would {what or 'follow up'}{said}. "
+                                  'Kept on this task, the work it is part of.')
             elif promise and not done:                                # the owner's own word is their task, with its day (spec 2026-10-12)
                 store.task_for_promise(m['MessageId'], what, _date(v.get('due')))
             for pid in v.get('delivers') or []:

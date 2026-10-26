@@ -2675,6 +2675,12 @@ class SQLiteStore:
             "SELECT t.TaskId, t.Title, t.Summary, MAX(a.CreatedAt) Touched FROM audit a JOIN task t ON t.TaskId=CAST(a.EntityId AS INTEGER) "
             " WHERE a.EntityType='task' AND a.Actor='owner' AND a.CreatedAt>=? AND a.CreatedAt<=? AND t.Status NOT IN ('done','dropped') "
             " GROUP BY t.TaskId ORDER BY Touched DESC LIMIT ?", (since, before, limit))
+    def owner_started(self, conversation_id):
+        """The owner's own sent message that STARTED this thread, when no task holds the thread yet - else None."""
+        if not conversation_id or self.task_for_conversation(conversation_id): return None
+        m = self._one("SELECT * FROM message WHERE ConversationId=? AND IFNULL(Channel,'') NOT IN ('report','assistant','own') "
+                      'ORDER BY SentAt, MessageId LIMIT 1', (conversation_id,))
+        return m if m and (m.get('Status') == 'context' or m.get('Direction') == 'out') else None
     def tasks_closed_since(self, since: str, limit=60):
         """Tasks closed (done or dropped) on or after `since`, newest first, each with the senders and
         conversations it carried - enough for a caller to decide whether it touches the message in hand

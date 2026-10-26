@@ -92,6 +92,9 @@ class SignIn(Shipped):
                                 headers=AGENT).status_code, 403)
 
     def test_signed_in_card_reads_the_google_calendar(self):
+        # the server's store is shared across the suite and an earlier test may leave the calendar switched off: this one reads it
+        was = server.store.get_setting('calendar_enabled'); server.store.set_setting('calendar_enabled', '1', 'test')
+        self.addCleanup(server.store.set_setting, 'calendar_enabled', '1' if was is None else was, 'test')
         cid = self.card()                                                                  # nothing to create or paste
         self.assertTrue(any(self.me in x for x in cal.unread_mail(server.store)))           # before: a card no read reaches
         with fake_vault():

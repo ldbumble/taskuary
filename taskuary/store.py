@@ -569,6 +569,11 @@ MSG_FTS_TRIGGERS = (
     f'INSERT INTO message_fts(message_fts, rowid, {_MSG_COLS}) VALUES ({_MSG_OLD}); '
     f'INSERT INTO message_fts(rowid, {_MSG_COLS}) VALUES ({_MSG_NEW}); END')
 
+# A mail's own ids, kept in its MailMetaJson so a later reply finds the thread through them (store.conversation_of_mail):
+# its Message-ID (`mid`) and Gmail's thread id (`gm_thread`). One spelling for the index and the query, or SQLite never
+# pairs the two; json_valid first, since one malformed row would otherwise stop the index being built at all.
+def meta_expr(key: str) -> str: return f"(CASE WHEN json_valid(MailMetaJson) THEN json_extract(MailMetaJson, '$.{key}') END)"
+
 # CREATE TABLE IF NOT EXISTS is a no-op on an existing db; these are not. IF NOT EXISTS
 # so a second open (desktop + web, or a restart) does not raise. Named so EXPLAIN QUERY
 # PLAN tests can see them, and so a DROP INDEX in a test is not a mystery.
@@ -580,6 +585,8 @@ INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_message_sent ON message(SentAt, MessageId)',
     'CREATE INDEX IF NOT EXISTS idx_message_created ON message(CreatedAt)',
     'CREATE INDEX IF NOT EXISTS idx_message_from ON message(FromEmail)',
+    f"CREATE INDEX IF NOT EXISTS idx_message_mail_id ON message({meta_expr('mid')})",
+    f"CREATE INDEX IF NOT EXISTS idx_message_gm_thread ON message({meta_expr('gm_thread')})",
     'CREATE INDEX IF NOT EXISTS idx_project_link_identity ON project_link(Kind, Value, Confidence)',
     'CREATE INDEX IF NOT EXISTS idx_project_link_project ON project_link(ProjectId, Kind)',
     'CREATE INDEX IF NOT EXISTS idx_project_evidence_task ON project_evidence(TaskId, LinkId)',
@@ -2633,6 +2640,27 @@ class SQLiteStore:
             if r: return r['TaskId']
         # channels without a conversation id (and mail whose References header was rewritten)
         return next((m['TaskId'] for m in reversed(self.thread_messages(None, subject)) if m['TaskId']), None) if subject else None
+    def conversation_of_mail(self, ids=(), gm_thread=None, mailbox=None):
+        """The conversation a mail already stored here files under, found through the mail's own ids (TQ-1214,
+        2026-10-26): Gmail's thread id when the server gave one, else the first of `ids` - root first - that is a
+        conversation key or the Message-ID of a stored mail. None when nothing here belongs to it.
+
+        The key each IMAP mail derived from its own headers was not enough: a reply whose In-Reply-To named the
+        owner's answer rather than the first mail keyed a thread of its own, and the owner's next answer sat on
+        the other half. Gmail's id is per account, so it is matched within the mailbox that read it."""
+        if gm_thread:
+            r = self._one(f"SELECT ConversationId FROM message WHERE {meta_expr('gm_thread')}=? AND SourceName=? "
+                          'AND ConversationId IS NOT NULL ORDER BY MessageId LIMIT 1', (str(gm_thread), mailbox))
+            if r: return r['ConversationId']
+        ids = [i for i in dict.fromkeys(ids) if i][:100]
+        if not ids: return None
+        qs = ','.join('?' * len(ids))
+        keys = {r['ConversationId'] for r in self._rows(f'SELECT DISTINCT ConversationId FROM message WHERE ConversationId IN ({qs})', ids)}
+        # oldest row last, so where one id ever landed on two keys the first one kept wins
+        by_mid = {r['m']: r['ConversationId'] for r in self._rows(
+            f"SELECT {meta_expr('mid')} m, ConversationId FROM message WHERE {meta_expr('mid')} IN ({qs}) "
+            'AND ConversationId IS NOT NULL ORDER BY MessageId DESC', ids)}
+        return next((i if i in keys else by_mid[i] for i in ids if i in keys or i in by_mid), None)
     def open_task_with_same_ask(self, title, from_email, channel=None):
         """The OPEN task this exact ask is already sitting on, when the thread cannot say so.
 

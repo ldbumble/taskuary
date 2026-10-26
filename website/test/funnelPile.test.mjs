@@ -151,7 +151,7 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.match(page, /if \(t === "Timeline" \|\| t === "Tasks"\) t = "Assistant";/);   // old links and cards still land
   assert.match(page, /if \(BROWSED\[t\]\) \{ ask\(\{ kind: "browse", area: BROWSED\[t\] \}\); t = "Assistant"; \}/);
   assert.doesNotMatch(page, /<FeedView/);                   // the rail is mounted by the Assistant, nowhere else
-  assert.match(page, /useState\("Assistant"\)/);           // the default, always
+  assert.match(page, /useState\(\(\) => \(window\.location\.hash === BOARD \? "Board" : "Assistant"\)\)/);   // the default, unless the address is the Board's (2026-10-26)
   assert.doesNotMatch(page, /<FloatingAssistant/);
   // ...and the way back from the Board wears Taskuary's star, drawn in the pill's own ink
   // ...and one switch for the three views, Chat wearing the real logo (2026-10-15: no Board button, no Task mode)

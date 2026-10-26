@@ -30,10 +30,10 @@ test("the coding picker filters to coding workers and names them by their CLI", 
 
 test("the hook carries what each worker is for", () => {
   const ui = read("ui.jsx");
-  assert.match(ui, /setKinds\(Object\.fromEntries\(\(data\.data \|\| \[\]\)\.map\(\(a\) => \[a\.Name, a\.Kind\]\)\)\)/);
+  assert.match(ui, /kinds: Object\.fromEntries\(\(data\.data \|\| \[\]\)\.map\(\(a\) => \[a\.Name, a\.Kind\]\)\)/);
   // the hook may carry MORE than these - it grew a "brains" member with the brain-layer
   // work - but "kinds" has to stay on it, which is what this guard is actually for
-  assert.match(ui, /return \{ agents, models, cmds, kinds[^}]*\};/);
+  assert.match(ui, /const AGENTS_UNREAD = \{ agents: \[\], models: \{\}, cmds: \{\}, kinds: \{\}/);
 });
 
 test("the new-task dialog asks the question it means, and passes the kinds", () => {

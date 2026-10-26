@@ -350,3 +350,12 @@ def test_a_run_over_sources_with_no_rows_yet_puts_nothing_on_the_rail():
     assert out['message_id'] is None and not out['failed'] and 'nothing to show yet' in out['subject']
     funnel._SOURCES['at'] = 0
     assert not any(i.get('source_id') == src['SourceId'] for i in funnel.pile(s, force=True)['items'])
+
+
+def test_the_tasks_dataset_leaves_out_the_assistants_own_chat_records():
+    # the owner, 2026-10-26: the built-in dashboard listed "Taskuary guide" - the Assistant's chat record - and it opened an empty task
+    s = MemoryStore()
+    real = s.create_task({'Title': 'Reconcile the August GL export', 'Kind': 'general', 'Status': 'open'}, 'router')
+    s.create_task({'Title': 'Taskuary guide', 'Kind': 'general', 'Status': 'open', 'Source': 'assistant', 'SourceRef': 'assistant:dock'}, 'owner')
+    s.create_task({'Title': 'Assistant chat', 'Kind': 'general', 'Status': 'open', 'Source': 'assistant', 'SourceRef': 'assistant:concierge'}, 'owner')
+    assert [r['task_id'] for r in dashboards.DATASETS['tasks'][0](s, 90)] == [real]

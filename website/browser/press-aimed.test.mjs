@@ -45,7 +45,9 @@ async function oneActed(page, tasks, acted) {
 }
 
 test("a double-click on Mark done closes one task and leaves the next open on the table", { timeout: 180000 }, async (t) => {
-  const { page, errors, tasks } = await start(t, { slow: SLOW });
+  // ...on a screen wide enough for Mark done to stand on the row: at 1440 the one-row chat bar's box (2026-10-26) takes the room CLOSE stood
+  // in, and it folds into the ▾ - a menu item, not the button a hand double-clicks
+  const { page, errors, tasks } = await start(t, { slow: SLOW, width: 1920 });
   await dbl(page, '[data-tq-row] button[data-tq-verb="done"]');
   await oneActed(page, tasks, (s) => s === "done");
   assert.deepEqual(errors, []);

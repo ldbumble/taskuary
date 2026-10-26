@@ -15,6 +15,7 @@ import threading
 from datetime import datetime, timedelta
 from loguru import logger
 from .timewords import plural
+from .store import task_ref
 
 DAYS = 30                  # the Advisor's window (assistant.DAYS): how far back sent words are read
 BATCH = 40                 # messages per call - a first run on a full Sent folder catches up over a few runs
@@ -32,12 +33,15 @@ SYSTEM = ("You read messages the OWNER sent and say what each one means for foll
           "= the sent day, 'tomorrow' = the next day, 'Friday' = the next Friday on or after it); null when no day was given.\n"
           "- delivered: for a promise, true when one of YOUR LATER WORDS shown under it plainly delivers it; otherwise false.\n"
           "- delivers: the ids of OPEN PROMISES shown under the message that THIS message delivers (sends the thing, says it is done); [] if none.\n"
+          "- task: when OPEN WORK is shown under the message, the number of the task this message is part of - the owner reporting on, "
+          "sending or promising to finish that work; null when it is about something else. Judge by what the work IS, not shared words.\n"
           "Judge only from the words given. Answer JSON only: "
-          '{"verdicts": [{"id": "m123", "asks_them": false, "promise": false, "what": "", "due": null, "delivered": false, "delivers": []}]}')
+          '{"verdicts": [{"id": "m123", "asks_them": false, "promise": false, "what": "", "due": null, "delivered": false, "delivers": [], "task": null}]}')
 WANT = {'type': 'object', 'required': ['verdicts'], 'properties': {'verdicts': {'type': 'array', 'items': {
     'type': 'object', 'required': ['id', 'asks_them', 'promise'],
     'properties': {'id': {'type': 'string'}, 'asks_them': {'type': 'boolean'}, 'promise': {'type': 'boolean'}, 'what': {'type': 'string'},
-                   'due': {'type': ['string', 'null']}, 'delivered': {'type': 'boolean'}, 'delivers': {'type': 'array', 'items': {'type': 'string'}}}}}}}
+                   'due': {'type': ['string', 'null']}, 'delivered': {'type': 'boolean'}, 'delivers': {'type': 'array', 'items': {'type': 'string'}},
+                   'task': {'type': ['integer', 'null']}}}}}}
 _LOCK = threading.Lock()   # one judging pass at a time: the Advisor and the digest firing together would pay twice
 
 
@@ -62,13 +66,28 @@ def _brain(store, llm):
         logger.debug(f'sentjudge: no model - {e}'); return None
 
 
-def _item(store, m: dict, open_: list, later: list) -> str:
+def open_work(store, m: dict) -> list:
+    """The open tasks a sent message ON NO TASK may be part of: what touches it by thread, subject or a shared id (as triage is shown,
+    context.recent_open), and what the owner was working in the hours before they sent it (context.worked_before). A message
+    already on a task is its thread's - [] then. Evidence for the judge's `task`; nothing here joins anything."""
+    if m.get('TaskId'): return []
+    from . import context
+    seen, out = set(), []
+    msg = {'conversation_id': m.get('ConversationId'), 'subject': m.get('Subject'), 'body': m.get('BodyText'), 'channel': m.get('Channel')}
+    for w in context.recent_open(store, msg) + context.worked_before(store, m.get('SentAt')):
+        if w['tid'] not in seen: seen.add(w['tid']); out.append(w)
+    return out
+
+
+def _item(store, m: dict, open_: list, later: list, work: list = ()) -> str:
     to = store.last_inbound_in(m['ConversationId']) or {}
     out = [f"[m{m['MessageId']}] sent {_day(m.get('SentAt'))} to {to.get('FromName') or to.get('FromEmail') or 'them'} "
            f"re \"{' '.join(str(m.get('Subject') or '').split())[:90]}\":\n  \"{_words(m)}\""]
     if open_: out.append('  OPEN PROMISES on this thread: ' + '; '.join(
         f"[m{p['MessageId']}] \"{p.get('PromiseWhat') or _words(p, 120)}\"" + (f" (due {p['PromiseDue']})" if p.get('PromiseDue') else '') for p in open_))
     if later: out.append('  YOUR LATER WORDS on this thread: ' + '; '.join(f"{_day(x.get('SentAt'))}: \"{_words(x, 200)}\"" for x in later))
+    if work: out.append('  OPEN WORK (this message is on no task yet): ' + '; '.join(
+        f"[task {w['tid']}] \"{w['title'][:120]}\"" + (f" - {w['summary']}" if w.get('summary') else '') + f" ({w['why']})" for w in work))
     return '\n'.join(out)
 
 
@@ -93,8 +112,9 @@ def judge(store, llm=None, days: int = DAYS) -> int:
             cid, at = m['ConversationId'], _ts(m.get('SentAt'))
             open_ = [p for p in store.open_promises(_since(days), at, cid) if p['MessageId'] != m['MessageId'] and _ts(p.get('SentAt')) < at]
             later = store.own_sent_on_thread(cid, after=at, limit=LATER)
-            ctx[f"m{m['MessageId']}"] = (m, {f"m{p['MessageId']}": p['MessageId'] for p in open_}, later)
-            items.append(_item(store, m, open_, later))
+            work = open_work(store, m)
+            ctx[f"m{m['MessageId']}"] = (m, {f"m{p['MessageId']}": p['MessageId'] for p in open_}, later, {w['tid'] for w in work})
+            items.append(_item(store, m, open_, later, work))
         try: got = _ask(llm, items)
         except Exception as e:
             logger.warning(f'sentjudge: the sent-words judge failed - {e}'); return 0
@@ -102,14 +122,26 @@ def judge(store, llm=None, days: int = DAYS) -> int:
         for v in got:
             hit = ctx.get(str(v.get('id') or '').strip())
             if not hit: continue                                       # an id it invented is not a verdict
-            m, opened, later = hit
+            m, opened, later, shown = hit
             promise = v.get('promise') is True
             done = later[-1]['MessageId'] if promise and v.get('delivered') is True and later else None
-            store.put_sent_verdict(m['MessageId'], m['ConversationId'], v.get('asks_them') is True, promise,
-                                   ' '.join(str(v.get('what') or '').split())[:160] if promise else '',
+            what = ' '.join(str(v.get('what') or '').split())[:160] if promise else ''
+            store.put_sent_verdict(m['MessageId'], m['ConversationId'], v.get('asks_them') is True, promise, what,
                                    _date(v.get('due')) if promise else None, str(by)[:60], done)
-            if promise and not done:                                  # the owner's own word is their task, with its day (spec 2026-10-12)
-                store.task_for_promise(m['MessageId'], ' '.join(str(v.get('what') or '').split())[:160], _date(v.get('due')))
+            # PART OF WORK ALREADY OPEN (2026-10-26): a mail the owner sent from their mail app about a task they had made by hand -
+            # "the numbers are in the shared folder, done Sunday" - became a promise task of its own, the thread became that task's,
+            # and the other side's question about the work joined it there and not the work's task (the owner: "can email add itself
+            # to task that I opened?"). A message on no task that the judge reads as part of a
+            # task it was SHOWN goes on that task; its thread follows it there, and no second task is made for one job
+            try: tid = int(v.get('task')) if v.get('task') is not None else None
+            except (TypeError, ValueError): tid = None
+            on = tid in shown and store.sent_onto_task(m['MessageId'], tid, f"your sent mail - part of {task_ref(tid)}'s work, so its thread is that task's")
+            if on and promise and not done:
+                due = _date(v.get('due'))
+                store.add_comment(tid, 'promise', 'agent', f"You told {store.promisee(m) or 'them'} you would {what or 'follow up'}"
+                                  + (f" by {due}" if due else '') + ' - kept on this task, the work it is part of.')
+            elif promise and not done:                                # the owner's own word is their task, with its day (spec 2026-10-12)
+                store.task_for_promise(m['MessageId'], what, _date(v.get('due')))
             for pid in v.get('delivers') or []:
                 if str(pid) in opened: store.deliver_promise(opened[str(pid)], m['MessageId'])   # only a promise it was shown
             n += 1

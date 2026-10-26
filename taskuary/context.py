@@ -146,6 +146,24 @@ def recent_open(store, msg: dict, limit: int = RECENT) -> list:
     return [{k: v for k, v in r.items() if k != '_rank'} for r in out[:limit]]
 
 
+WORKED_HOURS = 4         # how long before a mail of the owner's the work they were doing still speaks to it
+
+
+def worked_before(store, at: str, hours: float = WORKED_HOURS, limit: int = RECENT) -> list:
+    """The OPEN tasks the owner was working in the hours before `at` - what a mail they sent then may be part of. A task
+    the owner made by hand has no thread and no sender, and its title rarely shares a word with a "Docs" subject line, so
+    by words alone their own sent mail about it matched nothing: the promise in it became a task of its own, the thread
+    became that task's, and the other side's question about the work joined it rather than the work's task (2026-10-26,
+    the owner: "can email add itself to task that I opened?"). When they were in it is evidence; the model says if it is the one."""
+    try: end = datetime.fromisoformat(str(at or '')[:19].replace('T', ' '))
+    except ValueError: return []
+    since = (end - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
+    from .timewords import mins, span
+    return [{'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '', 'summary': _short(t.get('Summary'), 240),
+             'why': f"you were working on it {span(mins(t['Touched'], end) or 0, long=True)} before you sent this"}
+            for t in store.tasks_owner_worked(since, end.strftime('%Y-%m-%d %H:%M:%S'), limit)]
+
+
 MEETINGS = 12            # a day's calendar, bounded so a packed one cannot crowd the mail out of the prompt
 
 def meetings_today_of(t: dict) -> list:

@@ -2500,6 +2500,24 @@ class SQLiteStore:
                     if r['Kind'] == 'promise.made' and not r['ResolvedAt']: outcomes._resolve_one(self, r, datetime.now())
             except Exception as e: logger.warning(f'promise {mid}: its outcome row was not resolved - {e}')
     def promise_task(self, mid): return self._one('SELECT * FROM task WHERE SourceRef=?', (f'promise:{mid}',))
+    def made_from(self, t: dict, before=12, after=8) -> list:
+        """The message a task was made from that is not ON it, with its thread around it, oldest first. A promise's sent mail
+        is nearly always on the thread's own task already (task_for_promise links it only when it is free), and an Advisor
+        idea on a closed task's mail opens a fresh task - a message points at one task, so the task carries its message in
+        SourceRef ('promise:<mid>', 'assistant:idea:<n>' -> idea.MessageId) and Came from reads it from there, never moving it."""
+        ref, mid = str(t.get('SourceRef') or ''), None
+        if ref.startswith('promise:') and ref[8:].isdigit(): mid = int(ref[8:])
+        elif ref.startswith('assistant:idea:') and ref[15:].isdigit():
+            i = self._one("SELECT COALESCE(MessageId, json_extract(ActionJson,'$.mid')) Mid FROM idea WHERE IdeaId=?", (int(ref[15:]),))
+            mid = (i or {}).get('Mid')
+        m = self.get_message(mid) if mid else None
+        if not m or m.get('Channel') == 'assistant': return []      # an idea read off the Advisor's own line has no source to show
+        if not m.get('ConversationId'): return [m]
+        q = ("SELECT * FROM message WHERE ConversationId=? AND Status<>'skipped' AND IFNULL(Channel,'')<>'assistant' AND MessageId<>? "
+             'AND SentAt{} ? ORDER BY SentAt {} LIMIT ?')
+        a = (m['ConversationId'], m['MessageId'], m.get('SentAt') or '')
+        # ...a window, not the whole thread: a family chat a promise was made in runs to thousands of lines
+        return list(reversed(self._rows(q.format('<=', 'DESC'), a + (before,)))) + [m] + self._rows(q.format('>', 'ASC'), a + (after,))
     def task_for_promise(self, mid: int, what: str, due) -> int:
         """The owner's own promise as a task on them (spec 2026-10-12): made once per sent message, dated when it was,
         saying whom it was made to and carrying the thread it was made in (the review, 2026-10-12: a title alone)."""

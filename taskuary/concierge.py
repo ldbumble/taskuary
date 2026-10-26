@@ -1078,8 +1078,11 @@ def row_buttons(store, it: dict) -> list:
     # an item with a task behind it is drawn as the task's own view (CanvasItem.showsTask), whose row is the task page's verbs - the chips under
     # the line are not drawn there: TQ-0001's chips had Not ours, its row did not, and "Press Not ours" lit nothing (verify, 2026-10-19)
     if it.get('tid') and it.get('kind') not in TASK_VIEW_NOT and store is not None:
+        # REPLY on a task with no message of its own answers whom it owes - a promise task's own mail (funnel.reply_to, the task
+        # page's `owed`); only Reply reads it, so filing or forwarding never reaches the owner's sent mail on another task
+        owed = it if it.get('mid') else it | {'mid': funnel.reply_to(store, int(it['tid']))}
         out = [{'verb': v, 'label': buttons.label(v)} for v, d in buttons.VERBS.items()
-               if d.get('row') and not cannot(it, v, store) and _shows(store, it, v) and not (v == 'regular_agent' and _agent_holds(store, it))]
+               if d.get('row') and not cannot(owed if v == 'reply' else it, v, store) and _shows(store, it, v) and not (v == 'regular_agent' and _agent_holds(store, it))]
     else: out = [{'verb': c['verb'], 'label': c['label']} for c in chips_for(store, it) if c.get('verb') and c['verb'] != 'next']
     # ...and a report's or a dashboard's Share, which its card draws on the row while it is the item (ReportCard, DashboardCard) - a run
     # that failed has nothing to share. Seen here so the Advisor knows the row has it; no rule lights it (rulebook: report_ok, dashboard)

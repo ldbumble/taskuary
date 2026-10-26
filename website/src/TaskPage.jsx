@@ -958,7 +958,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     .filter((m) => cleanText(m.BodyText) && !ownBodies.has(cleanText(m.BodyText)));
   const taskMessages = [...storedMessages, ...reviewMessages]
     .sort((a, b) => tsMs(a.SentAt) - tsMs(b.SentAt));
-  const sourceMessage = replySource(storedMessages);
+  // ...and a PROMISE task, which carries no message of its own, answers the owner's own mail the promise was made in - to whom it went
+  // (the owner, 2026-10-26: "if the promise was to x it should save who to send to and draft response to them"; server _owed)
+  // (the owner's own mail, read as the person it went to: To and Answering name them, never "You")
+  const ownSource = replySource(storedMessages);
+  const owed = !ownSource && detail?.owed ? { ...detail.owed, FromName: detail.owed.OwedTo || "them", FromEmail: "" } : null;
+  const sourceMessage = ownSource || owed || undefined;
   // ...and whether there is anybody at the other end of it (taskLifecycle.hasCorrespondent). Every
   // reply door hangs off this, so a task you typed yourself offers no reply to write.
   // a BATCH owes nobody one reply: its items are four authors, each answered (or merged, or closed) on its own line (batch.py)
@@ -1036,12 +1041,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const sourceFiles = filesByMessage(detail?.attachments);
   const fetchFor = inbound[0]?.Channel === "email" && mentionsPicture(inbound[0].BodyText) ? inbound[0].MessageId : null;
   // CLOSE OUT'S CONVERSATION is the one being answered - the reply source's - condensed, newest first; never a batch's four authors
-  const closeGroup = detail?.batch || !inbound.length ? null
+  const closeGroup = detail?.batch || !(inbound.length || owed) ? null
     : sources.find((g) => g.msgs.some((m) => m.MessageId === sourceMessage?.MessageId)) || sources[0] || null;
   // ...and what you sent outside Taskuary in some OTHER conversation still says so under it, newest first
   const sentApart = newestFirst(sentOutside.filter((m) => !closeGroup?.msgs.some((x) => x.MessageId === m.MessageId)));
   // ...and the one message in it the draft answers: the reply's source, else the conversation's newest from them
-  const answering = !closeGroup ? null : closeGroup.msgs.find((m) => m.MessageId === sourceMessage?.MessageId)
+  const owedRow = owed && closeGroup?.msgs.find((m) => m.MessageId === owed.MessageId);
+  const answering = !closeGroup ? null : owedRow ? { ...owedRow, who: owed.FromName }
+    : closeGroup.msgs.find((m) => m.MessageId === sourceMessage?.MessageId)
     || newestFirst(closeGroup.msgs.filter((m) => m.Status !== "context" && m.Direction !== "out" && !m.ReviewSent))[0] || null;
   // ...From is always open now (the redesign, 2026-10-21): the link opens the whole conversation there and brings it into view, and the
   // work column stays where it was - the reply you were reading does not fold under you
@@ -1210,7 +1217,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // are a line each, one click to open - the Send to agent form stood open over a task nobody needed an agent for
   const pane = waitFor && !openStage ? "" : workPane({ stage, kind: t?.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas, picked: !!openStage });
   // the one line From folds to while an agent works (sessionView)
-  const fromLine = fromLineOf({ sender: sourceMessage, count: sourceCount, workflow: fromWorkflow, made: t ? `${detail.ref} · ${made}` : "" });
+  const fromLine = fromLineOf({ sender: ownSource, count: sourceCount, workflow: fromWorkflow, made: t ? `${detail.ref} · ${made}` : "" });
   // the note a close was written with (server task.complete: "Closed out: ...") - Close out shows it under the close
   const closedNote = String([...(detail?.comments || [])].reverse().find((c) => /^Closed out: /.test(String(c.Body || "")))?.Body || "").replace(/^Closed out: /, "");
   // the news line is said once, at the top of the task stage; open, the agent step is just its record

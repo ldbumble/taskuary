@@ -201,19 +201,14 @@ class RemindMeTests(unittest.TestCase):
 
 
 class ErrorDismissTests(unittest.TestCase):
-    def test_next_on_an_error_dismisses_it_and_a_different_error_comes_back(self):
-        """R10: Next from the page wrote no sig, so the error after the dismissed one stayed hidden too."""
+    def test_a_failing_connection_is_not_a_row_to_walk_past(self):
+        """R10 put Next's dismissal on the "stopped answering" row; the row is gone (2026-10-26) - the bell carries it."""
         s = store()
         c = s.get_connector_by_type('github')
         s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Roles': 'trigger'}, 'test')
         s.touch_connector(c['ConnectorId'], 'northwind/ledger: 404 Not Found')
-        s._exec("UPDATE connector SET LastErrorAt=datetime('now', 'localtime', '-1 hour') WHERE ConnectorId=?", (c['ConnectorId'],))   # past the bell's grace
-        key = f"conn:{c['ConnectorId']}"
-        self.assertTrue([i for i in rail(s) if i['key'] == key])
-        funnel.settle(s, key, 'surfaced', 'owner', read=True, put_down=True); funnel.invalidate()     # Next's mark: shown alone keeps it
-        self.assertFalse([i for i in rail(s) if i['key'] == key], 'Next dismisses it')
-        s.touch_connector(c['ConnectorId'], 'northwind/ledger: 401 Bad credentials'); funnel.invalidate()
-        self.assertTrue([i for i in rail(s) if i['key'] == key], 'a different error is news again')
+        s._exec("UPDATE connector SET LastErrorAt=datetime('now', 'localtime', '-1 hour') WHERE ConnectorId=?", (c['ConnectorId'],))
+        self.assertFalse([i for i in rail(s) if i['key'] == f"conn:{c['ConnectorId']}"])
 
 
 class NewWalkRaisesWavingAgentsTests(unittest.TestCase):

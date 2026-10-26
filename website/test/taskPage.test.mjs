@@ -108,7 +108,7 @@ test("a running agent's Stop and save is dark on its own; the Advisor's pick out
   assert.deepEqual(dark(rowOf({ ref: "", list: list.map((x) => ({ ...x, fill: false })) })), [], "a finished turn or a question: nothing dark");
   const page = src("TaskPage.jsx");
   assert.match(page, /const stopSave = \{ id: "save-end", group: "agent", lead: !pendingReview, fill: liveSession && agentState === AGENT\.working && !pendingReview,/);
-  assert.match(src("ActionRow.jsx"), /data-tq-verb=\{v\.id\} data-tq-own=\{v\.own \? "" : undefined\}/);
+  assert.match(src("ActionRow.jsx"), /data-tq-verb=\{v\.id\} data-tq-for=\{v\.at\} data-tq-own=\{v\.own \? "" : undefined\}/);
   const walk = readFileSync(new URL("../deadend_check.mjs", import.meta.url), "utf8");
   assert.match(walk, /const darkOwn = \(v\) => !!v\?\.own && v\.id === "save-end";/, "the walk excuses that one button and no other");
   assert.match(walk, /const dark = s\.verbs\.filter\(\(v\) => v\.dark && !darkOwn\(v\)\);/);

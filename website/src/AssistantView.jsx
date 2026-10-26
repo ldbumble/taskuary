@@ -30,7 +30,7 @@ import { lazyView } from "./lazyView.jsx";
 import { loadGeneral } from "./lazyGeneral.js";
 // the static demo's guided journey: nothing outside the demo build ever draws it, so nothing there fetches it
 const DemoJourney = DEMO ? lazyView(() => import("./DemoJourney.jsx")) : () => null;
-import { advisedIn, aimed, onPressed, onPressing, press as pressRow, rowNow, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { advisedIn, aimed, onPressed, onPressing, press as pressRow, leaveRow, rowNow, rowTable, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
 import { deskPress, notePress as notePressed } from "./pressLog.js";
 import { forgetTasks, heldTask, heldTerm, notePile, pageRead, prefetchTask, watchReads } from "./taskDetail.js";
 import { readLists } from "./connectorLists.js";
@@ -981,7 +981,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
   if (live && canvas && m.card && showsTask(c, kind) && !foldedNow) return (
     <div className="tq-canvas-live">
       <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle} phone={canvas.phone}
-        onNext={() => actions.next()} busy={actions.busy} onFold={() => canvas.fold(c.key)} onAfter={() => actions.advance(null, true)}
+        onNext={() => actions.next()} busy={actions.busy} picking={actions.picking} onFold={() => canvas.fold(c.key)} onAfter={() => actions.advance(null, true)}
         onLeave={() => canvas.putDown(c.key, c.tid)} onStay={(why) => canvas.pickUp(c.key, why)} onReminded={(out) => actions.reminded(out, c)}
         onListChanged={actions.reload} onChanged={actions.changed} onOpenTask={actions.openTask} lit={canvas.lit}
         onPropose={actions.pressAdvice} />
@@ -1120,6 +1120,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // the day's meetings are asked for NOW, not when the welcome first draws - the strip is ready with it
   useEffect(() => { refreshToday(); }, []);
   const [busy, setBusy] = useState(false);
+  // A ROW CLICKED IS NOT A NEXT PRESSED (the owner, 2026-10-26: "fix switching tasks thing of course"): every pick greyed Next for the
+  // ~300 ms its pull took, on a row that had just drawn the new task. While a pick (a row, a name, a link) is in flight Next stays
+  // pressable, and a press then is held and runs once the pick lands - on the item the owner was looking at, as a press always does.
+  // `flight`: the walk move under way - a pick or not, and the item it is leaving, whose verbs leave the row at once (actionRow.leaveRow)
+  const [flight, setFlight] = useState(null), nextHeld = useRef(false), picking = !!flight?.pick;
   // a card was let go and the next one is on its way: the settle and the deferred pick run BEFORE
   // surface() raises busy, and that second drew nothing at all (the owner, 2026-09-25: "for a second
   // there is no ... loading the next"). Its own flag, because busy would make surface() refuse to run.
@@ -1975,7 +1980,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       }
     }
     turnFlight.current = true;
-    setBusy(true); setErr("");
+    setBusy(true); setErr(""); setFlight({ pick: !!key, from: key && key === currentRef.current?.key ? null : currentRef.current?.key || null });
     if (key) unleave({ key });                                    // a row clicked, a name, a link: the owner asked for it back
     pickedRef.current = !!key;
     if (!key) navHow.current = "replace";            // the walk's Next is a stream, not a stack: the address follows, Back does not
@@ -1992,7 +1997,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       capture = key ? null : await ensureNextSelection(scope);
       // a new chat or a reset is the owner's own doing and stays quiet. 2026-09-09: a press that returned here with no word looked
       // alive and reached nothing for half an hour - which is why the only quiet return left is the owner's own
-      if (epoch !== chatEpoch.current || resettingRef.current) { turnFlight.current = false; setBusy(false); dropCarried(); return; }
+      if (epoch !== chatEpoch.current || resettingRef.current) { turnFlight.current = false; setBusy(false); setFlight(null); dropCarried(); return; }
       const activeScope = nextSelectionScope(key ? null : only.current, key ? null : currentRef.current?.key || null);
       const scopeMoved = !key && !sameSelectionScope(scope, activeScope);
       if (!scopeMoved) break;
@@ -2091,7 +2096,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       setErr(errText(e));
     }
     turnFlight.current = false;
-    setBusy(false);
+    setBusy(false); setFlight(null);
   }, [busy, drawAhead, ensureNextSelection, landed, loadPile, noteLine, putOnTable, resetting, turn, unshow]);
   useEffect(() => { surfaceRef.current = surface; }, [surface]);
   // A CLOSE PUTS THE NEXT ONE UP AT ITS PRESS (owner-approved, 2026-10-20): Mark done, Remove and Remind me fold the item at once, and
@@ -3033,7 +3038,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // none, so a move the row lacks drew no line and no button there (the matrix's phone pass, 2026-10-20)
   const actions = { done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items: pileRows(pile), pressAdvice,
     reminded: (out, c) => remindReceipt(out, c?.tid, c?.ref, c?.key),
-    next: () => runChip({ verb: "next" }), advance: (pile, settled) => advance(pile, settled), reload: () => loadPile(true), changed: onChanged,
+    next: () => { if (picking && busy) nextHeld.current = true; else runChip({ verb: "next" }); }, picking: picking && !resetting, advance: (pile, settled) => advance(pile, settled), reload: () => loadPile(true), changed: onChanged,
     // an earlier line back on the table - or the folded item itself, which only unfolds: it never left the table
     // ...and a page opened over it is put away with the fold: the item under it was folded by the page, not by its X
     reopen: (key, onTable) => { if (onTable) { setFoldedKey(null); browseDown(); putOnTable(null, "view"); } else pull(key); },
@@ -3049,6 +3054,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       if (note) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: note }]);
       deferInChat(() => key ? surfaceRef.current?.(key) : loadPileRef.current?.(), 900);
     } };
+  // ...the Next held over a pick runs the moment it lands (or is dropped with it, by a reset)
+  useEffect(() => { if (busy || !nextHeld.current) return; nextHeld.current = false; if (!resetting) runChip({ verb: "next" }); }, [busy]);   // eslint-disable-line react-hooks/exhaustive-deps
   const shown = old ? old.messages : msgs;
   const walkDots = starting && (msgs.length ? msgs[msgs.length - 1].id : null) === startLast.current;
   const lastBriefId = [...shown].reverse().find((m) => m.card?.kind === "brief")?.id;
@@ -3067,6 +3074,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // THE TABLE, ONE RECORD (tableState.js): folded by its X or under a page opened over it, the item keeps its key - and the Advisor
   // keeps quiet, its button never acting on what nobody can see. The strip speaks only for the item on the table, at rest.
   const table = tableOf({ current, cardKey, foldedKey, browsing, setup: setupOn.current, over: !!setupCard });
+  // ...and the row draws only ITS verbs from the frame it changes (actionRow.rowTable), none of the one a press is leaving: both in one
+  // commit, before the paint - no frame shows the old task's buttons, and a press that fails gives them back in the frame it says so
+  useLayoutEffect(() => { rowTable(table.key); leaveRow(flight?.from); }, [table.key, flight?.from]);
   // ...and what the rail's tag and the box say of it: a page over it is not it in view (tableWords)
   const tableSays = tableWords(table, currentItem?.ref || (/^task:(\d+)$/.test(table.key || "") ? `TQ-${table.key.slice(5).padStart(4, "0")}` : ""));
   // THE ASSISTANT'S LIGHT OUTRANKS THE ADVISOR'S while its item is on the table: the owner asked for that act in words, and the Advisor's line
@@ -3386,8 +3396,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                 onClick={() => openAppLink(place("ai").href)}>{CONNECT_AI}</button>
             </div>
           ) : <>
-            {/* THE ADVICE IS ON ITS WAY: the row has nothing dark until it lands (rowOf), and a quiet line says so - no button.
-                ONE STRIP, ONE HEIGHT from Thinking to its answer: it came and went under the row, which jumped (2026-10-19) */}
+            {/* THE ADVICE IS ON ITS WAY: the row has nothing dark until it lands (rowOf) - no button, no word.
+                ...and a strip with no line in it takes NO ROOM (the owner, 2026-10-26: "remove it when it's not doing anything"):
+                the CSS hides it until a .tq-next lands in it, so the dock is a band shorter while the Advisor is silent */}
             {table.speaks && !holding && !hostedRow && <div className="tq-strip" data-tq-strip={busy || (reading && reading === onTable) ? "busy" : ""}>
             {/* THE ASSISTANT'S LIT BUTTON SAYS SO HERE, over the row it lit: the strip stood empty over a dark Mark done, and "Press Mark done"
                 was only up in the chat (verify, 2026-10-19) - it goes out with the light */}

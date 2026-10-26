@@ -550,8 +550,14 @@
    row its 30px pills in a 3px section (.tq-cl), the box its 34px line - about 115px; a touch screen keeps its 44px targets (pointer: coarse) */
 .tq-dock .tq-next { margin: 0; min-height: 30px; padding: 0 16px; justify-content: flex-start; background: #f6f5f1; border-bottom: 1px solid #ece7de; }
 .tq-dock .tq-next .tq-next-why { margin-left: auto; padding-block: 2px; }
-/* one strip, one height from "Thinking" to its answer: the row under it never jumps when the advice lands (2026-10-19) */
-.tq-dock .tq-strip { min-height: 30px; display: flex; flex-direction: column; background: #f6f5f1; border-bottom: 1px solid #ece7de; }
+/* one strip, one height whatever line it says (2026-10-19) */
+.tq-dock .tq-strip { min-height: 30px; display: flex; flex-direction: column; background: #f6f5f1; border-bottom: 1px solid #ece7de; animation: tqStripIn .16s ease-out; }
+/* ...and NO LINE, NO STRIP (the owner, 2026-10-26: "for advisor we probably should remove it when it's not doing anything no? want to give
+   laptops enough real estate to see the full task"): an empty band of 31px sat over the row while the Advisor was silent - the obvious move
+   (its lit button says it), an agent at work, a read still on its way. It takes no room until it has words, and comes in softly then */
+.tq-dock .tq-strip:not(:has(> .tq-next)) { display: none; }
+@keyframes tqStripIn { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .tq-dock .tq-strip { animation: none; } }
 .tq-dock .tq-strip > .tq-next:last-child { border-bottom: 0; }
 .tq-dock .tq-arow { width: 100%; margin: 0; min-height: 0; justify-content: center; padding: 3px 12px; box-sizing: border-box; border-bottom: 1px solid #ece7de; }
 .tq-dock .tq-compose-box { width: 100%; min-height: 40px; align-items: center; border: 0; border-radius: 0; box-shadow: none; padding: 3px 8px; }
@@ -731,6 +737,9 @@
 .tq-ab:disabled { opacity: .5; cursor: default; }
 /* the draft's Send keeps its place on the bar, empty: its button is under the draft (the owner, 2026-10-22), and the row must not shift */
 .tq-ab.p:disabled { background: #b9c1c8; border-color: #b9c1c8; opacity: 1; }   /* a greyed decision reads as off, not as a fainter blue */
+/* ...but NEXT, held while its own press is in flight, is drawn as it was: it flashed grey on every switch (the owner, 2026-10-26) */
+.tq-ab.next[data-tq-steady]:disabled { opacity: 1; cursor: progress; }
+.tq-ab.p.next[data-tq-steady]:disabled { background: #55697a; border-color: #55697a; }
 .tq-ab.next::after { content: "\2192"; margin-left: 6px; }   /* the arrow is drawn, so the button's text stays exactly "Next" */
 /* setup's Back takes the same slot and points the way it goes (FirstRun: setup:back) */
 .tq-ab.next[data-tq-back]::after { content: none; }

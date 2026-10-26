@@ -12,7 +12,7 @@ import ActionRow, { AdvisorNext } from "./ActionRow.jsx";
 import api from "./api.js";
 import { onLive } from "./live.js";
 import { adviceKeyFor, adviceShown, stripWord } from "./advice.js";
-import { onPressed, useHost, useRowVerbs, useVerbs } from "./actionRow.js";
+import { TableVerbs, onPressed, useHost, useRowVerbs, useVerbs } from "./actionRow.js";
 import { adviceRead } from "./tableState.js";
 import { hint as btnHint, label as btnLabel } from "./buttons.js";
 import { adviceNone } from "./words.js";
@@ -60,7 +60,7 @@ export const showsTask = (card, kind) => !!card?.tid && !["proposal", "setup", "
 // arrow - full screen, and still never a resize: the box it pins is measured in place, the same width and height.
 export const phoneItemHeight = (innerHeight) => Math.max(420, Math.round((innerHeight || 0) - 16));
 
-export default function CanvasItem({ card, height, expanded, onExpand, onNext, busy, onFold, onAfter, onLeave, onStay, onListChanged, onChanged, onOpenTask, onReminded, phone = false, lit = null, onPropose = null }) {
+export default function CanvasItem({ card, height, expanded, onExpand, onNext, busy, picking = false, onFold, onAfter, onLeave, onStay, onListChanged, onChanged, onOpenTask, onReminded, phone = false, lit = null, onPropose = null }) {
   // a task opened "and start it" or "with this dialog up" (TaskHubPage.openTask): once, then it is spent
   const [auto, setAuto] = useState(card.autostart ? { taskId: card.tid, ...card.autostart } : null);
   const [act, setAct] = useState(card.act ? { taskId: card.tid, act: card.act } : null);
@@ -81,7 +81,9 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
   const h = phone ? phoneH : height;
   // NEXT, in the row: the walk's ONE button on a task (the owner, 2026-09-29), the same handler as the button it replaces
   useHost(phone);
-  useVerbs("next", [{ id: "next", group: "next", label: btnLabel("next"), disabled: !!busy, run: () => onNext(), title: btnHint("next") }]);
+  // ...pressable while a pick (a rail row, a link) is on its way - AssistantView holds that press (`picking`); greyed only by a Next in
+  // flight, and drawn as it was then (`steady`): it flashed grey for the ~300 ms of every switch (the owner, 2026-10-26)
+  useVerbs("next", [{ id: "next", group: "next", label: btnLabel("next"), disabled: !!busy && !picking, steady: true, run: () => onNext(), title: btnHint("next") }]);
   const read = useItemAdvice(card, phone);
   const rowHas = useRowVerbs().list.some((v) => v.label === CONNECT_AI && !v.disabled);   // the row's own Connect is lit there (ActionRow)
   // the Assistant's lit button outranks the Advisor's line, as it does over the composer (assistantLight.js)
@@ -110,6 +112,8 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
       {/* a COLUMN that shrinks to the box: the task view inside is a flex column too, so its own scroller gets what is left (TaskPage) */}
       <Box sx={{ flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
       {/* `rail`: the rail's own row for this task - the header's status pill wears exactly its mark and word (railStatus.js) */}
+      {/* ...its verbs are this item's: the row stops drawing them the moment the table names another (actionRow.rowTable) */}
+      <TableVerbs value={card.key}>
       <TaskPage taskId={card.tid} title={card.title || ""} rail={card} canvas active autostart={auto} onAutostarted={() => setAuto(null)}
         openAct={act} onActOpened={() => setAct(null)}
         expanded={expanded} onExpand={onExpand}
@@ -122,6 +126,7 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         onReminded={(out) => { onReminded?.(out); if (out?.remindAt) onAfter(); }} backArrow={phone}
         // Mark done and Remind me put the task down AT THE PRESS, as Next does; a failure puts it back with the reason
         onLeave={onLeave} onStay={onStay} />
+      </TableVerbs>
       </Box>
       {/* THE BUTTONS ARE NOT HERE (layout B, 2026-09-30): the view registers its verbs and Next, and the ONE row above the chat line
           draws them. On a phone the same row rides at the view's foot instead, in both states - the pinned full-screen view covers

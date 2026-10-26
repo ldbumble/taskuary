@@ -412,7 +412,8 @@ const readPage = (page) => page.evaluate(() => {
   const decided = !!document.querySelector("[data-tq-advice]");
   // THE ADVISOR'S STRIP AND ITS LIT BUTTON: the strip is empty only if nothing in it speaks; the lit button must be on the screen
   // and the thing under its own centre
-  const strip = [...document.querySelectorAll("[data-tq-strip]")].find(vis);
+  // ...the dock's strip takes no room while it is silent (2026-10-26), so a silent one is read where it is, unseen
+  const strip = [...document.querySelectorAll("[data-tq-strip]")].find(vis) || document.querySelector(".tq-dock [data-tq-strip]");
   // ...the row's filled button, or the draft card's own lit one (ReviewDecision marks it [data-tq-lit]): a draft's Send, Copy or
   // Redraft is lit under the draft, never on the bar (the owner, 2026-10-22) - the silent strip over it is the obvious move, not a gap
   const litEl = (row && [...row.querySelectorAll(".tq-arow-verbs .tq-ab.p")].find(vis)) || [...document.querySelectorAll("[data-tq-lit]")].find(vis);

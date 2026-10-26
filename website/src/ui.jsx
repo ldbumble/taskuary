@@ -1980,8 +1980,8 @@ export const DraftField = ({ value, onChange, sx, inputProps, ...rest }) => {
     // this cut off" - a 60%-of-screen draft outgrew the column, the lit Send was scrolled up to, and "Result" rested half under the edge)
     const col = el.closest("[data-tq-work]");
     const fit = () => {
-      const room = col ? col.clientHeight - (el.getBoundingClientRect().top - col.getBoundingClientRect().top + col.scrollTop) - 56 : Infinity;
-      setCap(Math.max(col ? 6 : 8, Math.floor(Math.min(window.innerHeight * 0.6, room) / line(el))));
+      const room = col ? col.clientHeight - (el.getBoundingClientRect().top - col.getBoundingClientRect().top + col.scrollTop) - 64 : Infinity;
+      setCap(Math.max(col ? 4 : 8, Math.floor(Math.min(window.innerHeight * 0.6, room) / line(el))));
     };
     fit(); window.addEventListener("resize", fit);
     const cro = col && new ResizeObserver(fit); cro?.observe(col);

@@ -2075,14 +2075,14 @@ def word_hits(words: list, text: str) -> int:
 def _enough(words: list) -> int: return max(1, (len(words) + 1) // 2)
 
 
-def newest_rows(store, days: int, cap: int = 4000):
+def newest_rows(store, days: int, cap: int = 4000, sent: bool = False):
     """feed(limit=cap) newest first, a page at a time: a search by category or age alone stops at its twelfth hit
     instead of building 4,000 rows (6-10 s) to keep twelve. Same rows, same order (feed's order is total: SentAt,
     then MessageId). A row that arrives between pages shifts the next one down a place - seen once, not twice.
     No live sessions: a hit carries who/when/title/ref, none of which a running agent changes."""
     seen, off, n = set(), 0, 100
     while off < cap:
-        page = store.feed(limit=min(n, cap - off), days=days, offset=off, live_state=())
+        page = store.feed(limit=min(n, cap - off), days=days, offset=off, live_state=(), sent=sent)
         for r in page:
             if r['MessageId'] not in seen: seen.add(r['MessageId']); yield r
         if len(page) < min(n, cap - off): return
@@ -2093,7 +2093,9 @@ def search_timeline(store, sel: dict, limit: int = 12) -> list:
     """The history, by the same selector the pipe uses - and over ALL of it, not the last fortnight.
     lookup() only ever looked 14 days back and needed half the owner's words to hit, so anything older
     simply did not exist to the assistant (the owner, 2026-09-07: "lookup should find the correct
-    period and surface likely match")."""
+    period and surface likely match").
+    ...and the owner's OWN sent mail with it: read in from Sent as thread context, it was in no list and so in no search -
+    "did I answer the invite?" came back "I could not find any sent messages" (2026-10-26). A hit they sent says so."""
     from .routing import tokens
     sel = {k: v for k, v in (sel or {}).items() if v not in (None, '', [])}
     want = lambda f: str(sel.get(f) or '').strip().lower()
@@ -2103,8 +2105,8 @@ def search_timeline(store, sel: dict, limit: int = 12) -> list:
     out, days = [], int(sel.get('days') or 3650)
     # the index reaches every message, body included, best match first; without one, the newest 4000 by subject
     ids = store.message_search(words, who, days) if (words or who) else None
-    if ids is None: rows = newest_rows(store, days)
-    else: rank = {i: n for n, i in enumerate(ids)}; rows = sorted(store.feed(limit=len(ids) or 1, days=days, ids=ids), key=lambda r: rank[r['MessageId']])
+    if ids is None: rows = newest_rows(store, days, sent=True)
+    else: rank = {i: n for n, i in enumerate(ids)}; rows = sorted(store.feed(limit=len(ids) or 1, days=days, ids=ids, sent=True), key=lambda r: rank[r['MessageId']])
     for r in rows:
         if r.get('Channel') == 'assistant': continue
         hay = f"{r.get('FromName') or ''} {r.get('FromEmail') or ''}".lower()
@@ -2116,8 +2118,7 @@ def search_timeline(store, sel: dict, limit: int = 12) -> list:
             from datetime import datetime as _dt
             d = funnel._dt(r.get('SentAt'))
             if not d or (datetime.now() - d).total_seconds() < float(older) * 3600: continue
-        out.append({'ref': task_ref(r['TaskId']) if r.get('TaskId') else '', 'when': str(r.get('SentAt') or ''),
-                    'who': r.get('FromName') or r.get('FromEmail') or '?', 'title': subj, 'mid': r.get('MessageId')})
+        out.append(_hit(r))
         if len(out) >= limit: break
     if not out and len(words) > 1: return _search_loose(store, words, who, cat, days, limit)
     return out
@@ -2125,8 +2126,8 @@ def search_timeline(store, sel: dict, limit: int = 12) -> list:
 
 def _search_loose(store, words: list, who: str, cat: str, days: int, limit: int) -> list:
     ids = store.message_search([_stem(w) for w in words], who, days, loose=True)
-    if ids is None: rows = store.feed(limit=4000, days=days)
-    else: rank = {i: n for n, i in enumerate(ids)}; rows = sorted(store.feed(limit=len(ids) or 1, days=days, ids=ids), key=lambda r: rank[r['MessageId']])
+    if ids is None: rows = store.feed(limit=4000, days=days, sent=True)
+    else: rank = {i: n for n, i in enumerate(ids)}; rows = sorted(store.feed(limit=len(ids) or 1, days=days, ids=ids, sent=True), key=lambda r: rank[r['MessageId']])
     scored = []
     for r in rows:
         if r.get('Channel') == 'assistant': continue
@@ -2134,9 +2135,14 @@ def _search_loose(store, words: list, who: str, cat: str, days: int, limit: int)
         if (who and who not in hay) or (cat and str(r.get('Category') or '').lower() != cat): continue
         n = word_hits(words, f"{hay} {r.get('Subject') or ''} {r.get('Preview') or ''}")
         if n >= _enough(words): scored.append((-n, len(scored), r))
-    return [{'ref': task_ref(r['TaskId']) if r.get('TaskId') else '', 'when': str(r.get('SentAt') or ''),
-             'who': r.get('FromName') or r.get('FromEmail') or '?', 'title': str(r.get('Subject') or ''), 'mid': r.get('MessageId')}
-            for *_, r in sorted(scored)[:limit]]
+    return [_hit(r) for *_, r in sorted(scored)[:limit]]
+
+
+def _hit(r: dict) -> dict:
+    sent = r.get('Direction') == 'out'
+    return {'ref': task_ref(r['TaskId']) if r.get('TaskId') else '', 'when': str(r.get('SentAt') or ''), 'sent': sent,
+            'who': 'you (sent)' if sent else r.get('FromName') or r.get('FromEmail') or '?', 'title': str(r.get('Subject') or ''),
+            'mid': r.get('MessageId')}
 
 
 def know(store, q: str) -> str:

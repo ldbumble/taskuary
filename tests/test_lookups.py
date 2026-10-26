@@ -1,5 +1,5 @@
 """The assistant's look-ups over the whole store: body search, open work, one message, one sender, the docs."""
-import unittest
+import json, unittest
 from unittest import mock
 from taskuary import concierge, ingest, lookups, toolcatalog
 import tests.test_assistant_reactions as T
@@ -147,6 +147,37 @@ class AppAtWorkTests(unittest.TestCase):
         self.assertEqual(agenda.call_args.kwargs['days'], 1)
         s.set_setting('calendar_enabled', '0', 't')
         self.assertIn('switched off', read(s, 'calendar.read'))
+
+    def test_the_owners_sent_mail_is_found_and_said_to_be_theirs(self):
+        # read in from Sent as thread context (channels: Status context, Direction out) - no list shows it, so no search found it,
+        # and "did I answer the invite?" came back "I could not find any sent messages" (2026-10-26)
+        s = world()
+        s.add_message({'ExternalId': 'sent:1', 'Channel': 'email', 'FromName': 'Alex Doyle', 'FromEmail': 'alex@northwind.example',
+                       'Subject': 'Re: Invite: freight review', 'BodyText': 'Accepted - see you Thursday at two.', 'Status': 'context',
+                       'Direction': 'out', 'SentAt': T.ago(2)})
+        for p in ({'contains': 'Thursday'}, {'contains': 'freight review'}, {'contains': 'invite freight zzzz'}, {}):
+            out = read(s, 'timeline.search', **p)
+            self.assertIn('you (sent): Re: Invite: freight review', out, p)
+        self.assertNotIn('Re: Invite', read(s, 'timeline.search', contains='Quarterly'))
+        self.assertNotIn('Re: Invite', ''.join(str(r.get('Subject')) for r in s.feed(days=30)))   # the lists stay as they were
+
+    def test_calendar_read_names_the_calendars_it_read_and_the_ones_it_cannot(self):
+        # asked "what calendar did you check?" the answer could only be that the read did not say - and the Gmail card the owner
+        # meant, read over IMAP, has no calendar on it at all (2026-10-26)
+        s = world(); s.set_setting('calendar_enabled', '1', 't')
+        gm = s.get_connector_by_type('gmail')
+        s.save_connector({'ConnectorId': gm['ConnectorId'], 'Active': 1, 'ConfigJson': json.dumps({'address': 'alex@northwind.example'})}, 't')
+        ag = {'events': [], 'errors': [], 'sources': ['outlook: alex@work.example'], 'start': '2026-10-27T00:00', 'end': '2026-10-28T00:00', 'tz': 'UTC'}
+        with mock.patch('taskuary.calendar.agenda', return_value=ag):
+            out = read(s, 'calendar.read', **{'from': 'tomorrow', 'days': 1})
+        self.assertIn('read from outlook: alex@work.example', out)
+        self.assertIn('NOT read', out); self.assertIn('gmail: alex@northwind.example', out)
+        with mock.patch('taskuary.calendar.agenda', return_value={**ag, 'sources': []}):
+            out = read(s, 'calendar.read')
+        self.assertIn('No calendar is connected', out); self.assertIn('gmail: alex@northwind.example', out)
+        s.save_connector({'ConnectorId': gm['ConnectorId'], 'ConfigJson': json.dumps({'address': 'alex@northwind.example', 'google_refresh_token': 'r'})}, 't')
+        with mock.patch('taskuary.calendar.agenda', return_value=ag):
+            self.assertNotIn('NOT read', read(s, 'calendar.read'))      # its calendar is read now: nothing left out
 
     def test_lookup_arguments_do_not_drop_the_assistant_turn(self):
         s = world()

@@ -334,6 +334,30 @@ def freshen(store, task_id: int, mid: int) -> dict:
     return {'state': 'fresh', 'mid': mid}
 
 
+def unanswered(store, task_id: int) -> list:
+    """What the run was still ASKING the owner when it ended: a question it raised itself (a hook or the general chat's ask, the
+    ones selfclose.refusal will not close over) or an approval it waited on, that nobody answered and no later prompt overtook.
+
+    A run that ends there did not finish, and the drafter was told it had. The agent tried, could not do the one thing the sender
+    asked, said "nothing goes to them until you've approved it" and asked the owner to run a check - the session was put away,
+    and the responder, told "the work this thread asked for is FINISHED", mailed the sender the agent's notes to the owner in
+    the owner's voice (TQ-1207, the owner, 2026-10-26: "you are responding I did not review. that's not helpful")."""
+    from . import workerstate as ws
+    try: reqs = ws.status(store, task_id).get('requests') or []
+    except Exception as e: logger.debug(f'task {task_id}: open questions not read - {e}'); return []
+    return [r for r in reqs if r.get('text') and (r['kind'] == 'approval_needed' or (r['kind'] == 'input_needed' and r.get('source') in ('hook', 'api')))]
+
+
+def asked_block(asked: list) -> str:
+    """The drafter's source says the work stopped short, and on what - so it never reads the agent's working notes as done work."""
+    if not asked: return ''
+    from .responder import NO_REPLY
+    qs = '\n'.join(f"- {r['text']}" for r in asked)
+    return ('\n\n--- THE WORK DID NOT FINISH. The session ended waiting on YOU (the owner) for this, and you never answered:\n'
+            f'{qs}\nWhatever it was waiting on has NOT happened, and what it found is its note to you - you have not checked it. '
+            f'Do not report it to the sender as your answer. Write only what they are owed now, or {NO_REPLY} if nothing need go back yet.')
+
+
 def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'agent',
            complete_result: str = None, owner_done: bool = False, keep_open: bool = False, no_reply: bool = False) -> dict:
     """The end of finished work: the conversation is refreshed, the ask reassessed, and the responder
@@ -428,7 +452,7 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'age
     if due and due['action'] == 'close_issue': proposals.closeout(store, task_id, due, '' if mid else resolution_text(rep), actor)
     # a tracker's close-out carries the agent's result as its comment - Jira, Monday and Linear have no reply to carry it (outbound.NEVER)
     if due and due['action'] == 'close_item': proposals.closeout(store, task_id, due, resolution_text(rep), actor)
-    if mid: raise_reply(store, task_id, mid, run_id, rep, complete_result, fresh=fresh)
+    if mid: raise_reply(store, task_id, mid, run_id, rep, complete_result, fresh=fresh, asked=unanswered(store, task_id))
     if due and due['action'] == 'merge_pr': proposals.closeout(store, task_id, due, '' if due.get('theirs') else resolution_text(rep), actor)
     return {'drafting': bool(mid), 'message_id': mid, 'can_send': bool(mid) and can_send,
             'send_block': block if mid else '', 'freshness': fresh['state'], 'closeout': (due or {}).get('action')}
@@ -757,7 +781,7 @@ def _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, 
 
 
 def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
-                complete_result: str = None, fresh: dict = None) -> None:
+                complete_result: str = None, fresh: dict = None, asked: list = None) -> None:
     """The session reported; the responder writes what the sender actually reads. One voice for
     every reply the owner sends - and no coding CLI drafting prose from inside a repo. A draft
     that fails to write still leaves the review standing: 'Draft with AI' retries it.
@@ -770,6 +794,8 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
     why = 'the agent finished - the reply is rewritten from what it found'
     if fresh.get('state') == 'changed': why = 'the agent finished, and the thread moved on after the work began - the reply answers the newest message; reread it before sending'
     if fresh.get('state') == 'unresolved': why = f"the agent finished, but the conversation could not be refreshed ({fresh.get('error')}) - drafted from the saved result; refresh it before sending"
+    # ...and "the agent finished the work" is not said of a run that stopped on a question to the owner (unanswered)
+    if asked and fresh.get('state') not in ('changed', 'unresolved'): why = 'the agent stopped on a question to you nobody answered - written without your answer; reread it before sending'
     held = store.held_review(task_id, mid) or store.held_review(task_id)
     # one review per answer (PW-236): the held triage draft, else the pending one an earlier completion
     # event already raised - a repeated completion rewrites it, never duplicates it
@@ -784,7 +810,7 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
         if not is_follow_up(live): store.update_review_reason(rid, why, run_id)
     else:
         rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': run_id, 'Kind': 'draft_reply', 'Status': 'pending',
-                                'Reason': why if fresh.get('state') in ('changed', 'unresolved') else 'the agent finished the work - reply awaiting approval'})
+                                'Reason': why if asked or fresh.get('state') in ('changed', 'unresolved') else 'the agent finished the work - reply awaiting approval'})
     if (held or live) and (held or live).get('MessageId') != mid: store.update_review_message(rid, mid)
     rv = store.get_review(rid) or {}
     if agent_drafted(rv):
@@ -801,6 +827,7 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
         l = fresh['latest']
         src += (f"\n\nTHE THREAD MOVED ON after the work began. Newest message from {l.get('FromName') or l.get('FromEmail') or 'them'} ({l.get('SentAt')}):\n"
                 f"{str(l.get('BodyText') or '')[:800]}\nAnswer what is asked NOW; say plainly if the result above does not cover it.")
+    src += asked_block(asked)
     # The report is intentionally compact UI copy. Draft from the complete final response (or
     # transcript fallback), so every question the session answered remains available here.
     try:

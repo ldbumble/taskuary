@@ -580,8 +580,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             )}
             {/* A CLOSED task's conversation is read, not typed into: a message started a live session on a done task, which
                 then read "waiting on you" under a bar offering only Reopen (the owner, 2026-10-14). The server refuses it too. */}
-            {/* ...and a STOPPED one is resumed by Continue, as a coding agent's is: a box under a stopped agent read as a way to talk to it
-                (the owner, 2026-10-26: "before I hit continue it has a space to type into the agent? coding agents don't have that") */}
+            {/* ...and ONE DOOR: while the conversation is open the box is how it goes on (no Continue on the bar, 2026-09-29), but once its
+                run has ENDED the bar offers Continue - and a box beside it read as a second way in (the owner, 2026-10-26: "before I hit
+                continue it has a space to type into the agent? coding agents don't have that"). `noComposer` is that Continue (TaskPage). */}
             {closedChat ? <div className="tq-aui-hint" role="status" style={{ padding: "10px 4px" }}>
               This task is closed. Press {btn("reopen")}, then {btn("continue")}, to pick the conversation back up.</div> : noComposer ? null : <>
             <ComposerPrimitive.Root className="tq-aui-composer">

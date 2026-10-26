@@ -24,3 +24,12 @@ test("a closed task's conversation shows why it cannot be typed into, in place o
   assert.match(ws, /const closedChat = !dock && \["done", "dropped"\]\.includes\(String\(task\?\.Status \|\| ""\)\);/);
   assert.match(ws, /\{closedChat \? <div className="tq-aui-hint" role="status"[\s\S]*?This task is closed\. Press \{btn\("reopen"\)\}, then \{btn\("continue"\)\}[\s\S]*?: <>\s*<ComposerPrimitive\.Root/);
 });
+
+// ONE DOOR (the owner, 2026-10-26: "before I hit continue it has a space to type into the agent? coding agents don't have that"): the
+// chat agent's box goes exactly when the row offers Continue - an open conversation keeps it, as its way on (2026-09-29)
+test("a chat agent's box is gone exactly when the row offers Continue", () => {
+  const ws = read("GeneralWorkspace.jsx"), page = read("TaskPage.jsx");
+  assert.match(ws, /: noComposer \? null : <>\s*<ComposerPrimitive\.Root/);
+  assert.match(page, /noComposer=\{isGeneral && continueHere\}/);
+  assert.match(page, /const continueHere = !liveSession && notDone && \(barContinue \|\| \(stage !== "agent" && canContinue\)\);/);
+});

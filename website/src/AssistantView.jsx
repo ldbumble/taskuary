@@ -2322,11 +2322,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // item's other verbs, Next - it said "Not done" and offered nothing (2026-09-29)
       // (the repositories stay on the proposal card's own picker here - the chat has them only where there is no card)
       // ...and a SEND that went carries its own (concierge.sent_chips): Mark done and Next - the item stays on the table
-      // ...and a way on is offered only where it stays: a press that walks on (settle, advance) puts the next item's row in its place
-      // within ~200 ms, and Not ours on an FYI left "✓ Done - Not ours · <subject>." with its From now on already gone (2026-10-26)
-      const leaves = step === "settle" || step === "advance";
       const chips = (out.status !== "done" || p.kind === "review.approve") && res?.chips?.length ? res.chips.filter((c) => !(out.repo && c.verb === "repo"))
-        : step === "offer" || out.status !== "done" ? [{ verb: "next", label: btn("next") }] : leaves ? [] : followUps(p, out);
+        : step === "offer" || out.status !== "done" ? [{ verb: "next", label: btn("next") }] : followUps(p, out);
       // A PRESS THAT WENT THROUGH IS A BADGE ON ITS CARD, never "Done - Mark done · TQ-0001." under it (the owner, 2026-10-22: "we don't
       // need that text ever"). A line stays only where it carries a way on (a send's Mark done and Next, Not ours taken further, a
       // sweep's Next) - and a press that did NOT go through is said, as a failure

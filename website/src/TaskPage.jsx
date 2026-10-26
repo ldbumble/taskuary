@@ -85,7 +85,7 @@ import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
 import { CLOSE_BY_HAND, closeOut, focusOf, fromLine as fromLineOf, layoutOf, sameWords, waitingOn, workPane } from "./taskLayout.js";
 import { taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
-import { ASK_TAG } from "./newTask.js";
+import { ASK_TAG, BROWSER_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails, wentOut,
   AGENT, agentPhase, closedLine, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, reopenedDetail, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
@@ -1607,6 +1607,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           agent={run.agent} model={run.model}
                           brains={brainList} brainModels={brainModels} brain={run.brain || ""}
                           generalBrains={generalBrains} brainsRead={agentsRead} codingReady={codingReady} pick={run.pick || ""} has={ownProfile}
+                          browser={String(t?.Tags || "").split(/[\s,]+/).includes(BROWSER_TAG)}
                           onPick={(p) => setRun((r) => ({ ...r, pick: p }))}
                           onBrain={(b) => setRun((r) => ({ ...r, brain: b, model: "" }))}
                           onAgent={(a) => setRun((r) => ({ ...r, agent: a }))}

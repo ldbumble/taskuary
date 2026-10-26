@@ -63,3 +63,9 @@ export const cutAway = (stateKey, touchedToday, older) =>
 // first and filled, with whose habit it is; nothing is set until it is pressed. A day nobody's habit holds shows nothing.
 export const usualLabel = (u) => (u?.on && u?.day ? `${u.day} ${Number(u.on.slice(8, 10))}` : "");
 export const usualWhy = (u) => (u?.by ? `your usual for ${u.by}` : "");
+// ...and the day's own line, as LEARNED.md says it now (the owner, 2026-10-25): reworded there, the day here follows
+export const usualLine = (u) => (u?.line ? `How you work: ${u.line}` : "");
+
+// THE USUAL RECIPIENT (the owner, 2026-10-25: "Hand it to a person pre-fills the usual recipient"): whose asks went to them, said under
+// the filled To, so a name the owner did not type is never a mystery. Chosen, not sent.
+export const usualHandWhy = (u) => (u?.to && u?.from ? `your usual for ${u.from}` : "");

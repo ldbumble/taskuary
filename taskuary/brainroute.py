@@ -275,6 +275,11 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
     from .general import is_dock
     chosen = want_pick is not None or bool(want_model)
     rule, tier = ('you chose it' if chosen else 'fixed'), 'fixed'
+    # WORK THAT NEEDS HANDS stays on a CLI: coding, and a general task with a browser - an API backup got the browser brief and no
+    # shell, and the task stayed on it with the page still in the pane (the owner's computer-use walk, 2026-10-25)
+    from . import browserview
+    browser = job == 'general' and browserview.wanted(task)
+    hands = lambda p: (job != 'coding' and not browser) or str(p or '').startswith('cli:')
     f = facts(store, job, task) if pick and (task or mode(store) == 'auto') else {}
     # FIRST, THE DATA (a hard constraint, failing closed - in either mode, once the owner turns its rule on): over an explicit pick too
     only, held = (_first(store, f, 'only') if task and f else None), ''
@@ -292,7 +297,7 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
             if tier == 'strong':
                 # the brain's own strong gear, else the first backup that has one - and for coding only ever a CLI's. A brain picked
                 # explicitly is kept: without a strong model it does the work at standard
-                ok = lambda p: bool(strong_of(store, p)) and (job != 'coding' or p.startswith('cli:'))
+                ok = lambda p: bool(strong_of(store, p)) and hands(p)
                 to = pick if ok(pick) else '' if want_pick is not None else next((c for c in chain if c and ok(c)), '')
                 if not to: tier, said = 'standard', f"; {'it has no' if want_pick is not None else 'no brain here has a'} strong model, so standard"
                 elif to != pick: said, chain, pick = f'; {_said(store, pick)} has no strong model', [pick, *chain], to
@@ -303,7 +308,7 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
             why = f"{JOB_WORDS[job]}{hard} -> {tier} on {_said(store, pick)}{f', {model}' if model else ''} (rule {rule}){said}"
     # a brain resting on its usage limit hands the call to the first backup that is not (Auto mode; the cards stand in Fixed)
     if pick and mode(store) == 'auto' and pick in (cold := cooldowns(store)):
-        to = next((c for c in chain if c and c not in cold and (job != 'coding' or c.startswith('cli:'))), '')
+        to = next((c for c in chain if c and c not in cold and hands(c)), '')
         if to:
             why += f"; {_said(store, pick)} is limited until {cold[pick].strftime('%H:%M')}, so {_said(store, to)}"
             # ...on its own model, as a failover always is: the resting brain's model id means nothing to another provider
@@ -311,6 +316,7 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
             if tier == 'strong' and not strong_of(store, pick): tier, g = 'standard', GEAR_OF['standard']
     up = ''
     if pick and mode(store) == 'auto' and tier != 'strong' and job in ESCALATES and _first(store, f, 'escalate'): up = 'strong'
+    if browser and str(pick).startswith('cli:'): chain = [c for c in chain if hands(c)]      # its failover too: no brain without a shell
     return Route(job, tier, pick, model, g, [c for c in chain if c and c != pick], rule, why[0].upper() + why[1:],
                  (j or {}).get('difficulty', ''), (j or {}).get('data_class', ''), up)
 

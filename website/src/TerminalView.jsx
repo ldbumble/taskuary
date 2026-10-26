@@ -698,6 +698,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   const [ratio, setRatio] = useState(savedRatio);
   const [peek, setPeek] = useState(false);
   const [localOk, setLocalOk] = useState(false);          // the owner unfolded a local page: it stays shown (isLocalPage)
+  const lastPage = useRef("");                            // where the browser last was, for the line that says it closed
   // A Wall tile is one of four across and a drawer pane is 480px tall: enough to notice an agent
   // working, not enough to watch one - and far too little once a browser is beside the terminal.
   // The chat workspace runs this itself, from its own strip, so it asks for no button here.
@@ -706,7 +707,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   // session, so the conversation sits inside the same tree it will sit in once one exists - swapping the
   // wrapper in mid-turn would remount the thread that is streaming the answer (GeneralWorkspace.started).
   useEffect(() => {
-    setBrowser({ open: false, url: "" }); setSeen(false); setLocalOk(false); setFolded(!!sid && savedFold(sid));
+    setBrowser({ open: false, url: "" }); setSeen(false); setLocalOk(false); setFolded(!!sid && savedFold(sid)); lastPage.current = "";
     if (!sid) return undefined;
     let stop = false;
     const tick = async () => {
@@ -715,6 +716,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
         if (stop) return;
         setBrowser(r.data || { open: false });
         if (r.data?.open) setSeen(true);
+        if (r.data?.open && r.data?.url && !/^about:/.test(r.data.url)) lastPage.current = r.data.url;
       } catch { /* server away for a moment: keep showing what we had */ }
     };
     tick();
@@ -753,8 +755,17 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
         bgcolor: "#1a1a1acc", color: "#c9c3b9", "&:hover": { color: "#e1dcd5", borderColor: "#6b655c" } }}>
       <Box sx={{ width: 7, height: 7, borderRadius: 99,
         bgcolor: browser.open ? CATPPUCCIN.green : CATPPUCCIN.yellow }} />
-      {browser.open ? `browser · ${shortUrl(browser.url, 36) || "open"}` : "browser · starting…"}
+      {/* ...and when the agent waits on the owner, the chip says so: at 1024px the agent's "open in the browser beside you" pointed at a
+          chip that named only an address (2026-10-25) */}
+      {!browser.open ? "browser · starting…" : yourTurn ? "browser · your turn - open it" : `browser · ${shortUrl(browser.url, 36) || "open"}`}
     </Box>
+  );
+  /* A BROWSER THAT WAS OPEN AND CLOSED says so, where its chip or half sat: the pane just vanished, so a crash, a close and a glitch
+     looked the same (2026-10-25). Words only - it comes back by itself when the agent opens a page again. */
+  const closedLine = !!sid && seen && !browser.open && (
+    <Typography data-tq-browser-closed="" sx={{ ...mono, flex: "0 0 auto", fontSize: 10.5, color: "#a8a196", m: "5px 0 0 10px" }}>
+      {`The browser closed${lastPage.current ? ` (last on ${shortUrl(lastPage.current, 36)})` : ""}. It reopens when the agent next needs it.`}
+    </Typography>
   );
   return (
     <Box ref={slot} sx={{ display: "flex", flexDirection: "row", position: "relative", minHeight: 0, minWidth: 0,
@@ -774,7 +785,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
         // the terminal takes what is left after the chip's row; only IT stretches
         "& > .tq-term-slot": { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" },
         "& > .tq-term-slot > *": { flex: 1, minHeight: 0 } }}>
-        {chip}
+        {chip}{closedLine}
         <Box className="tq-term-slot">{children || <TermOnly sid={sid} height="100%" onExit={onExit} autoFocus={autoFocus} />}</Box>
       </Box>
       {layout === "split" && (
@@ -785,14 +796,14 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
             <Box sx={{ width: 2, height: 36, borderRadius: 99, bgcolor: BORDER, transition: "background .15s" }} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
-            <BrowserPane sid={sid} url={browser.url} open={browser.open} yourTurn={yourTurn} onFold={() => fold(true)} clearRight={canFull} />
+            <BrowserPane sid={sid} url={browser.url} open={browser.open} filling={!!browser.filling} yourTurn={yourTurn} onFold={() => fold(true)} clearRight={canFull} />
           </Box>
         </>
       )}
       {/* peek is the CHIP layout's browser. Left standing when the box grew into a split - a wider
           window, the full-screen button - it mounted a second pane on the same session: two sockets,
           two decodes, two screencast clients on one Chrome, for one page. */}
-      {peek && layout === "chip" && showingBrowser && <BrowserPane sid={sid} url={browser.url} open={browser.open} yourTurn={yourTurn} overlay onFold={() => setPeek(false)} />}
+      {peek && layout === "chip" && showingBrowser && <BrowserPane sid={sid} url={browser.url} open={browser.open} filling={!!browser.filling} yourTurn={yourTurn} overlay onFold={() => setPeek(false)} />}
     </Box>
   );
 };

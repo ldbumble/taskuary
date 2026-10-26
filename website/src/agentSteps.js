@@ -76,6 +76,37 @@ const taskuaryCall = (path, cmd) => {
   return { kind: "data", summary: `Looked up ${(bits[0] || "data").replace(/[-_]/g, " ")} in Taskuary` };
 };
 
+// AGENT-BROWSER IN WORDS, from its own fixed grammar (browsergate.LOOKS / TYPES lists the same verbs): Codex and Gemini read "Ran
+// agent-browser click" with no page or target, while Claude was saved only by its own Bash description (2026-10-25)
+const AB_VALUED = new Set(["--session", "--profile", "--state", "--args", "--user-agent", "--proxy", "--executable-path", "--cdp",
+  "--idle-timeout", "--headers", "--timeout", "--restore", "--device", "--color-scheme", "--download-path"]);
+const AB_LOOKS = new Set(["snapshot", "get", "read", "screenshot", "is", "wait", "console", "errors", "tabs", "tab", "highlight", "hover"]);
+const AB_ACTIONS = new Set(["click", "dblclick", "press", "fill", "type", "check", "uncheck", "hover", "focus", "select"]);
+const AB_SAID = { back: "Went back a page", forward: "Went forward a page", reload: "Reloaded the page", scroll: "Scrolled the page",
+  scrollintoview: "Scrolled the page", close: "Closed the browser", click: "Clicked on the page", dblclick: "Clicked on the page",
+  press: "Pressed a key on the page", fill: "Typed into a box", type: "Typed into a box", check: "Ticked a box", uncheck: "Unticked a box",
+  select: "Chose an option", upload: "Uploaded a file", keyboard: "Typed on the page", pdf: "Saved the page as a PDF" };
+export const browserStep = (args) => {
+  const a = [];
+  for (let i = 0; i < args.length; i += 1) {
+    if (AB_VALUED.has(args[i])) { i += 1; continue; }
+    if (!String(args[i]).startsWith("-")) a.push(args[i]);
+  }
+  const [verb = "", ...rest] = a.map(String), v = verb.toLowerCase();
+  const step = (summary, more = {}) => ({ kind: "page", summary, browser: true, ...more });
+  if (["open", "goto", "navigate"].includes(v)) { const host = hostOf(rest[0]) || hostOf(`https://${rest[0] || ""}`); return step(host ? `Opened ${host}` : "Opened a page", { host }); }
+  if (AB_LOOKS.has(v)) return step("Looked at the page");
+  if (v === "find") {
+    // find <locator> <value> <action> [text]: a role's own name may sit before the action ("button "Pay now" click") or after it
+    const ai = rest.findIndex((w, i) => i >= 2 && AB_ACTIONS.has(w.toLowerCase())), act = ai >= 0 ? rest[ai].toLowerCase() : "";
+    const value = (ai > 2 && rest.slice(2, ai).join(" ")) || (rest[0] !== "role" && rest[1]) || (ai >= 0 && rest.slice(ai + 1).join(" ")) || rest[1];
+    if (["fill", "type"].includes(act)) return step(value ? `Typed into ${quoted(value)}` : "Typed into a box");
+    if (["click", "dblclick", "press"].includes(act)) return step(value ? `Clicked ${quoted(value)}` : "Clicked on the page");
+    return step(value ? `Looked for ${quoted(value)} on the page` : "Looked at the page");
+  }
+  return step(AB_SAID[v] || (v ? `Used the browser (${v})` : "Used the browser"));
+};
+
 const commandStep = (cmd, depth = 0) => {
   const found = [];
   for (const seg of segments(cmd)) {
@@ -91,6 +122,9 @@ const commandStep = (cmd, depth = 0) => {
       if (inner) { const s = commandStep(inner, depth + 1); if (s) found.push(s); continue; }
     }
     if (QUIET.has(p)) continue;
+    if (p === "agent-browser" || (["npx", "pnpm", "bunx"].includes(p) && prog(plain[0]) === "agent-browser")) {
+      found.push(browserStep(p === "agent-browser" ? args : args.slice(args.indexOf(plain[0]) + 1))); continue;
+    }
     if (FETCH.has(p)) {
       const url = args.find((a) => /^https?:\/\//i.test(a) || a.includes("/api/"));
       if (!url) { found.push({ kind: "run", summary: `Ran ${p}` }); continue; }
@@ -144,8 +178,9 @@ export const describeCall = (name, args = {}) => {
   const cmd = a.command || a.cmd || a.script;
   if (kind === "run" || (!kind && cmd)) {
     const s = commandStep(Array.isArray(cmd) ? cmd.join(" ") : cmd);
-    if (s && s.kind !== "run") return s;
-    if (a.description) return { kind: "run", summary: clip(a.description) };
+    // ...Claude's own words for a browser step ("Press the pay button for invoice INV-1001") say more than the verb does
+    if (s && s.kind !== "run" && !(s.browser && a.description)) return s;
+    if (a.description) return { kind: s?.browser ? "page" : "run", summary: clip(a.description) };
     return s || { kind: "run", summary: "Ran a command" };
   }
   if (kind === "read") { const f = fileOf(a); return { kind, summary: f ? `Read ${baseName(f)}` : "Read a file", file: f }; }

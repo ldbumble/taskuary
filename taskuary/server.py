@@ -643,28 +643,53 @@ def signin_code(site: str, body: SigninKeyBody, request: Request):
 def signin_page(token: str):
     from . import signin
     r = signin.peek(store, token)
-    if not r: return HTMLResponse(signin.gone_html('This sign-in page was used already or has expired.'), 410, headers=signin.HEADERS)
-    return HTMLResponse(signin.form_html(r['Site'], max(1, int((r['ExpiresAt'] - time.time()) // 60))), headers=signin.HEADERS)
+    if not r: return _signin_gone(token)
+    return HTMLResponse(signin.form_html(r['Site'], max(1, int((r['ExpiresAt'] - time.time()) // 60)), task=signin.for_line(store, r['TaskId'])),
+                        headers=signin.HEADERS)
+
+
+def _signin_gone(token: str, why: str = ''):
+    "Which it is - used, and when, or expired - and the task to go back to."
+    from . import signin
+    from .store import task_ref
+    said, tid = signin.gone_why(store, token)
+    return HTMLResponse(signin.gone_html(why or said, signin.for_line(store, tid), task_ref(tid) if tid else ''), 410, headers=signin.HEADERS)
+
+
+def _signin_origin_ok(headers) -> bool:
+    """The token gate's Origin check, and one more: `Origin: null` with Sec-Fetch-Site same-origin is the fill page's own form (an older
+    page served with no-referrer still open in a tab) - the browser sets that header, a page cannot."""
+    if guard.origin_ok(headers): return True
+    return str(headers.get('origin') or '').lower() == 'null' and str(headers.get('sec-fetch-site') or '').lower() == 'same-origin'
 
 
 @app.post('/signin/{token}', include_in_schema=False)
 async def signin_submit(token: str, request: Request):
     from urllib.parse import parse_qs
     from . import signin, totp
-    if not guard.origin_ok(request.headers):
+    if not _signin_origin_ok(request.headers):
         return HTMLResponse(signin.gone_html('This sign-in came from another page, so nothing was typed.'), 403, headers=signin.HEADERS)
     form = parse_qs((await request.body())[:16384].decode('utf-8', 'replace'), keep_blank_values=True)
     one = lambda k: (form.get(k) or [''])[0]
     try: out = await run_in_threadpool(signin.by_owner, store, token, one('username'), one('password'), one('save') == '1', None, one('key'))
     except totp.BadKey as e:            # said on the same page, the link not spent: the owner fixes the key and presses again
         r = signin.peek(store, token)
-        if r: return HTMLResponse(signin.form_html(r['Site'], max(1, int((r['ExpiresAt'] - time.time()) // 60)), f'{e}.'), 400, headers=signin.HEADERS)
-        return HTMLResponse(signin.gone_html('This sign-in page was used already or has expired.'), 410, headers=signin.HEADERS)
-    except LookupError as e: return HTMLResponse(signin.gone_html(str(e)), 410, headers=signin.HEADERS)
+        if r: return HTMLResponse(signin.form_html(r['Site'], max(1, int((r['ExpiresAt'] - time.time()) // 60)), f'{e}.',
+                                                  task=signin.for_line(store, r['TaskId'])), 400, headers=signin.HEADERS)
+        return _signin_gone(token)
+    except signin.NotAccepted as e:
+        # the form again, on a fresh link, with the site's answer: nothing saved, the agent not told "signed in"
+        r = signin.peek(store, e.again) if e.again else None
+        if not r: return _signin_gone(token, f'Nothing was signed in: {e}.')
+        return HTMLResponse(signin.form_html(r['Site'], signin.TTL // 60, f"{r['Site']} did not accept that password - nothing was saved. Try again.",
+                                             task=signin.for_line(store, r['TaskId']), action=f'/signin/{e.again}'), 409, headers=signin.HEADERS)
+    except LookupError: return _signin_gone(token)
     except (signin.SignInError, ValueError) as e:
         return HTMLResponse(signin.gone_html(f'Nothing was signed in: {e}.'), 409, headers=signin.HEADERS)
     finally: form.clear()
-    return HTMLResponse(signin.done_html(out['site'], out['saved'], out['kept'] if out['kept'] != 'saved' else ''), headers=signin.HEADERS)
+    from .store import task_ref
+    return HTMLResponse(signin.done_html(out['site'], out['saved'], out['kept'] if out['kept'] != 'saved' else '', told=out.get('told', True),
+                                         task=signin.for_line(store, out['task']), ref=task_ref(out['task'])), headers=signin.HEADERS)
 
 
 MAX_BUG_BODY = 200_000       # the scrub matches every private string against every field: a client does not get to make it chew megabytes
@@ -1999,6 +2024,10 @@ def _assistant_payload(task_id: int, session=None):
             'playbookDrafts': [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' "
                                                        "ORDER BY ReviewId", (task_id,))
                                if _proposals._action(r) in ('write_playbook', 'amend_playbook')],
+            # ...AND A HELD BROWSER ACT, the same way (2026-10-25): its card sat inside the hidden Close out, so the owner reached it only
+            # by Stop and save - which closed the agent's browser, and then Approve said "the agent's browser is closed"
+            'browserActs': [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' "
+                                                   "ORDER BY ReviewId", (task_id,)) if _proposals._action(r) == 'browser_act'],
             'session': session.info(tail=3) if session else None}
 
 @app.get('/api/tasks/{task_id}/assistant')
@@ -2024,8 +2053,15 @@ def assistant_session(task_id: int, body: AssistantSessionBody = None):
         store.set_setting('assistant_ai', str(body.pick), ACTOR)
         store.set_setting('assistant_model', str(body.model or ''), ACTOR)
     try: session = general.start_session(store, task_id, body.connector_id, body.model, ACTOR, body.pick)
-    except (ValueError, RuntimeError) as e: raise HTTPException(422, str(e))
+    except (ValueError, RuntimeError) as e: return _chat_failed(e)
     return _assistant_payload(task_id, session)
+
+
+def _chat_failed(e):
+    "A chat that could not start or answer, said once with its fix (failures.classify): a signed-out CLI read as an app bug (2026-10-25)."
+    from . import failures
+    c = failures.classify(e, act='assistant.message')
+    return JSONResponse(status_code=422, content={'detail': c['sentence'], 'fix': c['fix'], 'retry': c['retry']})
 
 CLOSED_CHAT = (f"This task is closed. Press {buttons.label('reopen')}, then {buttons.label('continue')}, "
                'to pick the conversation back up.')
@@ -2047,7 +2083,7 @@ def assistant_message(task_id: int, body: AssistantMessageBody):
         _refresh_chat_context(task_id=task_id)
         session = general.start_session(store, task_id, body.connector_id, body.model, ACTOR, body.pick)
         reply = session.send_prompt(body.text, body.attachments, body.connector_id, body.model, pick=body.pick)
-    except (ValueError, RuntimeError) as e: raise HTTPException(422, str(e))
+    except (ValueError, RuntimeError) as e: return _chat_failed(e)
     return {'reply': reply, **_assistant_payload(task_id, session)}
 
 @app.post('/api/tasks/{task_id}/assistant/browser')
@@ -2179,13 +2215,25 @@ def remind_task(task_id: int, body: RemindBody):
 @app.get('/api/tasks/{task_id}/remind/usual')
 def remind_usual(task_id: int):
     """The day Remind me opens on (the owner's ruling 7, 2026-10-23: "Remind me opens with the learned day pre-chosen"): the weekday the
-    owner puts this sender's mail off to, counted from their own put-offs (usual.remind_day) - {} while no day has held. Pre-chosen is
-    not chosen: the picker shows it first, and nothing is set until the owner presses."""
+    How you work line about this sender says (usual.remind_day) - a line the owner can see and correct, written from their own put-offs
+    (the owner, 2026-10-25) - {} while no line says one. Pre-chosen is not chosen: the picker shows it first, and nothing is set until
+    the owner presses."""
     from . import usual
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     try: return usual.remind_day(store, task_id) or {}
     except Exception as e:
         logger.debug(f'no usual day for {task_id}: {e}'); return {}
+
+@app.get('/api/tasks/{task_id}/handoff/usual')
+def handoff_usual(task_id: int):
+    """Whom Hand it to a person opens on (the owner, 2026-10-25: "Hand it to a person pre-fills the usual recipient"): the person the
+    owner handed this sender's asks to, twice or more (usual.handoff_usual) - {} while there is nobody. Chosen, not sent: the drawer
+    fills the recipient, and the owner still presses Send it."""
+    from . import usual
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    try: return usual.handoff_usual(store, task_id) or {}
+    except Exception as e:
+        logger.debug(f'no usual recipient for {task_id}: {e}'); return {}
 
 @app.patch('/api/tasks/{task_id}')
 def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None):
@@ -4204,14 +4252,14 @@ def cli_hook_reason(payload: dict):
 
 
 @app.post('/api/hooks/claude/browser')
-async def cli_hook_browser(payload: dict):
+async def cli_hook_browser(payload: dict, sid: str = ''):
     """Before one of our sessions runs a shell command (hooks.browser -> browsergate.check): a browser act that can't be undone is
     refused and held on the task for the owner's press. On the permits' threads - a snapshot and a model verdict take seconds, and
     on anyio's shared forty they would queue behind every other sync route. A failure IN the judging holds (check); a failure
     around it - an unreadable payload - lets the command go, as every hook here does."""
     from . import hooks
     def go():
-        try: return hooks.browser(payload if isinstance(payload, dict) else {})
+        try: return hooks.browser(payload if isinstance(payload, dict) else {}, sid=sid)       # sid: a general chat's own hook (hooks.browser_settings)
         except Exception as e:
             logger.warning(f'browser hook: {e}'); return {}
     return await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, go)
@@ -9280,7 +9328,8 @@ def open_terminal(body: TermBody):
     # slice, so raising DOC_CHARS made this door alone start chopping "Do NOT call the Taskuary
     # API" off the end, unmarked (test_start_session_seeds_the_same_full_prompt_as_dispatch,
     # 2026-09-17).
-    seed_fn = ((lambda cwd: hub_term.seed_text(store, body.task_id, body.instruction, repo, cwd))
+    seed_fn = ((lambda cwd: hub_term.seed_text(store, body.task_id, body.instruction, repo, cwd,
+                                                cli=hub_term.cli_named(json.loads((store.get_agent(body.agent) or {}).get('Config') or '{}'))))
                if body.seed and body.agent and tk else None)
     # this is the owner's door (agents dispatch through terminal.start_on_task): a session opened
     # here is one they sit in, so the task is theirs to end - whichever dialog or button it came from

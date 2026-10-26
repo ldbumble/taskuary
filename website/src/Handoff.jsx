@@ -10,6 +10,7 @@ import api from "./api";
 import { ContactPicker } from "./ui.jsx";
 import { FAINT, selSx } from "./theme.jsx";
 import { label } from "./buttons.js";
+import { usualHandWhy } from "./taskFilter.js";
 
 const msgOf = (e, fallback) => (e?.response?.status === 404
   ? "This needs the new server — restart Taskuary and try again."
@@ -30,6 +31,19 @@ export const Handoff = ({ taskId, onSent, onLeave, onStay }) => {
   const [sent, setSent] = useState(null);
   const [err, setErr] = useState("");
   useEffect(() => { api.get("/api/people").then(({ data }) => setPeople(data.data || [])).catch(() => {}); }, []);
+  // THE USUAL RECIPIENT, CHOSEN NOT SENT (the owner, 2026-10-25: "Hand it to a person pre-fills the usual recipient"): the person this
+  // sender's asks were handed to before fills To - never over a name already typed - and the owner still presses Send it. Nobody
+  // learned, or the ask failing, leaves the form as it always was.
+  const [usual, setUsual] = useState(null);
+  useEffect(() => {
+    let on = true;
+    api.get(`/api/tasks/${taskId}/handoff/usual`).then(({ data }) => {
+      if (!on || !data?.to) return;
+      setUsual(data); setTo((v) => v || data.to);
+      if (data.channel) setChannel((c) => (c === "email" ? data.channel : c));
+    }).catch(() => {});
+    return () => { on = false; };
+  }, [taskId]);
   const call = async (body) => (await api.post(`/api/tasks/${taskId}/handoff`, body)).data;
   const draft = async () => {
     setBusy("draft"); setErr("");
@@ -69,6 +83,8 @@ export const Handoff = ({ taskId, onSent, onLeave, onStay }) => {
           {busy === "draft" ? <CircularProgress size={12} /> : text ? label("redraft") : label("redraft", "none")}
         </Button>
       </Box>
+      {usual && to === usual.to && (
+        <Typography variant="caption" sx={{ color: FAINT, mt: -0.5 }} data-tq-handoff-usual="">{usualHandWhy(usual)}</Typography>)}
       <TextField multiline minRows={4} size="small" value={text} onChange={(e) => setText(e.target.value)}
         placeholder="What they need to know. Draft with AI writes it from this task's own context — you edit before it goes." />
       <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>

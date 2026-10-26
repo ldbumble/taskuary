@@ -98,10 +98,13 @@ export const parseMessage = (raw) => {
 // is the one thing matching the pane exactly would have cost (the owner chose this trade).
 export const MIN_VIEWPORT_W = 1200;
 export const MIN_VIEWPORT_H = 400;
+// ...BUT A LAPTOP'S PANE IS NOT A DESKTOP'S: at 1366x768 the pane is ~540px, so a 1200px page drew at 45% and its text at ~7px, in the
+// pane where the owner is asked to sign in (2026-10-25). Under NARROW_PANE the page is 980px - still the width sites give a desktop.
+export const NARROW_PANE = 800, NARROW_VIEWPORT_W = 980;
 
 export const viewportFor = (w, h) => {
   if (!(w > 0 && h > 0)) return null;
-  const vw = Math.round(Math.max(MIN_VIEWPORT_W, w));
+  const vw = Math.round(Math.max(w < NARROW_PANE ? NARROW_VIEWPORT_W : MIN_VIEWPORT_W, w));
   return { w: vw, h: Math.max(MIN_VIEWPORT_H, Math.round(vw * (h / w))) };
 };
 

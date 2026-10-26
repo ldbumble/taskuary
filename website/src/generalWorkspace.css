@@ -19,6 +19,7 @@
   border-radius: 11px; background: #fbf7ee; display: flex; flex-direction: column; gap: 8px; }
 .tq-aui-asking b { color: #4d514b; font-size: 12px; }
 .tq-aui-asking-q { color: #3f423d; font-size: 13px; white-space: pre-wrap; }
+.tq-aui-asking-hint { color: #7a756b; font-size: 11.5px; }
 .tq-aui-asking-choices { display: flex; gap: 6px; flex-wrap: wrap; }
 .tq-aui-asking-box { display: flex; gap: 8px; align-items: center; }
 .tq-aui-asking-box .MuiInputBase-root { background: #fff; font-size: 13px; }

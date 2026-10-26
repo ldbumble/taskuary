@@ -127,9 +127,14 @@ def brain_options(store, keep: str = '') -> list:
     options = provider_options(store)
     by_pick = {o['pick']: o for o in options}
     brains = dict(hub_agents.connection_brains(store))
-    # not installed is not a choice - the same rule the coding brain list follows
-    out = [{**o, 'label': words.local(o['cmd']), 'agent': o['pick'][4:], 'models': climodels.catalog(o['cmd'])['models']}
+    # not installed is not a choice - the same rule the coding brain list follows. ONE NAME per CLI, the clis.KNOWN label the task shows
+    # once it runs ('gemini' here, 'Gemini CLI' after), and what matters for computer use said with it (2026-10-25): whether its browser
+    # acts can be held (llm.HOLDS_CLI) and whether its last test said it isn't signed in
+    tests = hub_agents.cli_tests(store)
+    out = [{**o, 'agent': o['pick'][4:], 'models': climodels.catalog(o['cmd'])['models'], 'browser': True,
+            'holds': o['cmd'] in llm_mod.HOLDS_CLI, 'signed_out': tests.get(o['pick'][4:]) is False}
            for o in options if o.get('type') == 'cli' and hub_agents.runs_here(brains.get(o['pick'][4:]))]
+    options = [{**o, 'browser': False, 'holds': False} if o.get('type') != 'cli' else o for o in options]
     out += [o for o in options if o.get('type') != 'cli']
     # ...but a pick already in use never vanishes from its own picker. Collapsing five Claude
     # profiles into one entry would otherwise blank the dropdown of a chat running on the fourth.
@@ -159,6 +164,9 @@ def _browser_task(task: dict) -> bool:
     """Does this task drive a browser? Only a CLI can: the browser is driven from a shell."""
     from . import browserview
     return browserview.wanted(task)
+
+
+NO_BROWSER_LINE = "This AI can't use the browser - pick an AI CLI such as Claude Code or Codex to let it."
 
 
 def walk_pick(store, task: dict = None) -> str:
@@ -746,6 +754,15 @@ class GeneralSession:
         self.witness = Witness()
         self._restore_terminal()
 
+    browser_failed = ''                  # why this session's browser did not open, said in the turn (send_prompt)
+
+    def holds_browser(self) -> bool:
+        "Can this session's browser acts be held? Only a Claude CLI's hook refuses a call (llm.HOLDS_CLI), and a stranger's run has its own."
+        from . import origin
+        try: return (self.pick.startswith('cli:') and _cli_of_pick(self.store, self.pick) in llm_mod.HOLDS_CLI
+                     and origin.of_task(self.store, self.task_id)[0] != 'stranger')
+        except Exception: return False
+
     def _remember_session(self):
         from . import continuity
         self.store.save_session(self.task_id, self.pick, self.model, self.cli_sid,
@@ -932,6 +949,11 @@ class GeneralSession:
                 system = f'{system}\n\n{str(delivery_instructions).strip()}'
             if not as_owner: user = f'{user}\n\n{text}'      # the instruction, carried but not attributed
             browser_tools, browser_env = False, None
+            if self.browser_wanted and not self.pick.startswith('cli:'):
+                # AN API CARD HAS NO SHELL, so no browser: said in the turn and to it, instead of a pane over a chat that "forgot" (2026-10-25)
+                self._remember_trace('progress', 'browser', NO_BROWSER_LINE)
+                system = f'{system}\n\nTHIS AI CANNOT USE THE BROWSER for this task (it has no shell). If the work needs the browser, say so '\
+                         'in one line: pick an AI CLI such as Claude Code or Codex in the brain menu to run it.'
             if self.pick.startswith('cli:'):
                 # This is still the conversational Assistant, not a coding PTY. Give its headless
                 # CLI the same named browser session as the pane, and wait for the one background
@@ -950,7 +972,14 @@ class GeneralSession:
                 # for one. A chat that did not is a research session: it reads, it does not run.
                 if self.browser_wanted and browserview.start(self.sid, browserview.last_page(self.task_id) or 'about:blank'):
                     browser_tools = True
-                    system = f'{system}\n\n{browserview.brief()}'
+                    system = f'{system}\n\n{browserview.brief(held=self.holds_browser())}'
+                elif self.browser_wanted:
+                    # a browser that did not open is SAID - in the turn and to the agent - not left for it to guess at (2026-10-25)
+                    why = browserview.FAILED_WHY if browserview.installed() else 'agent-browser is not installed on this computer'
+                    self.browser_failed = why
+                    self._emit(f'\x1b[33mThe browser did not open: {why}.\x1b[0m\r\n')
+                    self._remember_trace('progress', 'browser', f'The browser did not open: {why}. Send another message to try again.')
+                    system = f'{system}\n\n{browserview.FAILED_LINE.format(why=why)}'
             # only a CLI-backed chat can post to the wall: an API provider has no shell to
             # run the command in, and telling it about a command it cannot run is a lie
             if self.pick.startswith('cli:'):
@@ -1032,6 +1061,8 @@ class GeneralSession:
             if browser_env: build_args.update(extra_env=browser_env)
             # the CLI's own hands, in Taskuary's scratch folder (llm._build_llm), with the session's token in its environment
             if browser_tools or hands: build_args.update(cli_tools=True)
+            # ...and the browser hold as this chat's own hook: the user-wide one never knew a headless chat, so Pay went through (2026-10-25)
+            if browser_tools and self.holds_browser(): build_args.update(hold_sid=self.sid)
             # WHICH GEAR: session work takes the MAIN model - a general worker is doing a job, not
             # classifying one message. The dock is the Assistant's own chat and keeps the quick
             # gear it shares with triage (aidefaults). See the 2026-09-16 spec.
@@ -1077,13 +1108,14 @@ class GeneralSession:
                     system = f'{system}\n\n{hub.ASSISTANT_LINE}'
                 if browser_tools:
                     from . import browserview
-                    system = f'{system}\n\n{browserview.brief()}'
+                    system = f'{system}\n\n{browserview.brief(held=self.holds_browser())}'
                 system = f'{system}\n\n{_sc.ASK_LINE}'
                 if systems: system = f'{system}\n\n{systems}'
                 build_args = dict(pick=self.pick, model=self.model or None,
                                   trace=visible, cancel=cancel, task_id=self.task_id)
                 if browser_tools or hands:
                     build_args.update(cli_tools=True, extra_env=browser_env)
+                if browser_tools and self.holds_browser(): build_args.update(hold_sid=self.sid)
                 build_args['gear'] = 'light' if is_dock(self.store.get_task(self.task_id)) else 'main'
                 brain = llm_mod.build_llm(self.store, **build_args, job='general')
                 limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS
@@ -1382,7 +1414,11 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     from . import ownwork
     ownwork.ensure(store, tid, session.started, 'the assistant started here', actor)
     if task.get('Status') == 'open': store.update_task(tid, {'Status': 'in_progress'}, actor)
-    if session.browser_wanted:
+    # ...not for a CLI whose last test said it isn't signed in: the pane opened a page, then the chat failed, and it looked as if the AI
+    # had started too (2026-10-25). Its first message launches it, once it runs.
+    from . import agents as hub_agents
+    signed_out = session.pick.startswith('cli:') and hub_agents.cli_tests(store).get(session.pick[4:]) is False
+    if session.browser_wanted and not signed_out and not session.pick.startswith('connector:'):   # an API card can't drive it
         from . import browserview
         # on the page the task's browser was last on: after a restart the agent's ask ("sign in on the page beside us")
         # still points somewhere real

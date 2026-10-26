@@ -138,6 +138,19 @@ def reachable(store) -> bool:
                for c in store.connectors_by_type('gmail', with_secret=True))
 
 
+def unread_mail(store) -> list:
+    """The live mail cards whose calendar NO read reaches: Gmail over IMAP without its Google calendar fields, and plain IMAP.
+    Said beside every calendar answer - "is this on my calendar?" was answered off the one calendar the cards could read,
+    not the Gmail one the owner meant, and asked which, the answer could only say it did not know (2026-10-26)."""
+    out = []
+    for t in ('gmail', 'imap'):
+        for c in store.connectors_by_type(t, with_secret=True):
+            cfg = json.loads(c.get('ConfigJson') or '{}')
+            if c.get('Active') and not (t == 'gmail' and cfg.get('google_refresh_token')):
+                out.append(f"{t}: {cfg.get('address') or c.get('Name') or t}")
+    return out
+
+
 def agenda(store, days: int = DAYS, start: datetime = None) -> dict:
     """{events, errors, sources, start, end, tz} - every calendar the cards can reach, from `start`
     (now, unless a caller wants the whole day) for `days` days."""

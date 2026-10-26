@@ -2454,6 +2454,11 @@ def due_reports(store, startup: bool = False) -> list:
     return out
 
 
+def _is_advisor(src: dict) -> bool:
+    try: return json.loads(src.get('ConfigJson') or '{}').get('type') == 'assistant'
+    except (ValueError, AttributeError): return False
+
+
 def run_due_reports(store, startup: bool = False) -> int:
     """Every due report, own-data ones FIRST and each one walled off from the others.
 
@@ -2470,10 +2475,19 @@ def run_due_reports(store, startup: bool = False) -> int:
     from .llm import build_llm
     try: llm = build_llm(store, job='report')
     except Exception: llm = None
+    # THE ADVISOR ON ITS CLOCK IS THE ADVISOR (2026-10-26): handed this report brain, the scheduled pass ran as job='report' while
+    # the same pass run with no brain asks for job='advisor' (assistant._run) - one Advisor, two routes, and Auto's rules for the
+    # Advisor never reached the run that posts to the rail. A report that names its own brain still gets it (report_llm).
+    adv = []
+    def advisor():
+        if not adv:
+            try: adv.append(build_llm(store, job='advisor'))
+            except Exception: adv.append(llm)
+        return adv[0]
     n = 0
     for src in sorted(due_reports(store, startup), key=lambda s: not _own_data(s)):
         # a runner that RAISES is a failed run in the history (run_report_source keeps it), run again at
         # its next slot - never a reason to skip the reports behind it
-        try: n += not run_one(store, src, llm).get('busy')
+        try: n += not run_one(store, src, advisor() if _is_advisor(src) else llm).get('busy')
         except Exception as e: logger.warning(f"report {src.get('Address')} raised, skipping it and running the rest - {e}")
     return n

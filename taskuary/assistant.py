@@ -793,6 +793,7 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s work rail - the short
             '"task": "<idea:* only - a task title the owner could accept as-is, or null>", '
             '"kind": "<when task is not null: coding if it needs a repository/system changed, otherwise general>", '
             '"premise_unanswered": <true when the line rests on nobody having replied or told them (no answer yet, nobody told X), else false>, '
+            '"memory": "<the key in [memory:...] of the line under WHAT YOU KNOW ABOUT HOW THE OWNER WORKS this line rests on, or null>", '
             '"threads": [<connect:* only - the T numbers of every thread under SYSTEMS NOTHING HERE READS really about that system>], '
             '"named_in": [<connect:* only - the N numbers there that name it, and "SOUL" when the owner\'s own document does>]}], '
             '"notes": "<your note to the next check, under 120 words: FACTS AND TIMINGS ONLY - what you looked at and found nothing in, '
@@ -1106,7 +1107,8 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES, report_id=N
         except (ValueError, TypeError): a = {}
         for f in ('tid', 'mid'):
             if a.get(f): aimed.setdefault((f, a[f]), i['Key'])
-    out, seen = [], set()
+    out, seen, known = [], set(), None
+    from .assistantblocks import memory_keys
     for s in (j.get('say') or []) if isinstance(j, dict) else []:
         if not isinstance(s, dict): continue
         key, txt, why = str(s.get('key') or '').strip(), _short(s.get('text'), 240), _short(s.get('why'), 400)
@@ -1157,6 +1159,13 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES, report_id=N
             # placed by the producer that found it, and no model answer overrides that.
             act['section'] = section_of({'section': s.get('section'), 'kind': 'idea'})
             act |= said
+            # A LINE THAT RESTS ON A MEMORY LINE IS KEYED BY IT (the owner, 2026-10-26: "make the fixes"): with no message or task under
+            # it, the same standing fact came back under a fresh slug every run and a No never stuck. Only a key the document holds;
+            # a line about a mail or a task keeps that key, so the mail that finally bears on a put-down fact is still said.
+            mem = str(s.get('memory') or '').strip()
+            if mem and known is None: known = set(memory_keys(store).values())
+            if mem and mem in known: act['memory'] = mem
+            if act.get('memory') and not (act.get('tid') or act.get('mid')): key = f'idea:memory-{mem}'
             key = aimed.get(('tid', act.get('tid'))) or aimed.get(('mid', act.get('mid'))) or key
             if key in seen: continue
             for f in ('tid', 'mid'):
@@ -1937,6 +1946,10 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     # every line names the block behind it, looked up rather than asked for (source_of)
     rows = [store.upsert_idea(s | {'action': (s.get('action') or {}) | {'why': s['why']}
                                    | ({'source': src} if (src := source_of(s, mids, blocks)) else {})}, stamp) for s in say]
+    # ...and an idea that rests on a memory line says so where the owner's "why did it raise this?" reads (learned_cut.used)
+    from . import learned_cut
+    for s in say:
+        if (mem := (s.get('action') or {}).get('memory')): learned_cut.receipt(store, 'assistant', s['key'], [mem])
     # the source goes in the BODY, not only on the card: the Timeline's detail pane renders an
     # assistant post as its plain text, so a provenance that lived only in the React card was
     # invisible exactly where the owner reads the post

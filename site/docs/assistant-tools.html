@@ -598,7 +598,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>ref</code> - TQ-0401 (or <code>id</code>)</li>
 </ul>
 <p class="runs">Runs at once and changes nothing.</p><h3 id="timeline-search"><code>timeline.search</code><a class="anchor" href="#timeline-search" aria-label="Link to this section">#</a></h3>
-<p>Find messages anywhere in the history, however old - takes the same SELECT fields below, plus <code>limit</code>; here <code>contains</code> matches the subject, the sender AND the body, best match first. Returns m-numbers, refs, senders, subjects and dates; open one with message.read or its task with task.read.</p>
+<p>Find messages anywhere in the history, however old - takes the same SELECT fields below, plus <code>limit</code>; here <code>contains</code> matches the subject, the sender AND the body, best match first. Returns m-numbers, refs, senders, subjects and dates - the owner&#39;s own sent mail too, marked &quot;you (sent)&quot;: &quot;did I answer it&quot; is a search; open one with message.read or its task with task.read.</p>
 <ul>
 <li><code>limit</code></li>
 <li><code>contains</code></li>
@@ -722,7 +722,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">Runs at once and changes nothing.</p>
     </article>
     <nav class="pager"><a class="pn prev" href="./assistant"><span>Previous</span>Assistant buttons</a><a class="pn next" href="./reports"><span>Next</span>Reports and the Advisor</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.47 · updated 2026-10-26</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.48 · updated 2026-10-26</p>
   </main>
 </div>
 <script src="./docs.js"></script>

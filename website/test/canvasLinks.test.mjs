@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { canvasRequestFromHash, hashFor } from "../src/canvasLinks.js";
+import { BOARD, canvasRequestFromHash, hashFor, placeOf } from "../src/canvasLinks.js";
 
 // Every link the app writes still lands once the tabs are gone (the canvas redesign, 2026-09-29).
 test("each old link becomes a canvas request", () => {
@@ -71,4 +71,15 @@ test("a settings link to a page that does not exist opens the section list", () 
   assert.deepEqual(canvasRequestFromHash("#settings=foo").state, { section: null, open: null });
   assert.deepEqual(canvasRequestFromHash("#settings=config&group=Renamed%20group").state, { section: "config", open: "Renamed group" },
     "a group is checked by the view, which knows the groups");
+});
+
+// GOING BACK RESTORES WHERE YOU WERE (2026-10-26): a Hub topic and an opened post are steps of their own, and the Board is a place
+test("a Hub topic and an open post round-trip through the address, and the Board has one of its own", () => {
+  assert.equal(hashFor("hub", {}), "#hub");
+  assert.equal(hashFor("hub", { section: "importers", open: null }), "#hub=importers");
+  for (const s of [{ section: "importers", open: 7 }, { section: "", open: 7 }, { section: "importers", open: null }])
+    assert.deepEqual(canvasRequestFromHash(hashFor("hub", s)).state, s, JSON.stringify(s));
+  assert.notEqual(placeOf(hashFor("hub", { section: "", open: 7 })), placeOf("#hub"), "an opened post is a step Back can take");
+  assert.equal(placeOf(BOARD), "#board");
+  assert.equal(canvasRequestFromHash(BOARD), null, "the Board is no canvas page");
 });

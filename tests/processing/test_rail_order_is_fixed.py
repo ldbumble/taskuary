@@ -186,3 +186,22 @@ def test_a_closed_task_opened_by_name_walks_on_from_its_row_in_tasks(db):
     concierge.surface(store, f'task:{tids[0]}')                 # opened again by name, closed
     out = concierge.surface(store, leaving=f'task:{tids[0]}')
     assert out['item'] and out['item'].get('tid') == tids[1], f"Next from the closed task went to {out['item'] and out['item'].get('title')}"
+
+
+def test_put_it_on_my_list_on_a_report_walks_on_below_the_report_never_back_up_to_tasks(db):
+    """The 2026-10-26 sweep: Put it on my list on a report made a task in Tasks that kept the report's key, and the walk went on from
+    THERE - it offered the new task itself, then the task below it, back up in Tasks. The report stood in Reports; the walk goes on
+    below it."""
+    from taskuary import operations, server
+    store, tids = db
+    report = next(i for i in rail(store) if lanes.level_of(i) == 'reports')
+    below_it = keys(rail(store))[keys(rail(store)).index(report['key']) + 1]
+    concierge.surface(store, report['key'])
+    with mock.patch.object(server, 'store', store):
+        concierge.run_proposal(store, operations.propose(store, 'task.create_from_message', report['mid'], {'kind': 'task'}, 'owner'), 'owner')
+    settle(store)
+    made = store._one('SELECT TaskId FROM message WHERE MessageId=?', (report['mid'],))['TaskId']
+    assert made and made in task_rows(store), 'the report did not become a task in Tasks'
+    out = concierge.surface(store, leaving=report['key'])
+    assert out['item'] and below_it in out['item']['key'].removeprefix('fyis:').split(','), f"Next went to {out['item'] and out['item'].get('title')}, not the row below the report"
+    assert out['item'].get('tid') != made and lanes.level_of(out['item']) != 'task', 'the walk went back up into Tasks'

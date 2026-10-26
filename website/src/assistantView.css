@@ -620,7 +620,10 @@
 /* ...and the "…" of a press in flight is not a line after it (.tq-pending): it took the floor away, the scroll clamped, and the card put
    down dropped at the press, the next one sat low, and the answer slid it up the screen seconds later (the owner, 0.3.9.26: "it shows up
    right away, then reloads it a few seconds later"; browser/next-steady.test.mjs). The dots wait under the fold. */
-.tq-chat-inner > .tq-canvas-live:not(:has(~ .tq-msg:not(.tq-pending), ~ .tq-canvas-live, ~ .tq-live-card)) { min-height: calc(100cqh + 14px); }   /* an empty browse line may follow */
+/* ...but not over a box opened UNDER it (Close with a note, the agent box, Continue - a .tq-browse-line with something in it): below the
+   floor, the box was a screen down and bringing it into view pushed the card up and off the table - a task view cut to its title by the
+   drawers (0.3.9.48) kept 91px of itself in sight (the dead-end walk's SEEN). Without the floor the box stands right under the card */
+.tq-chat-inner > .tq-canvas-live:not(:has(~ .tq-msg:not(.tq-pending), ~ .tq-canvas-live, ~ .tq-live-card, ~ .tq-browse-line:not(:empty))) { min-height: calc(100cqh + 14px); }   /* an empty browse line may follow */
 /* Expand: the view alone, the conversation around it hidden - its own box never changes size (CanvasItem) */
 .tq-chat-inner.expanded > :not(.tq-canvas-live) { display: none; }
 /* NOT a padding change: the task view is sized off this body (100cqh), so a smaller padding here grew the pane on Expand */

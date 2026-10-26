@@ -25,13 +25,14 @@ test("task context, expanded messages and agent results fit short laptops and ph
   assert.ok(mail && coding);
   const chat = await fixture("/api/fixture/task/chat-burst");
   const saved = await fixture("/api/fixture/task/coding-saved");
-  assert.ok(chat.taskId && saved.taskId);
+  const rest = await fixture("/api/fixture/general/rest");
+  assert.ok(chat.taskId && saved.taskId && rest.taskId);
   const shots = process.env.TQ_LAYOUT_SCREENSHOTS;
   if (shots) await mkdir(shots, { recursive: true });
 
-  for (const [width, height] of [[1858, 900], [1440, 900], [1366, 768], [1280, 720], [1024, 600], [768, 700], [390, 844]]) {
+  for (const [width, height] of [[1858, 900], [1440, 900], [1366, 768], [1366, 640], [1280, 720], [1024, 600], [768, 700], [390, 844]]) {
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
-    for (const [name, id] of [["email", mail.TaskId], ["messages", chat.taskId], ["result", saved.taskId], ["agent", coding.TaskId]]) {
+    for (const [name, id] of [["email", mail.TaskId], ["messages", chat.taskId], ["result", saved.taskId], ["rest", rest.taskId], ["agent", coding.TaskId]]) {
       await page.evaluate((id) => { location.hash = `task=${id}`; }, id);
       await page.waitForSelector(`[data-tq-task-page="${id}"] [data-tq-task-head]`, { timeout: 20000 });
       if (name === "messages") {
@@ -42,6 +43,8 @@ test("task context, expanded messages and agent results fit short laptops and ph
         await page.waitForSelector("[data-tq-from] [data-tq-chat-thread]");
       } else if (name === "result") {
         await page.waitForSelector("[data-tq-result]", { timeout: 20000 });
+      } else if (name === "rest") {
+        await page.waitForSelector("[data-tq-agent-room='rest'] .tq-aui-viewport", { timeout: 20000 });
       } else if (name === "agent") {
         await page.waitForSelector(".xterm-screen", { timeout: 20000 });
       }
@@ -60,7 +63,10 @@ test("task context, expanded messages and agent results fit short laptops and ph
         return { pageOverflow: document.documentElement.scrollWidth - innerWidth, card: rect(card),
           from: from && rect(from), work: work && rect(work), rows, compose: compose && rect(compose),
           terminal: card.querySelector(".xterm-screen") && rect(card.querySelector(".xterm-screen")),
-          scrollable: from ? getComputedStyle(from).overflowY : null };
+          scrollable: from ? getComputedStyle(from).overflowY : null,
+          // a scroller INSIDE the work column: the Result or a finished agent's chat shrunk into one of its own (TQ-1215)
+          inner: work ? [...work.querySelectorAll("*")].filter((e) => visible(e) && /auto|scroll/.test(getComputedStyle(e).overflowY)
+            && e.scrollHeight > e.clientHeight + 1 && !e.closest("textarea, .xterm")).length : 0 };
       });
       const say = `${name} at ${width}x${height}: ${JSON.stringify(metrics)}`;
       assert.ok(metrics.pageOverflow <= 1, say);
@@ -70,6 +76,7 @@ test("task context, expanded messages and agent results fit short laptops and ph
         assert.ok(row.centers.length <= 1 && row.h <= 42 && row.overflow <= 1, say);
       }
       if (metrics.compose) assert.ok(metrics.compose.h <= 48, say);
+      if (name === "rest" || name === "result") assert.equal(metrics.inner, 0, `one scroller for the work: ${say}`);
       if (name === "agent") assert.ok(metrics.terminal?.h > 100 && metrics.terminal.right <= metrics.card.right, say);
       if (metrics.from && metrics.work) {
         const beside = metrics.work.x >= metrics.from.right;
@@ -79,7 +86,7 @@ test("task context, expanded messages and agent results fit short laptops and ph
           assert.ok(metrics.from.bottom <= metrics.card.bottom + 1, say);
         }
       }
-      if (shots) await page.screenshot({ path: `${shots}/${name}-${width}.png` });
+      if (shots) await page.screenshot({ path: `${shots}/${name}-${width}x${height}.png` });
       if (name === "messages" && metrics.scrollable === "auto") {
         const reachable = await page.evaluate(() => {
           const from = document.querySelector("[data-tq-from]");

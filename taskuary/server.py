@@ -1048,8 +1048,13 @@ def read_hand_task(task_id: int, background: BackgroundTasks, body: ReadAskBody 
 @app.post('/api/tasks')
 def create_task(body: TaskBody):
     if not body.Title: raise HTTPException(422, 'Title is required')
+    fields = {k: v for k, v in body.model_dump().items() if v is not None}
+    # A TITLE IS A LINE, NOT THE ASK (TQ-1215, the owner: "task name is 300 words. it should be limited"): + New filed its whole request
+    # as the title. Cut at a word the way the assistant's own tasks are; the words as typed stay the Summary.
+    from .concierge import _title_cut
+    if len(fields['Title']) > 120: fields = {**fields, 'Summary': fields.get('Summary') or fields['Title'], 'Title': _title_cut(' '.join(fields['Title'].split()))}
     # made by the owner on the page: an ask from the desktop once an agent works it (asks.py)
-    tid = store.create_task({**{k: v for k, v in body.model_dump().items() if v is not None}, 'AskedVia': 'desktop', 'OriginBase': 'owner'}, ACTOR)
+    tid = store.create_task({**fields, 'AskedVia': 'desktop', 'OriginBase': 'owner'}, ACTOR)
     # A task created by the owner is their durable TODO. Agent runs may come and go without
     # silently completing it; only routed/triaged work is eligible for automatic completion.
     from . import selfclose

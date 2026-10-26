@@ -1758,8 +1758,21 @@ class SQLiteStore:
     def _one(self, q, p=()):
         r = self._rows(q, p); return r[0] if r else None
     def _exec(self, q, p=()):
-        with self.lock:
+        with self.lock, self._undone():
             cur = self.cx.execute(q, p); self.cx.commit(); self._writes += 1; return cur.lastrowid
+    # A WRITE THAT FAILS LEAVES NOTHING OPEN (2026-10-26): another process held the database 5s, one INSERT met "database is
+    # locked", and the transaction sqlite3 had opened for it stayed open on the writer - every BEGIN IMMEDIATE after it failed
+    # with "cannot start a transaction within a transaction" until a restart, the rail's reads with them, and Next said "still
+    # refreshing" over and over. A failed bare write rolls back; a BEGIN first drops one a failed write left behind.
+    @contextlib.contextmanager
+    def _undone(self):
+        try: yield
+        except BaseException:
+            if self.cx.in_transaction: self.cx.rollback()
+            raise
+    def _clear_stale(self):
+        if self.cx.in_transaction:
+            logger.warning('store: a failed write had left a transaction open - rolled back before BEGIN'); self.cx.rollback()
     def _patch_poll_state(self, table, row_id, *, config_set=None, config_remove=(),
                           expect_fields=None, expect_config=None, last_polled_at=_POLL_UNSET):
         """Merge poll metadata into the latest config under a SQLite write transaction.
@@ -1781,7 +1794,7 @@ class SQLiteStore:
         if set(updates).intersection(removed):
             raise ValueError('a poll checkpoint cannot set and remove the same config key')
         with self.lock:
-            self.cx.execute('BEGIN IMMEDIATE')
+            self._clear_stale(); self.cx.execute('BEGIN IMMEDIATE')
             try:
                 found = self.cx.execute(f'SELECT * FROM {table} WHERE {key}=?', (row_id,)).fetchone()
                 if found is None:
@@ -2743,7 +2756,7 @@ class SQLiteStore:
         from . import processing_reads
         stamp = _now()
         with self.lock:
-            cur = self.cx.cursor()
+            self._clear_stale(); cur = self.cx.cursor()
             cur.execute('BEGIN IMMEDIATE')
             try:
                 version = processing_reads.active_version(cur)
@@ -2829,7 +2842,7 @@ class SQLiteStore:
         yield
         if not was_read: return
         with self.lock:
-            cur = self.cx.cursor(); cur.execute('BEGIN IMMEDIATE')
+            self._clear_stale(); cur = self.cx.cursor(); cur.execute('BEGIN IMMEDIATE')
             try:
                 after = picture(cur)
                 if after: processing_reads.record(cur, processing_reads.units(after['view']), version=version, at=_now(), by=by, origin='own_words')
@@ -2887,7 +2900,7 @@ class SQLiteStore:
     def _clear_funnel_compat(self, where, params):
         from .processing_reads import active_version
         with self.lock:
-            cur = self.cx.cursor()
+            self._clear_stale(); cur = self.cx.cursor()
             cur.execute('BEGIN IMMEDIATE')
             try:
                 clean = bool(active_version(cur)) and not self._processing_reconcile_status_cursor(cur)['pending']
@@ -3001,7 +3014,7 @@ class SQLiteStore:
             raise ValueError('fixed_now must be a non-empty string')
         from .processing_membership import reconcile_membership
         with self.lock:
-            cur = self.cx.cursor()
+            self._clear_stale(); cur = self.cx.cursor()
             cur.execute('BEGIN IMMEDIATE')
             try:
                 before = self._processing_reconcile_status_cursor(cur)
@@ -3085,7 +3098,7 @@ class SQLiteStore:
                 raise ValueError('processing alias target must be one of the reconciled exact entities')
             clean_aliases.append(a)
         with self.lock:
-            cur = self.cx.cursor(); cur.execute('BEGIN IMMEDIATE')
+            self._clear_stale(); cur = self.cx.cursor(); cur.execute('BEGIN IMMEDIATE')
             try:
                 existing = set()
                 for member in clean:
@@ -3145,7 +3158,7 @@ class SQLiteStore:
         """Explicitly redirect one item while retaining old memberships and alias receipts."""
         stamp = fixed_now or _now()
         with self.lock:
-            cur = self.cx.cursor(); cur.execute('BEGIN IMMEDIATE')
+            self._clear_stale(); cur = self.cx.cursor(); cur.execute('BEGIN IMMEDIATE')
             try:
                 source = self._processing_follow(cur, str(source_item_id))
                 target = self._processing_follow(cur, str(target_item_id))
@@ -3173,7 +3186,7 @@ class SQLiteStore:
     def _processing_read(self):
         """Hold one SQLite snapshot across related reads, including external merges."""
         with self.lock:
-            cur = self.cx.cursor()
+            self._clear_stale(); cur = self.cx.cursor()
             cur.execute('BEGIN')
             try:
                 yield cur
@@ -3760,7 +3773,7 @@ class SQLiteStore:
             prior = cur.execute("SELECT Completion FROM processing_migration WHERE Version=?", (str(version),)).fetchone()
             if prior and prior[0] == 'complete':
                 return self._processing_backfill_summary(cur, str(version), 'already_complete')
-            cur.execute('BEGIN IMMEDIATE')
+            self._clear_stale(); cur.execute('BEGIN IMMEDIATE')
             try:
                 if _activate_reads:
                     from . import processing_reads
@@ -4046,7 +4059,7 @@ class SQLiteStore:
         cols = [c for c in self.BRAIN_ROUTE_COLS if rec.get(c) is not None]
         return self._exec_unseen(f"INSERT INTO brainroute ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", [rec[c] for c in cols])
     def _exec_unseen(self, q, p=()):
-        with self.lock:
+        with self.lock, self._undone():
             cur = self.cx.execute(q, p); self.cx.commit(); return cur.lastrowid
     def set_brain_route(self, rid: int, **fields) -> None:
         cols = [c for c in fields if c in self.BRAIN_ROUTE_COLS]
@@ -4812,7 +4825,7 @@ class SQLiteStore:
     def review_delivery_edit(self, rid):
         """Exclude send claims while attachment bytes/envelopes change, even in another process."""
         with _DELIVERY_LOCK, self.lock:
-            self.cx.execute('BEGIN IMMEDIATE')
+            self._clear_stale(); self.cx.execute('BEGIN IMMEDIATE')
             try:
                 row = self.get_review(rid) or {}
                 if row.get('DeliveryClaim') or row.get('DeliveryState') in ('sending', 'unknown', 'sent'):
@@ -4870,7 +4883,7 @@ class SQLiteStore:
         token = _DELIVERY_PROCESS + uuid.uuid4().hex
         claimed = None
         with _DELIVERY_LOCK, self.lock:
-            self.cx.execute('BEGIN IMMEDIATE')
+            self._clear_stale(); self.cx.execute('BEGIN IMMEDIATE')
             try:
                 raw = self.cx.execute('SELECT * FROM review WHERE ReviewId=?', (rid,)).fetchone()
                 row = dict(raw) if raw else {}

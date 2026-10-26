@@ -450,7 +450,8 @@ READS = {
     'task.read':        'everything on one task - its summary, status, the messages on it, what agents said and did. `ref`: TQ-0401 (or `id`)',
     'timeline.search':  ('find messages anywhere in the history, however old - takes the same SELECT fields below, plus `limit`; here '
                          '`contains` matches the subject, the sender AND the body, best match first. Returns m-numbers, refs, senders, '
-                         'subjects and dates; open one with message.read or its task with task.read'),
+                         'subjects and dates - the owner\'s own sent mail too, marked "you (sent)": "did I answer it" is a search; '
+                         'open one with message.read or its task with task.read'),
     # OPEN WORK, ONE MESSAGE, ONE PERSON, THE DOCS (lookups.py). "What's open", "what did that mail
     # actually say", "what do we have with her", "how do I set up X" had no read at all (2026-09-24).
     'tasks.list':       'the tasks - `status`: open (the default: open, in progress or waiting) | done | all; `contains`: words; `limit`',

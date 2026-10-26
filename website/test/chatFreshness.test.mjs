@@ -45,7 +45,10 @@ test("delayed next-card actions cannot cross a New chat boundary", () => {
 
 test("same-tick composer submits are synchronously locked", () => {
   assert.match(view, /const turnFlight = useRef\(false\)/);
-  assert.match(view, /if \(!t \|\| busy \|\| resetting \|\| turnFlight\.current \|\| pics\.busy\) return/);
+  // ...a line typed while a turn is in flight is HELD, not dropped (2026-10-26) - and the same line twice in one tick is not held twice
+  assert.match(view, /if \(busy \|\| resetting \|\| turnFlight\.current\) \{/);
+  assert.match(view, /t === sending\.current \|\| askLater\.current\.includes\(t\)\) return;/);
+  assert.match(view, /turnFlight\.current = answering\.current = true; sending\.current = t;/);
 });
 
 // A stale draft is never sent - and the card must say what to do instead. Disabling the only

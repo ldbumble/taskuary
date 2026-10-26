@@ -196,12 +196,19 @@ def calendar_read(store, p: dict) -> str:
         try: start = start.replace(year=int(when[:4]), month=int(when[5:7]), day=int(when[8:]))
         except ValueError: return f'calendar.read cannot use {when}; that is not a real date.'
     ag = cal.agenda(store, days=int(days), start=start)
-    if not ag['sources']: return 'No calendar is connected - an Outlook or Google mail connection brings its calendar with it.'
+    # WHICH calendars, said every time (2026-10-26): asked "what calendar did you check?" the model could only say the read did not
+    # name one - and a Gmail card read over IMAP brings no calendar at all, which "an Outlook or Google mail connection brings its
+    # calendar" told it the opposite of
+    blind = cal.unread_mail(store)
+    unread = (f"NOT read - no calendar comes with these cards: {'; '.join(blind)} (a Gmail card reads its calendar only once its "
+              f"Google calendar fields are filled in; IMAP carries none). An event there is not in this answer either way." if blind else '')
+    if not ag['sources']: return NL.join(['No calendar is connected - an Outlook card brings its calendar with it, a Gmail card once its '
+                                          'Google calendar fields are filled in.'] + ([unread] if unread else []))
     ev = [f"{e['start']}{'-' + e['end'][11:] if e.get('end') and not e['all_day'] else ''} {'(all day) ' if e['all_day'] else ''}"
           f"{e['subject']}{' @ ' + e['where'] if e.get('where') else ''}{' with ' + ', '.join(e['who'][:5]) if e.get('who') else ''}"
           for e in ag['events']]
-    return NL.join([f"{ag['start'][:10]} to {ag['end'][:10]} ({ag['tz']}):"] + (ev or ['nothing booked'])
-                   + [f'could not read one calendar: {x}' for x in ag['errors']])
+    return NL.join([f"{ag['start'][:10]} to {ag['end'][:10]} ({ag['tz']}), read from {'; '.join(ag['sources'])}:"] + (ev or ['nothing booked'])
+                   + [f'could not read one calendar: {x}' for x in ag['errors']] + ([unread] if unread else []))
 
 def activity_list(store, p: dict) -> str:
     """What happened, from the audit trail - the owner and the agents apart."""

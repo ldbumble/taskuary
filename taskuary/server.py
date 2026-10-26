@@ -335,7 +335,8 @@ async def request_log(request: Request, call_next):
     return resp
 
 # the redirects back from a provider's sign-in: no header can ride on one, so each proves itself with the one-time state it was issued
-OAUTH_RETURNS = ('/api/quickbooks/callback', '/api/zoho/callback', '/api/linkedin/callback', '/api/google/files/callback')
+OAUTH_RETURNS = ('/api/quickbooks/callback', '/api/zoho/callback', '/api/linkedin/callback', '/api/google/files/callback',
+                 '/api/google/calendar/callback')
 
 @app.middleware('http')
 async def token_gate(request: Request, call_next):
@@ -6762,12 +6763,50 @@ def google_files(cid: int, body: GoogleFilesBody):
 def google_files_callback(code: str = None, state: str = '', error: str = None):
     """Google sends the browser back here. Outside the token gate like every OAuth return: it proves itself with the one-time state
     google_files issued, the refresh token never reaches a page, and the tab only says whether it worked (escaped, under a CSP)."""
-    from html import escape as _esc
     from . import fileaccess
     ok, msg = fileaccess.google_callback(store, cfg['server'], code, state, error)
+    return _oauth_tab(ok, msg)
+
+
+def _oauth_tab(ok: bool, msg: str) -> HTMLResponse:
+    from html import escape as _esc
     return HTMLResponse(f'<!doctype html><meta charset=utf-8><title>Taskuary</title><body style="font:15px system-ui;padding:40px;color:#262521;background:#f6f4f1">'
                         f'<p style="font-weight:700">{"Done" if ok else "Not changed"}</p><p>{_esc(str(msg))}</p><p style="color:#6e685f">You can close this tab and go back to Taskuary.</p>',
                         headers={'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'", 'Cache-Control': 'no-store'})
+
+
+class FlowBody(BaseModel):
+    flow: str = ''
+
+
+# SIGN IN WITH GOOGLE FOR THE CALENDAR, on the Gmail card (googlecal.py; the owner, 2026-10-26: "yes" to the card offering it)
+@app.post('/api/connectors/{cid}/google/calendar')
+def google_calendar_signin(cid: int):
+    """Where the browser goes to allow calendar.readonly, and the flow the card polls. No OAuth client on the card: 409, in words."""
+    from . import googlecal
+    try: return googlecal.start(store, cid, cfg['server'])
+    except LookupError as e: raise HTTPException(404, str(e))
+    except ValueError as e: raise HTTPException(409, str(e))
+
+
+@app.post('/api/connectors/{cid}/google/calendar/poll')
+def google_calendar_poll(cid: int, body: FlowBody):
+    from . import googlecal
+    return googlecal.poll(body.flow)
+
+
+@app.post('/api/connectors/{cid}/google/calendar/cancel')
+def google_calendar_cancel(cid: int, body: FlowBody):
+    from . import googlecal
+    googlecal.cancel(body.flow)
+    return {'ok': True}
+
+
+@app.get('/api/google/calendar/callback', response_class=HTMLResponse)
+def google_calendar_callback(code: str = None, state: str = '', error: str = None):
+    """Google's return, outside the token gate like google_files_callback: the one-time state is its proof, the token stays here."""
+    from . import googlecal
+    return _oauth_tab(*googlecal.callback(store, cfg['server'], code, state, error))
 
 
 @app.get('/api/connectors/{cid}/ms/adminlink')

@@ -27,6 +27,7 @@ import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, SideRail, Confirm } from "./ui.jsx";
 import { UndoLine, removeNow } from "./Removed.jsx";
 import { AllowFiles, GoogleFiles, MS_FILES_HINT } from "./FileAccess.jsx";
+import { GoogleCalendar } from "./GoogleCalendar.jsx";
 import { hasLogo } from "./logos.jsx";
 import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
@@ -275,7 +276,7 @@ const META = {
     fields: [["mailbox address", "address"],
       ["Google OAuth client id (optional — calendar)", "google_client_id", "", "Only for calendar access: an OAuth client from Google Cloud with the Calendar API enabled"],
       ["Google OAuth client secret (optional — calendar)", "google_client_secret"],
-      ["Google refresh token (optional — calendar)", "google_refresh_token", "", "From the OAuth consent flow with scope calendar.events; with it, replies about time check this calendar, and invites are answered from Taskuary (calendar.readonly only reads)"]],
+      ["Google refresh token (optional — calendar)", "google_refresh_token", "", "Filled by Sign in with Google for the calendar (read-only), or pasted from your own consent round - with scope calendar.events, invites are answered from Taskuary too"]],
     secretLabel: "App Password (16 characters)",
     desc: "A Gmail or Google Workspace mailbox - IMAP in through triage, replies back over Gmail's own SMTP, in-thread. Optional OAuth fields add the calendar.",
     howto: ["Turn on 2-Step Verification for the Google account (App Passwords require it).",
@@ -2556,6 +2557,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
           It sits above the agent box too: one sign-in is the whole setup, the agent is the long road (B10) */}
       {MS_SIGNIN.includes(conn.Type) && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} reload={reload} onSignedIn={() => setStep(m.srcLabel ? 2 : 3)} /></Box>}
       {conn.Type === "chatgpt" && <Box sx={{ mb: 2 }}><ChatGptSignIn conn={conn} cfg={cfg} reload={reload} /></Box>}
+      {conn.Type === "gmail" && <GoogleCalendar conn={conn} cfg={cfg} reload={reload} />}
       {conn.Type === "gmail" && <Box sx={{ mb: 2 }}><GoogleFiles conn={conn} cfg={cfg} reload={reload} /></Box>}
       {conn.Type === "whatsapp" && <Box sx={{ mb: 2 }}><WaPair conn={conn} reload={reload} onStatus={setWaSt} onTurnedAway={openPicker} /></Box>}
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{m.desc}</Typography>

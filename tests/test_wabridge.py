@@ -22,8 +22,9 @@ class BridgeManagerTests(unittest.TestCase):
         """The owner's bridge predated the code that reports the paired number; only a restart picks the
         new code up, and the manager never started that process - so it finds it by the port."""
         netstat = 'Active Connections\n\n  Proto  Local Address          Foreign Address        State           PID\n  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       1234\n  TCP    127.0.0.1:8977         0.0.0.0:0              LISTENING       4242\n'
+        # port() is pinned: with os.name faked to 'nt', reading the port file builds a WindowsPath, which Linux and macOS refuse
         with mock.patch.object(wabridge.os, 'name', 'nt'), mock.patch.object(wabridge.subprocess, 'run', return_value=mock.Mock(stdout=netstat)) as run, \
-             mock.patch.object(wabridge, '_proc', return_value=NODE):
+             mock.patch.object(wabridge, '_proc', return_value=NODE), mock.patch.object(wabridge, 'port', return_value=8977):
             self.assertEqual(wabridge.pid_on_port(8977), 4242)
             with mock.patch.object(wabridge, 'start', return_value={'phase': 'starting'}) as st, mock.patch.object(wabridge.time, 'sleep'):
                 self.assertEqual(wabridge.restart()['phase'], 'starting')

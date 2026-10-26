@@ -602,6 +602,9 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
         if closed: thread = {**thread, 'recently_closed': closed}
         # ...and the OPEN work it touches, so a repeat can be named as the task it repeats (same_as, 2026-09-25)
         still = taskcontext.recent_open(store, msg)
+        # ...and on a thread the owner started from their mail app, the work they were in when they did (2026-10-26)
+        seen = {w['tid'] for w in still}
+        still += [w for w in taskcontext.owner_started_work(store, msg) if w['tid'] not in seen]
         if still: thread = {**thread, 'open_work': still}
         # ...and the open GOALS with their steps, so a mail on another thread can say which step it serves (spec 2026-10-12)
         goals = taskcontext.open_goals(store)

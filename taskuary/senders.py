@@ -238,6 +238,14 @@ def _chat_known(store, msg: dict, ch: str, exclude_mid, on: bool) -> tuple:
         return True, _said(f"{name} is at {o.get('domain') or 'an organisation'} you trust.")
     if vouched: return True, _said(f'You vouched for {name}.')
     how = store.talked_with(ch, who, exclude_mid, alias)
+    # A TEAMS SENDER'S HISTORY BEFORE THEIR ID (2026-10-26, the owner: "we have talked to this person a million times"): until
+    # 2026-10-14 a Teams sender the directory could not place - a colleague in a sister tenant - was stored with no address, so
+    # their lines are keyed by display name; since then by Graph id, which none of those lines carry, and weeks of answers in a
+    # group chat read "you haven't answered them". Their name is matched to those name-keyed lines - and only in THIS
+    # conversation, so copying a colleague's name elsewhere borrows nothing (the reason the id replaced the name).
+    conv = str(msg.get('conversation_id') or msg.get('ConversationId') or '')
+    if not how and ch == 'teams' and who.startswith('teams:') and name and name.lower() != who and conv:
+        how = store.talked_with(ch, who, exclude_mid, (*alias, name), conversation=conv)
     if how == 'dm': return True, _said(f'You talk with {name} one-to-one on {room}.')
     if how == 'answered': return True, _said(f'You have answered {name} on {room} before.')
     return False, _said(f"{name} wrote in {room}, and you haven't talked with them one-to-one or answered them there, {NOBODY}.")

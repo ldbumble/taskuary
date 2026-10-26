@@ -28,6 +28,13 @@ test("messages group by conversation, newest first, with the thread's subject an
   assert.equal(cameFromLabel(g.slice(0, 1)), "Came from · 2 messages");
 });
 
+test("a Teams conversation is headed by its chat, never by the owner's own account it was read through (2026-10-26)", () => {
+  const teams = (o) => ({ MessageId: ++id, Channel: "teams", ConversationId: "teams:19:crew", SourceName: "alex@northwind.example", SentAt: "2026-10-26 08:00:00", ...o });
+  assert.equal(groupConversations([teams({ Subject: "Teams chat with Marcus Reed", FromName: "Marcus Reed", BodyText: "logins are blank" })])[0].title,
+    "Teams chat with Marcus Reed");
+  assert.equal(groupConversations([teams({ FromName: "Marcus Reed", BodyText: "logins are blank" })])[0].title, "Marcus Reed");
+});
+
 test("a thread with no id still holds together by its subject, Re: and Fwd: taken off", () => {
   const g = groupConversations([mail({ Subject: "Invoice 41", SentAt: "2026-10-01" }), mail({ Subject: "RE: Fwd: Invoice 41", SentAt: "2026-10-02" }),
     mail({ Subject: "Something else", SentAt: "2026-10-03" })]);

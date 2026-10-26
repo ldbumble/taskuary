@@ -5303,7 +5303,7 @@ class SQLiteStore:
                                        AND (o.Status='context' OR o.Direction='out'))
                              OR EXISTS (SELECT 1 FROM review r WHERE r.MessageId=m.MessageId AND r.Status IN ('approved','edited','sent')))
                              LIMIT 1""", (mailbox, email, exclude_mid or 0, mailbox, mailbox)) is not None
-    def talked_with(self, channel: str, who: str, exclude_mid=None, aliases=()):
+    def talked_with(self, channel: str, who: str, exclude_mid=None, aliases=(), conversation=None):
         """How the owner has talked with `who` in this chat channel, or None. 'dm': a conversation the PLATFORM called
         one-to-one (the poller's {'dm': true} on their line - who has spoken proves nothing, a group's one talker looks
         alone), with the owner's own line AFTER one of theirs (other than exclude_mid), and nobody else's. 'answered':
@@ -5311,7 +5311,8 @@ class SQLiteStore:
         the owner answering THEM, not a room the owner happens to be in (2026-10-20: weeks of replies in a group chat
         still read "someone you haven't worked with"). `who` is senders.chat_key's key - their address or platform id,
         else their name; `aliases` the same person's other ids (WhatsApp's phone and LID forms), matched against a
-        row's key and its MailMetaJson alias alike."""
+        row's key and its MailMetaJson alias alike. `conversation` keeps the search to that one conversation (senders._chat_known's
+        name-keyed Teams history)."""
         keys = sorted({str(x).strip().lower() for x in (who, *aliases) if str(x or '').strip()})
         if not (channel and keys): return None
         k = "LOWER(TRIM(COALESCE(NULLIF(TRIM({0}.FromEmail),''), NULLIF(TRIM({0}.FromName),''), '')))"
@@ -5321,8 +5322,8 @@ class SQLiteStore:
         # code sets these; a sender who calls themselves 'You' is not the owner (ingest.is_ours reads names, this must not)
         mine = "(COALESCE({0}.Status,'')='context' OR COALESCE({0}.Direction,'')='out')"
         head = f"""SELECT 1 x FROM message m WHERE m.Channel=? AND m.ConversationId IS NOT NULL AND m.MessageId<>?
-                   AND NOT {mine.format('m')} AND {them.format('m')}"""
-        args = (channel, exclude_mid or 0, *keys, *keys, *keys, *keys)
+                   AND NOT {mine.format('m')} AND {them.format('m')}""" + (' AND m.ConversationId=?' if conversation else '')
+        args = (channel, exclude_mid or 0, *keys, *keys, *((conversation,) if conversation else ()), *keys, *keys)
         if self._one(f"""{head} AND (CASE WHEN json_valid(m.MailMetaJson) THEN json_extract(m.MailMetaJson, '$.dm') END)=1
                          AND EXISTS (SELECT 1 FROM message o WHERE o.Channel=m.Channel AND o.ConversationId=m.ConversationId
                                      AND o.MessageId>m.MessageId AND {mine.format('o')})

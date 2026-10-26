@@ -354,6 +354,9 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
 export function AgentAsks({ asking, name, onAnswer, taskId }) {
   const [text, setText] = useState(""), [going, setGoing] = useState(false), [err, setErr] = useState("");
   const site = String(asking.request_id || "").startsWith("signin:") ? asking.request_id.slice(7) : "";
+  // ...and its Signed in is a press on EVERY agent's ask (2026-10-25): a terminal CLI's had only the box and a line saying to type it.
+  // The server tells either kind the same words (signin.signed_in), never a chooser's number.
+  const choices = site && !(asking.choices || []).includes("Signed in") ? [...(asking.choices || []), "Signed in"] : asking.choices || [];
   const fillPage = async () => {
     setErr("");
     try {
@@ -377,13 +380,11 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
           the agent-never-sees-it line lived only in a hover. Words only - the presses are the ones it had. */}
       {site && <span className="tq-aui-asking-hint" data-tq-signin-hint="">
         {taskId ? "Sign in here opens a page Taskuary types from - the agent never sees it. " : ""}
-        {(asking.choices || []).includes("Signed in")
-          ? "Or sign in yourself in the browser, then press Signed in."
-          : "Or sign in yourself in the browser, then answer Signed in."}</span>}
-      {(!!asking.choices?.length || (site && taskId)) && <div className="tq-aui-asking-choices">
+        Or sign in yourself in the browser, then press Signed in.</span>}
+      {(!!choices.length || (site && taskId)) && <div className="tq-aui-asking-choices">
         {site && taskId && <Button size="small" variant="outlined" onClick={fillPage}
           title={`A one-time page to type the ${site} sign-in - Taskuary fills it into the browser and the agent never sees it`}>Sign in here</Button>}
-        {(asking.choices || []).map((c) => <Button key={c} size="small" variant="outlined" disabled={going} onClick={() => send(c)}>{c}</Button>)}
+        {choices.map((c) => <Button key={c} size="small" variant="outlined" disabled={going} onClick={() => send(c)}>{c}</Button>)}
       </div>}
       <form className="tq-aui-asking-box" onSubmit={(e) => { e.preventDefault(); send(text); }}>
         <TextField size="small" fullWidth value={text} disabled={going} onChange={(e) => setText(e.target.value)}

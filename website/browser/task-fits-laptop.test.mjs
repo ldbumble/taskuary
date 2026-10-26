@@ -23,6 +23,9 @@ test("one main view at every width: a failed run with Came from on the left, a f
   const made = await page.evaluate(async () => (await fetch("/api/fixture/task/playbook-failed", { method: "POST", body: "{}",
     headers: { "X-Taskuary-Token": localStorage.getItem("taskuary_token"), "Content-Type": "application/json" } })).json());
   assert.ok(made.taskId, JSON.stringify(made));
+  const burst = await page.evaluate(async () => (await fetch("/api/fixture/task/chat-burst", { method: "POST", body: "{}",
+    headers: { "X-Taskuary-Token": localStorage.getItem("taskuary_token"), "Content-Type": "application/json" } })).json());
+  assert.ok(burst.taskId, JSON.stringify(burst));
   const tasks = (await (await fetch(`${harness.fixtureApi}/api/tasks`, { headers: { "X-Taskuary-Token": harness.token } })).json()).data;
   const fresh = tasks.find((x) => /^Year-end audit/.test(x.Title) && !["done", "dropped"].includes(x.Status));
   assert.ok(fresh, "the demo's audit task, nothing run on it");
@@ -82,7 +85,11 @@ test("one main view at every width: a failed run with Came from on the left, a f
         work: work && getComputedStyle(work).display, arrow: tab.querySelector("[data-tq-from-chevron]").textContent, words: tab.textContent };
     });
     assert.deepEqual(f, { main: "task", left: false, work: "none", arrow: "‹", words: "‹Agent · Close out" }, `${width}: the fresh task's page`);
-    const from = await rect(page, "[data-tq-from]");
+    const from = await rect(page, "[data-tq-from]"), card = await rect(page, "[data-tq-canvas-item]");
+    // ...the main view fills the width (the owner, 2026-10-26: "no main view should fill the screen. why waste space?") - less the tab
+    assert.ok(from.w >= card.w - 80, `${width}: the task fills the width ${JSON.stringify({ from, card })}`);
+    // ...and the tab is lit: the drawer holds the next move (an agent for an ask nothing has worked)
+    assert.ok(await page.$("[data-tq-work-tab][data-tq-lit]"), `${width}: the right tab is lit`);
     await page.click("[data-tq-work-tab]");
     await page.waitForSelector("[data-tq-work-side] [data-tq-closeout]", { visible: true, timeout: 5000 });
     assert.equal(await page.$eval("[data-tq-work-tab]", (e) => e.getAttribute("aria-expanded")), "true");
@@ -92,6 +99,17 @@ test("one main view at every width: a failed run with Came from on the left, a f
     // ...a press outside it shuts it
     await page.click("[data-tq-task-head]");
     await page.waitForFunction(() => getComputedStyle(document.querySelector("[data-tq-work]")).display === "none", { timeout: 5000 });
+
+    // A REPLY WITH NOTHING DRAFTED opens on the task, the right tab lit and naming the move (the owner, 2026-10-26: "you can open on task
+    // but highlight the side bar so people know to go there")
+    await open(burst.taskId, "[data-tq-work-tab]");
+    const b = await page.evaluate(() => {
+      const card = document.querySelector("[data-tq-canvas-item]"), tab = card.querySelector("[data-tq-work-tab]");
+      return { main: card.querySelector("[data-tq-task-body]").getAttribute("data-tq-main"), lit: tab.hasAttribute("data-tq-lit"),
+        words: tab.querySelector("[data-tq-from-words]").textContent, bg: getComputedStyle(tab).backgroundColor };
+    });
+    assert.equal(b.main, "task", `${width}: ${JSON.stringify(b)}`);
+    assert.ok(b.lit && b.words === "Close out · reply to Gail Moreno" && b.bg === "rgb(85, 105, 122)", `${width}: the tab is lit and names the reply ${JSON.stringify(b)}`);
   }
   assert.deepEqual(errors, []);
 });

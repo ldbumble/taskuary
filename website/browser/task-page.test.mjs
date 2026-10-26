@@ -94,9 +94,8 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
     const made = await post(page, "/api/fixture/task/chat-burst");
     assert.ok(made.taskId, JSON.stringify(made));
     await open(page, made.taskId);
-    // ...its reply is the page: the burst is in Came from, behind the left tab
-    await page.waitForSelector("[data-tq-from-line]", { timeout: 20000 });
-    await page.click("[data-tq-from-line]");
+    // ...nothing drafted, so the task is the page and the burst is in it - Close out behind the lit right tab (the owner, 2026-10-26)
+    await page.waitForSelector("[data-tq-work-tab][data-tq-lit]", { timeout: 20000 });
     await page.waitForSelector("[data-tq-from] [data-tq-conversation-row]", { timeout: 20000 });
     const rows = () => page.$$eval("[data-tq-from] [data-tq-conversation-row]", (els) => els.map((e) => e.innerText.replace(/\s+/g, " ").trim()));
     const first = await rows();
@@ -108,7 +107,6 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
     await page.waitForSelector("[data-tq-from] [data-tq-chat-thread]", { timeout: 10000 });   // a chat's Show all is its back-and-forth
     const thread = await page.$eval("[data-tq-from] [data-tq-chat-thread]", (e) => e.innerText);
     assert.ok(thread.indexOf("floor plan") < thread.indexOf("Morning all"), "still newest on top, the opening line last");
-    await page.keyboard.press("Escape");
   });
 
   await t.test("a coding agent working takes the whole width; From is one line and nothing covers the terminal", async () => {

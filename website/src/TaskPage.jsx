@@ -82,7 +82,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { adviceKeyFor, suggestion } from "./advice.js";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
-import { CLOSE_BY_HAND, askIsTitle, closeOut, focusOf, fromLine as fromLineOf, layoutOf, mainOf, sameWords, waitingOn, workPane } from "./taskLayout.js";
+import { CLOSE_BY_HAND, askIsTitle, closeOut, focusOf, fromLine as fromLineOf, layoutOf, mainOf, nextInDrawer, sameWords, waitingOn, workPane } from "./taskLayout.js";
 import { taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
 import { ASK_TAG, BROWSER_TAG } from "./newTask.js";
@@ -234,26 +234,29 @@ const FROM_SIDE = { position: "absolute", top: 0, left: 0, bottom: 0, width: "mi
 // one on the right, each laid OVER the main view behind a tab, so nothing under it reflows. Two columns cut the owner's 1600x810 laptop
 // to a ~700px work column whose failure reason sat out of sight. A phone (the body under 760px) keeps its stacked page.
 const STACK_BELOW = 760;
-// ...the main view a reading column, centred: the chat's own talk column is 860px (assistantView.css), and the white focus box adds its
-// 16px gutters and hairlines - a 1920 screen no longer runs a reply's lines edge to edge. A LIVE agent keeps the whole width (2026-10-25:
-// "when agent is open we want to maximize space to agent working")
-const MAIN_MAX = 900;
-const MAIN = { width: "100%", maxWidth: MAIN_MAX, mx: "auto", flex: "0 1 auto", minHeight: 0, overflowY: "auto", scrollbarWidth: "thin", overflowAnchor: "none" };
+// ...the main view the whole width, as a live agent's is (the owner, 2026-10-26: "no main view should fill the screen. why waste space?" -
+// a 900px column had been tried), scrolling on its own
+const MAIN = { width: "100%", flex: "0 1 auto", minHeight: 0, overflowY: "auto", scrollbarWidth: "thin", overflowAnchor: "none" };
 // ...the right drawer: the work column itself, laid over the main view's right edge, scrolling on its own; `display` keeps it mounted
 // while shut, so a draft half-typed or an agent's chat is where it was when it opens again
 const WORK_SIDE = (open) => ({ position: "absolute", top: 0, right: 0, bottom: 0, width: "min(640px, 92%)", zIndex: 6, overflowY: "auto",
   display: open ? "flex" : "none", bgcolor: "#fbf9f6", boxShadow: "-6px 0 18px rgba(38, 37, 33, 0.14)", px: 1.75, py: 1.25, boxSizing: "border-box" });
-// ...the TAB each drawer folds to, one design for both edges and for a live agent's Came from: the whole height of the body, an arrow in a
-// disc and the drawer's name read along the edge - a tint on hover, a ring on focus, and the arrow turns while the drawer is out
-const DRAWER_TAB = (open, right = false) => ({ appearance: "none", font: "inherit", cursor: "pointer", flex: "0 0 30px", width: 30, p: 0, pt: 1.1, border: 0,
-  [right ? "borderLeft" : "borderRight"]: `1px solid ${BORDER}`, bgcolor: open ? "#e7e0d4" : "#efeae2", color: INK, display: "flex", flexDirection: "column",
-  alignItems: "center", gap: 1, minHeight: 0, overflow: "hidden",
-  "& [data-tq-from-chevron]": { width: 22, height: 22, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0, bgcolor: "#fff",
-    border: `1px solid ${BORDER}`, color: ACCENT, fontSize: 17, lineHeight: 1, fontWeight: 600 },
-  "& [data-tq-from-words]": { writingMode: "vertical-rl", transform: right ? "none" : "rotate(180deg)", fontSize: 12, fontWeight: 600, letterSpacing: ".02em",
+// ...the TAB each drawer folds to, one design for both edges and for a live agent's Came from: the whole height of the body, 34px wide, an
+// arrow in a disc at its middle and the drawer's name read along the edge - a tint on hover, a ring on focus, and the arrow turns while the
+// drawer is out. `lit`: the drawer holds where the task goes NEXT (the owner, 2026-10-26: "you can open on task but highlight the side bar
+// so people know to go there") - filled in the accent, and it peeks out once as it lands (still for a reader who asked for no motion);
+// a drawer of context only (Came from) stays quiet
+const DRAWER_TAB = (open, right = false, lit = false) => ({ appearance: "none", font: "inherit", cursor: "pointer", flex: "0 0 34px", width: 34, p: 0, py: 1.5, border: 0,
+  [right ? "borderLeft" : "borderRight"]: `1px solid ${lit ? ACCENT : BORDER}`, bgcolor: lit ? ACCENT : open ? "#e7e0d4" : "#efeae2", color: lit ? "#fff" : INK,
+  display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: 1.25, minHeight: 0, overflow: "hidden",
+  "& [data-tq-from-chevron]": { width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0, bgcolor: "#fff",
+    border: `1px solid ${lit ? "#fff" : BORDER}`, color: ACCENT, fontSize: 21, lineHeight: 1, fontWeight: 600 },
+  "& [data-tq-from-words]": { writingMode: "vertical-rl", transform: right ? "none" : "rotate(180deg)", fontSize: 12.5, fontWeight: 600, letterSpacing: ".02em",
     whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minHeight: 0 },
-  "&:hover": { bgcolor: "#e7e0d4" }, "&:hover [data-tq-from-chevron]": { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT },
-  "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: -2 } });
+  "&:hover": { bgcolor: lit ? "#46586a" : "#e7e0d4" }, "&:hover [data-tq-from-chevron]": lit ? {} : { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT },
+  "&:focus-visible": { outline: `2px solid ${lit ? INK : ACCENT}`, outlineOffset: -2 },
+  ...(lit && !open ? { "@keyframes tqTabPeek": { "0%, 100%": { transform: "none" }, "50%": { transform: `translateX(${right ? -5 : 5}px)` } },
+    animation: "tqTabPeek .6s ease-in-out .5s 2", "@media (prefers-reduced-motion: reduce)": { animation: "none" } } : {}) });
 // a phone's From: three lines, faded at the foot, until a tap opens it
 const PHONE_MQ = "(max-width: 599.95px)";
 const PHONE_FROM = (open) => (open ? {} : { [`@media ${PHONE_MQ}`]: { maxHeight: 132, overflow: "hidden", cursor: "pointer",
@@ -306,7 +309,7 @@ function Part({ label, sub, subTitle, children, focus = false, ...rest }) {
         <Typography sx={{ color: INK, fontSize: 14, fontWeight: 600, lineHeight: 1.3 }}>{label}</Typography>
         {sub && <Typography variant="caption" title={subTitle} sx={{ color: FAINT, display: "block", lineHeight: 1.35 }}>{sub}</Typography>}
       </Box>
-      <Box sx={{ minWidth: 0, maxWidth: 900 }}>{children}</Box>
+      <Box sx={{ minWidth: 0 }}>{children}</Box>
     </Box>
   );
 }
@@ -362,7 +365,7 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
   };
   const list = steps || [], done = list.filter((s) => s.done).length;
   return (
-    <Box sx={{ mt: 0.85, maxWidth: 900 }}>
+    <Box sx={{ mt: 0.85 }}>
       <Typography sx={{ ...label, display: "block", mb: 0.25 }}>Done when</Typography>
       <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55 }}>{task.DoneWhen}</Typography>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 0.6, flexWrap: "wrap" }}>
@@ -1297,8 +1300,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // THE MAIN VIEW AND ITS DRAWERS (taskLayout.mainOf): Came from on the left where the work is the page, Agent and Close out on the right
   // where the task is; a phone's narrow body stays one stacked page. A move that changes where the task is up to shuts whichever was out
   const stacked = !sessionView && bodyW > 0 && bodyW < STACK_BELOW;
-  const main = mainOf({ sessionView, stacked, focus });
-  const fromDrawer = main === "work", workDrawer = main === "task";
+  const main = mainOf({ sessionView, stacked, focus, drafted: replyHas });
+  const fromDrawer = main === "work", workDrawer = main === "task", workLit = nextInDrawer({ main, focus });
+  // ...and a lit tab names the move: the reply and who to ("Close out · reply to Priya Shah"), else what the drawer holds
+  const workTabWords = focus === "reply" && replyMessage?.FromName ? `Close out · reply to ${replyMessage.FromName}` : "Agent · Close out";
   useEffect(() => { setFromSide(false); setWorkSide(false); }, [main]);
   // A START THAT STOPPED ON "WHICH REPOSITORY?" (funnel.HELD_REPO): the chip says so and the pick resumes the start, whichever
   // chip you press (the owner, 2026-10-12: "if i don't fill it out it should warn me at least?")
@@ -2453,7 +2458,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           conversation over the draft were the same messages From shows beside it, said a second time. */}
                       {closeGroup && answering && <Box component="button" type="button" data-tq-answering="" onClick={seeWholeConversation}
                         title="Read the whole conversation in From"
-                        sx={{ appearance: "none", font: "inherit", display: "block", width: "100%", maxWidth: 900, textAlign: "left", bgcolor: "transparent", border: 0,
+                        sx={{ appearance: "none", font: "inherit", display: "block", width: "100%", textAlign: "left", bgcolor: "transparent", border: 0,
                           cursor: "pointer", p: 0, mb: 1, fontSize: 12.5, color: FAINT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                           "&:hover": { color: INK }, "&:hover [data-tq-answering-words]": { textDecoration: "underline", textUnderlineOffset: "2px" },
                           "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
@@ -2519,7 +2524,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           {/* the thread's own drawing - who and WHEN first, a rule on the left, newest first - not a grey box with its
                               date pushed off the right edge (the owner, 2026-10-14: "you need time and date when each one was sent") */}
                           {sentApart.map((m) => (
-                            <Box key={m.MessageId} sx={{ mt: 0.9, pl: 1, borderLeft: `2px solid ${BORDER}`, maxWidth: 900 }}>
+                            <Box key={m.MessageId} sx={{ mt: 0.9, pl: 1, borderLeft: `2px solid ${BORDER}` }}>
                               <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>
                                 Sent by you{m.SourceName ? ` · ${m.SourceName}` : ""}{m.SentAt ? ` · ${fmtDateTime(m.SentAt)}` : ""}
                               </Typography>
@@ -2562,7 +2567,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           {/* the words that LEFT: an edit before the send is the FinalText - the draft read "keep it active" over a
                               mail that had said something else (2026-10-13) */}
                           {(sentReview?.FinalText || sentReview?.DraftText) && (
-                            <Box sx={{ mt: 0.9, pl: 1, borderLeft: `2px solid ${BORDER}`, maxWidth: 900 }}>
+                            <Box sx={{ mt: 0.9, pl: 1, borderLeft: `2px solid ${BORDER}` }}>
                               <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>
                                 What was sent{sentReview.DecidedAt ? ` · ${fmtDateTime(sentReview.DecidedAt)}` : ""}</Typography>
                               <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap",
@@ -2635,11 +2640,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 </Box>
                 </Box>
               </Box>
-              {workDrawer && <Box component="button" type="button" ref={workTabRef} data-tq-work-tab="" sx={DRAWER_TAB(workSide, true)}
+              {workDrawer && <Box component="button" type="button" ref={workTabRef} data-tq-work-tab="" data-tq-lit={workLit ? "" : undefined} sx={DRAWER_TAB(workSide, true, workLit)}
                 title={workSide ? "Hide the agent and Close out" : "Show the agent and Close out"} aria-label={workSide ? "Hide the agent and Close out" : "Show the agent and Close out"}
                 aria-expanded={workSide} aria-controls="tq-work-side" onClick={() => { setFromSide(false); setWorkSide((v) => !v); }}>
                 <Box component="span" aria-hidden data-tq-from-chevron="">{workSide ? "›" : "‹"}</Box>
-                <Box component="span" data-tq-from-words="">Agent · Close out</Box></Box>}
+                <Box component="span" data-tq-from-words="">{workTabWords}</Box></Box>}
               </Box>
               {/* THE TASKS TAB'S BAR, AT THE FOOT (the owner, 2026-10-16: "the buttons stay on bottom by the prompt box like always. No
                   buttons there."). The canvas draws these as its row over the chat line (rowVerbs, ActionRow); the Tasks tab has no

@@ -27,8 +27,13 @@ export const focusOf = ({ live = false, result = false, failed = false, pane = "
 // says where the task is up to. A live agent, its Result or its failure, or Close out -> "work", Came from the left drawer; a to-do, a
 // goal's steps, an ask nothing has worked yet, a wait on a person -> "task", Agent and Close out the right drawer. `stacked`: a phone's
 // narrow body keeps its one stacked page (null).
-export const mainOf = ({ sessionView = false, stacked = false, focus = null } = {}) =>
-  sessionView ? "work" : stacked ? null : focus === "agent" || focus === "reply" || focus === null ? "work" : "task";
+// ...and a reply with NOTHING DRAFTED yet opens on the task, its right tab lit (the owner, 2026-10-26: "you can open on task but highlight
+// the side bar so people know to go there"); `drafted` is anything of Close out's own - a draft, emails owed, a close, a write-up
+export const mainOf = ({ sessionView = false, stacked = false, focus = null, drafted = false } = {}) =>
+  sessionView ? "work" : stacked ? null : focus === "agent" || (focus === "reply" && drafted) || focus === null ? "work" : "task";
+// ...WHICH DRAWER HOLDS WHAT IS NEXT, so its tab is lit: the right one where the task is the page but the move is the reply (nothing
+// drafted yet) or an agent (an ask nothing has worked: "source"). A to-do's or a goal's list is itself the move; Came from is context only.
+export const nextInDrawer = ({ main = null, focus = null } = {}) => main === "task" && (focus === "reply" || focus === "source");
 
 // WHICH HALF OF THE WORK COLUMN IS OPEN. The page's focus (taskLifecycle.focusStage) still decides between the agent and the
 // reply; where it named the task itself - now the always-open From column - the work column opens on what the task is for: the

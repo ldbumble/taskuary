@@ -1042,12 +1042,21 @@ FIELD_BUTTON = {'priority': 'priority', 'assignee': 'assign'}
 WAITS = 'Nothing happens until you say yes.'
 
 
+def _story(store, t: int):
+    try: return funnel.agent_story(store, t)
+    except Exception: return None
+
+
 def _shows(store, it: dict, b: str) -> bool:
     """The task page's own button for `b` (buttons.json `row`) is drawn on this item now - the few whose being there turns on state."""
     if b == 'reopen': return bool(it.get('closed')) or str((store.get_task(int(it['tid'])) or {}).get('Status') or '') in ('done', 'dropped')
     if b == 'stop_agent': return _agent_running(it['tid'])
-    # the task page draws it only on an open task (TaskPage notDone)
-    if b == 'strong_again': return not it.get('closed') and str((store.get_task(int(it['tid'])) or {}).get('Status') or '') not in ('done', 'dropped')
+    # the task page draws it only on an open task whose agent failed or whose reader was unsure (brainroute.strong_offered)
+    if b == 'strong_again':
+        from . import brainroute, workerstate
+        t = int(it['tid'])
+        return not it.get('closed') and brainroute.strong_offered(store.get_task(t), brainroute.judged(store, t), workerstate.ended(store, t),
+                                                                  _story(store, t))
     if b == 'continue': return bool(store.resumable_session(it['tid'])) and not _general(store, it)
     if b in ('review_changes', 'run_another', 'share'): return _agent_holds(store, it) or bool(store.resumable_session(it['tid']))
     # Share stands on a task's row whenever no agent is at work on it (TaskPage: a Result to share, or a summary to email)
@@ -1078,6 +1087,18 @@ def row_buttons(store, it: dict) -> list:
     if it.get('closeout'): out.insert(0, {'verb': 'approve', 'label': closeout_label(it)})
     seen = set()
     return [b for b in out if not (b['verb'] in seen or seen.add(b['verb']))]
+
+
+def _button_named(store, it: dict, said: str) -> str:
+    """The verb of the button `said` names on this item: by the label its row draws first - "Share" on a task's row is share_result,
+    not the verb id share (Email a summary) - then by verb id, then by any button's label. button.light {button: 'Remind me'} missed
+    with "has no remind me button - its row has ..., Remind me, ..." and "Run again on the strong model" lit nothing (2026-10-26)."""
+    low = ' '.join(said.lower().split())
+    row = next((b['verb'] for b in row_buttons(store, it) if b['label'].lower() == low), '')
+    if row: return row
+    v = canon_verb(low.replace(' ', '_') if low.replace(' ', '_') in buttons.VERBS else low)
+    if v in buttons.VERBS or v in BUTTON_OF: return v
+    return next((k for k, d in buttons.VERBS.items() if low in {d['label'].lower(), *(s.lower() for s in (d.get('states') or {}).values())}), v)
 
 
 def _lit(store, tid: int, table: dict | None, it: dict, verb: str, note: str = '') -> dict:
@@ -2412,10 +2433,11 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # task `ref` names - never pressed, but for a put-down, which the words press (_press_or_light). A phone has no rows to light: its
     # acts are the tools and decisions, answered yes or no
     if kind == 'button.light':
-        b = canon_verb(str(params.get('button') or '').strip().lower())
+        said = str(params.get('button') or '').strip()
         ref = re.search(r'(\d+)', str(params.get('ref') or ''))
         on = funnel.item_for_key(store, f'task:{int(ref.group(1))}') if ref else (item or None)
         if not on: raise CallMiss('Name the task (TQ-0123) whose button to light, or bring it up first. Nothing was changed.')
+        b = _button_named(store, on, said)
         if not routes():
             raise CallMiss(f"A phone has no row to light - CALL the tool or decision {b!r} is (THE BUTTONS BY NAME) and it is asked yes or no.")
         return _press_or_light(store, tid, item, on, b, str(params.get('note') or ''), actor)

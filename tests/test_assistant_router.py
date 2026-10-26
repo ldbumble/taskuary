@@ -152,6 +152,27 @@ class DeskRoutes(unittest.TestCase):
         self.assertEqual(len(closeouts()), n, 'no second close-out')
         self.assertEqual(s.get_task(tid)['Status'], 'done')
 
+    def test_any_row_button_named_by_its_own_label_lights(self):
+        """The 2026-10-26 sweep: button.light {button: 'Remind me'} missed with "has no remind me button - its row has ..., Remind me",
+        "Share" lit Email a summary's absence, and "Run again on the strong model" lit nothing or another button."""
+        s = store(); tid, item = on_table(s)
+        it = funnel.item_for_key(s, f'task:{tid}')
+        for b in concierge.row_buttons(s, it):
+            if b['verb'] in concierge.PUT_DOWN: continue                                # a put-down is pressed, not lit (above)
+            with self.subTest(label=b['label']):
+                self.assertEqual(concierge._button_named(s, it, b['label']), b['verb'])
+                self.assertEqual(concierge._button_named(s, it, b['label'].upper()), b['verb'], 'the case is not the button')
+        self.assertEqual(concierge._button_named(s, it, 'remind me'), 'defer')
+        if any(b['verb'] == 'share_result' for b in concierge.row_buttons(s, it)):
+            self.assertEqual(concierge._button_named(s, it, 'Share'), 'share_result', "the row's Share, not Email a summary")
+        out, _ = say(s, 'remind me about this', item['key'], 'CALL: {"kind": "button.light", "params": {"button": "Remind me"}}')
+        self.assertEqual(out['light']['verb'], 'defer')
+        # ...and the strong re-run, on a task whose reader was unsure (the ▾ draws it then), by its label - lit, nothing runs
+        s.judge_task(tid, {'sure': False}, 'triage')
+        out, _ = say(s, 'use the strong model for this', item['key'],
+                     'CALL: {"kind": "button.light", "params": {"button": "Run again on the strong model"}}')
+        self.assertEqual(out['light']['verb'], 'strong_again')
+
     def test_a_digit_over_a_task_view_presses_nothing_it_does_not_show(self):
         """The 2026-10-26 sweep: "2" over TQ-1141 was rewritten to its chips' second, Mark done - but a task is drawn as its own view,
         whose row has no numbers and not those chips - and the task closed. The digit stays the owner's word for the model to read."""

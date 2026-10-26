@@ -106,12 +106,19 @@ test("a long answer opens at its first line", { timeout: 180000 }, async (t) => 
   await page.waitForSelector(".tq-aui-agent", { timeout: 20000 });
   await new Promise((r) => setTimeout(r, 1200));
 
+  // ...in whatever scrolls it: a finished agent's chat is no scroller of its own since the work column became the one scroller
+  // (TaskPage data-tq-agent-room "rest", 2026-10-26) - so the pane is the nearest box that scrolls, and the answer must open at
+  // its first line there, never at its last
   const seen = await page.evaluate(() => {
-    const v = document.querySelector(".tq-aui-viewport"), m = [...v.querySelectorAll(".tq-aui-agent")].pop();
+    const m = [...document.querySelectorAll(".tq-aui-agent")].pop();
+    let v = m.parentElement;
+    while (v && !(/auto|scroll/.test(getComputedStyle(v).overflowY) && v.scrollHeight > v.clientHeight + 1)) v = v.parentElement;
+    if (!v) return { overflow: false, tall: Math.round(m.getBoundingClientRect().height) };
     const vr = v.getBoundingClientRect(), mr = m.getBoundingClientRect();
-    return { scrolled: v.scrollTop, overflow: v.scrollHeight > v.clientHeight, top: mr.top - vr.top };
+    return { scroller: v.className || [...v.attributes].map((a) => a.name).join(" "), scrolled: v.scrollTop, overflow: true,
+      longer: mr.height > vr.height, top: Math.round(mr.top - vr.top), room: Math.round(vr.height) };
   });
-  assert.ok(seen.overflow, `the answer must be longer than the pane for this to test anything: ${JSON.stringify(seen)}`);
-  assert.ok(seen.top >= 0 && seen.top < 40, `the answer's first line must open at the top of the pane: ${JSON.stringify(seen)}`);
+  assert.ok(seen.overflow && seen.longer, `the answer must be longer than the pane for this to test anything: ${JSON.stringify(seen)}`);
+  assert.ok(seen.top >= 0 && seen.top < seen.room - 40, `the answer's first line must open in view at the top of the pane: ${JSON.stringify(seen)}`);
   assert.deepEqual(errors, []);
 });

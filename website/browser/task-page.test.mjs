@@ -24,6 +24,13 @@ const layout = (page) => page.evaluate(() => {
     statusKey: document.querySelector("[data-tq-status-pill]")?.getAttribute("data-tq-status-pill") || "",
     head: document.querySelector("[data-tq-task-head]")?.innerText || "", sorted: document.querySelector("[data-tq-sorted]")?.innerText || "" };
 });
+// ...read once the page has stopped moving: the Advisor's line, the rail's read and the canvas pin land after the task header does, and on
+// a slower runner (CI's Linux, 0.3.9.48) a first read caught the reply 3px from where it came to rest - which is not the drawer moving it
+const settled = async (page) => {
+  let was = "", same = 0, l = null;
+  for (let i = 0; i < 40 && same < 3; i++) { l = await layout(page); const k = JSON.stringify(l); same = k === was ? same + 1 : 0; was = k; await new Promise((r) => setTimeout(r, 150)); }
+  return l;
+};
 
 test("the task page: From | Work at rest, the work alone while an agent works, its Result when it stopped", { timeout: 360000 }, async (t) => {
   const harness = await startHarness();
@@ -41,12 +48,12 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
     assert.ok(mail, "the demo world has an email reply waiting to send");
     await open(page, mail.TaskId);
     await page.waitForSelector("[data-tq-from-line]", { timeout: 20000 });
-    const shut = await layout(page);
+    const shut = await settled(page);
     assert.equal(shut.layout, "work");
     assert.ok(!shut.from && shut.work, `the reply alone, Came from shut: ${JSON.stringify(shut)}`);
     await page.click("[data-tq-from-line]");
     await page.waitForSelector("[data-tq-from-side] [data-tq-sorted]", { timeout: 20000 });
-    const l = await layout(page);
+    const l = await settled(page);
     assert.deepEqual(l.work, shut.work, "the drawer is laid over the reply, which does not move");
     assert.ok(l.from.x <= l.work.x + 1, `Came from comes in from the left: ${JSON.stringify(l)}`);
     assert.match(l.sorted, /^Sorted as: a reply to send · \w+ priority/, "what triage made of it, at the foot of From");

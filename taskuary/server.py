@@ -2900,9 +2900,9 @@ def split_task_api(task_id: int, body: TaskSplitBody):
     return {'taskId': new, 'ref': task_ref(new)}
 
 @app.get('/api/tasks/{task_id}/merge-candidates')
-def merge_candidates_api(task_id: int):
+def merge_candidates_api(task_id: int, q: str = ''):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    return {'data': reshape.merge_candidates(store, task_id)}
+    return {'data': reshape.merge_candidates(store, task_id, q=q[:200])}
 
 @app.post('/api/tasks/{task_id}/merge')
 def merge_task_api(task_id: int, body: MergeBody):

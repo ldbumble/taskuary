@@ -482,6 +482,17 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(c.post(f'/api/tasks/{keep}/merge', json={'into': keep}).status_code, 422)
         self.assertEqual(c.post(f'/api/tasks/{keep}/merge', json={'into': 999999}).status_code, 404)
 
+    def test_merge_candidates_take_a_search_and_offer_closed_tasks_marked(self):
+        shut = c.post('/api/tasks', json={'Title': 'Spendly card limits for Ray Colton'}).json()['taskId']
+        server.store.update_task(shut, {'Status': 'done'}, 'owner')
+        me = c.post('/api/tasks', json={'Title': 'Order a desk'}).json()['taskId']
+        for q in (str(shut), f'TQ-{shut:04d}', 'spendly ray'):
+            got = c.get(f'/api/tasks/{me}/merge-candidates', params={'q': q}).json()['data']
+            self.assertEqual([(x['task_id'], x['closed']) for x in got], [(shut, True)], q)
+        out = c.post(f'/api/tasks/{me}/merge', json={'into': shut}).json()
+        self.assertTrue(out['reopened'])
+        self.assertEqual(c.get(f'/api/tasks/{shut}').json()['task']['Status'], 'open')
+
     def test_attachments_are_kept_served_and_counted(self):
         """"See below" mail is a screenshot with a sentence on top - a text-only funnel threw the
         actual ask away. The bytes go to disk, the panel draws the images, the row shows a clip."""

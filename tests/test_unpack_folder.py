@@ -113,6 +113,8 @@ def test_the_whatsapp_bridge(frozen, tmp_path, monkeypatch):
     monkeypatch.setattr(wabridge, 'LOG', tmp_path / 'wa.log')
     monkeypatch.setattr(wabridge, 'token', lambda: 't')
     monkeypatch.setattr(wabridge.time, 'sleep', lambda s: None)
+    monkeypatch.setattr(wabridge, 'pid_on_port', lambda p=None: 0)
+    monkeypatch.setattr(wabridge, '_listening', lambda: True)
     assert wabridge.start(wait=True)['phase'] == 'running'
     clear_of(frozen, frozen.calls[-1])
 

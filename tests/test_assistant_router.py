@@ -125,6 +125,22 @@ class DeskRoutes(unittest.TestCase):
         self.assertEqual(out['pressed']['label'], buttons.label('remove')); self.assertNotIn('light', out)
         self.assertNotEqual((s.get_task(tid) or {}).get('Status'), 'open')
 
+    def test_a_put_down_on_a_task_not_on_screen_brings_it_up_lit_and_closes_nothing(self):
+        """The 2026-10-26 sweep: a walk narrated in words left nothing on the table, and "mark this done" closed TQ-1141 - the task the
+        model had named, never drawn. A typed put-down presses only the item in front of the owner; one off the table comes up lit."""
+        for model in ('CALL: {"kind": "close", "params": {"on": "TQ-%04d"}}', 'CALL: {"kind": "task.complete", "params": {"ref": "TQ-%04d"}}'):
+            s = store(); tid, _ = on_table(s)
+            out, _ = say(s, 'mark this done', None, model % tid)
+            self.assertNotIn('pressed', out)
+            self.assertEqual((out['light']['verb'], out['light']['tid']), ('close', tid))
+            self.assertEqual(s.get_task(tid)['Status'], 'open', model)
+
+    def test_with_nothing_on_the_table_the_model_is_told_walking_is_next_never_words(self):
+        s = store(); on_table(s); asked = []
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(ingest, '_spawn'):
+            concierge.say(s, 'walk me through my tasks', llm=lambda sy, u, **k: (asked.append(u), 'CALL: {"kind": "next", "params": {}}')[1])
+        self.assertIn('CALL next', asked[0]); self.assertIn('Never read a task out in words', asked[0])
+
     def test_an_act_on_another_task_brings_it_up_with_its_button_lit(self):
         s = store(); tid, item = on_table(s)
         other = s.create_task({'Title': 'Renew the Spendly licence', 'Kind': 'task'}, 't')

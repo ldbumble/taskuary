@@ -1252,6 +1252,13 @@ def _advice_block(store, item: dict | None) -> str:
         logger.debug(f'concierge: no advice block - {e}'); return ''
 
 
+# NOTHING ON THE TABLE, AND THEY WANT TO GO THROUGH WHAT WAITS: the walk draws each row as its card with its own buttons. Asked to walk
+# with an empty table the model read TQ-1141 out with task.read and narrated "First up is TQ-1141..." - no card, no ring, no buttons,
+# 0 of 6 turns (the 2026-10-26 sweep; the owner, 2026-10-21: "Free text should almost never be used in the assistant")
+EMPTY_TABLE = ('Nothing is on the table now: when they want to go through what waits - the next one, walk me through it, from the '
+               'top - CALL next, which brings that row up as its card with its buttons. Never read a task out in words in its place.')
+
+
 def table_line(store, item: dict | None) -> str:
     """What a look-up round and a retry carry, so "it" still means the item on the table after the first round."""
     if not item: return ''
@@ -2749,8 +2756,9 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
         # THE NOTES GO WITH IT: "rerun the agent with these notes: use the new template" lit Continue and dropped the notes (the real-CLI
         # walk, 2026-10-20) - they are in Continue's box when it is pressed, and the line says so
         note = str(params.get('note') or params.get('text') or '').strip() if b in ('continue', 'close_note') else ''
-        # ...and a put-down is pressed, not lit (_press_or_light) - but a rule for "from now on" (preference.*) is the owner's own press
-        if kind in ('task.complete', 'item.settle', 'task.not_a_task', 'message.file', 'message.archive'):
+        # ...and a put-down is pressed, not lit (_press_or_light) - but a rule for "from now on" (preference.*) is the owner's own press;
+        # and only on the item in front of the owner: one named off the table comes up with its button lit (2026-10-26, as in turn())
+        if kind in ('task.complete', 'item.settle', 'task.not_a_task', 'message.file', 'message.archive') and on is table:
             return _press_or_light(store, tid, table, on, b, note, actor)
         return _lit(store, tid, table, on, b, note=note)
     if on and kind in ON_TASK:
@@ -4610,7 +4618,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       + ("ATTACHED IMAGES (read these files - they are what the owner is showing you)\n" + "\n".join(images) + "\n" if images else '')
                       + f"Answer them, briefly. If a look-up would answer it, CALL it now instead of saying you will. "
                       + ('If their words mean one of the actions for the item on the table, CALL it.' if item else
-                         'If they ask for something to be done, CALL it now - its button is their confirmation.'))
+                         'If they ask for something to be done, CALL it now - its button is their confirmation. ' + EMPTY_TABLE))
         raw = str(llm(system, asked, max_tokens=MAX_TOKENS, **({'images': general._images(images)} if images else {})) or '').strip()
         raw, call = parse_call(raw)
         # A LOOK-UP runs at once and comes straight back, because it changes nothing and waits for
@@ -4834,8 +4842,11 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         if verb in ('coding_agent', 'regular_agent') and (own_job or not target_item):
             return _new(store, tid, item, 'coding' if verb == 'coding_agent' else 'general', decision.get('text') or text)
         if target_item:
-            # ...a put-down (Mark done, Not ours just this once) is pressed, not lit (_press_or_light)
-            try: return _press_or_light(store, tid, item, target_item, verb, str(decision.get('text') or '').strip() if verb == 'continue' else '', actor)
+            # ...a put-down (Mark done, Not ours just this once) is pressed, not lit (_press_or_light) - on the item IN FRONT of the owner only.
+            # One named off the table is brought up with its button lit: "walk me through my tasks" was narrated in words with no card,
+            # and the next "mark this done" closed TQ-1141, a task never on screen, because the model had named it (2026-10-26)
+            try: return (_lit(store, tid, item, target_item, verb) if elsewhere and verb in PUT_DOWN else
+                         _press_or_light(store, tid, item, target_item, verb, str(decision.get('text') or '').strip() if verb == 'continue' else '', actor))
             except CallMiss:                                           # no such button on its row: the model says so in words
                 # ...except a report asked to run again: Run it again is drawn only on a failed run, and the report's own page has Run now -
                 # "run the AP ageing again" over a good run was answered in words with the page one link away (the 2026-10-20 query walk)

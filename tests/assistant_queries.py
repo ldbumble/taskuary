@@ -98,6 +98,11 @@ CASES = [
     Q('item', 'put it on my list', 'fyi', c('mine'), 'light:mine', freq=3),
     Q('item', 'next', 'todo', c('next'), 'next', freq=5),
     Q('item', 'skip this one', 'todo', c('next'), 'next', freq=4),
+    # ...and with nothing on the table the walk words bring the first row up as its card - never a task read out in words, and a later
+    # "mark this done" over no card brings the named one up lit, never closes it (the 2026-10-26 sweep)
+    Q('item', 'walk me through my tasks', None, c('next'), 'card', freq=5),
+    Q('item', 'start over', None, c('next'), 'card', freq=3),
+    Q('item', 'mark this done', None, c('close', on=T1), 'light:close', demo='other', freq=3),   # the demo script: "Nothing is on the table" 
     Q('item', 'remember that Marcus owns the bank feed', 'todo', c('remember', text='Marcus owns the bank feed'), 'open:#settings=memory', freq=2),
     Q('item', 'split this into two tasks', 'todo', c('task.split', text='the bank feed; the 4,180 gap'), 'light:split', freq=1),
     Q('item', 'file a note on it: waiting on the bank', 'todo', c('task.comment', text='waiting on the bank'), 'did:task.comment', freq=2),

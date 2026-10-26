@@ -25,6 +25,15 @@ test("a person is found by their number however it is typed", () => {
   assert.deepEqual(find("555 0100"), [ERIN, RAY]);
 });
 
+// the owner, 2026-10-26: "the whatsapp contacts people tab are still not searchable by name as well"
+test("a person WhatsApp writes to by LID is found by their name, never by the LID, and the picker searches it that way", () => {
+  const GAIL = "88001@lid", opts = [{ to: GAIL, name: "Gail Moreno" }, { to: ERIN, name: "Erin Blake" }];
+  for (const q of ["gail", "MORENO", "gail moreno"]) assert.deepEqual(opts.filter((o) => waMatches(q, o.to, o.name)).map((o) => o.to), [GAIL], q);
+  for (const q of ["88001", GAIL, "lid"]) assert.deepEqual(recipientOptions(opts, q).map((o) => o.to), [], q);
+  assert.equal(recipientLabel(opts[0]), "Gail Moreno");
+  assert.equal(recipientId(opts[0]), GAIL);
+});
+
 test("the JID never finds anything", () => {
   for (const q of ["120363", OPS, "s.whatsapp.net", "@g.us", ERIN]) assert.deepEqual(find(q), [], q);
 });

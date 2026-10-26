@@ -2288,7 +2288,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         // the receipt names the task and its chip opens it
         const ref = cur.ref || `TQ-${String(cur.tid).padStart(4, "0")}`;
         const there = elsewhere && cur.tid ? { tid: cur.tid, ref, chips: [{ verb: "opentask", tid: cur.tid, label: `Open ${ref}` }] } : {};
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", ...there, text: data.draft
+        // ...and a rewrite that did not happen is drawn as the failure it is (✗) - a receipt with no status wore the tick (2026-10-26)
+        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", ...there, ...(data.draft ? {} : { status: "failed" }), text: data.draft
           ? (there.tid ? `Rewritten on ${ref} - read it there before you send it.` : "Rewritten - read it below before you send it.")
           : `I could not rewrite it here; edit the draft on ${there.tid ? ref : "the card"} and send that.` }]);
         if (!elsewhere) { putOnTable(null, "sync"); deferInChat(() => surfaceRef.current?.(`review:${cur.rid}`), 300); } else loadPile();

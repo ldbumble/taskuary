@@ -4854,8 +4854,11 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     if decision and verb in ('reply', 'redraft') and target_item:
         # A CLOSED TASK IS SAID SO: "approve the Fairhaven PO" drafted "Approved" on a task already marked done, and nothing said it
         # was (real-AI check, 2026-10-18). The draft is still theirs to send; it never reopens the task - Reopen task does
+        # ...and a REWRITE promises nothing before it has run: the page runs it after this line, and when the drafting AI failed the chat read
+        # "Rewriting the draft on TQ-1141 - it waits for your Send." over "I could not rewrite it here" (2026-10-26); its own receipt says
         said = (f"{'Drafting a reply' if verb == 'reply' else 'Rewriting the draft'} on {target_item.get('ref') or _title_cut(str(target_item.get('title') or 'it'), 60)}"
-                + (f" - it waits for your {buttons.label('approve')}." if routes() else ' - nothing goes out until you say yes.')) + closed_note(store, target_item)
+                + ('.' if verb == 'redraft' and routes() else f" - it waits for your {buttons.label('approve')}." if routes()
+                   else ' - nothing goes out until you say yes.')) + closed_note(store, target_item)
         rec('assistant', said)
         d = {'verb': verb, 'text': decision.get('text') or ''}
         if verb == 'reply' and decision.get('cc'): d['cc'] = decision['cc']            # LOOP THEM IN: the reply copies them (open_reply)

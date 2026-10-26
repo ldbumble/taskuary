@@ -395,6 +395,9 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     if resolution is None:
         resolution = resolution_of(store, task_id)
     msgs = [m for m in store.list_messages(task_id) if m.get('Status') != 'context']
+    # a promise task carries no message of its own: the owner's mail the promise was made in is what it answers (store.promised_in)
+    promised = None if msgs else store.promised_in(t)
+    if promised: msgs = [promised]
     if not msgs: raise RuntimeError('nothing to reply to on this task')
     last = msgs[-1]
     soul = store.doc('soul') or ''
@@ -436,8 +439,11 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     # signature - happens after the reading, and a line landing there IS genuinely unseen.
     if seen is not None:
         from . import operations
-        seen['saw'], seen['revision'] = store.last_inbound_on_task(task_id), operations.message_revision(store, task_id)
+        seen['saw'], seen['revision'] = store.last_inbound_on_task(task_id) or promised, operations.message_revision(store, task_id)
     user = f"Subject: {last.get('Subject') or t.get('Title') or ''}\nFrom: {last.get('FromName')} <{last.get('FromEmail')}>\n{_to_cc(store, last)}\n{thread}"
+    # ...said as what it is: the message above is the owner's own, and the reply is the one that keeps its promise to whom it went
+    if promised: user += (f"\n\n--- WHAT THIS REPLY IS FOR: the last message above is YOUR OWN, to {store.promisee(promised) or 'them'}. "
+                          f"{t.get('Summary') or ''} Write the message that keeps that promise to them - never an answer to yourself.")
     # THE PICTURES THEY SENT, seen (the owner, 2026-10-15: "is it not seeing the full message? the image is there higher up the
     # chat"). Triage saw them on arrival; the writer, later, read the thread as text, where a picture is "(sent ad.jpg)" - and
     # drafted "send me the image you mean" to someone who had. The newest ones on the task ride with the call, as triage's do.
@@ -481,7 +487,8 @@ def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: 
     from . import operations
     # the writer says what it read (below); this is what to assume if it says nothing - the older,
     # stricter reading, so a caller that replaces draft_reply cannot quietly switch the guard off
-    seen = {'saw': store.last_inbound_on_task(task_id), 'revision': operations.message_revision(store, task_id)}
+    seen = {'saw': store.last_inbound_on_task(task_id) or store.promised_in(store.get_task(task_id)),
+            'revision': operations.message_revision(store, task_id)}
     try: text = draft_reply(store, task_id, llm, resolution, nudge, seen)
     except NoReply:
         # ...carried out, and said: the draft is put down as no reply, the way the owner's own No reply does it (which closes

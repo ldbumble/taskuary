@@ -118,7 +118,10 @@ def reply_target(store, task_id: int):
     joined onto the task (the End of day checkup) became the newest row, so the session's reply to the colleague who had
     written again went to "nobody" and was filed as a result (2026-10-13). Only a task with nobody behind any row gets one."""
     rows = [m for m in reversed(store.list_messages(task_id)) if m.get('Status') not in ('context', 'skipped')]
-    return next((m['MessageId'] for m in rows if not no_one_behind(m.get('Channel'))), rows[0]['MessageId'] if rows else None)
+    own = next((m['MessageId'] for m in rows if not no_one_behind(m.get('Channel'))), None)
+    # ...and a promise task answers the owner's own mail it was made from: whom they promised is who waits (store.promised_in). Only
+    # where nobody on the task's own rows is: a line that came in on it since is the newer ask
+    return own or (store.promised_in(store.get_task(task_id)) or {}).get('MessageId') or (rows[0]['MessageId'] if rows else None)
 
 
 # ── the agent's own words ───────────────────────────────────────────────────────────────
@@ -246,6 +249,12 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': run_id, 'Kind': 'draft_reply', 'Status': 'pending', 'Reason': why})
     rv = store.get_review(rid) or {}
     if rv.get('MessageId') != mid: store.update_review_message(rid, mid)
+    # ...and an answer to the owner's OWN mail (a promise task's, store.promised_in) is pinned to whom it went at once - its To and Cc -
+    # so the card never reads "sends this to" its author while it waits (outbound.reply_envelope, as Reply's own door pins it)
+    m = store.get_message(mid) or {}
+    if (m.get('Status') == 'context' or m.get('Direction') == 'out') and not store.review_envelope(rid):
+        from .outbound import reply_envelope
+        if (env := reply_envelope(store, m)): store.set_review_envelope(rid, env)
     store.update_review_draft(rid, text, run_id or rv.get('RunId'), by=AGENT_DRAFT + agent)
     store.add_comment(task_id, agent, 'agent', f'{agent} drafted the reply itself - it is on the task, waiting on your approval.')
     return {'ok': True, 'review_id': rid, 'message_id': mid, **attach_files(store, rid, files, agent)}

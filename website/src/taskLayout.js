@@ -59,6 +59,13 @@ export const fromLine = ({ sender = null, count = 0, workflow = null, made = "" 
 // once, under the title, and From does not open the same words again as the message under it. Spacing and line breaks aside.
 const squash = (s) => String(s || "").replace(/\s+/g, " ").trim();
 export const sameWords = (a, b) => !!squash(a) && squash(a) === squash(b);
+// ...and THE ASK THAT IS THE TITLE is not said under it again (the owner, 2026-10-26, a playbook task on a laptop: "you can't see anything.
+// there are too many lines on top"): the same words, or a title cut from the ask's own start (a playbook's is its first 100 characters) -
+// whoever waits on it still gets the band, and the ask's whole words are the title's hover
+export const askIsTitle = (ask, title) => {
+  const a = squash(ask).toLowerCase(), t = squash(title).replace(/(…|\.\.\.)$/, "").trim().toLowerCase();
+  return !!a && (a === t || (t.length >= 24 && a.startsWith(t)) || (a.length >= 24 && t.endsWith(a)));
+};
 
 // WHO A TASK WAITS ON (the owner, 2026-10-25): a task handed to a person opens on them - "Waiting on Ray. Due Oct 23, 2 days late."
 // The name is the one their own mail on the task signs with, else the address read as a name, the way the server reads a step's

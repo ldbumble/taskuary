@@ -11,7 +11,9 @@ test("where a task came from shows the whole message, not three lines of it", ()
   const at = page.indexOf("WHERE IT CAME FROM IS THE WHOLE MESSAGE");
   assert.notEqual(at, -1);
   const card = page.slice(at, page.indexOf("</Box>", at));
-  assert.match(card, /maxHeight: 420, overflowY: "auto"/);
+  // ...in full, and never a scroller inside the column that scrolls (the owner, 2026-10-26: "you can't see anything")
+  assert.match(card, /data-tq-letter-body=""/);
+  assert.doesNotMatch(card, /maxHeight|overflowY/);
   assert.doesNotMatch(card, /WebkitLineClamp/);
   assert.match(card, /r\.m\.ReadText \?\? r\.m\.BodyText/, "an email still shows its own words, not the quoted chain");
   assert.match(page, /onClick=\{\(\) => onOpen\(/, "a row in Came from opens its message in full under it");

@@ -57,7 +57,9 @@ test("no line is still an answer: only no AI is a sentence, and every other sile
   // ...and the dead-end walk holds the page to all of it (STILL, STRIP, REREAD, LIT)
   const walk = fs.readFileSync(path.join(process.cwd(), "deadend_check.mjs"), "utf8");
   for (const rule of ["STILL", "STRIP", "REREAD", "LIT"]) assert.ok(walk.includes(`note("${rule}"`), rule);
-  assert.match(read("assistantView.css"), /\.tq-dock \.tq-strip \{ min-height: 40px;/);
+  // ...one line tall, and the same height whatever it says (30px since the owner's 2026-10-26 laptop: the dock was a third of it)
+  assert.match(read("assistantView.css"), /\.tq-dock \.tq-strip \{ min-height: 30px;/);
+  assert.match(read("assistantView.css"), /\.tq-dock \.tq-next \{ margin: 0; min-height: 30px;/);
 });
 
 // THE ADVISOR MATRIX (2026-10-19): every moment the Advisor speaks must match the screen. Two it caught: the draft's text cleared, Send

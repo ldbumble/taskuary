@@ -545,13 +545,16 @@
 .tq-compose { padding: 2px 20px 8px; background: #fffdfb; box-shadow: 0 -14px 14px -6px #fffdfb; position: relative; }   /* no rule above it: the row and the box float, a soft fade keeps scrolled content from showing through */
 /* THE DOCK (canvas I2): one border, three bands, as wide as the card above it (the owner: "the prompt box full width") - the suggestion tinted on top, the row under a hairline, the box its floor */
 .tq-dock { width: 100%; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #d5d0c7; border-radius: 16px; background: #fff; box-shadow: 0 2px 10px #39352d0d; }
-.tq-dock .tq-next { margin: 0; min-height: 40px; padding: 0 16px; justify-content: flex-start; background: #f6f5f1; border-bottom: 1px solid #ece7de; }
-.tq-dock .tq-next .tq-next-why { margin-left: auto; }
+/* ...and A THIRD OF A LAPTOP NO MORE (the owner, 2026-10-26, 1600x810: "you can't see anything ... button height is too high? you can't see
+   what you have to do"): 138px of dock over a task whose reason was out of sight. Each band is as tall as its one line - the strip 30, the
+   row its 30px pills in a 3px section (.tq-cl), the box its 34px line - about 115px; a touch screen keeps its 44px targets (pointer: coarse) */
+.tq-dock .tq-next { margin: 0; min-height: 30px; padding: 0 16px; justify-content: flex-start; background: #f6f5f1; border-bottom: 1px solid #ece7de; }
+.tq-dock .tq-next .tq-next-why { margin-left: auto; padding-block: 2px; }
 /* one strip, one height from "Thinking" to its answer: the row under it never jumps when the advice lands (2026-10-19) */
-.tq-dock .tq-strip { min-height: 40px; display: flex; flex-direction: column; background: #f6f5f1; border-bottom: 1px solid #ece7de; }
+.tq-dock .tq-strip { min-height: 30px; display: flex; flex-direction: column; background: #f6f5f1; border-bottom: 1px solid #ece7de; }
 .tq-dock .tq-strip > .tq-next:last-child { border-bottom: 0; }
-.tq-dock .tq-arow { width: 100%; margin: 0; min-height: 44px; justify-content: center; padding: 4px 12px; box-sizing: border-box; border-bottom: 1px solid #ece7de; }
-.tq-dock .tq-compose-box { width: 100%; min-height: 46px; align-items: center; border: 0; border-radius: 0; box-shadow: none; padding: 6px 8px; }
+.tq-dock .tq-arow { width: 100%; margin: 0; min-height: 0; justify-content: center; padding: 3px 12px; box-sizing: border-box; border-bottom: 1px solid #ece7de; }
+.tq-dock .tq-compose-box { width: 100%; min-height: 40px; align-items: center; border: 0; border-radius: 0; box-shadow: none; padding: 3px 8px; }
 .tq-compose-box { width: min(980px, 100%); margin: 0 auto; display: flex; align-items: flex-end; gap: 5px; padding: 6px 7px; border: 1px solid #d5d0c7; background: #fff; border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
 .tq-compose-box textarea { flex: 1; min-width: 0; min-height: 34px; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: #292824; font: inherit; font-size: 13px; line-height: 1.45; padding: 7px 5px; max-height: min(40vh, 280px); overflow-y: auto; }
 .tq-compose-box textarea::placeholder { color: #8f8b84; }
@@ -668,7 +671,7 @@
 .tq-arow-ghost .tq-cl-h, .tq-arow-ghost .tq-ab { flex: none; max-width: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; }
 /* ONE TYPE (canvas J3): its own soft section, the label inside on the left of its one-word pills - one line, so the row is a
    band as tall as the suggestion and the box (the owner, 2026-10-13). The label names the noun. */
-.tq-cl { display: flex; align-items: center; gap: 5px; padding: 5px; border-radius: 16px; background: #f3f1ec; max-width: 100%; box-sizing: border-box; min-width: 0; }
+.tq-cl { display: flex; align-items: center; gap: 5px; padding: 3px; border-radius: 16px; background: #f3f1ec; max-width: 100%; box-sizing: border-box; min-width: 0; }
 .tq-cl-h { width: 44px; padding-left: 9px; font: 500 9.5px/1 'IBM Plex Mono', Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; color: #8a857c; }
 /* ...and its pills stay on ITS line too (2026-10-23): the walk's end "Open TQ-... · <title>" chips that ran past a phone's edge (2026-10-22)
    fold into the ▾ now, and a centred line that overflowed both sides is `safe center` above - a start is never cut off */

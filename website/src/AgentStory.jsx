@@ -22,12 +22,17 @@ export function StoryChip({ kind, text }) {
 // the state in one sentence: what happened to the session and what you can do about it. The server's sentence is whole
 // and leads with its state ("Waiting for you.", "Couldn't start."): the profile's name and a verb glued in front named a
 // profile as the actor over a reason fragment (the owner, 2026-10-16), so nothing is added here
-export const StoryLine = ({ kind, line }) => (
+// ...and `why`, the reason a run FAILED (funnel.agent_story), leads it on one line, whole on hover: under a restart's note, at the foot
+// of the transcript, "could not start: this tool has no built-in reviewer" was the last thing read (the owner, 2026-10-26)
+export const StoryLine = ({ kind, line, why = "" }) => (
   <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
-    <ErrorOutlineIcon sx={{ fontSize: 16, mt: 0.25, flex: "none", color: storyAlarm(kind) ? PALETTE.oxblood : PALETTE.slate }} />
-    <Typography sx={{ fontSize: 13.5, lineHeight: 1.45, color: INK }}>
-      {line}
-    </Typography>
+    <ErrorOutlineIcon sx={{ fontSize: 16, mt: 0.25, flex: "none", color: why || storyAlarm(kind) ? PALETTE.oxblood : PALETTE.slate }} />
+    <Box sx={{ minWidth: 0, flex: 1 }}>
+      {why && <Typography data-tq-run-why="" title={why} noWrap sx={{ fontSize: 13.5, lineHeight: 1.45, color: INK, fontWeight: 600 }}>{why}</Typography>}
+      <Typography sx={{ fontSize: why ? 12.5 : 13.5, lineHeight: 1.45, color: why ? DIM : INK }}>
+        {line}
+      </Typography>
+    </Box>
   </Box>);
 
 // the moments of the run - started, asked, finished a turn, cut off
@@ -55,7 +60,7 @@ export default function AgentStory({ story, compact = false, onTrust }) {
   const steps = compact ? [] : story.steps || [], said = !compact && story.said;
   return (
     <Box sx={{ mt: 1, pl: { xs: 0, sm: 4 } }}>
-      <StoryLine kind={story.kind} line={story.line} />
+      <StoryLine kind={story.kind} line={story.line} why={story.why} />
       {onTrust && trustInBox(story) && <TrustButtons trust={story.trust} onTrust={onTrust} />}
       {(said || steps.length > 0) && (
         <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>

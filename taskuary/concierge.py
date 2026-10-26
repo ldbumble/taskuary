@@ -4560,7 +4560,10 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # ...and the line kept is the one TYPED: "2" was saved as "Mark done", a second owner bubble the owner never wrote, and the only one
     # a reload kept (the 2026-10-25 sweep) - the model reads what the digit names, the chat keeps what was said
     typed = text
-    if item and text.strip().lstrip('#').rstrip('.').strip().isdigit():
+    # ...and only where numbered chips ARE drawn - the phone, or a card under its line. An item drawn as its task's view shows the task's
+    # own row, with no numbers and not those chips: "2" over TQ-1141 became Mark done, a button not on screen, and closed it (2026-10-26)
+    numbered = not routes() or not (item and item.get('tid') and item.get('kind') not in TASK_VIEW_NOT)
+    if item and numbered and text.strip().lstrip('#').rstrip('.').strip().isdigit():
         words = [c['label'] for c in chips_for(store, item)]
         i = int(text.strip().lstrip('#').rstrip('.').strip())
         if 1 <= i <= len(words): text = words[i - 1]

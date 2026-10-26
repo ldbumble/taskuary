@@ -135,6 +135,16 @@ class DeskRoutes(unittest.TestCase):
             self.assertEqual((out['light']['verb'], out['light']['tid']), ('close', tid))
             self.assertEqual(s.get_task(tid)['Status'], 'open', model)
 
+    def test_a_digit_over_a_task_view_presses_nothing_it_does_not_show(self):
+        """The 2026-10-26 sweep: "2" over TQ-1141 was rewritten to its chips' second, Mark done - but a task is drawn as its own view,
+        whose row has no numbers and not those chips - and the task closed. The digit stays the owner's word for the model to read."""
+        s = store(); tid, item = on_table(s); heard = []
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(ingest, '_spawn'):
+            concierge.say(s, '2', key=item['key'], llm=lambda sy, u, **k: (heard.append(u), 'Which one do you mean?')[1])
+        said = next(l for l in heard[0].splitlines() if l.startswith(concierge.OWNER_SAYS))
+        self.assertEqual(said, concierge.OWNER_SAYS + '2')
+        self.assertEqual(s.get_task(tid)['Status'], 'open')
+
     def test_with_nothing_on_the_table_the_model_is_told_walking_is_next_never_words(self):
         s = store(); on_table(s); asked = []
         with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(ingest, '_spawn'):

@@ -110,8 +110,18 @@ def _learned(store, o):
     # what the owner's verdicts taught (learn.injectable: promoted lines only, never a hypothesis) - the event pass read it, the
     # clock pass never did (2026-10-12). The seed is headings and placeholders: a document with no line yet says nothing.
     # ...every section: their people, what they care about, how they work, their promises, what to bring up (learned_cut.READS, 2026-10-25)
+    # ...each line with its key beside it, so a line that rests on one names it (CONTRACT's "memory") and its idea is keyed by it: an
+    # idea with no message or task under it got a fresh slug every run, and the owner's No never stuck (2026-10-26). The receipt names
+    # the report whose run was given the lines; each idea that rests on one leaves its own (assistant._run).
     from . import learned_cut
-    return learned_cut.for_reader(store, 'assistant', budget=o.get('cap')), []
+    text, ks = learned_cut.for_reader(store, 'assistant', budget=o.get('cap'), target=f"rail:{o.get('report') or 'advisor'}"), memory_keys(store)
+    return '\n'.join(f'{l}  [memory:{ks[l]}]' if l in ks else l for l in text.split('\n')), []
+
+def memory_keys(store, doc: str = None) -> dict:
+    """{raw line: key} for every line of LEARNED.md a reader could be given - what a rail line resting on one cites it by."""
+    from . import learned_cut as lc
+    doc = store.doc('learned') if doc is None else doc
+    return {raw: k for h in lc.SECTIONS.values() for raw, k in lc.lines(doc or '', h)}
 
 def _ledger(store, o):
     # the resolved outcomes of the window, cited by out-id, and the ledger's page on each person the candidates name
@@ -208,8 +218,16 @@ CATALOGUE = (
           _notes, sql=NOTES_SQL, whole=True),
     # the two memories the clock pass never read while the event pass did (the owner, 2026-10-12: "it should be much better if it is")
     Block('learned', 'Learned', 'view', ('doc',),
-          "WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (learned from what they did - their people, what they care about, how they work, their "
-          "promises and what to bring up; weigh it, never restate it as news)",
+          # WHAT TO BRING UP IS AN INSTRUCTION, THE REST IS BACKGROUND (the owner, 2026-10-26: "make the fixes"). "Weigh it, never restate
+          # it as news" sat over the owner's own "bring up X" too, and with no word on when a standing fact is worth a line a live run
+          # said "you owe Ray the accruals" in worlds with no mail from Ray at all - 3 times in one round, 8 in the next.
+          "WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (learned from what they did and what they told you - their people, what they care "
+          "about, how they work, their promises and what to bring up). What to bring up is the owner's OWN instruction about what to "
+          "raise and what to leave alone: follow it. Everything else here is background to weigh, never news by itself: a Promises or "
+          "people line is worth a line of yours ONLY when something else you were given in THIS check bears on it - its thread, a task, "
+          "a meeting, the person's mail sitting unanswered, a date someone wrote. The line's own words are not that evidence: a standing "
+          "fact with nothing current behind it is no line, however soon it might come due. A line of yours that rests on one of these "
+          "names its [memory:...] key in \"memory\"",
           _learned, cap=2000),
     Block('ledger', 'The outcome ledger', 'view', ('outcome', 'doc'),
           'THE OUTCOME LEDGER (the last {days} days of what came of actions, resolved, each with an id to cite)',
@@ -406,7 +424,7 @@ def stamp(b: Block, o: dict, *, facts: str = '', report_id=None, source_ids=None
     - they stamped their own and drifted, and the card priced the seeded Assistant's note for every
     report that asked."""
     if b.id in ('knowledge', 'ledger'): return o | {'facts': facts}      # the ledger names the people the candidates name
-    if b.id in ('notes', 'automation', 'already_said'): return o | {'report': report_id}
+    if b.id in ('notes', 'automation', 'already_said', 'learned'): return o | {'report': report_id}   # learned: its receipt names the report
     if b.id == 'system_checks': return o | {'source_ids': source_ids, 'inline': inline}
     return o
 

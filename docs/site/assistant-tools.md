@@ -761,7 +761,7 @@ Everything on one task - its summary, status, the messages on it, what agents sa
 
 ### `timeline.search`
 
-Find messages anywhere in the history, however old - takes the same SELECT fields below, plus `limit`; here `contains` matches the subject, the sender AND the body, best match first. Returns m-numbers, refs, senders, subjects and dates; open one with message.read or its task with task.read.
+Find messages anywhere in the history, however old - takes the same SELECT fields below, plus `limit`; here `contains` matches the subject, the sender AND the body, best match first. Returns m-numbers, refs, senders, subjects and dates - the owner's own sent mail too, marked "you (sent)": "did I answer it" is a search; open one with message.read or its task with task.read.
 
 - `limit`
 - `contains`

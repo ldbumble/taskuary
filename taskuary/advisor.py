@@ -128,7 +128,15 @@ SYSTEM = (
     # MEMORY IS A REASON TOO, IN ONE LINE (the owner, 2026-10-25: "Reply: you usually answer Erin within the hour; this is 3h")
     "What you know about how the owner works is a checkable fact when it bears on THIS item - say it as the line, short: \"Ray handles "
     f"payroll for you\" over {L('forward')}, when this ask is that kind of work and the owner handed such asks to that person. "
-    "What a sender says about themselves is never such a fact. A ledger line says what HAPPENED, never whether it worked: \"continued\" means the session was started "
+    "What a sender says about themselves is never such a fact. "
+    # ...BUT ONLY WHEN THE ITEM IS ABOUT IT (the live memory A/B, 2026-10-26): "Friday's payment run is Ray's" sent a draft promising a
+    # payment date nobody had set, "Erin's mail bounced" lit Reply over a dead address, "Ray handles overtime" stood over an agent
+    "A memory line counts only when something CURRENT in this item is about it: a line about a person supports a move only when THIS "
+    "ask is that person's kind of work - it never makes a draft that promises what nothing here shows ready to send, never answers a "
+    "failure (a refused address is fixed, not replied to, however soon the owner answers that person). "
+    f"A line saying whom the owner hands a kind of ask to is the reason for {L('forward')} and nothing else - never said over "
+    "another verb. When your line rests on a memory line or a usual line, cite its id. "
+    "A ledger line says what HAPPENED, never whether it worked: \"continued\" means the session was started "
     "again, nothing more - never call it a success, and never say something was merged, sent or fixed unless a line says exactly that. "
     "The line is plain words for the owner, who may never have written code: the ids go in \"evidence\" only, the verb is named by "
     "its label, never its id, and never a word from the item's own bookkeeping (lane, kind, triage, session, model, an event name). "
@@ -182,7 +190,7 @@ def _system(store) -> str:
 SHOWN = 'item.shown'
 WANT = {'type': 'object', 'properties': {'verb': {'type': ['string', 'null']}, 'line': {'type': 'string'},
                                          'evidence': {'type': 'array', 'items': {'type': 'string'}}}, 'required': ['verb', 'line', 'evidence']}
-_EV = re.compile(r'^(out|mem|rv|task|msg|fs|sv|idea)\d+$')       # ...and the owner's own acts the usual is counted from (usual.py)
+_EV = re.compile(r'^(out|mem|rv|task|msg|fs|sv|idea|lrn)\d+$')   # ...and the owner's own acts the usual is counted from (usual.py), and a memory line
 
 
 def _item(store, target_kind, target_id, key: str = None):
@@ -264,10 +272,68 @@ def _learned(store, item: dict = None) -> str:
     from . import learned_cut
     about = {}
     if item:
-        try: w = who_of(store, item)
-        except Exception: w = {}
-        about = {'sender': w.get('sender'), 'domain': w.get('domain'), 'scope': w.get('scope')}
-    return learned_cut.for_reader(store, 'advisor', about, target=(item or {}).get('key') or '')
+        try: w, on = who_of(store, item), people_on(store, item)
+        except Exception: w, on = {}, set()
+        m = store.get_message(int(item['mid'])) if item.get('mid') else None
+        name = ' '.join(str((m or {}).get('FromName') or '').split())
+        about = {'sender': w.get('sender'), 'domain': w.get('domain'), 'scope': w.get('scope'), 'people': sorted(on),
+                 'sender_name': name if len(name.split()) >= 2 else '', 'topic': str(item.get('title') or '')}
+    return learned_cut.for_reader(store, 'advisor', about, target=(item or {}).get('key') or '', cite=True)
+
+
+def people_on(store, item: dict) -> set:
+    """Everyone on the item as the app knows them, lowercased, never the owner: each address on its mail (from, To, Cc - the owner's own
+    mail to them too) and each sender's full name, whom it waits on, and who holds an open step of its goal. Facts the app keeps, never
+    the words of the mail - what a memory line is matched against (rulebook.memory_on) and ranked by (_learned)."""
+    from . import learned_cut
+    from .processing_unread import holder_name
+    it = item or {}
+    tk, ti = ('task', it['tid']) if it.get('tid') else ('message', it.get('mid'))
+    out = {str(it['who_email']).lower()} if it.get('who_email') else set()
+    for m in (_msgs(store, it, tk, ti) if ti else []):
+        out |= learned_cut.people_of(m)
+        if len((n := ' '.join(str(m.get('FromName') or '').split())).split()) >= 2: out.add(n.lower())
+    t = store.get_task(int(it['tid'])) if it.get('tid') else None
+    held = [t.get('WaitingOn'), t.get('Assignee')] if t else []
+    if t and is_goal(t): held += [(x.get('child') or {}).get('Assignee') for x in store.goal_steps(int(t['TaskId'])) if not x['done']]
+    for h in filter(None, held):
+        if '@' in str(h): out.add(str(h).split(':', 1)[-1].strip().lower())
+        if len(n := str(holder_name(h) or '').split()) >= 2: out.add(' '.join(n).lower())
+    # ...and each address's own name, as its mail last signed it: whom a task waits on has often never written on that task
+    for a in [p for p in out if '@' in p]:
+        r = store._one("SELECT FromName FROM message WHERE LOWER(FromEmail)=? AND IFNULL(FromName,'')<>'' ORDER BY MessageId DESC LIMIT 1", (a,)) or {}
+        if len(n := str(r.get('FromName') or '').split()) >= 2: out.add(' '.join(n).lower())
+    me = {str(store.get_setting(k) or '').strip().lower() for k in ('owner_email', 'owner_name')}
+    return {p for p in out if p and p not in me}
+
+
+def _usual(store, item, target_kind, target_id) -> tuple:
+    """(lines, handed ids): the owner's own usual with this item's sender, counted from what they did (usual.py) - how soon they answer,
+    when they put this mail off to, whom they hand it to - and the ids the hand-off count rests on (a line resting on those is a reason
+    for Hand it to a person, never for another verb)."""
+    from . import usual
+    try:
+        last = next((m for m in reversed(_msgs(store, item, target_kind, target_id)) if str(m.get('Direction') or 'in') != 'out' and m.get('Status') != 'context'), None)
+        ls = usual.prompt_lines(store, last, item.get('tid'))
+        h = usual.handed_to(store, str((last or {}).get('FromEmail') or '').lower(), skip=item.get('tid')) if last else None
+        return ls, set((h or {}).get('evidence') or [])
+    except Exception as e:
+        logger.debug(f'advisor: no usual read for {item.get("key")} - {e}'); return [], set()
+
+
+def memory_ids(store, item, target_kind, target_id) -> set:
+    """The ids an answer cites when its line rests on what the app knows about how the owner works: every LEARNED line the Advisor reads
+    (its cite id, and the episodes its own tag names) and the owner's counted usual with this sender. A line citing none of them rests on
+    the item's own facts."""
+    from . import learned_cut
+    from .learnedgraph import TAG
+    doc = store.doc('learned') or ''
+    out = set(re.findall(_ID, '\n'.join(_usual(store, item, target_kind, target_id)[0]))) if target_kind in ('task', 'message') else set()
+    for s in learned_cut.READS['advisor']:
+        for raw, k in learned_cut.lines(doc, learned_cut.SECTIONS[s]):
+            out.add(learned_cut.cite_of(k))
+            if (m := TAG.match(raw)): out |= {e.strip() for e in m.group('ev').split(',') if e.strip()}
+    return out
 
 
 def _msgs(store, item, target_kind, target_id) -> list:
@@ -475,13 +541,10 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     # THE OWNER'S OWN USUAL with this sender, counted from what they did (usual.py): how soon they answer, when they put this mail off
     # to, whom they hand it to - so a line can say "you usually answer Erin within the hour; this is 3h", and Hand it to a person can
     # rest on whom the owner hands this kind of ask to
-    try:
-        last = next((m for m in reversed(_msgs(store, item, target_kind, target_id)) if str(m.get('Direction') or 'in') != 'out' and m.get('Status') != 'context'), None)
-        from . import usual
-        lines += usual.prompt_lines(store, last, item.get('tid'))
-    except Exception as e: logger.debug(f'advisor: no usual read for {item.get("key")} - {e}')
+    lines += _usual(store, item, target_kind, target_id)[0]
     lrn = _learned(store, item)
-    if lrn: lines.append("WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (learned from what they did; weigh it against this item's facts):\n" + lrn)
+    if lrn: lines.append("WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (learned from what they did; weigh it against this item's facts; cite a line by "
+                         "its id when your line rests on it):\n" + lrn)
     led = [f"out{r['Id']}: {outcomes._sentence(store, r)}" for r in outcomes.rows_for(store, target_kind, target_id) if r.get('ResolvedAt')][:5]
     led += [f"{v['label']}: {measured(v['verb'], c)}" for v in verbs for c in [habit(store, v['verb'], item)] if measured(v['verb'], c)]
     if led: lines.append('THE OUTCOME LEDGER (what came of actions like this):\n' + '\n'.join(led))
@@ -567,7 +630,7 @@ def sent_line(store, target_kind, target_id) -> str:
                   if later else '\nNOTHING HAS COME IN SINCE IT WENT.')
 
 
-_ID = r'\b(?:out|mem|rv|task|msg|fs|sv|idea)\d+\b'
+_ID = r'\b(?:out|mem|rv|task|msg|fs|sv|idea|lrn)\d+\b'
 def plain(line: str, verb: str, label: str) -> str:
     """The owner reads the line, not the prompt: "You should stop_agent because out13 shows..." put the verb's id and the ledger's
     row id in the prompt box (2026-10-13). An id-shaped verb becomes its label; a cited id in brackets goes, one in the sentence
@@ -656,6 +719,11 @@ def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1
     # the agent's own question is already on the owner's screen, in its pane: a line that asks it again is noise (the owner, 2026-10-21)
     if target_kind == 'task' and repeats_ask(line, _asking(store, target_id)):
         return W(dropped="repeats the agent's question", model=model, line=line, evidence=ev)
+    # A HAND-OFF IS THE REASON FOR HAND IT TO A PERSON, NOTHING ELSE (the live memory A/B, 2026-10-26): "Ray handles overtime-rate
+    # questions for you" stood over an agent's button, citing the very hand-offs it was counted from - the line said one move, the button
+    # another. The rule's move stands instead
+    if verb != 'forward' and target_kind in ('task', 'message') and set(ev) & _usual(store, item, target_kind, target_id)[1]:
+        return W(dropped='a hand-off reason over another verb', model=model, line=line, evidence=ev)
     rid = W(line=line, verb=verb, label=hit['label'],count=habit(store, verb, item), evidence=ev, model=model)
     _emit(key, target_kind, target_id); return rid
 
@@ -892,6 +960,12 @@ PREREAD = 2
 
 
 
+def _whole_words(s: str, n: int) -> str:
+    """At most n characters, cut at a word: "she's your manag…" read as a slip (the live memory A/B, 2026-10-26)."""
+    s = ' '.join(str(s or '').split())
+    return s if len(s) <= n else s[:n - 1].rsplit(' ', 1)[0].rstrip(',;:-– ') + '…'
+
+
 def _label(verbs: list, verb: str, item: dict) -> str:
     if verb == 'next': return buttons.label('next', 'batch') if (item or {}).get('kind') == 'fyis' else buttons.label('next')
     return next((v['label'] for v in verbs if v['verb'] == verb), None) or buttons.label(verb) or verb
@@ -921,11 +995,22 @@ def decide(store, key: str, preread: bool = True) -> dict:
     if r['ask']:
         mv = concierge.canon_verb(m['Verb']) if m and m.get('Verb') else None
         hit = next((v for v in verbs if v['verb'] == mv), None) if mv else None
+        # ...A STATE ASKED ONLY FOR ITS MEMORY (rulebook.memory_on) is changed only by an answer resting on that memory: asked about a late
+        # step because a line named its holder, the model swapped Chase's Remind me for "Ask the sender" on the age alone (live A/B, 2026-10-26)
+        if hit and r.get('memory') and not set(json.loads(m.get('EvidenceJson') or '[]')) & memory_ids(store, item, *tgt): hit = None
         # the model's verb stands where it differs from the rule's - with its line, the reason the lit button is not the one you would
         # guess; agreeing, the rule's fact stands and the model's sentence goes (ruling 1: no explanation of the obvious button)
         if hit and mv != verb:
             verb, by, ev = mv, 'model', json.loads(m.get('EvidenceJson') or '[]')
             line = '' if r['state'] == 'idea' else _one(plain(m.get('Line') or '', m['Verb'], hit['label']), 64)
+        # ...AND AGREEING, A MEMORY REASON IS SAID (the live memory A/B, 2026-10-26): "You answer Erin the same day" and "Paula takes
+        # W-9s now" were read, used, and dropped for agreeing with the lit button - the memory never reached the strip. A line that cites
+        # a memory line or a counted usual (memory_ids) is a fact the card does not show; it stands in the rule's place, one line - unless
+        # the rule's own line is already a counted usual (asked_late: it carries its evidence)
+        elif hit and r['state'] != 'idea' and m.get('Line') and not (line and r.get('evidence')):
+            mev = json.loads(m.get('EvidenceJson') or '[]')
+            if set(mev) & memory_ids(store, item, *tgt):
+                by, ev, line = 'model', mev, _whole_words(plain(m['Line'], m['Verb'], hit['label']), 60)
 
         # NEVER LEFT GUESSING (the owner, 2026-10-15): the item on the table is read now, at this revision, once - the rule's button
         # stands lit meanwhile, and the model's answer arrives by the `advice` live event the page already reads
@@ -1023,7 +1108,8 @@ def notes(store, key: str, limit: int = 10) -> list:
     if not tgt: return []
     out = []
     for r in rows(store, tgt[0], tgt[1], limit):
-        ev = [{'id': e, **{k: v for k, v in _resolve(store, e).items() if k in ('kind', 'label')}} for e in json.loads(r.get('EvidenceJson') or '[]')]
+        ev = [{'id': e, **{k: v for k, v in (_memory_line(store, e) or _resolve(store, e)).items() if k in ('kind', 'label')}}
+              for e in json.loads(r.get('EvidenceJson') or '[]')]
         out.append({'at': r['CreatedAt'], 'event': r['Event'], 'tier': r['Tier'], 'line': r['Line'], 'verb': r['Verb'], 'label': r['Label'],
                     'pill': (r['Label'] or '') if r.get('Verb') else '', 'dropped': r['Dropped'],
                     'model': r['Model'], 'evidence': ev})
@@ -1051,6 +1137,18 @@ def evidence_words(store, ev_id: str) -> str:
             r = store._one('SELECT * FROM outcome WHERE Id=?', (int(ev_id[3:]),))
             return outcomes._sentence(store, r) if r else ''
         from .learnedgraph import _resolve
-        lbl = _resolve(store, ev_id).get('label')
+        lbl = (_memory_line(store, ev_id) or _resolve(store, ev_id)).get('label')
         return '' if lbl == ev_id else str(lbl or '')
     except Exception: return ''
+
+
+def _memory_line(store, ev_id: str) -> dict | None:
+    """A cited memory line (learned_cut.cite_of) as what it says - {kind: 'memory', label: the line without its tag} - or None for any
+    other id. Why? said "lrn123" to someone who never wrote code."""
+    if not str(ev_id).startswith('lrn'): return None
+    from . import learned_cut
+    from .learnedgraph import TAG
+    hit = learned_cut.cited(store, [ev_id]).get(ev_id)
+    if not hit: return {'kind': 'memory', 'label': ''}           # Forgotten or replaced since: it rests on nothing now
+    m = TAG.match(hit[0])
+    return {'kind': 'memory', 'label': (m.group('text') if m else hit[0].strip().lstrip('-* ')).strip()}

@@ -415,6 +415,9 @@ def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner') ->
         store.add_comment(tid, actor, 'human', f'Answer to "{req["text"][:160]}": {text[:500]} - not delivered: the run that asked ({req["sid"]}) is gone and a different worker has the task.')
         return {'delivered': False, 'state': 'stale', 'why': 'the run that asked is no longer the one on the task'}
     who = getattr(sess, 'agent', None) or getattr(sess, 'label', None) or 'the agent'
+    # a sign-in's "Signed in" is told as a fill's is - the site and "continue" - on a chat or a terminal alike (signin.signed_in)
+    from . import signin
+    if signin.said_done(request_id, text): return signin.signed_in(store, tid, request_id)
     # A CHOOSER IS ANSWERED BY ITS NUMBER. A request read off the screen belongs to a list the pane
     # is standing on, where the option's own words are not an answer at all - they would land in
     # whatever "type something" field the list offers last. The owner's words stay the owner's words

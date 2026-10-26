@@ -319,8 +319,9 @@ def needs(store, tid: int, sid: str, claimed: str = '', fill=None) -> dict:
                   source='api')
         return {'site': '', 'auto': False}
     rid, text = f'{PREFIX}{site}', f'Sign in to {site} to continue'
-    # "Signed in" as a press only where an answer arrives as words (the chat's own agent): a pty's choices are a chooser, answered
-    # by number (workerstate.answer) - there the owner types it
+    # "Signed in" as a CHOICE only where an answer arrives as words (the chat's own agent): a pty's choices are a chooser, answered
+    # by number (workerstate.answer). A pty's ask still has the press - the card draws it for every `signin:` ask, and its answer goes
+    # through signed_in, never the chooser (2026-10-25)
     ws.record(store, tid, sid, 'input_needed', request_id=rid, text=text, choices=[DONE] if _chat(sid) else None, source='api')
     row, last = saved(store, site), _TRIED.get((tid, site), 0)
     if row and _now() - last < AGAIN:
@@ -410,16 +411,30 @@ def _continue(store, tid, rid, site, actor, code=False):
     did = f"Signed in to {site}{' with the saved sign-in' if actor != 'owner' else ''}{' and its authenticator code' if code else ''}"
     if not sess:
         store.add_comment(tid, actor, 'agent', f'{did}, but no agent is running on this task to tell - open it to continue.')
-        return
+        return False
     try:
         if hasattr(sess, 'send_prompt'): sess.send_prompt(said, as_owner=False)
         else: term.type_into(sess, said)
     except Exception as e:
         logger.warning(f'signin: task {tid} signed in to {site}, but the agent was not told - {e}')
         store.add_comment(tid, actor, 'agent', f'{did}, but the agent could not be told - say "{said}" to it.')
-        return
+        return False
     ws.record(store, tid, sess.sid, 'answered', request_id=rid, text=DONE, source='owner' if actor == 'owner' else 'api')
     store.add_comment(tid, actor, 'agent', f'{did} - the agent goes on.')
+    return True
+
+
+def said_done(rid, text) -> bool:
+    "Is this the owner's own Signed in, pressed or typed, to a sign-in ask?"
+    return str(rid or '').startswith(PREFIX) and ' '.join(str(text or '').split()).rstrip('.!').lower() == DONE.lower()
+
+
+def signed_in(store, tid: int, rid: str) -> dict:
+    """The owner signed in by hand and said so (workerstate.answer). Told as a fill is (_continue), on every kind of agent: a terminal
+    CLI's ask had no Signed in press, only a box to type it in, and the bare words reached its prompt with no site and no "continue"
+    (the owner, 2026-10-25: both kinds of agent ask alike)."""
+    told = _continue(store, tid, rid, rid[len(PREFIX):], 'owner')
+    return {'delivered': True, 'state': 'delivered'} if told else {'delivered': False, 'state': 'failed', 'why': 'the agent could not be told - see the task'}
 
 
 def _audit(store, tid, site, how, ok, why='', saved=None, code=None):

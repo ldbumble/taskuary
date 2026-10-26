@@ -61,15 +61,20 @@ def test_the_owner_corrects_the_difficulty_and_it_teaches_triage():
 
 def test_run_again_on_the_strong_model_is_a_press_on_a_brain_that_has_one():
     s = _store(); tid = s.create_task({'Title': 'Research the vendor', 'Status': 'open', 'Kind': 'general'}, 'owner')
-    sent = []
+    s.judge_task(tid, {'sure': False}, 'triage')                                       # the reader was unsure: the ▾ offers it
+    sent, told = [], []
     class Session:
-        def send_prompt(self, text, **kw): sent.append(kw)
+        def send_prompt(self, text, **kw): sent.append(kw); told.append(text)
     with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.start_session', lambda store, tid, actor='owner': Session()), \
          mock.patch('threading.Thread', lambda target, **kw: type('T', (), {'start': lambda self: target()})()):
         d = c.get(f'/api/tasks/{tid}').json()
         assert d['strongAgain'] == {'pick': s.a, 'brain': 'Anthropic API', 'model': 'claude-opus-5'}
         out = c.post(f'/api/tasks/{tid}/strong-again').json()
     assert (out['kind'], out['model']) == ('general', 'claude-opus-5') and sent == [{'pick': s.a, 'model': 'claude-opus-5', 'as_owner': False}]
+    # ...and the agent is told what was pressed: a re-run on a stronger model, not a Resume nobody pressed (2026-10-26)
+    assert 'Run again on the strong model' in told[0] and 'chose Resume' not in told[0]
+    from taskuary import buttons
+    assert 'fresh start' not in buttons.hint('strong_again') and 'saved work' in buttons.hint('strong_again'), 'the hover says what it does'
     r = s.brain_routes(tid, limit=1)[0]
     assert (r['Tier'], r['Rule']) == ('strong', 'you chose it') and 'as you pressed' in r['Why']
 
@@ -83,3 +88,27 @@ def test_no_strong_model_anywhere_offers_nothing_and_refuses_with_where_to_set_o
         assert c.get(f'/api/tasks/{tid}').json()['strongAgain'] is None
         r = c.post(f'/api/tasks/{tid}/strong-again')
     assert r.status_code == 422 and 'strong model box on its card' in r.json()['detail']
+
+
+def test_opening_a_task_asks_the_router_only_when_the_strong_rerun_can_be_offered():
+    """Opening a task paid ~11 ms for the strong model's brain on every task, 2.7x 0.3.9.34's open (2026-10-26): only an open task whose
+    agent failed or whose reader was unsure draws the button, so only that one asks."""
+    s = _store()
+    plain = s.create_task({'Title': 'Research the vendor', 'Status': 'open', 'Kind': 'general'}, 'owner')
+    unsure = s.create_task({'Title': 'Research the supplier', 'Status': 'open', 'Kind': 'general'}, 'owner')
+    shut = s.create_task({'Title': 'Research the venue', 'Status': 'done', 'Kind': 'general'}, 'owner')
+    for t in (unsure, shut): s.judge_task(t, {'sure': False}, 'triage')
+    with mock.patch.object(server, 'store', s), mock.patch.object(brainroute, 'strong_for', wraps=brainroute.strong_for) as asked:
+        assert c.get(f'/api/tasks/{plain}').json()['strongAgain'] is None
+        assert c.get(f'/api/tasks/{shut}').json()['strongAgain'] is None
+        assert not asked.called, 'nothing on these tasks can show the button'
+        assert c.get(f'/api/tasks/{unsure}').json()['strongAgain']['model'] == 'claude-opus-5'
+        assert asked.call_count == 1
+
+
+def test_the_strong_rerun_reads_config_toml_once():
+    from taskuary import config
+    s = _store(); tid = s.create_task({'Title': 'Research the vendor', 'Status': 'open', 'Kind': 'general'}, 'owner')
+    with mock.patch.object(server, 'store', s), mock.patch.object(config, '_read', wraps=config._read) as rd:
+        server._strong_again_of(s.get_task(tid))
+    assert rd.call_count <= 1, f'config.toml parsed {rd.call_count} times for one button'

@@ -92,7 +92,26 @@ def _env_server() -> dict:
     if t: out['token'] = t
     return out
 
+_ONCE = __import__('contextvars').ContextVar('config_once', default=None)
+
+
+class once:
+    """`with config.once():` - one read of config.toml for everything inside. Opening a task asked the router for "Run again on the
+    strong model" and its resolvers parsed config.toml ten times per open, 2.7x the 0.3.9.34 cost (2026-10-26). Read-only work only:
+    a save inside would be shadowed by the copy read at the start."""
+    def __enter__(self): self.tok = _ONCE.set({}); return self
+    def __exit__(self, *a): _ONCE.reset(self.tok)
+
+
 def load() -> dict:
+    memo = _ONCE.get()
+    if memo is not None:
+        if 'cfg' not in memo: memo['cfg'] = _load()
+        return memo['cfg']
+    return _load()
+
+
+def _load() -> dict:
     cfg = _read()
     cfg.setdefault('server', {})
     cfg['server'].setdefault('host', '127.0.0.1')

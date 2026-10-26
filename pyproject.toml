@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "taskuary"
-version = "0.3.9.46"
+version = "0.3.9.47"
 description = "Your work manager. Locally. Securely. In control. Mail, chats and tickets in one list; your agents do the work, you approve. Runs on your machine."
 readme = "README.md"
 license = { text = "MIT" }

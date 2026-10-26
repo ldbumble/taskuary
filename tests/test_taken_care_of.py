@@ -142,8 +142,8 @@ class Thinking(unittest.TestCase):
 
     def test_it_does_not_age_out_while_anything_is_held(self):
         self.failed(2)
-        self.s.set_setting('triage_last_error_at', ago(hours=problems.STALE_HOURS + 3), 't')
-        self.s.set_setting(problems.THINKING, json.dumps({'at': ago(hours=problems.STALE_HOURS + 3)}), 't')
+        self.s.set_setting('triage_last_error_at', ago(hours=27), 't')
+        self.s.set_setting(problems.THINKING, json.dumps({'at': ago(hours=27)}), 't')
         self.assertIn('triage', {p['key'] for p in problems.collect(self.s)})
 
     def test_one_good_answer_does_not_clear_it_while_others_are_stuck(self):

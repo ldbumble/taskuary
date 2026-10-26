@@ -9,28 +9,40 @@ text and its timestamp, as a signature - and the moment the same thing fails AGA
 signature and the item is back. You can silence what you have decided to live with; you cannot
 silence a system that keeps breaking.
 
-A failure ALSO puts itself down with time: one that has not happened again for STALE_HOURS is
-yesterday's news (the owner, 2026-10-01: an error from the day before, already fixed, still rang
-the bell). Something that keeps failing re-stamps `since` on every try, so it stays. A failure
-with no time at all is one from before the stamp existed - old by definition.
+A FAILURE IS ONE PER CONNECTION, NOT ONE PER POLL (the owner, 2026-10-26: "errors should be per connection not per
+refresh"). A connector re-stamps LastErrorAt on every failing poll, and the dismissal was signed with that stamp,
+so a broken chat bridge put down came back thirty seconds later. Now each key's failure is an EPISODE (OPEN): it
+opens the first time it is seen and closes when it works again, and a dismissal holds for the whole episode.
 
-...EXCEPT what is still costing the owner something. Two failures are said in the assistant's own voice and
-stay up for as long as they are true, whatever the clock says (`live`): Microsoft signing the owner out (no
-mail is read, so no answer is watched for) and the triage brain down while mail it could not sort is still
-being held. Each one ANNOUNCES ITS OWN END (`news`): "Back on. 14 came in, 2 need you." - a quiet line beside
-the bell, never a red one, because the worst part of an outage is not knowing whether it is over.
+ONLY A REAL ONE RINGS (the owner, same day: "the classic whatsapp timeout should not show up. it should just restart
+it if it crashes by itself"). A dropped bridge is started again by the poll (wabridge.supervise) and a mailbox that
+timed out once reads fine ten minutes later, so a connector's failure shows only once it has lasted GRACE_MINUTES -
+and one that healed inside that never rang, so it says no "working again" either. What no retry heals shows at
+once: Microsoft signing the owner out, the bridge given up on, a report run that failed or did not go out.
+
+It then stays up for as long as it is true - no clock takes it down. A four-hour cut (2026-10-01) let a report that
+failed at 6 am say nothing by 10, and a connector whose poller stopped go quiet while still broken. A failure with
+no time at all is from before the stamp existed: old by definition, never shown.
+
+AND IT ANNOUNCES ITS OWN END (`news`), until the owner says Got it (2026-10-26: "once it recovers it still shows
+issue and recovery until dismissed"): what failed, from when to when - a quiet line beside the bell, never a red
+one, because the worst part of an outage is not knowing whether it is over. Microsoft signing the owner out and
+the triage brain going down say theirs in the assistant's own voice: "Back on. 14 came in, 2 need you."
 """
 import hashlib
 import json
 from datetime import datetime, timedelta
 
-STALE_HOURS = 4
-NEWS_HOURS = 6                        # how long "I'm back" stays beside the bell unless it is put down
+GRACE_MINUTES = 10                    # a connector failing for less than this is a retry still at work, not news
+NEWS_HOURS = 6                        # a second hand-over of held mail inside this joins the first (held)
+NEWS_KEEP = 20                        # news stays until Got it; past this many, the oldest goes
 
 DISMISSED = 'problems_dismissed'      # {key: signature of the failure the owner read}
 NEWS = 'problems:news'                # {key: what ended, and when} - the text is worked out when it is read
 THINKING = 'problems:thinking'        # {'at': when the brain went down} for as long as the outage lasts
 AWAY = 'problems:mail_away:'          # + connector id: {'at', 'seen'} while Microsoft has the owner signed out
+OPEN = 'problems:open'                # {key: the failure as last seen, 'from' its start, 'shown' once it rang} while it lasts
+OWN_NEWS = ('signed_out', 'thinking')  # these two say their own end (watch_mail, thinking) - no second line for them
 
 
 def _now(): return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -63,9 +75,9 @@ def _plural(n, one, many): return one if n == 1 else many
 
 
 def signature(p: dict) -> str:
-    """What makes this failure THIS failure. `since` is in it deliberately: the same connector
-    failing the same way an hour later is news again."""
-    raw = f"{p.get('key')}|{p.get('detail')}|{p.get('since')}"
+    """What makes this failure THIS failure: the key and when its episode began. Each failing poll re-stamps `since`
+    and may word the error differently; neither is a new failure. Working again, then failing, is."""
+    raw = f"{p.get('key')}|{p.get('from') or p.get('since')}"
     return hashlib.sha256(raw.encode('utf-8', 'replace')).hexdigest()[:16]
 
 
@@ -81,7 +93,8 @@ def _dismissed(store) -> dict: return _load(store.get_setting(DISMISSED))
 
 def _news_put(store, key, entry):
     got = _load(store.get_setting(NEWS))
-    got[key] = {**entry, 'at': _now()}
+    got.pop(key, None); got[key] = {**entry, 'at': _now()}
+    got = dict(sorted(got.items(), key=lambda kv: str(kv[1].get('at') or ''))[-NEWS_KEEP:])
     store.set_setting(NEWS, json.dumps(got), 'system')
 
 
@@ -130,6 +143,10 @@ def _said(store, key, e) -> dict | None:
                 else f"I'm back. The message I was holding is sorted - {'it needs you' if need else 'nothing for you'}." if n == 1
                 else f"I'm back. All {n} sorted, {need or 'none'} {_plural(need, 'needs', 'need')} you.")
         return {'title': text, 'detail': 'Everything that came in while I was stuck has been read.', 'where': 'Timeline', 'fix': 'Show me'}
+    if kind == 'recovered':
+        span = f"Failed {clock(e.get('from'))} to {clock(e.get('to'))}" if e.get('from') else f"Working again since {clock(e.get('to'))}"
+        return {'title': e.get('back') or f"{e.get('title')} - working again", 'detail': f"{span}: {e.get('detail')}"[:400] if e.get('detail') else span,
+                'where': e.get('where'), 'connector': e.get('connector'), 'report': e.get('report'), 'fix': 'Show me'}
     if kind == 'held':
         mids = e.get('mids') or []
         n, names = len(mids), _who(store, mids)
@@ -143,14 +160,32 @@ def _said(store, key, e) -> dict | None:
 
 
 def news(store) -> list:
-    """What ended on its own, said once and quietly: the bell's calm half. Gone after NEWS_HOURS or a dismiss."""
-    got, cut, out = _load(store.get_setting(NEWS)), datetime.now() - timedelta(hours=NEWS_HOURS), []
-    keep = {k: e for k, e in got.items() if _fresh(e.get('at'), cut)}
-    if keep != got: store.set_setting(NEWS, json.dumps(keep), 'system')
-    for k, e in sorted(keep.items(), key=lambda kv: str(kv[1].get('at') or '')):
+    """What ended on its own, said quietly: the bell's calm half. It stays until Got it."""
+    out = []
+    for k, e in sorted(_load(store.get_setting(NEWS)).items(), key=lambda kv: str(kv[1].get('at') or '')):
         said = _said(store, k, e)
         if said: out.append({'key': k, 'kind': 'news', 'since': e.get('at'), 'connector': None, **said})
     return out
+
+
+def _episodes(store, failing: list) -> tuple:
+    """Open an episode for what is failing and not yet open, close the ones that are not failing any more, and return
+    (what rings now, everything failing). Read when the bell is (collect): the failures' own stamps say when, so a bell read an hour later
+    still dates them right. Each item leaves with `from`, its episode's start; a closed episode that rang says so in
+    `news`, and one that healed inside its grace says nothing at all."""
+    was, now, cut = _load(store.get_setting(OPEN)), _now(), datetime.now() - timedelta(minutes=GRACE_MINUTES)
+    got, ring = {}, []
+    for p in failing:
+        e = was.get(p['key']) or {'from': p.get('since') or now}
+        p['from'] = e['from']
+        shown = bool(p.pop('now', False) or e.get('shown') or not _fresh(e['from'], cut))
+        got[p['key']] = {**{k: p.get(k) for k in ('title', 'back', 'detail', 'where', 'connector', 'report', 'kind')}, 'from': e['from'], 'shown': shown}
+        if shown: ring.append(p)
+    for k, e in was.items():
+        if k in got or not e.get('shown') or e.get('kind') in OWN_NEWS: continue
+        _news_put(store, f'back:{k}', {**e, 'kind': 'recovered', 'to': now})
+    if got != was: store.set_setting(OPEN, json.dumps(got), 'system')
+    return ring, failing
 
 
 # ── 1. signed out of Microsoft ───────────────────────────────────────────────────────────────────
@@ -255,23 +290,25 @@ def collect(store, all_of_them: bool = False) -> list:
         if not (c.get('Active') and err): continue
         if signed_out(c):
             title, detail = signed_out_line(store, c)
-            out.append({'key': f"connector:{c['ConnectorId']}", 'title': title, 'detail': detail, 'live': True,
+            out.append({'key': f"connector:{c['ConnectorId']}", 'title': title, 'detail': detail,
                         'since': away_since(store, c['ConnectorId']) or c.get('LastErrorAt') or '', 'where': 'Connections',
-                        'connector': str(c['ConnectorId']), 'fix': 'Sign in', 'kind': 'signed_out'})
+                        'connector': str(c['ConnectorId']), 'fix': 'Sign in', 'kind': 'signed_out', 'now': True})
             continue
         # a bridge this machine runs is started again from the bell itself - its error says "Restart bridge starts it"
         from . import wabridge
         restart = c.get('Type') == 'whatsapp' and wabridge.managed(c)
+        # ...and the bridge it stopped starting again is past any retry (wabridge.supervise's give-up line)
+        gave_up = restart and bool(wabridge._SUP.get('gave_up'))
         out.append({'key': f"connector:{c['ConnectorId']}", 'title': f"{c.get('Name') or c['Type']}: the last poll failed",
+                    'back': f"{c.get('Name') or c['Type']} is working again",
                     'detail': err[:400], 'since': c.get('LastErrorAt') or '', 'where': 'Connections', 'connector': str(c['ConnectorId']),
-                    'fix': 'Open the card', **({'restart': True} if restart else {})})
+                    'fix': 'Open the card', **({'restart': True} if restart else {}), **({'now': True} if gave_up else {})})
     s = store.get_settings()
     brain = thinking(store)
     if brain:
         pick = str(s.get('triage_ai') or '')
         out.append({'key': 'triage', 'title': brain['title'], 'detail': brain['detail'], 'since': brain['since'], 'error': brain['error'][:400],
-                    # held mail keeps it up whatever its age; a bare error with nothing held ages out like any other
-                    'live': brain['held'] > 0, 'where': 'Connections', 'connector': pick[10:] if pick.startswith('connector:') else None,
+                    'now': True, 'where': 'Connections', 'connector': pick[10:] if pick.startswith('connector:') else None,
                     'fix': 'Check my setup', 'kind': 'thinking'})
     # A REPORT'S FAILURE LIVES HERE AND NOWHERE ELSE (the owner, 2026-09-28): a failed run files no row, so
     # this reads each report's latest run - failed, or run without one of its sources - and clears itself
@@ -285,7 +322,8 @@ def collect(store, all_of_them: bool = False) -> list:
         if not (last.get('failed') or gone): continue
         out.append({'key': f"report:{src['SourceId']}", 'title': f"Report failed: {name}" if last.get('failed') else f"{name} ran without {', '.join(gone)}",
                     'detail': str(last.get('error') or last.get('subject') or '')[:400], 'since': last.get('at') or '', 'where': 'Reports',
-                    'connector': None, 'report': src['SourceId'], 'fix': 'Open the report'})
+                    'back': f"{name} ran cleanly again",
+                    'connector': None, 'report': src['SourceId'], 'fix': 'Open the report', 'now': True})
     # ...and a report that ran but whose send or alert did not go (reports.send_failed)
     from .reports import SEND_FAILED
     for src in store.list_sources():
@@ -295,13 +333,16 @@ def collect(store, all_of_them: bool = False) -> list:
             except ValueError: continue
             if not f: continue
             out.append({'key': f"report_{kind}:{src['SourceId']}", 'title': f"{src.get('Address')}: {says}",
+                        'back': f"{src.get('Address')}: {'sent out' if kind == 'send' else 'its alert reached you'} again",
                         'detail': f"{f.get('what')}. {f.get('error')}"[:400], 'since': f.get('at') or '', 'where': 'Reports',
-                        'connector': None, 'report': src['SourceId'], 'fix': 'Open the report'})
-    cut, seen, uniq = datetime.now() - timedelta(hours=STALE_HOURS), set(), []
+                        'connector': None, 'report': src['SourceId'], 'fix': 'Open the report', 'now': True})
+    seen, uniq = set(), []
     for p in out:
-        if p['key'] in seen or not (p.pop('live', False) or _fresh(p['since'], cut)): continue
+        if p['key'] in seen or not _when(p['since']): continue
         seen.add(p['key']); uniq.append(p)
-    if all_of_them: return uniq
+    ring, uniq = _episodes(store, uniq)
+    if all_of_them: return uniq          # the troubleshooter and the facts see a retry still at work too
+    uniq = ring
     # ...minus the ones the owner has read, and only while they are the SAME failure
     put_down = _dismissed(store)
     return [p for p in uniq if put_down.get(p['key']) != signature(p)]

@@ -185,14 +185,19 @@ def broken_connections(store) -> list:
     you have to think to open - and the log. The owner, 2026-09-18, on a repo that had been dead for
     days: "we should have notification for the github issue in the notification place".
 
-    Only an ACTIVE connector: one nobody turned on is not broken, it is off.
+    Only an ACTIVE connector: one nobody turned on is not broken, it is off. And only one the BELL rings for (problems.collect):
+    a timeout the poll is still retrying, or one the owner dismissed, was a "stopped answering" row while the bell said nothing
+    (the owner, 2026-10-26: "they have to be real issues only ... the classic whatsapp timeout should not show up").
     """
-    out = []
+    out, ringing = [], None
     for c in store.list_connectors():
         if not c.get('Active'): continue
         full = store.get_connector(c['ConnectorId']) or {}
         err = ' '.join(str(full.get('LastError') or '').split())
         if not err: continue
+        from . import problems
+        if ringing is None: ringing = {p['key'] for p in problems.collect(store)}
+        if f"connector:{c['ConnectorId']}" not in ringing: continue
         kind = str(c.get('Type') or full.get('Type') or '')
         label = CONN_LABELS.get(kind, kind.title() or 'A connection')
         # Microsoft signing the owner out is not a connection "not answering": it is one tap to fix, and said the bell's way

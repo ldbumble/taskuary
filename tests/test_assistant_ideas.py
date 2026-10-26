@@ -29,7 +29,7 @@ class HealthTests(unittest.TestCase):
         s.add_report_run(A.AR['sid'], {'at': '2026-09-18 08:00:00', 'title': 'Monthly AR Report', 'failed': True, 'error': 'login timed out'})
         wf = s.save_source({'Channel': 'report', 'Address': 'wf2', 'Active': 1, 'ConfigJson': json.dumps({'title': 'Nightly sync', 'type': 'agent', 'access': 'write', 'cron': '0 1 * * *'})}, 't')
         cid = s.save_connector({'Type': 'teams', 'Name': 'Teams live', 'Active': 1, 'ConfigJson': '{}', 'Secret': 'x'}, 't')
-        s._exec('UPDATE connector SET LastError=? WHERE ConnectorId=?', ('token expired', cid))
+        s._exec('UPDATE connector SET LastError=?, LastErrorAt=? WHERE ConnectorId=?', ('token expired', '2026-09-18 06:00:00', cid))
         # a workflow is not "never run" the minute it is saved: it waits a day from when the Advisor first saw it
         self.assertNotIn(f'health:workflow:{wf}', {i['key'] for i in assistant.health_ideas(s)})
         from datetime import timedelta

@@ -623,7 +623,7 @@ def idle_state(store, tid) -> dict:
         return out('left', f'{_cap(agent)} finished its work - its record is below. The task is still open.' + old)
     if store.last_transcript(tid):
         return out('left', f'{_cap(agent)} ran on this and left without finishing it.' + old)
-    msg = store.last_inbound_on_task(tid) or {}
+    msg, lifted = store.last_inbound_on_task(tid) or {}, False
     for r in reversed(store.message_routes(msg.get('MessageId')) or []) if msg.get('MessageId') else []:
         said = held_clause(r.get('Reason'))
         if said is None: continue
@@ -634,13 +634,24 @@ def idle_state(store, tid) -> dict:
         # the route kept the sender rule's words from when it arrived; a sender trusted SINCE (a Teams colleague resolved after
         # the fact, channels.teams_org) is no hold any more - the task just waits for its normal start, and origin.of_task drops
         # the stale hold tag. It is not started for them: what was held when it came in stays the owner's to start.
+        # ...and so is one the owner vouched for on this very task (Trust them, the Trust buttons below): a mail sender's say-so is the
+        # task's TrustedThrough, not a remembered person, and the box went on asking for the press it had just had
         if str(msg.get('Channel') or '') != 'github' and 'no agent starts on' in said:
             from . import origin
-            if origin.of_message(store, msg)[0] == 'trusted': origin.of_task(store, tid); continue
+            if msg['MessageId'] <= int(t.get('TrustedThrough') or 0) or origin.of_message(store, msg)[0] == 'trusted':
+                origin.of_task(store, tid); lifted = True; continue
+            # THE HOLD OFFERS ITS WAY OUT (the owner, 2026-10-26: "we should have button on untrusted user to either trust user or trust
+            # domain and then we won't have issue again"): the box that says why nothing started carries the two presses, worded for
+            # the channel (senders.trust_offer)
+            from .senders import trust_offer
+            return {**out('held', f'Waiting for you. {_sentence(said)}' + old, 'held for you - not started'), 'trust': trust_offer(store, tid)}
         return out('held', f'Waiting for you. {_sentence(said)}' + old, 'held for you - not started')
     if not auto_code_enabled(store) and (t.get('Kind') or '') == 'coding':
         return out('held', f'Waiting for you. Starting {agent} by itself is switched off, so it waits for you.' + old,
                    'held for you - not started')
+    # ...the box says the hold is gone, and that it still waits for the owner's own Start: trusting is not starting (2026-10-26)
+    if lifted: return out('idle', f'Not started yet. The sender is trusted now - start {agent} when you want it; what was held never starts by itself.' + old,
+                          'not started yet')
     return out('idle', f'Not started yet. Nothing has started {agent} on this.' + old, 'not started yet')
 
 
@@ -678,7 +689,8 @@ def agent_story(store, tid) -> dict | None:
     if not (str(t.get('Assignee') or '').startswith('agent:') or left or q or held): return None
     # the sentence is whole and leads with its state ("Waiting for you.", "Couldn't start."): the page adds nothing before it
     # ...and a run that FINISHED is finished, not "not started" over its own "finished its work" sentence (G7, 2026-10-20)
-    if not left: return {'kind': 'held' if held else 'queued' if q else 'finished' if session_finished(store, tid) else 'idle', 'line': why}
+    if not left: return {'kind': 'held' if held else 'queued' if q else 'finished' if session_finished(store, tid) else 'idle', 'line': why,
+                         **({'trust': st['trust']} if held and st.get('trust') else {})}
     evs = store.worker_events(tid) or []
     sid = str(evs[-1]['Sid']) if evs else None
     run = [e for e in evs if str(e['Sid']) == sid]

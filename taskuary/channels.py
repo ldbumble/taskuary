@@ -266,6 +266,8 @@ def test_connector(store, cid: int) -> dict:
             if not c.get('Secret'): raise RuntimeError('no bot token saved - paste an xoxb- token under Credentials')
             a = _slack(c['Secret'], 'auth.test')
             detail = f"authenticated as {a.get('user')} in {a.get('team')}"
+            # its own workspace, kept: its members are known like Teams' own organisation (slack_own_team)
+            if a.get('team_id'): store.set_connector_config(c['ConnectorId'], {**_cfg(c), 'team_id': str(a['team_id']), 'team_name': str(a.get('team') or '')})
             src = next((s for s in store.list_sources(active_only=False) if s['Channel'] == 'slack'), None)
             if src:
                 _slack(c['Secret'], 'conversations.history', channel=src['Address'], limit=1)
@@ -1204,12 +1206,41 @@ def hosted_images(tok: str, html: str, cap: int = 4, where: str = '') -> list:
 _TEAMS_ME = {}
 
 
-def slack_msg(src: dict, m: dict) -> dict:
-    "One Slack line as ingest takes it. A channel id starting with D is Slack's direct message - the one-to-one mark."
+def slack_msg(src: dict, m: dict, own: str = '', names: dict | None = None) -> dict:
+    """One Slack line as ingest takes it. A channel id starting with D is Slack's direct message - the one-to-one mark.
+    ...and WHICH WORKSPACE the sender is in (the owner, 2026-10-26: Slack has no domains, so a member of the owner's own workspace
+    is known like Teams' own organisation): the line's user_team - a Slack Connect sender's home workspace - else its team.
+    `internal` only when the connection's own workspace (`own`, auth.test's team_id) was known, like Teams' own word."""
+    team = str(m.get('user_team') or m.get('team') or '')
+    name = ' '.join(str((m.get('user_profile') or {}).get('real_name') or '').split())
+    meta = {**({'dm': True} if str(src.get('Address') or '').startswith('D') else {}), **({'team': team} if team else {}),
+            **({'internal': team == own} if team and own else {}), **({'team_name': names[team]} if team and (names or {}).get(team) else {}),
+            **({'name': name} if name else {})}
     return {'external_id': f"slack:{src['Address']}:{m.get('ts')}", 'channel': 'slack', 'subject': None, 'body': m.get('text'),
             'from_name': m.get('user'), 'conversation_id': f"slack:{src['Address']}", 'source_name': src['Address'],
-            'sent_at': datetime.fromtimestamp(float(m.get('ts', 0))).strftime('%Y-%m-%d %H:%M:%S'),
-            **({'mail_meta': {'dm': True}} if str(src.get('Address') or '').startswith('D') else {})}
+            'sent_at': datetime.fromtimestamp(float(m.get('ts', 0))).strftime('%Y-%m-%d %H:%M:%S'), **({'mail_meta': meta} if meta else {})}
+
+
+def slack_own_team(store, c: dict, tok: str) -> str:
+    "The connection's own workspace (auth.test's team_id), asked once and kept on the connector; '' when Slack would not say."
+    cfg = _cfg(c)
+    if cfg.get('team_id'): return str(cfg['team_id'])
+    try: a = _slack(tok, 'auth.test')
+    except Exception as e:
+        logger.info(f'slack: the workspace of this connection could not be read - {e}'); return ''
+    if a.get('team_id'): store.set_connector_config(c['ConnectorId'], {**cfg, 'team_id': str(a['team_id']), 'team_name': str(a.get('team') or '')})
+    return str(a.get('team_id') or '')
+
+
+_SLACK_TEAMS = {}     # workspace id -> its name; '' when team.info refused (no team:read) - the button then says "their Slack workspace"
+
+def slack_team_name(tok: str, team: str) -> str:
+    "A Slack Connect sender's workspace name, for its Trust button: one team.info per workspace per run, never in the way of a poll."
+    if team not in _SLACK_TEAMS:
+        try: _SLACK_TEAMS[team] = str((_slack(tok, 'team.info', team=team).get('team') or {}).get('name') or '')
+        except Exception as e:
+            logger.info(f'slack: the name of workspace {team} could not be read - {e}'); _SLACK_TEAMS[team] = ''
+    return _SLACK_TEAMS[team]
 
 
 def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=False, read_it=False, user=False) -> int:
@@ -2016,8 +2047,10 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                 msgs = [m for m in reversed(hist_all) if not m.get('subtype')]
                 # the channel's read cursor is ONE timestamp - the newest line we took
                 if read_it and msgs: mark_slack_read(tok, s['Address'], msgs[-1].get('ts'))
+                own = slack_own_team(store, full, tok)
+                names = {t: slack_team_name(tok, t) for t in {str(m.get('user_team') or m.get('team') or '') for m in msgs} - {'', own}}
                 for m in msgs:
-                    n += ingest_message(store, file_only=file_only, msg=slack_msg(s, m), llm=llm)['status'] != 'duplicate'
+                    n += ingest_message(store, file_only=file_only, msg=slack_msg(s, m, own, names), llm=llm)['status'] != 'duplicate'
             store.touch_source(s['SourceId'])
         store.touch_connector(c['ConnectorId'], '; '.join(errors) if errors else None)
         _watch(store, full, '; '.join(errors) if errors else None)

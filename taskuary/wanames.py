@@ -12,7 +12,8 @@ import json, re, unicodedata
 KEY = 'wa_names'                 # {jid: name}, merged on every roster read
 
 
-def is_jid(s) -> bool: return str(s or '').endswith(('@s.whatsapp.net', '@g.us'))
+# ...and a LID (<n>@lid): WhatsApp addresses most 1:1 chats by one now, and those rows were neither kept nor named (2026-10-26)
+def is_jid(s) -> bool: return str(s or '').endswith(('@s.whatsapp.net', '@g.us', '@lid'))
 def is_group(jid) -> bool: return str(jid or '').endswith('@g.us')
 def digits(s) -> str: return re.sub(r'\D', '', str(s or ''))
 def _fold(s) -> str: return ''.join(c for c in unicodedata.normalize('NFKD', str(s or '')) if not unicodedata.combining(c)).casefold()
@@ -80,18 +81,43 @@ def matches(q, jid, name='') -> bool:
     return all(_fold(w) in hay for w in q.split())
 
 
+def user(jid) -> str: return str(jid or '').split('@')[0].split(':')[0]
+
+
 def fill(store, rows, key: str = 'jid', name: str = 'name') -> list:
-    """Each row named (the roster's name, else the one kept, else what its last message was signed with) and given `phone`."""
+    """Each row named (the roster's name, else the one kept, else what its last message was signed with, else the name its
+    person signed a message with anywhere - a group they are both in) and given `phone`."""
     known, seen = names(store), {}
     try:
         for r in store.chats(None):
             cid = str(r.get('Cid') or '')
             if (r.get('Channel') or '').lower() == 'whatsapp' and cid.startswith('whatsapp:'): seen[cid[9:]] = r.get('Name') or ''
     except Exception: pass
+    signed = None
     for r in rows:
         jid = r.get(key) or ''
         if not is_jid(jid): continue
         if bare(r.get(name), jid):
             r[name] = name_of(store, jid, known) or ('' if is_group(jid) or bare(seen.get(jid), jid) else seen[jid])
+        if bare(r.get(name), jid) and not is_group(jid):
+            if signed is None: signed = _signed(store)
+            if not bare(n := signed.get(user(jid), ''), jid): r[name] = n
         r['phone'] = phone(jid)
     return rows
+
+
+def _signed(store) -> dict:
+    """{number or LID: the name they last signed a WhatsApp message with}, under both of a person's ids (the poller keeps the
+    other one as the message's `alias`). Read once per fill, and only when a row has no better name."""
+    out = {}
+    try: rows = store._rows("SELECT FromEmail, FromName, MailMetaJson FROM message WHERE Channel='whatsapp' "
+                            "AND IFNULL(Direction,'in')<>'out' AND IFNULL(FromName,'')<>'' ORDER BY SentAt")
+    except Exception: return out
+    for r in rows:
+        try: alias = (json.loads(r.get('MailMetaJson') or '{}') or {}).get('alias') or ''
+        except (TypeError, ValueError, AttributeError): alias = ''
+        n = r['FromName'].strip()
+        if not re.search(r'[^\d\s+()\-.]', n): continue          # the poller's number-for-a-name fallback names nobody
+        for i in (r.get('FromEmail') or '', alias):
+            if str(i).startswith('whatsapp:') and i[9:]: out[i[9:]] = n
+    return out

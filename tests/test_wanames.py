@@ -67,6 +67,32 @@ class RosterTests(unittest.TestCase):
                             'Direction': 'in', 'ExternalId': 'wa:1'})
         self.assertEqual({r['jid']: r['name'] for r in self.chats()}[RAY], 'Ray Colton')
 
+    # The owner, 2026-10-26: "the whatsapp contacts people tab are still not searchable by name as well" - the People rows
+    # were bare numbers, because the address book never arrived and a person who wrote only in a group was never named
+    def test_a_person_known_only_by_a_group_line_is_named_and_found_by_it_on_the_people_tab(self):
+        grp = lambda who, num, alias, n: self.s.add_message({
+            'Channel': 'whatsapp', 'BodyText': 'standup moved', 'ConversationId': f'whatsapp:{OPS}', 'FromName': who,
+            'FromEmail': f'whatsapp:{num}', 'SentAt': f'2026-10-2{n} 09:00:00', 'Status': 'filed', 'Direction': 'in',
+            'ExternalId': f'wa:g{n}', 'MailMetaJson': '{"alias": "whatsapp:%s"}' % alias if alias else None})
+        grp('Ray Colton', '15550100188', '', 1)
+        grp('Gail Moreno', '88001', '15550100155', 2)              # written by LID; the poller kept her number as the alias
+        grp('15550100166', '15550100166', '', 3)                   # a number for a name is not one
+        GAIL, OMAR, LIDP = '15550100155@s.whatsapp.net', '15550100166@s.whatsapp.net', '88001@lid'
+        roster = {'chats': [{'jid': j, 'group': False, 'name': '', 'n': 0, 'last': 1} for j in (RAY, GAIL, OMAR)]
+                  + [{'jid': LIDP, 'group': False, 'name': '', 'n': 0, 'last': 1}, ROSTER['chats'][0]]}
+        rows = self.chats(roster)
+        self.assertEqual({r['jid']: r['name'] for r in rows}, {RAY: 'Ray Colton', GAIL: 'Gail Moreno', OMAR: '', LIDP: 'Gail Moreno',
+                                                               OPS: 'Northwind ops'})
+        for q in ('ray', 'RAY colton', 'colton'): self.assertEqual(find(rows, q), [RAY], q)
+        self.assertEqual(find(rows, 'gail'), [GAIL, LIDP])
+        self.assertEqual(find(rows, '+1 555 010 0188'), [RAY])
+
+    def test_a_lid_row_the_roster_named_is_kept_like_any_other(self):
+        self.chats({'chats': [{'jid': '88002@lid', 'group': False, 'name': 'Marcus Reed', 'n': 0, 'last': 1}]})
+        self.assertEqual(wanames.names(self.s), {'88002@lid': 'Marcus Reed'})
+        self.assertEqual([r['name'] for r in self.chats({'chats': [{'jid': '88002@lid', 'group': False, 'name': '', 'n': 0, 'last': 1}]})],
+                         ['Marcus Reed'])
+
     def test_send_targets_name_and_number_whatsapp_never_the_jid(self):
         with mock.patch.object(outbound, 'send_channels', return_value=['whatsapp']), \
              mock.patch.object(self.s, 'list_connectors', return_value=[self.c]), \

@@ -63,7 +63,7 @@ import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, putDownLanded, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory, withdrawSelection } from "./funnelPile.js";
-import { FYI_PAGE, ageHover, coveredByReload, fyiTail, heldSince, latestLine, newMark, pileRows, sentChips } from "./funnelPile.js";
+import { FYI_PAGE, ageHover, coveredByReload, fyiTail, heldSince, latestLine, pileRows, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
 import { StatusLogo } from "./StatusMark.jsx";
@@ -718,9 +718,9 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                   <div key={i.key} className={cls} data-tq-key={i.key} data-tq-urgent={urgentDot ? "" : undefined} data-tq-important={imp ? "" : undefined}
                     style={{ top: falls(i.key) ? -ROW_H : top }}>
                     {/* For later counts DOWN to when it comes back, in the same short form the age column uses */}
-                    {/* ...every other row says its ARRIVAL; a reply since it was last opened is a quiet "+N" beside it, never a new age */}
+                    {/* ...every other row says its ARRIVAL, never a new age for a reply - and no "+N" for one either: what came in since is
+                        read inside the task (the owner, 2026-10-26: "if it's in the task it's fine no?") */}
                     <span className="when" title={level === "later" && backAt(i) ? `back ${ago(backAt(i))}` : goal || i.kind === "meeting" ? undefined : ageHover(i)}>
-                      {!goal && level !== "later" && !!newMark(i, isCur) && <span className="tq-pile-new">{newMark(i, isCur)}</span>}
                       {goal ? dueWord(i.due)      /* a goal's clock is its date (spec 2026-10-12) */
                         : level === "later" ? bandUntil(backAt(i)) : band(i.kind === "meeting" ? i.when : arrivedAt(i))}</span>
                     {/* the dot is the BAND's colour, the pill's own (the owner, 2026-10-06: one palette, everywhere) - where it

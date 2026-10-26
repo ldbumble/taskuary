@@ -89,3 +89,33 @@ test("a held browser act reads as what it does and where, never its JSON", () =>
   assert.equal(shown.readOnly, true);
   assert.equal(reviewText(review), "pays the $412.50 order on toll.example\n\nagent-browser click @e12");
 });
+
+// A TRACKER ITEM'S CLOSE-OUT (trackers.py, 2026-10-25): the card says where it goes and the done state the tracker names - or that it
+// is the comment alone, before the press
+test("a Jira close-out reads as the comment and the move to the tracker's own done state", () => {
+  const review = { Kind: "action", DraftText: JSON.stringify({ action: "close_item", tracker: "jira", item: "NW-12", status: "Done",
+    text: "Fixed - tonight's export will be full.", closeout: true }) };
+  const p = proposalPresentation(review);
+  assert.equal(p.kind, "closeout");
+  assert.equal(p.destination, "NW-12 in Jira → Done");
+  assert.equal(p.approveLabel, "Approve");
+  assert.match(p.then, /posts the comment on NW-12 in Jira and moves it to Done/);
+  assert.equal(reviewText(review), "Fixed - tonight's export will be full.");
+});
+
+test("a tracker with no done state to move to says so, and the press is the comment alone", () => {
+  const review = { Kind: "action", DraftText: JSON.stringify({ action: "close_item", tracker: "monday", item: "4410", status: null,
+    no_done: "its status column \"Stage\" marks no label as done", text: "Shipped.", closeout: true }) };
+  const p = proposalPresentation(review);
+  assert.equal(p.destination, "4410 in Monday · comment only");
+  assert.match(p.context, /marks no label as done, so Approve posts the comment alone/);
+  assert.doesNotMatch(p.then, /moves/);
+});
+
+test("an agent's tracker act names the item it lands on", () => {
+  const review = { Kind: "action", Reason: "the agent proposes to move NW-12 in Linear to In Review",
+    DraftText: JSON.stringify({ action: "run_tool", type: "linear_move", connector_id: 56, item: "NW-12", status: "In Review" }) };
+  const p = proposalPresentation(review);
+  assert.equal(p.destination, "NW-12 · linear move");
+  assert.equal(reviewText(review), "status: In Review");
+});

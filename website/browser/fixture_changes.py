@@ -20,9 +20,11 @@ def install_processing_changes(app, store):
         '/api/fixture/processing/unread-arrivals',
         '/api/fixture/processing/sync-phase',
         '/api/fixture/task/agent-closed',
+        '/api/fixture/task/tracker-closeout',
         '/api/fixture/task/coding-saved',
         '/api/fixture/task/chat-burst',
         '/api/fixture/task/chat-saved',
+        '/api/fixture/task/closed-asked',
         '/api/fixture/general/canvas',
         '/api/fixture/processing/arrive-during-next',
     })
@@ -54,6 +56,60 @@ def install_processing_changes(app, store):
         out = selfclose.declare(store, tid, body['said'], 'assistant')
         if not out.get('closed'): raise HTTPException(409, f"the agent's close was refused: {out.get('why')}")
         return {'taskId': tid}
+
+    tracker_writes = []
+
+    @app.post('/api/fixture/task/tracker-closeout')
+    def tracker_closeout(body: dict):
+        """A task from a Jira item whose agent finished: its close-out proposes "comment and move to Done", read from a Jira that lives in
+        this process (no socket leaves the fixture). Invented site, item and people. GET /api/fixture/tracker/writes is what reached it."""
+        if set(body) != {'comment'} or not isinstance(body['comment'], str) or len(body['comment']) > 2000:
+            raise HTTPException(422, 'exactly a comment is required')
+        from taskuary import proposals, trackers
+        def jira(c, method, path, payload=None):
+            if method != 'GET': tracker_writes.append({'method': method, 'path': path, 'body': payload}); return {}
+            if path.endswith('/transitions'):
+                return {'transitions': [{'id': '31', 'name': 'Ship it', 'to': {'name': 'Done', 'statusCategory': {'key': 'done'}}}]}
+            return {'key': 'NW-12', 'fields': {'summary': 'Nightly export is empty', 'status': {'name': 'In Review', 'statusCategory': {'key': 'indeterminate'}}}}
+        trackers._jira = jira
+        c = store.get_connector_by_type('jira')
+        store.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Secret': 'fixture-not-a-token',
+                              'ConfigJson': '{"base_url": "https://northwind.example", "email": "alex@northwind.example"}'}, 'fixture')
+        tid = store.create_task({'Title': 'NW-12 Nightly export is empty', 'Kind': 'general', 'Status': 'waiting', 'Source': 'jira'}, 'router')
+        store.add_message({'TaskId': tid, 'Channel': 'jira', 'ExternalId': f'jira:NW-12@{tid}', 'ConversationId': 'jira:NW-12',
+                           'FromName': 'Paula Vance', 'Subject': 'NW-12 Nightly export is empty',
+                           'BodyText': '[Jira NW-12 - status In Review - assigned to you]\nThe nightly export came back empty.', 'Status': 'routed'})
+        store.add_comment(tid, 'general', 'agent', 'AGENT REPORT\nDetermination: the export read a renamed view.\n'
+                          f"Actions: pointed it at the new view.\nSummary: {body['comment']}")
+        due = trackers.closeout_due(store, tid)
+        if not due or not proposals.closeout(store, tid, due, body['comment'], 'router'): raise HTTPException(409, 'no close-out was raised')
+        return {'taskId': tid}
+
+    @app.get('/api/fixture/tracker/writes')
+    def tracker_writes_seen(): return {'writes': tracker_writes}
+
+    @app.post('/api/fixture/task/closed-asked')
+    def closed_asked(body: dict):
+        """A finished email task, and a day later its sender asking the owner a question on the same thread - ingested through the real
+        door with triage scripted (reply_only, asks_owner true). The owner, 2026-10-25: it stayed closed, off the rail, with no draft."""
+        if body: raise HTTPException(422, 'this fixed fixture accepts only an empty object')
+        import json
+        from unittest import mock
+        from taskuary import ingest
+        conv, then = 'fixture-closed-asked', datetime.now() - timedelta(hours=1)
+        tid = store.create_task({'Title': 'Investigate the missing ledger accounts', 'Kind': 'task', 'Status': 'done', 'Source': 'email'}, 'router')
+        store.add_message({'TaskId': tid, 'Channel': 'email', 'ExternalId': f'{conv}-1', 'ConversationId': conv, 'FromName': 'Erin Blake',
+                           'FromEmail': 'erin@northwind.example', 'Subject': 'Missing ledger accounts', 'BodyText': 'Some accounts are missing from the pull.',
+                           'SentAt': (then - timedelta(days=1)).isoformat(' '), 'Status': 'routed'})
+        said = {'intent': 'reply_only', 'why': 'Erin asks Alex directly', 'title': 'Erin asks what separates the 4100 accounts',
+                'summary': 'Erin Blake wants the difference between the 4100 accounts explained.', 'asks_owner': True}
+        with mock.patch.object(ingest, '_spawn'):          # the draft is its own job; this fixture shows the row, not the drafter
+            out = ingest.ingest_message(store, {'external_id': f'{conv}-2', 'channel': 'email', 'from_email': 'erin@northwind.example',
+                                                'from_name': 'Erin Blake', 'conversation_id': conv, 'subject': 'RE: Missing ledger accounts',
+                                                'body': 'Can you explain the difference between the 4100 accounts?', 'sent_at': then.isoformat(' ')},
+                                         llm=lambda system, user, **k: json.dumps(said))
+        if out.get('task_id') != tid: raise HTTPException(409, f'the question did not join its task: {out}')
+        return {'taskId': tid, 'status': store.get_task(tid)['Status']}
 
     @app.post('/api/fixture/task/chat-burst')
     def chat_burst(body: dict):

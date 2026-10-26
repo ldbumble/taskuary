@@ -1872,8 +1872,11 @@ def task_detail(task_id: int):
     # "Run again on the strong model" is offered only on an open task whose agent failed or whose reader was unsure (TaskPage's
     # ▾): asking the router on every other open cost ~11 ms a task, 2.7x what an open cost in 0.3.9.34 (2026-10-26)
     strong = _brainroute().strong_offered(d['task'], judged, ran, story)
+    o = dict(zip(('origin', 'why'), origin.of_task(store, task_id)))
     return {**d,'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])},
-            'origin': {**dict(zip(('origin', 'why'), origin.of_task(store, task_id))),     # who's words are on it (origin.py)
+            'origin': {**o,                                                                  # who's words are on it (origin.py)
+                       # ...and the presses that trust them, in the same words as the held box's (senders.trust_offer)
+                       **({'trust': _trust_offer(task_id)} if o['origin'] == 'stranger' else {}),
                        # ...and what one of them tries to make an AI do, as triage or ranking read it (message.Danger)
                        'danger': next((m['Danger'] for m in store.list_messages(task_id) if m.get('Danger')), None)},
             # the same sender writing again and again about this one thing, said once (concierge.repeats) - counted here, no model
@@ -1949,6 +1952,13 @@ def _ended_line(task_id: int, comments=None):
     except Exception as e:
         logger.debug(f'task {task_id}: ended line skipped - {e}'); return None
 
+
+def _trust_offer(task_id: int):
+    "senders.trust_offer, never in the way of opening the task: an offer that could not be worded is the plain Trust them."
+    from . import senders
+    try: return senders.trust_offer(store, task_id)
+    except Exception as e:
+        logger.debug(f'task {task_id}: trust offer skipped - {e}'); return {'person': 'Trust them', 'org': None}
 
 def _agent_story(task_id: int):
     """funnel.agent_story, never in the way of opening the task: a broken story is a missing line, not a 500."""

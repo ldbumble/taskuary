@@ -32,7 +32,10 @@ export function groupConversations(messages = [], { ms = (s) => Date.parse(s) ||
   }
   return [...groups.values()].map((g) => {
     const first = g.msgs[0], last = g.msgs[g.msgs.length - 1], people = new Set(g.msgs.map((m) => m.who));
-    const title = isChat(g.channel) ? first.SourceName || first.Subject || first.who : first.Subject || first.SourceName || first.who;
+    // a Teams line's SourceName is the owner's own account it was read through (channels.ingest_teams_chats), not the chat: the owner's
+    // address headed a colleague's conversation (2026-10-26) - its Subject is the chat's topic, or "Teams chat with <them>"
+    const room = g.channel === "teams" ? "" : first.SourceName;
+    const title = isChat(g.channel) ? room || first.Subject || first.who : first.Subject || first.SourceName || first.who;
     return { ...g, msgs: [...g.msgs].reverse(), title: oneLine(title), count: g.msgs.length, people: people.size, first, last };
   }).sort((a, b) => ms(b.last.SentAt) - ms(a.last.SentAt));
 }

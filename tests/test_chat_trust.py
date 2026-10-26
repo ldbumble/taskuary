@@ -390,3 +390,32 @@ def test_discord_and_chat_servers_key_a_sender_by_the_platform_id():
     assert {ch: r['FromEmail'] for ch, r in got.items()} == {'discord': 'discord:42', 'mattermost': 'mm:u77', 'rocketchat': 'rocket:r9',
                                                              'google_chat': 'gchat:users/123'}
     assert {r['FromName'] for r in got.values()} == {'Erin'}
+
+# A TEAMS SENDER'S HISTORY BEFORE THEIR ID (2026-10-26, the owner: "we have talked to this person a million times"): a colleague in a
+# sister tenant - the directory cannot place them, so 'internal' is false - was stored by display name until their Graph id replaced it
+SISTER = '{"internal": false, "tenant": "tenant-sister"}'
+def _sister(s, conv='teams:19:crew', key='teams:oid-9', **kw):
+    return _line(s, conv, 'Marcus Reed', ch='teams', SourceName='alex@northwind.example', FromEmail=key, MailMetaJson=SISTER, **kw)
+
+def _sister_msg(conv='teams:19:crew'):
+    return {'channel': 'teams', 'from_name': 'Marcus Reed', 'from_email': 'teams:oid-9', 'conversation_id': conv,
+            'source_name': 'alex@northwind.example', 'MailMetaJson': SISTER}
+
+def test_a_teams_colleague_the_owner_answered_under_their_name_is_known_by_their_id_too():
+    s = _store()
+    _line(s, 'teams:19:crew', 'Erin Blake', ch='teams'); _line(s, 'teams:19:crew', 'Marcus Reed', ch='teams', FromEmail='')   # stored by name
+    _mine(s, 'teams:19:crew', ch='teams')                                                                                 # ...and answered
+    mid = _sister(s)
+    assert senders.known(s, _sister_msg(), exclude_mid=mid) == (True, 'You have answered Marcus Reed on Teams before.')
+    t = s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'teams'}, 'router'); s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (t, mid))
+    assert origin.of_task(s, t)[0] == 'trusted'                                                   # the held task is released on read
+
+def test_a_copied_name_in_another_teams_chat_borrows_nothing():
+    s = _store(); _line(s, 'teams:19:crew', 'Marcus Reed', ch='teams', FromEmail=''); _mine(s, 'teams:19:crew', ch='teams')
+    mid = _sister(s, conv='teams:19:other')
+    ok, why = senders.known(s, _sister_msg('teams:19:other'), exclude_mid=mid)
+    assert not ok and "haven't talked with them" in why
+    # ...nor does a name-keyed line nobody answered, nor someone else's answered line
+    s = _store(); _line(s, 'teams:19:crew', 'Marcus Reed', ch='teams', FromEmail=''); _line(s, 'teams:19:crew', 'Erin Blake', ch='teams')
+    _mine(s, 'teams:19:crew', ch='teams'); mid = _sister(s)
+    assert not senders.known(s, _sister_msg(), exclude_mid=mid)[0]

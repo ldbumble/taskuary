@@ -606,8 +606,7 @@ def health_ideas(store, now: datetime = None) -> list:
                         'text': f"{r['title']} is a workflow that has never run - its clock is {r['schedule'] or 'not set'}.",
                         'action': {'type': 'health', 'tab': 'Reports', 'hash': f"report={r['source_id']}", 'source_id': r['source_id'],
                                    'why': 'a workflow that never ran is either mis-clocked or waiting on a sign-in'}})
-    # An erroring CONNECTION is not raised here: the rail already carries it as its own "stopped answering" row
-    # (funnel.broken_connections), and said twice it became an idea, then a task, then a coding agent investigating
+    # An erroring CONNECTION is not raised here: the bell carries it, and nothing else (problems.py), and said twice it became an idea, then a task, then a coding agent investigating
     # a connection the owner was looking at (the owner, 2026-09-30: "don't need both ... if it fails we don't need
     # advisor to tell us").
     try:

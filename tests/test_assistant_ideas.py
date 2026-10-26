@@ -37,10 +37,10 @@ class HealthTests(unittest.TestCase):
         self.assertIn('failed its last three runs', ideas[f"health:report:{A.AR['sid']}"]['text'])
         self.assertEqual(ideas[f"health:report:{A.AR['sid']}"]['action']['tab'], 'Reports')
         self.assertIn('never run', ideas[f'health:workflow:{wf}']['text'])
-        # the rail's "stopped answering" row says this; an idea too became a task and an agent (2026-09-30)
+        # the bell says this, and nothing else does; an idea too became a task and an agent (2026-09-30)
         self.assertNotIn(f'health:connection:{cid}', ideas)
-        from taskuary import funnel
-        self.assertIn('Teams stopped answering', [r['title'] for r in funnel.broken_connections(s)])
+        from taskuary import problems
+        self.assertIn(f'connector:{cid}', {p['key'] for p in problems.collect(s)})
         # the ADP workflow in the fixture failed ONCE: one failure is a bad day, not a broken report
         self.assertNotIn('health:workflow:' + str([r for r in A.appfacts.reports(s) if r['title'] == 'ADP hours export'][0]['source_id']), ideas)
 

@@ -44,7 +44,7 @@ DIRTY_ROWS = {
 # A healthy connector's heartbeat is the one write nothing here reads: touch_connector stamps LastSyncAt on every check-in
 # (~2/s while WhatsApp is connected), and each stamp left a dirty row that moved rail_top and threw the cached pile away -
 # 0 of 1,050 production pile reads came back warm (2026-10-12). So the connector's UPDATE leaves a row only when a column
-# other than the stamp moved, or the connector is failing (a broken row's `when` is its LastSyncAt, funnel.broken_connections).
+# other than the stamp moved, or the connector is failing (once the rail's "stopped answering" row; that row is gone, 2026-10-26).
 # Every other column stays in: a column added to the table must be added here (test_rail_incremental pins the list).
 CONNECTOR_COLUMNS = ('ConnectorId', 'Type', 'Name', 'ConfigJson', 'Secret', 'Active', 'LastError', 'LastErrorAt', 'Roles', 'Scope')
 UPDATE_WHEN = {'connector': 'NEW.LastError IS NOT NULL OR ' + ' OR '.join(f'OLD.{c} IS NOT NEW.{c}' for c in CONNECTOR_COLUMNS)}

@@ -215,7 +215,7 @@ def test_a_column_the_pile_reads_still_leaves_a_dirty_row(db, column, value):
 
 
 def test_a_failing_connectors_stamp_still_leaves_a_dirty_row(db):
-    # a broken row's `when` is its LastSyncAt (funnel.broken_connections)
+    # a failing connector still leaves its dirty row (the rail's old 'stopped answering' row read it)
     cid = db.get_connector_by_type('github')['ConnectorId']
     stamp(db, cid, 'LastError', 'HTTP 404'); top = db.rail_top()
     stamp(db, cid, 'LastSyncAt', '2026-01-01 00:00:00')

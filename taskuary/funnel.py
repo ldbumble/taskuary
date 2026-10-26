@@ -177,46 +177,6 @@ CONN_LABELS = {'chatgpt': 'ChatGPT', 'outlook': 'Outlook', 'gmail': 'Gmail', 'im
                'jira': 'Jira', 'sentry': 'Sentry', 'intacct': 'Intacct', 'quickbooks': 'QuickBooks'}
 
 
-def broken_connections(store) -> list:
-    """A connection that stopped answering, as a row you will actually walk past.
-
-    The `broken` lane has always existed and exactly one thing produced it: a failing REPORT. So a
-    repo that answers 404 for a fortnight said so only in connector.LastError - on a settings page
-    you have to think to open - and the log. The owner, 2026-09-18, on a repo that had been dead for
-    days: "we should have notification for the github issue in the notification place".
-
-    Only an ACTIVE connector: one nobody turned on is not broken, it is off. And only one the BELL rings for (problems.collect):
-    a timeout the poll is still retrying, or one the owner dismissed, was a "stopped answering" row while the bell said nothing
-    (the owner, 2026-10-26: "they have to be real issues only ... the classic whatsapp timeout should not show up").
-    """
-    out, ringing = [], None
-    for c in store.list_connectors():
-        if not c.get('Active'): continue
-        full = store.get_connector(c['ConnectorId']) or {}
-        err = ' '.join(str(full.get('LastError') or '').split())
-        if not err: continue
-        from . import problems
-        if ringing is None: ringing = {p['key'] for p in problems.collect(store)}
-        if f"connector:{c['ConnectorId']}" not in ringing: continue
-        kind = str(c.get('Type') or full.get('Type') or '')
-        label = CONN_LABELS.get(kind, kind.title() or 'A connection')
-        # Microsoft signing the owner out is not a connection "not answering": it is one tap to fix, and said the bell's way
-        from . import problems
-        if problems.signed_out({**c, **full}):
-            title, why = problems.signed_out_line(store, {**c, **full})
-            out.append(_item(f'conn:{c["ConnectorId"]}', 'connection', 'broken', title, channel=kind, who=label, why=why,
-                             sig=_short(err, 120), when=full.get('LastSyncAt') or '', since=full.get('LastSyncAt') or ''))
-            continue
-        # a bridge this machine runs is restarted from the card, not from a shell (the owner, 2026-10-15)
-        from . import wabridge
-        restart = kind == 'whatsapp' and wabridge.managed(full)
-        out.append(_item(f'conn:{c["ConnectorId"]}', 'connection', 'broken',
-                         f'{label} stopped answering', channel=kind,
-                         who=label, why=_short(err, 220), sig=_short(err, 120),   # a NEW error is news again
-                         when=full.get('LastSyncAt') or '', since=full.get('LastSyncAt') or '', **({'restart': True} if restart else {})))
-    return out
-
-
 def _feed_skip(r: dict) -> bool:
     """Rows that are nobody asking anything: our own sends, withdrawn lines, an auto-reply, and
     anything on a task that is over (unless a draft on it still waits for a yes)."""
@@ -1317,10 +1277,7 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
     items = [i for i in items if not (i['kind'] in ('asked', 'todo', 'fyi') and i.get('tid') in parked)]
     items += from_proposals(store, {i['rid'] for i in items if i.get('rid')}, {i['tid'] for i in items if i.get('tid')})
     items += from_calendar(store, now)
-    # A CONDITION, not a letter: it is here while the connection is broken and gone when it is
-    # fixed, so it carries no read receipt and cannot be marked read. Marking a dead repo "read"
-    # would be marking the outage read.
-    items += broken_connections(store)
+    # (a failing connection is not a row: it is the bell's alone - problems.py, the owner 2026-10-26)
     # Only a row still inside the walk window may suppress a fresh Assistant follow-up about the
     # same conversation. Once filed/automated mail was admitted to Unread, an old message could
     # occupy used_cids here, hide this morning's follow-up, and then age out itself below—leaving
@@ -1937,11 +1894,6 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
     `shown` ({key: view_revision}) is the card the press was made on: its receipts cover what that card showed, and a
     message that landed after it was drawn stays unread. Without it, the card the rail last drew."""
     if shown is None: shown = _SHOWING.get()
-    # Handled - or Next - on a broken connection remembers WHICH error it put down (its sig), so a different failure
-    # comes back rather than staying hidden (processing_unread compares the two). Next from the page wrote no sig, and
-    # the error after it stayed dismissed with the one before (R10, 2026-09-25).
-    if verb in ('done', 'surfaced') and note is None and str(key or '').startswith('conn:'):
-        note = next((c.get('sig') for c in broken_connections(store) if c['key'] == key), None)
     if verb not in VERBS: raise ValueError(f'unknown verb: {verb}')
     if key.startswith('fyis:'):                                   # a batch: the verb lands on every member
         # ...and wakes the tabs ONCE. Each settle empties the pile cache and fires the live event

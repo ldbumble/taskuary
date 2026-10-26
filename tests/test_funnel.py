@@ -1352,138 +1352,18 @@ if __name__ == '__main__':
     unittest.main()
 
 
-class ABrokenConnectionSaysSoTests(unittest.TestCase):
-    """A dead connection only ever landed in connector.LastError, on a page you have to go and open.
-    The `broken` lane existed and was produced by exactly one thing: a failing REPORT. So a repo
-    that 404s for a fortnight said nothing anywhere you look (the owner, 2026-09-18: "we should have
-    notification for the github issue in the notification place")."""
+class AFailingConnectionIsTheBellsTests(unittest.TestCase):
+    """The owner, 2026-10-26: "let's remove that row. it should be only in errors logo in corner" - a failing connection
+    was a "stopped answering" row on the rail AND a line on the bell; now it is the bell's alone (problems.py)."""
 
-    def setUp(self):
-        self.s = MemoryStore()
-        funnel.invalidate()
-
-    def _broken(self, ctype, err):
-        c = self.s.get_connector_by_type(ctype)
-        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Roles': 'trigger'}, 't')
-        self.s.touch_connector(c['ConnectorId'], err)
-        # failing for an hour: past the grace a retry gets before the bell (and so this row) says anything (problems.GRACE_MINUTES)
-        self.s._exec('UPDATE connector SET LastErrorAt=? WHERE ConnectorId=?',
-                     ((datetime.now() - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S'), c['ConnectorId']))
-        return c['ConnectorId']
-
-    def test_a_connection_that_stopped_answering_is_on_the_rail(self):
-        self._broken('github', 'northwind/ledger: no such repository - it was renamed or deleted')
-        rows = funnel.broken_connections(self.s)
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]['lane'], 'broken')
-        self.assertIn('github', rows[0]['title'].lower())
-        self.assertIn('no such repository', rows[0]['why'])
-        self.assertTrue(rows[0]['key'].startswith('conn:'))
-
-    def test_a_retry_still_at_work_is_not_on_the_rail(self):
-        """2026-10-26: "the classic whatsapp timeout should not show up" - the rail rings for what the bell rings for, no sooner."""
-        c = self.s.get_connector_by_type('whatsapp')
-        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1}, 't')
-        self.s.touch_connector(c['ConnectorId'], 'timed out')
-        self.assertEqual(funnel.broken_connections(self.s), [])
-
-    def test_a_healthy_connection_says_nothing(self):
-        c = self.s.get_connector_by_type('github')
-        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Roles': 'trigger'}, 't')
-        self.s.touch_connector(c['ConnectorId'], None)
-        self.assertEqual(funnel.broken_connections(self.s), [])
-
-    def test_a_connection_nobody_turned_on_is_not_broken(self):
-        c = self.s.get_connector_by_type('github')
-        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 0}, 't')
-        self.s.touch_connector(c['ConnectorId'], 'boom')
-        self.assertEqual(funnel.broken_connections(self.s), [])
-
-    def test_it_reaches_the_pile_the_rail_actually_draws(self):
-        self._broken('github', 'northwind/ledger: no such repository')
-        funnel.invalidate()
-        keys = [i['key'] for i in funnel.pile(self.s, force=True)['items']]
-        self.assertTrue(any(k.startswith('conn:') for k in keys), keys[:8])
-
-    def test_next_walks_past_a_broken_connection_once_it_was_shown(self):
-        """A broken connection is a condition with no receipt of its own - so Next put the same one back
-        on the table on every press (the owner, 2026-09-23: "when I hit next it takes me back to linkedin
-        failed"). Shown, it is walked past; a NEW error makes it news again."""
-        cid = self._broken('github', 'northwind/ledger: no such repository')
-        funnel.invalidate()
-        first = funnel.next_item(self.s)
-        self.assertEqual(first['key'], f'conn:{cid}')
-        funnel.settle(self.s, first['key'], 'surfaced', read=True, put_down=True)       # what Next writes (move_on)
-        funnel.invalidate()
-        again = funnel.next_item(self.s)
-        self.assertNotEqual((again or {}).get('key'), first['key'])
-        self.s.touch_connector(cid, 'a different failure: 401 unauthorised')
-        funnel.invalidate()
-        self.assertEqual((funnel.next_item(self.s) or {}).get('key'), first['key'], 'a new error is news again')
-
-    def test_handled_puts_a_broken_connection_down_until_the_error_changes(self):
-        """No task to close (the owner, 2026-09-23): Handled hides the row; a DIFFERENT failure is news."""
-        cid = self._broken('github', 'northwind/ledger: no such repository')
-        funnel.invalidate()
-        funnel.settle(self.s, f'conn:{cid}', 'done')
-        self.assertTrue(self.s.funnel_states()[f'conn:{cid}']['Note'])                  # it remembers which error
-        funnel.invalidate()
-        self.assertNotEqual((funnel.next_item(self.s) or {}).get('key'), f'conn:{cid}')
-        self.s.touch_connector(cid, 'a different failure: 401 unauthorised')
-        funnel.invalidate()
-        self.assertEqual((funnel.next_item(self.s) or {}).get('key'), f'conn:{cid}', 'a new error comes back')
-
-    def test_a_walked_past_error_is_not_kept_in_passed(self):
-        """The rail reads the pile WITH what was read, and filed the walked-past error under Passed - so
-        Next never made it go (the owner, 2026-09-23: "still see linkedin error. can't get rid of it")."""
-        from taskuary import processing_unread
-        cid = self._broken('linkedin', 'LinkedIn needs an access token')
-        funnel.invalidate()
-        key = f'conn:{cid}'
-        funnel.settle(self.s, key, 'surfaced', read=True, put_down=True)
-        for inc in (False, True):
-            keys = [i['key'] for i in processing_unread.build(self.s, include_read=inc)['items']]
-            self.assertNotIn(key, keys, f'include_read={inc}')
-        self.s.touch_connector(cid, 'LinkedIn: 401 unauthorised')
-        self.assertIn(key, [i['key'] for i in processing_unread.build(self.s, include_read=True)['items']], 'a new error is news')
-
-    def test_an_error_on_the_table_stays_on_the_rail(self):
-        """Shown is not walked past: the card on the table writes a shown mark, and the error left the rail with it
-        while every other row stays there, lit as on the table (the owner, 2026-10-15). Only Next puts it down."""
-        from taskuary import processing_unread
-        cid = self._broken('whatsapp', 'the bridge is not running at http://127.0.0.1:8977')
-        funnel.invalidate()
-        key = f'conn:{cid}'
-        funnel.settle(self.s, key, 'surfaced', read=True)                                 # what surface() writes
-        funnel.invalidate()
-        for inc in (False, True):
-            self.assertIn(key, [i['key'] for i in processing_unread.build(self.s, include_read=inc)['items']], f'include_read={inc}')
-        self.assertIn(key, [i['key'] for i in funnel.pile(self.s, force=True)['items']])
-
-    def test_a_bridge_this_machine_runs_can_be_restarted_from_its_card(self):
-        """The card said `cd taskuary/whatsapp && npm install && node bridge.mjs` - a shell for a button's worth of work
-        (the owner, 2026-10-15: "where is the button to restart it from the page itself?"). Offered only where there is a
-        local process to start: never on a hosted service, never on a bridge someone else runs at their own URL."""
-        from taskuary import concierge
-        wa = self._broken('whatsapp', 'the bridge is not running at http://127.0.0.1:8977')
-        self._broken('github', 'northwind/ledger: no such repository')
-        rows = {r['channel']: r for r in funnel.broken_connections(self.s)}
-        self.assertTrue(rows['whatsapp']['restart'])
-        self.assertFalse(rows['github'].get('restart'))
-        self.assertTrue(concierge.card_for(rows['whatsapp'])['restart'], 'the card the page draws carries it')
-        self.s.save_connector({'ConnectorId': wa, 'ConfigJson': '{"bridge_url": "http://bridge.northwind.example:8977"}'}, 't')
-        self.assertFalse(next(r for r in funnel.broken_connections(self.s) if r['channel'] == 'whatsapp').get('restart'))
-
-    def test_next_dismisses_an_error_until_it_changes(self):
-        """An error is not work that comes back in an hour (the owner, 2026-09-23: "next on error should
-        dismiss it no?"): walked past, it is not offered again - until the error itself changes."""
-        cid = self._broken('github', 'northwind/ledger: no such repository')
-        funnel.invalidate()
-        first = funnel.next_item(self.s)
-        funnel.settle(self.s, first['key'], 'surfaced', read=True, put_down=True)
-        self.s._exec("UPDATE funnel_state SET At=datetime('now', '-3 hours') WHERE Key=?", (first['key'],))
-        funnel.invalidate()
-        self.assertNotEqual((funnel.next_item(self.s) or {}).get('key'), first['key'], 'three hours on, still dismissed')
-        self.s.touch_connector(cid, 'a different failure: 401 unauthorised')
-        funnel.invalidate()
-        self.assertEqual((funnel.next_item(self.s) or {}).get('key'), first['key'], 'a new error is news again')
+    def test_a_failing_connection_is_on_the_bell_and_not_on_the_rail(self):
+        s = MemoryStore(); funnel.invalidate()
+        c = s.get_connector_by_type('github')
+        s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Roles': 'trigger'}, 't')
+        s.touch_connector(c['ConnectorId'], 'northwind/ledger: no such repository')
+        s._exec('UPDATE connector SET LastErrorAt=? WHERE ConnectorId=?',
+                ((datetime.now() - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S'), c['ConnectorId']))
+        from taskuary import problems
+        self.assertIn(f"connector:{c['ConnectorId']}", {p['key'] for p in problems.collect(s)})
+        self.assertFalse([i for i in funnel.pile(s, force=True)['items'] if i['key'].startswith('conn:')])
+        self.assertFalse(hasattr(funnel, 'broken_connections'))

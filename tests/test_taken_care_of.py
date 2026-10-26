@@ -84,10 +84,12 @@ class SignedOut(unittest.TestCase):
         self.s._exec('UPDATE connector SET LastErrorAt=? WHERE ConnectorId=?', (ago(hours=9), self.c['ConnectorId']))
         self.assertIn(f"connector:{self.c['ConnectorId']}", {p['key'] for p in problems.collect(self.s)})
 
-    def test_the_rail_says_it_the_same_way(self):
+    def test_the_bell_says_it_and_the_rail_does_not(self):
+        """The bell alone (the owner, 2026-10-26: "it should be only in errors logo in corner")."""
         _lapse(self.s, self.c)
-        row = next(r for r in funnel.broken_connections(self.s) if r['key'] == f"conn:{self.c['ConnectorId']}")
-        self.assertTrue(row['title'].startswith('Microsoft signed you out'))
+        p = {x['key']: x for x in problems.collect(self.s)}[f"connector:{self.c['ConnectorId']}"]
+        self.assertTrue(p['title'].startswith('Microsoft signed you out'))
+        self.assertFalse([i for i in funnel.pile(self.s, force=True)['items'] if i['key'] == f"conn:{self.c['ConnectorId']}"])
 
     def test_only_microsoft_refusing_the_token_is_a_lapse(self):
         """A 503 from their sign-in service is their bad minute; sending the owner to sign in again would be wrong."""

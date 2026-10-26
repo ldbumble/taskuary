@@ -723,31 +723,8 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
             card.update(unread=not receipt.get('read') and not deferred, deferred=deferred,
                         actionable=not receipt.get('read') and not deferred and not funnel._not_yet(card))
             cards.append(card)
-    # A broken connection is a CONDITION: no receipt, no defer, no census row - it is on the rail
-    # while it is broken and gone when it is fixed. The owner, 2026-09-18, on a repo that had been
-    # answering 404 for days: "we should have notification for the github issue in the notification
-    # place". Before this the `broken` lane was produced by exactly one thing, a failing report.
-    # ...but the walk's own marks still hold on it (funnel_state, keyed conn:<id>): it had none, so Next
-    # put the same broken connection back on the table on every press and the walk could not get past it
-    # (the owner, 2026-09-23: "when I hit next it takes me back to linkedin failed"). Shown = walked past,
-    # still on the rail; later/skip = held until then; a changed error (its sig) is new again.
-    states = store.funnel_states()
-    stamp = now.strftime('%Y-%m-%d %H:%M:%S')
-    for card in funnel.broken_connections(store):
-        st = states.get(card['key']) or {}
-        held = st.get('Status') in ('later', 'skip', 'done') and (not st.get('Until') or funnel._ts(st['Until']) > stamp)
-        if held and st.get('Status') == 'done' and st.get('Note') and st['Note'] != card.get('sig'): held = False
-        if held and not include_read: continue
-        card.update(unread=not held, deferred=held, actionable=not held, order_band=funnel._band(card))
-        # NEXT DISMISSES AN ERROR (the owner, 2026-09-23: "next on error should dismiss it no?" / "i hit
-        # next on LinkedIn and it went to passed not gone"): walked past, it is GONE from the rail and the
-        # walk - not waiting in Passed - until the error CHANGES (its sig), which is a new failure
-        # ...and that holds for the rail's read-inclusive pile too, or Passed keeps it on screen (2026-09-23:
-        # "still see linkedin error. can't get rid of it")
-        # ...but SHOWN is not walked past: the card on the table writes a bare shown mark, and the error left the rail while
-        # it was being read (the owner, 2026-10-15) - only Next's put-down (its Until) dismisses it, as with every other row
-        if st.get('Status') == 'surfaced' and st.get('Until') and not (st.get('Note') and st['Note'] != card.get('sig')): continue
-        cards.append(card)
+    # A FAILING CONNECTION IS THE BELL'S, NOT A ROW (the owner, 2026-10-26: "it should be only in errors logo in corner"):
+    # the "stopped answering" row said again what the bell says, with no grace for a retry still at work (problems.py).
     cards = funnel._order(cards)
     return {'rev': snapshot['snapshot_revision'], 'items': cards, 'hidden': 0, 'muted': 0,
             'rules': [], 'canonical': True, 'coverage': coverage,

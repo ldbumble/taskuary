@@ -152,6 +152,11 @@ class DeskRoutes(unittest.TestCase):
         self.assertEqual(len(closeouts()), n, 'no second close-out')
         self.assertEqual(s.get_task(tid)['Status'], 'done')
 
+    def test_every_shelf_of_the_reports_page_has_its_address_in_the_page_list(self):
+        """The 2026-10-26 sweep: "go to reports" opened the Workflows shelf - #report=workflows was the only shelf the model was told."""
+        block = concierge.pages_block(store())
+        for shelf in ('reports', 'workflows', 'dashboards', 'playbooks'): self.assertIn(f'#report={shelf}', block)
+
     def test_any_row_button_named_by_its_own_label_lights(self):
         """The 2026-10-26 sweep: button.light {button: 'Remind me'} missed with "has no remind me button - its row has ..., Remind me",
         "Share" lit Email a summary's absence, and "Run again on the strong model" lit nothing or another button."""

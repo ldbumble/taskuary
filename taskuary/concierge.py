@@ -1551,8 +1551,11 @@ def pages_block(store) -> str:
                'is set up with the Setup button at the top; say so\n' if _demo.enabled() else
                '- setup itself - their AI, their main source (email, chat or a task system), the questions about their work - has '
                'no link: it is the Setup button at the top of the page; say so\n') +
+            # ...and each shelf of the Reports page by its own address: "go to reports" opened the Workflows shelf, the one address the
+            # list had (2026-10-26)
             f"- a report or workflow: #report=<id>{' - ' + reps if reps else ''}; a new report #report=new; a new workflow "
-            '#report=new-agent; the workflows #report=workflows\n'
+            '#report=new-agent; the Reports page and its list of reports #report=reports; the workflows #report=workflows; the dashboards '
+            '#report=dashboards; the playbooks #report=playbooks\n'
             '- settings, page by page:\n' + _screens() + '\n' + THIS_APP + '\n\n')
 
 

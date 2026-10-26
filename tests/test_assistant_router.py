@@ -135,6 +135,23 @@ class DeskRoutes(unittest.TestCase):
             self.assertEqual((out['light']['verb'], out['light']['tid']), ('close', tid))
             self.assertEqual(s.get_task(tid)['Status'], 'open', model)
 
+    def test_a_closed_task_brought_up_by_its_ref_offers_reopen_and_no_put_down(self):
+        """The 2026-10-26 sweep: a closed task opened by its ref offered Mark done, Close with a note, Remind me and Remove beside
+        Reopen task, and a typed close ran task.complete on it again - a second close-out comment."""
+        s = store(); tid, item = on_table(s)
+        say(s, 'mark this done', item['key'], 'CALL: {"kind": "close", "params": {}}')
+        it = funnel.item_for_key(s, f'task:{tid}')
+        self.assertTrue(it.get('closed'))
+        verbs = {b['verb'] for b in concierge.row_buttons(s, it)}
+        self.assertIn('reopen', verbs)
+        self.assertFalse(verbs & {'close', 'close_note', 'remove', 'defer', 'strong_again'}, verbs)
+        closeouts = lambda: [c for c in s.list_comments(tid) if str(c.get('Body') or '').startswith('Closed out')]
+        n = len(closeouts())
+        out, _ = say(s, 'close it, the bank sorted it', f'task:{tid}', 'CALL: {"kind": "task.complete", "params": {"note": "the bank sorted it"}}')
+        self.assertNotIn('pressed', out)
+        self.assertEqual(len(closeouts()), n, 'no second close-out')
+        self.assertEqual(s.get_task(tid)['Status'], 'done')
+
     def test_a_digit_over_a_task_view_presses_nothing_it_does_not_show(self):
         """The 2026-10-26 sweep: "2" over TQ-1141 was rewritten to its chips' second, Mark done - but a task is drawn as its own view,
         whose row has no numbers and not those chips - and the task closed. The digit stays the owner's word for the model to read."""

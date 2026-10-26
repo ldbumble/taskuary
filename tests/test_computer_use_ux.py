@@ -10,6 +10,15 @@ from unittest import mock
 from taskuary import (agents, brainroute, browsergate as bg, browserview, failures, general, hooks, llm, signin, terminal, totp,
                       workerstate as ws)
 from taskuary.store import MemoryStore
+from test_signin import FakeKeyring
+
+
+def setUpModule():
+    # a refused saved password is a real seal and update - off Windows there is no keychain on CI, the stand-in test_signin uses
+    import sys
+    if sys.platform != 'win32':
+        from taskuary import vault
+        p = mock.patch.object(vault, '_keyring', return_value=FakeKeyring()); p.start(); unittest.addModuleCleanup(p.stop)
 from taskuary.testing import Factory
 from test_general import connect_cli
 

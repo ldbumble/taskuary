@@ -204,6 +204,13 @@ class PortInUseTests(unittest.TestCase):
         wabridge._SUP.update(down=0.0, up=0.0, tries=0, next=0.0, held=False, gave_up='')
         self.killed, self.port = [], [4242]          # the port's holder, as netstat would say, until it is killed
         (wabridge.run_dir() / 'node_modules' / '@whiskeysockets').mkdir(parents=True, exist_ok=True)   # installed: no npm here
+        import tempfile, pathlib
+        d = pathlib.Path(tempfile.mkdtemp()); self.addCleanup(__import__('shutil').rmtree, d, True)
+        self.saved, self.lock = d / 'wa-bridge.port', wabridge.run_dir() / 'wa-auth.lock'
+        self.addCleanup(self.lock.unlink, missing_ok=True)
+        env = mock.patch.dict(os.environ); env.start(); self.addCleanup(env.stop); os.environ.pop('WA_BRIDGE_PORT', None)
+        for x in (mock.patch.object(wabridge, '_port_file', return_value=self.saved), mock.patch.object(wabridge, '_free_port', return_value=8978)):
+            x.start(); self.addCleanup(x.stop)
         def kill(pid):
             self.killed.append(pid)
             if pid in self.port: self.port.remove(pid)
@@ -228,16 +235,56 @@ class PortInUseTests(unittest.TestCase):
             self.assertEqual(wabridge.restart(wait=True)['phase'], 'running')
         self.assertEqual(self.killed, [4242]); pop.assert_called_once(); self.assertEqual(wabridge.state()['pid'], 5150)
 
-    def test_a_stranger_on_the_port_is_named_and_left_alone(self):
-        with mock.patch.object(wabridge, '_proc', return_value=('svchost.exe', 'C:\\Windows\\system32\\svchost.exe -k netsvcs')), self.popen([None]) as pop:
+    def test_a_stranger_on_the_port_is_left_alone_and_the_bridge_moves_to_a_free_port(self):
+        """The owner's ruling (2026-10-26): not stuck - moved, said quietly on the card, and remembered."""
+        from taskuary import messengers
+        with mock.patch.object(wabridge, '_proc', return_value=('svchost.exe', 'C:\\Windows\\system32\\svchost.exe -k netsvcs')), \
+             self.popen([None] * 5) as pop, mock.patch.object(wabridge, '_listening', return_value=True):
             wabridge.stop()
             out = wabridge.restart(wait=True)
-        self.assertEqual(self.killed, []); pop.assert_not_called(); self.assertEqual(out['phase'], 'failed')
+        self.assertEqual(self.killed, []); self.assertEqual(out['phase'], 'running')
+        self.assertTrue(out['detail'].startswith('port 8977 was taken by svchost.exe (pid 4242); the bridge runs on 8978 - listening on'))
+        self.assertEqual(pop.call_args.kwargs['env']['WA_BRIDGE_PORT'], '8978')
+        self.assertEqual(self.saved.read_text(), '8978'); self.assertEqual(wabridge.port(), 8978)       # every later start, and the poll
+        self.assertEqual(messengers.wa_url(), 'http://127.0.0.1:8978')
+        self.assertEqual(messengers.wa_url('http://127.0.0.1:8977'), 'http://127.0.0.1:8978', 'a card saved with the old default follows it')
+        self.assertEqual(messengers.wa_url('http://wa-box.example:8977'), 'http://wa-box.example:8977')
+        self.assertTrue(wabridge.managed({'ConfigJson': '{"bridge_url": "http://localhost:8977"}'}))
+
+    def test_a_port_the_owner_pinned_is_not_moved_and_no_free_port_says_so(self):
+        os.environ['WA_BRIDGE_PORT'] = '8977'
+        with mock.patch.object(wabridge, '_proc', return_value=('svchost.exe', 'svchost.exe -k netsvcs')), self.popen([None]) as pop:
+            out = wabridge.start(wait=True)
+        pop.assert_not_called(); self.assertEqual(out['phase'], 'failed'); self.assertFalse(self.saved.exists())
         self.assertIn('port 8977 is in use by svchost.exe (pid 4242), which is not a WhatsApp bridge', out['detail'])
-        self.assertIn('WA_BRIDGE_PORT', out['detail'])
-        with mock.patch.object(wabridge, '_proc', return_value=None):                       # the machine would not say: still not ours
-            self.assertIn('could not identify', wabridge.start(wait=True)['detail'])
+        self.assertIn('change WA_BRIDGE_PORT', out['detail'])
+        del os.environ['WA_BRIDGE_PORT']
+        with mock.patch.object(wabridge, '_proc', return_value=None), mock.patch.object(wabridge, '_free_port', return_value=0), self.popen([None]):
+            self.assertIn('could not identify - and no free port', wabridge.start(wait=True)['detail'])
         self.assertEqual(self.killed, [])
+
+    def test_a_pairing_held_by_a_bridge_of_ours_is_taken_back_and_by_one_nobody_can_name_is_left_alone(self):
+        """Moved off a port held by something unnamed, the new copy may meet the old bridge's pairing (bridge.mjs exits 75 on
+        wa-auth.lock). Provably ours: ended, and the start goes on. Unprovable: two bridges never share a pairing - it says so."""
+        self.port.clear(); self.lock.write_text('6060')
+        who = {6060: NODE}
+        def proc(pid): return who.get(pid, ('', ''))
+        def kill(pid): self.killed.append(pid); who.pop(pid, None)
+        with mock.patch.object(wabridge, '_proc', side_effect=proc), mock.patch.object(wabridge, '_kill', side_effect=kill), \
+             mock.patch.object(wabridge.subprocess, 'Popen', side_effect=[mock.Mock(pid=5150, returncode=75, poll=mock.Mock(return_value=75)),
+                 mock.Mock(pid=5151, returncode=None, poll=mock.Mock(return_value=None))]) as pop,              mock.patch.object(wabridge, '_listening', side_effect=[False, True, True]):
+            out = wabridge.start(wait=True)
+        self.assertEqual(self.killed, [6060]); self.assertEqual(pop.call_count, 2); self.assertEqual(out['phase'], 'running')
+        self.lock.write_text('6061')
+        with mock.patch.object(wabridge, '_proc', return_value=None), self.popen([75] * 9, code=75) as pop, \
+             mock.patch.object(wabridge, '_listening', return_value=False):
+            out = wabridge.start(wait=True)
+        self.assertEqual(pop.call_count, 1); self.assertEqual(out['phase'], 'failed'); self.assertEqual(self.killed, [6060])
+        self.assertIn('pairing is in use by pid 6061, which Taskuary could not identify', out['detail'])
+        self.lock.write_text('6062')                                        # a pid some other program has now: a stale claim
+        with mock.patch.object(wabridge, '_proc', return_value=('chrome.exe', 'chrome.exe --type=renderer')):
+            self.assertEqual(wabridge._unlock(wabridge.run_dir()), '')
+        self.assertFalse(self.lock.exists())
 
     def test_a_bridge_that_dies_on_a_held_port_after_a_slow_start_is_failed_not_running(self):
         self.port.clear()
@@ -286,6 +333,8 @@ class PortInUseTests(unittest.TestCase):
 
     def test_the_poll_looks_where_the_bridge_listens(self):
         from taskuary import messengers
+        self.saved.write_text('8990')
+        self.assertEqual(messengers.wa_url(), 'http://127.0.0.1:8990')
         with mock.patch.dict(os.environ, {'WA_BRIDGE_PORT': '9123'}): self.assertEqual(messengers.wa_url(), 'http://127.0.0.1:9123')
 
 

@@ -211,8 +211,17 @@ def managed(c: dict) -> bool:
     nothing here starts it, and no button offers to."""
     try: cfg = json.loads((c or {}).get('ConfigJson') or '{}')
     except ValueError: cfg = {}
-    raw = str(cfg.get('bridge_url') or '').strip().rstrip('/')
-    return raw in {'', f'http://127.0.0.1:{port()}', f'http://localhost:{port()}'}
+    return _local(cfg.get('bridge_url'))
+
+
+def _local(raw) -> bool:
+    "The managed bridge's address - on its port now, or on 8977 where it was before Taskuary moved it off a taken port."
+    return str(raw or '').strip().rstrip('/') in {'', *(f'http://{h}:{p}' for h in ('127.0.0.1', 'localhost') for p in {8977, port()})}
+
+
+def bridge_url(raw='') -> str:
+    "Where the poll finds the bridge: a card's own URL when it names another bridge; the managed one's current port otherwise."
+    return f'http://127.0.0.1:{port()}' if _local(raw) else str(raw).strip().rstrip('/')
 
 
 def start_configured(store) -> dict:
@@ -264,11 +273,18 @@ def start(force_install: bool = False, wait: bool = False, filter_policy: dict =
                 if r.returncode != 0:
                     _set('failed', f'npm install failed: {(r.stderr or r.stdout)[-300:]}'); return
             # WHO HOLDS THE PORT, before a launch (#269): a second copy only dies on EADDRINUSE - and it went on dying, Restart after
-            # Restart, while an old bridge nobody recorded kept the port. Ours is replaced; a stranger is named and left alone.
-            held = pid_on_port()
+            # Restart, while an old bridge nobody recorded kept the port. Ours is replaced; a stranger is left alone and the bridge moves.
+            held,note = pid_on_port(),''
+            if held and not _ours(info := _proc(held)):
+                # MOVED, NOT STUCK (owner, 2026-10-26): a program that is not provably a bridge of ours keeps its port, and the
+                # bridge runs on a free one, saved so the poll and every later start look there. If that program is an old bridge
+                # whose command line this machine would not show, the pairing lock (bridge.mjs wa-auth.lock) keeps the two apart.
+                new = 0 if os.getenv('WA_BRIDGE_PORT') else _free_port(port())      # a port the owner pinned is theirs to change
+                if not new: _set('failed', _in_use(held, info)); return
+                note = f'port {port()} was taken by {_who(held, info)}; the bridge runs on {new} - '
+                logger.info(f'wa bridge: {note[:-3]}'); _port_file().write_text(str(new), encoding='utf-8')
+                held = 0
             if held:
-                info = _proc(held)
-                if not _ours(info): _set('failed', _in_use(held, info)); return
                 st = _status()
                 if st and st.get('code') == code():
                     _set('running', f'already listening on http://127.0.0.1:{port()}', pid=held); return
@@ -276,25 +292,31 @@ def start(force_install: bool = False, wait: bool = False, filter_policy: dict =
                 logger.info(f'wa bridge: an old bridge (pid {held}) holds port {port()} without answering as this code - ending it first')
                 _kill(held)
                 if not _freed({held}): _set('failed', f'port {port()} is still held by an old WhatsApp bridge (pid {held}) that would not stop'); return
-            _set('starting', 'node bridge.mjs')
-            out = open(lg, 'ab')
             kw = {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP | getattr(subprocess, 'DETACHED_PROCESS', 0)} if os.name == 'nt' else {'start_new_session': True}
             env = {**os.environ, 'WA_BRIDGE_TOKEN': token(), 'WA_BRIDGE_PORT': str(port())}   # the bridge listens where we look
             if filter_policy is not None: env['WA_BRIDGE_FILTER'] = json.dumps(filter_policy, separators=(',', ':'))
-            # bare: detached, outlives us by design - so it must hold nothing of the exe's unpack folder (spawn's note)
-            p = spawn.bare([node(), 'bridge.mjs'], cwd=str(run), stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                 env=env, **kw)
-            # until it answers or dies, not a fixed 2.5s: loading Baileys outlasts that on a cold Windows start, so a copy that died on
-            # EADDRINUSE a moment later was already called running - the card's Start said yes and the bridge stayed down (#269)
-            end = time.monotonic() + LAUNCH_SECS
-            while p.poll() is None and not _listening() and time.monotonic() < end: time.sleep(.5)
+            for again in (False, True):
+                _set('starting', 'node bridge.mjs')
+                out = open(lg, 'ab')
+                # bare: detached, outlives us by design - so it must hold nothing of the exe's unpack folder (spawn's note)
+                p = spawn.bare([node(), 'bridge.mjs'], cwd=str(run), stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                     env=env, **kw)
+                # until it answers or dies, not a fixed 2.5s: loading Baileys outlasts that on a cold Windows start, so a copy that died
+                # on EADDRINUSE a moment later was already called running - the card's Start said yes and the bridge stayed down (#269)
+                end = time.monotonic() + LAUNCH_SECS
+                while p.poll() is None and not _listening() and time.monotonic() < end: time.sleep(.5)
+                if p.poll() != 75: break
+                # the pairing is claimed (bridge.mjs exits 75): once more if its claimant was provably ours and is ended, or is gone
+                why = _unlock(run)
+                if why: _set('failed', why); return
+                if again: _set('failed', 'the WhatsApp pairing is still claimed by another bridge - Restart bridge'); return
             if p.poll() is not None:
                 tail = lg.read_bytes()[-400:].decode('utf-8', 'replace') if lg.exists() else ''
                 if p.returncode == 98:          # bridge.mjs on a held port - not the log, which keeps every earlier run's lines
                     held = pid_on_port(); _set('failed', _in_use(held, _proc(held) if held else None)); return
                 _set('failed', f'the bridge exited at once (code {p.returncode}): {tail}'); return
-            _set('running', f'listening on http://127.0.0.1:{port()} - log: {lg}' if _listening()
-                 else f'started (pid {p.pid}) but not answering on http://127.0.0.1:{port()} yet - log: {lg}', pid=p.pid)
+            _set('running', note + (f'listening on http://127.0.0.1:{port()} - log: {lg}' if _listening()
+                 else f'started (pid {p.pid}) but not answering on http://127.0.0.1:{port()} yet - log: {lg}'), pid=p.pid)
         except Exception as e:
             logger.warning(f'wa bridge start failed: {e}')
             _set('failed', str(e))
@@ -308,11 +330,29 @@ def start(force_install: bool = False, wait: bool = False, filter_policy: dict =
 _BAD_PORTS_SEEN: set = set()
 
 
+def _port_file() -> Path:
+    from . import config
+    return config.home() / 'wa-bridge.port'
+
+
+def _free_port(taken: int) -> int:
+    "A port nobody listens on, near the taken one so it is recognisable in a log; any free one past those."
+    import socket
+    for p in [*range(taken + 1, taken + 21), 0]:
+        with socket.socket() as s:
+            try: s.bind(('127.0.0.1', p)); return s.getsockname()[1]
+            except OSError: continue
+    return 0
+
+
 def port() -> int:
-    """WA_BRIDGE_PORT, or 8977 when it is unset or not a port. The status poll calls this every
-    few seconds, so a bad value is warned about once, not on every call."""
+    """WA_BRIDGE_PORT, else the port Taskuary moved the bridge to (wa-bridge.port, when another program held its own), else
+    8977. The status poll calls this every few seconds, so a bad value is warned about once, not on every call."""
     raw = os.getenv('WA_BRIDGE_PORT')
-    if not raw: return 8977
+    if not raw:
+        try: raw = _port_file().read_text(encoding='utf-8').strip()
+        except OSError: return 8977
+        if not raw: return 8977
     from . import config
     try: return config.port_number(raw)
     except ValueError as e:
@@ -378,6 +418,29 @@ def _proc(pid: int):
 def _ours(info) -> bool: return bool(info) and 'bridge.mjs' in info[1] and 'node' in (info[0] + info[1]).lower()
 
 
+def _who(pid: int, info) -> str: return f'{info[0]} (pid {pid})' if info and info[0] else f'pid {pid}'
+
+
+def _unlock(run: Path) -> str:
+    """The bridge refused a pairing another bridge claims (wa-auth.lock). '' when the next launch may have it - the claimant was
+    provably ours and is ended, or is gone, or the pid is now some other program; otherwise the card's line."""
+    lock = run / 'wa-auth.lock'
+    try: pid = int(lock.read_text(encoding='utf-8').strip() or 0)
+    except (OSError, ValueError): return ''
+    info = _proc(pid) if pid else ('', '')
+    if _ours(info):
+        logger.info(f'wa bridge: an old bridge (pid {pid}) holds the pairing - ending it'); _kill(pid)
+        for _ in range(40):
+            if _proc(pid) == ('', ''): break
+            time.sleep(.25)
+        return ''
+    if info is None:
+        return (f'the WhatsApp pairing is in use by pid {pid}, which Taskuary could not identify - it will not connect a second bridge '
+                'with the same pairing. End that process, then Restart bridge')
+    lock.unlink(missing_ok=True)                 # gone, or the pid now belongs to some other program: the claim is stale
+    return ''
+
+
 def _in_use(pid: int, info, token: bool = True) -> str:
     "The card's line for a held port - who holds it, and what the owner can do."
     p = port()
@@ -385,9 +448,9 @@ def _in_use(pid: int, info, token: bool = True) -> str:
     if _ours(info):
         return (f'port {p} is in use by another WhatsApp bridge (pid {pid})' + ('' if token else " that does not know this Taskuary's token - "
                 'another Taskuary home runs it') + ' - Restart bridge replaces it')
-    who = f'{info[0]} (pid {pid})' if info and info[0] else f'pid {pid}'
-    return (f'port {p} is in use by {who}, ' + ('which is not a WhatsApp bridge' if info else 'which Taskuary could not identify')
-            + ' - Taskuary leaves it alone. Close it, or set WA_BRIDGE_PORT to a free port and restart Taskuary')
+    return (f'port {p} is in use by {_who(pid, info)}, ' + ('which is not a WhatsApp bridge' if info else 'which Taskuary could not identify')
+            + (' - Taskuary leaves it alone. Close it, or change WA_BRIDGE_PORT and restart Taskuary' if os.getenv('WA_BRIDGE_PORT')
+               else ' - and no free port was found to move the bridge to'))
 
 
 def _kill(pid: int):

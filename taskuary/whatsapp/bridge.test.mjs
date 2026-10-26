@@ -211,3 +211,62 @@ test("/status says how many chats are let in and turned away, when the last mess
     fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
   }
 });
+
+// A bridge that must never reach WhatsApp: the fake marks connected.txt the moment anything calls makeWASocket.
+const MARKS = `
+import { EventEmitter } from "node:events";
+import fs from "node:fs";
+export const DisconnectReason = { loggedOut: 401 };
+export const useMultiFileAuthState = async () => ({ state: { creds: {}, keys: { set: async () => {} } }, saveCreds: async () => {} });
+export const downloadMediaMessage = async () => Buffer.alloc(0);
+export const decryptPollVote = () => { throw new Error("no polls here"); };
+export default function makeWASocket() {
+  fs.writeFileSync("connected.txt", "yes");
+  const ev = new EventEmitter();
+  setTimeout(() => ev.emit("connection.update", { connection: "open" }), 20);
+  return { ev, user: { id: "15550100100:1@s.whatsapp.net", name: "Alex Doyle" }, groupFetchAllParticipating: async () => ({}), resyncAppState: async () => {} };
+}`;
+
+// Run bridge.mjs on `port` in `dir` with MARKS for Baileys; resolves {code, out} when it exits, or after `ms` (then killed, code null).
+const runBridge = (dir, port, ms = 8000) => new Promise((ok) => {
+  const fake = path.join(dir, "fake-baileys.mjs");
+  fs.writeFileSync(fake, MARKS);
+  const hooks = `export async function resolve(s, c, next) {
+    return s === "@whiskeysockets/baileys" ? { url: ${JSON.stringify(pathToFileURL(fake).href)}, shortCircuit: true } : next(s, c); }`;
+  const reg = `import { register } from "node:module"; register(${JSON.stringify("data:text/javascript," + encodeURIComponent(hooks))});`;
+  const child = spawn(process.execPath, ["--import", "data:text/javascript," + encodeURIComponent(reg), BRIDGE],
+    { cwd: dir, env: { ...process.env, WA_BRIDGE_PORT: String(port), WA_BRIDGE_TOKEN: "t" }, stdio: ["ignore", "pipe", "pipe"] });
+  let out = "";
+  child.stdout.on("data", (c) => (out += c)); child.stderr.on("data", (c) => (out += c));
+  const t = setTimeout(() => { child.kill(); }, ms);
+  child.on("exit", (code) => { clearTimeout(t); ok({ code, out }); });
+});
+const until = async (f, ms = 8000) => { for (let i = 0; i < ms / 100 && !f(); i++) await new Promise((r) => setTimeout(r, 100)); return f(); };
+
+test("a held port is said in one line and exits 98 before WhatsApp is touched", { timeout: 30_000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wa-bridge-test-"));
+  const port = await freePort(), holder = net.createServer().listen(port, "127.0.0.1");
+  await new Promise((r) => holder.once("listening", r));
+  try {
+    const { code, out } = await runBridge(dir, port);
+    assert.equal(code, 98, out); assert.match(out, new RegExp(`EADDRINUSE: port ${port} is in use`));
+    assert.ok(!fs.existsSync(path.join(dir, "connected.txt")), "a losing copy never connects with the shared pairing");
+  } finally { holder.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 }); }
+});
+
+test("a pairing a live bridge holds is refused with 75; a lock whose bridge is gone is taken over", { timeout: 30_000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wa-bridge-test-"));
+  try {
+    fs.writeFileSync(path.join(dir, "wa-auth.lock"), String(process.pid));          // this test runner: alive, holding the pairing
+    const held = await runBridge(dir, await freePort());
+    assert.equal(held.code, 75, held.out); assert.match(held.out, new RegExp(`WA_AUTH_LOCKED: .* bridge pid ${process.pid}`));
+    assert.ok(!fs.existsSync(path.join(dir, "connected.txt")), "two bridges never connect with one pairing");
+    assert.equal(fs.readFileSync(path.join(dir, "wa-auth.lock"), "utf8"), String(process.pid), "the holder's lock is left alone");
+    const gone = spawn(process.execPath, ["-e", ""]); await new Promise((r) => gone.once("exit", r));
+    fs.writeFileSync(path.join(dir, "wa-auth.lock"), String(gone.pid));             // a bridge killed with no chance to clean up
+    const run = runBridge(dir, await freePort());
+    assert.ok(await until(() => fs.existsSync(path.join(dir, "connected.txt"))), "a stale lock does not keep the bridge off WhatsApp");
+    assert.notEqual(fs.readFileSync(path.join(dir, "wa-auth.lock"), "utf8"), String(gone.pid));
+    await run;
+  } finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 }); }
+});

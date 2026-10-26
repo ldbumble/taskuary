@@ -94,7 +94,7 @@ test("Close out says what the draft answers in one line, and the line opens the 
   assert.doesNotMatch(closeOut, /<ConversationRows /, "no condensed rows in Close out");
   assert.match(closeOut, /\{closeGroup && answering && <Box component="button" type="button" data-tq-answering="" onClick=\{seeWholeConversation\}/);
   assert.match(closeOut, /Answering <Box component="span"[^>]*>\{answering\.who\}<\/Box>/);
-  assert.match(page, /const seeWholeConversation = \(\) => \{ setShowAll\(true\); setFromOpen\(true\); if \(wide\) setFromSide\(true\); setSeekCameFrom\(true\); \};/);
+  assert.match(page, /const seeWholeConversation = \(\) => \{ setShowAll\(true\); setFromOpen\(true\); if \(fromDrawer\) setFromSide\(true\); setSeekCameFrom\(true\); \};/);
   assert.match(page, /<Box ref=\{cameFromRef\}/);
   assert.equal(page.match(/<ConversationRows /g).length, 1, "one component, in From");
 });

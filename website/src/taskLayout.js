@@ -22,6 +22,14 @@ export const layoutOf = ({ sessionView = false }) => (sessionView ? "full" : "co
 export const focusOf = ({ live = false, result = false, failed = false, pane = "", waiting = false, list = false } = {}) =>
   live ? null : waiting ? "none" : result || failed ? "agent" : pane === "agent" ? (list ? "list" : "source") : "reply";
 
+// THE MAIN VIEW (the owner, 2026-10-26: "if task view is where the task opens to it should only open on that, and then right side arrow
+// should pull out the agent/close out screens. If up to agent or close out open those with coming from in left side draw"): the focus
+// says where the task is up to. A live agent, its Result or its failure, or Close out -> "work", Came from the left drawer; a to-do, a
+// goal's steps, an ask nothing has worked yet, a wait on a person -> "task", Agent and Close out the right drawer. `stacked`: a phone's
+// narrow body keeps its one stacked page (null).
+export const mainOf = ({ sessionView = false, stacked = false, focus = null } = {}) =>
+  sessionView ? "work" : stacked ? null : focus === "agent" || focus === "reply" || focus === null ? "work" : "task";
+
 // WHICH HALF OF THE WORK COLUMN IS OPEN. The page's focus (taskLifecycle.focusStage) still decides between the agent and the
 // reply; where it named the task itself - now the always-open From column - the work column opens on what the task is for: the
 // reply for a reply with somebody to answer, else the agent (its plan, its start, its record).

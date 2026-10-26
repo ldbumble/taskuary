@@ -2,14 +2,15 @@
 // fields are filled in by hand. Should the card offer a 'Sign in with Google' step for the calendar?"). A Gmail card is IMAP and carries
 // no calendar, so while no Google calendar is on it the card offers this one step: the browser goes to Google asking for
 // calendar.readonly and comes back to this server (googlecal.py), and the box finishes by itself, as Sign in with ChatGPT does.
-// Taskuary ships no Google client: with none on the card the box says what is needed - the server says the same if pressed anyway.
+// It rides Taskuary's own Google client (the owner, 2026-10-26: "don't want to create my own google client, want to use their own"):
+// nobody creates or pastes one. A build that has none yet says so on the button itself - no instructions to go and make a client.
 import React, { useEffect, useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import api from "./api";
 import { BORDER, DIM, INK, PANEL2 } from "./theme.jsx";
 
 export const G_CAL = "Sign in with Google for the calendar";
-export const G_CAL_NEEDS = "Needs a Google OAuth client of your own first: turn on the Google Calendar API in Google Cloud console, create an OAuth client of type Desktop app, and paste its client id and secret into this card's Google OAuth client fields.";
+export const G_CAL_NONE = "Google sign-in isn't available in this build yet";
 const saved = (conn, k) => (conn.ConfigSaved || []).includes(k);
 
 export function GoogleCalendar({ conn, cfg, reload }) {
@@ -18,8 +19,14 @@ export function GoogleCalendar({ conn, cfg, reload }) {
   const [detail, setDetail] = useState("");
   const [busy, setBusy] = useState(false);
   const signedIn = saved(conn, "google_refresh_token") || !!cfg.google_refresh_token;
-  const can = !!(cfg.google_client_id && (saved(conn, "google_client_secret") || cfg.google_client_secret));
+  const [can, setCan] = useState(true);        // the server's word: does this build carry a Google client (googlecal.available)
   const base = `/api/connectors/${conn.ConnectorId}/google/calendar`;
+  useEffect(() => {
+    if (signedIn) return undefined;
+    let alive = true;
+    api.get(base).then(({ data }) => { if (alive) setCan(!!data.available); }).catch(() => {});
+    return () => { alive = false; };
+  }, [base, signedIn]);
   useEffect(() => {
     if (!flow) return undefined;
     let alive = true;
@@ -62,10 +69,9 @@ export function GoogleCalendar({ conn, cfg, reload }) {
             sx={{ fontSize: 11.5, color: DIM }}>Cancel</Button>
         </Typography>
       ) : (
-        <Box><Button variant="contained" disableElevation disabled={busy} onClick={start}>
-          {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : G_CAL}</Button></Box>
+        <Box><Button variant="contained" disableElevation disabled={busy || !can} onClick={start}>
+          {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : can ? G_CAL : G_CAL_NONE}</Button></Box>
       )}
-      {!can && !flow && !detail && <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>{G_CAL_NEEDS}</Typography>}
       {detail && <Typography variant="body2" role={state === "ok" ? undefined : "alert"} sx={{ fontWeight: 600, color: state === "ok" ? "#47654a" : "#6b2733" }}>
         {state === "ok" ? "✓" : "✗"} {detail}</Typography>}
     </Box>

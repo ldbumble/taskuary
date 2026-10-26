@@ -11,9 +11,9 @@ Two sources, both read-only, both riding credentials already on a connector card
   same app registration the mail comes through - it needs the APPLICATION permission
   Calendars.Read granted once (Test on the card says whether it is).
 - Google: the Gmail card is IMAP (an app password), which carries no calendar access, so a
-  Google calendar needs an OAuth client (google_client_id, google_client_secret) and a refresh
-  token - minted by the card's "Sign in with Google for the calendar" step (googlecal.py) or pasted
-  as google_refresh_token. When present it is read; when absent it is simply not one of the sources.
+  Google calendar needs a refresh token - minted by the card's "Sign in with Google for the
+  calendar" step on Taskuary's own Google client (googlecal.py), or pasted beside a client of the
+  card's own. When present it is read; when absent it is simply not one of the sources.
 The same read is a tool (`calendar` in reports.REGISTRY) so an agent can check before it
 commits anyone to a time.
 """
@@ -100,8 +100,8 @@ def about_text(preview: str, limit: int = 240) -> str:
 
 def google_events(cfg: dict, start: datetime, end: datetime, tz) -> list:
     """Google Calendar with an OAuth refresh token from the card - primary calendar, expanded."""
-    if not (cfg.get('google_client_id') and cfg.get('google_client_secret') and cfg.get('google_refresh_token')): return []
-    from .googlecal import access_token       # cached until it expires: today, upcoming and every draft read the same calendar
+    from .googlecal import access_token, client     # cached until it expires: today, upcoming and every draft read the same calendar
+    if not (cfg.get('google_refresh_token') and all(client(cfg))): return []
     r = requests.get('https://www.googleapis.com/calendar/v3/calendars/primary/events', timeout=20,
                      headers={'Authorization': f"Bearer {access_token(cfg)}"},
                      params={'timeMin': start.astimezone(tz).isoformat(), 'timeMax': end.astimezone(tz).isoformat(),

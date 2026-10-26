@@ -993,7 +993,10 @@ const phoneLook = (page) => page.evaluate(() => ({ wide: document.scrollingEleme
   stacked: [...document.querySelectorAll("body *")].filter((e) => {
     if (![...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim().length > 6)) return false;
     const r = e.getBoundingClientRect(), cs = getComputedStyle(e), fs = parseFloat(cs.fontSize) || 13, lh = parseFloat(cs.lineHeight) || fs * 1.4;
-    return r.width > 0 && r.width < 4 * fs && r.height >= 2.5 * lh; }).map((e) => `"${e.textContent.trim().slice(0, 24)}" ${Math.round(e.getBoundingClientRect().width)}px wide`) }));
+    // ...measured along its own lines: a label set sideways (writing-mode vertical, a drawer's tab - TaskPage DRAWER_TAB) is one line
+    // running down the screen, narrow and tall by design; it stands a letter a line only where ITS lines are that short
+    const side = /^vertical/.test(cs.writingMode), along = side ? r.height : r.width, across = side ? r.width : r.height;
+    return along > 0 && along < 4 * fs && across >= 2.5 * lh; }).map((e) => `"${e.textContent.trim().slice(0, 24)}" ${Math.round(e.getBoundingClientRect().width)}px wide`) }));
 const phoneNote = async (page, where) => { const l = await phoneLook(page);
   if (l.wide > 0) note("PHONE", page.step, `${where}: the page runs ${l.wide}px off a 390px screen`);
   for (const x of l.stacked.slice(0, 3)) note("PHONE", page.step, `${where}: ${x} - a letter a line`); };

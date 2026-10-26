@@ -1738,8 +1738,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // agent box ... like we had originally"): the card under the table opened out of sight; the form sits in the work column and is
   // brought into view when it opens
   // ...and its words box takes the cursor, every time a door opens it (boxAt) - a second press found it open and did nothing
+  // ...and where the task is the page the box is in the right drawer: the row's Send to agent pulls it out, or the press opened a box
+  // nobody could see (CI, 0.3.9.48 - the drawer stayed shut over it). After the [main] effect, so a press that moves the main view wins
   useEffect(() => {
     if (!restartOpen) return undefined;
+    if (workDrawer) setWorkSide(true);
     const f = requestAnimationFrame(() => {
       const el = document.querySelector("[data-tq-run-form]");
       el?.scrollIntoView({ block: "nearest", behavior: "smooth" }); el?.querySelector("textarea")?.focus({ preventScroll: true });

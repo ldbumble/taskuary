@@ -102,3 +102,26 @@ test("the saved name outlives the profile name a message carries", () => {
   assert.equal(roster.list()[0].name, "Ray Colton");
   assert.equal(roster.list()[0].last, 400);
 });
+
+test("a person who wrote is named by the push name on the stanza, picked or not, and the owner's own never", () => {
+  const lids = createLidMap(), gate = createChatGate(undefined, lids);
+  const roster = createChatRoster({ canon: gate.canonical, alt: lids.alt });
+  const self = (j) => j.startsWith("15550100999");
+  // turned away before decryption: only routing metadata reached the picker - a bare number nobody could search by name
+  gate.configure({ jids: [] }); gate.shouldIgnore("15550100123@s.whatsapp.net"); gate.shouldIgnore("88001@lid");
+  roster.observeStanza({ from: "15550100123@s.whatsapp.net", notify: "Ray Colton" }, self);
+  // a group member's own name names their 1:1 row - written by LID here, which the map knows is the same person
+  lids.learn("88001@lid", "15550100456@s.whatsapp.net");
+  roster.observeStanza({ from: "42@g.us", participant: "88001@lid", notify: "Gail Moreno" }, self);
+  roster.observeStanza({ from: "15550100999@s.whatsapp.net", recipient: "15550100777@s.whatsapp.net", notify: "Alex Doyle" }, self);
+  roster.observeStanza({ from: "42@g.us", participant: "15550100888@s.whatsapp.net", notify: "Erin Blake" }, self);
+  const rows = roster.list(gate.blockedChats());
+  assert.deepEqual(rows.map(({ jid, name }) => ({ jid, name })).sort((a, b) => a.jid.localeCompare(b.jid)), [
+    { jid: "15550100123@s.whatsapp.net", name: "Ray Colton" },
+    { jid: "15550100456@s.whatsapp.net", name: "Gail Moreno" }
+  ], "a profile name adds no row of its own, and the owner's own name is never anyone's");
+  // a name the owner saved still wins over the one the person gave themselves
+  roster.upsertContact({ id: "15550100123@s.whatsapp.net", name: "Ray (payroll)" });
+  roster.observeStanza({ from: "15550100123@s.whatsapp.net", notify: "Ray C" }, self);
+  assert.equal(roster.list(gate.blockedChats()).find((r) => r.jid === "15550100123@s.whatsapp.net").name, "Ray (payroll)");
+});

@@ -466,10 +466,8 @@ export const placeOrder = (a, b) => {
 // (the last message was tried on 2026-10-22: placed by arrival, labelled by its newest mail, the column read 1d, 1d, 2h, 1d, 2h - a
 // user reported the tasks out of order; the owner, 2026-10-23, chose the arrival)
 export const arrivedAt = (i) => i?.arrived_at || i?.since || i?.when;
-// ...and a reply never moves the row nor changes that age: it says "+N" beside it, the messages from others since the owner last opened
-// it (the server's `new_n`), and the age's hover says both clocks (the owner, 2026-10-23). The row on the table has just been opened,
-// so it wears none - the server's next pile has cleared it.
-export const newMark = (i, isCur) => (!isCur && i?.new_n > 0 ? `+${i.new_n}` : "");
+// ...and a reply never moves the row nor changes that age; the age's hover says both clocks (the owner, 2026-10-23). The "+N" it wore
+// beside the age for the replies since it was last opened is gone (2026-10-26): what came in since is read inside the task.
 export const ageHover = (i) => [arrivedAt(i) && `arrived ${fmtDateTime(arrivedAt(i))}`, i?.last_at && `last message ${ago(i.last_at)}`]
   .filter(Boolean).join(" · ") || undefined;
 // ...and the line under its title is the newest message, who said it and what

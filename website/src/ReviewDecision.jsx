@@ -94,13 +94,21 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   const [text, setTextNow] = useState(() => heldEdit(r));   // the owner's edit; null means "the draft as filed"
   const setText = (v) => { if (v == null) edits.delete(r.ReviewId); else edits.set(r.ReviewId, { text: v, filed: reviewText(r) }); setTextNow(v); };
   const [cc, setCc] = useState(null);               // null means "the CC the draft was filed with"
-  const [busy, setBusy] = useState(false);
+  const [busyNow, setBusy] = useState(false);
+  // SENT STAYS SENT until the page's re-read takes the card away (the owner, 2026-10-26: "when you hit send on close out email it grey's
+  // out and then turns blue again then closes"): busy still ends when the decide answers, as 2026-10-18 ruled, but the button after it
+  // reads "Sent" and stays off - a blue Send again over a reply already gone invited a second press
+  const [sent, setSent] = useState(false);
+  const busy = busyNow || sent;
+  const sentOr = (w) => (sent ? "Sent" : w);
   const [err, setErr] = useState("");
   const [sendErr, setSendErr] = useState("");       // approved, but the channel refused it
   const [interrupt, setInterrupt] = useState(null); // PW-239: the click that did not send
   const [compare, setCompare] = useState(null);     // the refreshed draft, shown beside the owner's edit
 
   const delivery = reviewDeliveryState(r);
+  // ...until the review itself says where the send stands: its own delivery line (Sending… / Check delivery) takes over from "Sent"
+  useEffect(() => { if (delivery.frozen) setSent(false); }, [delivery.frozen, r.ReviewId]);
   const filedDelivery = delivery.frozen ? { ...r, Deliver: JSON.stringify(delivery.envelope) } : r;
   const proposal = proposalPresentation(r);
   const value = delivery.frozen ? delivery.body : text ?? reviewText(r);
@@ -172,7 +180,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       else if (data.send_error) setSendErr(replySendFailure(data));
       // WAIT FOR IT, THEN MOVE ON (the owner, 2026-10-02): the close-out landed with no error, so the task may be closed now
       // ...the press is over when the server answers: the re-read after it is the page's, and "Sending…" waited on it too
-      else if (data.ok && verb !== "reject" && onSent) { setBusy(false); await onSent(); return; }
+      else if (data.ok && verb !== "reject" && onSent) { setSent(true); setBusy(false); await onSent(); return; }
       reloadGh(); onChanged?.();
     } catch (e) {
       if (timedOut(e)) onChanged?.();       // no answer in a minute: the review's own delivery state says where it stands
@@ -206,7 +214,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       // ...and a close without sending (a chat's Mark done, which copies the draft) is a close: the task page reads it the same way,
       // finds it done and walks on - it stood on the table as "task · done" with no line over it (the matrix's verify, 2026-10-20)
       // ...and busy ends when the decide answers, not when that re-read does: behind a slow server "Sending…" outlived the send
-      else if (data.ok && (verb === "approve" || (verb === "close_unsent" && r.Kind !== "slot")) && onSent) { setBusy(false); await onSent(); return; }
+      else if (data.ok && (verb === "approve" || (verb === "close_unsent" && r.Kind !== "slot")) && onSent) { setSent(verb === "approve"); setBusy(false); await onSent(); return; }
       onChanged?.();
     } catch (e) {
       // NO ANSWER IN A MINUTE is not "nothing was sent": the server may be sending still. The card reads the review again and its
@@ -283,11 +291,11 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       ...(unconfirmed ? [{ id: no("anyway"), label: btn("approve", "unknown"), tone: "s", disabled: busy, run: sendAnyway, title: btnHint("approve", "unknown") },
         ...(r.TaskId ? [{ id: no("done"), label: btn("close"), tone: "s", disabled: busy, run: doneAnyway, title: btnHint("close") }] : [])] : []),
     ] : co && !r.Stale ? [
-      { id: no("approve"), label: busy ? co.busyLabel : co.approveLabel, tone: "p", title: blocked ? gh.reason : thenLine, disabled: busy || blocked || (sendable && !value.trim()), run: () => decideBoth("approve"),
+      { id: no("approve"), label: busy ? sentOr(co.busyLabel) : co.approveLabel, tone: "p", title: blocked ? gh.reason : thenLine, disabled: busy || blocked || (sendable && !value.trim()), run: () => decideBoth("approve"),
         why: blocked ? gh.reason.split(" - ")[0] : sendable && !value.trim() ? "write the reply first" : "" },
       ...(co.alt ? [{ id: no("alt"), label: altSends ? `${co.alt.label} & send your text` : co.alt.label, tone: "s", title: altTitle, disabled: busy, run: () => decideBoth(co.alt.verb) }] : []),
     ] : proposal ? [
-      { id: no("approve"), label: busy ? proposal.busyLabel : proposal.approveLabel, tone: "p", disabled: busy || (proposal.kind === "closeout" && blocked), run: () => decide("approve"),
+      { id: no("approve"), label: busy ? sentOr(proposal.busyLabel) : proposal.approveLabel, tone: "p", disabled: busy || (proposal.kind === "closeout" && blocked), run: () => decide("approve"),
         why: proposal.kind === "closeout" && blocked ? gh.reason.split(" - ")[0] : "",
         title: proposal.kind === "closeout" && blocked ? gh.reason : proposal.kind === "playbook" ? "Save this process in Reports → Playbooks; nothing is sent to the sender"
           : proposal.kind === "closeout" ? `${proposal.approveLabel} - the text above goes with it` : "Run the proposed action; nothing is sent to the sender" },
@@ -301,10 +309,10 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
     ] : chatFile ? [
       { id: no("email-file"), label: "Reply by email with the file", tone: "p", disabled: busy, run: onEmailInstead,
         title: `A ${r.Channel} message cannot carry a file - this writes an email with the file on it, which waits here for your yes` },
-      { id: no("approve"), label: busy ? "Sending…" : `${sendWord} without the file`, tone: "s", disabled: busy || !value.trim(), why: value.trim() ? "" : "write the reply first",
+      { id: no("approve"), label: busy ? sentOr("Sending…") : `${sendWord} without the file`, tone: "s", disabled: busy || !value.trim(), why: value.trim() ? "" : "write the reply first",
         run: () => decide("approve"), title: `Sends only the words to ${replyContext(r)} - no file goes with them` },
     ] : [
-      { id: no("approve"), label: busy ? (simulated ? "Simulating…" : "Sending…") : simulated ? "Simulate approval" : `${sendWord}${ccNow.length && !isCal ? `, copying ${ccNow.length}` : ""}`, tone: "p", disabled: busy || (!value.trim() && !isCal), why: value.trim() || isCal ? "" : "write the reply first",
+      { id: no("approve"), label: busy ? sentOr(simulated ? "Simulating…" : "Sending…") : simulated ? "Simulate approval" : `${sendWord}${ccNow.length && !isCal ? `, copying ${ccNow.length}` : ""}`, tone: "p", disabled: busy || (!value.trim() && !isCal), why: value.trim() || isCal ? "" : "write the reply first",
         run: () => decide("approve"), title: simulated ? "Complete this temporary demo; no email is sent" : isCal ? thenLine : `Sends this response to ${replyContext(r)}` },
     ]),
     ...(proposal?.alt ? [{ id: no("palt"), label: proposal.alt.label, tone: "s", disabled: busy, run: () => decide(proposal.alt.verb), title: `${proposal.alt.label} - ${proposal.alt.then}` }] : []),
@@ -448,7 +456,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           <>
             <Button size="small" variant={solid} disableElevation disabled={busy || blocked || (sendable && !value.trim())}
               onClick={() => decideBoth("approve")} title={blocked ? gh.reason : thenLine}>
-              {busy ? co.busyLabel : co.approveLabel}</Button>
+              {busy ? sentOr(co.busyLabel) : co.approveLabel}</Button>
             {co.alt && <Button size="small" variant="outlined" disabled={busy}
               onClick={() => decideBoth(co.alt.verb)} title={altTitle}>
               {altSends ? `${co.alt.label} & send your text` : co.alt.label}</Button>}
@@ -460,7 +468,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
               ? "Save this process in Reports → Playbooks; nothing is sent to the sender"
               : proposal.kind === "closeout" ? `${proposal.approveLabel} - the text above goes with it`
               : "Run the proposed action; nothing is sent to the sender"}>
-            {busy ? proposal.busyLabel : proposal.approveLabel}
+            {busy ? sentOr(proposal.busyLabel) : proposal.approveLabel}
           </Button>
         ) : !canSendIt ? (
           /* COPY, BESIDE REDRAFT (the owner, 2026-10-22): the draft goes to the clipboard and the task stays open - its badge says it
@@ -485,7 +493,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
               Reply by email with the file</Button>
             <Button size="small" variant="outlined" disabled={busy || !value.trim()} onClick={() => decide("approve")}
               title={`Sends only the words to ${replyContext(r)} - no file goes with them`}>
-              {busy ? "Sending…" : `${sendWord} without the file`}</Button>
+              {busy ? sentOr("Sending…") : `${sendWord} without the file`}</Button>
           </>
         ) : (
           <Button size="small" variant={solid}
@@ -493,7 +501,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
             onClick={() => decide("approve")}
             title={simulated ? "Complete this temporary demo; no email is sent" : `Sends this response to ${replyContext(r)}`}>
             {/* the one word for the send, as everywhere (buttons.json) */}
-            {busy ? (simulated ? "Simulating…" : "Sending…")
+            {busy ? sentOr(simulated ? "Simulating…" : "Sending…")
               : simulated ? "Simulate approval" : `${sendWord}${ccNow.length ? `, copying ${ccNow.length}` : ""}`}
           </Button>
         )}

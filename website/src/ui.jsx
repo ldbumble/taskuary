@@ -632,38 +632,35 @@ export const AgentReport = ({ body, artifacts: all = [] }) => {
   );
 };
 
+// ...and every task page opens on the LAST READ, re-read behind it: each page read /api/agents afresh, so its agent buttons drew as
+// "nothing known yet" and flipped a beat later (the owner, 2026-10-26: "when you load task the buttons load then go gray then reload")
+let agentsLast = null;
+const agentsOf = (data) => ({
+  agentsRead: true, codingReady: data.coding_ready ?? !!(data.brain_list || []).length,
+  agents: (data.data || []).map((a) => a.Name),
+  models: data.models || {},
+  // what each worker is FOR. A coding dialog asks which CLI; the five general profiles -
+  // researcher, analyst, coordinator, marketer, trader - answer a question it never asked.
+  kinds: Object.fromEntries((data.data || []).map((a) => [a.Name, a.Kind])),
+  // profile name -> the CLI it actually runs (the coding profile is usually claude) - the Board
+  // tints a working card by the BRAND, and the name alone doesn't say which one it is
+  cmds: Object.fromEntries(Object.entries(data.config || {}).map(([k, v]) => [k, (v || {}).cmd || k])),
+  // ...and WHICH BRAIN each role runs on. A role no longer says which CLI runs it - every
+  // coding task's role is the one coding profile - so the card asks this instead (the owner, 2026-09-16).
+  brains: data.brains || {}, brainList: data.brain_list || [], brainModels: data.brain_models || {},
+  // the brains a NON-coding hand-off may choose: one per installed CLI, then the API connectors
+  generalBrains: data.general_brains || [],
+});
+// agentsRead: [] read is "no AI connected"; [] not yet read is nothing yet. codingReady: a coding agent can start (agents.coding_ready)
+const AGENTS_UNREAD = { agents: [], models: {}, cmds: {}, kinds: {}, brains: {}, brainList: [], brainModels: {}, generalBrains: [], agentsRead: false, codingReady: false };
 export const useAgents = () => {
-  const [agents, setAgents] = useState([]);
-  const [models, setModels] = useState({});
-  const [cmds, setCmds] = useState({});
-  const [kinds, setKinds] = useState({});
-  const [brains, setBrains] = useState({});
-  const [brainList, setBrainList] = useState([]);
-  const [brainModels, setBrainModels] = useState({});
-  const [generalBrains, setGeneralBrains] = useState([]);
-  const [agentsRead, setAgentsRead] = useState(false);     // [] read is "no AI connected"; [] not yet read is nothing yet
-  const [codingReady, setCodingReady] = useState(false);   // a coding agent can start: the server's own fact (agents.coding_ready)
+  const [v, setV] = useState(() => agentsLast || AGENTS_UNREAD);
   useEffect(() => {
-    api.get("/api/agents").then(({ data }) => {
-      setAgentsRead(true); setCodingReady(data.coding_ready ?? !!(data.brain_list || []).length);
-      setAgents((data.data || []).map((a) => a.Name));
-      setModels(data.models || {});
-      // what each worker is FOR. A coding dialog asks which CLI; the five general profiles -
-      // researcher, analyst, coordinator, marketer, trader - answer a question it never asked.
-      setKinds(Object.fromEntries((data.data || []).map((a) => [a.Name, a.Kind])));
-      // profile name -> the CLI it actually runs (the coding profile is usually claude) - the Board
-      // tints a working card by the BRAND, and the name alone doesn't say which one it is
-      setCmds(Object.fromEntries(Object.entries(data.config || {}).map(([k, v]) => [k, (v || {}).cmd || k])));
-      // ...and WHICH BRAIN each role runs on. A role no longer says which CLI runs it - every
-      // coding task's role is the one coding profile - so the card asks this instead (the owner, 2026-09-16).
-      setBrains(data.brains || {});
-      setBrainList(data.brain_list || []);
-      setBrainModels(data.brain_models || {});
-      // the brains a NON-coding hand-off may choose: one per installed CLI, then the API connectors
-      setGeneralBrains(data.general_brains || []);
-    }).catch(() => {});
+    let on = true;
+    api.get("/api/agents").then(({ data }) => { agentsLast = agentsOf(data); if (on) setV(agentsLast); }).catch(() => {});
+    return () => { on = false; };
   }, []);
-  return { agents, models, cmds, kinds, brains, brainList, brainModels, generalBrains, agentsRead, codingReady };
+  return v;
 };
 // THE CODING PROFILE IS FOUND BY ITS KIND, never by a name: the owner may rename it, or have none - and then blank, so
 // the server (which resolves the same way) chooses rather than this page naming one that is not there.
@@ -1979,15 +1976,22 @@ export const DraftField = ({ value, onChange, sx, inputProps, ...rest }) => {
   const line = (el) => parseFloat(getComputedStyle(el).lineHeight) || 18;
   useEffect(() => {
     const el = ref.current; if (!el) return;
-    const fit = () => setCap(Math.max(8, Math.floor(window.innerHeight * 0.6 / line(el))));
+    // ...and in a task's work column, no taller than leaves Send under it with the column at its top (the owner, 2026-10-26: "why is
+    // this cut off" - a 60%-of-screen draft outgrew the column, the lit Send was scrolled up to, and "Result" rested half under the edge)
+    const col = el.closest("[data-tq-work]");
+    const fit = () => {
+      const room = col ? col.clientHeight - (el.getBoundingClientRect().top - col.getBoundingClientRect().top + col.scrollTop) - 56 : Infinity;
+      setCap(Math.max(col ? 6 : 8, Math.floor(Math.min(window.innerHeight * 0.6, room) / line(el))));
+    };
     fit(); window.addEventListener("resize", fit);
+    const cro = col && new ResizeObserver(fit); cro?.observe(col);
     // a resize while the pointer is down on the box is the handle being dragged; settle it once the drag goes quiet
     const ro = new ResizeObserver(() => { if (!drag.current) return;
       clearTimeout(drag.current.t); drag.current.t = setTimeout(() => setRows(Math.max(2, Math.round(el.clientHeight / line(el)))), 250); });
     ro.observe(el);
     const up = () => { drag.current = null; };   // the settle already queued still lands
     window.addEventListener("pointerup", up);
-    return () => { ro.disconnect(); window.removeEventListener("resize", fit); window.removeEventListener("pointerup", up); };
+    return () => { ro.disconnect(); cro?.disconnect(); window.removeEventListener("resize", fit); window.removeEventListener("pointerup", up); };
   }, []);
   return <TextField fullWidth multiline minRows={Math.max(2, rows)} maxRows={Math.max(cap, rows)} value={value} onChange={onChange} {...rest}
     inputRef={ref} inputProps={{ ...inputProps, "data-tq-draft": "", onPointerDown: () => { drag.current = { t: 0 }; } }}

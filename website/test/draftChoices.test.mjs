@@ -45,3 +45,12 @@ test("the walk's reply card offers Redraft over a draft it has", () => {
   assert.match(reply, /\{ verb: "redraft", label: busy === "redraft" \? "Drafting…" : btn\("redraft"\)/);
   assert.doesNotMatch(reply, /"Reject"/);
 });
+
+test("Send stays off and reads Sent until the page's re-read takes the card away (the owner, 2026-10-26)", () => {
+  const src = read("ReviewDecision.jsx");
+  assert.match(src, /const busy = busyNow \|\| sent;/);
+  assert.match(src, /onSent\) \{ setSent\(true\); setBusy\(false\); await onSent\(\); return; \}/);
+  assert.match(src, /onSent\) \{ setSent\(verb === "approve"\); setBusy\(false\); await onSent\(\); return; \}/);
+  assert.match(src, /busy \? sentOr\(simulated \? "Simulating…" : "Sending…"\)/);
+  assert.match(src, /if \(delivery\.frozen\) setSent\(false\);/, "the review's own delivery line takes over");
+});

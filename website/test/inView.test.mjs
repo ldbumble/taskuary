@@ -2,7 +2,7 @@
 // phone's docked strip and row - in view by its box, covered by the dock. What covers it is read off the screen and scrolled clear.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { coverOf, floorOf, shiftFor } from "../src/inView.js";
+import { coverOf, floorOf, rowAcross, shiftFor } from "../src/inView.js";
 
 const box = (top, height) => ({ top, height, bottom: top + height });
 
@@ -26,4 +26,15 @@ test("a held move's floor is the dock's top inside the scroller, else the scroll
   assert.equal(floorOf(body, withDock), 470);
   assert.equal(floorOf(body, { querySelector: () => null }), 745, "no dock - the desktop's is outside the conversation");
   assert.equal(floorOf(body, { querySelector: () => ({ getBoundingClientRect: () => box(900, 40) }) }), 745, "a dock below the scroller does not cover it");
+});
+
+test("the row standing across a scroller's top edge is found - a line-sized box, never the draft's tall text (the owner, 2026-10-26)", () => {
+  const node = (top, height, parentElement = null) => ({ parentElement, getBoundingClientRect: () => box(top, height) });
+  const p = { ...node(200, 500), contains: () => true };
+  const section = node(180, 500, p), head = node(190, 22, section), word = node(192, 16, head);
+  assert.equal(rowAcross(p, word), head, "\"Result\" half under the edge is the row, not the section round it");
+  const draft = node(100, 400, p);
+  assert.equal(rowAcross(p, draft), null, "a tall draft cut by the edge scrolls as text does");
+  const clear = node(204, 22, section);
+  assert.equal(rowAcross(p, clear), null, "a row wholly below the edge is not cut");
 });

@@ -373,6 +373,13 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
     <div className="tq-aui-asking" data-tq-asking={asking.request_id}>
       <b>{says(subState({ request: asking }), name)}</b>
       <span className="tq-aui-asking-q">{asking.text}</span>
+      {/* WHAT EACH WAY DOES, said on the card (2026-10-25): "Sign in to X ... Type your answer" read as "type the password here", and
+          the agent-never-sees-it line lived only in a hover. Words only - the presses are the ones it had. */}
+      {site && <span className="tq-aui-asking-hint" data-tq-signin-hint="">
+        {taskId ? "Sign in here opens a page Taskuary types from - the agent never sees it. " : ""}
+        {(asking.choices || []).includes("Signed in")
+          ? "Or sign in yourself in the browser, then press Signed in."
+          : "Or sign in yourself in the browser, then answer Signed in."}</span>}
       {(!!asking.choices?.length || (site && taskId)) && <div className="tq-aui-asking-choices">
         {site && taskId && <Button size="small" variant="outlined" onClick={fillPage}
           title={`A one-time page to type the ${site} sign-in - Taskuary fills it into the browser and the agent never sees it`}>Sign in here</Button>}
@@ -380,7 +387,7 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
       </div>}
       <form className="tq-aui-asking-box" onSubmit={(e) => { e.preventDefault(); send(text); }}>
         <TextField size="small" fullWidth value={text} disabled={going} onChange={(e) => setText(e.target.value)}
-          placeholder="Type your answer" inputProps={{ "aria-label": `Your answer to ${name}` }} />
+          placeholder={site ? "Message the agent - never your password" : "Type your answer"} inputProps={{ "aria-label": `Your answer to ${name}` }} />
         <Button type="submit" size="small" variant="contained" disableElevation disabled={going || !text.trim()}>{going ? "Sending…" : "Answer"}</Button>
       </form>
       {err && <span className="tq-aui-asking-err" role="alert">{err}</span>}
@@ -390,7 +397,7 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 
 function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer, drafts = [], onDraftDecided, starting = "" }) {
+  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "" }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
@@ -548,6 +555,15 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.75 }}>
                 Approve saves this playbook to Reports → Playbooks, and triage starts matching new mail against its when line. Nothing is sent to anyone.</Typography>
               {drafts.map((r) => <ReviewDecision key={r.ReviewId} review={r} onChanged={onDraftDecided} />)}
+            </Box>
+          )}
+          {/* ...AND A BROWSER ACT HELD HERE IS APPROVED HERE (2026-10-25): its card waited in the hidden Close out, and Stop and save, the
+              only road to it, closed the very browser Approve runs in. The same card, where the owner already looks. */}
+          {!dock && !!acts?.length && (
+            <Box data-tq-browser-acts="" sx={{ mt: 1.5, mx: { xs: 1, sm: 2 }, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff" }}>
+              <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.75 }}>
+                The agent's browser waits for your yes. Approve runs exactly this in its browser; Dismiss tells the agent it was not done.</Typography>
+              {acts.map((r) => <ReviewDecision key={r.ReviewId} review={r} onChanged={onDraftDecided} />)}
             </Box>
           )}
           </ThreadPrimitive.If>
@@ -773,7 +789,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         asking={asking} onAnswer={answerAsk}
         onBusyChange={onBusyChange} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
         serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since}
-        drafts={data?.playbookDrafts || []} onDraftDecided={refresh} starting={starting} />
+        drafts={data?.playbookDrafts || []} acts={data?.browserActs || []} onDraftDecided={refresh} starting={starting} />
     </OutputsCtx.Provider>
     </ShownCtx.Provider></AgentNameCtx.Provider>
   );
@@ -782,7 +798,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       const provider = data?.providers?.find((p) => String(p.id) === String(e.target.value));
       updateProvider(e.target.value, provider?.model || "");
     }}
-      sx={{ height: 27, fontSize: 11.5, minWidth: 130, bgcolor: PANEL2, flexShrink: 0 }}>
+      sx={{ height: 27, fontSize: 11.5, minWidth: 96, maxWidth: 220, bgcolor: PANEL2, flexShrink: 1 }}>
       {!data?.providers?.length && <MenuItem value="">No agent connected</MenuItem>}
       {(data?.providers || []).map((p) => <MenuItem key={p.id} value={String(p.id)}>{p.label}</MenuItem>)}
     </Select>

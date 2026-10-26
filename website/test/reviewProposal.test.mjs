@@ -87,7 +87,9 @@ test("a held browser act reads as what it does and where, never its JSON", () =>
   assert.equal(shown.destination, "https://pay.toll.example/checkout/review");
   assert.equal(shown.approveLabel, "Approve");
   assert.equal(shown.readOnly, true);
-  assert.equal(reviewText(review), "pays the $412.50 order on toll.example\n\nagent-browser click @e12");
+  // the what is the context line (Reason) already; the box is the exact command, once (2026-10-25)
+  assert.equal(reviewText(review), "Approve runs: agent-browser click @e12");
+  assert.equal((shown.context.match(/pays the \$412\.50/g) || []).length, 1);
 });
 
 // A TRACKER ITEM'S CLOSE-OUT (trackers.py, 2026-10-25): the card says where it goes and the done state the tracker names - or that it

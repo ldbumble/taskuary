@@ -12,15 +12,18 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 ALGOS = {'SHA1': hashlib.sha1, 'SHA256': hashlib.sha256, 'SHA512': hashlib.sha512}
 class BadKey(ValueError): "What the owner pasted is not a key a code can be made from - said on the page they pasted it into."
+# ONE PLAIN SENTENCE for a key that isn't one (2026-10-25): "base32 text", "does not decode" and "otpauth://" are developer words, and
+# sites call it a setup key under "Can't scan the QR code?"
+BAD = "that isn't a setup key - copy the letters-and-numbers code the site shows under \"Can't scan the QR code?\""
 
 
 def _b32(s: str) -> str:
     "A key as the base32 the RFC means: upper case, no spaces or dashes (the way sites print it), padded - or BadKey."
     k = re.sub(r'[\s-]+', '', str(s or '')).upper().rstrip('=')
-    if not k or not re.fullmatch(r'[A-Z2-7]+', k): raise BadKey('that is not an authenticator key - it is the base32 text beside the QR code')
+    if not k or not re.fullmatch(r'[A-Z2-7]+', k): raise BadKey(BAD)
     k += '=' * (-len(k) % 8)
     try: raw = base64.b32decode(k)
-    except Exception: raise BadKey('that authenticator key does not decode')
+    except Exception: raise BadKey(BAD)
     # under 80 bits is no key a real site issues (RFC 4226 asks 128, says 160): a typo'd half key would type wrong codes for ever
     if len(raw) < 10: raise BadKey('that authenticator key is too short - copy all of it')
     return k

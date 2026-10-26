@@ -26,6 +26,7 @@ def install_processing_changes(app, store):
         '/api/fixture/task/chat-saved',
         '/api/fixture/task/closed-asked',
         '/api/fixture/general/canvas',
+        '/api/fixture/signin/link',
         '/api/fixture/processing/arrive-during-next',
     })
 
@@ -33,6 +34,9 @@ def install_processing_changes(app, store):
         # Only these test-installed, bounded database edits are extra allowances.
         # Every production route retains the original demo guard and socket guard.
         if method == 'POST' and path in fixture_paths:
+            return ''
+        # the one-time fill page's own form: its POST is what Chrome refused with Origin null (signin.HEADERS, 2026-10-25)
+        if method == 'POST' and path.startswith('/signin/'):
             return ''
         return refuse(method, path)
 
@@ -349,6 +353,18 @@ def install_processing_changes(app, store):
         funnel.invalidate()
         store._poke('feed-changed')
         return {'titles': titles}
+
+    @app.post('/api/fixture/signin/link')
+    def signin_link(body: dict):
+        """A task whose agent asked to be signed in to northwind.example - the ask the [[TASKUARY-SIGNIN]] marker records - and a fresh
+        one-time fill link for it. No browser runs, so a fill gets as far as "the task's browser is not open": past the Origin check."""
+        if body:
+            raise HTTPException(422, 'this fixed sign-in fixture accepts only an empty object')
+        from taskuary import signin, workerstate as ws
+        tid = store.create_task({'Title': 'Pay the Payworth invoice', 'Kind': 'general', 'Status': 'in_progress'}, 'fixture')
+        ws.record(store, tid, 'fixture-sid', 'input_needed', request_id=f'{signin.PREFIX}northwind.example',
+                  text='Sign in to northwind.example to continue', source='api')
+        return {'taskId': tid, **signin.link(store, tid)}
 
     @app.post('/api/fixture/general/canvas')
     def general_canvas(body: dict):

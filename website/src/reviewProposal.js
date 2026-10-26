@@ -56,7 +56,9 @@ export const reviewText = (review) => {
   // a workflow repair reads as what was wrong and what changes, never the step list's JSON (flow.repair)
   if (proposal?.action === "repair_workflow") return [proposal.why, proposal.changes].filter(Boolean).join("\n\n");
   if (proposal?.action === "run_tool") return toolBody(proposal);
-  if (proposal?.action === "browser_act") return [proposal.what, proposal.command].filter(Boolean).join("\n\n");
+  // the WHAT is the context line already (proposals.queue's Reason); the box is the exact command Approve runs, once - with no AI the card
+  // said "agent-browser click @e12" three times over (2026-10-25)
+  if (proposal?.action === "browser_act") return proposal.command ? `Approve runs: ${proposal.command}` : proposal.what || "";
   return PAGES.has(proposal?.action) && proposal.text ? proposal.text : review?.DraftText || "";
 };
 

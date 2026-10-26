@@ -72,14 +72,14 @@ class FilingTests(unittest.TestCase):
         mv.assert_called_once_with('tok', 'alex@northwind.example', 'AAMk1')
         self.assertEqual(s._one('SELECT Result FROM mail_filed WHERE MessageId=?', (done,))['Result'], 'archived')
 
-    def test_a_row_put_down_with_handled_is_filed(self):
+    def test_an_fyi_put_down_with_no_task_stays_in_the_inbox(self):
+        """Archive covers closed tasks only (the owner, 2026-10-25): reading an FYI here is not filing it in the mailbox."""
         s = _store(); self._arm(s)
         mid = s.add_message({'ExternalId': 'graph:AAMk3', 'Channel': 'email', 'Subject': 'fyi: the office is closed Friday',
                              'SourceName': 'alex@northwind.example'})
         s._exec("INSERT INTO funnel_state (Key, Status, By, At) VALUES (?, 'done', 'owner', '2026-10-25 09:00:00')", (f'msg:{mid}',))
-        with mock.patch.object(channels, 'graph_token', return_value='tok'), mock.patch.object(filing, 'graph_archive') as mv:
-            filing.file_handled(s)
-        mv.assert_called_once()
+        done, _ = _mail(s, 'graph:AAMk4', closed=True)
+        self.assertEqual([r['MessageId'] for r in filing.handled(s, '2000-01-01 00:00:00')], [done])
 
     def test_a_refused_move_is_written_down_and_not_retried_every_poll(self):
         s = _store(); self._arm(s); mid, _ = _mail(s, 'graph:AAMk1', closed=True)

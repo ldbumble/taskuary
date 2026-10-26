@@ -65,6 +65,31 @@ process.on("unhandledRejection", (reason) => {
   console.error("ignored a stray rejection - the connection's own close drives the reconnect:", reason?.stack || reason);
 });
 
+// ONE BRIDGE PER PAIRING (#269). Taskuary moves the bridge to another port when a program it cannot name holds 8977 - and that
+// program may be an old bridge of ours whose command line Windows would not show. Two copies connected with one wa-auth knock each
+// other off WhatsApp in turn ("connection replaced"), so the pairing is claimed before connecting: wa-auth.lock holds the pid of
+// the bridge using it, and a second copy finds that pid alive, says so and exits 75. A lock whose bridge is gone (killed with no
+// chance to clean up) is taken over; a pid since reused by another program Taskuary sees by its command line and clears.
+const LOCK = path.resolve("wa-auth.lock");
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e?.code === "EPERM"; } };
+const lockPairing = () => {
+  for (let i = 0; i < 3; i++) {
+    try {
+      fs.writeFileSync(LOCK, String(process.pid), { flag: "wx" });
+      process.on("exit", () => { try { if (fs.readFileSync(LOCK, "utf8").trim() === String(process.pid)) fs.unlinkSync(LOCK); } catch {} });
+      return 0;
+    } catch (e) {
+      if (e?.code !== "EEXIST") throw e;
+      let held = 0;
+      try { held = Number(fs.readFileSync(LOCK, "utf8").trim()) || 0; } catch {}
+      if (held && held !== process.pid && alive(held)) return held;
+      fs.rmSync(LOCK, { force: true });
+    }
+  }
+  return -1;
+};
+for (const sig of ["SIGTERM", "SIGINT"]) process.on(sig, () => process.exit(0));     // so the lock goes with a plain stop
+
 const text = (m) => m.conversation || m.extendedTextMessage?.text
   || m.imageMessage?.caption || m.videoMessage?.caption || m.documentMessage?.caption || "";
 const context = (m) => Object.values(m || {}).find((v) => v?.contextInfo)?.contextInfo;
@@ -433,6 +458,11 @@ http.createServer(async (req, res) => {
   process.exit(e?.code === "EADDRINUSE" ? 98 : 1);
 }).listen(PORT, "127.0.0.1", () => {
   console.log(`bridge listening on http://127.0.0.1:${PORT}`);
+  const held = lockPairing();
+  if (held) {
+    console.error(`WA_AUTH_LOCKED: the pairing in ./wa-auth is in use by bridge pid ${held} - not connecting a second copy with it`);
+    process.exit(75);
+  }
   connect().catch((e) => {
     console.error("could not connect:", e?.message || e);
     scheduleReconnect(e?.message || e);

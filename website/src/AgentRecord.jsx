@@ -149,7 +149,7 @@ export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = nul
   if (folded) {
     const lead = now ? plain(cardParts(now, draft).lead) : "";
     return story ? <Box sx={{ mt: 1, pl: { xs: 0, sm: 4 } }}>
-      <StoryLine kind={story.kind} line={story.line} />
+      <StoryLine kind={story.kind} line={story.line} why={story.why} />
       {lead && <Typography sx={{ mt: 0.4, pl: 3, fontSize: 13, lineHeight: 1.45, color: DIM, overflow: "hidden",
         display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{lead}</Typography>}
     </Box> : null;
@@ -165,7 +165,7 @@ export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = nul
   return (
     // `bare`: the page's white focus is the box (the owner, 2026-10-25), and the record reads as plain sections inside it
     <Box sx={bare ? { width: "100%" } : { width: "100%", bgcolor: PANEL, px: 1.35, py: 1.15, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
-      {state && <Box sx={{ mb: 1, pb: 1, borderBottom: `1px solid ${BORDER}` }}><StoryLine kind={state.kind} line={state.line} /></Box>}
+      {state && <Box sx={{ mb: 1, pb: 1, borderBottom: `1px solid ${BORDER}` }}><StoryLine kind={state.kind} line={state.line} why={state.why} /></Box>}
       {s && !chat && result ? <ResultView s={s} before={before} pages={[...pages, ...(outputs || [])]} diff={diff} since={since} draft={draft} story={story} diffOpen={diffOpen} onDiff={onDiff} />
         : s && !chat ? <RunSummaries sessions={[s, ...before]} pages={pages}
           full={<SessionRecord s={s} draft={draft} startOpen timeline={story?.steps || []} since={since} earlier={before} />} />

@@ -718,9 +718,14 @@ def agent_story(store, tid) -> dict | None:
     said = next((e for e in reversed(run) if e['Kind'] == 'turn_end' and str(e.get('Text') or '').strip()), None)
     # ...and a run that FAILED is a failure, with the place that fixes it when there is one (Connect an AI): the step offers Try again
     failed = st['kind'] == 'failed' and not interrupted
+    # ...and A RUN THAT FAILED SAYS WHY FIRST, whatever cut it after (the owner, 2026-10-26: "you can't see what you have to do"): a
+    # restart's note led the Result and "could not start: this tool has no built-in reviewer" sat at the foot of the transcript under it
+    ran = run_failed(store, tid) or {}
+    why = ran.get('sentence') or ''
     return {'kind': 'interrupted' if interrupted else 'failed' if failed else 'left', 'line': line, 'steps': steps,
             'said': _said(said['Text']) if said else '', 'said_at': said['CreatedAt'] if said else None,
-            **({'fix': (run_failed(store, tid) or {}).get('fix')} if failed else {})}
+            **({'why': why} if why and why.rstrip('.') not in line else {}),
+            **({'fix': ran.get('fix')} if failed else {})}
 
 
 def left_by_facts(tags, runs) -> str:

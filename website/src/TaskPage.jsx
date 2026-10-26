@@ -82,7 +82,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { adviceKeyFor, suggestion } from "./advice.js";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
-import { CLOSE_BY_HAND, closeOut, focusOf, fromLine as fromLineOf, layoutOf, sameWords, waitingOn, workPane } from "./taskLayout.js";
+import { CLOSE_BY_HAND, askIsTitle, closeOut, focusOf, fromLine as fromLineOf, layoutOf, sameWords, waitingOn, workPane } from "./taskLayout.js";
 import { taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
 import { ASK_TAG, BROWSER_TAG } from "./newTask.js";
@@ -190,7 +190,9 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
           {/* WHERE IT CAME FROM IS THE WHOLE MESSAGE, in full and scrolling - three lines of it were never enough to check the ask
               against: first for a report run (the owner, 2026-09-30: "i can't see the full report once it gets sent to agent"), then
               for the email behind a task (2026-10-01: "don't see the full email that this task came from") */}
-          <Box sx={{ mt: 0.5, maxHeight: 420, overflowY: "auto", minWidth: 0, overflowWrap: "anywhere" }}>
+          {/* ...in full and NOT a scroller of its own: the column it stands in scrolls, and a 420px box inside it was a scrollbar inside a
+              scrollbar (the owner, 2026-10-26, three in one column on a laptop: "you can't see anything") */}
+          <Box data-tq-letter-body="" sx={{ mt: 0.5, minWidth: 0, overflowWrap: "anywhere" }}>
             {r.m.Channel === "report" && looksMd(r.m.BodyText) ? <Md text={cleanText(r.m.BodyText)} />
               : <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
                   <LinkedText text={cleanText(r.m.Channel === "report" ? r.m.BodyText : (r.m.ReadText ?? r.m.BodyText))} /></Typography>}
@@ -1066,6 +1068,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...never Taskuary's own brief to the agent (ownwork.BRIEFED: a playbook built with AI) - its title is the ask (taskAsk)
   const askText = (t?.SourceRef === "assistant:playbook" ? "" : cleanText(verdict?.summary || t?.Summary || opener?.ReadText || opener?.BodyText || "")) || taskAsk;
   const askQuoted = !verdict?.summary && !t?.Summary && !!(opener?.ReadText || opener?.BodyText);   // the sender's words, not triage's
+  // ...said once where it is the title's own words (taskLayout.askIsTitle): the band under the head is for a different sentence, or who it waits on
+  const askBand = askText && !askIsTitle(askText, t?.Title) ? askText : "";
   // a task that came from ONE message reads it whole from the start, as an email does; a row closed by hand stays closed
   // ...unless the ask under the title IS that message's words (the task-view cleanup, owner-approved 2026-10-25): then From keeps its
   // one row, and the words are read once
@@ -1219,6 +1223,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and NEITHER half on a task waiting on a person (the owner, 2026-10-25): nothing is yours until they answer, so Agent work and Close out
   // are a line each, one click to open - the Send to agent form stood open over a task nobody needed an agent for
   const pane = waitFor && !openStage ? "" : workPane({ stage, kind: t?.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas, picked: !!openStage });
+  // ONE SCROLLER IN THE WORK COLUMN (the owner, 2026-10-26, a failed run on a laptop: "you can't see anything"): a settled agent's part
+  // scrolled inside the column with its transcript scrolling inside THAT, and the reason it failed sat at the foot of the inner one. Now
+  // the column alone scrolls, the agent's part and its chat at their own height, and a folded Close out keeps its place on screen by
+  // standing at the column's foot (sticky) - where the inner scroller used to keep it. With Close out open (a draft to send) the Result
+  // still gives way to it (2026-10-25: "never past a report or a diff")
+  const oneScroll = settled && pane !== "reply";
   // the one line From folds to while an agent works (sessionView)
   const fromLine = fromLineOf({ sender: ownSource, count: sourceCount, workflow: fromWorkflow, made: t ? `${detail.ref} · ${made}` : "" });
   // the note a close was written with (server task.complete: "Closed out: ...") - Close out shows it under the close
@@ -1724,8 +1734,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   - sitting directly above a second heading that said "Task · the job itself". The
                   provenance line moved into the card (Came from, under its messages), where you go
                   and look at it rather than read it every time. */}
-              <Box data-tq-task-head="" sx={{ px: liveSession ? 1.5 : 1.75, py: liveSession ? 0.7 : 1,
-                bgcolor: "#fff", borderBottom: !wide && (waitFor || askText) ? 0 : `1px solid ${BORDER}`, flexShrink: 0 }}>
+              <Box data-tq-task-head="" sx={{ px: liveSession ? 1.5 : 1.75, py: 0.7,
+                bgcolor: "#fff", borderBottom: !wide && (waitFor || askBand) ? 0 : `1px solid ${BORDER}`, flexShrink: 0 }}>
                 {/* on a phone the strip WRAPS: ref and title keep the first line, the controls take the next - one line
                     pushed Next, Expand and the X off the right edge (the canvas redesign's phone pass, 2026-09-29) */}
                 {/* ...only while there ARE controls to wrap. On the assistant's canvas there are none up here, and the strip still
@@ -1736,7 +1746,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     letterSpacing: ".015em", fontWeight: 600, fontSize: 11.5 }}>{detail.ref}</Typography>
                   {/* NO CHIPS BESIDE THE TITLE (the redesign, owner-approved 2026-10-21): what triage made of it is the last line of From,
                       and the state is the one pill at the right - the title has the row */}
-                  <Typography title={t.Title} sx={{ color: INK, flex: 1, fontWeight: 600,
+                  <Typography title={!askBand && (askText || "").length > t.Title.length ? askText : t.Title} sx={{ color: INK, flex: 1, fontWeight: 600,
                     fontSize: liveSession ? 12.5 : 14,
                     minWidth: headControls ? { xs: 90, sm: 180 } : 0,
                     flexBasis: headControls ? { xs: "calc(100% - 90px)", sm: "auto" } : "auto",
@@ -1797,17 +1807,17 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     Where the work takes the whole width (an agent ran) the ask stays in From, over the agent's room. It is its own band under the
                     header, not a second line OF it: the header stays one row (the dead-end walk's HEAD), and an ask that is the sender's own words
                     is marked quoted, so a mail that says "Traceback ... null" is read as theirs, not as our jargon (WORDS) */}
-                {!wide && (waitFor || askText) && <Box data-tq-ask="" data-tq-quoted={askQuoted ? "" : undefined}
+                {!wide && (waitFor || askBand) && <Box data-tq-ask="" data-tq-quoted={askQuoted ? "" : undefined}
                   sx={{ px: 1.75, pt: 0, pb: 1, mt: -0.5, bgcolor: "#fff", borderBottom: `1px solid ${BORDER}`, flexShrink: 0, minWidth: 0 }}><Box sx={{ maxWidth: "92ch" }}>
                   {waitFor && <Typography data-tq-waiting-on="" sx={{ color: INK, fontSize: 13.5, fontWeight: 600, lineHeight: 1.45 }}>{waitFor.line}</Typography>}
-                  {askText && !(waitFor && sameWords(askText, t.Title)) && <Typography title={askText} sx={{ color: waitFor ? DIM : INK, fontSize: 13.5, lineHeight: 1.5,
+                  {askBand && <Typography title={askText} sx={{ color: waitFor ? DIM : INK, fontSize: 13.5, lineHeight: 1.5,
                     overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{askText}</Typography>}
                 </Box></Box>}
               {/* a flex column so the terminal takes exactly what is left between the strip above and the
                   waiting room below - a fixed-height formula clipped its bottom line on shorter screens */}
               {/* SHADED BUT FOR THE FOCUS (the owner, 2026-10-25): with no agent live the body takes a warm shade and only the section to act
                   on is white (FOCUS); the header stays white, and a live session's screen is exactly as it was */}
-              <Box ref={stepsBox} sx={{ px: liveSession ? 1 : { xs: 1.25, sm: 1.5 }, py: liveSession ? 0.65 : 1.25, ...(!term?.alive ? { bgcolor: SHADE } : {}),
+              <Box ref={stepsBox} sx={{ px: liveSession ? 1 : { xs: 1.25, sm: 1.5 }, py: liveSession ? 0.65 : 0.9, ...(!term?.alive ? { bgcolor: SHADE } : {}),
                 overflowY: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", containerType: "inline-size", position: "relative" }}>
                 {/* FROM, FOLDED TO ONE LINE while an agent works, or once it has finished or failed (`wide`, 2026-10-22) - owner-approved
                     2026-10-21: the work has the whole width and the terminal is never covered or squeezed. The line opens From as a
@@ -2067,6 +2077,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {/* THE WORK COLUMN: the agent and the reply - the agent's own pane, full width while it works */}
                 {/* ...ONCE AN AGENT HAS ACTED (`settled`: its Result, or the run that failed) the work shrinks to the card and the agent's part scrolls in it,
                     so Close out stays on screen under it at a laptop (the owner, 2026-10-25) - never past a report or a diff */}
+                {/* ...only while Close out is OPEN: folded, the column is the one scroller and Close out stands at its foot (oneScroll, 2026-10-26) */}
                 <Box ref={workBox} data-tq-work="" sx={sessionView ? { display: "contents" } : { minWidth: 0, display: "flex", flexDirection: "column", containerType: "inline-size", ...(settled ? { flex: "0 1 auto", minHeight: 0 } : {}) }}>
                 {/* ONE SHORT LINE, LIVE OR NOT. A running session has always been a single strip -
                     heading, chip, controls - while the stopped card answered with a heading, a
@@ -2081,7 +2092,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {!codeRun && <Box ref={agentHead} data-tq-focus={focus === "agent" ? "" : undefined} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
                   px: liveSession ? 1 : sessionView ? 1.5 : 0, py: liveSession ? 0.55 : pane === "agent" ? (agentBar ? 0.8 : 1.5) : 1.1,
                   ...(sessionView ? {} : { borderTop: 0, pt: 0 }),
-                  flexShrink: settled ? 1 : 0, ...(settled ? { minHeight: 0, overflowY: "auto", scrollbarWidth: "thin", overflowAnchor: "none" } : {}),
+                  flexShrink: settled && !oneScroll ? 1 : 0, ...(settled && !oneScroll ? { minHeight: 0, overflowY: "auto", scrollbarWidth: "thin", overflowAnchor: "none" } : {}),
                   display: liveSession ? "flex" : "block", alignItems: "center",
                   gap: liveSession ? 1 : 0, flexWrap: "wrap",
                   ...(focus === "agent" ? { ...FOCUS, ...(chatBelow ? { borderBottom: 0, borderRadius: "10px 10px 0 0", pb: 0.5 } : {}) } : {}) }}>
@@ -2276,7 +2287,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 },
                     // ...except while its agent is starting and has said nothing: the room is that one line (GeneralWorkspace `quiet`)
                     "&:has([data-tq-starting])": { flex: "0 0 auto", minHeight: 0, "& > *": { flex: "0 0 auto" } } }
-                    : { flex: "0 1 auto", minHeight: 0, mb: canvas ? 1 : 0, display: "flex", flexDirection: "column", "& > *": { flex: "0 1 auto", minHeight: 0 },
+                    : { flex: "0 0 auto", mb: canvas ? 1 : 0, display: "flex", flexDirection: "column", "& > *": { flex: "0 0 auto" },
                       ...(chatBelow ? { bgcolor: "#fff", border: `1px solid ${FOCUS_EDGE}`, borderTop: 0, borderRadius: "0 0 10px 10px", overflow: "hidden" } : {}) }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession}
@@ -2340,6 +2351,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
 
                 {/* ...the draft a little heavier than the words round it (the owner, 2026-10-25: "subtly focus the reply"): the eye lands on what goes out */}
                 {!sessionView && <Box ref={closeOutRef} data-tq-closeout="" sx={{ ...card, ...step, borderTop: 0, mt: 1, px: 0, py: pane === "reply" ? 1.25 : 1, flexShrink: 0,
+                  // ...side by side only: a phone's stacked view scrolls whole under its own docked row
+                  ...(oneScroll ? { "@container (min-width: 760px)": { position: "sticky", bottom: 0, zIndex: 1, bgcolor: SHADE, mt: 0.5, boxShadow: `0 -1px 0 ${BORDER}` } } : {}),
                   ...(focus === "reply" ? { ...FOCUS, mt: 1.25 } : {}),
                   "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }} data-tq-focus={focus === "reply" ? "" : undefined}>
                   {/* CLOSE OUT, not Reply (the owner, 2026-09-27): what finishes a task is not always a reply - a pull

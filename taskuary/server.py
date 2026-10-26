@@ -1835,6 +1835,11 @@ def _earlier(d: dict) -> list:
         for mid in ids:
             if mid in own or any(m['MessageId'] == mid for m in out): continue
             if (m := store.get_message(mid)): out.append(_readable(m))
+    # ...and the message a task was MADE FROM without being moved onto it - the owner's own promise, an Advisor idea on a closed
+    # task's mail (store.made_from). Came from showed only "from email · made 3d ago" (the owner, 2026-10-26: "need more info
+    # where this came from? what sent email/message/chat etc")
+    for m in store.made_from(d.get('task') or {}):
+        if m['MessageId'] not in own and not any(x['MessageId'] == m['MessageId'] for x in out): out.append(_readable(m))
     return out
 
 

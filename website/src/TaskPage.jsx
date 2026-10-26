@@ -2067,6 +2067,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {/* THE WORK COLUMN: the agent and the reply - the agent's own pane, full width while it works */}
                 {/* ...ONCE AN AGENT HAS ACTED (`settled`: its Result, or the run that failed) the work shrinks to the card and the agent's part scrolls in it,
                     so Close out stays on screen under it at a laptop (the owner, 2026-10-25) - never past a report or a diff */}
+                {/* ...in ONE scroller, the column's, with Close out held at its foot (TQ-1215, "screen is wonky and poorly sized"): the Result and a
+                    finished agent's chat each shrank into a scroller of their own, and at 1366x640 the Result kept 12px and the chat 40px */}
                 <Box ref={workBox} data-tq-work="" sx={sessionView ? { display: "contents" } : { minWidth: 0, display: "flex", flexDirection: "column", containerType: "inline-size", ...(settled ? { flex: "0 1 auto", minHeight: 0 } : {}) }}>
                 {/* ONE SHORT LINE, LIVE OR NOT. A running session has always been a single strip -
                     heading, chip, controls - while the stopped card answered with a heading, a
@@ -2081,7 +2083,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {!codeRun && <Box ref={agentHead} data-tq-focus={focus === "agent" ? "" : undefined} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
                   px: liveSession ? 1 : sessionView ? 1.5 : 0, py: liveSession ? 0.55 : pane === "agent" ? (agentBar ? 0.8 : 1.5) : 1.1,
                   ...(sessionView ? {} : { borderTop: 0, pt: 0 }),
-                  flexShrink: settled ? 1 : 0, ...(settled ? { minHeight: 0, overflowY: "auto", scrollbarWidth: "thin", overflowAnchor: "none" } : {}),
+                  flexShrink: 0,
                   display: liveSession ? "flex" : "block", alignItems: "center",
                   gap: liveSession ? 1 : 0, flexWrap: "wrap",
                   ...(focus === "agent" ? { ...FOCUS, ...(chatBelow ? { borderBottom: 0, borderRadius: "10px 10px 0 0", pb: 0.5 } : {}) } : {}) }}>
@@ -2276,7 +2278,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 },
                     // ...except while its agent is starting and has said nothing: the room is that one line (GeneralWorkspace `quiet`)
                     "&:has([data-tq-starting])": { flex: "0 0 auto", minHeight: 0, "& > *": { flex: "0 0 auto" } } }
-                    : { flex: "0 1 auto", minHeight: 0, mb: canvas ? 1 : 0, display: "flex", flexDirection: "column", "& > *": { flex: "0 1 auto", minHeight: 0 },
+                    : { flex: "0 0 auto", mb: canvas ? 1 : 0, display: "flex", flexDirection: "column", "& > *": { flex: "0 0 auto" },
                       ...(chatBelow ? { bgcolor: "#fff", border: `1px solid ${FOCUS_EDGE}`, borderTop: 0, borderRadius: "0 0 10px 10px", overflow: "hidden" } : {}) }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession}
@@ -2340,6 +2342,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
 
                 {/* ...the draft a little heavier than the words round it (the owner, 2026-10-25: "subtly focus the reply"): the eye lands on what goes out */}
                 {!sessionView && <Box ref={closeOutRef} data-tq-closeout="" sx={{ ...card, ...step, borderTop: 0, mt: 1, px: 0, py: pane === "reply" ? 1.25 : 1, flexShrink: 0,
+                  ...(settled ? { position: "sticky", bottom: 0, zIndex: 2, bgcolor: SHADE } : {}),
                   ...(focus === "reply" ? { ...FOCUS, mt: 1.25 } : {}),
                   "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }} data-tq-focus={focus === "reply" ? "" : undefined}>
                   {/* CLOSE OUT, not Reply (the owner, 2026-09-27): what finishes a task is not always a reply - a pull

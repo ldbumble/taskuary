@@ -26,6 +26,7 @@ def install_processing_changes(app, store):
         '/api/fixture/task/chat-saved',
         '/api/fixture/task/closed-asked',
         '/api/fixture/general/canvas',
+        '/api/fixture/general/rest',
         '/api/fixture/signin/link',
         '/api/fixture/signin/terminal-ask',
         '/api/fixture/browser/last-frame',
@@ -398,6 +399,28 @@ def install_processing_changes(app, store):
         sess = general.GeneralSession(store, tid)
         sess.trace, sess.trace_revision = [{'type': 'start', 'session': {'provider': 'Claude Code'}}, *trace], 1
         terminal.SESSIONS[sess.sid] = sess
+        return {'taskId': tid}
+
+    @app.post('/api/fixture/general/rest')
+    def general_rest(body: dict):
+        """A research ask whose general agent finished and is gone: its chat at rest under the Result, a two-box To do, and a title
+        that is the whole ask - what a short laptop drew as three scrollers fighting over one column (TQ-1215). Invented people."""
+        if body: raise HTTPException(422, 'this fixed fixture accepts only an empty object')
+        from taskuary import general
+        ask = ('I need you to find every commercial building within a 3 mile radius of 1 Example Way. Then I want you to find the direct '
+               'email of the owners or decision makers for each property. We are looking to buy a property, so I want to contact each of them.')
+        tid = store.create_task({'Title': ask, 'Kind': 'research', 'Status': 'open', 'Source': 'whatsapp'}, 'router')
+        store.add_message({'TaskId': tid, 'Channel': 'whatsapp', 'Status': 'routed', 'ExternalId': f'fixture-rest-{tid}', 'ConversationId': f'fixture-rest-{tid}',
+                           'FromName': 'Gail Moreno', 'BodyText': ask, 'SentAt': (datetime.now() - timedelta(minutes=40)).isoformat(' ')})
+        store.set_task_checklist(tid, ['Find every commercial building within a 3-mile radius of 1 Example Way.',
+                                       'Find direct email addresses for the owners or decision makers for each property.'], 'router')
+        store.add_comment(tid, 'owner', general.USER_TYPE, 'Run it again with the county parcel file.')
+        found = (('1,184 parcel records,', 'with recorded owners and mailing addresses.'), ('36 published emails:', '25 named contacts, 8 general inboxes.'),
+                 ('12 owners', 'with no public email - a mailing address only.'), ('3 duplicates', 'merged by owner name.'))
+        store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE,
+                          'The rerun produced:\n\n' + '\n'.join(f'- **{n}** {w}' for n, w in found) + '\n\nThe sheet is in the task folder.')
+        store.add_comment(tid, 'general', 'agent', 'AGENT REPORT\nDetermination: 1,184 commercial parcels lie within the radius; 36 owners publish an email.\n'
+                          "Actions: Read the county parcel file and each owner's public site.\nSummary: A sheet of parcels, owners and the emails found.")
         return {'taskId': tid}
 
     from taskuary import demo as _demo

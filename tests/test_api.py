@@ -363,6 +363,17 @@ class ApiTests(unittest.TestCase):
         c.patch(f'/api/tasks/{tid}', json={'Status': 'done'})
         self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'done')
 
+    def test_a_typed_ask_is_not_its_own_title(self):
+        """+ New filed the whole request as the title (TQ-1215): it is cut at a word to one line, the words kept as the Summary."""
+        ask = 'Find every commercial building within three miles of 1 Example Way, then find the direct email of each owner ' * 3
+        t = server.store.get_task(c.post('/api/tasks', json={'Title': ask}).json()['taskId'])
+        self.assertLessEqual(len(t['Title']), 121)
+        self.assertTrue(t['Title'].endswith('…') and ask.startswith(t['Title'][:-1]))
+        self.assertEqual(t['Summary'], ask)
+        typed = server.store.get_task(c.post('/api/tasks', json={'Title': ask, 'Summary': 'as typed'}).json()['taskId'])
+        self.assertEqual(typed['Summary'], 'as typed')
+        self.assertEqual(server.store.get_task(c.post('/api/tasks', json={'Title': 'do the thing'}).json()['taskId'])['Title'], 'do the thing')
+
     def test_the_list_row_carries_its_checklist(self):
         """The sidebar draws each row's progress, and list_tasks' SELECT t.* already ships the
         column - so the bar costs no extra request and no wider payload. Pinned here because the

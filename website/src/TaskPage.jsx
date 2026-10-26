@@ -2268,7 +2268,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession}
                         onAnswered={() => { findTerm(selected); onChanged?.(); }}
-                        toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} />
+                        toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} noComposer={!liveSession} />
                     </React.Suspense>
                   </Box>
                 ) : workspaceMode === "wrapping" ? (

@@ -1366,6 +1366,9 @@ class ABrokenConnectionSaysSoTests(unittest.TestCase):
         c = self.s.get_connector_by_type(ctype)
         self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Roles': 'trigger'}, 't')
         self.s.touch_connector(c['ConnectorId'], err)
+        # failing for an hour: past the grace a retry gets before the bell (and so this row) says anything (problems.GRACE_MINUTES)
+        self.s._exec('UPDATE connector SET LastErrorAt=? WHERE ConnectorId=?',
+                     ((datetime.now() - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S'), c['ConnectorId']))
         return c['ConnectorId']
 
     def test_a_connection_that_stopped_answering_is_on_the_rail(self):
@@ -1376,6 +1379,13 @@ class ABrokenConnectionSaysSoTests(unittest.TestCase):
         self.assertIn('github', rows[0]['title'].lower())
         self.assertIn('no such repository', rows[0]['why'])
         self.assertTrue(rows[0]['key'].startswith('conn:'))
+
+    def test_a_retry_still_at_work_is_not_on_the_rail(self):
+        """2026-10-26: "the classic whatsapp timeout should not show up" - the rail rings for what the bell rings for, no sooner."""
+        c = self.s.get_connector_by_type('whatsapp')
+        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1}, 't')
+        self.s.touch_connector(c['ConnectorId'], 'timed out')
+        self.assertEqual(funnel.broken_connections(self.s), [])
 
     def test_a_healthy_connection_says_nothing(self):
         c = self.s.get_connector_by_type('github')

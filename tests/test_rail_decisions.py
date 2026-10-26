@@ -207,6 +207,7 @@ class ErrorDismissTests(unittest.TestCase):
         c = s.get_connector_by_type('github')
         s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Roles': 'trigger'}, 'test')
         s.touch_connector(c['ConnectorId'], 'northwind/ledger: 404 Not Found')
+        s._exec("UPDATE connector SET LastErrorAt=datetime('now', 'localtime', '-1 hour') WHERE ConnectorId=?", (c['ConnectorId'],))   # past the bell's grace
         key = f"conn:{c['ConnectorId']}"
         self.assertTrue([i for i in rail(s) if i['key'] == key])
         funnel.settle(s, key, 'surfaced', 'owner', read=True, put_down=True); funnel.invalidate()     # Next's mark: shown alone keeps it

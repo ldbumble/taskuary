@@ -100,6 +100,7 @@ import { LIT, STEP_SAID, finishLine } from "./connectorStep.js";
 import { revealRing } from "./railReveal.js";
 import { pressable } from "./pressable.js";
 import { coalesce } from "./coalesce.js";
+import { takeAsk } from "./askAssistant.js";
 import "./assistantView.css";
 
 // Which walk-through this tab was in. Per-browser and deliberately thin - one task id - because the
@@ -2236,6 +2237,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     turnFlight.current = answering.current = false;
     setBusy(false);
   };
+  // ...and a line the bell hands over (askAssistant.js), sent as if typed - or left in the box while a turn is running, never dropped
+  const askRef = useRef(null);
+  askRef.current = (t) => (busy || resetting || turnFlight.current ? setText(t) : send(t));
+  useEffect(() => {
+    const on = () => { const t = takeAsk(); if (t) askRef.current(t); };
+    on(); window.addEventListener("tq-ask", on);
+    return () => window.removeEventListener("tq-ask", on);
+  }, []);
   const sendEmoji = (emoji) => {
     setEmojiEl(null);
     // Do not destroy a sentence the owner was already writing. With an empty composer this is

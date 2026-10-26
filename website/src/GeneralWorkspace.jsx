@@ -398,7 +398,7 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 
 function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "" }) {
+  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
@@ -580,8 +580,10 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             )}
             {/* A CLOSED task's conversation is read, not typed into: a message started a live session on a done task, which
                 then read "waiting on you" under a bar offering only Reopen (the owner, 2026-10-14). The server refuses it too. */}
+            {/* ...and a STOPPED one is resumed by Continue, as a coding agent's is: a box under a stopped agent read as a way to talk to it
+                (the owner, 2026-10-26: "before I hit continue it has a space to type into the agent? coding agents don't have that") */}
             {closedChat ? <div className="tq-aui-hint" role="status" style={{ padding: "10px 4px" }}>
-              This task is closed. Press {btn("reopen")}, then {btn("continue")}, to pick the conversation back up.</div> : <>
+              This task is closed. Press {btn("reopen")}, then {btn("continue")}, to pick the conversation back up.</div> : noComposer ? null : <>
             <ComposerPrimitive.Root className="tq-aui-composer">
               <IconButton size="small" onClick={onAttach} title="Attach an image" className="tq-aui-attach">
                 <AttachFileIcon sx={{ fontSize: 18 }} />
@@ -612,7 +614,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
 
 export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, dock = false, toolsAt = null,
   dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  onDockNewChat, noAiSaid = false, noTools = false }) {
+  onDockNewChat, noAiSaid = false, noTools = false, noComposer = false }) {
   const [data, setData] = useState(null);
   const [connectorId, setConnectorId] = useState("");
   const [model, setModel] = useState("");
@@ -787,7 +789,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onClearAttachments={clearAttachments}
         onAttach={() => fileRef.current?.click()}
         dock={dock} dockExpanded={dockExpanded} prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
-        asking={asking} onAnswer={answerAsk}
+        asking={asking} onAnswer={answerAsk} noComposer={noComposer}
         onBusyChange={onBusyChange} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
         serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since}
         drafts={data?.playbookDrafts || []} acts={data?.browserActs || []} onDraftDecided={refresh} starting={starting} />

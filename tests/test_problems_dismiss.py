@@ -36,24 +36,27 @@ class DismissTests(unittest.TestCase):
         self.assertEqual((out['ok'], out['remaining']), (True, 0))
         self.assertEqual(problems.collect(s), [])
 
-    def test_it_comes_back_when_it_fails_again(self):
+    def test_the_next_failing_poll_does_not_bring_it_back(self):
+        """Per connection, not per poll (2026-10-26): every failing poll re-stamps LastErrorAt, and a dismissal signed
+        with that stamp let a broken chat bridge back thirty seconds after it was put down."""
+        s, key = _failing()
+        problems.dismiss(s, key)
+        cid = int(key.split(':')[1])
+        s._exec('UPDATE connector SET LastErrorAt=? WHERE ConnectorId=?', (_ago(0), cid))
+        self.assertEqual(problems.collect(s), [])
+        s.touch_connector(cid, 'the token expired')                       # worded differently, still the same outage
+        self.assertEqual(problems.collect(s), [])
+
+    def test_it_comes_back_when_it_fails_again_after_working(self):
         """The whole point: dismissing is reading, not fixing."""
         s, key = _failing()
         problems.dismiss(s, key)
-        self.assertEqual(problems.collect(s), [])
         cid = int(key.split(':')[1])
+        s.touch_connector(cid)                                            # it worked
+        problems.collect(s)
+        s.touch_connector(cid, 'the bridge is down')
         s._exec('UPDATE connector SET LastErrorAt=? WHERE ConnectorId=?', (_ago(30), cid))
-        self.assertEqual([p['key'] for p in problems.collect(s)], [key])   # same error, later: news again
-
-    def test_a_different_error_on_the_same_card_is_not_dismissed(self):
-        s, key = _failing()
-        problems.dismiss(s, key)
-        cid = int(key.split(':')[1])
-        s.touch_connector(cid, 'the token expired')
-        s._exec('UPDATE connector SET LastErrorAt=? WHERE ConnectorId=?', (_ago(60), cid))
-        got = problems.collect(s)
-        self.assertEqual([p['key'] for p in got], [key])
-        self.assertIn('token expired', got[0]['detail'])
+        self.assertEqual([p['key'] for p in problems.collect(s)], [key])
 
     def test_a_dismissal_for_something_that_cleared_is_forgotten(self):
         """Not housekeeping for its own sake: without it the list grows forever and a card that
@@ -64,6 +67,7 @@ class DismissTests(unittest.TestCase):
         s.touch_connector(cid, '')                       # polled clean
         self.assertEqual(problems.collect(s), [])
         s.touch_connector(cid, 'down again')
+        s._exec('UPDATE connector SET LastErrorAt=? WHERE ConnectorId=?', (_ago(30), cid))
         self.assertEqual([p['key'] for p in problems.collect(s)], [key])
         problems.dismiss(s, key)                          # rewrites the record, dropping the stale one
         self.assertEqual(list(json.loads(s.get_settings()[problems.DISMISSED])), [key])

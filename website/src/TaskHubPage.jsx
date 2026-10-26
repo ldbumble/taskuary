@@ -32,6 +32,7 @@ import { DEMO } from "./demoApi.js";
 import { buildMove, isBusy, loadedAsset, markReloaded, reloadedFor, staleWhat } from "./staleBuild.js";
 import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
 import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } from "./handraiseState.js";
+import { askAssistant } from "./askAssistant.js";
 import { TaskuaryMark, asUtc, timeAgo } from "./ui.jsx";
 import AssistantView from "./AssistantView.jsx";
 import { SEARCH_PICKED, SearchBar, openSearch } from "./SearchEverything.jsx";
@@ -75,7 +76,7 @@ const SUPPORT_URL ="https://github.com/ldbumble/taskuary/issues/new/choose";
 // what is not yet set up; this says what was working and is not. Grey and quiet when nothing is.
 // "3h ago" alone hides a day boundary: the clock time says which morning
 const fmtWhen = (s) => fmtStamp(asUtc(s), [], { weekday: "short", hour: "numeric", minute: "2-digit" });
-function Bell({ onGo }) {
+function Bell({ onGo, onAsk }) {
   const [items, setItems] = useState([]);
   const [el, setEl] = useState(null);
   const [busy, setBusy] = useState(null);
@@ -119,7 +120,7 @@ function Bell({ onGo }) {
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}
         slotProps={{ paper: { sx: { width: 440, p: 1.5, mt: 0.5 } } }}>
         <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK, mb: n ? 0.25 : 0.5 }}>{n ? "Failing right now" : "Nothing is failing"}</Typography>
-        {!n && <Typography variant="caption" sx={{ color: DIM, display: "block" }}>Nothing has failed in the last few hours: connections, the triage brain and reports. Anything you dismissed comes back if it happens again.</Typography>}
+        {!n && <Typography variant="caption" sx={{ color: DIM, display: "block" }}>Connections, the triage brain and reports are all working. Anything you dismissed comes back if it fails again after working.</Typography>}
         {items.map((p) => (
           <Box key={p.key} sx={{ py: 0.85, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1.25, alignItems: "flex-start" }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -135,10 +136,13 @@ function Bell({ onGo }) {
               {p.restart && p.connector && <Button size="small" variant="outlined" data-tq-restart-bridge="" disabled={busy === `restart:${p.key}`}
                 sx={{ fontSize: 11, whiteSpace: "nowrap" }} onClick={() => restart(p)}>
                 {busy === `restart:${p.key}` ? "Restarting…" : "Restart bridge"}</Button>}
-              {/* Reading it, not fixing it. It comes back the moment the same thing fails again
-                  (problems.signature), so this quiets something you have decided to live with. */}
+              {/* the chat looks into it: reads the app's own health, does the simple repair or says why (troubleshoot.py) */}
+              <Button size="small" variant="outlined" sx={{ fontSize: 11, whiteSpace: "nowrap" }}
+                onClick={() => { setEl(null); onAsk(p); }}>Ask the assistant</Button>
+              {/* Reading it, not fixing it. It holds until this failure ends, and comes back if it fails again after
+                  working (problems.signature), so this quiets something you have decided to live with. */}
               <Button size="small" disabled={busy === p.key} sx={{ fontSize: 10.5, color: FAINT, textTransform: "none" }}
-                title="I have read this. It returns if it happens again."
+                title="I have read this. It returns if it fails again after working."
                 onClick={() => put(p)}>{busy === p.key ? "…" : "Dismiss"}</Button>
               <Button size="small" sx={{ fontSize: 10.5, color: DIM, textTransform: "none", p: 0, minWidth: 0 }}
                 onClick={() => { setEl(null); openBugReport(bellError(p)); }}>{btnLabel("report_bug")}</Button>
@@ -527,7 +531,7 @@ export default function TaskHubPage() {
             if (p.connector) { openAppLink(`connector=${p.connector}`); return; }   // the link opens its card in the canvas
             if (p.report) { openAppLink(`report=${p.report}`); return; }
             go(p.where || "Connections");
-          }} />
+          }} onAsk={(p) => { go("Assistant"); askAssistant(`${p.title}: ${p.detail}${p.error ? ` (${p.error})` : ""}. Can you look into it and fix it?`); }} />
           <Tooltip title="Refresh">
             <IconButton size="small" onClick={() => setTick(tick + 1)}><RefreshIcon sx={{ fontSize: 17, color: DIM }} /></IconButton>
           </Tooltip>

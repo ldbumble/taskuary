@@ -296,9 +296,24 @@ def thread_key(msg):
 
 
 def mail_ids(msg, gm_thread=None) -> dict:
-    """The ids kept on the stored row, so a later reply can find this mail's thread through it (store.meta_expr)."""
-    mid = next(iter(_ids(msg.get('Message-ID'))), '')[:200]
-    return {**({'mid': mid} if mid else {}), **({'gm_thread': str(gm_thread)} if gm_thread else {})}
+    """The ids kept on the stored row: its Message-ID and Gmail thread, so a later reply can find this mail's thread
+    (store.meta_expr), and what it answers (`refs`), so OUR reply to it can carry the chain (reply_headers)."""
+    mid, refs = next(iter(_ids(msg.get('Message-ID'))), '')[:200], [i[:200] for i in ancestry(msg)]
+    if len(refs) > 20: refs = refs[:1] + refs[-19:]      # RFC 5322 3.6.4: a long chain keeps its root and its latest
+    return {**({'mid': mid} if mid else {}), **({'refs': refs} if refs else {}),
+            **({'gm_thread': str(gm_thread)} if gm_thread else {})}
+
+
+def reply_headers(row: dict) -> dict:
+    """In-Reply-To and References for a reply to one stored mail (the owner, 2026-10-26: "it should be this way for
+    all email services"). RFC 5322: In-Reply-To names the mail answered - not the thread's root, which is all a reply
+    said before - and References is that mail's own chain plus it. A row stored before its ids were kept still
+    threads on its conversation key, as it always did."""
+    try: meta = json.loads((row or {}).get('MailMetaJson') or '{}') or {}
+    except ValueError: meta = {}
+    mid = meta.get('mid') if isinstance(meta, dict) else None
+    if not mid: return {'in_reply_to': (row or {}).get('ConversationId')}
+    return {'in_reply_to': mid, 'references': [*(r for r in meta.get('refs') or [] if r != mid), mid]}
 
 
 def conversation_key(store, msg, mailbox: str, gm_thread=None):
@@ -803,7 +818,7 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
                     store, M, user, conv, restore='INBOX', readonly=not read_it, before=sent_at,
                     folder_identity=chain_folder_identity,
                     protected={'INBOX': protected_inbox},
-                    protected_after={'INBOX': inbox_frontier})
+                    protected_after={'INBOX': inbox_frontier}, gm_thread=thrid)
             return int(out['status'] != 'duplicate')
         def progress(uid, holes):
             checkpoint({folder['keys']['uid']: uid,
@@ -834,7 +849,7 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
 
 
 def send_smtp(store, c, to: list, subject: str, body: str, in_reply_to: str = None, cc: list = None,
-              attachments: list = None, html: str = None) -> dict:
+              attachments: list = None, html: str = None, references: list = None) -> dict:
     """The reply, over the provider's own SMTP, threaded with In-Reply-To/References. `cc` is the
     colleague the owner looped in: on the header so everyone sees it, and in the envelope so the
     server actually delivers to them (the header alone sends nothing - it is only text)."""
@@ -863,7 +878,7 @@ def send_smtp(store, c, to: list, subject: str, body: str, in_reply_to: str = No
     m['Date'], m['Message-ID'] = email.utils.formatdate(localtime=True), email.utils.make_msgid(domain=user.rpartition('@')[2] or None)
     if in_reply_to:
         m['In-Reply-To'] = in_reply_to
-        m['References'] = in_reply_to
+        m['References'] = ' '.join(references or [in_reply_to])   # the answered mail's chain plus it (reply_headers)
     port = int(cfg.get('smtp_port') or 587)
     with smtplib.SMTP(smtp_h, port, timeout=30) as S:
         try: S.starttls(context=ssl_ctx(cfg))

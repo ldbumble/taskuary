@@ -2676,7 +2676,7 @@ class SQLiteStore:
         """The OPEN tasks, newest activity first, each with the senders and conversations it carried - the
         open half of what triage is shown (context.recent_open) beside what closed lately."""
         return self._rows(
-            "SELECT t.TaskId, t.Title, t.Status, t.Kind, "
+            "SELECT t.TaskId, t.Title, t.Status, t.Kind, t.Summary, "
             "       GROUP_CONCAT(DISTINCT lower(m.FromEmail)) Senders, GROUP_CONCAT(DISTINCT m.ConversationId) Convs "
             "  FROM task t LEFT JOIN message m ON m.TaskId=t.TaskId "
             " WHERE t.Status NOT IN ('done','dropped') "

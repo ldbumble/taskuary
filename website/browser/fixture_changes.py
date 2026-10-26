@@ -27,6 +27,8 @@ def install_processing_changes(app, store):
         '/api/fixture/task/closed-asked',
         '/api/fixture/general/canvas',
         '/api/fixture/signin/link',
+        '/api/fixture/signin/terminal-ask',
+        '/api/fixture/browser/last-frame',
         '/api/fixture/processing/arrive-during-next',
     })
 
@@ -38,9 +40,13 @@ def install_processing_changes(app, store):
         # the one-time fill page's own form: its POST is what Chrome refused with Origin null (signin.HEADERS, 2026-10-25)
         if method == 'POST' and path.startswith('/signin/'):
             return ''
+        # ...and the answer to the terminal stand-in's sign-in ask, for that task only: its press is the thing under test
+        if method == 'POST' and path in answer_paths:
+            return ''
         return refuse(method, path)
 
     demo.refuse = fixture_refuse
+    answer_paths = set()
 
     sync_token = [None]
 
@@ -387,4 +393,65 @@ def install_processing_changes(app, store):
         sess = general.GeneralSession(store, tid)
         sess.trace, sess.trace_revision = [{'type': 'start', 'session': {'provider': 'Claude Code'}}, *trace], 1
         terminal.SESSIONS[sess.sid] = sess
+        return {'taskId': tid}
+
+    from taskuary import demo as _demo
+
+    class TypedPane(_demo.Replay):
+        "A terminal CLI that keeps what is typed into it - the demo's Replay takes no dictation."
+        def __init__(self, store, tid):
+            super().__init__(store, tid, 'Claude Code', lines=[('Claude Code is waiting on a sign-in', 0)])
+            self.got, self.n = [], 0
+        def write(self, data): self.got.append(data); self.n += 1
+
+    panes = {}
+
+    @app.post('/api/fixture/signin/terminal-ask')
+    def signin_terminal_ask(body: dict):
+        """A general task whose agent works in a terminal pane (no conversation session) and asked to be signed in to
+        northwind.example: the ask a pty's Stop hook records - no choices, since a pty's are a chooser (signin.needs)."""
+        if body:
+            raise HTTPException(422, 'this fixed sign-in fixture accepts only an empty object')
+        from taskuary import signin, terminal, workerstate as ws
+        tid = store.create_task({'Title': 'Pay the Payworth invoice', 'Kind': 'general', 'Status': 'in_progress', 'Tags': 'needs:browser'}, 'fixture')
+        pane = panes[tid] = TypedPane(store, tid)
+        terminal.SESSIONS[pane.sid] = pane
+        ws.record(store, tid, pane.sid, 'input_needed', request_id=f'{signin.PREFIX}northwind.example',
+                  text='Sign in to northwind.example to continue', source='api')
+        answer_paths.add(f'/api/tasks/{tid}/worker/answer')
+        return {'taskId': tid, 'sid': pane.sid}
+
+    @app.get('/api/fixture/signin/typed/{tid}')
+    def signin_typed(tid: int): return {'typed': ''.join(panes[tid].got) if tid in panes else ''}
+
+    # a frame the screencast would have relayed: a 1x1 JPEG
+    JPEG = ('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////'
+            'wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=')
+
+    @app.post('/api/fixture/browser/last-frame')
+    def browser_last_frame(body: dict):
+        """A general task whose browser session ends - on an act held for the owner, on one that failed when approved, or normally -
+        through the real close (browserview.close -> keep_last). Then the agent's answer, so the picture sits under it."""
+        if set(body) != {'end'} or body['end'] not in ('held', 'failed', 'normal'):
+            raise HTTPException(422, "end must be 'held', 'failed' or 'normal'")
+        import json
+        from unittest import mock
+        from taskuary import browsergate, browserview, general, proposals
+        tid = store.create_task({'Title': 'Pay the Payworth invoice', 'Kind': 'general', 'Status': 'in_progress', 'Tags': 'needs:browser'}, 'fixture')
+        store.add_comment(tid, 'owner', general.USER_TYPE, 'Pay the Payworth invoice on the vendor portal.')
+        sid, page = f'fixture-frame-{tid}', 'https://billing.vendor.example/invoices/1001'
+        browserview.LAST[sid] = {'frame': json.dumps({'type': 'frame', 'data': JPEG}), 'url': page, 'at': 0}
+        if body['end'] != 'normal':
+            p = {'action': 'browser_act', 'sid': sid, 'args': ['click', '@e12'], 'command': 'agent-browser click @e12', 'url': page,
+                 'site': 'vendor.example', 'what': 'click the "Pay $412.50" button on billing.vendor.example', 'why': 'it pays'}
+            proposals.queue(store, tid, p, 'agent')
+            browserview.ended_on(sid, 'held', store, tid)
+            if body['end'] == 'failed':
+                # Approve pressed with the browser already gone: the real perform refuses it and marks the session
+                with mock.patch.object(browserview, 'state', return_value={'open': False}):
+                    try: browsergate.perform(store, tid, p)
+                    except RuntimeError: pass
+        browserview.close(sid)
+        store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, {'held': 'The invoice page is open, waiting on your Approve.',
+                          'failed': 'The Pay button on the invoice page did not go through.', 'normal': 'I read the invoice page.'}[body['end']])
         return {'taskId': tid}

@@ -50,6 +50,9 @@ class GmailBox:
             if m := re.fullmatch(r'\(OR HEADER Message-ID "([^"]+)" HEADER References "([^"]+)"\)', crit):
                 hit = lambda raw: m.group(1) in str(email.message_from_bytes(raw)['Message-ID']) or m.group(1) in str(email.message_from_bytes(raw)['References'] or '')
                 return 'OK', [' '.join(str(u) for u, (raw, _t) in sorted(msgs.items()) if hit(raw)).encode()]
+            if m := re.fullmatch(r'\(X-GM-THRID (\d+)\)', crit):
+                self.thread_searches = getattr(self, 'thread_searches', 0) + 1
+                return 'OK', [' '.join(str(u) for u, (_raw, t) in sorted(msgs.items()) if t == m.group(1)).encode()]
             return 'OK', [' '.join(str(u) for u in sorted(msgs)).encode()]
         if cmd == 'fetch':
             u, what = int(a[0]), a[1]; self.fetches.append(what)
@@ -150,6 +153,79 @@ class TheReplyFromSentJoinsTheThread(unittest.TestCase):
         for col in ('gm_thread', 'mid'):
             plan = ' '.join(str(r[-1]) for r in s.cx.execute(f'EXPLAIN QUERY PLAN SELECT ConversationId FROM message WHERE {store.meta_expr(col)}=?', ('x',)))
             self.assertIn('USING INDEX', plan, col)
+
+
+class TheChainIsTheProvidersThread(unittest.TestCase):
+    """The owner, 2026-10-26: "yes on the 2 gmail questions. do it. it should be this way for all email services."
+    History is read by the provider's own thread where it has one - Graph's conversationId already, Gmail's
+    X-GM-THRID now - and by Message-ID/References on a plain IMAP server."""
+
+    def test_gmail_history_includes_the_owners_mail_whose_headers_named_nothing(self):
+        s, _c = store_with()
+        mine = mime(ME, '<a0@mail.gmail.example>', 'the ledger export', 'can you check the export?', ago=120, to=RAY)
+        theirs = mime(RAY, '<r1@vendor.example>', 'RE: the ledger export', 'it writes empty files', ago=60)   # no thread headers at all
+        box = GmailBox({1: (theirs, '900')}, {1: (mine, '900')})
+        poll(s, box)
+        self.assertTrue(box.thread_searches)                                  # the chain was read by Gmail's thread
+        got = rows(s)
+        self.assertEqual({r['ConversationId'] for r in got}, {'<r1@vendor.example>'})
+        self.assertIn('context', [r['Status'] for r in got])                 # Alex's first mail, as history of the thread
+
+    def test_a_plain_imap_server_is_still_searched_by_message_id(self):
+        s, _c = store_with()
+        first = mime(RAY, '<r1@vendor.example>', ago=60)
+        box = GmailBox({1: (first, '')}, {}, gm=False)
+        poll(s, box)
+        self.assertFalse(getattr(box, 'thread_searches', 0))
+
+
+class AReplyNamesTheMailItAnswers(unittest.TestCase):
+    """RFC 5322 3.6.4: In-Reply-To is the mail answered, References its chain plus it. A reply named the thread's root."""
+
+    def _smtp(self, row):
+        s, _c = store_with()
+        sent = {}
+        class FakeSmtp:
+            def __init__(self, host, port, timeout=None): self.sock = mock.Mock(getpeercert=mock.Mock(return_value=b'the mail host certificate'))
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+            def starttls(self, context=None): pass
+            def login(self, u, p): pass
+            def sendmail(self, frm, to, data): sent['msg'] = email.message_from_string(data)
+        with mock.patch.object(imapmail.smtplib, 'SMTP', FakeSmtp):
+            from taskuary import outbound
+            outbound.reply_to_message(s, row, 'Fixed - it exports again.')
+        return sent['msg']
+
+    def _row(self, meta=None):
+        return {'Channel': 'email', 'ExternalId': f'imap:{ME}:102', 'Subject': 'RE: the ledger export', 'FromEmail': 'ray@vendor.example',
+                'SourceName': ME, 'ConversationId': '<r1@vendor.example>', 'MailMetaJson': json.dumps(meta) if meta else None}
+
+    def test_smtp_reply_threads_on_the_answered_mail_and_carries_its_chain(self):
+        msg = email.message_from_bytes(mime(RAY, '<r2@vendor.example>', refs='<r1@vendor.example> <a1@mail.gmail.example>', irt='<a1@mail.gmail.example>'))
+        out = self._smtp(self._row(imapmail.mail_ids(msg, '900')))
+        self.assertEqual(out['In-Reply-To'], '<r2@vendor.example>')
+        self.assertEqual(out['References'], '<r1@vendor.example> <a1@mail.gmail.example> <r2@vendor.example>')
+
+    def test_a_row_stored_before_its_ids_were_kept_still_threads_on_its_key(self):
+        out = self._smtp(self._row())
+        self.assertEqual((out['In-Reply-To'], out['References']), ('<r1@vendor.example>', '<r1@vendor.example>'))
+
+    def test_a_long_chain_keeps_its_root_and_its_latest(self):
+        refs = ' '.join(f'<m{i}@vendor.example>' for i in range(30))
+        kept = imapmail.mail_ids(email.message_from_bytes(mime(RAY, '<m30@vendor.example>', refs=refs)))['refs']
+        self.assertEqual((len(kept), kept[0], kept[-1]), (20, '<m0@vendor.example>', '<m29@vendor.example>'))
+
+    def test_graph_replies_on_the_answered_message_itself(self):
+        # Graph threads by itself when the reply is made ON the message - this pins that it still is
+        from taskuary import outbound
+        s = MemoryStore()
+        row = {'Channel': 'email', 'ExternalId': 'graph:AAMk-r2', 'Subject': 'RE: the ledger export', 'FromEmail': 'ray@vendor.example',
+               'SourceName': ME, 'ConversationId': 'AAQk-thread'}
+        ok = mock.Mock(status_code=202, text='')
+        with mock.patch.object(outbound, '_graph_token', return_value='tok'), mock.patch.object(outbound.requests, 'post', return_value=ok) as post:
+            outbound.reply_to_message(s, row, 'Fixed - it exports again.')
+        self.assertTrue(post.call_args[0][0].endswith(f'/users/{ME}/messages/AAMk-r2/reply'))
 
 
 if __name__ == '__main__': unittest.main()

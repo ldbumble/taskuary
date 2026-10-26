@@ -812,23 +812,24 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
                            'or share a link to them in the chat')
     if ch == 'email' and ext.startswith('imap:'):
         # mail that arrived over IMAP goes back over the provider's own SMTP, in-thread
-        from .imapmail import send_smtp
+        from .imapmail import send_smtp, reply_headers
         box = msg.get('SourceName') or ''
         c = next((store.get_connector(x['ConnectorId'], with_secret=True) for x in store.list_connectors()
                   if x['Type'] in ('gmail', 'imap') and x['Active']
                   and json.loads(x.get('ConfigJson') or '{}').get('address', '').lower() == box.lower()), None)
         if not c: raise Fixable(f'no mail connection is set up for {box}', *MAIL)
         return send_smtp(store, c, to or [msg.get('FromEmail')], re_subject(msg.get('Subject')),
-                         body, in_reply_to=msg.get('ConversationId'), cc=cc,
-                         attachments=read_attachments(attachments))
+                         body, cc=cc, attachments=read_attachments(attachments), **reply_headers(msg))
     # ...and mail that came in another way (a forward, the push door) leaves through the SMTP mailbox it was addressed to - or
     # the only one there is when no Outlook is connected: the Graph road alone answered "the outlook connection is not set
     # up" with an IMAP mailbox connected and working (2026-10-06)
     smtp = None if ext.startswith('graph:') else _smtp_box(store, msg.get('SourceName')) if ch == 'email' else None
     if smtp:
-        from .imapmail import send_smtp
+        from .imapmail import send_smtp, reply_headers
+        # in-thread only when the row kept the mail's own Message-ID: this road's conversation key is no mail id at all
+        hdrs = reply_headers(msg)
         return send_smtp(store, smtp, to or [msg.get('FromEmail')], re_subject(msg.get('Subject')),
-                         body, cc=cc, attachments=read_attachments(attachments))
+                         body, cc=cc, attachments=read_attachments(attachments), **(hdrs if hdrs.get('references') else {}))
     if ch == 'email':
         return send_email(store, to or [msg.get('FromEmail')], re_subject(msg.get('Subject')),
                           body, ext[6:] if ext.startswith('graph:') else None, msg.get('SourceName'),

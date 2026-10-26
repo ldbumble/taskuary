@@ -128,19 +128,23 @@ def refresh_outlook(store, tok: str, mailbox: str, conversation_id: str, before:
     return cov
 
 
-def _imap_search(M, box: str, root: str, readonly: bool = True) -> list:
+def _imap_search(M, box: str, root: str, readonly: bool = True, gm_thread=None) -> list:
     typ, _d = M.select(box if box == 'INBOX' else f'"{box}"', readonly=readonly)
     if typ != 'OK': raise RuntimeError(f'SELECT {box} returned {typ}: {_d}')
-    typ, data = M.uid('search', None, f'(OR HEADER Message-ID "{root}" HEADER References "{root}")')
+    # the provider's own thread where it has one, as Graph's conversationId is for Outlook (the owner, 2026-10-26: "it
+    # should be this way for all email services"): Gmail's holds a reply whose headers never named the root
+    crit = f'(X-GM-THRID {int(gm_thread)})' if gm_thread else f'(OR HEADER Message-ID "{root}" HEADER References "{root}")'
+    typ, data = M.uid('search', None, crit)
     if typ != 'OK': raise RuntimeError(f'SEARCH {box} returned {typ}: {data}')
     return sorted(int(x) for x in (data[0] or b'').split())
 
 
 def refresh_imap(store, M, user: str, root: str, restore: str = 'INBOX', readonly: bool = True,
                  before: str = None, folder_identity=None, protected=None,
-                 protected_after=None) -> dict:
-    """Complete one IMAP conversation - the thread keyed by its root Message-ID, through References -
-    across INBOX and the Sent folder; the owner's own mail is `context`, the rest `history`.
+                 protected_after=None, gm_thread=None) -> dict:
+    """Complete one IMAP conversation - the thread keyed by its root Message-ID, through References, or by
+    Gmail's own thread id (`gm_thread`) when the server gave one - across INBOX and the Sent folder; the
+    owner's own mail is `context`, the rest `history`, all filed under `root`.
 
     The poll supplies its exact folder identity and protects every Inbox UID it still owns. That
     keeps history retrieval from duplicating a scoped row or swallowing pending work as history.
@@ -157,7 +161,7 @@ def refresh_imap(store, M, user: str, root: str, restore: str = 'INBOX', readonl
         for box, is_sent in boxes:
             # Historical discovery is always read-only. The owner's mark-read switch applies to
             # arriving Inbox work, never to old context fetched for a chain.
-            uids = _imap_search(M, box, root, readonly=True)
+            uids = _imap_search(M, box, root, readonly=True, gm_thread=gm_thread)
             identity = None
             if folder_identity:
                 try:
@@ -182,7 +186,7 @@ def refresh_imap(store, M, user: str, root: str, restore: str = 'INBOX', readonl
                 except Exception: when = None
                 added += _keep(store, root, ext, {'subject': _dec(msg.get('Subject')), 'body': body[:20000], 'from_name': name or addr,
                                                   'from_email': addr, 'to': _hdr_addrs(msg, 'To'), 'cc': _hdr_addrs(msg, 'Cc'), 'sent_at': when,
-                                                  'mail_meta': mail_ids(msg)}, user, before, atts)
+                                                  'mail_meta': mail_ids(msg, gm_thread)}, user, before, atts)
         cov = {'complete': failed == 0, 'listed': seen, 'added': added,
                'error': None if not failed else f'{plural(failed, "message")} of the thread could not be fetched'}
     except IMAPIdentityError as e:

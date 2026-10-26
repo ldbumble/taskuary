@@ -184,10 +184,13 @@ def fast_args(cli: str) -> list:
     return []
 
 
+# the CLIs whose PreToolUse hook can REFUSE a shell call, so a browser act can be held (browsergate.py's header says why the rest can't)
+HOLDS_CLI = frozenset({'claude'})
+
 def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, trace=None, cancel=None,
                  resume=None, cli_tools: bool = False, extra_env: dict = None, read_only: bool = None,
                  research: bool = False, gear: str = 'light', keep: str = None, extra_args: list = None, task_id=None,
-                 user_settings: bool = True):
+                 user_settings: bool = True, hold_sid: str = None):
     """A CLI agent as the classifier: prompt in on stdin, JSON out. The repo working dir
     is dropped - triage is about the message, not about any checkout.
 
@@ -265,6 +268,11 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         from . import agenttools
         args = list(prof.get('args') or preset_args(prof['cmd']) or ['-p'])
         prof['args'] = agenttools.insert(['', *args], agenttools.session_args(store, hub_agents.cli_of(prof, agent_name), task_id, args))[1:]
+    # ...and a general chat with a browser gets the browser hold as its own hook (hooks.browser_settings): only Claude's hook can refuse
+    # a call (browsergate.HOLDS), and a stranger's run already carries its one --settings file
+    if hold_sid and not no_hands and stranger_mode not in ('auto', 'look') and hub_agents.cli_of(prof, agent_name) in HOLDS_CLI:
+        from . import hooks
+        if (f := hooks.browser_settings(hold_sid)): prof['args'] = list(prof.get('args') or []) + ['--settings', f]
     # WHICH GEAR this job rides. Session work - coding and general alike - takes the MAIN model;
     # the light gear is for the one-message jobs (triage, drafts, summaries, the digest). A
     # general worker session used to fall through to light whenever no main model was set, so
@@ -355,7 +363,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
 
 def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,
               cli_tools: bool = False, extra_env: dict = None, research: bool = False, fallback_user=None,
-              gear: str = 'light', keep: str = None, task_id=None, job: str = None):
+              gear: str = 'light', keep: str = None, task_id=None, job: str = None, hold_sid: str = None):
     """The brain, or the demo's script. Everything in the app asks for its brain here, which is
     the one place a demo can be told to answer without a key, a CLI, or a request that leaves
     the machine (demo.py).
@@ -371,7 +379,7 @@ def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None
     # held by the owner's data rule: no AI here may read it, so it waits - never what blank means, which would be one the rule keeps out
     if r.tier == 'held': brainroute.outcome(store, rid, 'refused:sensitive'); return None
     try: brain = _build_llm(store, r.pick, r.model or None, trace, cancel, resume, cli_tools, extra_env, research, fallback_user, r.gear, keep, task_id,
-                            backups=r.chain)
+                            backups=r.chain, hold_sid=hold_sid)
     except Exception as e:
         brainroute.outcome(store, rid, f'refused:{type(e).__name__}' if isinstance(e, (origin.RefusedForStranger, origin.Refusal)) else 'error'); raise
     if brain is None: brainroute.outcome(store, rid, 'error' if r.pick else 'refused:no AI')
@@ -474,7 +482,7 @@ class _StepUp:
 
 def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,
                cli_tools: bool = False, extra_env: dict = None, research: bool = False, fallback_user=None,
-               gear: str = 'light', keep: str = None, task_id=None, backups: list = None):
+               gear: str = 'light', keep: str = None, task_id=None, backups: list = None, hold_sid: str = None):
     """The brain named by `pick` ('' = first active AI connector, 'connector:<id>',
     'cli:<agent>'), defaulting to the triage_ai setting - callers like reports may name
     their OWN brain and model per job instead of riding the triage tier. The owner's ordered
@@ -514,7 +522,7 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
             try:
                 return _Cooling(store, candidate, make_cli_llm(store, candidate[4:], chosen_model, trace=trace, cancel=cancel,
                                     resume=chosen_resume, cli_tools=cli_tools, extra_env=extra_env,
-                                    research=research, gear=gear, keep=chosen_keep, task_id=task_id))
+                                    research=research, gear=gear, keep=chosen_keep, task_id=task_id, hold_sid=hold_sid))
             # a BACKUP that cannot run a stranger's task is no backup for it; the first brain's refusal is the answer
             except origin_mod.RefusedForStranger:
                 if first: raise

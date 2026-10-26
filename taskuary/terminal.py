@@ -1777,7 +1777,7 @@ def no_emails(text: str) -> str:
     return _EMAIL.sub('[email removed]', text or '')
 
 
-def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: str = None, instruction_theirs: bool = False) -> str:
+def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: str = None, instruction_theirs: bool = False, cli: str = '') -> str:
     """What gets typed into a fresh session, and the ONLY context it should need: the ask, the
     mail behind it, which checkout to work in, and the coding rules. One line - a newline
     submits in a TUI.
@@ -1807,7 +1807,9 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # repo's agents are deliberately absent - awareness costs prompt tokens, so it is spent
     # only where a collision is physically possible.
     from . import browserview as _bv
-    if _bv.wanted(t) and shutil.which('agent-browser'): parts.append(_bv.brief())
+    # the hold is promised only to a CLI whose hook can refuse (llm.HOLDS_CLI): Codex was told "held" and paid (2026-10-25)
+    from .llm import HOLDS_CLI
+    if _bv.wanted(t) and shutil.which('agent-browser'): parts.append(_bv.brief(held=not cli or cli_named({'cmd': cli}) in HOLDS_CLI))
     from . import blackboard as bb
     # the overlap model would read a stranger's title and summary, and its sentence would land in this prompt
     aware = bb.briefing(store, cwd, exclude_tid=tid, assess_for=None if stranger else tid) if cwd else ''
@@ -2296,7 +2298,8 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
                                 model if i == 0 else None, resume=resume,
                                 brain=candidate or None,
                                 seed_fn=(lambda here: resume_seed(instruction, store, tid)) if resume else
-                                        (lambda here, r=repo: seed_text(store, tid, instruction, r, here, instruction_theirs)))
+                                        (lambda here, r=repo, c=candidate: seed_text(store, tid, instruction, r, here, instruction_theirs,
+                                                                            cli=c or cli_named(json.loads(row.get('Config') or '{}')))))
             chosen = candidate or cli_named(json.loads(row.get('Config') or '{}'))
             chain = chain[i:]
             break

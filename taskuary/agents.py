@@ -252,7 +252,10 @@ def _live_line(j):
 
 
 # the CLI's own login has lapsed - nothing in Taskuary can renew it, only the user at a terminal can
-_SIGNED_OUT = re.compile(r'OAuth session expired|Failed to authenticate|not logged in|Not logged in|please (?:run )?[`\']?(?:claude )?/?login|codex login|401 Unauthorized', re.I)
+# ...and Gemini's and Qwen's own words for it (2026-10-25): "API key is missing or not configured", "Please set an Auth method",
+# "Authentication required: Use Qwen Code CLI to authenticate first" reached the task page as an app bug with Report this bug
+_SIGNED_OUT = re.compile(r'OAuth session expired|Failed to authenticate|not logged in|Not logged in|please (?:run )?[`\']?(?:claude )?/?login|codex login|401 Unauthorized'
+                         r'|API key is missing|set an Auth method|Authentication required|to authenticate first', re.I)
 _LOGIN_HOW = {'claude': "run `claude` and type `/login`", 'copilot': "run `copilot` and type `/login`",
               'codex': "run `codex login`", 'cursor': "run `cursor-agent login`",
               'gemini': "run `gemini` once and finish Google's sign-in",
@@ -276,7 +279,8 @@ def signed_out_msg(name: str, why: str, cmd: str = '') -> str:
     the profile name, _LOGIN_HOW.get('coding') missed every time and always had."""
     from . import cliinstall, words
     cli = cliinstall.recipe_for(cmd) or name
-    how = _LOGIN_HOW.get(cli, f"run `{cli}` and sign in again")
+    why = re.sub(r'^\s*session/\w+:\s*', '', str(why or ''))        # the protocol's method name is ours, not the owner's to read
+    how =_LOGIN_HOW.get(cli, f"run `{cli}` and sign in again")
     # named by the AI, not the profile: "coding isn't signed in" says nothing about which sign-in to do
     return (f"{cli} isn't signed in on this machine ({why.strip()[:160]}). Press Set it up on "
             f"{words.name('ai_apps')} and sign in there in the pane that opens - or {how} in a terminal.")
@@ -1230,12 +1234,17 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
             if cancel.is_set(): client.cancel(); client.close()
         watcher = threading.Thread(target=_cancel, daemon=True); watcher.start()
     try:
-        caps = client.connect()
-        if resume and caps.get('loadSession'): client.load_session(resume, cwd)
-        else:
-            if resume: trace('progress', 'acp', f'{name} cannot reload a session; starting a fresh one')
-            client.new_session(cwd)
-        stop, said = client.prompt(prompt)
+        try:
+            caps = client.connect()
+            if resume and caps.get('loadSession'): client.load_session(resume, cwd)
+            else:
+                if resume: trace('progress', 'acp', f'{name} cannot reload a session; starting a fresh one')
+                client.new_session(cwd)
+            stop, said = client.prompt(prompt)
+        except acp_mod.ACPAgentError as e:
+            # a CLI that is not signed in answers session/new in its own words: said as a sign-in, not as a broken app (2026-10-25)
+            if _SIGNED_OUT.search(str(e)): raise RuntimeError(signed_out_msg(name, str(e), cmd[0] if cmd else '')) from e
+            raise
         if stop and stop not in ('end_turn', 'cancelled'):
             trace('progress', 'acp', f'the turn ended early: {stop}')
         diff = ''

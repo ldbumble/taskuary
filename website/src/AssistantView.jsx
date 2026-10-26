@@ -62,7 +62,7 @@ import { ASK_REPORT, AgentAsk } from "./RunForm.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, putDownLanded, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory, withdrawSelection } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, putDownLanded, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, pressFollowsTable, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory, withdrawSelection } from "./funnelPile.js";
 import { FYI_PAGE, ageHover, coveredByReload, fyiTail, heldSince, latestLine, pileRows, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
@@ -1913,10 +1913,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
 
   const ensureNextSelection = useCallback(async (scope) => {
     if (pendingPile.current) await pendingPile.current;        // the rail riding behind the last card carries the next token
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
       const captured = selectionRef.current;
       if (captured && sameSelectionScope(captured.scope, scope)) return captured;
-      await loadPileRef.current?.(true);
+      // ...and a read already on its way is waited out, never taken as this scope's: it was asked for the table as it stood when it
+      // was sent, and one for another table is dropped when it lands (loadPile) - joined, it spent a try and brought nothing. The read
+      // that follows it is this scope's own
+      if (pileFlight.current) await pileFlight.current;
+      else await loadPileRef.current?.(true);
     }
     const captured = selectionRef.current;
     return captured && sameSelectionScope(captured.scope, scope) ? captured : null;
@@ -1956,19 +1960,31 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     pickedRef.current = !!key;
     if (!key) navHow.current = "replace";            // the walk's Next is a stream, not a stack: the address follows, Back does not
     const epoch = chatEpoch.current;
-    const scope = nextSelectionScope(key ? null : only.current, key ? null : currentRef.current?.key || null);
-    const capture = key ? null : await ensureNextSelection(scope);
-    const activeScope = nextSelectionScope(key ? null : only.current, key ? null : currentRef.current?.key || null);
-    const scopeMoved = !key && !sameSelectionScope(scope, activeScope);
-    if (epoch !== chatEpoch.current || resettingRef.current || scopeMoved) {
-      turnFlight.current = false;
-      setBusy(false);
-      // a new chat or a reset is the owner's own doing and stays quiet. The rail re-emitting under
-      // a slow pile is NOT: this returned with no error and no message, and between 08:20 and
-      // 08:47 on 2026-09-09 not one press reached the server while the button looked alive.
-      if (scopeMoved) setErr((m) => m || "The list moved while that was loading - press it again.");
-      dropCarried();
-      return;
+    // ONE PRESS WALKS ON (the owner, 2026-10-26: Next said "The list moved while that was loading - press it again" - "the list changed
+    // while you pressed next should be fixed as well"): the rail read a press waits on can itself settle the table - the server says its
+    // item is gone and the table clears, or the same task comes back under its new key - and the press then stopped and asked for
+    // another. That is no move of the owner's: the press captures again for the table as it now stands (pressFollowsTable), twice at
+    // most. A filter changed under it, or another item put up, is still refused below - passing an item never seen would skip it
+    let scope, capture;
+    for (let round = 0; ; round += 1) {
+      const was = key ? null : currentRef.current;
+      scope = nextSelectionScope(key ? null : only.current, key ? null : was?.key || null);
+      capture = key ? null : await ensureNextSelection(scope);
+      const activeScope = nextSelectionScope(key ? null : only.current, key ? null : currentRef.current?.key || null);
+      const scopeMoved = !key && !sameSelectionScope(scope, activeScope);
+      const ours = epoch === chatEpoch.current && !resettingRef.current;
+      if (ours && scopeMoved && round < 2 && pressFollowsTable(scope, activeScope, was, currentRef.current)) continue;
+      if (epoch !== chatEpoch.current || resettingRef.current || scopeMoved) {
+        turnFlight.current = false;
+        setBusy(false);
+        // a new chat or a reset is the owner's own doing and stays quiet. The rail re-emitting under
+        // a slow pile is NOT: this returned with no error and no message, and between 08:20 and
+        // 08:47 on 2026-09-09 not one press reached the server while the button looked alive.
+        if (scopeMoved) setErr((m) => m || "The list moved while that was loading - press it again.");
+        dropCarried();
+        return;
+      }
+      break;
     }
     // A failed modern capture (including selection_unavailable) never becomes an optimistic owner
     // turn. The pile refresh already supplied the bounded error; a later explicit gesture retries.

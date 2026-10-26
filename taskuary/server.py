@@ -1859,8 +1859,7 @@ def task_detail(task_id: int):
     judged, ran, story = _brainroute().judged(store, task_id), _workerstate().ended(store, task_id), _agent_story(task_id)
     # "Run again on the strong model" is offered only on an open task whose agent failed or whose reader was unsure (TaskPage's
     # ▾): asking the router on every other open cost ~11 ms a task, 2.7x what an open cost in 0.3.9.34 (2026-10-26)
-    strong = d['task'].get('Status') not in ('done', 'dropped') and (judged.get('sure') is False or ran == 'failed'
-                                                                       or (story or {}).get('kind') == 'failed')
+    strong = _brainroute().strong_offered(d['task'], judged, ran, story)
     return {**d,'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])},
             'origin': {**dict(zip(('origin', 'why'), origin.of_task(store, task_id))),     # who's words are on it (origin.py)
                        # ...and what one of them tries to make an AI do, as triage or ranking read it (message.Danger)

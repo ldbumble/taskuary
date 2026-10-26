@@ -475,6 +475,13 @@ def session_allowed(store, task, chain: list) -> tuple:
     return (ok, '') if ok else ([], f'{NO_SENSITIVE}, so the coding agent does not start')
 
 
+def strong_offered(task: dict, judged_: dict, ended: str, story: dict | None) -> bool:
+    """Whether "Run again on the strong model" can stand on this task's ▾ (TaskPage: an open task whose agent failed, or whose reader was
+    unsure) - the task page, the Assistant's row and the open's own cost all read this one rule (2026-10-26)."""
+    return str((task or {}).get('Status') or '') not in ('done', 'dropped') and (
+        (judged_ or {}).get('sure') is False or ended == 'failed' or (story or {}).get('kind') == 'failed')
+
+
 def strong_for(store, job: str, task, first: str = None) -> tuple:
     """(pick, model) for "Run again on the strong model": `first` (the brain that ran it) or the job's own brain when it has a strong
     model, else the first backup with one - a coding pane only ever a CLI's. ('', '') when no brain here has one."""

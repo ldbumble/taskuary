@@ -2555,6 +2555,14 @@ class SQLiteStore:
         from . import outcomes
         outcomes.record(self, 'promise.made', 'task', tid, 'promise', facts={'mid': mid, 'due': due})   # the ledger: kept, kept late, late?
         return tid
+    def sent_onto_task(self, mid: int, tid: int, why: str) -> bool:
+        """The owner's own sent message, on no task yet, put on the open task the model read it as part of - so the thread is that
+        task's and the other side's reply follows it there (store.task_for_conversation). False when it found a task meanwhile."""
+        with self.lock:
+            cur = self.cx.execute('UPDATE message SET TaskId=? WHERE MessageId=? AND TaskId IS NULL', (tid, mid)); self.cx.commit(); self._writes += 1
+        if cur.rowcount != 1: return False
+        self.add_route(mid, tid, 'attach', None, why, [], 'sentjudge')
+        return True
     def open_promises(self, since, before='9999', conversation_id=None):
         """Promises the model read in the owner's sent words that nothing later of theirs delivered, newest first, with
         the message they were made in. The other side replying does not close one - "Great, thanks!" is not the budget."""
@@ -2660,6 +2668,19 @@ class SQLiteStore:
             "  FROM task t LEFT JOIN message m ON m.TaskId=t.TaskId "
             " WHERE t.Status NOT IN ('done','dropped') "
             " GROUP BY t.TaskId ORDER BY IFNULL(t.UpdatedAt, t.CreatedAt) DESC LIMIT ?", (limit,))
+    def tasks_owner_worked(self, since: str, before: str, limit=3):
+        """The OPEN tasks the owner acted on (an audit row of theirs) between two stamps, last touched first, with when.
+        What they had in hand when they sent a mail of their own (context.worked_before)."""
+        return self._rows(
+            "SELECT t.TaskId, t.Title, t.Summary, MAX(a.CreatedAt) Touched FROM audit a JOIN task t ON t.TaskId=CAST(a.EntityId AS INTEGER) "
+            " WHERE a.EntityType='task' AND a.Actor='owner' AND a.CreatedAt>=? AND a.CreatedAt<=? AND t.Status NOT IN ('done','dropped') "
+            " GROUP BY t.TaskId ORDER BY Touched DESC LIMIT ?", (since, before, limit))
+    def owner_started(self, conversation_id):
+        """The owner's own sent message that STARTED this thread, when no task holds the thread yet - else None."""
+        if not conversation_id or self.task_for_conversation(conversation_id): return None
+        m = self._one("SELECT * FROM message WHERE ConversationId=? AND IFNULL(Channel,'') NOT IN ('report','assistant','own') "
+                      'ORDER BY SentAt, MessageId LIMIT 1', (conversation_id,))
+        return m if m and (m.get('Status') == 'context' or m.get('Direction') == 'out') else None
     def tasks_closed_since(self, since: str, limit=60):
         """Tasks closed (done or dropped) on or after `since`, newest first, each with the senders and
         conversations it carried - enough for a caller to decide whether it touches the message in hand

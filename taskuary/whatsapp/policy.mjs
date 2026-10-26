@@ -79,7 +79,8 @@ export function createChatGate(now = () => Date.now(), lids = createLidMap()) {
     const accepted = admits(jid) || self.has(j);
     if (!accepted && isChat(j)) {
       // Keep only routing metadata for the source picker. Baileys calls this before decrypting the
-      // message, so an unapproved chat's name, text and media never enter Taskuary's bridge.
+      // message, so an unapproved chat's text and media never enter Taskuary's bridge - only the sender's push name, which
+      // the stanza carries in clear and the picker needs to find them by (roster.observeStanza, 2026-10-26).
       seenBlocked.delete(j);
       seenBlocked.set(j, { jid: j, group: j.endsWith("@g.us"), last: Math.floor(now() / 1000) });
       while (seenBlocked.size > 500) seenBlocked.delete(seenBlocked.keys().next().value);

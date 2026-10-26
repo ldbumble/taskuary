@@ -69,6 +69,19 @@ export function createChatRoster({ canon = (jid) => jid, alt = () => "" } = {}) 
     row.n += 1;
   };
 
+  // THE NAME ON THE ENVELOPE (2026-10-26). The owner: "the whatsapp contacts people tab are still not searchable by name as
+  // well". The address book never arrives on an account whose app-state key went missing (contact sync failing every ten
+  // minutes, a name on 1 person row of 78), and a chat the owner has not picked is turned away before decryption - so its
+  // messages' push names were never seen either, and every person row was a bare number. WhatsApp writes the sender's own
+  // push name in clear on the message stanza (`notify`), beside who sent it; that name - only the name, never a body - names
+  // the person's row, the way a saved contact would. Like a profile name it never adds a row, and the owner's own is skipped.
+  const observeStanza = (attrs = {}, isSelf = () => false) => {
+    const from = String(attrs.from || ""), notify = String(attrs.notify || "").trim();
+    const who = String((from.endsWith("@g.us") ? attrs.participant : from) || "");
+    if (!notify || !isChat(who) || who.endsWith("@g.us") || isSelf(who)) return;
+    upsertContact({ id: who, jid: attrs.participant_pn || attrs.sender_pn, lid: attrs.participant_lid || attrs.sender_lid, notify });
+  };
+
   const remove = (jids = []) => {
     for (const jid of jids || []) chats.delete(String(jid || ""));
   };
@@ -101,5 +114,5 @@ export function createChatRoster({ canon = (jid) => jid, alt = () => "" } = {}) 
       || a.jid.localeCompare(b.jid));
   };
 
-  return { upsertContact, upsertChat, observeMessage, remove, replaceGroups, list };
+  return { upsertContact, upsertChat, observeMessage, observeStanza, remove, replaceGroups, list };
 }

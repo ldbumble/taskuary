@@ -2,7 +2,8 @@
 // owner, 2026-10-23: "search should be by phone number, name or group name not id's. you can show id's in small under").
 // The server's twin is taskuary/wanames.py; the rows arrive named and with `phone` from it.
 
-export const isWaJid = (s) => /@(s\.whatsapp\.net|g\.us)$/.test(String(s || ""));
+// ...a LID (<n>@lid) too: WhatsApp addresses most 1:1 chats by one now, and it is no more searchable than any other id (2026-10-26)
+export const isWaJid = (s) => /@(s\.whatsapp\.net|g\.us|lid)$/.test(String(s || ""));
 export const isWaGroup = (s) => String(s || "").endsWith("@g.us");
 const digits = (s) => String(s || "").replace(/\D/g, "");
 const fold = (s) => String(s || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLocaleLowerCase();

@@ -200,6 +200,17 @@ async function connect() {
   thisSock.ev.on("contacts.update", (contacts) => {
     if (thisSock === sock) for (const contact of contacts || []) { learnContact(contact); chatRoster.upsertContact(contact); }
   });
+  // every message stanza, picked chat or not, before Baileys' own handler decides to ignore it: the sender's push name and
+  // other id off its attributes (roster.observeStanza) - the body is never touched here
+  thisSock.ws?.on?.("CB:message", (node) => {
+    if (thisSock !== sock) return;
+    try {
+      const a = node?.attrs || {}, who = (String(a.from || "").endsWith("@g.us") ? a.participant : a.from) || "";
+      lids.learn(who, a.participant_pn || a.sender_pn); lids.learn(who, a.participant_lid || a.sender_lid);
+      const mine = new Set([meJid, thisSock.user?.id, thisSock.user?.lid].map(user).filter(Boolean));
+      chatRoster.observeStanza(a, (j) => mine.has(user(j)));
+    } catch { /* a name never breaks the bridge */ }
+  });
   thisSock.ev.on("chats.phoneNumberShare", ({ lid, jid } = {}) => { if (thisSock === sock) lids.learn(lid, jid); });
   thisSock.ev.on("chats.upsert", (chats) => {
     if (thisSock === sock) for (const chat of chats || []) chatRoster.upsertChat(chat);

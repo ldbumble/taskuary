@@ -12,6 +12,7 @@ _NOT_INSTALLED = re.compile(r"\[Errno 2\]|No such file or directory|is not recog
                             r"|not installed|cannot find the file specified", re.I)
 _NO_FOLDER = re.compile(r'working directory does not exist|needs a repository|no repository|not a git repository|repository still to choose', re.I)
 _NO_TOOL = re.compile(r'pick a coding tool first', re.I)
+_SIGNED_OUT = re.compile(r"isn't signed in on this machine", re.I)
 _NO_AI = re.compile(r'no AI connector|no AI is (set up|connected)|no brain', re.I)
 
 
@@ -51,6 +52,8 @@ def classify(e, *, act: str = None) -> dict:
     elif _NO_TOOL.search(text): fix = fix or _fix('Connect a coding tool', 'ai_apps')       # terminal.NO_CODING_TOOL
     elif _NO_FOLDER.search(text): fix = fix or _fix('Choose where it works', 'coding')
     elif _NO_AI.search(text): fix = fix or _fix('Connect an AI', 'ai')
+    # an AI CLI that isn't signed in is a sign-in to do on its card, not an app bug to report (agents.signed_out_msg, 2026-10-25)
+    elif _SIGNED_OUT.search(text): fix = fix or _fix('Sign it in', 'ai_apps')
     unknown = act in SENDS and not isinstance(e, str) and outbound.delivery_uncertain(e)
     return {'sentence': redact.scrub(sentence)[:500], 'fix': fix, 'retry': not fix and not unknown, 'unknown': bool(unknown)}
 

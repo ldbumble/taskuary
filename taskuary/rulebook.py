@@ -262,7 +262,29 @@ def decide(store, item: dict, verbs: list) -> dict:
     line = _say(st, **facts) if verb and (verb != 'next' or st in FAILED) else ''
     # ...and an age under a day is on the card already ("2h"): the line speaks from yesterday on
     if st == 'asked' and not re.search(r'yesterday|days ago', line): line = ''
-    return {'state': st, 'verb': verb, 'line': _cut(line, 64), 'ask': asks(st), **({'evidence': ev} if ev and line else {})}
+    ask, mem = asks(st), []
+    if not ask and st in MEMORY_ASKS:
+        try: mem = memory_on(store, item)
+        except Exception as e: logger.debug(f"rulebook: no memory read for {(item or {}).get('key')} - {e}")
+    return {'state': st, 'verb': verb, 'line': _cut(line, 64), 'ask': ask or bool(mem), **({'evidence': ev} if ev and line else {}),
+            **({'memory': mem} if mem else {})}
+
+
+# A STATE THE RULE DECIDES ALONE NEVER READ THE MEMORY (the memory audit, 2026-10-26): a promise to the person a wait is on, or a line about
+# who holds a late goal step, could not inform Chase, Continue or Remind me - the model, which reads LEARNED.md, was never asked there.
+# These states ask it only where a Your people or Promises line NAMES someone on the item (people_on: addresses and full names - facts,
+# never the words of a mail); every other item stays the rule's alone, with no model call. Safety states never (SAFE).
+MEMORY_ASKS = frozenset({'waiting', 'waiting_late', 'waiting_late_usual', 'goal', 'goal_late', 'stopped', 'agent_done', 'done_list', 'own'})
+
+
+def memory_on(store, item: dict) -> list:
+    """The keys of the people and promise lines the Advisor reads that name someone on the item - [] when none does."""
+    from . import advisor, learned_cut as lc
+    doc = store.doc('learned') or ''
+    ls = [(raw, k) for s in ('people', 'promises') if s in lc.READS['advisor'] for raw, k in lc.lines(doc, lc.SECTIONS[s])]
+    if not ls: return []
+    on = advisor.people_on(store, item)
+    return [k for raw, k in ls if lc.names(raw) & on or any(' ' in p and p in raw.lower() for p in on)] if on else []
 
 
 def chase_thread(store, item: dict) -> dict | None:

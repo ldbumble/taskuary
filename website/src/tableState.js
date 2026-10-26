@@ -3,10 +3,13 @@
 // their own, so a folded task kept its Advisor strip and its dark button acting on what nobody could see (re-audit item 4).
 import { foldsAs } from "./funnelPile.js";
 
-export function tableOf({ current = null, cardKey = null, foldedKey = null, browsing = null, setup = false } = {}) {
+// ...SETUP IS QUIET ONLY WHILE IT IS IN VIEW: a task opened over it by its link or by Search (`over`, AssistantView's setupCard) is the
+// item in front of the owner, and it drew its row with nothing lit and no line while the same task in the walk had both (the memory
+// A/B's UI pass, 2026-10-26: "make the opened task get its advice too")
+export function tableOf({ current = null, cardKey = null, foldedKey = null, browsing = null, setup = false, over = false } = {}) {
   const key = current || cardKey || null;
   const folded = foldsAs(foldedKey, key), place = !!browsing;
-  return { key, folded, place, speaks: !!key && !folded && !place && !setup };
+  return { key, folded, place, speaks: !!key && !folded && !place && (!setup || !!over) };
 }
 
 // WHAT THE RAIL'S TAG AND THE BOX SAY of it (the 2026-10-19 UI walk, G5): a page opened over the item keeps it on the table - the next

@@ -1,7 +1,8 @@
 """DOES THE ADVISOR USE THE MEMORY, AND IS IT BETTER FOR IT (the memory redesign's question, 2026-10-26).
 
 LEARNED.md reaches the Advisor's model through advisor._learned -> learned_cut.for_reader(store, 'advisor', ...) - but only where the
-rulebook hands the item to the model (rulebook `ask`); a state the rule decides alone never reads it. This file measures that on the
+rulebook hands the item to the model (rulebook `ask`); a state the rule decides alone reads it only where a people or promise line
+names someone on it (rulebook.memory_on, 2026-10-26). This file measures that on the
 advisor_cases world, twice: memory EMPTY (every subject section stripped) and memory FILLED with Northwind lines planted to change the
 right answer for named cases - a person who handles a kind of ask (Hand it to a person), a promise a draft breaks (Redraft), a sender
 whose mail is put off to a day (Remind me) - plus three lines that must never reach the model: one CLOSED by a later correction
@@ -265,7 +266,7 @@ def grade_ab(res: dict) -> list:
         rows.append({'case': t, 'empty': e['verb'], 'filled': f['verb'], 'model_empty': (e.get('model') or {}).get('verb'),
                      'model_filled': (f.get('model') or {}).get('verb'), 'line_filled': f['line'], 'model_line_filled': (f.get('model') or {}).get('line'),
                      'cites': bool(CUE.get(t) and re.search(CUE[t], said(f))),
-                     # ...and whether the STRIP says it: a model that agrees with the rule's verb has its line dropped (advisor.decide)
+                     # ...and whether the STRIP says it: agreeing with the rule's verb, its line stands only when it cites a memory line (advisor.decide)
                      'shown': bool(CUE.get(t) and re.search(CUE[t], str(f.get('line') or '').lower())), 'cites_dead': bool(BAD.get(t) and re.search(BAD[t], said(f))),
                      'g_empty': C.grade(e['verb'], ok, nv), 'g_filled': C.grade(f['verb'], fok, nv), 'dead_in_prompt': f.get('dead_in_prompt')})
     return rows

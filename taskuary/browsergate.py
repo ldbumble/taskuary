@@ -236,7 +236,7 @@ def _pending(store, tid: int, sid: str, args: list):
 def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
     """The hook's answer for one shell command: {} lets it run; a refusal holds it and puts the act on the task. ONE act held
     holds the whole command - the shell line is the agent's, and running half of it is not what it asked for."""
-    from . import signin
+    from . import browserview, signin
     todo = acts(cmd)
     if not todo: return {}
     pg = page(sid)
@@ -247,6 +247,7 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
         if not args: return _deny(f"{HELD}: a browser command it could not read. Run each agent-browser command on its own line.")
         try: site = signin.site_of(pg['url']) or signin.registrable(urlsplit(pg['url']).hostname) or 'the page'
         except ValueError: site = 'the page'
+        browserview.ended_on(sid, 'held', store, tid)                          # its last frame is kept if the session stops here
         if not _pending(store, tid, sid, args):
             from . import proposals
             proposals.queue(store, tid, {'action': 'browser_act', 'sid': str(sid), 'args': args, 'command': ' '.join([EXE, *args]),
@@ -255,7 +256,18 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
         return _deny(f"{HELD}: {v['what']} ({v['why']}). It is on the task for the owner to approve; once they do, Taskuary runs this "
                      "exact command in your browser and tells you what happened. Do not try it another way. End your turn now, or "
                      "go on with work that does not need it.")
+    if (browserview.ENDED_ON.get(str(sid)) or ('',))[0] == 'failed': browserview.ended_on(sid)     # it went on past the failure
     return {}
+
+
+def waiting(store, tid: int, sid: str) -> bool:
+    "Does an act of this session still wait on the owner's press?"
+    if not store or not tid: return False
+    for r in store._rows("SELECT DraftText FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,)):
+        try: p = json.loads(r.get('DraftText') or '{}')
+        except ValueError: continue
+        if p.get('action') == 'browser_act' and p.get('sid') == str(sid): return True
+    return False
 
 
 def _deny(why: str) -> dict:
@@ -268,7 +280,16 @@ def _same_page(a: str, b: str) -> bool: return a.split('#', 1)[0].rstrip('/') ==
 
 def perform(store, tid: int, p: dict, run=None) -> dict:
     """The owner's yes: run the held command in the session's browser - only while that browser is still on the page the act was
-    judged on, since a ref like @e12 means another control on another page. `run`: the runner (tests stand one in)."""
+    judged on, since a ref like @e12 means another control on another page. `run`: the runner (tests stand one in). One that fails
+    marks the session, so the page it failed on is kept if the session stops there (browserview.keep_last)."""
+    from . import browserview
+    try: return _perform(store, tid, p, run)
+    except RuntimeError:
+        if p.get('sid'): browserview.ended_on(str(p['sid']), 'failed', store, tid)
+        raise
+
+
+def _perform(store, tid: int, p: dict, run=None) -> dict:
     from . import browserview
     sid, args = str(p.get('sid') or ''), list(p.get('args') or [])
     if not sid or not args: raise RuntimeError('this held act names no browser command')

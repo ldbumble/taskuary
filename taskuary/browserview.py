@@ -229,6 +229,35 @@ def snapshot(store, sid: str, actor: str, tid: int = None) -> dict:
     return {'attachmentId': aid, 'name': name, 'url': f'/api/attachments/{aid}', 'page': page or ''}
 
 
+# THE LAST FRAME, KEPT WHEN THE SESSION STOPPED ON A HELD OR FAILED ACT (the owner, 2026-10-25: "only on a held or failed act"). The
+# browser closes with its session, so a task that ended waiting on Approve, or on an act the browser refused, showed nothing of the page
+# it stood on. A normal end keeps nothing: the agent's own answer says what it did. sid -> (kind, store, tid), set by browsergate.
+ENDED_ON = {}
+LAST_SAYS = {'held': 'Where the browser was when it waited for you', 'failed': 'Where the browser was when it stopped'}
+
+
+def ended_on(sid: str, kind: str = None, store=None, tid: int = None):
+    "Mark how this session's last browser act ended - 'held', 'failed' - or clear it (None)."
+    if kind: ENDED_ON[str(sid)] = (kind, store, tid)
+    else: ENDED_ON.pop(str(sid), None)
+
+
+def keep_last(sid: str) -> dict | None:
+    """The session is closing: keep its newest frame on the task, shown in the chat with a plain caption, when it stopped on a held act
+    still waiting on the owner or on one that failed. None otherwise - and never a frame from a sign-in being typed (remember)."""
+    kind, store, tid = ENDED_ON.pop(str(sid), (None, None, None))
+    if kind == 'held':
+        from . import browsergate
+        if not browsergate.waiting(store, tid, sid): return None           # approved or dismissed since: it did not end waiting
+    data = kind in LAST_SAYS and tid and sid not in FILLING and _frame((LAST.get(sid) or {}).get('frame'))
+    if not data: return None
+    from . import session_artifacts
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / 'browser-last.jpg'
+        p.write_bytes(base64.b64decode(data))
+        return session_artifacts.shown(store, tid, p, 'taskuary', name=LAST_SAYS[kind])
+
+
 def navigate(sid: str, url: str) -> str:
     """Point this session's browser at a URL, on the owner's say-so.
 
@@ -289,6 +318,8 @@ def close(sid: str):
     # If the workspace closes while Chrome is still coming up, wait for that exact launch and
     # close it. Reading the stream file before the launch settled leaked the late browser.
     with lock:
+        try: keep_last(sid)
+        except Exception as e: logger.debug(f'the last frame of {sid} was not kept: {e}')
         if exe and _read(session_name(sid), 'stream'):
             try: spawn.run([exe, '--session', session_name(sid), 'close'], env=_cli_env(sid), timeout=20, capture_output=True)
             except (OSError, subprocess.SubprocessError) as e: logger.debug(f'could not close the browser of {sid}: {e}')

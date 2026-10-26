@@ -85,7 +85,7 @@ import { summarize } from "./walkSummary.js";
 import { refreshToday, useCalendarToday } from "./calendarToday.js";
 import FeedView from "./FeedView.jsx";
 import { MORE_PX, backAt, dueWord, placed, pulledRow, sectionDone, sectionNext } from "./funnelPile.js";
-import { isImportant } from "./priority.js";
+import { isImportant, level as priorityOf } from "./priority.js";
 import { age, ago, band, bandUntil, plural } from "./timeWords.js";
 const GeneralWorkspace = lazyView(loadGeneral);
 import CanvasItem, { CANVAS_ITEM_HEIGHT, showsTask } from "./CanvasItem.jsx";
@@ -681,10 +681,14 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                 // URGENT IS A QUIET SHADE ON THE ROW, IN ITS PLACE (the owner, 2026-10-22: "remove the urgent section and just add quiet
                 // shading around it") - no heading of its own, no icon, no word; Next walks it in its place
                 const hot = !i.settling && isUrgent(i);
+                // ...and the DOT says the stored priority whatever the band (2026-10-26): a draft waiting for the owner's yes, a blocked agent,
+                // a goal or a wait on someone never reaches band 1, so an urgent one drew regular's sage - raising important to urgent
+                // visibly lowered its mark. The owner's ruling (2026-10-25): the category IS the dot's colour. The band and the walk stay
+                const urgentDot = !i.settling && (hot || priorityOf(i.priority) === "urgent");
                 // ...and IMPORTANT a quieter mark of its own, in its place too - never a move (the owner, 2026-10-25: "show it as a mark
                 // in its row's place"); urgent outranks it, so an urgent row wears urgent's shade alone
                 const imp = isImportant(i, hot);
-                const cls = ["tq-pile-row", falls(i.key) ? "landing" : entering.has(i.key) ? "entering" : "", i.settling ? "settling" : "", hot ? "urgent" : imp ? "important" : "",
+                const cls = ["tq-pile-row", falls(i.key) ? "landing" : entering.has(i.key) ? "entering" : "", i.settling ? "settling" : "", urgentDot ? "urgent" : imp ? "important" : "",
                   isCur ? "current" : inBatch ? "inbatch" : i.key === nextKey ? "next" : ""].filter(Boolean).join(" ");
                 // NO PILLS ON A ROW (the owner, 2026-09-28: "nothing else has pill"): a row's state is its mark and word, the same
                 // for every lane - "ready to send" and "agent waiting on you" included
@@ -710,7 +714,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                     // a goal says only that it SLIPPED (red); on track or not started, its steps say enough (the owner, 2026-10-21)
                     : goal ? (i.kind === "goal_slipped" ? meta.word : "") : "";
                 return (
-                  <div key={i.key} className={cls} data-tq-key={i.key} data-tq-urgent={hot ? "" : undefined} data-tq-important={imp ? "" : undefined}
+                  <div key={i.key} className={cls} data-tq-key={i.key} data-tq-urgent={urgentDot ? "" : undefined} data-tq-important={imp ? "" : undefined}
                     style={{ top: falls(i.key) ? -ROW_H : top }}>
                     {/* For later counts DOWN to when it comes back, in the same short form the age column uses */}
                     {/* ...every other row says its ARRIVAL; a reply since it was last opened is a quiet "+N" beside it, never a new age */}
@@ -729,7 +733,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                       tabIndex={i.key === tabKey ? 0 : -1} onFocus={() => setKbdKey(i.key)}
                       onClick={() => (isCur ? onCurrent?.() : !i.settling && onPull(i.key))}
                       onPointerEnter={() => { if (!isCur && i.tid) prefetchTask(api, i.tid); }}
-                      aria-label={hot ? `${i.title} - urgent` : imp ? `${i.title} - important` : undefined}
+                      aria-label={urgentDot ? `${i.title} - urgent` : imp ? `${i.title} - important` : undefined}
                       title={[i.who, st?.word || meta.word, i.ref, imp ? "important" : "", i.promoted ? 'moved up - it looked urgent' : '', why].filter(Boolean).join(" · ")}>
                       <div className="t">
                         {/* AN AGENT AT WORK is a ring spinning round the row's icon (the owner, 2026-10-21) - it stops when the agent
@@ -2284,7 +2288,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         // the receipt names the task and its chip opens it
         const ref = cur.ref || `TQ-${String(cur.tid).padStart(4, "0")}`;
         const there = elsewhere && cur.tid ? { tid: cur.tid, ref, chips: [{ verb: "opentask", tid: cur.tid, label: `Open ${ref}` }] } : {};
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", ...there, text: data.draft
+        // ...and a rewrite that did not happen is drawn as the failure it is (✗) - a receipt with no status wore the tick (2026-10-26)
+        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", ...there, ...(data.draft ? {} : { status: "failed" }), text: data.draft
           ? (there.tid ? `Rewritten on ${ref} - read it there before you send it.` : "Rewritten - read it below before you send it.")
           : `I could not rewrite it here; edit the draft on ${there.tid ? ref : "the card"} and send that.` }]);
         if (!elsewhere) { putOnTable(null, "sync"); deferInChat(() => surfaceRef.current?.(`review:${cur.rid}`), 300); } else loadPile();

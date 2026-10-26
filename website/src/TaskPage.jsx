@@ -585,7 +585,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     try { await api.post(`/api/tasks/${selected}/judged`, patch); } catch (e) { setErr(opError(e, "That correction didn't go through - pick it again.")); }
     loadDetail(selected);
   };
-  // RUN AGAIN ON THE STRONG MODEL (owner-approved, 2026-10-25): a failed or unsure agent, run once more from a fresh start on a strong
+  // RUN AGAIN ON THE STRONG MODEL (owner-approved, 2026-10-25): a failed or unsure agent, run once more on a strong
   // model - a press in the ▾, never by itself: an agent that can act may have done half its work
   const [strongGoing, setStrongGoing] = useState(false);
   const strongAgain = async () => {

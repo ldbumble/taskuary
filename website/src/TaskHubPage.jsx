@@ -20,12 +20,12 @@ import { fmtStamp } from "./dates.js";
 import { theme, ACCENT, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT, BRAND } from "./theme.jsx";
 import { lazyView } from "./lazyView.jsx";
 const BoardView = lazyView(() => import("./BoardView.jsx"));   // the Board is a tab away from the first screen
-import { canvasRequestFromHash } from "./canvasLinks.js";
+import { BOARD, canvasRequestFromHash } from "./canvasLinks.js";
 import { readLists } from "./connectorLists.js";
 // a link to Connections asks for its lists the moment the address is read - not once the canvas, its chunk and Connections' own
 // chunk have all come in (connectorLists.js: a cold #connector=whatsapp sent its first read ~1.4 s after the page was asked for)
 const readAhead = (req) => { if (req?.kind === "browse" && req.area === "connections") readLists(api); };
-import { onPlace, openAppLink } from "./appLinks.js";
+import { onPlace, openAppLink, recordPlace } from "./appLinks.js";
 import { restartBridge } from "./waBridge.js";
 import { SetupChip, useSetup } from "./SetupWizard.jsx";
 import { DEMO } from "./demoApi.js";
@@ -319,7 +319,8 @@ export default function TaskHubPage() {
   // Honor a deep link on the first render. Starting every reload on Assistant meant its hidden
   // conversation, feed and funnel all fetched before #task=356 (or a report) was allowed to load.
   // On a busy live session that left the requested page looking completely blank for many seconds.
-  const [tab, setTab] = useState("Assistant");
+  // ...and the BOARD is a place of its own (#board): it wrote no address, so Back from a task opened on it never brought it back (2026-10-26)
+  const [tab, setTab] = useState(() => (window.location.hash === BOARD ? "Board" : "Assistant"));
   // what the canvas is asked to open - a task, or a browse card - numbered so the same one asked twice opens twice
   const [canvasReq, setCanvasReq] = useState(() => { const r = canvasRequestFromHash(window.location.hash || "", 1); readAhead(r); return r && { ...r, fromUrl: true }; });
   const ask = useCallback((req) => setCanvasReq((cur) => ({ ...req, n: (cur?.n || 0) + 1 })), []);
@@ -382,6 +383,8 @@ export default function TaskHubPage() {
     if (BROWSED[t]) { ask({ kind: "browse", area: BROWSED[t] }); t = "Assistant"; }
     if (!VIEWS.includes(t)) t = "Assistant";
     if (t === tab) return;
+    // the Board is a step Back returns to, and leaving it for the chat is one too (the canvas writes its own place from there)
+    if (t === "Board") recordPlace(BOARD, "push"); else if (window.location.hash === BOARD) recordPlace("", "push");
     scrollAt.current[tab] = window.scrollY; setTab(t); tabRef.current = t;
     track("tab", t);
   };
@@ -445,6 +448,7 @@ export default function TaskHubPage() {
   // own table, the page put down (the 2026-10-19 UI walk: Back left the app). `fromUrl`: the address already says it - the canvas
   // writes it more exactly, never as a new step
   useEffect(() => onPlace((h, back) => {
+    if (h === BOARD) { setTab("Board"); tabRef.current = "Board"; return; }
     const req = canvasRequestFromHash(h, 0);
     readAhead(req);
     if (req || (back && !h)) { ask({ ...(req || { kind: "home" }), fromUrl: true }); setTab("Assistant"); tabRef.current = "Assistant"; }

@@ -58,6 +58,15 @@ RESUME_PROMPT = (
     'approval, restate that one question and wait; do not invent the answer or treat Resume as approval '
     'to send, publish, or execute a pending action. If the result is ready, point the owner to it for review.'
 )
+# RUN AGAIN ON THE STRONG MODEL picks up from the saved work, as Resume does - an agent that can act may have done half of it, so a
+# blank start could do it twice - but it is not a Resume press: the agent was told "the owner chose Resume" and the hover said "from
+# a fresh start", and neither was what happened (2026-10-26)
+STRONG_AGAIN_PROMPT = (
+    'The owner chose Run again on the strong model for this task: the last run failed or was unsure, and you are now on a stronger '
+    'model. Use the saved conversation and handover to see what was tried and what is already done, and say so briefly. Verify the '
+    'current state before repeating any action, then carry the work through. Do not treat this press as approval to send, publish, '
+    'or execute a pending action. If the result is ready, point the owner to it for review.'
+)
 
 
 # ── what came in after the agent's last turn ─────────────────────────────────────────────────────────────────────────

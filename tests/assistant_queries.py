@@ -50,6 +50,8 @@ CASES = [
     Q('navigation', 'where do I set up the AI?', None, 'Under [Connections → AI](#settings=config&group=How%20mail%20is%20sorted).', 'link:#settings', tools=('pages',), freq=3),
     Q('navigation', 'open the agent profiles', None, 'Here: [Profiles](#profiles).', 'link:#profiles', tools=('pages',), freq=2),
     Q('navigation', 'show me the workflows', None, 'Here: [Workflows](#report=workflows).', 'link:#report=workflows', tools=('pages',), freq=2),
+    Q('navigation', 'go to reports', None, 'Here: [Reports](#report=reports).', 'link:#report=reports', tools=('pages',), demo='open', freq=4),
+    Q('navigation', 'show me my dashboards', None, 'Here: [Dashboards](#report=dashboards).', 'link:#report=dashboards', tools=('pages',), freq=3),
     Q('navigation', 'go to the memory page', None, 'Here: [Verdicts & notes](#settings=memory).', 'link:#settings=memory', tools=('pages',), freq=2),
     Q('navigation', 'open the GitHub connection', None, 'Here: [GitHub](#connector=github).', 'link:#connector=github', tools=('pages',), freq=2),
     Q('navigation', 'show me the new starter task', None, [c('tasks.list', contains='new starter'), 'That is [TQ-0002](#task=2).'], 'read:tasks.list', demo='open', freq=3),
@@ -98,6 +100,11 @@ CASES = [
     Q('item', 'put it on my list', 'fyi', c('mine'), 'light:mine', freq=3),
     Q('item', 'next', 'todo', c('next'), 'next', freq=5),
     Q('item', 'skip this one', 'todo', c('next'), 'next', freq=4),
+    # ...and with nothing on the table the walk words bring the first row up as its card - never a task read out in words, and a later
+    # "mark this done" over no card brings the named one up lit, never closes it (the 2026-10-26 sweep)
+    Q('item', 'walk me through my tasks', None, c('next'), 'card', freq=5),
+    Q('item', 'start over', None, c('next'), 'card', freq=3),
+    Q('item', 'mark this done', None, c('close', on=T1), 'light:close', demo='other', freq=3),   # the demo script: "Nothing is on the table" 
     Q('item', 'remember that Marcus owns the bank feed', 'todo', c('remember', text='Marcus owns the bank feed'), 'open:#settings=memory', freq=2),
     Q('item', 'split this into two tasks', 'todo', c('task.split', text='the bank feed; the 4,180 gap'), 'light:split', freq=1),
     Q('item', 'file a note on it: waiting on the bank', 'todo', c('task.comment', text='waiting on the bank'), 'did:task.comment', freq=2),
@@ -195,7 +202,10 @@ CASES = [
     Q('typos', 'repyl to marcus', 'todo', c('reply'), 'draft:reply', freq=3),
     # ── WhatsApp-style short replies ──
     Q('short', 'yes', 'review', c('approve'), 'light:approve', freq=5),
-    Q('short', '2', 'todo', 'Ok.', 'words', tools=('digit',), demo='lit', freq=4),
+    # a digit names a numbered chip only where numbered chips are drawn - a card under its line; a task drawn as its own view has none,
+    # and "2" there pressed a Mark done that was not on screen (2026-10-26): the model reads it as typed
+    Q('short', '2', 'fyi', 'Ok.', 'words', tools=('digit',), demo='out', freq=4),
+    Q('short', '3', 'todo', 'Which one do you mean?', 'words', tools=('digit',), demo='out', freq=3),
     Q('short', 'skip', 'todo', c('next'), 'next', freq=4),
     Q('short', 'no', 'review', 'Then it stays as drafted - nothing is sent.', 'words', tools=('words',), freq=4),
     Q('short', 'ok', 'todo', 'Ok.', 'words', tools=('words',), freq=4),

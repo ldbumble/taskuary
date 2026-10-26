@@ -42,7 +42,12 @@ export function canvasRequestFromHash(hash, n = 0) {
   if ((m = /^#connections=([^&]+)/.exec(h))) return { kind: "browse", area: "connections", state: { section: decodeURIComponent(m[1]), open: null }, n };
   if (/^#connections$/.test(h)) return { kind: "browse", area: "connections", state: { section: null, open: null }, n };
   if (/^#settings$/.test(h)) return { kind: "browse", area: "settings", state: { section: null, open: null }, n };
-  if (/^#hub$/.test(h)) return { kind: "browse", area: "hub", state: {}, n };
+  // ...and a topic and an open post on it (#hub=<topic>&post=<id>): Back from an opened post left the Hub entirely - the address said
+  // #hub whatever was open, so the post's opening was no step of history (2026-10-26)
+  if ((m = /^#hub(?:=([^&]*))?(?:&post=(\d+))?$/.exec(h))) {
+    const section = m[1] ? decodeURIComponent(m[1]) : "", open = m[2] ? Number(m[2]) : null;
+    return { kind: "browse", area: "hub", state: section || open != null ? { section, open } : {}, n };
+  }
   // one document, and the view to open it on (the opening screen's "learned this week" -> LEARNED.md, What changed)
   if ((m = /^#settings=docs&doc=(\w+)(?:&view=(\w+))?/.exec(h))) return { kind: "browse", area: "settings", state: { section: "docs", open: `d:${m[1]}`, ...(m[2] ? { view: m[2] } : {}) }, n };
   if ((m = /^#settings=([^&]*)(?:&group=([^&]*))?/.exec(h))) {
@@ -74,7 +79,7 @@ const enc = encodeURIComponent;
 export function hashFor(area, s = {}) {
   s = s || {};
   if (area === "new") return "#new-task";
-  if (area === "hub") return "#hub";
+  if (area === "hub") return `#hub${s.section ? `=${enc(s.section)}` : ""}${s.open != null && /^\d+$/.test(String(s.open)) ? `${s.section ? "" : "="}&post=${s.open}` : ""}`;
   if (area === "connections") return s.connector === "cli-agents" ? "#cli-agents" : s.connector ? `#connector=${s.connector}`
     : s.section ? `#connections=${enc(s.section)}` : "#connections";
   if (area === "settings") {
@@ -97,7 +102,10 @@ export function hashFor(area, s = {}) {
 }
 // the one place an address names - "#connector=" and "#connections" are both the Connections landing, "#playbook=x" is Playbooks -
 // so two spellings of the same place are never two steps of history; "" for an address that is no place of the canvas
+// ...and the Board, the one full-screen view, by its own address (BOARD): no canvas request, so nothing else reads it as a page
+export const BOARD = "#board";
 export function placeOf(hash) {
+  if (String(hash || "").trim() === BOARD) return BOARD;
   const r = canvasRequestFromHash(hash);
   return !r ? "" : r.kind === "task" ? `#task=${r.tid}` : r.kind === "msg" ? `#msg=${r.mid}` : r.kind === "new" ? "#new-task" : hashFor(r.area, r.state);
 }

@@ -61,9 +61,11 @@ test("the rail marks an urgent row's dot in place and says urgent to a screen re
   const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
   const css = readFileSync(fileURLToPath(new URL("../src/assistantView.css", import.meta.url)), "utf8");
   assert.match(view, /const hot = !i\.settling && isUrgent\(i\);/);
-  assert.match(view, /hot \? "urgent" : imp \? "important" : ""/);
-  assert.match(view, /data-tq-urgent=\{hot \? "" : undefined\}/);
-  assert.match(view, /aria-label=\{hot \? `\$\{i\.title\} - urgent` : imp \? `\$\{i\.title\} - important` : undefined\}/);
+  // ...and the DOT follows the stored priority, whatever the band: an urgent draft, blocked agent, goal or wait drew regular's sage (2026-10-26)
+  assert.match(view, /const urgentDot = !i\.settling && \(hot \|\| priorityOf\(i\.priority\) === "urgent"\);/);
+  assert.match(view, /urgentDot \? "urgent" : imp \? "important" : ""/);
+  assert.match(view, /data-tq-urgent=\{urgentDot \? "" : undefined\}/);
+  assert.match(view, /aria-label=\{urgentDot \? `\$\{i\.title\} - urgent` : imp \? `\$\{i\.title\} - important` : undefined\}/);
   // urgent is the rail's dot, never a shaded row - a shade read as selected (the owner, 2026-10-25)
   assert.match(css, /\.tq-pile-row\.urgent \.rail i, \.tq-pile-row\.urgent\.current \.rail i \{ background: #8a3646 !important/);
   assert.doesNotMatch(css, /\.tq-pile-row\.urgent[^{]*\.card \{/);

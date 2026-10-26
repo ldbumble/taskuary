@@ -125,6 +125,75 @@ class DeskRoutes(unittest.TestCase):
         self.assertEqual(out['pressed']['label'], buttons.label('remove')); self.assertNotIn('light', out)
         self.assertNotEqual((s.get_task(tid) or {}).get('Status'), 'open')
 
+    def test_a_put_down_on_a_task_not_on_screen_brings_it_up_lit_and_closes_nothing(self):
+        """The 2026-10-26 sweep: a walk narrated in words left nothing on the table, and "mark this done" closed TQ-1141 - the task the
+        model had named, never drawn. A typed put-down presses only the item in front of the owner; one off the table comes up lit."""
+        for model in ('CALL: {"kind": "close", "params": {"on": "TQ-%04d"}}', 'CALL: {"kind": "task.complete", "params": {"ref": "TQ-%04d"}}'):
+            s = store(); tid, _ = on_table(s)
+            out, _ = say(s, 'mark this done', None, model % tid)
+            self.assertNotIn('pressed', out)
+            self.assertEqual((out['light']['verb'], out['light']['tid']), ('close', tid))
+            self.assertEqual(s.get_task(tid)['Status'], 'open', model)
+
+    def test_a_closed_task_brought_up_by_its_ref_offers_reopen_and_no_put_down(self):
+        """The 2026-10-26 sweep: a closed task opened by its ref offered Mark done, Close with a note, Remind me and Remove beside
+        Reopen task, and a typed close ran task.complete on it again - a second close-out comment."""
+        s = store(); tid, item = on_table(s)
+        say(s, 'mark this done', item['key'], 'CALL: {"kind": "close", "params": {}}')
+        it = funnel.item_for_key(s, f'task:{tid}')
+        self.assertTrue(it.get('closed'))
+        verbs = {b['verb'] for b in concierge.row_buttons(s, it)}
+        self.assertIn('reopen', verbs)
+        self.assertFalse(verbs & {'close', 'close_note', 'remove', 'defer', 'strong_again'}, verbs)
+        closeouts = lambda: [c for c in s.list_comments(tid) if str(c.get('Body') or '').startswith('Closed out')]
+        n = len(closeouts())
+        out, _ = say(s, 'close it, the bank sorted it', f'task:{tid}', 'CALL: {"kind": "task.complete", "params": {"note": "the bank sorted it"}}')
+        self.assertNotIn('pressed', out)
+        self.assertEqual(len(closeouts()), n, 'no second close-out')
+        self.assertEqual(s.get_task(tid)['Status'], 'done')
+
+    def test_every_shelf_of_the_reports_page_has_its_address_in_the_page_list(self):
+        """The 2026-10-26 sweep: "go to reports" opened the Workflows shelf - #report=workflows was the only shelf the model was told."""
+        block = concierge.pages_block(store())
+        for shelf in ('reports', 'workflows', 'dashboards', 'playbooks'): self.assertIn(f'#report={shelf}', block)
+
+    def test_any_row_button_named_by_its_own_label_lights(self):
+        """The 2026-10-26 sweep: button.light {button: 'Remind me'} missed with "has no remind me button - its row has ..., Remind me",
+        "Share" lit Email a summary's absence, and "Run again on the strong model" lit nothing or another button."""
+        s = store(); tid, item = on_table(s)
+        it = funnel.item_for_key(s, f'task:{tid}')
+        for b in concierge.row_buttons(s, it):
+            if b['verb'] in concierge.PUT_DOWN: continue                                # a put-down is pressed, not lit (above)
+            with self.subTest(label=b['label']):
+                self.assertEqual(concierge._button_named(s, it, b['label']), b['verb'])
+                self.assertEqual(concierge._button_named(s, it, b['label'].upper()), b['verb'], 'the case is not the button')
+        self.assertEqual(concierge._button_named(s, it, 'remind me'), 'defer')
+        if any(b['verb'] == 'share_result' for b in concierge.row_buttons(s, it)):
+            self.assertEqual(concierge._button_named(s, it, 'Share'), 'share_result', "the row's Share, not Email a summary")
+        out, _ = say(s, 'remind me about this', item['key'], 'CALL: {"kind": "button.light", "params": {"button": "Remind me"}}')
+        self.assertEqual(out['light']['verb'], 'defer')
+        # ...and the strong re-run, on a task whose reader was unsure (the ▾ draws it then), by its label - lit, nothing runs
+        s.judge_task(tid, {'sure': False}, 'triage')
+        out, _ = say(s, 'use the strong model for this', item['key'],
+                     'CALL: {"kind": "button.light", "params": {"button": "Run again on the strong model"}}')
+        self.assertEqual(out['light']['verb'], 'strong_again')
+
+    def test_a_digit_over_a_task_view_presses_nothing_it_does_not_show(self):
+        """The 2026-10-26 sweep: "2" over TQ-1141 was rewritten to its chips' second, Mark done - but a task is drawn as its own view,
+        whose row has no numbers and not those chips - and the task closed. The digit stays the owner's word for the model to read."""
+        s = store(); tid, item = on_table(s); heard = []
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(ingest, '_spawn'):
+            concierge.say(s, '2', key=item['key'], llm=lambda sy, u, **k: (heard.append(u), 'Which one do you mean?')[1])
+        said = next(l for l in heard[0].splitlines() if l.startswith(concierge.OWNER_SAYS))
+        self.assertEqual(said, concierge.OWNER_SAYS + '2')
+        self.assertEqual(s.get_task(tid)['Status'], 'open')
+
+    def test_with_nothing_on_the_table_the_model_is_told_walking_is_next_never_words(self):
+        s = store(); on_table(s); asked = []
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(ingest, '_spawn'):
+            concierge.say(s, 'walk me through my tasks', llm=lambda sy, u, **k: (asked.append(u), 'CALL: {"kind": "next", "params": {}}')[1])
+        self.assertIn('CALL next', asked[0]); self.assertIn('Never read a task out in words', asked[0])
+
     def test_an_act_on_another_task_brings_it_up_with_its_button_lit(self):
         s = store(); tid, item = on_table(s)
         other = s.create_task({'Title': 'Renew the Spendly licence', 'Kind': 'task'}, 't')

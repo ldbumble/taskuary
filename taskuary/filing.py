@@ -1,7 +1,7 @@
 """Handled mail, filed where it came from. The mark-read switch grew a third answer (the owner, 2026-10-25: "a mark-read
 setting already exists - extend that setting rather than adding something new"): leave the mailbox alone, mark read what
 the funnel took (what '1' always did), or that AND move the mail out of the Inbox into Archive once it is HANDLED here -
-its task closed, or the row put down with Handled. Unhandled mail is never moved: the Inbox keeps exactly what is still owed.
+its task closed (never an FYI or report put down without a task). Unhandled mail is never moved: the Inbox keeps exactly what is still owed.
 
 Best-effort like every marker in channels.py: a refused consent or a server with no Archive is written down once per
 message and never costs the poll. Only mail handled AFTER the choice was made is filed - choosing it must not empty a
@@ -25,18 +25,16 @@ def _now(): return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
 
 def handled(store, since: str, limit: int = 200) -> list:
-    """Inbound mail the hub is done with since `since`, not filed yet: its task closed, or its row (msg: or the processing
-    item it belongs to) settled done. Only mailbox mail - Graph or IMAP ids - is anything this module can move."""
+    """Inbound mail the hub is done with since `since`, not filed yet: its task closed. Only mailbox mail - Graph or IMAP ids
+    - is anything this module can move."""
+    # Closed tasks only (the owner, 2026-10-25: "Archive ... covers closed tasks only"): an FYI or a report put down here has
+    # no task, and moving it out of the Inbox filed every read FYI in the mailbox - the press only said "read" (2026-10-26).
     return store._rows(
-        """SELECT m.MessageId, m.ExternalId, m.SourceName FROM message m LEFT JOIN task t ON t.TaskId=m.TaskId
+        """SELECT m.MessageId, m.ExternalId, m.SourceName FROM message m JOIN task t ON t.TaskId=m.TaskId
            WHERE m.Channel='email' AND COALESCE(m.Direction,'in')='in' AND (m.ExternalId LIKE 'graph:%' OR m.ExternalId LIKE 'imap:%')
              AND NOT EXISTS (SELECT 1 FROM mail_filed f WHERE f.MessageId=m.MessageId)
-             AND ((t.Status IN ('done','dropped') AND t.ClosedAt>=?)
-               OR EXISTS (SELECT 1 FROM funnel_state s WHERE s.Key='msg:'||m.MessageId AND s.Status='done' AND s.At>=?)
-               OR EXISTS (SELECT 1 FROM processing_member p JOIN funnel_state s ON s.Key='processing:'||p.ItemId
-                          WHERE p.EntityKind='message' AND p.LocalId=CAST(m.MessageId AS TEXT) AND p.RetiredAt IS NULL
-                            AND s.Status='done' AND s.At>=?))
-           ORDER BY m.MessageId LIMIT ?""", (since, since, since, limit))
+             AND t.Status IN ('done','dropped') AND t.ClosedAt>=?
+           ORDER BY m.MessageId LIMIT ?""", (since, limit))
 
 
 def _filed(store, mid, result): store._exec('INSERT OR REPLACE INTO mail_filed (MessageId, FiledAt, Result) VALUES (?,?,?)', (mid, _now(), result[:200]))

@@ -131,7 +131,8 @@ test("a bare line borrows no words while the task view's own row holds them", ()
 // last task view on the canvas holds a screen, so a short one scrolls to the top like a full one; the thread's end is its top
 test("every task view opens at the top of the canvas, a short one with the blank under it", () => {
   // ...and the "…" of a press in flight under it does not take the screen away (browser/next-steady.test.mjs)
-  assert.match(src("assistantView.css"), /\.tq-chat-inner > \.tq-canvas-live:not\(:has\(~ \.tq-msg:not\(\.tq-pending\), ~ \.tq-canvas-live, ~ \.tq-live-card\)\) \{ min-height: calc\(100cqh \+ 14px\); \}/);
+  // ...but a box opened under the card (Close with a note, the agent box) stands right under it, not a screen down (the walk's SEEN)
+  assert.match(src("assistantView.css"), /\.tq-chat-inner > \.tq-canvas-live:not\(:has\(~ \.tq-msg:not\(\.tq-pending\), ~ \.tq-canvas-live, ~ \.tq-live-card, ~ \.tq-browse-line:not\(:empty\)\)\) \{ min-height: calc\(100cqh \+ 14px\); \}/);
   assert.match(src("AssistantView.jsx"), /\(busy \|\| phoneBusy \|\| nextComing \|\| walkDots\) && \(\n\s*<div className="tq-msg tq-pending">/);
   assert.match(src("AssistantView.jsx"), /const toEnd = \(el\) => \{/);
 });

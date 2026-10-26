@@ -2500,6 +2500,25 @@ class SQLiteStore:
                     if r['Kind'] == 'promise.made' and not r['ResolvedAt']: outcomes._resolve_one(self, r, datetime.now())
             except Exception as e: logger.warning(f'promise {mid}: its outcome row was not resolved - {e}')
     def promise_task(self, mid): return self._one('SELECT * FROM task WHERE SourceRef=?', (f'promise:{mid}',))
+    # A PROMISE TASK KNOWS WHOM IT OWES (the owner, 2026-10-26, on a promise task: "it does not show who to send it back to?? meaning
+    # if the promise was to x it should save who to send to and draft response to them"). Its sent mail stays on the thread's own task
+    # (made_from), so every "who is waiting on a reply" road - the agent's --reply, Close out's To, Reply, the Advisor - found nobody.
+    # The mail is the reply's anchor instead: an answer to the owner's own mail goes to whom it went (outbound.reply_envelope: its To,
+    # its Cc as they had them), and a chat's to its room. SourceRef already names it, so every promise task ever made has one.
+    def promised_in(self, t) -> dict | None:
+        """The owner's own message a promise task was made from ('promise:<mid>' in SourceRef), else None."""
+        ref = str((t or {}).get('SourceRef') or '')
+        return self.get_message(int(ref[8:])) if ref.startswith('promise:') and ref[8:].isdigit() else None
+    def promisee(self, m: dict) -> str:
+        """Whom the owner promised it to, by name: a mail's To line, else the room's other side (as task_for_promise says it)."""
+        if not m: return ''
+        if str(m.get('Channel') or '').lower() == 'email':
+            from .ingest import names_on_thread
+            try: to = (json.loads(m.get('RecipientsJson') or '{}') or {}).get('to') or []
+            except (TypeError, ValueError): to = []
+            if to: return ', '.join(names_on_thread(self, {'conversation_id': m.get('ConversationId'), 'subject': m.get('Subject')}, to)[:3])
+        o = self.last_inbound_in(m['ConversationId']) if m.get('ConversationId') else None
+        return str((o or {}).get('FromName') or (o or {}).get('FromEmail') or '')
     def made_from(self, t: dict, before=12, after=8) -> list:
         """The message a task was made from that is not ON it, with its thread around it, oldest first. A promise's sent mail
         is nearly always on the thread's own task already (task_for_promise links it only when it is free), and an Advisor
@@ -5812,6 +5831,13 @@ class SQLiteStore:
         t = self.get_task(task_id)
         if not t: return None
         msgs = self.list_messages(task_id)
+        reviews = self._rows('SELECT rv.*, m.FromName, m.FromEmail, m.Channel, m.SourceName, m.ConversationId FROM review rv '
+                             'LEFT JOIN message m ON m.MessageId=rv.MessageId WHERE rv.TaskId=? ORDER BY rv.ReviewId DESC', (task_id,))
+        # ...and a reply to a promise's own mail answers whom it was made to, not its author: "sends this to Alex Doyle" was the owner
+        if (p := self.promised_in(t)) and any(r.get('MessageId') == p['MessageId'] for r in reviews):
+            who = self.promisee(p) or 'them'
+            for r in reviews:
+                if r.get('MessageId') == p['MessageId']: r.update(FromName=who, FromEmail='')
         return {'task': {**t, 'ChecklistMd': self.checklist_markdown(task_id)}, 'ref': task_ref(task_id), 'messages': msgs,
                 'checklist': self.task_checklist(task_id),
                 'attachments': [a for m in msgs for a in self.list_attachments(m['MessageId'])],
@@ -5821,8 +5847,7 @@ class SQLiteStore:
                 'routes': self.list_routes(task_id), 'comments': self.list_comments(task_id),
                 'runs': self.list_runs(task_id), 'audit': self.list_audit('task', task_id),
                 # ...with who it answers, as list_reviews has: without it a draft's To line read "this conversation"
-                'reviews': self._rows('SELECT rv.*, m.FromName, m.FromEmail, m.Channel, m.SourceName, m.ConversationId FROM review rv '
-                                      'LEFT JOIN message m ON m.MessageId=rv.MessageId WHERE rv.TaskId=? ORDER BY rv.ReviewId DESC', (task_id,))}
+                'reviews': reviews}
 
     # ── knowledge base (knowledge.py): documents as passages behind an FTS5 index ──
     def kb_doc(self, cid, source, path):

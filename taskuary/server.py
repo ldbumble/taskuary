@@ -1826,6 +1826,13 @@ def _calendar_of(task_id: int):
     except Exception as e:
         logger.debug(f'task {task_id}: the calendar ask was not read - {e}'); return None
 
+def _owed(d: dict):
+    """The promise's own message when nobody on the task's rows is waiting (wrapup.reply_target's fallback), with `OwedTo`."""
+    from .wrapup import reply_target
+    m = store.promised_in(d.get('task'))
+    if not m or reply_target(store, d['task']['TaskId']) != m['MessageId']: return None
+    return _readable(m) | {'OwedTo': store.promisee(m)}
+
 def _earlier(d: dict) -> list:
     """The messages a triage verdict on this task named as what its ask rests on, not already the task's own."""
     own, out = {m['MessageId'] for m in d.get('messages') or []}, []
@@ -1878,6 +1885,9 @@ def task_detail(task_id: int):
             'messages': [_readable(x) for x in d.get('messages') or []],
             # ...and the earlier messages triage said its ask rests on, shown with them, never moved onto this task (rests_on, 2026-10-22)
             'earlier': _earlier(d),
+            # ...and on a promise task, the owner's own mail the promise was made in, with whom it was made to: the page answers it as a
+            # task's reply source, so Close out says "Answering <them>" and the row leads with Reply (store.promised_in, 2026-10-26)
+            'owed': _owed(d),
             'artifacts': [_artifact_row(a) for a in d.get('artifacts') or []],
             # The detail page only needs lifecycle here; its terminal pane and optional WorkStrip
             # load their own rich data. Do not block selecting a task on git status.
@@ -3256,16 +3266,19 @@ def open_reply(mid: int, body: OpenReplyBody = None):
         raise HTTPException(422, 'nobody sent this, so there is nobody to answer - work it, or write '
                                  'what you found on the task itself')
     later = body is not None and body.later
+    # THE OWNER'S OWN MAIL A PROMISE WAS MADE IN is answered on the promise's task (store.promised_in): the mail sits on its thread's
+    # task, whose newest inbound line is somebody else's ask - the reply that keeps the promise goes to whom it was made to
+    promise = store.promise_task(mid) if (m.get('Status') == 'context' or m.get('Direction') == 'out') else None
     if not later:                     # the draft behind a box opened at once reads the provider itself (draft_review)
         try: _refresh_chat_context(task_id=m.get('TaskId'), message_id=mid)
         except RuntimeError as e: raise HTTPException(503, str(e))
     # The requested row may no longer be the end of the conversation after that sync.  Draft and
     # deliver against the newest inbound line, while keeping the same task/review.
-    m = (_latest_context_message(m.get('TaskId'), mid) or store.get_message(mid) or m)
+    if not promise: m = (_latest_context_message(m.get('TaskId'), mid) or store.get_message(mid) or m)
     mid = m['MessageId']
     # a FILED message stays filed: answering it is a reply, not a project, and promoting it to a
     # task just to hold the review put a TQ badge on chatter. The review rides task-less.
-    tid = m.get('TaskId')
+    tid = promise['TaskId'] if promise else m.get('TaskId')
     # ...and a thread its own last reply CLOSED comes back when the owner opens another one. The
     # draft was created on the done task, where the queue's visibility rule hides it, so the card
     # asking for the yes said "already handled" over the message instead of showing the draft, and

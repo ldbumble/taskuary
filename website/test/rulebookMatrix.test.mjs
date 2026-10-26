@@ -79,10 +79,14 @@ test("an agent asking lights nothing on the row: its pane holds the answers", ()
   assert.deepEqual(litOf(rowOf({ list: [v("save-end", "agent", { label: "Stop and save" }), NEXT], ref: "" }, pick)), []);
 });
 
-test("at phone width the Advisor's line wraps to two lines, never cut; the desk keeps its one line", async () => {
+// ONE LINE, READ WHOLE, ON A PHONE TOO (2026-10-26, superseding the two-line wrap of 2026-10-22): the phone gives the line the room
+test("at phone width the Advisor's line stays one line, given the room; the desk keeps its one line", async () => {
   const fs = await import("node:fs");
   const css = fs.readFileSync(new URL("../src/assistantView.css", import.meta.url), "utf8");
-  assert.match(css, /@media \(max-width: 600px\) \{\s*\.tq-strip \.tq-next-txt \{ white-space: normal; overflow: visible; text-overflow: clip;/);
+  assert.doesNotMatch(css, /\.tq-next-txt \{[^}]*white-space: normal/, "never a second line");
+  const phone = css.match(/@media \(max-width: 600px\) \{\s*\.tq-strip \.tq-next \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(phone, /\.tq-strip \.tq-next::before \{ display: none; \}/, "the dot gives its room to the words");
+  assert.match(phone, /\.tq-strip \.tq-next-txt \{ font-size: 13px;/);
   assert.match(css, /\.tq-next-txt \{[^}]*white-space: nowrap; overflow: hidden; text-overflow: ellipsis; \}/);
 });
 

@@ -3021,7 +3021,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   setupCovered.current = !!(firstRun && (browsing || setupCard));
   // THE TABLE, ONE RECORD (tableState.js): folded by its X or under a page opened over it, the item keeps its key - and the Advisor
   // keeps quiet, its button never acting on what nobody can see. The strip speaks only for the item on the table, at rest.
-  const table = tableOf({ current, cardKey, foldedKey, browsing, setup: setupOn.current });
+  const table = tableOf({ current, cardKey, foldedKey, browsing, setup: setupOn.current, over: !!setupCard });
   // ...and what the rail's tag and the box say of it: a page over it is not it in view (tableWords)
   const tableSays = tableWords(table, currentItem?.ref || (/^task:(\d+)$/.test(table.key || "") ? `TQ-${table.key.slice(5).padStart(4, "0")}` : ""));
   // THE ASSISTANT'S LIGHT OUTRANKS THE ADVISOR'S while its item is on the table: the owner asked for that act in words, and the Advisor's line
@@ -3331,7 +3331,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           {/* ONE PANEL, THREE LAYERS (the owner, 2026-10-13: "i thought there will be one border around all 3"): the Advisor's
               suggestion, the row whose filled button it picked, and the box - one border, the box its floor */}
           <div className="tq-dock">
-          {firstRun ? <SetupLine /> : noAi ? (
+          {/* ...setup's own line only while setup is in view: a task opened over it speaks for itself (tableOf's `over`, 2026-10-26) */}
+          {firstRun && !setupCard ? <SetupLine /> : noAi ? (
             <div className="tq-next" role="status" data-tq-advice="no_ai">
               <div className="tq-next-txt">{adviceNone("no_ai").line}</div>
               {/* THE ONE LIT MOVE: the row's own Connect an AI when it has one (ActionRow lights it), else this one (the design, phase A:

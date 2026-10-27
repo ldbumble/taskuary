@@ -202,9 +202,12 @@ class OneMeansOneOnBothScreensTests(unittest.TestCase):
         def brain(system, user, **kw):
             seen['user'] = user
             return 'Right you are.'
-        with mock.patch.object(concierge, '_brain_for', return_value=brain),              mock.patch.object(concierge, 'chips_for', wraps=concierge.chips_for):
+        # the phone is where the words are numbered; a desktop task view draws its own row, unnumbered, so a digit there stays a digit
+        # (3992150a). Read the owner's line itself: the canvas lists buttons by name, so the word is somewhere in the prompt either way
+        with mock.patch.object(concierge, '_brain_for', return_value=brain), concierge.delivering(concierge.PHONE):
             concierge.say(s, '1', item=item)
-        self.assertIn(words[0], seen['user'], 'the model should have been handed the action, not the digit')
+        said = [l for l in seen['user'].splitlines() if l.startswith(concierge.OWNER_SAYS)]
+        self.assertEqual(said, [concierge.OWNER_SAYS + words[0]], 'the model should have been handed the action, not the digit')
 
     def test_a_number_nobody_offered_stays_the_owners_own_words(self):
         from taskuary import concierge

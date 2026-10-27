@@ -1269,14 +1269,116 @@ WHAT_ABOUT = ('WHAT THEIR WORDS ARE ABOUT, in this order: the item on the table 
               'sentence; an old task they ask you to FIND - search for it.')
 
 
-def _advice_block(store, item: dict | None) -> str:
-    """The Advisor's line on the item on the table (advisor.block): 'why?' is answered from it, never recomputed here."""
+def _advice_block(store, item: dict | None, d: dict | None = None) -> str:
+    """The Advisor's line on the item on the table (advisor.block): 'why?' is answered from it, never recomputed here. `d`: its
+    decision, already read (_decision)."""
     if not item: return ''
     try:
         from . import advisor
-        return advisor.block(store, item)
+        return advisor.block(store, item, d)
     except Exception as e:
         logger.debug(f'concierge: no advice block - {e}'); return ''
+
+
+def _decision(store, item: dict | None) -> dict:
+    """The Advisor's decision for the item on the table (advisor.decide), or {} - read once per turn."""
+    if not item or not item.get('key'): return {}
+    try:
+        from . import advisor
+        return advisor.decide(store, item['key'], preread=False) or {}
+    except Exception as e:
+        logger.debug(f'concierge: no advisor decision - {e}'); return {}
+
+
+# THE CANVAS, FIRST (the owner, 2026-10-26: "the context for the assistant should be everything in the canvas, so if task is open the status
+# of that task should be first ... and then on mark done or read on other tasks the summary should be 'read' into the ai context ... This
+# will make assistant quicker without having to call tools right away to be able to click buttons"): the item on the table - its stage
+# (stages.json), the ask, the lit button and the row's buttons by the ids a CALL takes - then what this walk already put down, one line
+# each, from the cards this chat drew and the badges a press left on them (_stamp_pressed, _stamp_next). The row's buttons ride here by
+# id and tool name only: what each tool does is the system's index, and their whole descriptions were half of every turn's words.
+CANVAS_CAP, CANVAS_ROWS = 1500, 8
+
+
+def _past_of(label: str) -> str:
+    "What a card's badge says happened to it, in the past tense."
+    L = buttons.label
+    return {L('close'): 'marked done', L('close_note'): 'closed with a note', L('approve'): 'sent', L('defer'): 'put away until its day',
+            L('remove'): 'removed - not a task', L('not_ours'): 'filed - not ours', L('next', 'read'): 'read', L('next', 'batch'): 'all read',
+            L('next'): 'passed - still on you'}.get(label) or f'pressed {label}'
+
+
+def _how_to_press(v: str) -> str:
+    """How a CALL presses or lights the row's button `v`: its own id where it is a decision, else the tool its row runs, else button.light."""
+    if v in toolcatalog.DECISIONS: return ''
+    tool = CHIP_TOOL.get(v) or PICKER_TOOL.get(v)
+    return f' = {toolcatalog.signature(tool)}' if tool else f' = button.light(button: "{v}")'
+
+
+def _canvas_table(store, item: dict, d: dict) -> list:
+    """The item on the table, in a few lines: what it is, its stage and what the page shows for it, the ask, the lit button, the draft
+    and the row's buttons - each by the id a CALL takes."""
+    from . import stages
+    lines = [f"ON THE TABLE: {handle_of(item)} · {_cut(item.get('title'), 90)}" + (f" · from {item['who']}" if item.get('who') else '')]
+    t = store.get_task(int(item['tid'])) if item.get('tid') and item.get('kind') not in TASK_VIEW_NOT else None
+    verbs = []
+    if t:
+        live = next((x for x in _live(store) if x.get('taskId') == t['TaskId']), None)
+        sess = {'alive': True, 'waiting': bool(live.get('waiting'))} if live else None
+        key = stages.of_task(store, t, session=sess)
+        p = stages.parts(key)
+        if p:
+            verbs = p['verbs']
+            lines.append(f"  stage: {key} ({p['word']}) - the page shows {p['shows']}; the drawer: {p['drawer']}"
+                         + (' - its tab lit, the next move is in it' if p['lit'] else ''))
+        ask = str(t.get('Summary') or '').strip()
+    else:
+        lines.append(f"  card: {item.get('kind')} ({funnel.LANE_WORDS.get(item.get('lane'), (item.get('lane'),))[0]})"
+                     + (f" - {len(item.get('items') or [])} notices on one card" if item.get('kind') == 'fyis' else ''))
+        ask = ''
+    ask = ask or str(item.get('summary') or item.get('preview') or item.get('why') or '').strip()
+    if ask: lines.append(f"  ask: {_cut(' '.join(ask.split()), 200)}")
+    if d.get('verb'): lines.append(f"  lit: {d['verb']} \"{d.get('label') or buttons.label(d['verb'])}\" - the Advisor's pick" + (f": {_cut(d['line'], 120)}" if d.get('line') else ''))
+    rv = store.get_review(item['rid']) if item.get('rid') else store.pending_review(t['TaskId']) if t else None
+    first = next((ln.strip() for ln in str((rv or {}).get('DraftText') or '').splitlines() if ln.strip()), '')
+    if first and str((rv or {}).get('Status') or 'pending') == 'pending': lines.append(f'  draft waiting for Send: "{_cut(first, 140)}"')
+    # ...the row's own buttons on the desk and Next on the walk's bar beside them (table_actions' pick); a phone's chips
+    chips = [c for c in chips_for(store, item) if c.get('verb')]
+    row = row_buttons(store, item) + [c for c in chips if c['verb'] == 'next'] if routes() else chips
+    row = sorted(row, key=lambda b: verbs.index(b['verb']) if b['verb'] in verbs else len(verbs))
+    if row: lines.append('  buttons: ' + ' · '.join(f"{b['verb']} \"{b['label']}\"{_how_to_press(b['verb'])}" for b in row))
+    return lines
+
+
+def _canvas_walk(store, dock_tid: int, item: dict | None) -> list:
+    """What this walk already put on the canvas and what became of each, newest first - a card's badge (Mark done, Read, Next...) or,
+    with none, how it stands now."""
+    seen, out = {(item or {}).get('key')}, []
+    for c in reversed(general.chat_rows(store, dock_tid)):
+        if c.get('ActorType') != general.ASSISTANT_TYPE: continue
+        card = _card_of(c)
+        if not isinstance(card, dict) or card.get('kind') in ('words', 'proposal') or not card.get('key') or card['key'] in seen: continue
+        seen.add(card['key'])
+        if card.get('pressed'): did = _past_of(card['pressed']) + (f": {_cut(card['pressed_note'], 80)}" if card.get('pressed_note') else '')
+        else:
+            t = store.get_task(int(card['tid'])) if card.get('tid') else None
+            did = ('closed' if t and t.get('Status') in ('done', 'dropped') else 'read' if card.get('lane') in READ_ON_NEXT or card.get('kind') == 'fyis'
+                   else 'shown')
+        title = f"{len(card.get('items') or [])} fyi" if card.get('kind') == 'fyis' else _cut(card.get('title'), 70)
+        out.append(f"  {handle_of(card)} · {title} · {did}")
+        if len(out) >= CANVAS_ROWS: break
+    return out
+
+
+def canvas_block(store, item: dict | None, dock_tid: int | None, d: dict | None = None) -> str:
+    """THE CANVAS block, first in a typed turn: the table, then this walk's other cards. Bounded (CANVAS_CAP): the walk's lines go first
+    when it is over, oldest of them first. `d`: the Advisor's decision for the item, read once by the caller."""
+    head = ('CANVAS - what is on the owner\'s screen now. Act from it first: a button below is pressed or lit by CALLing its id - '
+            '{"kind": "<id>"} - or the tool it names, with no look-up first.')
+    table = _canvas_table(store, item, d or {}) if item else ['ON THE TABLE: nothing']
+    walk = _canvas_walk(store, dock_tid, item) if dock_tid else []
+    def text(w): return '\n'.join([head, *table] + (['EARLIER ON THE CANVAS THIS WALK (newest first):', *w] if w else []))
+    while walk and len(text(walk)) > CANVAS_CAP: walk = walk[:-1]
+    return _cut(text(walk), CANVAS_CAP + 400)
 
 
 # NOTHING ON THE TABLE, AND THEY WANT TO GO THROUGH WHAT WAITS: the walk draws each row as its card with its own buttons. Asked to walk
@@ -4635,8 +4737,12 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # reports.list, connections.list and settings.list read them when a turn needs them.
         # ...and the Hub is a tool too (hub.publish), not an envelope taught every turn (2026-09-25)
         system = turn_system(store, llm)
+        # THE CANVAS FIRST (canvas_block): the table's stage, ask, lit button and row by id, then what this walk put down - the Advisor's
+        # decision read once, for the lit button there and the "why?" line under the facts
+        adv_d = _decision(store, item)
         # the pipe's own SELECT values ride the turn, not the index (toolcatalog.select_values): they move with every mail
-        asked = (f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n{toolcatalog.select_values(store)}\n\n"
+        asked = (f"{canvas_block(store, item, tid, adv_d)}\n\n"
+                 f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n{toolcatalog.select_values(store)}\n\n"
                  f"{facts(store, item, whole=True)}\n\n"
                       + (f"THE TASKS THEY NAMED, as they are now:\n{nn}\n\n" if (nn := named_now(store, text, item)) else '')
                       # what the owner handed over and where each stands (asks.py) - "where's the tab check?", "add Omar to that"
@@ -4652,7 +4758,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       # ...under that page, out of sight: "show me TQ-0003" over Connections answered and left it covered (2026-10-19 UI walk, G5)
                       + (f"OPEN BESIDE IT: {_cut(open_card, 300)} - the item is still on the table, under that page; 'this' is whichever of the two "
                          f"their words fit{under_page(item)}\n\n" if open_card and item else '')
-                      + (f"{table_actions(store, item)}\n\n" + (f"{adv}\n\n" if (adv := _advice_block(store, item)) else '') + f"{WHAT_ABOUT}\n\n" if item else '')
+                      # ...the row's buttons are the CANVAS's now, by id; the Advisor's evidence stays, for "why?"
+                      + ((f"{adv}\n\n" if (adv := _advice_block(store, item, adv_d)) else '') + f"{WHAT_ABOUT}\n\n" if item else '')
                       + f"{OWNER_SAYS}{text}\n"
                       # A PICTURE WITH THE LINE (the owner, 2026-09-30): an API brain sees it, a CLI brain reads the file it names
                       + ("ATTACHED IMAGES (read these files - they are what the owner is showing you)\n" + "\n".join(images) + "\n" if images else '')

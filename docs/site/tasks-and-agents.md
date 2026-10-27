@@ -257,6 +257,26 @@ state for a task, in the work rail's words — the server decides it once and bo
 | waiting on somebody else | 📤 waiting on them | — |
 | nobody was handed it | 📋 on you | — |
 
+### Where a task is up to
+
+A task view opens on one main view, with the rest one click away in a drawer. Which one is decided by the task's
+**stage** — one list, read by the task view, the server and the Assistant alike (`taskuary/stages.json`). The first
+row that holds wins, top to bottom:
+
+| Stage | When | Main view | Drawer | Advisor's section |
+|---|---|---|---|---|
+| agent working | an agent's session is open, working or waiting on you | the session, the whole width | Came from, one line | over the work |
+| waiting on someone | handed to a person | the task, who it waits on and when it is due | Agent and Close out | in the drawer |
+| done | closed | how it closed — the note, what went out, the Result | Came from | — |
+| close out | a draft or emails wait for **Send**, or something went out | Close out | Came from | over the work |
+| agent result | an agent finished, stopped or failed | its Result, or why it failed with **Try again** | Came from | over the work |
+| to reply | somebody wrote and nothing is drafted | the task | Agent and Close out — its tab lit | in the drawer |
+| to do | a to-do's checklist or a goal's steps | the task and its list | Agent and Close out | in the drawer |
+| to start | an ask nothing has worked yet | the task | Agent and Close out — its tab lit | in the drawer |
+
+A lit tab says the next move is inside that drawer. The Assistant is told the stage of the task on the table, so a
+typed "send it" or "mark it done" acts on what you are looking at.
+
 A task put away with **Remind me** waits under **For later** on the rail and off the Board until its day — unless its
 agent asks you something. Status has no box of its own: **Start**, **Mark done**, **Remind me** and **Reopen** set it, and Reopen clears
 an old reminder. **Mark done** keeps a draft that was waiting; **Bring it back to send** sends it after all. Done is

@@ -744,18 +744,18 @@ async function faults() {
     await wayOut(page.step, [aFix, f === "nocli" ? "Connect a coding tool" : whereCode, (x) => /coding tool/i.test(x.word)]);
     page.expect.delete("/dispatch"); await fault("");
   }
-  // no AI at all: the strip asks for one, with the button that connects it - on an item whose move needs an AI (the owner, 2026-10-23:
+  // no AI at all: the row carries the button that connects one, lit (the strip that asked is gone, 2026-10-26) - on an item whose move needs an AI (the owner, 2026-10-23:
   // a move the rule decides is lit with no AI, and a failure's fix outranks it). The walk has been past every ask by now (Next is
   // seen-in-this-walk), so the rail's rows are opened in turn until one is
   page.step = "faults noai"; await fresh();
   for (const r of (await look(page)).rail.slice(0, 16)) {
-    if (await page.$('[data-tq-advice="no_ai"] button')) break;
+    if (await page.$('[data-tq-row] [data-tq-verb="noai:connect"]')) break;
     await openItem(page, r.key); await wait(1500);
   }
   const s = await look(page);
-  if (!(await page.$('[data-tq-advice="no_ai"] button'))) note("WAYOUT", page.step, "with no AI the Advisor's strip offers no way to connect one");
-  else { const before = s; await (await page.$('[data-tq-advice="no_ai"] button')).click(); await wait(3000);
-    if (sig(await look(page)) === sig(before)) note("WAYOUT", page.step, "the strip's Connect an AI changed nothing"); await closePops(page); }
+  if (!(await page.$('[data-tq-row] [data-tq-verb="noai:connect"]'))) note("WAYOUT", page.step, "with no AI the row offers no way to connect one");
+  else { const before = s; await (await page.$('[data-tq-row] [data-tq-verb="noai:connect"]')).click(); await wait(3000);
+    if (sig(await look(page)) === sig(before)) note("WAYOUT", page.step, "the row's Connect an AI changed nothing"); await closePops(page); }
   // an act on a task closed behind its open card: the act is refused - with the way to reopen it, never only "reopen it first"
   page.step = "faults closed"; await fresh();
   const t = await openItem(page, (x) => x.status === "yours"), ref = t && ((await look(page)).ref.match(/TQ-(\d+)/) || [])[1];

@@ -3,13 +3,13 @@ import test from "node:test";
 
 import { startHarness } from "./harness.mjs";
 
-/* NO LINE, NO STRIP (the owner, 2026-10-26, the dock on a 1600x810 laptop: "for advisor we probably should remove it when it's not doing
-   anything no? want to give laptops enough real estate to see the full task"). The Advisor's band over the row stood ~31px tall and empty
-   whenever it was silent - the obvious move said by its lit button alone, an agent at work, a read on its way. Walked across the rail: a
-   silent strip takes no room and the dock is that much shorter; a strip with a line shows it, its band as tall as before. */
+/* NO STRIP AT ALL (the owner, 2026-10-26: "maybe keep the box but remove the advisor? not sure the advisor is really useful"). The
+   Advisor's band over the row went - first when silent (the same day: "remove it when it's not doing anything"), now always: its pick is
+   the row's one dark button, and the few lines that warned stand in the task beside what they are about (advice.taskNote). Walked across
+   the rail at 1600x810: the dock is the one line of the row and the box on every item, and a decided item still has its button lit. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-test("the dock's Advisor strip takes no room while it is silent, and shows its line when it has one", { timeout: 300000 }, async (t) => {
+test("the dock never draws the Advisor's strip: one line on every item, and the Advisor's pick still lit", { timeout: 300000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
   const page = await harness.newPage();
@@ -24,28 +24,27 @@ test("the dock's Advisor strip takes no room while it is silent, and shows its l
     await page.evaluate((k) => document.querySelector(`[data-tq-rail] .tq-pile-row[data-tq-key="${k}"] .card`)?.click(), k);
     await page.waitForFunction((k) => document.querySelector(".tq-pile-row.current")?.getAttribute("data-tq-key") === k, { timeout: 20000 }, k).catch(() => {});
     await sleep(2500);                                  // its reads and its advice land
-    const m = await page.evaluate(() => {
-      const dock = document.querySelector(".tq-dock"), strip = dock?.querySelector("[data-tq-strip]"), row = dock?.querySelector("[data-tq-row]");
+    seen.push({ k, ...(await page.evaluate(() => {
+      const dock = document.querySelector(".tq-dock"), bar = dock?.querySelector(".tq-dock-line");
       const h = (e) => (e ? Math.round(e.getBoundingClientRect().height) : null);
-      // ...the row and the box share one line (the one-row chat bar, 2026-10-26): the line is the band under the strip
-      const box = dock?.querySelector(".tq-compose-box"), bar = dock?.querySelector(".tq-dock-line");
-      return { dock: h(dock), strip: strip ? h(strip) : null, row: h(row), box: h(bar), line: strip?.querySelector(".tq-next")?.textContent || "",
-        other: [...(dock?.children || [])].filter((e) => e !== strip && e !== bar && e.getBoundingClientRect().height > 0).map((e) => e.className).join(",") };
-    });
-    seen.push({ k, ...m });
+      return { dock: h(dock), bar: h(bar), strip: document.querySelectorAll("[data-tq-strip], .tq-dock .tq-next").length,
+        other: [...(dock?.children || [])].filter((e) => e !== bar && e.getBoundingClientRect().height > 0).map((e) => e.className).join(","),
+        // ...counted by label: the row draws a hidden measuring copy of itself (ActionRow's ghost)
+        decided: !!document.querySelector("[data-tq-advice-verb]"), lit: new Set([...document.querySelectorAll("[data-tq-row] .tq-ab.p:not(:disabled)")].map((b) => b.textContent.trim())).size, litWords: [...document.querySelectorAll("[data-tq-row] .tq-ab.p:not(:disabled)")].map((b) => b.textContent.trim()).join("|") };
+    })) });
   }
   if (process.env.TQ_PROBE) console.log(JSON.stringify(seen, null, 1));
-  const silent = seen.filter((s) => s.strip !== null && !s.line && !s.other), said = seen.filter((s) => s.line && !s.other);
-  assert.ok(silent.length, `a silent strip was met: ${JSON.stringify(seen)}`);
-  for (const s of silent) {
-    assert.equal(s.strip, 0, `a silent strip takes no room: ${JSON.stringify(s)}`);
-    assert.ok(Math.abs(s.dock - (s.box + 2)) <= 2 && s.row <= s.box, `the dock is the one line of the row and the box: ${JSON.stringify(s)}`);
+  for (const s of seen) {
+    assert.equal(s.strip, 0, `no strip and no line over the row: ${JSON.stringify(s)}`);
+    assert.equal(s.other, "", `nothing but the one line in the dock: ${JSON.stringify(s)}`);
+    assert.ok(Math.abs(s.dock - (s.bar + 2)) <= 2, `the dock is the one line of the row and the box: ${JSON.stringify(s)}`);
   }
-  // ...and one with words shows them, in a band of its own: the dock is that band taller
-  assert.ok(said.length, `a strip with a line was met: ${JSON.stringify(seen)}`);
-  for (const s of said) {
-    assert.ok(s.strip >= 30, `the line has its band: ${JSON.stringify(s)}`);
-    assert.ok(Math.abs(s.dock - (s.box + s.strip + 2)) <= 2, `the dock is the strip and the line of the row and the box: ${JSON.stringify(s)}`);
-  }
+  // ...the box keeps its size: the dock is as tall as it was with a silent strip (44px at 1600x810, the one-row chat bar's)
+  assert.ok(seen.every((s) => s.dock <= 48), `one line, never a band over it: ${JSON.stringify(seen.map((s) => s.dock))}`);
+  // ...and the Advisor still decides: a decided item lights one button
+  const decided = seen.filter((s) => s.decided);
+  assert.ok(decided.length, `a decided item was met: ${JSON.stringify(seen)}`);
+  for (const s of decided) assert.ok(s.lit <= 1, `one dark button at most: ${JSON.stringify(s)}`);
+  assert.ok(decided.some((s) => s.lit === 1), `the Advisor's pick is lit on the row: ${JSON.stringify(decided)}`);
   assert.deepEqual(errors, []);
 });

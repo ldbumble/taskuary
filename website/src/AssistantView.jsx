@@ -75,7 +75,7 @@ import DigestText from "./DigestText.jsx";
 import { canGoBack, firstAppLink, onStep, openAppLink, recordPlace } from "./appLinks.js";
 import { hashFor } from "./canvasLinks.js";
 import { canSend, useCapabilities } from "./capabilities.js";
-import { adviceNone, place } from "./words.js";
+import { place } from "./words.js";
 import ConnectAi, { CONNECT_AI, connectAi } from "./ConnectAi.jsx";
 // FirstRun, the walk's workspace and the browse cards are drawn after the pile or a click, never on the first frame: out of the entry chunk
 const FirstRun = lazyView(() => import("./FirstRun.jsx"));
@@ -109,6 +109,7 @@ import "./assistantView.css";
 // showing anything, so a stale key restores nothing.
 const WALK_KEY = "taskuary_walk_tid";
 const HOLD_MS = 400;            // the longest a row waits for its item's first decision before it is drawn without one
+const POP_LIT_MS = 1800;        // how long the chat pop-up shows the owner's line when the answer was only a lit button
 const isOpenWalk = (t) => !!t && t.SourceRef === "assistant:setup" && !["done", "dropped"].includes(t.Status);
 // markers the server writes on a line that are NOT cards (concierge.SETUP_QUESTIONS): the line is its words
 // ...and a line that carries its own words (concierge: a failed act's way on, the already-seen opens): never an item card
@@ -984,7 +985,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
       <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle} phone={canvas.phone}
         onNext={() => actions.next()} busy={actions.busy} picking={actions.picking} onFold={() => canvas.fold(c.key)} onAfter={() => actions.advance(null, true)}
         onLeave={() => canvas.putDown(c.key, c.tid)} onStay={(why) => canvas.pickUp(c.key, why)} onReminded={(out) => actions.reminded(out, c)}
-        onListChanged={actions.reload} onChanged={actions.changed} onOpenTask={actions.openTask} lit={canvas.lit}
+        onListChanged={actions.reload} onChanged={actions.changed} onOpenTask={actions.openTask} lit={canvas.lit} advice={canvas.advice}
         onPropose={actions.pressAdvice} />
     </div>
   );
@@ -1162,7 +1163,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [reading, setReading] = useState(""), [readFor, setReadFor] = useState(null);
   // ...let go only once the decision is drawn: the effect runs after the strip's own (AdvisorNext registers a move the row lacks then)
   useEffect(() => { if (readFor) setReading((r) => (r === readFor.key ? "" : r)); }, [readFor]);
-  const [changed, setChanged] = useState(null);   // {for, reading}: a press refused as changed since the Advisor looked (B6)
+  const [, setChanged] = useState(null);   // {for, reading}: a press refused as changed since the Advisor looked (B6) - said by no strip now
   // THE BOX GROWS WITH WHAT YOU TYPE, like every chat app: one row empty, a row per line after that, up to the CSS
   // cap (40% of the window) - then it scrolls inside. rows={1} alone held a paragraph in a one-and-a-half-line slot
   // (the owner, 2026-09-24: "how do we deal with this when you type in many lines?")
@@ -3087,6 +3088,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const litNow = litPick(lit, litTable);
   useEffect(() => { setLit((l) => litAfter(l, litTable)); }, [litTable.key, litTable.tid, lit]);   // eslint-disable-line react-hooks/exhaustive-deps
   const shownAdvice = table.speaks && !litNow ? adviceShown(advice, { key: table.key, lane: currentItem?.lane }, busy) : null;
+  // ...and the decision a WARNING in the task is read from (advice.taskNote): never put out by the Assistant's light or a turn in flight -
+  // a warning about the draft does not blink while the chat answers
+  const noteAdvice = adviceShown(advice, { key: table.key, lane: currentItem?.lane }, false);
   shownRef.current = shownAdvice?.verb ? { key: shownAdvice.for || shownAdvice.key || table.key, verb: shownAdvice.verb, revision: shownAdvice.revision } : null;
   // ...an answer that landed wins: the strip asking for an AI over a line the Advisor did give hid the line and left its button dark
   // ...and every other reason there is no line, said (words.json advice_none) - an agent at work included, whose line is hidden.
@@ -3108,6 +3112,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const setupLit = !firstRun ? null : (() => { const v = rowVerbs.list.find((x) => /^(setup|about):/.test(String(x.id)) && x.tone === "p" && !x.disabled); return v ? { id: v.id } : null; })();
   pickRef.current = stripPick || setupLit;         // what the row is drawn with - a press records what it had filled (notePress)
   const rowEmpty = !rowVerbs.list.some((v) => !String(v.id).startsWith("floor:"));
+  // NO AI, WHERE THE MOVE NEEDS ONE: the strip said "Connect an AI." over the row with its own button (2026-10-26, the strip gone) - the
+  // button joins the row instead, the one lit (ActionRow lights a row's Connect an AI for a no_ai pick), unless the task's row has its own
+  const rowConnect = rowVerbs.list.some((v) => v.label === CONNECT_AI && !v.disabled && v.id !== "noai:connect");
+  useVerbs("noai", [{ id: "noai:connect", group: "decide", label: CONNECT_AI, title: "No AI is connected - connect one under Connections",
+    run: () => openAppLink(place("ai").href) }], !firstRun && noAi && !rowConnect);
   // ...and not under a page the owner opened on the canvas (Reports, Connections): they are working there, and the line read
   // as part of that page (the owner's workflow screenshot, 2026-10-15)
   // ...and under a proposal waiting on its Confirm: the item it came from folded away with its row, and the walk must still go on
@@ -3193,13 +3202,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     return () => clearTimeout(t);
   }, [continuingTid]);
   // ...and the Assistant's lit button with its line, for the phone's row at the view's foot (CanvasItem)
-  const canvasState = useMemo(() => ({ height: CANVAS_ITEM_HEIGHT, expanded, folded: foldedKey, browsing, phone, lit: litNow,
+  const canvasState = useMemo(() => ({ height: CANVAS_ITEM_HEIGHT, expanded, folded: foldedKey, browsing, phone, lit: litNow, advice: noteAdvice,
     toggle: () => setExpanded((x) => !x), fold: (key) => { setExpanded(false); setFoldedKey(key); },
     // the task leaves the table the moment it is put down, the "…" under its title line while the server closes it
     // ...and the next item comes up in the same press (drawNextEarly); a close that fails puts the drawn one down and this one back
     putDown: (key, tid = null) => { leave({ key, tid }); leavingRef.current = { key, tid }; setExpanded(false); setFoldedKey(key); setNextComing(true); setLeavingTid(tid); drawNextEarlyRef.current?.(key); },
     pickUp: (key, why) => { takeEarlyBackRef.current?.(); unleave(leavingRef.current?.key === key ? leavingRef.current : { key }); setFoldedKey((k) => (k === key ? null : k)); setNextComing(false); setLeavingTid(null); if (why) setErr(why); } }),
-    [bodyH, expanded, foldedKey, browsing, phone, litNow?.verb, litNow?.line]);   // eslint-disable-line react-hooks/exhaustive-deps
+    [bodyH, expanded, foldedKey, browsing, phone, litNow?.verb, litNow?.line, noteAdvice?.for, noteAdvice?.state, noteAdvice?.line, noteAdvice?.verb]);   // eslint-disable-line react-hooks/exhaustive-deps
   const lastCardIdx = useMemo(() => { const i = tableCardIndex(shown, old ? null : current || cardKey), c = shown[i]?.card;
     // ...the canvas's own fallback (the newest card in the chat) included: a durable line about a closed task landing after Next drew it
     return !old && c && c.key !== current && isLeft(c) ? -1 : i; }, [shown, old, current, cardKey]);
@@ -3232,6 +3241,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // ...it opens on the owner's line (send) and on the Assistant speaking up about the task in this session - never on a reload's history
   const popLast = popLines[popLines.length - 1]?.[0];
   useEffect(() => { if (popLast?.role === "assistant" && /^(a|s|d|context)\d/.test(popLast.id)) setPopOpen(true); }, [popLast?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // ...and AN ANSWER THAT WAS ONLY A LIT BUTTON shuts it again by itself (the chat bar's open question, default chosen 2026-10-26): a reply
+  // that only lit or pressed is no chat line (only words get one), so the pop-up held the owner's own line alone over the task - it is
+  // shown a moment, the row's dark button being the answer. Never over an error, nor while the answer is still on its way
+  useEffect(() => {
+    if (!popOpen || popPending || err || popLast?.role !== "user") return undefined;
+    const t = setTimeout(() => setPopOpen(false), POP_LIT_MS);
+    return () => clearTimeout(t);
+  }, [popOpen, popPending, err, popLast?.id, popLast?.role]);
   // ...and goes with the task: the next one on the table starts with it shut
   const popTable = shown[lastCardIdx]?.card?.key || "";
   useEffect(() => { setPopOpen(false); }, [popTable]);
@@ -3265,7 +3282,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           )}</>;
   const errLine = err && <Typography component="div" sx={{ color: "#7a2f3c", fontSize: 12, mb: 1 }}>{err}<ReportLink text={err} /></Typography>;
   const chat = (
-    <div className={shownAdvice ? "tq-asst-col advising" : "tq-asst-col"} style={{ position: "relative", flex: 1, minHeight: 0 }}>
+    <div className="tq-asst-col" style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div className="tq-chat-head">
         {/* no mark here: the top bar already carries the logo (the owner, 2026-10-06: "don't need it on top of the assistant") */}
         {canBack && !!placeHash && !old && !firstRun && <Tooltip title="Back (Alt+←)"><IconButton size="small" aria-label="Back" onClick={() => window.history.back()} sx={{ ml: -0.75, mr: 0.25 }}><ArrowBackIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>}
@@ -3434,30 +3451,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               suggestion, the row whose filled button it picked, and the box - one border, the box its floor */}
           <div className="tq-dock">
           {/* ...setup's own line only while setup is in view: a task opened over it speaks for itself (tableOf's `over`, 2026-10-26) */}
-          {firstRun && !setupCard ? <SetupLine /> : noAi ? (
-            <div className="tq-next" role="status" data-tq-advice="no_ai">
-              <div className="tq-next-txt">{adviceNone("no_ai").line}</div>
-              {/* THE ONE LIT MOVE: the row's own Connect an AI when it has one (ActionRow lights it), else this one (the design, phase A:
-                  the strip asked for an AI over a row that lit nothing) */}
-              <button type="button" className={rowVerbs.list.some((v) => v.label === CONNECT_AI && !v.disabled) ? "tq-chip" : "tq-chip primary"}
-                onClick={() => openAppLink(place("ai").href)}>{CONNECT_AI}</button>
-            </div>
-          ) : <>
-            {/* THE ADVICE IS ON ITS WAY: the row has nothing dark until it lands (rowOf) - no button, no word.
-                ...and a strip with no line in it takes NO ROOM (the owner, 2026-10-26: "remove it when it's not doing anything"):
-                the CSS hides it until a .tq-next lands in it, so the dock is a band shorter while the Advisor is silent */}
-            {table.speaks && !holding && !hostedRow && <div className="tq-strip" data-tq-strip={busy || (reading && reading === onTable) ? "busy" : ""}>
-            {/* THE ASSISTANT'S LIT BUTTON SAYS SO HERE, over the row it lit: the strip stood empty over a dark Mark done, and "Press Mark done"
-                was only up in the chat (verify, 2026-10-19) - it goes out with the light */}
-            {table.speaks && !!litNow?.line && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">{litNow.line}</div></div>}
-            {table.speaks && !litNow && changed && changed.for === onTable && <div className="tq-next" role="status" data-tq-advice-changed="">
-              <div className="tq-next-txt">{changed.reading ? "This changed - reading it again…" : shownAdvice ? "This changed - here's the updated suggestion."
-                : "This changed."}</div></div>}
-            <AdvisorNext advice={shownAdvice} onPropose={pressAdvice} />
+          {firstRun && !setupCard && <SetupLine />}
+          {/* NO STRIP OVER THE ROW (the owner, 2026-10-26: "maybe keep the box but remove the advisor? not sure the advisor is really
+              useful"): the Advisor's pick is the row's one dark button and says nothing; the few lines that warn are in the task, beside
+              what they are about (advice.taskNote). AdvisorNext only joins a move the row lacks, and leaves the walks' hidden mark */}
+          {!firstRun && table.speaks && !holding && !hostedRow && <>
+            <AdvisorNext advice={shownAdvice} onPropose={pressAdvice} onErr={setErr} />
             {/* ...and a decision that lights NOTHING on purpose (an agent asking is answered in its own pane, the design's state 7): no
-                word, no button - only a mark, so the dead-end walk can tell it from a strip that never got its decision */}
+                word, no button - only a mark, so the dead-end walk can tell it from one that never got its decision */}
             {!shownAdvice && advice?.for === onTable && advice?.state && !advice.verb && !advice.none && <div hidden data-tq-advice="" data-tq-silent="" data-tq-unlit={advice.state} />}
-            </div>}
           </>}
           {!firstRun && <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />}
           {/* ONE ROW: the row's groups and the box share a line (the one-row chat bar, 2026-10-26) - the box a pill at its end while at rest,

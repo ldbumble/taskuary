@@ -2,10 +2,8 @@
 // next, the rare ones behind More; Next is FIRST (the owner, 2026-09-30). The card registers them (actionRow.js); this only draws. Centred over the composer,
 // ONE filled button at most - the Advisor's pick, and none before it answers - and a greyed decision says why it is greyed.
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Menu, MenuItem, Popover, useMediaQuery } from "@mui/material";
-import api from "./api.js";
-import { suggestion } from "./advice.js";
-import { TYPES, advisedAny, advisedIn, fitRow, press, pressInFlight, rowOf, lightOnCard, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { Menu, MenuItem, useMediaQuery } from "@mui/material";
+import { TYPES, advisedAny, fitRow, press, rowOf, lightOnCard, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
 import { adviceNone } from "./words.js";
 import { CONNECT_AI } from "./ConnectAi.jsx";
 
@@ -14,78 +12,30 @@ import { CONNECT_AI } from "./ConnectAi.jsx";
 export const proposeFailed = (e) => (e?.response?.status === 409 ? "This changed - here's the updated suggestion."
   : e?.response?.data?.detail || "That did not go through - try again.");
 
-// THE ADVISOR'S SUGGESTION (advisor.py), over the row whose filled button it picked: the fact it rests on, and Why? for the
-// reasoning behind it - the buttons stay on the row, the box below stays the owner's own. THE OBVIOUS MOVE IS SILENT (the owner,
-// 2026-10-23): a decision with no line lights its button and the strip draws no sentence - only an empty mark the walk reads.
-export function AdvisorNext({ advice, onPropose }) {
+// THE ADVISOR'S PICK, ON THE ROW AND NOWHERE ELSE (the owner, 2026-10-26: "maybe keep the box but remove the advisor? not sure the advisor
+// is really useful"): the strip that said its line over the row is gone - the lit button does the talking, and the few lines that warn
+// are drawn in the task beside what they are about (advice.taskNote, AdvisorNote). What stays here is the move the row has no button
+// for, joined to the row so it can be lit, and a hidden mark the walks read to tell a decided item from one still being read.
+export function AdvisorNext({ advice, onPropose, onErr = null }) {
   const verbs = useRowVerbs();
-  const [at, setAt] = useState(null), [note, setNote] = useState(null), [going, setGoing] = useState("");
+  const [going, setGoing] = useState(false);
   // A MOVE THE ROW HAS NO BUTTON FOR (Not ours, Take it myself, Chase, Let it go) was hidden, and then got a button of its own beside
   // the line (2026-10-15) - a second row of buttons. The row owns every button (the owner, 2026-10-16: "the advisor should just
   // highlight the button in the button row not add new ones"): the move joins the row in its type, on the proposal road the pill
   // takes, stamped with the revision it was judged at, and the row fills it like any advised button
   const theirs = verbs.list.filter((v) => !String(v.id).startsWith("advice:"));
   const lacks = !!(advice?.verb && advice.verb !== "next" && onPropose) && !advisedAny(theirs, advice);
-  // ...a 409 says so once and stays over the suggestion the page reads next for this item; another item starts clean
-  useEffect(() => { setGoing(""); }, [advice?.for || advice?.key]);
+  useEffect(() => { setGoing(false); }, [advice?.for || advice?.key]);
+  // ...a refusal is said where the page says what went wrong (onErr: the chat's error line) - there is no strip to say it on
   const run = async (e, anchor) => {
-    setGoing("…");
-    try { await onPropose(advice, anchor || e?.currentTarget || null); setGoing(""); } catch (err) { setGoing(proposeFailed(err)); }
+    setGoing(true);
+    try { await onPropose(advice, anchor || e?.currentTarget || null); } catch (err) { onErr?.(proposeFailed(err)); } finally { setGoing(false); }
   };
   // ...it IS the advice, so it is the dark one (rowOf fills it like any advised verb)
   // ...at the END of its type (group "more"): in front, it pushed the type's own second button into ▾ when the advice landed (2026-10-19)
-  useVerbs("advice", lacks ? [{ id: `advice:${advice.verb}`, label: advice.label, group: "more", tone: "p", disabled: going === "…",
+  useVerbs("advice", lacks ? [{ id: `advice:${advice.verb}`, label: advice.label, group: "more", tone: "p", disabled: going,
     title: "What the Advisor suggests", run }] : [], lacks);
-  if (!advice?.verb) return null;
-  // the silent decision: its button is lit, and the strip says nothing (data-tq-advice marks it decided for the dead-end walk)
-  const mark = <div hidden data-tq-advice="" data-tq-silent="" />;
-  if (advice.verb === "next") return advice.line ? <div className="tq-next" role="status" data-tq-advice=""><div className="tq-next-txt">{advice.line}</div></div> : mark;
-  // a move the row cannot make NOW is not advice: "Stop the agent" over a greyed Stop and save left Next the filled
-  // button under it (the owner, 2026-10-13: "it said stop agent but highlighted button was next?")
-  const onRow = advisedIn(verbs.list, advice);
-  if (!onRow) {
-    // ...but A MOVE THE ROW HAS AND HAS GREYED says why it is off, in the row's own words: the draft's text cleared, Send greyed, and
-    // the strip went blank with nothing lit (the advisor matrix, 2026-10-19) - the line it was judged with is not true of this screen
-    const off = advisedAny(theirs, advice);
-    if (!off?.disabled) return null;
-    // ...and not while the owner's own press greys it (pressInFlight): "Drafting… is off" was said over the Reply just pressed
-    if (pressInFlight(theirs)) return null;
-    return (
-      <div className="tq-next" role="status" data-tq-advice="off">
-        <div className="tq-next-txt">{`${off.label} is off - ${off.why || "it cannot be pressed right now"}.`}</div>
-      </div>
-    );
-  }
-  // ...and a move whose text is gone (`blank`: a chat's Mark done copies the draft, and the box was emptied) says what it does now,
-  // in place of the line judged over the draft as filed - still the advised move, still lit (the matrix's verify, 2026-10-20)
-  if (onRow.blank) return <div className="tq-next" role="status" data-tq-advice=""><div className="tq-next-txt">{`${onRow.blank}.`}</div></div>;
-  if (!advice.line) return mark;
-  const word = onRow.label;
-  const why = (e) => {
-    setAt(e.currentTarget); setNote(null);
-    api.get("/api/advice/notes", { params: { key: advice.key, limit: 5 } })
-      .then(({ data }) => setNote((data?.rows || []).find((r) => r.verb === advice.verb && r.line) || {}))
-      .catch(() => setNote({}));
-  };
-  return (
-    <div className="tq-next" role="status" data-tq-advice="">
-      <div className="tq-next-txt">{suggestion(advice.line, advice.label, advice.verb)}{going && going !== "…" && <span className="tq-next-err"> {going}</span>}</div>
-      <button type="button" className="tq-next-why" aria-haspopup="dialog" aria-expanded={!!at} onClick={why}>Why?</button>
-      <Popover open={!!at} anchorEl={at} onClose={() => setAt(null)} anchorOrigin={{ vertical: "top", horizontal: "right" }}
-        transformOrigin={{ vertical: "bottom", horizontal: "right" }} slotProps={{ paper: { sx: { borderRadius: 2.5, maxWidth: 420 } } }}>
-        <div className="tq-next-pop" role="dialog" aria-label="Why the Advisor suggests this">
-          <div className="pick">Suggested: <b>{word}</b> - the dark button</div>
-          <div className="said">{advice.line}</div>
-
-          {/* what it rests on, in words: an evidence id ("out13") or the model's name tells someone who never wrote code nothing */}
-          {note === null ? <div className="fact">Reading its notes…</div> : (note.evidence || []).some((e) => e.label) && (
-            <div className="rests"><div className="head">What it rests on</div>
-              <ul>{note.evidence.filter((e) => e.label).map((e) => <li key={e.id}>{e.label}</li>)}</ul></div>)}
-          {note?.at && <div className="when">Judged {String(note.at).slice(0, 16)}</div>}
-        </div>
-      </Popover>
-    </div>
-  );
+  return advice?.verb ? <div hidden data-tq-advice="" data-tq-silent="" data-tq-advice-verb={advice.verb} /> : null;
 }
 
 // ONE TYPE: its label, its two most likely buttons joined, and its own ▾ for the rest (clustersOf)

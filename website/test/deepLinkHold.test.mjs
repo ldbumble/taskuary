@@ -20,7 +20,8 @@ test("while held, the spinner stands in for the conversation and the Advisor str
   assert.ok(at > 0 && end > at, "the chat body's content is behind the hold");
   // ...the lines after the table's item drawn in the pop-up over it instead (the one-row chat bar, 2026-10-26)
   assert.ok(src.slice(at, end).includes("shown.map((m, i) => popOn && i > lastCardIdx ? null : <Line"), "the conversation, the table's item with it");
-  assert.match(src, /\{table\.speaks && !holding && !hostedRow && <div className="tq-strip"/);
+  // ...and the Advisor's mark (no strip since 2026-10-26) is not drawn for the item before the link either
+  assert.match(src, /\{!firstRun && table\.speaks && !holding && !hostedRow && <>/);
 });
 
 test("a chat read sent before a turn began never puts its older table back over that turn's answer", () => {

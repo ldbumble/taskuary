@@ -300,7 +300,7 @@ def decide(store, item: dict, verbs: list) -> dict:
     if st == 'asked' and not re.search(r'yesterday|days ago', line): line = ''
     ask, mem = asks(st), []
     if not ask and st in MEMORY_ASKS:
-        try: mem = memory_on(store, item)
+        try: mem = cares_on(store) if st == 'report_ok' and 'report_off' in offered else [] if st == 'report_ok' else memory_on(store, item)
         except Exception as e: logger.debug(f"rulebook: no memory read for {(item or {}).get('key')} - {e}")
     return {'state': st, 'verb': verb, 'line': _cut(line, 64), 'ask': ask or bool(mem), **({'evidence': ev} if ev and line else {}),
             **({'memory': mem} if mem else {})}
@@ -310,7 +310,10 @@ def decide(store, item: dict, verbs: list) -> dict:
 # who holds a late goal step, could not inform Chase, Continue or Remind me - the model, which reads LEARNED.md, was never asked there.
 # These states ask it only where a Your people or Promises line NAMES someone on the item (people_on: addresses and full names - facts,
 # never the words of a mail); every other item stays the rule's alone, with no model call. Safety states never (SAFE).
-MEMORY_ASKS = frozenset({'waiting', 'waiting_late', 'waiting_late_usual', 'waiting_overdue', 'goal', 'goal_late', 'stopped', 'agent_done', 'done_list', 'own'})
+# ...and a REPORT RUN asks it only where What you care about has a line: whether the run's findings are about something the owner said they do
+# not care about is the model's to read (no word lists), and its Switch it off stands only on an answer citing such a line (the owner,
+# 2026-10-27: "the Advisor may suggest switching a report off")
+MEMORY_ASKS = frozenset({'report_ok', 'waiting', 'waiting_late', 'waiting_late_usual', 'waiting_overdue', 'goal', 'goal_late', 'stopped', 'agent_done', 'done_list', 'own'})
 
 
 def memory_on(store, item: dict) -> list:
@@ -321,6 +324,13 @@ def memory_on(store, item: dict) -> list:
     if not ls: return []
     on = advisor.people_on(store, item)
     return [k for raw, k in ls if lc.names(raw) & on or any(' ' in p and p in raw.lower() for p in on)] if on else []
+
+
+def cares_on(store) -> list:
+    """The keys of the What you care about lines the Advisor reads - what a report run's findings are held against."""
+    from . import learned_cut as lc
+    if 'care' not in lc.READS['advisor']: return []
+    return [k for raw, k in lc.lines(store.doc('learned') or '', lc.SECTIONS['care'])]
 
 
 def chase_thread(store, item: dict) -> dict | None:

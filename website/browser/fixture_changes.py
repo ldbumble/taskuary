@@ -142,9 +142,10 @@ def install_processing_changes(app, store):
         """A WhatsApp group's ask whose general agent the owner stopped and saved (Stop and save): its transcript and AGENT REPORT
         filed, nothing sent. The browser test then presses Reply and holds the draft - the row the owner saw wrap onto two lines
         (2026-10-23): the agent's session over, its WhatsApp reply drafting. Invented people. `draft`: a reply already drafted and
-        waiting on the owner - Close out open on it under the Result (the owner's 2026-10-26 screen, its first row cut in half)."""
-        if set(body) - {'draft'} or not isinstance(body.get('draft', ''), str) or len(body.get('draft', '')) > 4000:
-            raise HTTPException(422, 'only a draft string is accepted')
+        waiting on the owner - Close out open on it under the Result (the owner's 2026-10-26 screen, its first row cut in half).
+        `todo`: one long to-do, ticked - a short Result under a Came from drawer that holds more (the owner's 2026-10-26 screen)."""
+        if set(body) - {'draft', 'todo'} or not all(isinstance(body.get(k, ''), str) and len(body.get(k, '')) <= 4000 for k in ('draft', 'todo')):
+            raise HTTPException(422, 'only draft and todo strings are accepted')
         from taskuary import terminal
         tid = store.create_task({'Title': 'Site ops: who signs the snag list on Thursday', 'Kind': 'general', 'Status': 'in_progress', 'Source': 'whatsapp',
                                  'Assignee': 'agent:general', 'Tags': terminal.SAVED}, 'router')
@@ -155,6 +156,9 @@ def install_processing_changes(app, store):
                              agent='general', cwd='C:/work', brain='claude')
         store.add_comment(tid, 'general', 'agent', 'AGENT REPORT\nDetermination: Ray Colton signs the snag list on Thursday.\n'
                           'Actions: Read the handover sheet.\nSummary: Ray Colton signs it; the group should be told.')
+        if body.get('todo'):
+            import json
+            store._exec('UPDATE task SET Checklist=? WHERE TaskId=?', (json.dumps([{'id': 'a', 'text': body['todo'], 'done': True}]), tid))
         if body.get('draft'):
             mid = store.list_messages(tid)[0]['MessageId']
             store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': body['draft'], 'Reason': 'needs a reply: Gail asks Alex'})

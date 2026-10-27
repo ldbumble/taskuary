@@ -78,7 +78,7 @@ class SignInSyncTests(unittest.TestCase):
     def test_a_finished_sign_in_starts_the_first_sync(self):
         cid = next(x for x in server.store.list_connectors() if x['Type'] == 'outlook')['ConnectorId']
         with mock.patch.object(msauth, 'device_start', return_value={'device_code': 'D', 'user_code': 'X', 'verification_uri': 'u', 'expires_in': 9, 'interval': 1, 'message': ''}):
-            flow = c_api.post(f'/api/connectors/{cid}/ms/signin').json()['flow']
+            flow = c_api.post(f'/api/connectors/{cid}/ms/signin', json={'code': True}).json()['flow']
         with mock.patch.object(msauth, 'device_poll', return_value={'access_token': 'A', 'refresh_token': 'RT', 'expires_in': 3600}), \
              mock.patch.object(msauth, 'me', return_value={'account': 'new@x.com', 'name': 'New'}), \
              mock.patch.object(server.threading, 'Thread') as th:

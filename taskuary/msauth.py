@@ -4,9 +4,13 @@ The Outlook card used to need an app registration of the user's own: tenant id, 
 client secret, admin-consented APPLICATION permissions. Fine for a tenant owner; impossible
 for an employee. This is the other road, the one Thunderbird / Apple Mail / rclone take:
 Taskuary ships ONE public client registration (no secret - it is public by design) and the
-user signs in to it with the OAuth device-code flow: a short code, microsoft.com/devicelogin,
-their own account, consent to THEIR OWN mailbox. We keep the refresh token as the card's
-secret and mint access tokens from it silently from then on.
+user signs in to it in the system browser - the OAuth authorization-code flow with PKCE, coming back to this
+server on a loopback redirect (REDIRECT_PATH) - their own account, consent to THEIR OWN mailbox. We keep the
+refresh token as the card's secret and mint access tokens from it silently from then on.
+
+DEVICE CODE IS THE FALLBACK, never the default (an enterprise IT, 2026-10-27: Conditional Access blocks the device-code
+flow as a known phishing vector). It stays for a Taskuary the browser cannot reach on localhost - another machine, a
+headless box - and only when the owner picks "Sign in with a code instead" on the card.
 
 Graph accepts /users/{upn} with a delegated token for the signed-in user's own mailbox, so
 the pollers, sender and calendar reader do not change - they get a token from graph_token
@@ -18,8 +22,8 @@ Teams chat reading (getAllMessages) is app-only in Graph, so the Outlook sign-in
 it, and answering invites - Calendars.ReadWrite). A TEAMS card signs in the same way with chat scopes of its own
 (TEAMS_SCOPES): its chats are read one by one (channels._teams_user_delta) and a reply is posted as the person.
 """
-import os, time, threading
-from urllib.parse import quote
+import base64, hashlib, os, secrets, time, threading
+from urllib.parse import quote, urlencode
 import requests
 from loguru import logger
 
@@ -37,8 +41,9 @@ TEAMS_SCOPES = 'offline_access User.Read User.ReadBasic.All Chat.ReadWrite ChatM
 FILES_SCOPE = 'Files.ReadWrite'
 def scopes_for(kind, files: bool = False) -> str: return (TEAMS_SCOPES if kind == 'teams' else SCOPES) + (f' {FILES_SCOPE}' if files else '')
 def card_of(cfg) -> str: return 'Teams' if (cfg or {}).get('_kind') == 'teams' else 'Outlook'   # whose sign-in this is, said
-# Taskuary's own registration (multi-tenant + personal accounts, public client, device code
-# on). Overridable per install with TASKUARY_MS_CLIENT_ID, or per card with client_id.
+# Taskuary's own registration (multi-tenant + personal accounts, public client; "Mobile and desktop applications" platform
+# with the loopback redirect below, and public client flows on for the device-code fallback). Overridable per install with
+# TASKUARY_MS_CLIENT_ID, or per card with client_id.
 PUBLIC_CLIENT_ID = os.getenv('TASKUARY_MS_CLIENT_ID', 'd32e53c9-f00d-49fc-8b93-227b3e0190f0')
 
 _CACHE, _LOCK = {}, threading.Lock()      # refresh token -> (access, expires_at, current refresh token)
@@ -70,6 +75,40 @@ def _need_client(cfg):
         raise RuntimeError("Taskuary's Microsoft app id is not set on this install - set TASKUARY_MS_CLIENT_ID "
                            "(or enter a client_id under the admin fields) and try again")
     return cid
+
+
+# THE BROWSER SIGN-IN comes back here. Entra ignores the port of an http://localhost redirect on a public client, so the one
+# URI registered on the app - http://localhost/api/ms/callback - matches whatever port this install listens on.
+REDIRECT_PATH = '/api/ms/callback'
+def redirect_uri(port) -> str: return f'http://localhost:{int(port or 7787)}{REDIRECT_PATH}'
+def _challenge(verifier: str) -> str: return base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()
+
+
+def browser_start(cfg: dict, scope: str, redirect: str) -> dict:
+    """Begin the authorization-code + PKCE sign-in: the URL the browser opens, and the one-time state and verifier the server keeps.
+    The verifier never leaves this process; the URL carries only its S256 hash."""
+    state, verifier = secrets.token_urlsafe(24), secrets.token_urlsafe(48)
+    url = f'{AUTH}/{tenant(cfg)}/oauth2/v2.0/authorize?' + urlencode({
+        'client_id': _need_client(cfg), 'response_type': 'code', 'redirect_uri': redirect, 'response_mode': 'query', 'scope': scope,
+        'state': state, 'code_challenge': _challenge(verifier), 'code_challenge_method': 'S256', 'prompt': 'select_account'})
+    return {'url': url, 'state': state, 'verifier': verifier}
+
+
+def code_redeem(cfg: dict, code: str, verifier: str, redirect: str, scope: str) -> dict:
+    """The code the browser brought back, for tokens - with the verifier only this server holds. Raises like device_poll."""
+    r = requests.post(f'{AUTH}/{tenant(cfg)}/oauth2/v2.0/token', timeout=20,
+                      data={'client_id': _need_client(cfg), 'grant_type': 'authorization_code', 'code': code, 'redirect_uri': redirect,
+                            'code_verifier': verifier, 'scope': scope})
+    if r.status_code == 200: return _tokens(r.json())
+    desc = _err(r)
+    raise (AdminConsent if _needs_admin(desc) else RuntimeError)(_friendly(desc))
+
+
+def callback_error(error: str, desc: str = '') -> Exception:
+    """What Microsoft's redirect said instead of a code, as the exception device_poll would have raised for it."""
+    d = f'{error}: {desc}' if desc else error
+    if error == 'access_denied' and not _needs_admin(d): return RuntimeError('you declined the sign-in')
+    return (AdminConsent if _needs_admin(d) else RuntimeError)(_friendly(d))
 
 
 def device_start(cfg: dict, scope: str = SCOPES) -> dict:

@@ -63,6 +63,24 @@ class OneRoadTests(unittest.TestCase):
             held[0]()
         self.assertNotIn(tid, general.OPENING, 'and no longer once the turn has run')
 
+    def test_a_general_continue_writes_the_owners_note_before_it_answers(self):
+        """The page reads the conversation the moment /continue-work answers: the note written by the turn, once its CLI had started,
+        was missed, and showed seconds later under an agent already "working" (the owner, 0.3.9.51). Written once, by the door."""
+        from taskuary import general
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Compare payroll vendors', 'Kind': 'general', 'Status': 'open'}, 'o')
+        session, held = mock.Mock(), []
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=True), \
+             mock.patch('taskuary.general.provider_options', return_value=['x']), \
+             mock.patch('taskuary.general.start_session', return_value=session), \
+             mock.patch('threading.Thread', side_effect=lambda target, **k: mock.Mock(start=lambda: held.append(target))):
+            TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': 'look at the south office first'})
+            said = [c['Body'] for c in s.list_comments(tid) if c.get('ActorType') == general.USER_TYPE]
+            self.assertEqual(said, ['look at the south office first'], 'on the conversation before the turn runs')
+            held[0]()
+        self.assertTrue(session.send_prompt.call_args.kwargs['kept'], 'and the turn does not write it a second time')
+        general.OPENING.discard(tid)
+
     def test_a_coding_agent_reopens_its_own_session_or_a_fresh_one(self):
         s = MemoryStore()
         tid = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open'}, 'o')

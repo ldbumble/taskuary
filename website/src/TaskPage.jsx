@@ -478,7 +478,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     startFlights.current = { ...startFlights.current, [id]: what }; setStarting(startFlights.current); return true;
   };
   const endStart = (id) => { const { [id]: _, ...rest } = startFlights.current; startFlights.current = rest; setStarting(rest); };
-  const [generalRevision, setGeneralRevision] = useState(0);
+  // a door that continued the conversation answered: it reads itself again in place - a remount drew it empty, then the same turns
+  const [chatRead, setChatRead] = useState(0);
   // the waiting room: notes for the agent, typed in when it stops (waitroom.py)
   const [waitText, setWaitText] = useState("");
   const [wrapping, setWrapping] = useState(false);   // declared up here: the poll effect below reads it
@@ -1472,9 +1473,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const noteable = !!t && !term?.alive && !["done", "dropped"].includes(String(t?.Status || ""));
   const continued = () => {
     const id = selected;
-    if (!stale(id)) setGeneralRevision((n) => n + 1);
+    if (!stale(id)) setChatRead((n) => n + 1);
     Promise.all([loadDetail(id), loadTasks()]).then(() => onChanged?.());
   };
+  // ...and the canvas's Continue card is the Assistant's (AssistantView): it says so when /continue-work answers, and this conversation
+  // shows the owner's note at once, not on a poll seconds later under an agent already "working" (the owner, 0.3.9.51)
+  useEffect(() => {
+    const on = (e) => { if (Number(e.detail?.tid) === Number(selRef.current)) continued(); };
+    window.addEventListener("tq-continued", on);
+    return () => window.removeEventListener("tq-continued", on);
+  });
   // A RUN THAT FAILED IS TRIED AGAIN, NOT CONTINUED (owner-approved, 2026-10-21): the step says "Failed - <why>", Try again runs it
   // once more on the same conversation at the press, and the place that fixes it - Connect an AI - is the filled move when it has one
   const runFix = failedRun ? detail?.agentStory?.fix || null : null;
@@ -2420,7 +2428,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     : { flex: "0 0 auto", mb: canvas ? 1 : 0, display: "flex", flexDirection: "column", "& > *": { flex: "0 0 auto" },
                       ...(chatBelow ? { bgcolor: "#fff", border: `1px solid ${FOCUS_EDGE}`, borderTop: 0, borderRadius: "0 0 10px 10px", overflow: "hidden" } : {}) }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
-                      <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession}
+                      <GeneralWorkspace key={t.TaskId} task={t} compact onSession={generalSession} reread={chatRead}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}
                         onAnswered={() => { findTerm(selected); onChanged?.(); }}
                         toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} noComposer={isGeneral && continueHere} />

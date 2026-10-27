@@ -35,5 +35,5 @@ export function pagePress(root, btn) {
 // one press, posted - a lost post costs one observation, never the press
 export function notePress(api, { key, pressed, surface, lit = "", live = null, advised = null, revision = null }) {
   if (!key || !pressed) return null;
-  return api.post("/api/advice/press", { key, pressed, surface, lit, live, advised, revision }).catch(() => {});
+  return api.post("/api/advice/press", { key, pressed, surface, lit, live, advised, revision }, { quiet: true }).catch(() => {});
 }

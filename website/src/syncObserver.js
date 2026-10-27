@@ -2,9 +2,11 @@ import { syncStatusDelay } from './syncTiming.js';
 
 // One cancellable status reader. Live events prompt a read; periodic reads also
 // discover completion when an event is lost. Elapsed time never means completion.
+// `gather`: live events that come in a burst are read ONCE, `gather` ms after the last of them - a press of Next sends two or three
+// (the walk's settle, the rail's, the turn's), and each asked the status again (the overnight walk, 2026-10-26)
 export function observeSync({ read, changed, failed, subscribe, now = Date.now,
-  schedule = setTimeout, cancel = clearTimeout }) {
-  let alive = true, flight = null, again = false, timer = null;
+  schedule = setTimeout, cancel = clearTimeout, gather = 0 }) {
+  let alive = true, flight = null, again = false, timer = null, soon = null;
   let running = false, nextAt = null, unavailable = false;
   const refresh = () => {
     if (!alive) return Promise.resolve();
@@ -25,7 +27,8 @@ export function observeSync({ read, changed, failed, subscribe, now = Date.now,
     });
     return flight;
   };
-  const unsubscribe = subscribe(refresh);
+  const nudge = () => { if (!gather) return refresh(); cancel(soon); soon = schedule(() => { soon = null; refresh(); }, gather); };
+  const unsubscribe = subscribe(nudge);
   refresh();
-  return { refresh, stop() { alive = false; cancel(timer); unsubscribe(); } };
+  return { refresh, stop() { alive = false; cancel(timer); cancel(soon); unsubscribe(); } };
 }

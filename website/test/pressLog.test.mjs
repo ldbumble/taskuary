@@ -8,6 +8,7 @@ import path from "node:path";
 import { announce, onPressing } from "../src/actionRow.js";
 import { label } from "../src/buttons.js";
 import { deskPress, notePress, pagePress, verbOf, verbOfLabel } from "../src/pressLog.js";
+import { isWrite } from "../src/wrote.js";
 
 const v = (id, group, extra = {}) => ({ id, group, tone: "s", label: id, title: "", disabled: false, why: "", promote: true, lead: false, ...extra });
 const src = (f) => fs.readFileSync(path.join(process.cwd(), "src", f), "utf8");
@@ -43,9 +44,13 @@ test("the Tasks tab: a button is known by its one name, and the filled one is wh
 
 test("one press is posted with its surface, and a lost post never stops the press", async () => {
   const sent = [];
-  const api = { post: (url, body) => { sent.push([url, body]); return Promise.reject(new Error("offline")); } };
+  const api = { post: (url, body, cfg) => { sent.push([url, body, cfg]); return Promise.reject(new Error("offline")); } };
   await notePress(api, { key: "task:3", pressed: "close", surface: "task", lit: "close", live: ["defer"] });
-  assert.deepEqual(sent, [["/api/advice/press", { key: "task:3", pressed: "close", surface: "task", lit: "close", live: ["defer"], advised: null, revision: null }]]);
+  assert.deepEqual(sent, [["/api/advice/press", { key: "task:3", pressed: "close", surface: "task", lit: "close", live: ["defer"], advised: null, revision: null }, { quiet: true }]]);
+  // ...and that record is no write the sync caption must re-read for: every press of Next asked /api/ingest/status again (overnight walk)
+  assert.equal(isWrite({ method: "post", ...sent[0][2] }), false);
+  assert.equal(isWrite({ method: "post" }), true);
+  assert.equal(isWrite({ method: "get" }), false);
   assert.equal(notePress(api, { key: "", pressed: "close" }), null);
 });
 

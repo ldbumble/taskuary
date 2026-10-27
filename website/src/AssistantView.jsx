@@ -1626,7 +1626,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // revision: the old pill must go), and when the Advisor's own event names this item or one of its aliases
   // ...and when its lane moves (an agent continued is at work: its "waiting on you" line must go)
   useEffect(() => { readAdvice(onTable); setChanged(null); }, [onTable, readAdvice]);
-  useEffect(() => { if (onTable) readAdvice(onTable, true); }, [currentItem?.view_revision, currentItem?.lane]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // ...the SAME item's revision or lane, that is: a new item is read by the effect above (or by landed, once its answer is in), and this
+  // one fired on the same render as a second read of it - three reads of /api/advice a press of Next (the overnight walk, 2026-10-26)
+  const revFor = useRef(null);
+  useEffect(() => {
+    const k = currentItem?.key || null, was = revFor.current; revFor.current = k;
+    if (onTable && k && k === was) readAdvice(onTable, true);
+  }, [currentItem?.key, currentItem?.view_revision, currentItem?.lane]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => onLive("advice", (ev) => {
     const key = adviceKeyFor(ev, currentRef.current || (cardRef.current ? { key: cardRef.current } : null));
     if (key) readAdvice(key, true);
@@ -1635,7 +1641,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // an act refused), so a line judged before the Send is never read back over its "Sent" (2026-10-19)
   const onTableRef = useRef(null);
   useEffect(() => { onTableRef.current = onTable; }, [onTable]);
-  useEffect(() => onPressed(() => { if (onTableRef.current) readAdvice(onTableRef.current, true); }), [readAdvice]);
+  // ...except Next: it puts the item down, and the read went for the item being left a moment before the next one's own (overnight walk)
+  useEffect(() => onPressed((id) => { if (onTableRef.current && !/(^|:)next$/.test(String(id || ""))) readAdvice(onTableRef.current, true); }), [readAdvice]);
   // LIT AND PRESSED (the deep dive, 2026-10-20): each press on the row says what was lit and the revision it was judged at
   // (advisor.press) - the evidence the owner's moves are learned from. EVERY press, lit or not (phase B, 2026-10-23: only a press
   // under a shown line was sent): what the row had filled and what else it offered (pressLog.deskPress). Nothing on screen changes.
@@ -2646,7 +2653,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   };
   // `pressed`: the label of the button that did it - the folded card wears it as its badge, and no line is said (the owner, 2026-10-22:
   // "we don't need that text ever"). Given, the act landed already; null, only the settle below does it
+  // ...ONCE per item while its settle is out: a double-click on an FYI batch's "All read, next" posted two settles of the same batch
+  // (the overnight walk, 2026-10-26) - the second click lands before the batch has folded
+  const doneFor = useRef(null);
   const done = async (pressed) => {
+    if (current && doneFor.current === current) return;
+    doneFor.current = current;
+    try { await settleDone(pressed); } finally { doneFor.current = null; }
+  };
+  const settleDone = async (pressed) => {
     // the card folds to its line the moment its verb is pressed - see interactiveCardIndex
     setMsgs((m) => { const i = interactiveCardIndex(m);
       return i < 0 ? m : m.map((x, j) => (j === i ? { ...x, done: true, ...(pressed ? { pressed } : {}) } : x)); });

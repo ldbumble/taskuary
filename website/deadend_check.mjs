@@ -500,11 +500,14 @@ const menuHandle = (page, verb) => page.evaluateHandle((ids, words) => [...docum
     && (!words.length || words.some((w) => i.innerText.trim().startsWith(w)))) || null, [verb, ...(VERBS[verb]?.row || [])], verb === "approve" ? sendWords : []);
 const pressVerb = async (page, verb) => {
   const h = (await rowHandle(page, verb)).asElement();
-  if (h) { await h.click(); mark(verb, page.step); return true; }
+  // ...pressed from inside the page, as walkdriver does: a menu redrawn between the find and a remote click threw "Node is either not
+  // clickable or not an Element" and ended the faults pass on CI (0.3.9.50) - a node gone by then is looked for again, not a crash
+  const tap = (e) => e.evaluate((x) => x.isConnected && (x.click(), true)).catch(() => false);
+  if (h && (await tap(h))) { mark(verb, page.step); return true; }
   for (const m of await page.$$eval("[data-tq-row] [data-tq-more]", (e) => e.map((x) => x.dataset.tqMore))) {
     await page.evaluate((m) => document.querySelector(`[data-tq-row] [data-tq-more="${m}"]`)?.click(), m); await wait(400);
     const i = (await menuHandle(page, verb)).asElement();
-    if (i) { await i.click(); mark(verb, page.step); walked.push(`${page.step}: ${verb} pressed from the ${m} ▾`); return true; }
+    if (i && (await tap(i))) { mark(verb, page.step); walked.push(`${page.step}: ${verb} pressed from the ${m} ▾`); return true; }
     await page.keyboard.press("Escape"); await wait(300);
   }
   return false;
@@ -679,10 +682,14 @@ async function faults() {
   // press the draft's Send: the card's own, under the draft (a proposal's row verb first, where one is on the bar)
   const send = async () => (await pressVerb(page, "approve")) || (await pressCardSend(page));
   // after a forced failure: the screen must carry a way out from the list, and pressing it must do something
+  // ...looked for until it is drawn, up to 15 s: CI's slower machine still showed the draft ("Answering ...") 6 s after the failed send,
+  // and the faults pass judged that screen as one with no way out (0.3.9.50)
   const wayOut = async (at, want, { press = true } = {}) => {
-    const s = await look(page);
+    const find = (s) => { const ways = outs(s); return want.map((w) => ways.find((x) => (typeof w === "string" ? x.word === w : w(x)))).find(Boolean); };
+    let s = await look(page);
+    for (let t = Date.now(); !find(s) && Date.now() - t < 15000; s = await look(page)) await wait(1000);
     judge(s, at);
-    const ways = outs(s), hit = want.map((w) => ways.find((x) => (typeof w === "string" ? x.word === w : w(x)))).find(Boolean);
+    const ways = outs(s), hit = find(s);
     if (!hit) { note("WAYOUT", at, `expected ${want.map((w) => (typeof w === "string" ? `"${w}"` : w.name || "a fix")).join(" or ")} - the screen offers ${JSON.stringify(ways.map((w) => w.word))}${s.errs[0] ? ` under "${s.errs[0].slice(0, 80)}"` : ""}`); return null; }
     walked.push(`${at}: offered "${hit.word}"`);
     if (!press) return hit;

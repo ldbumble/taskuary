@@ -26,9 +26,14 @@ const UNSENDABLE = "unsendable";
 const AGENT_LANES = new Set(["working", "blocked"]);
 export const agentGone = (item, page) => !!page && AGENT_LANES.has(item?.lane) && !page.live && !!page.state && !AGENT_LANES.has(page.state)
   && !!taskStateMeta(page.state);
+// A REPLY OWED WITH NO DRAFT YET is no flag and no "ready to send" (the owner, 2026-10-27): the rail, the header and the phone said
+// "ready to send" over a reply nothing had written - it reads "reply owed" until the draft lands (funnel: `draft: false`)
+const OWED = "owed";
+export const owedNoDraft = (item) => item?.lane === "approve" && item.kind === "review" && item.draft === false && !item.not_sent;
 export const railStatus = (item, cantSend = false, page = null) => {
   if (agentGone(item, page)) return taskStatus({ state: page.state, cantSend });
   if (!item?.lane) return null;
+  if (owedNoDraft(item)) return said(OWED, { ...rowMeta(item), ...KIND_META[OWED] }, false);
   const copy = cantSend && !item.not_sent && item.lane === "approve" && item.kind === "review";
   const key = copy ? UNSENDABLE : item.not_sent ? "not_sent" : KIND_META[item.kind] ? item.kind : item.lane;
   const spins = item.lane === "working" && !item.settling;
@@ -49,10 +54,13 @@ export const stateStatus = (key) => {
 // its state is the server's: done, the agent finished, or dropped.
 // `cantSend`: the task's pending draft cannot leave from here (TaskPage's cantSend) - its pill is the rail's "draft to copy", not the flag
 // `page`: the task's own read, newer than the rail's (agentGone) - the same reading the rail row takes, so the two still cannot disagree
-export const taskStatus = ({ live = null, rail = null, state = null, closed = false, cantSend = false, page = null } = {}) => {
+// `owed`: whether the task's pending reply has no draft yet (TaskPage's pendingReview; null when it has none) - the task's own read
+// is newer than the rail's, so a draft that just landed lifts "reply owed" and one not written yet puts it there
+export const taskStatus = ({ live = null, rail = null, state = null, closed = false, cantSend = false, page = null, owed = null } = {}) => {
   if (live?.alive) return railStatus({ lane: live.waiting ? "blocked" : "working" });
   if (closed && stateStatus(state)) return stateStatus(state);
-  const st = railStatus(rail, cantSend, page) || stateStatus(state);
+  const st = railStatus(owed === false && owedNoDraft(rail) ? { ...rail, draft: true } : rail, cantSend, page) || stateStatus(state);
+  if (owed && ["approve", UNSENDABLE].includes(st?.key) && rail?.kind !== "action") return said(OWED, KIND_META[OWED], false);
   return cantSend && st?.key === "approve" && rail?.kind !== "action" ? said(UNSENDABLE, KIND_META[UNSENDABLE], false) : st;
 };
 

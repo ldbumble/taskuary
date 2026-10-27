@@ -18,7 +18,8 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0
 // `onLeave` fires AT THE PRESS, before the server answers, so the walk can put the task down at once; `onStay(error)` if it failed
 // `live`: an agent session is still open on the task - the picker warns instead of offering days (the owner, 2026-10-01:
 // it has to be saved and ended first); the server refuses the day with the same words if one slips through
-export function RemindPicker({ task, anchor, onClose, onDone, path, onLeave, onStay, live = false }) {
+// `said`: the day the owner's words named, {until, day} (assistantLight's light.day) - its button comes first
+export function RemindPicker({ task, anchor, onClose, onDone, path, onLeave, onStay, live = false, said = null }) {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const away = remindWaiting(task);
@@ -54,6 +55,10 @@ export function RemindPicker({ task, anchor, onClose, onDone, path, onLeave, onS
           <Typography sx={{ fontSize: 12, color: "#7a2f3c" }}>
             An agent is still open on this task. Press Stop and save first, then put it away.</Typography>
         ) : <>
+          {/* THE DAY THE OWNER SAID leads (the owner, 2026-10-27): "remind me Monday" lit this picker with no Monday in it */}
+          {said?.until && said?.day && !away && (
+            <Button size="small" variant="contained" disabled={busy} onClick={() => set(said.until)} disableElevation data-tq-remind-said=""
+              sx={{ justifySelf: "start", fontSize: 11, minHeight: 26, py: 0, px: 1, bgcolor: "#55697a", "&:hover": { bgcolor: "#46586a" } }}>{said.day}</Button>)}
           {/* the learned day leads, filled - its row keeps its height while it is read, so the days under it never jump */}
           {reads && !away && (usual === null || usualLabel(usual)) && (
             <Box sx={{ minHeight: 26, display: "flex", alignItems: "center", gap: 0.75 }} data-tq-remind-usual="">
@@ -91,8 +96,9 @@ export function RemindPicker({ task, anchor, onClose, onDone, path, onLeave, onS
   );
 }
 
-export default function RemindMe({ task, compact = false, sx, onDone, onLeave, onStay, live = false, lit = false }) {
+export default function RemindMe({ task, compact = false, sx, onDone, onLeave, onStay, live = false, lit = false, said = null }) {
   const [at, setAt] = useState(null);
+  const [day, setDay] = useState(null);     // the said day as it was at the press: the light that carried it goes out then
   const away = remindWaiting(task);
   const title = away ? `Away until ${remindDay(task.RemindAt)} - change the day or bring it back now`
                      : `${label("defer")} - ${hint("defer")}`;
@@ -102,8 +108,8 @@ export default function RemindMe({ task, compact = false, sx, onDone, onLeave, o
         ? <Tooltip title={title}><IconButton size="small" sx={{ color: "#55697a", ...sx }} onClick={(e) => setAt(e.currentTarget)}>
             <EventIcon sx={{ fontSize: 16 }} /></IconButton></Tooltip>
         : <Button size="small" variant={lit ? "contained" : "outlined"} disableElevation sx={sx} title={title} startIcon={<EventIcon sx={{ fontSize: 16, color: lit ? "inherit" : "#55697a" }} />}
-            onClick={(e) => setAt(e.currentTarget)}>{away ? `Back ${remindDay(task.RemindAt)}` : label("defer")}</Button>}
-      <RemindPicker task={task} anchor={at} onClose={() => setAt(null)} onDone={onDone} onLeave={onLeave} onStay={onStay} live={live} />
+            onClick={(e) => { setDay(said); setAt(e.currentTarget); }}>{away ? `Back ${remindDay(task.RemindAt)}` : label("defer")}</Button>}
+      <RemindPicker task={task} anchor={at} onClose={() => setAt(null)} onDone={onDone} onLeave={onLeave} onStay={onStay} live={live} said={day} />
     </>
   );
 }

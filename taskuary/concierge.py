@@ -1104,17 +1104,27 @@ def _button_named(store, it: dict, said: str) -> str:
     return next((k for k, d in buttons.VERBS.items() if low in {d['label'].lower(), *(s.lower() for s in (d.get('states') or {}).values())}), v)
 
 
-def _lit(store, tid: int, table: dict | None, it: dict, verb: str, note: str = '') -> dict:
+def said_day(until) -> dict:
+    """The day the owner's words named for Remind me, as its picker's first button: {'until', 'day'} - "remind me Monday" lit Remind me and
+    its picker had no Monday in it, while the phone kept the day (the owner, 2026-10-27). {} for no day, one remind cannot read, or gone."""
+    from . import remind
+    if str(until or '').strip().lower() in remind.NONE_WORDS: return {}
+    try: at = remind.parse(until)
+    except ValueError: return {}
+    return {'until': at[:16], 'day': remind.when(at)} if at else {}
+
+
+def _lit(store, tid: int, table: dict | None, it: dict, verb: str, note: str = '', day: dict | None = None) -> dict:
     """The item's own button for `verb`, lit - the item brought up first when it is not the one on the table (the page pulls `light.key`,
     the rail's road). Nothing runs. A button the row does not draw is a miss the model answers in words (CallMiss), never a line naming it.
     THE LIT BUTTON IS THE WHOLE ANSWER (the owner, 2026-10-23: "what the heck is Lit" - "buttons do the talking", "I hate free text"): no
     "Lit Mark done on TQ-0026." in the chat and no "Press it when you're sure." over the row - the filled button says it all."""
     b = BUTTON_OF.get(verb, verb)
     label = _label_on(store, it, b)
-    # `note`: the owner's words for the press to carry - Continue's box opens holding them
+    # `note`: the owner's words for the press to carry - Continue's box opens holding them; `day`: Remind me's said day (said_day)
     return {'say': '', 'options': [], 'chips': [], 'decision': None,
             'light': {'verb': b, 'label': label, 'line': '', 'key': it.get('key') or '', 'tid': it.get('tid'), 'ref': it.get('ref') or '',
-                      **({'note': note} if note else {})}}
+                      **({'note': note} if note else {}), **({'day': day} if day and b == 'defer' else {})}}
 
 
 def _label_on(store, it: dict, b: str) -> str:
@@ -2899,7 +2909,7 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
         # and only on the item in front of the owner: one named off the table comes up with its button lit (2026-10-26, as in turn())
         if kind in ('task.complete', 'item.settle', 'task.not_a_task', 'message.file', 'message.archive') and on is table:
             return _press_or_light(store, tid, table, on, b, note, actor)
-        return _lit(store, tid, table, on, b, note=note)
+        return _lit(store, tid, table, on, b, note=note, day=said_day(params.get('until')) if b == 'defer' else None)
     if on and kind in ON_TASK:
         said = f"Brought up {_where(on) or 'it'} - {ON_TASK[kind]}."
         record(store, tid, 'assistant', said)

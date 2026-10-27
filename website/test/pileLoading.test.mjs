@@ -25,7 +25,9 @@ test("while the day is counted the opener says Loading..., and a greyed Walk has
   assert.match(view, /const counting = pileLoading \|\| mailReading \|\| \(!canAdvance && items\.some\(\(i\) => i\.settling\)\);/);
   // the owner, 2026-10-22: "yes remove that walk line too" - buttons do the talking
   assert.doesNotMatch(view, /data-tq-nothing-to-walk|Nothing to walk through right now|Click any row to open it/);
-  assert.match(src("assistantCards.jsx"), /const onYou = onYouCount\(groups\)/, "the card's headline and the line read one count");
+  // ...and the card's headline is the rail's Tasks count, every row under it (the owner, 2026-10-27: "they should match count of tasks")
+  assert.match(src("assistantCards.jsx"), /const tasks = act\.reduce\(\(n, g\) => n \+ \(SECTION\[g\.key\]\?\.on_you \? g\.n \?\? g\.rows\.length : 0\), 0\);/);
+  assert.match(src("assistantCards.jsx"), /tasks \? plural\(tasks, "task"\) : "Nothing on you"/);
 });
 
 test("the first read, landed or failed, ends the loading - a coverage retry does not", () => {

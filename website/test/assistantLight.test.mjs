@@ -90,3 +90,20 @@ test("the setting the Assistant names opens with its knob outlined", async () =>
     { section: "config", open: "Sync & startup", knob: "poll_minutes" });
   assert.match(src("SettingsView.jsx"), /const asked = only\?\.knob === s\.Name;/);
 });
+
+// REMIND ME'S SAID DAY (the owner, 2026-10-27): "remind me Monday" lit Remind me and its picker had no Monday, while the phone kept it.
+// The day rides the light to the row's pick, the task view keeps it at the press, and the picker leads with it.
+test("the day typed with Remind me rides the light into the picker as its first button", () => {
+  const day = { until: "2026-11-02 07:00", day: "Mon 2 Nov" };
+  const l = lightOf({ verb: "defer", label: "Remind me", key: "task:4", tid: 4, day });
+  assert.deepEqual(l.day, day);
+  assert.deepEqual(litPick(l, { key: "task:4", tid: 4 }).day, day, "the row's pick carries it");
+  assert.equal(lightOf({ verb: "close", key: "task:4", tid: 4, day }).day, undefined, "only Remind me carries a day");
+  assert.equal(lightOf({ verb: "defer", key: "task:4", tid: 4 }).day, undefined, "no day said, none carried");
+  assert.equal(litPick(lightOf({ verb: "defer", key: "task:4", tid: 4 }), { key: "task:4" }).day, undefined);
+  assert.match(src("CanvasItem.jsx"), /saidDay=\{lit\?\.verb === "defer" \? lit\.day \|\| null : null\}/);
+  assert.match(src("TaskPage.jsx"), /const remindHere = \(at\) => \{ setRemindSaid\(saidRef\.current\); setRemindAt\(at\); \};/);
+  assert.match(src("TaskPage.jsx"), /live=\{liveSession\}\n\s+said=\{remindSaid\} \/>/);
+  assert.match(src("RemindMe.jsx"), /\{said\?\.until && said\?\.day && !away && \(/, "the said day leads the picker, before the learned day");
+  assert.match(src("AssistantView.jsx"), /live: agentOpen\(item\), said: litDayRef\.current \}\); return; \}/, "the walk's own picker too");
+});

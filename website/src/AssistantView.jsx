@@ -31,7 +31,7 @@ import { lazyView } from "./lazyView.jsx";
 import { loadGeneral } from "./lazyGeneral.js";
 // the static demo's guided journey: nothing outside the demo build ever draws it, so nothing there fetches it
 const DemoJourney = DEMO ? lazyView(() => import("./DemoJourney.jsx")) : () => null;
-import { advisedIn, aimed, onPressed, onPressing, press as pressRow, leaveRow, rowNow, rowTable, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { advisedIn, aimed, onPressed, onPressing, press as pressRow, leaveRow, rowNow, rowDrawable, rowReady, rowTable, useHosted, useRowHold, useRowVerbs, useVerbs } from "./actionRow.js";
 import { deskPress, notePress as notePressed } from "./pressLog.js";
 import { forgetTasks, heldTask, heldTerm, notePile, pageRead, prefetchTask, watchReads } from "./taskDetail.js";
 import { readLists } from "./connectorLists.js";
@@ -109,7 +109,6 @@ import "./assistantView.css";
 // walk itself lives on the server: a reload asks the task whether it is still an open set-up before
 // showing anything, so a stale key restores nothing.
 const WALK_KEY = "taskuary_walk_tid";
-const HOLD_MS = 400;            // the longest a row waits for its item's first decision before it is drawn without one
 const POP_ROOM = 120;          // the least room under the task view the chat pop-up stands in, rather than over the view (120: the open box above the dock takes ~85px of it, 2026-10-27)
 const POP_LIT_MS = 1800;        // how long the chat pop-up shows the owner's line when the answer was only a lit button
 const isOpenWalk = (t) => !!t && t.SourceRef === "assistant:setup" && !["done", "dropped"].includes(t.Status);
@@ -1164,11 +1163,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [cardKey, setCardKey] = useState(null);       // ...or a task opened by name (the Board's open), which is no pile item
   const [text, setText] = useState("");
   const [advice, setAdvice] = useState(null);     // the Advisor's line for the key on the table (advisor.py), or null
-  // the key whose FIRST decision is being read: its row waits for it (at most HOLD_MS), so the lit button lands with the row instead of
-  // reshuffling it under the owner's hand - a lit verb kept in view pushed its neighbour into the ▾ (the dead-end walk's STILL, 2026-10-23)
-  const [reading, setReading] = useState(""), [readFor, setReadFor] = useState(null);
-  // ...let go only once the decision is drawn: the effect runs after the strip's own (AdvisorNext registers a move the row lacks then)
-  useEffect(() => { if (readFor) setReading((r) => (r === readFor.key ? "" : r)); }, [readFor]);
+  // the key the Advisor's last read was for: a new item's row waits for it (actionRow.useRowHold), so the lit button lands with the row
+  // instead of reshuffling it under the owner's hand - a lit verb kept in view pushed its neighbour into the ▾ (the dead-end walk's STILL, 2026-10-23)
+  const [readFor, setReadFor] = useState(null);
+  // ...and the press round on the item (Next is no act on it: it moves the table): a press's row waits for the read made after it
+  const [round, setRound] = useState(0), roundRef = useRef(0);
+  useEffect(() => onPressing((id) => { if (!/(^|:)next$/.test(String(id || ""))) setRound((roundRef.current += 1)); }), []);
   const [, setChanged] = useState(null);   // {for, reading}: a press refused as changed since the Advisor looked (B6) - said by no strip now
   // THE BOX GROWS WITH WHAT YOU TYPE, like every chat app: one row empty, a row per line after that, up to the CSS
   // cap (40% of the window) - then it scrolls inside. rows={1} alone held a paragraph in a one-and-a-half-line slot
@@ -1609,20 +1609,19 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // NO "THINKING..." (the owner, 2026-10-23): the Advisor answers at once with the rule's lit button, and the model's read, where one
   // is wanted, arrives by the `advice` event - nothing is drawn while a read is out
   const readAdvice = useCallback(async (key, keep) => {
-    const n = ++adviceAsk.current;
+    const n = ++adviceAsk.current, r = roundRef.current;
     if (!keep) setAdvice(null);                     // a new item starts with no line, never the last item's
     if (!key) return;
     // ...and not while the card is one drawn ahead of its press's answer (drawAhead): the Advisor reads the rail, and
     // a rail rebuilt under the press between its admission and its commit check refused the press as stale (PW-118). The
     // read is made once the answer has landed (landed), exactly as it was when the card only came with the answer.
-    if (!keep) { setReading(key); setTimeout(() => setReading((r) => (r === key ? "" : r)), HOLD_MS); }
     if (unconfirmedRef.current === key) { adviceHeld.current = key; return; }
     let got = null;
     // ...and {"none":"no_ai"}: no AI connected is said once, with the way to connect one, instead of a strip that stays empty (U3)
     try { got = adviceRead((await api.get("/api/advice", { params: { key } })).data, key).advice; }
     catch { got = null; }
     if (n !== adviceAsk.current) return;
-    setAdvice(got); setReadFor({ key });
+    setAdvice(got); setReadFor({ key, round: r });
   }, []);
   // ...re-read when the table changes AND when the card on it refreshes (a reply landing keeps the key and moves the
   // revision: the old pill must go), and when the Advisor's own event names this item or one of its aliases
@@ -1886,12 +1885,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const earlyRef = useRef(null), carryRef = useRef(null), adoptRef = useRef(null);
   const movedOnRef = useRef(false);   // that early draw was taken over by another walk move before its close landed (adopt, advance)
   const tableNow = () => ({ item: currentRef.current, cardKey: cardRef.current, openCard: openCardRef.current, pin: pin.current });
-  const drawAhead = useCallback((line, hash = null) => {
+  const drawAhead = useCallback((line, hash = null, { ask = false } = {}) => {
     if (isLeft(line.card)) return null;                           // the early draw paints FROM the one rule, never past it (leftRef)
     const rec = { id: line.id, key: line.card?.key || null, hash, say: line.text, table: tableNow() };
     // ...and the Advisor is not asked about it until the answer lands (readAdvice): the Advisor reads the rail, and a rail rebuilt under
     // the press between its admission and its commit check refused the press as stale (PW-118, 2026-10-20)
-    unconfirmedRef.current = rec.key; adviceHeld.current = null;
+    // ...EXCEPT a pick by name or row (`ask`): it carries no selection to refuse as stale, so its read starts at the click, beside the
+    // pull - the row waits for that read before it draws (actionRow.useRowHold), and asked only after the answer it came ~400 ms late
+    unconfirmedRef.current = ask ? null : rec.key; adviceHeld.current = null;
     setMsgs((m) => [...m, { ...line, ahead: true }]);
     putOnTable(line.card);
     if (line.text) say(line.text);
@@ -2074,7 +2075,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     else if (prep) aheadRef.current = drawAhead({ ...line, text: prep.answer.say, options: prep.answer.options || [], chips: prep.answer.chips || [],
                                                  card: prep.answer.item || null, ...(drawsNow(prep.answer.item) ? {} : { held: true }) }, prep.answer_hash);
     else if (aheadItem && (drawsNow(aheadItem) || (key && showsTask(aheadItem, cardFor(aheadItem)))))
-      aheadRef.current = drawAhead({ ...line, text: "", card: aheadItem });
+      aheadRef.current = drawAhead({ ...line, text: "", card: aheadItem }, null, { ask: !!key });
     try {
       // A named Timeline/pile row remains an explicit pull. Automatic Walk/Next echoes the exact
       // server capture; with none to be had (above), the server's own pick for this scope.
@@ -3189,6 +3190,17 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [linkHold, setLinkHold] = useState(() => (request?.kind === "task" && request.fromUrl ? request.n : 0));
   useLayoutEffect(() => { if (linkHold && (doneReq.current === linkHold || request?.n !== linkHold) && !turnFlight.current) setLinkHold(0); });
   const holding = !!linkHold && !err && !firstRun;
+  // THE ROW DRAWS ONCE (actionRow.useRowHold): from the table's change, a press that leaves the item or one that acts on it, the row drawn
+  // last stays up until the new one is whole - the item's verbs, the walk move over (and a cold link's pull), the Advisor's read made
+  // after it - at most ROW_HOLD_MS; then the new row, in one step
+  // ...and a cold link's (#task=N on a reload) until its task is on the table: the boot's lone Next drew a beat before the task's own row
+  const [linkRow, setLinkRow] = useState(() => request?.kind === "task" && !!request.fromUrl);
+  useEffect(() => { if (linkRow && (table.key || err)) setLinkRow(false); }, [linkRow, table.key, err]);
+  const rowAt = { key: table.key, leaving: flight?.from, list: rowVerbs.list,
+    keyed: currentItem ? showsTask(currentItem, cardFor(currentItem)) : /^task:/.test(table.key || "") };
+  const rowHold = useRowHold(`${table.key || ""}|${flight?.from || ""}|${round}`, rowReady({ ...rowAt, moving: !!flight || holding || linkRow, read: readFor, round }),
+    JSON.stringify([stripPick || setupLit, rowVerbs.list.map((v) => [v.id, v.label, v.disabled])]));
+  const rowEarly = !linkRow && rowDrawable(rowAt);
   // THE ADDRESS SAYS WHERE THE OWNER IS (the 2026-10-19 UI walk, G2): the page open on the canvas, else the task on the table, else
   // nothing - a reload lands on the server's own table. Never while a turn is landing (the table is about to move) or a link is still
   // on its way (the address is the link's), nor over setup or an old conversation, which are not places
@@ -3531,7 +3543,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           }}>
           {/* ...and during setup its line is the Advisor's (SetupLine): the move setup fills (FirstRun's tone) is the one lit - nothing
               was, so the line said "pick it" over a plain Back and a greyed Next (2026-10-19) */}
-          <ActionRow advised={stripPick || setupLit} hold={!!reading && reading === onTable} />
+          <ActionRow advised={stripPick || setupLit} hold={rowHold} early={rowEarly} />
           <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined} ref={boxRef} data-tq-open={boxWide ? "" : undefined}
             onFocus={() => setBoxOpen(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget) && !rowDown.current) setBoxOpen(false); }}>
             <div className="tq-compose-tools">

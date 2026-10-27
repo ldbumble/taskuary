@@ -137,7 +137,7 @@ test("the CSS never wraps the row or a group, and a label never breaks inside it
   const row = fs.readFileSync(new URL("../src/ActionRow.jsx", import.meta.url), "utf8");
   assert.match(row, /const fit = fitRow\(row, m, avail, phone, extra\);/);
   assert.match(row, /new ResizeObserver\(f\)/, "a resize re-fits the row");
-  assert.match(row, /\{fit\.groups\.map\(\(g\) => <Cluster key=\{g\.type\} g=\{g\} btn=\{btn\} \/>\)\}/);
+  assert.match(row, /\{fit\.groups\.map\(\(g\) => <Cluster key=\{g\.type\} g=\{g\} btn=\{btn\} act=\{act\} \/>\)\}/);
 });
 
 test("the Tasks tab's bar folds the same way: Change first, Mark done and Remind me never", () => {

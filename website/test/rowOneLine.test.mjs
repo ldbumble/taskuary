@@ -79,11 +79,12 @@ for (const [name, list] of Object.entries(STATES)) {
   });
 }
 
-test("the owner's case folded on a desktop instead of wrapping: five groups do not fit 1024, so Task and Close fold first", () => {
+test("the owner's case folded on a desktop instead of wrapping: five groups do not fit 1024, so Task folds first and Close (Mark done) after the rest", () => {
   const row = rowOf({ ref: "TQ-1", list: STATES["stopped while drafting a WhatsApp reply"] }), all = foldsOf(row);
   assert.deepEqual(all[0].map((g) => g.type), ["reply", "agent", "close", "task"]);
   assert.deepEqual(all[1].map((g) => g.type), ["reply", "agent", "close", "more"], "Task folds first");
-  assert.deepEqual(all[2].map((g) => g.type), ["reply", "agent", "more"], "then Close");
+  // ...Close after Agent (the owner, 2026-10-27: Mark done folds "if there is no space"): Reply holds the lit move here, so it stays
+  assert.deepEqual(all[2].map((g) => g.type), ["reply", "close", "more"], "then Agent - Close stays");
   assert.deepEqual(all.at(-1), [phoneRow(row)], "the narrowest is the phone's");
   const m = model(1024, row), w0 = rowWidth(all[0], row.next, m);
   assert.ok(w0 > avail(1024), `the typed groups need ${w0}px - the width that wrapped`);

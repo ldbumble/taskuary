@@ -187,13 +187,20 @@ def vocabularies(store=None) -> dict:
     from . import funnel
     out['lane'] = list(funnel.LANES)
     if store is None: return out
+    # ...READ ONCE PER CHANGE (the canvas timing, 2026-10-26): every typed turn built the whole pipe for these few words - twice, the
+    # index's selector asking too - a build that is ~290 ms on a real mailbox. They stand while nothing is written and no worker moved
+    try: from . import terminal; mark = (funnel._rail_top(store), funnel.workers_signature(terminal.live_sessions(tail=6)))
+    except Exception: mark = (None, None)
+    if None not in mark and _VOCAB.get('store') is store and _VOCAB.get('mark') == mark: return _VOCAB['v']
     try:
         items = funnel.build(store)['items']
     except Exception:
         return out
     seen = lambda f: sorted({str(i.get(f) or '') for i in items} - {''})
-    return {'category': seen('category') or list(FALLBACK_CATEGORIES),
-            'kind': seen('kind'), 'lane': seen('lane') or list(funnel.LANES)}
+    v = {'category': seen('category') or list(FALLBACK_CATEGORIES), 'kind': seen('kind'), 'lane': seen('lane') or list(funnel.LANES)}
+    if None not in mark: _VOCAB.update(store=store, mark=mark, v=v)
+    return v
+_VOCAB = {}
 
 
 def select_values(store=None) -> str:
@@ -207,7 +214,7 @@ def select_values(store=None) -> str:
 def selector(store=None, live: bool = True) -> str:
     """SELECT's fields. `live`: with the pipe's own values for category, kind and lane; else pointing at select_values, which the
     turn carries (block)."""
-    v = vocabularies(store)
+    v = vocabularies(store) if live else {}           # the index's own (live=False) names no value - it builds nothing for them
     lines = ['SELECT (pipe.clear, or wherever a set is meant) - every field optional, ANDed together:']
     if live:
         lines.append('  category   one of these, exactly: ' + ', '.join(v['category']))

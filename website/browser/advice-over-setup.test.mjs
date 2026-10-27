@@ -39,10 +39,12 @@ test("a task opened over setup has its lit button and its line in the task's Adv
     .catch(async (e) => { throw new Error(`${e.message}\n${(await page.evaluate(() => document.body.innerText)).slice(-1200)}`); });
   assert.ok(await page.$('.tq-arow .tq-ab.p[data-tq-verb]'), "its button is lit");
   assert.equal(await page.$(".tq-dock .tq-next, [data-tq-strip]"), null, "and nothing over the row");
-  // ...in the task's own Advisor section (the owner, 2026-10-26), its line keeping its Why? - and a drawer holding it says so on its tab
+  // ...in the task's own Advisor section (the owner, 2026-10-26), its line keeping its Why? - in the MAIN view, never a drawer, so no tab
+  // says it holds a note (the Advisor audit's judge, 2026-10-26)
   assert.ok(await page.$("[data-tq-advisor] .tq-next-why"), "the line's Why?");
-  const tab = await page.evaluate(() => document.querySelector("[data-tq-work-tab]")?.textContent || null);
-  if (tab !== null) assert.match(tab, /1 note/);
+  assert.equal(await page.$("[data-tq-work-side] [data-tq-advisor], [data-tq-from-side] [data-tq-advisor]"), null, "not in a drawer");
+  const tab = await page.evaluate(() => document.querySelector("[data-tq-work-tab]")?.textContent || "");
+  assert.doesNotMatch(tab, /note/);
 
   // ...and Back to Setup: setup is in view again, and the task's warning goes with the task
   const back = await page.evaluate(() => { const b = [...document.querySelectorAll("button")].find((x) => x.innerText.trim() === "Back to Setup"); b?.click(); return !!b; });

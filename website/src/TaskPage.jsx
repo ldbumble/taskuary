@@ -1942,6 +1942,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 )}
                 {/* FROM AND THE WORK (the task page redesign, owner-approved 2026-10-21, replacing the Task / Agent work / Close out accordion):
                     one of them is the main view and the other its drawer (mainOf, the owner 2026-10-26) - a phone's narrow body stacks them */}
+                {/* THE ADVISOR'S OWN SECTION (the owner, 2026-10-26: "one is more a guide and one is more doing work but they are in essence the same
+                    idea") - IN THE MAIN VIEW WHATEVER THE MAIN VIEW IS (the Advisor audit's judge, 2026-10-26): in the right drawer behind a sideways
+                    tab, a late line or the reason for a fold was off screen with only a note-count at the end of the tab to say so. Drawers hold work,
+                    never the Advisor's words; a live agent's screen keeps its room (and its decision says nothing over it) */}
+                {warn && !liveSession && <AdvisorNote note={warn} onDraft={() => { setOpenStage("reply"); if (workDrawer) { setFromSide(false); setWorkSide(true); }
+                  requestAnimationFrame(() => workBox.current?.querySelector("textarea")?.scrollIntoView({ block: "center", behavior: "smooth" })); }} />}
                 <Box ref={columnsBox} data-tq-columns="" data-tq-layout={sessionView ? "full" : stacked ? "stacked" : main} sx={stacked ? COLUMNS : { display: "contents" }}>
                 {(!fromDrawer || fromSide) && (
                   <Box data-tq-from="" data-tq-task-section="" data-tq-from-open={fromOpen ? "" : undefined} data-tq-from-side={fromDrawer ? "" : undefined}
@@ -2153,10 +2159,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     question (the owner, 2026-09-17: keep the stopped header as short as the
                     one a running agent gets). The bar rides IN the heading now, so
                     the sentence and the row that held it both go. */}
-                {/* THE ADVISOR'S OWN SECTION, OVER AGENT WORK (the owner, 2026-10-26: "one is more a guide and one is more doing work but they are
-                    in essence the same idea"): in the main view when the work is it, else in the right drawer with the work, whose tab says so */}
-                {warn && <AdvisorNote note={warn} onDraft={() => { setOpenStage("reply");
-                  requestAnimationFrame(() => workBox.current?.querySelector("textarea")?.scrollIntoView({ block: "center", behavior: "smooth" })); }} />}
                 {/* a queued start: what it waits for, or why it could not start - with Start now and Cancel (T10) */}
                 {!liveSession && listRow?.State === "queued" && listRow?.Queued && <Box sx={{ mb: 1 }}>
                   <QueuedStart taskId={t.TaskId} queued={listRow.Queued} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
@@ -2664,7 +2666,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 aria-expanded={workSide} aria-controls="tq-work-side" onClick={() => { setFromSide(false); setWorkSide((v) => !v); }}>
                 <Box component="span" aria-hidden data-tq-from-chevron="">{workSide ? "›" : "‹"}</Box>
                 {/* ...and the Advisor's section in the drawer, said on its tab (the owner, 2026-10-26) */}
-                <Box component="span" data-tq-from-words="">{workTabWords}{warn ? " · 1 note" : ""}</Box></Box>}
+                <Box component="span" data-tq-from-words="">{workTabWords}</Box></Box>}
               </Box>
               {/* THE TASKS TAB'S BAR, AT THE FOOT (the owner, 2026-10-16: "the buttons stay on bottom by the prompt box like always. No
                   buttons there."). The canvas draws these as its row over the chat line (rowVerbs, ActionRow); the Tasks tab has no

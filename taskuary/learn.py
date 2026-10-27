@@ -461,7 +461,7 @@ def reflect(store, llm=None) -> bool:
                               f'{sum(new.count(m) == 1 for m in markers)}/4 markers')
     # ...and every section is still there: a rewrite that lost "What you care about" lost everything triage reads
     if lost := [h for h in SECTIONS.values() if h in doc and h not in new]: return _failed(store, f'the rewrite dropped {", ".join(lost)}')
-    new = put_off_lines(store, _restore(new, held))
+    new = answer_lines(store, put_off_lines(store, _restore(new, held)))
     from . import learnedgraph
     # this reflection is itself an opportunity: it read the window, so every line it did not
     # touch has just gone one tick quieter. Recorded BEFORE settle, which measures against it.
@@ -528,6 +528,29 @@ def put_off_lines(store, doc: str, today: str = None) -> str:
             doc = doc.replace(raw, lg.fmt(l), 1); continue
         if raw is not None: doc = doc.replace(raw + '\n', '', 1).replace(raw, '', 1)
         doc = _under(doc, WORK, lg.fmt(l)) if live else _to_watching(doc, [lg.fmt(l)])
+    return doc
+
+
+def answer_lines(store, doc: str, today: str = None) -> str:
+    """The doc with a How you work line for each person the count says how soon the owner answers (usual.answer_habits) - the line the
+    late line on a task reads (usual.answer_line; the Advisor audit's judge, 2026-10-26: one fact, one source). Confirmed in the count's own
+    words as the count moves; a line the owner wrote about the person's answer time is left to say it; a line put down (Wrong, Forget)
+    does not come back by the side door (_buried)."""
+    from . import usual, learnedgraph as lg
+    from .learned_cut import lines as section_lines, names
+    today = today or _today()
+    for h in usual.answer_habits(store):
+        key, ev = usual.answer_key(h['who']), h['evidence']
+        text = f"You answer {h['name']} ({h['who']}) {usual.within(h['minutes'])}" if len(h['name'].split()) >= 2 else f"You answer {h['who']} {usual.within(h['minutes'])}"
+        if any(not lg.TAG.match(raw) and h['who'] in names(raw) and usual.speed(raw) for s in (PEOPLE, WORK) for raw, _ in section_lines(doc, s)): continue
+        hit = next(((raw, l) for raw, l in lg.walk(doc) if l and l['key'] == key), None)
+        if not hit and _buried(store, ev): continue
+        if hit and (store._one("SELECT 1 x FROM learned_line WHERE Key=? AND Status IN ('wrong','forgotten','closed')", (key,))): continue
+        raw, l = hit or (None, {'key': key, 'text': text, 'ev': [], 'score': 0, 'seen': today, 'status': 'live'})
+        l = {**l, 'text': text, 'ev': list(dict.fromkeys(ev + [e for e in l['ev'] if e not in ev]))[:10], 'score': max(l['score'], h['n'] + 1), 'seen': today}
+        if raw is not None and l['status'] == 'live': doc = doc.replace(raw, lg.fmt(l), 1); continue
+        if raw is not None: doc = doc.replace(raw + '\n', '', 1).replace(raw, '', 1)
+        doc = _under(doc, WORK, lg.fmt({**l, 'status': 'live'}))
     return doc
 
 

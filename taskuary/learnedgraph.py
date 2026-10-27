@@ -216,7 +216,9 @@ def graph(store) -> dict:
         out.append({**l, 'text': named(l.get('text')), 'evidence': evs, 'steps': steps, 'effective': eff,
                     'eligible': l['status'] == 'hypothesis' and eff >= PROMOTE_AT and len(dated) >= 3 and len(people) >= 2,
                     'reads': ', '.join(readers_of(section_of(l))), 'section_slug': section_of(l), 'standing': r.get('Status') or ('in_use' if l['status'] == 'live' else 'watching'),
-                    'in_use_at': r.get('InUseAt'), 'over_budget': over.get(l['key'], [])})
+                    'in_use_at': r.get('InUseAt'), 'over_budget': over.get(l['key'], []),
+                    # ...and whether the owner Kept it: Visualize was pixel-identical after Keep (the Advisor audit's judge, F6, 2026-10-26)
+                    'kept': bool(r.get('OwnerText'))})
     live_keys = {l['key'] for l in ls}
     deleted = []
     for k, hs in by_key.items():

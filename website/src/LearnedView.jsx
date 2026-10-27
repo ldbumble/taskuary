@@ -152,6 +152,7 @@ export default function LearnedView({ onChanged, onPerson, people = [] }) {
                 {isOpen ? "▾" : "▸"} {plural(l.evidence.length, "act")}{isPinned ? " · pinned" : ""}
               </Typography></>}
             <Box sx={{ flex: 1 }} />
+            {l.kept && !l.own && <Typography variant="caption" data-tq-kept="" sx={{ ...mono, color: st.color, fontSize: 10, fontWeight: 600 }}>KEPT · yours now</Typography>}
             {l.eligible && l.status === "hypothesis" && <Chip size="small" label="earned it" sx={{ height: 16, fontSize: 9.5, bgcolor: ROLES.handled.tint, color: ROLES.handled.ink }} />}
             <MarkRow marks={marksFor(l)} busy={busy === l.key} onMark={(how) => mark(l.key, how)} />
           </Box>

@@ -527,13 +527,16 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // its slot at once, under the rows still gliding out of it, for ten-odd frames. It comes in once the others have moved. Not on the
   // first draw, and not a row falling in from above the pipe (`landing`), which has its own way in.
   // ...nor the row on the table: the ring lands with its card, in the same frame
+  // ...and a row this rail drew before that COMES BACK waits too: it does not fall from above the pipe (`ever`), and it was not in the last
+  // pile, so it was drawn in its slot at once while the rows under it glided down out of it - a task closed behind its card put its row
+  // back at the top of its band, two rows on one spot for ~15 frames (the dead-end walk's SWAP, faults closed, 2026-10-27)
   const placedNow = useRef([]), placedBefore = useRef(null), enterTimer = useRef(0);
   placedNow.current = [];
   const [entering, setEntering] = useState(() => new Set());
   useLayoutEffect(() => {
     const now = placedNow.current, was = placedBefore.current, inPile = prev.current;
     placedBefore.current = new Set(now);
-    const fresh = was ? now.filter((lk) => !was.has(lk)).map((lk) => lk.slice(lk.indexOf(" ") + 1)).filter((k) => k !== curKey && inPile?.has(k)) : [];
+    const fresh = was ? now.filter((lk) => !was.has(lk)).map((lk) => lk.slice(lk.indexOf(" ") + 1)).filter((k) => k !== curKey && (inPile?.has(k) || ever.current.has(k))) : [];
     if (!fresh.length) return;
     setEntering(new Set(fresh));
     clearTimeout(enterTimer.current); enterTimer.current = setTimeout(() => setEntering(new Set()), 700);
@@ -3484,7 +3487,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               </Tooltip>)}
             {/* a phone's composer is one line tall and the long hint wrapped under its own edge, cut
                 mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there - and the pill's at rest */}
-            <textarea ref={composeRef} rows={1} value={text} disabled={resetting}
+            <textarea ref={composeRef} rows={1} value={text} disabled={resetting} aria-label={tableSays.name}
               placeholder={phone ? tableSays.phone : !popOn ? tableSays.box : boxWide ? "Tell me what to do with it, or ask about it…" : "Tell me what to do…"}
               onChange={(e) => setText(e.target.value)} onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }

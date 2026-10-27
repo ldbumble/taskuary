@@ -279,8 +279,7 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
         src = store if notes == 'today' else _AsOf(store, c.get('sent_at')) if notes == 'asof' else None
         ns, left = relevant_notes(src, [msg['from_email'] or ''], f"{msg['subject']} {msg['body']}"[:4000], subject=msg['subject']) if src else ([], 0)
         # the memory as the funnel reads it for THIS mail: what the owner cares about, and the people lines about whoever is on it
-        lrn = (learned_cut.for_reader(store, 'triage', learned_cut.about_mail(msg), people=learned_cut.people_of(msg),
-                                      sections=None if people else ('care',)) if learned else '')
+        lrn = (learned_cut.whole(store, 'triage', sections=None if people else ('care',)) if learned else '')
         v = {'intent': 'fyi', 'why': 'a calendar invite'} if msg.get('invite') else None      # the funnel's only no-model verdict
         for attempt in range(RETRIES + 1):
             if v and not v.get('degraded'): break
@@ -340,7 +339,7 @@ def evaluate_jev(store, cases: list, key: str, notes: str = 'asof', learned: boo
     from .ingest import others_on_thread, owner_addresses, relevant_notes
     from . import learned_cut
     mine, conf, rows = owner_addresses(store), Counter(), []
-    soul, lrn = store.doc('soul') or '', learned_cut.for_reader(store, 'triage') if learned else ''
+    soul, lrn = store.doc('soul') or '', learned_cut.whole(store, 'triage') if learned else ''
     for c in cases:
         if not c.get('body'): continue
         msg = as_message(c)

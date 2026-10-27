@@ -121,16 +121,27 @@ def test_a_fresh_doc_has_the_five_subjects_in_order_and_nothing_about_presses():
     assert learn.OLD_NEXT not in doc and learn.OLD_SORT not in doc and 'press' not in doc.split('## Your people')[1].split('## Proposed')[0]
 
 
-def test_triage_reads_what_you_care_about_and_the_people_on_this_mail_and_nothing_else():
-    """...the people lines for the PRIORITY alone (the owner, 2026-10-25: important is "anything from certain people")."""
+def test_triage_reads_the_whole_memory_every_time():
+    """The owner, 2026-10-27: "triage needs the entire thing to make a decision every time, so load the whole thing" - every section,
+    every line, not the care and people lines cut to a budget. The people lines still weigh the priority alone."""
     s, seen = full(), {}
     ingest.ingest_message(s, {'external_id': 'r11-1', 'channel': 'email', 'from_email': 'erin@northwind.example', 'subject': 'Statement',
                               'body': 'Your September statement is attached.'},
                           llm=lambda sys_, usr, **k: (seen.update(p=sys_ + usr), '{"intent":"fyi","why":"x"}')[1])
-    assert 'Vendor statements from vendor.example are fyi' in seen['p'] and ERIN_LINE.split('[')[0].strip() in seen['p']
+    for l in (CARE_LINE, ERIN_LINE, GAIL_LINE, WORK_LINE, PROMISE_LINE, BRING_LINE): assert l.split('[')[0].strip() in seen['p']
     assert 'weigh the priority only, never whether it is a task' in seen['p']
-    for l in (GAIL_LINE, WORK_LINE, PROMISE_LINE, BRING_LINE): assert l.split('[')[0].strip() not in seen['p']
-    assert learned_cut.for_reader(s, 'triage').startswith(learned_cut.CARE) and learned_cut.READS['triage'] == ('care', 'people')
+    assert learned_cut.READS['triage'] == tuple(learned_cut.SECTIONS)
+    assert learned_cut.used(s, 'mail:r11-1', 'triage')[0]['keys'], 'the read left a receipt'
+
+
+def test_the_whole_memory_keeps_whole_sections_and_logs_what_did_not_fit():
+    s = full()
+    got = learned_cut.whole(s, 'triage')
+    assert [h for h in learned_cut.SECTIONS.values() if h in got] == list(learned_cut.SECTIONS.values()), 'every section, in order'
+    cut = learned_cut.whole(s, 'triage', cap=len(learned_cut.PEOPLE) + len(ERIN_LINE) + len(GAIL_LINE) + 4)
+    assert cut.startswith(learned_cut.PEOPLE) and GAIL_LINE in cut and learned_cut.CARE not in cut, 'a whole section, never half of one'
+    assert learned_cut.over_budget(s).get('vendor statements') == ['triage'], 'what did not fit is noted, not silently dropped'
+    assert learned_cut.whole(MemoryStore(), 'triage') == '', "a fresh memory is placeholders"
 
 
 def test_the_drafter_reads_the_people_lines_about_whoever_it_writes_to():
@@ -147,26 +158,25 @@ def test_each_reader_reads_the_sections_of_the_matrix():
     assert all(x in adv for x in ('Erin Blake', 'Vendor statements', 'Vendor renewals', 'headcount sheet every Monday')) and 'Newsletter' not in adv
     told, _ = assistantblocks._learned(s, {})
     assert all(x in told for x in ('Erin Blake', 'Vendor statements', 'Vendor renewals', 'every Monday', 'Newsletter'))
-    assert 'people' in learned_cut.READS['triage'] and not {'work', 'promises', 'bring'} & set(learned_cut.READS['triage']), \
-        'a defer or a reply lag never decides whether mail is a task'
 
 
-def test_an_agent_reads_the_people_on_its_own_task_and_nothing_on_a_strangers():
+def test_an_agents_brief_carries_its_own_people_and_points_at_the_rest_and_nothing_on_a_strangers():
+    """Progressive disclosure (the owner, 2026-10-27: "agents can look at the memory LEARNED.md if they need it, same as the hub"): the
+    brief carries the lines about the people on this task, and says where the rest is - never the whole memory in every start prompt."""
     s = full()
     tid = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open'}, 'owner')
     s.add_message({'TaskId': tid, 'ExternalId': 'e1', 'Channel': 'email', 'Subject': 'export', 'FromEmail': 'erin@northwind.example',
                    'BodyText': 'The export fails.', 'Status': 'routed'})
     page = context.build(s, tid)
-    assert 'Vendor statements' in page and 'Erin Blake (erin@northwind.example)' in page and 'every Monday' in page
+    assert 'Erin Blake (erin@northwind.example)' in page and context.MEMORY_LINE in page and 'owner_memory' in page
     assert 'gets the headcount questions' not in page, "Gail is not on this task: the owner's notes on her are not the agent's"
-    # ...and everything else it knows about how the owner works (the owner, 2026-10-27: "every part it knows about the user should be in the agents")
-    assert 'Vendor renewals' in page and 'Newsletter' in page
+    for l in (CARE_LINE, WORK_LINE, PROMISE_LINE, BRING_LINE): assert l.split('[')[0].strip() not in page, 'the rest is read on demand'
     assert learned_cut.used(s, f'task:{tid}', 'agents')[0]['keys'], 'the read left a receipt'
     from taskuary import origin
     orig = origin.of_task
     try:
         origin.of_task = lambda store, t: ('stranger', 'test')
-        assert 'Erin Blake (erin' not in context.build(s, tid) and 'Vendor statements' not in context.build(s, tid)
+        assert 'Erin Blake (erin' not in context.build(s, tid) and context.MEMORY_LINE not in context.build(s, tid)
     finally: origin.of_task = orig
 
 

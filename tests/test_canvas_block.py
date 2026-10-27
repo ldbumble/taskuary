@@ -126,6 +126,60 @@ class AButtonFromTheCanvasActsInOneRound(unittest.TestCase):
         self.assertEqual(out['light']['verb'], 'share_result')
 
 
+class HowATurnReadsIsSaidOnce(unittest.TestCase):
+    """The owner, 2026-10-27: the canvas's, the rail's and the closing instructions rode every turn word for word, and a CLI conversation
+    keeps every turn - they are the launch instructions now (TURN_GUIDE). And the rail goes whole once per conversation, then "unchanged"
+    while it is: only to a CLI brain, which keeps the conversation; an API brain reads each call alone."""
+    def setUp(self):
+        self.st = mock.patch.object(terminal, 'live_sessions', return_value=[]); self.st.start()
+        self.sp = mock.patch.object(ingest, '_spawn'); self.sp.start()
+        self.s, self.dock = world()
+        concierge._RAIL_SEEN.clear()
+
+    def tearDown(self): self.sp.stop(); self.st.stop(); concierge._RAIL_SEEN.clear()
+
+    def cli(self):
+        llm, seen = scripted()
+        llm.session_id, llm.warm = 'sid-1', lambda *a, **k: False             # what a kept CLI conversation looks like (llm.make_cli_llm)
+        return llm, seen
+
+    def test_the_instructions_carry_how_a_turn_reads_and_the_turn_does_not(self):
+        system = concierge.turn_system(self.s)
+        for said in ('Act from it first', 'only to find the one the owner names', 'WHAT THEIR WORDS ARE ABOUT', 'CALL next', 'no words before it'):
+            self.assertIn(said, system)
+        llm, seen = scripted()
+        concierge.say(self.s, 'what is this', key='msg:1', llm=llm)
+        for said in ('Act from it first', 'only to find the one', 'WHAT THEIR WORDS ARE ABOUT', 'If a look-up would answer'):
+            self.assertNotIn(said, seen[0])
+        self.assertTrue(seen[0].rstrip().endswith(f"{concierge.OWNER_SAYS}what is this\nAnswer them, briefly."), seen[0][-200:])
+
+    def test_a_cli_conversation_reads_the_rail_whole_once_then_unchanged(self):
+        llm, seen = self.cli()
+        for text in ('what is this', 'and this one', 'and again'): concierge.say(self.s, text, key='msg:1', llm=llm)
+        self.assertIn('TQ-0001 · ', seen[0]); self.assertNotIn(concierge.RAIL_SAME, seen[0])
+        self.assertIn(concierge.RAIL_SAME, seen[1]); self.assertNotIn('\n- TQ-0001 · ', seen[1])
+        self.assertIn(concierge.RAIL_SAME, seen[2])
+
+    def test_a_moved_rail_a_new_conversation_or_an_api_brain_get_it_whole(self):
+        llm, seen = self.cli()
+        concierge.say(self.s, 'what is this', key='msg:1', llm=llm)
+        self.s.set_funnel_state('msg:5', 'surfaced', '', 'owner', read=True); funnel.invalidate()     # a row went: the rail moved
+        concierge.say(self.s, 'and this one', key='msg:1', llm=llm)
+        self.assertNotIn(concierge.RAIL_SAME, seen[1])
+        llm.session_id = 'sid-2'                                                                      # New chat: another conversation
+        concierge.say(self.s, 'and again', key='msg:1', llm=llm)
+        self.assertNotIn(concierge.RAIL_SAME, seen[2])
+        api, said = scripted()
+        for text in ('one', 'two'): concierge.say(self.s, text, key='msg:1', llm=api)
+        self.assertNotIn(concierge.RAIL_SAME, said[1])
+
+    def test_a_long_conversation_reads_it_whole_again(self):
+        llm, seen = self.cli()
+        for i in range(concierge.RAIL_FULL_EVERY + 2): concierge.say(self.s, f'turn {i}', key='msg:1', llm=llm)
+        whole = [i for i, u in enumerate(seen) if concierge.RAIL_SAME not in u]
+        self.assertEqual(whole, [0, concierge.RAIL_FULL_EVERY + 1])
+
+
 class TheTurnBuildsNoPipeItDoesNotNeed(unittest.TestCase):
     """The canvas timing (2026-10-26): every typed turn built the whole pipe twice more for SELECT's few words - the index's selector,
     which names no value, and the turn's values, unchanged since the last turn. Built once while nothing moved, and never for the index."""

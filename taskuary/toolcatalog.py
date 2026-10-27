@@ -177,7 +177,7 @@ FALLBACK_CATEGORIES = ('report', 'info', 'idea', 'todo', 'coding', 'review', 'pr
                        'automated', 'error', 'assistant', 'filed', 'ignored', 'yours')
 
 
-def vocabularies(store=None) -> dict:
+def vocabularies(store=None, items: list = None) -> dict:
     """{category, kind, lane} -> the values actually in the PIPE right now.
 
     The same set concierge.select_items searches, and that is the whole point. This read
@@ -193,7 +193,10 @@ def vocabularies(store=None) -> dict:
     out = {'category': list(FALLBACK_CATEGORIES), 'kind': [], 'lane': []}
     from . import funnel
     out['lane'] = list(funnel.LANES)
-    if store is None: return out
+    if store is None and items is None: return out
+    # ...or off the pipe a typed turn has just built (funnel.pile - the same rows): a second build of it was most of what the turn spent
+    # before the model was asked (the speed pass, 2026-10-27)
+    if items is not None: return _values(items)
     # ...READ ONCE PER CHANGE (the canvas timing, 2026-10-26): every typed turn built the whole pipe for these few words - twice, the
     # index's selector asking too - a build that is ~290 ms on a real mailbox. They stand while nothing is written and no worker moved
     try: from . import terminal; mark = (funnel._rail_top(store), funnel.workers_signature(terminal.live_sessions(tail=6)))
@@ -203,17 +206,22 @@ def vocabularies(store=None) -> dict:
         items = funnel.build(store)['items']
     except Exception:
         return out
-    seen = lambda f: sorted({str(i.get(f) or '') for i in items} - {''})
-    v = {'category': seen('category') or list(FALLBACK_CATEGORIES), 'kind': seen('kind'), 'lane': seen('lane') or list(funnel.LANES)}
+    v = _values(items)
     if None not in mark: _VOCAB.update(store=store, mark=mark, v=v)
     return v
 _VOCAB = {}
 
 
-def select_values(store=None) -> str:
+def _values(items: list) -> dict:
+    from . import funnel
+    seen = lambda f: sorted({str(i.get(f) or '') for i in items} - {''})
+    return {'category': seen('category') or list(FALLBACK_CATEGORIES), 'kind': seen('kind'), 'lane': seen('lane') or list(funnel.LANES)}
+
+
+def select_values(store=None, items: list = None) -> str:
     """The values SELECT's category, kind and lane can take in the pipe as it is NOW - said with each turn, never in the index:
     the index is a CLI brain's launch instructions, and a value that came or went (an FYI cleared, a mail landed) restarted it."""
-    v = vocabularies(store)
+    v = vocabularies(store, items)
     return ('SELECT VALUES IN THE PIPE NOW - category: ' + ', '.join(v['category']) + (f"; kind: {' | '.join(v['kind'])}" if v['kind'] else '')
             + '; lane: ' + ' | '.join(v['lane']))
 
@@ -248,6 +256,9 @@ def block(store=None) -> str:
         # the owner, 2026-10-21: "free text should almost never be used in the assistant - it should be bringing up UI components"
         'BRINGING SOMETHING UP IS THE ANSWER: a task, a page, a card or a button the owner asked for comes up with a few words at most',
         '(under 12) - never what it shows: no sender, story or summary of it beside it. Longer words only answer a real question.',
+        # the owner, 2026-10-27: the words before a press were written, then thrown away - the lit button says nothing (2026-10-23)
+        'A CALL that presses or lights a button - an action word for the item on the table, a put-down, a reminder - is the CALL line',
+        'alone, no words before it: the button is the whole answer.',
         'Answer in plain words. To look something up or to do anything, end with ONE line:',
         '  CALL: {"kind": "<tool>", "params": {...}}',
         'A look-up runs at once and answers you. Anything that changes something is the owner\'s to press: Taskuary',

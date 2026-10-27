@@ -1543,7 +1543,7 @@ def _keeps(profile: dict, family: str, args: list) -> bool:
     return bool(profile.get('keep_alive')) and family == 'claude' and 'stream-json' in args and ('-p' in args or '--print' in args)
 
 
-def warm_cli(profile: dict, resume: str = None, extra_env: dict = None, store=None) -> bool:
+def warm_cli(profile: dict, resume: str = None, extra_env: dict = None, store=None, swap: bool = False) -> bool:
     """Start a kept conversation's process ahead of its first turn (clipool.warm) - the command run_cli's live road would
     launch for this profile, so that turn finds it running. False for a profile that keeps no conversation (a one-shot
     brain, a CLI with no stream-json input): there is nothing to have ready."""
@@ -1552,7 +1552,7 @@ def warm_cli(profile: dict, resume: str = None, extra_env: dict = None, store=No
     if not _keeps(profile, _cli_name(name), args): return False
     from . import clipool
     try: return clipool.warm(profile['keep_alive'], _resolve_cmd(name) + args + _model_args(profile, name) + _own_settings(profile, name),
-                             cwd=profile.get('cwd'), env=spawn_env(profile, extra_env), resume=resume)
+                             cwd=profile.get('cwd'), env=spawn_env(profile, extra_env), resume=resume, swap=swap)
     except PermissionError as e: raise FileNotFoundError(denied_msg(name, name, e)) from e
 
 

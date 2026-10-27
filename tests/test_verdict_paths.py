@@ -181,11 +181,11 @@ class SentToAgentTests(unittest.TestCase):
         self.assertEqual((first['status'], first['task_id']), ('filed', None))
         server.store.upsert_agent('coding', 'coding', 'cli', '{"cmd": "claude"}')
         with mock.patch.object(server.hub_term, 'start_on_task', return_value={'sid': 's1'}) as start, \
-             mock.patch('taskuary.learn.learn_from') as learned:
+             mock.patch('taskuary.memorylines.teach') as learned:
             r = c.post(f"/api/messages/{first['message_id']}/dispatch", json={'agent': 'coding'}).json()
         tid = r['taskId']
         self.assertEqual(start.call_args[0][1:3], (tid, 'coding'))
-        self.assertIn('under-reached', learned.call_args[0][1])      # the miss in the other direction is a lesson too
+        self.assertEqual(learned.call_args[0][1], 'made_task')       # the miss in the other direction is a lesson too
         asked = []
         second = push(2, conv=conv, channel='email', from_email='reports@vendor.com', subject='Re: Process Check - FAILED',
                       body='Re-ran it, still 3 rows off', sent_at=stamp(hours=1), calls=asked)

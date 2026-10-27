@@ -33,7 +33,7 @@ class Phone:
         ra._ANSWERED.clear(); ra._talked.clear()
         self.ch, self.brain_fn = channel, brain
         self.s = s = store or MemoryStore()
-        for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
+        for k in ('calendar_enabled', 'coding_auto_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
         if brain: s.upsert_agent('claude', 'general', 'cli', json.dumps({'cmd': 'claude'}))
         cid = s.get_connector_by_type(channel)['ConnectorId']
         self.chat = TG_CHAT if channel == 'telegram' else JID

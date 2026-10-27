@@ -9,7 +9,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 
 | Bucket | What it is for | Tools, and what each needs |
 |---|---|---|
-| **table** | decide about the item on the table | reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, accept_invite, decline_invite, propose_time, find_time, prepare, elsewhere |
+| **table** | decide about the item on the table | reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, report_off, remember(text), setup(text), confirm, cancel, chase, let_go, accept_invite, decline_invite, propose_time, find_time, prepare, elsewhere |
 | **task** | change any task - the table's, or one named by ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?, note?), task.checklist(add?, items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?), review.approve, review.reject |
 | **agents** | start, continue, answer or stop a task's agent; teach where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value), task.ask_agent(who, text) |
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text) |
@@ -126,6 +126,12 @@ The "Stop and save" button: save and end the agent's session on the item.
 ### `rerun`
 
 The "Run it again" button: run the report on the table again.
+
+<p class="runs">Brings up its button for you to press.</p>
+
+### `report_off`
+
+The "Pause this report" button: pause the report on the table - off its clock - only when its findings are about something the owner said they do not care about.
 
 <p class="runs">Brings up its button for you to press.</p>
 

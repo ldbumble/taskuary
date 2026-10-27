@@ -6,6 +6,7 @@ from unittest import mock
 
 from taskuary import concierge, ingest, messengers, remote_assistant as ra, triage
 from taskuary.store import MemoryStore
+from taskuary import memorylines
 
 
 def brain(intent, urgent, kind='task', seen=None):
@@ -108,7 +109,7 @@ class SweepOnlyClearsTests(unittest.TestCase):
         s = MemoryStore()
         out = concierge.clear_selected(s, {'contains': 'vendor report'})
         self.assertEqual(out['cleared'], 0)
-        self.assertEqual(s.list_memories(active_only=True), [])
+        self.assertEqual(memorylines.notes(s), [])
         self.assertFalse(hasattr(concierge, 'clear_matching'))
         self.assertIn('preference.exclude_sender', concierge.toolcatalog.PURPOSE['pipe.clear'] if hasattr(concierge, 'toolcatalog') else
                       __import__('taskuary.toolcatalog', fromlist=['PURPOSE']).PURPOSE['pipe.clear'])

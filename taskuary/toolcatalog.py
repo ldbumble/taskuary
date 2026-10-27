@@ -327,6 +327,7 @@ _DECIDE = {
     'answer_agent':    'answer the agent waiting on the owner - `text`',
     'stop_agent':      "save and end the agent's session on the item",
     'rerun':           'run the report on the table again',
+    'report_off':      "pause the report on the table - off its clock - only when its findings are about something the owner said they do not care about",
     'remember':        "keep a fact about how the owner works in their memory - `text`, their words (\"I don't care about the legacy export job any more\" too)",
     # ...and a PLAYBOOK, which has its own New playbook: "can I build a playbook for it?" was sent to a general agent as its job (the
     # owner, 2026-10-22: "this is not playbook ui?")

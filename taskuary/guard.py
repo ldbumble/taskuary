@@ -143,6 +143,7 @@ AGENT_WRITES = (
 AGENT_READS = (
     (r'GET', r'^/api/agent/messages(/\d+)?$',
      "`taskuary --search/--message`: the owner's mail and messages, read-only (mailsearch.py) - never a stranger's task"),
+    (r'GET', r'^/api/agent/memory$', "`taskuary --memory`: LEARNED.md, read on demand (context.MEMORY_LINE) - never a stranger's task"),
 )
 
 # ── EVERY OTHER WRITE, NAMED ────────────────────────────────────────────────────────────

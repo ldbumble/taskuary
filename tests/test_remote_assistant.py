@@ -21,7 +21,7 @@ TG_CHAT = '900100'
 def armed_store(channel='whatsapp', chat=JID, on='1', talking=True):
     store = MemoryStore()
     store.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
-    for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled', 'auto_draft_enabled'): store.set_setting(k, '0', 't')
+    for k in ('calendar_enabled', 'coding_auto_enabled', 'auto_draft_enabled'): store.set_setting(k, '0', 't')
     funnel.invalidate(); funnel.forget_states(); funnel._CACHE.update(cands_at=0.0, cands=[])
     cid = store.get_connector_by_type(channel)['ConnectorId']
     store.save_connector({'ConnectorId': cid, 'Active': 1, 'Roles': 'trigger,tool', 'Secret': 'tok',

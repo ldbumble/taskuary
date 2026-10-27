@@ -649,11 +649,10 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
     from . import agents as hub_agents, capabilities
     project = context_for_message(store, msg)
     from .triage import job_doc
-    # "What you care about", learned from sorting verdicts - presses never reach triage (the owner, 2026-10-23) - and the people lines
-    # about whoever is on this mail, for its priority alone (2026-10-25). A line already in the EVIDENCE (a verdict about this sender or
-    # topic: both come from LEARNED.md now) is said once, there
-    lrn = learned_cut.for_reader(store, 'triage', learned_cut.about_mail(msg), target=f"mail:{msg.get('external_id') or ''}",
-                                 people=learned_cut.people_of(msg))
+    # THE WHOLE MEMORY, every time (the owner, 2026-10-27: "triage needs the entire thing to make a decision every time, so load the
+    # whole thing") - not the care and people lines cut to 1500 characters. A line already in the EVIDENCE (a verdict about this sender
+    # or topic: both come from LEARNED.md now) is said once, there
+    lrn = learned_cut.whole(store, 'triage', target=f"mail:{msg.get('external_id') or ''}")
     from .memorylines import ABOUT
     said = {str(n).strip() for n in notes}
     blocks = [[l for l in b.splitlines() if l.startswith('#') or ABOUT.sub('', l.strip().lstrip('-* ')).strip() not in said]
@@ -1293,7 +1292,7 @@ def applicable_notes(store, senders, subject: str = '', text: str = '', source: 
     who = {(s or '').lower() for s in senders if s}
     doms = {s.rsplit('@', 1)[-1] for s in who if '@' in s}
     src = (source or '').lower()
-    # ...read from LEARNED.md, the one memory (memorylines, the owner 2026-10-27): the notes table is the verdicts' record, read by no one
+    # ...read from LEARNED.md, the one memory (memorylines, the owner 2026-10-27): the notes table is gone
     from . import memorylines
     return [n for n in memorylines.standing(store)
             if n['Scope'] == 'global'

@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from taskuary import buttons, concierge, funnel, general, server, terminal
 from taskuary.store import MemoryStore
+from taskuary import memorylines
 
 
 def ago(hours=0): return (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
@@ -19,7 +20,7 @@ def store():
     # an install has a coding agent - config.toml seeds it at boot. Without one the assistant now
     # says so instead of receipting a hand-off the dispatch would 422 on (2026-09-03).
     s.upsert_agent('coding', 'coding', 'cli', '{}')
-    for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
+    for k in ('calendar_enabled', 'coding_auto_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
     funnel.invalidate(); funnel.forget_states(); funnel._CACHE.update(cands_at=0.0, cands=[])
     return s
 
@@ -792,7 +793,7 @@ class SweepTests(unittest.TestCase):
         self.assertEqual(o['cleared'], 3)
         line = ran['receipt']
         self.assertIn('Marked 3 items read - ', line); self.assertIn('Read, not deleted', line)
-        self.assertEqual((funnel.mutes(s), s.list_memories(active_only=True)), ([], []))   # clearing is all it does (R8)
+        self.assertEqual((funnel.mutes(s), memorylines.notes(s)), ([], []))   # clearing is all it does (R8)
         self.assertEqual([i['who'] for i in funnel.build(s)['items']], ['Omar Keller'])                # Omar stays
         again = cleared_by(s, 'same for all resident refunds', {'contains': 'resident refund'})
         self.assertIsNone(again.get('proposal')); self.assertIn('No items about resident refund are waiting, so there is nothing to clear', again['say'])

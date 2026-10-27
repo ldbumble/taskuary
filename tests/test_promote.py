@@ -6,6 +6,7 @@ from unittest import mock
 from fastapi.testclient import TestClient
 from taskuary import assistant, policy, promote, server
 from taskuary.store import MemoryStore
+from tests.memlines import note as put_note
 
 NEWS, ALERTS = 'newsletter@vendor.example', 'alerts@vendor.example'
 
@@ -55,8 +56,7 @@ class Promotion(unittest.TestCase):
 
     def test_one_mail_taken_up_means_no_rule(self):
         s = _store(); mids = mails(s, NEWS, 12, down=11)
-        s.add_memory({'Scope': 'sender', 'ScopeKey': NEWS, 'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner',
-                      'Note': f'2026-10-01: "Issue 11" from {NEWS} - MADE A TASK: triage filed it, but the owner promoted it as real work'})
+        s.add_route(mids[-1], None, 'create', None, 'made a task - the owner promoted it as real work', [], 'owner')
         self.assertEqual(promote.ideas(s), [], f'{mids[-1]} was taken up')
 
     def test_never_for_a_colleague(self):

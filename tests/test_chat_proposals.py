@@ -25,7 +25,7 @@ def ago(hours=0): return (datetime.now() - timedelta(hours=hours)).strftime('%Y-
 def store():
     s = MemoryStore()
     s.upsert_agent('coding', 'coding', 'cli', '{}')
-    for k in ('calendar_enabled', 'learn_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
+    for k in ('calendar_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
     s.set_setting('coding_auto_enabled', '1', 't'); s.set_setting('team_domains', 'ours.com', 't'); s.set_setting('owner_email', 'owner@ours.com', 't')
     funnel.invalidate(); funnel.forget_states(); funnel._SOURCES.update(at=0.0, by={})
     return s
@@ -234,7 +234,7 @@ class ExecutionTests(unittest.TestCase):
         s, tid, mid, item = asked()
         p = say(s, 'remember that Gail signs off on refunds', key=item['key'], model='Noted.\nCALL: {"kind": "remember", "params": {"text": "Gail signs off on refunds"}}')['proposal']
         self.assertEqual((p['kind'], p['params']['note'], p['settles']), ('memory.remember', 'Gail signs off on refunds', False))
-        self.assertEqual([m['Note'] for m in s.list_memories()], [])
+        self.assertNotIn('Gail signs off on refunds', s.get_doc('learned') or '')                 # a proposal: nothing kept yet
         run(s, p); self.assertIn('- Gail signs off on refunds', s.get_doc('learned') or '')     # LEARNED.md, every reader's memory (2026-10-27)
         p = say(s, 'close it', key=item['key'], model='Closing.\nCALL: {"kind": "close", "params": {}}')['proposal']
         self.assertEqual((p['kind'], p['target']), ('task.complete', tid)); self.assertEqual(s.get_task(tid)['Status'], 'open')

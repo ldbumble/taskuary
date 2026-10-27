@@ -19,7 +19,7 @@ def ago(hours=0): return (datetime.now() - timedelta(hours=hours)).strftime('%Y-
 def store():
     s = MemoryStore()
     s.upsert_agent('coding', 'coding', 'cli', '{}')
-    for k in ('calendar_enabled', 'learn_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
+    for k in ('calendar_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
     s.set_setting('coding_auto_enabled', '1', 't'); s.set_setting('team_domains', 'ours.com', 't'); s.set_setting('owner_email', 'owner@ours.com', 't')
     funnel.invalidate(); funnel.forget_states(); funnel._SOURCES.update(at=0.0, by={})
     return s

@@ -17,7 +17,7 @@ from unittest import mock
 from fastapi import BackgroundTasks
 from fastapi.testclient import TestClient
 
-from taskuary import server
+from taskuary import memorylines, server
 
 c, s = TestClient(server.app), server.store
 
@@ -32,17 +32,17 @@ def arrived(start='coding'):
     return tid, mid
 
 
-def wrote(go, start='coding'):
-    """Everything one door leaves behind: both memories, and where the task ended up."""
+def wrote(go, start='coding', facts_seen=None):
+    """Everything one door leaves behind: what it taught LEARNED.md (memorylines.teach - one line in words per verdict, 2026-10-27,
+    and the hot pass's guess where that still runs), the routing fact, and where the task ended up."""
     tid, mid = arrived(start)
-    mem = len(s.list_memories())
     facts = sum(int(x['EvidenceCount'] or 0) for x in s.routing_facts())
     bg = BackgroundTasks()
-    with mock.patch('taskuary.learn.learn_from') as lessons:
+    with mock.patch.object(memorylines, 'teach') as taught, mock.patch('taskuary.learn.learn_from') as guessed:
         go(tid, mid, bg)
         for t in bg.tasks: t.func(*t.args, **t.kwargs)
-    return {'memory': len(s.list_memories()) - mem,
-            'LEARNED': lessons.call_count,
+    if facts_seen is not None: facts_seen += [str(c.args[3]) for c in taught.call_args_list]
+    return {'taught': sorted(c.args[1] for c in taught.call_args_list) + ['guess'] * guessed.call_count,
             'routing': sum(int(x['EvidenceCount'] or 0) for x in s.routing_facts()) - facts,
             'kind': (s.get_task(tid) or {}).get('Kind')}
 
@@ -70,8 +70,9 @@ class MineNotTheAgents(unittest.TestCase):
     def test_and_all_of_them_actually_teach(self):
         row = wrote(self.DOORS['the kind selector'])
         self.assertEqual(row['kind'], 'task')
-        for what in ('memory', 'LEARNED', 'routing'):
-            self.assertGreater(row[what], 0, f'the verdict wrote no {what}')
+        self.assertGreater(row['routing'], 0)
+        # ONE lesson, in words - not a not-for-the-agent line AND a routing line (the owner, 2026-10-27)
+        self.assertEqual(row['taught'], ['not_for_agent'])
 
 
 class HandItToTheAssistant(unittest.TestCase):
@@ -93,32 +94,33 @@ class HandItToTheAssistant(unittest.TestCase):
     def test_it_is_a_weaker_signal_than_taking_it_yourself(self):
         row = wrote(self.DOORS['the kind selector'])
         self.assertEqual(row['kind'], 'general')
-        self.assertEqual(row['memory'], 0, 'general is still agent work - no not-for-the-agent line')
+        self.assertEqual(row['taught'], ['routing'], 'general is still agent work - no not-for-the-agent line')
         self.assertGreater(row['routing'], 0)
-        self.assertGreater(row['LEARNED'], 0)
 
 
 class TheOtherCorrections(unittest.TestCase):
     def test_reassigning_the_worker_teaches(self):
         row = wrote(lambda t, m, bg: c.patch(f'/api/tasks/{t}', json={'Assignee': 'agent:coding'}))
         self.assertGreater(row['routing'], 0)
-        self.assertGreater(row['LEARNED'], 0)
+        self.assertEqual(row['taught'], ['routing'])
 
     def test_choosing_a_different_repository_teaches(self):
         row = wrote(lambda t, m, bg: c.put(f'/api/tasks/{t}/repo', json={'repo': 'northwind/portal', 'agent': 'coding'}))
-        self.assertGreater(row['LEARNED'], 0, 'a rerouted checkout reached the profile as nothing at all')
+        self.assertTrue(row['taught'], 'a rerouted checkout reached the profile as nothing at all')
 
     def test_saying_where_it_belongs_teaches_twice(self):
         plain = wrote(lambda t, m, bg: c.post(f'/api/tasks/{t}/not-coding', json={'learn': True}))
-        named = wrote(lambda t, m, bg: c.post(f'/api/tasks/{t}/not-coding', json={'learn': True, 'belongs_to': 'ADP'}))
+        seen = []
+        named = wrote(lambda t, m, bg: c.post(f'/api/tasks/{t}/not-coding', json={'learn': True, 'belongs_to': 'ADP'}), facts_seen=seen)
         self.assertGreater(named['routing'], plain['routing'])
-        self.assertGreater(named['LEARNED'], plain['LEARNED'])
+        # ...and the one lesson is told where the work lives, so the line can say it
+        self.assertEqual(named['taught'], ['not_for_agent']); self.assertIn('belongs to ADP', seen[0])
 
     def test_not_a_task_is_not_a_routing_correction(self):
         # "there was no work here" says nothing about WHO should have done the work
         row = wrote(lambda t, m, bg: c.post(f'/api/tasks/{t}/not-a-task', json={'learn': True}))
         self.assertEqual(row['routing'], 0)
-        self.assertGreater(row['memory'], 0)
+        self.assertEqual(row['taught'], ['not_a_task'])
 
 
 

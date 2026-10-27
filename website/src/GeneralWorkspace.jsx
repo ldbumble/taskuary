@@ -398,7 +398,8 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 
 function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false }) {
+  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false,
+  onEnded }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
@@ -433,6 +434,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           events.push(event);
           yield { content: content() };
         } else if (event.type === "error") {
+          // ...and the page is told the turn is over: the session the stream's `start` handed it stayed "Agent is working", with Stop
+          // and save, over a CLI that had died mid-turn - and nothing polls a session the server no longer has (the agents walk, 2026-10-26)
+          onEnded?.();
           yield { content: content(`⚠ ${event.error || "The agent stopped without an answer."}`) };
           return;
         } else if (event.type === "done") {
@@ -442,12 +446,13 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
       }
       } catch (e) {
         if (abortSignal?.aborted) return;              // the owner pressed stop; that is not an error
+        onEnded?.();
         yield { content: content(`⚠ ${e?.message || "The assistant could not answer."}`) };
       } finally {
         onBusyChange?.(false);
       }
     },
-  }), [attachmentsRef, onBusyChange, onClearAttachments, onSent, onStarted, selectionRef, task.TaskId]);
+  }), [attachmentsRef, onBusyChange, onClearAttachments, onEnded, onSent, onStarted, selectionRef, task.TaskId]);
   const runtime = useLocalRuntime(modelAdapter, { initialMessages: initial(messages) });
   /* WHAT ARRIVED WHILE YOU WERE TYPING goes into the thread that is already standing. This used to
      be a key bump, which remounts - and the draft lives in the composer INSIDE this runtime, so the
@@ -792,7 +797,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       <AssistantThread key={task.TaskId} revision={revision} task={task} messages={shownMessages}
         published={dock ? placed.foot : [...placed.foot, ...uncited(data?.outputs, shownMessages.filter((m) => m.role === "assistant").map(textOf), task.TaskId)]}
         onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
-        attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onClearAttachments={clearAttachments}
+        attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onEnded={refresh} onClearAttachments={clearAttachments}
         onAttach={() => fileRef.current?.click()}
         dock={dock} dockExpanded={dockExpanded} prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
         asking={asking} onAnswer={answerAsk} noComposer={noComposer}

@@ -370,6 +370,20 @@ class GeneralApiTests(unittest.TestCase):
         self.assertEqual(events[-1]['reply'], 'Here is the researched answer.')
         self.assertEqual([m['role'] for m in events[-1]['payload']['messages']], ['user', 'assistant'])
 
+    def test_a_turn_that_dies_mid_way_is_said_once_its_session_is_down(self):
+        """The page reads the conversation again on the stream's error: said before the session's close (0.1 s after the raise), it
+        found it alive and kept "Agent is working" with Stop and save over a dead CLI (the agents walk, 2026-10-26)."""
+        from taskuary.clipool import MID_TURN
+        store = MemoryStore(); tid = general_task(store)
+        connect_cli(self, claude={'cmd': 'claude'})
+        def dies(*a, **k): raise RuntimeError(f'claude: {MID_TURN} (the CLI exited (3))')
+        with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
+             mock.patch.object(llm, 'build_llm', return_value=dies), mock.patch.object(handbook, 'enabled', return_value=False):
+            response = TestClient(server.app).post(f'/api/tasks/{tid}/assistant/stream', json={'text': 'Research this', 'pick': 'cli:claude'})
+            events = [json.loads(line) for line in response.text.splitlines()]
+            self.assertEqual(events[-1]['type'], 'error')
+            self.assertFalse(any(s.alive for s in terminal.SESSIONS.values() if s.task_id == tid), 'the session is down when the error is said')
+
     def test_api_accepts_the_existing_cli_agent_connection(self):
         store = MemoryStore(); tid = general_task(store)
         connect_cli(self, claude={'cmd': 'claude'})

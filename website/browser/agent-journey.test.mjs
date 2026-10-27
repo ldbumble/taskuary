@@ -65,8 +65,9 @@ test("an agent's road: each press runs once, Continue shows what it said, and a 
   const count = (re) => posts.filter((p) => re.test(p)).length;
 
   // SEND TO AGENT, pressed twice in its box: one dispatch, and the agent's answer
-  await page.waitForFunction(() => [...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Send to agent"), { timeout: 30000 });
-  assert.ok(await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Send to agent" && b.offsetParent)?.click() ?? true));
+  // ...the row's, in view: the box itself waits in the shut Agent drawer, so a press on nothing (the row not drawn yet) opened nothing
+  await page.waitForFunction(() => [...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Send to agent" && b.offsetParent), { timeout: 30000 });
+  assert.ok(await page.evaluate(() => { const b = [...document.querySelectorAll("button")].find((x) => x.textContent.trim() === "Send to agent" && x.offsetParent); b.click(); return true; }));
   await page.waitForSelector("[data-tq-run-form] textarea", { timeout: 15000 });
   assert.ok(await twice(page, "Send to agent", "[data-tq-run-form]"), "the box's Send to agent");
   await inTask(page, /Payworth is cheapest/);

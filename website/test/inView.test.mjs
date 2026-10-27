@@ -2,7 +2,18 @@
 // phone's docked strip and row - in view by its box, covered by the dock. What covers it is read off the screen and scrolled clear.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { coverOf, floorOf, rowAcross, shiftFor } from "../src/inView.js";
+import { bringIntoView, coverOf, floorOf, rowAcross, shiftFor } from "../src/inView.js";
+
+test("a move that is not drawn (its drawer shut) is never brought into view: nothing scrolls for it (the walk's SEEN, 2026-10-27)", () => {
+  const was = globalThis.document;
+  let touched = 0;
+  globalThis.document = { elementFromPoint: () => { touched += 1; return {}; } };
+  try {
+    const el = { getBoundingClientRect: () => ({ top: 0, height: 0, bottom: 0 }), getClientRects: () => [], scrollIntoView: () => { touched += 1; }, parentElement: null };
+    bringIntoView(el);
+    assert.equal(touched, 0);
+  } finally { globalThis.document = was; }
+});
 
 const box = (top, height) => ({ top, height, bottom: top + height });
 

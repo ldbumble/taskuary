@@ -51,6 +51,10 @@ const scrollersOf = (el) => {
 
 export function bringIntoView(el) {
   if (!el?.getBoundingClientRect || typeof document === "undefined") return;
+  // ...a move that is not drawn - its drawer shut (display: none, the task page's Close out) - has no box to bring anywhere: read at 0,0,
+  // the header "covered" it, and each frame for 1.5 s scrolled the conversation 68px up until the card on the table stood under the fold
+  // (the dead-end walk's SEEN, Accept on an invite: 66px of the card left in view)
+  if (el.getClientRects && !el.getClientRects().length) return;
   try { place(el); } finally { scrollersOf(el).forEach((p) => unclip(p, el)); }
 }
 function place(el) {

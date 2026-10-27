@@ -68,7 +68,7 @@ test("the layout: two columns whenever no agent is live - a Result and a failure
 test("the drawer tabs look pressable: an arrow that turns, a pointer, a hover tint, a focus ring - left and right alike", () => {
   const src = taskSource(), tab = src.slice(src.indexOf("const DRAWER_TAB"), src.indexOf("\n\n", src.indexOf("const DRAWER_TAB")));
   assert.match(tab, /cursor: "pointer"/);
-  assert.match(tab, /"&:hover": \{ bgcolor: lit \? "#46586a" : "#e7e0d4" \}/);
+  assert.match(tab, /"&:hover": \{ bgcolor: lit \? "#46586a" : "#f3efe9" \}/);
   assert.match(tab, /"&:focus-visible": \{ outline: `2px solid \$\{lit \? INK : ACCENT\}`/);
   // ...lit, it is filled in the accent and peeks out once - never for a reader who asked for no motion
   assert.match(tab, /bgcolor: lit \? ACCENT :/);

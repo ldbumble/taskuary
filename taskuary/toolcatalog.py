@@ -253,6 +253,9 @@ def block(store=None) -> str:
         # the owner, 2026-10-21: "free text should almost never be used in the assistant - it should be bringing up UI components"
         'BRINGING SOMETHING UP IS THE ANSWER: a task, a page, a card or a button the owner asked for comes up with a few words at most',
         '(under 12) - never what it shows: no sender, story or summary of it beside it. Longer words only answer a real question.',
+        # the owner, 2026-10-27: the words before a press were written, then thrown away - the lit button says nothing (2026-10-23)
+        'A CALL that presses or lights a button - an action word for the item on the table, a put-down, a reminder - is the CALL line',
+        'alone, no words before it: the button is the whole answer.',
         'Answer in plain words. To look something up or to do anything, end with ONE line:',
         '  CALL: {"kind": "<tool>", "params": {...}}',
         'A look-up runs at once and answers you. Anything that changes something is the owner\'s to press: Taskuary',

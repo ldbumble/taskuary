@@ -1382,8 +1382,7 @@ def _canvas_walk(store, dock_tid: int, item: dict | None) -> list:
 def canvas_block(store, item: dict | None, dock_tid: int | None, d: dict | None = None) -> str:
     """THE CANVAS block, first in a typed turn: the table, then this walk's other cards. Bounded (CANVAS_CAP): the walk's lines go first
     when it is over, oldest of them first. `d`: the Advisor's decision for the item, read once by the caller."""
-    head = ('CANVAS - what is on the owner\'s screen now. Act from it first: a button below is pressed or lit by CALLing its id - '
-            '{"kind": "<id>"} - or the tool it names, with no look-up first.')
+    head = CANVAS_HEAD                                    # how to act from it is said once, in the instructions (TURN_GUIDE)
     table = _canvas_table(store, item, d or {}) if item else ['ON THE TABLE: nothing']
     walk = _canvas_walk(store, dock_tid, item) if dock_tid else []
     def text(w): return '\n'.join([head, *table] + (['EARLIER ON THE CANVAS THIS WALK (newest first):', *w] if w else []))
@@ -1396,6 +1395,44 @@ def canvas_block(store, item: dict | None, dock_tid: int | None, d: dict | None 
 # 0 of 6 turns (the 2026-10-26 sweep; the owner, 2026-10-21: "Free text should almost never be used in the assistant")
 EMPTY_TABLE = ('Nothing is on the table now: when they want to go through what waits - the next one, walk me through it, from the '
                'top - CALL next, which brings that row up as its card with its buttons. Never read a task out in words in its place.')
+
+# HOW A TURN READS, SAID ONCE (the owner, 2026-10-27, approving the speed pass): the canvas's, the rail's and the closing instructions rode
+# every typed turn word for word - 1-1.4K characters each time, and a CLI conversation keeps every one of them. They are the launch
+# instructions now (turn_system); a turn carries its headings, its facts and the owner's words.
+CANVAS_HEAD = 'CANVAS - what is on the owner\'s screen now:'
+RAIL_HEAD = 'THE RAIL BY NAME:'
+RAIL_SAME = f'{RAIL_HEAD} unchanged since the last one you were given in this conversation - the same rows, row for row.'
+TURN_GUIDE = ('HOW EACH OF THE OWNER\'S TURNS READS - the message that carries their words, in this order:\n'
+              '- CANVAS: what is on the owner\'s screen now. Act from it first: a button there is pressed or lit by CALLing its id - '
+              '{"kind": "<id>"} - or the tool it names, with no look-up first.\n'
+              f'- {RAIL_HEAD} the rows waiting, each by its handle - only to find the one the owner names; never act on a row they did not '
+              'name. To act on one, put its handle (the TQ ref or m-number that starts its line) in `on` exactly. When it says unchanged, '
+              'it is the last one you were given, row for row.\n'
+              f'- With an item on the table: {WHAT_ABOUT}\n'
+              f'- Last, the owner\'s words ("{OWNER_SAYS.strip()}"). Answer them, briefly. If a look-up would answer it, CALL it now instead of '
+              'saying you will. If their words mean one of the actions for the item on the table, CALL it. With nothing on the table, if they '
+              f'ask for something to be done, CALL it now - its button is their confirmation. {EMPTY_TABLE}')
+RAIL_FULL_EVERY = 8          # a rail said unchanged is said whole again after this many turns: a long conversation may be compacted
+
+
+# what the rail looked like when this chat's CLI conversation last read it whole: {dock tid: (session id, rail, turns since)}
+_RAIL_SEEN: dict = {}
+
+
+def rail_for_turn(llm, tid: int, rail: str) -> str:
+    """The rail this turn carries: whole, or RAIL_SAME when the CLI conversation it goes to read this very rail on an earlier turn (the
+    owner, 2026-10-27). Only a CLI brain keeps a conversation: an API brain reads each call alone, and always gets it whole."""
+    seen, sid = _RAIL_SEEN.get(tid), getattr(llm, 'session_id', None)
+    if rail and sid and getattr(llm, 'warm', None) and seen and seen[0] == sid and seen[1] == rail and seen[2] < RAIL_FULL_EVERY: return RAIL_SAME
+    return rail
+
+
+def rail_read(llm, tid: int, rail: str, sent: str):
+    """After the model answered: what its conversation now holds of the rail."""
+    sid = getattr(llm, 'session_id', None)
+    if not (rail and sid and getattr(llm, 'warm', None)): _RAIL_SEEN.pop(tid, None)
+    elif sent == RAIL_SAME and tid in _RAIL_SEEN: s, r, n = _RAIL_SEEN[tid]; _RAIL_SEEN[tid] = (sid, r, n + 1)
+    else: _RAIL_SEEN[tid] = (sid, rail, 0)
 
 
 def table_line(store, item: dict | None) -> str:
@@ -1956,7 +1993,7 @@ def turn_system(store, llm=None) -> str:
     """A typed turn's instructions: COUNSEL, SOUL, the voice, then the tool index. ONE text for every round of a turn and for
     warm(): a CLI brain is launched with it (--system-prompt-file, named by its content), so a round that sent another one
     restarted the process under it."""
-    return _system(store, llm) + '\n\n' + toolcatalog.block(store)
+    return _system(store, llm) + '\n\n' + toolcatalog.block(store) + '\n\n' + TURN_GUIDE
 
 
 _WARMING = threading.Lock()
@@ -4680,8 +4717,7 @@ def _rail_block(p: dict, cap: int = RAIL_CAP) -> str:
                              + ('; a drafted reply waits for your yes' if i.get('rid') and i.get('draft') else '') + ')')
     if not rows: return ''
     more = f"\n- ...and {len(items) - cap} more (timeline.search finds them)" if len(items) > cap else ''
-    return ('THE RAIL BY NAME - only to find the one the owner names; never act on a row they did not name. To act on one, put its '
-            'handle (the TQ ref or m-number that starts its line) in `on` exactly\n' + '\n'.join(rows) + more)
+    return f'{RAIL_HEAD}\n' + '\n'.join(rows) + more             # what it is for is said once (TURN_GUIDE)
 
 
 def handle_of(i: dict) -> str:
@@ -4776,7 +4812,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       + (f"THE TASKS THEY NAMED, as they are now:\n{nn}\n\n" if (nn := named_now(store, text, item)) else '')
                       # what the owner handed over and where each stands (asks.py) - "where's the tab check?", "add Omar to that"
                       + (f"{asks_block}\n\n" if (asks_block := _asks_block(store, p)) else '')
-                      + (f"{rail}\n\n" if (rail := _rail_block(p)) else '')
+                      # ...said whole once per conversation, then "unchanged" while it is (rail_for_turn - the owner, 2026-10-27)
+                      + (f"{rail_sent}\n\n" if (rail_sent := rail_for_turn(llm, tid, rail := _rail_block(p))) else '')
                       + (f"CONVERSATION SO FAR:\n{so_far}\n\n" if so_far else '')
                       # THE CARD BROWSED OPEN in the canvas (the canvas redesign, 2026-09-29): "this", "it", "set it up"
                       # mean that card - a connector, a settings group, a report - when no item is on the table
@@ -4788,14 +4825,13 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       + (f"OPEN BESIDE IT: {_cut(open_card, 300)} - the item is still on the table, under that page; 'this' is whichever of the two "
                          f"their words fit{under_page(item)}\n\n" if open_card and item else '')
                       # ...the row's buttons are the CANVAS's now, by id; the Advisor's evidence stays, for "why?"
-                      + ((f"{adv}\n\n" if (adv := _advice_block(store, item, adv_d)) else '') + f"{WHAT_ABOUT}\n\n" if item else '')
+                      + ((f"{adv}\n\n" if (adv := _advice_block(store, item, adv_d)) else '') if item else '')
                       + f"{OWNER_SAYS}{text}\n"
                       # A PICTURE WITH THE LINE (the owner, 2026-09-30): an API brain sees it, a CLI brain reads the file it names
                       + ("ATTACHED IMAGES (read these files - they are what the owner is showing you)\n" + "\n".join(images) + "\n" if images else '')
-                      + f"Answer them, briefly. If a look-up would answer it, CALL it now instead of saying you will. "
-                      + ('If their words mean one of the actions for the item on the table, CALL it.' if item else
-                         'If they ask for something to be done, CALL it now - its button is their confirmation. ' + EMPTY_TABLE))
+                      + 'Answer them, briefly.')                        # the rest of how is the instructions' (TURN_GUIDE)
         raw = str(llm(system, asked, max_tokens=MAX_TOKENS, **({'images': general._images(images)} if images else {})) or '').strip()
+        rail_read(llm, tid, rail, rail_sent)
         raw, call = parse_call(raw)
         # A LOOK-UP runs at once and comes straight back, because it changes nothing and waits for
         # nobody. The model then answers with what it read - one round only, so a question can never

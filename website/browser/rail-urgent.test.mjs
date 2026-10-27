@@ -65,10 +65,12 @@ test("an urgent task is shaded in its place under Tasks, with no Urgent heading,
   const marked = (cls) => page.$eval(`[data-tq-rail] .tq-pile-row.${cls}`, (r) => r.getAttribute("data-tq-key")).catch(() => null);
   const onTable = (k) => page.waitForFunction((key) => document.querySelector("[data-tq-rail] .tq-pile-row.current")?.getAttribute("data-tq-key") === key
     && !document.querySelector(".tq-typing"), { timeout: 60000 }, k).catch(async () => assert.fail(`${k} never went on the table: current ${await marked("current")}`));
-  const pressNext = () => page.evaluate(() => {
-    const b = [...document.querySelectorAll("button")].find((n) => n.textContent.trim() === "Next" && !n.disabled);
-    if (!b) throw new Error("no enabled Next"); b.click();
-  });
+  // Next is held disabled while the row just opened is still busy: the owner presses it once it is live, and so does this walk
+  const pressNext = async () => {
+    await page.waitForFunction(() => [...document.querySelectorAll("button")].some((n) => n.textContent.trim() === "Next" && !n.disabled), { timeout: 30000 })
+      .catch(() => assert.fail("Next never came live"));
+    await page.evaluate(() => [...document.querySelectorAll("button")].find((n) => n.textContent.trim() === "Next" && !n.disabled).click());
+  };
   const walk = after.filter((r) => r.level === "task").map((r) => r.key), at = walk.indexOf(mid.key);
   await page.click(`[data-tq-rail] .tq-pile-row[data-tq-key="${walk[at - 1]}"] .card`);
   await onTable(walk[at - 1]);

@@ -1681,8 +1681,9 @@ def _run_kind(op: dict, background: BackgroundTasks):
         from . import concierge
         # a SELECTOR names the set - the model's, checked by select_items - and nothing else clears: a word list matching the
         # owner's sentence used to sweep whatever it hit (2026-10-08: "all these should not exist as hard coded rules")
-        if not p.get('select'): raise HTTPException(422, 'name the set to clear (select) - nothing was cleared')
-        return concierge.clear_selected(store, p['select'], ACTOR)
+        # ...or `keys`: scope table, the batch that was on the table when it was asked
+        if not p.get('select') and not p.get('keys'): raise HTTPException(422, 'name the set to clear (select) - nothing was cleared')
+        return concierge.clear_selected(store, p.get('select') or {}, ACTOR, keys=p.get('keys'))
     if kind in ('pipe.defer', 'pipe.close'):
         from . import concierge
         if not p.get('select'): raise HTTPException(422, 'name the set (select) - nothing was changed')

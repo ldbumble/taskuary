@@ -564,8 +564,10 @@ def facts(store, item: dict, whole: bool = False) -> str:
     # WHAT A BATCH CAN DO, said to the model (2026-10-08): its verbs were rewritten in code - not ours / remember / archive / close on a
     # batch all became "read", and "remember this sender" taught nothing. The model is told; it chooses
     if item['kind'] == 'fyis':
-        lines.append(f"BATCH: these {len(item.get('items') or [])} notices are one card. Its own button is done (All read, next) - for the "
-                     "whole set. A verb meant for ONE of them names it with `on` (its m-number, below): not_ours (just this one), "
+        n = len(item.get('items') or [])
+        lines.append(f"BATCH: these {n} notices are one card, of {fyi_waiting(store, item)} FYI waiting in all. Its own button is done "
+                     f"(All read, next) - for these {n} only. Words that say ALL the FYI mean every one waiting: pipe.clear "
+                     "(select kind: fyi, scope: all), never this card's button. A verb meant for ONE of them names it with `on` (its m-number, below): not_ours (just this one), "
                      "not_ours_sender (that sender's mail is filed from now on), block_sender (a rule: never reaches triage again).")
     if item['kind'] == 'meeting':
         e = item.get('event') or {}
@@ -1273,8 +1275,11 @@ def _in_words(llm, system: str, table: str, text: str, verb: str) -> tuple[str, 
 
 # THE CONTEXT ORDER for typed words over an item (the owner, 2026-10-01): asked "what's left to do?" over an idea, the model
 # listed the whole pipe; asked about another task by its person, it searched for the sentence and found nothing
+# ...but ALL of a kind is that whole lane: "Ignore all the FYI, I mean make a mark and read" over a batch of 4 marked the 4 on the table
+# read while the rest waited behind it (the owner, 2026-10-27: "I asked to mark all read and it did the 4 on the table??")
 WHAT_ABOUT = ('WHAT THEIR WORDS ARE ABOUT, in this order: the item on the table - a question that names nothing else is about it, '
-              'never the whole pipe; ANOTHER task when they name one (its TQ ref, its title or its person) - read that task with '
+              'never the whole pipe - but words that say ALL of a kind ("all the FYI", "every report") mean every one of that kind '
+              'waiting, the table\'s and the rest: pipe.clear with scope: all; ANOTHER task when they name one (its TQ ref, its title or its person) - read that task with '
               'task.read, finding its ref with tasks.list or timeline.search on the person and a subject word, never their whole '
               'sentence; an old task they ask you to FIND - search for it.')
 
@@ -1343,7 +1348,8 @@ def _canvas_table(store, item: dict, d: dict) -> list:
         ask = str(t.get('Summary') or '').strip()
     else:
         lines.append(f"  card: {item.get('kind')} ({funnel.LANE_WORDS.get(item.get('lane'), (item.get('lane'),))[0]})"
-                     + (f" - {len(item.get('items') or [])} notices on one card" if item.get('kind') == 'fyis' else ''))
+                     + (f" - {len(item.get('items') or [])} notices on one card, of {fyi_waiting(store, item)} FYI waiting in all"
+                        if item.get('kind') == 'fyis' else ''))
         ask = ''
     ask = ask or str(item.get('summary') or item.get('preview') or item.get('why') or '').strip()
     if ask: lines.append(f"  ask: {_cut(' '.join(ask.split()), 200)}")
@@ -2042,6 +2048,16 @@ def _on_the_table(store, actor: str = 'owner') -> list:
     return out
 
 
+def fyi_waiting(store, item: dict | None = None) -> int:
+    """How many FYI wait in all - the cached pile's and the batch on the table, counted once - so "all the FYI" is read against every one
+    of them, not the handful on one card."""
+    try: pool = funnel.pile(store)['items']
+    except Exception as e: logger.debug(f'concierge: no pile to count - {e}'); pool = []
+    is_fyi = lambda i: i.get('kind') != 'fyis' and 'fyi' in {str(i.get(f) or '').lower() for f in ('category', 'kind', 'lane')}
+    return len({i['key'] for i in pool if i.get('key') and is_fyi(i) and i.get('lane') not in ('blocked', 'working')}
+               | {e['key'] for e in (item or {}).get('items') or [] if e.get('key')})
+
+
 def _pipe(store) -> list:
     """The pipe AS THE OWNER SEES IT: what is unread, plus what is on the table. Counted once."""
     items = funnel.build(store)['items']
@@ -2170,9 +2186,10 @@ def close_selected(store, sel: dict, actor: str = 'owner') -> dict:
     return {'done': len(done), 'stuck': len(hits) - len(done), 'titles': [i['title'] for i in done][:8]}
 
 
-def clear_selected(store, sel: dict, actor: str = 'owner') -> dict:
-    """Mark every item a selector names read. Read, never deleted - they stay on the Timeline."""
-    items = select_items(store, sel)
+def clear_selected(store, sel: dict, actor: str = 'owner', keys: list | None = None) -> dict:
+    """Mark every item a selector names read. Read, never deleted - they stay on the Timeline. `keys`: scope table - only those of them."""
+    items = select_items(store, sel) if sel or not keys else [i for i in _pipe(store) if i['lane'] not in ('blocked', 'working')]
+    if keys: items = [i for i in items if i['key'] in set(keys)]
     cleared = [i for i in items if _clear_one(store, i['key'], actor, 'cleared by the owner')]
     _off_the_table(store, cleared, actor)
     return {'cleared': len(cleared), 'stuck': len(items) - len(cleared),
@@ -2608,6 +2625,13 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         # what is on the table: the walk's own, or the item the turn is about (a batch is its members)
         table_keys = ({i['key'] for i in _on_the_table(store, actor) if i.get('key')}
                       or {e.get('key') for e in (it.get('items') or [it]) if e.get('key')})
+        # SCOPE, the model's read of the owner's words: "mark these read" is the table's (`table`), "all the FYI" is every one waiting (`all`,
+        # the default) - the batch on the table was all a "mark all read" cleared, with the rest behind it (the owner, 2026-10-27)
+        scope = 'table' if str(params.get('scope') or '').strip().lower() == 'table' else 'all'
+        if scope == 'table':
+            named = any(v not in (None, '', [], False) for v in (sel or {}).values())
+            hits = [i for i in (hits if named else _pipe(store)) if i.get('key') in table_keys and i.get('lane') not in ('blocked', 'working')]
+            if not named: sel = {'kind': 'fyi'} if it.get('kind') == 'fyis' else {}
         if not hits and not any(v not in (None, '', [], False) for v in (sel or {}).values()):
             # a set that names nothing ("mark them all read" with nothing before it) is a question, not "nothing matches"
             say_ = (f"Which ones? {pipe_holds(store)} Say the notices, the reports, everything from one sender - or "
@@ -2645,7 +2669,9 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             # A RECEIPT, NOT A LIST (the owner, 2026-10-21: "free text should almost never be used in the assistant"): the rail shows what
             # is left; the line counts what went and says it is not gone
             n = len(cleared)
-            say_ = (f"Marked {_set_noun(sel, n)} read. Search still finds {'it' if n == 1 else 'them'}."
+            # the total, said as all of them, when it reached past the table's handful
+            every = scope == 'all' and n == len(hits) and not mine and n > len(table_keys)
+            say_ = (f"Marked {'all ' if every else ''}{_set_noun(sel, n)} read. Search still finds {'it' if n == 1 else 'them'}."
                     + (f" {plural(len(hits) - n, 'item')} would not clear." if len(hits) > n else '')
                     + (f" {plural(mine, 'item')} waiting on you stay{'s' if mine == 1 else ''} - each has its own button." if mine else ''))
             record_related(store, tid, item, 'assistant', say_)
@@ -2659,7 +2685,8 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         summary = f"{_set_noun(sel, len(hits))}{' ' + where if where else ''}: {shown}{' and more' if len(hits) > 4 else ''}"
         tail = ('They are marked read and search still finds them; nothing is deleted. '
                 + WAITS)
-        prop = _propose_raw(store, tid, 'pipe.clear', 0, {'select': sel, 'text': text}, label, summary, tail, actor, item)
+        prop = _propose_raw(store, tid, 'pipe.clear', 0, {'select': sel, 'text': text, **({'keys': [i['key'] for i in hits]} if scope == 'table' else {})},
+                            label, summary, tail, actor, item)
         # A sweep that takes the table with it has settled the table: the walk moves to the next thing
         # instead of sitting on what it just cleared (the owner, 2026-09-11: "did not move to next
         # after"). The KEY is what the page matches against Current; the server does the settling.

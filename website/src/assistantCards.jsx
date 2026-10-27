@@ -1169,7 +1169,7 @@ export function DayCards({ groups, onSection }) {
 const atLocal = (s) => new Date(String(s).replace(" ", "T")).getTime();
 const firstNames = (who = []) => who.slice(0, 2).map((w) => String(w).split(/[ @]/)[0]).join(", ") + (who.length > 2 ? ` +${who.length - 2}` : "");
 // what is ON YOU across the opener's groups: a section's `you` (summarize), or all its rows where the section is on you (lanes.json) -
-// the headline's count, and the opener's line under the card reads the same number (AssistantView welcome)
+// whether the opener's Walk has anything to walk (AssistantView welcome); the card's headline is the rail's Tasks count (DayOpener)
 export const onYouCount = (groups = []) => groups.reduce((n, g) => n + (g.you ?? (SECTION[g.key]?.on_you ? g.n ?? g.rows.length : 0)), 0);
 // `loading`: the launch is still reading the mail, so the counts are not the day's yet - they say so instead of growing under you
 export function DayOpener({ groups = [], onSection, top = null, loading = false }) {
@@ -1185,10 +1185,12 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
   // are on you (summarize - waiting on THEM, or an agent working, is under Tasks but not on you, as the greeting has always said)
   const cnt = (gs) => gs.reduce((n, g) => n + (g.n ?? g.rows.length), 0), isRead = (g) => !!SECTION[g.key]?.to_read;
   const act = groups.filter((g) => !isRead(g)), read = groups.filter(isRead);
-  const onYou = onYouCount(groups), toRead = cnt(read);
-  // ...and each band under "N on you" counts what of it is on you (lanes.census), so the rows add up to the headline - 13 sat under
-  // "12 on you" while waiting on them was counted in the band and not in the headline (the 2026-10-22 UX walk; the design, phase A)
-  const bandN = (g) => (SECTION[g.key]?.on_you ? g.you ?? g.n ?? g.rows.length : g.n ?? g.rows.length);
+  const toRead = cnt(read);
+  // ONE NUMBER, THE RAIL'S (the owner, 2026-10-27: "they should match count of tasks"): the opener said "12 on you" and its Tasks row 12
+  // beside the rail's TASKS 13 - an agent at work or a wait on them is a task on the rail and was left out here. The headline and each
+  // band count every row the rail draws under it (summarize's `n`, the rail's own count), so the opener and the rail say one number
+  const tasks = act.reduce((n, g) => n + (SECTION[g.key]?.on_you ? g.n ?? g.rows.length : 0), 0);
+  const bandN = (g) => g.n ?? g.rows.length;
   const row = (g) => (
     <button key={g.key} type="button" className={`tq-day-row lvl-${g.key}`} onClick={() => onSection?.(g.key)} title={`Walk me through ${g.word}`}>
       <i className="dot" /><b className="lbl">{g.word}</b><span className="who">{g.urgent ? `${g.urgent} urgent · ` : ""}{gistOf(g)}</span><b className="n">{loading ? "…" : bandN(g)}</b>
@@ -1239,7 +1241,7 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
       )}
       {waits && (
         <div className="tq-day-wait">
-          <div className="tq-day-h">{loading ? "Counting…" : onYou ? `${onYou} on you` : "Nothing on you"}</div>
+          <div className="tq-day-h">{loading ? "Counting…" : tasks ? plural(tasks, "task") : "Nothing on you"}</div>
           {!groups.length && <div style={{ fontSize: 13, color: "#6e685f" }}>Your mail is still being read - what needs you shows up here.</div>}
           {act.map(row)}
           {!!read.length && <div className="tq-day-h" style={{ marginTop: 8 }}>To read · {loading ? "…" : toRead}</div>}

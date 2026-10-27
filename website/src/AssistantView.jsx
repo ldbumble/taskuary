@@ -2575,7 +2575,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // ...an Advisor idea's own day when it has no task: the idea sleeps until then (C5, 2026-09-27)
     if (c.verb === "defer" && item?.kind === "idea" && item?.idea) { setRemindOn({ task: { TaskId: `idea-${item.idea}` }, path: `/api/assistant/ideas/${item.idea}/snooze`, anchor: anchor || null, ref: item.ref }); return; }
     // ...and with its agent still open the picker says to Stop and save first, instead of offering days (2026-10-01)
-    if (c.verb === "defer") { if (item?.tid) setRemindOn({ task: { TaskId: item.tid, RemindAt: item.remind_at || "" }, anchor: anchor || null, ref: item.ref, live: agentOpen(item) }); return; }
+    if (c.verb === "defer") { if (item?.tid) setRemindOn({ task: { TaskId: item.tid, RemindAt: item.remind_at || "" }, anchor: anchor || null, ref: item.ref, live: agentOpen(item), said: litDayRef.current }); return; }
     if (c.verb === "reply" || c.verb === "redraft") { await decide({ verb: c.verb }); return; }
     if ((c.verb === "accept_invite" || c.verb === "decline_invite") && item?.mid) { await calendarAnswer(item, c.verb === "accept_invite" ? "accept" : "decline"); return; }
     if ((c.verb === "propose_time" || c.verb === "find_time") && item?.mid) { setSlotsOn({ item, act: c.verb === "propose_time" ? "propose" : "schedule", anchor: anchor || null }); return; }
@@ -3111,6 +3111,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // over it would name another button (assistantLight.js); it goes out at the next press or when the table moves on
   const litTable = { key: table.key, tid: currentItem?.tid ?? Number(/^task:(\d+)$/.exec(table.key || "")?.[1] || 0) };
   const litNow = litPick(lit, litTable);
+  // the day typed with Remind me ("remind me Monday"): the walk's picker leads with it (assistantLight's light.day)
+  const litDayRef = useRef(null); litDayRef.current = litNow?.verb === "defer" ? litNow.day || null : null;
   useEffect(() => { setLit((l) => litAfter(l, litTable)); }, [litTable.key, litTable.tid, lit]);   // eslint-disable-line react-hooks/exhaustive-deps
   const shownAdvice = table.speaks && !litNow ? adviceShown(advice, { key: table.key, lane: currentItem?.lane }, busy) : null;
   // ...and the decision a WARNING in the task is read from (advice.taskNote): never put out by the Assistant's light or a turn in flight -
@@ -3342,7 +3344,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         <Tooltip title="Past chats"><IconButton size="small" onClick={openChats}><HistoryIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         <Tooltip title="New chat — archives this one"><IconButton size="small" onClick={newChat} disabled={busy || resetting}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip>
       </div>
-      {remindOn && <RemindPicker task={remindOn.task} path={remindOn.path} anchor={remindOn.anchor || document.body} live={remindOn.live} onClose={() => setRemindOn(null)}
+      {remindOn && <RemindPicker task={remindOn.task} path={remindOn.path} anchor={remindOn.anchor || document.body} live={remindOn.live} said={remindOn.said} onClose={() => setRemindOn(null)}
         onDone={(out) => { remindReceipt(out, remindOn.path ? null : remindOn.task.TaskId, remindOn.ref); if (out?.remindAt) advance(); }} />}
       {slotsOn && <SlotPicker mid={slotsOn.item.mid} act={slotsOn.act} anchor={slotsOn.anchor || document.body} onClose={() => setSlotsOn(null)}
         onRefused={(data) => calendarDrafted(data, slotsOn.item)} onPick={(slot) => calendarAnswer(slotsOn.item, slotsOn.act, slot)} />}

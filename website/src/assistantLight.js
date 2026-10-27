@@ -7,13 +7,16 @@
 // the server's `light` as the page keeps it; `landed` turns true once its item is the one on the table. `line` is what the strip says over it -
 // nothing since 2026-10-23 (the owner: "buttons do the talking", "I hate free text"): "Press Mark done when you're sure." is gone, the
 // filled button is the whole of it
+// ...and REMIND ME'S SAID DAY (concierge.said_day): "remind me Monday" lit Remind me and its picker had no Monday (the owner, 2026-10-27) -
+// the day rides the light, and the picker opened from it leads with that day
+const dayOf = (light) => (light?.verb === "defer" && light.day?.until && light.day?.day ? { until: String(light.day.until), day: String(light.day.day) } : null);
 export const lightOf = (light) => (light && (light.verb || light.key)
   ? { verb: light.verb || "", label: light.label || "", line: light.line || "", key: light.key || "",
-      tid: light.tid ? Number(light.tid) : null, landed: false } : null);
+      tid: light.tid ? Number(light.tid) : null, landed: false, ...(dayOf(light) ? { day: dayOf(light) } : {}) } : null);
 // is the lit item the one on the table - by its key, or by its task (a task brought up by name lands as its mail's row)
 export const litOn = (lit, table) => !!lit && !!table?.key && (lit.key === table.key || (!!lit.tid && Number(table.tid) === lit.tid));
 // the pick the row fills: the Assistant's, while its item is on the table - it outranks the Advisor's, which would fill another button
-export const litPick = (lit, table) => (litOn(lit, table) && lit.verb ? { verb: lit.verb, label: lit.label, line: lit.line || "" } : null);
+export const litPick = (lit, table) => (litOn(lit, table) && lit.verb ? { verb: lit.verb, label: lit.label, line: lit.line || "", ...(lit.day ? { day: lit.day } : {}) } : null);
 // the light after the table moved: it lands on its item, and once landed any other item puts it out
 export const litAfter = (lit, table) => (!lit ? null : litOn(lit, table) ? (lit.landed ? lit : { ...lit, landed: true }) : lit.landed ? null : lit);
 // ...and where its item is not on the table yet, the key to bring up (null: it is up already, or names none)

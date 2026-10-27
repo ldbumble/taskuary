@@ -20,7 +20,7 @@ from .reports import (PLANNED, REGISTRY, note_app_up, render_report, resolve_cfg
 from . import agents as hub_agents
 from . import cli_connections, pathcache
 from . import blackboard
-from . import taskstate
+from . import taskstate, stages
 from . import search
 from . import guard
 from . import policy as policy_engine
@@ -1903,7 +1903,9 @@ def task_detail(task_id: int):
             'session': session,
             # ...and what the task IS, the list's own State (taskstate): the table opens a task with no list row, and without it an
             # agent's own close read "stopped and saved" and opened on Close out (the owner, 2026-10-21)
-            'state': _task_state(task_id, d, session),
+            'state': (st := _task_state(task_id, d, session)),
+            # ...and WHERE IT IS UP TO, at rest (stages.json, the owner 2026-10-26): the page reads its own from what it draws, the same rules
+            'stage': stages.of_task(store, d['task'], st),
             # ...and who closed it and why, one line, when its agent did (taskstate.closed_why)
             'closedWhy': taskstate.closed_why(store, d['task'], d.get('comments')),
             # ...and how its last run ENDED, in the run's own word (finished / failed / stopped / disconnected) - what taskstate read

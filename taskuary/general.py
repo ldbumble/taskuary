@@ -485,7 +485,7 @@ FINISH_LINE = ("Finish the job in this turn. Your answer is what the owner gets:
 HISTORY_LINE = ("THE OWNER'S HISTORY IS IN TASKUARY - SEARCH IT FIRST. For anything about the owner's mail, messages, tasks or people, "
                 'run `taskuary --search "words" --from "name or address" --subject "..." --since YYYY-MM-DD --until YYYY-MM-DD` '
                 '(any of them; each hit prints its id, when, who, subject, thread and a snippet), then `taskuary --message ID` for one '
-                'in full with its thread. That is the way in: never write scripts or code to read a mailbox, mail files or '
+                'in full with its thread; `taskuary --memory` prints what Taskuary has learned about the owner. That is the way in: never write scripts or code to read a mailbox, mail files or '
                 "Taskuary's database, and never go around it. If the search finds nothing, say so and say what you searched for.")
 
 

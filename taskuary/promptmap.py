@@ -24,7 +24,7 @@ def _blocks_triage(store, msg: dict, mid: int) -> list:
          'source_name': msg.get('SourceName'), 'channel': msg.get('Channel')}
     doc = store.doc('triage') or ''
     base = doc.strip() or INTENT_SYSTEM
-    soul, learned = store.doc('soul') or '', learned_cut.for_reader(store, 'triage', learned_cut.about_mail(m), people=learned_cut.people_of(msg))
+    soul, learned = store.doc('soul') or '', learned_cut.whole(store, 'triage')
     notes, left = relevant_notes(store, [m['from_email'] or ''],
                                  f"{m['subject'] or ''} {m['body'] or ''}"[:4000],
                                  subject=m['subject'] or '', source=m['source_name'] or '')

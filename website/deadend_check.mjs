@@ -311,7 +311,9 @@ async function pageOn(srv, phase) {
   page.on("pageerror", (e) => note("CRASH", page.step, e.message));
   page.expect = new Set();                                           // an /api path whose failure the step forced on purpose
   page.adviceReads = [];                                             // when each read of the Advisor's line went out (REREAD)
-  page.on("request", (r) => { if (new URL(r.url()).pathname === "/api/advice") page.adviceReads.push(Date.now()); });
+  page.posts = [];                                                   // when each act went to the server, and where (a press that landed)
+  page.on("request", (r) => { const u = new URL(r.url()).pathname; if (u === "/api/advice") page.adviceReads.push(Date.now());
+    else if (r.method() === "POST") page.posts.push([Date.now(), u]); });
   page.on("response", async (r) => {
     const u = new URL(r.url());
     if (!u.pathname.startsWith("/api/") || r.status() < 400 || u.pathname === "/api/test/fault") return;
@@ -479,12 +481,20 @@ const receipts = (before, after, at) => {
 // the task, 2026-10-19). A draft's Send lives UNDER THE DRAFT only (the owner, 2026-10-22): the bar keeps an empty slot, so the walk
 // presses the card's own button - its first visible, live one that starts with a Send word
 const sendWords = [label("approve"), ...Object.values(VERBS.approve?.states || {})];
+// ...pressed from inside the page, as pressVerb does, and stamped when it is pressed (REREAD and AGAIN count from the press, not the search)
 const pressCardSend = async (page) => {
   const h = (await page.evaluateHandle((words) => [...document.querySelectorAll("[data-tq-task-page] button")].find((b) => !b.disabled
     && b.getBoundingClientRect().width > 0 && words.some((w) => b.innerText.trim().startsWith(w))) || null, sendWords)).asElement();
-  if (!h) return false;
-  await h.click(); mark("approve", page.step); return true;
+  if (!h || !(await tap(page, h))) return false;
+  mark("approve", page.step); return true;
 };
+// a press from inside the page: a node gone by then is not pressed, never a crash; `pressedAt` is when the click ran
+const tap = (page, e) => e.evaluate((x) => x.isConnected && (x.scrollIntoView({ block: "nearest" }), x.click(), true)).catch(() => false)
+  .then((ok) => { if (ok) page.pressedAt = Date.now(); return ok; });
+// ...and a ▾ menu waited on, open and shut: on CI's slower runner the menu was not drawn 400 ms after its ▾, the Escape went to the page,
+// and the menu opened after it - its backdrop then took the draft's Send, so no send went out and the failure was never drawn (0.3.9.50)
+const menuUp = (page) => page.evaluate(() => [...document.querySelectorAll('[role="menu"]')].some((m) => m.getBoundingClientRect().width > 0));
+const until = async (f, ms = 3000) => { for (const t = Date.now(); Date.now() - t < ms; await wait(100)) if (await f()) return true; return false; };
 const cardSends = (s) => s.cardBtns.some((b) => !b.off && sendWords.some((w) => b.word.startsWith(w)));
 // ...a greyed button is not one to press (the owner, 2026-10-22: a button that cannot work is greyed, its reason in the hover) - a click
 // on it does nothing, and the walk took that for a start and judged the screen it never left
@@ -502,14 +512,16 @@ const pressVerb = async (page, verb) => {
   const h = (await rowHandle(page, verb)).asElement();
   // ...pressed from inside the page, as walkdriver does: a menu redrawn between the find and a remote click threw "Node is either not
   // clickable or not an Element" and ended the faults pass on CI (0.3.9.50) - a node gone by then is looked for again, not a crash
-  const tap = (e) => e.evaluate((x) => x.isConnected && (x.click(), true)).catch(() => false);
-  if (h && (await tap(h))) { mark(verb, page.step); return true; }
+  if (h && (await tap(page, h))) { mark(verb, page.step); return true; }
   for (const m of await page.$$eval("[data-tq-row] [data-tq-more]", (e) => e.map((x) => x.dataset.tqMore))) {
-    await page.evaluate((m) => document.querySelector(`[data-tq-row] [data-tq-more="${m}"]`)?.click(), m); await wait(400);
+    await page.evaluate((m) => document.querySelector(`[data-tq-row] [data-tq-more="${m}"]`)?.click(), m);
+    if (!(await until(() => menuUp(page)))) continue;
     const i = (await menuHandle(page, verb)).asElement();
-    if (i && (await tap(i))) { mark(verb, page.step); walked.push(`${page.step}: ${verb} pressed from the ${m} ▾`); return true; }
-    await page.keyboard.press("Escape"); await wait(300);
+    if (i && (await tap(page, i))) { mark(verb, page.step); walked.push(`${page.step}: ${verb} pressed from the ${m} ▾`); return true; }
+    await page.keyboard.press("Escape");
+    if (!(await until(async () => !(await menuUp(page))))) note("STUCK", page.step, `the ${m} ▾ menu did not close on Escape`);
   }
+  if (await menuUp(page)) { await page.keyboard.press("Escape"); await until(async () => !(await menuUp(page))); }   // one drawn late
   return false;
 };
 const pressNext = async (page) => { const h = await page.$("[data-tq-row] [data-tq-next]"); if (!h) return false; await h.click(); mark("next", page.step); return true; };
@@ -547,7 +559,8 @@ async function settle(page, at, ms = 5000) {
     await wait(250);
   }
 }
-// REREAD: after a press on the row the advice is read again for the item as the act left it - a GET /api/advice within 2.5 s
+// REREAD: after a press on the row the advice is read again for the item as the act left it - a GET /api/advice within 2.5 s of the press
+// ...counted from the click itself (page.pressedAt): from before the ▾ menus were searched for Send, the search ate the 2.5 s on CI (0.3.9.50)
 const reread = (page, t0, at) => { if (!page.adviceReads.some((t) => t > t0 && t - t0 < 2500)) note("REREAD", at, "a press on the row and no fresh read of the Advisor's line after it"); };
 
 // AGAIN: a press of the lit button that was refused or failed - the advice is read again, and its new line must light the way past it,
@@ -571,7 +584,7 @@ async function walk() {
     if (s.verbs.some((v) => v.word.startsWith("Open TQ"))) break;
     const before = s, has = (verb) => s.verbs.some((v) => verbOfId(v.id) === verb), t0 = Date.now();
     if (!did.has("approve") && (has("approve") || cardSends(s)) && ((await pressVerb(page, "approve")) || (await pressCardSend(page)))) {
-      did.add("approve"); await wait(2600); reread(page, t0, at); await again(page, before, t0, sendWords, at);
+      did.add("approve"); await wait(2600); reread(page, page.pressedAt || t0, at); await again(page, before, page.pressedAt || t0, sendWords, at);
     }
     else if (!did.has("close") && has("close")) {
       did.add("close"); await pressVerb(page, "close"); await wait(1200);
@@ -680,7 +693,17 @@ async function faults() {
   const fresh = async () => { await page.goto(`${srv.base}/`, { waitUntil: "load" }); await wait(5000); await clickText(page, "Walk me through my tasks"); await wait(4000); };
   const outs = (s) => [...s.verbs.filter((v) => !v.next && !v.off).map((v) => ({ word: v.word, id: v.id, row: true })), ...s.cardBtns.filter((b) => !b.off).map((b) => ({ word: b.word }))];
   // press the draft's Send: the card's own, under the draft (a proposal's row verb first, where one is on the bar)
-  const send = async () => (await pressVerb(page, "approve")) || (await pressCardSend(page));
+  // ...and see it reach the server: on CI a Send pressed while the card was still settling sent nothing, and the pass judged the untouched
+  // draft as a failure with no way out (0.3.9.50). A press that sent nothing is pressed again; three that send nothing are the finding.
+  const send = async () => {
+    for (let i = 0; i < 3; i++) {
+      const t = Date.now();
+      if (!((await pressVerb(page, "approve")) || (await pressCardSend(page)))) return i ? "lost" : false;
+      if (await until(async () => page.posts.some(([at, u]) => at >= t && /^\/api\/reviews\/\d+\/decide$/.test(u)), 5000)) return true;
+      walked.push(`${page.step}: Send pressed and nothing went to the server - pressed again`);
+    }
+    return "lost";
+  };
   // after a forced failure: the screen must carry a way out from the list, and pressing it must do something
   // ...looked for until it is drawn, up to 15 s: CI's slower machine still showed the draft ("Answering ...") 6 s after the failed send,
   // and the faults pass judged that screen as one with no way out (0.3.9.50)
@@ -715,7 +738,9 @@ async function faults() {
     for (const r of (await look(page)).rail.filter((x) => x.status === "approve")) {
       if (!(await openItem(page, r.key))) continue;
       before = await look(page); t0 = Date.now();
-      if (await send()) { sent = true; break; }
+      const went = await send();
+      if (went === "lost") note("WAYOUT", page.step, "Send was pressed three times and no send went to the server");
+      if (went) { sent = true; break; }
     }
     if (!sent) { note("WAYOUT", page.step, "no draft in the seeded world shows a Send to press"); await fault(""); continue; }
     await again(page, before, t0, sendWords, page.step);

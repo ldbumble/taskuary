@@ -2,7 +2,7 @@
 // one row above the chat line (ActionRow.jsx) draws them, in the same place for every item. A verb is the card's own handler,
 // unchanged: the row calls the LATEST one, so a press costs what the old button cost and nothing in the card re-renders for it.
 // Only a change in what the row SHOWS (a label, a disabled flag, a verb arriving or going) wakes the row; a fresh closure does not.
-import React, { createContext, useContext, useEffect, useId, useSyncExternalStore } from "react";
+import React, { createContext, useContext, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { label, liveVerb, verbOfRow } from "./buttons.js";
 
 // verb: { id, label, group: "decide" | "agent" | "more" | "next", tone: "p" | "s" | "q", title, disabled, why, run(event, anchorEl) }
@@ -42,6 +42,46 @@ function draw() {
   if (s === sig) return;
   sig = s; snap = next; subs.forEach((f) => f());
 }
+// THE ROW DRAWS ONCE (the owner, 2026-10-27: "I reopened a task and there were no buttons on the bottom, then it reloaded the buttons ...
+// not to load then reload"). A new item's row came up in steps, recorded per frame (browser/row-draws-once): the press dropped the old
+// item's verbs and left Next alone and greyed; the new card's verbs arrived; the row went hidden while the Advisor read the item (up to
+// 400 ms); then it came back, and changed once more when the lit verb landed and reshuffled it. Reopen drew the open task's verbs off a
+// local guess, then the re-read's, then the Advisor's Reply. Now the row the owner was looking at STAYS drawn, as it was, its presses
+// inert, until the new row is whole - the item's card has registered its verbs, the walk move is over and the Advisor's read made after
+// the change is in - or ROW_HOLD_MS has gone by. Then the new row is drawn in one step. Never an empty row, never a greyed interim.
+export const ROW_HOLD_MS = 600, ROW_STUCK_MS = 1500;   // ...and whatever is up, never longer than ROW_STUCK_MS
+// ready: nothing on the table and nothing being left - or an item on it that is not the one being left, with verbs of its own on the
+// row, no walk move under way (`moving`: its answer still decides what is lit) and the Advisor's read of it (`read`: {key, round}, the
+// press round it was made in) made after the last press on it (`round`)
+export const rowReady = ({ key = null, leaving = null, moving = false, read = null, round = 0, list = [], keyed = true }) =>
+  !moving && rowDrawable({ key, leaving, list, keyed }) && (!key || (read?.key === key && (read.round || 0) >= round));
+// ...and what the row may be drawn as when the wait runs out: the item's own verbs up, none of the one being left - never a lone Next
+// between two items. A task's view registers its verbs under its table key (`keyed`, TableVerbs); a report's, a batch's or a message's
+// card registers none, so there any verb but the floor's is the item's
+export const rowDrawable = ({ key = null, leaving = null, list = [], keyed = true }) => (!key ? !leaving : key !== leaving
+  && (keyed ? list.some((v) => v.at === key) : list.some((v) => !v.at && !String(v.id).startsWith("floor:"))));
+// the hold, numbered (0: none): from each change of `sig` - the table, the item being left, the press round - until ready and the row's
+// buttons (`shape`: what the live row would draw) have stood still ROW_QUIET_MS - an item's own reads land a beat apart (a meeting's
+// answers after its task) - and once let go it stays let go for that change (a card re-registering its verbs is not a new item). The
+// wait is capped where it shows: ActionRow draws the live row ROW_HOLD_MS after the new item's own verbs are up
+export const ROW_QUIET_MS = 120;
+export function useRowHold(sig, ready, shape = "") {
+  const at = useRef({ sig: null, n: 0 }), freed = useRef(0), still = useRef({ shape: null, t: 0 }), [, wake] = useState(0);
+  if (at.current.sig !== sig) at.current = { sig, n: at.current.n + 1 };
+  const now = performance.now();
+  if (still.current.shape !== shape) still.current = { shape, t: now };
+  const quiet = now - still.current.t >= ROW_QUIET_MS, n = at.current.n, holding = freed.current !== n;
+  useEffect(() => {
+    if (!holding || !ready || quiet) return undefined;
+    const t = setTimeout(() => wake((k) => k + 1), ROW_QUIET_MS - (performance.now() - still.current.t) + 1);
+    return () => clearTimeout(t);
+  });
+  if (ready && quiet) freed.current = n;
+  return freed.current === n ? 0 : n;
+}
+// ...while it holds, the row drawn follows the live one only where they are the same buttons for the same item - a label turned to its
+// busy word ("Reopening…"), a flag - so the press still answers at once
+export const sameRow = (a, b) => { const ids = (r) => (r?.list || []).map((v) => `${v.id}@${v.at || ""}`).join("|"); return ids(a) === ids(b); };
 // EVERY PRESS IS AN ACT THE ADVISOR MUST SEE (2026-10-19): its line was read when the item opened and never again, so after Send it
 // still said the sender was waiting. Whoever shows advice hears each press once it settles (onPressed) and reads it again.
 // A card's own button that acts without the row (the draft's Send under it) says so the same way: acted(id).

@@ -96,7 +96,7 @@ test("a task's Next is the row's button: registered by the view, drawn above the
   assert.match(item, /useVerbs\("next", \[\{ id: "next", group: "next", label: btnLabel\("next"\), disabled: !!busy && !picking, steady: true, run: \(\) => onNext\(\)/);   // a pick in flight leaves it pressable (2026-10-26)
   assert.doesNotMatch(item, /data-tq-next/);
   assert.match(src("ActionRow.jsx"), /data-tq-next=""/);
-  assert.match(view, /<ActionRow advised=\{stripPick \|\| setupLit\}( hold=\{[^}]*\})? \/>/);   // no task number or waiting words on the row (2026-10-13)
+  assert.match(view, /<ActionRow advised=\{stripPick \|\| setupLit\}( hold=\{[^}]*\})?( early=\{[^}]*\})? \/>/);   // no task number or waiting words on the row (2026-10-13)
   assert.doesNotMatch(src("TaskPage.jsx"), /data-tq-next/);
 });
 

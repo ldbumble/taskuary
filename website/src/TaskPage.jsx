@@ -240,6 +240,7 @@ const FROM_SIDE = { position: "absolute", top: 0, left: 0, bottom: 0, width: "mi
 // one on the right, each laid OVER the main view behind a tab, so nothing under it reflows. Two columns cut the owner's 1600x810 laptop
 // to a ~700px work column whose failure reason sat out of sight. A phone (the body under 760px) keeps its stacked page.
 const STACK_BELOW = 760;
+const REOPEN_ROW_MS = 2500;     // the longest the row says "Reopening…" past the server's yes, waiting on the re-read to draw from
 // ...the main view the whole width, as a live agent's is (the owner, 2026-10-26: "no main view should fill the screen. why waste space?" -
 // a 900px column had been tried), scrolling on its own
 const MAIN = { width: "100%", flex: "0 1 auto", minHeight: 0, overflowY: "auto", scrollbarWidth: "thin", overflowAnchor: "none" };
@@ -659,9 +660,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     setErr(""); setReopening(id);
     try { await runOperation(api, "task.reopen", id); }
     catch (e) { setReopening(null); if (!stale(id)) setErr(opError(e, "The task did not reopen - press Reopen task again.")); return; }
-    setReopening(null);
     if (!stale(id)) setDetail((d) => (d?.task?.TaskId === id ? reopenedDetail(d) : d));
-    loadDetail(id); loadTasks(); onChanged?.();
+    loadTasks(); onChanged?.();
+    // ...AND THE ROW DRAWS ONCE (the owner, 2026-10-27: "I reopened a task and there were no buttons on the bottom, then it reloaded the
+    // buttons"): the page opens at the answer, but the row's verbs drawn off that local guess (Mark done, Close with a note) were swapped
+    // a beat later for the re-read's (Reply). The row keeps "Reopening…" until the re-read is in - at most REOPEN_ROW_MS - and then
+    // draws the open task's verbs in one step
+    await Promise.race([loadDetail(id), new Promise((r) => setTimeout(r, REOPEN_ROW_MS))]).catch(() => {});
+    setReopening((r) => (r === id ? null : r));
   };
   const queueNote = async () => {
     if (!waitText.trim() || !selected) return;
@@ -1644,7 +1650,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   ];
   // ...and DARK while the agent is running (the owner, 2026-10-20): not over a turn that finished or a question - those are waiting
   const stopSave = { id: "save-end", group: "agent", lead: !pendingReview, fill: liveSession && agentState === AGENT.working && !pendingReview, label: labelOfRow("save-end"), disabled: !!wrapping, run: wrapUp, title: hintOfRow("save-end") };
-  const rowVerbs = !t ? [] : !notDone
+  const rowVerbs = !t ? [] : !notDone || reopening === selected
     ? [{ id: "reopen", group: "decide", tone: "s", label: reopening === selected ? "Reopening…" : labelOfRow("reopen"), run: reopen,
       disabled: reopening === selected, why: "it is reopening", title: hintOfRow("reopen") }]
     : [

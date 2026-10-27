@@ -17,7 +17,8 @@ test("Assistant sends the message revision it saw and a newer live-chat line ref
 test("an open Assistant always pulls durable provider corrections", () => {
   assert.match(view, /Provider messages can arrive while this conversation is already open/);
   assert.match(view, /const \{ data: st \} = await api\.get\("\/api\/concierge"\)/);
-  assert.match(view, /onLive\(\["feed-changed", "task-changed"\], \(ev, meta\) => \{ if \(!coveredByReload\(meta, forcedLoadStartedAt\.current\)\) loadPile\(true\); \}, \{ wait: 1500, max: 5000 \}\)/);
+  assert.match(view, /onLive\(\["feed-changed", "task-changed"\], \(ev, meta\) => reloadFor\(meta\),\n\s+\{ wait: \(ev\) => \(mine\(ev\) \? 1500 : Math\.max\(0, forcedLoadStartedAt\.current \+ 1000 - Date\.now\(\)\)\), max: 5000 \}\)/);
+  assert.match(view, /const stale = \(\) => !coveredByReload\(meta, forcedLoadStartedAt\.current\) && !covers\(pileSeen\.current\.seq, meta\);/);
   assert.match(view, /pollWhileActive\(active, \(\) => \{\s*if \(first \|\| !liveUp\(\) \|\| \+\+n % 10 === 0\) loadPile\(false\);\s*else readChat\(\)/);
   // under a live socket the tick reads only the chat: provider turns push no event (store.add_comment)
   assert.match(view, /if \(!\(await readChat\(epoch\)\)\) return;/);

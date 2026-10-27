@@ -7,6 +7,7 @@ import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import { pollWhileVisible } from "./visible.js";
 import { holdLive, onLive } from "./live.js";
+import { covers, seqOf } from "./liveSeq.js";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import GridViewIcon from "@mui/icons-material/GridViewOutlined";
@@ -441,9 +442,15 @@ export default function TaskHubPage() {
   useEffect(() => { if (tab === "Board") setEverBoard(true); }, [tab]);
   useEffect(() => { if (tab === "Assistant") setEverAssistant(true); }, [tab]);
 
+  // ...the write stamp of the newest count drawn (liveSeq.js): a burst it was already read after is not counted again - an FYI press
+  // counted on its answer and then twice more on the wake-ups its own settle sent (the overnight walk, 2026-10-26)
+  const pendingSeen = useRef({ seq: null, n: 0 });
   const refreshPending = useCallback(async () => {
+    const n = ++pendingSeen.current.n;
     try {
-      const rows = (await api.get("/api/reviews", { params: { status: "pending" } })).data.data || [];
+      const res = await api.get("/api/reviews", { params: { status: "pending" } }), rows = res.data.data || [];
+      if (n !== pendingSeen.current.n) return;          // a count asked for since is the newer one
+      pendingSeen.current.seq = seqOf(res);
       setPending(new Set(rows.map((r) => r.TaskId ?? `rv:${r.ReviewId}`)).size);
     }
     catch { /* badge is optional */ }
@@ -451,7 +458,8 @@ export default function TaskHubPage() {
   useEffect(() => { refreshPending(); }, [refreshPending, tick]);
   // The badge counts a queue the server changes on its own - a drafter finishing, a reply that
   // landed. Counting only on mount and on the refresh icon left "Tasks · 2" over three drafts.
-  useEffect(() => onLive(["feed-changed", "task-changed"], refreshPending, { wait: 250, max: 1500 }), [refreshPending]);
+  useEffect(() => onLive(["feed-changed", "task-changed"], (ev, meta) => { if (!covers(pendingSeen.current.seq, meta)) refreshPending(); },
+    { wait: 250, max: 1500 }), [refreshPending]);
 
   // EVERY OLD LINK STILL LANDS - in the canvas (canvasLinks.js): #task=123 opens that task's view, #connector=,
   // #settings=, #report=, #playbook= open their browse card, #new-task the New sheet, #msg= that message's card

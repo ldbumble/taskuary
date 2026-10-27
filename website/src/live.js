@@ -7,6 +7,8 @@
 // the deferred event. A dropped socket reconnects, then sends hello so nothing is missed.
 // While it is down a slow fallback keeps the screen from freezing.
 
+import { mine, stampOf } from "./liveSeq.js";
+
 const DEMO = (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_DEMO === "1");
 
 const subs = new Set();
@@ -86,25 +88,40 @@ export function holdLive() {
 // debounce is not enough on its own: while the rows keep landing the timer keeps being pushed out, so
 // a chatty agent starved the refresh entirely until its 30-second safety poll came round (2026-09-10
 // audit). `max` is the ceiling - after that long waiting, the next event goes straight through.
+// ...and `wait` may be a function of the event: the rail waits out a burst of the page's OWN presses (their answers bring the rows) and
+// reads anything else at once - an event that waits for nothing sends the burst it joins straight through.
 export function onLive(kinds, fn, opts) {
   const want = new Set(!kinds ? [] : (typeof kinds === "string" ? [kinds] : kinds));
-  const wait = Number(opts?.wait) || 0, max = Number(opts?.max) || 0;
-  let dirty = false, coalesce = 0, waitingSince = 0, lastAt = 0;
+  const waitOf = typeof opts?.wait === "function" ? opts.wait : () => Number(opts?.wait) || 0, max = Number(opts?.max) || 0;
+  let dirty = false, coalesce = 0, waitingSince = 0, lastAt = 0, burst = null;
   // the callback is told when its burst began and when its newest event arrived, so a listener
-  // that already refetched after the newest event can tell it has nothing left to fetch
-  const fire = (ev) => {
-    const meta = { firstAt: waitingSince || lastAt, lastAt };
-    clearTimeout(coalesce); coalesce = 0; waitingSince = 0; fn(ev, meta);
+  // that already refetched after the newest event can tell it has nothing left to fetch - and (liveSeq.js) the newest write stamp
+  // of the burst, null when any of it was unstamped, and whether every event in it was this page's own
+  const note = (ev) => {
+    const s = stampOf(ev);
+    burst = !burst ? { seq: s, mine: mine(ev) } : { seq: burst.seq == null || s == null ? null : Math.max(burst.seq, s), mine: burst.mine && mine(ev) };
   };
+  const fire = (ev) => {
+    const meta = { firstAt: waitingSince || lastAt, lastAt, ...(burst || { seq: null, mine: false }) };
+    clearTimeout(coalesce); coalesce = 0; waitingSince = 0; burst = null; fn(ev, meta);
+  };
+  // a burst's moment moves later with each event while it trails (a plain `wait`, or a burst that is all this page's own); one with
+  // anything else in it keeps the soonest moment any of its events asked for
+  const trails = typeof opts?.wait !== "function";
+  let dueAt = 0;
   const got = (ev) => {
     if (!visible()) { dirty = true; return; }
     dirty = false;
     lastAt = Date.now();
-    if (!wait) return fn(ev, { firstAt: lastAt, lastAt });
+    const wait = waitOf(ev);
+    if (!wait && !coalesce) return fn(ev, { firstAt: lastAt, lastAt, seq: stampOf(ev), mine: mine(ev) });
+    note(ev);
     if (!waitingSince) waitingSince = Date.now();
-    if (max && Date.now() - waitingSince >= max) return fire(ev);
+    if (!wait || (max && Date.now() - waitingSince >= max)) return fire(ev);
+    const at = lastAt + wait;
+    dueAt = !coalesce || trails || burst.mine ? at : Math.min(dueAt, at);
     clearTimeout(coalesce);
-    coalesce = setTimeout(() => fire(ev), wait);
+    coalesce = setTimeout(() => fire(ev), Math.max(0, dueAt - Date.now()));
   };
   const rec = { want, got };
   subs.add(rec);

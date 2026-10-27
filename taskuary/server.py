@@ -1,7 +1,7 @@
 """The local HTTP API + built-in minimal web UI. Localhost-only by default; set
 [server].token in config to require an X-Taskuary-Token header (for LAN/self-hosting).
 """
-import asyncio, collections, contextlib, copy, json, re, secrets, sys, threading, time, weakref
+import asyncio, collections, contextlib, contextvars, copy, json, re, secrets, sys, threading, time, weakref
 import requests
 from starlette.concurrency import run_in_threadpool
 from contextlib import asynccontextmanager
@@ -332,6 +332,21 @@ async def request_log(request: Request, call_next):
         why = f' - store.lock wait {waited[0]:.1f}s, ran {max(0.0, took - waited[0]):.1f}s' if took >= SLOW_REQUEST else ''
         (logger.info if took >= SLOW_REQUEST else logger.debug)(
             f'{request.method} {request.url.path} -> {resp.status_code} ({int(took * 1000)}ms){why}')
+    return resp
+
+_TAB_ID = re.compile(r'[A-Za-z0-9-]{1,40}')
+
+@app.middleware('http')
+async def live_stamp(request: Request, call_next):
+    # WHICH WRITES THIS ANSWER HAS SEEN, AND WHOSE WRITES THEY ARE (live.seq / live.TAB, the load-once pass 2026-10-27): the page names
+    # its tab on every request, so the wake-ups its own presses cause say so, and every answer carries the newest write stamp there was
+    # as it began - a read begun then has seen every write stamped up to it, and the page skips a re-read of what it already holds
+    tab = request.headers.get('x-taskuary-tab') or ''
+    token = live_bus.TAB.set(tab if _TAB_ID.fullmatch(tab) else None)
+    seen = live_bus.seq()
+    try: resp = await call_next(request)
+    finally: live_bus.TAB.reset(token)
+    if request.url.path.startswith('/api'): resp.headers['X-Taskuary-Seq'] = str(seen)
     return resp
 
 # the redirects back from a provider's sign-in: no header can ride on one, so each proves itself with the one-time state it was issued
@@ -5053,7 +5068,7 @@ def _pile_payload(force: bool = False, current: str = None, only: str = None,
     from . import funnel
     from .funnel_selection import capture_selection
     from .processing_navigation import fields
-    started = time.time()
+    started, seen = time.time(), live_bus.seq()
     # funnel.pile owns invalidation and single-flight across open tabs. Capture navigation
     # from that exact cached pile; capture_selection accepts it specifically so this endpoint
     # does not rebuild canonical membership a second time.
@@ -5064,7 +5079,10 @@ def _pile_payload(force: bool = False, current: str = None, only: str = None,
     # generated_at: when this read BEGAN (server clock, ms) - the page compares it to its live events
     # to know which writes this read already saw (funnelPile.coveredByReload); transient, outside the revision
     # display_revision: the slot is held where it always sat - the final present() below fills it over the rows sent
+    # live_seq: the newest write stamp the rows were built after (live.seq) - the cached build's own when the cache answered, so a
+    # wake-up this read already holds is not read again (AssistantView's reload check); never a later one than the build saw
     p = {**capture.pile, 'display_revision': None, **fields(store, capture), 'generated_at': int(started * 1000),
+         'live_seq': cached.get('live_seq') if cached is not None else seen,
          'alerts': funnel.desk_alerts(funnel.alerts(store, capture.pile['items'])), 'events': events}
     # ...and what the page is HOLDING: an item whose review was decided (or whose task closed)
     # leaves the pile, and nothing told the page - so a sent reply sat on the table as
@@ -5447,6 +5465,9 @@ async def concierge_stream(body: ConciergeStreamBody):
             _ANSWERING.discard(cancel)
             if reservation: reservation.close()
     try:
+        # ...with the request's context: the turn's writes are the page's own press (live.TAB), as they would be on the request's thread
+        ctx, turn = contextvars.copy_context(), work
+        def work(): ctx.run(turn)               # (named as the turn it runs: a thread is told apart by its target's name)
         threading.Thread(target=work, daemon=True).start()
     except BaseException:
         if reservation: reservation.close()

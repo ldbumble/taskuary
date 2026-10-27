@@ -38,21 +38,25 @@ test("one row: the action row and the box share a line, the answer pops up over 
   const say = JSON.stringify(rest);
   assert.ok(rest.line <= 46, `the row and the box are one line ${say}`);
   assert.ok(rest.mid <= 3 && rest.after, `the pill stands at the row's end, on its line ${say}`);
-  assert.ok(rest.pill >= 200 && rest.pill <= 240 && !rest.open && rest.tools === "none", `a pill at rest ${say}`);
-  assert.equal(rest.hint, "Tell me what to do…");
+  // ...a SMALL pill (the owner, 2026-10-27: "yes shrink the chat box"): at 220px it folded Mark done and Send to agent behind a ▾ on a laptop
+  assert.ok(rest.pill >= 110 && rest.pill <= 130 && !rest.open && rest.tools === "none", `a pill at rest ${say}`);
+  assert.equal(rest.hint, "Ask…");
 
-  // FOCUSED: it widens, shows its tools, and the groups fold for the room - Next stays
+  // FOCUSED: it opens UP AND OVER the canvas with its tools, and the row under it does not move or fold (the owner, 2026-10-27: "it should
+  // always be the same size and words, unless you click when it should expand up and above over the canvas like it was mocked up")
   await page.click(".tq-compose-box textarea");
   await page.waitForSelector(".tq-compose-box[data-tq-open]", { timeout: 5000 });
   await sleep(300);
   const wide = await page.evaluate(() => {
     const line = document.querySelector(".tq-dock .tq-dock-line"), pill = line.querySelector(".tq-compose-box"), verbs = line.querySelector(".tq-arow-verbs");
     return { pill: Math.round(pill.getBoundingClientRect().width), tools: getComputedStyle(line.querySelector(".tq-compose-tools")).display, line: Math.round(line.getBoundingClientRect().height),
+      above: Math.round(line.getBoundingClientRect().top - pill.getBoundingClientRect().top),
       next: !!verbs.querySelector("[data-tq-next]"), over: verbs.scrollWidth - verbs.clientWidth, labels: [...verbs.querySelectorAll("button")].map((b) => b.textContent.trim()) };
   });
   assert.ok(wide.pill > rest.pill + 150 && wide.tools !== "none", `it widens with its tools ${JSON.stringify(wide)}`);
   assert.ok(wide.next && wide.over <= 1 && wide.line <= 46, `still one line, Next on it, nothing past its edge ${JSON.stringify(wide)}`);
-  assert.ok(wide.labels.length < rest.labels.length, `the groups folded for the room ${JSON.stringify({ rest: rest.labels, wide: wide.labels })}`);
+  assert.ok(wide.above > 10, `it rises over the canvas, above the row's line ${JSON.stringify(wide)}`);
+  assert.deepEqual(wide.labels, rest.labels, "nothing on the row folded or moved while the box is open");
 
   // SENT: the answer comes up above the box, over the task view - which does not move or change size
   const view = await box(page, "[data-tq-canvas-item]"), dock = await box(page, ".tq-dock");

@@ -1,0 +1,45 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { startHarness } from "./harness.mjs";
+
+/* THE SMALL PILL LEAVES A LAPTOP ITS BUTTONS (the owner, 2026-10-27: "yes shrink the chat box"). At 220px the one-row bar's chat pill took
+   the room Mark done and Send to agent need, and on a 1366-1600px laptop they folded behind a ▾ - two clicks each, and Mark done's next
+   card ~500-800 ms instead of ~200. At rest the pill is ~120px ("Ask…"): both stay on the row, on one line, at every laptop width. */
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+test("at rest the pill is small and one line at 1366, and leaves Mark done and Send to agent on the row at 1600px", { timeout: 300000 }, async (t) => {
+  const harness = await startHarness();
+  t.after(() => harness.close());
+  const page = await harness.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.setViewport({ width: 1600, height: 810, deviceScaleFactor: 1 });
+  await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
+  await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 30000 });
+  const tasks = (await (await fetch(`${harness.fixtureApi}/api/tasks`, { headers: { "X-Taskuary-Token": harness.token } })).json()).data;
+  const reply = tasks.find((x) => /^Invoice 88213/.test(x.Title));
+  assert.ok(reply, "the demo's invoice reply");
+  await page.evaluate((id) => { location.hash = `task=${id}`; }, reply.TaskId);
+  await page.waitForSelector(`[data-tq-task-page="${reply.TaskId}"]`, { timeout: 20000 });
+  await page.waitForSelector(".tq-dock [data-tq-row] [data-tq-next]", { timeout: 20000 });
+  for (const width of [1366, 1440, 1600]) {
+    await page.setViewport({ width, height: 810, deviceScaleFactor: 1 });
+    await sleep(1500);
+    const s = await page.evaluate(() => {
+      const line = document.querySelector(".tq-dock .tq-dock-line"), pill = line.querySelector(".tq-compose-box");
+      const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+      return { pill: Math.round(pill.getBoundingClientRect().width), line: Math.round(line.getBoundingClientRect().height),
+        verbs: [...line.querySelectorAll("[data-tq-row] button[data-tq-verb]")].filter(vis).map((b) => b.getAttribute("data-tq-verb").split(":").pop()) };
+    });
+    const say = `${width}px ${JSON.stringify(s)}`;
+    assert.ok(s.pill <= 130, `the pill is small at rest ${say}`);
+    assert.ok(s.line <= 46, `one line ${say}`);
+    console.log(`# ${say}`);
+    // ...narrower, this reply's row has more groups than the line holds even beside the small pill: Close folds before Agent and Reply (foldsOf)
+    if (width < 1600) continue;
+    assert.ok(s.verbs.includes("done"), `Mark done is on the row, not behind a ▾ ${say}`);
+    assert.ok(s.verbs.some((v) => /agent/.test(v)), `Send to agent is on the row, not behind a ▾ ${say}`);
+  }
+  assert.deepEqual(errors, []);
+});

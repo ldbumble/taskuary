@@ -570,11 +570,27 @@
 .tq-dock-line > .tq-arow { flex: 1 1 0; min-width: 0; width: auto; }
 .tq-dock .tq-dock-line > .tq-arow { border-bottom: 0; padding-right: 8px; }
 .tq-compose-tools { display: contents; }
-.tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box { flex: 0 0 220px; width: auto; min-height: 34px; margin: 3px 6px 3px 0; padding: 0 3px 0 10px; gap: 2px;
+/* ...and at rest the pill is SMALL - "Ask…" and its send (the owner, 2026-10-27: "yes shrink the chat box"): at 220px it took the room
+   Mark done, Send to agent and Remind me need, and they folded behind a ▾ on a 1366-1600px laptop - two clicks each. min-width 0: the
+   textarea's own 20 columns held the box at ~208px whatever its basis */
+.tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box { flex: 0 0 120px; min-width: 0; width: auto; min-height: 34px; margin: 3px 6px 3px 0; padding: 0 3px 0 10px; gap: 2px;
   border: 1px solid #d5d0c7; border-radius: 17px; background: #f8f7f3; transition: background-color .12s, border-color .12s; }
 .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { flex-basis: min(560px, 46%); padding-left: 3px; background: #fff; border-color: #9fae9f; }
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box:not([data-tq-open]) .tq-compose-tools { display: none; }
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box textarea { min-height: 30px; padding: 5px 4px; }
+/* ...its "Ask…" in the MIDDLE of the pill's height (the owner, 2026-10-27: "not centered in the height"): one 30px line, no padding to sit it high */
+.tq-dock-line:has(> .tq-arow) > .tq-compose-box:not([data-tq-open]) textarea { height: 30px; padding: 0 4px; line-height: 30px; overflow: hidden; }
+/* ...and USED, it opens UP AND OVER the canvas (the owner, 2026-10-27: "it should always be the same size and words, unless you click when
+   it should expand up and above over the canvas like it was mocked up"): its slot on the row keeps the pill's 120px (::after holds it), so
+   nothing on the row moves or folds while the owner types; the box is laid over, anchored at the pill's corner, and grows upward. On a
+   phone (under 600px) it widens in its line as before */
+@media (min-width: 601px) {
+  .tq-dock .tq-dock-line:has(> .tq-arow):has(> .tq-compose-box[data-tq-open])::after { content: ""; flex: 0 0 120px; margin: 3px 6px 3px 0; }
+  .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { position: absolute; right: 27px; bottom: 12px; z-index: 6;
+    width: min(560px, calc(100% - 54px)); min-height: 72px; align-items: flex-end; padding: 6px 4px 4px 8px; border-radius: 14px;
+    box-shadow: 0 10px 32px #39352d26, 0 2px 6px #39352d14; }
+  .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] textarea { min-height: 52px; align-self: stretch; }
+}
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box .tq-send { width: 28px; height: 28px; flex-basis: 28px; border-radius: 50%; }
 /* ...its hint ONE line, cut at the pill's edge: the box's long hint (an FYI batch, the walk's end) wrapped in the 220px pill and half its
    second line showed under the first (the overnight walk, 2026-10-26) */
@@ -586,7 +602,7 @@
   .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { flex-basis: 62%; }
 }
 /* ...and what is said about the task comes up OVER it, anchored above the box: a few turns tall at most, scrolling inside, never moving the view */
-.tq-chat-pop { position: absolute; right: 20px; bottom: calc(100% - 2px); z-index: 5; width: min(600px, calc(100% - 40px)); box-sizing: border-box; display: flex; flex-direction: column;
+.tq-chat-pop { position: absolute; right: 20px; bottom: max(calc(100% - 2px), calc(var(--tq-box-h, 0px) + 18px)); z-index: 5; width: min(600px, calc(100% - 40px)); box-sizing: border-box; display: flex; flex-direction: column;
   border: 1px solid #d5d0c7; border-radius: 14px; background: #fffdfb; box-shadow: 0 10px 32px #39352d26, 0 2px 6px #39352d14; animation: tqPopIn .14s ease-out; }
 .tq-chat-pop[hidden] { display: none; }
 @keyframes tqPopIn { from { opacity: 0; transform: translateY(6px); } }

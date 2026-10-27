@@ -87,7 +87,8 @@ test("the default static demo completes one reviewed request and never calls a l
     // the top bar's Setup, as the installed app has it - the chat has no setup choice (the owner, 2026-10-19)
     assert.equal(await page.$('button[title^="Setup - your AI, your email"]'), null, "the chat offers no setup button");
     const setupPill = await page.waitForSelector("[data-tq-setup-open]");
-    assert.equal(await setupPill.evaluate(node => node.innerText.trim()), "Setup");
+    // ...at this phone width its ring alone, the word its name (phone-title, the owner 2026-10-27: the words put the bar on two rows)
+    assert.deepEqual(await setupPill.evaluate(node => [node.getAttribute("aria-label"), node.innerText.trim(), !!node.querySelector("svg")]), ["Setup", "", true]);
     await setupPill.click();
     await page.waitForFunction(() => document.body.innerText.includes("Set up Taskuary on your own machine"));
     assert.ok(await page.$('a[href="https://taskuary.com/docs/"]'), "the setup action provides a working installation destination");

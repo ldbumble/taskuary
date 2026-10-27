@@ -114,7 +114,10 @@ PURPOSE = {
                                  'a task log or a routine answer. When the owner asks to save something there, or a turn clearly earns it'),
     'pipe.clear':               ('clear a SET of items from the pipe at once - takes `select` (below); read, never deleted. "Clear all '
                                  'the FYI" and "mark the FYI read" - one FYI on the table or many - are this with kind: fyi, never next. Their words naming the set are the press: it is marked read at once '
-                                 'and the count said. It only clears: when the owner says "from now on" too, also CALL '
+                                 'and the count said. `scope`: all (the default - every one waiting that `select` matches, the batch on the table '
+                                 'and every one after it: "all the FYI", "mark every FYI read", "ignore all the FYI") | table (only those on the table: '
+                                 '"mark these read", "these four") - ALL in their words is every one waiting, never just the batch on the table. '
+                                 'It only clears: when the owner says "from now on" too, also CALL '
                                  'preference.exclude_sender or preference.sender_rule'),
     'pipe.defer':               ('put a SET away until a day - `select` (below) and `until` (as task.defer takes it): "snooze everything '
                                  'from Gail until Monday" is select sender: Gail. Runs at once and the count is said'),
@@ -411,7 +414,7 @@ BUCKETS = (
 
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
-HINTS = {'memory.remember': 'note, about?, section?, replaces?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
+HINTS = {'memory.remember': 'note, about?, section?, replaces?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'pipe.clear': 'select, scope?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?', 'task.share': 'who, about?', 'task.complete': 'note?',
          'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?, note?', 'task.checklist': 'add?, items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until'}
 

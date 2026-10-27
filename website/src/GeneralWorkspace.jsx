@@ -837,7 +837,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
           leaves that heading behind */}
       {/* ...and none at all on a card whose session is not live (`noTools`, the owner 2026-10-25): a failed or closed agent's heading carried
           the agent picker, "provider default" and Full screen for a chat nothing is running in - the bar's Run another agent starts one */}
-      {!dock && !noTools && toolsAt && !full && createPortal(tools, toolsAt)}
+      {/* ...in a fragment: a portal straight under a Box failed its `children` check, a console error on every live agent (2026-10-26) */}
+      {!dock && !noTools && toolsAt && !full && <>{createPortal(tools, toolsAt)}</>}
       {!dock && !noTools && !(toolsAt && !full) && <Box sx={{ minHeight: 39, px: 1.25, py: { xs: 0.5, md: 0 }, display: "flex", alignItems: "center", gap: 0.8, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL,
         flexWrap: "wrap", flexShrink: 0 }}>
         <Box sx={{ width: 7, height: 7, borderRadius: 99, bgcolor: session?.alive ? "#78a17b" : "#c7a258" }} />

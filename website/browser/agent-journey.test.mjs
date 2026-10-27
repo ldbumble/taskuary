@@ -54,6 +54,8 @@ test("an agent's road: each press runs once, Continue shows what it said, and a 
   await page.setViewport({ width: 1600, height: 810 });
   const errors = [], posts = [], polls = [], chats = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  // ...and React's own complaint about what a component was handed (a portal straight under a Box, on every live agent)
+  page.on("console", (m) => { if (m.type() === "error" && /Failed %s type|Failed prop type/.test(m.text())) errors.push(m.text().slice(0, 200)); });
   page.on("request", (r) => { const p = new URL(r.url()).pathname;
     if (r.method() === "POST") posts.push(p); if (/^\/api\/terminals\/[^/]+\/browser$/.test(p)) polls.push(Date.now());
     if (r.method() === "GET" && /^\/api\/tasks\/\d+\/assistant$/.test(p)) chats.push(Date.now()); });

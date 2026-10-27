@@ -547,6 +547,79 @@ state for a task, in the work rail&#39;s words — the server decides it once an
 <td>—</td>
 </tr>
 </tbody></table>
+<h3 id="where-a-task-is-up-to">Where a task is up to<a class="anchor" href="#where-a-task-is-up-to" aria-label="Link to this section">#</a></h3>
+<p>A task view opens on one main view, with the rest one click away in a drawer. Which one is decided by the task&#39;s
+<strong>stage</strong> — one list, read by the task view, the server and the Assistant alike (<code>taskuary/stages.json</code>). The first
+row that holds wins, top to bottom:</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>When</th>
+<th>Main view</th>
+<th>Drawer</th>
+<th>Advisor&#39;s section</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>agent working</td>
+<td>an agent&#39;s session is open, working or waiting on you</td>
+<td>the session, the whole width</td>
+<td>Came from, one line</td>
+<td>over the work</td>
+</tr>
+<tr>
+<td>waiting on someone</td>
+<td>handed to a person</td>
+<td>the task, who it waits on and when it is due</td>
+<td>Agent and Close out</td>
+<td>in the drawer</td>
+</tr>
+<tr>
+<td>done</td>
+<td>closed</td>
+<td>how it closed — the note, what went out, the Result</td>
+<td>Came from</td>
+<td>—</td>
+</tr>
+<tr>
+<td>close out</td>
+<td>a draft or emails wait for <strong>Send</strong>, or something went out</td>
+<td>Close out</td>
+<td>Came from</td>
+<td>over the work</td>
+</tr>
+<tr>
+<td>agent result</td>
+<td>an agent finished, stopped or failed</td>
+<td>its Result, or why it failed with <strong>Try again</strong></td>
+<td>Came from</td>
+<td>over the work</td>
+</tr>
+<tr>
+<td>to reply</td>
+<td>somebody wrote and nothing is drafted</td>
+<td>the task</td>
+<td>Agent and Close out — its tab lit</td>
+<td>in the drawer</td>
+</tr>
+<tr>
+<td>to do</td>
+<td>a to-do&#39;s checklist or a goal&#39;s steps</td>
+<td>the task and its list</td>
+<td>Agent and Close out</td>
+<td>in the drawer</td>
+</tr>
+<tr>
+<td>to start</td>
+<td>an ask nothing has worked yet</td>
+<td>the task</td>
+<td>Agent and Close out — its tab lit</td>
+<td>in the drawer</td>
+</tr>
+</tbody></table>
+<p>A lit tab says the next move is inside that drawer. The Assistant is told the stage of the task on the table, so a
+typed &quot;send it&quot; or &quot;mark it done&quot; acts on what you are looking at.</p>
 <p>A task put away with <strong>Remind me</strong> waits under <strong>For later</strong> on the rail and off the Board until its day — unless its
 agent asks you something. Status has no box of its own: <strong>Start</strong>, <strong>Mark done</strong>, <strong>Remind me</strong> and <strong>Reopen</strong> set it, and Reopen clears
 an old reminder. <strong>Mark done</strong> keeps a draft that was waiting; <strong>Bring it back to send</strong> sends it after all. Done is
@@ -682,7 +755,7 @@ moves it down without deleting it.</p>
 
     </article>
     <nav class="pager"><a class="pn prev" href="./connections"><span>Previous</span>Connections</a><a class="pn next" href="./security"><span>Next</span>Security</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.49 · updated 2026-10-26</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.50 · updated 2026-10-27</p>
   </main>
 </div>
 <script src="./docs.js"></script>

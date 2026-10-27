@@ -201,6 +201,19 @@ export const lastActIndex = (messages) => {
   }
   return said;
 };
+// ...AND A NOT OURS TAKEN FURTHER OUTLIVES THE WALK'S NEXT STEP: Not ours files the item and the walk moves on in the same press, so
+// its From now on (followUps, `follow`) stood on the row only between the receipt and the next item's line - a flash, and none at all
+// once the row drew once (actionRow.useRowHold kept the old row until the new item was whole). It rides on the next item's row until
+// anything else is said or done: the newest receipt carrying one, with nothing after it but the one item the walk moved to; -1 if none
+export const furtherIndex = (messages) => {
+  const ms = messages || [];
+  for (let index = ms.length - 1, cards = 0; index >= 0; index -= 1) {
+    const m = ms[index];
+    if (m?.role === "receipt") return chipsOf(m).some((c) => c.follow) ? index : -1;
+    if (m?.role !== "assistant" || !m.card || m.proposal || (cards += 1) > 1) return -1;
+  }
+  return -1;
+};
 // The words offered under one line: the item's own verbs, or a clarifying choice the assistant asked
 // with (OPTIONS) - which goes back as words, not as a verb. Never both: one row, one place to look.
 export const chipsOf = (message) => {

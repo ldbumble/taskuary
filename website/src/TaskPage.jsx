@@ -12,7 +12,7 @@ import { strangerLine, trustInBox } from "./strangerLine.js";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { canSend, cannotStart, draftCanSend, useCapabilities } from "./capabilities.js";
 import {
-  Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
+  Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress,
   Drawer, IconButton, InputAdornment, Link, Menu, MenuItem, TextField, Tooltip, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -70,7 +70,6 @@ import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
-import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import { Divider, ListItemText } from "@mui/material";
 import { TerminalPane } from "./TerminalView.jsx";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
@@ -510,13 +509,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // see the actual task and where it came from"). peek shows the task card with the session folded
   // to one line; the session keeps running, and the terminal comes back on a click or a new pick.
   const [peek, setPeek] = useState(false);
-  const [askSenderOpen, setAskSenderOpen] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);          // Email someone (EmailSomeone.jsx)
-  const [senderQuestion, setSenderQuestion] = useState("");
   // "this one is mine" - the verdict that used to be a silent dropdown (TQ-0501)
-  const [askingSender, setAskingSender] = useState(false);
-  const [askErr, setAskErr] = useState("");      // said IN the Ask sender box: the page's own line sat behind the dialog, unseen
-  useEffect(() => { if (askSenderOpen) setAskErr(""); }, [askSenderOpen]);
   const [openingReply, setOpeningReply] = useState(false);
   const [reopening, setReopening] = useState(null);   // the task id whose Reopen is on its way
   const [openStage, setOpenStage] = useState(null);   // a stage you opened by hand, overriding the computed focus
@@ -712,7 +706,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     setWrapping(false); setWrapped(null);
     // a press on another task is that task's: back on it, a job still writing is read from the server's own word (detail.writeup)
     setWritingUpAt((w) => (w?.id === selected ? w : null));
-    setAskSenderOpen(false); setSenderQuestion(""); setAskingSender(false); setOpeningReply(false);
+    setOpeningReply(false);
     setOpenStage(null);
   }, [selected]);
 
@@ -1061,23 +1055,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     ? `Playbook · ${t.Playbook.title}${t.Playbook.uses?.length ? ` · uses ${t.Playbook.uses.join(", ")}` : ""}`
     : t?.Source === "report" && sourceMessage?.SourceName
       ? `Report · ${sourceMessage.SourceName}` : "";
-  const askSender = async () => {
-    const text = senderQuestion.trim();
-    if (!selected || !text || askingSender) return;
-    // ...a task with no message behind it has no sender to ask: said in the box, where the press was (the UI audit, 2026-10-21)
-    if (!sourceMessage?.MessageId) { setAskErr("This task has no message behind it, so there is no sender to ask."); return; }
-    const id = selected;
-    setAskingSender(true); setErr(""); setAskErr("");
-    try {
-      await runOperation(api, "task.clarify", id, { text, message_id: sourceMessage.MessageId });
-      if (stale(id)) return;
-      setAskSenderOpen(false); setSenderQuestion("");
-      await Promise.all([loadDetail(id), loadTasks()]);
-      onChanged?.();
-    } catch (e) {
-      if (!stale(id)) setAskErr(opError(e, "Could not prepare the question for the sender"));
-    } finally { if (!stale(id)) setAskingSender(false); }
-  };
   const openReply = async (generate = false) => {
     if (!replyMessage?.MessageId || openingReply) return;
     const id = selected;
@@ -1695,8 +1672,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         run: openBox, title: ranBefore ? hintOfRow("run-another") : hintOfRow("start-agent") }] : []),
       // MESSAGE SOMEONE - email or chat - whoever started the task (the owner, 2026-10-09) - is Share's "Email a summary" now (the owner,
       // 2026-10-23: one Share button); never where nothing can be sent from here (the owner, 2026-10-22) - useShare below
-      // ...nor Ask sender: its question is a reply too, and leaves by the same channel (a Teams task offered it, 2026-10-22)
-      ...(replyMessage && !liveSession && !cantSend ? [{ id: "ask-sender", group: "more", label: labelOfRow("ask-sender"), run: () => setAskSenderOpen(true), title: hintOfRow("ask-sender") }] : []),
+      // NO ASK SENDER (the owner, 2026-10-27: "remove the Ask sender button"): a question for the sender is a reply - Reply asks it. An agent
+      // or the Assistant may still park one (task.clarify), and it waits in Review for its Send like any draft
       { id: "done", group: "more", label: finishing ? "Marking done…" : labelOfRow("done"), disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession && !pendingReview, beside: liveSession, onCard: !!pendingReview && !liveSession },   // a live session has no primary;
       // ...nor a waiting draft: its Send, under the draft, is the move (2026-10-06), so Mark done stands outlined beside Next -
       // and so do Start an agent and Next (`onCard`): a second filled button on the bar pulled the eye off the draft
@@ -2504,10 +2481,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             startIcon={openingReply ? <CircularProgress size={11} /> : <ForwardToInboxIcon sx={{ fontSize: 14 }} />}
                             onClick={() => (pendingReview ? setOpenStage("reply") : openReply(true))}>
                             {openingReply ? "Drafting…" : replyPrimary}</Button>
-                          {!cantSend && <Tooltip title={`${labelOfRow("ask-sender")} - ${hintOfRow("ask-sender")}`}>
-                            <IconButton size="small" sx={{ color: "#8a3646" }} onClick={() => setAskSenderOpen(true)}>
-                              <ChatBubbleOutlineIcon sx={{ fontSize: 15 }} /></IconButton>
-                          </Tooltip>}
                         </Box>
                       : null} />
                   {/* WHAT CLOSED IT, where it was closed (the owner, 2026-10-19: "i hit mark done on close out but agent work tab opened up
@@ -2558,10 +2531,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               title="Drafts the reply here, from this task's own context. Nothing is sent until you approve it."
                               onClick={() => openReply(true)}>{openingReply ? "Drafting…" : replyPrimary}</Button>
                           )}
-                          {!inRow && !cantSend && <Button size="small" variant="outlined" sx={barBtn}
-                            startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 15, color: "#8a3646" }} />}
-                            title="Drafts a question to the sender. It waits here for your approval; nothing is sent now."
-                            onClick={() => setAskSenderOpen(true)}>{labelOfRow("ask-sender")}</Button>}
                           <Box sx={{ flex: 1, minWidth: 12 }} />
                           <Typography variant="caption" sx={{ color: FAINT, textAlign: "right", maxWidth: 320 }}>
                             {/* no More button: with these on the surface there is nothing left to hide */}
@@ -2876,28 +2845,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           onStay={(tid, msg) => { if (tid === selected) { setReshape(true); onStay?.(msg); } }} />}
       </Drawer>
 
-      {/* ── new task dialog ───────────────────────────────────────────── */}
-      <Dialog open={askSenderOpen} onClose={() => !askingSender && setAskSenderOpen(false)} fullWidth maxWidth="sm"
-        PaperProps={{ sx: { borderRadius: 3 } }}>
-        <DialogTitle>Ask the sender · {detail?.ref}</DialogTitle>
-        <DialogContent sx={{ pt: "8px !important" }}>
-          <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
-            Write the one fact the agent or task needs. This becomes a clarification draft on the task; it is not sent until you approve it.
-            The task stays open while you wait for the sender's answer.
-          </Typography>
-          <TextField autoFocus fullWidth multiline minRows={3} label="Question for the sender"
-            value={senderQuestion} onChange={(e) => setSenderQuestion(e.target.value)}
-            placeholder="Which distribution spreadsheet and which dashboard should I use?" />
-          {askErr && <Alert severity="error" sx={{ mt: 1.5, py: 0.25, fontSize: 12.5 }}>{askErr}</Alert>}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setAskSenderOpen(false)} disabled={askingSender}>Cancel</Button>
-          <Button variant="contained" disableElevation onClick={askSender}
-            disabled={askingSender || !senderQuestion.trim()}>
-            {askingSender ? <CircularProgress size={15} /> : "Put it on the task"}
-          </Button>
-        </DialogActions>
-      </Dialog>
       {/* Share's menu and its Email the result dialog; the badge stands on the Result (or the workflow run) it shared */}
       {shareMenu}
       {t && <EmailSomeone open={emailOpen} task={t} detail={detail} onClose={() => setEmailOpen(false)}

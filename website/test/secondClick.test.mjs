@@ -1,5 +1,5 @@
-// A DOUBLE-CLICK OPENS, IT DOES NOT OPEN AND SHUT (the overnight walk, 2026-10-27): the second click of a double-click on Ask sender,
-// Find a time or a ▾ landed on the backdrop of what the first opened, and shut it. That click is swallowed; a later one shuts as before.
+// A DOUBLE-CLICK OPENS, IT DOES NOT OPEN AND SHUT (the overnight walk, 2026-10-27): the second click of a double-click on Find a
+// time or a ▾ landed on the backdrop of what the first opened, and shut it. That click is swallowed; a later one shuts as before.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

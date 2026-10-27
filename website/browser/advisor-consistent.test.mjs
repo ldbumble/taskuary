@@ -17,7 +17,7 @@ const SAY = {
   draft_warn: { state: "draft_ready", verb: "approve", line: "The draft promises Friday; nothing on the task backs that.", by: "model", kind: "draft_caution" },
 };
 const ROW = { close: ["done"], defer: ["remind"], regular_agent: ["start-agent", "send-general"], stop_agent: ["save-end"], split: ["reshape"],
-  close_note: ["close-note"], review_changes: ["diff"], share_result: ["share"], ask_sender: ["ask-sender"], forward: ["hand"], remove: ["nat"],
+  close_note: ["close-note"], review_changes: ["diff"], share_result: ["share"], forward: ["hand"], remove: ["nat"],
   run_another: ["run-another"], strong_again: ["strong-again"] };
 
 const MEASURE = () => {

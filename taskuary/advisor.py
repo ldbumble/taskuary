@@ -1089,7 +1089,7 @@ def checked(store, item: dict, verbs: list, d: dict, rule: dict) -> dict:
     verb, kind, why, instead = d['verb'], d.get('kind') or 'other', '', []
     drafted = 'approve' in {v['verb'] for v in verbs}
     if (no := pressable(store, item, verb, verbs)): why = f'{verb}: {no}'
-    elif kind == 'draft_caution' and verb == 'approve': why, instead = 'a caution about the draft over its Send', ['redraft', 'ask_sender']
+    elif kind == 'draft_caution' and verb == 'approve': why, instead = 'a caution about the draft over its Send', ['redraft']
     elif kind == 'late' and verb == 'reply' and drafted: why, instead = 'late on a drafted task: the draft is the answer', ['approve']
     elif kind == 'same_ask' and verb in ('remove', 'split') and _survives(store, item): why = 'the survivor of a duplicate pair is never folded'
     if not why: return {**d, 'kind': kind}

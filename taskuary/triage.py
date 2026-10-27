@@ -40,6 +40,8 @@ FIELDS = {
     'recently_closed': "recently_closed is work on this thread, sender or subject that was closed in the last few days, each with its "
                        "tid and how it ended - the finding the agent wrote, or the ask if no agent ran.",
     'open_work': "open_work is the OPEN tasks this message touches, each with its tid.",
+    'thread_task': "thread_task is the task this message's thread already belongs to - its tid, title, ask and status. The message "
+                   "joins it unless you answer new_job: one line saying why this is a different job; null when it is the same.",
     'open_goals': "open_goals is the owner's OPEN GOALS, each with its tid, what done looks like and its steps (id, text, done, who holds it): "
                   "when this message serves one step - it delivers it, answers it, or is plainly about it - answer serves {task, step, done}, "
                   "done true only when the message completes that step; a message that serves no step answers serves null.",
@@ -171,7 +173,7 @@ def due_of(j: dict, sent=None) -> str | None:
     return s if base - timedelta(days=7) <= d <= base + timedelta(days=366) else None
 
 def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, same=False, goals=False, coding=True, workflows=None,
-                   earlier=False) -> dict:
+                   earlier=False, thread_task=False) -> dict:
     """The answer's shape as a JSON schema, for the brains whose wire can carry one (llm.ask_json).
 
     Prose asks; a schema binds. Handed this, gpt-5.4 answered `title` and `summary` even when the
@@ -215,6 +217,8 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
                  related_message_ids={'type': ['array', 'null'], 'items': {'type': 'integer'}},
                  existing_task_id={'type': ['integer', 'null']}, same_problem={'type': ['boolean', 'null']})
     if same: p['same_as'] = {'type': ['integer', 'null']}
+    # THE THREAD IS A HINT (the owner, 2026-10-26): a message on a task's thread joins it unless this says why it is another job
+    if thread_task: p['new_job'] = {'type': ['string', 'null']}
     # the earlier lines of the exchange the ask rests on - shown with the task so its ask can be checked (2026-10-22)
     if earlier: p['rests_on'] = {'type': ['array', 'null'], 'items': {'type': 'integer'}}
     # how hard the WORK is and whether the reader could tell (the router, 2026-10-25): its own verdict, never the priority. Shown on
@@ -673,6 +677,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             same_ids = {int(w['tid']) for key in ('open_work', 'recently_closed') for w in ((thread or {}).get(key) or []) if w.get('tid')}
             goal_steps = {int(g['tid']): {x['id'] for x in g.get('steps') or []} for g in (thread or {}).get('open_goals') or []}
             earlier_ids = {int(x) for l in (thread or {}).get('exchange') or [] for x in re.findall(r'^\[#(\d+)\]', str(l))}
+            home = ((thread or {}).get('thread_task') or {}).get('tid')
             how = addressed_to_you(msg, mine)
             # THE SENDER'S OWN WORDS ON TOP, the chain they wrote on top of quoted under them, and the
             # budget's cut taken out of the chain (sender_body). `own_text` is Graph's uniqueBody where
@@ -722,7 +727,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # what was left out. Both exist because neither reaches every brain (TQ-0665).
             from .llm import ask_json
             answer = ask_json(llm, system, user, want=verdict_schema(repos, candidates, playbooks, profiles, same=bool(same_ids), goals=bool(goal_steps),
-                                                                     coding=coding, workflows=workflows, earlier=bool(earlier_ids)),
+                                                                     coding=coding, workflows=workflows, earlier=bool(earlier_ids), thread_task=bool(home)),
                               need=('title', 'summary'), **({'max_tokens': TRIAGE_TOKENS} if takes_tokens(llm) else {}),
                               **({'images': images} if images else {}))
             raw_answer, j = answer.raw, answer.data
@@ -762,6 +767,12 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 try: same = int(j.get('same_as')) if j.get('same_as') is not None else None
                 except (TypeError, ValueError): same = None
                 if same in same_ids: out['same_as'] = same
+                # new_job: only on a thread whose task was shown, only for work (an fyi stays on the thread for the chain), and never
+                # beside a same_as naming that very task - the answer that contradicts itself keeps the default, the join
+                nj = j.get('new_job')
+                nj = None if str(nj).strip().lower() in ('', 'null', 'none', 'false', 'no') else nj
+                if home and nj and out['intent'] in ('task', 'reply_only') and same != home:
+                    out['new_job'] = ' '.join(str(nj if isinstance(nj, str) else j.get('why') or 'a different job').split())[:200]
                 # rests_on: only lines of the exchange it was shown - an id it made up shows nothing
                 rests = []
                 for x in j.get('rests_on') or []:

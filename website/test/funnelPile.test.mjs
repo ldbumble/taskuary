@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { LANES, LANE_META, attentionBand, levelOf, arrivals, chipsOf, lastSaidIndex, lastActIndex, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, refreshCurrentPresentation, refreshPilePresentation, rowMeta, statusLine } from "../src/funnelPile.js";
+import { LANES, LANE_META, attentionBand, levelOf, arrivals, chipsOf, lastSaidIndex, lastActIndex, furtherIndex, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, refreshCurrentPresentation, refreshPilePresentation, rowMeta, statusLine } from "../src/funnelPile.js";
 import * as tw from "../src/timeWords.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
@@ -325,6 +325,14 @@ test("the action words hang on the last thing Taskuary SAID about the item, not 
   assert.equal(lastActIndex([{ ...item, done: true }, failed]), 1, "a folded card has nothing left to press");
   assert.equal(lastActIndex([item, { id: "r1", role: "receipt" }]), 0, "a bare receipt still is not");
   assert.equal(lastActIndex([failed, item]), 1, "a newer line takes them back");
+  // ...but a Not ours taken further rides on the row of the item the walk moved to, until anything else is said or done
+  const filed = { id: "r3", role: "receipt", status: "done", chips: [{ verb: "not_ours_sender", label: "From now on", follow: { kind: "preference.exclude_sender" } }] };
+  assert.equal(furtherIndex([item, filed, item]), 1, "the next item's line keeps From now on in reach");
+  assert.equal(furtherIndex([item, filed]), 1);
+  assert.equal(furtherIndex([filed, item, item]), -1, "a second item put it away");
+  assert.equal(furtherIndex([filed, item, { id: "u2", role: "user" }]), -1, "so did a word from the owner");
+  assert.equal(furtherIndex([item, failed, item]), -1, "a receipt with no From now on lends nothing");
+  assert.equal(furtherIndex([filed, item, failed]), -1, "nor does a newer receipt");
   // an answer to a typed question carries them on the turn itself; a surfaced item on its card
   assert.deepEqual(chipsOf(item).map((c) => c.verb), ["approve"]);
   assert.deepEqual(chipsOf({ role: "assistant", chips: [{ verb: "next", label: "Next" }] }).map((c) => c.verb), ["next"]);

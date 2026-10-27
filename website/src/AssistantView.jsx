@@ -64,7 +64,7 @@ import { ASK_REPORT, AgentAsk } from "./RunForm.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, putDownLanded, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory, withdrawSelection } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, putDownLanded, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, furtherIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory, withdrawSelection } from "./funnelPile.js";
 import { FYI_PAGE, ageHover, awayFromClear, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
@@ -857,11 +857,11 @@ function Pressed({ label, note = "" }) {
   return <><span className="tq-pressed" data-tq-pressed={label} title={note || undefined}>✓ {label}</span>
     {note && <span className="tq-pressed-note" data-tq-pressed-note="" title={note}>{note}</span>}</>;
 }
-function BarVerbs({ owner, chips, busy, onChip }) {
+function BarVerbs({ owner, chips, busy, onChip, quiet = false }) {
   // the item's key in the id: the end of the walk offers one "open" chip per item, and one id kept only the last - "Open TQ-0001" opened
   // TQ-0010. The verb stays LAST so isDone's /:done$/ still finds a done chip
   useVerbs(owner, chips.map((c, i) => ({ id: `chat:${c.key ? `${c.key}:` : ""}${c.verb || c.label}`, label: c.label, group: c.verb === "next" ? "next" : "decide",
-    tone: i === 0 && c.verb !== "next" ? "p" : "s", title: c.hint || "", disabled: busy, run: () => onChip(c) })), chips.length > 0);
+    tone: i === 0 && c.verb !== "next" && !quiet ? "p" : "s", title: c.hint || "", disabled: busy, run: () => onChip(c) })), chips.length > 0);
   return null;
 }
 
@@ -892,7 +892,7 @@ function RetryVerbs({ item, failed, onSaid, onDone }) {
   return null;
 }
 
-function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [], barHolds = false, canvas = null }) {
+function Line({ m, lastBrief = false, live, last, further = false, actions, fresh, tableChips = [], barHolds = false, canvas = null }) {
   // a PREPARED answer's line (drawAhead, `held`) says its words at once and draws its card once the press has answered: a card's
   // first reads write (a task's origin filed on its first detail read, the Advisor asked), and a write under a press between
   // its admission and its commit check refused the press as stale (PW-118, 2026-10-20)
@@ -919,6 +919,8 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
           ...and its Open and Report this bug go there too: a button in the line is against "no button in line ever" (2026-10-06),
           and an Open TQ-x and a Report this bug link stood in the chat under a failure (the walk click-through, 2026-10-17) */}
       {last && <BarVerbs owner={`line:${m.id}`} chips={receiptChips(m)} busy={actions.busy} onChip={actions.chip} />}
+      {/* ...and its From now on, past it, on the next item's row (furtherIndex) - never lit there: the row's one lit button is that item's */}
+      {!last && further && <BarVerbs owner={`line:${m.id}`} chips={chipsOf(m).filter((c) => c.follow)} busy={actions.busy} onChip={actions.chip} quiet />}
     </div></div>);
   // THE END OF THE WALK SAYS NOTHING (the owner, 2026-10-23: "yes remove the sentence, just the button"): a line with no words and no item
   // is only its buttons - Walk me through my tasks and its Opens - on the row by the prompt, never an empty bubble wearing the mark
@@ -3278,7 +3280,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const lastCardIdx = useMemo(() => { const i = tableCardIndex(shown, old ? null : current || cardKey), c = shown[i]?.card;
     // ...the canvas's own fallback (the newest card in the chat) included: a durable line about a closed task landing after Next drew it
     return !old && c && c.key !== current && isLeft(c) ? -1 : i; }, [shown, old, current, cardKey]);
-  const lastSaidIdx = useMemo(() => lastActIndex(shown), [shown]);
+  const lastSaidIdx = useMemo(() => lastActIndex(shown), [shown]), furtherIdx = useMemo(() => furtherIndex(shown), [shown]);
   // a reloaded answer is text only: the item still on the table lends it its verbs, so Next is never gone
   // ONE ROW OF WORDS (the owner, 2026-10-05: "why is there buttons both places?"): a task on the table is drawn as its task view,
   // and that view registers its words in the row under the chat (layout B). A bare line under it then borrowed the same item's
@@ -3469,7 +3471,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           </div>}
           {firstRun ? state && <div data-tq-setup-under={setupCovered.current ? "hidden" : ""} style={setupCovered.current ? { display: "none" } : undefined}>{welcome()}</div>
             : state && !shown.length && !busy && !starting && welcome()}
-          {!firstRun && shown.map((m, i) => popOn && i > lastCardIdx ? null : <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} tableChips={tableChips} barHolds={barHolds}
+          {!firstRun && shown.map((m, i) => popOn && i > lastCardIdx ? null : <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} further={!old && i === furtherIdx} tableChips={tableChips} barHolds={barHolds}
                                      actions={actions} fresh={currentItem} canvas={old ? null : canvasState} />)}
           {/* CONTINUE, IN LINE (the owner, 2026-09-30): a card under the item, like New - the mic and pictures in it */}
           {!old && continueOn && (

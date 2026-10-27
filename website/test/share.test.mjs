@@ -100,7 +100,7 @@ test("Allow saving files on the Microsoft and Google cards - a choice, never the
   const fa = src("FileAccess.jsx"), cv = src("ConnectorsView.jsx");
   assert.match(fa, /export const ALLOW_FILES = "Allow saving files"/);
   assert.match(fa, /api\.post\(`\/api\/connectors\/\$\{conn\.ConnectorId\}\/google\/files`, \{ on \}\)/);
-  assert.match(cv, /api\.post\(`\/api\/connectors\/\$\{conn\.ConnectorId\}\/ms\/signin`, \{ files: !!want \}\)/);
+  assert.match(cv, /api\.post\(`\/api\/connectors\/\$\{conn\.ConnectorId\}\/ms\/signin`, \{ files: !!want, code \}\)/);
   assert.match(cv, /useState\(!!cfg\.allow_files\)/);
   assert.match(cv, /conn\.Type === "gmail" && <Box sx=\{\{ mb: 2 \}\}><GoogleFiles/);
 });

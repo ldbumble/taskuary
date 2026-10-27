@@ -187,15 +187,15 @@ const META = {
     fields: [["tenant_id (tenant app only)", "tenant_id"], ["client_id (your own app - sign-in or tenant app)", "client_id"]],
     secretLabel: "client secret (tenant app only)",
     desc: "Your Microsoft mailbox, read and sorted for you. Sign in with your own account - no Azure portal - or register your own app if you prefer.",
-    howto: ["Sign in with Microsoft (anyone): Credentials → Sign in with Microsoft → open microsoft.com/devicelogin, enter the code, sign in with your own account and accept. That is mail, sending and calendar for your mailbox - work or personal (Outlook.com). Nobody registers anything.",
+    howto: ["Sign in with Microsoft (anyone): Credentials → Sign in with Microsoft → Microsoft's sign-in page opens in your browser; sign in with your own account and accept, and the tab hands you back to Taskuary. No code to type. (Taskuary on another computer, or a browser that cannot reach it? \"Sign in with a code instead\" shows a code for microsoft.com/devicelogin - some organisations block that one.) That is mail, sending and calendar for your mailbox - work or personal (Outlook.com). Nobody registers anything.",
       "\"Need admin approval\": some organisations let only an admin say yes to a new app. The card then shows an approval link - forward it to your Microsoft 365 admin. They sign in, click Accept once, and everyone in the organisation can sign in from then on. It is a consent grant on Taskuary's app id, not an app registration on their side; the yellow \"unverified publisher\" note on their screen is expected.",
-      "Register your own Microsoft app (optional - if your organisation only approves apps it registered itself, or you want your own name on the consent screen). portal.azure.com → Microsoft Entra ID → App registrations → New registration: name it Taskuary; Supported account types: \"Accounts in any organizational directory and personal Microsoft accounts\" (or just your organisation); Redirect URI: platform \"Mobile and desktop applications\", tick https://login.microsoftonline.com/common/oauth2/nativeclient → Register.",
-      "Then: Authentication → Advanced settings → Allow public client flows = Yes → Save. API permissions → Add a permission → Microsoft Graph → Delegated permissions: offline_access, User.Read, Mail.ReadWrite, Mail.Send, Calendars.ReadWrite (reads the calendar and answers invites) → Add. No client secret - a sign-in app is public by design. Copy the Application (client) ID into client_id here (under Admin?) and sign in above - or set TASKUARY_MS_CLIENT_ID on the server so every install uses it. No Partner Center and no publisher verification: those only remove the \"unverified\" label on the consent screen.",
+      "Register your own Microsoft app (optional - if your organisation only approves apps it registered itself, or you want your own name on the consent screen). portal.azure.com → Microsoft Entra ID → App registrations → New registration: name it Taskuary; Supported account types: \"Accounts in any organizational directory and personal Microsoft accounts\" (or just your organisation); Redirect URI: platform \"Mobile and desktop applications\", enter http://localhost/api/ms/callback (the browser sign-in comes back to Taskuary on whatever port it runs; Entra ignores the port of a localhost redirect) and tick https://login.microsoftonline.com/common/oauth2/nativeclient (the admin-approval link) → Register.",
+      "Then: Authentication → Advanced settings → Allow public client flows = Yes → Save (needed only for the \"Sign in with a code instead\" fallback). API permissions → Add a permission → Microsoft Graph → Delegated permissions: offline_access, User.Read, Mail.ReadWrite, Mail.Send, Calendars.ReadWrite (reads the calendar and answers invites) → Add. No client secret - a sign-in app is public by design. Copy the Application (client) ID into client_id here (under Admin?) and sign in above - or set TASKUARY_MS_CLIENT_ID on the server so every install uses it. No Partner Center and no publisher verification: those only remove the \"unverified\" label on the consent screen.",
       "Tenant app (admins - required for Teams chat reading and for mailboxes other than your own): the same App registrations → New registration, then API permissions → APPLICATION permissions Mail.Read (Mail.ReadWrite for Outlook drafts on approve or 'Handled mail, at the source') and Calendars.Read (Calendars.ReadWrite to answer invites and book meetings from Taskuary) → Grant admin consent; Certificates & secrets → New client secret. Enter tenant_id + client_id and paste the secret under Admin?; blank = the server's AZURE_* env vars.",
       "Mailboxes: signing in adds your own automatically. A tenant app reads every mailbox you add as a UPN under Sources.",
       "Test acquires a real Graph token and reports exactly what failed if anything - and whether the calendar can be read. Enable, and mail flows through the same triage funnel as everything else."],
-    // written FOR the agent: it drives the device-code sign-in through the API and relays the code
-    agent: ["Preferred road, no Azure portal: POST {base}/api/connectors/{cid}/ms/signin{hdr}. It returns user_code, verification_uri and a flow id. Tell the owner: open <verification_uri>, enter <user_code>, sign in with their own Microsoft account and Accept.",
+    // written FOR the agent: it starts the browser sign-in through the API and hands the owner the link (a code only if they ask)
+    agent: ["Preferred road, no Azure portal: POST {base}/api/connectors/{cid}/ms/signin{hdr}. It returns url and a flow id. Tell the owner: open <url> in the browser on this computer, sign in with their own Microsoft account and Accept - the tab comes back to Taskuary by itself. Only if the owner's browser cannot reach this Taskuary on localhost (it runs on another machine): POST the same with JSON {\"code\": true} instead - it returns user_code and verification_uri; tell them to open <verification_uri> and enter <user_code>.",
       "Poll POST {base}/api/connectors/{cid}/ms/poll{hdr} with JSON {\"flow\": \"<flow>\"} every 5 seconds. status pending = keep waiting; status ok = the card is connected as them and their mailbox was added as a source; status error = read detail. If the error carries admin_consent_url, give the owner that link to forward to their Microsoft 365 admin, and start again at step 1 once the admin has approved.",
       "Only if the owner says they are an admin who wants a tenant app (needed for Teams chat reading or for mailboxes other than their own): ask for tenant_id, client_id and the client secret, save tenant_id and client_id in ConfigJson and the client secret as Secret.",
       "Run Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on (POST {base}/api/connectors{hdr} with {\"ConnectorId\": {cid}, \"Active\": true}) and say SETUP DONE."] },
@@ -204,13 +204,13 @@ const META = {
       pollSecondsField("teams")],
     secretLabel: "client secret",
     desc: "Your Teams chats, read and answered as you. Sign in with your own Microsoft account, like Outlook - each Teams card is one account.",
-    howto: ["Sign in with Microsoft (anyone): the button above, a code on microsoft.com/devicelogin, your own account. That is your chats - read, and answered as you - and nobody registers anything. A second organisation's Teams is a second card: Add another Teams account, and sign that one in.",
+    howto: ["Sign in with Microsoft (anyone): the button above, Microsoft's page in your browser, your own account (or \"Sign in with a code instead\" when the browser cannot reach Taskuary). That is your chats - read, and answered as you - and nobody registers anything. A second organisation's Teams is a second card: Add another Teams account, and sign that one in.",
       "No sign-in of its own: a Teams card reads through the Outlook card signed in as the SAME account (the user named under Sources) - never another account's Outlook card.",
       "Admins - a tenant app instead: tenant_id + client_id + client secret under Admin?. App-only chat reading is a Microsoft PROTECTED API: the tenant needs Microsoft-approved Chat.Read.All - until that approval is granted, Test shows the 403 telling you so - and an app cannot post into a chat, so replies need the sign-in.",
       "Add the user whose chats to ingest as a UPN under Sources. Your UPN (User Principal Name) is your Microsoft 365 sign-in address - usually just your work email. Find it in Teams: click your profile picture, it's the address under your name. Or run `whoami /upn` in a terminal on a work Windows machine, or check Azure Portal → Users → your account → User principal name.",
       "A specific chat id works too (Teams web: open the chat, the 19:...@thread.v2 part of the URL).",
       "Test probes an actual chat read for the first Teams source, not just the token."],
-    agent: ["The usual road is the owner's own: Sign in with Microsoft on this card (the button above this terminal) - a code on microsoft.com/devicelogin, their account. Tell them to press it; nothing to register. Only if they are a Microsoft 365 admin who wants a tenant app instead: tenant_id + client_id + secret with the Microsoft-approved Chat.Read.All application permission - do not invent a registration.",
+    agent: ["The usual road is the owner's own: Sign in with Microsoft on this card (the button above this terminal) - Microsoft's page in their browser, their account. Tell them to press it; nothing to register. Only if they are a Microsoft 365 admin who wants a tenant app instead: tenant_id + client_id + secret with the Microsoft-approved Chat.Read.All application permission - do not invent a registration.",
       "Find the owner's UPN yourself when you can: on a domain-joined Windows machine run `whoami /upn`; otherwise ask - it is usually their work email. Add it with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"teams\", \"Address\": \"<upn>\", \"ConnectorId\": {cid}, \"Active\": true}.",
       "Run Test (POST {base}/api/connectors/{cid}/test{hdr}). A 403 naming Chat.Read.All means the tenant has not been granted the protected API - report that as the blocker, it is not something to retry. Otherwise turn the connector on and say SETUP DONE."] },
   slack: { group: "Messaging", channel: "slack", srcLabel: "Channel IDs", srcPh: "C0123456789",
@@ -3810,7 +3810,7 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle }) => {
 };
 
 /* ── Sign in with Microsoft: Graph for a regular user, no Azure portal (taskuary/msauth.py).
-   A code, microsoft.com/devicelogin, their own account; this box polls until they are done. ── */
+   Microsoft's page in the browser, back to this server on localhost (a code on microsoft.com/devicelogin only as the fallback); this box polls until they are done. ── */
 // Sign in with ChatGPT: the browser goes to auth.openai.com and comes back to a one-off listener on 127.0.0.1, so there
 // is no code to type - the page only waits. A popup blocker is the one thing that can stop it, so the link is shown too.
 const ChatGptSignIn = ({ conn, cfg, reload }) => {
@@ -3891,7 +3891,9 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
 
 // shared with the first-run card on the canvas (FirstRun.jsx) - one Microsoft sign-in, wherever it is drawn
 export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
-  const [flow, setFlow] = useState(null);      // {flow, user_code, verification_uri, interval}
+  // {flow, mode: "browser", url} - the default, Microsoft's page in the browser coming back to this server - or {flow, mode: "code",
+  // user_code, verification_uri, interval}, the device code the owner asks for when the browser cannot reach Taskuary on localhost
+  const [flow, setFlow] = useState(null);
   const [state, setState] = useState("");      // "" | ok | error
   const [detail, setDetail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -3907,7 +3909,7 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
   useEffect(() => {
     if (!flow) return undefined;
     let alive = true;
-    const wait = Math.max(2, flow.interval || 5) * 1000;
+    const wait = flow.mode === "browser" ? 2000 : Math.max(2, flow.interval || 5) * 1000;
     const tick = async () => {
       if (!alive) return;
       try {
@@ -3915,7 +3917,8 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
         if (!alive) return;
         // the code Microsoft handed out dies after expires_in seconds - stop there and say so rather than spin on
         if (data.status === "pending" && Date.now() - flow.at > (flow.expires_in || 900) * 1000) {
-          setFlow(null); setState("error"); setDetail("The sign-in code expired before it was used. Press Sign in with Microsoft for a fresh one.");
+          setFlow(null); setState("error"); setDetail(flow.mode === "browser" ? "The sign-in was not finished in ten minutes, so this stopped waiting. Press Sign in with Microsoft to start a fresh one."
+            : "The sign-in code expired before it was used. Press Sign in with Microsoft for a fresh one.");
           return;
         }
         if (data.status === "pending") { setTimeout(tick, wait); return; }
@@ -3930,11 +3933,21 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
     const id = setTimeout(tick, wait);
     return () => { alive = false; clearTimeout(id); };
   }, [flow, conn.ConnectorId, reload]);
-  const start = async (want = files) => {
+  // the browser sign-in by default; `code` is the fallback the owner picks (a Taskuary on another machine, or one with no browser)
+  const start = async (want = files, code = false) => {
     setBusy(true); setState(""); setDetail("");
-    try { const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/ms/signin`, { files: !!want }); setFlow({ ...data, at: Date.now() }); }
+    try {
+      const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/ms/signin`, { files: !!want, code });
+      setFlow({ ...data, at: Date.now() });
+      if (data.mode === "browser") window.open(data.url, "_blank", "noopener");
+    }
     catch (e) { setState("error"); setDetail(e?.response?.data?.detail || "could not start the sign-in"); }
     setBusy(false);
+  };
+  // a cancelled round is forgotten on the server too, so a browser tab finished later signs nothing in
+  const cancel = () => {
+    if (flow) api.post(`/api/connectors/${conn.ConnectorId}/ms/cancel`, { flow: flow.flow }).catch(() => {});
+    setFlow(null); setState(""); setDetail("");
   };
   // SIGN OUT IS AT ONCE, with "Signed out of <account> - Undo" in its place (the owner, 2026-10-21: no "are you sure")
   const signout = async () => {
@@ -3954,7 +3967,7 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
       <UndoLine kinds={["signout"]} onRestored={reload} sx={{ mb: 0 }} />
       {/* the first-run card says it for someone who has never heard of a tenant (FirstRun.jsx) */}
       <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
-        {plain ? "Press the button, then type the code it shows on Microsoft's page and sign in as usual. This page finishes by itself."
+        {plain ? "Press the button and sign in on Microsoft's page as usual. This page finishes by itself."
           : chats ? <>Your own work account, your own chats — read here and answered as you. No Azure portal, no tenant id, no secret;
         each Teams card signs in its own account, so a second organisation is a second card.</>
           : <>Your own account, your own mailbox — mail, sending and calendar. No Azure portal, no tenant id, no secret;
@@ -3965,7 +3978,7 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
           <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Signed in as {cfg.name ? `${cfg.name} · ` : ""}{cfg.account}</Typography>
           <Button size="small" variant="outlined" onClick={signout}
             title={`${chats ? "Teams chats" : "Mail and calendar"} stop syncing until you sign in again - Undo puts it back. Nothing already here is lost.`}>Sign out</Button>
-          {/* choosing it signs in again with the one more permission (or without it) - the code to type comes up here */}
+          {/* choosing it signs in again with the one more permission (or without it) - Microsoft's page opens for it */}
           {!plain && <AllowFiles checked={files} disabled={busy} hint={MS_FILES_HINT} onChange={(v) => { setFiles(v); start(v); }} />}
           {/* a sign-in from before Taskuary asked for contacts / people (peoplesearch.missing): searching for someone skips them */}
           {!!conn.PeopleMissing?.length && (
@@ -3974,6 +3987,13 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
             </Typography>
           )}
         </Box>
+      ) : flow?.mode === "browser" ? (
+        <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+          <CircularProgress size={11} /> Finish signing in on Microsoft's page in the browser tab that opened - this page completes by itself.
+          <a href={flow.url} target="_blank" rel="noreferrer">Open it again</a>
+          <Button size="small" onClick={() => { cancel(); start(files, true); }} sx={{ fontSize: 11.5, color: DIM }}>Sign in with a code instead</Button>
+          <Button size="small" onClick={cancel} sx={{ fontSize: 11.5, color: DIM }}>Cancel</Button>
+        </Typography>
       ) : flow ? (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
           <Typography variant="body2" sx={{ color: INK }}>
@@ -3988,7 +4008,7 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
           </Box>
           <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 0.75 }}>
             <CircularProgress size={11} /> 2. Sign in with your Microsoft account and accept — this page finishes by itself.
-            <Button size="small" onClick={() => { setFlow(null); setState(""); setDetail(""); }} sx={{ fontSize: 11.5, color: DIM }}>Cancel</Button>
+            <Button size="small" onClick={cancel} sx={{ fontSize: 11.5, color: DIM }}>Cancel</Button>
           </Typography>
         </Box>
       ) : (
@@ -4001,6 +4021,9 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
           )}
           <Button variant="contained" disableElevation disabled={busy} onClick={() => start()}>
             {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : signedOut ? "Sign in again" : "Sign in with Microsoft"}</Button>
+          {/* the device code is the fallback, never the default: Conditional Access blocks it in many organisations */}
+          <Button size="small" disabled={busy} onClick={() => start(files, true)} sx={{ fontSize: 11.5, color: DIM }}
+            title="For a Taskuary on another computer, or one this browser cannot reach: type a code on Microsoft's page instead">Sign in with a code instead</Button>
           {!plain && <AllowFiles checked={files} disabled={busy} hint={MS_FILES_HINT} onChange={setFiles} />}
           {/* the QUESTION is not the button. Asked and answered in one 48-character control, it was
               the widest thing on the card and read as a sentence somebody had made clickable. */}

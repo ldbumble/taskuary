@@ -849,11 +849,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and the SAME session's new word too: the detail reloads on every task-changed, but only a new sid was adopted, so an agent
   // that asked while the page was open kept its header on "working" and its row without Answer it until the task was opened again (G7)
   const liveWord = sessionWord(detail?.session);
+  // ...nor a regular agent's session its own conversation has just read as gone (generalSession): a task read from before it ended
+  // put it back, the conversation read it gone again, and the view flipped between the live pane and the Result - eight remounts in
+  // three seconds after a turn that died, until a newer read landed (the agents walk, 2026-10-26)
+  const goneSid = useRef("");
   useEffect(() => {
     const live = detail?.session;
     if (!live?.alive || live.taskId !== selected) return;
     // ...never the session Stop and save is writing up: its pty lives until the report is safe, and adopting it put the agent back
     if (pressedHere?.sid && live.sid === pressedHere.sid) return;
+    if (live.sid === goneSid.current) return;
     if (live.sid !== term?.sid) setTerm(live);
     else if (liveWord !== sessionWord(term)) setTerm((was) => (was?.sid === live.sid ? { ...was, ...live } : was));
   }, [detail?.session, term?.sid, selected, liveWord]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -876,7 +881,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   }, [loadDetail, loadTasks, onChanged]);
   // ...never a live terminal's row put out by the conversation having none: an agent asking from a terminal on a general task read
   // as no session at all, its Agent work folded shut over the question (the UI audit's W6, 2026-10-21)
-  const generalSession = useCallback((session) => setTerm((was) => session || (was?.alive && was.mode !== "assistant" ? was : null)), []);
+  const generalSession = useCallback((session) => setTerm((was) => {
+    if (!session && was?.alive && was.mode === "assistant") goneSid.current = was.sid;
+    return session || (was?.alive && was.mode !== "assistant" ? was : null);
+  }), []);
   // "New task -> live session" lands here: put the CLI on it once we know this task has no
   // session already, so a reload never spawns a second one.
   // A GENERAL task has no repository and no CLI - it is a question, worked in the assistant's

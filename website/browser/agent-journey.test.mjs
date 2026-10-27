@@ -52,10 +52,11 @@ test("an agent's road: each press runs once, Continue shows what it said, and a 
   const w = await agentWorld(t);
   const page = await w.newPage();
   await page.setViewport({ width: 1600, height: 810 });
-  const errors = [], posts = [], polls = [];
+  const errors = [], posts = [], polls = [], chats = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("request", (r) => { const p = new URL(r.url()).pathname;
-    if (r.method() === "POST") posts.push(p); if (/^\/api\/terminals\/[^/]+\/browser$/.test(p)) polls.push(Date.now()); });
+    if (r.method() === "POST") posts.push(p); if (/^\/api\/terminals\/[^/]+\/browser$/.test(p)) polls.push(Date.now());
+    if (r.method() === "GET" && /^\/api\/tasks\/\d+\/assistant$/.test(p)) chats.push(Date.now()); });
   await page.goto(w.ui, { waitUntil: "domcontentloaded" });
   const made = await w.api("/api/tasks", { Title: "Compare payroll vendors", Summary: "Compare three payroll vendors on price for Northwind", Kind: "general" });
   await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
@@ -90,8 +91,12 @@ test("an agent's road: each press runs once, Continue shows what it said, and a 
 
   // A TURN THAT DIES: Failed and its reason first, Try again lit, nothing left saying it works
   const box = await page.waitForSelector("[data-tq-task-page] textarea", { timeout: 15000 });
-  await box.type("crash please"); await page.keyboard.press("Enter");
+  await box.type("crash please"); const died = Date.now(); await page.keyboard.press("Enter");
   await inTask(page, /Result\s+Failed - /, 20000);
+  // ...once: a task read from before the session ended put it back, and the view flipped between the live pane and the Result,
+  // its conversation mounted again each time
+  await new Promise((r) => setTimeout(r, 4000));
+  assert.ok(chats.filter((at) => at >= died).length <= 2, `the conversation was read ${chats.filter((at) => at >= died).length} times as the turn died`);
   const row = await shown(page);
   assert.ok(row.includes("Try again"), `Try again on the row: ${row.join(" | ")}`);
   assert.ok(!row.includes("Stop and save"), `no Stop and save over a dead session: ${row.join(" | ")}`);

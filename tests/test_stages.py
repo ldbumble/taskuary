@@ -50,7 +50,7 @@ class ATaskReadFromItsRows(unittest.TestCase):
         s = MemoryStore(); t = task(s); m = mail(s, t)
         self.assertEqual(stages.of_task(s, s.get_task(t)), 'to_reply')
         s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'Thursday works.', 'Status': 'pending'})
-        self.assertEqual(stages.of_task(s, {**s.get_task(t), 'ReviewStatus': 'pending'}), 'close_out')
+        self.assertEqual(stages.of_task(s, s.get_task(t)), 'close_out', 'its pending review read from the store')
         s.update_task(t, {'Status': 'done'}, 'owner')
         self.assertEqual(stages.of_task(s, s.get_task(t)), 'done')
 

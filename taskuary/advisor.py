@@ -1116,9 +1116,10 @@ def notes(store, key: str, limit: int = 10) -> list:
     return out
 
 
-def block(store, item: dict) -> str:
-    """The Advisor's line for the chat's system prompt, so 'why?' is answered from its evidence - a lookup, not a think."""
-    d = decide(store, (item or {}).get('key') or '', preread=False) if item else {}
+def block(store, item: dict, d: dict | None = None) -> str:
+    """The Advisor's line for the chat's system prompt, so 'why?' is answered from its evidence - a lookup, not a think. `d`: the
+    decision already read for the item (the chat's CANVAS reads it once for its lit button and this line)."""
+    if d is None: d = decide(store, (item or {}).get('key') or '', preread=False) if item else {}
     if not d.get('verb'): return ''
     # the button's name and what the evidence SAYS: "verb stop_agent; evidence: out13" was handed to the chat as-is, and came
     # back to the owner in its answer (2026-10-17 audit)

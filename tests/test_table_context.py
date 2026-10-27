@@ -131,8 +131,9 @@ class TheModelIsToldTheActionsOnTheTable(unittest.TestCase):
         # on the desk the row's own buttons - what a typed act can light; a phone's chat draws the chips (test_assistant_router)
         rows = concierge.row_buttons(s, item)
         self.assertTrue(rows)
-        self.assertIn('ACTIONS FOR THE ITEM ON THE TABLE', seen[0])
-        for c in rows: self.assertIn(f'"{c["label"]}"', seen[0])
+        # ...in the CANVAS, first, by the id a CALL takes (canvas_block, the owner 2026-10-26)
+        self.assertTrue(seen[0].startswith('CANVAS'))
+        for c in rows: self.assertIn(f'{c["verb"]} "{c["label"]}"', seen[0])
 
     def test_a_drafts_send_button_is_named_as_approve(self):
         lines = concierge.table_actions(None, {'kind': 'review', 'key': 'review:1', 'rid': 1, 'tid': 1, 'lane': 'review'},

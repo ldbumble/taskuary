@@ -24,6 +24,9 @@ SAFE = frozenset({'closed', 'working', 'agent_asking', 'failed', 'failed_cause',
 FAILED = frozenset({'failed', 'failed_cause', 'report_failed'})
 # where the lit move needs an AI to work: with none connected the strip asks for one there, and only there
 NEEDS_AI = frozenset({'asked', 'asked_late', 'stranger'})
+# THE KIND OF FACT a state's line is - what the check after the Advisor decides reads (advisor.checked), the same field the model states
+KIND = {'asked_late': 'late', 'waiting_late': 'late', 'waiting_late_usual': 'late', 'waiting_overdue': 'late', 'goal_late': 'late',
+        'duplicate': 'same_ask', 'failed': 'failure', 'failed_cause': 'failure', 'report_failed': 'failure'}
 EV = '_evidence'         # a fact's own ids (usual.py), carried beside the line's facts and handed on as the decision's evidence
 
 
@@ -88,6 +91,28 @@ def same_thread(store, item) -> int | None:
     return int(r['TaskId']) if r else None
 
 
+# ONE SURVIVOR PER PAIR, DECIDED ONCE (the Advisor audit's judge, 2026-10-26): both twins lit "Remove - not a task", each naming the other -
+# following the Advisor twice dropped the ask. The pair is decided once and kept (advice_decision `pair:<a>:<b>`): the one asked first
+# stays, with its own move; only the other is the duplicate, folded into it. A fact, never the words: when each was asked, then how much
+# each holds, then the older task.
+def survivor(store, a: int, b: int) -> int:
+    lo, hi = sorted((int(a), int(b)))
+    key = f'pair:{lo}:{hi}'
+    r = store._one('SELECT Json FROM advice_decision WHERE Key=?', (key,))
+    if r:
+        try:
+            got = int(json.loads(r['Json'])['survivor'])
+            if got in (lo, hi): return got
+        except (ValueError, KeyError, TypeError): pass
+    def facts(t):
+        m = store._one("SELECT MIN(IFNULL(SentAt,CreatedAt)) AS at, COUNT(*) AS n FROM message WHERE TaskId=? AND IFNULL(Direction,'in')<>'out'", (t,)) or {}
+        return (str(m.get('at') or '9999'), -int(m.get('n') or 0), t)
+    got = min((lo, hi), key=facts)
+    store._exec('INSERT OR REPLACE INTO advice_decision (Key, Stamp, Json, At) VALUES (?,?,?,?)',
+                (key, 'pair', json.dumps({'survivor': got, 'pair': [lo, hi]}), datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+    return got
+
+
 def changes_waiting(store, tid) -> bool:
     """Work an agent left that is not pushed, as the app knows it without asking git: the agent's own note on the board saying it is
     ready to push and nothing after it saying done, or a run that finished with a diff."""
@@ -115,6 +140,12 @@ def waited(store, item, t: dict) -> tuple:
                      (int(t['TaskId']),)) or {}
     since = _dt(out.get('SentAt') or out.get('CreatedAt')) or _dt(t.get('WaitingSince')) or _dt(t.get('UpdatedAt')) or _dt(t.get('CreatedAt'))
     return who or 'They', working_days(since) if since else 0
+
+
+def overdue(t: dict) -> int:
+    """Calendar days past the task's due day - 0 with none, or not yet."""
+    try: return max(0, (date.today() - date.fromisoformat(str((t or {}).get('DueAt') or '')[:10])).days)
+    except ValueError: return 0
 
 
 def late_step(store, t: dict) -> tuple | None:
@@ -195,6 +226,10 @@ def state(store, item: dict, verbs: list) -> tuple:
         return ('goal_late', {'step': late[0], 'days': late[1]}) if late else ('goal', {})
     if lane == 'theirs' and t:
         who, days = waited(store, it, t)
+        # ONE CLOCK WITH THE HEADER (the Advisor audit's judge, 2026-10-26): "Due Oct 24, 2 days late" stood over a lit Remind me, and the
+        # chase line said "this is 4 days" counted from the ask - a wait with a due day past is late by the days past it, as the header
+        # counts them (taskLayout.waitingOn) and a goal's late step does (late_step), and Chase is lit
+        if (late := overdue(t)) > 0: return 'waiting_overdue', {'who': who, 'days': late}
         # ...LEARNED PER PERSON (ruling 8): once three of their answers say how soon this person answers, a silence is late on THEIR day,
         # and the line says their usual beside this wait (usual.chase_usual) - before that, the three working days stand
         from . import usual
@@ -211,9 +246,10 @@ def state(store, item: dict, verbs: list) -> tuple:
             who = str(ins[-1].get('FromEmail') or '').lower()
             if '@' in who: return 'stranger', {'domain': who.rsplit('@', 1)[1]}
         dup = same_thread(store, it) if tid else None
-        if dup and 'remove' in offered:
+        # ...the survivor of the pair keeps its own move; only the other is the duplicate, and its line names the one that stays
+        if dup and offered & {'split', 'remove'} and (keep := survivor(store, tid, dup)) != int(tid):
             from .store import task_ref
-            return 'duplicate', {'ref': task_ref(dup)}
+            return 'duplicate', {'ref': task_ref(keep)}
         # LATE FOR THIS PERSON, BY THE OWNER'S OWN USUAL (the owner, 2026-10-25: "Reply: you usually answer Erin within the hour; this is
         # 3h") - one line, the reason beside the lit Reply, counted from the answers it cites (usual.late_reply)
         from . import usual
@@ -274,7 +310,7 @@ def decide(store, item: dict, verbs: list) -> dict:
 # who holds a late goal step, could not inform Chase, Continue or Remind me - the model, which reads LEARNED.md, was never asked there.
 # These states ask it only where a Your people or Promises line NAMES someone on the item (people_on: addresses and full names - facts,
 # never the words of a mail); every other item stays the rule's alone, with no model call. Safety states never (SAFE).
-MEMORY_ASKS = frozenset({'waiting', 'waiting_late', 'waiting_late_usual', 'goal', 'goal_late', 'stopped', 'agent_done', 'done_list', 'own'})
+MEMORY_ASKS = frozenset({'waiting', 'waiting_late', 'waiting_late_usual', 'waiting_overdue', 'goal', 'goal_late', 'stopped', 'agent_done', 'done_list', 'own'})
 
 
 def memory_on(store, item: dict) -> list:
@@ -337,5 +373,6 @@ def adds(store, item: dict) -> list:
     if lane not in ('theirs', 'forgotten') and not kind.startswith('goal'): return []
     try: st, _f = state(store, it, [{'verb': 'chase'}])
     except Exception: return []
-    if st not in ('waiting_late', 'goal_late'): return []
+    # ...every late wait: past three days, past the person's own day, past its due day - the line said late and Chase was not on the row
+    if st not in ('waiting_late', 'waiting_late_usual', 'waiting_overdue', 'goal_late'): return []
     return ['chase'] if lane == 'forgotten' or chase_thread(store, it) else []

@@ -39,7 +39,7 @@ import { hint as btnHint, label as btn, liveVerb, verbOfRow } from "./buttons.js
 import { readTurn, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive } from "./live.js";
-import { adviceKeyFor, adviceShown, stripWord } from "./advice.js";
+import { adviceKeyFor, adviceShown, stripWord, taskNote } from "./advice.js";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 // TASKUARY'S MARK IN THE CHAT (the owner, 2026-09-28: "the taskuary logo is blue and very obvious ... you can change the
@@ -1080,26 +1080,27 @@ function WorkingFor() {
   return line ? <span className="tq-working" data-tq-working="">{line}</span> : null;
 }
 
+// ...THE SAME DECISION THE TASK SHOWS, OR NOTHING (the Advisor audit's judge, 2026-10-26): the menu listed older model rows - "Someone is
+// waiting on an answer from you." - beside a section that said "You usually answer Erin within the hour". It reads the one decision the
+// row lit and the section says (/api/advice, advisor.decide), through the same filter (advice.taskNote): its line and what it rests on
 function AdvisorNotes({ keyOnTable }) {
-  const [rows, setRows] = useState(null);
+  const [d, setD] = useState(null);
   useEffect(() => {
     let on = true;
-    api.get("/api/advice/notes", { params: { key: keyOnTable, limit: 8 } }).then(({ data }) => { if (on) setRows(data?.rows || []); }).catch(() => { if (on) setRows([]); });
+    api.get("/api/advice", { params: { key: keyOnTable } }).then(({ data }) => { if (on) setD(data || {}); }).catch(() => { if (on) setD({}); });
     return () => { on = false; };
   }, [keyOnTable]);
+  const note = d && taskNote(d), rests = (note && d.rests) || [];
   return (
     <div className="tq-advisor-notes">
       <Typography sx={{ fontSize: 12, fontWeight: 600, color: INK, px: 1.5, pt: 1.25 }}>Advisor's notes on this one</Typography>
-      {rows === null && <Typography sx={{ color: FAINT, fontSize: 12, px: 1.5, py: 0.75 }}>Reading…</Typography>}
-      {rows && !rows.length && <Typography sx={{ color: FAINT, fontSize: 12, px: 1.5, py: 0.75 }}>Nothing judged on it yet.</Typography>}
-      {(rows || []).map((r, i) => (
-        <div key={i} style={{ padding: "6px 12px", borderTop: "1px solid #eee9e2" }}>
-          <Typography sx={{ fontSize: 11.5, color: FAINT }}>{[age(r.at), r.tier > 1 ? "a closer look" : ""].filter(Boolean).join(" · ")}</Typography>
-          <Typography sx={{ fontSize: 12.5, color: INK }}>{r.verb ? `${r.pill} - ${r.line}` : quietWhy(r.dropped)}</Typography>
-          {!r.verb && NO_AI_DROP.test(String(r.dropped || "")) && <ConnectAi variant="outlined" sx={{ mt: 0.5 }} />}
-          {!!(r.evidence || []).some((e) => e.label) && <Typography sx={{ fontSize: 11.5, color: FAINT }}>Looked at: {r.evidence.map((e) => e.label).filter(Boolean).join(" · ")}</Typography>}
-        </div>
-      ))}
+      <div style={{ padding: "6px 12px 8px" }} data-tq-advisor-notes-line="">
+        {d === null ? <Typography sx={{ color: FAINT, fontSize: 12 }}>Reading…</Typography>
+          : d.none === "no_ai" ? <><Typography sx={{ fontSize: 12.5, color: INK }}>{quietWhy("no ai")}</Typography><ConnectAi variant="outlined" sx={{ mt: 0.5 }} /></>
+          : note ? <Typography sx={{ fontSize: 12.5, color: INK }}>{d.label ? `${d.label} - ` : ""}{note.line}</Typography>
+          : <Typography sx={{ color: FAINT, fontSize: 12 }}>{d.label && d.verb !== "next" ? `Nothing to add - ${d.label} is the lit button.` : "Nothing to add on this one."}</Typography>}
+        {rests.length > 0 && <Typography sx={{ fontSize: 11.5, color: FAINT }}>Rests on: {rests.map((r) => r.label).join(" · ")}</Typography>}
+      </div>
     </div>
   );
 }

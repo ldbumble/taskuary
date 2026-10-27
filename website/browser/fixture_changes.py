@@ -48,6 +48,9 @@ def install_processing_changes(app, store):
         # ...and the answer to the terminal stand-in's sign-in ask, for that task only: its press is the thing under test
         if method == 'POST' and path in answer_paths:
             return ''
+        # ...and Keep / Wrong / Forget pressed from the Advisor's Why? on a task: that press reaching the task is what the Advisor test checks
+        if method == 'POST' and path == '/api/learned/mark':
+            return ''
         return refuse(method, path)
 
     demo.refuse = fixture_refuse
@@ -535,26 +538,33 @@ def install_processing_changes(app, store):
     from taskuary import advisor
     real_decide = advisor.decide
 
+    # ...and it passes the SAME check a real answer does (advisor.checked, the judge's fix 3, 2026-10-26): a scripted Send under a draft
+    # caution, a Try again nobody can press, Reply over a ready draft - refused and the next sensible move lit, exactly as the app would.
+    # An agent at work is never advised over: the real decide answers before any model is read, and so does this
     def scripted_decide(st, key, preread=True):
         out = real_decide(st, key, preread)
         tgt = advisor.target_of(st, key)
         o = said.get(int(tgt[1])) if tgt and tgt[0] == 'task' else None
-        if o is None: return out
+        if o is None or out.get('state') == 'working': return out
         item = advisor._item(st, *tgt, key=key)
         verbs = advisor.offered(st, item) if item else []
-        verb = o.get('verb', out.get('verb'))
-        lbl = advisor._label(verbs, verb, item) if verb else ''
-        return {**out, **o, 'key': key, 'label': lbl, 'pill': lbl, 'evidence': [], 'scripted': True}
+        from taskuary import rulebook
+        r = rulebook.decide(st, item, verbs) if item else {'verb': out.get('verb'), 'line': '', 'evidence': []}
+        state = o.get('state', out.get('state'))
+        d = advisor.checked(st, item or {}, verbs, {**out, **o, 'key': key, 'state': state, 'verb': o.get('verb', out.get('verb')), 'evidence': [],
+                            'kind': o.get('kind') or rulebook.KIND.get(state, 'other')}, {'verb': r['verb'], 'line': r['line'], 'evidence': list(r.get('evidence') or [])})
+        lbl = advisor._label(verbs, d['verb'], item) if d['verb'] else ''
+        return {**d, 'label': lbl, 'pill': lbl, 'scripted': True}
     advisor.decide = scripted_decide
 
     @app.post('/api/fixture/advisor/say')
     def advisor_say(body: dict):
-        """{taskId, decision}: the Advisor's decision for that task from now on ({state, verb, line, by}); null puts the real one back."""
+        """{taskId, decision}: the Advisor's decision for that task from now on ({state, verb, line, by, kind}); null puts the real one back."""
         if set(body) != {'taskId', 'decision'} or not isinstance(body['taskId'], int): raise HTTPException(422, 'taskId and decision')
         d = body['decision']
         if d is None: said.pop(body['taskId'], None)
         else:
-            if not isinstance(d, dict) or not set(d) <= {'state', 'verb', 'line', 'by'}: raise HTTPException(422, 'state, verb, line, by only')
+            if not isinstance(d, dict) or not set(d) <= {'state', 'verb', 'line', 'by', 'kind'}: raise HTTPException(422, 'state, verb, line, by, kind only')
             said[body['taskId']] = d
         advisor._emit(f"task:{body['taskId']}", 'task', body['taskId'])
         return {'ok': True}
@@ -584,12 +594,25 @@ def install_processing_changes(app, store):
         msg(dup1, 'Marcus Reed', 'marcus@northwind.example', 'Spendly cards', 'Can we get Spendly cards for the new site?', at(hours=7), 'adv-dup')
         dup2 = store.create_task({'Title': 'RE: Spendly cards', 'Kind': 'reply', 'Status': 'open', 'Source': 'email'}, 'router')
         msg(dup2, 'Marcus Reed', 'marcus@northwind.example', 'RE: Spendly cards', 'Following up on the Spendly cards.', at(hours=2), 'adv-dup')
-        # an agent at work, and one that finished
+        # an agent at work, and one that finished - REACHED this time (the judge: both stages had stayed a plain ask, so "never over a working
+        # agent" was never tried): the working one has a live session the run's own events name (workerstate: working needs a live run), the
+        # finished one its chat and its report, so the page draws its Result
+        from taskuary import general, terminal
         work = store.create_task({'Title': 'Reconcile the Payworth September export', 'Kind': 'general', 'Status': 'in_progress', 'Source': 'email'}, 'router')
         msg(work, 'Paula Vance', 'paula@northwind.example', 'Payworth export', 'The September export does not tie out.', at(hours=3), 'adv-work')
-        ws.record(store, work, f'adv-work-{work}', 'working', source='fixture')
+        pane = _demo.Replay(store, work, 'Claude Code', lines=[('Reading the September export and the bank feed side by side...', 0)])
+        terminal.SESSIONS[pane.sid] = pane
+        ws.record(store, work, str(pane.sid), 'working', source='fixture')
         fin = store.create_task({'Title': 'Summarise the Trainly completion report', 'Kind': 'general', 'Status': 'in_progress', 'Source': 'email'}, 'router')
         msg(fin, 'Gail Moreno', 'gail@northwind.example', 'Trainly completions', 'Who is still missing the safety module?', at(hours=6), 'adv-fin')
+        store.add_comment(fin, 'owner', general.USER_TYPE, 'Who is still missing the safety module?')
+        store.add_comment(fin, 'assistant', general.ASSISTANT_TYPE, 'Four people are missing the safety module; the list is in the result.')
+        store.add_comment(fin, 'general', 'agent', 'AGENT REPORT\nDetermination: four people are missing the safety module.\n'
+                          'Actions: Read the Trainly completion report.\nSummary: The four names, with their sites.')
         ws.record(store, fin, f'adv-fin-{fin}', 'working', source='fixture')
         ws.record(store, fin, f'adv-fin-{fin}', 'finished', text='Four people are missing the safety module; the list is in the result.', source='fixture')
+        # ...AND ERIN'S USUAL AS A LINE IN LEARNED.md, as the day's reflection writes it from the count (learn.answer_lines): the task's late
+        # line reads that line and nothing else, so the task, LEARNED.md and Why? say one thing (the judge's problem 3)
+        from taskuary import learn
+        store.save_doc('learned', learn.answer_lines(store, store.get_doc('learned') or ''), 'reflect')
         return {'late': late, 'plain': plain, 'dup1': dup1, 'dup2': dup2, 'working': work, 'finished': fin}

@@ -85,11 +85,11 @@ def _acted(store, target_kind, target_id) -> str:
 
 
 def _write(store, *, target_kind, target_id, key, event, revision, tier=1, line='', verb=None, label=None, count=(0, 0),
-           evidence=(), model=None, dropped=None) -> int:
-    return store._exec('INSERT INTO advice (TargetKind,TargetId,Key,Event,Revision,Tier,Line,Verb,Label,CountJson,EvidenceJson,Model,Dropped,CreatedAt) '
-                       'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+           evidence=(), model=None, dropped=None, kind=None) -> int:
+    return store._exec('INSERT INTO advice (TargetKind,TargetId,Key,Event,Revision,Tier,Line,Verb,Label,CountJson,EvidenceJson,Model,Dropped,CreatedAt,Kind) '
+                       'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                        (target_kind, int(target_id), key, event, revision, int(tier), line or '', verb, label, json.dumps(list(count)),
-                        json.dumps(list(evidence)), model, dropped, _now()))
+                        json.dumps(list(evidence)), model, dropped, _now(), kind))
 # A drop for an OUTSIDE reason is not a verdict on the item: with no AI, opening an item wrote "no brain" and the line never
 # came once one was connected; 30 reads in an hour left every later item a "cap" for good (2026-10-17 audit). The next look
 # tries again. "nothing to say", "verb not offered", "no item", "no actions" stand for the revision.
@@ -144,8 +144,13 @@ SYSTEM = (
     "owner is a reason to answer, never a reason to put it off. Ending an agent's session is right when its work is done or no "
     "longer wanted; when it has finished something for the owner to review or send, the move is the one that reviews or sends it. If none of the verbs offered is the right move, say nothing - a "
     "wrong suggestion is worse than none. The line is at most 60 characters, so it is read whole on a phone. "
+    # ...AND WHAT KIND OF FACT THE LINE IS (the Advisor audit's judge, 2026-10-26): a caution about the draft stood beside a lit Send - the
+    # check after the answer reads this field, never the line's words, to refuse a verb that contradicts its own reason
     "Answer with JSON only:{\"verb\": \"<one of the verbs>\" or null, \"line\": \"<sentence>\" or \"\", "
-    "\"evidence\": [\"<ids from the lines below>\"]}. "
+    "\"evidence\": [\"<ids from the lines below>\"], \"kind\": \"<what the line's fact is>\"}. The kind is one of: late (an answer or a "
+    "wait past its time), same_ask (another task holds this same ask), draft_caution (the draft is not ready to send as written), "
+    "handoff (someone else does this work), failure (something failed), memory (another fact about how the owner works), other - "
+    "\"other\" with an empty line. "
     "EXCEPT when the EVENT is item.shown: the owner is looking at this item right now and is owed a next step, so pick the verb the "
     f"item's own facts make right (a person waiting on them: {L('reply')}; an agent asking them something is answered in its own pane, "
     "not by a verb - pick what else its facts make right, or nothing; nothing "
@@ -188,8 +193,10 @@ def _system(store) -> str:
     return f"{SYSTEM}\n\nHOW THE LINE SPEAKS (the owner's own rules):\n{voice}" if voice else SYSTEM
 # the event every item on the table gets, when no other event judged it at its current revision (Advisor audit, 2026-10-15)
 SHOWN = 'item.shown'
+KINDS = ('late', 'same_ask', 'draft_caution', 'handoff', 'failure', 'memory', 'other')
 WANT = {'type': 'object', 'properties': {'verb': {'type': ['string', 'null']}, 'line': {'type': 'string'},
-                                         'evidence': {'type': 'array', 'items': {'type': 'string'}}}, 'required': ['verb', 'line', 'evidence']}
+                                         'evidence': {'type': 'array', 'items': {'type': 'string'}}, 'kind': {'type': 'string', 'enum': list(KINDS)}},
+        'required': ['verb', 'line', 'evidence']}
 _EV = re.compile(r'^(out|mem|rv|task|msg|fs|sv|idea|lrn)\d+$')   # ...and the owner's own acts the usual is counted from (usual.py), and a memory line
 
 
@@ -724,7 +731,8 @@ def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1
     # another. The rule's move stands instead
     if verb != 'forward' and target_kind in ('task', 'message') and set(ev) & _usual(store, item, target_kind, target_id)[1]:
         return W(dropped='a hand-off reason over another verb', model=model, line=line, evidence=ev)
-    rid = W(line=line, verb=verb, label=hit['label'],count=habit(store, verb, item), evidence=ev, model=model)
+    kind = d.get('kind') if d.get('kind') in KINDS else 'other'
+    rid = W(line=line, verb=verb, label=hit['label'],count=habit(store, verb, item), evidence=ev, model=model, kind=kind)
     _emit(key, target_kind, target_id); return rid
 
 
@@ -876,7 +884,9 @@ def offered(store, item: dict) -> list:
     # ...and A GENERAL AGENT'S RUN THAT FAILED with nothing named to fix is tried again from its saved conversation - the step's own
     # Continue, said as Try again (owner-approved, 2026-10-21). A coding agent's keeps New task: Continue reopened it into the same
     # unreachable database (the 2026-10-20 deep dive)
-    elif f and f.get('kind') == 'agent' and _retryable_agent(store, item):
+    # ...when it can start again from here: with no brain to run on, Try again is greyed on the page, and New task stands in for it (the
+    # Advisor audit's judge, 2026-10-26 - a lit Try again nobody could press left nothing lit at all)
+    elif f and f.get('kind') == 'agent' and _retryable_agent(store, item) and not _agent_ready(store, item):
         lead.append(buttons.chip('continue') | {'label': buttons.label('try_again'), 'hint': buttons.hint('try_again')})
     elif f and not f.get('unknown'): lead.append(buttons.chip('new_task', 'fix') | {'task': fix_task(store, item, f)})
     return lead + verbs
@@ -988,6 +998,7 @@ def decide(store, key: str, preread: bool = True) -> dict:
     verbs = offered(store, item)
     r = rulebook.decide(store, item, verbs)
     verb, line, by, ev = r['verb'], r['line'], 'rule', list(r.get('evidence') or [])
+    kind = rulebook.KIND.get(r['state'], 'rule')
     rs = _at(store, tgt[0], tgt[1], rev)
     # only the rows written for THIS item (keys_of): a line judged over the same task's other card is not this one's
     own = _own(store, tgt, key, rs); rs = [x for x in rs if x.get('Key') in own]
@@ -998,10 +1009,13 @@ def decide(store, key: str, preread: bool = True) -> dict:
         # ...A STATE ASKED ONLY FOR ITS MEMORY (rulebook.memory_on) is changed only by an answer resting on that memory: asked about a late
         # step because a line named its holder, the model swapped Chase's Remind me for "Ask the sender" on the age alone (live A/B, 2026-10-26)
         if hit and r.get('memory') and not set(json.loads(m.get('EvidenceJson') or '[]')) & memory_ids(store, item, *tgt): hit = None
+        # ...AND AN ANSWER RESTING ON A MEMORY LINE THE OWNER PUT DOWN rests on nothing (the Advisor audit's judge, 2026-10-26): Wrong on
+        # a line left the task saying it - the rule's move stands until the item changes and the model reads it again
+        if hit and withdrawn(store, json.loads(m.get('EvidenceJson') or '[]')): hit = None
         # the model's verb stands where it differs from the rule's - with its line, the reason the lit button is not the one you would
         # guess; agreeing, the rule's fact stands and the model's sentence goes (ruling 1: no explanation of the obvious button)
         if hit and mv != verb:
-            verb, by, ev = mv, 'model', json.loads(m.get('EvidenceJson') or '[]')
+            verb, by, ev, kind = mv, 'model', json.loads(m.get('EvidenceJson') or '[]'), m.get('Kind') or 'other'
             line = '' if r['state'] == 'idea' else _one(plain(m.get('Line') or '', m['Verb'], hit['label']), 64)
         # ...AND AGREEING, A MEMORY REASON IS SAID (the live memory A/B, 2026-10-26): "You answer Erin the same day" and "Paula takes
         # W-9s now" were read, used, and dropped for agreeing with the lit button - the memory never reached the strip. A line that cites
@@ -1010,7 +1024,7 @@ def decide(store, key: str, preread: bool = True) -> dict:
         elif hit and r['state'] != 'idea' and m.get('Line') and not (line and r.get('evidence')):
             mev = json.loads(m.get('EvidenceJson') or '[]')
             if set(mev) & memory_ids(store, item, *tgt):
-                by, ev, line = 'model', mev, _whole_words(plain(m['Line'], m['Verb'], hit['label']), 60)
+                by, ev, line, kind = 'model', mev, _whole_words(plain(m['Line'], m['Verb'], hit['label']), 60), m.get('Kind') or 'memory'
 
         # NEVER LEFT GUESSING (the owner, 2026-10-15): the item on the table is read now, at this revision, once - the rule's button
         # stands lit meanwhile, and the model's answer arrives by the `advice` live event the page already reads
@@ -1018,9 +1032,12 @@ def decide(store, key: str, preread: bool = True) -> dict:
         if not mv and r['state'] in rulebook.NEEDS_AI and rs and rs[0].get('Dropped') == 'no brain':
             return {'key': key, 'none': 'no_ai', 'state': r['state'], 'revision': rev, 'line': ''}
     if preread: _preread(store, key)
+    d = checked(store, item, verbs, {'key': key, 'state': r['state'], 'verb': verb, 'line': line, 'by': by, 'evidence': ev, 'kind': kind},
+                {'verb': r['verb'], 'line': r['line'], 'evidence': list(r.get('evidence') or [])})
+    verb, line, by, ev = d['verb'], d['line'], d['by'], d['evidence']
     lbl = _label(verbs, verb, item) if verb else ''
     out = {'key': key, 'state': r['state'], 'verb': verb, 'label': lbl, 'line': line, 'by': by, 'revision': rev, 'pill': lbl, 'evidence': ev,
-           'ask': r['ask'], 'needs_ai': r['state'] in rulebook.NEEDS_AI}
+           'ask': r['ask'], 'needs_ai': r['state'] in rulebook.NEEDS_AI, 'kind': d['kind'], **({'checked': d['checked']} if d.get('checked') else {})}
     # a fix is a place, not a proposal: the page opens its href where the row has no '<rid>:fix' of its own to press (a failed act with
     # no draft on the table) - read live, so a fix already made carries no stale link
     if verb == 'fix':
@@ -1032,6 +1049,122 @@ def decide(store, key: str, preread: bool = True) -> dict:
         try: f = failure(store, item)
         except Exception: f = None
         if f: out['task'] = fix_task(store, item, f)
+    kept(store, out)
+    return out
+
+
+# ── THE CHECK AFTER THE ADVISOR DECIDES (the Advisor audit's judge, 2026-10-26) ─────────────────────────────────────────────────────────
+# The model still decides; this only refuses a pick the owner could not press or that contradicts its own reason's KIND (the model states
+# it, a rule's state carries it - never the line's words), and falls to the next sensible move the row can press. Four failures it ends:
+# a lit Try again greyed for want of an AI (nothing lit at all), "the draft promises Friday" beside a dark Send, a late line on a drafted
+# task lighting Reply over the draft's own Send, and the survivor of a duplicate pair folded into its own twin. Each refusal is logged.
+AGENT_VERBS = frozenset({'continue', 'regular_agent', 'run_another', 'strong_again'})
+AGENT_CHECK = True       # the suite turns this off (tests/conftest.py): a bare store has no brain, and its agents' buttons are not the subject
+
+
+def _agent_ready(store, item: dict) -> str:
+    """'' when an agent can start on the item from here, else why not - the page's own check (capabilities.cannotStart: an AI, and a brain a
+    general hand-off can choose), so the Advisor never lights a button the page greys."""
+    if not AGENT_CHECK: return ''
+    from . import capabilities, general, agents as ha
+    try:
+        if not capabilities.has_ai(store): return 'no AI is connected'
+        brains = dict(ha.connection_brains(store))
+        ok = any(o.get('type') != 'cli' or ha.runs_here(brains.get(o['pick'][4:])) for o in general.provider_options(store))
+        return '' if ok else 'no brain an agent can run on'
+    except Exception as e: logger.debug(f'advisor: no agent check for {item.get("key")} - {e}'); return ''
+
+
+def pressable(store, item: dict, verb: str, verbs: list) -> str:
+    """'' when the row carries `verb` and it can be pressed now, else why not."""
+    if not verb or verb == 'next': return ''
+    if verb not in {v['verb'] for v in verbs}: return 'not on the row'
+    return _agent_ready(store, item) if verb in AGENT_VERBS else ''
+
+
+def checked(store, item: dict, verbs: list, d: dict, rule: dict) -> dict:
+    """`d` ({verb, line, by, evidence, kind, state}) as the owner may be shown it: unchanged, or its verb refused (`checked` says why) and the
+    next sensible pressable move lit - the line kept where it is still the reason for that move, else the rule's own line."""
+    from . import rulebook
+    verb, kind, why, instead = d['verb'], d.get('kind') or 'other', '', []
+    drafted = 'approve' in {v['verb'] for v in verbs}
+    if (no := pressable(store, item, verb, verbs)): why = f'{verb}: {no}'
+    elif kind == 'draft_caution' and verb == 'approve': why, instead = 'a caution about the draft over its Send', ['redraft', 'ask_sender']
+    elif kind == 'late' and verb == 'reply' and drafted: why, instead = 'late on a drafted task: the draft is the answer', ['approve']
+    elif kind == 'same_ask' and verb in ('remove', 'split') and _survives(store, item): why = 'the survivor of a duplicate pair is never folded'
+    if not why: return {**d, 'kind': kind}
+    lit = (rulebook.RULES.get(d.get('state')) or {}).get('lit') or []
+    pick = next((v for v in [*instead, rule['verb'], *lit] if v and v != verb and not pressable(store, item, v, verbs)
+                 and not (kind == 'draft_caution' and v == 'approve')), 'next')
+    keep = pick in instead                       # the line is still this move's reason
+    logger.info(f"advisor: {d['key']} {verb} refused ({why}) - {pick} lit instead")
+    if keep: return {**d, 'verb': pick, 'kind': kind, 'checked': why}
+    same = pick == rule['verb']
+    return {**d, 'verb': pick, 'by': 'rule', 'kind': rulebook.KIND.get(d.get('state'), 'rule'), 'checked': why,
+            # ...a failure is the fact whatever is lit (rulebook.decide), so its line stays over the move that gets past it
+            'line': rule['line'] if (same and pick != 'next') or d.get('state') in rulebook.FAILED else '', 'evidence': rule['evidence'] if same else []}
+
+
+def _survives(store, item: dict) -> bool:
+    from . import rulebook
+    tid = item.get('tid')
+    dup = rulebook.same_thread(store, item) if tid else None
+    return bool(dup) and rulebook.survivor(store, tid, dup) == int(tid)
+
+
+def withdrawn(store, ev: list) -> bool:
+    """Whether an answer cites a memory line no longer in the document - put down (Wrong, Forget) or replaced since it was read."""
+    from . import learned_cut
+    want = [e for e in ev or [] if str(e).startswith('lrn')]
+    return bool(want) and not set(want) <= set(learned_cut.cited(store, want))
+
+
+# THE DECISION, KEPT (the Advisor audit's judge, 2026-10-26): every surface reads decide - the stored row is what a Wrong or Forget on a
+# memory line finds to re-read: the items whose decision rested on it are named in the `advice` event, and their pages ask again
+def kept(store, d: dict):
+    try: store._exec('INSERT OR REPLACE INTO advice_decision (Key, Stamp, Json, At) VALUES (?,?,?,?)', (d['key'], d.get('revision') or '', json.dumps(d), _now()))
+    except Exception as e: logger.debug(f"advisor: decision for {d.get('key')} not kept - {e}")
+
+
+def resting_on(store, ids) -> list:
+    """The keys whose kept decision cites any of `ids` (a memory line's cite id, its evidence)."""
+    want = {str(i) for i in ids or () if i}
+    out = []
+    for r in store._rows("SELECT Key, Json FROM advice_decision WHERE Key NOT LIKE 'pair:%'"):
+        try: ev = set(json.loads(r['Json']).get('evidence') or [])
+        except ValueError: continue
+        if ev & want: out.append(r['Key'])
+    return out
+
+
+def forgot(store, cite: str, ev=()) -> list:
+    """A memory line put down: each item whose decision rested on it is re-read (its `advice` event), so it stops saying it. The keys."""
+    keys = resting_on(store, [cite, *(e for e in ev if not str(e).startswith('msg'))]) if cite else []
+    for k in keys:
+        store._exec('DELETE FROM advice_decision WHERE Key=?', (k,))
+        tgt = target_of(store, k)
+        if tgt: _emit(k, *tgt)
+    return keys
+
+
+def rests(store, d: dict) -> list:
+    """What a decision rests on, in words, for Why?: each evidence id as its label, and a memory line with its key - so Keep, Wrong and
+    Forget can be pressed on it from the task (the judge's F5)."""
+    from . import learned_cut
+    from .learnedgraph import _resolve, TAG
+    ev = list(d.get('evidence') or [])
+    hits = learned_cut.cited(store, [e for e in ev if str(e).startswith('lrn')])
+    out = []
+    for e in ev:
+        if e in hits:
+            raw, k, s = hits[e]
+            m = TAG.match(raw)
+            out.append({'id': e, 'kind': 'memory', 'key': k, 'own': not m, 'section': s,
+                        'label': (m.group('text') if m else raw.strip().lstrip('-* ')).strip()})
+        else:
+            try: r = _resolve(store, e)
+            except Exception: r = {}
+            if r.get('label') and r.get('label') != e: out.append({'id': e, 'kind': r.get('kind') or '', 'label': r['label']})
     return out
 
 
@@ -1056,7 +1189,13 @@ def _preread(store, key: str):
 REASONS = tuple(words.ADVICE_NONE)
 def status(store, key: str) -> dict:
     """decide, or {'none': 'nothing'} for a key nothing is decided on (a meeting row, a connection): the page lights Next, silent."""
-    return decide(store, key) or {'none': 'nothing'}
+    d = decide(store, key)
+    if not d: return {'none': 'nothing'}
+    # ...with what its line rests on, in words: the Advisor section's Why? and the clock menu read THIS, never older rows (the judge, 2026-10-26)
+    if d.get('line'):
+        try: d['rests'] = rests(store, d)
+        except Exception as e: logger.debug(f'advisor: no rests for {key} - {e}')
+    return d
 
 
 # ── LIT AND PRESSED (the deep dive, 2026-10-20) ─────────────────────────────────────────────────────────────────────────────────

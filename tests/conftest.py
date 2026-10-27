@@ -523,6 +523,14 @@ def no_advisor_in_the_background():
     advisor.BACKGROUND = goals.BACKGROUND = False; yield; advisor.BACKGROUND = goals.BACKGROUND = True
 
 
+@pytest.fixture(autouse=True, scope='session')
+def agents_can_start():
+    """A bare store connects no brain, so every agent button would be greyed and the Advisor's check refuse them all (advisor.checked) -
+    agents are not what most tests are about. A test of that check turns it on (`advisor.AGENT_CHECK = True`)."""
+    from taskuary import advisor
+    advisor.AGENT_CHECK = False; yield; advisor.AGENT_CHECK = True
+
+
 @pytest.fixture(autouse=True)
 def no_turn_end_judge_in_the_background():
     """A general agent's finished turn is read by the turn-end judge on a daemon thread (hooks.judge_ended) - one more model call

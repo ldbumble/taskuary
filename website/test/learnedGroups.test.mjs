@@ -39,6 +39,7 @@ test("your people sit under the person they are about, with their page linked on
 test("Keep / Wrong / Forget: all three on a learned line, only Forget on yours, none on a line already put down", () => {
   assert.deepEqual(marksFor(g.lines[0]), ["keep", "wrong", "forget"]);
   assert.deepEqual(marksFor(g.lines[2]), ["forget"]);
+  assert.deepEqual(marksFor({ ...g.lines[0], kept: true }), ["wrong", "forget"], "a line you Kept says so, and offers no Keep again");
   assert.deepEqual(changeMarks({ key: "erin", newest: true, standing: "in_use" }), ["keep", "wrong", "forget"]);
   assert.deepEqual(changeMarks({ key: "erin", newest: false, standing: "in_use" }), [], "once per line, on its newest row");
   for (const st of ["wrong", "forgotten", "closed", "retired", "gone"]) assert.deepEqual(changeMarks({ key: "x", newest: true, standing: st }), []);

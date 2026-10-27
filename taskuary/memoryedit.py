@@ -79,6 +79,10 @@ def mark(store, key: str, how: str) -> dict:
             st, ev = ('wrong', None) if how == 'wrong' else ('forgotten', len([e for e in str(r.get('Ev') or '').split(',') if e]))
             store._exec('UPDATE learned_line SET Status=?, InDoc=0, ForgotEv=IFNULL(?, ForgotEv), UpdatedAt=? WHERE Key=?', (st, ev, _now(), key))
             store.add_learned_event(key, text, (l or {}).get('status') or 'live', 0, '', 'wrong' if how == 'wrong' else 'forgotten', 'owner')
+        # ...and every task whose Advisor line rested on it says so no more (the Advisor audit's judge, 2026-10-26: Wrong on "You answer
+        # Erin the same day" left her task saying her usual): their decisions are re-read now, without the line
+        from . import advisor
+        advisor.forgot(store, lc.cite_of(key), (l or {}).get('ev') or [e for e in str(r.get('Ev') or '').split(',') if e])
     return {'ok': True, 'key': key, 'how': how, 'text': text}
 
 

@@ -5,12 +5,12 @@ import { startHarness } from "./harness.mjs";
 /* A TASK OPENED OVER SETUP IS THE ITEM IN FRONT OF THE OWNER (the 2026-10-26 memory A/B's UI pass): opened by its link or by Search while
    setup was still open, it drew its row with nothing lit, while the same task reached in the walk had its lit button - the table counted
    setup as being in view (tableOf's `setup`) though the task was drawn over it. The decision is stood in for here (the fresh fixture has no
-   AI): its button is lit, and its warning - no strip over the row since 2026-10-26 (the owner: "remove the advisor") - stands in the task
-   itself; Back to Setup puts setup back, with nothing said over it. Invented Northwind people. */
+   AI): its button is lit, and its line - no strip over the row since 2026-10-26 (the owner: "remove the advisor") - stands in the task's
+   Advisor section; Back to Setup puts setup back, with nothing said over it. Invented Northwind people. */
 
 const LINE = "Ray Colton already answered this on the thread.";
 
-test("a task opened over setup has its lit button and its warning in the task; back on setup nothing is said", { timeout: 240000 }, async (t) => {
+test("a task opened over setup has its lit button and its line in the task's Advisor section; back on setup nothing is said", { timeout: 240000 }, async (t) => {
   const harness = await startHarness({ fresh: true });
   t.after(() => harness.close());
   const H = { "X-Taskuary-Token": harness.token, "Content-Type": "application/json" };
@@ -35,12 +35,14 @@ test("a task opened over setup has its lit button and its warning in the task; b
   assert.equal(await said(), false, "setup in view: nothing of the Advisor's");
 
   await page.evaluate((tid) => { window.location.hash = `task=${tid}`; }, made.taskId);
-  await page.waitForFunction((l) => document.querySelector('[data-tq-canvas-item] [data-tq-advisor-note="task"]')?.textContent.includes(l), { timeout: 30000, polling: 200 }, LINE)
+  await page.waitForFunction((l) => document.querySelector("[data-tq-canvas-item] [data-tq-advisor] [data-tq-advisor-note]")?.textContent.includes(l), { timeout: 30000, polling: 200 }, LINE)
     .catch(async (e) => { throw new Error(`${e.message}\n${(await page.evaluate(() => document.body.innerText)).slice(-1200)}`); });
   assert.ok(await page.$('.tq-arow .tq-ab.p[data-tq-verb]'), "its button is lit");
   assert.equal(await page.$(".tq-dock .tq-next, [data-tq-strip]"), null, "and nothing over the row");
-  // ...a model's line keeps its Why?
-  assert.ok(await page.$('[data-tq-advisor-note="task"] .tq-next-why'), "the warning's Why?");
+  // ...in the task's own Advisor section (the owner, 2026-10-26), its line keeping its Why? - and a drawer holding it says so on its tab
+  assert.ok(await page.$("[data-tq-advisor] .tq-next-why"), "the line's Why?");
+  const tab = await page.evaluate(() => document.querySelector("[data-tq-work-tab]")?.textContent || null);
+  if (tab !== null) assert.match(tab, /1 note/);
 
   // ...and Back to Setup: setup is in view again, and the task's warning goes with the task
   const back = await page.evaluate(() => { const b = [...document.querySelectorAll("button")].find((x) => x.innerText.trim() === "Back to Setup"); b?.click(); return !!b; });

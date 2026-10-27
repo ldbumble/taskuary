@@ -7,12 +7,11 @@ import fs from "node:fs";
 const read = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 const view = read("AssistantView.jsx"), cards = read("assistantCards.jsx");
 
-test("no AI connected: the row carries Connect an AI, lit, and it opens Connections, AI (U3)", () => {
+test("no AI connected: no strip says it, and nothing is added to the row - a row's own Connect an AI is lit where it has one (U3)", () => {
   assert.match(read("tableState.js"), /data\.verb \|\| data\.none \|\| data\.state/, "the no-AI answer is kept, not dropped as nothing");
-  // ...ON THE ROW, not in a strip over it (the owner, 2026-10-26: "remove the advisor"): the row's own Connect an AI where it has one (a
-  // failed run's fix), else this one - and ActionRow lights it for a no_ai pick (the design, phase A: it lit nothing)
-  assert.match(view, /useVerbs\("noai", \[\{ id: "noai:connect", group: "decide", label: CONNECT_AI,[^\n]*\n\s+run: \(\) => openAppLink\(place\("ai"\)\.href\) \}\], !firstRun && noAi && !rowConnect\);/);
-  assert.match(view, /const rowConnect = rowVerbs\.list\.some\(\(v\) => v\.label === CONNECT_AI && !v\.disabled && v\.id !== "noai:connect"\);/);
+  // ...the strip that asked for an AI is gone (the owner, 2026-10-26: "remove the advisor"), and with it its button: setup is where an AI
+  // is connected, and a failed run's Result says why and where (the same day: "if you don't get through ai setup the whole thing doesn't work")
+  assert.doesNotMatch(view, /noai:connect/, "and no Connect an AI added to the row (the owner, 2026-10-26: \"why would we need connect an ai?\")");
   assert.match(read("ActionRow.jsx"), /const conn = move === "ai" \? verbs\.list\.find\(\(v\) => v\.label === CONNECT_AI && !v\.disabled\) : null;/);
   assert.doesNotMatch(view, /adviceNone\("no_ai"\)/);
   // ...and only where the move needs an AI: a rule decides the rest with none connected (`needs_ai`, advisor.decide)

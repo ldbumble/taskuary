@@ -3096,7 +3096,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // ...and every other reason there is no line, said (words.json advice_none) - an agent at work included, whose line is hidden.
   // ONE DECISION for the strip's word and the button it lights (advice.stripWord): they were chosen apart, and "Connect an AI" stood
   // over a dark Stop and save on an agent that needed nothing (the UI audit's C2, 2026-10-21)
-  const { noAi, pick: stripPick } = stripWord({ speaks: table.speaks, busy, shown: shownAdvice, lit: litNow, aiOff: caps.ai === false,
+  const { pick: stripPick } = stripWord({ speaks: table.speaks, busy, shown: shownAdvice, lit: litNow, aiOff: caps.ai === false,
     advice, key: table.key, lane: currentItem?.lane });
   // ON A PHONE THE LINE RIDES WITH ITS ROW: the row is drawn at the task view's foot there (CanvasItem), and the line pinned over the
   // composer stood a screen away from the button it lit (2026-10-19) - the view draws both, and the dock none
@@ -3112,11 +3112,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const setupLit = !firstRun ? null : (() => { const v = rowVerbs.list.find((x) => /^(setup|about):/.test(String(x.id)) && x.tone === "p" && !x.disabled); return v ? { id: v.id } : null; })();
   pickRef.current = stripPick || setupLit;         // what the row is drawn with - a press records what it had filled (notePress)
   const rowEmpty = !rowVerbs.list.some((v) => !String(v.id).startsWith("floor:"));
-  // NO AI, WHERE THE MOVE NEEDS ONE: the strip said "Connect an AI." over the row with its own button (2026-10-26, the strip gone) - the
-  // button joins the row instead, the one lit (ActionRow lights a row's Connect an AI for a no_ai pick), unless the task's row has its own
-  const rowConnect = rowVerbs.list.some((v) => v.label === CONNECT_AI && !v.disabled && v.id !== "noai:connect");
-  useVerbs("noai", [{ id: "noai:connect", group: "decide", label: CONNECT_AI, title: "No AI is connected - connect one under Connections",
-    run: () => openAppLink(place("ai").href) }], !firstRun && noAi && !rowConnect);
   // ...and not under a page the owner opened on the canvas (Reports, Connections): they are working there, and the line read
   // as part of that page (the owner's workflow screenshot, 2026-10-15)
   // ...and under a proposal waiting on its Confirm: the item it came from folded away with its row, and the walk must still go on

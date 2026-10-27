@@ -11,6 +11,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import api from "./api";
+import { readFirstRun } from "./firstRunState.js";
 import { DIM, FAINT, INK } from "./theme.jsx";
 import { CardGrid, ChannelDetail, ConnCard, connCardOf } from "./ConnectorsView.jsx";
 import { CliPane, useCliSetup } from "./cliSetup.jsx";
@@ -254,9 +255,12 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
   }, [pane?.sid]);
   // A BACKGROUND READ NEVER CLEARS AN ERROR (the non-coder audit, 2026-10-17): the 3-5s poll wiped the Change AI road's error before
   // it could be read. `err` goes on a user's own press or a step change; the first load's failure is its own (loadErr).
+  // ...the first one takes the answer the Assistant read a moment ago to open setup (firstRunState.js); every later one reads anew
+  const firstRead = useRef(true);
   const reload = useCallback(async () => {
+    const fresh = firstRead.current ? 3000 : 0; firstRead.current = false;
     try {
-      const [f, c, s] = await Promise.all([api.get("/api/setup/first-run", { timeout: 30_000 }), api.get("/api/connectors"), api.get("/api/sources")]);
+      const [f, c, s] = await Promise.all([readFirstRun(fresh, { timeout: 30_000 }).then((data) => ({ data })), api.get("/api/connectors"), api.get("/api/sources")]);
       setSt(f.data); setConns(c.data.data || []); setSources(s.data.data || []); setLoadErr("");
       return f.data;
     } catch (e) { setLoadErr(errText(e)); setFails((n) => n + 1); return null; }

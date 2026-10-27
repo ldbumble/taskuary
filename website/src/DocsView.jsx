@@ -291,7 +291,9 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
       setDocs((cur) => ({ ...cur, ...d })); setSaved((cur) => ({ ...cur, ...d })); setLoaded(true);
     } catch (e) { setErr(e?.response?.data?.detail || "Failed to load documents"); }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  // ...not for the unseen catalogue (catalogOnly): it reports profiles, playbooks and people, never a document's words - and it read all
+  // nine every time Settings > Docs or Profiles drew its list, twelve requests for three it uses (the overnight setup walk, 2026-10-26)
+  useEffect(() => { if (!catalogOnly) load(); }, [load, catalogOnly]);
 
   const loadBooks = useCallback(async () => {
     try {

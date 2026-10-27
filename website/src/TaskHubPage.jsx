@@ -8,7 +8,7 @@ import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import { pollWhileVisible } from "./visible.js";
 import { holdLive, onLive } from "./live.js";
-import { covers, seqOf } from "./liveSeq.js";
+import { covers, mine, seqOf } from "./liveSeq.js";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import GridViewIcon from "@mui/icons-material/GridViewOutlined";
@@ -474,22 +474,33 @@ export default function TaskHubPage() {
 
   // ...the write stamp of the newest count drawn (liveSeq.js): a burst it was already read after is not counted again - an FYI press
   // counted on its answer and then twice more on the wake-ups its own settle sent (the overnight walk, 2026-10-26)
-  const pendingSeen = useRef({ seq: null, n: 0 });
-  const refreshPending = useCallback(async () => {
+  const pendingSeen = useRef({ seq: null, n: 0, flight: null });
+  const refreshPending = useCallback(() => {
     const n = ++pendingSeen.current.n;
-    try {
-      const res = await api.get("/api/reviews", { params: { status: "pending" } }), rows = res.data.data || [];
-      if (n !== pendingSeen.current.n) return;          // a count asked for since is the newer one
-      pendingSeen.current.seq = seqOf(res);
-      setPending(new Set(rows.map((r) => r.TaskId ?? `rv:${r.ReviewId}`)).size);
-    }
-    catch { /* badge is optional */ }
+    const flight = (async () => {
+      try {
+        const res = await api.get("/api/reviews", { params: { status: "pending" } }), rows = res.data.data || [];
+        if (n !== pendingSeen.current.n) return;          // a count asked for since is the newer one
+        pendingSeen.current.seq = seqOf(res);
+        setPending(new Set(rows.map((r) => r.TaskId ?? `rv:${r.ReviewId}`)).size);
+      }
+      catch { /* badge is optional */ }
+    })();
+    pendingSeen.current.flight = flight;
+    flight.finally(() => { if (pendingSeen.current.flight === flight) pendingSeen.current.flight = null; });
+    return flight;
   }, []);
   useEffect(() => { refreshPending(); }, [refreshPending, tick]);
   // The badge counts a queue the server changes on its own - a drafter finishing, a reply that
   // landed. Counting only on mount and on the refresh icon left "Tasks · 2" over three drafts.
-  useEffect(() => onLive(["feed-changed", "task-changed"], (ev, meta) => { if (!covers(pendingSeen.current.seq, meta)) refreshPending(); },
-    { wait: 250, max: 1500 }), [refreshPending]);
+  // ...as the rail does (AssistantView's reloadFor), on a slow machine a Next's own writes came as two wake-ups and the badge counted
+  // twice (CI's reads-once): a burst of only this page's presses waits for its last write, and a count already on its way is waited
+  // out first - it may be the one that holds the burst
+  useEffect(() => onLive(["feed-changed", "task-changed"], (ev, meta) => {
+    const stale = () => !covers(pendingSeen.current.seq, meta), flight = pendingSeen.current.flight;
+    if (!flight) { if (stale()) refreshPending(); return; }
+    flight.then(() => { if (stale()) refreshPending(); });
+  }, { wait: (ev) => (mine(ev) ? 1500 : 250), max: 1500 }), [refreshPending]);
 
   // EVERY OLD LINK STILL LANDS - in the canvas (canvasLinks.js): #task=123 opens that task's view, #connector=,
   // #settings=, #report=, #playbook= open their browse card, #new-task the New sheet, #msg= that message's card

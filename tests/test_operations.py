@@ -148,9 +148,9 @@ class CorrectionTests(unittest.TestCase):
 
     def test_evidence_is_not_a_memory_note_and_not_a_sender_rule(self):
         s = MemoryStore(); mid = arrive(s, 'fyi')['message_id']
-        before = (len(s.list_memories(False)), len(s.list_policies(False)))
+        before = (s.get_doc('learned'), len(s.list_policies(False)))
         self.run_op(s, 'task.create_from_message', mid, {'kind': 'task'})
-        self.assertEqual((len(s.list_memories(False)), len(s.list_policies(False))), before)
+        self.assertEqual((s.get_doc('learned'), len(s.list_policies(False))), before)
         self.assertEqual(len(operations.corrections(s, message_id=mid)), 1)
 
     def test_evidence_that_could_not_be_written_is_recovered_without_repeating_the_action(self):

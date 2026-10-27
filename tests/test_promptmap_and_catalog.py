@@ -11,6 +11,7 @@ import taskuary
 from fastapi.testclient import TestClient
 from taskuary import promptmap, server
 from taskuary.store import MemoryStore
+from tests.memlines import note
 
 c = TestClient(server.app)
 
@@ -21,7 +22,7 @@ def _loaded():
     s.upsert_agent('coding', 'coding', 'cli', '{}')         # the coding profile, found by its kind: CODING.md rides with it
     s.save_doc('coding', '# rules\n- CODINGMARK', 'owner')
     s.save_doc('style', '### Tone\n- STYLEMARK: two sentences, answer first, never a preamble.', 'owner')
-    s.add_memory({'Scope': 'global', 'ScopeKey': None, 'Note': 'NOTEMARK defer to finance',
+    note(s, {'Scope': 'global', 'ScopeKey': None, 'Note': 'NOTEMARK defer to finance',
                   'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner'})
     tid = s.create_task({'Title': 'the importer crashed', 'Kind': 'coding', 'Source': 'email'}, 'test')
     s.add_message({'TaskId': tid, 'ExternalId': 'p1', 'Channel': 'email', 'Subject': 'importer crashed',
@@ -51,7 +52,7 @@ class PromptMapTests(unittest.TestCase):
         # the block header naming the doc must come BEFORE its text, or the map attributes wrongly
         self.assertLess(out.index('SOUL.md'), out.index('SOULMARK'))
         self.assertIn('NOTEMARK', out)                       # standing notes are shown too
-        self.assertIn('memory table', out)
+        self.assertIn('LEARNED.md lines about it', out)
 
     def test_it_says_which_prompt_the_message_is_the_user_turn_of(self):
         """The system/user split is the part people get wrong when reading a prompt dump."""

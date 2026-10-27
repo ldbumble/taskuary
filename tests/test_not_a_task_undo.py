@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from taskuary import demo, recentlydeleted, server
 from taskuary.store import MemoryStore
+from tests.memlines import teaching
 
 
 class NotATaskUndoTests(unittest.TestCase):
@@ -21,7 +22,8 @@ class NotATaskUndoTests(unittest.TestCase):
         self.s.add_comment(self.tid, 'owner', 'human', 'asked accounting')
 
     def remove(self):
-        r = self.c.post(f'/api/tasks/{self.tid}/not-a-task')
+        with teaching('Fuel card statements are accounting\'s, never a task for you'):
+            r = self.c.post(f'/api/tasks/{self.tid}/not-a-task')
         self.assertEqual(r.status_code, 200, r.text)
         return r.json()
 
@@ -35,7 +37,7 @@ class NotATaskUndoTests(unittest.TestCase):
         out = self.remove()
         ignore = self.s._one("SELECT RouteId FROM route WHERE MessageId=? AND Decision='ignore'", (self.mid,))
         self.assertTrue(ignore, 'the thread was ruled on')
-        mem = out['learned']['memory_id']
+        self.assertIn("Fuel card statements are accounting's", self.s.get_doc('learned'))
         r = self.c.post(f"/api/deleted/{out['deleted']}/restore")
         self.assertEqual(r.status_code, 200, r.text)
         tid = r.json()['task_id']
@@ -46,7 +48,7 @@ class NotATaskUndoTests(unittest.TestCase):
         self.assertEqual(self.s.get_message(self.mid)['TaskId'], tid)
         self.assertNotEqual(self.s.get_message(self.mid)['Status'], 'filed')
         self.assertIsNone(self.s._one('SELECT 1 FROM route WHERE RouteId=?', (ignore['RouteId'],)), 'the thread may open work again')
-        self.assertEqual(next(m for m in self.s.list_memories(active_only=False) if m['MemoryId'] == mem)['Active'], 0)
+        self.assertNotIn("Fuel card statements are accounting's", self.s.get_doc('learned'), 'the line it taught is taken back')
         # ...once: a second Undo finds nothing
         self.assertEqual(self.c.post(f"/api/deleted/{out['deleted']}/restore").status_code, 404)
 

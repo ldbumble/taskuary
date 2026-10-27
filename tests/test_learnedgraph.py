@@ -5,6 +5,9 @@ from unittest import mock
 
 from taskuary import learn, learnedgraph, triage
 from taskuary.store import MemoryStore
+from tests.memlines import note as put_note
+from taskuary import memorylines
+from tests.memlines import teacher, teaching
 
 DOC = '''# LEARNED.md — what the system has learned about {{owner_first}}
 
@@ -28,10 +31,21 @@ DOC = '''# LEARNED.md — what the system has learned about {{owner_first}}
 '''
 
 
+def verdicts(s, senders, kind='not_ours') -> list:
+    """One Not ours per sender, each taught as its own line (memorylines.teach) - the evidence ids are the mails they were given on."""
+    out = []
+    for i, who in enumerate(senders):
+        mid = s.add_message({'ExternalId': f'v{i}{who}', 'Channel': 'email', 'Subject': f'Re: Resident Refund Request - Case {i}', 'FromEmail': who,
+                             'SentAt': f'2026-08-{21 + i} 09:00', 'Status': 'filed'})
+        memorylines.teach(s, kind, f'msg{mid}', f'From: {who}', 'sender', who, llm=teacher(f'Refund case mail from {who} is facility staff work, not yours'))
+        out.append(f'msg{mid}')
+    return out
+
+
 def seeded():
     s = MemoryStore(); s.save_doc('learned', DOC, 'reflect')
-    for i in range(18, 24): s.add_memory({'Scope': 'subject', 'ScopeKey': 'resident refund request', 'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner',
-                                          'Note': f'2026-08-{i}: "Re: Resident Refund Request - X" - NOT OURS: other people\'s work, no task, no reply'})
+    ev = verdicts(s, ['gail@riverbend.example', 'ray@riverbend.example', 'erin@riverbend.example'])
+    s.save_doc('learned', s.get_doc('learned').replace('mem1, mem2, mem3', ', '.join(ev)), 'reflect')
     return s
 
 
@@ -170,10 +184,9 @@ class SettleTests(unittest.TestCase):
     def test_a_reflection_records_its_own_tick_and_stale_lines_stop_being_promotable(self):
         """Same evidence, same s:5 - only the reflections that passed it by differ."""
         s = MemoryStore()
-        for who in ('alice@x.com', 'bob@y.com', 'alice@x.com'):
-            s.add_memory({'Scope': 'sender', 'ScopeKey': who, 'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner', 'Note': 'NOT OURS'})
+        ev = verdicts(s, ('alice@x.example', 'bob@y.example', 'alice@x.example'))
         hyp = ('# LEARNED.md\n\n## Hypotheses - still being tested\n<!-- hypotheses:start -->\n'
-               '- Alex leaves matters with an assigned owner alone. [s:5 | ev: mem1, mem2, mem3 | seen: 2026-04-01 | k: assigned-owner]\n'
+               f'- Alex leaves matters with an assigned owner alone. [s:5 | ev: {", ".join(ev)} | seen: 2026-04-01 | k: assigned-owner]\n'
                '<!-- hypotheses:end -->\n')
         s.save_doc('learned', hyp, 'reflect')
         fresh = learnedgraph.graph(s)['lines'][0]
@@ -190,7 +203,7 @@ class SettleTests(unittest.TestCase):
 
 class OwnerSaidItTests(unittest.TestCase):
     def test_a_proposed_hide_rule_backed_by_the_owners_own_verdicts_goes_live_by_itself(self):
-        s = seeded()                                   # the refund rule's ev mem1..mem3 are NOT OURS verdict notes
+        s = seeded()                                   # the refund rule's three ids are mails the owner said Not ours on
         out = learn.auto_adopt(s)
         self.assertEqual(len(out), 1); self.assertIn('refund', out[0])
         self.assertEqual([l['status'] for l in learnedgraph.lines(s.get_doc('learned')) if 'refund' in l['text']], ['live'])
@@ -227,12 +240,14 @@ class NotCodingTests(unittest.TestCase):
         fake = mock.Mock(alive=True, sid='s1')
         with mock.patch.object(server, 'store', s), mock.patch.object(terminal, 'session_for', return_value=fake), \
              mock.patch.object(terminal, 'close', side_effect=lambda sid: closed.append(sid)):
-            out = TestClient(server.app).post(f'/api/tasks/{tid}/not-coding').json()
+            with teaching('You order supplies like badges yourself - not agent work'):
+                out = TestClient(server.app).post(f'/api/tasks/{tid}/not-coding').json()
         self.assertEqual((out['ok'], out['kind']), (True, 'task'))
         self.assertEqual(closed, ['s1'])
         self.assertEqual(s.get_task(tid)['Kind'], 'task'); self.assertEqual(s.get_task(tid)['Status'], 'in_progress')
-        note = next(m for m in s.list_memories() if 'NOT A CODING TASK' in m['Note'])
-        self.assertIn('Badges for the new hires', note['Note']); self.assertEqual(note['Scope'], 'subject')
+        said = memorylines.lessons(s)
+        self.assertEqual([(l['kind'], l['ev']) for l in said], [('not_for_agent', f'task{tid}')])
+        self.assertIn('(about: the topic "', said[0]['text'])
 
 
 if __name__ == '__main__': unittest.main()

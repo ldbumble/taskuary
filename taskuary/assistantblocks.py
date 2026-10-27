@@ -258,7 +258,7 @@ CATALOGUE = (
     Block('health', 'App health', 'view', ('source', 'report_run', 'connector'),
           None, _health, proposes=True),
     # a learned pattern clear-cut enough to be a rule, asked as a yes/no (promote.py) - counted, never read into the prompt
-    Block('rules', 'Rules worth making', 'view', ('route', 'advice_press', 'memory', 'audit', 'policy'),
+    Block('rules', 'Rules worth making', 'view', ('route', 'advice_press', 'learned_history', 'audit', 'policy'),
           None, _rules, proposes=True),
 )
 

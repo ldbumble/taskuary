@@ -2024,12 +2024,14 @@ def verdicts(store) -> list:
 def _keep_verdict(store, i: dict, verb: str, actor: str):
     row = {'key': i.get('Key'), 'text': _short(i.get('Text'), 160), 'verdict': verb, 'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     store.set_setting(VERDICTS_KEY, json.dumps(([row] + [r for r in verdicts(store) if r.get('key') != row['key']])[:VERDICTS_CAP]), actor)
-    # "no more ideas like this" is a standing word about what to bring up, so it is a line in the memory every reader has (the owner,
-    # 2026-10-27: "everything that learns about the user should be saved in memory"); one idea taken up or turned down is an episode,
-    # and the reflection learns What to bring up from those
-    if verb == 'dismiss_kind':
+    # ...and an idea taken up or turned down is a line in the memory every reader has "if it adds to understanding of the user - as long
+    # as it's not bloat" (the owner, 2026-10-27): the model says what it shows about what the owner wants brought up, against the lines
+    # already there - a new line, a sharper one in place of an older, or nothing. Never one line per press (memorylines.teach)
+    if verb in ('task', 'agent', 'dismiss', 'dismiss_kind') and i.get('IdeaId'):
         from . import memorylines
-        memorylines.keep(store, f'No more ideas like this: "{row["text"]}"', section='bring', verdict=False)
+        facts = '\n'.join(x for x in (f"The idea: {_short(i.get('Text'), 400)}", f"Its kind: {i.get('Kind')}" if i.get('Kind') else '',
+                                       f"The owner: {VERDICT_WORD.get(verb, verb)}") if x)
+        memorylines.teach_soon(store, f'idea_{verb}', f"idea{i['IdeaId']}", facts, section='bring')
 
 
 def verdicts_block(store, report_id=None) -> str:

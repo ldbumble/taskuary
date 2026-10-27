@@ -135,7 +135,6 @@ RETIRED_SEEDS = (('digest_report_seeded', 'Morning digest', 'digest'),
                  # Automation ideas: the Advisor reads the same month of counts once a week ([taskuary.automation]) and
                  # raises what is worth automating as an idea of its own (the owner, 2026-09-25: one voice, not two)
                  ('automate_report_seeded', 'Automation ideas', 'automate'))
-MEMORY_COLS = ('Scope', 'ScopeKey', 'Note', 'Source', 'Active', 'CreatedBy')
 PROJECT_COLS = ('Name', 'Description', 'Active', 'CreatedBy', 'UpdatedBy')
 ROUTING_FACT_COLS = ('Field', 'Signal', 'SignalKey', 'Value', 'Confidence', 'EvidenceCount',
                      'Confirmed', 'Source')
@@ -387,8 +386,7 @@ CREATE TABLE IF NOT EXISTS connector (ConnectorId INTEGER PRIMARY KEY, Type TEXT
   Scope TEXT);
 CREATE TABLE IF NOT EXISTS setting (Name TEXT PRIMARY KEY, Value TEXT, Description TEXT, UpdatedBy TEXT);
 CREATE TABLE IF NOT EXISTS deleted (DeletedId INTEGER PRIMARY KEY, Kind TEXT, Title TEXT, DataJson TEXT, DeletedAt REAL, KeepUntil REAL);
-CREATE TABLE IF NOT EXISTS memory (MemoryId INTEGER PRIMARY KEY, Scope TEXT, ScopeKey TEXT, Note TEXT,
-  Source TEXT, Active INTEGER DEFAULT 1, CreatedBy TEXT, CreatedAt TEXT);
+-- (the notes table, `memory`, is gone: an older install's rows are written into LEARNED.md once and the table dropped - memorylines.migrate)
 -- A small project graph. `project_link` is deliberately generic: repositories, email addresses,
 -- WhatsApp JIDs and future customer/system identities all point at the same project. Evidence is
 -- task-keyed so replaying startup history cannot make a guess grow more confident each launch.
@@ -1393,25 +1391,8 @@ class SQLiteStore:
             # sending it fields (others_replied) the doc never described. Only that pass writes a
             # non-SOUL doc as 'startup' (docsync writes SOUL.md), so those are untouched by anyone.
             self.cx.execute("UPDATE doc SET UpdatedBy='template' WHERE UpdatedBy='startup' AND Name<>'soul'")
-            self.cx.execute("UPDATE memory SET Note=REPLACE(Note, ' from an unknown sender', '') WHERE Source='verdict' AND Note LIKE '%from an unknown sender%'")
-            # data heal: verdict notes used to be written as RULES ("Messages from X like 'S' are not
-            # tasks - do not open tasks or draft replies"); they are EVIDENCE now (2026-08-27), so the
-            # old shape becomes the dated line the new ones get - same facts, no instruction in it
-            _RULE = re.compile(r"^Messages from (?P<who>\S+) like '(?P<subj>.*)' are not tasks - do not open tasks or draft replies\.$"
-                               r"|^Mail about \"(?P<topic>.*)\" is not a task - do not open tasks or draft replies\.$"
-                               r"|^Mail (?:about \"(?P<t2>.*)\"|like \"(?P<s2>.*)\"(?: from (?P<w2>\S+)| from anyone at (?P<d2>\S+)|, whoever sends it,)?) is other people's work - file it, do not open a task or draft a reply\.$")
-            for r in self.cx.execute("SELECT MemoryId, Note, Scope, ScopeKey, CreatedAt FROM memory WHERE Source='verdict'").fetchall():
-                m = _RULE.match(r['Note'] or '')
-                if not m: continue
-                g = m.groupdict(); when = str(r['CreatedAt'] or '')[:10]
-                subj = g.get('subj') or g.get('s2') or ''
-                who = g.get('who') or g.get('w2') or (r['ScopeKey'] if r['Scope'] == 'sender' else '')
-                topic = g.get('topic') or g.get('t2')
-                verdict = 'NOT A TASK: the owner filed it, no task, no reply' if 'are not tasks' in r['Note'] or 'is not a task' in r['Note']                           else "NOT OURS: other people's work, no task, no reply"
-                about = (f' - the topic "{topic}"' if topic else f" - anyone at {g['d2']}" if g.get('d2')
-                         else ' - whoever sends it' if 'whoever sends it' in r['Note'] else '')
-                line = f'{when}: "{subj or topic or ""}"' + (f' from {who}' if who else '') + f'{about} - {verdict}'
-                self.cx.execute('UPDATE memory SET Note=? WHERE MemoryId=?', (line, r['MemoryId']))
+            if self.cx.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory'").fetchone():   # an older install, not yet drained
+                self._heal_notes()
             for name in ('soul', 'job', 'agent', 'coding', 'digest', 'learned', 'triage', 'style', 'counsel',
                          'researcher', 'analyst', 'coordinator', 'marketer', 'trader', 'assistant'):
                 f = Path(__file__).parent / 'templates' / f'{name}.md'
@@ -5510,23 +5491,27 @@ class SQLiteStore:
     def remember_trust(self, mailbox: str, email: str, reason: str):
         self._exec('INSERT OR REPLACE INTO sender_trust (Mailbox, Address, Reason, CheckedAt) VALUES (?,?,?,?)',
                    ((mailbox or '').lower(), (email or '').lower(), reason, _now()))
-    def add_memory(self, fields):
-        """A verdict's RECORD - and, in the same breath, its line in LEARNED.md, the one memory every reader reads (memorylines, the
-        owner 2026-10-27): no road writes a row that no decision then sees."""
-        mid = self._insert('memory', fields, MEMORY_COLS, {'CreatedAt': _now()})
-        from . import memorylines
-        memorylines.keep_row(self, mid)
-        return mid
-    def list_memories(self, active_only=True):
-        return self._rows('SELECT * FROM memory' + (' WHERE Active=1' if active_only else '') + ' ORDER BY MemoryId DESC')
-    def set_memory_active(self, mid, active):
-        """A record switched off takes its LEARNED.md line out (an Undo, a Forget); switched back on, the line returns."""
-        from . import memorylines
-        if not active: memorylines.drop_row(self, mid)
-        self._exec('UPDATE memory SET Active=? WHERE MemoryId=?', (1 if active else 0, mid))
-        if active:
-            m = self._one('SELECT * FROM memory WHERE MemoryId=?', (mid,)) or {}
-            if m: memorylines.keep(self, m.get('Note') or '', m.get('Scope') or 'global', m.get('ScopeKey'), verdict=m.get('Source') == 'verdict')
+    def _heal_notes(self):
+        """An older install's notes table, healed in place before memorylines.migrate writes its rows into LEARNED.md and drops it."""
+        self.cx.execute("UPDATE memory SET Note=REPLACE(Note, ' from an unknown sender', '') WHERE Source='verdict' AND Note LIKE '%from an unknown sender%'")
+        # data heal: verdict notes used to be written as RULES ("Messages from X like 'S' are not
+        # tasks - do not open tasks or draft replies"); they are EVIDENCE now (2026-08-27), so the
+        # old shape becomes the dated line the new ones get - same facts, no instruction in it
+        _RULE = re.compile(r"^Messages from (?P<who>\S+) like '(?P<subj>.*)' are not tasks - do not open tasks or draft replies\.$"
+                           r"|^Mail about \"(?P<topic>.*)\" is not a task - do not open tasks or draft replies\.$"
+                           r"|^Mail (?:about \"(?P<t2>.*)\"|like \"(?P<s2>.*)\"(?: from (?P<w2>\S+)| from anyone at (?P<d2>\S+)|, whoever sends it,)?) is other people's work - file it, do not open a task or draft a reply\.$")
+        for r in self.cx.execute("SELECT MemoryId, Note, Scope, ScopeKey, CreatedAt FROM memory WHERE Source='verdict'").fetchall():
+            m = _RULE.match(r['Note'] or '')
+            if not m: continue
+            g = m.groupdict(); when = str(r['CreatedAt'] or '')[:10]
+            subj = g.get('subj') or g.get('s2') or ''
+            who = g.get('who') or g.get('w2') or (r['ScopeKey'] if r['Scope'] == 'sender' else '')
+            topic = g.get('topic') or g.get('t2')
+            verdict = 'NOT A TASK: the owner filed it, no task, no reply' if 'are not tasks' in r['Note'] or 'is not a task' in r['Note']                           else "NOT OURS: other people's work, no task, no reply"
+            about = (f' - the topic "{topic}"' if topic else f" - anyone at {g['d2']}" if g.get('d2')
+                     else ' - whoever sends it' if 'whoever sends it' in r['Note'] else '')
+            line = f'{when}: "{subj or topic or ""}"' + (f' from {who}' if who else '') + f'{about} - {verdict}'
+            self.cx.execute('UPDATE memory SET Note=? WHERE MemoryId=?', (line, r['MemoryId']))
 
     # projects and their identities ---------------------------------------------------------
     def ensure_project(self, name: str, description: str = None, actor: str = 'system') -> int:

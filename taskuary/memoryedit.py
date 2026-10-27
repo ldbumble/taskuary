@@ -75,12 +75,12 @@ def mark(store, key: str, how: str) -> dict:
         if raw: _save(store, doc, _without(doc, raw))
         if own:
             store.add_learned_event(key, text, 'live', 0, '', 'forgotten', 'owner')
-            # ...and a verdict line Forgotten switches its record off, as the notes page's switch did: what it fed is withdrawn
-            # (learn.withdraw) and it no longer counts as the owner having said it (memorylines, 2026-10-27)
-            from . import memorylines
+            # ...and a verdict's line Forgotten no longer counts as the owner having said it (memorylines.lessons reads the document), and
+            # what it fed is withdrawn: the id of what the verdict was given on leaves every learned line's evidence (learn.withdraw)
             from .learn import withdraw
-            for m in store.list_memories(active_only=True):
-                if memorylines.of_row(m).strip() == raw.strip(): store.set_memory_active(m['MemoryId'], False); withdraw(store, m['MemoryId'])
+            for h in store._rows("SELECT DISTINCT Ev FROM learned_history WHERE Action='said' AND Actor LIKE 'verdict:%' AND Text=? AND IFNULL(Ev,'')<>''",
+                                 (raw.strip(),)):
+                withdraw(store, h['Ev'])
         elif how == 'wrong' or not raw:
             # Wrong is final; Forget of a line already out of the document is a tombstone with its evidence counted (sync did it for one in it)
             st, ev = ('wrong', None) if how == 'wrong' else ('forgotten', len([e for e in str(r.get('Ev') or '').split(',') if e]))

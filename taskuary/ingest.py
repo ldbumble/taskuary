@@ -1274,7 +1274,7 @@ def applicable_notes(store, senders, subject: str = '', text: str = '', source: 
     who = {(s or '').lower() for s in senders if s}
     doms = {s.rsplit('@', 1)[-1] for s in who if '@' in s}
     src = (source or '').lower()
-    # ...read from LEARNED.md, the one memory (memorylines, the owner 2026-10-27): the notes table is the verdicts' record, read by no one
+    # ...read from LEARNED.md, the one memory (memorylines, the owner 2026-10-27): the notes table is gone
     from . import memorylines
     return [n for n in memorylines.standing(store)
             if n['Scope'] == 'global'

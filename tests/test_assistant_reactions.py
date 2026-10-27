@@ -31,6 +31,8 @@ from fastapi.testclient import TestClient
 
 from taskuary import buttons, concierge, funnel, general, ingest, operations, server, terminal, wrapup
 from taskuary.store import MemoryStore
+from taskuary import memorylines
+from tests.memlines import teaching
 
 
 # THE PHONE'S ROAD (the owner, 2026-10-19): on the desk a typed act lights its button or opens its page and proposes nothing
@@ -490,12 +492,13 @@ class ResponseTests(unittest.TestCase):
         self.assertEqual((p['kind'], p['target'], p['params'], p['label']), ('message.file', mid, {'learn': False}, buttons.label('not_ours')))
         self.assertNotEqual(s.get_message(mid)['Status'], 'ignored')  # untouched until the click
         run(s, p)
-        self.assertEqual(s.get_message(mid)['Status'], 'ignored'); self.assertEqual(s.list_memories(active_only=True), [])
+        self.assertEqual(s.get_message(mid)['Status'], 'ignored'); self.assertEqual(memorylines.notes(s), [])
         s3, tid3, mid3, item3 = self._asked()
         p3 = decide(s3, 'that sender is junk, block them', 'not_ours_sender', key=item3['key'])['proposal']
         self.assertEqual((p3['kind'], p3['params']['scope'], p3['label']), ('preference.exclude_sender', 'sender', buttons.label('not_ours_sender')))
-        run(s3, p3)
-        self.assertTrue(any('craig@vendor.com' in (n['ScopeKey'] or '').lower() for n in s3.list_memories(active_only=True)))
+        s3.set_setting('learn_enabled', '1', 't')         # what a verdict teaches is learning: written only while learning is on
+        with teaching("Mail from craig@vendor.com is the vendor's own business, not yours"): run(s3, p3)
+        self.assertTrue(any('craig@vendor.com' in (n['ScopeKey'] or '').lower() for n in memorylines.notes(s3)))
 
     def test_not_ours_pressed_runs_just_this_once_and_offers_from_now_on_after(self):
         """The owner, 2026-10-21: no "are you sure". Not ours asked how far before anything happened - a card with Cancel. Pressed on the
@@ -507,13 +510,15 @@ class ResponseTests(unittest.TestCase):
         self.assertEqual((p['kind'], p['params'], p.get('auto'), p['say_card']), ('message.file', {'learn': False}, True, ''))   # never "until you say yes"
         self.assertIn('not_ours_sender', [a['verb'] for a in p['alts']])          # the chip under its receipt (proposalCard.followUps)
         self.assertEqual(run(s, p).json()['status'], 'done')
-        self.assertEqual(s.get_message(mid)['Status'], 'ignored'); self.assertEqual(s.list_memories(active_only=True), [])
+        self.assertEqual(s.get_message(mid)['Status'], 'ignored'); self.assertEqual(memorylines.notes(s), [])
         self.assertEqual(p['target'], mid)
         with mock.patch.object(server, 'store', s):
             c = TestClient(server.app)
             q = c.post('/api/operations', json={'kind': 'preference.exclude_sender', 'target': mid, 'params': {'scope': 'sender'}}).json()
-            self.assertEqual(c.post(f"/api/operations/{q['id']}/execute", json={'version': q['version']}).json()['status'], 'done')
-        self.assertTrue(any('craig@vendor.com' in (n['ScopeKey'] or '').lower() for n in s.list_memories(active_only=True)))
+            s.set_setting('learn_enabled', '1', 't')
+            with teaching("Mail from craig@vendor.com is the vendor's own business, not yours"):
+                self.assertEqual(c.post(f"/api/operations/{q['id']}/execute", json={'version': q['version']}).json()['status'], 'done')
+        self.assertTrue(any('craig@vendor.com' in (n['ScopeKey'] or '').lower() for n in memorylines.notes(s)))
 
     def test_remember_keeps_the_fact_in_the_owners_words_once_confirmed(self):
         s, tid, mid, item = self._asked()
@@ -828,7 +833,7 @@ class OneTruthPerTurnTests(unittest.TestCase):
         s, tid, mid, item = ResponseTests()._asked()
         out = decide(s, 'remember that Dovid handles the badge printers', 'remember', key=item['key'], text_arg='Dovid handles the badge printers')
         self.assertEqual(out['proposal']['kind'], 'memory.remember'); self.assertNotIn('Moving on', out['say'])
-        self.assertEqual(s.list_memories(), [])
+        self.assertEqual(memorylines.notes(s), [])
         run(s, out['proposal'])
         self.assertIn('- Dovid handles the badge printers', s.get_doc('learned') or '')     # in the memory every reader reads (2026-10-27)
         self.assertEqual(funnel.next_item(s, item['key'])['key'], item['key'])        # still on the table
@@ -841,7 +846,7 @@ class OneTruthPerTurnTests(unittest.TestCase):
         second = decide(s, 'and remember that Omar handles refunds', 'remember', key=item['key'], text_arg='Omar handles refunds')['proposal']
         self.assertEqual(second['kind'], 'memory.remember')
         self.assertEqual(operations.get(s, first['id'])['status'], 'cancelled')
-        self.assertEqual(s.list_memories(), [])
+        self.assertEqual(memorylines.notes(s), [])
         run(s, second)
         self.assertIn('- Omar handles refunds', s.get_doc('learned') or '')
         self.assertEqual(s.get_review(rid)['Status'], 'pending')                     # the approve never went out
@@ -859,7 +864,7 @@ class WordsTheOwnerUsesTests(unittest.TestCase):
                       'can you check if the report ran?', 'tell them to ignore it'):
             out = say(s, words, key=item['key'], model='Leaving it exactly as it is.')
             self.assertIsNone(out['decision'], words); self.assertIsNone(out.get('proposal'), words)
-        self.assertEqual(s.get_task(tid)['Status'], 'open'); self.assertEqual(s.list_memories(), [])
+        self.assertEqual(s.get_task(tid)['Status'], 'open'); self.assertEqual(memorylines.notes(s), [])
         self.assertEqual([i['key'] for i in pile(s)], [item['key']])
         # ...and telling them something is a reply the model names, drafted at once - never a filing
         out = decide(s, 'let them know we will fix it by Friday', 'reply', key=item['key'], text_arg='we will fix it by Friday')
@@ -880,7 +885,7 @@ class WordsTheOwnerUsesTests(unittest.TestCase):
                   model='Only this one, or this kind from now on? Nothing has changed yet.' + chr(10) + 'OPTIONS: Just this once | Forever for this kind')
         self.assertIsNone(ask['decision']); self.assertIsNone(ask.get('proposal'))
         self.assertEqual(ask['options'], ['Just this once', 'Forever for this kind'])
-        self.assertEqual(s.list_memories(), [])
+        self.assertEqual(memorylines.notes(s), [])
         self.assertEqual(decide(s, 'Just this once', 'not_ours', key=item['key'])['proposal']['kind'], 'message.file')
         s2, tid2, mid2, item2 = ResponseTests()._asked()
         p = decide(s2, 'Forever for this sender', 'not_ours_sender', key=item2['key'])['proposal']
@@ -1514,14 +1519,16 @@ class ApiActionsTests(unittest.TestCase):
         s = store(); out = self._ask(s); c = self.client(s)
         self.assertEqual(c.post(f"/api/messages/{out['message_id']}/file", json={'learn': False}).status_code, 200)
         self.assertEqual(s.get_message(out['message_id'])['Status'], 'ignored')   # the owner's own verdict on the thread
-        self.assertEqual(s.list_memories(active_only=True), [])                    # this once teaches nothing
+        self.assertEqual(memorylines.notes(s), [])                    # this once teaches nothing
         gone = s.get_task(out['task_id'])                                         # a task that existed only for
         self.assertTrue(gone is None or gone['Status'] in ('dropped', 'done'), gone)   # this mail is removed with it
         self.assertEqual(pile(s), [])                                             # and off the pile
         two = self._ask(s, subject='Another refund', conv='c:two', hours=2)
-        r = c.post(f"/api/messages/{two['message_id']}/not-mine", json={'scope': 'sender'})
+        s.set_setting('learn_enabled', '1', 't')
+        with teaching("Mail from craig@vendor.com is the vendor's own business, not yours"):
+            r = c.post(f"/api/messages/{two['message_id']}/not-mine", json={'scope': 'sender'})
         self.assertEqual(r.status_code, 200)
-        notes = s.list_memories(active_only=True)
+        notes = memorylines.notes(s)
         self.assertTrue(notes, 'the verdict is remembered, not just applied once')
         self.assertTrue(any('craig@vendor.com' in (n['ScopeKey'] or '').lower() or 'refund' in (n['Note'] or '').lower()
                             for n in notes), [dict(n) for n in notes])

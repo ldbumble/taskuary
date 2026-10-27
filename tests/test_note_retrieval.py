@@ -8,6 +8,7 @@ import unittest
 from taskuary import agents
 from taskuary.ingest import NOTE_CAP, ingest_message, notes_for, relevant_notes
 from taskuary.store import MemoryStore
+from tests.memlines import note as put_note
 
 DANA = 'dana@vendor.com'
 
@@ -15,7 +16,7 @@ DANA = 'dana@vendor.com'
 def _store(*notes):
     s = MemoryStore()
     for scope, key, note, src in notes:
-        s.add_memory({'Scope': scope, 'ScopeKey': key, 'Note': note, 'Source': src,
+        put_note(s, {'Scope': scope, 'ScopeKey': key, 'Note': note, 'Source': src,
                       'Active': 1, 'CreatedBy': 'test'})
     return s
 
@@ -65,8 +66,8 @@ class RankingTests(unittest.TestCase):
         self.assertEqual(notes_for(s, {'from_email': 'nobody@nowhere.com', 'subject': 'hi', 'body': 'x'}),
                          ['Never open tasks from newsletters or digests.'])
         # switching a note off in the UI has to actually silence it
-        mid = next(m['MemoryId'] for m in s.list_memories() if m['Scope'] == 'global')
-        s.set_memory_active(mid, False)
+        from taskuary import learned_cut as lc, memoryedit
+        memoryedit.mark(s, next(k for raw, k in lc.lines(s.get_doc('learned'), lc.CARE) if 'newsletters' in raw), 'forget')
         self.assertEqual(notes_for(s, {'from_email': 'nobody@nowhere.com', 'subject': 'hi', 'body': 'x'}), [])
 
     def test_a_verdict_is_never_cut_in_half(self):

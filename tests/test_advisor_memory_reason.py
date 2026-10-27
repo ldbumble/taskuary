@@ -80,6 +80,7 @@ def test_a_counted_usual_already_on_the_strip_keeps_its_place(w):
     """asked_late's line IS the counted usual, with its evidence: the model's agreeing sentence does not replace it."""
     s, facts = w
     t = ask(s, 'erin', 'Q4 headcount forecast', 'Can you send me the Q4 headcount forecast?', hours=3)
+    C.reflected(s)
     d, _ = judged(s, t, {'verb': 'reply', 'line': 'She has waited three hours.', 'evidence': [f"msg{facts['erin_fast'][0]}"]})
     assert (d['state'], d['line']) == ('asked_late', 'You usually answer Erin within the hour; this is 3h.'), d
 

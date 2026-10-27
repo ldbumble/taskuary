@@ -115,26 +115,31 @@ test("an important line lands in the task's Advisor section, and every other str
     { line: "The draft promises what nothing here shows.", draft: true });
   // late against the learned usual, the same ask as another task, a model's reason the lit button is not the obvious one
   for (const n of [d("asked_late", "You usually answer Erin within the hour; this is 3h."), d("waiting_late_usual", "Erin usually answers in a day; this is 4 days.", { verb: "chase" }),
-    d("duplicate", "Same ask as TQ-0012.", { verb: "remove" }), d("asked", "TQ-0012 may already cover this - an agent is on it.", { verb: "defer", by: "model" })])
+    d("duplicate", "Same ask as TQ-0012.", { verb: "remove" }), d("asked", "TQ-0012 may already cover this - an agent is on it.", { verb: "defer", by: "model" }),
+    // ...and who and how late, where Chase is lit (the Advisor audit's judge, 2026-10-26)
+    d("waiting_late", "Erin Blake: 4 days, no answer.", { verb: "chase" }), d("goal_late", "Pick the vendor: 3 days late.", { verb: "chase" })])
     assert.equal(taskNote(n)?.line, n.line, n.state);
   // ...said by the task already, or narration of the lit button: no section
   for (const [state, line] of [["failed", "Failed: no AI is connected"], ["failed_cause", "Failed: the run stopped"], ["report_failed", "Report failed: timeout"],
     ["invite_clash", "Clashes with Quarter-end planning 9:00-12:00."], ["invite_free", "Free then."], ["stranger", "First mail from vendor.example."],
-    ["stopped", "Stopped 2 hours ago."], ["unpushed", "Changes ready - not pushed."], ["waiting_late", "Erin Blake: 4 days, no answer."],
-    ["goal_late", "Pick the vendor: 3 days late."], ["asked", "Erin Blake asked 2 hours ago."]])
+    ["stopped", "Stopped 2 hours ago."], ["unpushed", "Changes ready - not pushed."], ["waiting_overdue", "Ray Colton: 2 days late."],
+    ["asked", "Erin Blake asked 2 hours ago."]])
     assert.equal(taskNote(d(state, line)), null, state);
   assert.equal(taskNote(d("draft_ready", "")), null, "a silent decision says nothing anywhere");
   assert.equal(taskNote({ none: "no_ai", for: "task:7" }), null, "no AI is no line at all");
-  // ...ONE section of its own over Agent work ("one is more a guide and one is more doing work", the owner 2026-10-26), at the head of the
-  // work column, only with a line, its drawer's tab saying so - on the canvas and the Tasks tab alike
+  // ...ONE section of its own ("one is more a guide and one is more doing work", the owner 2026-10-26), only with a line - IN THE MAIN VIEW,
+  // never a drawer, so no tab needs to say it holds a note (the Advisor audit's judge, 2026-10-26) - on the canvas and the Tasks tab alike
   const page = read("TaskPage.jsx"), sec = read("AdvisorNote.jsx");
   assert.match(page, /const warn = notDone \? \(canvas \? note : taskNote\(taskAdvice\)\) : null;/);
   assert.equal((page.match(/<AdvisorNote /g) || []).length, 1, "one place for the Advisor's words");
-  const col = page.indexOf('<Box ref={workBox} data-tq-work=""'), at = page.indexOf("{warn && <AdvisorNote note={warn}"), head = page.indexOf('<WorkflowHeading number="2"');
-  assert.ok(col > 0 && col < at && at < head, "in the work column, over Agent work and outside it");
-  assert.match(page, /\{workTabWords\}\{warn \? " · 1 note" : ""\}/);
+  const steps = page.indexOf("<Box ref={stepsBox}"), at = page.indexOf("{warn && !liveSession && <AdvisorNote note={warn}"), cols = page.indexOf("<Box ref={columnsBox} data-tq-columns");
+  assert.ok(steps > 0 && steps < at && at < cols, "in the body's own scroller, before the columns: the main view, whichever it is - never a drawer");
+  assert.doesNotMatch(page, /1 note/, "nothing hides behind a tab, so the tab says nothing of it");
   assert.match(sec, /aria-label="Advisor" data-tq-advisor=""/);
-  assert.match(sec, /<TaskuaryMark size=\{13\} \/>\s*<Typography[^>]*>Advisor<\/Typography>/);
+  assert.match(sec, /<TaskuaryMark size=\{12\} \/><Typography[^>]*>Advisor<\/Typography>/);
+  // ...one compact line that WRAPS - on a phone "this is 5h" was cut off by an ellipsis (the judge, 2026-10-26)
+  assert.match(sec, /flexWrap: "wrap"/);
+  assert.doesNotMatch(sec, /textOverflow|whiteSpace: "nowrap"/);
   assert.match(sec, /\{note\.draft && onDraft && <button[^>]*data-tq-advisor-draft=""/);
   assert.match(sec, />Why\?<\/button>/);
   assert.doesNotMatch(page, /data-tq-task-advice/);

@@ -1117,6 +1117,12 @@ class SQLiteStore:
                             'Revision TEXT, Tier INTEGER, Line TEXT, Verb TEXT, Label TEXT, CountJson TEXT, EvidenceJson TEXT, Model TEXT, '
                             'Dropped TEXT, CreatedAt TEXT)')
             self.cx.execute('CREATE INDEX IF NOT EXISTS advice_target ON advice(TargetKind, TargetId)')
+            # ...the KIND of reason the model gave (late, same_ask, draft_caution, ...): what the check after it reads, never its words
+            if 'Kind' not in {r[1] for r in self.cx.execute('PRAGMA table_info(advice)')}: self.cx.execute('ALTER TABLE advice ADD COLUMN Kind TEXT')
+            # ...AND THE ONE DECISION EVERY SURFACE READS (the Advisor audit's judge, 2026-10-26): the item's lit verb, line and what it rests
+            # on, stored per key with the stamp it was made at - the section, the clock menu, the phone and the row read this, never their own.
+            # A duplicate pair's survivor is kept here too (Key pair:<a>:<b>), so the pair is decided once
+            self.cx.execute('CREATE TABLE IF NOT EXISTS advice_decision (Key TEXT PRIMARY KEY, Stamp TEXT, Json TEXT, At TEXT)')
             # ...AND WHAT THE OWNER PRESSED while it was shown (the deep dive, 2026-10-20): nothing recorded whether the lit button was the
             # one pressed. One row per press - advised and pressed verb, whether they matched, and what kind of item from whom - a record
             # only: nothing in LEARNED.md is learned from a press (the owner, 2026-10-25)

@@ -54,8 +54,11 @@ export function stripWord({ speaks, busy, shown = null, lit = null, aiOff = fals
    wrote for a lit button you would not guess (a duplicate an agent is on, what the owner's memory says). Every other line the task
    already says or the lit button does - a failure is the Result's first line, a clash is in the invite's summary, a stranger in Came
    from, a bare age on the rail, a stopped or unpushed agent on its own heading - so: null, and no section. */
-const SHOWN = new Set(["draft_ready", "duplicate", "asked_late", "waiting_late_usual"]);
-const SAID = new Set(["failed", "failed_cause", "report_failed", "invite_clash", "invite_free", "stranger", "working", "closed", "agent_asking"]);
+// ...AND WHEN CHASE IS LIT, WHO AND HOW LATE (the Advisor audit's judge, 2026-10-26): a goal lit Chase with its "2 days late" dropped, so
+// the page said only that a step slipped - a late step and a quiet wait say it here; a wait past its due day is the header's own line
+// ("Waiting on Ray. Due Oct 24, 2 days late."), counted on the same clock, so it is not said twice
+const SHOWN = new Set(["draft_ready", "duplicate", "asked_late", "waiting_late_usual", "waiting_late", "goal_late"]);
+const SAID = new Set(["failed", "failed_cause", "report_failed", "invite_clash", "invite_free", "stranger", "working", "closed", "agent_asking", "waiting_overdue"]);
 export function taskNote(advice) {
   const line = String(advice?.line || "").trim();
   if (!line || !advice.verb || advice.verb === "next" || SAID.has(advice.state)) return null;

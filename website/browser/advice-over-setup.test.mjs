@@ -37,7 +37,9 @@ test("a task opened over setup has its lit button and its line in the task's Adv
   await page.evaluate((tid) => { window.location.hash = `task=${tid}`; }, made.taskId);
   await page.waitForFunction((l) => document.querySelector("[data-tq-canvas-item] [data-tq-advisor] [data-tq-advisor-note]")?.textContent.includes(l), { timeout: 30000, polling: 200 }, LINE)
     .catch(async (e) => { throw new Error(`${e.message}\n${(await page.evaluate(() => document.body.innerText)).slice(-1200)}`); });
-  assert.ok(await page.$('.tq-arow .tq-ab.p[data-tq-verb]'), "its button is lit");
+  // ...and its button lit on the row, which is drawn a beat after the section on a slow machine
+  await page.waitForSelector(".tq-arow .tq-ab.p[data-tq-verb]", { timeout: 15000 }).catch(async () => assert.fail(`its button is not lit: ${
+    await page.evaluate(() => [...document.querySelectorAll("[data-tq-row] button")].map((b) => `${b.getAttribute("data-tq-verb")}.${b.className}`).join(", "))}`));
   assert.equal(await page.$(".tq-dock .tq-next, [data-tq-strip]"), null, "and nothing over the row");
   // ...in the task's own Advisor section (the owner, 2026-10-26), its line keeping its Why? - in the MAIN view, never a drawer, so no tab
   // says it holds a note (the Advisor audit's judge, 2026-10-26)

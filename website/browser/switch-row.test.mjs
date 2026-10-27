@@ -5,8 +5,9 @@ import { startHarness } from "./harness.mjs";
 
 /* SWITCHING TASKS, THE ROW GOES STRAIGHT ACROSS (the owner, 2026-10-26: "fix switching tasks thing of course"). A rail click or Next put
    another item on the table, and the row still wore the old one's buttons after it was up, Next went grey for the ~300 ms the pull took,
-   and only then did the new one's buttons settle. Sampled every frame and every mutation from the press: from the frame the table shows
-   the new item, no button on the row was registered for the old one (data-tq-for), Next is never greyed - not disabled at all on a rail
+   and only then did the new one's buttons settle. Since 2026-10-27 (row-draws-once) the old row may stand whole until the new one is
+   ready, and is then replaced in one step - never mixed with it. Sampled every frame and every mutation from the press: the row's buttons
+   (data-tq-for) are all the old item's or all the new one's, the old never back after the new, Next is never greyed - not disabled at all on a rail
    click, and on its own press held but drawn as it was - and the new item's own buttons come up. */
 
 const WATCH_MS = 3000;
@@ -44,7 +45,11 @@ const assertStraight = (rec, what, rail) => {
   const b = log[at].table, after = log.slice(at);
   assert.ok(after.every((s) => s.table === b), msg("the table stayed on B"));
   assert.ok(log[0].for === a, msg("A's buttons were drawn for A"));
-  assert.ok(rec.slice(p).every((s) => s.press || !s.for.split(",").includes(a)), msg("a button of the old item stayed on the row after the press"));
+  // ...THE ROW DRAWS ONCE (the owner, 2026-10-27: "not to load then reload"): A's row may stand, as it was, until B's is whole - then B's,
+  // in one step. Never the two mixed, never a lone Next between them, and A's never back once B's is up
+  const fors = rec.slice(p).filter((s) => !s.press).map((s) => s.for);
+  assert.ok(fors.every((f) => f === a || f === b), msg("the row mixed the two items' buttons, or drew neither's"));
+  assert.ok(fors.indexOf(b) < 0 || fors.slice(fors.indexOf(b)).every((f) => f === b), msg("the old item's buttons came back after the new one's"));
   assert.ok(log.every((s) => nextOf(s) && !nextOf(s).includes("[grey]")), msg("Next greyed or left the row during the switch"));
   if (rail) assert.ok(log.every((s) => !nextOf(s).includes("[off]")), msg("Next was disabled by a rail click"));
   const end = log[log.length - 1];

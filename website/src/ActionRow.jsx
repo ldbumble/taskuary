@@ -3,7 +3,7 @@
 // ONE filled button at most - the Advisor's pick, and none before it answers - and a greyed decision says why it is greyed.
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Menu, MenuItem, useMediaQuery } from "@mui/material";
-import { TYPES, advisedAny, fitRow, press, rowOf, lightOnCard, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { ROW_HOLD_MS, ROW_STUCK_MS, TYPES, advisedAny, fitRow, press, rowOf, lightOnCard, sameRow, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
 import { adviceNone } from "./words.js";
 import { CONNECT_AI } from "./ConnectAi.jsx";
 
@@ -39,7 +39,7 @@ export function AdvisorNext({ advice, onPropose, onErr = null }) {
 }
 
 // ONE TYPE: its label, its two most likely buttons joined, and its own ▾ for the rest (clustersOf)
-function Cluster({ g, btn }) {
+function Cluster({ g, btn, act = press }) {
   const [at, setAt] = useState(null);
   return (
     <div className="tq-cl" role="group" aria-label={g.label || (g.type === "more" ? "More" : "This one")} data-tq-type={g.type}>
@@ -53,7 +53,7 @@ function Cluster({ g, btn }) {
             slotProps={{ paper: { sx: { minWidth: 200, borderRadius: 2 } } }}>
             {g.rest.map((v) => (
               <MenuItem key={v.id} dense disabled={v.disabled} title={(v.disabled && v.why) || v.title || undefined} data-tq-verb={v.id} data-tq-for={v.at}
-                onClick={(e) => { const a = at; setAt(null); press(v.id, e, a, v.of); }} sx={{ fontSize: 13 }}>{v.label}</MenuItem>
+                onClick={(e) => { const a = at; setAt(null); act(v.id, e, a, v.of); }} sx={{ fontSize: 13 }}>{v.label}</MenuItem>
             ))}
           </Menu></>}
       </div>
@@ -62,10 +62,34 @@ function Cluster({ g, btn }) {
 }
 
 // the row says what to do, by type - not which task or how long it waited: the card above says both (the owner, 2026-10-13)
-export default function ActionRow({ inline = false, advised = null, hold = false }) {
+export default function ActionRow({ inline = false, advised: given = null, hold = false, early = true }) {
+  // `hold` (actionRow.useRowHold, its number): the new row is not whole yet - the row drawn last stays up as it was, and its presses do
+  // nothing, until it is; with none drawn yet (a reload) there is no row until then. Never hidden, never greyed, never drawn twice
+  // ...and at most ROW_HOLD_MS from the moment the held row is kept off one that may be drawn (`early`: the new item's own verbs are up)
+  // - counted once for a run of holds, a click on another row before this one was whole included - then the live one until the holding
+  // is over - and ROW_STUCK_MS from the first difference in one hold, whatever the live row is. The lit pick drawn is the held one: the press that
+  // starts a walk move puts the Advisor's light out (busy) a render before the old verbs go
+  const now = useRowVerbs(), seen = useRef(null), since = useRef(0), first = useRef({ n: 0, t: 0 }), [, wake] = useState(0);
+  if (!hold || first.current.n !== hold) first.current = { n: hold, t: 0 };
+  if (!hold) since.current = 0;
+  const off = !!hold && (seen.current ? !sameRow(seen.current.verbs, now) : now.list.length > 0), t0 = performance.now();
+  if (off && !first.current.t) first.current.t = t0;
+  if (off && early && !since.current) since.current = t0;
+  const late = (early && !!since.current && t0 - since.current >= ROW_HOLD_MS) || (!!first.current.t && t0 - first.current.t >= ROW_STUCK_MS);
+  const free = !hold || late, apart = !free && off;
+  useEffect(() => {
+    if (!first.current.t || late) return undefined;
+    const due = Math.min(since.current ? since.current + ROW_HOLD_MS : Infinity, first.current.t + ROW_STUCK_MS) - performance.now();
+    const t = setTimeout(() => wake((n) => n + 1), Math.max(0, due) + 1);
+    return () => clearTimeout(t);
+  });
+  if (free || !apart) seen.current = { verbs: now, advised: free || !seen.current ? given : seen.current.advised };
+  const { verbs, advised } = seen.current || { verbs: { list: [], ref: "" }, advised: null };
+  // ...a held button acts only where it stands for no item and is still live - Next pressed over a pick in flight is held and runs once
+  // the pick lands (AssistantView) - never the item being left's own
+  const act = verbs === now ? press : (id, e, a) => { const v = now.list.find((x) => x.id === id && !x.at); return v ? press(id, e, a, v.of) : undefined; };
   // a "none" answer lights its one move: no AI lights the row's own Connect an AI where the row has one (a failure's fix named after
   // its place) - it lit nothing, a move named "ai" no button carries (the design, phase A) - and any other none lights Next
-  const verbs = useRowVerbs();
   const move = advised?.none ? adviceNone(advised.none).move : "";
   const conn = move === "ai" ? verbs.list.find((v) => v.label === CONNECT_AI && !v.disabled) : null;
   const pick = advised?.none ? (conn ? { id: conn.id } : move === "ai" ? null : { verb: move || "next" }) : advised;
@@ -106,17 +130,16 @@ export default function ActionRow({ inline = false, advised = null, hold = false
   // a short bar word ("Snooze", "Stop") beside a long hover one was two names for one button
   const btn = (v) => (
     <button key={v.id} type="button" className={`tq-ab ${v.tone}`} disabled={v.disabled} data-tq-verb={v.id} data-tq-for={v.at} data-tq-own={v.own ? "" : undefined}
-      title={(v.disabled && v.why) || v.title || (fit.tight ? v.label : undefined)} onClick={(e) => press(v.id, e, e.currentTarget, v.of)}>{v.label}</button>
+      title={(v.disabled && v.why) || v.title || (fit.tight ? v.label : undefined)} onClick={(e) => act(v.id, e, e.currentTarget, v.of)}>{v.label}</button>
   );
   return (
-    // `hold`: the item's first decision is still being read - the row keeps its room and shows nothing until its lit button lands with it
     <div className={inline ? "tq-arow inline" : "tq-arow"} role="toolbar" aria-label={ref ? `What to do with ${ref}` : "What to do with this one"} data-tq-row=""
-      aria-busy={hold || undefined} style={hold ? { visibility: "hidden" } : undefined}>
+      aria-busy={hold || undefined}>
       <div className={fit.tight ? "tq-arow-verbs tight" : "tq-arow-verbs"} ref={setBox} data-tq-fold={fit.level}>
         {next && <div className="tq-cl tq-cl-next" role="group" aria-label="Move on">
           <div className="tq-cl-b"><button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} data-tq-steady={next.steady ? "" : undefined} title={next.title || undefined} disabled={next.disabled}
-            onClick={(e) => press(next.id, e, e.currentTarget, next.of)}>{next.label}</button></div></div>}
-        {fit.groups.map((g) => <Cluster key={g.type} g={g} btn={btn} />)}
+            onClick={(e) => act(next.id, e, e.currentTarget, next.of)}>{next.label}</button></div></div>}
+        {fit.groups.map((g) => <Cluster key={g.type} g={g} btn={btn} act={act} />)}
       </div>
       {why && <div className="tq-arow-why" role="status" data-tq-row-why="">{why}</div>}
       {/* every part the row can draw, unseen, in the row's own classes - what fitRow adds up */}

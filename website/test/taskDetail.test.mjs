@@ -66,7 +66,7 @@ test("a task's session is held with it: unknown until read, null for a task no a
 test("Next draws what its capture names in the same frame as the fold, and the answer fills that line in place", () => {
   const view = src("AssistantView.jsx"), turns = src("assistantTurns.js");
   assert.match(view, /const drawsNow = \(c\) => !!c && showsTask\(c, cardFor\(c\)\) && !!heldTask\(c\.tid\) && heldTerm\(c\.tid\) !== undefined;[^]*aheadItem && \(drawsNow\(aheadItem\) \|\|/, "a Next only from a read already held - never an empty view");
-  assert.match(view, /drawAhead\(\{ \.\.\.line, text: "", card: aheadItem \}\)/);
+  assert.match(view, /drawAhead\(\{ \.\.\.line, text: "", card: aheadItem \}, null, \{ ask: !!key \}\)/);
   assert.match(view, /setMsgs\(\(m\) => \[\.\.\.m, \{ \.\.\.line, ahead: true \}\]\);\s+putOnTable\(line\.card\);/);
   assert.match(view, /const id = keep \? ahead\.id : `a\$\{Date\.now\(\)\}`;/, "the same id: the view stays mounted");
   assert.match(view, /setMsgs\(\(m\) => m\.filter\(\(x\) => x\.id !== rec\.id\)\);\s+const t = rec\.table;/, "a failure puts the table back");

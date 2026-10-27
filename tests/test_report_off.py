@@ -1,5 +1,5 @@
 """SWITCH IT OFF (the owner, 2026-10-27: "Yes" - the Advisor may suggest switching a report off). A report run whose findings are all about
-something a What you care about line says the owner does not care about may have Switch it off lit by the Advisor; the press is the
+something a What you care about line says the owner does not care about may have Pause this report lit by the Advisor; the press is the
 owner's, and runs the report's own pause - the report stays under Reports, switched off. Invented Northwind names only."""
 import json
 from unittest import mock
@@ -21,7 +21,7 @@ def _care(s, line=CARE):
 
 
 def test_it_is_one_button_with_one_name():
-    assert buttons.label('report_off') == 'Switch it off' and buttons.hint('report_off')
+    assert buttons.label('report_off') == 'Pause this report' and buttons.hint('report_off')
     assert 'report_off' in concierge.VERBS and 'report_off' in toolcatalog.DECISIONS
     assert concierge.PROPOSALS['report_off'][0] == 'report.pause'
 

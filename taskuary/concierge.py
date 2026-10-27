@@ -94,7 +94,7 @@ CHIPS ={'review': ('approve', 'redraft', 'close', 'defer', 'not_ours', 'next'), 
          # only have a next button like what it has on desktop") - and Prepare beside it (the owner, 2026-10-25: "add prepare that
          # creates agent to research about person and topic through your mails")
          'agent': ('stop_agent', 'defer', 'next'), 'meeting': ('prepare', 'next'),
-         # ...and Switch it off, for the Advisor to light over a run whose findings the owner said they do not care about (the owner,
+         # ...and Pause this report, for the Advisor to light over a run whose findings the owner said they do not care about (the owner,
          # 2026-10-27: "the Advisor may suggest switching a report off"); the press is the owner's, the report stays under Reports
          'report': ('mine', 'regular_agent', 'report_off', 'next'), 'agentdone': ('close', 'reply', 'next'),
          'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'not_ours', 'defer', 'next'), 'task': ('close', 'defer', 'next'),
@@ -169,7 +169,7 @@ RECEIPTS = {'chase': "I'll draft the nudge - nothing goes out until you say so."
             'remember': "Remembered. Moving on.", 'coding_agent': "Handed off - the code work starts now, and what it finds comes back here.",
             'regular_agent': "Handed off - work on it starts now, and the answer comes back here.",
             'mine': "On your list. Moving on.", 'close': 'Closing the task. Moving on.', 'rerun': "Running it again - its result goes where the report sends it, and if it fails the bell says why. Moving on.",
-            'report_off': "Switched off - it stays under Reports, where its switch turns it back on. Moving on.",
+            'report_off': "Paused - it stays under Reports, where its switch turns it back on. Moving on.",
             'setup': "I'll walk you through it, one step at a time - nothing is built and nothing changes until you say so.",
             'answer_agent': "Passing that on - right away if it's waiting on you, otherwise the moment it next pauses.",
             'redraft': "Writing it again with that - the new draft lands below for your yes.", 'next': 'Next.'}
@@ -699,7 +699,7 @@ NEEDS = {'reply': 'mid', 'approve': 'rid', 'redraft': 'rid', 'not_ours': 'mid', 
          'accept_invite': 'mid', 'decline_invite': 'mid', 'propose_time': 'mid', 'find_time': 'mid', 'prepare': 'event'}
 SAYS_VERB = {'approve': 'approve', 'redraft': 'redraft', 'not_ours': 'file', 'not_ours_remember': 'file',
              'not_ours_sender': 'file', 'block_sender': 'write an exclusion rule for', 'coding_agent': 'hand to a coding agent', 'regular_agent': 'hand to an agent', 'mine': 'put on your list', 'forward': 'forward',
-             'archive': 'archive', 'rerun': 'rerun', 'report_off': 'switch off', 'close': 'close', 'answer_agent': 'answer', 'reply': 'reply to',
+             'archive': 'archive', 'rerun': 'rerun', 'report_off': 'pause', 'close': 'close', 'answer_agent': 'answer', 'reply': 'reply to',
              'split': 'split', 'defer': 'put away', 'continue': 'continue', 'chase': 'chase', 'let_go': 'let go', 'elsewhere': 'close as answered elsewhere', 'prepare': 'prepare for'}
 
 def _coding(store) -> bool:
@@ -910,7 +910,7 @@ def calendar_asks(store, item: dict | None) -> tuple:
 
 
 def _report_on(store, item: dict) -> bool:
-    """Is the item a report run whose report is still switched on - the one thing Switch it off can act on."""
+    """Is the item a report run whose report is still switched on - the one thing Pause this report can act on."""
     if item.get('kind') != 'report' or not item.get('source_id') or store is None: return False
     try: src = store.get_source(int(item['source_id'])) or {}
     except Exception: return False
@@ -1100,7 +1100,7 @@ def row_buttons(store, it: dict) -> list:
     # ...and a report's or a dashboard's Share, which its card draws on the row while it is the item (ReportCard, DashboardCard) - a run
     # that failed has nothing to share. Seen here so the Advisor knows the row has it; no rule lights it (rulebook: report_ok, dashboard)
     if it.get('kind') == 'report' and it.get('mid') and not it.get('bad'): out.append({'verb': 'share_result', 'label': buttons.label('share_result')})
-    # ...and Switch it off on a report run drawn as its task's view too, so the Advisor may light it there (the owner, 2026-10-27)
+    # ...and Pause this report on a report run drawn as its task's view too, so the Advisor may light it there (the owner, 2026-10-27)
     if it.get('kind') == 'report' and not cannot(it, 'report_off', store): out.append({'verb': 'report_off', 'label': buttons.label('report_off')})
     if it.get('closeout'): out.insert(0, {'verb': 'approve', 'label': closeout_label(it)})
     seen = set()

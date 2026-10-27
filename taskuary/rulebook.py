@@ -311,7 +311,7 @@ def decide(store, item: dict, verbs: list) -> dict:
 # These states ask it only where a Your people or Promises line NAMES someone on the item (people_on: addresses and full names - facts,
 # never the words of a mail); every other item stays the rule's alone, with no model call. Safety states never (SAFE).
 # ...and a REPORT RUN asks it only where What you care about has a line: whether the run's findings are about something the owner said they do
-# not care about is the model's to read (no word lists), and its Switch it off stands only on an answer citing such a line (the owner,
+# not care about is the model's to read (no word lists), and its Pause this report stands only on an answer citing such a line (the owner,
 # 2026-10-27: "the Advisor may suggest switching a report off")
 MEMORY_ASKS = frozenset({'report_ok', 'waiting', 'waiting_late', 'waiting_late_usual', 'waiting_overdue', 'goal', 'goal_late', 'stopped', 'agent_done', 'done_list', 'own'})
 

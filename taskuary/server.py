@@ -1602,15 +1602,13 @@ def _run_kind(op: dict, background: BackgroundTasks):
         from . import remote_assistant
         return _rerun_report(tid, asked=remote_assistant.asking(), by='assistant')
     if kind == 'memory.remember':
-        from . import concierge, memoryedit
-        # ...a fact about how the owner works with someone or something goes where its readers read it (LEARNED.md), and closes the line
-        # it makes untrue; any other fact is a saved note, as it always was
-        if p.get('about') or p.get('section') or p.get('replaces'):
-            try: return {'learned': memoryedit.remember(store, str(p.get('note') or ''), str(p.get('about') or ''), str(p.get('section') or ''),
-                                                        str(p.get('replaces') or ''))}
-            except LookupError as e: raise HTTPException(404, f"{e} The line to replace was not found - read memory.about for its key.")
-            except ValueError as e: raise HTTPException(422, str(e))
-        return {'memoryId': concierge.remember_fact(store, str(p.get('note') or ''), ACTOR)}
+        from . import memoryedit
+        # ...every fact the owner tells it goes where its readers read it (LEARNED.md), and closes the line it makes untrue - a fact about
+        # nobody too, under What you care about: a saved note was read only when a mail's words matched it (the owner, 2026-10-27)
+        try: return {'learned': memoryedit.remember(store, str(p.get('note') or ''), str(p.get('about') or ''), str(p.get('section') or ''),
+                                                    str(p.get('replaces') or ''))}
+        except LookupError as e: raise HTTPException(404, f"{e} The line to replace was not found - read memory.about for its key.")
+        except ValueError as e: raise HTTPException(422, str(e))
     if kind == 'memory.wrong':
         from . import memoryedit
         how = str(p.get('how') or 'wrong').strip().lower()
@@ -6101,13 +6099,14 @@ def report_replay(sid: int, body: dict = None, limit: int = 5):
     find out the AI reads your sentence differently is not a way to set one up (2026-09-17). Same
     judge, same prompt, on results that already happened - nothing is posted, sent or filed.
     """
-    from .reports import asks_ai, decide, judge_for, judge_prompt, read_result, report_llm, with_judge
+    from .reports import asks_ai, decide, judge_for, judge_memory, judge_prompt, read_result, report_llm, with_judge
     if not store.get_source(sid): raise HTTPException(404, 'report not found')
     cfg = body or {}
     llm = report_llm(store, cfg, _llm()) if asks_ai(cfg) else None
     # resolved once for the whole replay: which judge answers is an install-wide setting, and this
-    # is the road the two of them are compared on
-    chosen = with_judge(judge_for(store, cfg, llm), llm)
+    # is the road the two of them are compared on - reading the owner's memory as a live run does
+    mem = judge_memory(store, cfg) if llm else ''
+    chosen = with_judge(judge_for(store, cfg, llm, mem), llm, mem)
     out = []
     for r in store.report_runs(sid, min(max(1, limit), 20)):
         whole = store.get_report_run(r['runId']) or r

@@ -519,9 +519,10 @@ class ResponseTests(unittest.TestCase):
         p = decide(s, 'remember that Gail is the CFO and signs off on refunds', 'remember', key=item['key'],
                    text_arg='Gail is the CFO and signs off on refunds')['proposal']
         self.assertEqual((p['kind'], p['params']['note'], p['settles']), ('memory.remember', 'Gail is the CFO and signs off on refunds', False))
-        self.assertEqual([m['Note'] for m in s.list_memories()], [])     # nothing written on the words
+        self.assertNotIn('signs off on refunds', s.get_doc('learned') or '')     # nothing written on the words
         run(s, p)
-        self.assertIn('Gail is the CFO and signs off on refunds', [m['Note'] for m in s.list_memories()])   # the row exists, not just the receipt
+        # the line exists in the memory every reader reads, not just the receipt (2026-10-27: a saved note was read on a matching word only)
+        self.assertIn('- Gail is the CFO and signs off on refunds', s.get_doc('learned') or '')
         self.assertEqual(funnel.next_item(s, item['key'])['key'], item['key'])                                 # ...and the walk did not move
 
     def test_send_it_to_the_coding_agent_with_nothing_on_the_table_proposes_a_new_task(self):
@@ -828,7 +829,7 @@ class OneTruthPerTurnTests(unittest.TestCase):
         self.assertEqual(out['proposal']['kind'], 'memory.remember'); self.assertNotIn('Moving on', out['say'])
         self.assertEqual(s.list_memories(), [])
         run(s, out['proposal'])
-        self.assertEqual([m['Note'] for m in s.list_memories()], ['Dovid handles the badge printers'])
+        self.assertIn('- Dovid handles the badge printers', s.get_doc('learned') or '')     # in the memory every reader reads (2026-10-27)
         self.assertEqual(funnel.next_item(s, item['key'])['key'], item['key'])        # still on the table
 
     def test_a_second_decision_replaces_the_proposal_on_the_table(self):
@@ -841,7 +842,7 @@ class OneTruthPerTurnTests(unittest.TestCase):
         self.assertEqual(operations.get(s, first['id'])['status'], 'cancelled')
         self.assertEqual(s.list_memories(), [])
         run(s, second)
-        self.assertEqual([m['Note'] for m in s.list_memories()], ['Omar handles refunds'])
+        self.assertIn('- Omar handles refunds', s.get_doc('learned') or '')
         self.assertEqual(s.get_review(rid)['Status'], 'pending')                     # the approve never went out
 
 

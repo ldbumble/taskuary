@@ -655,9 +655,12 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # past verdicts. It refines the operator's document; explicit notes still outrank it.
             if learned:
                 # ...its "Your people" lines are for the priority alone (the guide's section 6 says so too, 2026-10-25)
-                system += ("\n\nLearned profile - what the owner cares about, learned from their past verdicts, and who the people on "
-                           "this mail are to them, learned from what they did - the people lines weigh the priority only, never whether "
-                           'it is a task (the document above outranks it where they disagree):\n' + learned)     # budgeted by learned_cut
+                # ...and what they said they do NOT care about decides as much as what they do (the owner, 2026-10-27: "if I don't care
+                # about something the system knows it") - read for its meaning, a legacy job by any of its names
+                system += ("\n\nLearned profile - what the owner cares about and what they do not, from their own words and their past "
+                           "verdicts, and who the people on this mail are to them, learned from what they did. Something they said they do "
+                           "not care about is never a task on its own - an fyi at most; the people lines weigh the priority only, never "
+                           'whether it is a task (the document above outranks it where they disagree):\n' + learned)     # budgeted by learned_cut
             if notes:
                 # already ranked and budgeted by ingest.relevant_notes. Evidence, never an order (PW-025): how much
                 # each counts for is the guide's to say (templates/triage.md, section 6).

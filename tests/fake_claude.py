@@ -71,10 +71,45 @@ def turn(prompt: str, n: int):
          'duration_ms': int((time.time() - t) * 1000)})
 
 
+TAKES = {'--session-id', '--resume', '-r', '--settings', '--model', '--system-prompt-file', '--append-system-prompt', '--permission-mode',
+         '--add-dir', '--tools', '--allowedTools', '--disallowedTools', '--mcp-config', '--setting-sources', '--output-format', '--input-format'}
+
+
+def seed():
+    """The interactive CLI's first prompt: its positional argument (terminal.SEED_ARGV), past the flags and their values."""
+    out, skip = [], False
+    for a in args:
+        if skip: skip = False; continue
+        if a in TAKES: skip = True; continue
+        if not a.startswith('-'): out.append(a)
+    return out[-1] if out else ''
+
+
+def interactive():
+    """`claude` with no -p, as a coding agent runs it in a pty: the seed answered, then each line typed answered, until the pty goes.
+    The rules match anywhere in what was said - a coding seed is Taskuary's whole prompt, not "The owner says: ..." (browser/agent-presses)."""
+    def say(text):
+        time.sleep(THINK)
+        for r in script:
+            if re.search(r['when'], text, re.I | re.S):
+                if r.get('exit') is not None: sys.exit(r['exit'])
+                reply = r.get('first') or 'Ok.'; break
+        else: reply = 'Ok.'
+        sys.stdout.write(f'\r\n● {reply}\r\n\r\n> '); sys.stdout.flush()
+    sys.stdout.write(f'fake claude - session {sid}\r\n'); sys.stdout.flush()
+    first = seed()
+    if first: say(first)
+    else: sys.stdout.write('> '); sys.stdout.flush()
+    for line in sys.stdin:
+        if line.strip(): say(line.strip())
+
+
 if os.environ.get('FAKE_CLAUDE_BROKEN'): sys.exit(1)          # a CLI half-way through updating itself: it starts and dies
 time.sleep(SPAWN)
 log('ready', spawn=round(time.time() - T0, 3), live=LIVE, args=args)
-if LIVE:
+if '-p' not in args and '--print' not in args:
+    interactive()
+elif LIVE:
     n = 0
     for line in sys.stdin:
         if not line.strip(): continue

@@ -35,8 +35,16 @@ listener.setblocking(False)
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 
+def _pty_own(address) -> bool:
+    """pywinpty reads a Windows pty through a loopback socket it opened itself (ptyprocess._read_in_thread): a coding agent's terminal,
+    not a connection out. Only winpty's own call, only to loopback - every other connect stays blocked (browser/agent-presses)."""
+    host = address[0] if isinstance(address, tuple) else ""
+    return host in ("127.0.0.1", "localhost") and sys._getframe(2).f_globals.get("__name__", "").startswith("winpty")
+
+
 class NoOutboundSocket(socket.socket):
     def connect(self, address):
+        if _pty_own(address): return super().connect(address)
         raise RuntimeError(f"browser fixture blocked outbound socket connection to {address!r}")
 
     def connect_ex(self, address):

@@ -2426,6 +2426,14 @@ def continue_task(task_id: int, body: CodeBody):
     return {'continued': True, 'agent': agent, 'fromSession': previous.get('Sid'), 'session': session}
 
 
+def _after_writeup(tid: int, timeout: float = 90) -> None:
+    """A Stop and save writing up in the background (writeup.start) closes its session only once the result is saved
+    (wrapup._wrap_session), and the page offers Continue and Run another agent from that Result: a press in the gap waits for the
+    write-up instead of being refused over a session that is about to go. Never from inside the write-up itself."""
+    from . import writeup
+    if writeup.running(tid) and not writeup.in_job(): writeup.wait_for(tid, timeout=timeout)
+
+
 @app.post('/api/tasks/{task_id}/continue-session')
 def continue_session(task_id: int, body: CodeBody = None):
     """Reopen the agent's OWN conversation, by the id its CLI gave it.
@@ -2438,6 +2446,10 @@ def continue_session(task_id: int, body: CodeBody = None):
     task = store.get_task(task_id)
     if not task: raise HTTPException(404, 'task not found')
     if task.get('Status') == 'dropped': raise HTTPException(409, 'This task was dismissed.')
+    # ...a Stop and save still writing up closes its session only once the result is saved (wrapup._wrap_session): the page offers
+    # Continue from the Result, and a press in that gap was refused "this task already has a live session" (browser/agent-presses).
+    # It waits for that write-up - the session it is about to close is not a live one
+    _after_writeup(task_id)
     if hub_term.for_task(task_id): raise HTTPException(409, 'this task already has a live session')
     row, why = _resumable(task_id)
     if not row: raise HTTPException(409, why)
@@ -3704,6 +3716,9 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
     # NO SECOND HAND-OFF WHILE AN AGENT RUNS (the owner, 2026-10-01: Send to agent is not offered then - Continue
     # instead). Another dispatch on a live session either started a second worker or typed into the first unasked; every
     # door - button, chip, chat word, operation - comes through here, so the refusal is said here.
+    # ...but a Stop and save still writing up is not an agent at work: its session goes once the result is saved, and Run another agent
+    # pressed from that Result was refused (browser/agent-presses). The start waits for the write-up (_after_writeup)
+    _after_writeup(tid)
     live = hub_term.session_for(tid)
     if live and live.alive:
         who = getattr(live, 'agent', None) or getattr(live, 'label', None) or 'An agent'

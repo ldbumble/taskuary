@@ -198,9 +198,9 @@ class FileAccess(unittest.TestCase):
         cid = next(x for x in server.store.list_connectors() if x['Type'] == 'outlook')['ConnectorId']
         d = {'device_code': 'D', 'user_code': 'X', 'verification_uri': 'u', 'expires_in': 9, 'interval': 1, 'message': ''}
         with mock.patch.object(msauth, 'device_start', return_value=dict(d)) as start:
-            c.post(f'/api/connectors/{cid}/ms/signin')
-            c.post(f'/api/connectors/{cid}/ms/signin', json={'files': True})
-            c.post(f'/api/connectors/{cid}/ms/signin', json={'files': False})
+            c.post(f'/api/connectors/{cid}/ms/signin', json={'code': True})
+            c.post(f'/api/connectors/{cid}/ms/signin', json={'code': True, 'files': True})
+            c.post(f'/api/connectors/{cid}/ms/signin', json={'code': True, 'files': False})
         scopes = [call.args[1].split() for call in start.call_args_list]
         self.assertNotIn('Files.ReadWrite', scopes[0])
         self.assertIn('Files.ReadWrite', scopes[1])

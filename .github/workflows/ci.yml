@@ -111,13 +111,14 @@ jobs:
     # ...in three parts at once (2026-10-21): file after file on one machine it outgrew 10 minutes and was cut off mid-run.
     # browser/shard.mjs deals package.json's test:browser list out, so the list stays the one place a test is named.
     # ...in four (2026-10-27): the one-row dock's and the drawers' tests took part 1 past its 15 minutes, and it was cancelled mid-run.
+    # ...and in six, with 20 minutes each (2026-10-27, later): a day's new browser tests took part 1 of four past its 15 again.
     strategy:
       fail-fast: false
       matrix:
-        part: [1, 2, 3, 4]
-    name: browser (${{ matrix.part }} of 4)
+        part: [1, 2, 3, 4, 5, 6]
+    name: browser (${{ matrix.part }} of 6)
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -127,7 +128,7 @@ jobs:
       - run: pip install -e .[dev]
       - run: npm ci
         working-directory: website
-      - run: node browser/shard.mjs ${{ matrix.part }} 4
+      - run: node browser/shard.mjs ${{ matrix.part }} 6
         working-directory: website
 
   walk:

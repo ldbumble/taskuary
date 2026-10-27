@@ -59,15 +59,23 @@ export const announce = (id) => pressing.forEach((f) => { try { f(id); } catch {
 // click landed on the same button after the close had drawn the next task up (drawNextEarly), and the row ran whatever verb now answered
 // to "done": the next task's. `of`, the card the drawn button came from (the row passes it): another card's verb under the same id is
 // not this press's. A press from the code itself (the Advisor's pick of a real button) names none and runs the verb there is.
+// ...and ONE AT A TIME (the overnight walk, 2026-10-27; the owner, 2026-10-26: "if you click a button twice it won't [do the work twice]"):
+// a double-click on Accept drafted the calendar's answer twice - the verb's own handler had no busy of its own. A verb whose run is still
+// answering is not run again for the same card; a run that never answers lets go after FLIGHT_MS. Next keeps the walk's own rules
+// for a press over a press
+const flying = new Map(), FLIGHT_MS = 30000;
 export const press = (id, e, anchor, of = null) => {
   // ...the verb of THAT card: one put down a moment ago may still be mounted, registering the same id after it (rowTable) - and the
   // code's own press runs the one the row draws, not the one put down
   const by = of || snap.list.find((x) => x.id === id)?.of;
   const v = by && ofs.get(id) !== by ? owners.get(by)?.verbs.find((x) => x.id === id) : live.get(id);
   if (of && !v) return undefined;
+  const k = `${by || ""}|${id}`;
+  if (Date.now() - (flying.get(k) ?? -Infinity) < FLIGHT_MS) return undefined;
   announce(id);
   const out = v?.run?.(e, anchor);
-  Promise.resolve(out).catch(() => {}).then(() => acted(id));
+  if (typeof out?.then === "function" && v?.group !== "next") flying.set(k, Date.now());
+  Promise.resolve(out).catch(() => {}).then(() => { flying.delete(k); acted(id); });
   return out;
 };
 // THE CARD'S OWN MOVE, LIT WHERE IT STANDS: the Advisor's pick of a verb the card draws itself (a draft's Send) fills that button on

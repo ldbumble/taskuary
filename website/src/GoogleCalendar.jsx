@@ -8,6 +8,7 @@ import React, { useEffect, useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import api from "./api";
 import { BORDER, DIM, INK, PANEL2 } from "./theme.jsx";
+import { PEOPLE_MISSING } from "./peopleSearch.js";
 
 export const G_CAL = "Sign in with Google for the calendar";
 export const G_CAL_NONE = "Google sign-in isn't available in this build yet";
@@ -48,7 +49,10 @@ export function GoogleCalendar({ conn, cfg, reload }) {
     const id = setTimeout(tick, 2000);
     return () => { alive = false; clearTimeout(id); };
   }, [flow, base, reload]);
-  if (signedIn && !detail) return null;       // a Google calendar is on the card: nothing to offer
+  // a Google calendar is on the card: nothing to offer - but a sign-in from before Taskuary asked for contacts says the search skips them
+  if (signedIn && !detail && conn.PeopleMissing?.length)
+    return <Typography data-tq-google-people="" variant="caption" component="div" sx={{ color: DIM, mb: 2 }}>{PEOPLE_MISSING("this account's Google contacts")}</Typography>;
+  if (signedIn && !detail) return null;
   const start = async () => {
     setBusy(true); setState(""); setDetail("");
     try { const { data } = await api.post(base); setFlow({ ...data, at: Date.now() }); window.open(data.url, "_blank", "noopener"); }
@@ -59,7 +63,8 @@ export function GoogleCalendar({ conn, cfg, reload }) {
     <Box data-tq-google-calendar="" sx={{ mb: 2, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 1 }}>
       <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Google calendar</Typography>
       <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
-        The App Password brings mail only. Sign in once and Taskuary reads this account's calendar - read-only - when it answers about times.
+        The App Password brings mail only. Sign in once and Taskuary reads this account's calendar - read-only - when it answers about times,
+        and searches its contacts when you pick someone to write to.
       </Typography>
       {state === "ok" ? null : flow ? (
         <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>

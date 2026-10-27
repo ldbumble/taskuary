@@ -142,3 +142,194 @@ def test_the_endpoint_answers_the_search():
         r = TestClient(server.app).get('/api/people/search', params={'q': 'dynamo', 'channel': 'email', 'ai': 1})
     assert r.status_code == 200 and r.json()['data'][0]['to'] == 'lortiz@dynamo.example'
     assert f.call_args.args[1:] == ('dynamo', 'email') and f.call_args.kwargs == {'ai': True}
+
+
+# ---- contacts and the people you can message (the owner, 2026-10-27: "ask for contacts for Outlook whenever we can, and Gmail if it
+# supports it. Same for Teams") -------------------------------------------------------------------------------------------------
+
+from taskuary import googlecal, msauth, outbound
+
+
+def test_the_sign_ins_ask_for_people_and_contacts():
+    assert {'People.Read', 'Contacts.Read', 'Mail.Send'} <= set(msauth.SCOPES.split())
+    assert {'People.Read', 'User.ReadBasic.All', 'Chat.ReadWrite'} <= set(msauth.TEAMS_SCOPES.split())
+    # an Outlook sign-in a Teams card reads through is never asked for more than it was: its chats would read as lapsed
+    assert 'People.Read' not in msauth.TEAMS_CHAT.split()
+    assert googlecal.SCOPES.split() == [googlecal.SCOPE, *googlecal.PEOPLE]
+    assert {x.rpartition('/')[2] for x in googlecal.PEOPLE} == {'contacts.readonly', 'contacts.other.readonly', 'directory.readonly'}
+
+
+def test_a_sign_in_from_before_says_what_it_is_missing():
+    old = {'auth': 'user', 'granted_scope': 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite'}
+    assert ps.missing(old, 'outlook') == ['People.Read', 'Contacts.Read']
+    assert ps.missing({**old, 'granted_scope': msauth.SCOPES}, 'outlook') == []
+    assert ps.missing({'auth': 'user', 'granted_scope': 'https://graph.microsoft.com/People.Read Chat.ReadWrite'}, 'teams') == []
+    assert ps.missing({'auth': 'user'}, 'outlook') == []                     # never said what it has: nothing to claim
+    assert ps.missing({'tenant_id': 't', 'client_id': 'c'}, 'outlook') == []  # a tenant app is not a sign-in
+    assert ps.missing(json.dumps({'google_refresh_token': 'r', 'google_scope': googlecal.SCOPE}), 'gmail') == [googlecal.G_CONTACTS]
+    assert ps.missing({'google_refresh_token': 'r', 'google_scope': googlecal.SCOPES}, 'gmail') == []
+    assert ps.missing('not json', 'gmail') == []
+
+
+def R(code=200, j=None): return mock.Mock(status_code=code, json=lambda: j or {}, text='')
+
+
+def test_outlook_contacts_are_matched_by_name_company_or_address_and_read_once():
+    ps.forget()
+    G = 'https://graph.microsoft.com/v1.0'
+    pages = {f'{G}/me/contacts': R(j={'value': [
+                 {'displayName': 'Nora Price', 'companyName': 'Dynamo Freight', 'emailAddresses': [{'address': 'nprice@dynamo.example'}]}],
+                 '@odata.nextLink': f'{G}/me/contacts?page=2'}),
+             f'{G}/me/contacts?page=2': R(j={'value': [
+                 {'displayName': 'Omar Keller', 'emailAddresses': [{'address': 'okeller@vendor.example'}, {'address': 'omar@home.example'}]}]})}
+    with mock.patch('requests.get', side_effect=lambda url, **k: pages[url]) as get:
+        assert [r['email'] for r in ps.graph_contacts('t', 'freight', 1)] == ['nprice@dynamo.example']
+        assert [r['email'] for r in ps.graph_contacts('t', 'omar', 1)] == ['okeller@vendor.example', 'omar@home.example']
+        assert [r['email'] for r in ps.graph_contacts('t', 'vendor', 1)] == ['okeller@vendor.example']
+    assert get.call_count == 2                       # two pages, once: the book is held ten minutes
+    ps.forget()
+
+
+def outlook_card(s, granted):
+    c = s.get_connector_by_type('outlook')
+    s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Secret': 'rt',
+                      'ConfigJson': json.dumps({'auth': 'user', **({'granted_scope': granted} if granted else {})})}, 'o')
+    return c['ConnectorId']
+
+
+@pytest.mark.parametrize('granted, people, contacts', [(msauth.SCOPES, True, True), ('User.Read Mail.Send', False, False),
+                                                       ('User.Read People.Read', True, False), ('', True, True)])
+def test_outlook_asks_only_what_its_sign_in_was_given(s, granted, people, contacts):
+    outlook_card(s, granted)
+    ps.forget()
+    nora = [{'email': 'nprice@dynamo.example', 'name': 'Nora Price', 'company': 'Dynamo Freight', 'title': ''}]
+    with mock.patch('taskuary.channels.graph_token', return_value='tok'), mock.patch.object(ps, 'graph_people', return_value=[]) as g, \
+         mock.patch.object(ps, 'graph_contacts', return_value=nora) as gc:
+        out = tos(ps.search(s, 'nora'))
+    assert g.call_args.args == ('tok', 'nora', people)
+    assert gc.called == contacts and out == (['nprice@dynamo.example'] if contacts else [])
+    ps.forget()
+
+
+def test_google_people_reads_contacts_other_contacts_and_the_directory():
+    ps.forget()
+    G = ps.G_PEOPLE
+    def get(url, headers=None, params=None, timeout=None):
+        assert headers == {'Authorization': 'Bearer gt'}
+        if url == f'{G}/people/me/connections':
+            if not params.get('pageToken'):
+                return R(j={'connections': [{'names': [{'displayName': 'Lena Ortiz'}], 'organizations': [{'name': 'Dynamo Freight', 'title': 'Billing'}],
+                                             'emailAddresses': [{'value': 'lortiz@dynamo.example'}]}], 'nextPageToken': 'p2'})
+            return R(j={'connections': [{'names': [{'displayName': 'Ray Colton'}], 'emailAddresses': [{'value': 'ray@vendor.example'}]}]})
+        if url == f'{G}/otherContacts':
+            return R(j={'otherContacts': [{'names': [{'displayName': 'Victor Hale'}], 'emailAddresses': [{'value': 'vhale@dynamo.example'}]}]})
+        assert url == f'{G}/people:searchDirectoryPeople' and params['query'] == 'dynamo' and 'DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE' in params['sources']
+        return R(j={'people': [{'names': [{'displayName': 'Erin Blake'}], 'emailAddresses': [{'value': 'erin@dynamo.example'}]}]})
+    with mock.patch('requests.get', side_effect=get) as g:
+        out = ps.google_people('gt', 'dynamo', googlecal.SCOPES, 7)
+        assert [(r['email'], r['company']) for r in out] == [('lortiz@dynamo.example', 'Dynamo Freight'), ('vhale@dynamo.example', ''),
+                                                             ('erin@dynamo.example', '')]
+        assert out[-1]['staff'] == 'google' and 'staff' not in out[0]
+        assert g.call_count == 4
+        # a sign-in that was given the calendar alone: nothing is asked
+        assert ps.google_people('gt', 'dynamo', googlecal.SCOPE, 8) == [] and g.call_count == 4
+    ps.forget()
+
+
+def test_a_gmail_card_signed_in_with_google_is_searched_and_remembered(s):
+    c = s.get_connector_by_type('gmail')
+    s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'ConfigJson': json.dumps(
+        {'address': 'alex@northwind.example', 'google_refresh_token': 'grt', 'google_scope': googlecal.SCOPES})}, 'o')
+    ps.forget()
+    hit = [{'email': 'pvance@dynamo.example', 'name': 'Paula Vance', 'company': 'Dynamo Freight', 'title': ''}]
+    with mock.patch('taskuary.googlecal.access_token', return_value='gt'), mock.patch.object(ps, 'google_people', return_value=hit) as g:
+        assert tos(ps.search(s, 'paula')) == ['pvance@dynamo.example']
+    assert g.call_args.args == ('gt', 'paula', googlecal.SCOPES, c['ConnectorId'])
+    ps.forget()
+    with mock.patch.object(ps, 'google_people', side_effect=RuntimeError('offline')):
+        assert tos(ps.search(s, 'dynamo')) == ['pvance@dynamo.example']          # offline: remembered
+    ps.forget()
+
+
+def test_graph_people_marks_the_organisations_own_people():
+    def get(url, headers=None, params=None, timeout=None):
+        if url.endswith('/me/people'):
+            return R(j={'value': [{'displayName': 'Gail Moreno', 'personType': {'class': 'Person', 'subclass': 'OrganizationUser'},
+                                   'scoredEmailAddresses': [{'address': 'gmoreno@northwind.example'}]}]})
+        return R(j={'value': [{'displayName': 'Erin Blake', 'userPrincipalName': 'erin@northwind.example'}]})
+    with mock.patch('requests.get', side_effect=get):
+        assert [(r['email'], r.get('staff')) for r in ps.graph_people('t', 'n', True)] == [
+            ('gmoreno@northwind.example', 'microsoft'), ('erin@northwind.example', 'microsoft')]
+
+
+def teams_card(s, signed_in=True):
+    c = s.get_connector_by_type('teams')
+    s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, **({'Secret': 'trt'} if signed_in else {}),
+                      'ConfigJson': json.dumps({'auth': 'user', 'account': 'alex@northwind.example'} if signed_in else {})}, 'o')
+    return c['ConnectorId']
+
+
+def test_teams_offers_the_organisations_people_as_well_as_its_chats(s):
+    teams_card(s)
+    ps.remember(s, [{'email': 'erin@northwind.example', 'name': 'Erin Blake', 'staff': 'microsoft'},
+                    {'email': 'nprice@dynamo.example', 'name': 'Nora Erinson', 'company': 'Dynamo Freight'},     # outside: no Teams chat to open
+                    {'email': 'alex@northwind.example', 'name': 'Alex Doyle', 'staff': 'microsoft'}])
+    s.add_message({'ExternalId': 'w1', 'ConversationId': 'teams:19:ops@thread.v2', 'Channel': 'teams', 'FromName': 'Erin Blake',
+                   'Subject': '', 'BodyText': 'hi', 'SentAt': '2026-10-02 08:00:00', 'Status': 'routed'})
+    with mock.patch.object(ps, 'directory', return_value=[]):
+        assert sorted(tos(ps.search(s, 'erin', 'teams'))) == ['19:ops@thread.v2', 'erin@northwind.example']
+        assert tos(ps.search(s, 'alex', 'teams')) == []                     # the owner is never offered
+
+
+def test_teams_without_a_personal_sign_in_offers_only_its_chats(s):
+    teams_card(s, signed_in=False)
+    ps.remember(s, [{'email': 'erin@northwind.example', 'name': 'Erin Blake', 'staff': 'microsoft'}])
+    with mock.patch.object(ps, 'directory', return_value=[]):
+        assert tos(ps.search(s, 'erin', 'teams')) == []
+
+
+def test_sending_to_a_person_on_teams_opens_or_reuses_the_one_on_one_chat(s):
+    teams_card(s)
+    G = outbound.GRAPH
+    def get(url, headers=None, params=None, timeout=None):
+        if url == f'{G}/users/erin%40northwind.example': return R(404)
+        if url == f'{G}/users': assert params['$filter'] == "mail eq 'erin@northwind.example'"; return R(j={'value': [{'id': 'u-erin'}]})
+        assert url == f'{G}/me'; return R(j={'id': 'u-alex'})
+    posted = []
+    def post(url, headers=None, data=None, timeout=None):
+        posted.append((url, json.loads(data)))
+        return R(201, {'id': '19:alex_erin@unq.gbl.spaces'}) if url == f'{G}/chats' else R(201, {'id': 'm1'})
+    with mock.patch.object(outbound, '_graph_token', return_value='tok'), mock.patch('requests.get', side_effect=get), \
+         mock.patch('requests.post', side_effect=post):
+        assert outbound.send_out(s, 'teams', ['erin@northwind.example'], '', 'Done.') == {'channel': 'teams', 'chat': '19:alex_erin@unq.gbl.spaces'}
+    (u1, chat), (u2, msg) = posted
+    assert u1 == f'{G}/chats' and chat['chatType'] == 'oneOnOne'
+    assert [m['user@odata.bind'] for m in chat['members']] == [f"{G}/users('u-alex')", f"{G}/users('u-erin')"]
+    assert u2 == f'{G}/chats/19:alex_erin@unq.gbl.spaces/messages' and msg['body']['content'] == 'Done.'
+
+
+def test_a_chat_id_is_posted_to_as_it_always_was(s):
+    teams_card(s)
+    with mock.patch.object(outbound, '_graph_token', return_value='tok'), mock.patch('requests.get') as get, \
+         mock.patch('requests.post', return_value=R(201, {'id': 'm1'})) as post:
+        outbound.send_teams(s, '19:ops@thread.v2', 'hi')
+    get.assert_not_called()
+    assert post.call_args.args[0].endswith('/chats/19:ops@thread.v2/messages')
+
+
+def test_someone_teams_does_not_know_is_said_plainly(s):
+    teams_card(s)
+    with mock.patch.object(outbound, '_graph_token', return_value='tok'), mock.patch('requests.get', return_value=R(404)), \
+         mock.patch('requests.post') as post, pytest.raises(RuntimeError, match='does not know nprice@dynamo.example'):
+        outbound.send_teams(s, 'nprice@dynamo.example', 'hi')
+    post.assert_not_called()
+
+
+def test_the_cards_say_what_a_sign_in_is_missing():
+    c = server.store.get_connector_by_type('outlook')
+    before = server.store.get_connector(c['ConnectorId'], with_secret=True)
+    try:
+        server.store.save_connector({'ConnectorId': c['ConnectorId'], 'ConfigJson': json.dumps({'auth': 'user', 'granted_scope': 'User.Read Mail.Send'})}, 'o')
+        rows = TestClient(server.app).get('/api/connectors').json()['data']
+        assert next(r for r in rows if r['ConnectorId'] == c['ConnectorId'])['PeopleMissing'] == ['People.Read', 'Contacts.Read']
+    finally: server.store.save_connector({'ConnectorId': c['ConnectorId'], 'ConfigJson': before.get('ConfigJson') or '{}'}, 'o')

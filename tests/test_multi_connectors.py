@@ -244,7 +244,7 @@ class TwoTeamsCards(unittest.TestCase):
         store.save_source({'Channel': 'teams', 'Address': B, 'ConnectorId': tm, 'Active': 1}, 'test')
         cfg, sec, borrowed = channels.graph_creds(store, store.get_connector(tm, with_secret=True))
         self.assertEqual((sec, borrowed, cfg['_cid']), ('rt-ol-contoso', True, o_two))
-        self.assertEqual(cfg['_scope'], msauth.TEAMS_SCOPES, 'the same sign-in, asked for chats')
+        self.assertEqual(cfg['_scope'], msauth.TEAMS_CHAT, 'the same sign-in, asked for chats')
         # ...and a tenant app on another domain is not borrowed either
         store2 = SQLiteStore(':memory:')
         o = store2.get_connector_by_type('outlook')['ConnectorId']

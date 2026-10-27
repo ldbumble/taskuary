@@ -225,6 +225,8 @@ def send_teams(store, chat_id: str, body: str, connector_id=None) -> dict:
         next((x for x in store.connectors_by_type('teams') if as_person(store, x)), None)
     if c and c.get('Active') and not as_person(store, c): raise RuntimeError(NO_SENDER['teams'])
     tok = _graph_token(store, 'teams', c and c['ConnectorId'])
+    # a PERSON picked from the people search (an address, not a '19:' chat id) is their 1:1 chat - the one there is, or a new one
+    if not str(chat_id).startswith('19:') and '@' in str(chat_id): chat_id = one_on_one(tok, str(chat_id))
     r = requests.post(f'{GRAPH}/chats/{chat_id}/messages', timeout=30,
                       headers={'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'},
                       data=json.dumps({'body': {'contentType': 'text', 'content': body}}))
@@ -245,6 +247,31 @@ def send_teams(store, chat_id: str, body: str, connector_id=None) -> dict:
     if r.status_code >= 300:
         raise RuntimeError(f'graph chat post failed ({r.status_code}): {r.text[:300]}')
     return {'channel': 'teams', 'chat': chat_id}
+
+
+def _user_id(tok: str, who: str) -> str:
+    "An organisation user's object id from their sign-in name, else their mail address ('' when the directory knows neither)."
+    h = {'Authorization': f'Bearer {tok}'}
+    from urllib.parse import quote
+    r = requests.get(f'{GRAPH}/users/{quote(who)}', headers=h, params={'$select': 'id'}, timeout=20)
+    if r.status_code == 200: return (r.json() or {}).get('id') or ''
+    r = requests.get(f'{GRAPH}/users', headers=h, timeout=20, params={'$filter': f"mail eq '{who.replace(chr(39), chr(39) * 2)}'", '$select': 'id'})
+    return next((u.get('id') for u in (r.json() or {}).get('value') or [] if u.get('id')), '') if r.status_code == 200 else ''
+
+
+def one_on_one(tok: str, who: str) -> str:
+    """The id of the owner's 1:1 Teams chat with `who`. Graph hands back the one that exists, or opens it (Chat.ReadWrite covers
+    both) - the people search offers the organisation's people, not only the chats already seen here."""
+    them = _user_id(tok, who)
+    if not them: raise RuntimeError(f'Teams does not know {who} in your organisation - pick one of your existing chats, or send an email')
+    me = requests.get(f'{GRAPH}/me', headers={'Authorization': f'Bearer {tok}'}, params={'$select': 'id'}, timeout=20)
+    mid = (me.json() or {}).get('id') if me.status_code == 200 else ''
+    if not mid: raise RuntimeError(f'Teams did not say who is signed in ({me.status_code}) - try again in a minute')
+    m = lambda i: {'@odata.type': '#microsoft.graph.aadUserConversationMember', 'roles': ['owner'], 'user@odata.bind': f"{GRAPH}/users('{i}')"}
+    r = requests.post(f'{GRAPH}/chats', timeout=30, headers={'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'},
+                      data=json.dumps({'chatType': 'oneOnOne', 'members': [m(mid), m(them)]}))
+    if r.status_code >= 300: raise RuntimeError(f'Teams would not open a chat with {who} ({r.status_code}): {r.text[:200]}')
+    return r.json()['id']
 
 
 # Which channels Taskuary DRAFTS AND SENDS replies on. One answer, asked by everything:

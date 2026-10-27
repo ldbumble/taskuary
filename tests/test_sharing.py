@@ -205,7 +205,7 @@ class FileAccess(unittest.TestCase):
         self.assertNotIn('Files.ReadWrite', scopes[0])
         self.assertIn('Files.ReadWrite', scopes[1])
         self.assertNotIn('Files.ReadWrite', scopes[2])
-        self.assertEqual(msauth.SCOPES, 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite')   # the default never widens
+        self.assertNotIn('Files.ReadWrite', msauth.SCOPES.split())   # the default never widens to files
         self.assertIn('Files.ReadWrite', msauth.scopes_for('teams', True).split())
 
     def test_a_teams_card_that_may_save_files_carries_onedrive(self):

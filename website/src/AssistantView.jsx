@@ -586,9 +586,16 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
       const cs = getComputedStyle(el);
       return [el, parseFloat(cs.top), parseFloat(cs.height)];
     });
+    // ...and a row still coming in (`entering`) waits for THIS glide, not the one it came in on: a second read landing mid-glide (the pile
+    // read once, then the rail's own) restarted every row while its .42 s wait ran on, and it showed 8-17px short of its slot, under the
+    // ring growing over it (the dead-end walk's SWAP, cards fold, 2026-10-27)
+    const back = [...now.values()].map(({ el }) => el).filter((el) => el.classList.contains("entering"));
+    for (const el of back) el.style.animation = "none";
     for (const [el, top, h] of from) { el.style.transitionProperty = "opacity, transform"; el.style.top = `${top}px`; el.style.height = `${h}px`; }
     void wrapRef.current.offsetHeight;                         // that frame is the start; then the glide runs from it, for every row at once
     for (const { el, top } of now.values()) { el.style.transitionProperty = ""; el.style.top = `${top}px`; el.style.height = ""; }
+    for (const el of back) el.style.animation = "";
+    if (back.length) { clearTimeout(enterTimer.current); enterTimer.current = setTimeout(() => setEntering(new Set()), 700); }
   });
   useLayoutEffect(() => {
     const el = wrapRef.current;

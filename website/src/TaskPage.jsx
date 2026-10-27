@@ -252,14 +252,16 @@ const WORK_SIDE = (open) => ({ position: "absolute", top: 0, right: 0, bottom: 0
 // drawer is out. `lit`: the drawer holds where the task goes NEXT (the owner, 2026-10-26: "you can open on task but highlight the side bar
 // so people know to go there") - filled in the accent, and it peeks out once as it lands (still for a reader who asked for no motion);
 // a drawer of context only (Came from) stays quiet
+// ...and WHITE at rest, both edges (the owner, 2026-10-27: "the right side thing should be white as well, like the left sidebar - otherwise
+// you won't notice it's there"): a beige strip on the shaded body read as part of the shade; white with its hairline reads as a thing to pull
 const DRAWER_TAB = (open, right = false, lit = false) => ({ appearance: "none", font: "inherit", cursor: "pointer", flex: "0 0 34px", width: 34, p: 0, py: 1.5, border: 0,
-  [right ? "borderLeft" : "borderRight"]: `1px solid ${lit ? ACCENT : BORDER}`, bgcolor: lit ? ACCENT : open ? "#e7e0d4" : "#efeae2", color: lit ? "#fff" : INK,
+  [right ? "borderLeft" : "borderRight"]: `1px solid ${lit ? ACCENT : BORDER}`, bgcolor: lit ? ACCENT : open ? "#f3efe9" : "#fff", color: lit ? "#fff" : INK,
   display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: 1.25, minHeight: 0, overflow: "hidden",
   "& [data-tq-from-chevron]": { width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0, bgcolor: "#fff",
     border: `1px solid ${lit ? "#fff" : BORDER}`, color: ACCENT, fontSize: 21, lineHeight: 1, fontWeight: 600 },
   "& [data-tq-from-words]": { writingMode: "vertical-rl", transform: right ? "none" : "rotate(180deg)", fontSize: 12.5, fontWeight: 600, letterSpacing: ".02em",
     whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minHeight: 0 },
-  "&:hover": { bgcolor: lit ? "#46586a" : "#e7e0d4" }, "&:hover [data-tq-from-chevron]": lit ? {} : { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT },
+  "&:hover": { bgcolor: lit ? "#46586a" : "#f3efe9" }, "&:hover [data-tq-from-chevron]": lit ? {} : { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT },
   "&:focus-visible": { outline: `2px solid ${lit ? INK : ACCENT}`, outlineOffset: -2 },
   ...(lit && !open ? { "@keyframes tqTabPeek": { "0%, 100%": { transform: "none" }, "50%": { transform: `translateX(${right ? -5 : 5}px)` } },
     animation: "tqTabPeek .6s ease-in-out .5s 2", "@media (prefers-reduced-motion: reduce)": { animation: "none" } } : {}) });
@@ -2881,19 +2883,23 @@ const Fold = ({ title, children }) => (
 const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle, action, tools, quiet = false }) => (
   <Box {...pressable(onToggle)} aria-expanded={onToggle ? !folded : undefined} data-tq-quiet={quiet ? "" : undefined}
     sx={{ ...FOCUS_RING, display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" },
-    cursor: onToggle ? "pointer" : "default", opacity: quiet ? 0.6 : folded ? 0.72 : 1,
-    "&:hover": onToggle ? { opacity: 1 } : undefined }}>
+    cursor: onToggle ? "pointer" : "default", opacity: quiet ? 0.6 : 1,
+    "&:hover [data-tq-fold-mark]": onToggle ? { color: INK } : undefined }}>
     {/* no step number any more: From is a column of its own, not step 1 (the redesign, 2026-10-21) - the tone says whose move it is */}
     <Box data-tq-step={number} sx={{ width: quiet ? 7 : 9, height: quiet ? 7 : 9, borderRadius: "50%", bgcolor: tone, flexShrink: 0 }} />
     <Box sx={{ minWidth: 0, flex: 1 }}>
-      <Typography sx={{ color: quiet ? DIM : INK, fontSize: quiet ? 12.5 : 14, fontWeight: 600, lineHeight: 1.3 }}>{title}</Typography>
+      {/* A FOLDED SECTION IS A HEADING OF THE WORK, not a row to press (the owner, 2026-10-27: "on the task there is a Close out button, but
+          I thought it's a sidebar thing that pulls out?"): faded, with its arrow at the far edge, folded Close out read as a stray button
+          under the Result. It wears the open heading's own weight now, its fold mark beside its name */}
+      <Typography sx={{ color: quiet ? DIM : INK, fontSize: quiet ? 12.5 : 14, fontWeight: 600, lineHeight: 1.3, display: "flex", alignItems: "center", gap: 0.25 }}>
+        {title}
+        {onToggle && <ExpandMoreIcon data-tq-fold-mark="" sx={{ fontSize: 18, color: FAINT, flexShrink: 0, transform: folded ? "rotate(-90deg)" : "none", transition: "transform .15s, color .15s" }} />}
+      </Typography>
       {description && !folded && <Typography sx={{ color: FAINT, fontSize: 12, display: "block", lineHeight: 1.4 }}>{description}</Typography>}
     </Box>
     {/* the one action a stage cannot afford to hide when it folds. Its click is its own, not the fold's. */}
     {action && <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", flexShrink: 0, flexBasis: { xs: "100%", sm: "auto" }, order: { xs: 9, sm: 0 } }}>{action}</Box>}
     {tools && <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", flexShrink: 1, minWidth: 0 }}>{tools}</Box>}
     {chip}
-    {onToggle && <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, flexShrink: 0,
-      transform: folded ? "rotate(-90deg)" : "none", transition: "transform .15s" }} />}
   </Box>
 );

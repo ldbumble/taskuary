@@ -91,7 +91,7 @@ class SecondMicrosoftSignIn(unittest.TestCase):
     def _sign_in(self, cid, account, rt):
         start = {'device_code': 'D', 'user_code': 'ABCD-1234', 'verification_uri': 'https://microsoft.com/devicelogin', 'expires_in': 900, 'interval': 5}
         with mock.patch.object(msauth, 'device_start', return_value=start):
-            flow = self.c.post(f'/api/connectors/{cid}/ms/signin').json()['flow']
+            flow = self.c.post(f'/api/connectors/{cid}/ms/signin', json={'code': True}).json()['flow']
         with mock.patch.object(msauth, 'device_poll', return_value={'access_token': 'A', 'refresh_token': rt, 'expires_in': 3600}), \
              mock.patch.object(msauth, 'me', return_value={'account': account, 'name': 'Alex Doyle'}), \
              mock.patch.object(server, '_poll_reports'):
@@ -286,7 +286,7 @@ class TeamsSignsInOnItsOwnCard(unittest.TestCase):
     def _sign_in(self, cid, account, rt):
         start = {'device_code': 'D', 'user_code': 'ABCD-1234', 'verification_uri': 'https://microsoft.com/devicelogin', 'expires_in': 900, 'interval': 5}
         with mock.patch.object(msauth, 'device_start', return_value=start) as ds:
-            flow = self.c.post(f'/api/connectors/{cid}/ms/signin').json()['flow']
+            flow = self.c.post(f'/api/connectors/{cid}/ms/signin', json={'code': True}).json()['flow']
         self.assertEqual(ds.call_args.args[1], msauth.TEAMS_SCOPES, 'a Teams card asks for chats, not mail')
         with mock.patch.object(msauth, 'device_poll', return_value={'access_token': 'A', 'refresh_token': rt, 'expires_in': 3600}), \
              mock.patch.object(msauth, 'me', return_value={'account': account, 'name': 'Alex Doyle'}), \

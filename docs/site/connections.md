@@ -48,6 +48,40 @@ usually `report` and `tool`.
 | **Outlook** | Mail and calendar, through Microsoft sign-in or a tenant app registration - answering invites and booking meetings needs Calendars.ReadWrite, which a sign-in from before it asks for again |
 | **Gmail and IMAP** | Any IMAP mailbox. Approved replies go back through the provider's SMTP, in-thread |
 
+### How Microsoft sign-in works
+
+**Sign in with Microsoft** on the Outlook or Teams card opens Microsoft's own sign-in page in your
+browser. You sign in there, as you would anywhere else, and accept; the tab comes back to Taskuary
+on this computer and says *Signed in - you can close this tab*, and the card shows who signed in.
+Taskuary never sees your password.
+
+Under the hood this is the OAuth 2.0 authorization-code flow with PKCE, for a public client (no
+client secret): the sign-in carries a one-time `state` and an S256 code challenge, the code comes
+back to `http://localhost:<port>/api/ms/callback` on the machine Taskuary runs on, and is redeemed
+there with the matching verifier. The return is accepted once, only for the sign-in the card
+started, only from this machine, and only for ten minutes. The tab never shows a token. The
+refresh token is kept as the card's secret and renews itself from then on.
+
+**Sign in with a code instead** - the small link beside the button - is the fallback for a
+Taskuary your browser cannot reach on `localhost`: one running on another computer, or a headless
+box. It shows a code to type at microsoft.com/devicelogin. It is never used unless you pick it.
+
+:::note For an IT admin approving Taskuary
+- **No device-code flow by default.** Sign-in is the authorization-code flow with PKCE in the
+  system browser, so a Conditional Access policy that blocks device-code authentication does not
+  block Taskuary. Only a user who chooses *Sign in with a code instead* uses the device-code flow.
+- **Redirect URI:** `http://localhost/api/ms/callback`, on the *Mobile and desktop applications*
+  platform. Entra ignores the port of a `localhost` redirect for a public client, so this one
+  entry covers whatever port Taskuary listens on (7787 unless changed). The admin-approval link
+  uses `https://login.microsoftonline.com/common/oauth2/nativeclient`.
+- **Delegated permissions (Microsoft Graph)**, all a user's own consent:
+  - Outlook: `offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite People.Read Contacts.Read`
+  - Teams: `offline_access User.Read User.ReadBasic.All Chat.ReadWrite ChatMessage.Send People.Read`
+  - Plus `Files.ReadWrite` only on a card where the owner turns on *Allow saving files*.
+- **Approving once for everyone:** the card's *Get the admin link* is a standard admin-consent
+  URL for Taskuary's app id. Nothing is registered in your tenant.
+:::
+
 Taskuary reads your **Sent** folder as well as your inbox. That is what makes "has this been
 answered?" a real question rather than a guess, and it is what `STYLE.md`'s **Generate from
 history** learns your writing voice from.

@@ -7,7 +7,7 @@ import React, { useEffect, useState } from "react";
 import { Box, Button, CircularProgress, MenuItem, Select, TextField, Typography } from "@mui/material";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import api from "./api";
-import { ContactPicker } from "./ui.jsx";
+import { ContactPicker, useContacts } from "./ui.jsx";
 import { FAINT, selSx } from "./theme.jsx";
 import { label } from "./buttons.js";
 import { usualHandWhy } from "./taskFilter.js";
@@ -27,10 +27,9 @@ export const Handoff = ({ taskId, onSent, onLeave, onStay }) => {
   }, []);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState("");
-  const [people, setPeople] = useState([]);
   const [sent, setSent] = useState(null);
   const [err, setErr] = useState("");
-  useEffect(() => { api.get("/api/people").then(({ data }) => setPeople(data.data || [])).catch(() => {}); }, []);
+  const people = useContacts();
   // THE USUAL RECIPIENT, CHOSEN NOT SENT (the owner, 2026-10-25: "Hand it to a person pre-fills the usual recipient"): the person this
   // sender's asks were handed to before fills To - never over a name already typed - and the owner still presses Send it. Nobody
   // learned, or the ask failing, leaves the form as it always was.

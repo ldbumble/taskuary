@@ -12,7 +12,7 @@ const gets = (page) => {
   return { since: (i) => seen.slice(i), get n() { return seen.length; } };
 };
 const count = (list, path) => list.filter((p) => p === path).length;
-const ONCE = ["/api/setup/first-run"];
+const ONCE = ["/api/setup/first-run", "/api/calendar/today"];
 
 test("a start reads the first-run state, the build and today's meetings once each; Settings > Docs draws its list without the documents",
   { timeout: 180000 }, async (t) => {

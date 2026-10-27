@@ -36,7 +36,8 @@ test("a page over the item: the rail's tag and the box say it is under the page,
   assert.match(tableWords(tableOf({ browsing: "b1" })).box, /^Ask Taskuary anything/, "a page with nothing under it");
   assert.match(src, /tag=\{tableSays\.tag\}/, "the rail draws the tag tableWords chose");
   // ...and the box its words - but the one-row bar's pill, at rest and widened, its own short ones (2026-10-26)
-  assert.match(src, /placeholder=\{phone \? tableSays\.phone : !popOn \? tableSays\.box : boxWide \? "[^"]+" : "Tell me what to do…"\}/, "and the box its words");
+  // ...and the pill at rest with no task on the table the short hint, the long one ran on under its send button (2026-10-26)
+  assert.match(src, /placeholder=\{phone \? tableSays\.phone : !popOn \? \(boxNarrow && !boxWide \? tableSays\.phone : tableSays\.box\) : boxWide \? "[^"]+" : "Tell me what to do…"\}/, "and the box its words");
   assert.match(src, /aria-label=\{tableSays\.name\}/, "and its name the task on the table");
 });
 

@@ -608,6 +608,10 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
         # ...and on a thread the owner started from their mail app, the work they were in when they did (2026-10-26)
         seen = {w['tid'] for w in still}
         still += [w for w in taskcontext.owner_started_work(store, msg) if w['tid'] not in seen]
+        # ...and on a CLOSED task's thread, the open work about the same job - the owner's own too - which new work may be (2026-10-27)
+        if (ht := thread.get('thread_task')) and ht['status'] == 'closed':
+            seen = {w['tid'] for w in still}
+            still += [w for w in taskcontext.open_same_job(store, msg, ht) if w['tid'] not in seen]
         if still: thread = {**thread, 'open_work': still}
         # ...and the open GOALS with their steps, so a mail on another thread can say which step it serves (spec 2026-10-12)
         goals = taskcontext.open_goals(store)
@@ -859,6 +863,21 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             split_from, verdict = tid, (follow, _fail)
             r = {'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [],
                  'reason': f"a different job from {task_ref(tid)}, the task on its thread - {follow['new_job']}"}
+        # ...and new work on a CLOSED task's thread may be an OPEN task's job (the owner, 2026-10-27: a reply on a finished "explain
+        # these figures" thread asked for the change the owner's own reconciliation task was making, and reopened the old task).
+        # Triage was shown the open work about it (context.open_same_job) and named one: the reply goes there, the thread's task stays
+        # closed and is told where it went. Only on a closed thread - a reply on an open task's thread is that task's, as before.
+        elif (r.get('reopen') and owes_owner(follow) and (same := follow.get('same_as')) and same != tid
+              and (store.get_task(same) or {}).get('Status') not in (None, 'done', 'dropped')):
+            if pol['action'] == 'escalate': _escalate(store, same, pol, actor)
+            elif follow.get('urgent') or follow.get('priority'): _mark_urgent(store, same, follow, actor)
+            if follow.get('due'): remind.set_due(store, same, follow['due'], actor)
+            if follow.get('title'): msg['_title'] = str(follow['title']).strip()[:140] or None
+            res = _join_same(store, msg, same, follow, actor)
+            store.add_comment(tid, 'triage', 'agent', f"A later message on this thread joined {task_ref(same)} - same job: "
+                              f"{follow.get('why') or (store.get_task(same) or {}).get('Title') or ''}. This task stays closed.")
+            store.add_comment(same, 'triage', 'agent', f"Joined from {task_ref(tid)}'s thread, which is closed - same job: {follow.get('why') or ''}")
+            return res
     if r['decision'] == 'attach':
         # the follow-up's own twelve words, like a new message's - an attached row read its raw subject (X2)
         if follow and follow.get('title'): msg['_title'] = str(follow['title']).strip()[:140] or None

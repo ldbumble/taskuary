@@ -25,7 +25,6 @@ test("each control carries the caption that names its effect on task versus agen
     // was named for (2026-09-22), so the caption says what the press does
     // ...and while the AI writes it the label says "Drafting…" (2026-09-24)
     ['{openingReply ? "Drafting…" : replyPrimary}', "Drafts the reply here, from this task's own context. Nothing is sent until you approve it."],
-    ['{labelOfRow("ask-sender")}', "nothing is sent now."],
     ['{labelOfRow("diff")}', "Nothing is approved or committed here."],
   ]) {
     // one name can sit on several buttons (every ending is "Stop and save", 2026-09-25): each
@@ -149,8 +148,9 @@ test("saving a result never completes the task, drafts never send, a question wa
   assert.match(tasks, /\/wrap`, \{ close: false, background: true \}/);     // written up behind the press (writeup.py)
   // the box opens at once and the AI's draft is written behind it (replyDraft.js, 2026-10-01) - neither sends
   assert.match(tasks, /generate \? draftReply\(api, replyMessage\.MessageId\) : api\.post\(`[^`]*\/reply`, \{ draft: false \}\)/);
-  // ...the question for the sender down the task tools' road (Stream B, 2026-10-18): a draft for the yes, the message it answers named
-  assert.match(tasks, /runOperation\(api, "task\.clarify", id, \{ text, message_id: sourceMessage\.MessageId \}\)/);
+  // ...and no question for the sender of its own (the owner, 2026-10-27: Ask sender is gone - Reply asks it); an agent's or the Assistant's
+  // parked question still waits in Review for its Send (task.clarify)
+  assert.doesNotMatch(tasks, /"task\.clarify"/);
   assert.doesNotMatch(tasks, /\/send`/);
 });
 

@@ -2,8 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-// A PRESS THAT FAILS SAYS SO WHERE IT WAS PRESSED (the UI audit, 2026-10-21): Re-plan, a step's Send to agent, Ask sender's
-// Put it on the task, the Wall's x and Plan it with no AI each spun or did nothing, with no word anywhere
+// A PRESS THAT FAILS SAYS SO WHERE IT WAS PRESSED (the UI audit, 2026-10-21): Re-plan, a step's Send to agent, the Wall's x and Plan it with no AI each spun or did nothing, with no word anywhere
 const src = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 const body = (text, head) => { const i = text.indexOf(head); assert.ok(i >= 0, `${head} is there`); return text.slice(i, text.indexOf("\n  };", i)); };
 
@@ -15,16 +14,6 @@ test("a goal step that does not start, and a Re-plan that cannot or does not run
   const replan = body(page, "const replan = async () => {");
   assert.match(replan, /caps\.ai === false\) \{ setStepErr\("No AI is connected/);
   assert.match(replan, /catch \(e\) \{ setReplanning\(false\); setStepErr\(/);
-});
-
-test("Ask sender's failure is said inside its own box, not on the page behind it", () => {
-  const page = src("TaskPage.jsx");
-  const ask = body(page, "const askSender = async () => {");
-  assert.match(ask, /setAskErr\(opError\(e/);
-  assert.doesNotMatch(ask, /setErr\(opError/);
-  assert.match(ask, /if \(!sourceMessage\?\.MessageId\) \{ setAskErr\(/);
-  const dialog = page.slice(page.indexOf("<Dialog open={askSenderOpen}"), page.indexOf("</Dialog>", page.indexOf("<Dialog open={askSenderOpen}")));
-  assert.match(dialog, /\{askErr && <Alert severity="error"/);
 });
 
 test("the Wall's close-session x says a refused close on the pane", () => {

@@ -28,7 +28,7 @@ const WAIT_USUAL = { state: "waiting_late_usual", verb: "chase", line: "Ray usua
 
 // a verb's buttons on the row (buttons.json `row`)
 const ROW = { close: ["done"], defer: ["remind"], regular_agent: ["start-agent", "send-general"], stop_agent: ["save-end"], split: ["reshape"],
-  close_note: ["close-note"], review_changes: ["diff"], share_result: ["share"], ask_sender: ["ask-sender"], forward: ["hand"], remove: ["nat"],
+  close_note: ["close-note"], review_changes: ["diff"], share_result: ["share"], forward: ["hand"], remove: ["nat"],
   run_another: ["run-another"], strong_again: ["strong-again"], change_kind: ["kind"], pick_repo: ["repo"] };
 const records = [];
 const MEASURE = () => {

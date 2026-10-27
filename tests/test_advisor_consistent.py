@@ -134,11 +134,9 @@ def _d(verb, kind, state='asked', line='x'):
 
 
 def test_a_caution_about_the_draft_never_lights_send(s):
-    d = advisor.checked(s, {'key': 'task:1'}, V('approve', 'redraft', 'ask_sender'), _d('approve', 'draft_caution', 'draft_ready',
+    d = advisor.checked(s, {'key': 'task:1'}, V('approve', 'redraft'), _d('approve', 'draft_caution', 'draft_ready',
                         'The draft promises Friday; nothing backs it.'), {'verb': 'approve', 'line': '', 'evidence': []})
     assert (d['verb'], d['line']) == ('redraft', 'The draft promises Friday; nothing backs it.'), 'Redraft, with the caution as its reason'
-    d = advisor.checked(s, {'key': 'task:1'}, V('approve', 'ask_sender'), _d('approve', 'draft_caution', 'draft_ready'), {'verb': 'approve', 'line': '', 'evidence': []})
-    assert d['verb'] == 'ask_sender'
     d = advisor.checked(s, {'key': 'task:1'}, V('approve'), _d('approve', 'draft_caution', 'draft_ready'), {'verb': 'approve', 'line': '', 'evidence': []})
     assert d['verb'] == 'next', 'never Send - nothing else to light, so Next'
 

@@ -1,5 +1,5 @@
 // A DOUBLE-CLICK OPENS, IT DOES NOT OPEN AND SHUT (the overnight walk, 2026-10-27; the owner, 2026-10-26: "if you click a button twice it
-// won't reload"). Ask sender, Hand it to a person, Find a time, Remind me, Share and every ▾ open a dialog or a menu over a backdrop, and
+// won't reload"). Hand it to a person, Find a time, Remind me, Share and every ▾ open a dialog or a menu over a backdrop, and
 // a double-click's second click landed on that backdrop: it shut what the first had opened, and the press looked dead. A click on a
 // backdrop within GRACE_MS of the last click anywhere else - the one that opened it, on the row or a menu's item - is that same press, and is swallowed before
 // the page hears it. A later click on the backdrop shuts it as before.

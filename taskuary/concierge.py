@@ -1033,10 +1033,11 @@ def routes() -> bool: return DELIVERY.get() != PHONE
 # ...so "name the one you mean and I will ..." promises what this screen does: the desk brings it up, the phone does it (verify, 2026-10-19)
 def _there() -> str: return 'bring it up' if routes() else 'do it there'
 
-# the operation a tool names -> the row's own button for it (buttons.json)
+# the operation a tool names -> the row's own button for it (buttons.json); a question for the sender is Reply's - the row has no Ask sender
+# since the owner took it off (2026-10-27), and the parked question an agent or the phone writes still waits in Review for its Send
 KIND_BUTTON = {'task.complete': 'close', 'item.settle': 'close', 'task.defer': 'defer', 'task.reopen': 'reopen', 'review.approve': 'approve',
                'agent.continue': 'continue', 'agent.stop': 'stop_agent', 'agent.answer': 'answer_agent', 'task.split': 'split', 'task.merge': 'split',
-               'task.handoff': 'forward', 'task.clarify': 'ask_sender', 'task.share': 'share', 'task.not_a_task': 'remove',
+               'task.handoff': 'forward', 'task.clarify': 'reply', 'task.share': 'share', 'task.not_a_task': 'remove',
                'message.retriage': 'retriage', 'task.set_kind': 'change_kind', 'task.set_repo': 'pick_repo', 'dispatch.prepare': 'regular_agent',
                'report.rerun': 'rerun', 'connection.test': 'test_connection', **{k: 'not_ours' for k in OP_BUTTON}}
 # ...a task's fields: each one its own picker on the row; a title or a due day is written on the task itself

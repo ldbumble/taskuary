@@ -53,6 +53,44 @@ export const CANVAS_ITEM_HEIGHT = "max(340px, calc(100cqh + 14px))";
 export const wordsCap = (h) => (typeof h === "number" ? h - 12 : `calc(${h} - 12px)`);
 // ...and the least a card of words grows to while a drawer is out of it: its head and ~280px of drawer to read in
 export const DRAWER_FLOOR = 400;
+// ...and A CARD OF WORDS HOLDS ONE HEIGHT (the owner, 2026-10-27: "if an agent is not open it should be pinned to the top of the view ... take up
+// at least half or a little more, and not change if I click Reply or anything else, unless I start an agent"): it was exactly as tall as what
+// its main view said, so Reply - the view going from the task to its draft - or a drawer, a stage, a draft typed into, moved its foot. Now it
+// opens at least WORDS_FLOOR of the cap (and never under DRAWER_FLOOR, so a drawer has room without growing it), grows to what it says up to
+// the cap while it settles, and is then held at that height (useHeldHeight): what it says past that scrolls inside
+export const WORDS_FLOOR = 0.55;
+export const wordsFloor = (cap) => `max(calc(${cap} * ${WORDS_FLOOR}), min(${DRAWER_FLOOR}px, ${cap}))`;
+// ...held once the owner first touches the page or the card has stood still this long; re-taken when the item or the window changes
+export const SETTLE_MS = 1200;
+
+function useHeldHeight(box, key) {
+  const [held, setHeld] = useState(null);
+  const [size, setSize] = useState(() => (typeof window === "undefined" ? "" : `${window.innerWidth}x${window.innerHeight}`));
+  useEffect(() => {
+    const on = () => setSize(`${window.innerWidth}x${window.innerHeight}`);
+    window.addEventListener("resize", on); return () => window.removeEventListener("resize", on);
+  }, []);
+  useEffect(() => {
+    setHeld(null);
+    const el = box.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    let timer = null, done = false;
+    // a pane's full height is never what is held: only a card of words (the :has() rule below) has a height of its own
+    const hold = () => { if (done) return; const h = el.getBoundingClientRect().height; if (!h) return; done = true; setHeld(Math.round(h)); off(); };
+    const wait = () => { clearTimeout(timer); timer = setTimeout(hold, SETTLE_MS); };
+    // ...still while what it says is loading, not only while its box moves: under the floor the box stands still as the task fills in
+    const ro = new ResizeObserver(wait), mo = new MutationObserver(wait);
+    const touch = () => hold();
+    const off = () => {
+      clearTimeout(timer); ro.disconnect(); mo.disconnect();
+      document.removeEventListener("pointerdown", touch, true); document.removeEventListener("keydown", touch, true);
+    };
+    ro.observe(el); mo.observe(el, { childList: true, subtree: true }); wait();
+    document.addEventListener("pointerdown", touch, true); document.addEventListener("keydown", touch, true);
+    return off;
+  }, [key, size]);   // eslint-disable-line react-hooks/exhaustive-deps
+  return held;
+}
 
 // an item the canvas shows as a task view: it has a task, and it is not a proposal, a set-up step or a batch
 export const showsTask = (card, kind) => !!card?.tid && !["proposal", "setup", "walk", "brief", "fyis", "meeting"].includes(kind);
@@ -80,6 +118,7 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
     if (r) setPin({ left: r.left, width: r.width });   // exact: a rounded width re-wrapped the strip and moved the pane by 2px
   }, [phone, expanded]);
   const h = phone ? phoneH : height;
+  const held = useHeldHeight(box, card.key);
   // NEXT, in the row: the walk's ONE button on a task (the owner, 2026-09-29), the same handler as the button it replaces
   useHost(phone);
   // ...pressable while a pick (a rail row, a link) is on its way - AssistantView holds that press (`picking`); greyed only by a Next in
@@ -116,8 +155,10 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         // under a few lines of Result, and the drawer and its tab ran 200px past the white of the task (the owner, 2026-10-26: "the ui of
         // the sidebars looks messed up? it's bigger then the task box"). The card keeps the height of what it says, the drawer is exactly
         // its body and scrolls inside; only a card too short to read a drawer in grows, to DRAWER_FLOOR and never past the cap
-        ...(!pin ? { "&:not(:has(.xterm, [data-tq-agent-room='live'], [class*='tq-aui']:not([data-tq-agent-room='rest'] *), canvas, iframe))": { height: "auto", maxHeight: wordsCap(h),
-          "&:has([data-tq-drawer-out])": { minHeight: `min(${DRAWER_FLOOR}px, ${typeof h === "number" ? `${wordsCap(h)}px` : wordsCap(h)})` } } } : {}),
+        // ...and that floor is now the card's from the start, with WORDS_FLOOR, and its height is held (useHeldHeight): a drawer, Reply or a
+        // stage never moves its foot (the owner, 2026-10-27)
+        ...(!pin ? { "&:not(:has(.xterm, [data-tq-agent-room='live'], [class*='tq-aui']:not([data-tq-agent-room='rest'] *), canvas, iframe))": {
+          height: held ? `${held}px` : "auto", maxHeight: wordsCap(h), minHeight: wordsFloor(typeof h === "number" ? `${wordsCap(h)}px` : wordsCap(h)) } } : {}),
         ...(pin ? { position: "fixed", top: 8, left: pin.left, width: pin.width, zIndex: 1350 } : {}) }}>
       {/* a COLUMN that shrinks to the box: the task view inside is a flex column too, so its own scroller gets what is left (TaskPage) */}
       <Box sx={{ flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>

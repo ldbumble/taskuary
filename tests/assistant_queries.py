@@ -96,7 +96,7 @@ CASES = [
     Q('item', 'close it, the bank feed reconciled', 'todo', c('task.complete', note='the bank feed reconciled'), 'pressed:close_note', freq=3),
     Q('item', 'assign it to me', 'todo', c('task.update', assignee='owner'), 'light:assign', freq=2),
     Q('item', 'forward this to Priya', 'todo', c('task.handoff', who='Priya Shah'), 'light:forward', freq=3),
-    Q('item', 'ask Marcus which account it is', 'todo', c('task.clarify', text='Which account is short?'), 'light:ask_sender', freq=3),
+    Q('item', 'ask Marcus which account it is', 'todo', c('task.clarify', text='Which account is short?'), 'light:reply', freq=3),
     Q('item', 'put it on my list', 'fyi', c('mine'), 'light:mine', freq=3),
     Q('item', 'next', 'todo', c('next'), 'next', freq=5),
     Q('item', 'skip this one', 'todo', c('next'), 'next', freq=4),

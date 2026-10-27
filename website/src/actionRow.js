@@ -295,7 +295,7 @@ const TYPE_OF = {
   // the Advisor's moves a card has no button for join the row in their type (AdvisorNext), never beside the line (2026-10-16)
   chase: "reply", mine: "agent", answer_agent: "agent", coding_agent: "agent", regular_agent: "agent", rerun: "agent",
   elsewhere: "close", not_ours: "task", not_ours_sender: "task", not_ours_kind: "task", block_sender: "task",
-  let_go: "task", defer: "task", split: "task", test_connection: "task",
+  let_go: "task", defer: "task", split: "task", test_connection: "task", report_off: "task",
   // the calendar's answers (calwrite.py) are what goes back: an invite's yes, no or other time, and a thread's meeting
   accept_invite: "reply", decline_invite: "reply", propose_time: "reply", find_time: "reply",
   // ...and a meeting's Prepare starts a researcher: an agent's verb (2026-10-25)

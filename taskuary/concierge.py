@@ -65,7 +65,7 @@ _CALL = re.compile(r'\n?\s*CALL:\s*(\{.*\})\s*$', re.I | re.S)
 VERBS = ('reply', 'approve', 'not_ours', 'not_ours_sender', 'block_sender', 'remember', 'coding_agent', 'regular_agent', 'mine', 'close', 'stop_agent',
          'chase', 'let_go', 'elsewhere',                 # the slipped card's answers (spec 2026-10-12)
          'accept_invite', 'decline_invite', 'propose_time', 'find_time',    # the calendar's answers (calwrite.py)
-         'rerun', 'setup', 'next', 'answer_agent', 'redraft', 'not_ours_kind',
+         'rerun', 'report_off', 'setup', 'next', 'answer_agent', 'redraft', 'not_ours_kind',
          'confirm', 'cancel', 'none')
 # The coding hand-off had an old name (the key below), as if it were a profile or a brain - it is neither, a coding agent is any
 # profile of kind coding on any CLI. An old saved card or phone button, or a model still saying it, lands on the name it has
@@ -94,7 +94,9 @@ CHIPS ={'review': ('approve', 'redraft', 'close', 'defer', 'not_ours', 'next'), 
          # only have a next button like what it has on desktop") - and Prepare beside it (the owner, 2026-10-25: "add prepare that
          # creates agent to research about person and topic through your mails")
          'agent': ('stop_agent', 'defer', 'next'), 'meeting': ('prepare', 'next'),
-         'report': ('mine', 'regular_agent', 'next'), 'agentdone': ('close', 'reply', 'next'),
+         # ...and Switch it off, for the Advisor to light over a run whose findings the owner said they do not care about (the owner,
+         # 2026-10-27: "the Advisor may suggest switching a report off"); the press is the owner's, the report stays under Reports
+         'report': ('mine', 'regular_agent', 'report_off', 'next'), 'agentdone': ('close', 'reply', 'next'),
          'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'not_ours', 'defer', 'next'), 'task': ('close', 'defer', 'next'),
          'asked': ('reply', 'mine', 'regular_agent', 'defer', 'not_ours', 'next'),
          # a to-do with a task behind it (a promise you made in a chat) is closed here too - Next only read it (2026-10-15)
@@ -167,6 +169,7 @@ RECEIPTS = {'chase': "I'll draft the nudge - nothing goes out until you say so."
             'remember': "Remembered. Moving on.", 'coding_agent': "Handed off - the code work starts now, and what it finds comes back here.",
             'regular_agent': "Handed off - work on it starts now, and the answer comes back here.",
             'mine': "On your list. Moving on.", 'close': 'Closing the task. Moving on.', 'rerun': "Running it again - its result goes where the report sends it, and if it fails the bell says why. Moving on.",
+            'report_off': "Switched off - it stays under Reports, where its switch turns it back on. Moving on.",
             'setup': "I'll walk you through it, one step at a time - nothing is built and nothing changes until you say so.",
             'answer_agent': "Passing that on - right away if it's waiting on you, otherwise the moment it next pauses.",
             'redraft': "Writing it again with that - the new draft lands below for your yes.", 'next': 'Next.'}
@@ -691,12 +694,12 @@ def assent_verb(item: dict | None) -> str | None:
 # through task.create_from_text from the item's facts and the owner's words.
 NEEDS = {'reply': 'mid', 'approve': 'rid', 'redraft': 'rid', 'not_ours': 'mid', 'not_ours_remember': 'mid',
          'not_ours_sender': 'mid', 'block_sender': 'mid', 'mine': 'mid', 'forward': 'mid', 'archive': 'mid',
-         'rerun': 'source_id', 'close': 'tid', 'answer_agent': 'tid', 'split': 'key', 'defer': 'tid', 'continue': 'tid',
+         'rerun': 'source_id', 'report_off': 'source_id', 'close': 'tid', 'answer_agent': 'tid', 'split': 'key', 'defer': 'tid', 'continue': 'tid',
          'chase': 'key', 'let_go': 'key', 'elsewhere': 'key',
          'accept_invite': 'mid', 'decline_invite': 'mid', 'propose_time': 'mid', 'find_time': 'mid', 'prepare': 'event'}
 SAYS_VERB = {'approve': 'approve', 'redraft': 'redraft', 'not_ours': 'file', 'not_ours_remember': 'file',
              'not_ours_sender': 'file', 'block_sender': 'write an exclusion rule for', 'coding_agent': 'hand to a coding agent', 'regular_agent': 'hand to an agent', 'mine': 'put on your list', 'forward': 'forward',
-             'archive': 'archive', 'rerun': 'rerun', 'close': 'close', 'answer_agent': 'answer', 'reply': 'reply to',
+             'archive': 'archive', 'rerun': 'rerun', 'report_off': 'switch off', 'close': 'close', 'answer_agent': 'answer', 'reply': 'reply to',
              'split': 'split', 'defer': 'put away', 'continue': 'continue', 'chase': 'chase', 'let_go': 'let go', 'elsewhere': 'close as answered elsewhere', 'prepare': 'prepare for'}
 
 def _coding(store) -> bool:
@@ -778,6 +781,8 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     if verb == 'not_ours_kind':
         own = 'not_ours' in CHIPS.get(item.get('kind'), ()) and not item.get('closeout') and not cannot(item, 'not_ours', store)
         return f"{what} is not one of the assistant's ideas" + (f" - say {buttons.label('not_ours')}." if own else '.')
+    if verb == 'report_off' and not _report_on(store, item):
+        return f"There's no report on {what} running on its clock to switch off."
     if verb == 'answer_agent' and item.get('kind') != 'agent':
         return f"There's nothing to answer on {what} - nothing on it is waiting for an answer."
     if verb == 'approve' and item.get('kind') in ('review', 'action') and not item.get('draft') and item.get('kind') == 'review':
@@ -902,6 +907,14 @@ def calendar_asks(store, item: dict | None) -> tuple:
     t = (store.get_task(int(item['tid'])) or {}) if item.get('tid') else {}
     if not m or t.get('Status') in ('done', 'dropped'): return False, False
     return calwrite.open_on(store, m)
+
+
+def _report_on(store, item: dict) -> bool:
+    """Is the item a report run whose report is still switched on - the one thing Switch it off can act on."""
+    if item.get('kind') != 'report' or not item.get('source_id') or store is None: return False
+    try: src = store.get_source(int(item['source_id'])) or {}
+    except Exception: return False
+    return src.get('Channel') == 'report' and bool(src.get('Active'))
 
 
 def chips_for(store, item: dict | None, first: str = None) -> list:
@@ -1087,6 +1100,8 @@ def row_buttons(store, it: dict) -> list:
     # ...and a report's or a dashboard's Share, which its card draws on the row while it is the item (ReportCard, DashboardCard) - a run
     # that failed has nothing to share. Seen here so the Advisor knows the row has it; no rule lights it (rulebook: report_ok, dashboard)
     if it.get('kind') == 'report' and it.get('mid') and not it.get('bad'): out.append({'verb': 'share_result', 'label': buttons.label('share_result')})
+    # ...and Switch it off on a report run drawn as its task's view too, so the Advisor may light it there (the owner, 2026-10-27)
+    if it.get('kind') == 'report' and not cannot(it, 'report_off', store): out.append({'verb': 'report_off', 'label': buttons.label('report_off')})
     if it.get('closeout'): out.insert(0, {'verb': 'approve', 'label': closeout_label(it)})
     seen = set()
     return [b for b in out if not (b['verb'] in seen or seen.add(b['verb']))]
@@ -3499,7 +3514,7 @@ _OPS = {'coding_agent': ('task.create_from_message', True), 'regular_agent': ('t
         'answer_agent': ('agent.answer', True),
         # ...ending the session SETTLES the table, as AUTO below already says it does: it stayed False, so the walk held the same
         # item with the same button after it ran and the owner was stuck on it (2026-09-28: "it should just move to next")
-        'stop_agent': ('agent.stop', True), 'rerun': ('report.rerun', True), 'continue': ('agent.continue', False),
+        'stop_agent': ('agent.stop', True), 'rerun': ('report.rerun', True), 'report_off': ('report.pause', True), 'continue': ('agent.continue', False),
         # the slipped card's answers (spec 2026-10-12): a chase is a draft for your yes; the other two settle the item
         'chase': ('task.chase', False), 'let_go': ('task.let_go', True), 'elsewhere': ('task.elsewhere', True),
         'test_connection': ('connection.test', False), 'split': ('task.split', False),
@@ -3756,7 +3771,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         target, params = end, {'wrap': wrap}
         if not wrap: note = ' There is nothing written down to report from yet - this stops the work, and the task stays open.'
     elif verb == 'continue': target, params = it.get('tid'), {'note': d_text or ''}
-    elif verb == 'rerun': target = it.get('source_id')
+    elif verb in ('rerun', 'report_off'): target = it.get('source_id')
     elif verb == 'test_connection':
         k = str(it.get('key') or '')
         target = int(k.split(':', 1)[1]) if k.startswith('conn:') and k.split(':', 1)[1].isdigit() else None

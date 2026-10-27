@@ -109,6 +109,7 @@ import "./assistantView.css";
 // showing anything, so a stale key restores nothing.
 const WALK_KEY = "taskuary_walk_tid";
 const HOLD_MS = 400;            // the longest a row waits for its item's first decision before it is drawn without one
+const POP_ROOM = 150;          // the least room under the task view the chat pop-up stands in, rather than over the view
 const POP_LIT_MS = 1800;        // how long the chat pop-up shows the owner's line when the answer was only a lit button
 const isOpenWalk = (t) => !!t && t.SourceRef === "assistant:setup" && !["done", "dropped"].includes(t.Status);
 // markers the server writes on a line that are NOT cards (concierge.SETUP_QUESTIONS): the line is its words
@@ -3260,6 +3261,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     return () => { document.removeEventListener("pointerdown", down, true); document.removeEventListener("keydown", key); };
   }, [popOpen]);
   // ...its newest words in view, as the chat's end is
+  // ...AND STANDS IN THE ROOM UNDER THE VIEW WHEN THERE IS ENOUGH OF IT (the overnight walk, 2026-10-26): most views end well above the dock,
+  // and the pop-up still rose to 45% of the canvas over them - "reply saying Thursday works" answered over the right half of the very draft
+  // it was about. It is no taller than the gap under the view; a view with too little under it is covered as before, the newest words in view
+  const [popRoom, setPopRoom] = useState(0);
+  useLayoutEffect(() => {
+    if (!popOpen) return;
+    const view = popTable && bodyRef.current?.querySelector(`[data-tq-canvas-item="${CSS.escape(popTable)}"]`), floor = popRef.current?.parentElement;
+    setPopRoom(view && floor ? Math.floor(floor.getBoundingClientRect().top - view.getBoundingClientRect().bottom - 8) : 0);
+  }, [popOpen, popTable, popLines.length, popPending, bodyH]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const popTall = Math.max(180, Math.round(bodyH * 0.45)), popMax = popRoom >= POP_ROOM ? Math.min(popTall, popRoom) : popTall;
   useLayoutEffect(() => { const el = popBodyRef.current; if (el && popOpen) el.scrollTop = el.scrollHeight; }, [popOpen, popLines.length, popPending, words]);
   // ...a line of its own that stands under the card on the table only while the answer is on its way (tq-pending, assistantView.css) -
   // or in the pop-up over it, where the answer it waits for will be
@@ -3431,7 +3442,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               tall at most, scrolling inside. Shut, it stays mounted: the last line's chips are on the row either way */}
           {popOn && (!!popLines.length || popPending) && (
             <div className="tq-chat-pop" data-tq-chat-pop="" role="dialog" aria-label="Taskuary's answer" ref={popRef} hidden={!popOpen}
-              style={{ maxHeight: Math.max(180, Math.round(bodyH * 0.45)) }}>
+              style={{ maxHeight: popMax }}>
               <div className="tq-chat-pop-head"><TaskuaryMark size={16} /><b>Taskuary</b>{currentItem?.ref && <span>{`· ${currentItem.ref}`}</span>}<span style={{ flex: 1 }} />
                 <Tooltip title="Past chats"><IconButton size="small" aria-label="Past chats" onClick={() => { setPopOpen(false); openChats(); }}><HistoryIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip>
                 <IconButton size="small" aria-label="Close the answer" onClick={() => setPopOpen(false)}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></div>

@@ -1449,7 +1449,7 @@ def workers_signature(live_state) -> str | None:
 _OBSERVE = object()
 
 
-def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE) -> dict:
+def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE, seen=None) -> dict:
     """The pile, cached for a few seconds: it is polled while the page is open, and every look
     is a dozen queries.
 
@@ -1458,8 +1458,11 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE) -> 
     the sessions as seen now - taken here when not handed in). So a turn can take its selection from
     here instead of building the rail a second time (design B, 2026-09-17). `quiet` skips the
     watcher: a Next that turns out stale must reach no write, and announce() writes notices."""
-    from . import terminal as term
+    from . import live, terminal as term
     seen_generation = _CACHE.get('generation', 0)
+    # the newest write stamp a build begun now has seen (live.seq: the page's reload check) - taken before the workers are, whose
+    # moves are stamped too; a caller that observed them itself says when (`seen`), or the build claims no stamp at all
+    if seen is None and observed is _OBSERVE: seen = live.seq()
     if observed is _OBSERVE:
         try: observed = term.live_sessions(tail=6)
         except Exception: observed = None            # unobservable: never compare, always rebuild (the build says why)
@@ -1520,6 +1523,7 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE) -> 
         except Exception as e:
             logger.debug(f'batch progress did not reach the rail: {e}'); p['batch_progress'] = {}
         p['events'] = events
+        p['live_seq'] = seen
         _CACHE.update(at=time.time(), pile=p, store=store, full=full['items'] if shared else None,
                       generation=_CACHE.get('generation', 0) + 1, mark=mark, workers=workers)
         return p

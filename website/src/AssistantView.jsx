@@ -39,6 +39,7 @@ import { hint as btnHint, label as btn, liveVerb, verbOfRow } from "./buttons.js
 import { readTurn, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive, taskIdsOf } from "./live.js";
+import { TAB, covers, mine } from "./liveSeq.js";
 import { adviceKeyFor, adviceShown, nothingToAdd, stripWord, taskNote } from "./advice.js";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
@@ -1266,7 +1267,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const pileForcePending = useRef(false);
   const loadPileRef = useRef(null);
   const forcedLoadStartedAt = useRef(0);       // when the last forced pile load began (funnelPile.coveredByReload)
+  // the newest write stamp the rail on screen was read after (liveSeq.js) - moved only by a read the rail takes: an older answer never
+  // undoes a newer one (refreshPilePresentation), and its stamp does not either
+  const pileSeen = useRef({ seq: null, at: 0 });
+  const seePile = (data) => { const at = Number(data?.generated_at) || 0; if (at >= pileSeen.current.at) pileSeen.current = { seq: data?.live_seq ?? null, at }; };
   const currentRef = useRef(null); const surfaceRef = useRef(null); const speakRef = useRef(null);
+  // THE ADVISOR RE-READS ON ITS OWN REVISION (the load-once pass, 2026-10-27; the owner: "I thought we fixed this"): the item's revision
+  // moves with things the Advisor does not judge by (the press that showed it marks it seen), and each move read its advice again - two
+  // or three GETs of the same answer a press of Next. One sent AFTER the item on the table was read (`readClock`: putOnTable vs the GET)
+  // has seen at least that revision, so the revision's move is already in it.
+  const readClock = useRef(0), itemAt = useRef(0), adviceSent = useRef({ key: null, at: -1 });
   const noticedRef = useRef(null);      // the context notice the stream already showed this turn
   const only = useRef(null);                                       // "mail" once the owner chose to start with the mail
   const fyiWant = useRef(FYI_PAGE);                                // how many plain FYI the rail asks for whole (funnel.page_fyi)
@@ -1325,6 +1335,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (how !== "view") {
       const item = how === "card" ? null : card || null;
       currentRef.current = item; cardRef.current = how === "card" ? card?.key || null : null;
+      itemAt.current = ++readClock.current;          // the item as it now stands, read no later than this (readAdvice's revision check)
       setCurrent(item?.key || null); setCurrentItem(item); setCardKey(cardRef.current);
       // ...and the page the chat was answering about is put away with it: the open page's label stood after a task landed by Next,
       // a chip or a receipt, and the chat went on answering about Settings (re-audit, 2026-10-18)
@@ -1364,7 +1375,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // endpoint: its invented threads should never look like a model is working behind the page.
     if (DEMO) return plain();
     const token = localStorage.getItem("taskuary_token");
-    const res = await fetch("/api/concierge/stream", { method: "POST", signal: stop.signal, headers: { "Content-Type": "application/json", ...(token ? { "X-Taskuary-Token": token } : {}) }, body: JSON.stringify(body) });
+    const res = await fetch("/api/concierge/stream", { method: "POST", signal: stop.signal, headers: { "Content-Type": "application/json", "X-Taskuary-Tab": TAB, ...(token ? { "X-Taskuary-Token": token } : {}) }, body: JSON.stringify(body) });
     if (!res.ok) {
       // An old server may not have the streaming door. A selection conflict is authoritative:
       // replaying it through the plain endpoint would submit the same navigation twice.
@@ -1516,6 +1527,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       const captured = captureNextSelection(data, requestedScope);
       if (hasNextSelection(data)) selectionContractSeen.current = true;
       selectionRef.current = captured; preparedRef.current = data.prepared_next || null;
+      seePile(data);
       pileRef.current = refreshPilePresentation(pileRef.current, data); notePile(askedAt);
       setPile((p) => refreshPilePresentation(p, data)); setPileRead(true);
       if (!(await readChat(epoch))) return;
@@ -1617,9 +1629,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // read is made once the answer has landed (landed), exactly as it was when the card only came with the answer.
     if (unconfirmedRef.current === key) { adviceHeld.current = key; return; }
     let got = null;
+    adviceSent.current = { key, at: ++readClock.current };
     // ...and {"none":"no_ai"}: no AI connected is said once, with the way to connect one, instead of a strip that stays empty (U3)
     try { got = adviceRead((await api.get("/api/advice", { params: { key } })).data, key).advice; }
-    catch { got = null; }
+    catch { got = null; if (adviceSent.current.key === key) adviceSent.current = { key: null, at: -1 }; }
     if (n !== adviceAsk.current) return;
     setAdvice(got); setReadFor({ key, round: r });
   }, []);
@@ -1632,7 +1645,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const revFor = useRef(null);
   useEffect(() => {
     const k = currentItem?.key || null, was = revFor.current; revFor.current = k;
-    if (onTable && k && k === was) readAdvice(onTable, true);
+    const sent = adviceSent.current;
+    if (onTable && k && k === was && !(sent.key === onTable && sent.at > itemAt.current)) readAdvice(onTable, true);
   }, [currentItem?.key, currentItem?.view_revision, currentItem?.lane]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => onLive("advice", (ev) => {
     const key = adviceKeyFor(ev, currentRef.current || (cardRef.current ? { key: cardRef.current } : null));
@@ -1643,7 +1657,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const onTableRef = useRef(null);
   useEffect(() => { onTableRef.current = onTable; }, [onTable]);
   // ...except Next: it puts the item down, and the read went for the item being left a moment before the next one's own (overnight walk)
-  useEffect(() => onPressed((id) => { if (onTableRef.current && !/(^|:)next$/.test(String(id || ""))) readAdvice(onTableRef.current, true); }), [readAdvice]);
+  // ...nor a press that put its item down (leftRef: an FYI batch's "All read, next", a close): the walk is reading the next one's
+  useEffect(() => onPressed((id) => {
+    const k = onTableRef.current;
+    if (k && !/(^|:)next$/.test(String(id || "")) && !leftRef.current.has(`k:${k}`)) readAdvice(k, true);
+  }), [readAdvice]);
   // LIT AND PRESSED (the deep dive, 2026-10-20): each press on the row says what was lit and the revision it was judged at
   // (advisor.press) - the evidence the owner's moves are learned from. EVERY press, lit or not (phase B, 2026-10-23: only a press
   // under a shown line was sent): what the row had filled and what else it offered (pressLog.deskPress). Nothing on screen changes.
@@ -1754,21 +1772,34 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // a sync lands rows several times a second; one forced rebuild after the burst, not one per row -
   // and a CEILING, because a run that keeps talking pushed the trailing timer out indefinitely and
   // left the pile on its 30-second safety poll (2026-09-10 audit).
+  // ...and not at all when a forced load already began after the newest event: the turn that
+  // caused the write reloaded the rows itself, and this was the fourth full build of one press
+  // ...nor when the rail on screen was read after every write of the burst (their stamps, liveSeq.js): the press's own answer held it -
+  // and a read already on its way is waited out first, since it may be the one that holds them (a start read twice, the load-once pass)
+  const reloadFor = useCallback((meta) => {
+    const stale = () => !coveredByReload(meta, forcedLoadStartedAt.current) && !covers(pileSeen.current.seq, meta);
+    if (!stale()) return;
+    const flight = pileFlight.current;
+    if (!flight) { loadPile(true); return; }
+    flight.catch(() => {}).then(() => { if (stale() && !resettingRef.current) loadPile(true); });
+  }, [loadPile]);
   useEffect(() => {
     if (!active) return undefined;
-    // ...and not at all when a forced load already began after the newest event: the turn that
-    // caused the write reloaded the rows itself, and this was the fourth full build of one press
-    return onLive(["feed-changed", "task-changed"], (ev, meta) => { if (!coveredByReload(meta, forcedLoadStartedAt.current)) loadPile(true); }, { wait: 1500, max: 5000 });
-  }, [active, loadPile]);
+    // ...AND ONLY THE PAGE'S OWN PRESSES WAIT (the owner, 2026-10-27: "yes" to the intake walk's ~2 s from an arrival to its row, 1.5 s of
+    // it this wait): a burst of nothing but this tab's writes waits for the press's answer, which brings the rows; anything else - a new
+    // arrival, a drafter finishing, another tab - is read at once, at most once a second while a sync keeps landing
+    return onLive(["feed-changed", "task-changed"], (ev, meta) => reloadFor(meta),
+      { wait: (ev) => (mine(ev) ? 1500 : Math.max(0, forcedLoadStartedAt.current + 1000 - Date.now())), max: 5000 });
+  }, [active, reloadFor]);
   // ...but THE ITEM ON THE TABLE is read at once: its agent asking is the one change the owner is looking at, and the burst's 1.5s
   // left its rail row saying "working" under a header that already said it waited on them (G7, 2026-10-20)
   useEffect(() => {
     if (!active) return undefined;
     return onLive("task-changed", (ev, meta) => {
       const tid = Number(currentRef.current?.tid) || 0;
-      if (tid && taskIdsOf(ev)?.includes(tid) && !coveredByReload(meta, forcedLoadStartedAt.current)) loadPile(true);
+      if (tid && taskIdsOf(ev)?.includes(tid)) reloadFor(meta);
     }, { wait: 150, max: 600 });
-  }, [active, loadPile]);
+  }, [active, reloadFor]);
   // ...but only once there IS a conversation: on the empty welcome it scrolled "Good morning" and the
   // day's meetings off the top of the screen (the owner, 2026-09-23: "this is cutting off the top")
   // ...on a NEW line, not on a line's own state changing: browsing (a chip, a card, Back) rewrites its line in place, and
@@ -1866,6 +1897,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // gap between the old rows vanishing and the next four appearing (design B, 2026-09-17).
   const holdPile = useCallback((data, scope) => {
     forcedLoadStartedAt.current = heldSince(data);     // the live events this read already saw need no reload
+    seePile(data);                                      // ...counted by their write stamps, too (liveSeq.js)
     notePile(forcedLoadStartedAt.current);              // ...and a task read older than it no longer speaks over its rows
     if (hasNextSelection(data)) selectionContractSeen.current = true;
     selectionRef.current = captureNextSelection(data, scope);

@@ -7,12 +7,13 @@
 import { useEffect, useState } from "react";
 import api from "./api";
 import { onLive } from "./live.js";
+import { covers, seqOf } from "./liveSeq.js";
 
 export const ASSUMED = { coding: true, ai: true, mail: true, send: {}, known: false };
-let asked = null, last = ASSUMED;
+let asked = null, last = ASSUMED, seen = null;      // seen: the write stamp the answer in hand was read at (liveSeq.js)
 const subs = new Set();
 const read = (data) => ({ ...ASSUMED, ...(data || {}), send: { ...(data?.send || {}) }, known: !!data });
-export const capabilities = () => (asked ||= api.get("/api/capabilities").then(({ data }) => (last = read(data)))
+export const capabilities = () => (asked ||= api.get("/api/capabilities").then((res) => { seen = seqOf(res); return (last = read(res.data)); })
   .catch(() => { asked = null; return last; }));
 // a channel the server has not named can send: only an explicit false hides a Send
 export const canSend = (caps, channel) => !channel || caps?.send?.[String(channel).toLowerCase()] !== false;
@@ -41,8 +42,10 @@ export function refreshCapabilities() {
 }
 if (typeof window !== "undefined") {
   window.addEventListener?.("tq-setup-changed", () => { refreshCapabilities(); });
-  // a connection made or dropped lands as feed/task events: one re-read after the burst, never one per row
-  try { onLive(["feed-changed", "task-changed"], () => { refreshCapabilities(); }, { wait: 4000, max: 30000 }); } catch { /* no live socket here */ }
+  // a connection made or dropped lands as feed/task events: one re-read after the burst, never one per row - nor one for a burst the
+  // answer in hand was already read after (its write stamps, liveSeq.js: the start's own writes, the load-once pass 2026-10-27)
+  try { onLive(["feed-changed", "task-changed"], (ev, meta) => { if (!covers(seen, meta)) refreshCapabilities(); }, { wait: 4000, max: 30000 }); }
+  catch { /* no live socket here */ }
 }
 
 export function useCapabilities() {

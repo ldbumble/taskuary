@@ -50,6 +50,8 @@ export const CANVAS_ITEM_HEIGHT = "max(340px, calc(100cqh + 14px))";
 // ...and a view of WORDS stops a drop short of it (the owner, 2026-10-26: "size of the task looks too big, should we not leave a drop of
 // space under it" - and "if agent is open then use the full space"): the same 12px gap again under its cap; a pane keeps the whole height
 export const wordsCap = (h) => (typeof h === "number" ? h - 12 : `calc(${h} - 12px)`);
+// ...and the least a card of words grows to while a drawer is out of it: its head and ~280px of drawer to read in
+export const DRAWER_FLOOR = 400;
 
 // an item the canvas shows as a task view: it has a task, and it is not a proposal, a set-up step or a batch
 export const showsTask = (card, kind) => !!card?.tid && !["proposal", "setup", "walk", "brief", "fyis", "meeting"].includes(kind);
@@ -109,7 +111,12 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         // sized to the words it was cut off (the same day's "crunched down")
         // ...and a general agent's chat is a pane only while its session is live (the owner, 2026-10-25): finished, failed or closed it is
         // words too, and its room says so (TaskPage data-tq-agent-room)
-        ...(!pin ? { "&:not(:has(.xterm, [data-tq-agent-room='live'], [class*='tq-aui']:not([data-tq-agent-room='rest'] *), canvas, iframe, [data-tq-from-side]))": { height: "auto", maxHeight: wordsCap(h) } } : {}),
+        // ...and a DRAWER pulled out (Came from, Agent · Close out) no longer takes the whole height: the card stayed the canvas's height
+        // under a few lines of Result, and the drawer and its tab ran 200px past the white of the task (the owner, 2026-10-26: "the ui of
+        // the sidebars looks messed up? it's bigger then the task box"). The card keeps the height of what it says, the drawer is exactly
+        // its body and scrolls inside; only a card too short to read a drawer in grows, to DRAWER_FLOOR and never past the cap
+        ...(!pin ? { "&:not(:has(.xterm, [data-tq-agent-room='live'], [class*='tq-aui']:not([data-tq-agent-room='rest'] *), canvas, iframe))": { height: "auto", maxHeight: wordsCap(h),
+          "&:has([data-tq-drawer-out])": { minHeight: `min(${DRAWER_FLOOR}px, ${typeof h === "number" ? `${wordsCap(h)}px` : wordsCap(h)})` } } } : {}),
         ...(pin ? { position: "fixed", top: 8, left: pin.left, width: pin.width, zIndex: 1350 } : {}) }}>
       {/* a COLUMN that shrinks to the box: the task view inside is a flex column too, so its own scroller gets what is left (TaskPage) */}
       <Box sx={{ flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>

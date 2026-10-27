@@ -227,7 +227,7 @@ const FOCUS = { bgcolor: "#fff", border: `1px solid ${FOCUS_EDGE}`, borderRadius
 // FROM AS A SIDEBAR while an agent works (item 6, the owner 2026-10-21): laid OVER the agent's left edge - absolutely placed in the steps
 // box, so nothing under it moves or resizes - from under the folded line to the foot, scrolling on its own
 // ...from the tab at the body's left edge (DRAWER_TAB) to the foot, the whole height beside it
-const FROM_SIDE = { position: "absolute", top: 0, left: 0, bottom: 0, width: "min(420px, 88%)", zIndex: 6, overflowY: "auto",
+const FROM_SIDE = { position: "absolute", top: 0, left: 0, bottom: 0, width: "min(420px, 88%)", zIndex: 6, overflowY: "auto", scrollbarWidth: "thin",
   borderRadius: 0, borderLeft: 0, borderTop: 0, boxShadow: "6px 0 18px rgba(38, 37, 33, 0.14)", bgcolor: "#fffdfb" };
 // ONE MAIN VIEW AND TWO DRAWERS, AT EVERY WIDTH (the owner, 2026-10-26: "if task view is where the task opens to it should only open on
 // that, and then right side arrow should pull out the agent/close out screens. If up to agent or close out open those with coming from
@@ -240,7 +240,7 @@ const STACK_BELOW = 760;
 const MAIN = { width: "100%", flex: "0 1 auto", minHeight: 0, overflowY: "auto", scrollbarWidth: "thin", overflowAnchor: "none" };
 // ...the right drawer: the work column itself, laid over the main view's right edge, scrolling on its own; `display` keeps it mounted
 // while shut, so a draft half-typed or an agent's chat is where it was when it opens again
-const WORK_SIDE = (open) => ({ position: "absolute", top: 0, right: 0, bottom: 0, width: "min(640px, 92%)", zIndex: 6, overflowY: "auto",
+const WORK_SIDE = (open) => ({ position: "absolute", top: 0, right: 0, bottom: 0, width: "min(640px, 92%)", zIndex: 6, overflowY: "auto", scrollbarWidth: "thin",
   display: open ? "flex" : "none", bgcolor: "#fbf9f6", boxShadow: "-6px 0 18px rgba(38, 37, 33, 0.14)", px: 1.75, py: 1.25, boxSizing: "border-box" });
 // ...the TAB each drawer folds to, one design for both edges and for a live agent's Came from: the whole height of the body, 34px wide, an
 // arrow in a disc at its middle and the drawer's name read along the edge - a tint on hover, a ring on focus, and the arrow turns while the
@@ -1884,7 +1884,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               {/* THE BODY, between its two drawer tabs (DRAWER_TAB): Came from on the left where the work is the page - a live agent's too - and
                   Agent · Close out on the right where the task is. The drawer is laid OVER the main view, never beside it, so nothing under
                   it reflows: a terminal is not refitted and the CLI's screen gets no resize (item 6, the owner 2026-10-21) */}
-              <Box ref={bodyBox} data-tq-task-body="" data-tq-main={main || "stacked"} sx={{ display: "flex", flex: 1, minHeight: 0, minWidth: 0 }}>
+              {/* ...and a drawer pulled out is exactly this body, never taller (the owner, 2026-10-26: "it's bigger then the task box"): a
+                  short card grows to CanvasItem's DRAWER_FLOOR for it, and what the drawer holds past that scrolls inside it */}
+              <Box ref={bodyBox} data-tq-task-body="" data-tq-main={main || "stacked"} data-tq-drawer-out={(fromDrawer && fromSide) || (workDrawer && workSide) ? "" : undefined}
+                sx={{ display: "flex", flex: 1, minHeight: 0, minWidth: 0 }}>
               {/* ...and the tab reads as a press at a glance (the owner, 2026-10-26: "make it with arrow and more visible to pull out where it
                   came from"): the whole edge, an arrow in a disc that turns while it is out, a hover title saying what it opens */}
               {fromDrawer && <Box component="button" type="button" ref={fromLineRef} data-tq-from-line="" sx={DRAWER_TAB(fromSide)}
@@ -1893,10 +1896,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 <Box component="span" aria-hidden data-tq-from-chevron="">{fromSide ? "‹" : "›"}</Box>
                 <Box component="span" data-tq-from-words="">{fromLine ? `Came from · ${fromLine}` : "Came from"}</Box></Box>}
               <Box ref={stepsBox} sx={{ px: liveSession ? 1 : { xs: 1.25, sm: 1.5 }, py: liveSession ? 0.65 : 0.9, ...(!term?.alive ? { bgcolor: SHADE } : {}),
-                overflowY: "auto", flex: 1, minHeight: 0, minWidth: 0, display: "flex", flexDirection: "column", containerType: "inline-size", position: "relative",
-                // ...and a drawer pulled out over a short main view has room to show what it holds: the card grows, the main view does not move
-                // (100cqh is the canvas's own height, assistantView.css .tq-chat-body; the head and the card's drop of space come off it)
-                ...(!sessionView && (fromSide || workSide) ? { minHeight: "min(620px, calc(100cqh - 140px))" } : {}) }}>
+                overflowY: "auto", flex: 1, minHeight: 0, minWidth: 0, display: "flex", flexDirection: "column", containerType: "inline-size", position: "relative" }}>
                 {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
                     its lap - you type into it like any other terminal. Everything below is
                     reference material about the same task, folded away. */}

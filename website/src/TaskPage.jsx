@@ -461,7 +461,17 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // behind an explicit restart action instead of looking like the main thing to do next.
   const [restartOpen, setRestartOpen] = useState(false);
   const [boxAt, setBoxAt] = useState(0);              // each opening of the agent box, so a second press brings it into view again
-  const [startingAgent, setStartingAgent] = useState("");
+  // ONE START PER TASK AT A TIME, HELD IN A REF (the agents walk, 2026-10-26): `startingAgent` was state, so a double press on Send to
+  // agent passed its guard twice before React drew "Starting…" and posted two dispatches; and a start answered after the owner had
+  // moved to another task was never cleared (`stale`), leaving every start there greyed "Starting…". Keyed by task, cleared always.
+  const startFlights = useRef({});
+  const [starting, setStarting] = useState({});
+  const startingAgent = starting[selected] || "";
+  const beginStart = (id, what) => {
+    if (!id || startFlights.current[id]) return false;
+    startFlights.current = { ...startFlights.current, [id]: what }; setStarting(startFlights.current); return true;
+  };
+  const endStart = (id) => { const { [id]: _, ...rest } = startFlights.current; startFlights.current = rest; setStarting(rest); };
   const [generalRevision, setGeneralRevision] = useState(0);
   // the waiting room: notes for the agent, typed in when it stops (waitroom.py)
   const [wait, setWait] = useState(() => heldWait(selected) || { data: [], state: null });   // ...its waiting room with it (taskDetail.js)
@@ -1318,9 +1328,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // nothing to do and must not offer a chevron that does nothing.
   const stageProps = (name) => ({ folded: pane !== name, onToggle: pane === name ? null : () => setOpenStage(name) });
   const startCodingAgent = async () => {
-    if (!selected || startingAgent) return;
     const id = selected;
-    setStartingAgent("coding"); setErr(""); setStartFail(null);
+    if (!beginStart(id, "coding")) return;
+    setErr(""); setStartFail(null);
     try {
       // the repository chosen in the panel is pinned first - the tag is the override the start obeys
       if (startRepo) await api.put(`/api/tasks/${id}/repo`, { repo: startRepo, ...(run.agent ? { agent: run.agent } : {}) });
@@ -1346,12 +1356,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       if (e?.outcome?.dispatch === "needs_repo" || /no local path|could not tell which checkout/i.test(msg)) {
         setErr(""); setRepoPick(true); setResumeAfterRepo({ dispatch: true });
       } else { setErr(msg); setStartFail({ ...failOf(e), text: msg, again: startCodingAgent }); }
-    } finally { if (!stale(id)) setStartingAgent(""); }
+    } finally { endStart(id); }
   };
   const startGeneralAgent = async () => {
-    if (!selected || startingAgent) return;
     const id = selected;
-    setStartingAgent("general"); setErr(""); setStartFail(null);
+    if (!beginStart(id, "general")) return;
+    setErr(""); setStartFail(null);
     try {
       // one shared dispatch whatever the task's kind was: it switches the kind, starts (or reuses) the
       // assistant session and records the live worker - a relabelled task is not a started one (PW-213)
@@ -1372,15 +1382,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         const msg = e?.response?.data?.detail || "Could not start the agent - check that an AI is connected under Connections, then press it again.";
         setErr(msg); setStartFail({ ...failOf(e), text: msg, again: startGeneralAgent });
       }
-    } finally { if (!stale(id)) setStartingAgent(""); }
+    } finally { endStart(id); }
   };
   // START AN AGENT ON A GOAL (the owner, 2026-10-12): the goal is up to its first step not done. That step becomes a task
   // of its own if it is not one yet (the goal's repository rides along), the regular agent starts on it through the one
   // dispatch door, and the step opens on the table so what the agent does is what you see.
   const startGoalStep = async () => {
-    if (!selected || startingAgent) return;
     const id = selected;
-    setStartingAgent("step"); setErr(""); setStartFail(null);
+    if (!beginStart(id, "step")) return;
+    setErr(""); setStartFail(null);
     try {
       const { data: got } = await api.get(`/api/tasks/${id}/steps`);
       const step = (got.steps || []).find((s) => !s.done);
@@ -1399,7 +1409,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     } catch (e) {
       // ...with its ways past it as buttons on the error, as the task's own start has: the sentence stood alone (the matrix's verify, 2026-10-20)
       if (!stale(id)) { const msg = e?.response?.data?.detail || "Could not start the agent on the next step"; setErr(msg); setStartFail({ ...failOf(e), text: msg, again: startGoalStep }); }
-    } finally { if (!stale(id)) setStartingAgent(""); }
+    } finally { endStart(id); }
   };
   // CONTINUE SESSION is the rail's box here too (T14): one road (/continue-work) for a coding and a regular agent, and
   // what you type is the first thing it hears. The page had two older roads with no note (continue-session, resume).
@@ -1430,12 +1440,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const runFix = failedRun ? detail?.agentStory?.fix || null : null;
   const tryAgain = async () => {
     const id = selected;
-    if (!id || startingAgent) return;
-    setStartingAgent("resume"); setErr(""); setStartFail(null);
+    if (!beginStart(id, "resume")) return;
+    setErr(""); setStartFail(null);
     try { await api.post(`/api/tasks/${id}/continue-work`, { note: null }); continued(); }
     catch (e) {
       if (!stale(id)) { const msg = e?.response?.data?.detail || e?.message || "It could not start again."; setErr(msg); setStartFail({ ...failOf(e), text: msg, again: tryAgain }); }
-    } finally { if (!stale(id)) setStartingAgent(""); }
+    } finally { endStart(id); }
   };
   const continueWord = startingAgent === "resume" ? (failedRun ? "Trying again…" : "Continuing…") : failedRun ? btn("try_again") : labelOfRow("continue");
   const continuePress = (e, a) => (failedRun ? tryAgain() : setContinueAt(a || e?.currentTarget));

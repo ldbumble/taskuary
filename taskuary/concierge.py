@@ -1602,8 +1602,8 @@ def _handoff_brief(store, tid: int, text: str) -> str:
     return f"{text.strip()}\n\nWhat we were talking about:\n{_cut(ctx, 900)}" if ctx else text.strip()
 
 
-def _turns(store, tid: int) -> str:
-    rows = general.chat_rows(store, tid)[-TURNS:]
+def _turns(store, tid: int, n: int = TURNS) -> str:
+    rows = general.chat_rows(store, tid)[-n:]
     return '\n'.join(f"{'YOU' if c.get('ActorType') == general.ASSISTANT_TYPE else 'OWNER'}: {_cut(_MARK.sub('', c.get('Body') or ''), 500)}" for c in rows)
 
 
@@ -1962,11 +1962,14 @@ def turn_system(store, llm=None) -> str:
 _WARMING = threading.Lock()
 
 
-def warm(store, actor: str = 'owner', wait: bool = False) -> bool:
+def warm(store, actor: str = 'owner', wait: bool = False, changed: bool = False) -> bool:
     """Start the chat's CLI before the owner types (the owner, 2026-10-20: "it should respond to things quickly"): the page
     opening, New chat and a brain changed each start it, so the CLI's start-up - 2.5-4 s on this machine - is paid while they
     read, never on their first ask. Exactly the process that ask would take: the same brain, instructions and conversation.
     Nothing for an API brain or a CLI that keeps no conversation, and nothing at all while one is already starting.
+    `changed`: after a turn - only a LIVE process, and only when the instructions it was launched with are no longer the ones the next
+    ask would send (a memory kept, a report or a connection made: the process is named by them). That ask restarted the CLI under
+    the owner, 4 s on the stand-in against 1 (the speed pass, 2026-10-27); now the swap happens while they read the answer.
     True when a process was started."""
     if not is_cli(store): return False
     def go() -> bool:
@@ -1974,9 +1977,10 @@ def warm(store, actor: str = 'owner', wait: bool = False) -> bool:
         try:
             tid = general.dock_task(store, actor)[0]['TaskId']
             from . import clipool
-            if any(x['key'] == f'{LIVE_KEY}:{tid}' for x in clipool.live()): return False     # the page's every read: one look, no build
+            # the page's every read: one look, no build - and after a turn, nothing to swap when nothing is live
+            if any(x['key'] == f'{LIVE_KEY}:{tid}' for x in clipool.live()) != changed: return False
             llm = _brain_for(store, tid, None)
-            return bool(getattr(llm, 'warm', None) and llm.warm(turn_system(store, llm)))
+            return bool(getattr(llm, 'warm', None) and llm.warm(turn_system(store, llm), **({'swap': True} if changed else {})))
         except Exception as e:
             logger.info(f'concierge: the CLI was not warmed - {e}'); return False
         finally: _WARMING.release()
@@ -4689,7 +4693,10 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         open_card: str | None = None, images: list | None = None) -> dict:
     token = _TURN.set({})
     try: return _say(store, text, key, llm, actor, trace, cancel, item, open_card, images)
-    finally: _TURN.reset(token)
+    finally:
+        _TURN.reset(token)
+        # ...and the turn may have changed the instructions the chat's CLI runs on: the next ask finds the new one already up (warm)
+        if llm is None and DELIVERY.get() == DESK: warm(store, actor, changed=True)
 
 
 def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None,
@@ -4722,6 +4729,15 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         words = [c['label'] for c in chips_for(store, item)]
         i = int(text.strip().lstrip('#').rstrip('.').strip())
         if 1 <= i <= len(words): text = words[i - 1]
+    # THE TURN'S READS OF THE PIPE COME BEFORE ITS OWN WRITE (the speed pass, 2026-10-27): the owner's line written below moves the store's
+    # mark, so the Advisor's decision and SELECT's values, read after it, each rebuilt the whole pipe this turn had just built - 150-260 ms
+    # of every typed turn on a fresh home before the model was asked, more on a real mailbox. Read here they take the build above; the
+    # conversation so far is read here too, so it holds what came before this line and never the line itself, said again below it.
+    from . import toolcatalog
+    llm = _brain_for(store, tid, llm, trace, cancel)
+    adv_d = _decision(store, item) if llm else {}
+    picks = toolcatalog.select_values(store, p['items']) if llm else ''
+    so_far = _turns(store, tid, TURNS - 1) if llm else ''
     # the dock has the owner's words now; the item has them with the answer, once the turn knows it was about the item
     record(store, tid, 'user', typed)
     turn = _TURN.get()
@@ -4729,7 +4745,6 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     turn['trace'] = trace                           # the app's own trouble draws its steps as they happen (_trouble)
     rec = lambda role, body, card=None: record_related(store, tid, item, role, body, card)
     table = table_line(store, item)
-    llm = _brain_for(store, tid, llm, trace, cancel)
     if not llm:
         fb = fallback(item, False, p['items'], store=store).strip()
         if fb and not fb.endswith(('.', '!', '?', ')')): fb += '.'               # a sentence ends before the next one starts
@@ -4747,24 +4762,22 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # NO HUB NOTES PER TURN. Every turn carried whatever notes shared the owner's words - asked to research a
         # project, the model read internal notes on CLI flags and timeouts, and answered in that register (the
         # 2026-09-24 debug). knowledge.search reads the Hub when a question is about how things are done here.
-        from . import toolcatalog
         # PROGRESSIVE DISCLOSURE (the owner, 2026-09-25): COUNSEL, SOUL, where the voice is, and the tool index. The
         # workers, the repositories and the app's state rode every turn as blocks; agents.list, repos.list,
         # reports.list, connections.list and settings.list read them when a turn needs them.
         # ...and the Hub is a tool too (hub.publish), not an envelope taught every turn (2026-09-25)
         system = turn_system(store, llm)
         # THE CANVAS FIRST (canvas_block): the table's stage, ask, lit button and row by id, then what this walk put down - the Advisor's
-        # decision read once, for the lit button there and the "why?" line under the facts
-        adv_d = _decision(store, item)
+        # decision read once (adv_d, above), for the lit button there and the "why?" line under the facts
         # the pipe's own SELECT values ride the turn, not the index (toolcatalog.select_values): they move with every mail
         asked = (f"{canvas_block(store, item, tid, adv_d)}\n\n"
-                 f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n{toolcatalog.select_values(store)}\n\n"
+                 f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n{picks}\n\n"
                  f"{facts(store, item, whole=True)}\n\n"
                       + (f"THE TASKS THEY NAMED, as they are now:\n{nn}\n\n" if (nn := named_now(store, text, item)) else '')
                       # what the owner handed over and where each stands (asks.py) - "where's the tab check?", "add Omar to that"
                       + (f"{asks_block}\n\n" if (asks_block := _asks_block(store, p)) else '')
                       + (f"{rail}\n\n" if (rail := _rail_block(p)) else '')
-                      + (f"CONVERSATION SO FAR:\n{_turns(store, tid)}\n\n" if _turns(store, tid) else '')
+                      + (f"CONVERSATION SO FAR:\n{so_far}\n\n" if so_far else '')
                       # THE CARD BROWSED OPEN in the canvas (the canvas redesign, 2026-09-29): "this", "it", "set it up"
                       # mean that card - a connector, a settings group, a report - when no item is on the table
                       # ...or the PAGE open with nothing opened on it (2026-10-01): a question over the Connections wall is about connections

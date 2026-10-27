@@ -348,12 +348,12 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
             base = list(prof.get('args') or preset_args(prof['cmd']) or ['-p'])
             run_prof, prompt = {**prof, 'args': base + [flag, str(path)]}, user
         return run_prof, prompt
-    def warm(system) -> bool:
+    def warm(system, swap: bool = False) -> bool:
         """A kept conversation's process started before its first call, on these instructions (agents.warm_cli). False when
-        nothing keeps: a one-shot brain starts its CLI per call, as it always has."""
+        nothing keeps: a one-shot brain starts its CLI per call, as it always has. `swap`: only a live one launched otherwise is replaced."""
         if not keep: return False
         from .agents import warm_cli
-        return warm_cli(shaped(system, '')[0], resume=llm.session_id, extra_env=extra_env)
+        return warm_cli(shaped(system, '')[0], resume=llm.session_id, extra_env=extra_env, swap=swap)
     llm.session_id, llm.warm = resume, warm
     # said out loud, not merely absent: a brain that CANNOT carry a schema is the one whose answer
     # is worth rechecking in code (llm.ask_json). Silence means "do not second-guess me".

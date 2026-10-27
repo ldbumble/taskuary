@@ -174,7 +174,7 @@ FALLBACK_CATEGORIES = ('report', 'info', 'idea', 'todo', 'coding', 'review', 'pr
                        'automated', 'error', 'assistant', 'filed', 'ignored', 'yours')
 
 
-def vocabularies(store=None) -> dict:
+def vocabularies(store=None, items: list = None) -> dict:
     """{category, kind, lane} -> the values actually in the PIPE right now.
 
     The same set concierge.select_items searches, and that is the whole point. This read
@@ -190,7 +190,10 @@ def vocabularies(store=None) -> dict:
     out = {'category': list(FALLBACK_CATEGORIES), 'kind': [], 'lane': []}
     from . import funnel
     out['lane'] = list(funnel.LANES)
-    if store is None: return out
+    if store is None and items is None: return out
+    # ...or off the pipe a typed turn has just built (funnel.pile - the same rows): a second build of it was most of what the turn spent
+    # before the model was asked (the speed pass, 2026-10-27)
+    if items is not None: return _values(items)
     # ...READ ONCE PER CHANGE (the canvas timing, 2026-10-26): every typed turn built the whole pipe for these few words - twice, the
     # index's selector asking too - a build that is ~290 ms on a real mailbox. They stand while nothing is written and no worker moved
     try: from . import terminal; mark = (funnel._rail_top(store), funnel.workers_signature(terminal.live_sessions(tail=6)))
@@ -200,17 +203,22 @@ def vocabularies(store=None) -> dict:
         items = funnel.build(store)['items']
     except Exception:
         return out
-    seen = lambda f: sorted({str(i.get(f) or '') for i in items} - {''})
-    v = {'category': seen('category') or list(FALLBACK_CATEGORIES), 'kind': seen('kind'), 'lane': seen('lane') or list(funnel.LANES)}
+    v = _values(items)
     if None not in mark: _VOCAB.update(store=store, mark=mark, v=v)
     return v
 _VOCAB = {}
 
 
-def select_values(store=None) -> str:
+def _values(items: list) -> dict:
+    from . import funnel
+    seen = lambda f: sorted({str(i.get(f) or '') for i in items} - {''})
+    return {'category': seen('category') or list(FALLBACK_CATEGORIES), 'kind': seen('kind'), 'lane': seen('lane') or list(funnel.LANES)}
+
+
+def select_values(store=None, items: list = None) -> str:
     """The values SELECT's category, kind and lane can take in the pipe as it is NOW - said with each turn, never in the index:
     the index is a CLI brain's launch instructions, and a value that came or went (an FYI cleared, a mail landed) restarted it."""
-    v = vocabularies(store)
+    v = vocabularies(store, items)
     return ('SELECT VALUES IN THE PIPE NOW - category: ' + ', '.join(v['category']) + (f"; kind: {' | '.join(v['kind'])}" if v['kind'] else '')
             + '; lane: ' + ' | '.join(v['lane']))
 

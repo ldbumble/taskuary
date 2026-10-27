@@ -129,3 +129,19 @@ def test_a_one_shot_brain_never_carries_its_calls_into_one_conversation(cli, mon
     brain = _kept_brain(monkeypatch, None)
     brain('SYS', 'one'); brain('SYS', 'two')
     assert seen == [None, None]
+
+
+def test_a_swap_after_a_turn_replaces_only_a_live_idle_process_launched_otherwise(cli):
+    """After a typed turn the Assistant swaps its CLI when the instructions it was launched with changed (concierge.warm, `changed`):
+    the next ask then finds it up instead of starting it under the owner (the speed pass, 2026-10-27). A swap never starts a process
+    where none is live - a chat closed meanwhile stays closed - and never cuts a turn under way."""
+    assert not clipool.warm('chat:1', cli, swap=True) and 'chat:1' not in clipool._POOL
+    a = ask(cli, 'chat:1', 'hello')
+    assert not clipool.warm('chat:1', cli, resume=a['sid'], swap=True)                   # the same instructions: kept as it is
+    lv = clipool._POOL['chat:1']
+    with lv.lock: assert not clipool.warm('chat:1', cli + ['--model', 'other'], resume=a['sid'], swap=True)
+    assert clipool._POOL['chat:1'] is lv                                                  # a turn under way is never cut
+    assert clipool.warm('chat:1', cli + ['--model', 'other'], resume=a['sid'], swap=True)
+    swapped = clipool._POOL['chat:1']
+    b = ask(cli + ['--model', 'other'], 'chat:1', 'again', resume=a['sid'])
+    assert b['pid'] != a['pid'] and b['sid'] == a['sid'] and clipool._POOL['chat:1'] is swapped is not lv   # the next ask takes the swapped one

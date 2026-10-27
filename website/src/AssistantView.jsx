@@ -3234,7 +3234,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const popLines = useMemo(() => (popOn ? shown.map((m, i) => [m, i]).filter(([, i]) => i > lastCardIdx).slice(-12) : []), [popOn, shown, lastCardIdx]);
   const popPending = popOn && (busy || phoneBusy);
   const [popOpen, setPopOpen] = useState(false), [boxOpen, setBoxOpen] = useState(false);
-  const popRef = useRef(null), popBodyRef = useRef(null), boxRef = useRef(null), popOnRef = useRef(false);
+  const popRef = useRef(null), popBodyRef = useRef(null), boxRef = useRef(null), popOnRef = useRef(false), rowDown = useRef(false);
   popOnRef.current = popOn;
   const boxWide = boxOpen || !!text.trim() || !!pics.imgs.length || !!emojiEl;
   // ...it opens on the owner's line (send) and on the Assistant speaking up about the task in this session - never on a reload's history
@@ -3464,12 +3464,21 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           {/* ONE ROW: the row's groups and the box share a line (the one-row chat bar, 2026-10-26) - the box a pill at its end while at rest,
               widened while it is used, the groups folding into their ▾ for the room (ActionRow measures what is left; Next and the lit
               move never fold). With no row - the day's opener, a phone, whose row rides with its task view - the box is the whole line */}
-          <div className="tq-dock-line">
+          {/* ...A PRESS ON THE ROW LANDS WHERE IT WAS AIMED (the overnight walk, 2026-10-26): the press took focus from the wide box, the box shut
+              to its pill on that mousedown, the folded groups came back and slid the lit Remind me 290 px right before the mouseup - so the
+              click landed on nothing, and the lit button "did nothing" on the first press. The box keeps its width until the press is over */}
+          <div className="tq-dock-line" onPointerDownCapture={(e) => {
+            if (boxRef.current?.contains(e.target)) return;
+            rowDown.current = true;
+            const up = () => { window.removeEventListener("pointerup", up, true); window.removeEventListener("pointercancel", up, true);
+              setTimeout(() => { rowDown.current = false; if (!boxRef.current?.contains(document.activeElement)) setBoxOpen(false); }, 0); };
+            window.addEventListener("pointerup", up, true); window.addEventListener("pointercancel", up, true);
+          }}>
           {/* ...and during setup its line is the Advisor's (SetupLine): the move setup fills (FirstRun's tone) is the one lit - nothing
               was, so the line said "pick it" over a plain Back and a greyed Next (2026-10-19) */}
           <ActionRow advised={stripPick || setupLit} hold={!!reading && reading === onTable} />
           <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined} ref={boxRef} data-tq-open={boxWide ? "" : undefined}
-            onFocus={() => setBoxOpen(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setBoxOpen(false); }}>
+            onFocus={() => setBoxOpen(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget) && !rowDown.current) setBoxOpen(false); }}>
             <div className="tq-compose-tools">
             <AttachImage pics={pics} sx={{ color: DIM }} />
             <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />

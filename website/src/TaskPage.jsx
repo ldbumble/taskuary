@@ -1304,7 +1304,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // left - what the task is for (taskLayout.workPane). Presentation only: every press still reads `stage`.
   // ...and Close out under a Result on a task nobody sent: what closes it, the write-up's progress under the Result (taskLayout.closeOut)
   const co = closeOut({ hasSender: !!replyMessage, result: resultShown, writeup });
-  const replyHas = !!(pendingReview || proposals.length || owesEmails || emailsWaiting || ended || sentOutside.length
+  // ...and the reply SENT from here is Close out's too (the owner, 2026-10-27: "I hit send on close out and instead of keeping that page
+  // open it reopened the task page"): with the draft gone and only sentOutside counted, a sent reply read as "a reply owed, nothing written"
+  const replyHas = !!(pendingReview || sentReview || proposals.length || owesEmails || emailsWaiting || ended || sentOutside.length
     || ["done", "dropped"].includes(t?.Status) || co.writeupAt === "closeout");
   // ...and NEITHER half on a task waiting on a person (the owner, 2026-10-25): nothing is yours until they answer, so Agent work and Close out
   // are a line each, one click to open - the Send to agent form stood open over a task nobody needed an agent for
@@ -1347,7 +1349,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const restFocus = openStage ? focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, waiting: !!waitFor, list,
     pane: waitFor ? "" : workPane({ stage: restStage, kind: t?.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas }) }) : focus;
   const taskStage = stageOf({ focus: restFocus, drafted: replyHas, closed: ["done", "dropped"].includes(t?.Status) });
-  const main = mainView({ stage: taskStage, sessionView, stacked });
+  // ...and ONCE OPEN, THE PAGE STAYS WHERE IT IS (the owner, 2026-10-27, Close out swapped for the task on Send): the main view is read when
+  // the task opens and its detail lands, and again only when an agent starts or ends, the task closes or reopens, or the width stacks it -
+  // never because a press the owner made changed what the page holds
+  const mainNow = mainView({ stage: taskStage, sessionView, stacked });
+  const mainHeld = useRef({ key: null, main: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${t?.Status}`;
+  if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow };
+  const main = mainHeld.current.main;
   const fromDrawer = main === "work", workDrawer = main === "task", workLit = drawerLit({ main, stage: taskStage });
   // ...and a lit tab names the move: the reply and who to ("Close out · reply to Priya Shah"), else what the drawer holds
   const workTabWords = focus === "reply" && replyMessage?.FromName ? `Close out · reply to ${replyMessage.FromName}` : "Agent · Close out";

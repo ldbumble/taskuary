@@ -64,6 +64,8 @@ test("a closed task is done, opens on how it closed, and has no Advisor section"
 test("the task page reads the stage, and says it on its body", () => {
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   assert.match(page, /import \{ drawerLit, mainView, stageOf \} from "\.\/stages\.js";/);
-  assert.match(page, /const main = mainView\(\{ stage: taskStage, sessionView, stacked \}\);/);
+  // ...read through the held view (2026-10-27: Send must not swap Close out for the task): the stage's view, held once open
+  assert.match(page, /const mainNow = mainView\(\{ stage: taskStage, sessionView, stacked \}\);/);
+  assert.match(page, /const main = mainHeld\.current\.main;/);
   assert.match(page, /data-tq-stage=\{taskStage\}/);
 });

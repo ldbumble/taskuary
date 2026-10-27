@@ -52,7 +52,7 @@ CASES = [
     Q('navigation', 'show me the workflows', None, 'Here: [Workflows](#report=workflows).', 'link:#report=workflows', tools=('pages',), freq=2),
     Q('navigation', 'go to reports', None, 'Here: [Reports](#report=reports).', 'link:#report=reports', tools=('pages',), demo='open', freq=4),
     Q('navigation', 'show me my dashboards', None, 'Here: [Dashboards](#report=dashboards).', 'link:#report=dashboards', tools=('pages',), freq=3),
-    Q('navigation', 'go to the memory page', None, 'Here: [Verdicts & notes](#settings=memory).', 'link:#settings=memory', tools=('pages',), freq=2),
+    Q('navigation', 'go to the memory page', None, 'Here: [LEARNED.md](#settings=docs&doc=learned).', 'link:#settings=docs&doc=learned', tools=('pages',), freq=2),
     Q('navigation', 'open the GitHub connection', None, 'Here: [GitHub](#connector=github).', 'link:#connector=github', tools=('pages',), freq=2),
     Q('navigation', 'show me the new starter task', None, [c('tasks.list', contains='new starter'), 'That is [TQ-0002](#task=2).'], 'read:tasks.list', demo='open', freq=3),
     Q('navigation', 'bring up the census sync bug', None, [c('tasks.list', contains='census sync'), f'That is [{T12}](#task=12).'], 'read:tasks.list', demo='open', freq=3),

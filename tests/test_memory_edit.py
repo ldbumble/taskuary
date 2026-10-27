@@ -78,7 +78,7 @@ def test_visualize_gets_the_five_subjects_with_their_real_readers_and_your_own_l
     assert [x['slug'] for x in g['sections']] == list(lc.SECTIONS)
     reads = {x['slug']: x['reads'] for x in g['sections']}
     assert reads['people'] == 'read by triage (priority only) · drafts · the Advisor · the Assistant · agents'
-    assert reads['bring'] == 'read by the Assistant'
+    assert reads['bring'] == 'read by the Assistant · agents'      # an agent reads all of it (the owner, 2026-10-27)
     by = {l['key']: l for l in g['lines']}
     assert by['erin manager hour']['subject'] == 'erin@northwind.example' and by['erin manager hour']['section_slug'] == 'people'
     mine = [l for l in g['lines'] if l.get('own')]

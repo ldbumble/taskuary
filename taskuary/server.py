@@ -470,10 +470,6 @@ class PolicyBody(BaseModel):
     Pattern: str | None = None; Action: str | None = None; Reason: str | None = None
     SortOrder: int | None = None; Active: bool | None = None
     Mailbox: str | None = None       # the mailboxes it is for, '|'-separated; '' is every mailbox (policy.on_mailbox)
-class MemoryBody(BaseModel):
-    note: str; scope: str = 'global'; scope_key: str | None = None
-    source: str = 'manual'          # 'writing' = an instruction about how to write, read by the drafter only (PW-060)
-class MemoryToggle(BaseModel): active: bool
 class ConnectorBody(BaseModel):
     ConnectorId: int | None = None; Type: str | None = None; Name: str | None = None
     ConfigJson: str | None = None; Secret: str | None = None; Active: bool | None = None
@@ -2844,12 +2840,29 @@ def _teach_routing(task_id: int, field: str, value: str, belongs_to: str = None,
             said = rmem.lesson(store, task_id, f, v, belongs_to if f != 'system' else None, ev)
             n = rmem.learn_correction(store, task_id, f, v, ACTOR, reason=said[:200])
             if n: out[f'learned_{f}'] = n
+            # ...and the lesson where every reader reads it (the owner, 2026-10-27: "everything that learns about the user should be
+            # saved in memory"): the routing fact is the mechanical half, this is what it says about the owner
+            _teach_line(task_id, f, said.split(': ', 1)[-1])
             # the general lesson, once per correction and only when it taught something new -
             # a re-press of the same button must not spend an AI call restating a known pattern
             if n and background is not None: background.add_task(learn.learn_from, store, said)
         except Exception as e:
             logger.warning(f'routing memory: {f}={v} on task {task_id} not learned - {e}')
     return out
+
+def _teach_line(task_id: int, field: str, said: str) -> str:
+    """One correction of how a task was routed or judged, as a LEARNED.md line about the topic (else the sender) of the mail it came
+    from - the newer correction of the same field on the same thing replaces the older (memorylines). `said` reads '"title" - what
+    happened'. Never raises."""
+    from . import memorylines
+    try:
+        m = next(iter(store.list_messages(task_id)), None) or {}
+        em, topic = (m.get('FromEmail') or '').lower(), _topic_key(m) if m else ''
+        head, _, rest = str(said or '').partition(' - ')
+        text = f"{head} - ROUTING {field.upper().replace('_', ' ')}: {rest}" if rest else f"ROUTING {field.upper().replace('_', ' ')}: {head}"
+        return memorylines.keep(store, text, 'subject' if topic else 'sender' if em else 'global', topic or em or None)
+    except Exception as e:
+        logger.debug(f'routing lesson not written to memory: {e}'); return ''
 
 @app.post('/api/tasks/{task_id}/not-a-task')
 def not_a_task(task_id: int, body: NotATaskBody = None, background: BackgroundTasks = None):
@@ -3569,6 +3582,9 @@ def ignore_sender(mid: int, body: IgnoreSenderBody, background: BackgroundTasks 
     pid = store.save_policy({'Name': f'Skip {em}', 'Kind': 'sender', 'Pattern': em, 'Action': 'skip',
                              'Reason': f'the owner said to ignore mail from {em}', 'Active': 1}, ACTOR)
     store.audit('policy', pid, 'create', ACTOR, detail={'from': em, 'message_id': mid, 'via': 'ignore-sender'})
+    # ...the rule does the skipping; the memory says what it means about the owner, for every reader (2026-10-27)
+    from . import memorylines
+    memorylines.keep(store, 'You never want to see mail from this sender - it is skipped', 'sender', em, section='care', verdict=False)
     saved = next((p for p in store.list_policies(active_only=False) if p['PolicyId'] == pid), None)
     hidden = policy_engine.apply_retroactively(store, saved or {})
     if hidden: store.audit('policy', pid, 'apply_history', ACTOR, detail={'messages': hidden})
@@ -8436,33 +8452,9 @@ def delete_policy(pid: int):
     store.audit('policy', pid, 'delete', ACTOR, detail={'name': p.get('Name'), 'restored': out['restored']})
     return {'ok': True, **out}
 
-@app.get('/api/memory')
-def memory(): return {'data': store.list_memories(active_only=False)}
-
-@app.post('/api/memory')
-def add_memory(body: MemoryBody):
-    # 'subject' was missing here, so a topic rule - which is what most verdicts actually are -
-    # could only be written by pressing "Not our task" on a message, never typed in by hand
-    if body.scope not in ('global', 'sender', 'sender_domain', 'source', 'subject'):
-        raise HTTPException(422, 'bad scope')
-    # a keyed scope with no key matches nothing, ever: saved, listed, and silent
-    if body.scope != 'global' and not (body.scope_key or '').strip():
-        raise HTTPException(422, f'a {body.scope} note needs a scope_key to match on')
-    if not body.note.strip(): raise HTTPException(422, 'note is required')
-    source = body.source if body.source in ('manual', 'writing') else 'manual'
-    mid = store.add_memory({'Scope': body.scope, 'ScopeKey': body.scope_key, 'Note': body.note.strip()[:1000],
-                            'Source': source, 'Active': 1, 'CreatedBy': ACTOR})
-    store.audit('memory', mid, 'create', ACTOR)
-    return {'ok': True, 'memoryId': mid}
-
-@app.patch('/api/memory/{mid}')
-def toggle_memory(mid: int, body: MemoryToggle):
-    store.set_memory_active(mid, body.active)
-    store.audit('memory', mid, 'activate' if body.active else 'deactivate', ACTOR)
-    # A NOTE SWITCHED OFF WITHDRAWS WHAT IT FED (phase C, 2026-10-23): a rule it carried into LEARNED.md stopped being the owner's word
-    if not body.active: learn.withdraw(store, mid)
-    learn.note_verdicts(store)
-    return {'ok': True}
+# THE NOTES PAGE IS GONE (the owner, 2026-10-27: "probably garbage, remove it"): /api/memory listed, added and switched off rows of a
+# second memory that triage, the Advisor and agents read only on a matching word. Every row is a LEARNED.md line now (memorylines),
+# edited, kept or forgotten on LEARNED.md itself (Docs) or told to the Assistant (memory.remember / memory.wrong).
 
 @app.get('/api/audit/recent')
 def audit_recent(limit: int = 100): return {'data': store.list_audit(limit=max(1, min(limit, 500)))}
@@ -10123,7 +10115,11 @@ def correct_judged(task_id: int, body: JudgedBody):
     if not v: raise HTTPException(422, 'say what to correct')
     store.judge_task(task_id, v, 'owner')
     from . import routingmemory
-    for k, x in v.items(): routingmemory.learn_correction(store, task_id, k, x, ACTOR)
+    title = ' '.join(str((store.get_task(task_id) or {}).get('Title') or '').split())[:80]
+    for k, x in v.items():
+        routingmemory.learn_correction(store, task_id, k, x, ACTOR)
+        # ...and in the memory, in words: how hard work like this is for the owner, what data it carries (2026-10-27)
+        _teach_line(task_id, k, f'"{title}" - the owner says ' + (f'the work is {x}' if k == 'difficulty' else f'its data is {x}'))
     store.audit('task', task_id, 'judged', ACTOR, detail=v)
     return {'judged': _brainroute().judged(store, task_id)}
 

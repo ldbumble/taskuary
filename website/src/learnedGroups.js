@@ -29,9 +29,9 @@ export const byPerson = (ls) => {
 export const SECTIONS = [
   { slug: "people", title: "Your people", reads: "read by triage (priority only) · drafts · the Advisor · the Assistant · agents" },
   { slug: "care", title: "What you care about", reads: "read by triage · the Advisor · the Assistant · agents" },
-  { slug: "work", title: "How you work", reads: "read by the Advisor · the Assistant" },
+  { slug: "work", title: "How you work", reads: "read by the Advisor · the Assistant · agents" },
   { slug: "promises", title: "Promises", reads: "read by the Advisor · the Assistant · agents" },
-  { slug: "bring", title: "What to bring up", reads: "read by the Assistant" },
+  { slug: "bring", title: "What to bring up", reads: "read by the Assistant · agents" },
 ];
 
 // [{slug, title, reads, lines, people?}] - the five subjects in the document's order, then Watching and Proposed

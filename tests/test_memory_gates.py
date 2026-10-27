@@ -44,7 +44,8 @@ def test_triage_reads_the_dont_care_line_on_a_report_run():
     ingest.judge(s, {'external_id': 'report:7:x', 'channel': 'report', 'subject': 'Nightly process check — 1 rows',
                      'body': 'legacy export job: FAILED', 'from_name': 'Nightly process check', 'conversation_id': 'report:7',
                      'watch_for': 'a process failed'}, llm)
-    assert LEGACY in seen['sys'] and 'not care about is never a task on its own' in seen['sys']
+    # the owner's own line is in the EVIDENCE (LEARNED.md's standing lines, ingest.applicable_notes) - and said once, not twice
+    assert seen['sys'].count(LEGACY) == 1 and 'what they told you they care about, or do not' in seen['sys']
 
 
 def test_dont_care_said_to_the_assistant_lands_in_what_you_care_about():

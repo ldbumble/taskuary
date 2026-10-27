@@ -5,7 +5,7 @@
 const REPORT_BUCKETS = ["workflows", "new-invoices", "new-agent"];
 // Settings' pages (SettingsView NAV): a link to any other opens the section list - "#settings=foo" crashed the app on
 // every reload (the final review, 2026-09-29)
-export const SETTINGS_PAGES = ["about", "docs", "config", "policies", "memory", "audit", "updates"];
+export const SETTINGS_PAGES = ["about", "docs", "config", "policies", "audit", "updates"];
 
 export function canvasRequestFromHash(hash, n = 0) {
   const h = String(hash || "");
@@ -56,6 +56,8 @@ export function canvasRequestFromHash(hash, n = 0) {
     // (the owner, 2026-10-21) - an old link to them still lands, on their new shelf
     if (page === "playbooks") return { kind: "browse", area: "reports", state: { section: "playbooks", open: null }, n };
     if (page === "profiles") return { kind: "browse", area: "settings", state: { section: page, open: null }, n };
+    // ...and the old Verdicts & notes page is LEARNED.md now (the owner, 2026-10-27): its old link lands there
+    if (page === "memory") return { kind: "browse", area: "settings", state: { section: "docs", open: "d:learned" }, n };
     if (!SETTINGS_PAGES.includes(page)) return { kind: "browse", area: "settings", state: { section: null, open: null }, n };
     // Docs is a shelf of files: its link opens the shelf, not whichever document happens to be first
     // ...and &key=<knob>: the one setting the Assistant brought the page up for (concierge._route), outlined and in view

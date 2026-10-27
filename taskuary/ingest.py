@@ -645,11 +645,18 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
     from . import agents as hub_agents, capabilities
     project = context_for_message(store, msg)
     from .triage import job_doc
+    # "What you care about", learned from sorting verdicts - presses never reach triage (the owner, 2026-10-23) - and the people lines
+    # about whoever is on this mail, for its priority alone (2026-10-25). A line already in the EVIDENCE (a verdict about this sender or
+    # topic: both come from LEARNED.md now) is said once, there
+    lrn = learned_cut.for_reader(store, 'triage', learned_cut.about_mail(msg), target=f"mail:{msg.get('external_id') or ''}",
+                                 people=learned_cut.people_of(msg))
+    from .memorylines import ABOUT
+    said = {str(n).strip() for n in notes}
+    blocks = [[l for l in b.splitlines() if l.startswith('#') or ABOUT.sub('', l.strip().lstrip('-* ')).strip() not in said]
+              for b in lrn.split('\n\n')]
+    lrn = '\n\n'.join('\n'.join(b) for b in blocks if any(not l.startswith('#') for l in b))
     intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), job=job_doc(store), thread=thread, seen=carried,
-                             # "What you care about", learned from sorting verdicts - presses never reach triage (the owner, 2026-10-23) -
-                             # and the people lines about whoever is on this mail, for its priority alone (2026-10-25)
-                             learned=learned_cut.for_reader(store, 'triage', learned_cut.about_mail(msg), target=f"mail:{msg.get('external_id') or ''}",
-                                                            people=learned_cut.people_of(msg)),
+                             learned=lrn,
                              notes=notes, notes_left=notes_left, images=msg.get('images'),
                              system=store.doc('triage'), mine=me,
                              # a scheduled report carries its own brief - what the owner
@@ -1267,7 +1274,9 @@ def applicable_notes(store, senders, subject: str = '', text: str = '', source: 
     who = {(s or '').lower() for s in senders if s}
     doms = {s.rsplit('@', 1)[-1] for s in who if '@' in s}
     src = (source or '').lower()
-    return [n for n in store.list_memories()
+    # ...read from LEARNED.md, the one memory (memorylines, the owner 2026-10-27): the notes table is the verdicts' record, read by no one
+    from . import memorylines
+    return [n for n in memorylines.standing(store)
             if n['Scope'] == 'global'
             or (n['Scope'] == 'sender' and (n.get('ScopeKey') or '').lower() in who)
             or (n['Scope'] == 'sender_domain' and (n.get('ScopeKey') or '').lower() in doms)

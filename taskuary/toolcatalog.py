@@ -489,8 +489,8 @@ READS = {
     'memory.about':     ('who someone is to the owner: every line the memory holds about them, with its key, and what the org chart '
                          'says - `who`: a name or address. Use it for "who\'s Gail to me", "what do you know about Ray", and before '
                          'memory.remember replaces or memory.wrong takes out a line about them'),
-    'memory.list':      ('everything kept about the owner: the saved notes (from "remember this", their verdicts, Settings) '
-                         'and what LEARNED.md has learned from their verdicts. `about`: words to narrow it (a sender, a topic). '
+    'memory.list':      ('everything kept about the owner: LEARNED.md - what they told you ("remember this"), their verdicts, '
+                         'and what it learned from what they did. `about`: words to narrow it (a sender, a topic). '
                          'Use it for "what do you remember", "what do you know about me"'),
     'rules.list':       ('the standing filters on the owner\'s mail - queue mutes set with a reason, and the policy rules '
                          '(skip, ignore, escalate...) that decide before any model reads it. `about`: words to narrow it. '

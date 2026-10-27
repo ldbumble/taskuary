@@ -27,6 +27,13 @@ test("a start reads the first-run state, the build and today's meetings once eac
   const boot = g.since(0);
   for (const p of ONCE) assert.equal(count(boot, p), 1, `${p} read ${count(boot, p)} times at the start`);
 
+  // Connections opens on its catalogue without asking the machine for SQL Server's ODBC drivers - that card asks when it opens
+  const conns = g.n;
+  await page.evaluate(() => document.querySelector('[data-tq-nav="connections"]').click());
+  await page.waitForSelector('[data-tq-browse="connections"] [data-tq-browse-chip]', { timeout: 20000 });
+  await sleep(1500);
+  assert.ok(!g.since(conns).includes("/api/mssql/drivers"), `Connections asked for the ODBC drivers: ${g.since(conns)}`);
+
   await page.evaluate(() => document.querySelector('[data-tq-nav="settings"]').click());
   await page.waitForSelector('[data-tq-browse="settings"] [data-tq-browse-chip]');
   const at = g.n;
@@ -52,5 +59,32 @@ test("a start reads the first-run state, the build and today's meetings once eac
   await page.waitForFunction(() => document.querySelector('[data-tq-browse="settings"] [data-tq-browse-one]')?.innerText.length > 40, { timeout: 20000 });
   await sleep(1000);
   assert.ok(g.since(cfg).includes("/api/policies"), "Configuration still reads what it shows");
+  assert.deepEqual(errors, []);
+});
+
+// SETUP'S CANVAS, ITS RAIL AND THE ASSISTANT SHARE ONE READ OF THE FIRST RUN: the canvas's 5 s read and the rail's own 8 s one were two
+// GETs of the same answer, four or five every twelve seconds while a person sets up
+test("setup reads its state once for the canvas, the rail and the Assistant - at the start and while it waits", { timeout: 180000 }, async (t) => {
+  const h = await startHarness({ fresh: true }); t.after(() => h.close());
+  const page = await h.newPage(), errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.setViewport({ width: 1600, height: 810, deviceScaleFactor: 1 });
+  // an AI stood in by a key nothing calls (fresh-setup.test.mjs), so setup waits on the main source - the step the canvas re-reads on
+  const api = (p, body, method = body ? "POST" : "GET") => fetch(`${h.fixtureApi}${p}`, { method,
+    headers: { "Content-Type": "application/json", "X-Taskuary-Token": h.token }, body: body && JSON.stringify(body) }).then((r) => r.json());
+  const key = (await api("/api/connectors")).data.find((c) => c.Type === "anthropic");
+  await api("/api/connectors", { ConnectorId: key.ConnectorId, Secret: "sk-test-not-a-real-key-000000", Active: true });
+  await api("/api/settings", { name: "triage_ai", value: `connector:${key.ConnectorId}` }, "PATCH");
+  const g = gets(page);
+  await page.goto(h.ui, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector('[data-tq-firstrun="email"] [data-tq-card]', { timeout: 60000 });
+  await page.waitForSelector("[data-tq-setup-step]");
+  assert.equal(count(g.since(0), "/api/setup/first-run"), 1, `the start: ${count(g.since(0), "/api/setup/first-run")} reads`);
+  // waiting on the main source: the canvas reads every 5 s (a sign-in may finish in another tab), and the rail draws those answers
+  const at = g.n;
+  await sleep(16500);
+  const n = count(g.since(at), "/api/setup/first-run");
+  assert.ok(n <= 4, `${n} reads of the first run in 16.5 s`);
+  assert.match(await page.$eval('[data-tq-setup-step="ai"]', (e) => e.innerText), /Your AI[\s\S]*Anthropic/, "the rail still draws each answer");
   assert.deepEqual(errors, []);
 });

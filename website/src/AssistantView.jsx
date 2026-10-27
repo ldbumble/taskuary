@@ -84,6 +84,7 @@ import SetupLine from "./SetupLine.jsx";
 import { BriefCard, CardNav, DashboardCard, DayOpener, onYouCount, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, WalkCard, sourceColor } from "./assistantCards.jsx";
 import { summarize } from "./walkSummary.js";
 import { refreshToday, useCalendarToday } from "./calendarToday.js";
+import { onFirstRun, readFirstRun } from "./firstRunState.js";
 import FeedView from "./FeedView.jsx";
 import { MORE_PX, backAt, dueWord, placed, pulledRow, sectionDone, sectionNext } from "./funnelPile.js";
 import { isImportant, level as priorityOf } from "./priority.js";
@@ -1731,13 +1732,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // what is next, for the rail - read again whenever the first run moves a step (FirstRun fires tq-setup-changed)
     // ...and the first read answers both: the open and the rail's todo were two GETs of the same answer at every start (the overnight
     // setup walk, 2026-10-26)
-    const todo = (first) => api.get("/api/setup/first-run").then(({ data }) => {
-      if (first === true && data?.step && data.dismissed === false) setFirstRun(true);
-      setSetupTodo(data?.todo || "");
-    }).catch(() => {});
-    todo(true);
+    // ...and the read is setup's one shared read (firstRunState.js): every answer setup's canvas and rail take moves the todo too
+    readFirstRun().then((data) => { if (data?.step && data.dismissed === false) setFirstRun(true); }).catch(() => {});
+    const offRead = onFirstRun((data) => setSetupTodo(data?.todo || ""));
+    const todo = () => readFirstRun().catch(() => {});
     window.addEventListener("tq-first-run", show); window.addEventListener("tq-setup-changed", todo);
-    return () => { window.removeEventListener("tq-first-run", show); window.removeEventListener("tq-setup-changed", todo); };
+    return () => { offRead(); window.removeEventListener("tq-first-run", show); window.removeEventListener("tq-setup-changed", todo); };
   }, []);       // the launch still reading the mail (SinceBlock): the counts wait
   useEffect(() => onLive(["chat-changed"], (ev) => {
     setPhoneBusy(!!ev?.thinking);

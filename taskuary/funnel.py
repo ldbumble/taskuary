@@ -596,6 +596,10 @@ def idle_state(store, tid) -> dict:
         return out('interrupted', f'Taskuary closed while {agent} had this, so its work stopped there. Nothing restarts by itself.' + old)
     if held_for_repo(t):
         # plain words: "repository" is on the jargon list (words.json) - the row's own Choose where the code is answers it
+        # ...and a run that found the work is in other code asked to move it (wrapup.asks_to_move): it did start, so it never says "before it can start"
+        if store.last_transcript(tid):
+            return out('held', f'Waiting for you. {agent[:1].upper() + agent[1:]} found the work is not in this code and asks where to move it - '
+                               'change where the code is and it starts there.', 'asks to move - where is the code?')
         return out('held', f'Waiting for you. It needs to know where the code is before {agent} can start.' + old, 'not started - it needs to know where the code is')
     # THE QUEUE SAYS WHY (A3, 2026-09-25): a full house, a start that keeps failing and a CLI that is not installed all
     # read "nothing has started it" - only the Tasks list showed the queue

@@ -13,7 +13,7 @@ TRANSCRIPT_SYSTEM = (
     "the owner, who has now closed the session. Write the owner's record of what happened, from "
     'the transcript ALONE - never a step it did not take, never a claim it did not make.\n'
     'Output ONLY this JSON: {"determination": "...", "actions": "...", "summary": "...", '
-    '"outcome": "did_work|nothing_to_do"} - '
+    '"outcome": "did_work|nothing_to_do|elsewhere", "elsewhere": "..."} - '
     'determination is what was decided and why, in plain language and at most 80 words. '
     'actions is only what was actually changed or produced (files, commands, records, ids), '
     'at most 80 words; do not repeat the determination. summary is the concrete outcome for '
@@ -22,7 +22,11 @@ TRANSCRIPT_SYSTEM = (
     'outcome is nothing_to_do ONLY when the session changed, produced and chased nothing because there '
     'was nothing here to do at all - the message turned out to be a notice, a reminder, a newsletter or '
     "somebody else's job. Anything the session did, found out or settled for the owner is did_work, and "
-    'that includes looking and reporting that the problem is not real.')
+    'that includes looking and reporting that the problem is not real.\n'
+    'outcome is elsewhere when the session concluded that the work it was asked for is real but is not in the code it was '
+    'opened in - it lives in another repository or codebase and has to be done there. That is never nothing_to_do. The '
+    'elsewhere field then names the repository the session said the work is likely in, as it wrote it, or "" when it could '
+    'not tell; for every other outcome it is "".')
 
 
 def report_from_transcript(store, task_id: int, transcript: str, agent: str = '', final_message: str = '') -> dict:
@@ -46,6 +50,8 @@ def report_from_transcript(store, task_id: int, transcript: str, agent: str = ''
         # Absent or unrecognised means did_work - the ending that drafts, because swallowing a reply
         # somebody is waiting for is the worse failure of the two.
         if j.get('outcome') == 'nothing_to_do': rep['outcome'] = 'nothing_to_do'
+        # ...and work that lives in another repository is not done here: that ending ASKS to move it (asks_to_move), never closes
+        if j.get('outcome') == ELSEWHERE: rep |= {'outcome': ELSEWHERE, 'elsewhere': ' '.join(str(j.get('elsewhere') or '').split())[:120]}
         return rep
     except Exception as e:
         logger.warning(f'transcript report failed for task {task_id}: {e}')
@@ -367,6 +373,36 @@ def left_open(asked: list) -> str:
 def with_left_open(body: str, left: str) -> str: return f'{left}\n\n{body}'.strip() if left else body
 
 
+# ── the work is somewhere else ──────────────────────────────────────────────────────────
+# A coding agent started in the wrong repository searched it, found the job was not there, and closed the task "Nothing to do"
+# with "not a <repo> problem - it has to be diagnosed in the repo that runs that job" (the owner, 2026-10-27: "coding agent should
+# be able to at least ask can I change repos"). The work was real; only its place was wrong. So that ending ASKS: the task stays
+# open, held on where the code is (funnel.HELD_REPO) - the row's own Change where the code is is its move, and choosing starts
+# the agent there - and the question names the repository the agent thinks the work is in, when it said one.
+ELSEWHERE = 'elsewhere'
+def moves(rep) -> bool: return (rep or {}).get('outcome') == ELSEWHERE
+
+
+def move_question(store, task_id: int, rep: dict) -> str:
+    "The question the ending asks, from the agent's finding: where it looked, and where it thinks the work is."
+    from .terminal import repo_tag
+    here, there = repo_tag(store.get_task(task_id) or {}), str((rep or {}).get('elsewhere') or '').strip()
+    here = f'in {here}' if here and here != there else 'in the code it was opened in'
+    return (f'The agent found this is not {here} - it looks like {there}. Move it there?' if there
+            else f'The agent found this is not {here}. Which code should it move to?')
+
+
+def asks_to_move(store, task_id: int, rep: dict, actor: str = 'agent', keep_open: bool = False) -> dict:
+    "The run ends on the move question: no reply drafted, nothing closed, the task held until the owner says where the code is."
+    from . import funnel
+    store.tag_task(task_id, funnel.HELD_REPO, True, actor)
+    store.add_comment(task_id, actor, 'agent', f'{move_question(store, task_id, rep)} It was left open and no reply was drafted - '
+                                               'change where the code is and the agent starts there.')
+    if not keep_open: store.update_task(task_id, {'Status': 'open'}, actor)
+    store.audit('task', task_id, 'asks_to_move', actor, detail={'elsewhere': (rep or {}).get('elsewhere') or ''})
+    return {'drafting': False, 'message_id': None, 'can_send': False, 'send_block': '', 'freshness': 'unchecked', 'asks': 'repo'}
+
+
 def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'agent',
            complete_result: str = None, owner_done: bool = False, keep_open: bool = False, no_reply: bool = False) -> dict:
     """The end of finished work: the conversation is refreshed, the ask reassessed, and the responder
@@ -376,6 +412,9 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'age
     `keep_open` is ENDING THE RUN without ending the task: everything here still happens - the
     refresh, the reassessment, the draft - and the task's own status is left exactly as it was. The
     session's end is not a verdict on the work."""
+    # THE WORK IS IN ANOTHER REPOSITORY: not done, and nobody is answered yet - the owner says where it moves (asks_to_move).
+    # The owner's own Mark done is still theirs to make.
+    if moves(rep) and not owner_done: return asks_to_move(store, task_id, rep, actor, keep_open)
     # a held draft is itself proof there is someone waiting on an answer, so it names the message
     # to reply to when reply_target cannot find one (a chat thread, a promoted feed item)
     held = store.held_review(task_id) or {}
@@ -740,8 +779,10 @@ def _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, 
         _question(handbook.learn_from_session, store, tid, text, agent, repo=term.repo_tag(task) or '') if handbook.enabled(store) else None,
         _question(playbooks.draft, store, tid, text, agent)])
     _stage(tid, 'report')
-    left = left_open(unanswered(store, tid))       # read while the session is still up: its questions lead the result
+    asked = unanswered(store, tid)                 # read while the session is still up: its questions lead the result
     rep = report_from_transcript(store, tid, text, agent, final_message='' if cut else final_message)
+    # ...and so does the move it asks for, when the work turned out to be in another repository (asks_to_move)
+    left = left_open(asked + ([{'text': move_question(store, tid, rep)}] if moves(rep) and not (close and actor == 'owner') else []))
     report = with_left_open(resolution_text(rep), left)
     # SAVE FIRST, close after (PW-231/233): the result and the final answer land before the pty goes. A save that fails raises here - the session stays, the report is
     # not written, nothing reads as finalised - and the caller may retry.
@@ -799,7 +840,7 @@ def _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, 
     _ended(store, tid, close, actor)
     return {'wrap': 'done', 'taskId': tid, 'report': report, 'proposed': proposed,
             'drafting': bool(fin.get('drafting')), 'can_send': bool(fin.get('can_send')), 'send_block': fin.get('send_block') or '',
-            'freshness': fin.get('freshness') or 'unchecked', 'artifacts': [artifact] if artifact else []}
+            'freshness': fin.get('freshness') or 'unchecked', 'artifacts': [artifact] if artifact else [], 'asks': fin.get('asks')}
 
 
 def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,

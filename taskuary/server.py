@@ -4652,7 +4652,17 @@ def agent_message(mid: int, request: Request, task_id: int):
     if not m: raise HTTPException(404, 'no such message')
     return m
 
-class AgentFile(BaseModel): name: str; data: str                  # data is base64: the CLI reads the file, the server never opens a path it is handed
+@app.get('/api/agent/memory')
+def agent_memory(request: Request, task_id: int, section: str = ''):
+    """`taskuary --memory [SECTION]` (and the owner_memory tool): LEARNED.md, read on demand - an agent's brief no longer carries it
+    (the owner, 2026-10-27: "progressive disclosure"). Never on a stranger's task: what the owner is like is not a stranger's to read."""
+    from . import learned_cut
+    _owner_history(request, task_id)
+    if section and section not in learned_cut.SECTIONS: raise HTTPException(422, f"no section {section!r} - one of {', '.join(learned_cut.SECTIONS)}")
+    text = learned_cut.whole(store, 'agents', target=f'task:{task_id}', sections=(section,) if section else None)
+    return {'text': text, 'says': text or 'nothing learned about the owner yet' + (f' under {learned_cut.TITLE[section]}' if section else '')}
+
+class AgentFile(BaseModel): name: str; data: str                 # data is base64: the CLI reads the file, the server never opens a path it is handed
 class AgentReplyBody(BaseModel): task_id: int; text: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; follow_up: bool = False
 
 def _agent_files(files):

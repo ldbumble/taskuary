@@ -11,6 +11,8 @@ import { installOneLine } from "./oneLine.js";
 installOneLine();
 import { installTouchHints } from "./touchHint.js";
 installTouchHints();
+import { installSecondClick } from "./secondClick.js";
+installSecondClick();
 
 // a crash that draws no Assistant line still leaves its report ready behind the Help icon
 window.addEventListener("error", (e) => record(e.error || e.message));

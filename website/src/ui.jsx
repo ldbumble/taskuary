@@ -14,7 +14,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import BlockIcon from "@mui/icons-material/Block";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
-import { onLive } from "./live.js";
+import { onLive, touches } from "./live.js";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { RepoPicker } from "./RepoPicker.jsx";
 import { Md } from "./md.jsx";
@@ -53,6 +53,7 @@ import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import { choice, label as btnLabel } from "./buttons.js";   // buttons.json's words; theme.jsx owns `label`
 import { asUtc, setTz, fmtTime } from "./dates.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
+import { readContacts } from "./contacts.js";
 export { agentAssignee, assignedAgent, assigneeLabel } from "./agentIdentity.js";
 import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2, label } from "./theme.jsx";
 
@@ -1332,7 +1333,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
     if (!taskId) return;
     try { setWait((await api.get(`/api/tasks/${taskId}/waitroom`)).data); } catch { setWait({ data: [], state: null }); }
   }, [taskId]);
-  React.useEffect(() => { load(); return onLive("task-changed", load); }, [load]);
+  React.useEffect(() => { load(); return onLive("task-changed", (ev) => { if (touches(ev, taskId)) load(); }); }, [load, taskId]);
   React.useEffect(() => () => clearTimeout(peekTimer.current), []);
   const lines = text.split("\n").map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim()).filter(Boolean).length;
   const queue = async () => {
@@ -1843,9 +1844,10 @@ export const FilterPills = ({ options, value, onChange }) => (
 // is chosen.
 //
 // freeSolo on purpose: the right recipient is often somebody who has never written to you.
+// ...one read shared by every picker drawn within a minute (contacts.js)
 export const useContacts = () => {
   const [people, setPeople] = useState([]);
-  useEffect(() => { api.get("/api/people").then(({ data }) => setPeople(data.data || [])).catch(() => {}); }, []);
+  useEffect(() => { let on = true; readContacts((u) => api.get(u)).then((p) => { if (on) setPeople(p); }).catch(() => {}); return () => { on = false; }; }, []);
   return people;
 };
 
@@ -1929,13 +1931,15 @@ export const ToRow = ({ to, onSave, disabled }) => {
 export const CcRow = ({ cc, setCc, channel }) => {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
+  const [err, setErr] = useState("");
   const people = useContacts();
   if (String(channel || "").toLowerCase() !== "email") return null;   // a chat has members, not recipients
+  // ...a name nobody matched is said, as To says it (the overnight walk, 2026-10-27: Enter on "gail" did nothing and said nothing)
   const add = (a) => {
     const v = String(a || "").trim();
-    if (!v.includes("@")) return;
+    if (!v.includes("@")) { if (v) setErr("pick a person or type their email address"); return; }
     setCc([...(cc || []).filter((x) => x.toLowerCase() !== v.toLowerCase()), v]);
-    setText(""); setOpen(false);
+    setText(""); setErr(""); setOpen(false);
   };
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.75, flexWrap: "wrap", minWidth: 0 }}>
@@ -1953,7 +1957,7 @@ export const CcRow = ({ cc, setCc, channel }) => {
         <ContactPicker people={people} value={text} onChange={setText} onPick={add} autoFocus
           placeholder="name or email address" sx={{ width: 260 }}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(text); }
-                              if (e.key === "Escape") setOpen(false); }} />
+                              if (e.key === "Escape") { setOpen(false); setErr(""); } }} />
       ) : (
         <Typography {...pressable(() => setOpen(true))}
           sx={{ ...FOCUS_RING, fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600,
@@ -1961,6 +1965,7 @@ export const CcRow = ({ cc, setCc, channel }) => {
           {(cc || []).length ? "+ someone else" : "+ loop someone in"}
         </Typography>
       )}
+      {!!err && open && <Typography variant="caption" sx={{ color: "#6b2733" }}>{err}</Typography>}
     </Box>
   );
 };

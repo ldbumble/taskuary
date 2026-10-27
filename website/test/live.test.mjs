@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { onLive, holdLive, connect, liveUp, __testFanout, __testReset } from "../src/live.js";
+import { onLive, holdLive, connect, liveUp, taskIdsOf, touches, __testFanout, __testReset } from "../src/live.js";
 
 function FakeWS(url) {
   this.url = url;
@@ -237,3 +237,13 @@ test("liveUp is true only while the socket is open", () => withSocket(() => {
   FakeWS.instances[0].close();
   assert.equal(liveUp(), false);
 }));
+
+test("an event names every task its window touched, or none - and then it is about all of them (the intake walk, 2026-10-26)", () => {
+  assert.deepEqual(taskIdsOf({ type: "task-changed", task_id: 42 }), [42]);
+  assert.deepEqual(taskIdsOf({ type: "task-changed", task_id: 42, task_ids: [32, 42] }), [32, 42]);
+  assert.equal(taskIdsOf({ type: "task-changed" }), null);
+  assert.equal(touches({ task_id: 42 }, 32), false, "mail on other work does not re-read the open task");
+  assert.equal(touches({ task_id: 42, task_ids: [32, 42] }, 32), true);
+  assert.equal(touches({ type: "hello" }, 32), true, "an event that names no task is about every one");
+  assert.equal(touches({ task_id: "32" }, 32), true);
+});

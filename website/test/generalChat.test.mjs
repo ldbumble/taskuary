@@ -21,7 +21,7 @@ test("the general workspace has no view switcher - the conversation is the only 
 
 test("the chat renders with or without a live session - a session only adds the browser split", () => {
   // one tree either way: the pane takes a null sid, so a session that arrives mid-turn never remounts the thread (2026-10-02)
-  assert.match(workspace, /<SessionPane sid=\{session\?\.sid \|\| null\}[^>]*expectBrowser=\{wantsBrowser\(task\)\}>\{thread\}<\/SessionPane>/);
+  assert.match(workspace, /<SessionPane sid=\{\(!noTools && session\?\.sid\) \|\| null\}[^>]*expectBrowser=\{wantsBrowser\(task\)\}>\{thread\}<\/SessionPane>/);
 });
 
 test("the chat takes the room on the task page, the way a live session does", () => {
@@ -55,6 +55,6 @@ test("on the canvas the chat's brain and Full screen sit in the agent step's hea
   assert.match(tasks, /tools=\{inRow && workspaceMode === "general" && liveSession\s*\? <Box ref=\{setChatTools\}/);
   assert.match(tasks, /noTools=\{!liveSession\}/);
   assert.match(tasks, /toolsAt=\{canvas \? chatTools : null\}/);
-  assert.match(workspace, /\{!dock && !noTools && toolsAt && !full && createPortal\(tools, toolsAt\)\}/);
+  assert.match(workspace, /\{!dock && !noTools && toolsAt && !full && <>\{createPortal\(tools, toolsAt\)\}<\/>\}/);
   assert.match(workspace, /\{!dock && !noTools && !\(toolsAt && !full\) && <Box sx=\{\{ minHeight: 39,/);
 });

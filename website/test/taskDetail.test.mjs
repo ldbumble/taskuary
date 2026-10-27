@@ -15,7 +15,9 @@ test("a task read ahead is held for its view, once per task, and a goal brings i
   assert.equal(heldTask(4), null);
   await prefetchTask(api, 4); await prefetchTask(api, 4); await new Promise((r) => setTimeout(r, 0));
   assert.deepEqual(calls.filter((u) => u === "/api/tasks/4"), ["/api/tasks/4"], "one read per task while it is fresh");
-  assert.ok(calls.includes("/api/tasks/4/waitroom") && calls.includes("/api/terminals"), "its waiting room and the sessions come with it");
+  assert.ok(calls.includes("/api/terminals"), "the sessions come with it");
+  // ...and never its waiting room: the view no longer draws it, and its own 3 s poll read it in series behind every task read (2026-10-26)
+  assert.ok(!calls.some((u) => u.endsWith("/waitroom")), "no waiting room read for a view that draws none");
   assert.equal(heldTask(4).task.TaskId, 4);
   await prefetchTask(api, 9); await new Promise((r) => setTimeout(r, 0));
   assert.equal(heldSteps(9)[0].text, "Book the room");

@@ -3,7 +3,7 @@
 // for tq-setup-go). Read from the first run's own state, again whenever a step moves (tq-setup-changed).
 import React, { useEffect, useState } from "react";
 import { Box, Typography } from "@mui/material";
-import api from "./api";
+import { onFirstRun, readFirstRun } from "./firstRunState.js";
 import { DIM, FAINT, INK } from "./theme.jsx";
 import { stepsOf } from "./setupSteps.js";
 
@@ -15,11 +15,12 @@ export default function SetupSteps() {
     return () => window.removeEventListener("tq-setup-shown", on);
   }, []);
   useEffect(() => {
-    let on = true;
-    const read = () => api.get("/api/setup/first-run").then(({ data }) => on && setSt(data)).catch(() => {});
-    read(); window.addEventListener("tq-setup-changed", read);
-    const id = setInterval(read, 8000);                 // the mail being read moves "Finish" from sorting to ready on its own
-    return () => { on = false; window.removeEventListener("tq-setup-changed", read); clearInterval(id); };
+    // setup's one shared read (firstRunState.js): the canvas reads every few seconds and the rail draws each answer it takes - its own
+    // eight-second read only goes out when nobody has asked lately (the overnight setup walk, 2026-10-26)
+    const off = onFirstRun(setSt), read = () => readFirstRun().catch(() => {});
+    readFirstRun(3000).then(setSt).catch(() => {}); window.addEventListener("tq-setup-changed", read);
+    const id = setInterval(() => readFirstRun(7000).catch(() => {}), 8000);   // the mail being read moves "Finish" from sorting to ready on its own
+    return () => { off(); window.removeEventListener("tq-setup-changed", read); clearInterval(id); };
   }, []);
   const go = (key) => window.dispatchEvent(new CustomEvent("tq-setup-go", { detail: key }));
   return (

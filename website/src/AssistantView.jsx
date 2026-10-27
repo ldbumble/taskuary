@@ -38,8 +38,8 @@ import { readLists } from "./connectorLists.js";
 import { hint as btnHint, label as btn, liveVerb, verbOfRow } from "./buttons.js";
 import { readTurn, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
-import { liveUp, onLive } from "./live.js";
-import { adviceKeyFor, adviceShown, stripWord, taskNote } from "./advice.js";
+import { liveUp, onLive, taskIdsOf } from "./live.js";
+import { adviceKeyFor, adviceShown, nothingToAdd, stripWord, taskNote } from "./advice.js";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 // TASKUARY'S MARK IN THE CHAT (the owner, 2026-09-28: "the taskuary logo is blue and very obvious ... you can change the
@@ -84,6 +84,7 @@ import SetupLine from "./SetupLine.jsx";
 import { BriefCard, CardNav, DashboardCard, DayOpener, onYouCount, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, WalkCard, sourceColor } from "./assistantCards.jsx";
 import { summarize } from "./walkSummary.js";
 import { refreshToday, useCalendarToday } from "./calendarToday.js";
+import { onFirstRun, readFirstRun } from "./firstRunState.js";
 import FeedView from "./FeedView.jsx";
 import { MORE_PX, backAt, dueWord, placed, pulledRow, sectionDone, sectionNext } from "./funnelPile.js";
 import { isImportant, level as priorityOf } from "./priority.js";
@@ -109,6 +110,7 @@ import "./assistantView.css";
 // showing anything, so a stale key restores nothing.
 const WALK_KEY = "taskuary_walk_tid";
 const HOLD_MS = 400;            // the longest a row waits for its item's first decision before it is drawn without one
+const POP_ROOM = 150;          // the least room under the task view the chat pop-up stands in, rather than over the view
 const POP_LIT_MS = 1800;        // how long the chat pop-up shows the owner's line when the answer was only a lit button
 const isOpenWalk = (t) => !!t && t.SourceRef === "assistant:setup" && !["done", "dropped"].includes(t.Status);
 // markers the server writes on a line that are NOT cards (concierge.SETUP_QUESTIONS): the line is its words
@@ -1101,7 +1103,7 @@ function AdvisorNotes({ keyOnTable }) {
         {d === null ? <Typography sx={{ color: FAINT, fontSize: 12 }}>Reading…</Typography>
           : d.none === "no_ai" ? <><Typography sx={{ fontSize: 12.5, color: INK }}>{quietWhy("no ai")}</Typography><ConnectAi variant="outlined" sx={{ mt: 0.5 }} /></>
           : note ? <Typography sx={{ fontSize: 12.5, color: INK }}>{d.label ? `${d.label} - ` : ""}{note.line}</Typography>
-          : <Typography sx={{ color: FAINT, fontSize: 12 }}>{d.label && d.verb !== "next" ? `Nothing to add - ${d.label} is the lit button.` : "Nothing to add on this one."}</Typography>}
+          : <Typography sx={{ color: FAINT, fontSize: 12 }}>{nothingToAdd(d)}</Typography>}
         {rests.length > 0 && <Typography sx={{ fontSize: 11.5, color: FAINT }}>Rests on: {rests.map((r) => r.label).join(" · ")}</Typography>}
       </div>
     </div>
@@ -1196,7 +1198,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   useEffect(() => { if (currentItem?.tid && earlyRef.current?.key !== currentItem.key) actedTid.current = currentItem.tid; }, [currentItem]);
   useEffect(() => onPressed((id) => { if (!/(^|:)next$/.test(String(id || ""))) forgetTasks(actedTid.current ?? null); }), []);
   // ...and a write anywhere - an agent, another tab, a sync - makes that task's held read old (all of them, when it names none)
-  useEffect(() => onLive("task-changed", (ev) => forgetTasks(ev?.task_id ?? null)), []);
+  // ...every task the event's window touched, not the last one's alone (live._merged)
+  useEffect(() => onLive("task-changed", (ev) => { const ids = taskIdsOf(ev); if (!ids) forgetTasks(null); else ids.forEach((t) => forgetTasks(t)); }), []);
   const [continueOn, setContinueOn] = useState(null);  // the walk's Continue: { task, anchor, ref }
   // ...and the owner's notes the Assistant lit it with ("rerun it with these notes: ..."): its box opens holding them, for that task
   const continueNote = useRef(null);
@@ -1625,7 +1628,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // revision: the old pill must go), and when the Advisor's own event names this item or one of its aliases
   // ...and when its lane moves (an agent continued is at work: its "waiting on you" line must go)
   useEffect(() => { readAdvice(onTable); setChanged(null); }, [onTable, readAdvice]);
-  useEffect(() => { if (onTable) readAdvice(onTable, true); }, [currentItem?.view_revision, currentItem?.lane]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // ...the SAME item's revision or lane, that is: a new item is read by the effect above (or by landed, once its answer is in), and this
+  // one fired on the same render as a second read of it - three reads of /api/advice a press of Next (the overnight walk, 2026-10-26)
+  const revFor = useRef(null);
+  useEffect(() => {
+    const k = currentItem?.key || null, was = revFor.current; revFor.current = k;
+    if (onTable && k && k === was) readAdvice(onTable, true);
+  }, [currentItem?.key, currentItem?.view_revision, currentItem?.lane]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => onLive("advice", (ev) => {
     const key = adviceKeyFor(ev, currentRef.current || (cardRef.current ? { key: cardRef.current } : null));
     if (key) readAdvice(key, true);
@@ -1634,7 +1643,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // an act refused), so a line judged before the Send is never read back over its "Sent" (2026-10-19)
   const onTableRef = useRef(null);
   useEffect(() => { onTableRef.current = onTable; }, [onTable]);
-  useEffect(() => onPressed(() => { if (onTableRef.current) readAdvice(onTableRef.current, true); }), [readAdvice]);
+  // ...except Next: it puts the item down, and the read went for the item being left a moment before the next one's own (overnight walk)
+  useEffect(() => onPressed((id) => { if (onTableRef.current && !/(^|:)next$/.test(String(id || ""))) readAdvice(onTableRef.current, true); }), [readAdvice]);
   // LIT AND PRESSED (the deep dive, 2026-10-20): each press on the row says what was lit and the revision it was judged at
   // (advisor.press) - the evidence the owner's moves are learned from. EVERY press, lit or not (phase B, 2026-10-23: only a press
   // under a shown line was sent): what the row had filled and what else it offered (pressLog.deskPress). Nothing on screen changes.
@@ -1727,13 +1737,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // ...until the owner FINISHES it (Finish setup / Walk me through my tasks): it used to end itself on the first sorted email and
     // leave a half-made day under a lone button (the owner, 2026-10-15). An install that was working before is finished (settle_existing),
     // and a server that does not say (an older one) is never read as "not finished": only an explicit false opens setup
-    api.get("/api/setup/first-run").then(({ data }) => { if (data?.step && data.dismissed === false) setFirstRun(true); }).catch(() => {});
     const show = () => setupRef.current?.();                    // the top bar's setup chip asks for the cards
     // what is next, for the rail - read again whenever the first run moves a step (FirstRun fires tq-setup-changed)
-    const todo = () => api.get("/api/setup/first-run").then(({ data }) => setSetupTodo(data?.todo || "")).catch(() => {});
-    todo();
+    // ...and the first read answers both: the open and the rail's todo were two GETs of the same answer at every start (the overnight
+    // setup walk, 2026-10-26)
+    // ...and the read is setup's one shared read (firstRunState.js): every answer setup's canvas and rail take moves the todo too
+    readFirstRun().then((data) => { if (data?.step && data.dismissed === false) setFirstRun(true); }).catch(() => {});
+    const offRead = onFirstRun((data) => setSetupTodo(data?.todo || ""));
+    const todo = () => readFirstRun().catch(() => {});
     window.addEventListener("tq-first-run", show); window.addEventListener("tq-setup-changed", todo);
-    return () => { window.removeEventListener("tq-first-run", show); window.removeEventListener("tq-setup-changed", todo); };
+    return () => { offRead(); window.removeEventListener("tq-first-run", show); window.removeEventListener("tq-setup-changed", todo); };
   }, []);       // the launch still reading the mail (SinceBlock): the counts wait
   useEffect(() => onLive(["chat-changed"], (ev) => {
     setPhoneBusy(!!ev?.thinking);
@@ -1753,8 +1766,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   useEffect(() => {
     if (!active) return undefined;
     return onLive("task-changed", (ev, meta) => {
-      const tid = Number(ev?.task_id) || 0;
-      if (tid && tid === currentRef.current?.tid && !coveredByReload(meta, forcedLoadStartedAt.current)) loadPile(true);
+      const tid = Number(currentRef.current?.tid) || 0;
+      if (tid && taskIdsOf(ev)?.includes(tid) && !coveredByReload(meta, forcedLoadStartedAt.current)) loadPile(true);
     }, { wait: 150, max: 600 });
   }, [active, loadPile]);
   // ...but only once there IS a conversation: on the empty welcome it scrolled "Good morning" and the
@@ -2645,7 +2658,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   };
   // `pressed`: the label of the button that did it - the folded card wears it as its badge, and no line is said (the owner, 2026-10-22:
   // "we don't need that text ever"). Given, the act landed already; null, only the settle below does it
+  // ...ONCE per item while its settle is out: a double-click on an FYI batch's "All read, next" posted two settles of the same batch
+  // (the overnight walk, 2026-10-26) - the second click lands before the batch has folded
+  const doneFor = useRef(null);
   const done = async (pressed) => {
+    if (current && doneFor.current === current) return;
+    doneFor.current = current;
+    try { await settleDone(pressed); } finally { doneFor.current = null; }
+  };
+  const settleDone = async (pressed) => {
     // the card folds to its line the moment its verb is pressed - see interactiveCardIndex
     setMsgs((m) => { const i = interactiveCardIndex(m);
       return i < 0 ? m : m.map((x, j) => (j === i ? { ...x, done: true, ...(pressed ? { pressed } : {}) } : x)); });
@@ -3234,7 +3255,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const popLines = useMemo(() => (popOn ? shown.map((m, i) => [m, i]).filter(([, i]) => i > lastCardIdx).slice(-12) : []), [popOn, shown, lastCardIdx]);
   const popPending = popOn && (busy || phoneBusy);
   const [popOpen, setPopOpen] = useState(false), [boxOpen, setBoxOpen] = useState(false);
-  const popRef = useRef(null), popBodyRef = useRef(null), boxRef = useRef(null), popOnRef = useRef(false);
+  const popRef = useRef(null), popBodyRef = useRef(null), boxRef = useRef(null), popOnRef = useRef(false), rowDown = useRef(false);
   popOnRef.current = popOn;
   const boxWide = boxOpen || !!text.trim() || !!pics.imgs.length || !!emojiEl;
   // THE PILL'S HINT FITS THE PILL: with a row beside it and no task on the table the box is the 220px pill, and the long hint ("Ask
@@ -3277,6 +3298,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     return () => { document.removeEventListener("pointerdown", down, true); document.removeEventListener("keydown", key); };
   }, [popOpen]);
   // ...its newest words in view, as the chat's end is
+  // ...AND STANDS IN THE ROOM UNDER THE VIEW WHEN THERE IS ENOUGH OF IT (the overnight walk, 2026-10-26): most views end well above the dock,
+  // and the pop-up still rose to 45% of the canvas over them - "reply saying Thursday works" answered over the right half of the very draft
+  // it was about. It is no taller than the gap under the view; a view with too little under it is covered as before, the newest words in view
+  const [popRoom, setPopRoom] = useState(0);
+  useLayoutEffect(() => {
+    if (!popOpen) return;
+    const view = popTable && bodyRef.current?.querySelector(`[data-tq-canvas-item="${CSS.escape(popTable)}"]`), floor = popRef.current?.parentElement;
+    setPopRoom(view && floor ? Math.floor(floor.getBoundingClientRect().top - view.getBoundingClientRect().bottom - 8) : 0);
+  }, [popOpen, popTable, popLines.length, popPending, bodyH]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const popTall = Math.max(180, Math.round(bodyH * 0.45)), popMax = popRoom >= POP_ROOM ? Math.min(popTall, popRoom) : popTall;
   useLayoutEffect(() => { const el = popBodyRef.current; if (el && popOpen) el.scrollTop = el.scrollHeight; }, [popOpen, popLines.length, popPending, words]);
   // ...a line of its own that stands under the card on the table only while the answer is on its way (tq-pending, assistantView.css) -
   // or in the pop-up over it, where the answer it waits for will be
@@ -3448,7 +3479,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               tall at most, scrolling inside. Shut, it stays mounted: the last line's chips are on the row either way */}
           {popOn && (!!popLines.length || popPending) && (
             <div className="tq-chat-pop" data-tq-chat-pop="" role="dialog" aria-label="Taskuary's answer" ref={popRef} hidden={!popOpen}
-              style={{ maxHeight: Math.max(180, Math.round(bodyH * 0.45)) }}>
+              style={{ maxHeight: popMax }}>
               <div className="tq-chat-pop-head"><TaskuaryMark size={16} /><b>Taskuary</b>{currentItem?.ref && <span>{`· ${currentItem.ref}`}</span>}<span style={{ flex: 1 }} />
                 <Tooltip title="Past chats"><IconButton size="small" aria-label="Past chats" onClick={() => { setPopOpen(false); openChats(); }}><HistoryIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip>
                 <IconButton size="small" aria-label="Close the answer" onClick={() => setPopOpen(false)}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></div>
@@ -3481,12 +3512,21 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           {/* ONE ROW: the row's groups and the box share a line (the one-row chat bar, 2026-10-26) - the box a pill at its end while at rest,
               widened while it is used, the groups folding into their ▾ for the room (ActionRow measures what is left; Next and the lit
               move never fold). With no row - the day's opener, a phone, whose row rides with its task view - the box is the whole line */}
-          <div className="tq-dock-line">
+          {/* ...A PRESS ON THE ROW LANDS WHERE IT WAS AIMED (the overnight walk, 2026-10-26): the press took focus from the wide box, the box shut
+              to its pill on that mousedown, the folded groups came back and slid the lit Remind me 290 px right before the mouseup - so the
+              click landed on nothing, and the lit button "did nothing" on the first press. The box keeps its width until the press is over */}
+          <div className="tq-dock-line" onPointerDownCapture={(e) => {
+            if (boxRef.current?.contains(e.target)) return;
+            rowDown.current = true;
+            const up = () => { window.removeEventListener("pointerup", up, true); window.removeEventListener("pointercancel", up, true);
+              setTimeout(() => { rowDown.current = false; if (!boxRef.current?.contains(document.activeElement)) setBoxOpen(false); }, 0); };
+            window.addEventListener("pointerup", up, true); window.addEventListener("pointercancel", up, true);
+          }}>
           {/* ...and during setup its line is the Advisor's (SetupLine): the move setup fills (FirstRun's tone) is the one lit - nothing
               was, so the line said "pick it" over a plain Back and a greyed Next (2026-10-19) */}
           <ActionRow advised={stripPick || setupLit} hold={!!reading && reading === onTable} />
           <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined} ref={boxRef} data-tq-open={boxWide ? "" : undefined}
-            onFocus={() => setBoxOpen(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setBoxOpen(false); }}>
+            onFocus={() => setBoxOpen(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget) && !rowDown.current) setBoxOpen(false); }}>
             <div className="tq-compose-tools">
             <AttachImage pics={pics} sx={{ color: DIM }} />
             <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />

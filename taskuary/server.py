@@ -480,6 +480,8 @@ class DispatchBody(BaseModel):
     via: int | None = None
     # the Assistant's "Wrote it into New" line whose card this press is: said again as what it started (concierge.said_started)
     said: int | None = None
+    # RUN ANOTHER AGENT: a second agent with a conversation of its own, never the one before picked back up (general.new_run)
+    fresh: bool = False
 class PolicyBody(BaseModel):
     PolicyId: int | None = None; Name: str | None = None; Kind: str | None = None
     Pattern: str | None = None; Action: str | None = None; Reason: str | None = None
@@ -2046,6 +2048,8 @@ def _assistant_payload(task_id: int, session=None):
                  for r in (_artifact_row(a) for a in store.list_task_artifacts(task_id) if a.get('Kind') in ('claude_artifact', 'shown'))]
     from . import outputs
     return {'messages': messages,
+            # the conversations of the agents run before this one (Run another agent): kept on the task, read but never continued
+            'earlier': general.earlier(store, task_id),
             # the files the agent made for this task (outputs.py): listed on the canvas, and a chip where an answer names one
             'outputs': outputs.listing(task_id),
             # ONE ENTRY PER CLI, and only the installed ones: this listed a provider per worker
@@ -3725,6 +3729,8 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
                 raise HTTPException(422, f'{body.agent} is a coding profile - it cannot run a non-coding task')
             store.update_task(tid, {'Assignee': f'agent:{body.agent}'}, ACTOR)
             task = store.get_task(tid)
+        # ...and Run another agent starts a NEW conversation: without it this resumed the stopped one and, nothing typed, sent nothing
+        if body.fresh and not had_session: general.new_run(store, tid, ACTOR)
         try:
             session = general.start_session(store, tid, model=body.model, pick=body.pick or None, actor=ACTOR)
         except (ValueError, RuntimeError) as e:

@@ -2182,6 +2182,7 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
         put({'type': kind, 'name': name, 'detail': detail})
 
     def work():
+        session = None
         try:
             fresh = _refresh_chat_context(task_id=task_id)
             if fresh.get('polled'):
@@ -2211,6 +2212,12 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
             # the browser shows this under the question now; the log is for the run nobody was
             # watching, and for the owner who can only report that nothing happened
             logger.warning(f'assistant stream for task {task_id} failed: {e}')
+            # ...SAID ONCE ITS SESSION IS DOWN: a failed turn's session closes 0.1 s after send_prompt raises (general.py), and the page
+            # reads the conversation again on this event - it found the dead session still alive and kept "Agent is working" and Stop
+            # and save over a CLI that had died mid-turn (the agents walk, 2026-10-26). The dock's chat and a stopped turn stay open.
+            if session is not None and not cancel.is_set() and not general.is_dock(store.get_task(task_id)):
+                end = time.time() + 3
+                while session.alive and time.time() < end: time.sleep(0.05)
             put({'type': 'error', 'error': str(e)})
 
     threading.Thread(target=work, daemon=True).start()

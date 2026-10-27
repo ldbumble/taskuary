@@ -354,7 +354,7 @@ function useClose(card, onDone) {
 // the task page's own acts, by their buttons.json verbs - the same words the task page draws
 const TASK_ACTS = [["not_a_task", "remove"], ["handoff", "forward"], ["reshape", "split"]].map(([act, v]) => [act, btn(v), btnHint(v)]);
 
-// a card's word that is the Advisor's to light, never one of the row's own leads (the owner, 2026-10-27: Switch it off on a report)
+// a card's word that is the Advisor's to light, never one of the row's own leads (the owner, 2026-10-27: Pause this report on a report)
 const QUIET = new Set(["report_off"]);
 
 export function Foot({ verb, then, where, covers = [], close, onDone, more, promote, extra = [], inline = false, openTask, taskId, moves = false }) {
@@ -386,7 +386,7 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
     // PIECE of it (a draft under a task, YourMove's send) stays on the piece. Mark done is never behind More.
     ...movesOf(verb, moves ? "next" : "decide", "v"),
     ...(lifted ? [{ ...asVerb(lifted, "decide"), tone: "p" }] : []),
-    // ...save Switch it off, which waits behind More for the Advisor to light it - a lit button is always in view (rowOf)
+    // ...save Pause this report, which waits behind More for the Advisor to light it - a lit button is always in view (rowOf)
     ...words.map((a, i) => asVerb(a, (i < 3 && !QUIET.has(a.verb)) || a.verb === "close" ? "decide" : "more")),
   ] : null, rowed, nav.ref);
   return (

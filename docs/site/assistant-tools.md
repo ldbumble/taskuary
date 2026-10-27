@@ -131,7 +131,7 @@ The "Run it again" button: run the report on the table again.
 
 ### `report_off`
 
-The "Switch it off" button: switch the report on the table off its clock - only when its findings are about something the owner said they do not care about.
+The "Pause this report" button: pause the report on the table - off its clock - only when its findings are about something the owner said they do not care about.
 
 <p class="runs">Brings up its button for you to press.</p>
 

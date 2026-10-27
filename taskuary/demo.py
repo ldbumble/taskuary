@@ -431,6 +431,13 @@ OWNER_EMAIL = 'alex@northwind.example'
 PEOPLE = [('Marcus Reed', 'mreed@northwind.example'), ('Priya Shah', 'pshah@northwind.example'),
           ('Tom Alvarez', 'talvarez@vendor.example'), ('Ruth Bennett', 'rbennett@northwind.example')]
 
+# a freight vendor's people and two colleagues, as Microsoft's directory would give them - never written to in the demo's mail
+DIRECTORY = [{'email': 'lortiz@dynamo.example', 'name': 'Lena Ortiz', 'company': 'Dynamo Freight', 'title': 'Billing coordinator'},
+             {'email': 'vhale@dynamo.example', 'name': 'Victor Hale', 'company': 'Dynamo Freight', 'title': 'Dispatch lead'},
+             {'email': 'nprice@dynamo.example', 'name': 'Nora Price', 'company': 'Dynamo Freight', 'title': 'Account manager'},
+             {'email': 'gmoreno@northwind.example', 'name': 'Gail Moreno', 'company': 'Northwind', 'title': 'Controller'},
+             {'email': 'eblake@northwind.example', 'name': 'Erin Blake', 'company': 'Northwind', 'title': 'Payroll lead'}]
+
 SEEDS = [
     # (channel, who, subject, body, what triage did, why)
     ('email', 0, 'Month-end close is short by 4,180',
@@ -650,6 +657,9 @@ def seed(store) -> int:
     f = Factory(store)
     f.actor = 'triage'                     # not the test factory's 't': it is printed on every task
     store.set_setting('owner_email', OWNER_EMAIL, 'demo')
+    # what a connected directory named once, so To and Cc can find a vendor's people by their company (peoplesearch.DIR_KEY)
+    from . import peoplesearch
+    peoplesearch.remember(store, DIRECTORY)
     made = 0
     refs = {}
     for i, (channel, who, subject, body, verdict, why) in enumerate(SEEDS):

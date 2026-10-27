@@ -66,11 +66,12 @@ test("every WhatsApp picker draws the name over a small muted JID and filters th
   assert.doesNotMatch(card, /\$\{r\.name \|\| ""\} \$\{r\.jid\}/, "the JID is no longer in what the card searches");
   assert.match(card, /fontWeight: 600 \}\} noWrap>\{waLabel\(r\.jid, r\.name\)\}/);
   assert.match(card, /fontSize: 9\.5, display: "block", opacity: 0\.8 \}\} noWrap>\{r\.jid\}/);
-  for (const f of ["EmailSomeone.jsx", "NewSheet.jsx"]) {
-    const s = src(f);
-    assert.match(s, /\{recipientLabel\((t|target)\)\}<\/Box>/, f);
-    assert.match(s, /\{recipientId\((t|target)\) && <Box sx=\{\{ \.\.\.mono, fontSize: 10, color: FAINT \}\}>/, f);
-  }
+  // ...one chat picker (NewSheet's ChatRecipient), which Email someone draws too
+  const s = src("NewSheet.jsx");
+  assert.match(s, /\{recipientLabel\(target\)\}<\/Box>/);
+  assert.match(s, /\{recipientId\(target\) && <Box sx=\{\{ \.\.\.mono, fontSize: 10, color: FAINT \}\}>/);
+  assert.match(s, /filterOptions=\{\(rows, state\) => withFound\(recipientOptions\(rows, state\.inputValue\), found, state\.inputValue\)\}/);
+  assert.match(src("EmailSomeone.jsx"), /<ChatRecipient key=\{channel\} channel=\{channel\}/);
   assert.match(src("SettingsView.jsx"), /filterOptions=\{\(o, st\) => recipientOptions\(o, st\.inputValue, o\.length\)\}/);
   assert.match(src("ReportsView.jsx"), /const chatFilter = \(opts, st\) => recipientOptions\(opts, st\.inputValue, 8\)/);
 });

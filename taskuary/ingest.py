@@ -2298,17 +2298,25 @@ def _start_general(store, tid, brief: str = None) -> bool:
         return False
 
 
+# THE DRAFTS BEING WRITTEN AT ARRIVAL, by review: a Draft with AI or a Reply pressed on the new row meanwhile waits for this one
+# (server.draft_review) - the card says "No draft yet" until it lands, and the press wrote a second draft over the first, two
+# model calls for one reply (the intake walk, 2026-10-26)
+DRAFTING: dict = {}
+
+
 def _auto_draft(store, tid, rid):
     """A reply needs an answer, not an agent: the MAIN AI writes it and it waits for approval.
     A CLI agent named `responder` takes over only if the owner deliberately configured one.
     A draft that could not be written says so on the review (PW-046) - the item stays reply-needed
     and the owner can retry or write it; it never passes for an fyi or a draft that exists."""
     from . import responder
+    done = DRAFTING.setdefault(rid, threading.Event())
     try: responder.write_draft(store, tid, rid, actor='auto-draft')
     except Exception as e:
         logger.warning(f'auto-draft failed for task {tid}: {e}')
         try: store.set_review_draft_error(rid, str(e)[:300])
         except Exception as e2: logger.warning(f'could not record the draft failure on review {rid}: {e2}')
+    finally: DRAFTING.pop(rid, None); done.set()
 
 
 def _fields(msg, task_id):

@@ -65,7 +65,8 @@ const click = (page, label, within = "body") => page.evaluate((label, within) =>
 const press = async (page, label, within) => { await visible(page, label, within); await click(page, label, within); };
 // the row's verb, on the row or in one of its ▾
 async function rowVerb(page, id) {
-  await page.waitForSelector('[data-tq-row] [data-tq-next]', { timeout: 20000 });
+  // the row is up once it has its verbs - not its Next: a task that is the last item has none (the nav pill, 37de8d86)
+  await page.waitForSelector('[data-tq-row] button[data-tq-verb]', { timeout: 20000 });
   // ...on the row once its write-up has settled (it is greyed while Stop and save writes up)
   let at = await page.waitForSelector(`[data-tq-row] button[data-tq-verb$="${id}"]:not([disabled])`, { timeout: id === "continue" ? 20000 : 3000 }).catch(() => null);
   for (const more of await page.$$("[data-tq-row] [data-tq-more]")) {

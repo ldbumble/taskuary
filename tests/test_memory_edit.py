@@ -145,7 +145,7 @@ def test_the_chat_keeps_gail_moved_to_ops_and_forgets_rays_payroll_line_at_once(
     assert 'Paula' in s.get_doc('learned')
 
 
-def test_the_tools_are_in_the_catalogue_and_a_plain_fact_is_still_a_saved_note(w):
+def test_the_tools_are_in_the_catalogue_and_a_plain_fact_goes_into_the_memory(w):
     from taskuary import operations, toolcatalog
     s, *_ = w
     assert 'memory.wrong' in operations.KINDS and toolcatalog.is_read('memory.about')
@@ -153,4 +153,5 @@ def test_the_tools_are_in_the_catalogue_and_a_plain_fact_is_still_a_saved_note(w
     assert 'memory.about' in toolcatalog.block() and 'memory.wrong' in toolcatalog.block()
     with mock.patch.object(server, 'store', s):
         out = server._run_operation({'kind': 'memory.remember', 'target': 0, 'params': {'note': 'The office opens at 8'}}, None)
-    assert out.get('memoryId') and 'opens at 8' not in s.get_doc('learned'), 'a fact about nobody is a saved note, as before'
+    # a fact about nobody is in LEARNED.md too, where every reader reads it - a saved note was read only on a matching word (2026-10-27)
+    assert not out.get('memoryId') and out['learned']['section'] == 'care' and 'The office opens at 8' in s.get_doc('learned')

@@ -43,7 +43,7 @@ Say things in plain words and they are carried out, with a receipt saying what h
 - **reply and tell them X** — the gist rides into the draft
 - **approve** — the drafted reply goes as it stands
 - **not ours · never again · that sender is noise** — filed, and the verdict written down
-- **remember that X** — kept as a note
+- **remember that X · I don't care about X any more** — kept in your memory (LEARNED.md), where triage, reports, the Advisor and agents read it
 - **send it to the coding agent** — a task, an agent on it, and a link to it
 - **close it** — the task closes (a draft still waiting on it is dismissed first)
 - **stop the agent · wrap it up** — the session ends; wrapping also files the report and closes

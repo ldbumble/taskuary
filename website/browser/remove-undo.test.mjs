@@ -85,6 +85,10 @@ test('Not ours files at once, just this once, and offers From now on under its r
   assert.ok(await notOurs(), 'a row on the table carries Not ours');
   await page.evaluate(() => [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Not ours' && b.getBoundingClientRect().height).click());
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some((b) => /^From now on/.test(b.textContent.trim())), { timeout: 20000 });
+  // ...and it STAYS in reach once the walk has moved on - it was a flash between the receipt and the next item, gone when the row drew once
+  await new Promise((r) => setTimeout(r, 2000));
+  assert.ok(await page.evaluate(() => [...document.querySelectorAll('button')].some((b) => /^From now on/.test(b.textContent.trim()) && b.getBoundingClientRect().height)),
+    'From now on stays on the row after the walk moves on');
   if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
   assert.equal(await page.evaluate(() => [...document.querySelectorAll('.tq-proposal button')].some((b) => /^Cancel$/.test(b.textContent.trim())
     && b.getBoundingClientRect().height)), false, 'no card waits for a yes');

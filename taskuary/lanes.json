@@ -169,6 +169,13 @@
       "hint": "a reply is drafted, and this channel cannot send it from here - copy it and answer there"
     },
     {
+      "key": "owed",
+      "word": "reply owed",
+      "role": "you",
+      "mark": "✍️",
+      "hint": "a reply is owed and nothing is drafted yet"
+    },
+    {
       "key": "goal",
       "word": "on track",
       "role": "info",

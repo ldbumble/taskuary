@@ -54,9 +54,21 @@ CHANNEL_MARKS = {'email': '📧', 'teams': '👥', 'slack': '💬', 'telegram': 
                  'promise': '🤝', 'followup': '📨', 'prep': '📅', 'cold': '🥶'}
 
 
+def owed_no_draft(item: dict) -> bool:
+    """A reply owed with NO DRAFT YET (the owner, 2026-10-27): it rode the 'approve' lane and said "ready to send" with its flag on the
+    rail, the header and the phone over a reply nothing had written. It reads "reply owed" until the draft lands (railStatus.owedNoDraft)."""
+    return bool(item) and item.get('lane') == 'approve' and item.get('kind') == 'review' and item.get('draft') is False and not item.get('not_sent')
+
+
+def lane_word(item: dict) -> str:
+    """The word a row's state wears in a sentence: its lane's, or "reply owed" for a reply nothing has drafted yet."""
+    return lanes.word('owed') if owed_no_draft(item) else (LANE_WORDS.get(str((item or {}).get('lane') or '')) or ('',))[0]
+
+
 def mark_for(item: dict) -> str:
     """The one emoji that identifies a row: its kind's when that says more than its lane's."""
     if not item: return ''
+    if owed_no_draft(item): return KIND_MARKS['owed']
     return KIND_MARKS.get(str(item.get('kind') or '')) or LANE_MARKS.get(str(item.get('lane') or ''), '')
 SOON_MIN, ALERT_MIN, STARTED_MIN = 120, lanes.ALERT_MIN, 5   # calendar visibility window; attention boundary (lanes.json `urgent`); grace after the start
 SETUP_GRACE_MIN = 15              # a walk-through the owner is still in does not raise its own hand

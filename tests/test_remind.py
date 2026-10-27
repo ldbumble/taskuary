@@ -101,6 +101,24 @@ class ToolTests(unittest.TestCase):
         self.assertTrue(remind.waiting(s.get_task(t)))
         self.assertIn('under For later on your rail', concierge.receipt(s, done))
 
+    def test_the_said_day_rides_the_lit_remind_me_and_the_picker_road_takes_it(self):
+        """"remind me Monday" lit Remind me and its picker had no Monday, while the phone kept the day (the owner, 2026-10-27): the light
+        carries the day - its date and its words - and the picker's road reads that date back as the same day."""
+        s = store(); t = asked(s)
+        call = {'kind': 'task.defer', 'params': {'until': 'monday', 'ref': task_ref(t)}}
+        llm = lambda *a, **k: 'Putting it away.\nCALL: ' + json.dumps(call)
+        with mock.patch.object(server, 'store', s):
+            light = concierge.say(s, 'remind me Monday', llm=llm)['light']
+            at = remind.parse('monday')
+            self.assertEqual((light['verb'], light['day']), ('defer', {'until': at[:16], 'day': remind.when(at)}))
+            self.assertTrue(light['day']['day'].startswith('Mon '), light['day'])
+            self.assertFalse(remind.waiting(s.get_task(t)), 'lit, never put away on the words')
+            self.assertEqual(TestClient(server.app).post(f'/api/tasks/{t}/remind', json={'until': light['day']['until']}).status_code, 200)
+        self.assertEqual(str(s.get_task(t)['RemindAt'])[:16], at[:16])
+        # a time said with the day keeps it; no day, an unreadable one, or "none" adds no button
+        self.assertEqual(concierge.said_day('friday 2pm')['until'][11:], '14:00')
+        for none in ('', 'none', 'someday', None): self.assertEqual(concierge.said_day(none), {}, none)
+
     def test_the_task_page_road_is_the_same_one(self):
         s = store(); t = asked(s)
         with mock.patch.object(server, 'store', s):

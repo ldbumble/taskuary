@@ -65,6 +65,23 @@ test("only waiting on you and ready to send wear a badge; every other state is t
   for (const key of [...Object.keys(LANE_META)]) assert.ok(["", "👋", "🏁"].includes(stateStatus(key).badge), key);
 });
 
+test("a reply owed with no draft yet wears no flag and no 'ready to send' - the rail row and the header alike, until the draft lands", () => {
+  const owed = { lane: "approve", kind: "review", draft: false, channel: "email" };
+  const row = railStatus(owed), pill = taskStatus({ rail: owed });
+  assert.equal(row.key, "owed"); assert.equal(row.word, "reply owed"); assert.equal(row.badge, ""); assert.deepEqual(pill, row);
+  assert.equal(railStatus(owed, true).key, "owed", "no draft is no draft to copy either");
+  // ...the draft lands: the flag and the words come back
+  assert.equal(railStatus({ ...owed, draft: true }).word, "ready to send"); assert.equal(railStatus({ ...owed, draft: true }).badge, "🏁");
+  // the task's own read is newer than the rail's: its draft lifts "reply owed", its missing draft puts it there - Tasks tab included
+  assert.equal(taskStatus({ rail: owed, owed: false }).key, "approve");
+  assert.equal(taskStatus({ rail: { ...owed, draft: true }, owed: true }).key, "owed");
+  assert.equal(taskStatus({ state: "approve", owed: true }).word, "reply owed");
+  // an agent's proposed action, a refused send and a row with no draft field keep their own words
+  assert.equal(taskStatus({ rail: { lane: "approve", kind: "action" }, owed: true }).key, "approve");
+  assert.equal(railStatus({ ...owed, not_sent: true }).key, "not_sent");
+  assert.equal(railStatus({ lane: "approve", kind: "review" }).key, "approve");
+});
+
 test("a draft its channel cannot send wears no flag and no 'ready to send' - on the rail row and the header pill alike", () => {
   const teams = { lane: "approve", kind: "review", channel: "teams" };
   const row = railStatus(teams, true), pill = taskStatus({ rail: teams, cantSend: true });

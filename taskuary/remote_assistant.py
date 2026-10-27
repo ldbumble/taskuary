@@ -2158,7 +2158,7 @@ def status_line(item: dict | None) -> str:
     """The card's kicker and the one line under it, in the words lanes.json already holds - the chat
     must not grow a second copy of a vocabulary that took two tables to unify."""
     from . import funnel
-    word = (funnel.LANE_WORDS.get(str((item or {}).get('lane') or '')) or ('',))[0]
+    word = funnel.lane_word(item or {})
     why = ' '.join(str((item or {}).get('why_idle') or (item or {}).get('why') or '').split())
     # the WHY only. A bare lane word repeats the mark the say line already wears ("fyi" under a 👀),
     # and the card's kicker earns its place with a header a chat does not have.
@@ -2623,7 +2623,7 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
     kind, ch = it.get('kind'), str(it.get('channel') or '')
     word = ({'agentdone': lanes.word('agentdone'), 'wrapup': 'reply sent · task still open'}.get(kind)
             or ('your task' if is_own(it) and kind not in ('agent', 'review', 'action') else '')
-            or (funnel.LANE_WORDS.get(str(it.get('lane') or '')) or ('',))[0])
+            or funnel.lane_word(it))
     # ...and the header reads the run the body reads: "agent waiting on you" sat over "failed - <why>" (F5)
     state = agent_state(it, store)
     if state.startswith('failed') and kind not in ('agentdone', 'wrapup'): word = funnel.LANE_WORDS['stopped'][0]

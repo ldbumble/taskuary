@@ -87,7 +87,7 @@
 <div class="entry">
       <a class="page" href="./settings">Settings reference</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Settings reference's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#how-mail-is-sorted">How mail is sorted</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#sharing">Sharing</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#advisor">Advisor</a><a class="sec" href="./settings#coding-agent">Coding agent</a><a class="sec" href="./settings#agent-permissions">Agent permissions</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#routing-policies">Routing policies</a><a class="sec" href="./settings#verdicts-notes">Verdicts &amp; notes</a><a class="sec" href="./settings#audit-integrity">Audit integrity</a></div>
+      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#how-mail-is-sorted">How mail is sorted</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#sharing">Sharing</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#advisor">Advisor</a><a class="sec" href="./settings#coding-agent">Coding agent</a><a class="sec" href="./settings#agent-permissions">Agent permissions</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#routing-policies">Routing policies</a><a class="sec" href="./settings#your-memory">Your memory</a><a class="sec" href="./settings#audit-integrity">Audit integrity</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./faq">FAQ</a>
@@ -141,7 +141,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tr>
 <td><strong>pipe</strong></td>
 <td>the walk and sets of items, and filing mail</td>
-<td>pipe.clear, pipe.defer(select, until), pipe.close(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage</td>
+<td>pipe.clear(select, scope?), pipe.defer(select, until), pipe.close(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage</td>
 </tr>
 <tr>
 <td><strong>reports</strong></td>
@@ -213,9 +213,9 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">Brings up its button for you to press.</p><h3 id="rerun"><code>rerun</code><a class="anchor" href="#rerun" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Run it again&quot; button: run the report on the table again.</p>
 <p class="runs">Brings up its button for you to press.</p><h3 id="remember"><code>remember</code><a class="anchor" href="#remember" aria-label="Link to this section">#</a></h3>
-<p>Keep a fact.</p>
+<p>Keep a fact about how the owner works in their memory.</p>
 <ul>
-<li><code>text</code></li>
+<li><code>text</code> - , their words (&quot;I don&#39;t care about the legacy export job any more&quot; too)</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="setup"><code>setup</code><a class="anchor" href="#setup" aria-label="Link to this section">#</a></h3>
 <p>Build a report, a playbook (how one kind of recurring request is handled from now on), a connection to another system or an automation. Never a to-do, and never an agent&#39;s job.</p>
@@ -420,9 +420,10 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">Brings up its button for you to press.</p><h2 id="pipe">Pipe<a class="anchor" href="#pipe" aria-label="Link to this section">#</a></h2>
 <p>The walk and sets of items, and filing mail.</p>
 <h3 id="pipe-clear"><code>pipe.clear</code><a class="anchor" href="#pipe-clear" aria-label="Link to this section">#</a></h3>
-<p>Clear a SET of items from the pipe at once - takes <code>select</code> (below); read, never deleted. &quot;Clear all the FYI&quot; and &quot;mark the FYI read&quot; - one FYI on the table or many - are this with kind: fyi, never next. Their words naming the set are the press: it is marked read at once and the count said. It only clears: when the owner says &quot;from now on&quot; too, also CALL preference.exclude_sender or preference.sender_rule.</p>
+<p>Clear a SET of items from the pipe at once - takes <code>select</code> (below); read, never deleted. &quot;Clear all the FYI&quot; and &quot;mark the FYI read&quot; - one FYI on the table or many - are this with kind: fyi, never next. Their words naming the set are the press: it is marked read at once and the count said - ALL in their words is every one waiting, never just the batch on the table. It only clears: when the owner says &quot;from now on&quot; too, also CALL preference.exclude_sender or preference.sender_rule.</p>
 <ul>
 <li><code>select</code> - below</li>
+<li><code>scope</code> (optional) - all (the default - every one waiting that <code>select</code> matches, the batch on the table and every one after it: &quot;all the FYI&quot;, &quot;mark every FYI read&quot;, &quot;ignore all the FYI&quot;) | table (only those on the table: &quot;mark these read&quot;, &quot;these four&quot;)</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="pipe-defer"><code>pipe.defer</code><a class="anchor" href="#pipe-defer" aria-label="Link to this section">#</a></h3>
 <p>Put a SET away until a day. Runs at once and the count is said.</p>
@@ -554,11 +555,11 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>name</code></li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="memory-remember"><code>memory.remember</code><a class="anchor" href="#memory-remember" aria-label="Link to this section">#</a></h3>
-<p>Keep a fact. One about how they work with someone or something (&quot;Gail moved to Ops&quot;, &quot;Ray handles payroll for me&quot;, &quot;I put renewals off to Friday&quot;) is kept at once where the memory&#39;s readers read it, when you name it: <code>about</code>: the person&#39;s address or name. Any other fact brings up the notes page. Who reports to whom and who owns what is people.relate.</p>
+<p>Keep a fact about how the owner works, in LEARNED.md, at once. Who reports to whom and who owns what is people.relate.</p>
 <ul>
-<li><code>note</code> - the fact, in the owner&#39;s words</li>
-<li><code>about</code> (optional) - the person&#39;s address or name. Any other fact brings up the notes page. Who reports to whom and who owns what is people.relate</li>
-<li><code>section</code> (optional) - people | care | work | promises | bring</li>
+<li><code>note</code> - the fact, in the owner&#39;s words (&quot;Gail moved to Ops&quot;, &quot;Ray handles payroll for me&quot;, &quot;I put renewals off to Friday&quot;, &quot;I don&#39;t care about the legacy export job any more&quot;)</li>
+<li><code>about</code> (optional) - the person&#39;s address or name, for a people line</li>
+<li><code>section</code> (optional) - , always: people (who someone is to them, how they deal with them) | care (what they are responsible for and what they do NOT care about - a legacy process, a system no longer theirs: triage and the report gate then make no task of it) | work (their rhythm) | promises | bring (what the Advisor may raise)</li>
 <li><code>replaces</code> (optional) - the key of the line it makes untrue, closed and kept as history (memory.about gives the keys)</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="memory-wrong"><code>memory.wrong</code><a class="anchor" href="#memory-wrong" aria-label="Link to this section">#</a></h3>
@@ -660,7 +661,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>who</code> - a name or address</li>
 </ul>
 <p class="runs">Runs at once and changes nothing.</p><h3 id="memory-list"><code>memory.list</code><a class="anchor" href="#memory-list" aria-label="Link to this section">#</a></h3>
-<p>Everything kept about the owner: the saved notes (from &quot;remember this&quot;, their verdicts, Settings) and what LEARNED.md has learned from their verdicts. Use it for &quot;what do you remember&quot;, &quot;what do you know about me&quot;</p>
+<p>Everything kept about the owner: LEARNED.md - what they told you (&quot;remember this&quot;), their verdicts, and what it learned from what they did. Use it for &quot;what do you remember&quot;, &quot;what do you know about me&quot;</p>
 <ul>
 <li><code>about</code> - words to narrow it (a sender, a topic)</li>
 </ul>
@@ -722,7 +723,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">Runs at once and changes nothing.</p>
     </article>
     <nav class="pager"><a class="pn prev" href="./assistant"><span>Previous</span>Assistant buttons</a><a class="pn next" href="./reports"><span>Next</span>Reports and the Advisor</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.51 · updated 2026-10-27</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.52 · updated 2026-10-27</p>
   </main>
 </div>
 <script src="./docs.js"></script>

@@ -148,7 +148,10 @@ const THREAD_MAX = "max(360px, calc(100vh - 160px))";
 // message's attachments (taskSources.filesByMessage): what rode in with a message is drawn under ITS row, never loose under the card.
 // FROM'S ROWS (taskSources.fromRows) end in "Show N older" instead: newest on top, the older ones a press away at the foot. `narrow`: the
 // From column's width - the name column gives way to the words.
-function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fetchFor = null, narrow = false }) {
+// ...and an OPEN row says its words once (the overnight walk, 2026-10-27: an invitation's one message read its first line in the row, then
+// again in full under it, its subject under the conversation's own): the row keeps who and when, the letter keeps the words, and a
+// subject that is the conversation's (`subject`) is not said again
+function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fetchFor = null, narrow = false, subject = "" }) {
   return rows.map((r, ri) => r.older ? (
     <Box key={`older${ri}`} component="button" type="button" data-tq-show-older={r.older} onClick={onExpand} title={`Older messages from ${r.names}`}
       sx={{ appearance: "none", font: "inherit", display: "block", width: "100%", textAlign: "left", bgcolor: "transparent", border: 0, cursor: "pointer",
@@ -174,7 +177,7 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
           alignItems: "baseline", px: 0.5, mx: -0.5, py: 0.25, borderRadius: 1, fontSize: 12.5, color: DIM, minWidth: 0,
           "&:hover": { bgcolor: "#faf8f4" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
         <Box component="span" sx={{ color: INK, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.m.who}</Box>
-        <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rowText(r.m, files.get(r.m.MessageId))}</Box>
+        <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{open === r.m.MessageId ? "" : rowText(r.m, files.get(r.m.MessageId))}</Box>
         <Box component="span" sx={{ color: FAINT, textAlign: "right", whiteSpace: "nowrap", fontSize: 11.5 }}>{whenShort(r.m.SentAt)}</Box>
       </Box>
       {open !== r.m.MessageId && (files.has(r.m.MessageId) || fetchFor === r.m.MessageId) && (
@@ -188,7 +191,7 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
             <Typography variant="caption" sx={{ color: FAINT }}>{channelName(r.m.Channel)}{r.m.SentAt ? ` · ${fmtDateTime(r.m.SentAt)}` : ""}</Typography>
             {r.m.SourceLink && <Link href={r.m.SourceLink} target="_blank" rel="noopener" sx={{ fontSize: 11 }}>open the original</Link>}
           </Box>
-          {r.m.Subject && <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mt: 0.1 }}>{r.m.Subject}</Typography>}
+          {r.m.Subject && !sameWords(r.m.Subject, subject) && <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mt: 0.1 }}>{r.m.Subject}</Typography>}
           {/* WHERE IT CAME FROM IS THE WHOLE MESSAGE, in full and scrolling - three lines of it were never enough to check the ask
               against: first for a report run (the owner, 2026-09-30: "i can't see the full report once it gets sent to agent"), then
               for the email behind a task (2026-10-01: "don't see the full email that this task came from") */}
@@ -1257,13 +1260,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const codeRun = !!fromWorkflow?.byCode && !term?.alive && !generalStarted && !detail?.transcript && !report;
   // ...and Stop and save pressed here holds Close out open - writing, failed or drafted - so the draft replaces the pending block where
   // it stood, never a jump to whichever step the computed focus picks once the job is done
-  const stage = sessionView ? "agent" : (openStage || (pressedHere || writeup ? "reply" : peek ? "task" : focusStage({
+  const restStage = sessionView ? "agent" : (pressedHere || writeup ? "reply" : peek ? "task" : focusStage({
     kind: t?.Kind, task: taskState, agent: codeRun ? null : agentState, reply: replyState, hasSender: !!replyMessage,
     // what the agent is parked ON decides whether the proposal or the agent opens: an agent
     // waiting for approval is released by the very proposal sitting in stage 3
     proposal: proposals.length > 0, agentSub: term ? subState(term) : null, news: !!news,
     emails: emailsWaiting, record: hasRecord, out: wentOut(detail?.reviews),
-  })));
+  }));
+  const stage = sessionView ? "agent" : (openStage || restStage);
   // ...which of the work column's two halves is open: the stage, or - where the stage is the task itself, now always open on the
   // left - what the task is for (taskLayout.workPane). Presentation only: every press still reads `stage`.
   // ...and Close out under a Result on a task nobody sent: what closes it, the write-up's progress under the Result (taskLayout.closeOut)
@@ -1297,15 +1301,20 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     catch (e) { setErr(`That didn't go through - ${opError(e, "Taskuary didn't answer")}.${word ? ` Press ${word} again.` : ""}`); }
   };
   // the one white section on the shaded body (taskLayout.focusOf); a live session has no shade and no focus - it is the page
-  const focus = focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, pane, waiting: !!waitFor,
-    list: !!(detail?.batch || t?.DoneWhen || (!t?.DoneWhen && todo.length)) });
+  const list = !!(detail?.batch || t?.DoneWhen || (!t?.DoneWhen && todo.length));
+  const focus = focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, pane, waiting: !!waitFor, list });
   const chatBelow = focus === "agent" && workspaceMode === "general" && pane === "agent" && !liveSession;   // its chat joins the focus under it
   // THE MAIN VIEW AND ITS DRAWERS (taskLayout.mainOf): Came from on the left where the work is the page, Agent and Close out on the right
   // where the task is; a phone's narrow body stays one stacked page. A move that changes where the task is up to shuts whichever was out
   const stacked = !sessionView && bodyW > 0 && bodyW < STACK_BELOW;
   // ...read off ONE STAGE (stages.json, the owner 2026-10-26: "are these modes defined well anywhere besides the UI"): the focus and what
   // Close out holds make it, and the stage names the main view and whether the right tab is lit - the server and the Assistant read the same
-  const taskStage = stageOf({ focus, drafted: replyHas, closed: ["done", "dropped"].includes(t?.Status) });
+  // ...and a section OPENED BY HAND is not where the task is up to (2026-10-27, the overnight walk): Agent work clicked open over a draft
+  // waiting for Send made the stage "to start", the page flipped to the task view and shut both drawers - the click hid the draft AND the
+  // agent it asked for. The stage reads the pane the task would open on; the pick only opens its section in the view it is in
+  const restFocus = openStage ? focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, waiting: !!waitFor, list,
+    pane: waitFor ? "" : workPane({ stage: restStage, kind: t?.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas }) }) : focus;
+  const taskStage = stageOf({ focus: restFocus, drafted: replyHas, closed: ["done", "dropped"].includes(t?.Status) });
   const main = mainView({ stage: taskStage, sessionView, stacked });
   const fromDrawer = main === "work", workDrawer = main === "task", workLit = drawerLit({ main, stage: taskStage });
   // ...and a lit tab names the move: the reply and who to ("Close out · reply to Priya Shah"), else what the drawer holds
@@ -2091,7 +2100,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                   {showAll && isChat(g.channel) ? <ChatThread messages={g.msgs} maxHeight={THREAD_MAX} />
                                     : <Box data-tq-thread-box="" sx={showAll ? { maxHeight: THREAD_MAX, overflowY: "auto", minWidth: 0 } : undefined}>
                                         <ConversationRows rows={fromRows(g, 3, showAll)} open={shownMsg} onOpen={(f) => setOpenMsg(f(shownMsg))} narrow
-                                          onExpand={() => setShowAll(true)} files={sourceFiles} fetchFor={fetchFor} /></Box>}
+                                          onExpand={() => setShowAll(true)} files={sourceFiles} fetchFor={fetchFor} subject={g.title} /></Box>}
                                 </Box>
                               </Box>
                             ))}

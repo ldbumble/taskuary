@@ -66,8 +66,14 @@ export const InvoiceLine = ({ meta }) => (
 // THE OWNER'S EDIT OUTLIVES THE CARD (the 2026-10-25 sweep): it lived in the card's own state, so a look at Reports or another row - anything
 // that drew the task again - put the filed draft back and " Regards, Alex" was gone, with nothing said. Held per draft as filed: a new draft
 // (Redraft, the server's own) starts from itself.
+// ...and the CC the owner added with it (the overnight walk, 2026-10-27: Priya looped in, a look at another row, and the CC was back to
+// "+ loop someone in" while the edited words stood - Send would have gone without her)
 const edits = new Map();
-const heldEdit = (r) => { const e = edits.get(r?.ReviewId); return e && e.filed === reviewText(r) ? e.text : null; };
+const heldOf = (r) => { const e = edits.get(r?.ReviewId); return e && e.filed === reviewText(r) ? e : null; };
+const hold = (r, part) => {
+  const e = { text: null, cc: null, ...heldOf(r), ...part, filed: reviewText(r) };
+  if (e.text == null && e.cc == null) edits.delete(r.ReviewId); else edits.set(r.ReviewId, e);
+};
 
 const CAL_ACT = { accept: btn("accept_invite"), decline: btn("decline_invite"), propose: "Propose", schedule: "Invite" };
 // The times are the server's words (calwrite.when): the envelope carries them as they will be said.
@@ -91,9 +97,10 @@ export const CalendarLine = ({ meta }) => (
 // `toRow`: the decision's buttons are drawn by the action row above the chat line (layout B), not here - the same handlers, registered.
 // `onEmailInstead`: the task's Send out results - a chat reply that has to carry a file is answered by email instead (U17).
 export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, toRow = false, simulated = false, onDrop = null, onEmailInstead = null }) {
-  const [text, setTextNow] = useState(() => heldEdit(r));   // the owner's edit; null means "the draft as filed"
-  const setText = (v) => { if (v == null) edits.delete(r.ReviewId); else edits.set(r.ReviewId, { text: v, filed: reviewText(r) }); setTextNow(v); };
-  const [cc, setCc] = useState(null);               // null means "the CC the draft was filed with"
+  const [text, setTextNow] = useState(() => heldOf(r)?.text ?? null);   // the owner's edit; null means "the draft as filed"
+  const setText = (v) => { hold(r, { text: v ?? null }); setTextNow(v); };
+  const [cc, setCcNow] = useState(() => heldOf(r)?.cc ?? null);         // null means "the CC the draft was filed with"
+  const setCc = (v) => { hold(r, { cc: v ?? null }); setCcNow(v); };
   const [busyNow, setBusy] = useState(false);
   // SENT STAYS SENT until the page's re-read takes the card away (the owner, 2026-10-26: "when you hit send on close out email it grey's
   // out and then turns blue again then closes"): busy still ends when the decide answers, as 2026-10-18 ruled, but the button after it

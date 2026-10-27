@@ -324,6 +324,29 @@ class LiveSocketTests(unittest.TestCase):
         finally:
             live.detach(dummy)
 
+    def test_one_window_names_every_task_it_touched(self):
+        """A mail splitting off its thread wrote the thread's task and a new one inside one 80 ms window; the event named only the
+        new one, and a tab holding the thread's task kept its old read (the intake walk, 2026-10-26)."""
+        dummy = object()
+        live.attach(dummy)
+        try:
+            live.emit('task-changed', task_id=32, message_id=1)
+            live.emit('task-changed', task_id=42, message_id=2)
+            live.emit('task-changed', task_id=32)
+            got = live._pending['task-changed']
+            self.assertEqual((got['task_id'], got['task_ids'], got['message_id']), (32, [32, 42], 2))
+            live.emit('task-changed')                                # a write that names no task is about all of them
+            self.assertNotIn('task_id', live._pending['task-changed'])
+            self.assertNotIn('task_ids', live._pending['task-changed'])
+            live.emit('task-changed', task_id=7)
+            self.assertNotIn('task_id', live._pending['task-changed'], 'the window stays about every task')
+            live.flush()
+            live.emit('task-changed', task_id=7)
+            self.assertEqual(live._pending['task-changed'], {'task_id': 7, 'type': 'task-changed'})
+        finally:
+            live.detach(dummy)
+            live.reset()
+
     def test_ingest_status_pokes_the_clock_without_claiming_the_feed_changed(self):
         tab, s = _Tab(), MemoryStore()
         async def once():

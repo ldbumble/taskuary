@@ -38,7 +38,7 @@ import { readLists } from "./connectorLists.js";
 import { hint as btnHint, label as btn, liveVerb, verbOfRow } from "./buttons.js";
 import { readTurn, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
-import { liveUp, onLive } from "./live.js";
+import { liveUp, onLive, taskIdsOf } from "./live.js";
 import { adviceKeyFor, adviceShown, stripWord, taskNote } from "./advice.js";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
@@ -1196,7 +1196,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   useEffect(() => { if (currentItem?.tid && earlyRef.current?.key !== currentItem.key) actedTid.current = currentItem.tid; }, [currentItem]);
   useEffect(() => onPressed((id) => { if (!/(^|:)next$/.test(String(id || ""))) forgetTasks(actedTid.current ?? null); }), []);
   // ...and a write anywhere - an agent, another tab, a sync - makes that task's held read old (all of them, when it names none)
-  useEffect(() => onLive("task-changed", (ev) => forgetTasks(ev?.task_id ?? null)), []);
+  // ...every task the event's window touched, not the last one's alone (live._merged)
+  useEffect(() => onLive("task-changed", (ev) => { const ids = taskIdsOf(ev); if (!ids) forgetTasks(null); else ids.forEach((t) => forgetTasks(t)); }), []);
   const [continueOn, setContinueOn] = useState(null);  // the walk's Continue: { task, anchor, ref }
   // ...and the owner's notes the Assistant lit it with ("rerun it with these notes: ..."): its box opens holding them, for that task
   const continueNote = useRef(null);
@@ -1753,8 +1754,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   useEffect(() => {
     if (!active) return undefined;
     return onLive("task-changed", (ev, meta) => {
-      const tid = Number(ev?.task_id) || 0;
-      if (tid && tid === currentRef.current?.tid && !coveredByReload(meta, forcedLoadStartedAt.current)) loadPile(true);
+      const tid = Number(currentRef.current?.tid) || 0;
+      if (tid && taskIdsOf(ev)?.includes(tid) && !coveredByReload(meta, forcedLoadStartedAt.current)) loadPile(true);
     }, { wait: 150, max: 600 });
   }, [active, loadPile]);
   // ...but only once there IS a conversation: on the empty welcome it scrolled "Good morning" and the

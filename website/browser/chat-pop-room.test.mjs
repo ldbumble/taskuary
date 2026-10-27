@@ -34,8 +34,11 @@ test("the chat pop-up fits in the room under a short task view", { timeout: 3000
     await sleep(400);
     const view = await rect(page, "[data-tq-canvas-item]"), pop = await rect(page, "[data-tq-chat-pop]");
     const say = JSON.stringify({ line, view, pop });
-    assert.ok(pop.top >= view.bottom, `the pop-up stands under the view, not over it ${say}`);
-    assert.ok(pop.bottom - pop.top >= 140, `...and is still tall enough to read ${say}`);
+    // ...under the view where the room there reads (the open box stays open now, 2026-10-27, and takes part of it): else over it, tall
+    // enough to read, as before
+    const room = (await rect(page, ".tq-compose-box")).top - view.bottom;
+    if (room >= 160) assert.ok(pop.top >= view.bottom, `the pop-up stands under the view, not over it ${say}`);
+    assert.ok(pop.bottom - pop.top >= 140, `...and is tall enough to read ${say}`);
     // the newest answer is the one in view: the pop-up's body is scrolled to its end
     assert.ok(await page.$eval("[data-tq-chat-pop] .tq-chat-pop-body", (b) => b.scrollHeight - b.scrollTop - b.clientHeight <= 2), `the newest words in view ${say}`);
     await page.keyboard.press("Escape");

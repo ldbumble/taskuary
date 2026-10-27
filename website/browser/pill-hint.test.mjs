@@ -17,7 +17,8 @@ test("the dock's pill at rest says a hint that fits it, and the whole hint once 
   const { page, errors } = await boot(t, { width: 1600, height: 810 });
   await type(page, "what is on my list?");
   await page.waitForFunction(() => document.querySelector(".tq-dock-line > .tq-arow"), { timeout: 30000 });
-  await page.evaluate(() => document.activeElement?.blur()); await sleep(800);
+  // ...shut by its × (the box stays open until the owner shuts it, 2026-10-27), not by a look away
+  await page.click("[data-tq-box-close]"); await sleep(800);
   const rest = await hint(page);
   assert.ok(rest.pill && !rest.open, `the box is the pill beside the row: ${JSON.stringify(rest)}`);
   assert.ok(rest.fits, `the pill's hint fits it: ${JSON.stringify(rest)}`);

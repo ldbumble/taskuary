@@ -129,10 +129,14 @@ def test_a_routing_correction_teaches_in_words_once():
     tid = s.create_task({'Title': 'Timesheet hours wrong', 'Kind': 'coding', 'Status': 'open'}, 'router')
     s.add_message({'TaskId': tid, 'ExternalId': 'r1', 'Channel': 'email', 'Subject': 'Timesheet hours wrong for October',
                    'FromEmail': 'marcus@northwind.example', 'BodyText': 'fix my hours', 'Status': 'routed'})
-    seen = []
+    from fastapi import BackgroundTasks
+    seen, bg = [], BackgroundTasks()
+    # ...the lesson is taught off the press: handed a BackgroundTasks it runs here, in order - called with none, teach_soon starts a
+    # thread, and asserting on what that thread has not written yet is a race (it failed one run in a few)
     with mock.patch.object(server, 'store', s), mock.patch.object(memorylines, '_llm', lambda st: teacher('Timesheet fixes are a talk with the Assistant, not code', seen=seen)):
-        server._teach_routing(tid, 'kind', 'general')
-        server._teach_routing(tid, 'kind', 'general')                # the same press again teaches nothing new
+        server._teach_routing(tid, 'kind', 'general', background=bg)
+        server._teach_routing(tid, 'kind', 'general', background=bg)  # the same press again teaches nothing new
+        for t in bg.tasks: t.func(*t.args, **t.kwargs)
     assert len(seen) == 1 and 'general' in seen[0]
     assert sum('Timesheet fixes' in r for r in _section(s, 'care')) == 1 and not any('ROUTING' in l for l in lines(s))
 

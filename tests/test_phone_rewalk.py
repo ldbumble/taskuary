@@ -338,4 +338,32 @@ class OpenerAgentNameTests(PhoneCase):
         self.assertNotIn('Coding agent', row); self.assertNotIn('claude', row)
 
 
+class TypedReplyDraftTests(PhoneCase):
+    """The overnight walk (2026-10-26): "reply saying Thursday works" with the drafting AI failing answered "Drafting a reply on TQ-0001 -
+    nothing goes out until you say yes." over the card it brought up, which read "no reply drafted yet". A draft not written is said so."""
+    channel = 'whatsapp'
+    brain = staticmethod(lambda said: call('reply', text='Thursday works') if 'reply saying' in said.lower() else 'Ok.')
+
+    def setUp(self):
+        super().setUp()
+        _two_asks(self.f); self.ph.ready(); self.ph.walk()
+
+    def test_a_draft_the_ai_did_not_write_is_not_promised(self):
+        from taskuary import responder
+        with mock.patch.object(responder, 'write_draft', side_effect=RuntimeError('the drafting AI timed out')):
+            said = text_of(self.ph.type('reply saying Thursday works'))
+        self.assertNotIn('Drafting a reply', said)
+        self.assertIn('could not write that draft', said)
+        self.assertIn('Draft with AI', self.ph.choices(), 'the card stays, with the way to try again')
+
+    def test_a_draft_written_is_announced_and_shown(self):
+        from taskuary import responder
+        def wrote(store, tid, rid, **k):
+            store.update_review_draft(rid, 'Thursday works for me - see you then.', None); return 'Thursday works for me - see you then.'
+        with mock.patch.object(responder, 'write_draft', side_effect=wrote):
+            said = text_of(self.ph.type('reply saying Thursday works'))
+        self.assertIn('Drafting a reply', said); self.assertIn('Thursday works for me', said)
+        self.assertNotIn('could not write', said)
+
+
 if __name__ == '__main__': unittest.main()

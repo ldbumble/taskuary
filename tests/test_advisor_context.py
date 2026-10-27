@@ -7,6 +7,7 @@ import pytest
 from taskuary import advisor, funnel, terminal
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
+from tests.memlines import note
 
 ERIN = ('Erin Blake', 'erin@northwind.example')
 
@@ -82,8 +83,8 @@ def test_another_open_task_on_the_same_thread_is_flagged_a_possible_duplicate_an
 
 def test_the_owners_notes_on_the_sender_and_the_head_of_soul_and_job_ride_along(s):
     tid, _ = asked(s, 'Lease renewal', 'is it signed?')
-    s.add_memory({'Scope': 'sender', 'ScopeKey': ERIN[1], 'Note': 'Erin handles the leases herself - answer her, never forward', 'Source': 'verdict', 'Active': 1})
-    s.add_memory({'Scope': 'sender', 'ScopeKey': 'ray@northwind.example', 'Note': 'Ray is never urgent', 'Source': 'verdict', 'Active': 1})
+    note(s, {'Scope': 'sender', 'ScopeKey': ERIN[1], 'Note': 'Erin handles the leases herself - answer her, never forward', 'Source': 'verdict', 'Active': 1})
+    note(s, {'Scope': 'sender', 'ScopeKey': 'ray@northwind.example', 'Note': 'Ray is never urgent', 'Source': 'verdict', 'Active': 1})
     s.save_doc('soul', '# SOUL.md\n\nYou work for Alex Doyle.\n<!-- a comment -->\n' + 'y' * 2000, 'owner')
     s.save_doc('job', '# JOB.md\n\nAlex runs facilities for Northwind.', 'owner')
     p = prompt(s, tid)
@@ -109,7 +110,7 @@ def test_the_advisor_reads_how_the_owner_works_and_never_a_press_count(s):
 def test_the_prompt_is_bounded_and_keeps_the_item_and_its_verbs(s):
     tid, _ = asked(s, 'x', 'y')
     s.save_doc('soul', '# SOUL\n' + 'z' * 50000, 'owner')
-    for n in range(30): s.add_memory({'Scope': 'global', 'Note': f'note {n} ' + 'w' * 280, 'Source': 'verdict', 'Active': 1})
+    for n in range(30): note(s, {'Scope': 'global', 'Note': f'note {n} ' + 'w' * 280, 'Source': 'verdict', 'Active': 1})
     p = prompt(s, tid)
     assert len(p) <= advisor.PROMPT_CAP and p.startswith('EVENT: item.shown') and 'VERBS OFFERED: reply (Reply)' in p
 

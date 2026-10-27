@@ -78,7 +78,7 @@ def test_visualize_gets_the_five_subjects_with_their_real_readers_and_your_own_l
     assert [x['slug'] for x in g['sections']] == list(lc.SECTIONS)
     reads = {x['slug']: x['reads'] for x in g['sections']}
     assert reads['people'] == 'read by triage (priority only) · drafts · the Advisor · the Assistant · agents'
-    assert reads['bring'] == 'read by the Assistant · agents'      # an agent reads all of it (the owner, 2026-10-27)
+    assert reads['bring'] == 'read by triage · the Assistant · agents'      # triage reads all of it, agents on demand (the owner, 2026-10-27)
     by = {l['key']: l for l in g['lines']}
     assert by['erin manager hour']['subject'] == 'erin@northwind.example' and by['erin manager hour']['section_slug'] == 'people'
     mine = [l for l in g['lines'] if l.get('own')]
@@ -154,4 +154,4 @@ def test_the_tools_are_in_the_catalogue_and_a_plain_fact_goes_into_the_memory(w)
     with mock.patch.object(server, 'store', s):
         out = server._run_operation({'kind': 'memory.remember', 'target': 0, 'params': {'note': 'The office opens at 8'}}, None)
     # a fact about nobody is in LEARNED.md too, where every reader reads it - a saved note was read only on a matching word (2026-10-27)
-    assert not out.get('memoryId') and out['learned']['section'] == 'care' and 'The office opens at 8' in s.get_doc('learned')
+    assert out['learned']['section'] == 'care' and 'The office opens at 8' in s.get_doc('learned')

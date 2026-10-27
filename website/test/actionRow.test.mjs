@@ -162,7 +162,8 @@ test("a move on a PIECE stays on it; a move on the whole item rides the row (202
   assert.match(src, /\.\.\.movesOf\(verb, moves \? "next" : "decide", "v"\)/, "a Foot's move acts on the whole item: the row - a batch's All read, next IS its Next");
   assert.match(src, /<Foot moves verb=\{<Button[\s\S]{0,200}onDone\?\.\(btn\("next", "batch"\)\)/, "the batch's verb is in the Next group (the design, phase A)");
   assert.match(src, /\{!rowed && \(verb \|\|/, "...and is not drawn twice");
-  assert.match(src, /i < 3 \|\| a\.verb === "close" \? "decide" : "more"/, "Mark done is never behind More");
+  assert.match(src, /\(i < 3 && !QUIET\.has\(a\.verb\)\) \|\| a\.verb === "close" \? "decide" : "more"/, "Mark done is never behind More");
+  assert.match(src, /const QUIET = new Set\(\["report_off"\]\)/, "Pause this report waits behind More for the Advisor to light it (2026-10-27)");
   assert.match(src, /row: outer\.row/, "the walk's foot rides in the row as well");
   assert.match(fs.readFileSync(path.join(process.cwd(), "src", "ReplyFiles.jsx"), "utf8"), /toRow && mail/, "Attach a file is a More verb in the row");
   // ...and no Ask sender (the owner, 2026-10-27): a question for the sender is Reply's
@@ -177,7 +178,7 @@ test("Mark done and Remind me put the task down AT THE PRESS, as Next does, and 
   assert.match(finish, /onStay\?\.\(msg\)/);
   assert.ok(remind.indexOf("onLeave?.()") < remind.indexOf("api.post"), "the reminder too");
   assert.match(remind, /if \(leaving\) onStay\?\.\(msg\)/);
-  assert.match(view, /putDown: \(key, tid = null\) => \{ leave\(\{ key, tid \}\); leavingRef\.current = \{ key, tid \}; setExpanded\(false\); setFoldedKey\(key\); setNextComing\(true\); setLeavingTid\(tid\); drawNextEarlyRef\.current\?\.\(key\); \}/, "folded, and the next drawn under it");
+  assert.match(view, /putDown: \(key, tid = null\) => \{ leave\(\{ key, tid \}\); for \(const x of leftOf\(\{ key, tid \}\)\) downRef\.current\.add\(x\); leavingRef\.current = \{ key, tid \}; setExpanded\(false\); setFoldedKey\(key\); setNextComing\(true\); setLeavingTid\(tid\); drawNextEarlyRef\.current\?\.\(key\); \}/, "folded, and the next drawn under it");
   // ...and off the RAIL at the press as well, a live session's Mark done included: it waited on an 18-second write-up
   // first, sitting under For later the whole time (the owner, 2026-10-01: "it first went to Later ... did not disappear")
   const stop = task.slice(task.indexOf("const stopAndFinish = async"), task.indexOf("const markDoneHint"));

@@ -14,7 +14,7 @@ def _day(days=0): return (datetime.now() + timedelta(days=days)).strftime('%Y-%m
 
 def _store():
     s = MemoryStore()
-    for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled'): s.set_setting(k, '0', 't')
+    for k in ('calendar_enabled', 'coding_auto_enabled'): s.set_setting(k, '0', 't')
     s.set_setting('owner_email', ME, 't')
     return s
 

@@ -3,6 +3,7 @@ import json, unittest
 from unittest import mock
 from taskuary import concierge, ingest, lookups, toolcatalog
 import tests.test_assistant_reactions as T
+from tests.memlines import note as put_note
 
 
 def world():
@@ -220,8 +221,8 @@ class KeptAndFilteredTests(unittest.TestCase):
         s = world()
         s.save_doc(learn.DOC, '# Learned\n\n## What you care about\n- Vendor statements are fyi.\n\n## Watching\n' + learn.HYP_START
                    + '\n- Maybe spend reports are fyi too.\n' + learn.HYP_END + '\n', 't')
-        s.add_memory({'Scope': 'sender', 'ScopeKey': 'gail@northwind.example', 'Note': 'She owns the freight budget.', 'Source': 'manual', 'Active': 1})
-        s.add_memory({'Scope': 'subject', 'ScopeKey': 'weekly spend report', 'Note': '"Weekly spend" - NOT A TASK: filed', 'Source': 'verdict', 'Active': 1})
+        put_note(s, {'Scope': 'sender', 'ScopeKey': 'gail@northwind.example', 'Note': 'She owns the freight budget.', 'Source': 'manual', 'Active': 1})
+        put_note(s, {'Scope': 'subject', 'ScopeKey': 'weekly spend report', 'Note': '"Weekly spend" - NOT A TASK: filed', 'Source': 'verdict', 'Active': 1})
         memorylines.migrate(s)
         out = read(s, 'memory.list')
         for want in ('YOUR MEMORY', 'freight budget', 'weekly spend report', 'Vendor statements are fyi', 'STILL BEING TESTED', 'spend reports are fyi too'):

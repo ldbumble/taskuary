@@ -21,6 +21,7 @@ from pathlib import Path
 
 from taskuary import evalset, ingest
 from taskuary.store import MemoryStore
+from tests.memlines import note
 
 DATA = Path(__file__).parent / 'data'
 OWNER = 'me@corp.example'
@@ -45,7 +46,7 @@ def replay(case: dict):
         if p.get('from_kind') == 'owner' and p.get('from'):
             s.save_source({'Channel': 'email', 'Address': p['from'], 'Owner': 'me', 'Active': 1}, 'test')
     for n in case.get('notes_before') or []:
-        s.add_memory({'Scope': n['scope'], 'ScopeKey': n.get('key'), 'Note': n['note'], 'Source': n.get('source', 'verdict'),
+        note(s, {'Scope': n['scope'], 'ScopeKey': n.get('key'), 'Note': n['note'], 'Source': n.get('source', 'verdict'),
                       'Active': 1, 'CreatedBy': 'owner'})
     msg = evalset.as_message(case)
     if not msg['body']: msg['body'] = STAND_IN

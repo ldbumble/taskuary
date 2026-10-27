@@ -142,11 +142,6 @@ is what you see if those cards cannot load.</li>
 <p>Ordered alternatives for triage, reply drafts, summaries, reports, and assistant chat when the chosen AI is unavailable.</p>
 <p>Pick more than one. Taskuary tries them in the order shown when the primary brain hits a session or usage limit, is signed out, has no key, or otherwise refuses the call. A fallback uses its own default model; a model name chosen for Claude is never handed to Codex.</p>
 <p>This starts blank because crossing from a cloud API to a local CLI can change cost and privacy. Once you name backups, the same chain protects every short/background AI job as well as the non-coding assistant.</p>
-<h3 id="learn-from-your-verdicts">Learn from your verdicts<a class="anchor" href="#learn-from-your-verdicts" aria-label="Link to this section">#</a></h3>
-<p><code>learn_enabled</code> · type: switch · default: on</p>
-<p>Your corrections teach LEARNED.md — style, responsibilities, what deserves a task.</p>
-<p>Every correction you make — editing a draft before sending, rejecting one, reclassifying a task as a question, promoting something triage filed, &#39;Not a task&#39; / &#39;Not our task&#39; — is distilled into LEARNED.md (Settings → Docs): first as a hypothesis with a strength counter and the evidence behind it, promoted into the active profile only once it keeps holding across separate episodes. The active sections ride into every triage call, draft and agent run; SOUL.md always outranks them.</p>
-<p>Rules that would HIDE mail (treat as fyi, never a task) never activate themselves — they wait in the doc&#39;s &#39;Proposed rules&#39; for you to adopt or delete. Off: nothing new is learned; the doc stays as it is and is still injected.</p>
 <h3 id="use-playbooks">Use playbooks<a class="anchor" href="#use-playbooks" aria-label="Link to this section">#</a></h3>
 <p><code>playbooks_enabled</code> · type: switch · default: on</p>
 <p>Triage matches new mail to your playbooks, and agents may propose new ones.</p>
@@ -509,11 +504,13 @@ sent; <code>draft</code> is the targeted default; <code>task_only</code> files a
 <p>Nothing writes into this table by itself. <strong>Not a task</strong> teaches a verdict in your memory
 (<code>LEARNED.md</code>), not a rule here, and muting a sender is <strong>Skip this sender</strong>.</p>
 <h2 id="your-memory">Your memory<a class="anchor" href="#your-memory" aria-label="Link to this section">#</a></h2>
-<p>There is one memory: <code>LEARNED.md</code>, in Settings → Docs. Every verdict you give — <strong>Not ours</strong>,
-<strong>Not a task</strong>, a kind or a road you corrected — and every fact you tell the Assistant (&quot;remember
+<p>There is one memory: <code>LEARNED.md</code>, in Settings → Docs. Every fact you tell the Assistant (&quot;remember
 that…&quot;, &quot;I don&#39;t care about the legacy export any more&quot;) goes in at once as your own line, under
-the section it is about. A line about one sender, domain or topic ends with <code>(about: …)</code>, and a
-newer verdict on the same thing replaces the older one. Triage, report routing, the Advisor, agents
+the section it is about. A verdict you give — <strong>Not ours</strong>, <strong>Not a task</strong>, <strong>Not for the agent</strong>, a
+kind or a road you corrected, an Advisor idea taken up or turned down — goes in when it teaches
+something about you, as one line saying what kind of work it is and why; a verdict that repeats what
+is already there adds nothing, and one that sharpens an older line replaces it. A line about one
+sender, domain or topic ends with <code>(about: …)</code>. Triage, report routing, the Advisor, agents
 and the Assistant each read the sections that help them; edit a line, or press <strong>Forget</strong>, to
 change what they read.</p>
 <h2 id="audit-integrity">Audit integrity<a class="anchor" href="#audit-integrity" aria-label="Link to this section">#</a></h2>

@@ -24,7 +24,7 @@ def _blocks_triage(store, msg: dict, mid: int) -> list:
          'source_name': msg.get('SourceName'), 'channel': msg.get('Channel')}
     doc = store.doc('triage') or ''
     base = doc.strip() or INTENT_SYSTEM
-    soul, learned = store.doc('soul') or '', learned_cut.for_reader(store, 'triage', learned_cut.about_mail(m), people=learned_cut.people_of(msg))
+    soul, learned = store.doc('soul') or '', learned_cut.whole(store, 'triage')
     notes, left = relevant_notes(store, [m['from_email'] or ''],
                                  f"{m['subject'] or ''} {m['body'] or ''}"[:4000],
                                  subject=m['subject'] or '', source=m['source_name'] or '')
@@ -34,7 +34,7 @@ def _blocks_triage(store, msg: dict, mid: int) -> list:
     if soul: out.append(("the operator's document", 'SOUL.md', soul[:2500]))
     if learned: out.append(('the learned profile', 'LEARNED.md "What you care about" and the people on this mail (in-use lines, closest to this sender first, within budget)', learned))
     if notes:
-        out.append(('standing notes that apply to THIS message', f'memory table - {len(notes)} of '
+        out.append(('standing notes that apply to THIS message', f'LEARNED.md lines about it - {len(notes)} of '
                     f'{len(notes) + left} applied, ranked by ingest.relevant_notes',
                     '\n'.join(f'- {n}' for n in notes)))
     out.append(('the message itself (this is the USER turn, everything above is SYSTEM)',
@@ -63,7 +63,7 @@ def _blocks_reply(store, tid: int) -> list:
     if soul: out.append(('your document, addressed to the writer as themselves', 'SOUL.md', soul[:4000]))
     if sty: out.append(('your voice, distilled from mail you actually sent', 'STYLE.md', sty[:2500]))
     if lrn: out.append(('how you write to them', 'STYLE.md "By recipient" (this sender first, then their domain, then everyone)', lrn))
-    if notes: out.append(('standing notes for this sender/topic', 'memory table (ingest.notes_for)',
+    if notes: out.append(('standing notes for this sender/topic', 'LEARNED.md lines about it (ingest.notes_for)',
                           '\n'.join(f'- {n}' for n in notes)))
     hist = history_block(store, last) if last else ''
     if hist: out.append(('your history with this sender and topic, outside this thread', 'message + task tables (counsel.dossier)', hist))
@@ -87,7 +87,7 @@ def _blocks_coding(store, tid: int) -> list:
              source_rules(store, m) if m else ''),
             ('your document', 'SOUL.md (flattened, addresses stripped)', ' '.join((store.doc('soul') or '').split())[:600]),
             ('the coding rules', 'CODING.md (flattened)', terminal.rules_text(store)[:600]),
-            ('standing notes for this thread', 'memory table (agents.memory_block)', memory_block(store, msgs)),
+            ('standing notes for this thread', 'LEARNED.md lines about it (agents.memory_block)', memory_block(store, msgs)),
             ('what to do, and what not to go looking for', 'terminal.seed_text (code)', 'see the whole prompt above')]
     return [b for b in out if b[0] is None or b[2]]
 

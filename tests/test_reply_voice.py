@@ -19,6 +19,7 @@ from unittest import mock
 
 from taskuary import responder, triage
 from taskuary.store import MemoryStore
+from tests.memlines import note as put_note
 
 OWNER = 'Alex J Whitfield'
 
@@ -77,9 +78,9 @@ class VoiceTests(unittest.TestCase):
         """...and since PW-060 only WRITING instructions ride into a reply: a triage verdict about the
         sender is routing, not voice, and stays out."""
         s, tid = self._store()
-        s.add_memory({'Scope': 'global', 'ScopeKey': None, 'Active': 1, 'Source': 'writing',
+        put_note(s, {'Scope': 'global', 'ScopeKey': None, 'Active': 1, 'Source': 'writing',
                       'Note': 'Keep it to two sentences for Meyy.', 'CreatedBy': 'o'})
-        s.add_memory({'Scope': 'sender', 'ScopeKey': 'meyy@partner.example', 'Active': 1, 'Source': 'verdict',
+        put_note(s, {'Scope': 'sender', 'ScopeKey': 'meyy@partner.example', 'Active': 1, 'Source': 'verdict',
                       'Note': 'Meyy schedules for the whole vendor team.', 'CreatedBy': 'o'})
         sys_ = _capture(s, tid)['system']
         self.assertIn('two sentences for Meyy', sys_)     # a writing note is STYLE.md's Owner notes now (2026-10-27), read with the style

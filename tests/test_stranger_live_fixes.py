@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from taskuary import origin, agents, terminal, hooks, floor, llm, workerstate as ws, server, config, guard
 from taskuary.config import home
 from taskuary.store import MemoryStore
+from tests.memlines import note as put_note
 
 # CI's machines have no AI CLI on them: these tests are about what a session is ALLOWED to do, never whether claude is
 # installed, so the command resolves to its own name here as it does on a machine that has it (CI, 2026-10-14)
@@ -167,9 +168,9 @@ def test_both_ways_taskuary_starts_uvicorn_go_through_that_server():
 MARK = 'zq-marker-README-title-77'
 
 def _notes(s, frm):
-    s.add_memory({'Scope': 'sender', 'ScopeKey': frm, 'Source': 'verdict', 'Active': 1, 'CreatedBy': 't',
+    put_note(s, {'Scope': 'sender', 'ScopeKey': frm, 'Source': 'verdict', 'Active': 1, 'CreatedBy': 't',
                   'Note': f'2026-10-14: "{MARK}" from {frm} - MADE A TASK: triage filed it, but the owner promoted it as real work'})
-    s.add_memory({'Scope': 'sender', 'ScopeKey': frm, 'Source': 'manual', 'Active': 1, 'CreatedBy': 't', 'Note': 'OWNERNOTE ask Erin before merging'})
+    put_note(s, {'Scope': 'sender', 'ScopeKey': frm, 'Source': 'manual', 'Active': 1, 'CreatedBy': 't', 'Note': 'OWNERNOTE ask Erin before merging'})
 
 def test_a_stranger_s_seed_keeps_the_owner_s_notes_and_drops_the_quoted_subject():
     s = MemoryStore(); t = _stranger(s, MARK); _notes(s, 'someone@vendor.example')

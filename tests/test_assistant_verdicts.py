@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 
 from taskuary import assistant
 from taskuary.store import MemoryStore
+from tests.memlines import note as put_note
 
 ME, RIVKA = 'owner@ours.com', 'nina@clinic.example'
 def _ago(h=1): return (datetime.now() - timedelta(hours=h)).strftime('%Y-%m-%d %H:%M:%S')
@@ -30,7 +31,7 @@ CANDS = [{'key': 'asked:c1', 'kind': 'asked',
 class VerdictsReachTheBrief(unittest.TestCase):
     def test_a_topic_verdict_is_put_in_front_of_the_model(self):
         s = _store()
-        s.add_memory({'Scope': 'subject', 'ScopeKey': 'resident refund',
+        put_note(s, {'Scope': 'subject', 'ScopeKey': 'resident refund',
                       'Note': 'Resident refunds are not our problem - billing owns them.',
                       'Active': 1, 'CreatedBy': 'owner'})
         text = assistant.inputs(s, CANDS)
@@ -48,7 +49,7 @@ class VerdictsReachTheBrief(unittest.TestCase):
                        'SourceName': ME, 'Subject': 'RE: Resident Refund Request - Watson, Lisa',
                        'FromName': 'Nina', 'FromEmail': RIVKA, 'SentAt': _ago(),
                        'BodyText': 'still waiting for a response', 'Status': 'filed'})
-        s.add_memory({'Scope': 'subject', 'ScopeKey': 'resident refund request approved',
+        put_note(s, {'Scope': 'subject', 'ScopeKey': 'resident refund request approved',
                       'Note': 'resident refunds are not ours', 'Active': 1, 'CreatedBy': 'owner'})
         paraphrase = [{'key': 'asked:c-ref', 'kind': 'asked',
                        'facts': 'Barnes and Watson stall the same way: the BOM answers in-thread '
@@ -59,20 +60,20 @@ class VerdictsReachTheBrief(unittest.TestCase):
 
     def test_a_global_verdict_always_applies(self):
         s = _store()
-        s.add_memory({'Scope': 'global', 'Note': 'Never chase a vendor before Wednesday.',
+        put_note(s, {'Scope': 'global', 'Note': 'Never chase a vendor before Wednesday.',
                       'Active': 1, 'CreatedBy': 'owner'})
         self.assertIn('Never chase a vendor before Wednesday.', assistant.inputs(s, CANDS))
 
     def test_a_switched_off_verdict_is_silent(self):
         s = _store()
-        s.add_memory({'Scope': 'global', 'Note': 'Retired ruling nobody stands behind.',
+        put_note(s, {'Scope': 'global', 'Note': 'Retired ruling nobody stands behind.',
                       'Active': 0, 'CreatedBy': 'owner'})
         self.assertNotIn('Retired ruling', assistant.inputs(s, CANDS))
 
     def test_a_verdict_about_something_else_costs_nothing(self):
         """Scoped by the candidates' own words: an unrelated topic note stays out of the prompt."""
         s = _store()
-        s.add_memory({'Scope': 'subject', 'ScopeKey': 'parking permits',
+        put_note(s, {'Scope': 'subject', 'ScopeKey': 'parking permits',
                       'Note': 'Parking permits go to facilities.', 'Active': 1, 'CreatedBy': 'owner'})
         self.assertNotIn('Parking permits', assistant.inputs(s, CANDS))
 

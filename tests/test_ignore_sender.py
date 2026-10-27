@@ -12,6 +12,8 @@ from fastapi.testclient import TestClient
 
 from taskuary import server
 from taskuary.store import MemoryStore
+from taskuary import memorylines
+from tests.memlines import teaching
 
 
 def _mail(s, sub, frm='noreply@bank.example'):
@@ -37,11 +39,12 @@ class IgnoreSenderTests(unittest.TestCase):
         s = MemoryStore()
         mid = _mail(s, 'Balance Reporting')
         with mock.patch.object(server, 'store', s):
-            r = TestClient(server.app).post(f'/api/messages/{mid}/ignore-sender', json={'how': 'memory'})
+            with teaching('Balance reporting from the bank is noise to you'):
+                r = TestClient(server.app).post(f'/api/messages/{mid}/ignore-sender', json={'how': 'memory'})
         self.assertEqual(r.status_code, 200, r.text)
         d = r.json()
         self.assertEqual((d['how'], d['scope'], d['scopeKey']), ('memory', 'sender', 'noreply@bank.example'))
-        self.assertEqual([m['Scope'] for m in s.list_memories()], ['sender'])
+        self.assertEqual([n['ScopeKey'] for n in memorylines.notes(s)], ['noreply@bank.example'])
         self.assertEqual(s.list_policies(active_only=False), [])       # the mail keeps arriving
         self.assertEqual(s.get_message(mid)['Status'], 'ignored')
 

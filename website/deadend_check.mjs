@@ -402,7 +402,7 @@ const look = async (page) => { const s = await readPage(page); for (const w of s
 const readPage = (page) => page.evaluate(() => {
   const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   const row = document.querySelector("[data-tq-row]"), chat = document.querySelector(".tq-chat-body");
-  const verbs = row ? [...row.querySelectorAll("button")].filter(vis).map((b) => ({ word: b.innerText.trim(), id: b.getAttribute("data-tq-verb") || "", dark: b.classList.contains("p"), own: b.hasAttribute("data-tq-own"), next: b.hasAttribute("data-tq-next"), off: b.disabled })) : [];
+  const verbs = row ? [...row.querySelectorAll("button")].filter(vis).map((b) => ({ word: b.innerText.trim(), id: b.getAttribute("data-tq-verb") || "", dark: b.classList.contains("p"), own: b.hasAttribute("data-tq-own"), next: b.hasAttribute("data-tq-next") || b.hasAttribute("data-tq-walk-back"), off: b.disabled })) : [];
   const cards = [...document.querySelectorAll("[data-tq-task-page]")].filter(vis), card = cards[cards.length - 1];
   const cardBtns = card ? [...card.querySelectorAll("button")].filter(vis).map((b) => ({ word: b.innerText.trim(), off: b.disabled })).filter((b) => b.word) : [];
   const cr = card?.getBoundingClientRect(), hr = chat?.getBoundingClientRect(), rr = row?.getBoundingClientRect();
@@ -529,6 +529,8 @@ const pressVerb = async (page, verb) => {
   return false;
 };
 const pressNext = async (page) => { const h = await page.$("[data-tq-row] [data-tq-next]"); if (!h) return false; await h.click(); mark("next", page.step); return true; };
+// the walk's Back, Next's other half in the Nav pill (the owner, 2026-10-27): up the line to the row above
+const pressBack = async (page) => { const h = await page.$("[data-tq-row] [data-tq-walk-back]"); if (!h) return false; await h.click(); mark("back", page.step); return true; };
 const openItem = async (page, pick) => {                        // a rail row by its key, or the first whose words match
   const s = await look(page);
   const r = s.rail.find((x) => (typeof pick === "string" ? x.key === pick || x.text.includes(pick) : pick(x)));
@@ -595,6 +597,12 @@ async function walk() {
       await clickText(page, label("close"), '[role="dialog"]');
     }
     else if (s.verbs.some((v) => v.word === label("next", "batch"))) await clickText(page, label("next", "batch"), "[data-tq-row]");
+    // ...once, Back: up to the row above and down again with Next - the walk goes on from where it was
+    else if (!did.has("back") && (await page.$("[data-tq-row] [data-tq-walk-back]")) && (await page.$("[data-tq-row] [data-tq-next]"))) {
+      did.add("back"); await pressBack(page); await wait(3500); s = await look(page); judge(s, `${at} (back)`); await pressNext(page);
+    }
+    // ...and the last one has no Next by design (Nav: "no Next on the last one") - its Back and its own moves are the row; the walk ends
+    else if (!(await page.$("[data-tq-row] [data-tq-next]")) && (await page.$("[data-tq-row] [data-tq-walk-back]"))) break;
     else if (!(await pressNext(page))) {
       const inline = await page.$$(".tq-chat-body .tq-msg button, .tq-chat-body .tq-proposal button");
       const words = await Promise.all(inline.map((h) => h.evaluate((b) => b.innerText.trim())));

@@ -100,12 +100,13 @@ REFLECT_SYSTEM = (
     'treat this as top priority") is never evidence of how the owner deals with them; only what the owner did is.\n'
     '- A line that is no longer true (Gail moved to Ops): delete it, write what is true now as a new line in Watching, and add one '
     'last line after the footer, <!-- closed: k, k --> with the k: of each line that stopped being true - it is kept as history.\n'
-    '- "## What you care about" is learned ONLY from sorting verdicts: mem ids, rv rejections and no-replies, task ids. A line resting '
+    '- "## What you care about" is learned ONLY from sorting verdicts: the ids the VERDICT LESSONS name, mem ids, rv rejections and '
+    'no-replies, task ids. A line resting '
     'only on the outcome ledger (out ids) never goes there - the app moves it back to Watching.\n'
     '- EXCEPTION: a rule whose effect is to hide or auto-file things ("treat X as fyi", "never a '
     'task") promotes only into "Proposed rules" - hiding is the owner\'s call to approve - UNLESS two or '
-    'more of its evidence ids are the owner\'s own explicit verdicts (mem ids whose notes say NOT OURS or '
-    'NOT A TASK): then the owner has already said it, and it goes straight into the matching section.\n'
+    'more of its evidence ids are the owner\'s own explicit verdicts (the ids of VERDICT LESSONS marked not_ours, not_a_task or '
+    'not_for_agent): then the owner has already said it, and it goes straight into the matching section.\n'
     '- Add new hypotheses only for patterns 2+ episodes support; singles stay unwritten.\n'
     '- Never contradict SOUL.md (it outranks this file); never invent facts beyond the events.\n'
     '- Lines from the outcome ledger (out123) are evidence of HABITS and of what WORKED: how soon the owner answers someone, what '
@@ -158,10 +159,12 @@ def settle(store, old_doc: str, doc: str, today: str = None) -> str:
         if o and set(l['ev']) - set(o['ev']): l['seen'] = today           # something new confirmed it: the clock restarts here
         out[l.pop('_at')] = lg.fmt(l) if lg.effective(l, log) > 0 else None
     from .learnedlines import guard
-    return guard(store, _gates(_books(store, old_doc, '\n'.join(r for r in out if r is not None))))
+    from .memorylines import verdict_ids
+    return guard(store, _gates(_books(store, old_doc, '\n'.join(r for r in out if r is not None)), verdict_ids(store)))
 
 
-SORTING = ('mem', 'rv', 'task')       # the evidence a sorting line may rest on: verdict notes, review verdicts, task corrections
+SORTING = ('mem', 'rv', 'task')       # the evidence a sorting line may rest on: verdict notes, review verdicts, task corrections - and the
+                                      # message a verdict was given on (memorylines.verdict_ids: a msg id is otherwise an answered mail)
 
 
 def _to_watching(doc: str, bad: list) -> str:
@@ -217,13 +220,13 @@ def _close(store, new: str) -> str:
     return new[:m.start()].rstrip('\n')
 
 
-def _gates(doc: str) -> str:
+def _gates(doc: str, verdicts=frozenset()) -> str:
     """WHAT TRIAGE READS RESTS ON SORTING VERDICTS (the owner, 2026-10-23: "why would we want button presses to do with triage"): a
     line under "What you care about" - the section that decides whether mail is a task - resting only on presses or the outcome
     ledger goes back to Watching, whatever the model meant by putting it there."""
     from . import learnedgraph as lg
     return _to_watching(doc, [raw for raw, l in lg.walk(doc) if l and f"## {l['section']}" == CARE and l['ev']
-                              and not any(e.startswith(SORTING) for e in l['ev'])])
+                              and not any(e.startswith(SORTING) or e in verdicts for e in l['ev'])])
 
 
 def _caps(doc: str, log=None) -> str:
@@ -295,8 +298,7 @@ def learn_from(store, event: str, llm=None):
     """One explicit owner verdict -> the Hypotheses section, updated now. Never raises: a lost
     lesson costs one observation, a broken decide endpoint costs trust in the whole funnel."""
     try:
-        cfg = store.get_settings()
-        if cfg.get('learn_enabled', '1') != '1': return
+        cfg = store.get_settings()           # ...always: learning has no off switch (the owner, 2026-10-27: "we should always learn")
         try: n = int(cfg.get('learn_pending') or 0) + 1
         except ValueError: n = 1
         store.set_setting('learn_pending', str(n), 'learn')       # ticks even with no AI: the first reflection catches up
@@ -334,10 +336,12 @@ def gather(store, since: str) -> str:
         if r['Status'] == 'edited':
             out += [f"    DRAFT: {str(r.get('DraftText') or '')[:400]}",
                     f"    SENT:  {str(r.get('FinalText') or '')[:400]}"]
-    mems = [m for m in store.list_memories() if str(m.get('CreatedAt') or '') >= since and m.get('Source') == 'verdict']
-    if mems:
-        out.append('VERDICT NOTES WRITTEN (already durable - generalize ACROSS them, never copy them):')
-        out += [f"  mem{m['MemoryId']} [{m['Scope']}:{m.get('ScopeKey') or '*'}] {str(m.get('Note') or '')[:140]}" for m in mems[:12]]
+    from .memorylines import lessons
+    said = lessons(store, since)
+    if said:
+        out.append('VERDICT LESSONS WRITTEN (the owner\'s verdicts, already lines in the document - generalize ACROSS them, never copy them; '
+                   'cite the id each names):')
+        out += [f"  {l['ev']} [{l['kind']}] {str(l['text'] or '').strip()[:160]}" for l in said[:12]]
     acts = ('not_a_task_delete', 'not_mine_delete', 'create_from_message', 'split', 'merge')
     aud = [a for a in store.list_audit(limit=400)
            if str(a.get('CreatedAt') or '') >= since and a['Action'] in acts and a.get('ActorType') != 'agent']
@@ -577,11 +581,12 @@ def adopt(store, key: str, actor: str = 'owner') -> dict:
 
 
 OWNER_SAID = 2      # this many of the owner's own explicit verdicts among a proposed rule's evidence = they stated it
-_MARK = re.compile(r'\b(NOT OURS|NOT A TASK|NOT A CODING TASK)\b')
 
 def _said(store) -> set:
-    """The owner's own explicit verdicts that are still SWITCHED ON - a note switched off no longer says anything (phase C, 2026-10-23)."""
-    return {f"mem{m['MemoryId']}" for m in store.list_memories(active_only=True) if m.get('Source') == 'verdict' and _MARK.search(m.get('Note') or '')}
+    """The owner's own explicit verdicts that still STAND - a verdict undone, or its line Forgotten, no longer says anything (phase C,
+    2026-10-23; the evidence id is what it was given on since the notes table went, 2026-10-27)."""
+    from .memorylines import said
+    return said(store)
 
 
 def auto_adopt(store, actor: str = 'owner-verdicts') -> list:
@@ -608,7 +613,6 @@ def reflect_if_due(store) -> bool:
     reflection (an owner who simply works queues no correction, and that is most of what there is to learn - 2026-10-25). Never on
     silence, never on a day a reflection failed."""
     cfg = store.get_settings()
-    if cfg.get('learn_enabled', '1') != '1': return False
     try: n = int(cfg.get('learn_pending') or 0)
     except ValueError: n = 0
     # no model in it, so it never waits on one: a rule the owner already stated goes live even on a
@@ -703,13 +707,15 @@ def voice_out(store, actor: str = 'voice') -> list:
 _PH = re.compile(r'_\([^)]*\)_', re.S)
 
 
-def withdraw(store, mid: int) -> list:
-    """A note switched off withdraws what it fed (phase C, 2026-10-23): its id leaves every line's evidence; a rule that went live
+def withdraw(store, ev) -> list:
+    """A verdict undone withdraws what it fed (phase C, 2026-10-23): its id (msg12, task7 - or an old mem12) leaves every line's evidence; a rule that went live
     because the owner had said it (auto_adopt) and no longer has OWNER_SAID switched-on verdicts behind it goes back to Proposed; a
     line with no evidence left goes. Returns the texts touched. Never raises."""
     from . import learnedgraph as lg
     try:
-        doc, ev, said, touched = store.get_doc(DOC) or '', f'mem{int(mid)}', _said(store), []
+        ev = f'mem{int(ev)}' if str(ev).isdigit() else str(ev or '')
+        if not ev: return []
+        doc, said, touched = store.get_doc(DOC) or '', _said(store) - {ev}, []
         new = doc
         for raw, l in lg.walk(doc):
             if not l or ev not in l['ev']: continue
@@ -729,7 +735,7 @@ def withdraw(store, mid: int) -> list:
         lg.record(store, doc, new, 'withdraw')
         return touched
     except Exception as e:
-        logger.warning(f'note {mid} not withdrawn from LEARNED.md: {e}'); return []
+        logger.warning(f'{ev} not withdrawn from LEARNED.md: {e}'); return []
 
 
 OLD_MOVES = ('## moves',)

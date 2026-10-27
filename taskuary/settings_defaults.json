@@ -8,7 +8,6 @@
     "intent_classify_enabled": "1",
     "triage_ai": "",
     "triage_backup_ai": "",
-    "learn_enabled": "1",
     "playbooks_enabled": "1",
     "email_signature": "",
     "reply_channels": "email,teams,slack,telegram,whatsapp,imessage,discord,github",

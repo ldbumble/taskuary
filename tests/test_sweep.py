@@ -39,7 +39,7 @@ def lines(s): return {i['Key']: i for i in s.list_ideas()}
 @pytest.fixture
 def s():
     s = MemoryStore()
-    for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled'): s.set_setting(k, '0', 't')
+    for k in ('calendar_enabled', 'coding_auto_enabled'): s.set_setting(k, '0', 't')
     funnel.invalidate(); funnel.forget_states()
     processing_startup.initialize(s, live_state=[])        # the canonical rail, as every install runs it
     return s

@@ -32,7 +32,8 @@ test("a typed remind lights Remind me, one press opens its picker, by the row", 
   const lit = '.tq-arow-verbs button.tq-ab.p[data-tq-verb$="remind"]';
   await page.waitForSelector(lit, { visible: true, timeout: 20000 });
   const btn = await page.$eval(lit, (b) => { const r = b.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width }; });
-  assert.ok(await page.$(".tq-compose-box[data-tq-open]"), "the box is still wide when the button lights - the case that slid it");
+  // (the box is its pill again while the answer is up, 2026-10-27 - the case that slid the button no longer arises, and the press still
+  // has to open the picker by the row)
   // a real press, down then up where the button was drawn while the box was wide: the press is what takes the focus from the box
   await page.mouse.click(btn.x + btn.w / 2, btn.y + 12, { delay: 120 });
   await page.waitForFunction(() => [...document.querySelectorAll(".MuiPopover-paper")].some((p) => p.innerText.includes("Bring it back on")), { timeout: 10000 });

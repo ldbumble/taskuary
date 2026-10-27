@@ -60,9 +60,11 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
     assert.equal(l.statusKey, "approve");
     assert.match(l.status, /ready to send$/, "the status is the rail's word");
     assert.equal(await page.$$eval("[data-tq-task-head] [data-tq-fact], [data-tq-task-head] .MuiChip-root", (els) => els.length), 0, "no chips by the title");
-    // the ask leads under the title, and where it is the one message's own words From does not open them again (the task-view
-    // cleanup, owner-approved 2026-10-25 - a lone message opened whole before); the reply is the open half of the work
-    assert.ok(await page.$("[data-tq-task-head] + [data-tq-ask]"), "the ask is under the title");
+    // the header is the bold title alone and the ask is the task's first part (the owner, 2026-10-27: "top border on task is too big. It
+    // should just have the bolded task name the rest should be in the task"); where it is the one message's own words From does not open
+    // them again (a lone message opened whole before); the reply is the open half of the work
+    assert.equal(await page.$("[data-tq-task-head] + [data-tq-ask]"), null, "nothing under the title in the header");
+    assert.ok(await page.$("[data-tq-from] [data-tq-ask]"), "the ask is in the task");
     assert.equal(await page.$("[data-tq-from] [data-tq-conversation-row][aria-expanded=true]"), null, "the ask's words are read once");
     assert.ok(await page.$("[data-tq-work] [data-tq-closeout] textarea"), "the draft is in the work column");
     await page.keyboard.press("Escape");

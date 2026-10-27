@@ -12,8 +12,9 @@ test("a stranger's task gets the one line in plain words, with the reason for th
 });
 test("words Taskuary wrote from what it read are not 'someone'", () => {
   const l = strangerLine({ origin: { origin: "stranger", why: "written by Taskuary's report from what it read" } });
-  assert.match(l.text, /^Written by Taskuary from what it read/);
-  assert.equal(l.trust, "Trust it");
+  assert.equal(l.text, "Taskuary wrote this from a report - an agent asks before anything risky");
+  assert.equal(l.trust, null, "nobody to trust in Taskuary's own work (the owner, 2026-10-27)");
+  assert.equal(l.trustOrg, null);
 });
 test("owner, trusted and missing origin say nothing", () => {
   for (const o of ["owner", "trusted"]) assert.equal(strangerLine({ origin: { origin: o, why: "x" } }), null);
@@ -44,6 +45,6 @@ test("the held box carries the presses; Came from then carries none (one place, 
   const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   assert.match(page, /<AgentStory story=\{story\} compact=\{storyAt === "line"\} onTrust=\{trustPress\} \/>/);
   assert.match(page, /const trustBoxed = trustInBox\(story\) && \["line", "story"\]\.includes\(storyAt\)/);
-  assert.match(page, /\{!trustBoxed && <>\{" · "\}/);
+  assert.match(page, /\{!trustBoxed && strangerLine\(detail\)\.trust && <>/);
   assert.match(page, /runOperation\(api, "task\.trust", selected, scope \? \{ scope \} : undefined\)/);
 });

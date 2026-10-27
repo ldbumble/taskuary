@@ -28,6 +28,7 @@ import TravelExploreIcon from "@mui/icons-material/TravelExplore";
 import TuneIcon from "@mui/icons-material/Tune";
 import { SIDE_NAV } from "./sideNav.js";
 import { localDay, tsMs, tzNow } from "./ui.jsx";
+import { refreshToday, useCalendarToday } from "./calendarToday.js";
 import NewSheet from "./NewSheet.jsx";
 import AddIcon from "@mui/icons-material/Add";
 import { processingErrorMessage, processingTransportLimit, unreadProcessingRows } from "./processingAll.js";
@@ -150,15 +151,14 @@ const PAGE = 100;
 
 // Today's meetings, fetched once for the rail and re-read every 30 s: a meeting that has started counts in
 // "in today" beside the mail that arrived (a meeting is a row too).
+// ...through the meetings strip's own read (calendarToday.js): the rail asked for the same day on its own, two GETs at every start,
+// and drew nothing until its answer came while the strip's last one was already in hand (the overnight setup walk, 2026-10-26)
 const useCalToday = () => {
-  const [cal, setCal] = useState(null);
+  const cal = useCalendarToday();
   const [tick, setTick] = useState(0);          // only read to force the 30 s re-render (the scope test needs it named)
   useEffect(() => {
-    let alive = true;
-    const load = async () => { try { const { data } = await api.get("/api/calendar/today"); if (alive) setCal(data); } catch { /* no calendar */ } };
-    load();
-    const a = setInterval(load, 300000), b = setInterval(() => setTick((t) => t + 1), 30000);
-    return () => { alive = false; clearInterval(a); clearInterval(b); };
+    const a = setInterval(refreshToday, 300000), b = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => { clearInterval(a); clearInterval(b); };
   }, []);
   return tick >= 0 ? (cal?.events || []) : [];
 };

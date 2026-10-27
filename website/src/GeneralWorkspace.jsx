@@ -634,6 +634,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const { full, toggle: toggleFull } = useFullScreen();
   const [newChatBusy, setNewChatBusy] = useState(false);
   const [confirmNewChat, setConfirmNewChat] = useState(false);
+  // a turn this pane is streaming itself: `data.session` is not re-read during it, so it alone says the agent is not idle (SessionPane)
+  const [streaming, setStreaming] = useState(false);
+  const threadBusy = useCallback((b) => { setStreaming(b); onBusyChange?.(b); }, [onBusyChange]);
   const fileRef = useRef(null);
   const selectionRef = useRef({ connectorId: "", model: "" });
   const attachmentsRef = useRef([]);
@@ -801,7 +804,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         onAttach={() => fileRef.current?.click()}
         dock={dock} dockExpanded={dockExpanded} prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
         asking={asking} onAnswer={answerAsk} noComposer={noComposer}
-        onBusyChange={onBusyChange} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
+        onBusyChange={threadBusy} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
         serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since}
         drafts={data?.playbookDrafts || []} acts={data?.browserActs || []} onDraftDecided={refresh} starting={starting} />
     </OutputsCtx.Provider>
@@ -906,8 +909,10 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       {uploading && <Box sx={{ px: 1, py: 0.5, color: FAINT, fontSize: 11 }}>Attaching image…</Box>}
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         {/* ALWAYS inside the pane, session or not: a session that arrives mid-turn (`started`) must not
-            change the tree around the thread, or the answer streaming into it is remounted away */}
-        <SessionPane sid={session?.sid || null} height="100%" yourTurn={!!asking} expectBrowser={wantsBrowser(task)}>{thread}</SessionPane>
+            change the tree around the thread, or the answer streaming into it is remounted away
+            ...and no sid on a card whose session is not live (`noTools`): its browser was asked for every 3 s under a stopped, saved
+            or failed agent's Result, for as long as it stayed open (the agents walk, 2026-10-26) */}
+        <SessionPane sid={(!noTools && session?.sid) || null} height="100%" yourTurn={!!asking} idle={!busy && !streaming} expectBrowser={wantsBrowser(task)}>{thread}</SessionPane>
       </Box>
     </Box>
   );

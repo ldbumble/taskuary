@@ -46,7 +46,7 @@ usually `report` and `tool`.
 | System | Notes |
 |---|---|
 | **Outlook** | Mail and calendar, through Microsoft sign-in or a tenant app registration - answering invites and booking meetings needs Calendars.ReadWrite, which a sign-in from before it asks for again |
-| **Gmail and IMAP** | Any IMAP mailbox. Approved replies go back through the provider's SMTP, in-thread |
+| **Gmail and IMAP** | Any IMAP mailbox. Approved replies go back through the provider's SMTP, in-thread. A Gmail card can also sign in with Google, which adds the calendar and contacts |
 
 Taskuary reads your **Sent** folder as well as your inbox. That is what makes "has this been
 answered?" a real question rather than a guess, and it is what `STYLE.md`'s **Generate from
@@ -57,6 +57,27 @@ If the mailbox is shared, mail addressed to the team reads as mail addressed to 
 Taskuary knows otherwise. Name your own addresses in `SOUL.md` so triage can tell "someone asked
 me" from "someone asked the team".
 :::
+
+### Finding people: the permissions it asks for
+
+To, Cc and the other recipient boxes search everyone Taskuary knows by name, company or any part
+of an address. Each sign-in also asks for read-only access to the people the account knows:
+
+| Sign-in | Asks for | What the search gains |
+|---|---|---|
+| **Outlook** (Sign in with Microsoft) | `People.Read`, `Contacts.Read` | The people you write with, including outside contacts and their companies, and your Outlook contacts |
+| **Teams** (Sign in with Microsoft) | `People.Read`, besides `User.ReadBasic.All` | Your organisation's people, not only the chats already seen here. Picking one sends into your one-to-one chat with them, and opens that chat if you don't have one yet |
+| **Gmail** (Sign in with Google for the calendar) | `contacts.readonly`, `contacts.other.readonly`, `directory.readonly` | Your Google contacts, the addresses Gmail saved for you, and your Workspace directory |
+
+Microsoft lets each person consent to these themselves, without an admin, unless your
+organisation limits user consent. In that case **Get the admin link** on the card asks for them
+as well. On Google's consent page each one is its own box, and only the calendar is required.
+
+A sign-in made before Taskuary asked for these still works. The search skips what that sign-in
+can't read, and the card says so. To add them on the Outlook or Teams card, sign out and sign in again. A Gmail card that
+only has an App Password has no Google sign-in, so its contacts are not searched. The mail you
+exchanged is still searched. Search answers are kept for ten minutes, and the people they found
+are remembered so they can still be found offline.
 
 ## Chat
 

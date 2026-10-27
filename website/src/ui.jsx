@@ -480,10 +480,14 @@ const browserVoice = () => { try { return localStorage.getItem(BROWSER_VOICE) ==
 
 // One mic. Press to record, press again to stop; the clip goes to /api/voice/transcribe as its
 // raw bytes and the text lands through onText - into a prompt box, or straight into a session.
-export const MicButton = ({ onText, size = 18, sx }) => {
+export const MicButton = ({ onText, onActive, size = 18, sx }) => {
   const voice = useVoiceReady();
   const [rec, setRec] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
+  // ...and SAYS WHILE IT LISTENS OR TRANSCRIBES (the owner, 2026-10-27: "I click on the voice thing, it expands, but while I'm talking it
+  // gets small"): the browser's mic prompt takes the focus, and the chat box that opened for it read that as a look away and shut - its
+  // mic with it, mid-sentence. The box holds itself open while this is true
+  React.useEffect(() => { onActive?.(!!rec || busy); }, [!!rec, busy]);   // eslint-disable-line react-hooks/exhaustive-deps
   const [err, setErr] = React.useState("");
   const [ask, setAsk] = React.useState(null), [byBrowser, setByBrowser] = React.useState(browserVoice);
   const flash = (s) => { setErr(s); setTimeout(() => setErr(""), 5000); };

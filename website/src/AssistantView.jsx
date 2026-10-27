@@ -3305,7 +3305,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   popOnRef.current = popOn;
   // ...and WHILE AN ANSWER IS UP and nothing is typed, the box is its pill again, still focused (2026-10-27): the open box stands above the
   // dock (assistantView.css) and took the room under the view the answer stands in - the next key typed opens it again
-  const boxWide = (boxOpen && !(popOn && popOpen)) || !!text.trim() || !!pics.imgs.length || !!emojiEl;
+  const [dictating, setDictating] = useState(false);   // the box's mic listening or transcribing: the box stays open for it (MicButton)
+  const boxWide = (boxOpen && !(popOn && popOpen)) || dictating || !!text.trim() || !!pics.imgs.length || !!emojiEl;
   // THE PILL'S HINT FITS THE PILL: with a row beside it and no task on the table the box is the 220px pill, and the long hint ("Ask
   // Taskuary anything — a name or a subject pulls it in…") ran on under its own send button, cut mid-word (the overnight setup walk,
   // 2026-10-26). Measured, because the row beside it is what makes it a pill (the CSS's :has)
@@ -3580,7 +3581,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             onFocus={() => setBoxOpen(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget) && !rowDown.current) setBoxOpen(false); }}>
             <div className="tq-compose-tools">
             <AttachImage pics={pics} sx={{ color: DIM }} />
-            <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />
+            <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onActive={setDictating} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />
             <Tooltip title="Send an emoji response">
               <IconButton size="small" aria-label="Choose an emoji response" disabled={busy || resetting}
                 onClick={(e) => setEmojiEl(e.currentTarget)} sx={{ width: 34, height: 34, p: 0, color: DIM }}>

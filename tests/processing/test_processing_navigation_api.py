@@ -48,7 +48,7 @@ def nav_api(tmp_path, monkeypatch):
                 try: t.join(timeout=max(0.1, deadline - time.monotonic()))
                 except RuntimeError: time.sleep(.01)
         funnel.invalidate()
-        db.cx.close()
+        db.close()
 
 
 def binding(client, **scope):

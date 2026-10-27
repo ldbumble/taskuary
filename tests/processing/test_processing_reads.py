@@ -16,7 +16,7 @@ FUTURE = (datetime.fromisoformat(NOW) + timedelta(days=1)).isoformat(sep=' ')
 def db(tmp_path):
     store = SQLiteStore(str(tmp_path / 'reads.db'))
     yield store
-    store.cx.close()
+    store.close()
 
 
 def message(db, name='source', task=None):
@@ -72,7 +72,7 @@ def test_activation_uses_fresh_uncapped_baseline_and_reopen_is_idempotent(db):
         assert peer.processing_reads_active()
         assert processing_reads.state(picture(peer, ids[-1]), NOW)['unread'] is False
     finally:
-        peer.cx.close()
+        peer.close()
 
 
 def test_display_ack_and_clearing_legacy_rows_never_create_or_erase_receipts(db):
@@ -175,7 +175,7 @@ def test_activation_rejects_dirty_generation_without_any_migration_or_receipt(db
         activate(db)
         assert not processing_reads.state(picture(db, mid), NOW)['unread']
     finally:
-        peer.cx.close()
+        peer.close()
 
 
 def test_activation_failure_rolls_back_receipts_baseline_and_marker_then_retries(db, monkeypatch):
@@ -292,7 +292,7 @@ def test_serial_store_writer_is_fenced_by_activation_without_reusing_legacy_disp
         assert processing_reads.state(picture(db, mid), NOW)['unread']
         assert not db.cx.execute('SELECT 1 FROM processing_read_receipt').fetchone()
     finally:
-        peer.cx.close()
+        peer.close()
 
 
 def test_own_display_clear_and_done_keep_clean_census_but_never_clear_peer_dirt(db):
@@ -320,7 +320,7 @@ def test_own_display_clear_and_done_keep_clean_census_but_never_clear_peer_dirt(
             WHERE EntityKind='message' AND LocalId=?''', (str(newcomer),)).fetchone()
         assert processing_reads.state(picture(db, mid), NOW)['unread']
     finally:
-        peer.cx.close()
+        peer.close()
 
 
 def test_canonical_done_supersedes_retained_legacy_deferral(db):
@@ -445,7 +445,7 @@ def test_display_summary_reopens_by_exact_legacy_alias_without_adding_a_receipt(
             ContextRevision=read['context_revision'], Summary='Alias-specific summary')]
         assert processing_reads.state(read, NOW)['unread']
     finally:
-        peer.cx.close()
+        peer.close()
 
 
 def test_confirmation_context_is_checked_inside_receipt_writer_transaction(db):

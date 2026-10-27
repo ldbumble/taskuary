@@ -57,8 +57,8 @@ def test_external_merge_between_enumeration_and_projection_is_one_snapshot(tmp_p
         assert source not in {item['item_id'] for item in after['items']}
         assert item_for(after, f'message:{other}')['item_id'] == target
     finally:
-        writer.cx.close()
-        db.cx.close()
+        writer.close()
+        db.close()
 
 
 def test_failed_projection_closes_read_transaction_without_partial_inventory(tmp_path, monkeypatch):
@@ -85,7 +85,7 @@ def test_failed_projection_closes_read_transaction_without_partial_inventory(tmp
         monkeypatch.setattr(processing_projection, 'processing_projection', original)
         assert db.processing_inventory_snapshot(fixed_now=NOW) == before
     finally:
-        db.cx.close()
+        db.close()
 
 
 @pytest.mark.parametrize('change', ['body', 'draft', 'read', 'priority', 'member', 'worker'])
@@ -128,7 +128,7 @@ def test_in_place_changes_invalidate_snapshot_cursor_without_identity_churn(tmp_
         # An old immutable snapshot remains internally pageable, never blended with new rows.
         assert processing_inventory_page(before, limit=1, cursor=page['next_cursor'])['items']
     finally:
-        db.cx.close()
+        db.close()
 
 
 def test_uncatalogued_arrival_changes_coverage_without_getter_backfill(tmp_path):
@@ -149,7 +149,7 @@ def test_uncatalogued_arrival_changes_coverage_without_getter_backfill(tmp_path)
         assert db.resolve_processing_target('legacy_funnel', f'msg:{late}') is None
         assert 'calendar' in after['coverage']['unsupported']
     finally:
-        db.cx.close()
+        db.close()
 
 
 def test_page_facts_are_revision_bound_and_cannot_change_mid_walk(tmp_path):
@@ -183,7 +183,7 @@ def test_page_facts_are_revision_bound_and_cannot_change_mid_walk(tmp_path):
             processing_inventory_page(fresh, order='priority', facts=facts)
         assert facts[item['item_id']]['view_revision'] == item['view_revision']
     finally:
-        db.cx.close()
+        db.close()
 
 
 def test_wrapper_and_two_ideas_stay_independently_enumerated_with_exact_relations(tmp_path):
@@ -209,4 +209,4 @@ def test_wrapper_and_two_ideas_stay_independently_enumerated_with_exact_relation
             assert item['inventory_facts']['actionability'] == {'state': 'unknown'}
         assert db.processing_legacy_evidence('wrapper-inventory-v1')
     finally:
-        db.cx.close()
+        db.close()

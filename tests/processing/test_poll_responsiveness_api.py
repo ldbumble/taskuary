@@ -27,7 +27,7 @@ def test_card_interval_semantics_use_actual_backend_parser(tmp_path, monkeypatch
         db.save_connector({'ConnectorId': cid, 'Active': 1, 'ConfigJson': json.dumps(config)}, 'fixture')
         assert (kind in server._quick_due()) is due
     finally:
-        db.cx.close()
+        db.close()
 
 
 @pytest.mark.parametrize('raw,enabled', [('0', False), ('10', True), ('bad', True)])
@@ -47,7 +47,7 @@ def test_global_setting_controls_real_fast_clock_without_connecting(tmp_path, mo
         with pytest.raises(StopIteration): server.quick_forever()
         assert bool(calls) is enabled
     finally:
-        db.cx.close()
+        db.close()
 
 
 def test_second_chat_arrival_is_visible_while_quick_triage_is_held(tmp_path, monkeypatch):
@@ -116,7 +116,7 @@ def test_second_chat_arrival_is_visible_while_quick_triage_is_held(tmp_path, mon
         # The async worker API is supplied by the bounded polling implementation.
         assert server.join_drains(db, timeout=5), 'owned drain worker must finish before fixture teardown'
         client.close()
-        db.cx.close()
+        db.close()
 
 
 def test_chat_arrival_is_visible_while_full_sync_is_held(tmp_path, monkeypatch):
@@ -170,4 +170,4 @@ def test_chat_arrival_is_visible_while_full_sync_is_held(tmp_path, monkeypatch):
         release.set()
         assert server.join_drains(db, timeout=5)
         client.close()
-        db.cx.close()
+        db.close()

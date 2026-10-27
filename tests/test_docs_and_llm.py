@@ -37,11 +37,11 @@ class TemplateTests(unittest.TestCase):
         s = SQLiteStore(p)
         s._exec("UPDATE doc SET Content='OLD SHIPPED TEXT' WHERE Name='triage'")   # an older release
         s.save_doc('soul', 'my own rules', 'owner')
-        s.cx.close()
+        s.close()
         s2 = SQLiteStore(p)
         self.assertIn('# How to triage what arrives', s2.get_doc('triage'))  # refreshed
         self.assertEqual(s2.get_doc('soul'), 'my own rules')                       # theirs stays theirs
-        s2.cx.close()
+        s2.close()
 
     def test_owner_edits_never_overwritten(self):
         s = MemoryStore()
@@ -228,10 +228,10 @@ class DigestReportTests(unittest.TestCase):
         self.assertEqual((cfg['type'], cfg['title']), ('digest', 'Morning digest'))
         self.assertIn('TQ-ref', cfg['ai_prompt'])           # the editable ask, on the Reports tab
         s.delete_source(src['SourceId'])
-        s.cx.close()
+        s.close()
         s2 = SQLiteStore(p)
         self.assertEqual(digest_of(s2), [])
-        s2.cx.close()
+        s2.close()
 
     def test_an_empty_block_says_so_instead_of_leaving_a_bare_header(self):
         """The reported bug: with no pending reviews at all, 'WAITING ON THE OWNER' was a

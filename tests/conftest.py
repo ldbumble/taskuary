@@ -5,7 +5,7 @@ config and opens SQLite at import time.  The guards below are deliberately test-
 code does not gain a pytest switch and a unit test can still replace a guarded boundary with its
 own fake.  Real local services are reachable only after a test registers its ephemeral port.
 """
-import hashlib, os, platform, shutil, socket, subprocess, sys, tempfile, threading, uuid
+import hashlib, os, platform, shutil, socket, subprocess, sys, tempfile, threading, time, uuid
 from contextlib import asynccontextmanager
 from contextlib import ExitStack
 from pathlib import Path
@@ -170,12 +170,26 @@ def pytest_runtest_teardown(item):
     # ...and every other short-lived thread that reads the store behind a request: the assistant's
     # calendar prefetch (assistant._refresh_agenda) outlived its test the same way and took the Windows
     # 3.12 job down with an access violation in the test after it (the run for d37aaa37).
-    for t in threading.enumerate():
-        if t is not threading.current_thread() and t.name in ('taskuary-agenda', 'refresh-after', 'taskuary-new-walk'):
-            # ...and one listed but not yet started cannot be joined (Windows 3.12, the 0.3.9.48 run): it is let be, not a failed test
-            try: t.join(10)
-            except RuntimeError: pass
+    _join_store_readers()
     yield
+    # ...and again once the fixtures are down: a finalizer (a TestClient's exit, a refresh) can start one more, and
+    # left running it reads the next test's store - or this one's, closed under it.
+    _join_store_readers()
+
+
+def _join_store_readers(budget=10):
+    """Join the threads that read the store behind a request. One listed but not yet started cannot be joined (Windows
+    3.12, the 0.3.9.48 run) - it is about to run, so it is waited for, not let be. A second pass catches one a joined
+    thread started; an empty pass costs one enumerate."""
+    end = time.monotonic() + budget
+    for _ in range(3):
+        ts = [t for t in threading.enumerate() if t is not threading.current_thread()
+              and t.name in ('taskuary-agenda', 'refresh-after', 'taskuary-new-walk')]
+        if not ts: return
+        for t in ts:
+            while time.monotonic() < end:
+                try: t.join(max(0.0, end - time.monotonic())); break
+                except RuntimeError: time.sleep(0.005)
 
 
 # The owner token is minted on first run now (guard.ensure_tokens), so every request the suite makes

@@ -19,7 +19,7 @@ def store(monkeypatch):
     funnel.invalidate()
     yield s
     funnel.invalidate()
-    s.cx.close()
+    s.close()
 
 
 def add(s, title, *, tid=None, channel='email', status='filed', sent=None):
@@ -497,7 +497,7 @@ def test_startup_backup_contains_legacy_reads_and_owner_documents(tmp_path):
     assert Path(result['backup']).with_suffix('.attachments.json').exists()
     assert not funnel.build(s, live_state=[])['items']
     assert initialize(s, live_state=[]) == {'status': 'already_active'}
-    s.cx.close()
+    s.close()
 
 
 def test_window_and_full_history_snapshots_stay_cached_side_by_side(store):

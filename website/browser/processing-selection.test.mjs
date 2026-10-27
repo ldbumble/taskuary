@@ -179,6 +179,10 @@ test("PW-118 a change to the content of the shown Next is taken fresh, never ref
     // the chat line (layout B, 2026-09-30); otherwise the walk's own card
     const activeCard = async () => {
       await page.waitForSelector('.tq-canvas-live [data-tq-canvas-item], .tq-msg .tq-card', { timeout: 15000 });
+      // ...and the row whole: after a reload it is drawn once, when the item's verbs and the Advisor's read are in (row-draws-once,
+      // 6eb26cd5) - until then there is none, so a read the moment the view lands found no buttons one run in two
+      await page.waitForFunction(() => !document.querySelector('.tq-canvas-live [data-tq-canvas-item]')
+        || document.querySelector('[data-tq-row] [data-tq-next]'), { timeout: 5000 });
       return page.evaluate(() => {
         const view = document.querySelector('.tq-canvas-live [data-tq-canvas-item]');
         if (view) return { title: view.getAttribute('data-tq-canvas-item'),

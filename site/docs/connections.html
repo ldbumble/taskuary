@@ -167,7 +167,7 @@ usually <code>report</code> and <code>tool</code>.</p>
 </tr>
 <tr>
 <td><strong>Gmail and IMAP</strong></td>
-<td>Any IMAP mailbox. Approved replies go back through the provider&#39;s SMTP, in-thread</td>
+<td>Any IMAP mailbox. Approved replies go back through the provider&#39;s SMTP, in-thread. A Gmail card can also sign in with Google, which adds the calendar and contacts</td>
 </tr>
 </tbody></table>
 <p>Taskuary reads your <strong>Sent</strong> folder as well as your inbox. That is what makes &quot;has this been
@@ -176,7 +176,42 @@ history</strong> learns your writing voice from.</p>
 <div class="callout note"><p class="eyebrow">A shared mailbox needs saying so</p><p>If the mailbox is shared, mail addressed to the team reads as mail addressed to you unless
 Taskuary knows otherwise. Name your own addresses in <code>SOUL.md</code> so triage can tell &quot;someone asked
 me&quot; from &quot;someone asked the team&quot;.</p>
-</div><h2 id="chat">Chat<a class="anchor" href="#chat" aria-label="Link to this section">#</a></h2>
+</div><h3 id="finding-people-the-permissions-it-asks-for">Finding people: the permissions it asks for<a class="anchor" href="#finding-people-the-permissions-it-asks-for" aria-label="Link to this section">#</a></h3>
+<p>To, Cc and the other recipient boxes search everyone Taskuary knows by name, company or any part
+of an address. Each sign-in also asks for read-only access to the people the account knows:</p>
+<table>
+<thead>
+<tr>
+<th>Sign-in</th>
+<th>Asks for</th>
+<th>What the search gains</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Outlook</strong> (Sign in with Microsoft)</td>
+<td><code>People.Read</code>, <code>Contacts.Read</code></td>
+<td>The people you write with, including outside contacts and their companies, and your Outlook contacts</td>
+</tr>
+<tr>
+<td><strong>Teams</strong> (Sign in with Microsoft)</td>
+<td><code>People.Read</code>, besides <code>User.ReadBasic.All</code></td>
+<td>Your organisation&#39;s people, not only the chats already seen here. Picking one sends into your one-to-one chat with them, and opens that chat if you don&#39;t have one yet</td>
+</tr>
+<tr>
+<td><strong>Gmail</strong> (Sign in with Google for the calendar)</td>
+<td><code>contacts.readonly</code>, <code>contacts.other.readonly</code>, <code>directory.readonly</code></td>
+<td>Your Google contacts, the addresses Gmail saved for you, and your Workspace directory</td>
+</tr>
+</tbody></table>
+<p>Microsoft lets each person consent to these themselves, without an admin, unless your
+organisation limits user consent. In that case <strong>Get the admin link</strong> on the card asks for them
+as well. On Google&#39;s consent page each one is its own box, and only the calendar is required.</p>
+<p>A sign-in made before Taskuary asked for these still works. The search skips what that sign-in
+can&#39;t read, and the card says so. To add them on the Outlook or Teams card, sign out and sign in again. A Gmail card that
+only has an App Password has no Google sign-in, so its contacts are not searched. The mail you
+exchanged is still searched. Search answers are kept for ten minutes, and the people they found
+are remembered so they can still be found offline.</p>
+<h2 id="chat">Chat<a class="anchor" href="#chat" aria-label="Link to this section">#</a></h2>
 <table>
 <thead>
 <tr>

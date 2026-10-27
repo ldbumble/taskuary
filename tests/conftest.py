@@ -171,7 +171,10 @@ def pytest_runtest_teardown(item):
     # calendar prefetch (assistant._refresh_agenda) outlived its test the same way and took the Windows
     # 3.12 job down with an access violation in the test after it (the run for d37aaa37).
     for t in threading.enumerate():
-        if t is not threading.current_thread() and t.name in ('taskuary-agenda', 'refresh-after', 'taskuary-new-walk'): t.join(10)
+        if t is not threading.current_thread() and t.name in ('taskuary-agenda', 'refresh-after', 'taskuary-new-walk'):
+            # ...and one listed but not yet started cannot be joined (Windows 3.12, the 0.3.9.48 run): it is let be, not a failed test
+            try: t.join(10)
+            except RuntimeError: pass
     yield
 
 

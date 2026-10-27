@@ -60,6 +60,15 @@ export function connect() {
   ws.onerror = () => { try { ws.close(); } catch { /* already gone */ } };
 }
 
+// THE TASKS AN EVENT NAMES (live._merged): every task its window touched, or null when it named none - then it is about all of them.
+// A task open on the screen re-read itself on every task-changed, so each mail landing on OTHER work re-read the open task and its
+// waiting room (the intake walk, 2026-10-26).
+export const taskIdsOf = (ev) => {
+  const ids = Array.isArray(ev?.task_ids) ? ev.task_ids : ev?.task_id != null ? [ev.task_id] : null;
+  return ids ? ids.map(Number).filter(Boolean) : null;
+};
+export const touches = (ev, tid) => { const ids = taskIdsOf(ev); return !ids || ids.includes(Number(tid)); };
+
 // Whether pushes are arriving right now: a safety poll only needs to run when they are not.
 export function liveUp() {
   return !!ws && ws.readyState === 1;

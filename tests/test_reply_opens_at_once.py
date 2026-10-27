@@ -61,5 +61,29 @@ class ReplyOpensAtOnceTests(unittest.TestCase):
         out = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': True, 'later': True, 'instruction': 'yes, Tuesday works'}).json()
         self.assertEqual((out['reviewId'], out['draft'], out['drafting']), (rid, '', True))
 
+    def test_a_press_while_the_arrivals_own_draft_is_written_waits_for_it(self):
+        """A reply task's draft is written at arrival (ingest._auto_draft); the card says "No draft yet" until it lands, and a Draft
+        with AI pressed meanwhile wrote a second one over it - two model calls for one reply (the intake walk, 2026-10-26)."""
+        import threading
+        from taskuary import ingest
+        rid = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': False}).json()['reviewId']
+        go, calls = threading.Event(), []
+        def slow(store, tid, rid_, actor=None, nudge=None, **kw):
+            calls.append(actor); go.wait(10)
+            store.update_review_draft(rid_, 'Yes, I can cover Tuesday.', None)
+            return 'Yes, I can cover Tuesday.'
+        with mock.patch.object(responder, 'write_draft', side_effect=slow), mock.patch.object(server, '_refresh_chat_context', return_value={}):
+            arrival = threading.Thread(target=ingest._auto_draft, args=(self.s, self.tid, rid)); arrival.start()
+            while not calls: pass
+            threading.Timer(0.3, go.set).start()
+            r = self.c.post(f'/api/reviews/{rid}/draft')
+            arrival.join(10)
+            self.assertEqual((r.status_code, r.json()['draft']), (200, 'Yes, I can cover Tuesday.'))
+            self.assertEqual(calls, ['auto-draft'], 'the press wrote a second draft')
+            self.assertNotIn(rid, ingest.DRAFTING)
+            # ...and once it has landed, a press is a real redraft again
+            self.c.post(f'/api/reviews/{rid}/draft')
+            self.assertEqual(len(calls), 2)
+
 if __name__ == '__main__':
     unittest.main()

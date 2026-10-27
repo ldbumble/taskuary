@@ -18,3 +18,25 @@ def test_a_nested_payload_poked_inside_a_batch_does_not_crash_the_poker():
     kinds = sorted(k for k, _ in sent)
     assert kinds == ['feed-changed', 'ingest-status'], sent
     assert next(p for k, p in sent if k == 'ingest-status')['ingest']['lane'] == 'quick'
+
+
+def test_forgetting_a_funnel_state_nobody_had_wakes_no_tab():
+    """The pile's own read clears an agent's notice on every transition it announces (funnel.announce); a stop or a finish had
+    none, and the poke rebuilt every open tab's pile a second time 1.5 s after the read that caused it (the intake walk,
+    2026-10-26: one mail arriving, two full rail reloads). A state that was there and went is still news."""
+    from unittest import mock
+    from taskuary.store import MemoryStore
+    s = MemoryStore()
+    sent = []
+    with mock.patch('taskuary.live.emit', side_effect=lambda k, **p: sent.append(k)):
+        s.clear_funnel_state('notice:404')
+        s.clear_funnel_states(('ack',))
+        assert sent == [], sent
+        s.set_funnel_state('notice:7', 'ack', 'owner')
+        sent.clear()
+        s.clear_funnel_states(('ack',))
+        assert sent == ['feed-changed'], sent
+        s.set_funnel_state('notice:8', 'notice', 'owner')
+        sent.clear()
+        s.clear_funnel_state('notice:8')
+        assert sent == ['feed-changed'], sent

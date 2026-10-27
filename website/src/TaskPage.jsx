@@ -48,7 +48,7 @@ import SlotList from "./SlotList.jsx";
 import BatchItems from "./BatchItems.jsx";
 import { progress as batchProgress } from "./batchItems.js";
 import CloseNote from "./CloseNote.jsx";
-import { onLive } from "./live.js";
+import { onLive, touches } from "./live.js";
 import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT, ALERT_BD, ALERT_INK, ALERT_TINT, BRAND } from "./theme.jsx";
 import RunSteps from "./RunSteps.jsx";
@@ -563,7 +563,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // once something is already known to be live, so a task sitting open on this page could
     // never learn it had an agent (TQ-0500: the Board showed a live coding session while this
     // page offered to start one, which would have made a second).
-    return onLive("task-changed", () => { if (selRef.current) loadDetail(selRef.current); });
+    // ...when the write was to THIS task (or named none): each mail landing on other work re-read it (the intake walk, 2026-10-26)
+    return onLive("task-changed", (ev) => { if (selRef.current && touches(ev, selRef.current)) loadDetail(selRef.current); });
   }, [active, loadDetail]);
   // the roster is user-config - default to whatever actually exists. A GENERAL task's blank is an answer, not a gap: it means
   // "the profile it has", and filling it with the roster's first name sent the coding profile - which the dispatch refuses on a non-coding task (422), so

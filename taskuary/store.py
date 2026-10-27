@@ -2903,14 +2903,15 @@ class SQLiteStore:
     def clear_funnel_state(self, key):
         """Forget one row's state entirely - it is new again. A new chat does this to an agent
         that is still waiting on you: shown once yesterday is not an answer."""
-        self._clear_funnel_compat('Key=?', (key,))
-        self._poke('feed-changed')
+        # ...and forgetting a state nobody had is not news. The pile's own read clears an agent's notice on every transition it
+        # announces (funnel.announce) - a stop or a finish had none - and the poke made every open tab rebuild the pile a second
+        # time 1.5 s after the read that caused it (the intake walk, 2026-10-26: one mail arriving, two full rail reloads)
+        if self._clear_funnel_compat('Key=?', (key,)): self._poke('feed-changed')
     def clear_funnel_states(self, statuses=('surfaced',)):
         """A new chat walks the pile afresh: what was merely SHOWN comes back; what the owner
         decided (done, later) stands."""
         if statuses:
-            self._clear_funnel_compat(f"Status IN ({','.join('?' * len(statuses))})", list(statuses))
-            self._poke('feed-changed')
+            if self._clear_funnel_compat(f"Status IN ({','.join('?' * len(statuses))})", list(statuses)): self._poke('feed-changed')
 
     @staticmethod
     def _processing_finish_funnel_write(cur, clean):
@@ -2956,9 +2957,11 @@ class SQLiteStore:
             try:
                 clean = bool(active_version(cur)) and not self._processing_reconcile_status_cursor(cur)['pending']
                 cur.execute('DELETE FROM funnel_state WHERE ' + where, params)
+                gone = cur.rowcount
                 self._processing_finish_funnel_write(cur, clean)
                 self.cx.commit()
                 self._writes += 1
+                return gone
             except BaseException:
                 self.cx.rollback()
                 raise

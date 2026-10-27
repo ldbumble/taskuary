@@ -14,7 +14,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import BlockIcon from "@mui/icons-material/Block";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
-import { onLive } from "./live.js";
+import { onLive, touches } from "./live.js";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { RepoPicker } from "./RepoPicker.jsx";
 import { Md } from "./md.jsx";
@@ -1332,7 +1332,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
     if (!taskId) return;
     try { setWait((await api.get(`/api/tasks/${taskId}/waitroom`)).data); } catch { setWait({ data: [], state: null }); }
   }, [taskId]);
-  React.useEffect(() => { load(); return onLive("task-changed", load); }, [load]);
+  React.useEffect(() => { load(); return onLive("task-changed", (ev) => { if (touches(ev, taskId)) load(); }); }, [load, taskId]);
   React.useEffect(() => () => clearTimeout(peekTimer.current), []);
   const lines = text.split("\n").map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim()).filter(Boolean).length;
   const queue = async () => {

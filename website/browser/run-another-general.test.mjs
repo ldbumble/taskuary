@@ -55,8 +55,8 @@ test("Run another agent on a stopped general agent starts a new conversation and
   await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
   await page.waitForFunction((old) => [...document.querySelectorAll(".tq-aui-agent")].some((m) => m.innerText.includes(old)), { timeout: 30000 }, OLD);
 
-  // Run another agent rides in the row's More
-  await page.waitForSelector('[data-tq-row] button[data-tq-verb$="done"]', { timeout: 20000 });
+  // Run another agent rides in the row's More - the row is up once it has its ▾ (Mark done folds into it beside Back, the nav pill)
+  await page.waitForSelector('[data-tq-row] [data-tq-more]', { timeout: 20000 });
   await new Promise((r) => setTimeout(r, 1000));
   let press = await page.$('[data-tq-row] button[data-tq-verb$="run-another"]');
   for (const more of await page.$$("[data-tq-row] [data-tq-more]")) {

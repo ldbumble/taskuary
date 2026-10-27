@@ -1720,7 +1720,6 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   const [connectors, setConnectors] = useState(null);
   const [sources, setSources] = useState([]);
   const [types, setTypes] = useState([]);
-  const [drivers, setDrivers] = useState([]);
   const [q, setQ] = useState(asked || "");
   useEffect(() => { if (asked) setQ(asked); }, [asked]);
   const [group, setGroup] = useState(GROUP_TITLES[0]);   // which catalog section the rail has open
@@ -1737,7 +1736,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       setConnectors(c.data.data || []); setNOn(c.data.connected ?? null); setSources(s.data.data || []); setTypes(t.data.data || []);
     } catch (e) { setErr(e?.response?.data?.detail || "Failed to load connectors"); }
   }, []);
-  useEffect(() => { load(); api.get("/api/mssql/drivers").then(({ data }) => setDrivers(data.data || [])).catch(() => {}); }, [load]);
+  useEffect(() => { load(); }, [load]);
   // ...read again whenever a card closes: connecting or disconnecting a CLI happens on its panel
   useEffect(() => { if (!open) api.get("/api/cli/connections").then(({ data }) => setClis(data.data || [])).catch(() => {}); }, [open]);
   // ...and the count with it: an agent connected on its page is one more connected, said when the page closes
@@ -1800,7 +1799,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     : open?.kind === "alchemy-wallet" ? <AlchemyWalletGuide onBack={back}
       onData={() => { const c = byType.alchemy; if (c) setOpen({ kind: "connector", id: c.ConnectorId }); }} />
     : !conn ? null
-    : conn.Type === "mssql" ? <MssqlDetail key={conn.ConnectorId} {...shared} drivers={drivers} />
+    : conn.Type === "mssql" ? <MssqlDetail key={conn.ConnectorId} {...shared} />
     : conn.Type === "winrm" ? <WinrmDetail key={conn.ConnectorId} {...shared} />
     : conn.Type === "reason_network" ? <ReasonDetail key={conn.ConnectorId} {...shared} />
     : DATA_META[conn.Type] ? <DataDetail key={conn.ConnectorId} {...shared} meta={DATA_META[conn.Type]} sources={sources} byType={byType} />
@@ -2593,8 +2592,12 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
 }
 
 /* ── SQL Server detail: connection wizard + guide (reports live on the Reports tab) ── */
-function MssqlDetail({ conn, drivers, reload, onBack, onCreated }) {
+// THE ODBC DRIVERS ARE ASKED FOR BY THE CARD THAT PICKS ONE: every open of Connections asked the machine for them, for a card most
+// people never open (the overnight setup walk, 2026-10-26)
+function MssqlDetail({ conn, reload, onBack, onCreated }) {
   const [tab, setTab] = useState("Connection");
+  const [drivers, setDrivers] = useState([]);
+  useEffect(() => { api.get("/api/mssql/drivers").then(({ data }) => setDrivers(data.data || [])).catch(() => {}); }, []);
   if (!conn) return null;
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>

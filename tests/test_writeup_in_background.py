@@ -12,7 +12,9 @@ from taskuary import handbook, playbooks, server, terminal, writeup, wrapup
 from taskuary.store import MemoryStore
 
 SESSION = 'matched the hardware store to vendor 87, expense account 6120, created bill 1043 for 84.10. ' * 8
-LAT = 0.3
+# the brain's own time: long enough that a press which waited for it is told apart from a slow request on a busy CI
+# runner (Windows 3.12 answered a background press in 0.40 s against the old 0.3, the 0.3.9.48 run)
+LAT = 1.5
 
 
 def brain(system, user, **kw):

@@ -54,6 +54,7 @@ import { choice, label as btnLabel } from "./buttons.js";   // buttons.json's wo
 import { asUtc, setTz, fmtTime } from "./dates.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { readContacts } from "./contacts.js";
+import { personLine, runSearch, withFound } from "./peopleSearch.js";
 export { agentAssignee, assignedAgent, assigneeLabel } from "./agentIdentity.js";
 import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2, label } from "./theme.jsx";
 
@@ -1855,33 +1856,42 @@ export const useContacts = () => {
   return people;
 };
 
+// ...and the server's search as you type: company, domain, a fragment of a name, the model's pick when nothing plain fits (peopleSearch.js)
+export const usePeopleSearch = (q, channel = "email") => {
+  const [found, setFound] = useState({ q: "", rows: [], ai: false });
+  useEffect(() => runSearch((u, o) => api.get(u, o), q, channel, setFound), [q, channel]);
+  return found;
+};
+
+// `channel`: a chat's picker offers that channel's chats (their handle is what goes); the address book is email's alone
 export const ContactPicker = ({ value, onChange, onPick, placeholder = "name or email address",
-                               people, autoFocus, size = "small", sx, onKeyDown, clearOnPick }) => {
-  const rows = people || [];
-  const byEmail = (e) => rows.find((p) => String(p.Email || "").toLowerCase() === String(e || "").toLowerCase());
+                               people, autoFocus, size = "small", sx, onKeyDown, clearOnPick, channel = "email" }) => {
+  const rows = String(channel || "email").toLowerCase() === "email" ? people || [] : [];
+  const found = usePeopleSearch(value, channel);
+  const q = String(value || "").trim().toLowerCase();
+  // search the NAME as well as the address: nobody remembers how a colleague's mailbox is spelled
+  const local = rows.filter((p) => p.Email && (!q || `${p.Name || ""} ${p.Email}`.toLowerCase().includes(q)))
+    .slice(0, 50).map((p) => ({ to: p.Email, name: p.Name || "" }));
+  const opts = withFound(local, found, value).slice(0, 50);
+  const of = (o) => opts.find((x) => x.to === o) || {};
   return (
     <Autocomplete freeSolo autoHighlight size={size} sx={sx}
-      options={rows.map((p) => p.Email).filter(Boolean)}
+      options={opts.map((o) => o.to)}
       inputValue={value ?? ""}
       onInputChange={(_e, v) => onChange?.(v || "")}
       onChange={(_e, v) => { if (v) { onPick?.(String(v)); if (clearOnPick) onChange?.(""); } }}
       getOptionLabel={(o) => String(o)}
-      // search the NAME as well as the address: nobody remembers how a colleague's mailbox is spelled
-      filterOptions={(opts, { inputValue }) => {
-        const q = String(inputValue || "").trim().toLowerCase();
-        if (!q) return opts.slice(0, 50);
-        return opts.filter((o) => `${byEmail(o)?.Name || ""} ${o}`.toLowerCase().includes(q)).slice(0, 50);
-      }}
+      filterOptions={(x) => x}
       renderOption={(props, o) => {
-        const p = byEmail(o);
+        const p = of(o), line = personLine(p);
         return (
-          <li {...props} key={o} style={{ display: "block", padding: "4px 10px", minWidth: 0 }}>
-            {p?.Name && (
+          <li {...props} key={o} data-tq-person={o} style={{ display: "block", padding: "4px 10px", minWidth: 0 }}>
+            {p.name && (
               <div style={{ fontSize: 12.5, color: INK, fontWeight: 600, overflow: "hidden",
-                textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.Name}</div>
+                textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
             )}
             <div style={{ fontSize: 11.5, color: FAINT, overflow: "hidden",
-              textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o}</div>
+              textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line ? `${line} · ${o}` : o}</div>
           </li>
         );
       }}

@@ -76,7 +76,7 @@ export const Handoff = ({ taskId, onSent, onLeave, onStay }) => {
             <MenuItem key={x} value={x} sx={{ fontSize: 12.5 }}>{x}</MenuItem>
           ))}
         </Select>
-        <ContactPicker people={people} value={to} onChange={setTo} onPick={setTo}
+        <ContactPicker people={people} value={to} onChange={setTo} onPick={setTo} channel={channel}
           placeholder="who should own this — name or email" sx={{ flex: 1, minWidth: 220 }} />
         <Button size="small" onClick={draft} disabled={!!busy}>
           {busy === "draft" ? <CircularProgress size={12} /> : text ? label("redraft") : label("redraft", "none")}

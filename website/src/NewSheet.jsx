@@ -17,7 +17,8 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import api from "./api";
 import { ACCENT, ACCENT2, BORDER, DIM, FAINT, GRADIENT, INK, PANEL, PANEL2, ROLES, mono } from "./theme.jsx";
-import { ChannelIcon, AgentPicker, MicButton, useAgents, codingProfile, TaskuaryMark } from "./ui.jsx";
+import { ChannelIcon, AgentPicker, MicButton, useAgents, codingProfile, TaskuaryMark, usePeopleSearch } from "./ui.jsx";
+import { withFound } from "./peopleSearch.js";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { NO_REPO, planTask } from "./newTask.js";
 import NewRepo from "./NewRepo.jsx";
@@ -79,6 +80,8 @@ const Fork = ({ on, title, hint, onClick }) => (
 // nobody (the UI audit, 2026-10-21). Only a whole address is taken - half a name never becomes a recipient behind the owner's back.
 export const EmailRecipients = ({ value, onChange, options, placeholder }) => {
   const [typed, setTyped] = useState("");
+  // ...and the server's search beside the list this form was given: "dynamo" is everyone at Dynamo (peopleSearch.js)
+  const found = usePeopleSearch(typed, "email");
   const take = () => { const v = typed.trim(); if (validEmail(v)) { onChange(normalizeEmails([...value, v])); setTyped(""); } };
   return (
   <Autocomplete multiple freeSolo autoHighlight openOnFocus size="small" fullWidth
@@ -88,7 +91,7 @@ export const EmailRecipients = ({ value, onChange, options, placeholder }) => {
     onChange={(_event, values) => { onChange(normalizeEmails(values)); setTyped(""); }}
     getOptionLabel={(option) => typeof option === "string" ? option : (option.name || option.to || "")}
     isOptionEqualToValue={(option, selected) => option.to?.toLowerCase() === String(selected).toLowerCase()}
-    filterOptions={(rows, state) => emailRecipientOptions(rows, state.inputValue)}
+    filterOptions={(rows, state) => withFound(emailRecipientOptions(rows, state.inputValue), found, state.inputValue)}
     renderTags={(emails, getTagProps) => emails.map((email, index) => (
       <Chip {...getTagProps({ index })} key={email} label={email} size="small" sx={{ maxWidth: 260 }} />
     ))}
@@ -97,7 +100,7 @@ export const EmailRecipients = ({ value, onChange, options, placeholder }) => {
       return (
         <Box component="li" {...props} key={address} sx={{ display: "block !important", fontSize: 12.5 }}>
           <Box sx={{ fontWeight: 600 }}>{typeof option === "string" ? `Use ${address}` : (option.name || address)}</Box>
-          {typeof option !== "string" && <Box sx={{ fontSize: 10.5, color: FAINT }}>{address}</Box>}
+          {typeof option !== "string" && <Box sx={{ fontSize: 10.5, color: FAINT }}>{option.found && option.hint ? `${option.hint} · ${address}` : address}</Box>}
         </Box>
       );
     }}
@@ -105,6 +108,33 @@ export const EmailRecipients = ({ value, onChange, options, placeholder }) => {
       <TextField {...params} placeholder={value.length ? "Add another email" : placeholder}
         sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
     )} />
+  );
+};
+
+// WHO A CHAT GOES TO, picked by name: the known chats on this channel, and the server's search over them as you type - a description
+// the plain match cannot place goes to the model once (peopleSearch.js). Its own component, so a keystroke redraws the box, not the sheet.
+export const ChatRecipient = ({ channel, options, value, onChange }) => {
+  const [typed, setTyped] = useState("");
+  const found = usePeopleSearch(typed, channel);
+  return (
+    <Autocomplete size="small" fullWidth openOnFocus autoHighlight options={options} value={value}
+      onInputChange={(_event, v, why) => { if (why !== "reset") setTyped(v || ""); }}
+      onChange={(_event, target) => onChange(target)}
+      getOptionLabel={recipientLabel}
+      isOptionEqualToValue={(option, v) => option.to === v.to}
+      filterOptions={(rows, state) => withFound(recipientOptions(rows, state.inputValue), found, state.inputValue)}
+      noOptionsText={options.length ? "No matching conversation" : "nothing known on this channel yet"}
+      renderOption={(props, target) => (
+        <Box component="li" {...props} key={target.to} sx={{ display: "block !important", fontSize: 12.5 }}>
+          <Box sx={{ fontWeight: 600 }}>{recipientLabel(target)}</Box>
+          {recipientId(target) && <Box sx={{ ...mono, fontSize: 10, color: FAINT }}>{recipientId(target)}</Box>}
+          {target.hint && <Box sx={{ fontSize: 10.5, color: FAINT }}>{target.hint}</Box>}
+        </Box>
+      )}
+      renderInput={(params) => (
+        <TextField {...params} placeholder="Search people and conversations"
+          sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
+      )} />
   );
 };
 
@@ -383,25 +413,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
               {channel === "email" ? (
                 <EmailRecipients value={emailTo} onChange={setEmailTo} options={chanTargets}
                   placeholder="Search contacts or type any email address" />
-              ) : <Autocomplete key={channel} size="small" fullWidth openOnFocus autoHighlight
-                options={chanTargets}
-                value={chanTargets.find((target) => target.to === to) || null}
-                onChange={(_event, target) => setTo(target?.to || "")}
-                getOptionLabel={recipientLabel}
-                isOptionEqualToValue={(option, value) => option.to === value.to}
-                filterOptions={(options, state) => recipientOptions(options, state.inputValue)}
-                noOptionsText={chanTargets.length ? "No matching conversation" : "nothing known on this channel yet"}
-                renderOption={(props, target) => (
-                  <Box component="li" {...props} key={target.to} sx={{ display: "block !important", fontSize: 12.5 }}>
-                    <Box sx={{ fontWeight: 600 }}>{recipientLabel(target)}</Box>
-                    {recipientId(target) && <Box sx={{ ...mono, fontSize: 10, color: FAINT }}>{recipientId(target)}</Box>}
-                    {target.hint && <Box sx={{ fontSize: 10.5, color: FAINT }}>{target.hint}</Box>}
-                  </Box>
-                )}
-                renderInput={(params) => (
-                  <TextField {...params} placeholder="Search people and conversations"
-                    sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
-                )} />}
+              ) : <ChatRecipient key={channel} channel={channel} options={chanTargets}
+                value={chanTargets.find((target) => target.to === to) || (to ? { to, name: "" } : null)}
+                onChange={(target) => setTo(target?.to || "")} />}
             </Box>
             {channel === "email" && (
               <Box>

@@ -5,12 +5,11 @@
 // (outbox.task_email). It waits in Close out as one of the task's outputs - edit it, attach more, Send - and the task
 // stays open until Mark done (slots._left). Nothing is sent from here.
 import React, { useEffect, useState } from "react";
-import { Autocomplete, Box, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel,
+import { Box, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel,
   MenuItem, Select, TextField, Typography } from "@mui/material";
 import api from "./api";
-import { EmailRecipients } from "./NewSheet.jsx";
-import { recipientId, recipientLabel, recipientOptions } from "./recipientOptions.js";
-import { ACCENT, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
+import { ChatRecipient, EmailRecipients } from "./NewSheet.jsx";
+import { ACCENT, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 import { ChannelIcon } from "./ui.jsx";
 import { label } from "./buttons.js";
 
@@ -94,18 +93,7 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
           {email
             // one person: each message the task owes goes to one recipient; copy anyone else in
             ? <EmailRecipients value={to} onChange={(v) => setTo(v.slice(-1))} options={people} placeholder="Search contacts or type an email address" />
-            : <Autocomplete key={channel} size="small" fullWidth openOnFocus autoHighlight options={people} value={chat}
-                onChange={(_e, v) => setChat(v)} getOptionLabel={recipientLabel} isOptionEqualToValue={(o, v) => o.to === v.to}
-                filterOptions={(o, st) => recipientOptions(o, st.inputValue)}
-                noOptionsText={people.length ? "No matching conversation" : "nothing known on this channel yet"}
-                renderOption={(props, t) => (
-                  <Box component="li" {...props} key={t.to} sx={{ display: "block !important", fontSize: 12.5 }}>
-                    <Box sx={{ fontWeight: 600 }}>{recipientLabel(t)}</Box>
-                    {recipientId(t) && <Box sx={{ ...mono, fontSize: 10, color: FAINT }}>{recipientId(t)}</Box>}
-                    {t.hint && <Box sx={{ fontSize: 10.5, color: FAINT }}>{t.hint}</Box>}
-                  </Box>
-                )}
-                renderInput={(params) => <TextField {...params} placeholder="Search people and conversations" sx={field} />} />}
+            : <ChatRecipient key={channel} channel={channel} options={people} value={chat} onChange={setChat} />}
         </Box>
         {email && (
           <Box>

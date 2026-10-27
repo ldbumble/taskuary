@@ -76,7 +76,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launch } from "./browser.mjs";
 import { JARGON_RES } from "./src/words.js";
-import { VERBS, ALL_LABELS, label, verbOfRow, choice } from "./src/buttons.js";
+import { VERBS, ALL_LABELS, CHOICES, label, verbOfRow, choice } from "./src/buttons.js";
 import { LEVEL_ORDER as SECTION_KEYS } from "./src/lanes.js";
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
@@ -156,7 +156,11 @@ const NAMED = new Set(ALL_LABELS.map((l) => l.trim()));
 // a failed send's fix ('<rid>:fix') and a failure's own fix wear the fix's own words ("Connect a mailbox") - buttons.json says so of `fix`
 // ...and so does a failure's fix chip in the chat: concierge.recover makes `go` chips only of a failure's fix, with the fix's own words
 const isFix = (id = "") => /:fix$|^chat:(.+:)?go$/.test(id);
-const named = (w, id = "") => !w || NAMED.has(w) || /…$/.test(w) || w === "▾" || /^Open TQ-\d+/.test(w) || /:fix$|^chat:(.+:)?go$/.test(id);
+// ...and a receipt's further button, lent to the next item's row (Not ours' "From now on", funnelPile.furtherIndex, 4cb3e165): a chat
+// chip wearing the card question's answer for its OWN verb (buttons.json `choices`) - the same words under another verb are still unknown
+const CHOICE_WORDS = new Map(Object.values(CHOICES).flat().filter((c) => Array.isArray(c)).map(([v, w]) => [`${v}|${w}`, true]));
+const isFurther = (w, id = "") => /^chat:/.test(id) && CHOICE_WORDS.has(`${String(id).split(":").pop()}|${w}`);
+const named = (w, id = "") => !w || NAMED.has(w) || /…$/.test(w) || w === "▾" || /^Open TQ-\d+/.test(w) || /:fix$|^chat:(.+:)?go$/.test(id) || isFurther(w, id);
 // the cover key of a button: its verb, and the state its words are ("approve:unknown" for Send anyway)
 const coverOf = (verb, word) => {
   const v = VERBS[verb]; if (!v) return null;

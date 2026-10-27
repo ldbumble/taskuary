@@ -84,7 +84,14 @@ test("whether a draft can leave is asked of capabilities.js, with the row's own 
 test("the dead-end walk takes a failed send's fix by its own words: an id ending ':fix' is a named button", () => {
   const d = readFileSync(new URL("../deadend_check.mjs", import.meta.url), "utf8");
   const line = d.split("\n").find((l) => l.startsWith("const named = "));
-  const named = new Function("NAMED", `${line.replace("const named = ", "return ")}`)(new Set(["Send", "Next"]));
+  const further = d.split("\n").filter((l) => /^const (CHOICE_WORDS|isFurther) = /.test(l)).join("\n");
+  const named = new Function("NAMED", "CHOICES", `${further}\n${line.replace("const named = ", "return ")}`)(new Set(["Send", "Next"]),
+    { _: "answers", not_ours: [["not_ours", "Just this once"], ["not_ours_sender", "From now on - their mail is filed for you"]] });
+  // ...a receipt's further button lent to the next row is named by its own verb's answer (4cb3e165), and only by that
+  assert.equal(named("From now on - their mail is filed for you", "chat:5d:not_ours_sender"), true);
+  assert.equal(named("From now on - their mail is filed for you", "chat:5d:not_ours"), false);
+  assert.equal(named("From now on - their mail is filed for you", "12:not_ours_sender"), false);
+  assert.equal(named("Something new", "chat:5d:not_ours_sender"), false);
   assert.equal(named("Connect a mailbox", "12:fix"), true);
   assert.equal(named("Connect a mailbox", "12:approve"), false);
   assert.equal(named("Connect a coding tool", "chat:go"), true);

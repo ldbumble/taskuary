@@ -185,7 +185,6 @@ def teach(store, kind: str, src: str, facts: str, scope: str = 'global', key: st
     first). No brain, no line: a bare verdict is never written in its place. Returns the raw line, ''. Never raises."""
     from . import memoryedit
     try:
-        if (store.get_setting('learn_enabled') or '1') != '1': return ''
         # ...a verdict counts toward the next reflection whether or not it teaches a line now (learn.learn_from's tick, which it replaces)
         try: store.set_setting('learn_pending', str(int(store.get_setting('learn_pending') or 0) + 1), 'learn')
         except ValueError: pass

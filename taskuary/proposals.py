@@ -100,7 +100,6 @@ SETTING_ALLOW = {
     'funnel_max': 'how much the pipe holds at once',
     'timeline_fade': 'how old rows dim on the work rail',
     'calendar_enabled': 'read your calendar',
-    'learn_enabled': 'learn from your verdicts',
     'playbooks_enabled': 'let agents follow and propose playbooks',
     'agent_issues_enabled': 'treat GitHub issues as the tracker (off = GitHub items are rows on the work rail, not tasks)',
 }

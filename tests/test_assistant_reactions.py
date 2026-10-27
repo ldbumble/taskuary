@@ -58,7 +58,7 @@ def ahead(minutes=0):
 def store():
     s = MemoryStore()
     s.upsert_agent('coding', 'coding', 'cli', '{}')         # an install has one; without it a hand-off is refused
-    for k in ('calendar_enabled', 'learn_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
+    for k in ('calendar_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
     s.set_setting('coding_auto_enabled', '1', 't')          # the funnel of record: work reaches an agent
     s.set_setting('team_domains', 'ours.com', 't')
     s.set_setting('owner_email', 'owner@ours.com', 't')
@@ -496,7 +496,6 @@ class ResponseTests(unittest.TestCase):
         s3, tid3, mid3, item3 = self._asked()
         p3 = decide(s3, 'that sender is junk, block them', 'not_ours_sender', key=item3['key'])['proposal']
         self.assertEqual((p3['kind'], p3['params']['scope'], p3['label']), ('preference.exclude_sender', 'sender', buttons.label('not_ours_sender')))
-        s3.set_setting('learn_enabled', '1', 't')         # what a verdict teaches is learning: written only while learning is on
         with teaching("Mail from craig@vendor.com is the vendor's own business, not yours"): run(s3, p3)
         self.assertTrue(any('craig@vendor.com' in (n['ScopeKey'] or '').lower() for n in memorylines.notes(s3)))
 
@@ -515,7 +514,6 @@ class ResponseTests(unittest.TestCase):
         with mock.patch.object(server, 'store', s):
             c = TestClient(server.app)
             q = c.post('/api/operations', json={'kind': 'preference.exclude_sender', 'target': mid, 'params': {'scope': 'sender'}}).json()
-            s.set_setting('learn_enabled', '1', 't')
             with teaching("Mail from craig@vendor.com is the vendor's own business, not yours"):
                 self.assertEqual(c.post(f"/api/operations/{q['id']}/execute", json={'version': q['version']}).json()['status'], 'done')
         self.assertTrue(any('craig@vendor.com' in (n['ScopeKey'] or '').lower() for n in memorylines.notes(s)))
@@ -1524,7 +1522,6 @@ class ApiActionsTests(unittest.TestCase):
         self.assertTrue(gone is None or gone['Status'] in ('dropped', 'done'), gone)   # this mail is removed with it
         self.assertEqual(pile(s), [])                                             # and off the pile
         two = self._ask(s, subject='Another refund', conv='c:two', hours=2)
-        s.set_setting('learn_enabled', '1', 't')
         with teaching("Mail from craig@vendor.com is the vendor's own business, not yours"):
             r = c.post(f"/api/messages/{two['message_id']}/not-mine", json={'scope': 'sender'})
         self.assertEqual(r.status_code, 200)

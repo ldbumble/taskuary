@@ -361,11 +361,7 @@ class LearnTests(unittest.TestCase):
         learn.learn_from(s, 'rv8: x', llm=lambda sys_, usr, **kw: f'junk {learn.HYP_END} junk')
         self.assertEqual(s.get_doc('learned'), doc)
         self.assertEqual(s.get_settings().get('learn_pending'), '2')   # the counter still ticks
-        # the off switch really is off: no write, no tick
-        s.set_setting('learn_enabled', '0', 't')
-        learn.learn_from(s, 'rv9: x', llm=lambda sys_, usr, **kw: '- x. [s:2 | ev: rv9 | seen: y]')
-        self.assertEqual(s.get_doc('learned'), doc)
-        self.assertEqual(s.get_settings().get('learn_pending'), '2')
+        # ...and there is no off switch any more (the owner, 2026-10-27: "we should always learn")
 
     def test_reflect_rewrites_whole_doc_and_rejects_bad_output(self):
         s = MemoryStore()

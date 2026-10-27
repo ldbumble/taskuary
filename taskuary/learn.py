@@ -298,8 +298,7 @@ def learn_from(store, event: str, llm=None):
     """One explicit owner verdict -> the Hypotheses section, updated now. Never raises: a lost
     lesson costs one observation, a broken decide endpoint costs trust in the whole funnel."""
     try:
-        cfg = store.get_settings()
-        if cfg.get('learn_enabled', '1') != '1': return
+        cfg = store.get_settings()           # ...always: learning has no off switch (the owner, 2026-10-27: "we should always learn")
         try: n = int(cfg.get('learn_pending') or 0) + 1
         except ValueError: n = 1
         store.set_setting('learn_pending', str(n), 'learn')       # ticks even with no AI: the first reflection catches up
@@ -614,7 +613,6 @@ def reflect_if_due(store) -> bool:
     reflection (an owner who simply works queues no correction, and that is most of what there is to learn - 2026-10-25). Never on
     silence, never on a day a reflection failed."""
     cfg = store.get_settings()
-    if cfg.get('learn_enabled', '1') != '1': return False
     try: n = int(cfg.get('learn_pending') or 0)
     except ValueError: n = 0
     # no model in it, so it never waits on one: a rule the owner already stated goes live even on a

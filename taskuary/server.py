@@ -4046,6 +4046,14 @@ def people(limit: int = 300):
     whole book, so the pickers filter a wider set client-side (ui.ContactPicker)."""
     return {'data': store.people(max(1, min(int(limit), 1000)))}
 
+@app.get('/api/people/search')
+def people_search(q: str = '', channel: str = 'email', ai: bool = False):
+    """Everyone known who fits what was typed - name, company, the parts of an address - ranked by how much the owner writes with
+    them (peoplesearch.py). `ai=1` lets the model pick from the known people when the plain match finds nobody or the words describe
+    someone ("the dynamo billing person"); the pickers ask for it on its own, after the plain answer, so typing never waits on it."""
+    from . import peoplesearch
+    return peoplesearch.search(store, q[:120], channel, ai=ai)
+
 @app.get('/api/send-targets')
 def send_targets():
     """Where a report is allowed to be sent: the live channels, and the destinations known on

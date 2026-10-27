@@ -1,9 +1,9 @@
 // THE ONE ROW ABOVE THE CHAT LINE (layout B): whatever is on the table, its verbs are here - the decision first, the session's verbs
-// next, the rare ones behind More; Next is FIRST (the owner, 2026-09-30). The card registers them (actionRow.js); this only draws. Centred over the composer,
+// next, the rare ones behind More; Nav - Back and Next - is FIRST (the owner, 2026-09-30; Back beside Next 2026-10-27). The card registers them (actionRow.js); this only draws. Centred over the composer,
 // ONE filled button at most - the Advisor's pick, and none before it answers - and a greyed decision says why it is greyed.
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Menu, MenuItem, useMediaQuery } from "@mui/material";
-import { ROW_HOLD_MS, ROW_STUCK_MS, TYPES, advisedAny, fitRow, press, rowOf, lightOnCard, sameRow, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { NAV, ROW_HOLD_MS, ROW_STUCK_MS, TYPES, advisedAny, fitRow, press, rowOf, lightOnCard, sameRow, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
 import { adviceNone } from "./words.js";
 import { CONNECT_AI } from "./ConnectAi.jsx";
 
@@ -94,7 +94,7 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   const conn = move === "ai" ? verbs.list.find((v) => v.label === CONNECT_AI && !v.disabled) : null;
   const pick = advised?.none ? (conn ? { id: conn.id } : move === "ai" ? null : { verb: move || "next" }) : advised;
   const row = rowOf(verbs, pick);
-  const { ref, decide, agent, more, next, why } = row;
+  const { ref, decide, agent, more, next, back, why } = row;
   const hosted = useHosted();
   // ...a phone's row is Next, the one move and one ▾ (phoneRow) - the width the page calls a phone (AssistantView)
   const phone = useMediaQuery("(max-width:600px)");
@@ -107,9 +107,9 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   const [box, setBox] = useState(null), ghost = useRef(null);
   const [m, setM] = useState(null), [avail, setAvail] = useState(0), [over, setOver] = useState({ at: "", n: 0 }), [fonts, setFonts] = useState(0);
   const narrow = useMediaQuery("(max-width:1099px)");   // the row's own breakpoint (assistantView.css): pills lose their min-width
-  const parts = JSON.stringify([next?.label || "", [...decide, ...agent, ...more].map((v) => [v.id, v.label, v.tone])]);
+  const parts = JSON.stringify([next?.label || "", back?.label || "", [...decide, ...agent, ...more].map((v) => [v.id, v.label, v.tone])]);
   useEffect(() => { let on = true; document.fonts?.ready?.then(() => on && setFonts((n) => n + 1)); return () => { on = false; }; }, []);
-  useLayoutEffect(() => { if (box && ghost.current) setM(measure(ghost.current, box)); }, [box, parts, narrow, fonts]);
+  useLayoutEffect(() => { if (box && ghost.current) setM(measure(ghost.current, box)); }, [box, parts, narrow, phone, fonts]);
   useLayoutEffect(() => {
     if (!box) return undefined;
     const f = () => setAvail(box.clientWidth);
@@ -125,7 +125,7 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   const fit = fitRow(row, m, avail, phone, extra);
   useLayoutEffect(() => { if (box && fit.level < fit.last && box.scrollWidth > box.clientWidth + 1) setOver({ at: sig, n: extra + 1 }); });
   if (!inline && hosted) return null;                  // a phone's task view carries its own row
-  if (!decide.length && !agent.length && !more.length && !next) return null;
+  if (!decide.length && !agent.length && !more.length && !next && !back) return null;
   // ONE NAME PER BUTTON (buttons.json, the owner, 2026-10-17): the bar says the same words the hover, the Advisor and the menu say -
   // a short bar word ("Snooze", "Stop") beside a long hover one was two names for one button
   const btn = (v) => (
@@ -136,18 +136,26 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
     <div className={inline ? "tq-arow inline" : "tq-arow"} role="toolbar" aria-label={ref ? `What to do with ${ref}` : "What to do with this one"} data-tq-row=""
       aria-busy={hold || undefined}>
       <div className={fit.tight ? "tq-arow-verbs tight" : "tq-arow-verbs"} ref={setBox} data-tq-fold={fit.level}>
-        {next && <div className="tq-cl tq-cl-next" role="group" aria-label="Move on">
-          <div className="tq-cl-b"><button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} data-tq-steady={next.steady ? "" : undefined} title={next.title || undefined} disabled={next.disabled}
-            onClick={(e) => act(next.id, e, e.currentTarget, next.of)}>{next.label}</button></div></div>}
+        {/* NAV, ONE PILL (the owner, 2026-10-27): the walk's Back (up the line) and Next (down it), labelled like the types - never folded */}
+        {(next || back) && <div className="tq-cl tq-cl-next" role="group" aria-label={NAV} data-tq-type="nav">
+          {/* ...on a phone the pill keeps the row its words (pill-leaves-room): no label, and Back is its arrow alone, its name on it for a reader */}
+          {!phone && <span className="tq-cl-h" aria-hidden="true">{NAV}</span>}
+          <div className="tq-cl-b">
+            {back && <button type="button" className={`tq-ab ${back.tone} next`} data-tq-back="" data-tq-walk-back="" data-tq-short={phone ? "" : undefined}
+              aria-label={back.label} title={back.title || back.label} disabled={back.disabled}
+              onClick={(e) => act(back.id, e, e.currentTarget, back.of)}>{phone ? "" : back.label}</button>}
+            {next && <button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} data-tq-steady={next.steady ? "" : undefined} title={next.title || undefined} disabled={next.disabled}
+              onClick={(e) => act(next.id, e, e.currentTarget, next.of)}>{next.label}</button>}</div></div>}
         {fit.groups.map((g) => <Cluster key={g.type} g={g} btn={btn} act={act} />)}
       </div>
       {why && <div className="tq-arow-why" role="status" data-tq-row-why="">{why}</div>}
       {/* every part the row can draw, unseen, in the row's own classes - what fitRow adds up */}
       <div className="tq-arow-ghost" ref={ghost} aria-hidden="true">
         <div className="tq-cl">
-          {TYPES.map(([t, l]) => <span key={t} className="tq-cl-h" data-tq-wl={t}>{l}</span>)}
+          {[...TYPES, ...(phone ? [] : [["nav", NAV]])].map(([t, l]) => <span key={t} className="tq-cl-h" data-tq-wl={t}>{l}</span>)}
           <div className="tq-cl-b">
             {next && <span className={`tq-ab ${next.tone} next`} data-tq-wn="">{next.label}</span>}
+            {back && <span className={`tq-ab ${back.tone} next`} data-tq-back="" data-tq-wbk="" data-tq-short={phone ? "" : undefined}>{phone ? "" : back.label}</span>}
             {[...decide, ...agent, ...more].map((v) => <span key={v.id} className={`tq-ab ${v.tone}`} data-tq-w={v.id}>{v.label}</span>)}
             <span className="tq-ab s tq-cl-more" data-tq-wm="">▾</span>
           </div>
@@ -163,6 +171,6 @@ function measure(ghost, box) {
   const cl = ghost.querySelector(".tq-cl"), b = ghost.querySelector(".tq-cl-b"), btn = {}, label = {};
   ghost.querySelectorAll("[data-tq-w]").forEach((el) => { btn[el.dataset.tqW] = w(el); });
   ghost.querySelectorAll("[data-tq-wl]").forEach((el) => { label[el.dataset.tqWl] = w(el); });
-  return { btn, label, more: w(ghost.querySelector("[data-tq-wm]")), next: w(ghost.querySelector("[data-tq-wn]")),
+  return { btn, label, more: w(ghost.querySelector("[data-tq-wm]")), next: w(ghost.querySelector("[data-tq-wn]")), back: w(ghost.querySelector("[data-tq-wbk]")),
     pad: px(cl, "paddingLeft") + px(cl, "paddingRight"), clGap: px(cl, "columnGap"), bGap: px(b, "columnGap"), rowGap: px(box, "columnGap") };
 }

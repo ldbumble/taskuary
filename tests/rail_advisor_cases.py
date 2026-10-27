@@ -250,12 +250,11 @@ def _rule_pressed(s):
         s._exec('INSERT INTO advice_press (Key, Pressed, Sender, SenderDomain, Thread, CreatedAt) VALUES (?,?,?,?,?,?)',
                 (f'msg:{i}', 'not_ours', 'promo@vendor.example', 'vendor.example', f'email:promo:{i}', at(d=i)))
 def _rule_notes(s):
-    """Only LEARNED.md's evidence: the verdict notes Not a task writes, one per mail."""
+    """Only the owner's put-downs: the ignore route Not a task writes on each mail (the notes table is gone, 2026-10-27)."""
     for i in range(8):
-        s.add_message({'ConversationId': f'email:dig:{i}', 'Channel': 'email', 'Subject': f'Digest {i}', 'FromEmail': 'digest@vendor.example',
-                       'SentAt': at(d=1 + i), 'BodyText': 'x', 'Status': 'filed', 'SenderClass': 'automated'})
-        s.add_memory({'Scope': 'subject', 'ScopeKey': f'digest {i}', 'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner',
-                      'Note': f'{at(d=i)[:10]}: "Digest {i}" from digest@vendor.example - NOT A TASK: the owner filed it, no task, no reply'})
+        mid = s.add_message({'ConversationId': f'email:dig:{i}', 'Channel': 'email', 'Subject': f'Digest {i}', 'FromEmail': 'digest@vendor.example',
+                             'SentAt': at(d=1 + i), 'BodyText': 'x', 'Status': 'filed', 'SenderClass': 'automated'})
+        s.add_route(mid, None, 'ignore', None, 'not a task - the owner filed it', [], 'owner')
 def _rule_urgent(s, em='alerts@vendor.example'):
     for i in range(5):
         t = s.create_task({'Title': f'Disk alert {i}', 'Status': 'open'}, 'triage')

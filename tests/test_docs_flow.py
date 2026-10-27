@@ -10,6 +10,7 @@ import unittest
 
 from taskuary import agents, ingest, outbound, responder, terminal
 from taskuary.store import MemoryStore
+from tests.memlines import note as put_note
 
 MARK = {d: f'ZZMARK{d.upper()}ZZ' for d in ('soul', 'job', 'agent', 'coding', 'triage', 'learned', 'style')}
 NOTE, OFF, WNOTE = 'ZZMARKNOTEZZ', 'ZZMARKOFFZZ', 'ZZMARKWRITEZZ'   # a triage verdict, a switched-off note, a writing instruction
@@ -28,11 +29,11 @@ def seeded():
     s.save_doc('learned', f'## What you care about\n- {MARK["learned"]} [s:3 | ev: rv1 | seen: 2026-08-01]', 'owner')
     # style_doc holds an untouched template out of prompts, so the marker needs real content
     s.save_doc('style', f'### Tone & length\n- {MARK["style"]}: two sentences, answer first, no preamble.', 'owner')
-    s.add_memory({'Scope': 'global', 'ScopeKey': None, 'Note': f'{NOTE} always defer to the finance team',
+    put_note(s, {'Scope': 'global', 'ScopeKey': None, 'Note': f'{NOTE} always defer to the finance team',
                   'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner'})
-    s.add_memory({'Scope': 'global', 'ScopeKey': None, 'Note': f'{WNOTE} never open with a pleasantry',
+    put_note(s, {'Scope': 'global', 'ScopeKey': None, 'Note': f'{WNOTE} never open with a pleasantry',
                   'Source': 'writing', 'Active': 1, 'CreatedBy': 'owner'})
-    s.add_memory({'Scope': 'global', 'ScopeKey': None, 'Note': f'{OFF} a switched-off note',
+    put_note(s, {'Scope': 'global', 'ScopeKey': None, 'Note': f'{OFF} a switched-off note',
                   'Source': 'verdict', 'Active': 0, 'CreatedBy': 'owner'})
     # ...as an install that had them holds them after its first start: LEARNED.md lines (and STYLE.md for the writing note), 2026-10-27
     from taskuary import memorylines
@@ -121,10 +122,8 @@ class EveryScopeIsHonouredTests(unittest.TestCase):
     and silently never applied. 'source' was exactly that."""
     def _note(self, scope, key):
         s = MemoryStore()
-        mid = s.add_memory({'Scope': scope, 'ScopeKey': key, 'Note': f'{NOTE} {scope} rule',
+        put_note(s, {'Scope': scope, 'ScopeKey': key, 'Note': f'{NOTE} {scope} rule',
                             'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner'})
-        from taskuary import memorylines        # ...a LEARNED.md line about what it is scoped to (`about: ...`), since 2026-10-27
-        memorylines.keep_row(s, mid)
         return s
 
     MSG = {'from_email': 'dana@vendor.com', 'subject': 'Resident Refund Request - PAYNE, MICHAEL',

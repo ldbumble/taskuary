@@ -88,10 +88,21 @@ def test_the_assistants_chat_reads_the_memory():
     assert 'WHAT YOU KNOW ABOUT HOW THE OWNER WORKS' not in concierge._system(MemoryStore()), 'a fresh memory is placeholders'
 
 
-def test_agents_read_it_too():
-    from taskuary import context
+def test_agents_read_it_on_demand():
+    """The owner, 2026-10-27: "agents can look at the memory LEARNED.md if they need it" - the brief points at it, the tool reads it."""
+    from taskuary import agenttools, context
     s = _remembered()
     tid = s.create_task({'Title': 'Check the nightly run', 'Kind': 'general', 'Status': 'open'}, 'router')
     with mock.patch('taskuary.origin.of_task', return_value=('owner', '')):
         built = context.build(s, tid)
-    assert f'### What you care about\n- {LEGACY}' in built, 'under its own heading - the first one used to be cut off'
+    assert LEGACY not in built and context.MEMORY_LINE in built
+    got = agenttools.call(s, tid, 'owner_memory', {}, {})
+    assert f'## What you care about\n- {LEGACY}' in got, 'under its own heading'
+    assert LEGACY in agenttools.call(s, tid, 'owner_memory', {'section': 'care'}, {})
+    assert 'nothing learned' in agenttools.call(s, tid, 'owner_memory', {'section': 'promises'}, {})
+
+
+def test_the_routing_judge_and_triage_read_every_section():
+    s = _remembered()
+    memoryedit.remember(s, 'Alex keeps Fridays for vendor renewals', section='work')
+    assert 'Fridays for vendor renewals' in reports.judge_memory(s, {'title': 'Nightly process check'})

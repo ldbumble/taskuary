@@ -44,7 +44,7 @@ def today_ago(hours, span=3.0, now=None):
 def store():
     s = MemoryStore()
     s.upsert_agent('coding', 'coding', 'cli', '{}')
-    for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
+    for k in ('calendar_enabled', 'coding_auto_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
     funnel.invalidate(); funnel.forget_states(); funnel._CACHE.update(cands_at=0.0, cands=[])
     funnel._SOURCES.update(at=0.0, by={}, digest=set())        # the source cache is a module global
     return s

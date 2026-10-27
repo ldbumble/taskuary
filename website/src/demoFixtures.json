@@ -309,13 +309,6 @@
     "Default": "1"
    },
    {
-    "Name": "learn_enabled",
-    "Value": "1",
-    "Description": null,
-    "UpdatedBy": null,
-    "Default": "1"
-   },
-   {
     "Name": "mark_read_enabled",
     "Value": "0",
     "Description": null,

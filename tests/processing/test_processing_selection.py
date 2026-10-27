@@ -29,7 +29,7 @@ def stamp(minutes=-5):
 
 def store():
     value = MemoryStore()
-    for name in ("calendar_enabled", "coding_auto_enabled", "learn_enabled"):
+    for name in ("calendar_enabled", "coding_auto_enabled"):
         value.set_setting(name, "0", "test")
     funnel.invalidate()
     funnel.forget_states()

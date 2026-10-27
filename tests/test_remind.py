@@ -15,7 +15,7 @@ def ago(hours=0): return (datetime.now() - timedelta(hours=hours)).strftime('%Y-
 
 def store():
     s = MemoryStore()
-    for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled'): s.set_setting(k, '0', 't')
+    for k in ('calendar_enabled', 'coding_auto_enabled'): s.set_setting(k, '0', 't')
     funnel.invalidate(); funnel.forget_states(); funnel._CACHE.update(cands_at=0.0, cands=[])
     return s
 

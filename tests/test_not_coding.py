@@ -13,6 +13,9 @@ from unittest import mock
 from taskuary.ingest import ingest_message
 from taskuary.routing import draft_task_fields
 from taskuary.store import MemoryStore
+from unittest import mock
+from taskuary import memorylines
+from tests.memlines import teaching
 
 # verbatim shape of the message that started this
 JOB_SCOPE = ("Not really velocity. I think the bigger change is what the job has absorbed. I own AR "
@@ -111,11 +114,12 @@ class HarmlessExitTests(unittest.TestCase):
         mid = s.add_message({'Channel': 'email', 'Subject': 'Quarterly newsletter roundup', 'FromEmail': 'news@vendor.com',
                              'BodyText': JOB_SCOPE, 'ExternalId': 'file-me', 'Status': 'filed'})
         before = len(c.get('/api/policies').json()['data'])
-        r = c.post(f'/api/messages/{mid}/file')
+        with teaching('Vendor newsletter roundups are never work for you'):
+            r = c.post(f'/api/messages/{mid}/file')
         self.assertEqual(r.status_code, 200)
         self.assertEqual(len(c.get('/api/policies').json()['data']), before)     # no ignore rule
-        self.assertIn('NOT A TASK', next(m['Note'] for m in s.list_memories()
-                                         if m['MemoryId'] == r.json()['memoryId']))
+        self.assertEqual(r.json()['learned'], f'msg{mid}')
+        self.assertIn('Vendor newsletter roundups are never work for you', s.get_doc('learned'))
         self.assertEqual(s.get_message(mid)['Status'], 'ignored')
         self.assertFalse(r.json()['taskDeleted'])
 
@@ -125,26 +129,28 @@ class HarmlessExitTests(unittest.TestCase):
         from fastapi.testclient import TestClient
         from taskuary import server
         s = server.store
-        before = len(s.list_memories())
+        before = s.get_doc('learned')
         mid = s.add_message({'Channel': 'teams', 'Subject': 'chat', 'FromName': 'Priya',
                              'BodyText': JOB_SCOPE, 'ExternalId': 'file-me-teams', 'Status': 'filed'})
-        r = TestClient(server.app).post(f'/api/messages/{mid}/file')
-        self.assertIsNone(r.json()['memoryId'])
-        self.assertEqual(len(s.list_memories()), before)
+        with teaching('never written'):
+            r = TestClient(server.app).post(f'/api/messages/{mid}/file')
+        self.assertIsNone(r.json()['learned'])
+        self.assertEqual(s.get_doc('learned'), before)
 
     def test_one_off_dismissal_explicitly_teaches_nothing(self):
         """The Timeline's lighter exit must stay different from its neighboring Memory verdict."""
         from fastapi.testclient import TestClient
         from taskuary import server
         s = server.store
-        before = len(s.list_memories())
+        before = s.get_doc('learned')
         mid = s.add_message({'Channel': 'email', 'Subject': 'A real topic that could be learned',
                              'FromEmail': 'updates@vendor.com', 'BodyText': 'one-off note',
                              'ExternalId': 'dismiss-once', 'Status': 'filed'})
-        r = TestClient(server.app).post(f'/api/messages/{mid}/file', json={'learn': False})
+        with teaching('never written'):
+            r = TestClient(server.app).post(f'/api/messages/{mid}/file', json={'learn': False})
         self.assertEqual(r.status_code, 200)
-        self.assertIsNone(r.json()['memoryId'])
-        self.assertEqual(len(s.list_memories()), before)
+        self.assertIsNone(r.json()['learned'])
+        self.assertEqual(s.get_doc('learned'), before)
         self.assertEqual(s.get_message(mid)['Status'], 'ignored')
 
     def test_filing_also_removes_a_task_the_message_had(self):
@@ -164,18 +170,18 @@ class HarmlessExitTests(unittest.TestCase):
         from taskuary import server
         s = server.store
         c = TestClient(server.app)
-        notes = []
+        asked = []
         for i, door in enumerate(('task', 'message')):
             tid = s.create_task({'Title': 'Vendor renewal reminder', 'Kind': 'general'}, 'o')
             mid = s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'Vendor renewal reminder',
                                  'FromEmail': 'billing@vendor.com', 'BodyText': 'your plan renews',
                                  'ExternalId': f'both-doors-{i}', 'Status': 'routed'})
-            r = c.post(f'/api/tasks/{tid}/not-a-task' if door == 'task' else f'/api/messages/{mid}/file').json()
-            memid = r['learned']['memory_id'] if door == 'task' else r['memoryId']
-            notes.append(next(m for m in s.list_memories() if m['MemoryId'] == memid))
-        self.assertEqual(notes[0]['Scope'], notes[1]['Scope'])
-        self.assertEqual(notes[0]['ScopeKey'], notes[1]['ScopeKey'])
-        self.assertEqual(notes[0]['Note'], notes[1]['Note'])
+            with mock.patch.object(memorylines, 'teach') as taught:
+                r = c.post(f'/api/tasks/{tid}/not-a-task' if door == 'task' else f'/api/messages/{mid}/file').json()
+            self.assertEqual(r['learned']['source'] if door == 'task' else r['learned'], f'msg{mid}')
+            a = taught.call_args
+            asked.append((a.args[1], a.args[4:6], a.args[3].replace(f'msg{mid}', '')))
+        self.assertEqual(asked[0], asked[1])            # the same verdict, the same scope, the same item read
 
     def test_filing_an_unknown_message_is_a_404_not_a_500(self):
         from fastapi.testclient import TestClient

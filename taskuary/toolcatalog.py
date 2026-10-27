@@ -327,6 +327,7 @@ _DECIDE = {
     'answer_agent':    'answer the agent waiting on the owner - `text`',
     'stop_agent':      "save and end the agent's session on the item",
     'rerun':           'run the report on the table again',
+    'report_off':      "pause the report on the table - off its clock - only when its findings are about something the owner said they do not care about",
     'remember':        "keep a fact about how the owner works in their memory - `text`, their words (\"I don't care about the legacy export job any more\" too)",
     # ...and a PLAYBOOK, which has its own New playbook: "can I build a playbook for it?" was sent to a general agent as its job (the
     # owner, 2026-10-22: "this is not playbook ui?")
@@ -364,7 +365,7 @@ CHIP_TOOL = {'defer': 'task.defer', 'continue': 'agent.continue', 'test_connecti
 # ...and the buttons that are the page's alone: each answers the screen it is on, never a sentence (a test holds every
 # button in buttons.json to one of the three)
 PAGE_ONLY = {'new_task': "the page's own New task - the model makes one with task.create_from_text", 'fix': "wears the failure's own fix", 'try_again': 'repeats the press it stands under', 'trust_start': "a refused start's own way on - the owner's word on a stranger, never the model's", 'walk_here': 'the walk handed to a phone chat, brought back to the desk',
-             'review_changes': "opens the agent's diff", 'run_another': 'a second agent from the task page',
+             'review_changes': "opens the agent's diff", 'back': "the walk's step up the list - the row above the one on the table, a rail click the page makes", 'run_another': 'a second agent from the task page',
              'strong_again': "a failed or unsure agent's re-run on a strong model - the owner's press, never the model's (the router)",
              'new_task': 'the model makes one with task.create_from_text; naming the button too pushed the index over its cap',
              'report_bug': 'a failure the app cannot fix opens the bug report, which the owner reads before it goes',

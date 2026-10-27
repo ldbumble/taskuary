@@ -793,6 +793,7 @@
 /* setup's Back takes the same slot and points the way it goes (FirstRun: setup:back) */
 .tq-ab.next[data-tq-back]::after { content: none; }
 .tq-ab.next[data-tq-back]::before { content: "\2190"; margin-right: 6px; }
+.tq-ab.next[data-tq-short]::before { margin-right: 0; }   /* the walk's Back on a phone: its arrow alone (ActionRow) */
 .tq-arow.inline { width: 100%; margin: 0; padding: 6px 4px 2px; }
 /* a phone's line and the row it lights, one unit at the view's foot; the strip holds its height from Thinking to the answer */
 .tq-docked { flex: 0 0 auto; display: flex; flex-direction: column; position: sticky; bottom: 0; z-index: 2; background: #f6f4f1; }

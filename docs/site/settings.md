@@ -46,11 +46,13 @@ Nothing writes into this table by itself. **Not a task** teaches a verdict in yo
 
 ## Your memory
 
-There is one memory: `LEARNED.md`, in Settings → Docs. Every verdict you give — **Not ours**,
-**Not a task**, a kind or a road you corrected — and every fact you tell the Assistant ("remember
+There is one memory: `LEARNED.md`, in Settings → Docs. Every fact you tell the Assistant ("remember
 that…", "I don't care about the legacy export any more") goes in at once as your own line, under
-the section it is about. A line about one sender, domain or topic ends with `(about: …)`, and a
-newer verdict on the same thing replaces the older one. Triage, report routing, the Advisor, agents
+the section it is about. A verdict you give — **Not ours**, **Not a task**, **Not for the agent**, a
+kind or a road you corrected, an Advisor idea taken up or turned down — goes in when it teaches
+something about you, as one line saying what kind of work it is and why; a verdict that repeats what
+is already there adds nothing, and one that sharpens an older line replaces it. A line about one
+sender, domain or topic ends with `(about: …)`. Triage, report routing, the Advisor, agents
 and the Assistant each read the sections that help them; edit a line, or press **Forget**, to
 change what they read.
 

@@ -322,7 +322,7 @@ def _world():
     funnel.invalidate(); funnel.forget_states(); funnel._SOURCES.update(at=0.0, by={})
     s = MemoryStore()
     with mock.patch.object(terminal, 'live_sessions', return_value=[]): demo.seed(s)
-    for k in ('learn_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
+    for k in ('auto_draft_enabled',): s.set_setting(k, '0', 't')
     s.set_task_checklist(1, ['pull the bank feed', 'find the 4,180', 'send Marcus the answer'], 'owner')
     s.save_connector({'Type': 'outlook', 'Name': 'Work mail', 'Active': 1}, 't')
     funnel.invalidate()

@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from taskuary import config, server
 from taskuary.reports import REGISTRY
 from taskuary.testing import Factory
+from tests.memlines import teaching
 
 c = TestClient(server.app)
 
@@ -856,13 +857,12 @@ class ApiTests(unittest.TestCase):
                                                    'from_email': 'noise@vendor.com', 'channel': 'api'}).json()
         tid = out['task_id']
         before = len(c.get('/api/policies').json()['data'])
-        r = c.post(f'/api/tasks/{tid}/not-a-task').json()
+        with teaching('Export job noise from vendor.com is never a task for you'):
+            r = c.post(f'/api/tasks/{tid}/not-a-task').json()
         self.assertEqual(c.get(f'/api/tasks/{tid}').status_code, 404)
-        note = next(m for m in server.store.list_memories(active_only=False) if m['MemoryId'] == r['learned']['memory_id'])
-        self.assertIn('NOT A TASK', note['Note'])
-        # ...and the verdict is a line in LEARNED.md, where every reader reads it (memorylines, 2026-10-27)
-        from taskuary import memorylines
-        self.assertIn(memorylines.of_row(note), server.store.get_doc('learned'))
+        # ...and what the verdict teaches is a line in LEARNED.md, where every reader reads it (memorylines, 2026-10-27)
+        self.assertTrue(r['learned']['source'].startswith('msg'))
+        self.assertIn('Export job noise from vendor.com is never a task for you', server.store.get_doc('learned'))
         self.assertNotIn('policy', r['learned'])
         self.assertEqual(len(c.get('/api/policies').json()['data']), before)      # nobody was muted
         self.assertFalse(any(p['Pattern'] == 'noise@vendor.com' for p in c.get('/api/policies').json()['data']))
@@ -918,7 +918,8 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(c.get(f'/api/messages/{mid}/not-mine/suggest').json()['scope'], 'subject')
         suggested = c.get(f'/api/messages/{mid}/not-mine/suggest?scope=sender').json()['note']
         self.assertIn('michelle.soto@example.org', suggested)
-        out = c.post(f'/api/messages/{mid}/not-mine', json={'note': None, 'scope': 'sender'}).json()
+        with teaching("Resident refund requests are other people's work, not yours"):
+            out = c.post(f'/api/messages/{mid}/not-mine', json={'note': None, 'scope': 'sender'}).json()
         self.assertEqual((out['ok'], out['scope'], out['scopeKey']), (True, 'sender', 'michelle.soto@example.org'))
         self.assertEqual(suggested, out['note'])                     # the suggestion is what gets saved
         row = next(m for m in c.get('/api/feed').json()['data'] if m['MessageId'] == mid)
@@ -1258,39 +1259,34 @@ class ApiTests(unittest.TestCase):
                                         'Subject': 'Avid import failed', 'FromEmail': 'tova@vendor.example',
                                         'SentAt': '2026-09-02 11:41', 'BodyText': 'The bank import errored.',
                                         'Status': 'filed'})
-        before = {m['MemoryId'] for m in server.store.list_memories(active_only=False)}
-        with mock.patch.object(server.learn, 'learn_from') as distilled:
+        with teaching('Failed bank imports are real work for you, even from a machine'):
             out = c.post(f'/api/messages/{mid}/mine', json={}).json()
-        made = [m for m in server.store.list_memories(active_only=False) if m['MemoryId'] not in before]
-        self.assertEqual(len(made), 1)
-        self.assertEqual((made[0]['Source'], made[0]['Scope']), ('verdict', 'subject'))
-        self.assertIn('MADE A TASK', made[0]['Note'])
-        # ...readable as a line in LEARNED.md, about the topic it was given on (memorylines, 2026-10-27)
+        # ...readable as a line in LEARNED.md, about the topic it was given on, citing the mail (memorylines, 2026-10-27)
         from taskuary import memorylines
-        self.assertIn(memorylines.of_row(made[0]), server.store.get_doc('learned'))
-        self.assertIn('(about: the topic "', memorylines.of_row(made[0]))
+        made = [l for l in memorylines.lessons(server.store) if l['ev'] == f'msg{mid}']
+        self.assertEqual([l['kind'] for l in made], ['made_task'])
+        self.assertIn('(about: the topic "', made[0]['text'])
+        self.assertIn(made[0]['text'], server.store.get_doc('learned'))
         self.assertEqual(server.store.get_message(mid)['TaskId'], out['taskId'])
-        distilled.assert_called_once()
 
     def test_promoting_one_report_run_is_not_a_standing_order_for_the_report(self):
         """A report's subject is the same every day, so a topic note from sending ONE run to an agent made every later run a task."""
         mid = server.store.add_message({'ExternalId': 'report:1:2026-09-29 10:04', 'Channel': 'report', 'SourceName': 'Daily Digest',
                                         'Subject': 'Daily Digest - an agent ran a prompt - 49 lines', 'SentAt': '2026-09-29 10:04',
                                         'BodyText': 'Top 15 list.', 'Status': 'filed'})
-        before = {m['MemoryId'] for m in server.store.list_memories(active_only=False)}
-        with mock.patch.object(server.learn, 'learn_from') as distilled:
+        from taskuary import memorylines
+        with teaching('never written'):
             c.post(f'/api/messages/{mid}/mine', json={})
-        self.assertEqual([m for m in server.store.list_memories(active_only=False) if m['MemoryId'] not in before], [])
-        distilled.assert_not_called()
+        self.assertEqual([l for l in memorylines.lessons(server.store) if l['ev'] == f'msg{mid}'], [])
 
     def test_a_report_run_promoted_as_standing_is_learned(self):
         mid = server.store.add_message({'ExternalId': 'report:2:2026-09-29 10:04', 'Channel': 'report', 'SourceName': 'Weekly Digest',
                                         'Subject': 'Weekly Digest - an agent ran a prompt - 12 lines', 'SentAt': '2026-09-29 10:04',
                                         'BodyText': 'Numbers.', 'Status': 'filed'})
-        before = {m['MemoryId'] for m in server.store.list_memories(active_only=False)}
-        with mock.patch.object(server.learn, 'learn_from'):
+        from taskuary import memorylines
+        with teaching('The weekly digest is work you act on'):
             c.post(f'/api/messages/{mid}/mine', json={'standing': True})
-        self.assertEqual(len([m for m in server.store.list_memories(active_only=False) if m['MemoryId'] not in before]), 1)
+        self.assertEqual(len([l for l in memorylines.lessons(server.store) if l['ev'] == f'msg{mid}']), 1)
 
     def test_a_taskless_fyi_reply_and_manual_edits_survive_reopening(self):
         mid = server.store.add_message({'ExternalId': 'teams:fyi-reply', 'Channel': 'teams',
@@ -1471,7 +1467,7 @@ class ApiTests(unittest.TestCase):
         r = c.post(f'/api/tasks/{tid}/not-a-task', json={'learn': False}).json()
         self.assertIsNone(r['learned'])
         self.assertEqual(len(c.get('/api/policies').json()['data']), before_p)
-        self.assertNotIn('priya@corp.com', str(server.store.list_memories()))
+        self.assertNotIn('priya@corp.com', server.store.get_doc('learned') or '')
         self.assertEqual(c.get(f'/api/tasks/{tid}').status_code, 404)   # the task is gone
 
 

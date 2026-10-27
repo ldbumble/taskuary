@@ -1271,11 +1271,11 @@ JUDGE_AI = 'judge_ai'       # the app-wide "where runs go" brain; blank means th
 
 
 def judge_memory(store, cfg: dict = None) -> str:
-    """What the owner has said they care about - and do not - as the routing judge reads it: LEARNED.md's "What you care about", the
-    section triage reads, on triage's budget. The judge read no memory at all, so a report finding about a process the owner had said they
+    """What the owner has said they care about - and do not - as the routing judge reads it: the whole of LEARNED.md, as triage reads
+    it (the owner, 2026-10-27: "triage needs the entire thing"). The judge read no memory at all, so a report finding about a process the owner had said they
     no longer care about went on to triage and made a task (the owner, 2026-10-27: "if I don't care about something the system knows it")."""
     from . import learned_cut
-    try: return learned_cut.for_reader(store, 'triage', sections=('care',), target=f"report:{(cfg or {}).get('title') or ''}")
+    try: return learned_cut.whole(store, 'triage', target=f"report:{(cfg or {}).get('title') or ''}")
     except Exception as e:
         logger.debug(f'the routing judge reads no memory this run: {e}')
         return ''

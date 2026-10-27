@@ -5,7 +5,7 @@
 import React, { createContext, useContext, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { label, liveVerb, verbOfRow } from "./buttons.js";
 
-// verb: { id, label, group: "decide" | "agent" | "more" | "next", tone: "p" | "s" | "q", title, disabled, why, run(event, anchorEl) }
+// verb: { id, label, group: "decide" | "agent" | "more" | "next" | "back", tone: "p" | "s" | "q", title, disabled, why, run(event, anchorEl) }
 //   `why`: what a DISABLED verb is waiting for, said in the row itself ("write the reply first") - a greyed button that does not say why is a dead end
 //   `blank`: what an advised move does now that the text it acts on is gone (the draft box emptied) - said in place of the line judged over it
 const live = new Map();          // id -> the latest verb (its run closes over the freshest state)
@@ -14,6 +14,14 @@ const owners = new Map();        // owner -> { verbs, ref, at }
 const subs = new Set();
 const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", ...(v.blank ? { blank: v.blank } : {}), promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.fill ? { fill: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}), ...(v.card ? { card: true } : {}), ...(v.steady ? { steady: true } : {}) });
 let snap = { list: [], ref: "" }, sig = "";
+// THE WALK'S TWO WAYS, ONE PILL (the owner, 2026-10-27: "We have a Next button - let's have a Back button that goes up the line as well ...
+// on the first one no Back, like no Next on the last one. Combine Next/Back into one big pill called Nav"): Back is the walk's step up the
+// rail's line (AssistantView registers it, `BACK`, group "back"); Next is the cards' own, as before. `end`: the walk's own selection for
+// the item on the table names nothing below it - the last one - and the row draws no Next there (setup's and the floor's are not the walk's)
+export const BACK = "nav:back";
+export const walkMove = (id) => /(^|:)next$/.test(String(id || "")) || id === BACK;   // a move along the walk: it moves the table, and acts on no item
+let end = false;
+export const navEnd = (on) => { if (!!on === end) return; end = !!on; draw(); };
 
 export function put(owner, verbs, ref = "", at = null) {
   const old = owners.get(owner)?.verbs || [];
@@ -38,7 +46,7 @@ function draw() {
   const seen = new Set(), mine = new Set(shown.map(([o]) => o)), list = shown.flatMap(([o, { verbs: vs, at }]) => vs.map((v) => [o, v, at]))
     .filter(([, v]) => !seen.has(v.id) && seen.add(v.id))
     .map(([o, v, at]) => ({ ...view(v), of: mine.has(ofs.get(v.id)) ? ofs.get(v.id) : o, ...(at ? { at } : {}) }));
-  const next = { list, ref: shown.map(([, o]) => o.ref).find(Boolean) || "" }, s = JSON.stringify(next);
+  const next = { list, ref: shown.map(([, o]) => o.ref).find(Boolean) || "", ...(end ? { end } : {}) }, s = JSON.stringify(next);
   if (s === sig) return;
   sig = s; snap = next; subs.forEach((f) => f());
 }
@@ -59,7 +67,7 @@ export const rowReady = ({ key = null, leaving = null, moving = false, read = nu
 // between two items. A task's view registers its verbs under its table key (`keyed`, TableVerbs); a report's, a batch's or a message's
 // card registers none, so there any verb but the floor's is the item's
 export const rowDrawable = ({ key = null, leaving = null, list = [], keyed = true }) => (!key ? !leaving : key !== leaving
-  && (keyed ? list.some((v) => v.at === key) : list.some((v) => !v.at && !String(v.id).startsWith("floor:"))));
+  && (keyed ? list.some((v) => v.at === key) : list.some((v) => !v.at && !String(v.id).startsWith("floor:") && v.id !== BACK)));
 // the hold, numbered (0: none): from each change of `sig` - the table, the item being left, the press round - until ready and the row's
 // buttons (`shape`: what the live row would draw) have stood still ROW_QUIET_MS - an item's own reads land a beat apart (a meeting's
 // answers after its task) - and once let go it stays let go for that change (a card re-registering its verbs is not a new item). The
@@ -81,7 +89,7 @@ export function useRowHold(sig, ready, shape = "") {
 }
 // ...while it holds, the row drawn follows the live one only where they are the same buttons for the same item - a label turned to its
 // busy word ("Reopening…"), a flag - so the press still answers at once
-export const sameRow = (a, b) => { const ids = (r) => (r?.list || []).map((v) => `${v.id}@${v.at || ""}`).join("|"); return ids(a) === ids(b); };
+export const sameRow = (a, b) => { const ids = (r) => (r?.list || []).map((v) => `${v.id}@${v.at || ""}`).join("|") + (r?.end ? "|end" : ""); return ids(a) === ids(b); };
 // EVERY PRESS IS AN ACT THE ADVISOR MUST SEE (2026-10-19): its line was read when the item opened and never again, so after Send it
 // still said the sender was waiting. Whoever shows advice hears each press once it settles (onPressed) and reads it again.
 // A card's own button that acts without the row (the draft's Send under it) says so the same way: acted(id).
@@ -193,11 +201,11 @@ const sameAct = (v, pick) => {
 // while the task's Mark done stood dark on the bar under a line saying "mark it done" (2026-10-19)
 export const advisedIn = (list, pick) => {
   if (pick?.id) return list.find((v) => v.id === pick.id && !v.disabled) || null;     // a move named by its id (setup's own)
-  const ok = (v) => !v.disabled && v.group !== "next" && sameAct(v, pick), main = (v) => v.card && v.group === "decide" && v.tone === "p";
+  const ok = (v) => !v.disabled && v.group !== "next" && v.group !== "back" && sameAct(v, pick), main = (v) => v.card && v.group === "decide" && v.tone === "p";
   return pick?.verb ? list.find((v) => ok(v) && main(v)) || list.find((v) => ok(v) && !v.card) || list.find(ok) || null : null;
 };
 // the row's button for the advised act, greyed or not - a greyed one hides the line; none at all gives the line its own button
-export const advisedAny = (list, pick) => (pick?.verb ? list.find((v) => v.group !== "next" && sameAct(v, pick)) || null : null);
+export const advisedAny = (list, pick) => (pick?.verb ? list.find((v) => v.group !== "next" && v.group !== "back" && sameAct(v, pick)) || null : null);
 // THE STRIP'S "<X> is off" LINE (AdvisorNext): a move the row has and has greyed says why, in the row's own words - but NOT while a press is in
 // flight. The owner's own Send, Reply or Redraft greys the row's draft verbs while it runs (its label "Sending…", "Drafting…"), and the strip
 // read that as the advised move being unavailable: "Drafting… is off - it cannot be pressed right now." for half a second after every
@@ -222,7 +230,7 @@ export const pressInFlight = (list) => (list || []).some((v) => v.busy || /…$/
 // only when it is the advice. holdsMove: the card holds a move of its own under the draft (its filled button, or the task's Mark done
 // standing on it) - what the Advisor's Why? names as "under the draft".
 export const holdsMove = (list) => list.some((v) => v.onCard || (v.card && v.tone === "p"));
-export function rowOf({ list, ref }, pick = null) {
+export function rowOf({ list, ref, end: last = false }, pick = null) {
   const by = (g) => list.filter((v) => v.group === g && !v.card);
   // the card's own idea of its move (its filled tone) only says which greyed button the row explains - it never fills one
   const head = by("decide").find((v) => v.tone === "p") || null;
@@ -273,10 +281,12 @@ export function rowOf({ list, ref }, pick = null) {
   const seen = new Set();
   const once = (xs) => xs.filter((v) => v.slot || (seen.has(v.label) ? false : (seen.add(v.label), true)));   // an empty slot names nothing
   decide = once(decide); agent = once(agent); more = once(more);
-  const next = by("next")[0] || null;
+  // ...on the last item no Next (the walk's own; setup's Back and Next, and the floor's, are not the walk's), and Back beside it
+  const next = by("next").find((v) => !(last && v.id === "next")) || null, back = by("back")[0] || null;
   if (decide.length > ROOM) { more = [...decide.slice(ROOM), ...more]; decide = decide.slice(0, ROOM); }   // the row stays a short line of chips; the rest wait behind More
   // a greyed decision says why it is greyed - the advised one never is (advisedIn skips greyed verbs), so the card's own move speaks
   return { ref, decide, agent, more, primary, lit: advised?.card ? advised.id : "", next: next && { ...next, tone: pick?.verb === "next" && (!next.disabled || next.steady) ? "p" : "s" },
+    back: back && { ...back, tone: "s" },
     why: head?.disabled && head.why ? `${head.label} is off - ${head.why}` : "" };
 }
 
@@ -285,6 +295,7 @@ export function rowOf({ list, ref }, pick = null) {
 // `<rid>:approve`, so the last part counts). A card's own words (a report's chip, a chat chip) are none of these:
 // they lead, unlabelled. The order inside each type is rowOf's - the decision first - and its filled button is always in view.
 export const TYPES = [["reply", "Reply"], ["agent", "Agent"], ["close", "Close"], ["task", "Task"]];
+export const NAV = "Nav";                 // the pill Back and Next share, labelled like the types
 const TYPE_OF = {
   reply: "reply", approve: "reply", redraft: "reply", palt: "reply", reject: "reply", email: "reply", hand: "reply", attach: "reply", "email-file": "reply", copy: "reply",
   "start-agent": "agent", "run-another": "agent", "strong-again": "agent", continue: "agent", "send-general": "agent", diff: "agent", "save-end": "agent",
@@ -295,7 +306,7 @@ const TYPE_OF = {
   // the Advisor's moves a card has no button for join the row in their type (AdvisorNext), never beside the line (2026-10-16)
   chase: "reply", mine: "agent", answer_agent: "agent", coding_agent: "agent", regular_agent: "agent", rerun: "agent",
   elsewhere: "close", not_ours: "task", not_ours_sender: "task", not_ours_kind: "task", block_sender: "task",
-  let_go: "task", defer: "task", split: "task", test_connection: "task",
+  let_go: "task", defer: "task", split: "task", test_connection: "task", report_off: "task",
   // the calendar's answers (calwrite.py) are what goes back: an invite's yes, no or other time, and a thread's meeting
   accept_invite: "reply", decline_invite: "reply", propose_time: "reply", find_time: "reply",
   // ...and a meeting's Prepare starts a researcher: an agent's verb (2026-10-25)
@@ -327,7 +338,7 @@ export function clustersOf(row, keep = 2) {
 // while its WhatsApp reply drafted put five typed groups on a desktop row, and the row wrapped. Nothing wraps now - groups FOLD into
 // one ▾ at the row's end until the line fits: the lowest group first (Task, then Agent, Reply, the card's own), Close after them
 // all (the owner, 2026-10-27: Mark done folds "if there is no space" - it was second, and a laptop reply hid it behind the ▾), the group
-// holding the lit move last; with every group folded the row is the phone's - Next, the one move, one ▾. Next never folds.
+// holding the lit move last; with every group folded the row is the phone's - Nav, the one move, one ▾. Nav (Back, Next) never folds.
 // foldsOf: every layout from the widest (the typed groups) to the narrowest (phoneRow), each a list of groups for Cluster.
 export function foldsOf(row) {
   const cs = clustersOf(row), ph = phoneRow(row), lead = ph.shown[0], holds = (g) => !!lead && g.shown.includes(lead);
@@ -342,15 +353,19 @@ export function foldsOf(row) {
   out.push([ph].filter((g) => g.shown.length || g.rest.length));
   return out;
 }
+// THE NAV PILL: Back and Next, in the walk's order (up, then down) - never folded, at any width
+export const navOf = (row) => [row?.back, row?.next].filter(Boolean);
 // a layout's width in px from measured parts (ActionRow reads them off a hidden copy of the row): `btn` by verb id, `label` by type,
-// the ▾, Next, a group's side padding, the gap after its label, between its buttons, and between groups
-export function rowWidth(groups, next, m) {
+// the ▾, Next and Back, a group's side padding, the gap after its label, between its buttons, and between groups. `nav`: the Nav pill's
+// buttons (navOf), or Next alone
+export function rowWidth(groups, nav, m) {
   const w = (v) => m.btn[v.id] ?? 0;
   const cl = (g) => {
     const n = g.shown.length + (g.rest.length ? 1 : 0);
     return m.pad + (g.label ? (m.label[g.type] ?? 0) + m.clGap : 0) + g.shown.reduce((a, v) => a + w(v), 0) + (g.rest.length ? m.more : 0) + m.bGap * Math.max(0, n - 1);
   };
-  const parts = [...(next ? [m.pad + m.next] : []), ...groups.map(cl)];
+  const ns = (Array.isArray(nav) ? nav : [nav]).filter(Boolean), nw = (v) => (v.group === "back" ? m.back ?? m.next : m.next);
+  const parts = [...(ns.length ? [m.pad + (m.label?.nav ? m.label.nav + m.clGap : 0) + ns.reduce((a, v) => a + nw(v), 0) + m.bGap * (ns.length - 1)] : []), ...groups.map(cl)];
   return parts.reduce((a, x) => a + x, 0) + m.rowGap * Math.max(0, parts.length - 1);
 }
 // the widest layout that fits `avail` (a phone starts at the phone's, 2026-10-22); `extra` steps further when the drawn row still
@@ -358,7 +373,7 @@ export function rowWidth(groups, next, m) {
 export function fitRow(row, m, avail, phone = false, extra = 0) {
   const all = foldsOf(row), last = all.length - 1, at = (i) => ({ groups: all[Math.min(last, i)], level: Math.min(last, i), last });
   if (!m || !(avail > 0)) return at((phone ? last : 0) + extra);
-  for (let i = phone ? last : 0; i <= last; i++) if (rowWidth(all[i], row.next, m) <= avail) return at(i + extra);
+  for (let i = phone ? last : 0; i <= last; i++) if (rowWidth(all[i], navOf(row), m) <= avail) return at(i + extra);
   return { ...at(last), tight: true };
 }
 

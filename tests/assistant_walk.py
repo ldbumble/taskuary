@@ -40,7 +40,7 @@ STEPS = [
     Step("what's waiting on me", None, c('pipe.list'), 'read:pipe.list', r'month-end',
          # a question that needs a look-up is two model rounds, and its first words are the second round's
          then='Ten things are on you - the month-end close is short by 4,180 and leads the list.', budget=(2.0, 3.0)),
-    Step('mark the FYI read', 'msg:5', 'Clearing the FYIs.\n' + c('pipe.clear', select={'kind': 'fyi'}), 'cleared', r'^Marked \d+ (items?|FYI|reports?) read'),
+    Step('mark the FYI read', 'msg:5', 'Clearing the FYIs.\n' + c('pipe.clear', select={'kind': 'fyi'}), 'cleared', r'^Marked (all )?\d+ (items?|FYI|reports?) read'),   # "all": past the table's handful (58740414)
     Step('open Settings → Sounds', None, 'The sounds are under [Notifications](#settings=config&group=Notifications).', 'link:#settings', r'Notifications'),
     Step('add LinkedIn as a connector', None, 'Bringing up the LinkedIn card.\n' + c('connection.create', type='linkedin'), 'open:#connector=linkedin', r'LinkedIn'),
     Step('remind me tomorrow', 'msg:1', 'Putting it away until tomorrow.\n' + c('task.defer', until='tomorrow 9am'), 'light:defer', r'^$'),

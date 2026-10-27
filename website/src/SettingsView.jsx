@@ -1,7 +1,7 @@
 // Settings: a rail on the left that is the whole map - every page, and under it the sections
 // that page stacks - beside one scrolling page. Picking a section scrolls to it; it does not
 // swap the page out, so a knob two sections down is one scroll away rather than a tab hunt.
-// Search reaches EVERYTHING (knobs, rules, memory, help text, the section names themselves)
+// Search reaches EVERYTHING (knobs, rules, help text, the section names themselves)
 // and lands you on the same anchor, under the same path the rail shows.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCapabilities } from "./capabilities.js";
@@ -21,7 +21,6 @@ import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import VerifiedIcon from "@mui/icons-material/Verified";
 import TuneIcon from "@mui/icons-material/Tune";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
-import PsychologyIcon from "@mui/icons-material/Psychology";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import AiDefaults from "./AiDefaults.jsx";
@@ -100,15 +99,6 @@ const jsonProblem = (v) => {
     return Object.values(o).every((x) => typeof x === "string") ? "" : 'Each role needs a brain name in quotes, e.g. {"researcher": "codex"}.';
   } catch { return 'That is not valid JSON yet — check the quotes and braces, e.g. {"researcher": "codex"}. Not saved.'; }
 };
-// what a note can be ABOUT. "subject" leads because most verdicts are about a kind of work
-// rather than a person - and it was missing here, so a topic rule could only be created by
-// pressing "Not our task" on a message, never written by hand.
-const SCOPES = ["subject", "sender", "sender_domain", "source", "global"];
-const SCOPE_LABEL = { subject: "any mail about a topic", sender: "one sender",
-  sender_domain: "everyone at a domain", source: "one connection (mailbox, repo)",
-  global: "every message" };
-const SCOPE_KEY_LABEL = { subject: "the topic, e.g. resident refund request", sender: "their address",
-  sender_domain: "the domain, e.g. vendor.com", source: "the mailbox or repo it arrives on" };
 
 import schema from "../../taskuary/settings_schema.json";
 // ONE VOCABULARY for the knobs, in taskuary/settings_schema.json - the assistant reads the same file
@@ -342,9 +332,7 @@ const meta = (name) => KNOB_META[name] || { group: "Other", label: name, type: "
 
 const SECTION_HELP = {
   policies: { title: "Routing policies — the deterministic layer",
-    body: "Rules evaluated BEFORE any AI touches a message; no model confidence can override them. Precedence: skip > ignore > escalate — within one action, lowest order number wins.\n\nKINDS: keyword (pipe-separated substrings matched against subject+body), sender (exact addresses), sender_domain (domains), noreply (built-in matcher for automated addresses), first_time_sender (fires when the address has never been seen).\n\nACTIONS: ignore (no task, message stays visible in the feed), escalate (a human always decides, and the task is marked urgent - this is the ONLY thing that marks one urgent, so name the senders whose mail jumps your queue). Everything else is triage's to judge.\n\nNothing writes into this table by itself: 'Not a task' teaches a verdict in Memory, not a rule here, and muting a sender is 'Skip this sender'." },
-  memory: { title: "Verdicts & notes — the evidence behind LEARNED.md",
-    body: `Two layers, one loop. LEARNED.md (${placeName("docs")}) is the GENERAL profile — your style, your responsibilities, what deserves a task — and it is written by a nightly pass. This page is the EVIDENCE that pass reads: one dated line per verdict you gave ('Not our task' on this subject from this sender, 'Not a task' on that one) plus notes you type yourself, each tied to a sender, a domain, a subject, or everyone.\n\nWhen a new message arrives, the lines that bear on it (same sender, same topic) ride into triage and into the reply draft, and the model judges how alike the new message really is — the same sender asking the same thing is binding, a shared word is not. The general lessons in LEARNED.md are distilled from these same lines under a stricter rule (LEARNED.md → Verdicts lists which ones fed which lesson).\n\nSo nothing was removed: LEARNED.md is what it concluded, this is what it concluded it from. Toggle off a line learned wrong — it stays for the record and is never injected again; the next distillation drops it too.` },
+    body: "Rules evaluated BEFORE any AI touches a message; no model confidence can override them. Precedence: skip > ignore > escalate — within one action, lowest order number wins.\n\nKINDS: keyword (pipe-separated substrings matched against subject+body), sender (exact addresses), sender_domain (domains), noreply (built-in matcher for automated addresses), first_time_sender (fires when the address has never been seen).\n\nACTIONS: ignore (no task, message stays visible in the feed), escalate (a human always decides, and the task is marked urgent - this is the ONLY thing that marks one urgent, so name the senders whose mail jumps your queue). Everything else is triage's to judge.\n\nNothing writes into this table by itself: 'Not a task' teaches a verdict in LEARNED.md, not a rule here, and muting a sender is 'Skip this sender'." },
   audit: { title: "Audit integrity — what the log is, and how to read it",
     body: "Every consequential thing Taskuary does is one row in an append-only log: a message routed or filed and why, a verdict you gave, a reply sent, an agent session opened or wrapped, a connector saved or signed in, a setting changed, a task deleted. Each row stores a hash of its own contents PLUS the hash of the row before it, so the rows form a chain: change any row after the fact — even one character in the database — and its hash no longer matches, and every row after it points at a parent that no longer exists.\n\nVerify recomputes the whole chain from the first row. Intact means the record you see is the record that was written. 'Contents altered' names the exact rows that were changed after writing — the thing this log exists to catch. 'Out of order' means two writers raced at the same instant once; nothing was changed, and it cannot recur.\n\nThe history below is that log, newest first: when, who (you, the router, an agent, a scheduled report), what was done, to what. It is the answer to 'why did this happen' and 'who did this' for anything on your work rail or the Board." },
 };
@@ -362,7 +350,6 @@ const PAGES = {
   docs: { title: "Docs", icon: MenuBookIcon, desc: "The documents the system writes from and writes to — how you sound, what triage is told, and what it has learned." },
   config: { title: "Configuration", icon: TuneIcon, desc: "How mail is sorted, replies, agents and display - how Taskuary behaves." },
   policies: { title: "Routing policies", icon: AltRouteIcon, desc: "Deterministic rules the AI can never override — ignores, escalations, auto-answers." },
-  memory: { title: "Verdicts & notes", icon: PsychologyIcon, desc: "The evidence behind LEARNED.md — every verdict you gave, one line each, plus notes you write. Toggle off what it learned wrong." },
   audit: { title: "Audit integrity", icon: VerifiedIcon, desc: "Who did what, when — a tamper-evident record of every action, and a button that proves nobody edited it." },
   updates: { title: "Updates", icon: SystemUpdateAltIcon, desc: "Which build is running, which is the latest release, and one button that installs it and reopens — connections and settings untouched." },
 };
@@ -422,8 +409,6 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     const find = () => document.querySelector(`[data-tq-knob~="${k}"]`);
     setTimeout(() => focusPlace(find(), find), 0);   // not drawn yet (the panel's card): focusPlace waits for it
   }, [only?.knob, only?.at, settings]);
-  const [memory, setMemory] = useState([]);
-  const [newNote, setNewNote] = useState(null);
   const [draft, setDraft] = useState(null);
   const [verify, setVerify] = useState(null);
   const [help, setHelp] = useState(null);
@@ -440,8 +425,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
 
   const load = useCallback(async () => {
     try {
-      const [p, s, m] = await Promise.all([api.get("/api/policies"), api.get("/api/settings"), api.get("/api/memory")]);
-      setPolicies(p.data.data || []); setSettings(s.data.data || []); setMemory(m.data.data || []);
+      const [p, s] = await Promise.all([api.get("/api/policies"), api.get("/api/settings")]);
+      setPolicies(p.data.data || []); setSettings(s.data.data || []);
       api.get("/api/brains").then(({ data }) => setBrains(data.data || [])).catch(() => {});
       api.get("/api/mailboxes").then(({ data }) => setMailboxes(data.data || [])).catch(() => setMailboxes([]));
       api.get("/api/agents").then(({ data }) => {
@@ -484,9 +469,6 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     if (!ok && el) el.value = settings.find((s) => s.Name === name)?.Value ?? "";
     load();
   };
-  const toggleMemory = async (m) => { await run(() => api.patch(`/api/memory/${m.MemoryId}`, { active: !m.Active }),
-    { ok: m.Active ? "Switched off - it will not be used again" : "Switched back on" }); load(); };
-  const addNote = async () => { if ((await run(() => api.post("/api/memory", newNote), { ok: "Note added" })).ok) setNewNote(null); load(); };
   const [jsonBad, setJsonBad] = useState({});           // a JSON knob's problem, said under its box until fixed
   const [verifying, setVerifying] = useState(false);
   const runVerify = async () => {
@@ -514,8 +496,6 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
         go: () => { setQ(""); onJump("config", meta(s.Name).group); } })),
     ...(policies || []).filter((p) => hit(p.Name, p.Kind, p.Pattern, p.Action, p.Reason))
       .map((p) => ({ key: `p${p.PolicyId}`, label: p.Name, crumb: PAGES.policies.title, go: () => { setQ(""); onJump("policies"); } })),
-    ...memory.filter((m) => hit(m.Note, m.Scope, m.ScopeKey, m.Source))
-      .map((m) => ({ key: `m${m.MemoryId}`, label: m.Note.slice(0, 70), crumb: PAGES.memory.title, go: () => { setQ(""); onJump("memory"); } })),
   ];
 
   const control = (s) => {
@@ -865,59 +845,6 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
       );
     }
 
-    if (page === "memory") {
-      return (
-        <Box>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-            <Typography variant="body2" sx={{ color: DIM }}>
-              One dated line per verdict you gave, plus notes you write — the evidence LEARNED.md (Docs) distils its general lessons from.
-              Lines that bear on a new message ride into its triage and draft.
-              <Typography component="button" type="button" variant="body2" onClick={() => setHelp(SECTION_HELP.memory)}
-                sx={{ color: "#55697a", cursor: "pointer", border: 0, background: "none", padding: 0, font: "inherit", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
-                How this relates to LEARNED.md →
-              </Typography>
-            </Typography>
-            <Box sx={{ flex: 1 }} />
-            <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
-              onClick={() => setNewNote({ note: "", scope: "global", scope_key: "" })}>Add note</Button>
-          </Box>
-          {!memory.length && <Empty>Nothing learned yet — every review verdict teaches it.</Empty>}
-          {memory.map((m) => (
-            <Box key={m.MemoryId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.75, borderBottom: `1px solid ${BORDER}`, opacity: m.Active ? 1 : 0.5 }}>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography sx={{ color: INK, fontSize: 13.5, lineHeight: 1.4 }}>{m.Note}</Typography>
-                <Typography variant="caption" sx={{ ...mono, color: FAINT }}>{m.Scope}{m.ScopeKey ? `: ${m.ScopeKey}` : ""} · {m.Source}</Typography>
-              </Box>
-              <Switch checked={!!m.Active} onChange={() => toggleMemory(m)} />
-            </Box>
-          ))}
-          {newNote && (
-            <Box sx={{ ...card, bgcolor: PANEL2, p: 2, mt: 2, display: "flex", flexDirection: "column", gap: 1.25 }}>
-              <TextField label="Standing note (imperative, e.g. 'Never draft replies to daily cash reports')"
-                multiline value={newNote.note} onChange={(e) => setNewNote({ ...newNote, note: e.target.value })} />
-              <Box sx={{ display: "flex", gap: 1 }}>
-                <Select fullWidth value={newNote.scope} onChange={(e) => setNewNote({ ...newNote, scope: e.target.value })}>
-                  {SCOPES.map((s) => <MenuItem key={s} value={s}>{SCOPE_LABEL[s] || s.replace("_", " ")}</MenuItem>)}
-                </Select>
-                {newNote.scope !== "global" && (
-                  // a keyed scope with no key matches nothing, ever - the server refuses it now,
-                  // so the button does too rather than posting a note that could never fire
-                  <TextField fullWidth label={SCOPE_KEY_LABEL[newNote.scope] || "what to match on"}
-                    value={newNote.scope_key}
-                    onChange={(e) => setNewNote({ ...newNote, scope_key: e.target.value })} />
-                )}
-              </Box>
-              <Box sx={{ display: "flex", gap: 0.75 }}>
-                <Button size="small" variant="contained" onClick={addNote}
-                  disabled={!newNote.note.trim() || (newNote.scope !== "global" && !(newNote.scope_key || "").trim())}>Save</Button>
-                <Button size="small" onClick={() => setNewNote(null)}>Cancel</Button>
-              </Box>
-            </Box>
-          )}
-        </Box>
-      );
-    }
-
     if (page === "about") return <AboutYou />;
     if (page === "docs") return <DocsView sel={docSel} onSel={setDocSel} onCatalog={onCatalog} />;
     // ...its Update button lit when the Assistant brought the page up for it (#settings=updates&key=update), the way a knob row is
@@ -1026,7 +953,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
 // Docs is a SECTION here rather than a tab of its own: it is configuration you read, it sits
 // where About you leaves off, and moving it in keeps the top strip symmetric about the
 // Assistant now that Review is gone (the owner, 2026-09-22).
-const NAV = ["about", "docs", "config", "policies", "memory", "audit", "updates"];
+// no "memory" page: the notes it listed are LEARNED.md lines now, under Docs (the owner, 2026-10-27: "probably garbage, remove it")
+const NAV = ["about", "docs", "config", "policies", "audit", "updates"];
 
 // DOCS IS A TREE, not a list of scroll anchors: its rail entries SWITCH the document rather than
 // scrolling to a heading, because a document is not a heading you scroll past. Groups are headers

@@ -78,7 +78,7 @@ def test_visualize_gets_the_five_subjects_with_their_real_readers_and_your_own_l
     assert [x['slug'] for x in g['sections']] == list(lc.SECTIONS)
     reads = {x['slug']: x['reads'] for x in g['sections']}
     assert reads['people'] == 'read by triage (priority only) · drafts · the Advisor · the Assistant · agents'
-    assert reads['bring'] == 'read by the Assistant'
+    assert reads['bring'] == 'read by the Assistant · agents'      # an agent reads all of it (the owner, 2026-10-27)
     by = {l['key']: l for l in g['lines']}
     assert by['erin manager hour']['subject'] == 'erin@northwind.example' and by['erin manager hour']['section_slug'] == 'people'
     mine = [l for l in g['lines'] if l.get('own')]
@@ -145,7 +145,7 @@ def test_the_chat_keeps_gail_moved_to_ops_and_forgets_rays_payroll_line_at_once(
     assert 'Paula' in s.get_doc('learned')
 
 
-def test_the_tools_are_in_the_catalogue_and_a_plain_fact_is_still_a_saved_note(w):
+def test_the_tools_are_in_the_catalogue_and_a_plain_fact_goes_into_the_memory(w):
     from taskuary import operations, toolcatalog
     s, *_ = w
     assert 'memory.wrong' in operations.KINDS and toolcatalog.is_read('memory.about')
@@ -153,4 +153,5 @@ def test_the_tools_are_in_the_catalogue_and_a_plain_fact_is_still_a_saved_note(w
     assert 'memory.about' in toolcatalog.block() and 'memory.wrong' in toolcatalog.block()
     with mock.patch.object(server, 'store', s):
         out = server._run_operation({'kind': 'memory.remember', 'target': 0, 'params': {'note': 'The office opens at 8'}}, None)
-    assert out.get('memoryId') and 'opens at 8' not in s.get_doc('learned'), 'a fact about nobody is a saved note, as before'
+    # a fact about nobody is in LEARNED.md too, where every reader reads it - a saved note was read only on a matching word (2026-10-27)
+    assert not out.get('memoryId') and out['learned']['section'] == 'care' and 'The office opens at 8' in s.get_doc('learned')

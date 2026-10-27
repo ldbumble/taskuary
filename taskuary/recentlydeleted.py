@@ -179,7 +179,7 @@ def _restore_task(store, d: dict) -> int:
     for rid in d.get('routes') or []: store._exec('UPDATE route SET TaskId=? WHERE RouteId=? AND TaskId IS NULL', (tid, rid))
     if d.get('ignore'): store._exec("DELETE FROM route WHERE RouteId=? AND Decision='ignore'", (d['ignore'],))
     if d.get('memory'):
-        store.set_memory_active(d['memory'], False)
+        store.set_memory_active(d['memory'], False)        # ...which takes its LEARNED.md line out too (memorylines, 2026-10-27)
         from . import learn                 # ...and what that note fed in LEARNED.md goes with it (learn.withdraw)
         learn.withdraw(store, d['memory']); learn.note_verdicts(store)
     for i in d.get('ideas') or []:

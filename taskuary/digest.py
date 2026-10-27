@@ -324,7 +324,9 @@ def _ruled_out(store, c: dict) -> str:
 
 def global_rules(store) -> list:
     """The owner's active GLOBAL verdicts, whole - for the model to hold each ask against."""
-    try: return [n['Note'].strip() for n in store.list_memories() if n['Scope'] == 'global' and str(n.get('Note') or '').strip()]
+    # ...the owner's own general lines on what they care about, in LEARNED.md (memorylines, 2026-10-27) - what a global note was
+    from . import memorylines
+    try: return [n['Note'].strip() for n in memorylines.standing(store) if n['Scope'] == 'global' and str(n.get('Note') or '').strip()]
     except Exception as e:
         logger.debug(f'digest: global verdicts skipped - {e}'); return []
 

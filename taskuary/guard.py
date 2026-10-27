@@ -183,7 +183,6 @@ OWNER_ONLY = (
     (r'POST', r'^/api/messages/retriage-failed$', "re-judging every message triage failed on is the owner's call, as one is"),
     (r'POST|DELETE', r'^/api/funnel/(\d+/(later|pin)|mutes/\d+|rerank|settle)$', "the owner's pile"),
     (r'POST', r'^/api/board/notes/\d+/read$', "the owner's read mark"),
-    (r'POST|PATCH', r'^/api/memory(/\d+)?$', 'memory notes steer triage - an agent proposes one, it does not write it'),
     (r'POST', r'^/api/notes$', "a note to self is the owner's"),
     (r'POST', r'^/api/ingest/(poll|push)$', 'putting a message in the inbox would let an agent write its own next prompt'),
     (r'POST', r'^/api/(ai/defaults|setup/(adopt-brain|dismiss|seen|walk|walk/reset)|knowledge/reindex|calendar/prep(are)?|prompt-image)$',

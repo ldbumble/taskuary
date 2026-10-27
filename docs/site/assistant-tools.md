@@ -131,9 +131,9 @@ The "Run it again" button: run the report on the table again.
 
 ### `remember`
 
-Keep a fact.
+Keep a fact about how the owner works in their memory.
 
-- `text`
+- `text` - , their words ("I don't care about the legacy export job any more" too)
 
 <p class="runs">Brings up its button for you to press.</p>
 
@@ -697,11 +697,11 @@ Start a script by its name: walk me through my tasks | set up a report.
 
 ### `memory.remember`
 
-Keep a fact. One about how they work with someone or something ("Gail moved to Ops", "Ray handles payroll for me", "I put renewals off to Friday") is kept at once where the memory's readers read it, when you name it: `about`: the person's address or name. Any other fact brings up the notes page. Who reports to whom and who owns what is people.relate.
+Keep a fact about how the owner works, in LEARNED.md, at once. Who reports to whom and who owns what is people.relate.
 
-- `note` - the fact, in the owner's words
-- `about` (optional) - the person's address or name. Any other fact brings up the notes page. Who reports to whom and who owns what is people.relate
-- `section` (optional) - people | care | work | promises | bring
+- `note` - the fact, in the owner's words ("Gail moved to Ops", "Ray handles payroll for me", "I put renewals off to Friday", "I don't care about the legacy export job any more")
+- `about` (optional) - the person's address or name, for a people line
+- `section` (optional) - , always: people (who someone is to them, how they deal with them) | care (what they are responsible for and what they do NOT care about - a legacy process, a system no longer theirs: triage and the report gate then make no task of it) | work (their rhythm) | promises | bring (what the Advisor may raise)
 - `replaces` (optional) - the key of the line it makes untrue, closed and kept as history (memory.about gives the keys)
 
 <p class="runs">Brings up its button for you to press.</p>
@@ -865,7 +865,7 @@ Who someone is to the owner: every line the memory holds about them, with its ke
 
 ### `memory.list`
 
-Everything kept about the owner: the saved notes (from "remember this", their verdicts, Settings) and what LEARNED.md has learned from their verdicts. Use it for "what do you remember", "what do you know about me"
+Everything kept about the owner: LEARNED.md - what they told you ("remember this"), their verdicts, and what it learned from what they did. Use it for "what do you remember", "what do you know about me"
 
 - `about` - words to narrow it (a sender, a topic)
 

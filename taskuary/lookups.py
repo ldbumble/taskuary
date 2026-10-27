@@ -83,7 +83,9 @@ def sender_read(store, p: dict) -> str:
     out.append('open tasks: ' + ('; '.join(f"{task_ref(t['TaskId'])} {_cut(t['Title'], 80)} ({t['Status']})" for t in tasks) if tasks else 'none'))
     replies = store.own_replies_to(em, since, 3)
     if replies: out.append('you last wrote back ' + _day(replies[0].get('SentAt')))
-    notes = [m['Note'] for m in store.list_memories() if str(m.get('ScopeKey') or '').lower() == em]
+    from . import memorylines                  # what LEARNED.md holds about them (2026-10-27: the one memory)
+    from .learned_cut import names
+    notes = [m['Note'] for m in memorylines.notes(store) if str(m.get('ScopeKey') or '').lower() == em or em in names(m['Note'])]
     if notes: out += ['what you told me about them:'] + [f'  - {_cut(n, 300)}' for n in notes[:8]]
     from . import orgchart
     if (rel := orgchart.relation_of(store, em, s.get('Name') or '')): out.append(f'to you: {rel}')
@@ -259,18 +261,15 @@ def errors_list(store, p: dict) -> str:
 def _about(p) -> set: return _words(str(p.get('about') or ''))
 
 def memory_list(store, p: dict) -> str:
-    """Everything kept about the owner: the saved notes (chat, verdicts, Settings) and LEARNED.md."""
+    """Everything kept about the owner: LEARNED.md - their verdicts and what they told the Assistant are lines in it (2026-10-27)."""
     from . import learn
     want = _about(p)
     hit = lambda *xs: not want or bool(want & _words(' '.join(str(x or '') for x in xs)))
-    notes = [m for m in store.list_memories() if hit(m.get('ScopeKey'), m.get('Note'))]
-    out = [f'SAVED NOTES ({len(notes)}):' if notes else 'No saved notes' + (' match that.' if want else '.')]
-    out += [f"  mem{m['MemoryId']} {_day(m.get('CreatedAt'))} [{m.get('Source') or 'manual'}, {m.get('Scope')}"
-            f"{': ' + m['ScopeKey'] if m.get('ScopeKey') else ''}] {_cut(m.get('Note'), 300)}" for m in notes[:25]]
     doc = store.doc(learn.DOC) or ''
     learned, testing = learn.injectable(doc), learn._block(doc, learn.HYP_START, learn.HYP_END)
     if want: learned = NL.join(l for l in learned.splitlines() if hit(l))
-    out.append('WHAT I LEARNED FROM YOUR VERDICTS (LEARNED.md):' + NL + _cut(learned, 3000) if learned.strip() else 'LEARNED.md has nothing learned yet.')
+    out = ['YOUR MEMORY (LEARNED.md - what you said and what I learned from what you did):' + NL + _cut(learned, 4000) if learned.strip()
+           else 'LEARNED.md has nothing' + (' that matches.' if want else ' in it yet.')]
     if testing and not want: out.append('STILL BEING TESTED, not trusted yet:' + NL + _cut(testing, 1200))
     from . import orgchart
     org = NL.join(l for l in orgchart.block(store).splitlines() if hit(l))

@@ -59,7 +59,6 @@ VERD_START, VERD_END = '<!-- verdicts:start -->', '<!-- verdicts:end -->'
 _GATED = re.compile(r'\n## [^\n]*\n(?:(?!##)[^\n]*\n)*?<!-- (hypotheses|proposed|verdicts):start -->'
                     r'.*?<!-- \1:end -->\n?', re.S)
 VERD_HEADER = '## Verdicts - the evidence'
-VERD_KEEP = 60           # the most recent verdict lines the doc shows; the table keeps them all
 
 LESSON_SYSTEM = (
     'You maintain the Watching section of LEARNED.md: patterns Taskuary is testing about how '
@@ -266,30 +265,18 @@ def _without_preamble(doc: str) -> str:
     return _PREAMBLE.sub(r'\1', doc or '')
 
 
-def render_verdicts(store) -> str:
-    """The evidence, as the doc shows it: one dated line per verdict the owner gave, newest
-    first, straight from the memory table (which stays the record; this is its readable face)."""
-    rows = [m for m in store.list_memories() if m.get('Source') == 'verdict'][:VERD_KEEP]
-    if not rows: return '_(nothing yet - "Not our task" and "Not a task" write here)_'
-    return '\n'.join(f"- {str(m.get('Note') or '').strip()} [mem{m['MemoryId']} · {m['Scope']}"
-                     + (f": {m['ScopeKey']}" if m.get('ScopeKey') else '') + ']' for m in rows)
-
-
 def note_verdicts(store):
-    """Refresh LEARNED.md's evidence block after a verdict. The section is appended to a doc
-    that predates it (existing installs), never overwriting anything the owner or the
-    reflection wrote. Never raises - the memory row is already saved."""
+    """After a verdict (and at startup): every verdict and note the owner gave, written as a line under the section its readers read
+    (memorylines - the owner, 2026-10-27: "everything that learns about the user should be saved in memory"). The old evidence block
+    at the foot of LEARNED.md - "Verdicts - the evidence", read by no one and only repeating the table - is taken out. Never raises:
+    the verdict's record is already saved."""
     try:
+        from . import memorylines
+        memorylines.migrate(store)
         doc = store.get_doc(DOC) or ''
-        if VERD_START not in doc or VERD_END not in doc:
-            doc = doc.rstrip('\n') + (f'\n\n{VERD_HEADER}\n_(every verdict you give, dated, with the sender and subject '
-                                      f'it was given on. Triage is shown the ones about a similar sender or topic and judges '
-                                      f'how alike the new message is; the general lesson is distilled above.)_\n'
-                                      f'{VERD_START}\n{VERD_END}\n')
-        new = _put_block(doc, VERD_START, VERD_END, render_verdicts(store))
-        if new != (store.get_doc(DOC) or ''): store.save_doc(DOC, new, 'verdicts')
+        if VERD_START in doc and VERD_END in doc: store.save_doc(DOC, _without_verdicts(doc)[0].rstrip('\n') + '\n', 'verdicts')
     except Exception as e:
-        logger.warning(f'verdict block not written: {e}')
+        logger.warning(f'verdicts not written to the memory: {e}')
 
 
 def _without_verdicts(doc: str) -> tuple:
@@ -390,8 +377,8 @@ def _fit(doc: str, cap: int = REFLECT_FIT) -> tuple:
 
 def _restore(doc: str, held: dict) -> str:
     for a, ls in held.items():
-        if a == PEOPLE:
-            for l in ls: doc = _under(doc, PEOPLE, l) if l not in doc else doc
+        if a in SECTIONS.values():
+            for l in ls: doc = _under(doc, a, l) if l not in doc else doc
             continue
         b = {HYP_START: HYP_END, PROP_START: PROP_END}[a]
         doc = _put_block(doc, a, b, '\n'.join([_block(doc, a, b) or ''] + ls))
@@ -406,6 +393,19 @@ def _hold_people(doc: str, who: set) -> tuple:
     held = [raw for raw, l in lg.walk(doc) if l and l['status'] == 'live' and f"## {l['section']}" == PEOPLE and not (names(raw) & who)]
     for raw in held: doc = doc.replace(raw + '\n', '', 1)
     return doc, ({PEOPLE: held} if held else {})
+
+def _hold_said(doc: str) -> tuple:
+    """(doc, {section: lines}) - the owner's own lines about ONE sender, domain or topic (memorylines: their verdicts, kept as lines since
+    2026-10-27), held back from the call and put back as they are: the reflection keeps an untagged line byte-for-byte anyway, and a
+    few hundred of them would push the rewrite past its size law every time. What they teach in general, it learns from the events."""
+    from .memorylines import ABOUT
+    from .learnedgraph import TAG
+    from .learned_cut import lines
+    held = {h: [raw for raw, _ in lines(doc, h) if ABOUT.search(raw) and not TAG.match(raw)] for h in SECTIONS.values()}
+    held = {h: ls for h, ls in held.items() if ls}
+    for ls in held.values():
+        for raw in ls: doc = doc.replace(raw + '\n', '', 1) if raw + '\n' in doc else doc.replace(raw, '', 1)
+    return doc, held
 
 def _job(store) -> str:
     try:
@@ -437,8 +437,9 @@ def reflect(store, llm=None) -> bool:
     from . import episodes, orgchart
     eps, who, _ = episodes.block(store, since)
     sent, people = _hold_people(doc, who)
+    sent, said = _hold_said(sent)
     sent, held = _fit(sent)
-    held.update(people)
+    for h, ls in [*people.items(), *said.items()]: held[h] = held.get(h, []) + ls
     org = orgchart.block(store)
     try:
         # the answer is the whole doc again, so its budget follows the doc (~3 chars a token, plus room)
@@ -624,15 +625,8 @@ def reflect_if_due(store) -> bool:
     return reflect(store)
 
 
-# ── THE PRESS LOG IS RAW DATA, NOT A LESSON (2026-10-25) ───────────────────────────────────────────────────────────────────────────────
-# The moves - "On asks from X, presses Next (n of m)" under "## What you do next", lighting that button by themselves - are gone (the
-# owner, 2026-10-25: stop learning from presses and remove the habit mark). Every press is still kept (presses.py), as a record.
-def press_rows(store) -> list:
-    """THE ONE READER OF THE PRESS LOG (presses.py records every press, on every surface - phase B): every press with a scope that was a
-    real CHOICE, oldest first - one made with no other button there says nothing about what the owner would pick. Data only: nothing
-    in LEARNED.md is written from it."""
-    return store._rows("SELECT * FROM advice_press WHERE IFNULL(Stale,0)=0 AND IFNULL(Choice,1)=1 AND IFNULL(Scope,'')<>'' AND IFNULL(Pressed,'')<>'' "
-                       "ORDER BY Id")
+# THE PRESS LOG IS RAW DATA, NOT A LESSON (2026-10-25): the moves - "On asks from X, presses Next (n of m)" - are gone (the owner:
+# stop learning from presses). Every press is still kept (presses.py) as a record; its one reader here had no caller and went (2026-10-27).
 
 
 def _intro(head: str) -> str:

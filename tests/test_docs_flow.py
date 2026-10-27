@@ -34,6 +34,9 @@ def seeded():
                   'Source': 'writing', 'Active': 1, 'CreatedBy': 'owner'})
     s.add_memory({'Scope': 'global', 'ScopeKey': None, 'Note': f'{OFF} a switched-off note',
                   'Source': 'verdict', 'Active': 0, 'CreatedBy': 'owner'})
+    # ...as an install that had them holds them after its first start: LEARNED.md lines (and STYLE.md for the writing note), 2026-10-27
+    from taskuary import memorylines
+    memorylines.migrate(s)
     return s
 
 
@@ -118,8 +121,10 @@ class EveryScopeIsHonouredTests(unittest.TestCase):
     and silently never applied. 'source' was exactly that."""
     def _note(self, scope, key):
         s = MemoryStore()
-        s.add_memory({'Scope': scope, 'ScopeKey': key, 'Note': f'{NOTE} {scope} rule',
-                      'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner'})
+        mid = s.add_memory({'Scope': scope, 'ScopeKey': key, 'Note': f'{NOTE} {scope} rule',
+                            'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner'})
+        from taskuary import memorylines        # ...a LEARNED.md line about what it is scoped to (`about: ...`), since 2026-10-27
+        memorylines.keep_row(s, mid)
         return s
 
     MSG = {'from_email': 'dana@vendor.com', 'subject': 'Resident Refund Request - PAYNE, MICHAEL',

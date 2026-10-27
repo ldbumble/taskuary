@@ -145,21 +145,10 @@ _SIGNOFF = re.compile(r'^(best|thanks|thank you|regards|cheers|kind regards|best
 _COMMENT = re.compile(r'<!--.*?-->', re.S)
 _TEMPLATE_LINES = re.compile(r'^.*(not generated yet|Write your own rules here).*$', re.M)
 
-WRITING_SOURCE = 'writing'     # a memory note that is an explicit instruction about HOW to write (PW-060)
+# An explicit instruction about HOW to write (PW-060) lives in STYLE.md under Owner notes, which every draft reads (style_doc) - the
+# memory table's 'writing' notes were moved there once (memorylines.migrate, 2026-10-27), and the notes table is read by no one
+WRITING_SOURCE = 'writing'
 OWNER_NOTES = '## Owner notes'
-
-
-def writing_notes(store, budget: int = 1500) -> list:
-    """The standing notes a reply may read: explicit writing instructions and nothing else (PW-060). Triage's
-    verdicts - not a task, not ours, who to defer to - are how mail is ROUTED; they used to ride into every
-    draft as if they were style."""
-    out, used = [], 0
-    for n in store.list_memories():
-        if str(n.get('Source') or '') != WRITING_SOURCE: continue
-        note = ' '.join(str(n.get('Note') or '').split())
-        if not note or used + len(note) > budget: continue
-        out.append(note); used += len(note)
-    return out
 
 
 def style_feedback(store, note: str, actor: str = 'owner') -> bool:
@@ -386,7 +375,6 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     `seen` is filled with the message set this reply was written against - {'saw', 'revision'} -
     measured where the thread is actually read, which is the only place that knows it."""
     from .llm import build_llm
-    from .ingest import notes_for
     llm = llm or build_llm(store, job='draft', task_id=task_id)     # the task rides the route: Auto reads how hard it is
     if not llm: raise RuntimeError('no AI connector is set up to write replies')
     t = store.get_task(task_id) or {}
@@ -402,10 +390,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     last = msgs[-1]
     soul = store.doc('soul') or ''
     owner = owner_of(store, soul)
-    # the mail's own words rank the notes, so pass them: a note quoting this subject is the
-    # one most likely to change how the reply should read
-    # only explicit writing instructions ride into a reply (PW-060); the routing verdicts stay with triage
-    notes = writing_notes(store)
+    # only explicit writing instructions ride into a reply (PW-060) - STYLE.md's Owner notes, in `sty`; the routing verdicts stay with triage
     chat = written_as_chat(last.get('Channel'))
     sty = style_doc(store)
     box = mailbox_in(next((m for m in reversed(msgs) if m.get('Direction') != 'out'), last))
@@ -423,7 +408,6 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
               + (f'\n\nYour own style, distilled from mail you have actually sent - write like '
                  f'this:\n{sty[:2500]}' if sty else ''))
     # LEARNED.md is triage's document (PW-058): what deserves a task is not how to write a reply
-    if notes: system += '\n\nYour own writing instructions:\n' + '\n'.join(f'- {n}' for n in notes)
     system += voice_line(store, [last.get('FromEmail')])
     from .triage import sender_body
     # the writer reads the same assembled conversation triage reads (PW-054): the whole chain, history
@@ -575,7 +559,6 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     """A reply for a message with NO task behind it - chatter that just deserves an answer.
     Same voice, same rules, same channel-awareness; the context is the message itself."""
     from .llm import build_llm
-    from .ingest import notes_for
     from .triage import sender_body
     llm = llm or build_llm(store, job='draft', task_id=m.get('TaskId'))
     if not llm: raise RuntimeError('no AI connector is set up to write replies')
@@ -592,9 +575,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
                  f"one it is describing you:\n{soul[:4000]}" if soul else '')
               + (f'\n\nYour own style, distilled from mail you have actually sent - write like '
                  f'this:\n{sty[:2500]}' if sty else ''))
-    notes = writing_notes(store)                                     # explicit writing instructions only (PW-060)
-    if notes: system += '\n\nYour own writing instructions:\n' + '\n'.join(f'- {n}' for n in notes)
-    system += voice_line(store, [m.get('FromEmail')])
+    system += voice_line(store, [m.get('FromEmail')])                # explicit writing instructions are STYLE.md's Owner notes (PW-060)
     user = (f"Subject: {m.get('Subject') or ''}\nFrom: {m.get('FromName')} <{m.get('FromEmail')}>\n\n"
             f"{sender_body(str(m.get('BodyText') or ''), m.get('OwnText'), budget=4000)[0]}")
     from . import calendar as cal

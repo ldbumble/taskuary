@@ -44,23 +44,22 @@ test("a greyed verb is never the advised one", () => {
   assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "close", label: "Mark done" })), []);
 });
 
-test("the next step sits over the row and the box is plain: no ghost text, no pill", () => {
-  assert.match(src, /<AdvisorNext advice=\{shownAdvice\}/);
+test("the Advisor lights the row and the box is plain: no ghost text, no pill, no line over the row", () => {
+  assert.match(src, /<AdvisorNext advice=\{shownAdvice\} onPropose=\{pressAdvice\} onErr=\{setErr\} \/>/);
   assert.match(src, /<ActionRow [^>]*advised=\{stripPick \|\| setupLit\}/);
   assert.doesNotMatch(src, /ghostText|tq-pill|tq-advised/);
   assert.doesNotMatch(css, /\.tq-pill|tq-advised/);
-  assert.match(row, /if \(!advice\?\.verb\) return null;/);                                   // no decision draws nothing
-  // ...and an OBVIOUS move draws no sentence - its button is lit and the strip carries only an empty mark (the owner, 2026-10-23)
-  assert.match(row, /const mark = <div hidden data-tq-advice="" data-tq-silent="" \/>;/);
-  assert.match(row, /if \(!advice\.line\) return mark;/);
-  assert.match(css, /\.tq-next \{/);
+  // ...and NO decision draws a sentence (the owner, 2026-10-23 "the obvious move is silent", then 2026-10-26 "remove the advisor"): a
+  // decided item leaves only an empty mark the walks read; its button is lit, a warning is in the task (advice.taskNote)
+  assert.match(row, /return advice\?\.verb \? <div hidden data-tq-advice="" data-tq-silent="" data-tq-advice-verb=\{advice\.verb\} \/> : null;/);
+  assert.doesNotMatch(row.slice(row.indexOf("export function AdvisorNext"), row.indexOf("function Cluster")), /tq-next/);
 });
 
-test("while the NEXT strip stands, the task's own Open again line is hidden - only on the canvas", () => {
+test("the task's own Open again line always stands - no strip says what to do in its place (2026-10-26)", () => {
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   assert.match(page, /<Typography className="tq-news"[^>]*>Open again: \{news\.line\}/);
-  assert.match(src, /className=\{shownAdvice \? "tq-asst-col advising" : "tq-asst-col"\}/);
-  assert.match(css, /\.tq-asst-col\.advising \.tq-news \{ display: none; \}/);
+  assert.match(src, /<div className="tq-asst-col" style=/);
+  assert.doesNotMatch(css, /\.advising/);
 });
 
 test("the strip gives the suggestion, not the move's name: a lead-in that is the verb goes, any other sentence stays whole", () => {
@@ -73,16 +72,19 @@ test("the strip gives the suggestion, not the move's name: a lead-in that is the
 
 // ...and a move the row has no button for (Not ours, Take it myself, Chase) JOINS THE ROW, never a button beside the line (the owner,
 // 2026-10-16: "the advisor should just highlight the button in the button row not add new ones? check this for all advisor lines")
-test("the strip has no NEXT tag and no button of its own; a move the row lacks joins the row, and Why? opens the reasoning", () => {
+test("the Advisor draws no button of its own; a move the row lacks joins the row, and a warning's Why? opens the reasoning", () => {
   const strip = row.slice(row.indexOf("export function AdvisorNext"), row.indexOf("function Cluster"));
   assert.doesNotMatch(strip, /NEXT/);
   assert.doesNotMatch(strip, /<button type="button" className="tq-ab/, "the line draws no button - the row has them all");
   assert.match(strip, /useVerbs\("advice", lacks \? \[\{ id: `advice:\$\{advice\.verb\}`/);
   assert.match(strip, /const lacks = !!\(advice\?\.verb && advice\.verb !== "next" && onPropose\) && !advisedAny\(theirs, advice\);/);
-  assert.match(strip, /suggestion\(advice\.line, advice\.label, advice\.verb\)/);
-  assert.match(strip, /className="tq-next-why"[^>]*>Why\?<\/button>/);
-  assert.match(strip, /api\.get\("\/api\/advice\/notes", \{ params: \{ key: advice\.key/);
-  assert.match(strip, /<Popover open=\{!!at\}/);
+  // ...a refused press is said on the chat's error line (onErr) - there is no strip to say it on
+  assert.match(strip, /catch \(err\) \{ onErr\?\.\(proposeFailed\(err\)\); \}/);
+  // ...and every line in the task's Advisor section keeps its Why? (AdvisorNote, the owner 2026-10-26)
+  const note = fs.readFileSync(new URL("../src/AdvisorNote.jsx", import.meta.url), "utf8");
+  assert.match(note, /<button type="button" className="tq-next-why" aria-haspopup="dialog"[\s\S]{0,120}>Why\?<\/button>/);
+  assert.match(note, /api\.get\("\/api\/advice\/notes", \{ params: \{ key: a\.key/);
+  assert.match(note, /<Popover open=\{!!at\}/);
 });
 
 test("the clock menu offers the Advisor's notes for the item on the table", () => {
@@ -92,9 +94,9 @@ test("the clock menu offers the Advisor's notes for the item on the table", () =
 
 // ...and a greyed one says why it is off rather than drawing nothing: the strip went blank with nothing lit when the draft was cleared
 // (the advisor matrix, 2026-10-19)
-test("a move the row cannot make lights nothing: a greyed button says why it is off, a missing one draws no strip", () => {
+test("a move the row cannot make lights nothing: a greyed button says why it is off on its own title, and nothing joins the row for it", () => {
   const strip = row.slice(row.indexOf("export function AdvisorNext"), row.indexOf("function Cluster"));
-  assert.match(strip, /const onRow = advisedIn\(verbs\.list, advice\);\s*if \(!onRow\) \{[\s\S]{0,400}if \(!off\?\.disabled\) return null;/, "a greyed button: why it is off");
+  assert.match(row, /title=\{\(v\.disabled && v\.why\) \|\| v\.title \|\| undefined\}/, "a greyed button: why it is off");
   assert.match(strip, /!advisedAny\(theirs, advice\)/, "a greyed button is not lacking: nothing joins the row for it");
   const list = [v("stop_agent", "agent", { label: "Stop and save", disabled: true }), v("next", "next")];
   assert.equal(advisedIn(list, { verb: "stop_agent", label: "Stop and save" }), null, "greyed: nothing to fill");

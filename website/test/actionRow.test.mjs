@@ -335,7 +335,7 @@ test("the draft's own Send is never on the bar and leaves no empty slot; advised
 
 test("the Advisor's own button for a move the row lacks is the dark one; a 409 says the suggestion changed", async () => {
   const strip = fs.readFileSync(path.join(process.cwd(), "src", "ActionRow.jsx"), "utf8");
-  assert.match(strip, /group: "more", tone: "p", disabled: going === "…"/);
+  assert.match(strip, /group: "more", tone: "p", disabled: going,/);
   assert.match(strip, /status === 409 \? "This changed - here's the updated suggestion\."/);
   assert.doesNotMatch(strip, /note\.model/, "no model names in the Why? box");
   assert.doesNotMatch(strip, /e\.label \|\| e\.id/, "no evidence ids in the Why? box");

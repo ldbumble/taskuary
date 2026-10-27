@@ -52,15 +52,16 @@ test("no line is still an answer: only no AI is a sentence, and every other sile
   const view = read("AssistantView.jsx");
   assert.doesNotMatch(view, /AdviceNone|Thinking about this one/);
   assert.doesNotMatch(read("ActionRow.jsx"), /export function AdviceNone/);
-  // ...in one strip, which takes NO ROOM until it has a line (the owner, 2026-10-26: "remove it when it's not doing anything") -
-  // browser/dock-strip.test.mjs measures it
-  assert.match(read("assistantView.css"), /\.tq-dock \.tq-strip:not\(:has\(> \.tq-next\)\) \{ display: none; \}/);
-  assert.match(view, /<div className="tq-strip" data-tq-strip=\{busy( \|\| \(reading && reading === onTable\))? \? "busy" : ""\}>/);
+  // ...and NO STRIP AT ALL (the owner, 2026-10-26: "maybe keep the box but remove the advisor?"): not on the desk's dock, not over a
+  // phone's row - the lit button is the decision, no AI the row's own Connect an AI (browser/dock-strip.test.mjs measures the dock)
+  for (const f of ["AssistantView.jsx", "CanvasItem.jsx", "ActionRow.jsx"]) assert.doesNotMatch(read(f), /className="tq-strip"|data-tq-advice="no_ai"/, f);
+  assert.doesNotMatch(read("assistantView.css"), /\.tq-strip/);
+  // ...and no Connect an AI joins the row for it either (the owner, 2026-10-26: "if you don't get through ai setup the whole thing doesn't work")
+  for (const f of ["AssistantView.jsx", "CanvasItem.jsx"]) assert.doesNotMatch(read(f), /noai:connect/, f);
   // ...and the dead-end walk holds the page to all of it (STILL, STRIP, REREAD, LIT)
   const walk = fs.readFileSync(path.join(process.cwd(), "deadend_check.mjs"), "utf8");
   for (const rule of ["STILL", "STRIP", "REREAD", "LIT"]) assert.ok(walk.includes(`note("${rule}"`), rule);
-  // ...one line tall when it speaks, and the same height whatever it says (30px since the owner's 2026-10-26 laptop: the dock was a third of it)
-  assert.match(read("assistantView.css"), /\.tq-dock \.tq-strip \{ min-height: 30px;/);
+  // ...and setup's own line, the one .tq-next the dock still draws, is one line tall (30px since the owner's 2026-10-26 laptop)
   assert.match(read("assistantView.css"), /\.tq-dock \.tq-next \{ margin: 0; min-height: 30px;/);
 });
 
@@ -71,9 +72,10 @@ test("an advised move the row has greyed says why it is off, and a move lit on t
   const pick = { verb: "approve", label: "Send" };
   assert.equal(advisedIn(list, pick), null, "a greyed button is never lit");
   assert.equal(advisedAny(list, pick)?.why, "write the reply first", "...but the row still has it, and says why it is off");
+  // ...on the greyed button itself, its hover title - the strip's "<X> is off - <why>." went with the strip (2026-10-26)
   const src = read("ActionRow.jsx");
-  assert.match(src, /const off = advisedAny\(theirs, advice\);\s*if \(!off\?\.disabled\) return null;/);
-  assert.match(src, /data-tq-advice="off"[\s\S]{0,120}\$\{off\.label\} is off - \$\{off\.why/);
+  assert.doesNotMatch(src, /is off - /);
+  assert.match(src, /title=\{\(v\.disabled && v\.why\) \|\| v\.title \|\| undefined\}/);
   // ...and held clear of what stands over it (inView.js), marked so the conversation's pin keeps it clear too (the phone pass, 2026-10-20)
   const rd = read("ReviewDecision.jsx");
   assert.match(rd, /if \(!lit\.startsWith\(`\$\{r\.ReviewId\}:`\)\) return undefined;\s*const el = movesRef\.current\?\.querySelector\("\.MuiButton-contained"\);/);
@@ -87,7 +89,8 @@ test("a move whose text is gone says what it does now, still lit", () => {
   const list = [v("12:approve", "decide", { label: "Mark done", card: true, tone: "p", blank: "The draft box is empty - Mark done closes it with nothing copied" }), v("next", "next")];
   assert.equal(advisedIn(list, { verb: "close", label: "Mark done" })?.id, "12:approve", "still the advised move");
   assert.match(read("actionRow.js"), /\.\.\.\(v\.blank \? \{ blank: v\.blank \} : \{\}\)/, "the row carries it to the strip");
-  assert.match(read("ActionRow.jsx"), /if \(onRow\.blank\) return <div className="tq-next" role="status" data-tq-advice=""><div className="tq-next-txt">\{`\$\{onRow\.blank\}\.`\}/);
+  // ...said by no strip since 2026-10-26: the button is still the lit one
+  assert.doesNotMatch(read("ActionRow.jsx"), /onRow\.blank/);
 });
 
 test("a move greyed only by the owner's own press in flight is not said to be off (the 2026-10-25 sweep)", async () => {
@@ -97,5 +100,43 @@ test("a move greyed only by the owner's own press in flight is not said to be of
   assert.ok(pressInFlight([v("reply", "decide", { label: "Drafting…", disabled: true })]), "its own press, mid-way");
   // ...a move that is truly greyed still says why
   assert.ok(!pressInFlight([v("12:redraft", "decide", { label: "Redraft", disabled: true, why: "the reply was sent" })]));
-  assert.match(read("ActionRow.jsx"), /if \(!off\?\.disabled\) return null;\s*\/\/.*\s*if \(pressInFlight\(theirs\)\) return null;/);
+  // ...and since 2026-10-26 nothing says "is off" over the row at all (the strip is gone)
+  assert.doesNotMatch(read("ActionRow.jsx"), /is off - /);
+});
+
+// THE STRIP'S LINES, SORTED (the owner, 2026-10-26: "maybe keep the box but remove the advisor?", then "an advisor section on the task itself
+// part of the agent thing but separate"): the lines that matter stand in the task's Advisor section; every other one the task or the lit
+// button already says, and with none there is no section
+test("an important line lands in the task's Advisor section, and every other strip line is dropped", async () => {
+  const { taskNote } = await import("../src/advice.js");
+  const d = (state, line, extra = {}) => ({ key: "task:7", for: "task:7", verb: "reply", label: "Reply", state, line, by: "rule", ...extra });
+  // the draft promising what nothing backs, pointing at the draft
+  assert.deepEqual((({ line, draft }) => ({ line, draft }))(taskNote(d("draft_ready", "The draft promises what nothing here shows.", { verb: "redraft", label: "Redraft", by: "model" }))),
+    { line: "The draft promises what nothing here shows.", draft: true });
+  // late against the learned usual, the same ask as another task, a model's reason the lit button is not the obvious one
+  for (const n of [d("asked_late", "You usually answer Erin within the hour; this is 3h."), d("waiting_late_usual", "Erin usually answers in a day; this is 4 days.", { verb: "chase" }),
+    d("duplicate", "Same ask as TQ-0012.", { verb: "remove" }), d("asked", "TQ-0012 may already cover this - an agent is on it.", { verb: "defer", by: "model" })])
+    assert.equal(taskNote(n)?.line, n.line, n.state);
+  // ...said by the task already, or narration of the lit button: no section
+  for (const [state, line] of [["failed", "Failed: no AI is connected"], ["failed_cause", "Failed: the run stopped"], ["report_failed", "Report failed: timeout"],
+    ["invite_clash", "Clashes with Quarter-end planning 9:00-12:00."], ["invite_free", "Free then."], ["stranger", "First mail from vendor.example."],
+    ["stopped", "Stopped 2 hours ago."], ["unpushed", "Changes ready - not pushed."], ["waiting_late", "Erin Blake: 4 days, no answer."],
+    ["goal_late", "Pick the vendor: 3 days late."], ["asked", "Erin Blake asked 2 hours ago."]])
+    assert.equal(taskNote(d(state, line)), null, state);
+  assert.equal(taskNote(d("draft_ready", "")), null, "a silent decision says nothing anywhere");
+  assert.equal(taskNote({ none: "no_ai", for: "task:7" }), null, "no AI is no line at all");
+  // ...ONE section of its own over Agent work ("one is more a guide and one is more doing work", the owner 2026-10-26), at the head of the
+  // work column, only with a line, its drawer's tab saying so - on the canvas and the Tasks tab alike
+  const page = read("TaskPage.jsx"), sec = read("AdvisorNote.jsx");
+  assert.match(page, /const warn = notDone \? \(canvas \? note : taskNote\(taskAdvice\)\) : null;/);
+  assert.equal((page.match(/<AdvisorNote /g) || []).length, 1, "one place for the Advisor's words");
+  const col = page.indexOf('<Box ref={workBox} data-tq-work=""'), at = page.indexOf("{warn && <AdvisorNote note={warn}"), head = page.indexOf('<WorkflowHeading number="2"');
+  assert.ok(col > 0 && col < at && at < head, "in the work column, over Agent work and outside it");
+  assert.match(page, /\{workTabWords\}\{warn \? " · 1 note" : ""\}/);
+  assert.match(sec, /aria-label="Advisor" data-tq-advisor=""/);
+  assert.match(sec, /<TaskuaryMark size=\{13\} \/>\s*<Typography[^>]*>Advisor<\/Typography>/);
+  assert.match(sec, /\{note\.draft && onDraft && <button[^>]*data-tq-advisor-draft=""/);
+  assert.match(sec, />Why\?<\/button>/);
+  assert.doesNotMatch(page, /data-tq-task-advice/);
+  assert.match(read("CanvasItem.jsx"), /onLeave=\{onLeave\} onStay=\{onStay\} note=\{note\} \/>/);
 });

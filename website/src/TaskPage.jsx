@@ -80,7 +80,8 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 // chunks by content, so that tab asks the new server for a filename the build no longer has.
 // Recover once automatically; a real module error still reaches the view boundary on retry.
 import { autostartPlan, isGeneralKind } from "./autostart.js";
-import { adviceKeyFor, suggestion } from "./advice.js";
+import { adviceKeyFor, taskNote } from "./advice.js";
+import AdvisorNote from "./AdvisorNote.jsx";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
 import { CLOSE_BY_HAND, askIsTitle, closeOut, focusOf, fromLine as fromLineOf, layoutOf, mainOf, nextInDrawer, sameWords, waitingOn, workPane } from "./taskLayout.js";
 import { taskStatus } from "./railStatus.js";
@@ -413,7 +414,7 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
 
 export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, onReminded, onLeave, onStay, onOpenTask,
   onChanged, autostart, onAutostarted, active = true, openAct, onActOpened, canvas = false,
-  onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false, title = "", rail = null }) {
+  onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false, title = "", rail = null, note = null }) {
   const caps = useCapabilities(), canCode = caps.coding;     // no coding tool connected: coding is not offered (capabilities.js)
   // ...drawn from the task's read held ahead of it (taskDetail.js) - a view on the table opens whole, not as an empty shell (G8)
   const [detail, setDetail] = useState(() => heldTask(selected));
@@ -1535,6 +1536,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const notDone = !!t && !["done", "dropped"].includes(t.Status);
   // the bar's button the Advisor lit (advisor.decide - the canvas's decision for the same task); nothing is dark before it answers
   const barLit = (verb) => !!taskAdvice && liveVerb(taskAdvice.verb) === verb;
+  // THE ADVISOR'S SECTION (advice.taskNote; the owner, 2026-10-26: "remove the advisor", then "an advisor section on the task itself part
+  // of the agent thing but separate"): no line over the row or the bar - the canvas hands its decision's line in (`note`), the Tasks tab
+  // reads its own - its own section over Agent work, and only when there is a line
+  const warn = notDone ? (canvas ? note : taskNote(taskAdvice)) : null;
   // THE TASKS TAB'S BAR IS ONE LINE (2026-10-23, foldBar.js): Change folds first, then Split or merge, Hand off with its rule, Not a task;
   // Mark done and Remind me never fold, nor the button the Advisor lit
   const bar = useFoldBar(BAR_FOLD_BUT[{ remove: "nat", forward: "hand", split: "reshape" }[liveVerb(taskAdvice?.verb)] || ""], `${t?.TaskId}|${notDone}|${finishing}|${t?.RemindAt || ""}`);
@@ -1611,7 +1616,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         ...(pendingReview ? [stopSave] : []),
         ...(notDone ? [runAnother] : []),
       ] : continueHere ? [
-        // ...not a second Connect an AI on the canvas: with no AI the Advisor's own strip carries it, lit (words.json advice_none)
+        // ...not a second Connect an AI on the canvas (the owner, 2026-10-26: "why would we need connect an ai? if you don't get through ai
+        // setup the whole thing doesn't work"): the Result's line says why and points at Connections
         ...(runFix && !(inRow && runFix.href === place("ai").href) ? [{ id: "fix", group: "decide", tone: "p", label: runFix.label, run: () => openAppLink(runFix.href), title: btnHint("fix") }] : []),
         { id: "continue", group: "agent", lead: !pendingReview && !runFix, label: continueWord, disabled: !!startingAgent || !!noAiWhy, why: noAiWhy,
           run: continuePress, title: failedRun ? btnHint("try_again") : hintOfRow("continue") }]
@@ -1948,8 +1954,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     </Box>}
                     <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1.75 }}>
                       {/* OPEN AGAIN, AND WHY (funnel.news_since_agent): the message that reopened it, said first - the agent's last
-                          session is the record under Agent work, not the news (the owner, 2026-10-12). Where the Advisor's NEXT
-                          strip stands under the canvas it says what to do, so this one goes (assistantView.css .advising) */}
+                          session is the record under Agent work, not the news (the owner, 2026-10-12) - always, now no strip under the
+                          canvas says what to do (2026-10-26) */}
                       {news && <Typography className="tq-news" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>Open again: {news.line}</Typography>}
                       {/* THE ASK - one line of what is wanted; the whole summary is the tooltip when the line cut it */}
                       {wide && askText && <Part label="The ask" data-tq-ask="">
@@ -2143,6 +2149,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     question (the owner, 2026-09-17: keep the stopped header as short as the
                     one a running agent gets). The bar rides IN the heading now, so
                     the sentence and the row that held it both go. */}
+                {/* THE ADVISOR'S OWN SECTION, OVER AGENT WORK (the owner, 2026-10-26: "one is more a guide and one is more doing work but they are
+                    in essence the same idea"): in the main view when the work is it, else in the right drawer with the work, whose tab says so */}
+                {warn && <AdvisorNote note={warn} onDraft={() => { setOpenStage("reply");
+                  requestAnimationFrame(() => workBox.current?.querySelector("textarea")?.scrollIntoView({ block: "center", behavior: "smooth" })); }} />}
                 {/* a queued start: what it waits for, or why it could not start - with Start now and Cancel (T10) */}
                 {!liveSession && listRow?.State === "queued" && listRow?.Queued && <Box sx={{ mb: 1 }}>
                   <QueuedStart taskId={t.TaskId} queued={listRow.Queued} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
@@ -2649,21 +2659,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 title={workSide ? "Hide the agent and Close out" : "Show the agent and Close out"} aria-label={workSide ? "Hide the agent and Close out" : "Show the agent and Close out"}
                 aria-expanded={workSide} aria-controls="tq-work-side" onClick={() => { setFromSide(false); setWorkSide((v) => !v); }}>
                 <Box component="span" aria-hidden data-tq-from-chevron="">{workSide ? "›" : "‹"}</Box>
-                <Box component="span" data-tq-from-words="">{workTabWords}</Box></Box>}
+                {/* ...and the Advisor's section in the drawer, said on its tab (the owner, 2026-10-26) */}
+                <Box component="span" data-tq-from-words="">{workTabWords}{warn ? " · 1 note" : ""}</Box></Box>}
               </Box>
               {/* THE TASKS TAB'S BAR, AT THE FOOT (the owner, 2026-10-16: "the buttons stay on bottom by the prompt box like always. No
                   buttons there."). The canvas draws these as its row over the chat line (rowVerbs, ActionRow); the Tasks tab has no
                   row, so its view keeps the same moves here, under the sections, instead of inside the Task card. The two endings
                   first, then a rule, then the reroutes, then Change - what the task's pills used to set. While a session fills the page
                   the header carries them (headControls). */}
-              {/* the Advisor's line over the bar - only a fact the task does not show; the obvious move is said by its lit button alone
-                  (the owner, 2026-10-23). The button below IS the suggestion: no "Suggested: ..." in words */}
-              {!inRow && !sessionView && notDone && taskAdvice?.line && (
-                <Typography data-tq-task-advice="" role="status" sx={{ px: 1.75, py: 0.75, borderTop: `1px solid ${BORDER}`, bgcolor: "#fff",
-                  fontSize: 12.5, color: DIM, flexShrink: 0, overflowWrap: "anywhere" }}>
-                  {suggestion(taskAdvice.line, taskAdvice.label, taskAdvice.verb)}
-                </Typography>
-              )}
               {!inRow && !sessionView && (
                 <Box data-tq-task-bar="" ref={bar.ref} sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "nowrap", flexShrink: 0, minWidth: 0,
                   px: 1.75, py: 1, borderTop: `1px solid ${BORDER}`, bgcolor: "#fff", "& > *": { flexShrink: 0, whiteSpace: "nowrap" } }}>

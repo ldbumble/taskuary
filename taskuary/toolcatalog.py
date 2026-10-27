@@ -230,7 +230,7 @@ def selector(store=None, live: bool = True) -> str:
     """SELECT's fields. `live`: with the pipe's own values for category, kind and lane; else pointing at select_values, which the
     turn carries (block)."""
     v = vocabularies(store) if live else {}           # the index's own (live=False) names no value - it builds nothing for them
-    lines = ['SELECT (pipe.clear, or wherever a set is meant) - every field optional, ANDed together:']
+    lines = ['SELECT (pipe.clear, or wherever a set is meant) - fields optional, ANDed:']
     if live:
         lines.append('  category   one of these, exactly: ' + ', '.join(v['category']))
         if v['kind']: lines.append('  kind       ' + ' | '.join(v['kind']))
@@ -268,12 +268,12 @@ def block(store=None) -> str:
         "the item on the table is the target. A decision about a DIFFERENT item than the table's puts the",
         'words that name it in params.on. A SET of items goes in params.select (SELECT below).',
         '',
-        'WHERE THINGS ARE - look before you guess, say you do not know, or offer to look:',
+        'WHERE THINGS ARE - look before you guess:',
     ]
     for said, kind, params in WHERE:
         lines.append(f'  {said} -> CALL: {{"kind": "{kind}", "params": {json.dumps(params)}}}')
-    lines += ['', """TOOLS, IN BUCKETS. CALL tools.list with {"bucket": "<name>"} to see a bucket's tools and what each needs,""",
-              'or tools.describe with {"kind": "<tool>"}. When you already know a tool and what it needs, CALL it directly.']
+    lines += ['', """TOOLS, IN BUCKETS. CALL tools.list with {"bucket": "<name>"} for a bucket's tools,""",
+              'or tools.describe with {"kind": "<tool>"}. A tool you know, CALL directly.']
     for name, what, kinds in BUCKETS:
         lines.append(f'  {name} - {what}: {", ".join(signature(k) for k in kinds)}')
     # ...and every look-up WHERE does not already show, by name: "what is the agent doing?" and "what drafts wait for my yes?" had their
@@ -413,14 +413,14 @@ BUCKETS = (
     ('task', "change any task - the table's, or one named by ref",
      ('task.update', 'task.set_kind', 'task.set_repo', 'task.check', 'task.checklist', 'task.watch', 'task.comment', 'task.split', 'task.merge', 'task.reopen',
       'task.not_a_task', 'task.complete', 'task.defer', 'task.handoff', 'task.clarify', 'task.share', 'review.approve', 'review.reject')),
-    ('agents', "start, continue, answer or stop a task's agent; teach where work belongs",
+    ('agents', "a task's agent; where work belongs",
      ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.stop', 'routing.remember', 'task.ask_agent')),
     ('new', 'new work with no task yet', ('task.create_from_text', 'task.create_from_message', 'task.setup')),
     ('pipe', 'the walk and sets of items, and filing mail', ('pipe.clear', 'pipe.defer', 'pipe.close', 'review.each', 'button.light', 'item.settle', 'message.file', 'message.archive',
                                                             'preference.exclude_sender', 'preference.sender_rule', 'message.retriage')),
     ('reports', 'reports and workflows', ('report.create', 'report.run', 'report.rerun', 'report.pause', 'report.resume',
                                           'report.route', 'report.edit', 'report.delete')),
-    ('app', 'settings, connections, roles, scripts and kept facts', ('setting.set', 'connection.create', 'role.apply', 'connection.test', 'connection.pause',
+    ('app', 'settings, connections, scripts, memory', ('setting.set', 'connection.create', 'role.apply', 'connection.test', 'connection.pause',
                                                              'connection.resume', 'app.repair', 'script.start', 'memory.remember', 'memory.wrong', 'people.relate', 'hub.publish')),
 )
 

@@ -268,6 +268,7 @@ const chipBtn = { fontSize: 11.5, fontWeight: 600, height: 26, minHeight: 26, py
   borderRadius: 13, bgcolor: "#f4f1ec", color: INK, borderColor: BORDER,
   "&:hover": { borderColor: "#d8cfbe", bgcolor: "#f4f1ec" } };
 const barBtn = { minHeight: 34, py: 0, px: 1.6, fontSize: 12.5, color: INK, borderColor: BORDER };
+const TRUST_PILL = { minHeight: 22, py: 0, px: 1.1, ml: 0.5, my: 0.25, fontSize: 12, lineHeight: 1.6, borderRadius: 999, textTransform: "none", color: INK, borderColor: BORDER, verticalAlign: "baseline" };
 // ...and the one filled move beside them. Every card's bar reads [ primaryBtn ] | [ barBtn ] [ barBtn ].
 const primaryBtn = { minHeight: 34, py: 0, px: 1.75, fontSize: 12.5 };
 const BAR_FOLD = { change: 1, reshape: 2, hand: 3, sep: 3, nat: 4 }, HIDE = { display: "none" };   // the Tasks tab bar's fold order (useFoldBar)
@@ -1803,7 +1804,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   provenance line moved into the card (Came from, under its messages), where you go
                   and look at it rather than read it every time. */}
               <Box data-tq-task-head="" sx={{ px: liveSession ? 1.5 : 1.75, py: 0.7,
-                bgcolor: "#fff", borderBottom: !wide && (waitFor || askBand) ? 0 : `1px solid ${BORDER}`, flexShrink: 0 }}>
+                bgcolor: "#fff", borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
                 {/* on a phone the strip WRAPS: ref and title keep the first line, the controls take the next - one line
                     pushed Next, Expand and the X off the right edge (the canvas redesign's phone pass, 2026-09-29) */}
                 {/* ...only while there ARE controls to wrap. On the assistant's canvas there are none up here, and the strip still
@@ -1814,7 +1815,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     letterSpacing: ".015em", fontWeight: 600, fontSize: 11.5 }}>{detail.ref}</Typography>
                   {/* NO CHIPS BESIDE THE TITLE (the redesign, owner-approved 2026-10-21): what triage made of it is the last line of From,
                       and the state is the one pill at the right - the title has the row */}
-                  <Typography title={!askBand && (askText || "").length > t.Title.length ? askText : t.Title} sx={{ color: INK, flex: 1, fontWeight: 600,
+                  <Typography title={(askText || "").length > t.Title.length ? askText : t.Title} sx={{ color: INK, flex: 1, fontWeight: 600,
                     fontSize: liveSession ? 12.5 : 14,
                     minWidth: headControls ? { xs: 90, sm: 180 } : 0,
                     flexBasis: headControls ? { xs: "calc(100% - 90px)", sm: "auto" } : "auto",
@@ -1875,12 +1876,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     Where the work takes the whole width (an agent ran) the ask stays in From, over the agent's room. It is its own band under the
                     header, not a second line OF it: the header stays one row (the dead-end walk's HEAD), and an ask that is the sender's own words
                     is marked quoted, so a mail that says "Traceback ... null" is read as theirs, not as our jargon (WORDS) */}
-                {!wide && (waitFor || askBand) && <Box data-tq-ask="" data-tq-quoted={askQuoted ? "" : undefined}
-                  sx={{ px: 1.75, pt: 0, pb: 1, mt: -0.5, bgcolor: "#fff", borderBottom: `1px solid ${BORDER}`, flexShrink: 0, minWidth: 0 }}><Box sx={{ maxWidth: "92ch" }}>
-                  {waitFor && <Typography data-tq-waiting-on="" sx={{ color: INK, fontSize: 13.5, fontWeight: 600, lineHeight: 1.45 }}>{waitFor.line}</Typography>}
-                  {askBand && <Typography title={askText} sx={{ color: waitFor ? DIM : INK, fontSize: 13.5, lineHeight: 1.5,
-                    overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{askText}</Typography>}
-                </Box></Box>}
+                {/* ...and NOTHING MORE UP HERE (the owner, 2026-10-27: "top border on task is too big. It should just have the bolded task name the
+                    rest should be in the task"): the ask and who it waits on are the task's first part, The ask, below */}
               {/* a flex column so the terminal takes exactly what is left between the strip above and the
                   waiting room below - a fixed-height formula clipped its bottom line on shorter screens */}
               {/* SHADED BUT FOR THE FOCUS (the owner, 2026-10-25): with no agent live the body takes a warm shade and only the section to act
@@ -1968,9 +1965,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           canvas says what to do (2026-10-26) */}
                       {news && <Typography className="tq-news" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>Open again: {news.line}</Typography>}
                       {/* THE ASK - one line of what is wanted; the whole summary is the tooltip when the line cut it */}
-                      {wide && askText && <Part label="The ask" data-tq-ask="">
-                        <Typography title={askText} sx={{ color: INK, fontSize: 14, lineHeight: 1.45, overflowWrap: "anywhere",
-                          display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{askText}</Typography>
+                      {(askBand || waitFor) && <Part label="The ask" data-tq-ask="" data-tq-quoted={askQuoted ? "" : undefined}>
+                        {waitFor && <Typography data-tq-waiting-on="" sx={{ color: INK, fontSize: 13.5, fontWeight: 600, lineHeight: 1.45 }}>{waitFor.line}</Typography>}
+                        {askBand && <Typography title={askText} sx={{ color: INK, fontSize: 14, lineHeight: 1.45, overflowWrap: "anywhere",
+                          display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{askBand}</Typography>}
                       </Part>}
                       {/* TO DO - the checklist triage drew from the ask (PW-075): boxes are progress on the list, never task completion -
                           closing the task stays the owner's separate decision. The WHOLE LINE is the target, not the 16px box: on a
@@ -2054,17 +2052,17 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {strangerLine(detail) && (
                           <Typography variant="body2" sx={{ color: DIM, mt: 0.4, fontSize: 12.5 }}>
                             <Tooltip title={strangerLine(detail).why}><span>{strangerLine(detail).text}</span></Tooltip>
-                            {!trustBoxed && <>{" · "}
-                            <Link component="button" underline="hover" sx={{ fontSize: 12.5, verticalAlign: "baseline" }} onClick={() => trustPress("")}>
+                            {/* ...pressable LOOKS pressable (the owner, 2026-10-27: "trust has to be clickable like a pill"): small round buttons */}
+                            {!trustBoxed && strangerLine(detail).trust && <>{" "}
+                            <Button size="small" variant="outlined" data-tq-trust="" sx={TRUST_PILL} onClick={() => trustPress("")}>
                               {strangerLine(detail).trust}
-                            </Link>
+                            </Button>
                             {/* ...or their whole organisation (the owner, 2026-10-22: "hit trust domain and then all users from that domain are
                                 good"): everyone at that domain, Teams organisation or Slack workspace, from now on (senders.trust_org) */}
-                            {strangerLine(detail).trustOrg && <>{" · "}
-                            <Link component="button" underline="hover" data-tq-trust-org="" sx={{ fontSize: 12.5, verticalAlign: "baseline" }}
-                              onClick={() => trustPress("org")}>
+                            {strangerLine(detail).trustOrg && <>{" "}
+                            <Button size="small" variant="outlined" data-tq-trust-org="" sx={TRUST_PILL} onClick={() => trustPress("org")}>
                               {strangerLine(detail).trustOrg}
-                            </Link></>}</>}
+                            </Button></>}</>}
                           </Typography>
                         )}
                         {/* ...and what its words read as trying to make an agent do: one line, before anyone presses Start */}

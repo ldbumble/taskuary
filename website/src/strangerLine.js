@@ -6,9 +6,11 @@
 // 2026-10-26): "Trust Erin", "Trust everyone at vendor.example", a Slack workspace's name - and no organisation where there is none.
 export const strangerLine = (d) => {
   if (d?.origin?.origin !== "stranger") return null;
-  const ours = /^written by Taskuary/i.test(d.origin.why || "");
-  return { text: `${ours ? "Written by Taskuary from what it read" : "From someone you haven't worked with here yet"} - anything risky waits for your OK`,
-    trust: ours ? "Trust it" : d.origin.trust?.person || "Trust them", trustOrg: ours ? null : d.origin.trust?.org || null,
+  // ...and Taskuary's own work offers no "Trust it" (the owner, 2026-10-27: "trust it for something taskuary itself made??"): there is no
+  // one to trust - what it read is the risk, and the line just says so; a step it holds still carries its own presses (trustInBox)
+  const ours = /^written by Taskuary/i.test(d.origin.why || ""), what = /report/i.test(d.origin.why || "") ? "a report" : "what it read";
+  return { text: ours ? `Taskuary wrote this from ${what} - an agent asks before anything risky` : "From someone you haven't worked with here yet - anything risky waits for your OK",
+    trust: ours ? null : d.origin.trust?.person || "Trust them", trustOrg: ours ? null : d.origin.trust?.org || null,
     why: d.origin.why || "", danger: d.origin.danger || null };
 };
 

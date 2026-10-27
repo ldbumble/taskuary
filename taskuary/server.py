@@ -5780,6 +5780,10 @@ def draft_review(rid: int, body: DraftBody = None):
     if deliver.get('kind') == 'calendar': raise HTTPException(422, 'the note on a calendar answer is yours to write - or leave it empty')
     # THE OWNER'S WORDS FOR IT ARE KEPT on the review (the owner, 2026-10-23: a Redraft's instruction is stored and remembered)
     if body and (body.instruction or '').strip(): _keep_instruction(rid, body.instruction)
+    # ...and a plain ask while the arrival's own draft is being written is that draft: one model call, not a second over it
+    from .ingest import DRAFTING
+    running = None if body and (body.instruction or '').strip() else DRAFTING.get(rid)
+    if running and running.wait(180) and (got := (store.get_review(rid) or {}).get('DraftText')): return {'ok': True, 'draft': got}
     try:
         if rv.get('Kind') == 'slot':
             from . import outbox as ob

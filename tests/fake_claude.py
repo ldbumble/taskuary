@@ -14,7 +14,8 @@ Timing (seconds, env, defaults measured against claude 2.1 on the owner's machin
   FAKE_CLAUDE_TPS    output tokens a second (a token ~4 characters)                        70
 What it SAYS comes from FAKE_CLAUDE_SCRIPT, a JSON list of {"when": regex, "first": text, "then": text}: the owner's words are
 found where the Assistant puts them ("The owner says: " on a first round, "The owner asked: " on a look-up's second round), the
-first rule whose regex matches answers - `first` on a first round, `then` once it has looked something up. No rule: "Ok."
+first rule whose regex matches answers - `first` on a first round, `then` once it has looked something up, or `exit` with that code
+mid-turn (a CLI that dies). No rule: "Ok."
 FAKE_CLAUDE_LOG, when set, gets one JSON line per event ({pid, ev, t, ...}) for the latency breakdown."""
 import json, os, re, sys, time
 
@@ -44,7 +45,9 @@ def answer(prompt: str) -> str:
     m = re.search(r'^The owner (?:says|asked): (.*)$', prompt, re.M)
     said = m.group(1).strip() if m else prompt.strip().splitlines()[-1] if prompt.strip() else ''
     for r in script:
-        if re.search(r['when'], said, re.I): return r.get('then' if then else 'first') or r.get('first') or 'Ok.'
+        if not re.search(r['when'], said, re.I): continue
+        if r.get('exit') is not None: log('exit', code=r['exit']); sys.exit(r['exit'])   # a CLI that dies mid-turn (website/browser/agent-journey)
+        return r.get('then' if then else 'first') or r.get('first') or 'Ok.'
     return 'Ok.'
 
 

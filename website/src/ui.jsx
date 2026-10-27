@@ -1843,9 +1843,19 @@ export const FilterPills = ({ options, value, onChange }) => (
 // is chosen.
 //
 // freeSolo on purpose: the right recipient is often somebody who has never written to you.
+// ...ONE READ OF EVERYONE for the pickers a view mounts together (the overnight walk, 2026-10-27): To and Cc each read /api/people as a
+// draft opened - the whole list twice on every task with a reply, and Hand it to a person a third time. They share one read, kept a minute
+let contactsRead = null, contactsAt = 0;
+export const readContacts = (now = Date.now()) => {
+  if (!contactsRead || now - contactsAt > 60000) {
+    contactsAt = now;
+    contactsRead = api.get("/api/people").then(({ data }) => data.data || []).catch(() => { contactsRead = null; return []; });
+  }
+  return contactsRead;
+};
 export const useContacts = () => {
   const [people, setPeople] = useState([]);
-  useEffect(() => { api.get("/api/people").then(({ data }) => setPeople(data.data || [])).catch(() => {}); }, []);
+  useEffect(() => { let on = true; readContacts().then((p) => { if (on) setPeople(p); }); return () => { on = false; }; }, []);
   return people;
 };
 

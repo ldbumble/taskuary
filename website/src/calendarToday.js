@@ -23,9 +23,13 @@ const keep = (data) => {
 
 export const cachedToday = () => (held?.date === today() ? held : (held = saved()));
 
-export function refreshToday() {
+// `fresh`: an answer that landed this many ms ago is still today's - each view that draws the day (the strip, the opener, the rail)
+// asked again as it mounted, a beat after the last had its answer: two or three GETs at every start (the overnight setup walk, 2026-10-26)
+let landed = 0;
+export function refreshToday(fresh = 0) {
+  if (fresh && cachedToday() && Date.now() - landed < fresh) return Promise.resolve();
   if (!flight) flight = api.get("/api/calendar/today")
-    .then(({ data }) => keep({ ...data, date: data?.date || today() }))
+    .then(({ data }) => { landed = Date.now(); keep({ ...data, date: data?.date || today() }); })
     .catch(() => { if (!cachedToday()) keep({ date: today(), events: [] }); })
     .finally(() => { flight = null; });
   return flight;
@@ -35,7 +39,7 @@ export function useCalendarToday() {
   const [data, setData] = useState(cachedToday);
   useEffect(() => {
     subs.add(setData);
-    refreshToday();
+    refreshToday(10000);
     return () => { subs.delete(setData); };
   }, []);
   return data;

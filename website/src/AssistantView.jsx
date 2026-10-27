@@ -84,6 +84,7 @@ import SetupLine from "./SetupLine.jsx";
 import { BriefCard, CardNav, DashboardCard, DayOpener, onYouCount, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, WalkCard, sourceColor } from "./assistantCards.jsx";
 import { summarize } from "./walkSummary.js";
 import { refreshToday, useCalendarToday } from "./calendarToday.js";
+import { onFirstRun, readFirstRun } from "./firstRunState.js";
 import FeedView from "./FeedView.jsx";
 import { MORE_PX, backAt, dueWord, placed, pulledRow, sectionDone, sectionNext } from "./funnelPile.js";
 import { isImportant, level as priorityOf } from "./priority.js";
@@ -1736,13 +1737,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // ...until the owner FINISHES it (Finish setup / Walk me through my tasks): it used to end itself on the first sorted email and
     // leave a half-made day under a lone button (the owner, 2026-10-15). An install that was working before is finished (settle_existing),
     // and a server that does not say (an older one) is never read as "not finished": only an explicit false opens setup
-    api.get("/api/setup/first-run").then(({ data }) => { if (data?.step && data.dismissed === false) setFirstRun(true); }).catch(() => {});
     const show = () => setupRef.current?.();                    // the top bar's setup chip asks for the cards
     // what is next, for the rail - read again whenever the first run moves a step (FirstRun fires tq-setup-changed)
-    const todo = () => api.get("/api/setup/first-run").then(({ data }) => setSetupTodo(data?.todo || "")).catch(() => {});
-    todo();
+    // ...and the first read answers both: the open and the rail's todo were two GETs of the same answer at every start (the overnight
+    // setup walk, 2026-10-26)
+    // ...and the read is setup's one shared read (firstRunState.js): every answer setup's canvas and rail take moves the todo too
+    readFirstRun().then((data) => { if (data?.step && data.dismissed === false) setFirstRun(true); }).catch(() => {});
+    const offRead = onFirstRun((data) => setSetupTodo(data?.todo || ""));
+    const todo = () => readFirstRun().catch(() => {});
     window.addEventListener("tq-first-run", show); window.addEventListener("tq-setup-changed", todo);
-    return () => { window.removeEventListener("tq-first-run", show); window.removeEventListener("tq-setup-changed", todo); };
+    return () => { offRead(); window.removeEventListener("tq-first-run", show); window.removeEventListener("tq-setup-changed", todo); };
   }, []);       // the launch still reading the mail (SinceBlock): the counts wait
   useEffect(() => onLive(["chat-changed"], (ev) => {
     setPhoneBusy(!!ev?.thinking);
@@ -3254,6 +3258,17 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const popRef = useRef(null), popBodyRef = useRef(null), boxRef = useRef(null), popOnRef = useRef(false), rowDown = useRef(false);
   popOnRef.current = popOn;
   const boxWide = boxOpen || !!text.trim() || !!pics.imgs.length || !!emojiEl;
+  // THE PILL'S HINT FITS THE PILL: with a row beside it and no task on the table the box is the 220px pill, and the long hint ("Ask
+  // Taskuary anything — a name or a subject pulls it in…") ran on under its own send button, cut mid-word (the overnight setup walk,
+  // 2026-10-26). Measured, because the row beside it is what makes it a pill (the CSS's :has)
+  const [boxNarrow, setBoxNarrow] = useState(false);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(() => setBoxNarrow(el.getBoundingClientRect().width < 360));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [old, walk]);                                   // the box is mounted only while neither is up
   // ...it opens on the owner's line (send) and on the Assistant speaking up about the task in this session - never on a reload's history
   const popLast = popLines[popLines.length - 1]?.[0];
   useEffect(() => { if (popLast?.role === "assistant" && /^(a|s|d|context)\d/.test(popLast.id)) setPopOpen(true); }, [popLast?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -3525,7 +3540,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             {/* a phone's composer is one line tall and the long hint wrapped under its own edge, cut
                 mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there - and the pill's at rest */}
             <textarea ref={composeRef} rows={1} value={text} disabled={resetting} aria-label={tableSays.name}
-              placeholder={phone ? tableSays.phone : !popOn ? tableSays.box : boxWide ? "Tell me what to do with it, or ask about it…" : "Tell me what to do…"}
+              placeholder={phone ? tableSays.phone : !popOn ? (boxNarrow && !boxWide ? tableSays.phone : tableSays.box) : boxWide ? "Tell me what to do with it, or ask about it…" : "Tell me what to do…"}
               onChange={(e) => setText(e.target.value)} onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                 // Esc shuts the pop-up first, then hands an empty box back to its pill

@@ -63,3 +63,27 @@ def test_one_process_serves_the_whole_walk_and_it_was_started_before_the_first_a
 def test_the_words_come_before_the_answer_is_whole(rows):
     worded = [r for r in rows if r['first_word'] < r['action'] - 0.1]
     assert len(worded) >= len(rows) - 1, [(r['step'].text, r['first_word'], r['action']) for r in rows]
+
+
+def test_a_typed_turn_builds_the_pipe_once_and_says_the_owners_line_once():
+    """The speed pass, 2026-10-27: the owner's line, written first, moved the store's mark, and the Advisor's decision and SELECT's
+    values read after it each rebuilt the whole pipe the turn had just built - 150-260 ms of every typed turn before the model was
+    asked, more on a real mailbox. And the line itself rode twice: the last row of CONVERSATION SO FAR, then "The owner says"."""
+    from contextlib import ExitStack
+    from unittest import mock
+    from taskuary import concierge, funnel
+    s, asked, whole = W.world(), [], []
+    build = funnel.build
+    def counted(store, *a, **k):
+        if not k.get('keys'): whole.append(1)
+        return build(store, *a, **k)
+    with ExitStack() as st:
+        W._guards(st, set())
+        st.enter_context(mock.patch.object(funnel, 'build', counted))
+        llm = lambda system, user, **k: (asked.append(user), 'Ok.')[1]
+        concierge.say(s, 'bring up TQ-12', llm=llm)
+        whole.clear(); asked.clear()
+        concierge.say(s, "what's this one about", key='msg:17', llm=llm)
+    assert len(whole) == 1, f'the pipe was built {len(whole)} times in one typed turn'
+    assert 'OWNER: bring up TQ-12' in asked[0] and "OWNER: what's this one about" not in asked[0]
+    assert asked[0].count("what's this one about") == 1

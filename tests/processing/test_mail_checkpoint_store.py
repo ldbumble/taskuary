@@ -27,7 +27,7 @@ def checkpoint(tmp_path, request):
     try:
         yield db, path, kind, row_id, patch, get, key
     finally:
-        db.cx.close()
+        db.close()
 
 
 def test_checkpoint_merges_latest_owner_config_across_connections(checkpoint):
@@ -141,4 +141,4 @@ def test_source_cutoff_and_cursor_cleanup_are_one_conditional_checkpoint(tmp_pat
         assert db.patch_source_poll_state(sid, last_polled_at=None)
         assert db.get_source(sid)['LastPolledAt'] is None
     finally:
-        db.cx.close()
+        db.close()

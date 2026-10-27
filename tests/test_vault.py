@@ -41,11 +41,11 @@ class VaultTests(unittest.TestCase):
         s = SQLiteStore(path)
         cid = s.save_connector({'Type': 'slack', 'Name': 'Chat'}, 'o')
         s._exec('UPDATE connector SET Secret=? WHERE ConnectorId=?', ('xoxb-plain', cid))   # what a database from before holds
-        s.cx.close()
+        s.close()
         s = SQLiteStore(path)                                                               # the next start
         self.assertTrue(vault.sealed(self.raw(s, cid)))
         self.assertEqual(s.get_connector(cid, with_secret=True)['Secret'], 'xoxb-plain')
-        s.cx.close()
+        s.close()
 
     def test_a_secret_that_cannot_be_opened_here_is_empty_never_ciphertext(self):
         self.assertEqual(vault.unseal('vault:dpapi:AAAA'), '')

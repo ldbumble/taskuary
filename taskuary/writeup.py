@@ -12,7 +12,7 @@ the press was a close, and says why on the task.
 WHAT IT IS DOING NOW IS SAID (the owner, 2026-10-21: "open the Close out right away and show the reply is being created"): the job
 names its stage as it reaches it - reading the session, writing the report, drafting the reply - and the task page's Close out
 draws that, from here, until the draft replaces it. state() is what the task's detail carries; every stage is a task-changed."""
-import json, os, threading, time, uuid
+import contextlib, json, os, threading, time, uuid
 from loguru import logger
 
 PREFIX = 'writeup_job:'                 # setting name per task: the job's record, until it is done
@@ -175,5 +175,8 @@ def resume(store) -> int:
 
 
 def _settings_like(store):
-    try: return [(r[0], r[1]) for r in store.cx.execute('SELECT Name, Value FROM setting WHERE Name LIKE ?', (PREFIX + '%',))]
+    # under the store's lock, as every read in store.py is: the writer closed beneath a bare read is a native crash, not an error
+    try:
+        with getattr(store, 'lock', contextlib.nullcontext()):
+            return [(r[0], r[1]) for r in store.cx.execute('SELECT Name, Value FROM setting WHERE Name LIKE ?', (PREFIX + '%',))]
     except Exception: return []

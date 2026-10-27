@@ -16,7 +16,7 @@ def s(monkeypatch):
     s = MemoryStore(); s.set_setting('calendar_enabled', '0', 'test')
     monkeypatch.setattr(terminal, 'live_sessions', lambda tail=0: [])
     monkeypatch.setattr(funnel, '_agenda', lambda _s, **kw: [])
-    funnel.invalidate(); yield s; funnel.invalidate(); s.cx.close()
+    funnel.invalidate(); yield s; funnel.invalidate(); s.close()
 
 
 def ago(h): return (datetime.now() - timedelta(hours=h)).strftime('%Y-%m-%d %H:%M:%S')

@@ -31,7 +31,7 @@ def store(monkeypatch):
     funnel.forget_states()
     yield value
     funnel.invalidate()
-    value.cx.close()
+    value.close()
 
 
 def message(store, name, *, tid=None, at=None, channel="email", status="routed"):

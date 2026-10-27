@@ -16,7 +16,7 @@ def test_canonical_history_lookups_do_not_scan_unrelated_items():
             assert any('SEARCH '+table in step for step in plan), plan
             assert not any('SCAN '+table in step for step in plan), plan
     finally:
-        store.cx.close()
+        store.close()
 
 
 def test_runtime_cache_keeps_inventory_and_detects_local_and_external_changes(tmp_path):
@@ -54,4 +54,4 @@ def test_runtime_cache_keeps_inventory_and_detects_local_and_external_changes(tm
         external = store.processing_inventory_snapshot(fixed_now=now, live_state=[], include_history=False)
         assert external['items'][0]['context_revision'] != local['items'][0]['context_revision']
     finally:
-        store.cx.close()
+        store.close()

@@ -37,7 +37,7 @@ def test_additive_startup_and_getters_do_not_capture_or_change_owner_state(tmp_p
         assert not db.processing_snapshot('nonexistent-synthetic-item')
         assert _database_rows(db) == before
     finally:
-        db.cx.close()
+        db.close()
 
 
 @pytest.mark.parametrize('mixed', [False, True])
@@ -71,7 +71,7 @@ def test_digest_deferral_is_not_promoted_to_permanent_read(tmp_path, mixed):
         targets = [db.resolve_processing_target('legacy_funnel', f'idea:{iid}') for iid in ids]
         assert len({target['item_id'] for target in targets}) == len(ids)
     finally:
-        db.cx.close()
+        db.close()
 
 
 def test_baseline_replay_and_reopen_preserve_original_owner_records(tmp_path):
@@ -98,7 +98,7 @@ def test_baseline_replay_and_reopen_preserve_original_owner_records(tmp_path):
         assert not db.processing_legacy_evidence('frozen-v1', entity_kind='message', local_id=newcomer)
         assert db.get_message(newcomer)['BodyText'] == 'Synthetic new activity'
     finally:
-        db.cx.close()
+        db.close()
 
     for _ in range(2):
         db = storage.SQLiteStore(str(path))
@@ -108,7 +108,7 @@ def test_baseline_replay_and_reopen_preserve_original_owner_records(tmp_path):
             assert db.funnel_states()['msg:71']['Note'] == 'Synthetic later owner operation'
             assert expected['attachment_file'].read_text(encoding='utf-8') == 'synthetic attachment bytes'
         finally:
-            db.cx.close()
+            db.close()
 
 
 def test_two_open_ideas_capture_the_exact_legacy_selected_key(tmp_path):
@@ -131,7 +131,7 @@ def test_two_open_ideas_capture_the_exact_legacy_selected_key(tmp_path):
         assert evidence[0]['selected_key'] == expected_key
         assert evidence[0]['observed_unread']
     finally:
-        db.cx.close()
+        db.close()
 
 
 @pytest.mark.parametrize('getter', ['resolve', 'members', 'snapshot'])
@@ -176,8 +176,8 @@ def test_multiquery_getter_keeps_one_snapshot_during_external_merge(tmp_path, mo
         assert merged and not reader.cx.in_transaction
         assert reader.resolve_processing_target('legacy_funnel', f'msg:{mids[0]}')['item_id'] == target
     finally:
-        reader.cx.close()
-        writer.cx.close()
+        reader.close()
+        writer.close()
 
 
 def test_late_context_capture_failure_rolls_back_and_can_retry(tmp_path, monkeypatch):
@@ -207,7 +207,7 @@ def test_late_context_capture_failure_rolls_back_and_can_retry(tmp_path, monkeyp
         db.backfill_processing('late-failure-v1', fixed_now='2026-09-06 12:00:00')
         assert db.cx.execute('SELECT COUNT(*) FROM processing_context_snapshot').fetchone()[0] == 2
     finally:
-        db.cx.close()
+        db.close()
 
 
 def test_worker_iterator_and_nested_payload_are_frozen_across_capture_and_getter(tmp_path):
@@ -236,7 +236,7 @@ def test_worker_iterator_and_nested_payload_are_frozen_across_capture_and_getter
         assert not db.processing_snapshot(iid)['view']['worker_attention_available']
         assert db.processing_snapshot(iid, live_state=[])['view']['worker_attention_available']
     finally:
-        db.cx.close()
+        db.close()
 
 
 @pytest.mark.parametrize('case, expected_unread', [
@@ -323,4 +323,4 @@ def test_legacy_evidence_matches_actual_feed_and_fixed_expectation(
             assert not evidence['PermanentRead']
             assert evidence['TemporaryDeferJson']
     finally:
-        db.cx.close()
+        db.close()

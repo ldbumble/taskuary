@@ -37,7 +37,7 @@ def db(tmp_path):
     file(store, 'Office closed Friday', (datetime.now() - timedelta(minutes=30)).strftime('%Y-%m-%d %H:%M:%S'), 'email', 'info')
     settle(store)
     with mock.patch('taskuary.terminal.live_sessions', return_value=[]): yield store, mids, path
-    store.cx.close()
+    store.close()
 
 
 def reports(store):
@@ -63,7 +63,7 @@ def test_the_order_holds_across_rebuilds_and_a_reopened_store(db):
     try:
         funnel.invalidate()
         assert [i['key'] for i in funnel.build(again, live_state=[])['items'] if i['key'] in once] == once, 'a reload reordered the tie'
-    finally: again.cx.close()
+    finally: again.close()
 
 
 def test_next_walks_the_tie_down_and_never_back_up(db):

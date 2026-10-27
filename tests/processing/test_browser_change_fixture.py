@@ -55,4 +55,4 @@ def test_private_fixture_edits_preserve_all_production_demo_refusals(tmp_path, m
     finally:
         if client:
             client.close()
-        db.cx.close()
+        db.close()

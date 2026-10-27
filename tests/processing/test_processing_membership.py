@@ -59,13 +59,13 @@ def test_constructor_is_schema_only_and_uncapped_reconcile_bootstraps_507_items(
     first_ids = [row[0] for row in store.cx.execute(
         'SELECT ItemId FROM processing_item ORDER BY ItemId')]
     assert store.reconcile_processing_membership(fixed_now=LATER)['status'] == 'already_current'
-    store.cx.close()
+    store.close()
 
     reopened = SQLiteStore(str(path))
     assert reopened.processing_reconcile_status()['pending'] is False
     assert [row[0] for row in reopened.cx.execute(
         'SELECT ItemId FROM processing_item ORDER BY ItemId')] == first_ids
-    reopened.cx.close()
+    reopened.close()
 
 
 def test_all_raw_projection_tables_have_atomic_dirty_triggers_and_rollback_is_clean(tmp_path):
@@ -126,7 +126,7 @@ def test_all_raw_projection_tables_have_atomic_dirty_triggers_and_rollback_is_cl
     store.set_setting('unrelated-processing-fixture', 'value', 'fixture')
     assert store.processing_reconcile_status()['dirty_generation'] == before + 1
     assert complete['reconciled_generation'] < store.processing_reconcile_status()['dirty_generation']
-    store.cx.close()
+    store.close()
 
 
 def test_taskless_message_to_new_task_keeps_identity_and_owner_data(tmp_path):
@@ -152,7 +152,7 @@ def test_taskless_message_to_new_task_keeps_identity_and_owner_data(tmp_path):
     assert store.funnel_states()[f'msg:{mid}']['Note'] == 'owner read receipt'
     assert store.doc('counsel') == 'Owner custom counsel'
     assert before_owner['doc'] == raw_owner_tables(store)['doc']
-    store.cx.close()
+    store.close()
 
 
 def test_existing_task_root_wins_convergence_and_empty_source_redirects(tmp_path):
@@ -175,7 +175,7 @@ def test_existing_task_root_wins_convergence_and_empty_source_redirects(tmp_path
     assert {row['ItemId'] for row in old['item_history']} == {fyi_root, task_root}
     assert any(row['EntityKind'] == 'message' and row['ItemId'] == fyi_root and row['RetiredAt']
                for row in old['member_history'])
-    store.cx.close()
+    store.close()
 
 
 def test_task_roots_are_reserved_before_an_earlier_task_can_claim_moved_member(tmp_path):
@@ -195,7 +195,7 @@ def test_task_roots_are_reserved_before_an_earlier_task_can_claim_moved_member(t
     assert active_item(store, 'message', mid) == active_item(store, 'task', earlier)
     assert store.cx.execute('SELECT RedirectItemId FROM processing_item WHERE ItemId=?',
                             (established_root,)).fetchone()[0] is None
-    store.cx.close()
+    store.close()
 
 
 def test_new_task_joining_multiple_fyis_keeps_oldest_existing_item(tmp_path):
@@ -217,7 +217,7 @@ def test_new_task_joining_multiple_fyis_keeps_oldest_existing_item(tmp_path):
     assert active_item(store, 'message', first) == first_root
     assert active_item(store, 'message', second) == first_root
     assert store._processing_follow(store.cx.cursor(), second_root) == first_root
-    store.cx.close()
+    store.close()
 
 
 def test_reassignment_split_and_delete_move_only_exact_members(tmp_path):
@@ -271,7 +271,7 @@ def test_reassignment_split_and_delete_move_only_exact_members(tmp_path):
     assert tombstone['members'] == []
     assert inventory['coverage']['tombstone_item_count'] == 1
     assert inventory['coverage']['visible_item_count'] == 2
-    store.cx.close()
+    store.close()
 
 
 def test_deleting_task_splits_messages_without_redirecting_retained_root(tmp_path):
@@ -293,7 +293,7 @@ def test_deleting_task_splits_messages_without_redirecting_retained_root(tmp_pat
                             (old_root,)).fetchone()[0] is None
     assert {row['EntityKind'] for row in store.processing_members(old_root)} == {'message'}
     assert store.resolve_processing_target('legacy_funnel', f'msg:{second}')['item_id'] == second_root
-    store.cx.close()
+    store.close()
 
 
 def test_review_parent_conflict_is_truthful_and_preserves_prior_identity(tmp_path):
@@ -320,7 +320,7 @@ def test_review_parent_conflict_is_truthful_and_preserves_prior_identity(tmp_pat
     fixed = store.reconcile_processing_membership(fixed_now='2026-09-06 12:02:00')
     assert fixed['status'] == 'complete'
     assert active_item(store, 'review', review) == active_item(store, 'message', mid)
-    store.cx.close()
+    store.close()
 
 
 def test_dangling_review_message_does_not_fall_through_to_task(tmp_path):
@@ -335,7 +335,7 @@ def test_dangling_review_message_does_not_fall_through_to_task(tmp_path):
     assert result['status'] == 'complete'
     assert any(row['code'] == 'dangling_review_message' for row in result['diagnostics'])
     assert active_item(store, 'review', rid) != active_item(store, 'task', task)
-    store.cx.close()
+    store.close()
 
 
 def test_attachments_and_runs_follow_only_valid_exact_parents(tmp_path):
@@ -365,7 +365,7 @@ def test_attachments_and_runs_follow_only_valid_exact_parents(tmp_path):
         'dangling_attachment_message', 'dangling_run_task'}
     # Gaps stay diagnostic. They are never promoted into independent actionable roots.
     assert result['created_items'] == 1
-    store.cx.close()
+    store.close()
 
 
 def test_ideas_remain_independent_and_auxiliary_relation_errors_do_not_block(tmp_path):
@@ -392,7 +392,7 @@ def test_ideas_remain_independent_and_auxiliary_relation_errors_do_not_block(tmp
     assert active_item(store, 'idea', first['IdeaId']) == first_root
     assert len({active_item(store, 'idea', first['IdeaId']),
                 active_item(store, 'idea', second['IdeaId'])}) == 2
-    store.cx.close()
+    store.close()
 
 
 def test_aliases_evidence_read_state_and_provider_scopes_survive_reconciliation(tmp_path):
@@ -430,7 +430,7 @@ def test_aliases_evidence_read_state_and_provider_scopes_survive_reconciliation(
         'provenance': 'provider-receipt', 'redirected_from': None,
     }
     assert store.resolve_processing_target('external_id', 'opaque-id', 'connector:72') is None
-    store.cx.close()
+    store.close()
 
 
 def test_reconcile_failure_rolls_back_members_aliases_relations_and_generation(tmp_path, monkeypatch):
@@ -455,7 +455,7 @@ def test_reconcile_failure_rolls_back_members_aliases_relations_and_generation(t
     assert store.processing_reconcile_status() == before_status
     assert store.cx.total_changes > before_changes  # SQLite counts rolled-back work; rows remain atomic.
     assert store.get_message(mid)['Subject'] == 'Rollback membership'
-    store.cx.close()
+    store.close()
 
 
 def test_inventory_and_status_getters_are_read_only_and_share_one_wal_snapshot(tmp_path, monkeypatch):
@@ -500,5 +500,5 @@ def test_inventory_and_status_getters_are_read_only_and_share_one_wal_snapshot(t
     fresh = store.processing_reconcile_status()
     assert fresh['pending'] is True
     assert fresh['dirty_generation'] > fresh['reconciled_generation']
-    peer.cx.close()
-    store.cx.close()
+    peer.close()
+    store.close()

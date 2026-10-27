@@ -404,7 +404,7 @@ class TheDeadCatchAllRowTests(unittest.TestCase):
         first.cx.execute("DELETE FROM setting WHERE Name='whatsapp_star_dropped'")
         first.cx.execute("INSERT INTO source (Channel, Address, Owner, Active) VALUES ('whatsapp','*','o',0)")
         first.cx.execute("INSERT INTO source (Channel, Address, Owner, Active) VALUES ('telegram','*','o',1)")
-        first.cx.commit(); first.cx.close()
+        first.cx.commit(); first.close()
 
         reopened = SQLiteStore(path)                      # the migration runs on the way in
         left = {(r['Channel'], r['Address']) for r in

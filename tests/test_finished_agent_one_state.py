@@ -59,7 +59,7 @@ class FinishedAgentOneStateTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         for k in set(terminal.SESSIONS) - set(cls.before): terminal.SESSIONS.pop(k).close()
-        cls.s.cx.close(); cls.home.stop()
+        cls.s.close(); cls.home.stop()
 
     def test_every_reader_names_one_state_for_each_ending(self):
         self.maxDiff = None

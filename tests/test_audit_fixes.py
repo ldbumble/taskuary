@@ -174,7 +174,7 @@ class StoreTests(unittest.TestCase):
         for t in ts: t.start()
         for t in ts: t.join()
         self.assertEqual(errs, []); self.assertEqual(len(s.list_tasks()), 160)
-        s.cx.close()
+        s.close()
 
 
 class ScheduleTests(unittest.TestCase):

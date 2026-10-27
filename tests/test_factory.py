@@ -181,18 +181,18 @@ class TimelineDeskTests(unittest.TestCase):
             # Assistant's whole schedule ('when you open the app'), and no stamp can settle it
             if cfg.get('on_startup') and not cfg.get('once_per_day'): continue
             self.assertFalse(is_due(cfg, src['LastPolledAt'], startup=True), src['Address'])
-        fx.s.cx.close()
+        fx.s.close()
 
 
 class FileAndLoadTests(unittest.TestCase):
     def test_pictures_survive_a_file_backed_store(self):
         fx, path = _file_fx()
         p = fx.pending_draft()
-        fx.s.cx.close()
+        fx.s.close()
         fx2 = Factory(SQLiteStore(path))
         row = next(r for r in fx2.s.feed() if r['MessageId'] == p.mid)
         self.assertEqual(row['ReviewStatus'], 'pending')
-        fx2.s.cx.close()
+        fx2.s.close()
 
     def test_fill_is_the_live_mix_not_one_kind_of_row(self):
         fx = Factory()

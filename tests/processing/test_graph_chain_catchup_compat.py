@@ -64,7 +64,7 @@ def test_history_waits_until_every_configured_folder_has_delivered_normal_arriva
     assert len(rows) == 2
     assert all(row['Status'] not in ('history', 'context') for row in rows)
     assert store.chain_coverage(CONVERSATION)['complete'] is True
-    store.cx.close()
+    store.close()
 
 
 def test_failed_configured_folder_cannot_be_consumed_as_history_and_retry_routes_it_once(tmp_path):
@@ -101,4 +101,4 @@ def test_failed_configured_folder_cannot_be_consumed_as_history_and_retry_routes
     assert dict(store.get_message(old_mid)) == old_row
     assert store.funnel_states() == old_states
     assert store.doc('counsel') == 'exact owner document'
-    store.cx.close()
+    store.close()

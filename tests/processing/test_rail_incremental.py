@@ -22,7 +22,7 @@ def db(tmp_path, monkeypatch):
     funnel.invalidate()
     yield s
     funnel.invalidate()
-    s.cx.close()
+    s.close()
 
 
 def mail(s, n, *, tid=None, sent=None):
@@ -233,14 +233,14 @@ def test_an_install_made_before_the_when_gets_it(tmp_path):
     s.cx.execute('DROP TRIGGER rail_dirty_connector_update')
     s.cx.execute("CREATE TRIGGER rail_dirty_connector_update AFTER UPDATE ON connector BEGIN "
                  "INSERT INTO processing_dirty_row(Kind, LocalId) VALUES ('connector', NEW.ConnectorId); END")
-    s.cx.commit(); s.cx.close()
+    s.cx.commit(); s.close()
     s = SQLiteStore(path)
     triggers = lambda: {r[0]: r[1] for r in s.cx.execute("SELECT name, sql FROM sqlite_master WHERE type='trigger'")}
     before = triggers()
     assert ' WHEN ' in before['rail_dirty_connector_update']
-    s.cx.close(); s = SQLiteStore(path)                                   # a second open leaves every trigger as it is
+    s.close(); s = SQLiteStore(path)                                   # a second open leaves every trigger as it is
     assert triggers() == before
-    s.cx.close()
+    s.close()
 
 
 def test_a_check_in_that_changes_nothing_writes_nothing_for_a_while(db):

@@ -513,13 +513,13 @@ class ButtonTests(unittest.TestCase):
             adv = next(r for r in s.list_sources(active_only=False) if r['Address'] == 'Advisor')
             for text in ('the prompt as it shipped last week', 'the prompt as the owner rewrote it'):
                 c = json.loads(adv['ConfigJson']) | {'ai_prompt': text}
-                s._exec('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), adv['SourceId'])); s.cx.close()
+                s._exec('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), adv['SourceId'])); s.close()
                 shipped = (hashlib.sha256(b'the prompt as it shipped last week').hexdigest(),)
                 with mock.patch.object(assistant, 'OLD_PROMPT_SHA', shipped):
                     s = SQLiteStore(path)
                 got = json.loads(next(r for r in s.list_sources(active_only=False) if r['Address'] == 'Advisor')['ConfigJson'])['ai_prompt']
                 self.assertEqual(got, assistant.PROMPT if 'shipped' in text else text)
-            s.cx.close()
+            s.close()
         self.assertNotIn(hashlib.sha256(assistant.PROMPT.encode()).hexdigest(), assistant.OLD_PROMPT_SHA)
 
     def test_an_idea_about_work_just_handled_is_not_said(self):

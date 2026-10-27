@@ -53,7 +53,7 @@ def store(request, tmp_path):
     s.set_setting('funnel_hours', '72', 'fixture')
     s.canonical = request.param == 'canonical'
     yield s
-    if s.canonical: s.cx.close()
+    if s.canonical: s.close()
 
 
 def test_a_working_agent_is_the_status_not_its_draft(store):

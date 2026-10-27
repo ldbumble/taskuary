@@ -1495,11 +1495,41 @@ def _sender_name(m: dict) -> str:
     return dom[:1].upper() + dom[1:] if dom else 'They'
 
 
+# A REPEAT IS A NEW MESSAGE, NOT THE NEXT LINE OF A CHAT (the owner, 2026-10-27, over a WhatsApp task: "that's not what happened").
+# One same_as join in a chat counted EVERY line the person typed there as a copy - a chat's conversation id is the room, so one
+# conversation is one exchange however many lines it has. Lines in it count as copies only when they carry materially the same
+# words, a few of them, within REPEAT_WINDOW: a picture with no words, an empty body or an "ok" is never "the same thing".
+REPEAT_WINDOW = timedelta(days=3)
+NO_WORDS = ('(no text - see the attachment)', '(no text - see the attachments)')
+
+def _words(m: dict) -> str:
+    """The message's words, folded so a copy matches; '' for a body that is no words of theirs (media, empty, a short ack)."""
+    b = ' '.join(str(m.get('BodyText') or '').split())
+    if b.lower() in NO_WORDS: return ''
+    w = re.sub(r'[^\w\s]', ' ', b.lower()).split()
+    return ' '.join(w) if len(w) >= 3 else ''
+
+def _sent(m: dict):
+    try: return datetime.fromisoformat(str(m.get('SentAt') or '')[:19].replace('T', ' '))
+    except ValueError: return None
+
+def _copies(inbound: list) -> list:
+    """The most copies of one sender's same words within REPEAT_WINDOW of the newest copy, oldest first."""
+    groups, best = {}, []
+    for m in inbound:
+        if (w := _words(m)) and _sent(m): groups.setdefault((str(m.get('FromEmail') or '').lower(), w), []).append(m)
+    for ms in groups.values():
+        ms = sorted(ms, key=_sent); end = _sent(ms[-1])
+        if len(ms := [m for m in ms if end - _sent(m) <= REPEAT_WINDOW]) > len(best): best = ms
+    return best
+
+
 def repeats(store, tid: int, msgs: list = None, routes: list = None) -> dict | None:
     """ONE VENDOR, ONE ITEM, SAID. Ingest folds a sender writing again about the same thing onto one task (_join_same) and
     never told the owner: {'n', 'who', 'line'} - "Payworth wrote five times about the same thing - every one is kept here.
-    All they need now: the signed W-9." The count is code; what they need is the newest repeat's own triage summary, else
-    the task's ask - nothing new is asked of a model (a task card never waits on one). None below two."""
+    All they need now: the signed W-9." The count is code: separate messages (a conversation each) triage joined as the same,
+    else one person's lines that carry the same words ("Gail said the same thing 3 times"). What they need is the newest repeat's
+    own triage summary, else the task's ask - nothing new is asked of a model (a task card never waits on one). None below two."""
     from .welcome import times
     msgs = (store.list_messages(tid) or []) if msgs is None else msgs
     routes = (store.list_routes(tid) or []) if routes is None else routes
@@ -1508,18 +1538,23 @@ def repeats(store, tid: int, msgs: list = None, routes: list = None) -> dict | N
     inbound = [m for m in msgs if not _own_word(m)]
     by = {m['MessageId']: m for m in inbound}
     senders = Counter(str(by[mid].get('FromEmail') or '').lower() for mid in joined if mid in by)
-    if not senders: return None
-    em = senders.most_common(1)[0][0]
+    em = senders.most_common(1)[0][0] if senders else None
     theirs = sorted((m for m in inbound if str(m.get('FromEmail') or '').lower() == em), key=lambda m: str(m.get('SentAt') or ''))
-    if len(theirs) < 2: return None
-    last = max((joined[m['MessageId']] for m in theirs if m['MessageId'] in joined), key=lambda r: r.get('RouteId') or 0)
+    convs = {str(m.get('ConversationId') or m['MessageId']) for m in theirs}
+    if len(convs) >= 2:
+        n, newest, said = len(convs), theirs[-1], 'wrote {} about the same thing'
+        last = max((joined[m['MessageId']] for m in theirs if m['MessageId'] in joined), key=lambda r: r.get('RouteId') or 0)
+    elif len(copies := _copies(inbound)) >= 2:
+        n, newest, said, ids = len(copies), copies[-1], 'said the same thing {}', {m['MessageId'] for m in copies}
+        last = max((r for r in routes if r.get('MessageId') in ids), key=lambda r: r.get('RouteId') or 0, default={})
+    else: return None
     try: verdict = json.loads(last.get('VerdictJson') or 'null') or {}
     except ValueError: verdict = {}
     need = ' '.join(str(verdict.get('summary') or (store.get_task(tid) or {}).get('Summary') or '').split())
     need = re.split(r'(?<=[.!?])\s', need, maxsplit=1)[0].rstrip('.')[:200]
-    who = _sender_name(theirs[-1])
-    line = f"{who} wrote {times(len(theirs))} about the same thing - every one is kept here." + (f" All they need now: {need}." if need else '')
-    return {'n': len(theirs), 'who': who, 'line': line}
+    who = _sender_name(newest)
+    line = f"{who} {said.format(times(n))} - every one is kept here." + (f" All they need now: {need}." if need else '')
+    return {'n': n, 'who': who, 'line': line}
 
 
 def _finished(item: dict) -> str:

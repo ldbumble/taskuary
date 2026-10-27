@@ -1256,6 +1256,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // with its Try again - From folds to its one line over it. Two columns only where no agent ever ran (taskLayout.layoutOf).
   const layout = layoutOf({ sessionView }), wide = layout === "full";
   const settled = (resultShown || failedRun) && !term?.alive;   // the agent acted and is gone: its Result, or the run that failed
+  // ...whose record line already names the AI it ran on ("Claude Code (on this computer) · 07:05 · 6s"): an "AI claude" pill under
+  // it said it twice (the agents walk, 2026-10-26)
+  const factBrain = isGeneral && settled ? "" : brainPill;
   const replyState = replyPhase(detail?.reviews || []);
   // ONE question per page. A running session is itself the agent stage, so it is never folded; the
   // hand-picked stage wins over the computed one until you leave the task (start an agent on a task
@@ -2311,7 +2314,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* folded onto the live bar these facts share a ROW with the controls, where a
                       rule above them is stray chrome - they get a rule beside them instead, so the
                       pills you press and the pills you read are two groups and not five in a line */}
-                  {(term?.alive || report || detail?.transcript) && !restartOpen && (runRole || brainPill || repoOf(t)) && (
+                  {(term?.alive || report || detail?.transcript) && !restartOpen && (runRole || factBrain || repoOf(t)) && (
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.7, flexWrap: "wrap",
                       ...(liveSession
                         ? { ml: 0.9, pl: 1.1, borderLeft: `1px solid ${BORDER}`, flexShrink: 0 }
@@ -2319,11 +2322,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {/* plain words on the facts (the audit, 2026-10-17): "role" and "brain" were the app's own vocabulary */}
                       {runRole && <Box sx={{ ...chipBtnStatic }} title="Which instructions this agent follows - set in Settings.">
                         <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>works as</Box>&nbsp;{runRole}</Box>}
-                      {brainPill && <Box sx={{ ...chipBtnStatic }}
-                        title={(brainPill === detail?.ranOn?.brain ? "The AI that did this work. Which AI the agents use is set in Settings, not per task."
+                      {factBrain && <Box sx={{ ...chipBtnStatic }}
+                        title={(factBrain === detail?.ranOn?.brain ? "The AI that did this work. Which AI the agents use is set in Settings, not per task."
                           : "The AI that does the work. Which AI the agents use is set in Settings, not per task.")
                           + (detail?.routeWhy ? ` Last AI call: ${detail.routeWhy}` : "")}>
-                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>AI</Box>&nbsp;{brainPill}</Box>}
+                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>AI</Box>&nbsp;{factBrain}</Box>}
                       {/* the repository pill only where a coding tool is connected (B3) */}
                       {!isGeneral && canCode && <Button size="small" variant="outlined" sx={chipBtn}
                         startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}

@@ -3,7 +3,7 @@ import { label } from "./buttons.js";
 import { says, subState } from "./laneSays.js";
 import { ago, band } from "./timeWords.js";
 import { fmtDateTime } from "./dates.js";
-import { LEVEL_META, LEVEL_ORDER, SECTION_WORDS, attentionBand, isUrgent, levelOf, onYou } from "./lanes.js";
+import { LEVEL_META, LEVEL_ORDER, SECTION_WORDS, attentionBand, isUrgent, levelOf, notYet, onYou } from "./lanes.js";
 export { says, subState };
 // the rail's sections and the on-you rule are lanes.js's, re-exported where the rail's readers have always found them
 export { LEVEL_META, LEVEL_ORDER, SECTION_WORDS, attentionBand, isUrgent, levelOf, onYou };
@@ -596,6 +596,23 @@ export const sectionNext = (items, section, seen = new Set()) =>
   (bandsOf(items).find((b) => b.level === section)?.items || [])
     .find((i) => !i.settling && !seen.has(i.key) && !(i.aliases || []).some((a) => seen.has(a))) || null;
 export const sectionDone = (section) => `${SECTION_WORDS[section] || section} done.`;
+// BACK GOES UP THE LINE (the owner, 2026-10-27: "a Back button that goes up the line as well. Basic nav. Of course on the first one no
+// Back"): the line is the rail's - its sections in their order, rows by arrival (bandsOf), Tasks -> Reports -> FYI - read upward from the
+// row on the table, the same order Next walks down (funnel_selection.below). Only rows the walk can stand on: not For later (Remind me put
+// it there), not one settling (a close on its way), not a meeting not yet due. `table`: the item on the table - its row, else the row it
+// joins (a task pulled by name, an fyi batch's members, which leave the pile once shown); `gone(row)`: put down by a press (Mark done,
+// Remind me, Close with a note) and never drawn again (leftRef) - skipped. Null on the first row: no Back there.
+export const rowAbove = (items, table, gone = () => false) => {
+  if (!table?.key) return null;
+  const batch = table.kind === "fyis" ? table.items || [] : null, keys = new Set(batch ? table.members || batch.map((i) => i.key) : [table.key, ...(table.aliases || [])]);
+  const has = (i) => keys.has(i.key) || (i.aliases || []).some((a) => keys.has(a)), rows = items || [];
+  const extra = rows.some(has) ? [] : batch ? batch.filter((i) => i.key) : [pulledRow(table)];
+  const line = bandsOf(inOrder(rows, extra)).filter((b) => b.level !== "later").flatMap((b) => b.items)
+    .filter((i) => has(i) || (!i.settling && !i.deferred && !notYet(i)));
+  const at = line.findIndex(has);
+  for (let j = at - 1; j >= 0; j -= 1) if (!gone(line[j])) return line[j];
+  return null;
+};
 
 // ── the FYI tail (funnel.page_fyi) ─────────────────────────────────────────────────────────────
 // Six months of plain FYI was most of a big mailbox's rail and of every answer, while the rail draws a handful of them. The

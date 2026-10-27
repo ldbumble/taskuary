@@ -34,6 +34,7 @@
                         "states": {"batch": "All read, next", "read": "Read"},
                         "state_hints": {"batch": "Marks every notice on the card read - search finds them later - and brings the next",
                                         "read": "Marks this one read - search finds it later - and brings the next"}},
+    "back":            {"label": "Back", "hint": "Brings back the one above this in your list - this one stays where it is", "row": []},
     "split":           {"label": "Split or merge", "hint": "Split this task in two, or merge it with another", "row": ["reshape"],
                         "states": {"split": "Split it"}, "state_hints": {"split": "Splits this one into two jobs"}},
     "reopen":          {"label": "Reopen task", "hint": "Opens the task again", "row": ["reopen"]},

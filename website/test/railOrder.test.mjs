@@ -73,7 +73,9 @@ test("the rail marks an urgent row's dot in place and says urgent to a screen re
   assert.match(view, /const imp = isImportant\(i, hot\);/);
   assert.match(view, /background: imp \? PRIORITY_COLOR\.important : LEVEL_COLOR\[level\]/);
   assert.doesNotMatch(css, /\.tq-pile-row\.important \.card/);
-  assert.doesNotMatch(css, /\.tq-pile-row\.important[^{]*\{[^}]*background/, "important never shades the row");
+  assert.doesNotMatch(css, /\.tq-pile-row\.important(?![^{]*\.rail i)[^{]*\{[^}]*background/, "important never shades the row");
+  // ...its DOT is ringed as urgent's is, in its own slate, on the table too (the owner, 2026-10-27: "I don't see a bigger circle")
+  assert.match(css, /\.tq-pile-row\.important \.rail i, \.tq-pile-row\.important\.current \.rail i \{ background: #55697a !important; box-shadow: [^;]*rgba\(85, 105, 122/);
   assert.doesNotMatch(css, /lvl-urgent/);
   const sum = summarize([task("task:1", 19), task("task:2", 11, { lane: "time", order_band: 1 }), report("report:1", 3)]);
   assert.deepEqual(sum.groups.map((g) => [g.key, g.n, g.urgent]), [["task", 2, 1], ["reports", 1, 0]]);

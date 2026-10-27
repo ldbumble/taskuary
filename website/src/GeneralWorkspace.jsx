@@ -911,6 +911,17 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       {!data?.providers?.length && !noAiSaid && <Alert severity="info" data-tq-no-ai="" sx={{ borderRadius: 0, py: 0, alignItems: "center" }}
         action={<ConnectAi variant="outlined" />}>No AI is connected, so this work cannot run yet - connect one under {placeName("ai")}.</Alert>}
       {session?.resume_notice && <Typography sx={{ px: 1.5, py: 0.5, fontSize: 12, color: FAINT }}>{session.resume_notice}</Typography>}
+      {/* A SECOND AGENT'S CONVERSATION IS ITS OWN (Run another agent, general.new_run): the earlier agent's stays on the task, folded
+          above it and read only - the thread below is the new one's, never the old one picked back up */}
+      {!dock && !!data?.earlier?.length && <Box component="details" data-tq-earlier-run="" sx={{ px: 1.5, py: 0.4, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+        <Box component="summary" sx={{ cursor: "pointer", color: FAINT, fontSize: 12, fontWeight: 600, "&:hover": { color: INK } }}>
+          The earlier agent's conversation · {plural(data.earlier.length, "message")}</Box>
+        <Box sx={{ maxHeight: 260, overflow: "auto", py: 0.5, fontSize: 12.5, color: INK }}>
+          {data.earlier.map((m) => <Box key={m.id} sx={{ py: 0.4 }}>
+            <Box component="span" sx={{ color: FAINT, fontWeight: 600, fontSize: 11 }}>{m.role === "user" ? "You" : name}</Box>
+            <Md text={textOf(m)} /></Box>)}
+        </Box>
+      </Box>}
       <input ref={fileRef} hidden type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple onChange={(e) => upload(e.target.files)} />
       {uploading && <Box sx={{ px: 1, py: 0.5, color: FAINT, fontSize: 11 }}>Attaching image…</Box>}
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>

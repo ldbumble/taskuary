@@ -74,12 +74,20 @@ test("a general agent that could not start says Failed, offers Try again and Con
   await page.waitForFunction(() => /Failed - No AI is connected/.test(document.body.innerText), { timeout: 20000 });
   const text = await page.evaluate(() => document.body.innerText);
   assert.doesNotMatch(text, /Not started yet|Agent answered|agent waiting on you|CLI agent or an AI provider/);
-  await hasButton(page, "Try again");
   await hasButton(page, "Connect an AI");
   if (process.env.TQ_SHOT) await page.screenshot({ path: process.env.TQ_SHOT });
-  // Try again with still no AI is greyed, the reason its hover - never pressable into the same failure (the owner, 2026-10-22)
-  assert.ok(await page.evaluate(() => [...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Try again" && b.offsetParent
-    && b.disabled && /No AI is connected/.test(b.title || b.closest("[title]")?.title || ""))), "Try again is greyed, saying why");
+  // Try again with still no AI is greyed, the reason its hover - never pressable into the same failure (the owner, 2026-10-22). On the row,
+  // or in its ▾: Close folds last (the owner, 2026-10-27), so on a narrower row the Agent group's greyed Try again folds before Mark done
+  const greyed = () => page.evaluate(() => [...document.querySelectorAll('button, [role="menuitem"]')].some((b) => b.textContent.trim().startsWith("Try again")
+    && b.offsetParent && (b.disabled || b.getAttribute("aria-disabled") === "true") && /No AI is connected/.test(b.title || b.closest("[title]")?.title || "")));
+  let seen = await greyed();
+  for (const m of seen ? [] : await page.$$eval("[data-tq-row] [data-tq-more]", (e) => e.map((x) => x.dataset.tqMore))) {
+    await page.evaluate((m) => document.querySelector(`[data-tq-row] [data-tq-more="${m}"]`)?.click(), m); await new Promise((r) => setTimeout(r, 500));
+    if ((seen = await greyed())) break;
+    await page.keyboard.press("Escape"); await new Promise((r) => setTimeout(r, 300));
+  }
+  assert.ok(seen, "Try again is greyed, saying why");
+  await page.keyboard.press("Escape"); await new Promise((r) => setTimeout(r, 300));
   // ...and Connect an AI opens Connections at the AI cards
   assert.ok(await press(page, "Connect an AI"));
   await page.waitForFunction(() => decodeURIComponent(location.hash).includes("connections=AI"), { timeout: 10000 });

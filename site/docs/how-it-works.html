@@ -272,18 +272,22 @@ stays on your work rail until you have read it. See <a href="tasks-and-agents#wh
 <code>TRIAGE.md</code>, the document the classifier reads on the next message — so the correction applies to
 the next message <em>like</em> this one, rather than becoming a rule about this one sender.</p>
 <p>Every verdict is evidence. Editing a draft teaches voice; rejecting one teaches what should not
-be drafted; <strong>Not our task</strong> teaches where your responsibility ends. The exact decision goes into
-<code>LEARNED.md</code> at once, as your own line under <code>## What you care about</code>, with the sender and subject
-it was given on and what it is about (<code>(about: …)</code>), so future triage - and the routing judge of a
-report - can judge whether a new message is genuinely similar. A newer verdict on the same thing
-replaces the older; what you tell the Assistant (&quot;I don&#39;t care about the legacy export any more&quot;)
-goes in the same way. <code>LEARNED.md</code> is the one memory: there is no separate notes page.</p>
+be drafted; <strong>Not our task</strong> teaches where your responsibility ends. What a verdict says about you
+goes into <code>LEARNED.md</code> as one line under <code>## What you care about</code>, in words - the kind of work and
+why (&quot;You handle vendor invoice disputes yourself - not agent work&quot;), ending <code>(about: …)</code> when it
+holds only for one sender or topic - so future triage, and the routing judge of a report, can judge
+whether a new message is genuinely similar. A line is written only when it adds something: a verdict
+that repeats what is already there writes nothing, and one that sharpens an older line replaces it.
+<strong>Undo</strong> takes the line back out. What you tell the Assistant (&quot;I don&#39;t care about the legacy export
+any more&quot;) goes in as you said it. <code>LEARNED.md</code> is the one memory: there is no separate notes page or
+table.</p>
 <p>Repeated patterns become lessons in <code>LEARNED.md</code>, one section per subject: <code>## Your people</code>,
 <code>## What you care about</code>, <code>## How you work</code>, <code>## Promises</code> and <code>## What to bring up</code>. Each reader
-takes the sections that help it - triage reads what you care about (learned only from your sorting
-verdicts), the Advisor your people, what you care about, how you work and your promises, an agent
-all of it (the people lines only about those on its own task, and nothing on a stranger&#39;s), and the
-Assistant all of it. Nothing is learned from a button press. How you write
+takes the sections that help it - triage, and a report&#39;s routing judge, read the whole of it on
+every decision (your people for priority only), the Advisor your people, what you care about, how
+you work and your promises, and the Assistant all of it. An agent&#39;s brief carries only the lines
+about the people on its own task and reads the rest when it needs it (its <code>owner_memory</code> tool, or
+<code>taskuary --memory</code>); on a stranger&#39;s task it gets none of it. Nothing is learned from a button press. How you write
 is kept in <code>STYLE.md</code> under <code>## By recipient</code>, for the drafter - with the instruction you typed into
 Redraft, once you have typed the same one twice for the same person. Each machine-written line
 carries its evidence:</p>

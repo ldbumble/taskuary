@@ -270,6 +270,49 @@ def owner_started_work(store, msg: dict) -> list:
     return [w | {'why': w['why'].replace('you sent this', 'you started this thread')} for w in worked_before(store, first.get('SentAt'))]
 
 
+# A REPLY ON A CLOSED TASK'S THREAD MAY BE OPEN WORK'S (the owner, 2026-10-27: "this task should go on the deep dive rec task, it's the
+# same thing. why did it not work?"). A vendor's reply on a finished "explain these figures" thread asked for a change to the very
+# sheet the owner's own reconciliation task was rebuilding: triage judged new work owed and reopened the closed thread's task, as
+# nothing put the open job in front of it - that task had no thread and no sender, so neither the thread nor the person tied them.
+# On a closed thread the open tasks about the same job are shown, the owner's own among them; same_as says which one it is.
+WORKED_DAYS = 7          # how recently the owner's own hand on an open task still makes it the job a closed thread's reply may be
+
+def _own(t: dict) -> bool:
+    """A task the owner started themselves - made by hand or asked of the assistant, no requester but them."""
+    return t.get('OriginBase') == 'owner' or (not t.get('Senders') and t.get('Source') not in ('report', 'assistant'))
+
+
+def _latest(store, tid: int) -> str:
+    """The newest line on a task, as a person would skim it - what it is doing now."""
+    c = next((c for c in reversed(store.list_comments(tid)) if str(c.get('Body') or '').strip()), None)
+    return _short(report_body(c['Body']) if is_report(c['Body']) else c['Body'], 160) if c else ''
+
+
+def open_same_job(store, msg: dict, home: dict, limit: int = OPEN_SEATS) -> list:
+    """The OPEN tasks a reply on a CLOSED task's thread may be the job of: those whose title and ask share words with the reply
+    or the closed task's own ask, and the owner's own work of the last days. Each with its ask and what it is doing now, ranked by
+    the words it shares; the model says whether this is that job (same_as) or the thread's task again."""
+    from .routing import tokens
+    from .timewords import mins, span
+    words = set(tokens(f"{msg.get('subject') or ''} {msg.get('_title') or ''} {str(msg.get('body') or '')[:TOPIC_CHARS]} "
+                       f"{home.get('title') or ''} {home.get('ask') or ''}"))
+    since = (datetime.now() - timedelta(days=WORKED_DAYS)).strftime('%Y-%m-%d %H:%M:%S')
+    worked = {t['TaskId']: t['Touched'] for t in store.tasks_owner_worked(since, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 20)}
+    out = []
+    for t in store.tasks_open_linked():
+        if t['TaskId'] == home.get('tid'): continue
+        own, shared = _own(t), words & set(tokens(f"{t.get('Title') or ''} {t.get('Summary') or ''}"))
+        if not (len(shared) >= 2 or (own and shared) or t['TaskId'] in worked): continue
+        why = [f"shares {', '.join(sorted(shared)[:5])}"] if shared else []
+        if t['TaskId'] in worked: why.append(f"you were working on it {span(mins(worked[t['TaskId']]) or 0, long=True)} ago")
+        out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '',
+                    'from': 'you - your own task, nobody else asked for it' if own else _who('', {s for s in str(t.get('Senders') or '').split(',') if s}),
+                    'why': f"open work on what this closed thread's reply asks - {'; '.join(why)}", 'about': _short(t.get('Summary'), 200),
+                    '_rank': len(shared) + 0.5 * own + (t['TaskId'] in worked)})
+    out.sort(key=lambda r: -r['_rank'])
+    return [{k: v for k, v in {**r, 'latest': _latest(store, r['tid'])}.items() if k != '_rank' and v} for r in out[:limit]]
+
+
 MEETINGS = 12            # a day's calendar, bounded so a packed one cannot crowd the mail out of the prompt
 
 def meetings_today_of(t: dict) -> list:

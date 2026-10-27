@@ -351,7 +351,7 @@ async def live_stamp(request: Request, call_next):
 
 # the redirects back from a provider's sign-in: no header can ride on one, so each proves itself with the one-time state it was issued
 OAUTH_RETURNS = ('/api/quickbooks/callback', '/api/zoho/callback', '/api/linkedin/callback', '/api/google/files/callback',
-                 '/api/google/calendar/callback')
+                 '/api/google/calendar/callback', '/api/ms/callback')
 
 @app.middleware('http')
 async def token_gate(request: Request, call_next):
@@ -6745,29 +6745,41 @@ def chatgpt_signout(cid: int):
     return {'ok': True, **out}
 
 # ── Sign in with Microsoft (taskuary/msauth.py): Graph for a regular user, no Azure portal ──
-_MSFLOWS = {}   # flow id -> the device code being polled; one browser tab, minutes, then gone
+_MSFLOWS = {}   # flow id -> a sign-in in progress (a device code being polled, or a browser round awaiting its callback); minutes, then gone
+MS_TTL = 600    # a browser round not back in ten minutes is over: its state answers nothing after that
 
 class MsSignInBody(BaseModel):
     files: bool | None = None        # Allow saving files: this sign-in asks for Files.ReadWrite too (None: as the card already says)
+    code: bool = False               # the fallback the owner picks: a device code, for a Taskuary the browser cannot reach on localhost
 
 
 @app.post('/api/connectors/{cid}/ms/signin')
 def ms_signin(cid: int, body: MsSignInBody | None = None):
-    """Start the device-code sign-in: the code and URL to show, and a flow id to poll with. `files` turns the card's "Allow saving
-    files" on or off - the scopes asked for follow it, and the card keeps the choice once the sign-in completes (ms_poll)."""
+    """Start a Microsoft sign-in and return a flow id to poll with. By default the browser one: the authorize URL to open, which comes
+    back to /api/ms/callback on this machine (msauth.browser_start - PKCE, a one-time state). `code`: the device-code fallback - the
+    code and URL to show. `files` turns the card's "Allow saving files" on or off - the scopes asked for follow it, and the card keeps
+    the choice once the sign-in completes (_ms_finish)."""
     import secrets as _secrets
     from . import msauth
     c = _ms_card(cid)
-    cfg = json.loads(c.get('ConfigJson') or '{}')
-    if body is not None and body.files is not None: cfg['allow_files'] = bool(body.files)
-    try: d = msauth.device_start(cfg, msauth.scopes_for(c['Type'], bool(cfg.get('allow_files'))))
+    cfg_ = json.loads(c.get('ConfigJson') or '{}')
+    body = body or MsSignInBody()
+    if body.files is not None: cfg_['allow_files'] = bool(body.files)
+    scope = msauth.scopes_for(c['Type'], bool(cfg_.get('allow_files')))
+    for k, v in list(_MSFLOWS.items()):
+        if time.time() - v.get('at', 0) > 1800: _MSFLOWS.pop(k, None)
+    flow, f = _secrets.token_urlsafe(12), {'cid': cid, 'kind': c['Type'], 'cfg': cfg_, 'at': time.time()}
+    if not body.code:
+        redirect = msauth.redirect_uri(cfg['server'].get('port'))
+        try: b = msauth.browser_start(cfg_, scope, redirect)
+        except RuntimeError as e: raise HTTPException(409, str(e))
+        _MSFLOWS[flow] = {**f, 'state': b['state'], 'verifier': b['verifier'], 'redirect': redirect, 'scope': scope, 'done': None}
+        return {'flow': flow, 'mode': 'browser', 'url': b['url'], 'expires_in': MS_TTL}
+    try: d = msauth.device_start(cfg_, scope)
     except RuntimeError as e: raise HTTPException(409, str(e))
     except requests.RequestException as e: raise HTTPException(502, f'could not reach login.microsoftonline.com: {str(e)[:160]}')
-    flow = _secrets.token_urlsafe(12)
-    for k, v in list(_MSFLOWS.items()):
-        if time.time() - v['at'] > 1800: _MSFLOWS.pop(k, None)
-    _MSFLOWS[flow] = {'cid': cid, 'kind': c['Type'], 'device_code': d.pop('device_code'), 'cfg': cfg, 'at': time.time()}
-    return {'flow': flow, **d}
+    _MSFLOWS[flow] = {**f, 'device_code': d.pop('device_code')}
+    return {'flow': flow, 'mode': 'code', **d}
 
 def _reads(cid):
     c = store.get_connector(cid) if cid else None
@@ -6779,6 +6791,10 @@ def _ms_card(cid):
     if not c or c['Type'] not in ('outlook', 'teams'): raise HTTPException(404, 'Sign in with Microsoft lives on the Outlook and Teams cards')
     return c
 
+def _ms_admin(f):
+    from . import msauth
+    return msauth.admin_consent_url(f['cfg'], msauth.scopes_for(f.get('kind'), bool(f['cfg'].get('allow_files'))))
+
 @app.post('/api/connectors/{cid}/ms/poll')
 def ms_poll(cid: int, body: dict):
     """One poll of a sign-in. pending until the user finishes in the browser; then the card is
@@ -6787,15 +6803,64 @@ def ms_poll(cid: int, body: dict):
     flow = (body or {}).get('flow')
     f = _MSFLOWS.get(flow)
     if not f or f['cid'] != cid: raise HTTPException(404, 'no such sign-in in progress - start it again')
+    if 'verifier' in f:                  # a browser round: the callback did the work, this only reports it
+        if f.get('done'): _MSFLOWS.pop(flow, None); return f['done']
+        if time.time() - f['at'] > MS_TTL:
+            _MSFLOWS.pop(flow, None)
+            return {'status': 'error', 'detail': 'the sign-in was not finished in ten minutes - press Sign in with Microsoft to start again'}
+        return {'status': 'pending'}
     try: t = msauth.device_poll(f['cfg'], f['device_code'])
     except msauth.AdminConsent as e:
         _MSFLOWS.pop(flow, None)
-        return {'status': 'error', 'detail': str(e), 'admin_consent_url': msauth.admin_consent_url(f['cfg'], msauth.scopes_for(f.get('kind'), bool(f['cfg'].get('allow_files'))))}
+        return {'status': 'error', 'detail': str(e), 'admin_consent_url': _ms_admin(f)}
     except RuntimeError as e:
         _MSFLOWS.pop(flow, None)
         return {'status': 'error', 'detail': str(e)}
     if t.get('pending'): return {'status': 'pending'}
     _MSFLOWS.pop(flow, None)
+    return _ms_finish(cid, f, t)
+
+@app.post('/api/connectors/{cid}/ms/cancel')
+def ms_cancel(cid: int, body: dict):
+    """The card's Cancel: the round is forgotten, so its state answers nothing if the browser tab is finished after all."""
+    f = _MSFLOWS.get((body or {}).get('flow'))
+    if f and f['cid'] == cid: _MSFLOWS.pop(body['flow'], None)
+    return {'ok': True}
+
+def _is_loopback(host) -> bool:
+    import ipaddress
+    try: return ipaddress.ip_address(str(host or '').split('%')[0]).is_loopback
+    except ValueError: return str(host or '').lower() == 'localhost'
+
+@app.get('/api/ms/callback', response_class=HTMLResponse)
+def ms_callback(request: Request, code: str = None, state: str = '', error: str = None, error_description: str = None):
+    """Microsoft sends the browser back here with the code. Outside the token gate like every OAuth return: it answers only a state
+    ms_signin issued and nobody has used, within MS_TTL, from this machine; the code is redeemed with the round's own PKCE verifier,
+    and the tab is told only whether it worked - never a token (escaped, under a CSP, no-store)."""
+    import hmac
+    from . import msauth
+    if not _is_loopback(request.client.host if request.client else ''):
+        return _oauth_tab(False, 'This sign-in only finishes on the computer Taskuary runs on.')
+    f = next((v for v in list(_MSFLOWS.values()) if v.get('state') and hmac.compare_digest(str(v['state']), str(state or ''))), None)
+    if not f or f.get('claimed') or time.time() - f['at'] > MS_TTL:
+        return _oauth_tab(False, 'This sign-in was not started here, was already used, or is too old - press Sign in with Microsoft on the card again.')
+    f['claimed'] = True                  # a state answers once, whatever happens next
+    try:
+        if error: raise msauth.callback_error(error, error_description or '')
+        if not code: raise RuntimeError('Microsoft sent no code back')
+        t = msauth.code_redeem(f['cfg'], code, f['verifier'], f['redirect'], f['scope'])
+        f['done'] = _ms_finish(f['cid'], f, t)
+    except msauth.AdminConsent as e: f['done'] = {'status': 'error', 'detail': str(e), 'admin_consent_url': _ms_admin(f)}
+    except (RuntimeError, requests.RequestException) as e: f['done'] = {'status': 'error', 'detail': str(e)[:300]}
+    d = f['done']
+    if d.get('status') == 'ok':
+        return _oauth_tab(True, f"Signed in as {d.get('account') or 'your Microsoft account'}. Taskuary has it from here.",
+                          head='Signed in - you can close this tab')
+    return _oauth_tab(False, d.get('detail') or 'the sign-in did not complete')
+
+def _ms_finish(cid, f, t) -> dict:
+    """Tokens in hand, by either road: the card is connected as the account that signed in."""
+    from . import msauth
     if not t.get('refresh_token'):
         return {'status': 'error', 'detail': 'Microsoft returned no refresh token - the offline_access scope was not granted'}
     who = msauth.me(t['access_token'])
@@ -6862,10 +6927,10 @@ def google_files_callback(code: str = None, state: str = '', error: str = None):
     return _oauth_tab(ok, msg)
 
 
-def _oauth_tab(ok: bool, msg: str) -> HTMLResponse:
+def _oauth_tab(ok: bool, msg: str, head: str = '') -> HTMLResponse:
     from html import escape as _esc
     return HTMLResponse(f'<!doctype html><meta charset=utf-8><title>Taskuary</title><body style="font:15px system-ui;padding:40px;color:#262521;background:#f6f4f1">'
-                        f'<p style="font-weight:700">{"Done" if ok else "Not changed"}</p><p>{_esc(str(msg))}</p><p style="color:#6e685f">You can close this tab and go back to Taskuary.</p>',
+                        f'<p style="font-weight:700">{_esc(head or ("Done" if ok else "Not changed"))}</p><p>{_esc(str(msg))}</p><p style="color:#6e685f">You can close this tab and go back to Taskuary.</p>',
                         headers={'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'", 'Cache-Control': 'no-store'})
 
 

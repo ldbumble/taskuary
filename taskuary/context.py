@@ -297,7 +297,7 @@ def open_same_job(store, msg: dict, home: dict, limit: int = OPEN_SEATS) -> list
     or the closed task's own ask, and the owner's own work of the last days. Each with its ask and what it is doing now, ranked by
     the words it shares; the model says whether this is that job (same_as) or the thread's task again."""
     from .routing import tokens
-    from .timewords import mins, span
+    from .timewords import ago_m, mins, span
     words = set(tokens(f"{msg.get('subject') or ''} {msg.get('_title') or ''} {str(msg.get('body') or '')[:TOPIC_CHARS]} "
                        f"{home.get('title') or ''} {home.get('ask') or ''}"))
     since = (datetime.now() - timedelta(days=WORKED_DAYS)).strftime('%Y-%m-%d %H:%M:%S')
@@ -308,7 +308,7 @@ def open_same_job(store, msg: dict, home: dict, limit: int = OPEN_SEATS) -> list
         own, shared = _own(t), words & set(tokens(f"{t.get('Title') or ''} {t.get('Summary') or ''}"))
         if not (len(shared) >= 2 or (own and shared) or t['TaskId'] in worked): continue
         why = [f"shares {', '.join(sorted(shared)[:5])}"] if shared else []
-        if t['TaskId'] in worked: why.append(f"you were working on it {span(mins(worked[t['TaskId']]) or 0, long=True)} ago")
+        if t['TaskId'] in worked: why.append(f"you were working on it {ago_m(mins(worked[t['TaskId']]) or 0, long=True)}")
         out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '',
                     'from': 'you - your own task, nobody else asked for it' if own else _who('', {s for s in str(t.get('Senders') or '').split(',') if s}),
                     'why': f"open work on what this closed thread's reply asks - {'; '.join(why)}", 'about': _short(t.get('Summary'), 200),

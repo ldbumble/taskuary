@@ -3,7 +3,7 @@ once its Google calendar fields are filled in by hand. Should the card offer a '
 
 A Gmail card is IMAP with an App Password, which carries no calendar, and Google Calendar takes OAuth only - so the refresh token
 used to be minted outside Taskuary and pasted into the card. The card's step runs Google's installed-app flow from here instead:
-the browser goes to Google asking for calendar.readonly, comes back to this server on 127.0.0.1 (a Desktop client takes any
+the browser goes to Google asking for calendar.readonly (and the contacts, PEOPLE), comes back to this server on 127.0.0.1 (a Desktop client takes any
 loopback port - fileaccess's round rides the same road) with PKCE and a one-time state, and the refresh token is kept on the card,
 sealed (store seals google_refresh_token inside ConfigJson, vault.py), where calendar.agenda reads it as it read a pasted one.
 
@@ -18,6 +18,13 @@ from . import net as requests     # pooled Session + (connect, read) timeouts, s
 
 G_AUTH, G_TOKEN = 'https://accounts.google.com/o/oauth2/v2/auth', 'https://oauth2.googleapis.com/token'
 SCOPE = 'https://www.googleapis.com/auth/calendar.readonly'
+# PEOPLE SEARCH (the owner, 2026-10-27: "and Gmail if it supports it"): the same sign-in asks for the account's contacts, the ones Gmail
+# saved by itself (otherContacts) and, on a Workspace account, its organisation's directory - all read-only, each a box Google lets the
+# owner untick, and only the calendar is required (peoplesearch.google_people skips what was not granted). All three are Google
+# "sensitive" scopes, as calendar.readonly is: Taskuary's shipped client needs Google's verification for them before it goes public.
+G_CONTACTS, G_OTHER, G_DIRECTORY = (f'https://www.googleapis.com/auth/{s}' for s in ('contacts.readonly', 'contacts.other.readonly', 'directory.readonly'))
+PEOPLE = (G_CONTACTS, G_OTHER, G_DIRECTORY)
+SCOPES = ' '.join((SCOPE, *PEOPLE))
 TTL = 900
 # Taskuary's Desktop-app OAuth client goes HERE once it exists in Google Cloud - empty until then, and this build has no Google
 # sign-in. Its secret is not one: Google documents an installed app's client secret as not confidential, and asks for it anyway.
@@ -68,7 +75,7 @@ def start(store, cid: int, server: dict) -> dict:
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()
     # include_granted_scopes: a card that already allowed saving files (drive.file) keeps it on the new token
     return {'flow': state, 'url': G_AUTH + '?' + urlencode({
-        'client_id': gid, 'redirect_uri': redirect_uri(server), 'response_type': 'code', 'scope': SCOPE,
+        'client_id': gid, 'redirect_uri': redirect_uri(server), 'response_type': 'code', 'scope': SCOPES,
         'access_type': 'offline', 'prompt': 'consent', 'state': state, 'include_granted_scopes': 'true',
         'code_challenge': challenge, 'code_challenge_method': 'S256'})}
 
@@ -105,7 +112,10 @@ def _exchange(store, server, f, code, error) -> tuple:
     with _LOCK: _TOK[j['refresh_token']] = (j.get('access_token') or '', time.time() + int(j.get('expires_in') or 3600))
     from . import calendar
     for c in (calendar._REPLY, calendar._UPCOMING, calendar._TODAY): c['data'] = None     # the next read sees the new calendar
-    return True, f"Taskuary now reads the Google calendar of {cfg.get('address') or 'this account'} - read-only."
+    from . import peoplesearch
+    peoplesearch.forget()                                                                   # the next search asks the new contacts
+    also = ' and searches its contacts when you pick someone to write to' if G_CONTACTS in granted.split() else ''
+    return True, f"Taskuary now reads the Google calendar of {cfg.get('address') or 'this account'} - read-only{also}."
 
 
 def poll(state: str) -> dict:

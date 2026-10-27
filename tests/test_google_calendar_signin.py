@@ -100,7 +100,7 @@ class SignIn(Shipped):
         with fake_vault():
             f = c.post(f'/api/connectors/{cid}/google/calendar').json()
             q = {k: v[0] for k, v in parse_qs(urlsplit(f['url']).query).items()}
-            self.assertEqual(q['scope'], googlecal.SCOPE)
+            self.assertEqual(q['scope'].split(), [googlecal.SCOPE, *googlecal.PEOPLE])   # the calendar, and the people search's contacts
             self.assertEqual((q['code_challenge_method'], q['access_type'], q['client_id']), ('S256', 'offline', 'taskuary-desktop.apps.example'))
             self.assertTrue(q['redirect_uri'].startswith('http://127.0.0.1:') and q['redirect_uri'].endswith('/api/google/calendar/callback'))
             self.assertEqual(c.post(f'/api/connectors/{cid}/google/calendar/poll', json={'flow': f['flow']}).json(), {'status': 'pending'})

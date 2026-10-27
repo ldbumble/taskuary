@@ -28,14 +28,28 @@ GRAPH = 'https://graph.microsoft.com/v1.0'
 # Calendars.ReadWrite answers invites and books meetings (calwrite.py) - and reads, so it replaces Calendars.Read. A sign-in
 # from before it was asked for holds Calendars.Read only: its refresh asks for exactly what it was granted (refresh_scope),
 # so it keeps reading as it always did, and the next sign-in asks for the rest.
-SCOPES = 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite'
+# PEOPLE SEARCH (the owner, 2026-10-27: "ask for contacts for Outlook whenever we can"): People.Read is /me/people - the people the
+# account writes with, outside contacts and their companies included - and Contacts.Read its own address book (/me/contacts). Both are
+# a user's own consent, no admin. A sign-in from before them refreshes with what it was granted (refresh_scope) and the people search
+# skips what it cannot read; the card says a fresh sign-in would add them (peoplesearch.missing).
+PEOPLE_SCOPES = {'outlook': ('People.Read', 'Contacts.Read'), 'teams': ('People.Read',)}
+SCOPES = 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite People.Read Contacts.Read'
 LEGACY_SCOPES = 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.Read'
-# a Teams card's own sign-in: its chats, their senders' names, marking a chat read, and answering in it - none needs an admin
-TEAMS_SCOPES = 'offline_access User.Read User.ReadBasic.All Chat.ReadWrite ChatMessage.Send'
+# a Teams card's own sign-in: its chats, their senders' names, marking a chat read, and answering in it - none needs an admin.
+# TEAMS_CHAT is what an Outlook sign-in is asked for when a Teams card reads through it (channels.graph_creds): never widened, or every
+# Outlook sign-in from before a new scope would be refused it and its chats read as lapsed. User.ReadBasic.All already finds the
+# organisation's people (/users?$search); People.Read adds the ones this account writes with.
+TEAMS_CHAT = 'offline_access User.Read User.ReadBasic.All Chat.ReadWrite ChatMessage.Send'
+TEAMS_SCOPES = f'{TEAMS_CHAT} People.Read'
 # ALLOW SAVING FILES (the owner, 2026-10-23): a card that opts in signs in again asking for Files.ReadWrite as well - its own OneDrive,
 # where Share puts a result (sharing.onedrive). Off by default: the scopes above are never widened unless the card says so.
 FILES_SCOPE = 'Files.ReadWrite'
 def scopes_for(kind, files: bool = False) -> str: return (TEAMS_SCOPES if kind == 'teams' else SCOPES) + (f' {FILES_SCOPE}' if files else '')
+def granted(cfg, scope: str):
+    "Was `scope` granted to this sign-in? None when the card never wrote down what was (a sign-in from before PW-143): ask and see."
+    g = str((cfg or {}).get('granted_scope') or '').strip()
+    if not g: return None
+    return scope.lower() in {s.lower().rpartition('/')[2] for s in g.split()}
 def card_of(cfg) -> str: return 'Teams' if (cfg or {}).get('_kind') == 'teams' else 'Outlook'   # whose sign-in this is, said
 # Taskuary's own registration (multi-tenant + personal accounts, public client, device code
 # on). Overridable per install with TASKUARY_MS_CLIENT_ID, or per card with client_id.

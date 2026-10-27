@@ -51,6 +51,7 @@ import { LIT, lightField, lightStep } from "./connectorStep.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { validEmail } from "./recipientOptions.js";
 import { waLabel, waMatches, waPhone } from "./waChats.js";
+import { PEOPLE_MISSING } from "./peopleSearch.js";
 import ReasonPanel from "./ReasonNetwork.jsx";
 
 /* ── Get AI to set it up: the GENERAL agent walks the person through the card (taskuary/aisetup.py start_walk - the owner,
@@ -3966,6 +3967,12 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
             title={`${chats ? "Teams chats" : "Mail and calendar"} stop syncing until you sign in again - Undo puts it back. Nothing already here is lost.`}>Sign out</Button>
           {/* choosing it signs in again with the one more permission (or without it) - the code to type comes up here */}
           {!plain && <AllowFiles checked={files} disabled={busy} hint={MS_FILES_HINT} onChange={(v) => { setFiles(v); start(v); }} />}
+          {/* a sign-in from before Taskuary asked for contacts / people (peoplesearch.missing): searching for someone skips them */}
+          {!!conn.PeopleMissing?.length && (
+            <Typography variant="caption" sx={{ color: DIM, flexBasis: "100%" }}>
+              {PEOPLE_MISSING(chats ? "the people you write with most" : "your contacts")} Sign out and sign in again to add them.
+            </Typography>
+          )}
         </Box>
       ) : flow ? (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>

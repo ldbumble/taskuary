@@ -2,8 +2,9 @@
 should show up... I don't remember the email").
 
 One search over everyone Taskuary knows: who wrote in (store.people), who the owner wrote to or copied (people.written_to),
-the org chart (orgchart.chart), the people a connected directory named (Microsoft Graph's /me/people and /users, kept under
-DIR_KEY so the next search finds them without the network), and for a chat channel the chats seen on it. A query word matches
+the org chart (orgchart.chart), the people a connected directory named (Microsoft Graph's /me/people, /me/contacts and /users;
+Google's contacts, other contacts and Workspace directory - kept under DIR_KEY so the next search finds them without the network),
+and for a chat channel the chats seen on it - on Teams, the organisation's people as well. A query word matches
 a word of the name, of the company, of the address's mailbox or of its domain - "dynamo" is everyone at dynamo.example or at
 Dynamo Freight, "gail" is Gail Moreno - and the matches are ranked by how often and how lately the owner wrote with them.
 
@@ -45,6 +46,7 @@ def remember(store, found: list) -> int:
         old = by.get(e)
         row = {'email': e, 'name': f.get('name') or (old or {}).get('name') or '', 'company': f.get('company') or (old or {}).get('company') or '',
                'title': f.get('title') or (old or {}).get('title') or ''}
+        if st := f.get('staff') or (old or {}).get('staff'): row['staff'] = st       # whose organisation: a Teams chat can open with them
         if row != old: n += 1
         by[e] = row
     if n: store.set_setting(DIR_KEY, json.dumps(list(by.values())[-DIR_CAP:]), 'directory')
@@ -55,6 +57,7 @@ def known(store, channel: str = 'email') -> list:
     """Everyone a search may offer on `channel`: [{to, name, company, title, n, last, source}]. Email merges every source by
     address; a chat channel offers the chats seen on it (their id is what a send takes)."""
     channel = (channel or 'email').lower()
+    if channel == 'teams': return _chats(store, channel) + _colleagues(store)
     if channel != 'email': return _chats(store, channel)
     from . import orgchart
     from .people import written_to
@@ -73,6 +76,19 @@ def known(store, channel: str = 'email') -> list:
     from .ingest import owner_addresses
     own = {a.lower() for a in owner_addresses(store)}
     return [r for e, r in out.items() if e not in own]
+
+
+def _colleagues(store) -> list:
+    """On Teams, the organisation's people a Microsoft directory named, as well as the chats seen (the owner, 2026-10-27: "search the list
+    of people you can message"): picking one sends into the 1:1 chat with them, opened if there is none yet (outbound.one_on_one). Only
+    when a Teams card is signed in as the owner - an app may not post into a chat at all (outbound.NO_SENDER)."""
+    from .outbound import as_person
+    if not any(as_person(store, c) for c in store.connectors_by_type('teams')): return []
+    from .ingest import owner_addresses
+    own = {a.lower() for a in owner_addresses(store)} | {str(json.loads(c.get('ConfigJson') or '{}').get('account') or '').lower()
+                                                        for c in store.connectors_by_type('teams')}
+    return [{'to': r['email'], 'name': r.get('name') or '', 'company': r.get('company') or '', 'title': r.get('title') or '', 'n': 0, 'last': '',
+             'source': 'directory'} for r in directory_known(store) if r.get('staff') == 'microsoft' and r['email'] not in own]
 
 
 def _chats(store, channel: str) -> list:
@@ -147,8 +163,14 @@ def ai_pick(store, q: str, rows: list, brain=None) -> list:
 
 
 # ---- connected directories ----------------------------------------------------------------------------------------------------
+# Microsoft: /me/people (People.Read), /me/contacts (Contacts.Read) and the organisation's /users (User.ReadBasic.All on a Teams sign-in).
+# Google, on a Gmail card signed in with Google (googlecal.py): the account's contacts, the ones Gmail saved by itself, and a Workspace
+# directory. A sign-in that was not granted one of them skips it - it never asks and fails, and nothing here is an error.
+# An address book is read whole and matched here (its search is weaker than score), held ten minutes like a query's answer.
 
-_DIR_HELD, DIR_TTL = {}, 600
+_DIR_HELD, _LISTS, DIR_TTL = {}, {}, 600
+G_PEOPLE = 'https://people.googleapis.com/v1'
+def forget(): _DIR_HELD.clear(); _LISTS.clear()
 
 
 def _graph(tok: str, path: str, params: dict, eventual=False) -> list:
@@ -159,31 +181,118 @@ def _graph(tok: str, path: str, params: dict, eventual=False) -> list:
     return (r.json() or {}).get('value') or [] if r.status_code == 200 else []
 
 
+def _pages(url: str, tok: str, params: dict, key: str, next_key: str, cap: int = 3000) -> list:
+    "Every page of a list (Graph's @odata.nextLink, Google's nextPageToken) up to `cap` rows; a refusal ends it with what it had."
+    import requests
+    out, h = [], {'Authorization': f'Bearer {tok}'}
+    while url and len(out) < cap:
+        r = requests.get(url, headers=h, params=params, timeout=10)
+        if r.status_code != 200: break
+        j = r.json() or {}
+        out += j.get(key) or []
+        nxt = j.get(next_key)
+        if next_key == 'nextPageToken': params = {**params, 'pageToken': nxt} if nxt else None; url = url if nxt else None
+        else: url, params = nxt, None
+    return out
+
+
+def _held(key, fetch) -> list:
+    if (h := _LISTS.get(key)) and time.time() - h[0] < DIR_TTL: return h[1]
+    rows = fetch()
+    _LISTS[key] = (time.time(), rows)
+    return rows
+
+
+def matching(rows: list, q: str) -> list:
+    "The rows of an address book every word of `q` fits (score), as the directory's {email, name, company, title} rows."
+    ws = _words(q)
+    return [r for r in rows if ws and score(ws, {'to': r['email'], 'name': r.get('name'), 'company': r.get('company')})]
+
+
 def graph_people(tok: str, q: str, me: bool) -> list:
     """Microsoft's directory for `q`: the signed-in person's own relevant people (/me/people - outside contacts included, with their
-    company) and the organisation's users (/users?$search). A sign-in whose scope reaches neither answers nothing, never an error."""
+    company) and the organisation's users (/users?$search). A sign-in whose scope reaches neither answers nothing, never an error.
+    `staff` marks the organisation's own people: a Teams chat can be opened with them (outbound.one_on_one)."""
     q = re.sub(r'["\\]', '', q)[:60]
     out = []
     if me:
-        for j in _graph(tok, '/me/people', {'$search': f'"{q}"', '$top': 15, '$select': 'displayName,scoredEmailAddresses,companyName,jobTitle'}):
+        for j in _graph(tok, '/me/people', {'$search': f'"{q}"', '$top': 15,
+                                            '$select': 'displayName,scoredEmailAddresses,companyName,jobTitle,personType'}):
+            org = (j.get('personType') or {}).get('subclass') == 'OrganizationUser'
             for a in (j.get('scoredEmailAddresses') or [])[:1]:
-                out.append({'email': a.get('address'), 'name': j.get('displayName'), 'company': j.get('companyName'), 'title': j.get('jobTitle')})
+                out.append({'email': a.get('address'), 'name': j.get('displayName'), 'company': j.get('companyName'), 'title': j.get('jobTitle')}
+                           | ({'staff': 'microsoft'} if org else {}))
     for j in _graph(tok, '/users', {'$search': f'"displayName:{q}" OR "mail:{q}"', '$top': 15,
                                      '$select': 'displayName,mail,userPrincipalName,companyName,jobTitle'}, eventual=True):
         out.append({'email': j.get('mail') or j.get('userPrincipalName'), 'name': j.get('displayName'), 'company': j.get('companyName'),
-                    'title': j.get('jobTitle')})
+                    'title': j.get('jobTitle'), 'staff': 'microsoft'})
     return [f for f in out if '@' in str(f.get('email') or '')]
 
 
+def graph_contacts(tok: str, q: str, key) -> list:
+    "The signed-in person's Outlook contacts that fit `q` - by name, company or any of their addresses (Contacts.Read)."
+    from .channels import GRAPH
+    def book():
+        cs = _pages(f'{GRAPH}/me/contacts', tok, {'$top': 500, '$select': 'displayName,emailAddresses,companyName,jobTitle'}, 'value', '@odata.nextLink')
+        return [{'email': str(a.get('address') or '').strip(), 'name': c.get('displayName') or a.get('name') or '', 'company': c.get('companyName') or '',
+                 'title': c.get('jobTitle') or ''} for c in cs for a in (c.get('emailAddresses') or [])[:3] if '@' in str(a.get('address') or '')]
+    return matching(_held(('contacts', key), book), q)
+
+
+def _gperson(p: dict, staff=False) -> list:
+    "A Google People API person as directory rows, one per address."
+    name = next((n.get('displayName') for n in p.get('names') or [] if n.get('displayName')), '')
+    o = (p.get('organizations') or [{}])[0]
+    return [{'email': e['value'], 'name': name, 'company': o.get('name') or '', 'title': o.get('title') or ''} | ({'staff': 'google'} if staff else {})
+            for e in (p.get('emailAddresses') or [])[:3] if '@' in str(e.get('value') or '')]
+
+
+def google_people(tok: str, q: str, granted: str, key) -> list:
+    """A Google account's people for `q`: its contacts (people.connections), the ones Gmail saved by itself (otherContacts) and, on a
+    Workspace account, its organisation's directory (searchDirectoryPeople). `granted` is what the sign-in was given ('' unknown: ask)."""
+    from .googlecal import G_CONTACTS, G_DIRECTORY, G_OTHER
+    has = lambda s: not granted or s in granted.split()
+    out = []
+    if has(G_CONTACTS):
+        out += matching(_held(('gcontacts', key), lambda: [r for p in _pages(f'{G_PEOPLE}/people/me/connections', tok, {
+            'personFields': 'names,emailAddresses,organizations', 'pageSize': 1000}, 'connections', 'nextPageToken') for r in _gperson(p)]), q)
+    if has(G_OTHER):
+        out += matching(_held(('gother', key), lambda: [r for p in _pages(f'{G_PEOPLE}/otherContacts', tok, {
+            'readMask': 'names,emailAddresses', 'pageSize': 1000}, 'otherContacts', 'nextPageToken') for r in _gperson(p)]), q)
+    if has(G_DIRECTORY):
+        import requests
+        r = requests.get(f'{G_PEOPLE}/people:searchDirectoryPeople', headers={'Authorization': f'Bearer {tok}'}, timeout=5,
+                         params={'query': q[:60], 'readMask': 'names,emailAddresses,organizations', 'pageSize': 15,
+                                 'sources': ['DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE', 'DIRECTORY_SOURCE_TYPE_DOMAIN_CONTACT']})
+        if r.status_code == 200: out += [x for p in (r.json() or {}).get('people') or [] for x in _gperson(p, staff=True)]
+    return out
+
+
+def missing(cfg: dict, kind: str) -> list:
+    """The people-search permissions this card's sign-in was not given - [] when it has them all or never said what it has. The card
+    says that signing in again adds them (a sign-in from before Taskuary asked for them keeps working without)."""
+    if isinstance(cfg, str):
+        try: cfg = json.loads(cfg or '{}')
+        except ValueError: return []
+    if kind == 'gmail':
+        from .googlecal import G_CONTACTS
+        g = str((cfg or {}).get('google_scope') or '')
+        return [G_CONTACTS] if g and (cfg or {}).get('google_refresh_token') and G_CONTACTS not in g.split() else []
+    from .msauth import PEOPLE_SCOPES, granted
+    if (cfg or {}).get('auth') != 'user': return []
+    return [s for s in PEOPLE_SCOPES.get(kind, ()) if granted(cfg, s) is False]
+
+
 def directory(store, q: str) -> list:
-    """Every connected Microsoft account's directory asked for `q` (Outlook and Teams cards), each answer held ten minutes and
-    remembered (DIR_KEY). Nothing connected, the demo, or a query under two letters: []."""
+    """Every connected account's directory asked for `q` - the Outlook and Teams cards' Microsoft sign-ins and a Gmail card's Google
+    one - each answer held ten minutes and remembered (DIR_KEY). Nothing connected, the demo, or a query under two letters: []."""
     from . import demo
     q = ' '.join(str(q or '').split())
     if len(q) < 2 or demo.enabled(): return []
     key = q.lower()
     if (held := _DIR_HELD.get(key)) and time.time() - held[0] < DIR_TTL: return held[1]
     from .channels import graph_creds, graph_token
+    from .msauth import granted
     found = []
     for c in store.connectors_by_type('outlook') + store.connectors_by_type('teams'):
         if not c.get('Active'): continue
@@ -191,8 +300,18 @@ def directory(store, q: str) -> list:
             c = store.get_connector(int(c['ConnectorId']), with_secret=True) or c
             cfg, sec, _ = graph_creds(store, c)
             if not (sec or cfg.get('client_id')): continue
-            found += graph_people(graph_token(cfg, sec), q, cfg.get('auth') == 'user')
+            tok, user = graph_token(cfg, sec), cfg.get('auth') == 'user'
+            found += graph_people(tok, q, user and granted(cfg, 'People.Read') is not False)
+            if user and c['Type'] == 'outlook' and granted(cfg, 'Contacts.Read') is not False: found += graph_contacts(tok, q, c['ConnectorId'])
         except Exception as e: logger.debug(f'people search: {c.get("Name")} directory skipped - {e}')
+    for c in store.connectors_by_type('gmail'):
+        if not c.get('Active'): continue
+        try:
+            cfg = json.loads((store.get_connector(int(c['ConnectorId']), with_secret=True) or c).get('ConfigJson') or '{}')
+            if not cfg.get('google_refresh_token'): continue
+            from .googlecal import access_token
+            found += google_people(access_token(cfg), q, str(cfg.get('google_scope') or ''), c['ConnectorId'])
+        except Exception as e: logger.debug(f'people search: {c.get("Name")} Google people skipped - {e}')
     _DIR_HELD[key] = (time.time(), found)
     if found: remember(store, found)
     return found
@@ -202,7 +321,7 @@ def search(store, q: str, channel: str = 'email', ai: bool = False, brain=None, 
     """{'data': ranked people, 'ai': True when the model chose them}. `ai` asks the model only when the plain match is empty or the
     words describe someone - the caller asks for it separately, so typing never waits on a model."""
     channel = (channel or 'email').lower()
-    if channel == 'email' and len(_words(q)): directory(store, q)
+    if channel in ('email', 'teams') and len(_words(q)): directory(store, q)
     rows = known(store, channel)
     hits = plain(rows, q, top)
     if ai and (not hits or describes(q)):

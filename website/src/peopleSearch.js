@@ -50,3 +50,6 @@ export function runSearch(get, q, channel, set, { wait = SEARCH_MS, aiWait = AI_
   return () => { on = false; clearTimeout(id); clearTimeout(ai); };
 }
 export const forgetAi = () => aiSaid.clear();
+
+// a card whose sign-in is from before Taskuary asked for contacts (peoplesearch.missing, the card's PeopleMissing) says what the search skips
+export const PEOPLE_MISSING = (what) => `Searching for someone doesn't reach ${what} yet - this sign-in is from before Taskuary asked for them.`;

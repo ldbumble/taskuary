@@ -25,8 +25,9 @@ test("a press is heard once it settles, so the advice is read again for the item
   acted("12:approve"); assert.deepEqual(heard, ["send", "12:approve"], "a card's own button says so the same way");
   off(); put("t", null);
   // ...and the page and a phone's row both listen, as does the draft's own Send under the card
-  assert.match(read("AssistantView.jsx"), /onPressed\(\(\) => \{ if \(onTableRef\.current\) readAdvice\(onTableRef\.current, true\); \}\)/);
-  assert.match(read("CanvasItem.jsx"), /onPressed\(\(\) => read\(\)\)/);
+  // ...every press but Next, which puts the item down (the overnight walk, 2026-10-26: adviceOncePerPress.test.mjs)
+  assert.match(read("AssistantView.jsx"), /onPressed\(\(id\) => \{ if \(onTableRef\.current && !\/\(\^\|:\)next\$\/\.test\(String\(id \|\| ""\)\)\) readAdvice\(onTableRef\.current, true\); \}\)/);
+  assert.match(read("CanvasItem.jsx"), /onPressed\(\(id\) => \{ if \(!\/\(\^\|:\)next\$\/\.test\(String\(id \|\| ""\)\)\) read\(\); \}\)/);
   assert.equal((read("ReviewDecision.jsx").match(/finally \{ acted\(no\(/g) || []).length, 4, "decide, decideBoth, redraft and copy");
 });
 

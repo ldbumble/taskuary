@@ -1256,13 +1256,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const codeRun = !!fromWorkflow?.byCode && !term?.alive && !generalStarted && !detail?.transcript && !report;
   // ...and Stop and save pressed here holds Close out open - writing, failed or drafted - so the draft replaces the pending block where
   // it stood, never a jump to whichever step the computed focus picks once the job is done
-  const stage = sessionView ? "agent" : (openStage || (pressedHere || writeup ? "reply" : peek ? "task" : focusStage({
+  const restStage = sessionView ? "agent" : (pressedHere || writeup ? "reply" : peek ? "task" : focusStage({
     kind: t?.Kind, task: taskState, agent: codeRun ? null : agentState, reply: replyState, hasSender: !!replyMessage,
     // what the agent is parked ON decides whether the proposal or the agent opens: an agent
     // waiting for approval is released by the very proposal sitting in stage 3
     proposal: proposals.length > 0, agentSub: term ? subState(term) : null, news: !!news,
     emails: emailsWaiting, record: hasRecord, out: wentOut(detail?.reviews),
-  })));
+  }));
+  const stage = sessionView ? "agent" : (openStage || restStage);
   // ...which of the work column's two halves is open: the stage, or - where the stage is the task itself, now always open on the
   // left - what the task is for (taskLayout.workPane). Presentation only: every press still reads `stage`.
   // ...and Close out under a Result on a task nobody sent: what closes it, the write-up's progress under the Result (taskLayout.closeOut)
@@ -1296,15 +1297,20 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     catch (e) { setErr(`That didn't go through - ${opError(e, "Taskuary didn't answer")}.${word ? ` Press ${word} again.` : ""}`); }
   };
   // the one white section on the shaded body (taskLayout.focusOf); a live session has no shade and no focus - it is the page
-  const focus = focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, pane, waiting: !!waitFor,
-    list: !!(detail?.batch || t?.DoneWhen || (!t?.DoneWhen && todo.length)) });
+  const list = !!(detail?.batch || t?.DoneWhen || (!t?.DoneWhen && todo.length));
+  const focus = focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, pane, waiting: !!waitFor, list });
   const chatBelow = focus === "agent" && workspaceMode === "general" && pane === "agent" && !liveSession;   // its chat joins the focus under it
   // THE MAIN VIEW AND ITS DRAWERS (taskLayout.mainOf): Came from on the left where the work is the page, Agent and Close out on the right
   // where the task is; a phone's narrow body stays one stacked page. A move that changes where the task is up to shuts whichever was out
   const stacked = !sessionView && bodyW > 0 && bodyW < STACK_BELOW;
   // ...read off ONE STAGE (stages.json, the owner 2026-10-26: "are these modes defined well anywhere besides the UI"): the focus and what
   // Close out holds make it, and the stage names the main view and whether the right tab is lit - the server and the Assistant read the same
-  const taskStage = stageOf({ focus, drafted: replyHas, closed: ["done", "dropped"].includes(t?.Status) });
+  // ...and a section OPENED BY HAND is not where the task is up to (2026-10-27, the overnight walk): Agent work clicked open over a draft
+  // waiting for Send made the stage "to start", the page flipped to the task view and shut both drawers - the click hid the draft AND the
+  // agent it asked for. The stage reads the pane the task would open on; the pick only opens its section in the view it is in
+  const restFocus = openStage ? focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, waiting: !!waitFor, list,
+    pane: waitFor ? "" : workPane({ stage: restStage, kind: t?.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas }) }) : focus;
+  const taskStage = stageOf({ focus: restFocus, drafted: replyHas, closed: ["done", "dropped"].includes(t?.Status) });
   const main = mainView({ stage: taskStage, sessionView, stacked });
   const fromDrawer = main === "work", workDrawer = main === "task", workLit = drawerLit({ main, stage: taskStage });
   // ...and a lit tab names the move: the reply and who to ("Close out · reply to Priya Shah"), else what the drawer holds

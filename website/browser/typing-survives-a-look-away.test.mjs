@@ -41,7 +41,11 @@ test("a CC added to a reply draft is still on it after another row", { timeout: 
   await clickRow(page, invoice);
   await page.waitForFunction(() => [...document.querySelectorAll("[data-tq-closeout] [role=button]")].some((b) => /loop someone in/.test(b.textContent)), { timeout: 20000 });
   await page.evaluate(() => [...document.querySelectorAll("[data-tq-closeout] [role=button]")].find((b) => /loop someone in/.test(b.textContent)).click());
-  await sleep(500); await page.keyboard.type("priya");
+  // ...a name nobody matched is said, never dropped in silence
+  await sleep(500); await page.keyboard.type("nobody we know"); await page.keyboard.press("Enter"); await sleep(400);
+  assert.match(await page.$eval("[data-tq-closeout]", (e) => e.innerText), /pick a person or type their email address/);
+  for (let i = 0; i < 14; i++) await page.keyboard.press("Backspace");
+  await page.keyboard.type("priya");
   await page.waitForSelector(".MuiAutocomplete-popper [role=option]", { timeout: 10000 });
   await page.keyboard.press("ArrowDown"); await page.keyboard.press("Enter"); await sleep(800);
   assert.match(await cc(), /pshah@northwind\.example/, "the CC did not take");

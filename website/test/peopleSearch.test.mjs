@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { describes, forgetAi, personLine, runSearch, wantsAi, withFound } from "../src/peopleSearch.js";
+import { describes, forgetAi, PEOPLE_MISSING, personLine, runSearch, wantsAi, withFound } from "../src/peopleSearch.js";
 
 const DYN = [{ to: "vhale@dynamo.example", name: "Victor Hale", company: "Dynamo Freight" }, { to: "lortiz@dynamo.example", name: "Lena Ortiz", org: "dynamo" }];
 const tick = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -51,4 +51,13 @@ test("To, Cc and Hand-off search the server; the chat pickers and the email list
   assert.match(handoff, /<ContactPicker[^>]*channel=\{channel\}/);
   assert.match(sheet, /const found = usePeopleSearch\(typed, "email"\)/);
   assert.match(sheet, /const found = usePeopleSearch\(typed, channel\)/);
+});
+
+test("a card whose sign-in predates contacts says what the search skips, and how to add it - no new button", () => {
+  assert.match(PEOPLE_MISSING("your contacts"), /^Searching for someone doesn't reach your contacts yet - this sign-in is from before/);
+  const cv = fs.readFileSync(new URL("../src/ConnectorsView.jsx", import.meta.url), "utf8");
+  const g = fs.readFileSync(new URL("../src/GoogleCalendar.jsx", import.meta.url), "utf8");
+  assert.match(cv, /\{!!conn\.PeopleMissing\?\.length && \(\s*<Typography variant="caption"/);
+  assert.match(cv, /Sign out and sign in again to add them\./);
+  assert.match(g, /if \(signedIn && !detail && conn\.PeopleMissing\?\.length\)\s*return <Typography data-tq-google-people=""/);
 });

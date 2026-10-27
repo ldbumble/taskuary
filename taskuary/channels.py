@@ -60,7 +60,7 @@ def graph_creds(store, c):
     ocfg = _cfg(o)
     out = {**ocfg, **{k: v for k, v in cfg.items() if v}, '_cid': o['ConnectorId'], '_kind': 'outlook'}
     # the same person's Outlook sign-in, asked for chats: one sign-in, two tokens (msauth.access_token keys on the scope)
-    if ocfg.get('auth') == 'user': out |= {'auth': 'user', '_scope': msauth.TEAMS_SCOPES, '_for': 'teams'}
+    if ocfg.get('auth') == 'user': out |= {'auth': 'user', '_scope': msauth.TEAMS_CHAT, '_for': 'teams'}
     return out, sec or o.get('Secret'), True
 
 

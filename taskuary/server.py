@@ -6246,6 +6246,10 @@ def connectors(request: Request):
     # GatewayBuiltIn: this build ships the organisation gateway's address, so its card's address field is optional (llm.gateway_base)
     from .llm import OPENAI_COMPATIBLE
     rows = [c | {'GatewayBuiltIn': bool(OPENAI_COMPATIBLE['hipaa_ai'][0])} if c['Type'] == 'hipaa_ai' else c for c in rows]
+    # PeopleMissing: the contacts/people permissions this card's sign-in predates - the card says signing in again adds them
+    from .peoplesearch import missing
+    rows = [c | {'PeopleMissing': missing(c.get('ConfigJson'), c['Type'])} if c['Type'] in ('outlook', 'teams', 'gmail') else c
+            for c in rows]
     if guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
         rows = [guard.without_config_secrets(c) for c in rows]
     rows = [guard.masked_config(c) for c in rows]
@@ -6832,6 +6836,8 @@ def ms_poll(cid: int, body: dict):
             try: put_owner(OwnerBody(name=who.get('name') or who['account'].split('@')[0], email=who.get('account') or None))
             except Exception as e: logger.debug(f'ms signin: the owner was not named from the account - {e}')
     store.audit('connector', cid, 'ms_signin', ACTOR, detail={'account': who['account']})
+    from . import peoplesearch
+    peoplesearch.forget()                     # a sign-in that now reads contacts is asked by the next search, not in ten minutes
     from .docsync import sync_connections
     sync_connections(store, ACTOR)
     # signed in = connected: the first sync starts now, so mail is on the Timeline by the time

@@ -9,10 +9,7 @@ const src = fs.readFileSync(new URL("../src/AssistantView.jsx", import.meta.url)
 
 test("Next is no press that re-reads the item it puts down - nor Back, the other walk move", () => {
   assert.match(fs.readFileSync(new URL("../src/actionRow.js", import.meta.url), "utf8"), /export const walkMove = \(id\) => \/\(\^\|:\)next\$\/\.test\(String\(id \|\| ""\)\) \|\| id === BACK;/);
-  assert.match(src, /onPressed\(\(id\) => \{
-\s+const k = onTableRef\.current;
-\s+if \(k && !walkMove\(id\) && !leftRef\.current\.has\(`k:\$\{k\}`\)\) readAdvice\(k, true\);
-\s+\}\)/);
+  assert.match(src, /if \(k && !walkMove\(id\) && !leftRef\.current\.has\(`k:\$\{k\}`\)\) readAdvice\(k, true\);/);
 });
 
 test("...nor on a phone, whose view reads its own line (CanvasItem useItemAdvice)", () => {

@@ -2481,9 +2481,14 @@ def continue_work(task_id: int, body: ContinueBody = None):
         news = continuity.news_block(store, task_id)
         if not general.provider_options(store): raise HTTPException(422, f"Connect an AI under {words.name('ai')} to continue this work.")
         if task.get('Status') not in ('open', 'waiting', 'in_progress'): store.update_task(task_id, {'Status': 'in_progress'}, ACTOR)
+        # ...and the owner's words are on the conversation BEFORE this answers (the owner, 0.3.9.51: "I did Continue, filled it out and
+        # nothing happened"): written by the turn once its CLI had started, the page's read at the answer missed them, and they showed
+        # only on a poll seconds later, under an agent already "working"
+        said = (note or continuity.RESUME_PROMPT) if (note or imgs) else ''
+        if said: store.add_comment(task_id, 'owner', general.USER_TYPE, said)
         def go():
             try: general.start_session(store, task_id, actor=ACTOR).send_prompt(note or continuity.RESUME_PROMPT, imgs or None, as_owner=bool(note or imgs), echo=bool(note),
-                                                                              delivery_instructions=news or None)
+                                                                              delivery_instructions=news or None, kept=bool(said))
             except Exception as e: _walk_cannot(task_id, f'The session could not continue: {e}. Your saved conversation is still here.')
             finally: general.OPENING.discard(task_id)
         # marked HERE, as /resume and the walk are: the page reloads the conversation the moment this answers, before the thread has

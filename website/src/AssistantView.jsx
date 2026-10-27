@@ -3481,6 +3481,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                 onClose={() => { continueNote.current = null; setContinueOn(null); }}
                 onPress={() => setContinuingTid(continueOn.task.TaskId)} onFail={() => setContinuingTid(null)}
                 onDone={() => {
+                  // ...the task view reads its conversation again at once: the note is on it by now (TaskPage hears tq-continued)
+                  window.dispatchEvent(new CustomEvent("tq-continued", { detail: { tid: continueOn.task.TaskId } }));
                   // NO RECEIPT: the session on the table shows it working - "Continuing with your note..." under it was clutter
                   // (the owner, 2026-10-13). ...and the table STAYS on it: you continued it to watch it work, not to be walked past it (the owner,
                   // 2026-09-30: "the session started but then closed and moved on without hitting next"); the view shows the

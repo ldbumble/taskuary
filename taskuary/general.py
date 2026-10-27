@@ -908,7 +908,7 @@ class GeneralSession:
 
     def send_prompt(self, text: str, attachments=None, connector_id=None, model=None, echo=True,
                     pick=None, trace=None, cancel=None, as_owner=True,
-                    delivery_instructions: str = None) -> str:
+                    delivery_instructions: str = None, kept: bool = False) -> str:
         """`as_owner=False` is an instruction to the assistant that the OWNER did not say - used to
         make it open a conversation (the walk, a setup). It is not written to the history and
         not echoed, because putting words in the owner's mouth in their own transcript is a lie the
@@ -936,7 +936,7 @@ class GeneralSession:
             if echo and as_owner: self._emit(f'\x1b[1;34myou>\x1b[0m {text}\r\n')
             # the owner's words are kept FIRST, and the run says it is working only once it has an AI: with none, the message was
             # lost under "Started the selected agent" and a `working` record for an agent that never could start (2026-10-22 walk)
-            if as_owner: self.store.add_comment(self.task_id, 'owner', USER_TYPE, text)
+            if as_owner and not kept: self.store.add_comment(self.task_id, "owner", USER_TYPE, text)   # `kept`: the door wrote them already (continue-work)
             if not self.pick:
                 self.trace = []; self.trace_revision += 1
                 # ...in plain words: the AI CLI agents page's own name read "CLI agent" on the failed card (the 2026-10-21 audit, R2)

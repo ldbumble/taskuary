@@ -620,7 +620,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
 
 export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, dock = false, toolsAt = null,
   dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  onDockNewChat, noAiSaid = false, noTools = false, noComposer = false, liveSid = "" }) {
+  onDockNewChat, noAiSaid = false, noTools = false, noComposer = false, liveSid = "", reread = 0 }) {
   const [data, setData] = useState(null);
   const [connectorId, setConnectorId] = useState("");
   const [model, setModel] = useState("");
@@ -739,14 +739,19 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     }, 2500);
     return () => { live = false; clearInterval(timer); };
   }, [busy, task.TaskId, data?.messages, onSession]);
+  // ...and what a read brings is handed to the standing thread (a revision bump), as the poll does: taken into `data` alone, the owner's
+  // Continue note waited for the next poll to show (the owner, 0.3.9.51: "I did Continue, filled it out and nothing happened")
   const refresh = useCallback(() => {
-    api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => accept(r.data)).catch(() => {});
+    api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => { accept(r.data); setRevision((k) => k + 1); }).catch(() => {});
   }, [accept, task.TaskId]);
   // A SESSION ANOTHER DOOR STARTED (`liveSid`, the page's live one): the canvas's Continue card, the Assistant, the phone. The page
   // adopted it, but this conversation had loaded before it existed and polls only while it knows of a turn, so a Continue with a note
   // showed the old turns under an agent that had already asked its question (the agents walk, 2026-10-26). Read again when they differ.
   const loaded = !!data, knownSid = data?.session?.sid || "";
   useEffect(() => { if (loaded && liveSid && knownSid !== liveSid) refresh(); }, [loaded, liveSid, knownSid, refresh]);
+  // ...and at once when that door says it answered (`reread`, bumped by the page): the note is on the conversation by then, and the
+  // session it starts is seconds away
+  useEffect(() => { if (loaded && reread) refresh(); }, [reread]);  // eslint-disable-line react-hooks/exhaustive-deps
   const pasted = (e) => {
     const images = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
     if (images.length) { e.preventDefault(); upload(images); }

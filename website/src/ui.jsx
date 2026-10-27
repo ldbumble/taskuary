@@ -53,6 +53,7 @@ import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import { choice, label as btnLabel } from "./buttons.js";   // buttons.json's words; theme.jsx owns `label`
 import { asUtc, setTz, fmtTime } from "./dates.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
+import { readContacts } from "./contacts.js";
 export { agentAssignee, assignedAgent, assigneeLabel } from "./agentIdentity.js";
 import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2, label } from "./theme.jsx";
 
@@ -1843,9 +1844,10 @@ export const FilterPills = ({ options, value, onChange }) => (
 // is chosen.
 //
 // freeSolo on purpose: the right recipient is often somebody who has never written to you.
+// ...one read shared by every picker drawn within a minute (contacts.js)
 export const useContacts = () => {
   const [people, setPeople] = useState([]);
-  useEffect(() => { api.get("/api/people").then(({ data }) => setPeople(data.data || [])).catch(() => {}); }, []);
+  useEffect(() => { let on = true; readContacts((u) => api.get(u)).then((p) => { if (on) setPeople(p); }).catch(() => {}); return () => { on = false; }; }, []);
   return people;
 };
 

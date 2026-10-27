@@ -2468,6 +2468,11 @@ def continue_work(task_id: int, body: ContinueBody = None):
             try: general.start_session(store, task_id, actor=ACTOR).send_prompt(note or continuity.RESUME_PROMPT, imgs or None, as_owner=bool(note or imgs), echo=bool(note),
                                                                               delivery_instructions=news or None)
             except Exception as e: _walk_cannot(task_id, f'The session could not continue: {e}. Your saved conversation is still here.')
+            finally: general.OPENING.discard(task_id)
+        # marked HERE, as /resume and the walk are: the page reloads the conversation the moment this answers, before the thread has
+        # a session, read "nothing running" and never looked again - Continue and Try again left the new turn unseen (the agents walk,
+        # 2026-10-26)
+        general.OPENING.add(task_id)
         threading.Thread(target=go, daemon=True, name=f'continue-{task_id}').start()
         store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': 'general', 'note': bool(note)})
         from . import outcomes

@@ -405,6 +405,10 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   const canCode = useCapabilities().coding;                   // no coding tool connected: coding is not offered (capabilities.js)
   const [policies, setPolicies] = useState(null);
   const [settings, setSettings] = useState([]);
+  // A PAGE THAT READS ITS OWN (the canvas's one page - About you, a document, Updates) needs none of the rules, settings and notes below:
+  // each document opened from Settings > Docs read all seven of them first, and drew nothing until they came (the overnight setup walk,
+  // 2026-10-26)
+  const own = ["about", "docs", "updates"].includes(only?.page);
   // ...the asked knob in view once the rows are in, once per knob - never again while the owner works on the page
   // ...and again when a link names it again (`at`, the request's number): the same knob asked twice was in view only the first time
   const knobShown = useRef("");
@@ -463,7 +467,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   const brainOptions = useMemo(
     () => normalizeBrainOptions(brains, agentModels, selectedBrains),
     [brains, agentModels, selectedBrains]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (!own) load(); }, [load, own]);
 
   // EVERY WRITE ON THIS PAGE GOES THROUGH `run`: it says "Saved", or why not in words, and the page
   // re-reads either way so what you see is what is stored - a refused switch flips back.
@@ -710,7 +714,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
 
   // A spinner that never stops is the worst thing this page can show: on the install where
   // /api/settings answered 500, Settings span for ever and said nothing (2026-09-22).
-  if (!policies) return err
+  if (!policies && !own) return err
     ? <Alert severity="error" sx={{ m: 1 }}>{err}</Alert>
     : <CircularProgress size={22} sx={{ m: 4 }} />;
 

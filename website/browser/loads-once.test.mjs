@@ -35,8 +35,22 @@ test("a start reads the first-run state, the build and today's meetings once eac
   await sleep(1500);
   const docs = g.since(at).filter((p) => p.startsWith("/api/doc/"));
   assert.deepEqual(docs, [], "the list of documents reads none of them");
-  // ...and a document opened from it is still read and drawn
+  // ...and a document opened from it is still read and drawn - without the rules, settings and notes the other pages show
+  const open = g.n;
   await page.evaluate(() => [...document.querySelectorAll('[data-tq-browse="settings"] [data-tq-browse-card]')].find((c) => /JOB\.md/.test(c.innerText)).click());
   await page.waitForFunction(() => document.querySelector('[data-tq-browse="settings"] [data-tq-browse-one] textarea')?.value.length > 0, { timeout: 20000 });
+  await sleep(1000);
+  const opened = g.since(open);
+  assert.ok(opened.includes("/api/doc/job"), `the document is read: ${opened}`);
+  for (const p of ["/api/policies", "/api/memory", "/api/brains", "/api/mailboxes"]) assert.ok(!opened.includes(p), `${p} is not read to open a document`);
+  // ...while Configuration, which shows them, still reads them
+  await page.evaluate(() => document.querySelector('[data-tq-browse="settings"] [data-tq-browse-back]').click());
+  await page.evaluate(() => [...document.querySelectorAll('[data-tq-browse="settings"] [data-tq-browse-chip]')].find((c) => c.innerText.trim() === "Configuration").click());
+  await page.waitForFunction(() => document.querySelectorAll('[data-tq-browse="settings"] [data-tq-browse-card]').length > 2, { timeout: 20000 });
+  const cfg = g.n;
+  await page.evaluate(() => document.querySelector('[data-tq-browse="settings"] [data-tq-browse-card]').click());
+  await page.waitForFunction(() => document.querySelector('[data-tq-browse="settings"] [data-tq-browse-one]')?.innerText.length > 40, { timeout: 20000 });
+  await sleep(1000);
+  assert.ok(g.since(cfg).includes("/api/policies"), "Configuration still reads what it shows");
   assert.deepEqual(errors, []);
 });

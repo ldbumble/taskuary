@@ -400,6 +400,7 @@ def notices(s, n=9):
 
 
 def fyis(s): return [i for i in funnel.build(s)['items'] if i.get('kind') == 'fyi']
+def unread(s): return [i for i in funnel.build(s, keep_surfaced=True)['items'] if i.get('kind') == 'fyi']     # the batch shown on the table too
 
 
 class TheModelIsToldTheRow(unittest.TestCase):
@@ -602,6 +603,64 @@ class ClearingASet(unittest.TestCase):
             out = concierge.say(s, 'clear the to-dos', key=item['key'], llm=lambda *a, **k: 'CALL: {"kind": "pipe.clear", "params": {"select": {"lane": "yours"}}}')
             self.assertEqual([i['tid'] for i in funnel.build(s)['items']], [tid])
         self.assertNotIn('cleared', out); self.assertIn('own button', out['say'])
+
+    # "Ignore all the FYI, I mean make a mark and read" over a batch of 4 was answered "Marking all four as read." and cleared the 4 on the
+    # table, with the rest waiting behind it (the owner, 2026-10-27: "I asked to mark all read and it did the 4 on the table??"). The model
+    # had only the 4 to count and the card's All read, next to press; ALL is the scope it now chooses
+    def _batch(self):
+        s = store(); notices(s, 9)
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]): card = concierge.surface(s, llm=None)
+        self.assertEqual((card['item']['kind'], len(card['item']['items'])), ('fyis', 4))
+        return s, card['item']
+
+    def test_all_the_fyi_over_a_batch_clears_every_fyi_waiting(self):
+        s, batch = self._batch()
+        seen = []
+        def llm(system, user, **kw):
+            seen.append(system + '\n' + user)
+            return 'CALL: {"kind": "pipe.clear", "params": {"select": {"kind": "fyi"}, "scope": "all"}}'
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'Ignore all the FYI, I mean make a mark and read', key=batch['key'], llm=llm)
+        self.assertIn('of 9 FYI waiting in all', seen[0])                       # the model is told the lane, not only the card
+        self.assertEqual(unread(s), [])
+        self.assertEqual(out['say'].split('.')[0], 'Marked all 9 FYI read')
+        self.assertEqual(out['decision'], {'verb': 'next'})
+        self.assertNotIn('proposal', out)
+
+    def test_these_over_a_batch_clears_only_the_table(self):
+        s, batch = self._batch()
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'mark these read', key=batch['key'],
+                                llm=lambda *a, **k: 'CALL: {"kind": "pipe.clear", "params": {"select": {"kind": "fyi"}, "scope": "table"}}')
+            left = {i['key'] for i in unread(s)}
+        self.assertEqual(len(left), 5); self.assertFalse(left & set(batch['members']))
+        self.assertEqual(out['say'].split('.')[0], 'Marked 4 FYI read')
+        self.assertEqual(out['decision'], {'verb': 'next'})
+
+    def test_a_table_scope_needs_no_select(self):
+        s, batch = self._batch()
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            concierge.say(s, 'these are read', key=batch['key'], llm=lambda *a, **k: 'CALL: {"kind": "pipe.clear", "params": {"scope": "table"}}')
+            self.assertEqual(len(unread(s)), 5)
+
+    def test_a_phone_yes_keeps_the_table_scope(self):
+        s, batch = self._batch()
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]), concierge.delivering(concierge.PHONE):
+            out = concierge.say(s, 'mark these read', key=batch['key'],
+                                llm=lambda *a, **k: 'CALL: {"kind": "pipe.clear", "params": {"select": {"kind": "fyi"}, "scope": "table"}}')
+        self.assertEqual(len(unread(s)), 9)                                         # a phone asks first
+        op = operations.get(s, out['proposal']['id'])
+        self.assertEqual(sorted(op['params']['keys']), sorted(batch['members']))
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            done = server._run_kind(op, None)                                       # the yes: the shared handler
+            self.assertEqual((done['cleared'], len(unread(s))), (4, 5))
+
+    def test_the_tool_offers_the_scope(self):
+        from taskuary import toolcatalog
+        d = toolcatalog.describe('pipe.clear')
+        self.assertIn('`scope`', d); self.assertIn('all (the default', d); self.assertIn('table (only those on the table', d)
+        self.assertEqual(toolcatalog.signature('pipe.clear'), 'pipe.clear(select, scope?)')
+        self.assertIn('scope: all', concierge.WHAT_ABOUT)
 
     def test_next_keeps_the_words_the_model_said_with_it(self):
         s = store(); tid, item = on_table(s)

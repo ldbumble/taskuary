@@ -34,3 +34,15 @@ test("a double-click on Ask sender, Find a time or a ▾ leaves what it opened o
   assert.deepEqual(await up(page), [], "a later click outside did not shut it");
   assert.deepEqual(errors, []);
 });
+
+// ...and A DOUBLE-CLICK ON A PRESS THAT WRITES WRITES ONCE (actionRow.press): Accept drafted the calendar's answer twice
+test("a double-click on Accept drafts the calendar's answer once", { timeout: 180000 }, async (t) => {
+  const { page, errors } = await boot(t, { width: 1600, height: 810 });
+  const writes = [];
+  page.on("request", (r) => { if (/\/api\/messages\/\d+\/calendar/.test(r.url())) writes.push(r.postData()); });
+  await clickRow(page, await findRow(page, /Invite: AP cutover/)); await sleep(2500);
+  await dbl(page, rowButton("/^Accept$/"));
+  await sleep(2500);
+  assert.deepEqual(writes, ['{"act":"accept"}']);
+  assert.deepEqual(errors, []);
+});

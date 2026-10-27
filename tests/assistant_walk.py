@@ -25,9 +25,11 @@ class Step:
     """One thing the owner types. `table`: the pile key on screen when it is typed (None: nothing). `first`/`then`: the scripted
     model's answer, and its answer after a look-up. `expect`: the outcome (tests/assistant_queries.py's words: link:<href> |
     draft:<verb> | light:<verb> | read:<tool> | cleared). `says`: a regex the line the owner reads must match - it says what it did; a lit button says nothing (2026-10-23).
-    `budget`: (first word, action) in seconds on the fake's realistic timings."""
-    def __init__(self, text, table, first, expect, says, then=None, budget=(1.5, 3.0), live=None):
+    `budget`: (first word, action) in seconds on the fake's realistic timings. `reads`: seconds the owner reads the last answer before
+    typing this one (off the clock)."""
+    def __init__(self, text, table, first, expect, says, then=None, budget=(1.5, 3.0), live=None, reads=0.0):
         self.text, self.table, self.first, self.then, self.expect, self.says, self.budget, self.live = text, table, first, then, expect, says, budget, live
+        self.reads = reads
 
 
 STEPS = [
@@ -41,7 +43,13 @@ STEPS = [
          # a question that needs a look-up is two model rounds, and its first words are the second round's
          then='Ten things are on you - the month-end close is short by 4,180 and leads the list.', budget=(2.0, 3.0)),
     Step('mark the FYI read', 'msg:5', 'Clearing the FYIs.\n' + c('pipe.clear', select={'kind': 'fyi'}), 'cleared', r'^Marked (all )?\d+ (items?|FYI|reports?) read'),   # "all": past the table's handful (58740414)
-    Step('open Settings → Sounds', None, 'The sounds are under [Notifications](#settings=config&group=Notifications).', 'link:#settings', r'Notifications'),
+    # a fact kept changes the instructions the CLI was launched with (LEARNED.md rides them): the next ask, typed once the owner has read
+    # this answer, finds the new process already up - it restarted the CLI under them, 4 s on the stand-in (the speed pass, 2026-10-27)
+    Step('remember that Marcus prefers mornings', None, c('memory.remember', note='Marcus Reed prefers meetings in the morning', about='Marcus Reed',
+                                                         section='people'), 'decision:setting', r'^Remembered',
+         budget=(2.0, 3.0)),                                     # a bare CALL writes no words: its first word is the answer
+    Step('open Settings → Sounds', None, 'The sounds are under [Notifications](#settings=config&group=Notifications).', 'link:#settings', r'Notifications',
+         reads=3.5),
     Step('add LinkedIn as a connector', None, 'Bringing up the LinkedIn card.\n' + c('connection.create', type='linkedin'), 'open:#connector=linkedin', r'LinkedIn'),
     Step('remind me tomorrow', 'msg:1', 'Putting it away until tomorrow.\n' + c('task.defer', until='tomorrow 9am'), 'light:defer', r'^$'),
     Step('stop the agent', 'agent:6', 'Stopping it.\n' + c('stop_agent'), 'light:stop_agent', r'^$', live=6),
@@ -209,6 +217,7 @@ def run(steps=STEPS, real: bool = False, warm: bool = True, quiet: bool = False,
             warmed = time.perf_counter() - t
         else: warmed = 0.0
         for step in steps:
+            if step.reads: time.sleep(step.reads)
             live_box.clear(); live_box.update({step.live} if step.live else set())
             reads.clear(); clock.start()
             def trace(kind, name, detail):

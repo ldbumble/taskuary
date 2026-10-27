@@ -1388,8 +1388,7 @@ def _canvas_walk(store, dock_tid: int, item: dict | None) -> list:
 def canvas_block(store, item: dict | None, dock_tid: int | None, d: dict | None = None) -> str:
     """THE CANVAS block, first in a typed turn: the table, then this walk's other cards. Bounded (CANVAS_CAP): the walk's lines go first
     when it is over, oldest of them first. `d`: the Advisor's decision for the item, read once by the caller."""
-    head = ('CANVAS - what is on the owner\'s screen now. Act from it first: a button below is pressed or lit by CALLing its id - '
-            '{"kind": "<id>"} - or the tool it names, with no look-up first.')
+    head = CANVAS_HEAD                                    # how to act from it is said once, in the instructions (TURN_GUIDE)
     table = _canvas_table(store, item, d or {}) if item else ['ON THE TABLE: nothing']
     walk = _canvas_walk(store, dock_tid, item) if dock_tid else []
     def text(w): return '\n'.join([head, *table] + (['EARLIER ON THE CANVAS THIS WALK (newest first):', *w] if w else []))
@@ -1402,6 +1401,44 @@ def canvas_block(store, item: dict | None, dock_tid: int | None, d: dict | None 
 # 0 of 6 turns (the 2026-10-26 sweep; the owner, 2026-10-21: "Free text should almost never be used in the assistant")
 EMPTY_TABLE = ('Nothing is on the table now: when they want to go through what waits - the next one, walk me through it, from the '
                'top - CALL next, which brings that row up as its card with its buttons. Never read a task out in words in its place.')
+
+# HOW A TURN READS, SAID ONCE (the owner, 2026-10-27, approving the speed pass): the canvas's, the rail's and the closing instructions rode
+# every typed turn word for word - 1-1.4K characters each time, and a CLI conversation keeps every one of them. They are the launch
+# instructions now (turn_system); a turn carries its headings, its facts and the owner's words.
+CANVAS_HEAD = 'CANVAS - what is on the owner\'s screen now:'
+RAIL_HEAD = 'THE RAIL BY NAME:'
+RAIL_SAME = f'{RAIL_HEAD} unchanged since the last one you were given in this conversation - the same rows, row for row.'
+TURN_GUIDE = ('HOW EACH OF THE OWNER\'S TURNS READS - the message that carries their words, in this order:\n'
+              '- CANVAS: what is on the owner\'s screen now. Act from it first: a button there is pressed or lit by CALLing its id - '
+              '{"kind": "<id>"} - or the tool it names, with no look-up first.\n'
+              f'- {RAIL_HEAD} the rows waiting, each by its handle - only to find the one the owner names; never act on a row they did not '
+              'name. To act on one, put its handle (the TQ ref or m-number that starts its line) in `on` exactly. When it says unchanged, '
+              'it is the last one you were given, row for row.\n'
+              f'- With an item on the table: {WHAT_ABOUT}\n'
+              f'- Last, the owner\'s words ("{OWNER_SAYS.strip()}"). Answer them, briefly. If a look-up would answer it, CALL it now instead of '
+              'saying you will. If their words mean one of the actions for the item on the table, CALL it. With nothing on the table, if they '
+              f'ask for something to be done, CALL it now - its button is their confirmation. {EMPTY_TABLE}')
+RAIL_FULL_EVERY = 8          # a rail said unchanged is said whole again after this many turns: a long conversation may be compacted
+
+
+# what the rail looked like when this chat's CLI conversation last read it whole: {dock tid: (session id, rail, turns since)}
+_RAIL_SEEN: dict = {}
+
+
+def rail_for_turn(llm, tid: int, rail: str) -> str:
+    """The rail this turn carries: whole, or RAIL_SAME when the CLI conversation it goes to read this very rail on an earlier turn (the
+    owner, 2026-10-27). Only a CLI brain keeps a conversation: an API brain reads each call alone, and always gets it whole."""
+    seen, sid = _RAIL_SEEN.get(tid), getattr(llm, 'session_id', None)
+    if rail and sid and getattr(llm, 'warm', None) and seen and seen[0] == sid and seen[1] == rail and seen[2] < RAIL_FULL_EVERY: return RAIL_SAME
+    return rail
+
+
+def rail_read(llm, tid: int, rail: str, sent: str):
+    """After the model answered: what its conversation now holds of the rail."""
+    sid = getattr(llm, 'session_id', None)
+    if not (rail and sid and getattr(llm, 'warm', None)): _RAIL_SEEN.pop(tid, None)
+    elif sent == RAIL_SAME and tid in _RAIL_SEEN: s, r, n = _RAIL_SEEN[tid]; _RAIL_SEEN[tid] = (sid, r, n + 1)
+    else: _RAIL_SEEN[tid] = (sid, rail, 0)
 
 
 def table_line(store, item: dict | None) -> str:
@@ -1608,8 +1645,8 @@ def _handoff_brief(store, tid: int, text: str) -> str:
     return f"{text.strip()}\n\nWhat we were talking about:\n{_cut(ctx, 900)}" if ctx else text.strip()
 
 
-def _turns(store, tid: int) -> str:
-    rows = general.chat_rows(store, tid)[-TURNS:]
+def _turns(store, tid: int, n: int = TURNS) -> str:
+    rows = general.chat_rows(store, tid)[-n:]
     return '\n'.join(f"{'YOU' if c.get('ActorType') == general.ASSISTANT_TYPE else 'OWNER'}: {_cut(_MARK.sub('', c.get('Body') or ''), 500)}" for c in rows)
 
 
@@ -1962,17 +1999,20 @@ def turn_system(store, llm=None) -> str:
     """A typed turn's instructions: COUNSEL, SOUL, the voice, then the tool index. ONE text for every round of a turn and for
     warm(): a CLI brain is launched with it (--system-prompt-file, named by its content), so a round that sent another one
     restarted the process under it."""
-    return _system(store, llm) + '\n\n' + toolcatalog.block(store)
+    return _system(store, llm) + '\n\n' + toolcatalog.block(store) + '\n\n' + TURN_GUIDE
 
 
 _WARMING = threading.Lock()
 
 
-def warm(store, actor: str = 'owner', wait: bool = False) -> bool:
+def warm(store, actor: str = 'owner', wait: bool = False, changed: bool = False) -> bool:
     """Start the chat's CLI before the owner types (the owner, 2026-10-20: "it should respond to things quickly"): the page
     opening, New chat and a brain changed each start it, so the CLI's start-up - 2.5-4 s on this machine - is paid while they
     read, never on their first ask. Exactly the process that ask would take: the same brain, instructions and conversation.
     Nothing for an API brain or a CLI that keeps no conversation, and nothing at all while one is already starting.
+    `changed`: after a turn - only a LIVE process, and only when the instructions it was launched with are no longer the ones the next
+    ask would send (a memory kept, a report or a connection made: the process is named by them). That ask restarted the CLI under
+    the owner, 4 s on the stand-in against 1 (the speed pass, 2026-10-27); now the swap happens while they read the answer.
     True when a process was started."""
     if not is_cli(store): return False
     def go() -> bool:
@@ -1980,9 +2020,10 @@ def warm(store, actor: str = 'owner', wait: bool = False) -> bool:
         try:
             tid = general.dock_task(store, actor)[0]['TaskId']
             from . import clipool
-            if any(x['key'] == f'{LIVE_KEY}:{tid}' for x in clipool.live()): return False     # the page's every read: one look, no build
+            # the page's every read: one look, no build - and after a turn, nothing to swap when nothing is live
+            if any(x['key'] == f'{LIVE_KEY}:{tid}' for x in clipool.live()) != changed: return False
             llm = _brain_for(store, tid, None)
-            return bool(getattr(llm, 'warm', None) and llm.warm(turn_system(store, llm)))
+            return bool(getattr(llm, 'warm', None) and llm.warm(turn_system(store, llm), **({'swap': True} if changed else {})))
         except Exception as e:
             logger.info(f'concierge: the CLI was not warmed - {e}'); return False
         finally: _WARMING.release()
@@ -4703,8 +4744,7 @@ def _rail_block(p: dict, cap: int = RAIL_CAP) -> str:
                              + ('; a drafted reply waits for your yes' if i.get('rid') and i.get('draft') else '') + ')')
     if not rows: return ''
     more = f"\n- ...and {len(items) - cap} more (timeline.search finds them)" if len(items) > cap else ''
-    return ('THE RAIL BY NAME - only to find the one the owner names; never act on a row they did not name. To act on one, put its '
-            'handle (the TQ ref or m-number that starts its line) in `on` exactly\n' + '\n'.join(rows) + more)
+    return f'{RAIL_HEAD}\n' + '\n'.join(rows) + more             # what it is for is said once (TURN_GUIDE)
 
 
 def handle_of(i: dict) -> str:
@@ -4716,7 +4756,10 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         open_card: str | None = None, images: list | None = None) -> dict:
     token = _TURN.set({})
     try: return _say(store, text, key, llm, actor, trace, cancel, item, open_card, images)
-    finally: _TURN.reset(token)
+    finally:
+        _TURN.reset(token)
+        # ...and the turn may have changed the instructions the chat's CLI runs on: the next ask finds the new one already up (warm)
+        if llm is None and DELIVERY.get() == DESK: warm(store, actor, changed=True)
 
 
 def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None,
@@ -4749,6 +4792,15 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         words = [c['label'] for c in chips_for(store, item)]
         i = int(text.strip().lstrip('#').rstrip('.').strip())
         if 1 <= i <= len(words): text = words[i - 1]
+    # THE TURN'S READS OF THE PIPE COME BEFORE ITS OWN WRITE (the speed pass, 2026-10-27): the owner's line written below moves the store's
+    # mark, so the Advisor's decision and SELECT's values, read after it, each rebuilt the whole pipe this turn had just built - 150-260 ms
+    # of every typed turn on a fresh home before the model was asked, more on a real mailbox. Read here they take the build above; the
+    # conversation so far is read here too, so it holds what came before this line and never the line itself, said again below it.
+    from . import toolcatalog
+    llm = _brain_for(store, tid, llm, trace, cancel)
+    adv_d = _decision(store, item) if llm else {}
+    picks = toolcatalog.select_values(store, p['items']) if llm else ''
+    so_far = _turns(store, tid, TURNS - 1) if llm else ''
     # the dock has the owner's words now; the item has them with the answer, once the turn knows it was about the item
     record(store, tid, 'user', typed)
     turn = _TURN.get()
@@ -4756,7 +4808,6 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     turn['trace'] = trace                           # the app's own trouble draws its steps as they happen (_trouble)
     rec = lambda role, body, card=None: record_related(store, tid, item, role, body, card)
     table = table_line(store, item)
-    llm = _brain_for(store, tid, llm, trace, cancel)
     if not llm:
         fb = fallback(item, False, p['items'], store=store).strip()
         if fb and not fb.endswith(('.', '!', '?', ')')): fb += '.'               # a sentence ends before the next one starts
@@ -4774,24 +4825,23 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # NO HUB NOTES PER TURN. Every turn carried whatever notes shared the owner's words - asked to research a
         # project, the model read internal notes on CLI flags and timeouts, and answered in that register (the
         # 2026-09-24 debug). knowledge.search reads the Hub when a question is about how things are done here.
-        from . import toolcatalog
         # PROGRESSIVE DISCLOSURE (the owner, 2026-09-25): COUNSEL, SOUL, where the voice is, and the tool index. The
         # workers, the repositories and the app's state rode every turn as blocks; agents.list, repos.list,
         # reports.list, connections.list and settings.list read them when a turn needs them.
         # ...and the Hub is a tool too (hub.publish), not an envelope taught every turn (2026-09-25)
         system = turn_system(store, llm)
         # THE CANVAS FIRST (canvas_block): the table's stage, ask, lit button and row by id, then what this walk put down - the Advisor's
-        # decision read once, for the lit button there and the "why?" line under the facts
-        adv_d = _decision(store, item)
+        # decision read once (adv_d, above), for the lit button there and the "why?" line under the facts
         # the pipe's own SELECT values ride the turn, not the index (toolcatalog.select_values): they move with every mail
         asked = (f"{canvas_block(store, item, tid, adv_d)}\n\n"
-                 f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n{toolcatalog.select_values(store)}\n\n"
+                 f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n{picks}\n\n"
                  f"{facts(store, item, whole=True)}\n\n"
                       + (f"THE TASKS THEY NAMED, as they are now:\n{nn}\n\n" if (nn := named_now(store, text, item)) else '')
                       # what the owner handed over and where each stands (asks.py) - "where's the tab check?", "add Omar to that"
                       + (f"{asks_block}\n\n" if (asks_block := _asks_block(store, p)) else '')
-                      + (f"{rail}\n\n" if (rail := _rail_block(p)) else '')
-                      + (f"CONVERSATION SO FAR:\n{_turns(store, tid)}\n\n" if _turns(store, tid) else '')
+                      # ...said whole once per conversation, then "unchanged" while it is (rail_for_turn - the owner, 2026-10-27)
+                      + (f"{rail_sent}\n\n" if (rail_sent := rail_for_turn(llm, tid, rail := _rail_block(p))) else '')
+                      + (f"CONVERSATION SO FAR:\n{so_far}\n\n" if so_far else '')
                       # THE CARD BROWSED OPEN in the canvas (the canvas redesign, 2026-09-29): "this", "it", "set it up"
                       # mean that card - a connector, a settings group, a report - when no item is on the table
                       # ...or the PAGE open with nothing opened on it (2026-10-01): a question over the Connections wall is about connections
@@ -4802,14 +4852,13 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       + (f"OPEN BESIDE IT: {_cut(open_card, 300)} - the item is still on the table, under that page; 'this' is whichever of the two "
                          f"their words fit{under_page(item)}\n\n" if open_card and item else '')
                       # ...the row's buttons are the CANVAS's now, by id; the Advisor's evidence stays, for "why?"
-                      + ((f"{adv}\n\n" if (adv := _advice_block(store, item, adv_d)) else '') + f"{WHAT_ABOUT}\n\n" if item else '')
+                      + ((f"{adv}\n\n" if (adv := _advice_block(store, item, adv_d)) else '') if item else '')
                       + f"{OWNER_SAYS}{text}\n"
                       # A PICTURE WITH THE LINE (the owner, 2026-09-30): an API brain sees it, a CLI brain reads the file it names
                       + ("ATTACHED IMAGES (read these files - they are what the owner is showing you)\n" + "\n".join(images) + "\n" if images else '')
-                      + f"Answer them, briefly. If a look-up would answer it, CALL it now instead of saying you will. "
-                      + ('If their words mean one of the actions for the item on the table, CALL it.' if item else
-                         'If they ask for something to be done, CALL it now - its button is their confirmation. ' + EMPTY_TABLE))
+                      + 'Answer them, briefly.')                        # the rest of how is the instructions' (TURN_GUIDE)
         raw = str(llm(system, asked, max_tokens=MAX_TOKENS, **({'images': general._images(images)} if images else {})) or '').strip()
+        rail_read(llm, tid, rail, rail_sent)
         raw, call = parse_call(raw)
         # A LOOK-UP runs at once and comes straight back, because it changes nothing and waits for
         # nobody. The model then answers with what it read - one round only, so a question can never

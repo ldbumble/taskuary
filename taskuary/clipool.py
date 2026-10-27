@@ -111,10 +111,12 @@ def _reap():
 threading.Thread(target=_reap, daemon=True, name='clipool-reaper').start()
 
 
-def _take(key: str, cmd: list, cwd, env, resume, sig: tuple) -> Live:
-    """The live process for this conversation, opened (or reopened) as the caller's resume id requires."""
+def _take(key: str, cmd: list, cwd, env, resume, sig: tuple, swap: bool = False) -> Live | None:
+    """The live process for this conversation, opened (or reopened) as the caller's resume id requires. `swap`: only one that is
+    live and idle is replaced - None, and nothing started, when there is none or a turn is under way on it."""
     with _LOCK:
         lv = _POOL.get(key)
+        if swap and (lv is None or lv.lock.locked()): return None
         # a fresh conversation where one was going (New chat), another conversation named, different launch
         # settings (a model or brain changed), or a process that died: close it and start again
         stale = lv is not None and (not lv.alive() or lv.sig != sig
@@ -138,13 +140,15 @@ def _sig(cmd, cwd, env) -> tuple:
     return (tuple(cmd), str(cwd or ''), hash(tuple(sorted(env or {}))))
 
 
-def warm(key: str, cmd: list, *, cwd=None, env=None, resume=None) -> bool:
+def warm(key: str, cmd: list, *, cwd=None, env=None, resume=None, swap: bool = False) -> bool:
     """Start the conversation's process BEFORE its first message, so the CLI's start-up (2.5-4 s of node, settings and auth)
     is paid while the owner is still reading, not after they type. The same process `run` would take for this key, command
-    and resume id - so the first turn finds it ready. True when one was started; one already live is left as it is."""
+    and resume id - so the first turn finds it ready. True when one was started; one already live is left as it is.
+    `swap`: after a turn - only a live, idle process launched otherwise is replaced; none is ever started where none was (a chat
+    closed meanwhile stays closed), and a turn under way is never cut."""
     with _LOCK: had = _POOL.get(key)
-    lv = _take(key, cmd, cwd, env, resume, _sig(cmd, cwd, env))
-    return lv is not had
+    lv = _take(key, cmd, cwd, env, resume, _sig(cmd, cwd, env), swap=swap)
+    return lv is not None and lv is not had
 
 
 def run(key: str, cmd: list, prompt: str, on_event, *, cwd=None, env=None, resume=None, cancel=None,

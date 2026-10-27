@@ -191,8 +191,11 @@ class DeskRoutes(unittest.TestCase):
     def test_with_nothing_on_the_table_the_model_is_told_walking_is_next_never_words(self):
         s = store(); on_table(s); asked = []
         with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(ingest, '_spawn'):
-            concierge.say(s, 'walk me through my tasks', llm=lambda sy, u, **k: (asked.append(u), 'CALL: {"kind": "next", "params": {}}')[1])
-        self.assertIn('CALL next', asked[0]); self.assertIn('Never read a task out in words', asked[0])
+            concierge.say(s, 'walk me through my tasks', llm=lambda sy, u, **k: (asked.append((sy, u)), 'CALL: {"kind": "next", "params": {}}')[1])
+        # ...said once, in the instructions every turn is read by (TURN_GUIDE - the owner, 2026-10-27), with the empty table on the canvas
+        system, turn = asked[0]
+        self.assertIn('CALL next', system); self.assertIn('Never read a task out in words', system)
+        self.assertIn('ON THE TABLE: nothing', turn)
 
     def test_an_act_on_another_task_brings_it_up_with_its_button_lit(self):
         s = store(); tid, item = on_table(s)

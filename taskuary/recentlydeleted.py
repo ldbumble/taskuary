@@ -152,8 +152,8 @@ TASK_ROWS = (('review', 'ReviewId'), ('comment', 'CommentId'), ('run', 'RunId'),
 def task_snapshot(store, tid: int) -> dict:
     """REMOVE - NOT A TASK IS TAKEN BACK BY ITS UNDO (the owner, 2026-10-21: no "are you sure"; the task card had no Undo, 2026-10-22).
     What store.delete_task takes or unhooks, read before it runs: the task row, the rows it deletes, which messages and routes it lets
-    go (and as what), and the Advisor ideas it dismisses. The verdict's own marks - the ignore route and the memory note - are added
-    to it by the caller (`ignore`, `memory`) so the Undo takes those back too."""
+    go (and as what), and the Advisor ideas it dismisses. The verdict's own marks - the ignore route and the line it teaches - are added
+    to it by the caller (`ignore`, `taught`) so the Undo takes those back too."""
     rows = lambda q: store._rows(q, (tid,))
     return {'task': store.get_task(tid),
             **{t: rows(f'SELECT * FROM {t} WHERE TaskId=?') for t, _ in TASK_ROWS},
@@ -170,7 +170,7 @@ def keep_task(store, snap: dict) -> dict:
 
 def _restore_task(store, d: dict) -> int:
     """The task back as it stood - under its old id while nothing has taken it - with its rows, its messages and routes, its ideas;
-    the verdict's ignore route deleted and its memory note switched off, so the next message on the thread can open work again."""
+    the verdict's ignore route deleted and the line it taught taken out, so the next message on the thread can open work again."""
     tid = store.put_back('task', d['task'], 'TaskId')
     for t, key in TASK_ROWS:
         for r in d.get(t) or []: store.put_back(t, {**r, 'TaskId': tid}, key)
@@ -178,10 +178,11 @@ def _restore_task(store, d: dict) -> int:
         store._exec('UPDATE message SET TaskId=?, Status=? WHERE MessageId=? AND TaskId IS NULL', (tid, m['Status'], m['MessageId']))
     for rid in d.get('routes') or []: store._exec('UPDATE route SET TaskId=? WHERE RouteId=? AND TaskId IS NULL', (tid, rid))
     if d.get('ignore'): store._exec("DELETE FROM route WHERE RouteId=? AND Decision='ignore'", (d['ignore'],))
-    if d.get('memory'):
-        store.set_memory_active(d['memory'], False)        # ...which takes its LEARNED.md line out too (memorylines, 2026-10-27)
-        from . import learn                 # ...and what that note fed in LEARNED.md goes with it (learn.withdraw)
-        learn.withdraw(store, d['memory']); learn.note_verdicts(store)
+    # ...and the line the verdict taught comes out, any line it replaced goes back, and what it fed is withdrawn (memorylines.untaught).
+    # A snapshot from before 2026-10-27 names a notes-table row (`memory`); that table is gone, and so is anything to switch off
+    if d.get('taught'):
+        from . import memorylines
+        memorylines.untaught(store, d['taught'])
     for i in d.get('ideas') or []:
         store._exec('UPDATE idea SET Status=?, DecidedBy=?, DecidedAt=? WHERE IdeaId=?', (i['Status'], i.get('DecidedBy'), i.get('DecidedAt'), i['IdeaId']))
     store._bump_snapshots()

@@ -20,7 +20,10 @@ PEOPLE, CARE, WORK, PROMISES, BRING = SECTIONS.values()
 # 2026-10-25); the triage prompt says they never decide whether mail is a task
 # ...and an agent reads ALL of it (the owner, 2026-10-27: "every part it knows about the user should be in the agents") - the people lines
 # still only about the people on its own task, and nothing at all on a stranger's task (context.py)
-READS = {'triage': ('care', 'people'), 'drafter': ('people',), 'advisor': ('people', 'care', 'work', 'promises'), 'assistant': tuple(SECTIONS),
+# ...and triage, and the report's routing judge, read the WHOLE of it every time, through `whole` - not a budgeted cut (the owner,
+# 2026-10-27: "triage needs the entire thing to make a decision every time"). Agents read it on demand (agenttools' owner_memory,
+# `taskuary --memory`) instead of carrying it in their start prompt (2026-10-27: "progressive disclosure")
+READS = {'triage': tuple(SECTIONS), 'drafter': ('people',), 'advisor': ('people', 'care', 'work', 'promises'), 'assistant': tuple(SECTIONS),
          'agents': tuple(SECTIONS)}
 # who reads a section, as the owner reads it - triage takes the people lines for a task's PRIORITY only (the owner, 2026-10-25)
 READER_WORDS = {'triage': 'triage', 'drafter': 'drafts', 'advisor': 'the Advisor', 'assistant': 'the Assistant', 'agents': 'agents'}
@@ -209,6 +212,33 @@ def for_reader(store, reader: str, about: dict = None, budget: int = None, doc: 
     receipt(store, reader, target, [k for _, k, _ in got])
     say = (lambda raw, k: f'{raw} (id {cite_of(k)})') if cite else (lambda raw, k: raw)
     return '\n\n'.join(f'{SECTIONS[s]}\n' + '\n'.join(say(raw, k) for raw, k, x in got if x == s) for s in want if any(x == s for *_, x in got))
+
+
+WHOLE_CAP = 60_000         # ~15k tokens: past it a reader keeps whole sections in order, and the ones left out are logged
+
+
+def whole(store, reader: str = 'triage', target: str = '', doc: str = None, cap: int = WHOLE_CAP, sections=None) -> str:
+    """Every line of every section, in the document's order - the whole memory, for a reader that decides on all of it (triage, the
+    routing judge) or asked for it (an agent's owner_memory). Lines about one sender or topic come too: triage weighs them for mail
+    about that. Only past `cap` does anything go - a whole section at a time, said in the log and noted as over budget, never a line
+    cut off midway. `sections` (slugs) narrows it. '' when there is nothing in use."""
+    doc = store.doc('learned') if doc is None else doc
+    out, keys, over, used = [], [], [], 0
+    for s, head in SECTIONS.items():
+        if sections and s not in sections: continue
+        ls = lines(doc or '', head)
+        if not ls: continue
+        b = head + '\n' + '\n'.join(raw for raw, _ in ls)
+        if used + len(b) + 2 > cap:
+            over += [k for _, k in ls]
+            from loguru import logger
+            logger.warning(f'{reader} read LEARNED.md without "{TITLE[s]}" ({len(b):,} characters) - past its {cap:,}-character cap')
+            continue
+        out.append(b); keys += [k for _, k in ls]; used += len(b) + 2
+    try: _note_over(store, reader, over)
+    except Exception: pass
+    receipt(store, reader, target, keys)
+    return '\n\n'.join(out)
 
 
 def over_budget(store) -> dict:

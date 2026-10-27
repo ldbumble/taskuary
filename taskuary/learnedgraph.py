@@ -126,15 +126,20 @@ def record(store, old_doc: str, new_doc: str, actor: str = 'learn'):
 
 
 def _resolve(store, ev_id: str) -> dict:
-    """An evidence id -> {id, kind, date, label}. mem = a verdict note, rv = a review decision,
-    task = an owner action on a task, out = a resolved row of the outcome ledger (outcomes.py)."""
+    """An evidence id -> {id, kind, date, label}. mem = a verdict note of the old notes table (gone since 2026-10-27: its rows are
+    LEARNED.md lines), rv = a review decision, task = an owner action on a task, out = a resolved row of the outcome ledger
+    (outcomes.py). A msg or task id a verdict was given on reads as that verdict's lesson (memorylines.given_on)."""
     m = _EV.match(ev_id or '')
     if not m: return {'id': ev_id, 'kind': 'other', 'date': None, 'label': ev_id}
     kind, n = m.group(1), int(m.group(2))
-    if kind == 'mem':
-        r = next((x for x in store.list_memories(active_only=False) if x['MemoryId'] == n), None)
-        return {'id': ev_id, 'kind': 'verdict', 'date': (r or {}).get('CreatedAt'), 'label': (r or {}).get('Note') or ev_id,
-                'scope': (r or {}).get('Scope'), 'key': (r or {}).get('ScopeKey')}
+    if kind == 'mem': return {'id': ev_id, 'kind': 'verdict', 'date': None, 'label': ev_id}
+    if kind in ('msg', 'task'):
+        from .memorylines import given_on
+        v = given_on(store, ev_id)
+        if v:
+            r = store.get_message(n) if kind == 'msg' else store.get_task(n)
+            return {'id': ev_id, 'kind': 'verdict', 'date': (r or {}).get('SentAt' if kind == 'msg' else 'UpdatedAt'),
+                    'label': str(v['text'] or '').strip().lstrip('-* ') or ev_id, 'verdict': v['kind']}
     if kind == 'rv':
         r = store.get_review(n) or {}
         return {'id': ev_id, 'kind': 'review', 'date': r.get('DecidedAt') or r.get('CreatedAt'),
@@ -173,7 +178,12 @@ def resolves(store, ev_id: str) -> bool:
     m = _EV.match(ev_id or '')
     if not m: return False
     kind, n = m.group(1), int(m.group(2))
-    q = {'mem': 'SELECT 1 FROM memory WHERE MemoryId=?', 'rv': 'SELECT 1 FROM review WHERE ReviewId=?', 'task': 'SELECT 1 FROM task WHERE TaskId=?',
+    # an old notes-table id is real when the table had it: the rows were written into LEARNED.md, the highest one recorded (memorylines)
+    if kind == 'mem':
+        from .memorylines import APPLIED
+        try: return 0 < n <= int(store.get_setting(APPLIED) or 0)
+        except ValueError: return False
+    q = {'rv': 'SELECT 1 FROM review WHERE ReviewId=?', 'task': 'SELECT 1 FROM task WHERE TaskId=?',
          'fs': 'SELECT 1 FROM task WHERE TaskId=?', 'out': 'SELECT 1 FROM outcome WHERE Id=?', 'pr': 'SELECT 1 FROM advice_press WHERE Id=?',
          'msg': 'SELECT 1 FROM message WHERE MessageId=?', 'sv': 'SELECT 1 FROM sent_verdict WHERE MessageId=?', 'idea': 'SELECT 1 FROM idea WHERE IdeaId=?'}[kind]
     try: return bool(store._one(q, (n,)))
@@ -229,8 +239,9 @@ def graph(store) -> dict:
         deleted.append({'key': k, 'text': named(last['Text']), 'status': 'deleted', 'score': 0, 'deleted_at': last['At'],
                         'contradictions': [{'date': h['At'], 'ev': h['Ev']} for h in contradictions]})
     used = {e for l in ls for e in l['ev']}
-    loose = [{'id': f"mem{m['MemoryId']}", 'kind': 'verdict', 'date': m.get('CreatedAt'), 'label': m.get('Note') or '', 'scope': m.get('Scope'), 'key': m.get('ScopeKey')}
-             for m in store.list_memories() if m.get('Source') == 'verdict' and f"mem{m['MemoryId']}" not in used][:12]
+    from .memorylines import lessons
+    loose = [{'id': v['ev'], 'kind': 'verdict', 'date': v['at'], 'label': str(v['text'] or '').strip().lstrip('-* '), 'verdict': v['kind']}
+             for v in lessons(store) if v['ev'] and v['ev'] not in used][:12]
     # THE OWNER'S OWN LINES, beside what was learned (slice 6, 2026-10-25): what they typed - or a person's page gave - is in use as written
     from .learned_cut import SECTIONS, lines as section_lines, subject_of, reads_label, TITLE
     own = [{'key': k, 'text': named(raw.strip()[2:].strip() if raw.strip().startswith(('- ', '* ')) else raw.strip()), 'own': True, 'status': 'live',
@@ -262,7 +273,8 @@ SAYS = {'born': 'New guess', 'strengthened': 'Seen again', 'promoted': 'Now a ru
         'back': 'Back', 'edited': 'Reworded by you', 'forgotten': 'Removed by you - stays removed', 'withdrawn': 'Withdrawn - its note was switched off',
         'watching': 'Back to watching', 'moved': 'Moved to STYLE.md - the drafter reads it there',
         'retired': 'Retired - a count of button presses, not how you work', 'closed': 'No longer true - kept as history',
-        'kept': 'Kept by you - in your words from now on', 'wrong': 'Wrong, you said - never written back', 'said': 'Said by you'}
+        'kept': 'Kept by you - in your words from now on', 'wrong': 'Wrong, you said - never written back', 'said': 'Said by you',
+        'replaced': 'Replaced by a sharper line', 'unsaid': 'Taken back - you undid the verdict'}
 
 
 def _named(store):
@@ -286,7 +298,7 @@ def changes(store, days: int = 30) -> list:
     standing = lambda k: st.get(k) or ('own' if find(doc, k)[2] else 'gone')
     for h in reversed(rows):
         newest = h['Key'] not in seen; seen.add(h['Key'])
-        out.append({'at': h['At'], 'action': h['Action'], 'says': SAYS.get(h['Action'], h['Action']), 'text': named(h['Text']),
+        out.append({'at': h['At'], 'action': h['Action'], 'says': SAYS.get(h['Action'], h['Action']), 'text': named(str(h['Text'] or '').strip().lstrip('-* ')),
                     'status': h['Status'], 'score': h['Score'], 'key': h['Key'], 'standing': standing(h['Key']), 'newest': newest})
     return out
 

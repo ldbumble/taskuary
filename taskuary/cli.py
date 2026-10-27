@@ -106,7 +106,7 @@ def _open_keyed(url):
 # as it was. A stranger's session runs only the agent commands that go over HTTP with its own task-bound token, where the
 # server's STRANGER scope decides.
 AGENT_ACTS = ('reply', 'reply_file', 'draft', 'draft_file', 'attach', 'item', 'tick', 'untick', 'done', 'note', 'waiting_on', 'board', 'learned', 'upvote', 'downvote', 'comment',
-              'search', 'message')                  # ...and the owner's mail history, which a stranger's task never reads
+              'search', 'message', 'memory')        # ...and the owner's mail history and memory, which a stranger's task never reads
 STRANGER_ACTS = AGENT_ACTS[:11]                     # ...the Hub, and the wall's other sessions' words, are not a stranger's to read or write
 OWNER_ACTS = ('prompts', 'reroute_held', 'backfill_asks', 'evalset', 'demo', 'link')
 NO_TOKEN = ("not sent: this session has no token of its own (TASKUARY_TOKEN) - Taskuary's own is the owner's, and a "
@@ -139,7 +139,7 @@ def session() -> tuple:
     return True, int(tid) if tid.isdigit() else 0
 
 def _acts(args) -> list:
-    return [a for a in AGENT_ACTS if (getattr(args, a) is not None if a in ('reply', 'draft', 'done', 'search', 'message') else bool(getattr(args, a)))]
+    return [a for a in AGENT_ACTS if (getattr(args, a) is not None if a in ('reply', 'draft', 'done', 'search', 'message', 'memory') else bool(getattr(args, a)))]
 
 def _refuse_outside(args):
     "SystemExit unless every command asked for is one a stranger's session may run - and at least one is (bare `taskuary` starts the app)."
@@ -202,6 +202,20 @@ def _history(args, stranger):
           + (f"\nthread {out['thread']}" if out.get('thread') else '') + f"\n\n{out.get('body') or ''}")
     rest = [m for m in out.get('messages') or [] if m['id'] != out['id']]
     if rest: print('\nTHE REST OF THE THREAD, oldest first:\n' + '\n'.join(f"[{m['id']}] {m['when']} - {m['from']}: {m['snippet']}" for m in rest))
+
+
+def _memory(args, stranger):
+    """`taskuary --memory [SECTION]`: LEARNED.md, read through the server on this session's task - on demand, as an agent's brief no
+    longer carries it (the owner, 2026-10-27). The server refuses a stranger's task."""
+    import os, sys
+    try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except (AttributeError, OSError): pass
+    tid = os.environ.get('TASKUARY_TASK')
+    if not str(tid).isdigit(): print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no task to read the memory for'); return
+    got = _get('/api/agent/memory', {'task_id': int(tid), 'section': args.memory or ''}, stranger)
+    if not got: return
+    r, out = got
+    print(out.get('says') or '' if r.status_code == 200 else f"not read: {out.get('detail') or r.text[:200]}")
 
 
 def main():
@@ -326,6 +340,8 @@ def main():
     ap.add_argument('--until', default='', metavar='YYYY-MM-DD', help='with --search: sent on or before this day')
     ap.add_argument('--limit', type=int, default=20, help='with --search: how many hits at most')
     ap.add_argument('--message', type=int, metavar='ID', help='print one message from --search in full, with its thread')
+    ap.add_argument('--memory', metavar='SECTION', nargs='?', const='',
+                    help="print what Taskuary has learned about the owner (LEARNED.md) - all of it, or one section: people, care, work, promises, bring")
     args = ap.parse_args()
     agent, stranger = session()
     if stranger is not None: _refuse_outside(args)
@@ -435,6 +451,7 @@ def main():
             print(f"not closed: {out.get('why') or out.get('detail') or r.text[:200]}")
         return
     if args.search is not None or args.message is not None: return _history(args, stranger)
+    if args.memory is not None: return _memory(args, stranger)
     if args.note and stranger is not None:
         # a stranger's note: through the board door, which pins it to the token's own task (B2 keeps it off the others' seeds)
         import os, sys

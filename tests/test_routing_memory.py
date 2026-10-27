@@ -16,7 +16,7 @@ from taskuary.store import MemoryStore
 
 def store():
     s = MemoryStore()
-    for k in ('coding_auto_enabled', 'learn_enabled'): s.set_setting(k, '0', 't')
+    for k in ('coding_auto_enabled',): s.set_setting(k, '0', 't')
     return s
 
 
@@ -186,12 +186,12 @@ class TheKindControlTeaches(unittest.TestCase):
         """Everything one door leaves behind, so "they teach the same thing" is checked against
         all of it and not just the half I happened to remember (routing evidence alone passed
         while the selector was still writing no memory line and no learned lesson at all)."""
+        from taskuary import memorylines
         tid = arrived(self.s)
-        mem = len(self.s.list_memories())
         facts = (self.facts('kind') or [{}])[0].get('EvidenceCount') or 0
-        go(tid)
+        with mock.patch.object(memorylines, 'teach') as taught: go(tid)
         return {'kind': self.s.get_task(tid)['Kind'],
-                'memory': len(self.s.list_memories()) - mem,
+                'memory': sum(c.args[1] == 'not_for_agent' for c in taught.call_args_list),
                 'operations': len(self.s.operations_for(tid) or []),
                 'routing': ((self.facts('kind') or [{}])[0].get('EvidenceCount') or 0) - facts}
 

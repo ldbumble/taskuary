@@ -162,7 +162,8 @@ test("a move on a PIECE stays on it; a move on the whole item rides the row (202
   assert.match(src, /\.\.\.movesOf\(verb, moves \? "next" : "decide", "v"\)/, "a Foot's move acts on the whole item: the row - a batch's All read, next IS its Next");
   assert.match(src, /<Foot moves verb=\{<Button[\s\S]{0,200}onDone\?\.\(btn\("next", "batch"\)\)/, "the batch's verb is in the Next group (the design, phase A)");
   assert.match(src, /\{!rowed && \(verb \|\|/, "...and is not drawn twice");
-  assert.match(src, /i < 3 \|\| a\.verb === "close" \? "decide" : "more"/, "Mark done is never behind More");
+  assert.match(src, /\(i < 3 && !QUIET\.has\(a\.verb\)\) \|\| a\.verb === "close" \? "decide" : "more"/, "Mark done is never behind More");
+  assert.match(src, /const QUIET = new Set\(\["report_off"\]\)/, "Pause this report waits behind More for the Advisor to light it (2026-10-27)");
   assert.match(src, /row: outer\.row/, "the walk's foot rides in the row as well");
   assert.match(fs.readFileSync(path.join(process.cwd(), "src", "ReplyFiles.jsx"), "utf8"), /toRow && mail/, "Attach a file is a More verb in the row");
   // ...and no Ask sender (the owner, 2026-10-27): a question for the sender is Reply's

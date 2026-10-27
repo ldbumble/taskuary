@@ -15,6 +15,7 @@ from unittest import mock
 
 from taskuary import ingest, triage
 from taskuary.store import MemoryStore
+from taskuary import memorylines
 
 CONV = 'AAQk-collection-thread'
 
@@ -121,7 +122,7 @@ class BypassesStayTests(unittest.TestCase):
     def test_a_per_message_dismissal_teaches_no_standing_policy(self):
         s, _ = ruled_thread(MemoryStore())
         self.assertEqual(s.list_policies(), [])
-        self.assertEqual([m for m in s.list_memories() if m.get('Active')], [])
+        self.assertEqual(memorylines.notes(s), [])
 
 
 class HistoryIsPreservedTests(unittest.TestCase):

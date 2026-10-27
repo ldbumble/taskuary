@@ -15,7 +15,7 @@ rule silences the very corrections that would revoke it (learned.md's "Proposed 
 NEVER an ignore or a skip for a colleague (the owner's own or team domains) or for anyone the owner has written to. An
 escalate rule is for exactly those people - the boss whose every mail is marked urgent is on the owner's own domain and is
 answered - so it may be asked for them (the owner, 2026-10-20). Never when an active rule already covers them. One rule question open at a time, the strongest first."""
-import json, re
+import json
 from datetime import datetime, timedelta
 from loguru import logger
 
@@ -27,10 +27,6 @@ GROW = 3                   # a refused question comes back only once the evidenc
 DAYS = 90                  # how far back the evidence is read
 DOWN = ('not_ours', 'not_ours_sender', 'block_sender')                 # presses that put an item down
 NEUTRAL = ('next', 'close', 'defer', 'not_ours_kind', 'later', '')     # presses that say nothing about the sender
-DOWN_NOTE = re.compile(r' - (NOT A TASK|NOT OURS|FILE IT)\b')
-UP_NOTE = re.compile(r" - (MADE A TASK|REPLY ONLY|CODING TASK|THE OWNER'S OWN TASK|A CONVERSATION)\b")
-FROM_NOTE = re.compile(r' from (\S+@\S+?)(?= - |\s|$)')
-NOTE_SUBJ = re.compile(r'^\d{4}-\d\d-\d\d: "(.*?)"')
 AUTOMATED = ('automated', 'bulk')
 URGENT_ACTION = 'priority'  # the audit row server.update_task writes when the owner changes a task's priority
 
@@ -60,20 +56,9 @@ def _by_sender(store, q: str, senders) -> list:
     return [r for r in store._rows(q) if r['em'] in senders]
 
 
-def _newest_threads(store, pairs: set) -> dict:
-    "{(sender, subject's first 90): the thread of the newest such message} - what a note's per-note lookup found, in one read per 500 senders."
-    ems, out = sorted({em for em, _ in pairs}), {}
-    for i in range(0, len(ems), 500):
-        chunk = ems[i:i + 500]
-        for r in store._rows("SELECT lower(FromEmail) em, substr(IFNULL(Subject,''),1,90) s, ConversationId cid FROM message "
-                             f"WHERE lower(FromEmail) IN ({','.join('?' * len(chunk))}) ORDER BY MessageId", chunk):
-            if (r['em'], r['s']) in pairs: out[(r['em'], r['s'])] = r['cid']
-    return out
-
-
 def evidence(store, days: int = DAYS) -> dict:
     """{sender: {'down': {thread}, 'up': {thread}, 'urgent': {task}, 'threads': {thread}, 'auto': bool}} - what the owner did,
-    per sender and per THREAD (three replies on one thread are one episode), from the route log, the press log, the verdict notes
+    per sender and per THREAD (three replies on one thread are one episode), from the route log, the press log
     and the audit trail."""
     since, out = _since(days), {}
     def row(em): return out.setdefault(em, {'down': set(), 'up': set(), 'urgent': set(), 'threads': set(), 'auto': None})
@@ -91,20 +76,12 @@ def evidence(store, days: int = DAYS) -> dict:
         k = p['Thread'] or f"pr{p['Id']}"
         if p['Pressed'] in DOWN: row(p['em'])['down'].add(k)
         elif p['Pressed'] not in NEUTRAL: row(p['em'])['up'].add(k)
-    # the verdict notes (LEARNED.md's evidence block): one per mail, matched to its thread so a note and its route are one episode
-    notes = []
-    for n in store.list_memories():
-        if n.get('Source') != 'verdict' or str(n.get('CreatedAt') or '') < since: continue
-        note = str(n.get('Note') or ''); f = FROM_NOTE.search(note)
-        em = (f.group(1) if f else (n.get('ScopeKey') if n.get('Scope') == 'sender' else '') or '').lower()
-        if '@' in em: notes.append((n, note, em, (NOTE_SUBJ.match(note) or [None, None])[1]))
-    # ONE read per question, not one per note or per sender: lower(FromEmail)=? is a full scan of the message table each time,
-    # and ~250 of them back to back held the store for two minutes on every Advisor run (2026-10-23)
-    newest = _newest_threads(store, {(em, s) for _, _, em, s in notes if s is not None})
-    for n, note, em, subj in notes:
-        k = newest.get((em, subj)) or f"mem{n['MemoryId']}"
-        if DOWN_NOTE.search(note): row(em)['down'].add(k)
-        elif UP_NOTE.search(note): row(em)['up'].add(k)
+    # the owner's own moves the other way: a filed mail made a task, a message put on a working road (server._learn_promotion,
+    # reclassify_message) - an owner route that opens work or a reply. The verdicts used to be counted off the notes table (gone, 2026-10-27)
+    for m in store._rows("SELECT lower(m.FromEmail) em, m.ConversationId cid, m.MessageId FROM route r JOIN message m ON m.MessageId=r.MessageId "
+                         "WHERE r.RoutedBy='owner' AND r.Decision IN ('create','reply') AND m.FromEmail LIKE '%_@_%' AND r.CreatedAt>=?", (since,)):
+        k = m['cid'] or f"m{m['MessageId']}"
+        if k not in row(m['em'])['down']: row(m['em'])['up'].add(k)
     # taken up: the owner wrote back on the thread, sent a reply from a task on it, or closed a task of theirs as done work
     for t in _by_sender(store, "SELECT DISTINCT lower(FromEmail) em, ConversationId cid FROM message WHERE ConversationId IN "
                                "(SELECT ConversationId FROM message WHERE Direction='out' OR Status='context')", out): out[t['em']]['up'].add(t['cid'])

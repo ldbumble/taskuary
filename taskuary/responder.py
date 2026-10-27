@@ -146,7 +146,7 @@ _COMMENT = re.compile(r'<!--.*?-->', re.S)
 _TEMPLATE_LINES = re.compile(r'^.*(not generated yet|Write your own rules here).*$', re.M)
 
 # An explicit instruction about HOW to write (PW-060) lives in STYLE.md under Owner notes, which every draft reads (style_doc) - the
-# memory table's 'writing' notes were moved there once (memorylines.migrate, 2026-10-27), and the notes table is read by no one
+# memory table's 'writing' notes were moved there once (memorylines.migrate, 2026-10-27), and the notes table is gone
 WRITING_SOURCE = 'writing'
 OWNER_NOTES = '## Owner notes'
 

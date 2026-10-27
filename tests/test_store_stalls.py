@@ -13,6 +13,7 @@ from loguru import logger
 from taskuary import promote, server, store as store_mod
 from taskuary.store import MemoryStore, SQLiteStore
 from taskuary.testing import Factory
+from tests.memlines import note as put_note
 
 
 class Logs:
@@ -119,8 +120,6 @@ class PromotionReadsOnce(unittest.TestCase):
                 mid = s.add_message({'ConversationId': f'email:{em}', 'Channel': 'email', 'Subject': 'Issue', 'FromEmail': em,
                                      'BodyText': 'news', 'Status': 'filed', 'SenderClass': 'automated'})
                 s.add_route(mid, None, 'ignore', None, 'not ours', [], 'owner')
-                s.add_memory({'Scope': 'sender', 'ScopeKey': em, 'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner',
-                              'Note': f'2026-10-01: "Issue" from {em} - NOT OURS: the owner put it down'})
             calls = []
             real = s._rows
             with mock.patch.object(s, '_rows', lambda q, p=(): calls.append(q) or real(q, p)): ev = promote.evidence(s)
@@ -128,18 +127,15 @@ class PromotionReadsOnce(unittest.TestCase):
             return len(calls)
         self.assertEqual(count(3), count(40), 'one scan per question, not one per sender')
 
-    def test_a_note_lands_on_the_newest_thread_with_its_subject(self):
+    def test_a_mail_made_work_is_taken_up_on_its_own_thread(self):
+        """The owner's own moves, read off the route log (the notes table is gone, 2026-10-27): a put-down and a mail made work."""
         s, em = MemoryStore(), 'digest@vendor.example'
-        for cid in ('email:old', 'email:new'):
-            s.add_message({'ConversationId': cid, 'Channel': 'email', 'Subject': 'Weekly digest', 'FromEmail': em.upper(),
-                           'BodyText': 'x', 'Status': 'filed'})
-        s.add_memory({'Scope': 'sender', 'ScopeKey': em, 'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner',
-                      'Note': f'2026-10-01: "Weekly digest" from {em} - NOT OURS: put down'})
-        s.add_memory({'Scope': 'sender', 'ScopeKey': em, 'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner',
-                      'Note': f'2026-10-01: "Never sent" from {em} - NOT OURS: put down'})
-        down = promote.evidence(s)[em]['down']
-        self.assertIn('email:new', down); self.assertNotIn('email:old', down)
-        self.assertTrue(any(k.startswith('mem') for k in down), 'a note with no such mail keeps its own key')
+        old, new = (s.add_message({'ConversationId': cid, 'Channel': 'email', 'Subject': 'Weekly digest', 'FromEmail': em.upper(),
+                                   'BodyText': 'x', 'Status': 'filed'}) for cid in ('email:old', 'email:new'))
+        s.add_route(old, None, 'ignore', None, 'not ours', [], 'owner')
+        s.add_route(new, None, 'create', None, 'made a task', [], 'owner')
+        ev = promote.evidence(s)[em]
+        self.assertEqual((ev['down'], ev['up']), ({'email:old'}, {'email:new'}))
 
 
 class TheLoopStaysFree(unittest.TestCase):

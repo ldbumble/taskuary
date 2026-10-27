@@ -21,6 +21,8 @@ from fastapi.testclient import TestClient
 
 from taskuary import ingest, server
 from taskuary.store import MemoryStore
+from tests.memlines import note as put_note
+from tests.memlines import teaching
 
 c = TestClient(server.app)
 
@@ -32,7 +34,7 @@ TOPIC = 'resident refund request'
 def _store(*notes):
     s = MemoryStore()
     for scope, key, note, src in notes:
-        s.add_memory({'Scope': scope, 'ScopeKey': key, 'Note': note, 'Source': src,
+        put_note(s, {'Scope': scope, 'ScopeKey': key, 'Note': note, 'Source': src,
                       'Active': 1, 'CreatedBy': 'test'})
     return s
 
@@ -170,8 +172,9 @@ class TheDialogTests(unittest.TestCase):
         server.store.add_message({'TaskId': tid, 'ExternalId': 'older-1', 'Channel': 'email',
                                   'Subject': 'RE: Resident Refund Request - PAYNE, MICHAEL',
                                   'FromEmail': 'hudson@riverbend.example', 'Status': 'routed'})
-        d = c.post(f'/api/messages/{mid}/not-mine',
-                   json={'scope': 'subject', 'note': 'resident refunds are not our task'}).json()
+        with teaching('resident refunds are not our task'):
+            d = c.post(f'/api/messages/{mid}/not-mine',
+                       json={'scope': 'subject', 'note': 'resident refunds are not our task'}).json()
         self.assertEqual(d['scope'], 'subject')
         self.assertEqual(d['scopeKey'], TOPIC)          # the resident is not the topic
         self.assertIn(tid, [t['taskId'] for t in d['alsoCovered']])
@@ -324,7 +327,7 @@ class ThreadVerdictTests(unittest.TestCase):
         s = MemoryStore()
         first = self._arrive(s, 'c1', subject='Collection %')
         self.assertEqual(first['status'], 'created')
-        s.add_memory({'Scope': 'sender', 'ScopeKey': 'dwhitfield@client.example', 'Source': 'verdict', 'Active': 1,
+        put_note(s, {'Scope': 'sender', 'ScopeKey': 'dwhitfield@client.example', 'Source': 'verdict', 'Active': 1,
                       'CreatedBy': 'owner', 'Note': 'Priya will take care of this one. She is responsible for AR stuff.'})
         s.delete_task(first['task_id'])
         s.set_message_status(first['message_id'], 'ignored')

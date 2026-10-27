@@ -1394,12 +1394,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     const id = selected;
     if (!beginStart(id, "general")) return;
     setErr(""); setStartFail(null);
+    // RUN ANOTHER AGENT is a second agent, not Continue (the owner, 2026-10-27: "it just opened the same window instead of a new one"):
+    // the box under that title asks for a new conversation (general.new_run) - a live one is paused first, as the coding start does
+    const another = !!(report || detail?.transcript || term?.alive || generalStarted);
     try {
+      if (another && term?.alive) { await api.post(`/api/tasks/${id}/pause`, {}); if (!stale(id)) setTerm(null); }
       // one shared dispatch whatever the task's kind was: it switches the kind, starts (or reuses) the
       // assistant session and records the live worker - a relabelled task is not a started one (PW-213)
       // profile, brain and model - whichever of them was chosen; blank means "as configured"
       const { data } = await api.post(`/api/tasks/${id}/dispatch`,
-        { kind: "general", agent: run.agent || null, pick: run.pick || null, model: run.model || null,
+        { kind: "general", agent: run.agent || null, pick: run.pick || null, model: run.model || null, ...(another ? { fresh: true } : {}),
           // what was typed in the box goes to it - this sent the pickers and dropped the words
           instruction: withImages(run.instruction.trim(), runPics.paths) || null });
       const outcome = outcomeOf(data);
@@ -1407,6 +1411,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // where the code is, still to say: the same question the coding start asks - it came back quietly and nothing opened
       if (!stale(id) && outcome.state === "needs_repo") { setRepoPick(true); setResumeAfterRepo({ dispatch: true }); }
       if (!stale(id)) { askTaken(id); runPics.clear(); setRestartOpen(false); }
+      // ...and the pane draws the new agent's conversation, not the one it had loaded
+      if (!stale(id) && another) setGeneralRevision((n) => n + 1);
       await Promise.all([loadDetail(id), loadTasks()]);
       onChanged?.();
     } catch (e) {

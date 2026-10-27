@@ -12,7 +12,7 @@ import ActionRow, { AdvisorNext } from "./ActionRow.jsx";
 import api from "./api.js";
 import { onLive } from "./live.js";
 import { adviceKeyFor, adviceShown, stripWord, taskNote } from "./advice.js";
-import { TableVerbs, onPressed, useHost, useVerbs } from "./actionRow.js";
+import { TableVerbs, onPressed, useHost, useVerbs, walkMove } from "./actionRow.js";
 import { adviceRead } from "./tableState.js";
 import { hint as btnHint, label as btnLabel } from "./buttons.js";
 
@@ -32,7 +32,7 @@ function useItemAdvice(card, on) {
     setAdvice(null); read();
     const off = onLive("advice", (ev) => { if (adviceKeyFor(ev, { key, aliases: card.aliases || [] })) read(); });
     // an act on the item moves its revision: read the line again (2026-10-19) - not Next, which puts this item down (overnight walk)
-    const after = onPressed((id) => { if (!/(^|:)next$/.test(String(id || ""))) read(); });
+    const after = onPressed((id) => { if (!walkMove(id)) read(); });
     return () => { live = false; off?.(); after(); };
   }, [on, key]);   // eslint-disable-line react-hooks/exhaustive-deps
   return advice;

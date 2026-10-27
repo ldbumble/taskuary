@@ -44,7 +44,7 @@ test("the view draws from the held read, and the reads ahead are where the next 
   assert.match(view, /onPointerEnter=\{\(\) => \{ if \(!isCur && i\.tid\) prefetchTask\(api, i\.tid\); \}\}/);        // a rail row under the pointer
   assert.match(search, /if \(aheadTid\) prefetchTask\(api, aheadTid\);/);                                             // a search hit highlighted
   // an act makes the held reads old - but Next is no act, it is what they are for
-  assert.match(view, /onPressed\(\(id\) => \{ if \(!\/\(\^\|:\)next\$\/\.test\(String\(id \|\| ""\)\)\) forgetTasks\(actedTid\.current \?\? null\); \}\)/);
+  assert.match(view, /onPressed\(\(id\) => \{ if \(!walkMove\(id\)\) forgetTasks\(actedTid\.current \?\? null\); \}\)/);
   assert.match(view, /useEffect\(\(\) => \{ if \(currentItem\?\.tid && earlyRef\.current\?\.key !== currentItem\.key\) actedTid\.current = currentItem\.tid; \}, \[currentItem\]\);/,
     "an act lets go of its own task's read only - not the next item's, just before the walk goes on to it");
 });

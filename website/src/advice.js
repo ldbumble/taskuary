@@ -1,5 +1,6 @@
 // The Advisor's line on the item on the table (spec 2026-10-12, build step 3): the pure piece, so it can be tested without a
-// browser. The rest is wiring in AssistantView.jsx; it is drawn at the canvas foot (ActionRow.AdvisorNext), not in the prompt box.
+// browser. The rest is wiring in AssistantView.jsx: it lights a button on the row (ActionRow), and the few lines that warn are drawn
+// in the task beside what they are about (taskNote, AdvisorNote) - no line stands over the row any more (2026-10-26).
 
 /* Which key to re-read advice for when an `advice` live event lands: the event carries the target's legacy key
    (task:N / msg:N) while the table holds the rail's key (processing:... in a real install) - a card's aliases bridge
@@ -44,4 +45,19 @@ export function stripWord({ speaks, busy, shown = null, lit = null, aiOff = fals
   const noAi = !!speaks && !busy && !lit && !working && mine && (advice.none === "no_ai" || (aiOff && !!advice.needs_ai));
   const quiet = !!speaks && !busy && !lit && !noAi && !shown && ((mine && !!advice.none) || working) ? { verb: "next", line: "", for: key } : null;
   return { noAi, pick: lit || (noAi ? { none: "no_ai", for: key } : shown || quiet) };
+}
+
+/* THE STRIP IS GONE, ITS LIT BUTTON STAYS (the owner, 2026-10-26: "maybe keep the box but remove the advisor? not sure the advisor is
+   really useful"): a line over the row named a fact about something on the task, a hand's width from it. The FEW that warn are drawn IN
+   the task, beside what they are about - a draft promising what nothing backs under the draft ('draft'); the same ask as another task, or a
+   reason the lit button is not the one you would guess (the model's own line: a duplicate an agent is on, what the owner's memory says)
+   at the head of the task ('task'). Every other line the task already says or the lit button does - a failure is the Result's first line,
+   a clash is on the invite, a stranger in Came from, an age on the rail, a stopped or unpushed agent on its own heading - so: null. */
+const NOTE_AT = { draft_ready: "draft", duplicate: "task" };
+const SAID = new Set(["failed", "failed_cause", "report_failed", "invite_clash", "invite_free", "stranger", "working", "closed", "agent_asking"]);
+export function taskNote(advice) {
+  const line = String(advice?.line || "").trim();
+  if (!line || !advice.verb || advice.verb === "next" || SAID.has(advice.state)) return null;
+  const at = NOTE_AT[advice.state] || (advice.by === "model" ? "task" : null);
+  return at ? { at, line: suggestion(line, advice.label, advice.verb), why: advice.by === "model", advice } : null;
 }

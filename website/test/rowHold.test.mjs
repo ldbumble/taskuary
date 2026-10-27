@@ -15,7 +15,8 @@ test("the row is held - its room kept, aria-busy - only while the item's first d
   assert.match(view, /const HOLD_MS = \d{3};/);
   assert.match(view, /setTimeout\(\(\) => setReading\(\(r\) => \(r === key \? "" : r\)\), HOLD_MS\)/, "a slow read never hides the row for good");
   assert.match(view, /<ActionRow advised=\{stripPick \|\| setupLit\} hold=\{!!reading && reading === onTable\} \/>/);
-  assert.match(view, /data-tq-strip=\{busy \|\| \(reading && reading === onTable\) \? "busy" : ""\}/, "the strip says it is reading, in an attribute only");
+  // ...and nothing says it is reading: the strip that carried a "busy" attribute is gone (the owner, 2026-10-26: "remove the advisor")
+  assert.doesNotMatch(view, /data-tq-strip=/);
 });
 
 test("a decision that lights nothing on purpose leaves a hidden mark, never a word", () => {

@@ -8,7 +8,7 @@ import { startHarness } from "./harness.mjs";
    card ~500-800 ms instead of ~200. At rest the pill is ~120px ("Ask…"): both stay on the row, on one line, at every laptop width. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-test("at rest the pill is small and one line at 1366, and leaves Mark done and Send to agent on the row at 1600px", { timeout: 300000 }, async (t) => {
+test("at rest the pill is small and Mark done stays on the row at 1366, 1440 and 1600px", { timeout: 300000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
   const page = await harness.newPage();
@@ -36,9 +36,9 @@ test("at rest the pill is small and one line at 1366, and leaves Mark done and S
     assert.ok(s.pill <= 130, `the pill is small at rest ${say}`);
     assert.ok(s.line <= 46, `one line ${say}`);
     console.log(`# ${say}`);
-    // ...narrower, this reply's row has more groups than the line holds even beside the small pill: Close folds before Agent and Reply (foldsOf)
-    if (width < 1600) continue;
+    // ...and Close folds last (the owner, 2026-10-27: "if there is no space"): Mark done is on the row at every laptop width
     assert.ok(s.verbs.includes("done"), `Mark done is on the row, not behind a ▾ ${say}`);
+    if (width < 1600) continue;
     assert.ok(s.verbs.some((v) => /agent/.test(v)), `Send to agent is on the row, not behind a ▾ ${say}`);
   }
   assert.deepEqual(errors, []);

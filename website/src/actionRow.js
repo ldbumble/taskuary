@@ -277,12 +277,13 @@ export function clustersOf(row, keep = 2) {
 
 // THE ROW IS ONE LINE, AT EVERY WIDTH (the owner, 2026-10-23: "the buttons turned into 2 rows ... NEVER do that"): an agent stopped
 // while its WhatsApp reply drafted put five typed groups on a desktop row, and the row wrapped. Nothing wraps now - groups FOLD into
-// one ▾ at the row's end until the line fits: the lowest group first (Task, then Close, Agent, Reply, the card's own), the group
+// one ▾ at the row's end until the line fits: the lowest group first (Task, then Agent, Reply, the card's own), Close after them
+// all (the owner, 2026-10-27: Mark done folds "if there is no space" - it was second, and a laptop reply hid it behind the ▾), the group
 // holding the lit move last; with every group folded the row is the phone's - Next, the one move, one ▾. Next never folds.
 // foldsOf: every layout from the widest (the typed groups) to the narrowest (phoneRow), each a list of groups for Cluster.
 export function foldsOf(row) {
   const cs = clustersOf(row), ph = phoneRow(row), lead = ph.shown[0], holds = (g) => !!lead && g.shown.includes(lead);
-  const order = [...cs.filter((g) => !holds(g)).reverse(), ...cs.filter(holds)], out = [cs];
+  const rest = cs.filter((g) => !holds(g)).reverse(), order = [...rest.filter((g) => g.type !== "close"), ...rest.filter((g) => g.type === "close"), ...cs.filter(holds)], out = [cs];
   for (let k = 1; k < order.length; k++) {
     const gone = new Set(order.slice(0, k)), folded = cs.filter((g) => gone.has(g)).flatMap((g) => [...g.shown, ...g.rest]).filter((v) => !v.slot);
     // ...ONE ▾ at the row's end: the group standing beside the shared ▾ gives its own ▾'s buttons to it, first - two ▾ side by side

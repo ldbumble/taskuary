@@ -148,7 +148,10 @@ const THREAD_MAX = "max(360px, calc(100vh - 160px))";
 // message's attachments (taskSources.filesByMessage): what rode in with a message is drawn under ITS row, never loose under the card.
 // FROM'S ROWS (taskSources.fromRows) end in "Show N older" instead: newest on top, the older ones a press away at the foot. `narrow`: the
 // From column's width - the name column gives way to the words.
-function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fetchFor = null, narrow = false }) {
+// ...and an OPEN row says its words once (the overnight walk, 2026-10-27: an invitation's one message read its first line in the row, then
+// again in full under it, its subject under the conversation's own): the row keeps who and when, the letter keeps the words, and a
+// subject that is the conversation's (`subject`) is not said again
+function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fetchFor = null, narrow = false, subject = "" }) {
   return rows.map((r, ri) => r.older ? (
     <Box key={`older${ri}`} component="button" type="button" data-tq-show-older={r.older} onClick={onExpand} title={`Older messages from ${r.names}`}
       sx={{ appearance: "none", font: "inherit", display: "block", width: "100%", textAlign: "left", bgcolor: "transparent", border: 0, cursor: "pointer",
@@ -174,7 +177,7 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
           alignItems: "baseline", px: 0.5, mx: -0.5, py: 0.25, borderRadius: 1, fontSize: 12.5, color: DIM, minWidth: 0,
           "&:hover": { bgcolor: "#faf8f4" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
         <Box component="span" sx={{ color: INK, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.m.who}</Box>
-        <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rowText(r.m, files.get(r.m.MessageId))}</Box>
+        <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{open === r.m.MessageId ? "" : rowText(r.m, files.get(r.m.MessageId))}</Box>
         <Box component="span" sx={{ color: FAINT, textAlign: "right", whiteSpace: "nowrap", fontSize: 11.5 }}>{whenShort(r.m.SentAt)}</Box>
       </Box>
       {open !== r.m.MessageId && (files.has(r.m.MessageId) || fetchFor === r.m.MessageId) && (
@@ -188,7 +191,7 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
             <Typography variant="caption" sx={{ color: FAINT }}>{channelName(r.m.Channel)}{r.m.SentAt ? ` · ${fmtDateTime(r.m.SentAt)}` : ""}</Typography>
             {r.m.SourceLink && <Link href={r.m.SourceLink} target="_blank" rel="noopener" sx={{ fontSize: 11 }}>open the original</Link>}
           </Box>
-          {r.m.Subject && <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mt: 0.1 }}>{r.m.Subject}</Typography>}
+          {r.m.Subject && !sameWords(r.m.Subject, subject) && <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mt: 0.1 }}>{r.m.Subject}</Typography>}
           {/* WHERE IT CAME FROM IS THE WHOLE MESSAGE, in full and scrolling - three lines of it were never enough to check the ask
               against: first for a report run (the owner, 2026-09-30: "i can't see the full report once it gets sent to agent"), then
               for the email behind a task (2026-10-01: "don't see the full email that this task came from") */}
@@ -2096,7 +2099,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                   {showAll && isChat(g.channel) ? <ChatThread messages={g.msgs} maxHeight={THREAD_MAX} />
                                     : <Box data-tq-thread-box="" sx={showAll ? { maxHeight: THREAD_MAX, overflowY: "auto", minWidth: 0 } : undefined}>
                                         <ConversationRows rows={fromRows(g, 3, showAll)} open={shownMsg} onOpen={(f) => setOpenMsg(f(shownMsg))} narrow
-                                          onExpand={() => setShowAll(true)} files={sourceFiles} fetchFor={fetchFor} /></Box>}
+                                          onExpand={() => setShowAll(true)} files={sourceFiles} fetchFor={fetchFor} subject={g.title} /></Box>}
                                 </Box>
                               </Box>
                             ))}

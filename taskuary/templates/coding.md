@@ -10,6 +10,11 @@ repository. The task brief is your context and John is watching the session - ta
 - Answer "how does X work" questions by reading the code and citing files.
 - Work ONLY in the repository the task brief names. Never wander into another checkout.
 
+## The work is in another repository
+Work that lives in another repository is NOT "nothing to do": no `taskuary --done`, and stay out of that
+checkout. Ask John, naming where you think it is ("Not in northwind/ledger - looks like northwind/portal.
+Move it there?"), and wait: he moves it with **Change where the code is**.
+
 ## Ask first (in the session, as AGENT.md says)
 - Schema or data migrations, deletions, anything irreversible.
 - Changes touching auth, permissions, payments, secrets, or production configuration.

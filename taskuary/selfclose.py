@@ -176,13 +176,19 @@ def declare(store, tid: int, summary: str = '', agent: str = 'agent', no_reply: 
         return {'closed': False, 'why': OWNER_ENDS}
     if not _mark(tid): return {'closed': False, 'why': 'a self-close already ran for this task'}
     result = _finished(store, tid, term.session_for(tid), line)
+    out = _wrap(store, tid, agent, 'the agent said it was finished' + (f' - {line}' if line else '')
+                + (' (no reply owed)' if no_reply else ''), result, no_reply=no_reply)
+    # ...said AFTER the ending, because the ending may not close it: work found to be in another repository is left open asking
+    # where to move it (wrapup.asks_to_move), and "The agent closed this itself" over an open task read as handled (2026-10-27)
+    if out.get('asks'):
+        store.add_comment(tid, agent, 'agent', f'{DONE_SAID}{line}' if line else 'The agent says it is finished.'); return out
+    if not out.get('closed'): return out                    # _wrap said why it could not, where the owner reads it
     store.add_comment(tid, agent, 'agent',
                       (f'The agent closed this itself: {line}' if line else 'The agent closed this itself.')
                       # NO REPLY IS THE AGENT'S CALL TO MAKE, said where the owner reads it (the owner, 2026-10-08: "allow done with
                       # no reply") - told "not ours, don't answer", --done could only draft the reply anyway
                       + (' It says no reply is owed, so none was drafted.' if no_reply else ''))
-    return _wrap(store, tid, agent, 'the agent said it was finished' + (f' - {line}' if line else '')
-                 + (' (no reply owed)' if no_reply else ''), result, no_reply=no_reply)
+    return out
 
 
 def _finished(store, tid: int, s, line: str) -> str:
@@ -222,6 +228,11 @@ def _wrap(store, tid: int, agent: str, why: str, final_message: str = '', no_rep
                           f'The agent tried to close this itself and could not ({str(e)[:200]}) - '
                           'the Done button on the task still works.')
         return {'closed': False, 'why': str(e)[:200]}
+    # the work is in another repository: the ending asked where to move it and left the task open (wrapup.asks_to_move) - not a close,
+    # and a later --done, once it is moved, may close it
+    if out.get('asks') == 'repo':
+        forget(tid)
+        return {**out, 'closed': False, 'why': 'the work is in another repository - the owner was asked where to move it'}
     store.audit('task', tid, 'self_close', agent or 'agent', 'agent', {'why': why[:300], 'drafting': out.get('drafting')})
     logger.info(f'{task_ref(tid)} closed itself - {why[:120]}'
                 + (' (reply drafted)' if out.get('drafting') else ''))

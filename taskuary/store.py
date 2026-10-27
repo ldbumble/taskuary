@@ -273,6 +273,14 @@ _DEPLOY_WAS = '- Do not push, deploy, publish or release unless the brief says y
 _DEPLOY_NOW = ("- Push, deploy, publish or release only when the brief or John's Continue says to - otherwise commit locally and stop.\n"
                '  When the ask is met only once the change is LIVE, that stop is a question, not the end: ask John here, "ready to\n'
                '  deploy <what> to <where> - go ahead?", and wait - no `--reply`, no `--done`. On yes: deploy, check it is live, then finish.')
+# A coding agent started in the wrong repository found the job was not there and closed the task "Nothing to do" (the owner,
+# 2026-10-27: "coding agent should be able to at least ask can I change repos"). CODING.md now says to ask; an edited copy takes
+# the section under the line it follows, where that line still reads as shipped (coding_asks_to_move).
+_ELSEWHERE_AT = '- Work ONLY in the repository the task brief names. Never wander into another checkout.\n'
+_ELSEWHERE_NOW = ('\n## The work is in another repository\n'
+                  'Work that lives in another repository is NOT "nothing to do": no `taskuary --done`, and stay out of that\n'
+                  'checkout. Ask John, naming where you think it is ("Not in northwind/ledger - looks like northwind/portal.\n'
+                  'Move it there?"), and wait: he moves it with **Change where the code is**.\n')
 _PROMISE_AT = '- "Nothing to do here" is also an ending'
 _PROMISE_NOW = ('- A reply goes when what it says is true. Never promise a later step ("I\'ll let you know when it\'s live"): do\n'
                 '  it, or ask for the go-ahead and wait. If something is genuinely left, say plainly what, and who does it.\n')
@@ -1497,6 +1505,15 @@ class SQLiteStore:
                     if '\r\n' in body: now = now.replace('\n', '\r\n')
                     self.cx.execute('UPDATE doc SET Content=?, UpdatedAt=? WHERE Name=?', (body.replace(was, now), _now(), name))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('coding_asks_before_deploy', '1', 'migration')")
+            # ...and WORK IN ANOTHER REPOSITORY IS A QUESTION (_ELSEWHERE_NOW), into an edited CODING.md the same way, once
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='coding_asks_to_move'").fetchone():
+                row = self.cx.execute("SELECT Content FROM doc WHERE Name='coding'").fetchone()
+                body = (row['Content'] or '') if row else ''
+                crlf = '\r\n' in body
+                at, now = (_ELSEWHERE_AT.replace('\n', '\r\n'), _ELSEWHERE_NOW.replace('\n', '\r\n')) if crlf else (_ELSEWHERE_AT, _ELSEWHERE_NOW)
+                if body.count(at) == 1 and '## The work is in another repository' not in body:
+                    self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='coding'", (body.replace(at, at + now), _now()))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('coding_asks_to_move', '1', 'migration')")
             # ...and THE GUIDE REPLACES THE PATCHWORK (the owner, 2026-10-09: "make it clear how to triage things, what to
             # look for, signs that would suggest things"). The sentence swaps above each fixed one rule; the template is now
             # one guide written as questions and signs, and the judgement code used to append lives in it. A document only

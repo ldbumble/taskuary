@@ -16,7 +16,7 @@ from taskuary.store import MemoryStore
 
 def store():
     s = MemoryStore()
-    for k in ('coding_auto_enabled', 'learn_enabled'): s.set_setting(k, '0', 't')
+    for k in ('coding_auto_enabled',): s.set_setting(k, '0', 't')
     return s
 
 

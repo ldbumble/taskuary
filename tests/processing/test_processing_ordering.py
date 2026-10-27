@@ -22,7 +22,7 @@ def stamp(minutes=0):
 @pytest.fixture
 def store(monkeypatch):
     value = MemoryStore()
-    for name in ("calendar_enabled", "coding_auto_enabled", "general_auto_enabled", "learn_enabled"):
+    for name in ("calendar_enabled", "coding_auto_enabled", "general_auto_enabled"):
         value.set_setting(name, "0", "test")
     value.set_setting("funnel_hours", "240", "test")
     monkeypatch.setattr(terminal, "live_sessions", lambda tail=0: [])

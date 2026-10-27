@@ -16,7 +16,7 @@ def stamp(seconds=0):
 
 def seeded(*, body=None, review=False):
     store = MemoryStore()
-    for name in ("calendar_enabled", "coding_auto_enabled", "learn_enabled"):
+    for name in ("calendar_enabled", "coding_auto_enabled"):
         store.set_setting(name, "0", "test")
     tid = store.create_task({
         "Title": "Quarterly close", "Summary": "Reconcile the close", "Kind": "reply",

@@ -749,9 +749,6 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     'agent_issues_enabled': '0',
                     # may agents push/deploy on their own? Off: commit locally, the owner pushes.
                     'agent_push_enabled': '0',
-                    # LEARNED.md: distill the owner's verdicts (edited drafts, rejections,
-                    # reclassifications) into a general style/responsibility profile - see learn.py
-                    'learn_enabled': '1',
                     # when an inbound answer ATTACHES to a task whose agent session is live:
                     # ask = a one-click offer in the panel; auto = typed straight in; off = neither
                     'answer_to_agent': 'ask',
@@ -1391,6 +1388,8 @@ class SQLiteStore:
             # sending it fields (others_replied) the doc never described. Only that pass writes a
             # non-SOUL doc as 'startup' (docsync writes SOUL.md), so those are untouched by anyone.
             self.cx.execute("UPDATE doc SET UpdatedBy='template' WHERE UpdatedBy='startup' AND Name<>'soul'")
+            # ...and learning has no off switch (the owner, 2026-10-27: "we should always learn"): an old learn_enabled=0 is dropped
+            self.cx.execute("DELETE FROM setting WHERE Name='learn_enabled'")
             if self.cx.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory'").fetchone():   # an older install, not yet drained
                 self._heal_notes()
             for name in ('soul', 'job', 'agent', 'coding', 'digest', 'learned', 'triage', 'style', 'counsel',

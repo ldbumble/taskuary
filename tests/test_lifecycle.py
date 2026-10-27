@@ -21,7 +21,7 @@ class LifecycleTests(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore()
         self.s.upsert_agent('coding', 'coding', 'cli', '{}')     # config.toml seeds one at boot
-        for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled', 'auto_draft_enabled'): self.s.set_setting(k, '0', 't')
+        for k in ('calendar_enabled', 'coding_auto_enabled', 'auto_draft_enabled'): self.s.set_setting(k, '0', 't')
         funnel.invalidate(); funnel.forget_states()
         self.no_model = mock.patch.object(concierge, 'brain', return_value=None); self.no_model.start(); self.addCleanup(self.no_model.stop)
 

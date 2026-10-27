@@ -132,7 +132,7 @@ node --test taskuary/whatsapp/*.test.mjs                         # CI does NOT r
 ~40 minutes, ~17 of them a local full pytest that CI repeats). Run the targeted pytest files, `npm test`
 (it is the only thing that reads JSX source text, and it is ~2 min), and the browser test FILES the change
 touches. Skip the full `python -m pytest -q` and the full `test:browser` - CI runs both (the browser suite
-in three parts, `browser/shard.mjs`). A web-only change can still fail pytest (`tests/test_every_card_is_reachable.py`
+in four parts, `browser/shard.mjs`). A web-only change can still fail pytest (`tests/test_every_card_is_reachable.py`
 slices ConnectorsView.jsx), so include the pytest files that read the JSX you changed. Rules that cost a round when broken:
 
 - **Never rebuild the bundle while a pytest run is going.** `tests/test_floor_wave_b.py` reads the

@@ -136,6 +136,9 @@ SYSTEM = (
     "failure (a refused address is fixed, not replied to, however soon the owner answers that person). "
     f"A line saying whom the owner hands a kind of ask to is the reason for {L('forward')} and nothing else - never said over "
     "another verb. When your line rests on a memory line or a usual line, cite its id. "
+    # ...and A REPORT NOBODY WANTS (the owner, 2026-10-27: the Advisor may suggest switching a report off) - the press stays the owner's
+    f"{L('report_off')} only over a report run whose findings are all about something a What you care about line says the owner does "
+    "not care about - cite that line, and the line says what it is about; never over a run that failed, never on a guess. "
     "A ledger line says what HAPPENED, never whether it worked: \"continued\" means the session was started "
     "again, nothing more - never call it a success, and never say something was merged, sent or fixed unless a line says exactly that. "
     "The line is plain words for the owner, who may never have written code: the ids go in \"evidence\" only, the verb is named by "

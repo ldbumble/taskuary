@@ -22,12 +22,15 @@ export function StatusLogo({ status, agent = "", className = "", children }) {
 // THE TASK HEADER'S STATUS, top right: exactly the rail's mark and word for this task - its logo ringed while an agent works
 export function StatusPill({ status, logo = null, agent = "", note = "" }) {
   if (!status) return null;
-  const title = [status.hint, note].filter(Boolean).join(" ");
+  const title = [status.hint, note].filter(Boolean).join(" "), mark = status.mark !== "spinner" ? status.mark : "";
+  // ...ON A PHONE THE MARK ALONE (the owner, 2026-10-27): "waiting on them" cut the title to a stub - the word is still in the pill for a
+  // screen reader (statusMark.css hides it only from sight), and the hover says it. A state with no mark keeps its word
   return (
-    <span className={`tq-status-pill role-${status.role || "none"}`} data-tq-status-pill={status.key} title={title || undefined}>
+    <span className={`tq-status-pill role-${status.role || "none"}${status.spins || mark ? " marked" : ""}`} data-tq-status-pill={status.key}
+      title={title || status.word || undefined}>
       {status.spins
         ? <StatusLogo status={status} agent={agent}>{logo}</StatusLogo>
-        : <i className="mark" aria-hidden="true">{status.mark !== "spinner" ? status.mark : ""}</i>}
+        : <i className="mark" aria-hidden="true">{mark}</i>}
       <span className="word">{status.word}</span>
     </span>
   );

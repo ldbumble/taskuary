@@ -30,4 +30,9 @@
 .tq-status-pill.role-done { background: #e2ebe0; border-color: #c9dcc8; color: #3c5740; }
 .tq-status-pill.role-info { background: #ece5d6; border-color: #d8ccb4; color: #5f5440; }
 .tq-status-pill.role-bad { background: #f4e7e5; border-color: #e2c6c2; color: #7e2d2d; }
-@media (max-width: 599.95px) { .tq-status-pill .word { max-width: 96px; overflow: hidden; text-overflow: ellipsis; } }
+@media (max-width: 599.95px) {
+  .tq-status-pill .word { max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
+  /* ...and a pill with a mark is the mark alone, a 22px disc: its word took the title's room ("Invoice …", the 2026-10-27 overnight walk) */
+  .tq-status-pill.marked { position: relative; width: 22px; padding: 0; gap: 0; justify-content: center; }
+  .tq-status-pill.marked .word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+}

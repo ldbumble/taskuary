@@ -2,7 +2,8 @@
 // content underneath. The Assistant (the Timeline's rail + Taskuary's chat) in the middle,
 // Board, Tasks and Reports to its left, Hub, Connections and Settings to its right.
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Badge, Box, Button, CircularProgress, IconButton, MenuItem, Popover, Select, Snackbar, Tooltip, Typography } from "@mui/material";
+import { Badge, Box, Button, CircularProgress, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Popover, Select, Snackbar, Tooltip, Typography,
+  useMediaQuery } from "@mui/material";
 import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import { pollWhileVisible } from "./visible.js";
@@ -290,26 +291,54 @@ export const ViewSwitch = ({ view, onView }) => (
 // QUIT, ON THE TOP LINE (the owner, 2026-10-25: "Quit is an explicit option ... in the browser version's top line"). In the browser
 // nothing else stops the server; the desktop window has the tray's Quit, so it is not drawn there. No box asks: the hover says what
 // stops with it, read when the pointer arrives (GET /api/quit), and the press is the decision.
-function QuitButton({ onStopped }) {
+// `read`: what stops with it, asked when the pointer (or the phone's Help menu) arrives; `err`: a Quit that did not stop it says why
+function useQuit(onStopped) {
   const [running, setRunning] = useState("");
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");             // a Quit that did not stop it says why, on the button itself
-  if (inDesktop() || DEMO) return null;
+  const [err, setErr] = useState("");
   const read = () => api.get("/api/quit").then(({ data }) => setRunning(data.running || "")).catch(() => {});
   const quit = async () => {
     setBusy(true); setErr("");
     try { onStopped((await api.post("/api/quit", {})).data.stopped || []); }
     catch (e) { setBusy(false); setErr(e?.response?.data?.detail || "Taskuary did not stop - close the terminal that runs it"); }
   };
+  return { can: !inDesktop() && !DEMO, running, busy, err, read, quit };
+}
+function QuitButton({ onStopped }) {
+  const q = useQuit(onStopped);
+  if (!q.can) return null;
   return (
-    <Tooltip title={err || quitTitle(running)}>
-      <span onMouseEnter={read} onFocus={read}>
-        <IconButton size="small" onClick={quit} disabled={busy} aria-label="Quit Taskuary" data-tq-quit="">
-          {busy ? <CircularProgress size={14} /> : <PowerSettingsNewIcon sx={{ fontSize: 17, color: DIM }} />}
+    <Tooltip title={q.err || quitTitle(q.running)}>
+      <span onMouseEnter={q.read} onFocus={q.read}>
+        <IconButton size="small" onClick={q.quit} disabled={q.busy} aria-label="Quit Taskuary" data-tq-quit="">
+          {q.busy ? <CircularProgress size={14} /> : <PowerSettingsNewIcon sx={{ fontSize: 17, color: DIM }} />}
         </IconButton>
       </span>
     </Tooltip>
   );
+}
+
+// HELP, AND ON A PHONE REFRESH AND QUIT INSIDE IT (the owner, 2026-10-27: the top bar is one row there - the title had the room it took).
+// The same three actions: Report a problem, the same refresh, the same Quit with no box asking - its hover's words under it, read on open
+function HelpMenu({ onReload, onStopped }) {
+  const [el, setEl] = useState(null), q = useQuit(onStopped);
+  const item = (icon, words, sub, onClick, more = {}) => (
+    <MenuItem onClick={onClick} {...more} sx={{ minHeight: 40 }}>
+      <ListItemIcon sx={{ minWidth: 30 }}>{icon}</ListItemIcon>
+      <ListItemText primary={words} secondary={sub} primaryTypographyProps={{ fontSize: 13.5 }} secondaryTypographyProps={{ fontSize: 11.5, whiteSpace: "normal" }} />
+    </MenuItem>);
+  return (<>
+    <IconButton size="small" aria-label="Help" aria-haspopup="menu" aria-expanded={!!el} data-tq-help="" onClick={(e) => { setEl(e.currentTarget); if (q.can) q.read(); }}>
+      <HelpOutlineIcon sx={{ fontSize: 17, color: DIM }} />
+    </IconButton>
+    <Menu anchorEl={el} open={!!el} onClose={() => setEl(null)} anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      transformOrigin={{ vertical: "top", horizontal: "right" }} slotProps={{ paper: { sx: { maxWidth: 300 } } }}>
+      {item(<HelpOutlineIcon sx={{ fontSize: 18 }} />, "Report a problem", null, () => { setEl(null); openBugReport(); })}
+      {item(<RefreshIcon sx={{ fontSize: 18 }} />, "Refresh", null, () => { setEl(null); onReload(); }, { "data-tq-reload": "" })}
+      {q.can && item(q.busy ? <CircularProgress size={14} /> : <PowerSettingsNewIcon sx={{ fontSize: 18 }} />, "Quit Taskuary", q.err || quitTitle(q.running), q.quit,
+        { disabled: q.busy, "data-tq-quit": "" })}
+    </Menu>
+  </>);
 }
 
 // ...and what the tab shows once it has: plain, and nothing left on it that would call a server that is gone
@@ -343,6 +372,7 @@ export default function TaskHubPage() {
   useEffect(() => { const f = (e) => setBug({ error: e.detail || null }); window.addEventListener(REPORT_EVENT, f); return () => window.removeEventListener(REPORT_EVENT, f); }, []);
   const [pending, setPending] = useState(0);
   const [tick, setTick] = useState(0);
+  const phone = useMediaQuery("(max-width:599.95px)");   // Refresh and Quit fold into Help there (HelpMenu)
   const [stopped, setStopped] = useState(null);   // Quit pressed: the list of what stopped with it (QuitButton)
   // the counter, and the panel it opens
   const [setup, reloadSetup] = useSetup(tick);
@@ -528,21 +558,21 @@ export default function TaskHubPage() {
           {/* ...and the static demo has the same Setup, which says how to install Taskuary: the chat's own setup button went (the owner,
               2026-10-19) and the demo was left with no way to that page. A server run with --demo keeps its badge where it was */}
           {(DEMO || !demo) && <SetupChip state={DEMO ? DEMO_SETUP : setup} onOpen={openSetup} />}
-          <Tooltip title="Report a problem">
+          {phone ? <HelpMenu onReload={() => setTick(tick + 1)} onStopped={setStopped} /> : <Tooltip title="Report a problem">
             <IconButton onClick={() => openBugReport()} size="small" aria-label="Report a problem">
               <HelpOutlineIcon sx={{ fontSize: 17, color: DIM }} />
             </IconButton>
-          </Tooltip>
+          </Tooltip>}
           {/* the Fix button lands on the card itself: Connectors reads #connector=<type> on the way in */}
           <Bell onGo={(p) => {
             if (p.connector) { openAppLink(`connector=${p.connector}`); return; }   // the link opens its card in the canvas
             if (p.report) { openAppLink(`report=${p.report}`); return; }
             go(p.where || "Connections");
           }} onAsk={(p) => { go("Assistant"); askAssistant(`${p.title}: ${p.detail}${p.error ? ` (${p.error})` : ""}. Can you look into it and fix it?`); }} />
-          <Tooltip title="Refresh">
+          {!phone && <Tooltip title="Refresh">
             <IconButton size="small" onClick={() => setTick(tick + 1)}><RefreshIcon sx={{ fontSize: 17, color: DIM }} /></IconButton>
-          </Tooltip>
-          <QuitButton onStopped={setStopped} />
+          </Tooltip>}
+          {!phone && <QuitButton onStopped={setStopped} />}
         </Box>
 
         {/* tighter side padding than top/bottom: the horizontal margin is dead space on a wide

@@ -44,19 +44,27 @@ export const SetupChip = ({ state, onOpen }) => {
   if (!state) return null;
   // SET UP, ALWAYS ON THE TOP BAR once it is done: the way back into the setup canvas (the owner, 2026-10-15: "they should be able to
   // restart the initial walk through from the button on top")
+  // ...ON A PHONE ITS RING ALONE (the owner, 2026-10-27): "Setup: pick your AI" put the bar on two rows and pushed the title down; the words
+  // stay its name and its hover
+  const ring = (pct) => (
+    <Box sx={{ position: "relative", display: "flex", width: 16, height: 16 }}>
+      <CircularProgress variant="determinate" value={100} size={16} thickness={6} sx={{ color: ROLES.muted.solid, position: "absolute" }} />
+      <CircularProgress variant="determinate" value={pct} size={16} thickness={6} sx={{ color: ROLES.done.solid }} />
+    </Box>);
   if (!state.left) return (
     <Tooltip title="Setup - your AI, email, connections and what Taskuary knows about your work">
-      <Box onClick={onOpen} data-tq-setup-open="" sx={{ cursor: "pointer", ml: 1, px: 1, py: 0.35, borderRadius: 99, border: `1px solid ${BORDER}`,
-        "&:hover": { bgcolor: "#eae4d8" } }}>
-        <Typography variant="caption" sx={{ fontWeight: 600, color: DIM }}>Setup</Typography>
+      <Box onClick={onOpen} data-tq-setup-open="" role="button" aria-label="Setup" sx={{ cursor: "pointer", ml: { xs: 0, sm: 1 }, px: { xs: 0.6, sm: 1 },
+        py: { xs: 0.5, sm: 0.35 }, display: { xs: "flex", sm: "block" }, borderRadius: 99, border: `1px solid ${BORDER}`, "&:hover": { bgcolor: "#eae4d8" } }}>
+        <Box sx={{ display: { xs: "flex", sm: "none" } }}>{ring(100)}</Box>
+        <Typography variant="caption" sx={{ fontWeight: 600, color: DIM, display: { xs: "none", sm: "inline" } }}>Setup</Typography>
       </Box>
     </Tooltip>);
-  const pct = ((3 - state.left) / 3) * 100;
+  const pct = ((3 - state.left) / 3) * 100, words = state.todo ? `Setup: ${state.todo}` : "Set up";
   return (
     <Tooltip title={state.dismissed ? "Setting up — put away, click to reopen" : "Finish setting Taskuary up"}>
-      <Box onClick={onOpen}
-        sx={{ display: "flex", alignItems: "center", gap: 0.75, cursor: "pointer", ml: 1,
-          px: 1, py: 0.35, borderRadius: 99, border: `1px solid ${state.dismissed ? BORDER : "#d8cfbe"}`,
+      <Box onClick={onOpen} role="button" aria-label={words} data-tq-setup-chip=""
+        sx={{ display: "flex", alignItems: "center", gap: 0.75, cursor: "pointer", ml: { xs: 0, sm: 1 },
+          px: { xs: 0.6, sm: 1 }, py: { xs: 0.5, sm: 0.35 }, borderRadius: 99, border: `1px solid ${state.dismissed ? BORDER : "#d8cfbe"}`,
           bgcolor: state.dismissed ? "transparent" : "#eae4d8",
           opacity: state.dismissed ? 0.75 : 1, "&:hover": { opacity: 1 } }}>
         {/* The track has to be WARM. It was #e6e9ef - a cool grey-blue on this warm tan pill, 1.04:1,
@@ -65,14 +73,8 @@ export const SetupChip = ({ state, onOpen }) => {
             beside a blank gap at exactly the moment it matters most. Both colours come from the roles
             table now rather than being typed here: muted is the part not done, done is the part that is,
             which is the same green the panel ticks a finished row with. */}
-        <Box sx={{ position: "relative", display: "flex", width: 16, height: 16 }}>
-          <CircularProgress variant="determinate" value={100} size={16} thickness={6}
-            sx={{ color: ROLES.muted.solid, position: "absolute" }} />
-          <CircularProgress variant="determinate" value={pct} size={16} thickness={6} sx={{ color: ROLES.done.solid }} />
-        </Box>
-        <Typography variant="caption" sx={{ fontWeight: 600, color: state.dismissed ? DIM : "#55697a" }}>
-          {state.todo ? `Setup: ${state.todo}` : "Set up"}
-        </Typography>
+        {ring(pct)}
+        <Typography variant="caption" sx={{ fontWeight: 600, color: state.dismissed ? DIM : "#55697a", display: { xs: "none", sm: "inline" } }}>{words}</Typography>
       </Box>
     </Tooltip>
   );

@@ -600,6 +600,9 @@
 @media (max-width: 600px) {
   .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box { flex-basis: 40%; min-width: 0; }
   .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { flex-basis: 62%; }
+  /* ...and the whole-line box is ONE line at rest: its hint wrapped under the attach, mic and emoji icons and stood the box 58px tall over a
+     task whose title already had little room (the 2026-10-27 overnight walk) - what is typed still grows it */
+  .tq-dock .tq-compose-box textarea::placeholder { white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
 }
 /* ...and what is said about the task comes up OVER it, anchored above the box: a few turns tall at most, scrolling inside, never moving the view */
 .tq-chat-pop { position: absolute; right: 20px; bottom: max(calc(100% - 2px), calc(var(--tq-box-h, 0px) + 18px)); z-index: 5; width: min(600px, calc(100% - 40px)); box-sizing: border-box; display: flex; flex-direction: column;

@@ -480,6 +480,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const endStart = (id) => { const { [id]: _, ...rest } = startFlights.current; startFlights.current = rest; setStarting(rest); };
   // a door that continued the conversation answered: it reads itself again in place - a remount drew it empty, then the same turns
   const [chatRead, setChatRead] = useState(0);
+  // ...but another agent's run is a new conversation: that one is mounted fresh (Run another agent)
+  const [generalRevision, setGeneralRevision] = useState(0);
   // the waiting room: notes for the agent, typed in when it stops (waitroom.py)
   const [waitText, setWaitText] = useState("");
   const [wrapping, setWrapping] = useState(false);   // declared up here: the poll effect below reads it
@@ -2434,7 +2436,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     : { flex: "0 0 auto", mb: canvas ? 1 : 0, display: "flex", flexDirection: "column", "& > *": { flex: "0 0 auto" },
                       ...(chatBelow ? { bgcolor: "#fff", border: `1px solid ${FOCUS_EDGE}`, borderTop: 0, borderRadius: "0 0 10px 10px", overflow: "hidden" } : {}) }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
-                      <GeneralWorkspace key={t.TaskId} task={t} compact onSession={generalSession} reread={chatRead}
+                      <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}
                         onAnswered={() => { findTerm(selected); onChanged?.(); }}
                         toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} noComposer={isGeneral && continueHere} />

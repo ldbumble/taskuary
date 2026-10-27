@@ -398,7 +398,8 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 
 function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false }) {
+  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false,
+  onEnded }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
@@ -433,6 +434,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           events.push(event);
           yield { content: content() };
         } else if (event.type === "error") {
+          // ...and the page is told the turn is over: the session the stream's `start` handed it stayed "Agent is working", with Stop
+          // and save, over a CLI that had died mid-turn - and nothing polls a session the server no longer has (the agents walk, 2026-10-26)
+          onEnded?.();
           yield { content: content(`⚠ ${event.error || "The agent stopped without an answer."}`) };
           return;
         } else if (event.type === "done") {
@@ -442,12 +446,13 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
       }
       } catch (e) {
         if (abortSignal?.aborted) return;              // the owner pressed stop; that is not an error
+        onEnded?.();
         yield { content: content(`⚠ ${e?.message || "The assistant could not answer."}`) };
       } finally {
         onBusyChange?.(false);
       }
     },
-  }), [attachmentsRef, onBusyChange, onClearAttachments, onSent, onStarted, selectionRef, task.TaskId]);
+  }), [attachmentsRef, onBusyChange, onClearAttachments, onEnded, onSent, onStarted, selectionRef, task.TaskId]);
   const runtime = useLocalRuntime(modelAdapter, { initialMessages: initial(messages) });
   /* WHAT ARRIVED WHILE YOU WERE TYPING goes into the thread that is already standing. This used to
      be a key bump, which remounts - and the draft lives in the composer INSIDE this runtime, so the
@@ -615,7 +620,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
 
 export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, dock = false, toolsAt = null,
   dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  onDockNewChat, noAiSaid = false, noTools = false, noComposer = false }) {
+  onDockNewChat, noAiSaid = false, noTools = false, noComposer = false, liveSid = "" }) {
   const [data, setData] = useState(null);
   const [connectorId, setConnectorId] = useState("");
   const [model, setModel] = useState("");
@@ -629,6 +634,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const { full, toggle: toggleFull } = useFullScreen();
   const [newChatBusy, setNewChatBusy] = useState(false);
   const [confirmNewChat, setConfirmNewChat] = useState(false);
+  // a turn this pane is streaming itself: `data.session` is not re-read during it, so it alone says the agent is not idle (SessionPane)
+  const [streaming, setStreaming] = useState(false);
+  const threadBusy = useCallback((b) => { setStreaming(b); onBusyChange?.(b); }, [onBusyChange]);
   const fileRef = useRef(null);
   const selectionRef = useRef({ connectorId: "", model: "" });
   const attachmentsRef = useRef([]);
@@ -734,6 +742,11 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const refresh = useCallback(() => {
     api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => accept(r.data)).catch(() => {});
   }, [accept, task.TaskId]);
+  // A SESSION ANOTHER DOOR STARTED (`liveSid`, the page's live one): the canvas's Continue card, the Assistant, the phone. The page
+  // adopted it, but this conversation had loaded before it existed and polls only while it knows of a turn, so a Continue with a note
+  // showed the old turns under an agent that had already asked its question (the agents walk, 2026-10-26). Read again when they differ.
+  const loaded = !!data, knownSid = data?.session?.sid || "";
+  useEffect(() => { if (loaded && liveSid && knownSid !== liveSid) refresh(); }, [loaded, liveSid, knownSid, refresh]);
   const pasted = (e) => {
     const images = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
     if (images.length) { e.preventDefault(); upload(images); }
@@ -787,11 +800,11 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       <AssistantThread key={task.TaskId} revision={revision} task={task} messages={shownMessages}
         published={dock ? placed.foot : [...placed.foot, ...uncited(data?.outputs, shownMessages.filter((m) => m.role === "assistant").map(textOf), task.TaskId)]}
         onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
-        attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onClearAttachments={clearAttachments}
+        attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onEnded={refresh} onClearAttachments={clearAttachments}
         onAttach={() => fileRef.current?.click()}
         dock={dock} dockExpanded={dockExpanded} prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
         asking={asking} onAnswer={answerAsk} noComposer={noComposer}
-        onBusyChange={onBusyChange} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
+        onBusyChange={threadBusy} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
         serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since}
         drafts={data?.playbookDrafts || []} acts={data?.browserActs || []} onDraftDecided={refresh} starting={starting} />
     </OutputsCtx.Provider>
@@ -824,7 +837,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
           leaves that heading behind */}
       {/* ...and none at all on a card whose session is not live (`noTools`, the owner 2026-10-25): a failed or closed agent's heading carried
           the agent picker, "provider default" and Full screen for a chat nothing is running in - the bar's Run another agent starts one */}
-      {!dock && !noTools && toolsAt && !full && createPortal(tools, toolsAt)}
+      {/* ...in a fragment: a portal straight under a Box failed its `children` check, a console error on every live agent (2026-10-26) */}
+      {!dock && !noTools && toolsAt && !full && <>{createPortal(tools, toolsAt)}</>}
       {!dock && !noTools && !(toolsAt && !full) && <Box sx={{ minHeight: 39, px: 1.25, py: { xs: 0.5, md: 0 }, display: "flex", alignItems: "center", gap: 0.8, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL,
         flexWrap: "wrap", flexShrink: 0 }}>
         <Box sx={{ width: 7, height: 7, borderRadius: 99, bgcolor: session?.alive ? "#78a17b" : "#c7a258" }} />
@@ -896,8 +910,10 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       {uploading && <Box sx={{ px: 1, py: 0.5, color: FAINT, fontSize: 11 }}>Attaching image…</Box>}
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         {/* ALWAYS inside the pane, session or not: a session that arrives mid-turn (`started`) must not
-            change the tree around the thread, or the answer streaming into it is remounted away */}
-        <SessionPane sid={session?.sid || null} height="100%" yourTurn={!!asking} expectBrowser={wantsBrowser(task)}>{thread}</SessionPane>
+            change the tree around the thread, or the answer streaming into it is remounted away
+            ...and no sid on a card whose session is not live (`noTools`): its browser was asked for every 3 s under a stopped, saved
+            or failed agent's Result, for as long as it stayed open (the agents walk, 2026-10-26) */}
+        <SessionPane sid={(!noTools && session?.sid) || null} height="100%" yourTurn={!!asking} idle={!busy && !streaming} expectBrowser={wantsBrowser(task)}>{thread}</SessionPane>
       </Box>
     </Box>
   );

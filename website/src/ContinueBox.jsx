@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Box, Button, Popover, TextField, Typography } from "@mui/material";
 import api from "./api.js";
 import { MicButton } from "./ui.jsx";
@@ -19,14 +19,18 @@ export default function ContinueBox({ task, anchor, onClose, onDone, inline = fa
   const [err, setErr] = useState("");
   const pics = usePromptImages();
   const said = note.trim() || pics.imgs.length;
+  // ...once: a double press (or Ctrl+Enter then a click) posted /continue-work twice before `busy` was drawn (the agents walk, 2026-10-26)
+  const flight = useRef(false);
   const go = async () => {
+    if (flight.current) return;
+    flight.current = true;
     setBusy(true); setErr("");
     onPress?.();
     try {
       const { data } = await api.post(`/api/tasks/${task.TaskId}/continue-work`, { note: note.trim() || null, images: pics.paths });
       onClose?.(); onDone?.(data, note.trim() || (pics.imgs.length ? "(images)" : ""));
     } catch (e) { const msg = e?.response?.data?.detail || e?.message || "it could not continue"; setErr(msg); onFail?.(msg); }
-    finally { setBusy(false); }
+    finally { flight.current = false; setBusy(false); }
   };
   const body = (
     <Box sx={{ p: 1.5, display: "grid", gap: 1, ...(inline ? {} : { width: 320 }) }}>

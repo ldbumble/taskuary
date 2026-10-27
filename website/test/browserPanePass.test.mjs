@@ -12,7 +12,8 @@ test("the first turn's session is taken from the stream's start, not its done", 
   assert.match(gw, /event\.type === "start"\) \{\n\s*onStarted\?\.\(event\.session\)/);
   assert.match(gw, /setData\(\(d\) => \(d && !d\.session \? \{ \.\.\.d, session: s \} : d\)\)/);
   // the thread sits inside the pane with or without a session: swapping the wrapper mid-turn remounts the stream
-  assert.match(gw, /<SessionPane sid=\{session\?\.sid \|\| null\}/);
+  // ...a session that is not live (`noTools`) has no sid there: its browser is not asked after (2026-10-26)
+  assert.match(gw, /<SessionPane sid=\{\(!noTools && session\?\.sid\) \|\| null\}/);
   assert.doesNotMatch(gw, /\{session \? \(\s*<SessionPane/);
   assert.match(term, /if \(!sid\) return undefined;/);
 });

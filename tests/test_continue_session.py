@@ -50,6 +50,19 @@ class OneRoadTests(unittest.TestCase):
         self.assertEqual(out['kind'], 'general')
         self.assertEqual(session.send_prompt.call_args[0][0], 'use the new letterhead')
 
+    def test_a_general_continue_says_a_turn_is_coming_until_its_thread_has_run(self):
+        """The page reloads /assistant as soon as /continue-work answers - before the thread has a session - and polls only while
+        it reads busy or `starting`: unmarked, it never saw the continued turn (the agents walk, 2026-10-26)."""
+        from taskuary import general
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Compare payroll vendors', 'Kind': 'general', 'Status': 'open'}, 'o')
+        held = []
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=True),              mock.patch('taskuary.general.provider_options', return_value=['x']),              mock.patch('taskuary.general.start_session', return_value=mock.Mock()),              mock.patch('threading.Thread', side_effect=lambda target, **k: mock.Mock(start=lambda: held.append(target))):
+            TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': 'one more thing'})
+            self.assertIn(tid, general.OPENING, 'starting from the answer on')
+            held[0]()
+        self.assertNotIn(tid, general.OPENING, 'and no longer once the turn has run')
+
     def test_a_coding_agent_reopens_its_own_session_or_a_fresh_one(self):
         s = MemoryStore()
         tid = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open'}, 'o')

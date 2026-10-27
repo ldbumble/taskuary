@@ -675,9 +675,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // report lands on the task when the job has written it (the poll below reads it), and a failure is said on the task.
   // ...and the agent is put down AT THE PRESS, Close out opened with the write-up's pending block in it (the owner, 2026-10-21: "it
   // looks frozen"): the harvest the press waits for is the block's first step, not a pause with the pane still up.
+  // ...once per press: a double press posted /wrap twice before the first had put the pane down (the agents walk, 2026-10-26)
+  const wrapFlight = useRef(null);
   const wrapUp = async () => {
     if (!canWrap && !pressedHere) return;          // ...a write-up that failed here is tried again on the session it left open
     const id = selected, n = (detail?.comments || []).length, sid = term?.sid || pressedHere?.sid || null;
+    if (wrapFlight.current === id) return;
+    wrapFlight.current = id;
     setErr(""); setWritingUpAt({ id, n, sid }); setTerm(null); setSeekCloseOut(true);
     try {
       const { data } = await api.post(`/api/tasks/${id}/wrap`, { close: false, background: true });
@@ -688,7 +692,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       if (stale(id)) return;
       setWritingUpAt(null); findTerm(id);      // nothing was written up: the session comes back as it was
       setErr(e?.response?.data?.detail || "Could not save the agent's work - press Stop and save again.");
-    }
+    } finally { if (wrapFlight.current === id) wrapFlight.current = null; }
   };
   // Pausing is not finishing: no report, no reply draft, the task stays open. What it worked
   // out becomes a handover note that gets typed into the NEXT session, because a pty has no

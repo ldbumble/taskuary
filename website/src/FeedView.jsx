@@ -415,7 +415,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     // re-asks at once. Hidden windows stay subscribed via onLive but do not refetch.
     if (!active) return undefined;
     const observer = observeSync({
-      read: () => api.get("/api/ingest/status", { timeout: 10000 }).then(({ data }) => data),
+      read: () => api.get("/api/ingest/status", { timeout: 10000 }).then(({ data }) => data), gather: 250,
       changed: d => applyLatest.current(d),
       failed: () => setSyncUnknown(true),
       subscribe: refresh => { const off = onLive(["feed-changed", "ingest-status"], refresh), offWrote = onWrote(refresh); return () => { off(); offWrote(); }; },

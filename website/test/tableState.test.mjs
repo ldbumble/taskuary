@@ -30,11 +30,14 @@ test("a page over the item: the rail's tag and the box say it is under the page,
   const shown = tableWords(tableOf({ current: "task:3" }), "TQ-0003");
   assert.equal(shown.tag, "on the table");
   assert.match(shown.box, /^Ask about this one/);
+  assert.equal(shown.name, "Tell Taskuary what to do with TQ-0003", "the pill names the task its words do not");
+  assert.equal(under.name, "Ask Taskuary about this page or TQ-0003");
   assert.match(tableWords(tableOf({ cardKey: "task:9" })).box, /^Ask about this one/, "a task opened by name is on the table too");
   assert.match(tableWords(tableOf({ browsing: "b1" })).box, /^Ask Taskuary anything/, "a page with nothing under it");
   assert.match(src, /tag=\{tableSays\.tag\}/, "the rail draws the tag tableWords chose");
   // ...and the box its words - but the one-row bar's pill, at rest and widened, its own short ones (2026-10-26)
   assert.match(src, /placeholder=\{phone \? tableSays\.phone : !popOn \? tableSays\.box : boxWide \? "[^"]+" : "Tell me what to do…"\}/, "and the box its words");
+  assert.match(src, /aria-label=\{tableSays\.name\}/, "and its name the task on the table");
 });
 
 // NO "THINKING..." (the owner, 2026-10-23): the server answers at once with the Advisor's one decision - a lit verb, silent or with its

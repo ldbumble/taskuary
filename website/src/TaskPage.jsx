@@ -1311,10 +1311,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // domain and then we won't have issue again"): the box that says why nothing started holds them, and Came from then shows none.
   // A press lifts the hold - the box says so and the normal Start is offered; nothing starts by itself
   const trustBoxed = trustInBox(story) && ["line", "story"].includes(storyAt);
+  // ...and IT SAYS IT IS WORKING (the owner, 2026-10-27: "when you hit trust this sender it does not spin, it just hangs there"): the press
+  // spins and both presses grey until the task has been read again with the sender trusted - one press, never two
+  const [trusting, setTrusting] = useState(null);
   const trustPress = async (scope) => {
+    if (trusting) return;
     const word = scope === "org" ? strangerLine(detail)?.trustOrg : strangerLine(detail)?.trust;
-    try { await runOperation(api, "task.trust", selected, scope ? { scope } : undefined); loadDetail(selected); loadTasks(); onChanged?.(); }
+    setTrusting(scope || "person");
+    try { await runOperation(api, "task.trust", selected, scope ? { scope } : undefined); await loadDetail(selected); loadTasks(); onChanged?.(); }
     catch (e) { setErr(`That didn't go through - ${opError(e, "Taskuary didn't answer")}.${word ? ` Press ${word} again.` : ""}`); }
+    finally { setTrusting(null); }
   };
   // the one white section on the shaded body (taskLayout.focusOf); a live session has no shade and no focus - it is the page
   const list = !!(detail?.batch || t?.DoneWhen || (!t?.DoneWhen && todo.length));
@@ -2108,13 +2114,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             <Tooltip title={strangerLine(detail).why}><span>{strangerLine(detail).text}</span></Tooltip>
                             {/* ...pressable LOOKS pressable (the owner, 2026-10-27: "trust has to be clickable like a pill"): small round buttons */}
                             {!trustBoxed && strangerLine(detail).trust && <>{" "}
-                            <Button size="small" variant="outlined" data-tq-trust="" sx={TRUST_PILL} onClick={() => trustPress("")}>
+                            <Button size="small" variant="outlined" data-tq-trust="" sx={TRUST_PILL} disabled={!!trusting} onClick={() => trustPress("")}
+                              startIcon={trusting === "person" ? <CircularProgress size={11} color="inherit" /> : null}>
                               {strangerLine(detail).trust}
                             </Button>
                             {/* ...or their whole organisation (the owner, 2026-10-22: "hit trust domain and then all users from that domain are
                                 good"): everyone at that domain, Teams organisation or Slack workspace, from now on (senders.trust_org) */}
                             {strangerLine(detail).trustOrg && <>{" "}
-                            <Button size="small" variant="outlined" data-tq-trust-org="" sx={TRUST_PILL} onClick={() => trustPress("org")}>
+                            <Button size="small" variant="outlined" data-tq-trust-org="" sx={TRUST_PILL} disabled={!!trusting} onClick={() => trustPress("org")}
+                              startIcon={trusting === "org" ? <CircularProgress size={11} color="inherit" /> : null}>
                               {strangerLine(detail).trustOrg}
                             </Button></>}</>}
                           </Typography>
@@ -2267,7 +2275,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       : null} />
                   </Box>
                   {/* folded with no record, the step says its one sentence; open with none, the story is the whole account (storyPlace) */}
-                  {(storyAt === "line" || storyAt === "story") && <AgentStory story={story} compact={storyAt === "line"} onTrust={trustPress} />}
+                  {(storyAt === "line" || storyAt === "story") && <AgentStory story={story} compact={storyAt === "line"} onTrust={trustPress} trusting={trusting} />}
                   {/* ...folded over a record, its sentence and what happened - the draft it wrote opens below it (2026-09-22) */}
                   {storyAt === "summary" && <AgentRecord {...recordProps} story={story} folded />}
                   {storyAt === "summary" && co.writeupAt === "result" && <WriteupLine view={writeup} />}

@@ -43,7 +43,7 @@ test("the held box carries the presses; Came from then carries none (one place, 
   assert.match(story, /onTrust && trustInBox\(story\) && <TrustButtons/);
   assert.match(story, /data-tq-trust-org="" [^>]*onClick=\{\(\) => onTrust\("org"\)\}>\{trust\.org\}/);
   const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  assert.match(page, /<AgentStory story=\{story\} compact=\{storyAt === "line"\} onTrust=\{trustPress\} \/>/);
+  assert.match(page, /<AgentStory story=\{story\} compact=\{storyAt === "line"\} onTrust=\{trustPress\} trusting=\{trusting\} \/>/);
   assert.match(page, /const trustBoxed = trustInBox\(story\) && \["line", "story"\]\.includes\(storyAt\)/);
   assert.match(page, /\{!trustBoxed && strangerLine\(detail\)\.trust && <>/);
   assert.match(page, /runOperation\(api, "task\.trust", selected, scope \? \{ scope \} : undefined\)/);

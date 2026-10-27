@@ -550,15 +550,9 @@
    row its 30px pills in a 3px section (.tq-cl), the box its 34px line - about 115px; a touch screen keeps its 44px targets (pointer: coarse) */
 .tq-dock .tq-next { margin: 0; min-height: 30px; padding: 0 16px; justify-content: flex-start; background: #f6f5f1; border-bottom: 1px solid #ece7de; }
 .tq-dock .tq-next .tq-next-why { margin-left: auto; padding-block: 2px; }
-/* one strip, one height whatever line it says (2026-10-19) */
-.tq-dock .tq-strip { min-height: 30px; display: flex; flex-direction: column; background: #f6f5f1; border-bottom: 1px solid #ece7de; animation: tqStripIn .16s ease-out; }
-/* ...and NO LINE, NO STRIP (the owner, 2026-10-26: "for advisor we probably should remove it when it's not doing anything no? want to give
-   laptops enough real estate to see the full task"): an empty band of 31px sat over the row while the Advisor was silent - the obvious move
-   (its lit button says it), an agent at work, a read still on its way. It takes no room until it has words, and comes in softly then */
-.tq-dock .tq-strip:not(:has(> .tq-next)) { display: none; }
-@keyframes tqStripIn { from { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .tq-dock .tq-strip { animation: none; } }
-.tq-dock .tq-strip > .tq-next:last-child { border-bottom: 0; }
+/* NO STRIP (the owner, 2026-10-26: "maybe keep the box but remove the advisor?"): the dock is the row and the box, one line - a .tq-next here
+   is setup's own line (SetupLine), drawn only while setup is in view */
+.tq-dock > .tq-next { border-bottom: 1px solid #ece7de; }
 .tq-dock .tq-arow { width: 100%; margin: 0; min-height: 0; justify-content: center; padding: 3px 12px; box-sizing: border-box; border-bottom: 1px solid #ece7de; }
 .tq-dock .tq-compose-box { width: 100%; min-height: 40px; align-items: center; border: 0; border-radius: 0; box-shadow: none; padding: 3px 8px; }
 .tq-compose-box { width: min(980px, 100%); margin: 0 auto; display: flex; align-items: flex-end; gap: 5px; padding: 6px 7px; border: 1px solid #d5d0c7; background: #fff; border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
@@ -569,6 +563,30 @@
 .tq-compose-box > span { width: 34px; height: 34px; flex: 0 0 34px; display: flex; align-items: center; justify-content: center; }
 .tq-send { width: 34px; height: 34px; flex: 0 0 34px; border: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; color: white; background: #738275; }
 .tq-send:disabled { opacity: .4; cursor: default; }
+/* THE ONE-ROW CHAT BAR (the owner, 2026-10-26: "try one row chat bar with ai pop up. let me see what it looks like"): the row's groups and
+   the box on one line - the box a pill at the line's end at rest, its tools hidden; used, it widens and the groups fold into their ▾ for
+   the room (ActionRow measures the room left). With no row on the line the box is the whole line, as before */
+.tq-dock-line { display: flex; align-items: center; min-width: 0; }
+.tq-dock-line > .tq-arow { flex: 1 1 0; min-width: 0; width: auto; }
+.tq-dock .tq-dock-line > .tq-arow { border-bottom: 0; padding-right: 8px; }
+.tq-compose-tools { display: contents; }
+.tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box { flex: 0 0 220px; width: auto; min-height: 34px; margin: 3px 6px 3px 0; padding: 0 3px 0 10px; gap: 2px;
+  border: 1px solid #d5d0c7; border-radius: 17px; background: #f8f7f3; transition: background-color .12s, border-color .12s; }
+.tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { flex-basis: min(560px, 46%); padding-left: 3px; background: #fff; border-color: #9fae9f; }
+.tq-dock-line:has(> .tq-arow) > .tq-compose-box:not([data-tq-open]) .tq-compose-tools { display: none; }
+.tq-dock-line:has(> .tq-arow) > .tq-compose-box textarea { min-height: 30px; padding: 5px 4px; }
+.tq-dock-line:has(> .tq-arow) > .tq-compose-box .tq-send { width: 28px; height: 28px; flex-basis: 28px; border-radius: 50%; }
+/* ...and what is said about the task comes up OVER it, anchored above the box: a few turns tall at most, scrolling inside, never moving the view */
+.tq-chat-pop { position: absolute; right: 20px; bottom: calc(100% - 2px); z-index: 5; width: min(600px, calc(100% - 40px)); box-sizing: border-box; display: flex; flex-direction: column;
+  border: 1px solid #d5d0c7; border-radius: 14px; background: #fffdfb; box-shadow: 0 10px 32px #39352d26, 0 2px 6px #39352d14; animation: tqPopIn .14s ease-out; }
+.tq-chat-pop[hidden] { display: none; }
+@keyframes tqPopIn { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) { .tq-chat-pop { animation: none; } }
+.tq-chat-pop-head { display: flex; align-items: center; gap: 6px; padding: 5px 6px 5px 12px; border-bottom: 1px solid #ece7de; font-size: 12px; color: #6e685f; }
+.tq-chat-pop-head b { color: #2f3a42; font-weight: 600; }
+.tq-chat-pop-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 14px 4px; }
+.tq-chat-pop-body > .tq-msg { margin-bottom: 10px; }
+.tq-chat-pop-body > .tq-msg:first-child > .avatar { visibility: visible; }
 /* the Advisor's pill sits where the arrow does and does what the card's primary button does; typing brings the arrow back */
 /* the walk is on the phone: the composer is replaced by the way back, never sat beside it */
 .tq-handed { margin: 0 20px 10px; padding: 10px 12px; border: 1px solid #d5d0c7; border-top-width: 1px; border-radius: 12px; background: #fffdfb; display: flex; align-items: center; gap: 10px; color: #4a5d4f; }
@@ -698,24 +716,11 @@
   .tq-cl .tq-ab { min-width: 0; padding: 0 11px; }
   .tq-arow-verbs { gap: 5px 6px; }
 }
-/* ONE VOICE SAYS WHAT TO DO (the owner, 2026-10-13: "why would we need both?"): while the NEXT strip stands, the task's own
-   "Open again: ... continue the session, or answer it yourself" line goes - the Tasks tab, with no strip, keeps it */
-.tq-asst-col.advising .tq-news { display: none; }
 /* THE SUGGESTION (canvas J3): one centred line over the row, no box - a slate dot, the sentence, Why? */
 .tq-next { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 2px 8px; }
 .tq-next::before { content: ""; flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: #55697a; }
 .tq-next-txt { flex: 0 1 auto; min-width: 0; font: 500 14px/1.4 'IBM Plex Sans', system-ui, sans-serif; color: #262521;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* ONE line, always - the whole sentence is its tooltip (oneLine.js) */
-/* ...and ON A PHONE ONE LINE TOO, GIVEN THE ROOM (2026-10-26, superseding ruling 6's two lines: the owner's rule is one line, read whole -
-   at 390px the line wrapped in a ~211px box): the dot goes, the gutters and the type tighten, and Why? keeps its place. A line past
-   what fits still ends in an ellipsis, never a second line - the whole sentence is in Why? (its "said") and the tooltip (oneLine.js) */
-@media (max-width: 600px) {
-  .tq-strip .tq-next { gap: 2px; }
-  .tq-strip .tq-next::before { display: none; }
-  .tq-dock .tq-strip .tq-next, .tq-docked .tq-strip .tq-next { padding-left: 4px; padding-right: 0; }
-  .tq-strip .tq-next-txt { font-size: 13px; letter-spacing: -0.015em; }
-  .tq-strip .tq-next-why { padding: 4px 2px; font-size: 12px; }
-}
 .tq-next > *:not(.tq-next-txt) { flex-shrink: 0; }   /* ...and Why? and a lit button stay on it, whole */
 .tq-next-why { flex: 0 0 auto; border: 0; background: transparent; padding: 4px 6px; border-radius: 6px; cursor: pointer; font: 600 12.5px/1 'IBM Plex Sans', system-ui, sans-serif; color: #55697a; text-decoration: underline; text-underline-offset: 3px; }
 .tq-next-why:hover { background: #ece9e3; }
@@ -750,7 +755,6 @@
 .tq-arow.inline { width: 100%; margin: 0; padding: 6px 4px 2px; }
 /* a phone's line and the row it lights, one unit at the view's foot; the strip holds its height from Thinking to the answer */
 .tq-docked { flex: 0 0 auto; display: flex; flex-direction: column; position: sticky; bottom: 0; z-index: 2; background: #f6f4f1; }
-.tq-docked .tq-strip { min-height: 32px; display: flex; flex-direction: column; justify-content: center; }
 .tq-docked .tq-next { margin: 0; padding: 4px 8px; justify-content: flex-start; }   /* a phone's task view carries its own row: the dock is behind the pinned view */
 @media (min-width: 1100px) { .tq-arow { width: 100%; } }
 

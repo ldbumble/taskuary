@@ -80,13 +80,12 @@ test("an agent asking lights nothing on the row: its pane holds the answers", ()
 });
 
 // ONE LINE, READ WHOLE, ON A PHONE TOO (2026-10-26, superseding the two-line wrap of 2026-10-22): the phone gives the line the room
-test("at phone width the Advisor's line stays one line, given the room; the desk keeps its one line", async () => {
+// ...and since 2026-10-26 there is no Advisor line over a row on any width (the owner: "remove the advisor"); setup's line keeps the one line
+test("no Advisor strip at any width; the one .tq-next line left (setup's) stays one line", async () => {
   const fs = await import("node:fs");
   const css = fs.readFileSync(new URL("../src/assistantView.css", import.meta.url), "utf8");
   assert.doesNotMatch(css, /\.tq-next-txt \{[^}]*white-space: normal/, "never a second line");
-  const phone = css.match(/@media \(max-width: 600px\) \{\s*\.tq-strip \.tq-next \{[\s\S]*?\n\}/)?.[0] || "";
-  assert.match(phone, /\.tq-strip \.tq-next::before \{ display: none; \}/, "the dot gives its room to the words");
-  assert.match(phone, /\.tq-strip \.tq-next-txt \{ font-size: 13px;/);
+  assert.doesNotMatch(css, /\.tq-strip/);
   assert.match(css, /\.tq-next-txt \{[^}]*white-space: nowrap; overflow: hidden; text-overflow: ellipsis; \}/);
 });
 

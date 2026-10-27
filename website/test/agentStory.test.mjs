@@ -32,7 +32,8 @@ test("the agent step tries a failed run again and lights its fix", () => {
   const page = readFileSync(fileURLToPath(new URL("../src/TaskPage.jsx", import.meta.url)), "utf8");
   assert.match(page, /failedRun \? btn\("try_again"\)/);
   assert.match(page, /continue-work`, \{ note: null \}/);
-  assert.match(page, /runFix && [^\n]*\{ id: "fix"/);
+  // ...but no Connect an AI on the canvas's row (the owner, 2026-10-26: "why would we need connect an ai?") - the Result's line says why
+  assert.match(page, /\.\.\.\(runFix && !\(inRow && runFix\.href === place\("ai"\)\.href\) \? \[\{ id: "fix", group: "decide", tone: "p"/);
 });
 
 // by what the agent IS, from the task's kind - "Start coder" named a profile as if it were a worker (the owner, 2026-10-16)

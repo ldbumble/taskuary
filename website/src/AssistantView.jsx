@@ -20,6 +20,7 @@ import VolumeOffIcon from "@mui/icons-material/VolumeOff";
 import SendIcon from "@mui/icons-material/ArrowUpward";
 import SentimentSatisfiedAltIcon from "@mui/icons-material/SentimentSatisfiedAlt";
 import CloseIcon from "@mui/icons-material/Close";
+import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import ViewSidebarIcon from "@mui/icons-material/ViewSidebar";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import api from "./api.js";
@@ -74,7 +75,7 @@ import DigestText from "./DigestText.jsx";
 import { canGoBack, firstAppLink, onStep, openAppLink, recordPlace } from "./appLinks.js";
 import { hashFor } from "./canvasLinks.js";
 import { canSend, useCapabilities } from "./capabilities.js";
-import { adviceNone, place } from "./words.js";
+import { place } from "./words.js";
 import ConnectAi, { CONNECT_AI, connectAi } from "./ConnectAi.jsx";
 // FirstRun, the walk's workspace and the browse cards are drawn after the pile or a click, never on the first frame: out of the entry chunk
 const FirstRun = lazyView(() => import("./FirstRun.jsx"));
@@ -108,6 +109,7 @@ import "./assistantView.css";
 // showing anything, so a stale key restores nothing.
 const WALK_KEY = "taskuary_walk_tid";
 const HOLD_MS = 400;            // the longest a row waits for its item's first decision before it is drawn without one
+const POP_LIT_MS = 1800;        // how long the chat pop-up shows the owner's line when the answer was only a lit button
 const isOpenWalk = (t) => !!t && t.SourceRef === "assistant:setup" && !["done", "dropped"].includes(t.Status);
 // markers the server writes on a line that are NOT cards (concierge.SETUP_QUESTIONS): the line is its words
 // ...and a line that carries its own words (concierge: a failed act's way on, the already-seen opens): never an item card
@@ -983,7 +985,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
       <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle} phone={canvas.phone}
         onNext={() => actions.next()} busy={actions.busy} picking={actions.picking} onFold={() => canvas.fold(c.key)} onAfter={() => actions.advance(null, true)}
         onLeave={() => canvas.putDown(c.key, c.tid)} onStay={(why) => canvas.pickUp(c.key, why)} onReminded={(out) => actions.reminded(out, c)}
-        onListChanged={actions.reload} onChanged={actions.changed} onOpenTask={actions.openTask} lit={canvas.lit}
+        onListChanged={actions.reload} onChanged={actions.changed} onOpenTask={actions.openTask} lit={canvas.lit} advice={canvas.advice}
         onPropose={actions.pressAdvice} />
     </div>
   );
@@ -1161,7 +1163,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [reading, setReading] = useState(""), [readFor, setReadFor] = useState(null);
   // ...let go only once the decision is drawn: the effect runs after the strip's own (AdvisorNext registers a move the row lacks then)
   useEffect(() => { if (readFor) setReading((r) => (r === readFor.key ? "" : r)); }, [readFor]);
-  const [changed, setChanged] = useState(null);   // {for, reading}: a press refused as changed since the Advisor looked (B6)
+  const [, setChanged] = useState(null);   // {for, reading}: a press refused as changed since the Advisor looked (B6) - said by no strip now
   // THE BOX GROWS WITH WHAT YOU TYPE, like every chat app: one row empty, a row per line after that, up to the CSS
   // cap (40% of the window) - then it scrolls inside. rows={1} alone held a paragraph in a one-and-a-half-line slot
   // (the owner, 2026-09-24: "how do we deal with this when you type in many lines?")
@@ -2197,6 +2199,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     }
     turnFlight.current = answering.current = true; sending.current = t;
     setText(""); setBusy(true); setErr(""); setLit(null);
+    if (popOnRef.current) setPopOpen(true);            // the answer comes up over the task (the one-row chat bar)
     const shots = line == null ? pics.imgs : [];
     if (images.length) pics.clear();
     // ...a held line is on screen already: it is let go, not drawn twice
@@ -3085,12 +3088,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const litNow = litPick(lit, litTable);
   useEffect(() => { setLit((l) => litAfter(l, litTable)); }, [litTable.key, litTable.tid, lit]);   // eslint-disable-line react-hooks/exhaustive-deps
   const shownAdvice = table.speaks && !litNow ? adviceShown(advice, { key: table.key, lane: currentItem?.lane }, busy) : null;
+  // ...and the decision a WARNING in the task is read from (advice.taskNote): never put out by the Assistant's light or a turn in flight -
+  // a warning about the draft does not blink while the chat answers
+  const noteAdvice = adviceShown(advice, { key: table.key, lane: currentItem?.lane }, false);
   shownRef.current = shownAdvice?.verb ? { key: shownAdvice.for || shownAdvice.key || table.key, verb: shownAdvice.verb, revision: shownAdvice.revision } : null;
   // ...an answer that landed wins: the strip asking for an AI over a line the Advisor did give hid the line and left its button dark
   // ...and every other reason there is no line, said (words.json advice_none) - an agent at work included, whose line is hidden.
   // ONE DECISION for the strip's word and the button it lights (advice.stripWord): they were chosen apart, and "Connect an AI" stood
   // over a dark Stop and save on an agent that needed nothing (the UI audit's C2, 2026-10-21)
-  const { noAi, pick: stripPick } = stripWord({ speaks: table.speaks, busy, shown: shownAdvice, lit: litNow, aiOff: caps.ai === false,
+  const { pick: stripPick } = stripWord({ speaks: table.speaks, busy, shown: shownAdvice, lit: litNow, aiOff: caps.ai === false,
     advice, key: table.key, lane: currentItem?.lane });
   // ON A PHONE THE LINE RIDES WITH ITS ROW: the row is drawn at the task view's foot there (CanvasItem), and the line pinned over the
   // composer stood a screen away from the button it lit (2026-10-19) - the view draws both, and the dock none
@@ -3191,13 +3197,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     return () => clearTimeout(t);
   }, [continuingTid]);
   // ...and the Assistant's lit button with its line, for the phone's row at the view's foot (CanvasItem)
-  const canvasState = useMemo(() => ({ height: CANVAS_ITEM_HEIGHT, expanded, folded: foldedKey, browsing, phone, lit: litNow,
+  const canvasState = useMemo(() => ({ height: CANVAS_ITEM_HEIGHT, expanded, folded: foldedKey, browsing, phone, lit: litNow, advice: noteAdvice,
     toggle: () => setExpanded((x) => !x), fold: (key) => { setExpanded(false); setFoldedKey(key); },
     // the task leaves the table the moment it is put down, the "…" under its title line while the server closes it
     // ...and the next item comes up in the same press (drawNextEarly); a close that fails puts the drawn one down and this one back
     putDown: (key, tid = null) => { leave({ key, tid }); leavingRef.current = { key, tid }; setExpanded(false); setFoldedKey(key); setNextComing(true); setLeavingTid(tid); drawNextEarlyRef.current?.(key); },
     pickUp: (key, why) => { takeEarlyBackRef.current?.(); unleave(leavingRef.current?.key === key ? leavingRef.current : { key }); setFoldedKey((k) => (k === key ? null : k)); setNextComing(false); setLeavingTid(null); if (why) setErr(why); } }),
-    [bodyH, expanded, foldedKey, browsing, phone, litNow?.verb, litNow?.line]);   // eslint-disable-line react-hooks/exhaustive-deps
+    [bodyH, expanded, foldedKey, browsing, phone, litNow?.verb, litNow?.line, noteAdvice?.for, noteAdvice?.state, noteAdvice?.line, noteAdvice?.verb]);   // eslint-disable-line react-hooks/exhaustive-deps
   const lastCardIdx = useMemo(() => { const i = tableCardIndex(shown, old ? null : current || cardKey), c = shown[i]?.card;
     // ...the canvas's own fallback (the newest card in the chat) included: a durable line about a closed task landing after Next drew it
     return !old && c && c.key !== current && isLeft(c) ? -1 : i; }, [shown, old, current, cardKey]);
@@ -3215,9 +3221,63 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const c = shown[lastCardIdx]?.card;
     return c && current && (c.key === current || (c.aliases || []).includes(current)) ? chipsOf(shown[lastCardIdx]) : [];
   }, [shown, lastCardIdx, current]);
-
+  // THE ONE-ROW CHAT BAR (the owner, 2026-10-26: "try one row chat bar with ai pop up. let me see what it looks like"): the box is how the
+  // owner tells Taskuary what to do with the task ("reply saying Thursday works", "remind me Monday") - acting, not a help chat - and it
+  // cost a whole band under the row. It is a pill at the row's end now, widened while it is used, and what is said about the task on the
+  // table - the lines after its view - is drawn in a pop-up over the view instead of under it, so the view never moves. The same lines,
+  // the same Line, mounted while the pop-up is shut (a last line's chips stay on the row); only the place changes. A phone keeps the column.
+  const popOn = !phone && !old && !walk && !firstRun && lastCardIdx >= 0 && barHolds;
+  const popLines = useMemo(() => (popOn ? shown.map((m, i) => [m, i]).filter(([, i]) => i > lastCardIdx).slice(-12) : []), [popOn, shown, lastCardIdx]);
+  const popPending = popOn && (busy || phoneBusy);
+  const [popOpen, setPopOpen] = useState(false), [boxOpen, setBoxOpen] = useState(false);
+  const popRef = useRef(null), popBodyRef = useRef(null), boxRef = useRef(null), popOnRef = useRef(false);
+  popOnRef.current = popOn;
+  const boxWide = boxOpen || !!text.trim() || !!pics.imgs.length || !!emojiEl;
+  // ...it opens on the owner's line (send) and on the Assistant speaking up about the task in this session - never on a reload's history
+  const popLast = popLines[popLines.length - 1]?.[0];
+  useEffect(() => { if (popLast?.role === "assistant" && /^(a|s|d|context)\d/.test(popLast.id)) setPopOpen(true); }, [popLast?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // ...and AN ANSWER THAT WAS ONLY A LIT BUTTON shuts it again by itself (the chat bar's open question, default chosen 2026-10-26): a reply
+  // that only lit or pressed is no chat line (only words get one), so the pop-up held the owner's own line alone over the task - it is
+  // shown a moment, the row's dark button being the answer. Never over an error, nor while the answer is still on its way
+  useEffect(() => {
+    if (!popOpen || popPending || err || popLast?.role !== "user") return undefined;
+    const t = setTimeout(() => setPopOpen(false), POP_LIT_MS);
+    return () => clearTimeout(t);
+  }, [popOpen, popPending, err, popLast?.id, popLast?.role]);
+  // ...and goes with the task: the next one on the table starts with it shut
+  const popTable = shown[lastCardIdx]?.card?.key || "";
+  useEffect(() => { setPopOpen(false); }, [popTable]);
+  // ...shut by Esc, its x, or a press anywhere but on it or the box (a menu it opened is on it)
+  useEffect(() => {
+    if (!popOpen) return undefined;
+    const down = (e) => { if (popRef.current?.contains(e.target) || boxRef.current?.contains(e.target) || e.target.closest?.(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root")) return; setPopOpen(false); };
+    const key = (e) => { if (e.key === "Escape") setPopOpen(false); };
+    document.addEventListener("pointerdown", down, true); document.addEventListener("keydown", key);
+    return () => { document.removeEventListener("pointerdown", down, true); document.removeEventListener("keydown", key); };
+  }, [popOpen]);
+  // ...its newest words in view, as the chat's end is
+  useLayoutEffect(() => { const el = popBodyRef.current; if (el && popOpen) el.scrollTop = el.scrollHeight; }, [popOpen, popLines.length, popPending, words]);
+  // ...a line of its own that stands under the card on the table only while the answer is on its way (tq-pending, assistantView.css) -
+  // or in the pop-up over it, where the answer it waits for will be
+  const pendingLine = <>{(busy || phoneBusy || nextComing || walkDots) && (
+            <div className="tq-msg tq-pending"><div className="avatar"><AssistantMark /></div>
+              <div className="body">{busy && words ? <div className="tq-words" data-tq-words="">{looksMd(words) ? <Md text={words} /> : words.split("\n").map((p, i) => <p key={i}>{p}</p>)}</div>
+                : <span className="tq-typing"><i /><i /><i /></span>}
+                {/* ...and how long it has been at it, where the dots alone were silent: its own clock, so the chat does not redraw each second */}
+                {busy && answering.current && !DEMO && <WorkingFor />}
+                {/* an answer that hangs had no way out: New chat is refused while one is being written (dock/new 409) */}
+                {busy && answering.current && !DEMO && (
+                  <button type="button" className="tq-chip" style={{ marginLeft: 8 }} title="Stops the answer being written and gives you the chat back."
+                    onClick={() => { api.post("/api/concierge/stop").catch(() => {}); stopRef.current?.abort(); }}>Stop</button>
+                )}
+                {busy && !!steps.length && <AgentSteps data={{ steps }} />}
+                {!!work.length && <div className="tq-work">{work.map((w, i) => <div key={i}>{w}</div>)}</div>}
+              </div>
+            </div>
+          )}</>;
+  const errLine = err && <Typography component="div" sx={{ color: "#7a2f3c", fontSize: 12, mb: 1 }}>{err}<ReportLink text={err} /></Typography>;
   const chat = (
-    <div className={shownAdvice ? "tq-asst-col advising" : "tq-asst-col"} style={{ position: "relative", flex: 1, minHeight: 0 }}>
+    <div className="tq-asst-col" style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div className="tq-chat-head">
         {/* no mark here: the top bar already carries the logo (the owner, 2026-10-06: "don't need it on top of the assistant") */}
         {canBack && !!placeHash && !old && !firstRun && <Tooltip title="Back (Alt+←)"><IconButton size="small" aria-label="Back" onClick={() => window.history.back()} sx={{ ml: -0.75, mr: 0.25 }}><ArrowBackIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>}
@@ -3306,7 +3366,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           </div>}
           {firstRun ? state && <div data-tq-setup-under={setupCovered.current ? "hidden" : ""} style={setupCovered.current ? { display: "none" } : undefined}>{welcome()}</div>
             : state && !shown.length && !busy && !starting && welcome()}
-          {!firstRun && shown.map((m, i) => <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} tableChips={tableChips} barHolds={barHolds}
+          {!firstRun && shown.map((m, i) => popOn && i > lastCardIdx ? null : <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} tableChips={tableChips} barHolds={barHolds}
                                      actions={actions} fresh={currentItem} canvas={old ? null : canvasState} />)}
           {/* CONTINUE, IN LINE (the owner, 2026-09-30): a card under the item, like New - the mic and pictures in it */}
           {!old && continueOn && (
@@ -3346,25 +3406,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                 }} />
             </div>
           )}
-          {/* ...a line of its own that stands under the card on the table only while the answer is on its way (tq-pending,
-              assistantView.css) */}
-          {(busy || phoneBusy || nextComing || walkDots) && (
-            <div className="tq-msg tq-pending"><div className="avatar"><AssistantMark /></div>
-              <div className="body">{busy && words ? <div className="tq-words" data-tq-words="">{looksMd(words) ? <Md text={words} /> : words.split("\n").map((p, i) => <p key={i}>{p}</p>)}</div>
-                : <span className="tq-typing"><i /><i /><i /></span>}
-                {/* ...and how long it has been at it, where the dots alone were silent: its own clock, so the chat does not redraw each second */}
-                {busy && answering.current && !DEMO && <WorkingFor />}
-                {/* an answer that hangs had no way out: New chat is refused while one is being written (dock/new 409) */}
-                {busy && answering.current && !DEMO && (
-                  <button type="button" className="tq-chip" style={{ marginLeft: 8 }} title="Stops the answer being written and gives you the chat back."
-                    onClick={() => { api.post("/api/concierge/stop").catch(() => {}); stopRef.current?.abort(); }}>Stop</button>
-                )}
-                {busy && !!steps.length && <AgentSteps data={{ steps }} />}
-                {!!work.length && <div className="tq-work">{work.map((w, i) => <div key={i}>{w}</div>)}</div>}
-              </div>
-            </div>
-          )}
-          {err && <Typography component="div" sx={{ color: "#7a2f3c", fontSize: 12, mb: 1 }}>{err}<ReportLink text={err} /></Typography>}
+          {!popPending && pendingLine}
+          {!(popOn && popOpen) && errLine}
           {/* the floor's Next is the filled button under the chat - no line telling the owner to press it (the owner, 2026-10-15: "Don't be
               dumb like saying click next to move on if it's obvious") */}
           </>}
@@ -3380,6 +3423,22 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           lock the screen on desktop but we should probably get rid of that"): the box stays, and the table follows the phone's walk */}
       {!old && !walk && (
         <div className="tq-compose" {...pics.drop}>
+          {/* THE ANSWER POP-UP (the one-row chat bar, 2026-10-26): the lines after the task view, over it - it never moves - a few turns
+              tall at most, scrolling inside. Shut, it stays mounted: the last line's chips are on the row either way */}
+          {popOn && (!!popLines.length || popPending) && (
+            <div className="tq-chat-pop" data-tq-chat-pop="" role="dialog" aria-label="Taskuary's answer" ref={popRef} hidden={!popOpen}
+              style={{ maxHeight: Math.max(180, Math.round(bodyH * 0.45)) }}>
+              <div className="tq-chat-pop-head"><TaskuaryMark size={16} /><b>Taskuary</b>{currentItem?.ref && <span>{`· ${currentItem.ref}`}</span>}<span style={{ flex: 1 }} />
+                <Tooltip title="Past chats"><IconButton size="small" aria-label="Past chats" onClick={() => { setPopOpen(false); openChats(); }}><HistoryIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip>
+                <IconButton size="small" aria-label="Close the answer" onClick={() => setPopOpen(false)}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></div>
+              <div className="tq-chat-pop-body" ref={popBodyRef}>
+                {popLines.map(([m, i]) => <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={false} last={i === lastSaidIdx} tableChips={tableChips} barHolds={barHolds}
+                  actions={actions} fresh={currentItem} canvas={canvasState} />)}
+                {popPending && pendingLine}
+                {popOpen && errLine}
+              </div>
+            </div>
+          )}
           <RetryVerbs item={currentItem} failed={(pile?.items || []).filter((i) => i.lane === "unjudged").length}
             onSaid={(text, status) => setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: status || "done", text }])}
             onDone={() => loadPile(true)} />
@@ -3387,36 +3446,27 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               suggestion, the row whose filled button it picked, and the box - one border, the box its floor */}
           <div className="tq-dock">
           {/* ...setup's own line only while setup is in view: a task opened over it speaks for itself (tableOf's `over`, 2026-10-26) */}
-          {firstRun && !setupCard ? <SetupLine /> : noAi ? (
-            <div className="tq-next" role="status" data-tq-advice="no_ai">
-              <div className="tq-next-txt">{adviceNone("no_ai").line}</div>
-              {/* THE ONE LIT MOVE: the row's own Connect an AI when it has one (ActionRow lights it), else this one (the design, phase A:
-                  the strip asked for an AI over a row that lit nothing) */}
-              <button type="button" className={rowVerbs.list.some((v) => v.label === CONNECT_AI && !v.disabled) ? "tq-chip" : "tq-chip primary"}
-                onClick={() => openAppLink(place("ai").href)}>{CONNECT_AI}</button>
-            </div>
-          ) : <>
-            {/* THE ADVICE IS ON ITS WAY: the row has nothing dark until it lands (rowOf) - no button, no word.
-                ...and a strip with no line in it takes NO ROOM (the owner, 2026-10-26: "remove it when it's not doing anything"):
-                the CSS hides it until a .tq-next lands in it, so the dock is a band shorter while the Advisor is silent */}
-            {table.speaks && !holding && !hostedRow && <div className="tq-strip" data-tq-strip={busy || (reading && reading === onTable) ? "busy" : ""}>
-            {/* THE ASSISTANT'S LIT BUTTON SAYS SO HERE, over the row it lit: the strip stood empty over a dark Mark done, and "Press Mark done"
-                was only up in the chat (verify, 2026-10-19) - it goes out with the light */}
-            {table.speaks && !!litNow?.line && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">{litNow.line}</div></div>}
-            {table.speaks && !litNow && changed && changed.for === onTable && <div className="tq-next" role="status" data-tq-advice-changed="">
-              <div className="tq-next-txt">{changed.reading ? "This changed - reading it again…" : shownAdvice ? "This changed - here's the updated suggestion."
-                : "This changed."}</div></div>}
-            <AdvisorNext advice={shownAdvice} onPropose={pressAdvice} />
+          {firstRun && !setupCard && <SetupLine />}
+          {/* NO STRIP OVER THE ROW (the owner, 2026-10-26: "maybe keep the box but remove the advisor? not sure the advisor is really
+              useful"): the Advisor's pick is the row's one dark button and says nothing; the few lines that warn are in the task, beside
+              what they are about (advice.taskNote). AdvisorNext only joins a move the row lacks, and leaves the walks' hidden mark */}
+          {!firstRun && table.speaks && !holding && !hostedRow && <>
+            <AdvisorNext advice={shownAdvice} onPropose={pressAdvice} onErr={setErr} />
             {/* ...and a decision that lights NOTHING on purpose (an agent asking is answered in its own pane, the design's state 7): no
-                word, no button - only a mark, so the dead-end walk can tell it from a strip that never got its decision */}
+                word, no button - only a mark, so the dead-end walk can tell it from one that never got its decision */}
             {!shownAdvice && advice?.for === onTable && advice?.state && !advice.verb && !advice.none && <div hidden data-tq-advice="" data-tq-silent="" data-tq-unlit={advice.state} />}
-            </div>}
           </>}
+          {!firstRun && <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />}
+          {/* ONE ROW: the row's groups and the box share a line (the one-row chat bar, 2026-10-26) - the box a pill at its end while at rest,
+              widened while it is used, the groups folding into their ▾ for the room (ActionRow measures what is left; Next and the lit
+              move never fold). With no row - the day's opener, a phone, whose row rides with its task view - the box is the whole line */}
+          <div className="tq-dock-line">
           {/* ...and during setup its line is the Advisor's (SetupLine): the move setup fills (FirstRun's tone) is the one lit - nothing
               was, so the line said "pick it" over a plain Back and a greyed Next (2026-10-19) */}
           <ActionRow advised={stripPick || setupLit} hold={!!reading && reading === onTable} />
-          {!firstRun && <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />}
-          <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined}>
+          <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined} ref={boxRef} data-tq-open={boxWide ? "" : undefined}
+            onFocus={() => setBoxOpen(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setBoxOpen(false); }}>
+            <div className="tq-compose-tools">
             <AttachImage pics={pics} sx={{ color: DIM }} />
             <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />
             <Tooltip title="Send an emoji response">
@@ -3425,12 +3475,24 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                 <SentimentSatisfiedAltIcon sx={{ fontSize: 18 }} />
               </IconButton>
             </Tooltip>
+            </div>
+            {/* ...the pop-up shut, what was said comes back from here */}
+            {popOn && !popOpen && (!!popLines.length || popPending) && (
+              <Tooltip title={popPending ? "Answering…" : "Show the last answer"}>
+                <IconButton size="small" aria-label="Show the last answer" data-tq-pop-again="" onClick={() => setPopOpen(true)}
+                  sx={{ width: 28, height: 28, p: 0, color: popPending ? "#526b53" : DIM }}><ChatBubbleOutlineIcon sx={{ fontSize: 16 }} /></IconButton>
+              </Tooltip>)}
             {/* a phone's composer is one line tall and the long hint wrapped under its own edge, cut
-                mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there */}
+                mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there - and the pill's at rest */}
             <textarea ref={composeRef} rows={1} value={text} disabled={resetting}
-              placeholder={phone ? tableSays.phone : tableSays.box}
-              onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
+              placeholder={phone ? tableSays.phone : !popOn ? tableSays.box : boxWide ? "Tell me what to do with it, or ask about it…" : "Tell me what to do…"}
+              onChange={(e) => setText(e.target.value)} onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+                // Esc shuts the pop-up first, then hands an empty box back to its pill
+                if (e.key === "Escape") { e.stopPropagation(); if (popOpen) setPopOpen(false); else if (!text.trim()) e.currentTarget.blur(); }
+              }} />
             <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
+          </div>
           </div>
           </div>
           <Popover open={!!emojiEl} anchorEl={emojiEl} onClose={() => setEmojiEl(null)}

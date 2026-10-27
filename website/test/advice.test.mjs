@@ -50,7 +50,7 @@ test("the strip speaks only for the item on the table, at rest, and an agent at 
 test("the page draws the gated line, starts each item with none, and drops a read the table outran", async () => {
   const fs = await import("node:fs"), path = await import("node:path");
   const src = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
-  assert.match(src, /<AdvisorNext advice=\{shownAdvice\} onPropose=\{pressAdvice\} \/>/);
+  assert.match(src, /<AdvisorNext advice=\{shownAdvice\} onPropose=\{pressAdvice\} onErr=\{setErr\} \/>/);
   // ...and a move the server runs at once (Not ours) runs at once from the Advisor's copy too - never a proposal card with Cancel
   // ...and every press runs where it is proposed (the 2026-10-25 sweep): proposeDirect runs it, so no caller runs it a second time
   assert.match(src, /try \{ return await proposeDirect\(a\.verb, key, true, a\.revision\); \}/);

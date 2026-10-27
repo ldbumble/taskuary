@@ -3,14 +3,14 @@ import test from "node:test";
 import { startHarness } from "./harness.mjs";
 
 /* A TASK OPENED OVER SETUP IS THE ITEM IN FRONT OF THE OWNER (the 2026-10-26 memory A/B's UI pass): opened by its link or by Search while
-   setup was still open, it drew its row with nothing lit and no line, while the same task reached in the walk had its line and its lit
-   button - the table counted setup as being in view (tableOf's `setup`) though the task was drawn over it. The decision is stood in for
-   here (the fresh fixture has no AI), so what is checked is the page: the line is said, its button lit, and Back to Setup puts setup back
-   with the strip quiet. Invented Northwind people. */
+   setup was still open, it drew its row with nothing lit, while the same task reached in the walk had its lit button - the table counted
+   setup as being in view (tableOf's `setup`) though the task was drawn over it. The decision is stood in for here (the fresh fixture has no
+   AI): its button is lit, and its line - no strip over the row since 2026-10-26 (the owner: "remove the advisor") - stands in the task's
+   Advisor section; Back to Setup puts setup back, with nothing said over it. Invented Northwind people. */
 
-const LINE = "You usually answer Erin within the hour; this is 3h.";
+const LINE = "Ray Colton already answered this on the thread.";
 
-test("a task opened over setup has its Advisor line and lit button; back on setup the strip is quiet", { timeout: 240000 }, async (t) => {
+test("a task opened over setup has its lit button and its line in the task's Advisor section; back on setup nothing is said", { timeout: 240000 }, async (t) => {
   const harness = await startHarness({ fresh: true });
   t.after(() => harness.close());
   const H = { "X-Taskuary-Token": harness.token, "Content-Type": "application/json" };
@@ -24,24 +24,29 @@ test("a task opened over setup has its Advisor line and lit button; back on setu
     const u = new URL(r.url());
     if (u.pathname === "/api/advice") {
       const key = u.searchParams.get("key");
-      return r.respond({ status: 200, contentType: "application/json", body: JSON.stringify({ key, state: "asked_late", verb: "close", label: "Mark done",
-        line: LINE, by: "rule", revision: "r1", pill: "Mark done", evidence: [], ask: true, needs_ai: false }) });
+      return r.respond({ status: 200, contentType: "application/json", body: JSON.stringify({ key, state: "asked", verb: "close", label: "Mark done",
+        line: LINE, by: "model", revision: "r1", pill: "Mark done", evidence: [], ask: true, needs_ai: false }) });
     }
     page.fixtureRequestGuard(r);
   });
   await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 90000 });
-  const said = () => page.evaluate((l) => [...document.querySelectorAll(".tq-next-txt")].some((e) => e.textContent.includes(l)), LINE);
+  const said = () => page.evaluate((l) => document.body.innerText.includes(l), LINE);
   await page.waitForFunction(() => /Back to Setup|Your AI/.test(document.body.innerText), { timeout: 60000, polling: 200 });
-  assert.equal(await said(), false, "setup in view: no Advisor line");
+  assert.equal(await said(), false, "setup in view: nothing of the Advisor's");
 
   await page.evaluate((tid) => { window.location.hash = `task=${tid}`; }, made.taskId);
-  await page.waitForFunction((l) => [...document.querySelectorAll(".tq-next-txt")].some((e) => e.textContent.includes(l)), { timeout: 30000, polling: 200 }, LINE)
+  await page.waitForFunction((l) => document.querySelector("[data-tq-canvas-item] [data-tq-advisor] [data-tq-advisor-note]")?.textContent.includes(l), { timeout: 30000, polling: 200 }, LINE)
     .catch(async (e) => { throw new Error(`${e.message}\n${(await page.evaluate(() => document.body.innerText)).slice(-1200)}`); });
   assert.ok(await page.$('.tq-arow .tq-ab.p[data-tq-verb]'), "its button is lit");
+  assert.equal(await page.$(".tq-dock .tq-next, [data-tq-strip]"), null, "and nothing over the row");
+  // ...in the task's own Advisor section (the owner, 2026-10-26), its line keeping its Why? - and a drawer holding it says so on its tab
+  assert.ok(await page.$("[data-tq-advisor] .tq-next-why"), "the line's Why?");
+  const tab = await page.evaluate(() => document.querySelector("[data-tq-work-tab]")?.textContent || null);
+  if (tab !== null) assert.match(tab, /1 note/);
 
-  // ...and Back to Setup: setup is in view again, and the task's line is not said over it
+  // ...and Back to Setup: setup is in view again, and the task's warning goes with the task
   const back = await page.evaluate(() => { const b = [...document.querySelectorAll("button")].find((x) => x.innerText.trim() === "Back to Setup"); b?.click(); return !!b; });
   assert.ok(back, "Back to Setup is offered over the task");
-  await page.waitForFunction((l) => ![...document.querySelectorAll(".tq-next-txt")].some((e) => e.textContent.includes(l)), { timeout: 20000, polling: 200 }, LINE);
+  await page.waitForFunction((l) => !document.body.innerText.includes(l), { timeout: 20000, polling: 200 }, LINE);
   assert.deepEqual(errors, []);
 });

@@ -1106,91 +1106,95 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # and nobody on it; the planner proposes the steps behind the arrival, as the New sheet's Set a goal does
         goal = intent['intent'] == 'task' and bool(intent.get('goal') and intent.get('done_when'))
         if goal: f['kind'], role = 'task', None
-        tid = store.create_task({'Title': f['title'], 'Summary': f['summary'], 'Kind': f['kind'],
-                                 **({'DoneWhen': intent['done_when']} if goal else {}),
-                                 'Priority': f['priority'], 'Source': msg.get('channel') or 'api',
-                                 'SourceRef': msg.get('source_link'),
-                                 **({'Tags': _pb.tag(intent['playbook'])} if intent.get('playbook') else {}),
-                                 **({'Assignee': f'agent:{role}'} if role else {})}, actor)
-        store.audit('task', tid, 'create', actor, 'agent', {'from': msg.get('from_email'), 'reason': r['reason']})
-        # ...and why it is important, said where the owner reads the task (the verdict text says why - the owner, 2026-10-25)
-        if f['priority'] == 'important': store.add_comment(tid, actor, 'agent', f"Marked important - triage: {_priority_why(intent)}")
-        if msg.get('_workflow_held'): store.add_comment(tid, 'triage', 'agent', msg['_workflow_held'] + '. It was not started on its own.')
-        if intent.get('checklist') and not goal: store.set_task_checklist(tid, intent['checklist'], 'triage')
-        if intent.get('due'): remind.set_due(store, tid, intent['due'], actor)     # the day it is due, as triage read it
-        if goal:
-            from . import goals
-            store.tag_task(tid, 'goal', actor='triage')
-            goals.plan_later(store, tid, goals.words(store.get_task(tid)))
-        if intent.get('outputs'):                  # what closes it beyond the reply: emails to other people (slots.py)
-            from . import slots
-            slots.add(store, tid, intent['outputs'], 'triage', sender=_sender(msg))
-        # the repository, decided here and written down, so startup uses it instead of guessing again
-        # (PW-092); an owner's repo: tag and a GitHub item's own repository still outrank it (terminal.guess_repo)
-        if intent.get('repository'):
-            store.tag_task(tid, f"{TRIAGE_REPO_TAG}{intent['repository']}", actor='triage')
-            store.add_comment(tid, 'triage', 'agent', f"Triage picked repository {intent['repository']}: {intent.get('repo_reason') or 'named in the request'}")
-        elif intent.get('needs_repo_choice'):
-            # the tag rides even on the rerouted ones: "I could not tell" is knowledge, and without it a
-            # later hand-off to the coding agent guesses a checkout by word overlap instead of asking (PW-094)
-            store.tag_task(tid, NEEDS_REPO_TAG, actor='triage')
-            store.add_comment(tid, 'triage', 'agent',
-                              f"Triage could not tell which repository: {intent.get('repo_reason') or 'more than one is plausible'} - "
-                              + ('the coding agent is asked to choose one.' if no_repo else 'pick one before an agent starts'))
-        mid = _land(store, msg, tid, 'routed')
-        if intent.get('checklist') and not goal: store.source_checklist(tid, mid, 'triage')     # its boxes came from this message
-        # the same-day lines this one continues or answers that had no task yet join the task it opens:
-        # the fyi that opened a subject belongs with the ask that followed it (PW-031)
-        for rel_mid in (intent.get('related_message_ids') or []):
-            prior = store.get_message(rel_mid) or {}
-            # ...never one still WAITING for triage, or whose triage failed: attaching set it 'routed', and a row that
-            # was never judged left the queue and the retry sweep for good (L1, 2026-09-25 - always triage it)
-            if (prior and prior.get('TaskId') is None
-                    and prior.get('Status') not in ('context', 'skipped', 'triaging', 'error')):
-                store.attach_message(rel_mid, tid)
-        # the agents actually pick work up here:
-        # - reply tasks ALWAYS enter the review queue ("needs me") with the draft written at once - for everyone,
-        #   there is no setting for it (S1, 2026-09-25)
-        # - CODING and GENERAL tasks start their agent by themselves when Settings and the sender allow it
-        # - anything else that is real work queues as needs-you, for you to route
-        # ...an invite's answer is not an email: its row's Accept, Decline and Propose a new time draft it (calwrite.draft)
-        if f['kind'] == 'reply' and not intent.get('invite'):
-            new_rid = rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
-                                              'Reason': f"needs a reply: {intent.get('why') or 'question for you'}"
-                                                        + (f' · {unsendable}' if unsendable else '')})
-            _spawn(_auto_draft, store, tid, rid)        # always drafted (PW-043)
-        # Almost everything a keyboard can do goes to the agent - the owner's rule (2026-08-27,
-        # restated 2026-08-29): it does what it is supposed to, or says "nothing to do here" and
-        # stops, and a job left on a list does not. Coding and general both self-dispatch when the Settings allow
-        # it (auto_start_ok); `task` is the owner's by definition, and a reply is drafted for their yes.
-        elif f['kind'] in task_kinds.AGENT and not msg.get('no_auto'):
-            # no_auto = the channel opted out of self-dispatch (github items always do: an
-            # open repo would start an agent per drive-by PR) - the task queues as needs-you.
-            # The rest of the gate is auto_start_ok: what may start a worker on this machine, for
-            # either kind (PW-069/071). A coding job whose repository triage could not tell waits
-            # for the owner's choice - a visible hold, not a session in the wrong checkout.
-            if no_repo:
-                # the coding agent picks the checkout, then starts there if it may (in the background: a CLI call)
-                ok, who = False, 'the coding agent is choosing the repository first'
-                _spawn(_choose_then_start, store, tid, msg, mid)
-            else: ok, who = auto_start_ok(store, msg, mid, f['kind'])
-            if ok:
-                # the trust rule that let it through is said on the task (PW-080), so 'why did an agent start on
-                # a stranger's mail' has an answer
-                store.add_comment(tid, 'router', 'agent', f'Starting by itself: {who}')
-                if f['kind'] == 'coding': _spawn(_auto_code, store, tid)
-                else: _spawn(_auto_general, store, tid, advisor_brief(store, msg, mid))
-            else:
-                held = who
-                # A stranger's first message is its own state, not just an absent session. An
-                # inbound message is a PROMPT, and this one is a prompt from an address that has
-                # never written before - so the timeline says so in as many words and offers one
-                # button, instead of a task that merely looks like nobody got round to it. The
-                # tag rides on the task because that is what the feed row and the release both
-                # read (senders.known decided it; HOLD_TAG only records the decision).
-                if getattr(who, 'stranger', False): store.tag_task(tid, HOLD_TAG)
-                if not no_repo: store.add_comment(tid, 'router', 'agent', held_note(who, f['kind']))
-                store.audit('task', tid, 'auto_code_held', actor, 'agent', {'from': msg.get('from_email'), 'why': who})
+        # ONE ARRIVAL IS ONE WAKE-UP (the load-once pass, 2026-10-27): the task, its message and what rides on them poke one by one, and
+        # on a slow machine the task's wake-up went out alone - the page read the rail at once, before the message was in it, and read
+        # it again a second later for the message (CI's browser runs). Held here and sent together, the page's one read holds them all.
+        with store.one_poke():
+            tid = store.create_task({'Title': f['title'], 'Summary': f['summary'], 'Kind': f['kind'],
+                                     **({'DoneWhen': intent['done_when']} if goal else {}),
+                                     'Priority': f['priority'], 'Source': msg.get('channel') or 'api',
+                                     'SourceRef': msg.get('source_link'),
+                                     **({'Tags': _pb.tag(intent['playbook'])} if intent.get('playbook') else {}),
+                                     **({'Assignee': f'agent:{role}'} if role else {})}, actor)
+            store.audit('task', tid, 'create', actor, 'agent', {'from': msg.get('from_email'), 'reason': r['reason']})
+            # ...and why it is important, said where the owner reads the task (the verdict text says why - the owner, 2026-10-25)
+            if f['priority'] == 'important': store.add_comment(tid, actor, 'agent', f"Marked important - triage: {_priority_why(intent)}")
+            if msg.get('_workflow_held'): store.add_comment(tid, 'triage', 'agent', msg['_workflow_held'] + '. It was not started on its own.')
+            if intent.get('checklist') and not goal: store.set_task_checklist(tid, intent['checklist'], 'triage')
+            if intent.get('due'): remind.set_due(store, tid, intent['due'], actor)     # the day it is due, as triage read it
+            if goal:
+                from . import goals
+                store.tag_task(tid, 'goal', actor='triage')
+                goals.plan_later(store, tid, goals.words(store.get_task(tid)))
+            if intent.get('outputs'):                  # what closes it beyond the reply: emails to other people (slots.py)
+                from . import slots
+                slots.add(store, tid, intent['outputs'], 'triage', sender=_sender(msg))
+            # the repository, decided here and written down, so startup uses it instead of guessing again
+            # (PW-092); an owner's repo: tag and a GitHub item's own repository still outrank it (terminal.guess_repo)
+            if intent.get('repository'):
+                store.tag_task(tid, f"{TRIAGE_REPO_TAG}{intent['repository']}", actor='triage')
+                store.add_comment(tid, 'triage', 'agent', f"Triage picked repository {intent['repository']}: {intent.get('repo_reason') or 'named in the request'}")
+            elif intent.get('needs_repo_choice'):
+                # the tag rides even on the rerouted ones: "I could not tell" is knowledge, and without it a
+                # later hand-off to the coding agent guesses a checkout by word overlap instead of asking (PW-094)
+                store.tag_task(tid, NEEDS_REPO_TAG, actor='triage')
+                store.add_comment(tid, 'triage', 'agent',
+                                  f"Triage could not tell which repository: {intent.get('repo_reason') or 'more than one is plausible'} - "
+                                  + ('the coding agent is asked to choose one.' if no_repo else 'pick one before an agent starts'))
+            mid = _land(store, msg, tid, 'routed')
+            if intent.get('checklist') and not goal: store.source_checklist(tid, mid, 'triage')     # its boxes came from this message
+            # the same-day lines this one continues or answers that had no task yet join the task it opens:
+            # the fyi that opened a subject belongs with the ask that followed it (PW-031)
+            for rel_mid in (intent.get('related_message_ids') or []):
+                prior = store.get_message(rel_mid) or {}
+                # ...never one still WAITING for triage, or whose triage failed: attaching set it 'routed', and a row that
+                # was never judged left the queue and the retry sweep for good (L1, 2026-09-25 - always triage it)
+                if (prior and prior.get('TaskId') is None
+                        and prior.get('Status') not in ('context', 'skipped', 'triaging', 'error')):
+                    store.attach_message(rel_mid, tid)
+            # the agents actually pick work up here:
+            # - reply tasks ALWAYS enter the review queue ("needs me") with the draft written at once - for everyone,
+            #   there is no setting for it (S1, 2026-09-25)
+            # - CODING and GENERAL tasks start their agent by themselves when Settings and the sender allow it
+            # - anything else that is real work queues as needs-you, for you to route
+            # ...an invite's answer is not an email: its row's Accept, Decline and Propose a new time draft it (calwrite.draft)
+            if f['kind'] == 'reply' and not intent.get('invite'):
+                new_rid = rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
+                                                  'Reason': f"needs a reply: {intent.get('why') or 'question for you'}"
+                                                            + (f' · {unsendable}' if unsendable else '')})
+                _spawn(_auto_draft, store, tid, rid)        # always drafted (PW-043)
+            # Almost everything a keyboard can do goes to the agent - the owner's rule (2026-08-27,
+            # restated 2026-08-29): it does what it is supposed to, or says "nothing to do here" and
+            # stops, and a job left on a list does not. Coding and general both self-dispatch when the Settings allow
+            # it (auto_start_ok); `task` is the owner's by definition, and a reply is drafted for their yes.
+            elif f['kind'] in task_kinds.AGENT and not msg.get('no_auto'):
+                # no_auto = the channel opted out of self-dispatch (github items always do: an
+                # open repo would start an agent per drive-by PR) - the task queues as needs-you.
+                # The rest of the gate is auto_start_ok: what may start a worker on this machine, for
+                # either kind (PW-069/071). A coding job whose repository triage could not tell waits
+                # for the owner's choice - a visible hold, not a session in the wrong checkout.
+                if no_repo:
+                    # the coding agent picks the checkout, then starts there if it may (in the background: a CLI call)
+                    ok, who = False, 'the coding agent is choosing the repository first'
+                    _spawn(_choose_then_start, store, tid, msg, mid)
+                else: ok, who = auto_start_ok(store, msg, mid, f['kind'])
+                if ok:
+                    # the trust rule that let it through is said on the task (PW-080), so 'why did an agent start on
+                    # a stranger's mail' has an answer
+                    store.add_comment(tid, 'router', 'agent', f'Starting by itself: {who}')
+                    if f['kind'] == 'coding': _spawn(_auto_code, store, tid)
+                    else: _spawn(_auto_general, store, tid, advisor_brief(store, msg, mid))
+                else:
+                    held = who
+                    # A stranger's first message is its own state, not just an absent session. An
+                    # inbound message is a PROMPT, and this one is a prompt from an address that has
+                    # never written before - so the timeline says so in as many words and offers one
+                    # button, instead of a task that merely looks like nobody got round to it. The
+                    # tag rides on the task because that is what the feed row and the release both
+                    # read (senders.known decided it; HOLD_TAG only records the decision).
+                    if getattr(who, 'stranger', False): store.tag_task(tid, HOLD_TAG)
+                    if not no_repo: store.add_comment(tid, 'router', 'agent', held_note(who, f['kind']))
+                    store.audit('task', tid, 'auto_code_held', actor, 'agent', {'from': msg.get('from_email'), 'why': who})
     # the route row is the JUDGEMENT's record, and the timeline panel quotes it verbatim: the
     # verdict leads (what the classifier decided and why), routing explains new-vs-attached,
     # and the tail says what happened NEXT - "it's a task" without "and who is working it"

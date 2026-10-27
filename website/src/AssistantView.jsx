@@ -1727,11 +1727,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // ...until the owner FINISHES it (Finish setup / Walk me through my tasks): it used to end itself on the first sorted email and
     // leave a half-made day under a lone button (the owner, 2026-10-15). An install that was working before is finished (settle_existing),
     // and a server that does not say (an older one) is never read as "not finished": only an explicit false opens setup
-    api.get("/api/setup/first-run").then(({ data }) => { if (data?.step && data.dismissed === false) setFirstRun(true); }).catch(() => {});
     const show = () => setupRef.current?.();                    // the top bar's setup chip asks for the cards
     // what is next, for the rail - read again whenever the first run moves a step (FirstRun fires tq-setup-changed)
-    const todo = () => api.get("/api/setup/first-run").then(({ data }) => setSetupTodo(data?.todo || "")).catch(() => {});
-    todo();
+    // ...and the first read answers both: the open and the rail's todo were two GETs of the same answer at every start (the overnight
+    // setup walk, 2026-10-26)
+    const todo = (first) => api.get("/api/setup/first-run").then(({ data }) => {
+      if (first === true && data?.step && data.dismissed === false) setFirstRun(true);
+      setSetupTodo(data?.todo || "");
+    }).catch(() => {});
+    todo(true);
     window.addEventListener("tq-first-run", show); window.addEventListener("tq-setup-changed", todo);
     return () => { window.removeEventListener("tq-first-run", show); window.removeEventListener("tq-setup-changed", todo); };
   }, []);       // the launch still reading the mail (SinceBlock): the counts wait

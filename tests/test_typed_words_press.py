@@ -114,10 +114,13 @@ class ANamedTaskIsFound(unittest.TestCase):
 
     def test_the_turn_is_told_to_read_the_table_first_then_a_named_task_then_search(self):
         s = T.store(); item = an_idea(s)
-        llm, seen = scripted('The seat count.')
+        systems, seen = [], []
+        def llm(system, user, **kw): systems.append(system); seen.append(user); return 'The seat count.'
         ask(s, "what's left to do?", item['key'], llm)
-        self.assertIn('never the whole pipe', seen[0])
-        self.assertIn('ANOTHER task', seen[0])
+        # said ONCE, in the instructions the conversation is launched with (concierge.TURN_GUIDE), not again on every turn
+        self.assertIn('never the whole pipe', systems[0])
+        self.assertIn('ANOTHER task', systems[0])
+        self.assertNotIn('never the whole pipe', seen[0])
 
 
 class NoThreadNoInventedRefs(unittest.TestCase):

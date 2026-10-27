@@ -576,6 +576,15 @@
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box:not([data-tq-open]) .tq-compose-tools { display: none; }
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box textarea { min-height: 30px; padding: 5px 4px; }
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box .tq-send { width: 28px; height: 28px; flex-basis: 28px; border-radius: 50%; }
+/* ...its hint ONE line, cut at the pill's edge: the box's long hint (an FYI batch, the walk's end) wrapped in the 220px pill and half its
+   second line showed under the first (the overnight walk, 2026-10-26) */
+.tq-dock-line:has(> .tq-arow) > .tq-compose-box textarea::placeholder { white-space: nowrap; }
+/* ...and on a phone the pill takes under half the line: at 220px it left the row 88px, and "Walk me through my tasks" read "W." (its
+   min-width too: the textarea's own 20-column width held it at 208px whatever its basis) */
+@media (max-width: 600px) {
+  .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box { flex-basis: 40%; min-width: 0; }
+  .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { flex-basis: 62%; }
+}
 /* ...and what is said about the task comes up OVER it, anchored above the box: a few turns tall at most, scrolling inside, never moving the view */
 .tq-chat-pop { position: absolute; right: 20px; bottom: calc(100% - 2px); z-index: 5; width: min(600px, calc(100% - 40px)); box-sizing: border-box; display: flex; flex-direction: column;
   border: 1px solid #d5d0c7; border-radius: 14px; background: #fffdfb; box-shadow: 0 10px 32px #39352d26, 0 2px 6px #39352d14; animation: tqPopIn .14s ease-out; }

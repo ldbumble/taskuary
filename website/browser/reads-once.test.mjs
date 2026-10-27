@@ -15,7 +15,7 @@ const task = (title) => ({ intent: "task", kind: "task", why: "scripted", title,
 
 async function watched(t) {
   const { h, page, errors } = await boot(t, { width: 1600, height: 810 });
-  const gets = [], posts = [], advice = [];
+  const gets = [], posts = [], advice = [], wakes = [];
   page.on("request", (r) => {
     const u = new URL(r.url());
     if (!u.pathname.startsWith("/api/") || u.pathname.startsWith("/api/fixture")) return;
@@ -23,15 +23,22 @@ async function watched(t) {
   });
   // an Advisor line that lands is a real change, read once more for the item it names
   const cdp = await page.createCDPSession(); await cdp.send("Network.enable");
-  cdp.on("Network.webSocketFrameReceived", (e) => { if (/"type":"advice"/.test(e.response?.payloadData || "")) advice.push(Date.now()); });
+  cdp.on("Network.webSocketFrameReceived", (e) => {
+    const d = e.response?.payloadData || "";
+    if (/"type":"advice"/.test(d)) advice.push(Date.now());
+    if (/"type":"(task|feed)-changed"/.test(d)) { try { wakes.push(JSON.parse(d)); } catch { /* not one of ours */ } }
+  });
   const window = async (act, ms = 3500) => {
-    const g = gets.length, p = posts.length, a = advice.length;
+    const g = gets.length, p = posts.length, a = advice.length, w = wakes.length;
     await act(); await sleep(ms);
     const got = gets.slice(g), n = (path) => got.filter((x) => x === path).length;
-    return { got, n, posts: posts.slice(p), lines: advice.length - a };
+    return { got, n, posts: posts.slice(p), lines: advice.length - a, wakes: wakes.slice(w) };
   };
   return { h, page, errors, window };
 }
+// the wake-ups in a window that are not the page's own presses (no `by`: liveSeq.js) - other work moving, a demo agent's pane changing
+// state on its own task (handraise.moved): each may be read once, and is counted apart from the press's own reads
+const others = (w) => w.wakes.filter((e) => !e.by).length;
 const pressNext = (page) => page.evaluate(() => document.querySelector("[data-tq-row] [data-tq-next]")?.click());
 
 test("a row opened and each Next read the rail, the conversation and the Advisor once - never again for the press's own writes",
@@ -41,15 +48,15 @@ test("a row opened and each Next read the rail, the conversation and the Advisor
     await clickRow(page, await findRow(page, /Invoice 88213/));
     await page.waitForSelector("[data-tq-canvas-item] [data-tq-task-body]", { timeout: 20000 });
   }, 4000);
-  assert.ok(open.n("/api/funnel/pile") <= 1, `a row opened read the rail ${open.n("/api/funnel/pile")} times: ${open.got}`);
-  assert.ok(open.n("/api/concierge") <= 1, `...and the conversation ${open.n("/api/concierge")} times`);
+  assert.ok(open.n("/api/funnel/pile") <= 1 + others(open), `a row opened read the rail ${open.n("/api/funnel/pile")} times: ${open.got}\n${JSON.stringify(open.wakes)}`);
+  assert.ok(open.n("/api/concierge") <= 1 + others(open), `...and the conversation ${open.n("/api/concierge")} times`);
   assert.ok(open.n("/api/advice") <= 2 + open.lines, `...and the Advisor ${open.n("/api/advice")} times (${open.lines} lines landed)`);
   for (let i = 0; i < 2; i++) {
     const next = await window(() => pressNext(page));
     assert.ok(next.posts.includes("/api/concierge/stream"), `Next ${i} was pressed: ${next.posts}`);
     // the press's answer carries the rail: the 1.5 s reload behind it read the same rows again
-    assert.equal(next.n("/api/funnel/pile"), 0, `Next ${i} read the rail again: ${next.got}`);
-    assert.equal(next.n("/api/concierge"), 0, `Next ${i} read the conversation again: ${next.got}`);
+    assert.ok(next.n("/api/funnel/pile") <= others(next), `Next ${i} read the rail again: ${next.got}\n${JSON.stringify(next.wakes)}`);
+    assert.ok(next.n("/api/concierge") <= others(next), `Next ${i} read the conversation again: ${next.got}`);
     assert.ok(next.n("/api/advice") <= 1 + next.lines, `Next ${i} read the Advisor ${next.n("/api/advice")} times (${next.lines} lines landed)`);
     assert.ok(next.n("/api/reviews") <= 1, `Next ${i} counted the Review badge ${next.n("/api/reviews")} times`);
   }
@@ -65,7 +72,8 @@ test("All read, next on an FYI batch counts the badge at most twice and reads th
   const fyi = await window(() => pressNext(page));
   assert.ok(fyi.posts.includes("/api/funnel/settle"), `the press settled an FYI batch: ${fyi.posts}`);
   assert.equal(fyi.n("/api/funnel/pile"), 0, `the settle's own rail was read again: ${fyi.got}`);
-  assert.ok(fyi.n("/api/reviews") <= 2, `the Review badge was counted ${fyi.n("/api/reviews")} times: ${fyi.got}`);
+  assert.ok(fyi.n("/api/reviews") <= 2 + others(fyi), `the Review badge was counted ${fyi.n("/api/reviews")} times: ${fyi.got}
+${JSON.stringify(fyi.wakes)}`);
   assert.ok(fyi.n("/api/advice") <= 1 + fyi.lines, `the Advisor was read ${fyi.n("/api/advice")} times - the batch put down is not read again`);
   assert.deepEqual(errors, []);
 });
@@ -74,16 +82,23 @@ test("a new mail reaches the rail at once - one rail read, well inside the old 1
   const { h, page, errors, window } = await watched(t);
   for (let i = 0; i < 2; i++) {
     const title = `Approve reads-once invoice ${i}`;
-    let ms = null;
+    let ms = null, made = null;
     const got = await window(async () => {
       const t0 = Date.now();
-      await fetch(`${h.fixtureApi}/api/fixture/intake/arrive`, { method: "POST", headers: { "Content-Type": "application/json", "X-Taskuary-Token": h.token },
-        body: JSON.stringify({ messages: [{ msg: mail(i), verdict: task(title) }] }) });
+      made = await fetch(`${h.fixtureApi}/api/fixture/intake/arrive`, { method: "POST", headers: { "Content-Type": "application/json", "X-Taskuary-Token": h.token },
+        body: JSON.stringify({ messages: [{ msg: mail(i), verdict: task(title) }] }) }).then((r) => r.json());
       await page.waitForFunction((x) => [...document.querySelectorAll("[data-tq-rail] .tq-pile-row .t b")].some((b) => b.textContent === x), { timeout: 8000, polling: 20 }, title);
       ms = Date.now() - t0;
     }, 3000);
     assert.ok(ms < 1400, `mail ${i} took ${ms} ms to reach the rail`);
-    assert.equal(got.n("/api/funnel/pile"), 1, `mail ${i}: one arrival, one rail read: ${got.got}`);
+    // ONE read for the arrival. Other work moving in the window - a demo agent's pane changing state on its own task (handraise.moved) -
+    // is its own wake-up and may be read once more; it is counted apart, not allowed for in the arrival's number
+    const tid = made.out[0].task_id, theirs = (e) => [e.task_id, ...(e.task_ids || [])].includes(tid) || e.message_id === made.out[0].message_id;
+    const other = got.wakes.filter((e) => !theirs(e));
+    const reads = got.n("/api/funnel/pile");
+    assert.ok(reads >= 1 && reads <= 1 + other.length,
+      `mail ${i}: one arrival, one rail read (${other.length} wake-ups for other work): ${got.got}
+${JSON.stringify(got.wakes)}`);
   }
   assert.deepEqual(errors, []);
 });

@@ -23,13 +23,20 @@ test("an arrival is one rail read, a repeat is none, and other work leaves the o
   const reqs = [], errors = [];
   page.on("request", (r) => { const u = new URL(r.url()); if (u.pathname.startsWith("/api/") && !u.pathname.startsWith("/api/fixture")) reqs.push(r.method() + " " + u.pathname); });
   page.on("pageerror", (e) => errors.push(e.message));
+  // the wake-ups the page hears: other work moving in a window (a demo agent's pane changing state on its own task, handraise.moved) is
+  // read on its own account, and counted apart from the arrival's
+  const wakes = [], cdp = await page.createCDPSession(); await cdp.send("Network.enable");
+  cdp.on("Network.webSocketFrameReceived", (e) => {
+    const d = e.response?.payloadData || "";
+    if (/"type":"(task|feed)-changed"/.test(d)) { try { wakes.push(JSON.parse(d)); } catch { /* not one of ours */ } }
+  });
   const arrive = async (items, settle = 4000) => {
-    const from = reqs.length;
+    const from = reqs.length, w = wakes.length;
     const res = await fetch(`${h.fixtureApi}/api/fixture/intake/arrive`, { method: "POST", headers: { "Content-Type": "application/json", "X-Taskuary-Token": h.token },
       body: JSON.stringify({ messages: items }) }).then((r) => r.json());
     assert.ok(res.out, JSON.stringify(res));
     await sleep(settle);
-    return { out: res.out, reqs: reqs.slice(from) };
+    return { out: res.out, reqs: reqs.slice(from), wakes: wakes.slice(w) };
   };
   await page.goto(h.ui, { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 60000 });
@@ -40,7 +47,9 @@ test("an arrival is one rail read, a repeat is none, and other work leaves the o
   const one = await arrive([first]);
   assert.equal(one.out[0].status, "created");
   assert.ok((await rows(page)).includes("Approve Payworth invoice 2210"), "the arrival's row is on the rail");
-  assert.equal(one.reqs.filter((r) => r === "GET /api/funnel/pile").length, 1, `one arrival, one rail read: ${one.reqs}`);
+  const theirs = (e) => [e.task_id, ...(e.task_ids || [])].includes(one.out[0].task_id) || e.message_id === one.out[0].message_id;
+  const elsewhere = one.wakes.filter((e) => !theirs(e)).length, reads = one.reqs.filter((r) => r === "GET /api/funnel/pile").length;
+  assert.ok(reads >= 1 && reads <= 1 + elsewhere, `one arrival, one rail read (${elsewhere} wake-ups for other work): ${one.reqs}\n${JSON.stringify(one.wakes)}`);
 
   const again = await arrive([{ ...first, verdict: null }], 2500);
   assert.equal(again.out[0].status, "duplicate");

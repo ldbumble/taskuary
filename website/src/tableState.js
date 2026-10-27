@@ -20,7 +20,10 @@ export function tableWords(table, ref = "") {
   return { tag: under ? "under this page" : "on the table",
     box: !has ? "Ask Taskuary anything — a name or a subject pulls it in…"
       : under ? `Ask about this page or ${ref || "the one under it"}, or name something else…` : "Ask about this one, tell me what to do with it, or name something else…",
-    phone: !has ? "Ask Taskuary anything…" : under ? "Ask about this page…" : "Ask about this one…" };
+    phone: !has ? "Ask Taskuary anything…" : under ? "Ask about this page…" : "Ask about this one…",
+    // ...and the one-row bar's pill, whose words ("Tell me what to do…") name no task: its name for a reader and the walk says which
+    // one the chat will talk about, with no visible change (the dead-end walk's RING, 2026-10-27)
+    name: !has ? "Ask Taskuary anything" : under ? `Ask Taskuary about this page${ref ? ` or ${ref}` : ""}` : `Tell Taskuary what to do with ${ref || "this one"}` };
 }
 
 // What an /api/advice answer (advisor.status) means for the strip: the Advisor's ONE decision - a lit verb, its line '' when the move is

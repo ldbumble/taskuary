@@ -38,12 +38,13 @@ export const clickText = (page, re, scope = "body") => page.evaluate((src, scope
   if (b) { b.click(); return b.textContent.trim(); } return null;
 }, re.source, scope);
 // a row verb by its id, on the row or in one of its ▾ menus
+// window.__pressAt: the click that pressed - a verb folded behind a ▾ is searched for first, and that search is the driver's, not the press
 export async function doVerb(page, id) {
-  const onRow = await page.evaluate((id) => { const b = document.querySelector(`[data-tq-row] button[data-tq-verb="${id}"]`); if (b && !b.disabled) { b.click(); return true; } return false; }, id);
+  const onRow = await page.evaluate((id) => { const b = document.querySelector(`[data-tq-row] button[data-tq-verb="${id}"]`); if (b && !b.disabled) { window.__pressAt = performance.now(); b.click(); return true; } return false; }, id);
   if (onRow) return "row";
   for (const m of await page.$$eval("[data-tq-row] [data-tq-more]", (e) => e.map((x) => x.dataset.tqMore))) {
     await page.evaluate((m) => document.querySelector(`[data-tq-row] [data-tq-more="${m}"]`).click(), m); await sleep(400);
-    const hit = await page.evaluate((id) => { const i = document.querySelector(`[role=menu] [role=menuitem][data-tq-verb="${id}"]`); if (i && i.getAttribute("aria-disabled") !== "true") { i.click(); return true; } return false; }, id);
+    const hit = await page.evaluate((id) => { const i = document.querySelector(`[role=menu] [role=menuitem][data-tq-verb="${id}"]`); if (i && i.getAttribute("aria-disabled") !== "true") { window.__pressAt = performance.now(); i.click(); return true; } return false; }, id);
     if (hit) return `menu:${m}`;
     await page.keyboard.press("Escape"); await sleep(300);
   }

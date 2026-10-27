@@ -12,7 +12,7 @@ const NOW = () => [...document.querySelectorAll(".tq-canvas-live [data-tq-canvas
   .map((x) => x.getAttribute("data-tq-canvas-item")).pop() || document.querySelector("[data-tq-rail] .tq-pile-row.current")?.getAttribute("data-tq-key") || "";
 const live = (page) => page.evaluate(`(${NOW})()`);
 const watchCanvas = (page) => page.evaluate((now) => {
-  window.__k = []; let last = null; const t0 = performance.now(), read = new Function(`return (${now})()`);
+  window.__k = []; window.__pressAt = null; let last = null; const t0 = window.__t0 = performance.now(), read = new Function(`return (${now})()`);
   const tick = () => {
     const v = read();
     if (v !== last) { last = v; window.__k.push([Math.round(performance.now() - t0), v]); }
@@ -45,7 +45,10 @@ for (const [name, p] of Object.entries(PRESSES)) {
     await sleep(9200);
     const frames = await page.evaluate(() => window.__k);
     const gone = frames.findIndex(([, k]) => k !== left), back = gone < 0 ? [] : frames.slice(gone).filter(([, k]) => k === left);
-    const next = frames.find(([, k]) => k && k !== left);
+    // ...timed from the click that pressed (doVerb's __pressAt): the one-row chat bar leaves a 1440 px row room to fold Mark done behind
+    // a ▾, and the driver opening the ▾s to find it (400 ms a menu, ~1.1 s here) is not the press
+    const at = await page.evaluate(() => (window.__pressAt == null ? 0 : Math.round(window.__pressAt - window.__t0)));
+    const next = frames.map(([ms, k]) => [ms - at, k]).find(([, k]) => k && k !== left);
     timings[name] = next ? next[0] : null;
     console.log(`${name}: press to the next card ${next ? `${next[0]} ms` : "(none)"}`);
     assert.deepEqual(back, [], `${name} drew the item it left again: ${JSON.stringify(frames)}`);

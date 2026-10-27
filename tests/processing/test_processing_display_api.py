@@ -32,7 +32,7 @@ def display_api(tmp_path, monkeypatch):
     finally:
         client.close()
         funnel.invalidate()
-        db.cx.close()
+        db.close()
 
 
 def get_pile(client, current=None):
@@ -134,5 +134,5 @@ def test_multiple_card_backing_reads_share_snapshot_during_external_write(tmp_pa
         assert after['items'][0]['presentation_revision'] == initial['items'][0]['presentation_revision']
         assert after['items'][1]['presentation_revision'] != initial['items'][1]['presentation_revision']
     finally:
-        writer.cx.close()
-        db.cx.close()
+        writer.close()
+        db.close()

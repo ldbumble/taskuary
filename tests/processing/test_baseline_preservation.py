@@ -134,7 +134,7 @@ def test_frozen_2689679_database_preserves_owner_state_and_history_on_migration(
     expected = _legacy_picture(db)
     reopened = SQLiteStore(str(db))
     try: _assert_preserved(reopened, expected)
-    finally: reopened.cx.close()
+    finally: reopened.close()
 
 
 def test_migration_and_repeated_reopen_do_not_duplicate_or_rewrite_history(tmp_path):
@@ -143,4 +143,4 @@ def test_migration_and_repeated_reopen_do_not_duplicate_or_rewrite_history(tmp_p
     for _ in range(2):
         reopened = SQLiteStore(str(db))
         try: _assert_preserved(reopened, expected)
-        finally: reopened.cx.close()
+        finally: reopened.close()

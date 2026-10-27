@@ -109,7 +109,7 @@ def test_sync_api_recovers_a_late_mail_page_and_preserves_owner_state(tmp_path, 
     finally:
         assert server.join_drains(db, timeout=5)
         client.close()
-        db.cx.close()
+        db.close()
 
 
 def test_sync_api_reopens_and_retries_imap_hole_below_advanced_cursor(tmp_path, monkeypatch):
@@ -180,7 +180,7 @@ def test_sync_api_reopens_and_retries_imap_hole_below_advanced_cursor(tmp_path, 
 
         # Reopen only this disposable database: retry must be durable, not worker memory.
         assert server._close_drain_workers(target_store=db, timeout=5)
-        db.cx.close()
+        db.close()
         db = SQLiteStore(path)
         monkeypatch.setattr(server, 'store', db)
         mailbox.broken = False
@@ -197,4 +197,4 @@ def test_sync_api_reopens_and_retries_imap_hole_below_advanced_cursor(tmp_path, 
     finally:
         assert server.join_drains(db, timeout=5)
         client.close()
-        db.cx.close()
+        db.close()

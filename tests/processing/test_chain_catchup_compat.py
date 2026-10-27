@@ -116,7 +116,7 @@ def test_chain_history_uses_the_exact_scoped_epoch_and_does_not_duplicate_or_hid
     assert cov['added'] == 1
     assert store.message_by_external(epoch8)['BodyText'] == 'exact body 9'
     assert dict(store.get_message(legacy)) == old
-    store.cx.close()
+    store.close()
 
 
 class _FailFirstFetchOnce(FakeBox):
@@ -163,7 +163,7 @@ def test_pending_inbox_uid_and_retry_hole_cannot_be_swallowed_as_history(tmp_pat
     assert dict(store.get_message(old_mid)) == old_row
     assert store.funnel_states() == old_states
     assert store.doc('counsel') == 'owner exact document'
-    store.cx.close()
+    store.close()
 
 
 def test_later_inbox_uid_with_an_older_date_remains_an_arrival(tmp_path):
@@ -183,7 +183,7 @@ def test_later_inbox_uid_with_an_older_date_remains_an_arrival(tmp_path):
         False, USER, 2, scope=cfg['imap_uid_scope'],
         validity=cfg['imap_uidvalidity'], mode=cfg['imap_uid_identity'])
     assert store.message_by_external(uid2)['BodyText'] == 'exact body 2'
-    store.cx.close()
+    store.close()
 
 
 class _ArrivalDuringChainSearch(FakeBox):
@@ -216,7 +216,7 @@ def test_uid_arriving_after_initial_search_is_left_for_the_next_normal_poll(tmp_
     assert arrived is not None
     assert arrived['Status'] != 'history'
     assert _config(store)['imap_uid'] == 3
-    store.cx.close()
+    store.close()
 
 
 def test_sent_chain_rows_use_the_same_prepared_identity_as_the_following_sent_poll(tmp_path):
@@ -234,7 +234,7 @@ def test_sent_chain_rows_use_the_same_prepared_identity_as_the_following_sent_po
     assert [row['ExternalId'] for row in sent_rows] == [expected]
     assert store.message_by_external(f'imap-sent:{USER}:2') is None
     assert cfg['imap_sent_uid'] == 2
-    store.cx.close()
+    store.close()
 
 
 class _ValiditySequence(FakeBox):
@@ -257,7 +257,7 @@ def test_missing_or_newly_observed_validity_keeps_the_active_poll_namespace(tmp_
     assert saved_cfg['imap_uidvalidity'] == 7
     assert saved_cfg['imap_uid_identity'] == 'legacy'
     assert saved.message_by_external(f'imap:{USER}:1') is not None
-    saved.cx.close()
+    saved.close()
 
     # A fresh unknown epoch may become observable during the history SELECT. The active drain
     # keeps its unknown namespace; it does not rewrite its basis beneath its own closure.
@@ -271,7 +271,7 @@ def test_missing_or_newly_observed_validity_keeps_the_active_poll_namespace(tmp_
         False, USER, 1, scope=learned_cfg['imap_uid_scope'],
         validity=None, mode='scoped-unknown-v1')
     assert learned.message_by_external(unknown) is not None
-    learned.cx.close()
+    learned.close()
 
 
 class _RestoreFails(FakeBox):
@@ -329,7 +329,7 @@ def test_failed_restore_is_fatal_before_cursor_progress_and_retry_keeps_owner_da
     rows = store.thread_messages(ROOT)
     assert len([row for row in rows if row['Status'] != 'context']) == 2
     assert _config(store)['imap_uid'] == 2
-    store.cx.close()
+    store.close()
 
 
 @pytest.mark.parametrize('failure', ['select', 'search'])
@@ -346,4 +346,4 @@ def test_sent_history_discovery_failure_is_incomplete_without_preparing_sent_sta
     cfg = _config(store)
     assert store.chain_coverage(ROOT)['complete'] is False
     assert not any(key.startswith('imap_sent_') for key in cfg)
-    store.cx.close()
+    store.close()

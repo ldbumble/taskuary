@@ -98,7 +98,7 @@ def test_real_inventory_filters_roots_by_matching_member_and_binds_draft_detail(
         assert [r['DraftText'] for r in detail['detail']['reviews']] == ['EXACT OLDER DRAFT']
         assert 'DO NOT SEND SIBLING DRAFT' not in json.dumps(detail)
     finally:
-        store.cx.close()
+        store.close()
 
 
 def test_real_generic_roots_hidden_history_tombstones_and_detail_gets_are_readonly(tmp_path):
@@ -141,7 +141,7 @@ def test_real_generic_roots_hidden_history_tombstones_and_detail_gets_are_readon
         assert store.doc('counsel') == 'Exact owner custom document'
         assert idea['IdeaId'] and review
     finally:
-        store.cx.close()
+        store.close()
 
 
 def test_the_paged_all_route_is_gone_with_the_timeline():
@@ -167,7 +167,7 @@ def test_detail_rejects_member_moved_to_another_task(tmp_path):
             processing_all.item_detail(store, item['item_id'], kind='message', local_id=mid)
         assert caught.value.detail['code'] == 'processing_target_moved'
     finally:
-        store.cx.close()
+        store.close()
 
 
 def test_standalone_review_detail_preserves_owner_final_text(tmp_path):
@@ -181,4 +181,4 @@ def test_standalone_review_detail_preserves_owner_final_text(tmp_path):
         assert detail['detail']['body'] == 'Exact owner final wording'
         assert 'Superseded machine draft' not in json.dumps(detail)
     finally:
-        store.cx.close()
+        store.close()

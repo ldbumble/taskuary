@@ -38,7 +38,7 @@ class AgentStatesAgreeTests(unittest.TestCase):
         from taskuary import assistant
         assistant._AGENDA.clear()
         for k in set(terminal.SESSIONS) - set(cls.before): terminal.SESSIONS.pop(k).close()
-        cls.s.cx.close()
+        cls.s.close()
 
     def test_every_surface_says_the_same_state(self):
         self.maxDiff = None; got = {}

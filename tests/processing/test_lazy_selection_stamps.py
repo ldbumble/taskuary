@@ -31,7 +31,7 @@ def db(tmp_path, monkeypatch):
     fp.forget_stamps(); funnel.invalidate()
     yield s
     fp.forget_stamps(); funnel.invalidate()
-    s.cx.close()
+    s.close()
 
 
 def whole(store, cached, monkeypatch, **scope):

@@ -28,7 +28,7 @@ BANNER = ('This email was sent from outside of Northwind. ** Do not click links 
 def db(tmp_path):
     store = SQLiteStore(str(tmp_path / 'preview.db'))
     yield store
-    store.cx.close()
+    store.close()
 
 
 def a_message(db, subject, body, sender='notifications@github.com'):

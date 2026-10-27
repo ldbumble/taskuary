@@ -44,7 +44,7 @@ def db(tmp_path):
     mail(store, 'Office closed Friday', 30, cat='info')
     settle(store)
     with mock.patch('taskuary.terminal.live_sessions', return_value=[]): yield store, tids
-    store.cx.close()
+    store.close()
 
 
 def settle(store):

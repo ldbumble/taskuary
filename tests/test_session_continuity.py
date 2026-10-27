@@ -44,7 +44,7 @@ def test_database_reopen_restores_exact_native_thread_and_model(tmp_path, provid
     with mock.patch.object(llm, 'build_llm', return_value=brain()):
         session = general.GeneralSession(store, tid, pick=f'cli:{provider}', model='chosen-model')
         session.send_prompt('Collect item numbers')
-    store.cx.close()
+    store.close()
     fresh = SQLiteStore(db)
     try:
         resumed = general.GeneralSession(fresh, tid)
@@ -55,7 +55,7 @@ def test_database_reopen_restores_exact_native_thread_and_model(tmp_path, provid
         assert build.call_args.kwargs['resume'] == 'native-thread'
         assert 'Collect item numbers' in build.call_args.kwargs['fallback_user']
         assert general.default_pick(fresh, fresh.get_task(tid)) == f'cli:{provider}'
-    finally: fresh.cx.close()
+    finally: fresh.close()
 
 
 def test_provider_switch_and_changed_configuration_do_not_reuse_a_foreign_thread():

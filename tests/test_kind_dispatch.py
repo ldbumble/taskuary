@@ -210,7 +210,7 @@ class CodingIsNotTheDefaultMigrationTests(unittest.TestCase):
         p = os.path.join(tempfile.mkdtemp(), 't.db')
         old = 'MY OWN RULE: Erin is always urgent.\n\n' + '\n\n'.join(w for w, _n in store_mod._KIND_RULES) + '\n\nMy last line.'
         s = SQLiteStore(p); s.save_doc('triage', old, 'owner')
-        s.cx.execute("DELETE FROM setting WHERE Name='triage_coding_not_default'"); s.cx.commit(); s.cx.close()
+        s.cx.execute("DELETE FROM setting WHERE Name='triage_coding_not_default'"); s.cx.commit(); s.close()
         after = SQLiteStore(p).doc('triage')
         for was, now in store_mod._KIND_RULES:
             self.assertIn(now, after)
@@ -225,7 +225,7 @@ class CodingIsNotTheDefaultMigrationTests(unittest.TestCase):
         from taskuary.store import SQLiteStore
         p = os.path.join(tempfile.mkdtemp(), 't.db')
         s = SQLiteStore(p); s.save_doc('triage', 'Mine first. ' + store_mod._CODING_WAS + ' The test is where.', 'owner')
-        s.cx.execute("DELETE FROM setting WHERE Name='triage_reading_not_coding'"); s.cx.commit(); s.cx.close()
+        s.cx.execute("DELETE FROM setting WHERE Name='triage_reading_not_coding'"); s.cx.commit(); s.close()
         after = SQLiteStore(p).doc('triage')
         self.assertIn(store_mod._CODING_NOW, after); self.assertNotIn('a query against one of their databases', after)
         self.assertIn('Mine first.', after); self.assertIn('The test is where.', after)

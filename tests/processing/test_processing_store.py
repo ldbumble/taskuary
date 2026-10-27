@@ -54,7 +54,7 @@ def test_constructor_is_additive_schema_only_and_preserves_legacy_rows(tmp_path)
               store.get_doc('counsel'), store.get_settings()['fixture-owner-setting'])
     assert store.cx.execute('SELECT COUNT(*) FROM processing_item').fetchone()[0] == 0
     assert store.cx.execute('SELECT COUNT(*) FROM processing_migration').fetchone()[0] == 0
-    store.cx.close()
+    store.close()
 
     reopened = SQLiteStore(str(path))
     try:
@@ -62,7 +62,7 @@ def test_constructor_is_additive_schema_only_and_preserves_legacy_rows(tmp_path)
                  reopened.get_doc('counsel'), reopened.get_settings()['fixture-owner-setting'])
         assert after == before
         assert reopened.cx.execute('SELECT COUNT(*) FROM processing_item').fetchone()[0] == 0
-    finally: reopened.cx.close()
+    finally: reopened.close()
 
 
 def test_uncapped_backfill_reopens_and_same_version_never_recaptures(tmp_path):
@@ -93,7 +93,7 @@ def test_uncapped_backfill_reopens_and_same_version_never_recaptures(tmp_path):
     excluded = next(x for x in first if x['entity_kind'] == 'message' and x['local_id'] == '507')
     assert excluded['observed_unread'] is None
     assert excluded['original']['row']['BodyText'] == 'Full synthetic body 506'
-    store.cx.close()
+    store.close()
 
     reopened = SQLiteStore(str(path))
     try:
@@ -102,7 +102,7 @@ def test_uncapped_backfill_reopens_and_same_version_never_recaptures(tmp_path):
         assert again['status'] == 'already_complete'
         assert again['input_watermark'] == result['input_watermark']
         assert reopened.processing_legacy_evidence('legacy-v1') == first
-    finally: reopened.cx.close()
+    finally: reopened.close()
 
 
 def test_backfill_failure_rolls_back_every_foundation_write_and_retry_succeeds(tmp_path):
@@ -115,17 +115,17 @@ def test_backfill_failure_rolls_back_every_foundation_write_and_retry_succeeds(t
                   'processing_legacy_evidence', 'processing_migration'):
         assert store.cx.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] == 0
     assert store.backfill_processing('legacy-v1', fixed_now=NOW, evaluator=legacy_stub)['status'] == 'complete'
-    store.cx.close()
+    store.close()
 
 
 def test_two_connections_serialize_one_idempotent_baseline(tmp_path):
-    path = tmp_path / 'concurrent.db'; seed = SQLiteStore(str(path)); add_message(seed); seed.cx.close()
+    path = tmp_path / 'concurrent.db'; seed = SQLiteStore(str(path)); add_message(seed); seed.close()
     barrier = threading.Barrier(2)
 
     def capture():
         store = SQLiteStore(str(path)); barrier.wait()
         try: return store.backfill_processing('legacy-v1', fixed_now=NOW, evaluator=legacy_stub)
-        finally: store.cx.close()
+        finally: store.close()
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = [future.result() for future in (pool.submit(capture), pool.submit(capture))]
@@ -170,7 +170,7 @@ def test_legacy_aliases_resolve_the_exact_entity_and_ideas_stay_independent(tmp_
     assert (str(old_wrapper), str(one['IdeaId'])) in [tuple(r) for r in relations]
     assert (str(newer_wrapper), str(one['IdeaId'])) in [tuple(r) for r in relations]
     assert not store.cx.execute("SELECT 1 FROM processing_alias WHERE Namespace='external_id'").fetchone()
-    store.cx.close()
+    store.close()
 
 
 def test_backfill_adapter_preserves_due_note_and_closed_worker_enrichment(tmp_path):
@@ -190,7 +190,7 @@ def test_backfill_adapter_preserves_due_note_and_closed_worker_enrichment(tmp_pa
     assert seen[note_mid]['NeedsYou'] == 1
     assert seen[closed_mid]['Working'] is None
     assert seen[closed_mid]['AgentWaiting'] is False
-    store.cx.close()
+    store.close()
 
 
 def test_reconciliation_requires_provider_scope_reuses_fyi_item_and_keeps_accounts_separate(tmp_path):
@@ -212,7 +212,7 @@ def test_reconciliation_requires_provider_scope_reuses_fyi_item_and_keeps_accoun
     b = store.resolve_processing_target('external_id', 'same-provider-id', 'connector:22')
     assert a['item_id'] != b['item_id']
     assert store.resolve_processing_target('external_id', 'same-provider-id') is None
-    store.cx.close()
+    store.close()
 
 
 def test_later_baseline_reuses_a_sole_fyi_item_when_it_gains_a_task(tmp_path):
@@ -229,7 +229,7 @@ def test_later_baseline_reuses_a_sole_fyi_item_when_it_gains_a_task(tmp_path):
     assert store.resolve_processing_target('legacy_funnel', f'msg:{mid}')['item_id'] == original
     assert {e['migration_version'] for e in store.processing_snapshot(original)['legacy_evidence']} == {
         'legacy-v1', 'legacy-v2'}
-    store.cx.close()
+    store.close()
 
 
 def test_explicit_merge_preserves_redirect_members_alias_receipts_and_source_evidence(tmp_path):
@@ -255,4 +255,4 @@ def test_explicit_merge_preserves_redirect_members_alias_receipts_and_source_evi
         (source, f'msg:{mid}', ['done'])]
     assert store.processing_snapshot(target)['legacy_evidence'] == snap['legacy_evidence']
     assert snap['item']['ContextRevision'] is None and snap['item']['ViewRevision'] is None
-    store.cx.close()
+    store.close()

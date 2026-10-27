@@ -20,7 +20,7 @@ def cutover_verdict_reads(tmp_path, n):
         db.cx.set_trace_callback(None)
         assert db.processing_reads_active()
         return sum('PermanentRead IS NOT NULL' in s for s in sql)
-    finally: db.cx.close()
+    finally: db.close()
 
 
 def test_verdicts_are_read_once_however_many_items(tmp_path):

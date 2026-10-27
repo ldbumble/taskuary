@@ -145,16 +145,16 @@ class TriageLineMigrationTests(unittest.TestCase):
         s.cx.execute("DELETE FROM setting WHERE Name='report_triage_line_set'"); s.cx.execute("DELETE FROM source WHERE Channel='report'")
         s.cx.executemany("INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES ('report', 'r', 'owner', 1, ?)",
                          [(json.dumps({'title': f'r{i}', **c}),) for i, (c, _) in enumerate(self.CASES)])
-        s.cx.commit(); s.cx.close()
+        s.cx.commit(); s.close()
         s = SQLiteStore(fn)
         routes = lambda: [json.loads(r['ConfigJson'])['route'] for r in s._rows("SELECT * FROM source WHERE Channel='report' ORDER BY SourceId")]
         self.assertEqual([r['triage'] for r in routes()], [w for _, w in self.CASES])
         # ...and once: an owner who later turns a daily report's triage on keeps it across launches
         sid = s._rows("SELECT SourceId FROM source WHERE Channel='report' ORDER BY SourceId")[2]['SourceId']
         s.save_source({'SourceId': sid, 'ConfigJson': json.dumps(reports.set_line(json.loads(s.get_source(sid)['ConfigJson']), 'triage', 'always'))}, 'o')
-        s.cx.close(); s = SQLiteStore(fn)
+        s.close(); s = SQLiteStore(fn)
         self.assertEqual(routes()[2]['triage'], {'how': 'always'})
-        s.cx.close()
+        s.close()
 
 
 def _answering(payload):

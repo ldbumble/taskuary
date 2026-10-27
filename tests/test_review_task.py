@@ -69,7 +69,7 @@ class StrandedRowsAreBackfilled(unittest.TestCase):
         s.cx.execute("DELETE FROM setting WHERE Name='review_task_backfilled'")
         s.cx.commit()
         highest = s.cx.execute('SELECT MAX(TaskId) m FROM task').fetchone()['m'] or 0
-        s.cx.close()
+        s.close()
 
         s2 = SQLiteStore(path)
         rv = s2.cx.execute('SELECT TaskId FROM review').fetchone()
@@ -86,7 +86,7 @@ class StrandedRowsAreBackfilled(unittest.TestCase):
         s.cx.execute("INSERT INTO review (TaskId, Kind, Status, DraftText, Reason, CreatedAt) "
                      "VALUES (NULL,'action','pending','{}','a setting waits for your yes','2026-09-21 08:00:00')")
         s.cx.execute("DELETE FROM setting WHERE Name='review_task_backfilled'")
-        s.cx.commit(); s.cx.close()
+        s.cx.commit(); s.close()
         SQLiteStore(path).cx.close()
         s3 = SQLiteStore(path)
         self.assertEqual(s3.cx.execute("SELECT COUNT(*) c FROM task WHERE Source='review'").fetchone()['c'], 1,

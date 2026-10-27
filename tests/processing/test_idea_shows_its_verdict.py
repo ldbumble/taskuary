@@ -21,7 +21,7 @@ STAMP = NOW.isoformat(sep=' ')
 def db(tmp_path):
     store = SQLiteStore(str(tmp_path / 'ideas.db'))
     yield store
-    store.cx.close()
+    store.close()
 
 
 def an_idea(db, key, text, triage=None):

@@ -26,7 +26,7 @@ def db(tmp_path):
     store.activate_processing_reads(fixed_now=STAMP, live_state=[])
     funnel.invalidate(); funnel.forget_states()
     yield store
-    store.cx.close()
+    store.close()
 
 
 def a_run(db, route):

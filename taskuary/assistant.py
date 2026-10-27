@@ -2024,6 +2024,12 @@ def verdicts(store) -> list:
 def _keep_verdict(store, i: dict, verb: str, actor: str):
     row = {'key': i.get('Key'), 'text': _short(i.get('Text'), 160), 'verdict': verb, 'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     store.set_setting(VERDICTS_KEY, json.dumps(([row] + [r for r in verdicts(store) if r.get('key') != row['key']])[:VERDICTS_CAP]), actor)
+    # "no more ideas like this" is a standing word about what to bring up, so it is a line in the memory every reader has (the owner,
+    # 2026-10-27: "everything that learns about the user should be saved in memory"); one idea taken up or turned down is an episode,
+    # and the reflection learns What to bring up from those
+    if verb == 'dismiss_kind':
+        from . import memorylines
+        memorylines.keep(store, f'No more ideas like this: "{row["text"]}"', section='bring', verdict=False)
 
 
 def verdicts_block(store, report_id=None) -> str:

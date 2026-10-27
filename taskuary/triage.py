@@ -664,8 +664,10 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if notes:
                 # already ranked and budgeted by ingest.relevant_notes. Evidence, never an order (PW-025): how much
                 # each counts for is the guide's to say (templates/triage.md, section 6).
-                system += ('\n\nEVIDENCE - verdicts the owner gave on earlier mail that looks related (each names the sender '
-                           'and subject it was given on):\n' + '\n'.join(f'- {n}' for n in notes)
+                # ...from LEARNED.md now (memorylines, 2026-10-27): a line about one sender or topic says so at its end, `(about: ...)`
+                system += ('\n\nEVIDENCE - the owner\'s own word that may bear on this: verdicts they gave on earlier mail that looks related '
+                           '(each names the sender and subject it was given on, and what it is about) and what they told you they care '
+                           'about, or do not:\n' + '\n'.join(f'- {n}' for n in notes)
                            + (f'\n({notes_left} further note(s) also apply to this sender but did not fit.)' if notes_left else ''))
             # From here down the code only LABELS what it hands over. Every sentence about how to judge it - the
             # report brief, the workers, kind, repositories, chat lines, same_as - lives in the guide (2026-10-09:

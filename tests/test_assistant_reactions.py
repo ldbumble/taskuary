@@ -325,7 +325,8 @@ class ArrivalsTests(unittest.TestCase):
                          email='pvance@vendor.example', hours=n + 1, llm=brain('fyi', None))
             self.assertEqual(out['status'], 'filed')
         self.assertEqual(len(pile(s)), 2)
-        funnel.remember_mute(s, {'sender': 'pvance@vendor.example', 'words': ['northwind', 'financial'], 'why': 'the financials process'}, 'o')
+        # a mute an older version wrote - nothing writes one now (2026-10-27); the funnel still applies it
+        s.set_setting(funnel.MUTES_KEY, json.dumps([{'sender': 'pvance@vendor.example', 'words': ['northwind', 'financial'], 'why': 'the financials process'}]), 'o'); funnel.invalidate()
         p = funnel.build(s)
         self.assertEqual((p['items'], p['muted']), ([], 2))
         # ...and the same sender asking something real still gets through

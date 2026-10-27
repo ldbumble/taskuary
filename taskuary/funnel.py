@@ -110,12 +110,6 @@ def mutes(store) -> list:
     except ValueError: return []
 
 
-def remember_mute(store, rule: dict, actor: str = 'owner') -> None:
-    rules = [r for r in mutes(store) if (r.get('sender'), tuple(r.get('words') or [])) != (rule.get('sender'), tuple(rule.get('words') or []))]
-    store.set_setting(MUTES_KEY, json.dumps((rules + [rule])[-25:]), actor)
-    invalidate()
-
-
 def like(words, hay: set) -> int:
     """How many of the owner's words this item carries. Prefixes count BOTH ways: they type
     "financials" about a "Financial Report" and "pvancer" about pvance@ (2026-09-03)."""

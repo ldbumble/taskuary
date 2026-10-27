@@ -435,7 +435,8 @@ class MutedTests(unittest.TestCase):
         keep = mail(s, 'RE: Payworth', who='Omar', email='omar@vendor.example', body='please respond', hours=1, status='filed')
         s.add_route(keep, None, 'file', None, 'triage: fyi', [], 'triage')
         self.assertEqual(len(funnel.build(s)['items']), 3)
-        funnel.remember_mute(s, {'sender': 'pvance@vendor.example', 'words': ['northwind', 'financials'], 'why': 'part of the financials process'}, 'o')
+        # a mute an older version wrote - nothing writes one now (2026-10-27); the funnel still applies it
+        s.set_setting(funnel.MUTES_KEY, json.dumps([{'sender': 'pvance@vendor.example', 'words': ['northwind', 'financials'], 'why': 'part of the financials process'}]), 'o'); funnel.invalidate()
         p = funnel.build(s)
         self.assertEqual([i['who'] for i in p['items']], ['Omar'])
         self.assertEqual((p['muted'], p['rules']), (2, ['part of the financials process']))
@@ -445,9 +446,6 @@ class MutedTests(unittest.TestCase):
              body='please re-run it', hours=0, tid=t)
         funnel.invalidate()
         self.assertIn('yours', [i['lane'] for i in funnel.build(s)['items'] if i.get('tid') == t])
-        # ...and it is the owner's to take off again
-        funnel.remember_mute(s, {'sender': 'pvance@vendor.example', 'words': ['northwind', 'financials'], 'why': 'x'}, 'o')
-        self.assertEqual(len(funnel.mutes(s)), 1)              # rewritten, not stacked
 
 
 class LanesTests(unittest.TestCase):

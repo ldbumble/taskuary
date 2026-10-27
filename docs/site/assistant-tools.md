@@ -865,7 +865,7 @@ Who someone is to the owner: every line the memory holds about them, with its ke
 
 ### `memory.list`
 
-Everything kept about the owner: the saved notes (from "remember this", their verdicts, Settings) and what LEARNED.md has learned from their verdicts. Use it for "what do you remember", "what do you know about me"
+Everything kept about the owner: LEARNED.md - what they told you ("remember this"), their verdicts, and what it learned from what they did. Use it for "what do you remember", "what do you know about me"
 
 - `about` - words to narrow it (a sender, a topic)
 

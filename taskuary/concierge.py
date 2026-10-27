@@ -2260,7 +2260,8 @@ def know(store, q: str) -> str:
     from . import handbook as hub, knowledge
     from .routing import tokens
     want = {w for w in tokens(q) if len(w) > 2}
-    kept = [m['Note'] for m in store.list_memories() if want & set(tokens(m.get('Note') or ''))][:8]
+    from . import memorylines                  # the kept facts are LEARNED.md's lines (2026-10-27)
+    kept = [m['Note'] for m in memorylines.notes(store) if want & set(tokens(m.get('Note') or ''))][:8]
     parts = [hub.block(store, q, actions=False) if hub.enabled(store) else '', knowledge.block(store, q),
              ('KEPT FACTS:' + NEWLINE + NEWLINE.join(f'- {n}' for n in kept)) if kept else '']
     found = NEWLINE.join(x.strip() for x in parts if x.strip())
@@ -2879,8 +2880,6 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
         return _answer_now(store, tid, table, target, str(params.get('text') or text or '').strip(), actor)
     if kind == 'script.start':
         return _new(store, tid, table, 'report', '') if 'report' in str(params.get('name') or '') else surface(store, None, None, actor)
-    if kind == 'memory.remember':
-        return _page(store, tid, table, '#settings=memory', f"Opened {places.name('memory')} - add it as a note there; it is used from then on.")
     if tk == 'setting':
         r = next((x for x in appfacts.settings(store) if x['key'] == params.get('setting')), None) or {}
         return _page(store, tid, table, f"#settings=config&group={quote(r.get('group') or '')}&key={quote(str(params.get('setting') or ''))}",
@@ -2987,15 +2986,6 @@ def propose_switch(store, changes: list, says: str, text: str, actor: str = 'own
     return {'reviewId': rid, 'card': {'key': f'review:{rid}', 'kind': 'action', 'lane': 'approve', 'rid': rid,
                                       'title': says, 'who': 'you asked for it', 'why': 'a setting waits for your yes',
                                       'when': _ts(datetime.now())}}
-
-
-def remember_fact(store, note: str, actor: str = 'owner') -> int:
-    """A fact the owner told us to keep. Written HERE rather than left to the page, so the receipt
-    is the fact: "Remembered." used to go out whether or not a row was ever written (2026-09-03)."""
-    mid = store.add_memory({'Scope': 'global', 'ScopeKey': None, 'Note': redact(note.strip())[:1000],
-                            'Source': 'manual', 'Active': 1, 'CreatedBy': actor})
-    store.audit('memory', mid, 'create', actor, detail={'from': 'assistant chat'})
-    return mid
 
 
 def person(store, who: str) -> dict | None:

@@ -94,7 +94,7 @@ STOPS = [
         _can('choose which AI sorts your mail, and its backups', 'Settings', 'settings=config&group=How%20mail%20is%20sorted'),
         _can('decide whether replies draft themselves', 'Settings'),
         _can('write routing policies the AI can never override', 'Settings', 'settings=policies'),
-        _can('see every verdict it learned from, and switch off the wrong ones', 'Settings', 'settings=memory'),
+        _can('see what it knows about how you work, and correct a wrong line', 'Settings', 'settings=docs&doc=learned'),
         _can('install an update in place', 'Settings', 'settings=updates')]},
     {'key': 'board', 'title': 'Board', 'image': '/walk/board.png',
      'blurb': 'Work in flight, and the agents doing it. A coding task opens a real terminal session '

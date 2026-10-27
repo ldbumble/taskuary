@@ -113,7 +113,7 @@ These have no button. Say them, in the app or on your phone.
 | "redraft it shorter" | The draft written again with the change | at once - nothing is sent |
 | "yes, go ahead" to a waiting agent | Your answer goes to the agent | at once |
 | "run it again" on a report | **Run it again** lit on the report | you press it |
-| "remember that…" | Settings → Verdicts & notes opens beside the answer, to add it | you add it |
+| "remember that…", "I don't care about X any more" | Kept at once as a line in your memory (LEARNED.md), where triage, reports, the Advisor and agents read it | at once |
 | "set up a report that…" | **New** opens on Report with your words in it | you press Build it |
 | "stop hiding auto-replies" | The setting opens beside the answer, its knob outlined | you change it |
 | "what's waiting on me?" | Looked up and answered — tasks, reports, mail, calendar, settings | at once |

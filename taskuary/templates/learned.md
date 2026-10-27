@@ -1,13 +1,16 @@
 # LEARNED.md — what the system has learned about how {{owner_first}} works
 
-_Taskuary writes this document itself, from what you do: who you answer and how soon, what you put
-off and until when, what you hand to whom, what you promise, which ideas you take up. Never from
-which button you pressed, never from personal mail, and never from what a sender says about
-themselves. Each section is about one subject, and each reader takes the parts that help it:
-triage reads what you care about (and, for how important a task is, the lines about the people on
-the mail), the drafter the lines about whoever it writes to, the Advisor your people, what you care
-about, how you work and your promises, an agent the people on its own task, the Assistant all of
-it. How you write is kept
+_This is Taskuary's memory of how you work - the one place it keeps what it knows about you. It
+writes it from what you do: who you answer and how soon, what you put off and until when, what you
+hand to whom, what you promise, which ideas you take up. Never from which button you pressed, never
+from personal mail, and never from what a sender says about themselves. What you SAY goes in at
+once as your own line: a fact you tell the Assistant, a "Not ours" or "Not a task", a kind or a
+road you corrected - a line about one sender, domain or topic ends with `(about: …)`, and a newer
+verdict on the same thing replaces the older. Each section is about one subject, and each reader
+takes the parts that help it: triage reads what you care about (and, for how important a task is,
+the lines about the people on the mail), the drafter the lines about whoever it writes to, the
+Advisor your people, what you care about, how you work and your promises, an agent all of it (the people lines about those on its own task), the
+Assistant all of it. How you write is kept
 in STYLE.md (By recipient). Machine-written lines carry a `[s:N | ev: … | seen: … | k: …]` tag —
 strength, the evidence behind it, when it last held, and the key that keeps it the same line as it
 gets reworded. A line is only read once it is in use: three episodes from two people or threads,
@@ -45,11 +48,3 @@ activate themselves, because a wrong ignore-rule silences the corrections that w
 _(patterns seen once or twice; they reach a reader only once they are in use, or die.
 Nothing in this section or the one above is shown to triage, the Advisor or the agents.)_
 <!-- hypotheses:end -->
-
-## Verdicts - the evidence
-_(every verdict you give, dated, with the sender and subject it was given on. Triage is shown
-the ones about a similar sender or topic and judges how alike the new message is; the general
-lesson is distilled into the sections above.)_
-<!-- verdicts:start -->
-_(nothing yet - "Not our task" and "Not a task" write here)_
-<!-- verdicts:end -->

@@ -101,15 +101,18 @@ The roads on the Triage tab are not decoration. Correcting a verdict writes the 
 the next message *like* this one, rather than becoming a rule about this one sender.
 
 Every verdict is evidence. Editing a draft teaches voice; rejecting one teaches what should not
-be drafted; **Not our task** teaches where your responsibility ends. The exact decision is kept
-with its date, sender and subject, so future triage can judge whether a new message is genuinely
-similar.
+be drafted; **Not our task** teaches where your responsibility ends. The exact decision goes into
+`LEARNED.md` at once, as your own line under `## What you care about`, with the sender and subject
+it was given on and what it is about (`(about: …)`), so future triage - and the routing judge of a
+report - can judge whether a new message is genuinely similar. A newer verdict on the same thing
+replaces the older; what you tell the Assistant ("I don't care about the legacy export any more")
+goes in the same way. `LEARNED.md` is the one memory: there is no separate notes page.
 
 Repeated patterns become lessons in `LEARNED.md`, one section per subject: `## Your people`,
 `## What you care about`, `## How you work`, `## Promises` and `## What to bring up`. Each reader
 takes the sections that help it - triage reads what you care about (learned only from your sorting
 verdicts), the Advisor your people, what you care about, how you work and your promises, an agent
-the people on its own task (never on a stranger's), what you care about and your promises, and the
+all of it (the people lines only about those on its own task, and nothing on a stranger's), and the
 Assistant all of it. Nothing is learned from a button press. How you write
 is kept in `STYLE.md` under `## By recipient`, for the drafter - with the instruction you typed into
 Redraft, once you have typed the same one twice for the same person. Each machine-written line

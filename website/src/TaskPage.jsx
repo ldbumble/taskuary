@@ -105,7 +105,7 @@ import { openAppLink } from "./appLinks.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { place } from "./words.js";
 import { announceRemoved, fromAnswer } from "./removed.js";
-import { heldSteps, heldTask, heldTerm, heldWait, keepTask, keepTerms, pageRead } from "./taskDetail.js";
+import { heldSteps, heldTask, heldTerm, keepTask, keepTerms, pageRead } from "./taskDetail.js";
 import { coalesce } from "./coalesce.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
@@ -474,7 +474,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const endStart = (id) => { const { [id]: _, ...rest } = startFlights.current; startFlights.current = rest; setStarting(rest); };
   const [generalRevision, setGeneralRevision] = useState(0);
   // the waiting room: notes for the agent, typed in when it stops (waitroom.py)
-  const [wait, setWait] = useState(() => heldWait(selected) || { data: [], state: null });   // ...its waiting room with it (taskDetail.js)
   const [waitText, setWaitText] = useState("");
   const [wrapping, setWrapping] = useState(false);   // declared up here: the poll effect below reads it
   const [wrapped, setWrapped] = useState(null);      // the closing report, shown where the session was
@@ -534,8 +533,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       const { data } = await api.get(`/api/tasks/${id}`, { signal });
       if (stale(id)) return;
       setDetail(data); keepTask(id, data, undefined, asked);
-      try { const w = (await api.get(`/api/tasks/${id}/waitroom`, { signal })).data; if (!stale(id)) { setWait(w); keepTask(id, data, w, asked); } }
-      catch { if (!stale(id)) setWait({ data: [], state: null }); }
+      // ...and no waiting room after it: read on every 3 s poll, in series behind the task, into state nothing drew any more - half of
+      // what a running agent's page asked for (the agents walk, 2026-10-26). The notes box reads its own (ui.jsx)
     } catch (e) {
       if (stale(id) || signal.aborted) return;
       // A task can vanish under an open pane: "not mine" on its message deletes the task and
@@ -553,7 +552,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const loadDetail = useCallback(async (id) => {
     if (!id) { setDetail(null); return; }
     const ahead = heldTask(id);
-    if (ahead) { setDetail((d) => (d?.task?.TaskId === id ? d : ahead)); const w = heldWait(id); if (w) setWait(w); }
+    if (ahead) setDetail((d) => (d?.task?.TaskId === id ? d : ahead));
     return detailReads.current.run(id, id);
   }, []);
   // ...and the read of the task just left is let go of: its answer would be thrown away (stale) after the server spent on it

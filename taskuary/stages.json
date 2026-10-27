@@ -1,0 +1,23 @@
+{
+  "_": "WHERE A TASK IS UP TO, once (the owner, 2026-10-26: 'if in todo mode | agent mode | close out mode - are these modes defined well anywhere besides the UI, how the parts of the UI display and what is hidden - we should define this well'). Read by the task page (website/src/stages.js), the server's task detail and the Assistant's CANVAS block (taskuary/stages.py). `rules` decide the stage: the first whose fact holds wins, each side reading the facts its own way - the page from what it is drawing (a live terminal, the white section), the server from the task's rows - and the order is the one both keep. `stages` are the parts each stage draws: `main` the view the task opens on ('work': the agent or Close out is the page, Came from the left drawer; 'task': the task itself is the page, Agent and Close out the right drawer); `shows` what that view holds, in a sentence; `drawer` the drawer and what is in it; `lit` whether that drawer's tab is lit because the next move is inside it; `advisor` where the Advisor's section stands ('main' over the work, 'drawer' in the right drawer, said on its tab, null: none on a closed task); `verbs` the moves the stage is about, by their buttons.json ids, first the one it is for.",
+  "rules": [
+    { "if": "live", "stage": "agent_working", "_": "an agent's session is open - working, or waiting on you at its prompt" },
+    { "if": "waiting", "stage": "waiting", "_": "handed to a person: nothing is yours until they answer" },
+    { "if": "closed", "stage": "done", "_": "marked done, closed by its agent, or removed" },
+    { "if": "drafted", "stage": "close_out", "_": "Close out has something of its own: a draft or emails waiting for Send, something that went out, a write-up" },
+    { "if": "result", "stage": "agent_result", "_": "an agent finished, stopped or failed, and its Result (or why it failed) is the move" },
+    { "if": "owed", "stage": "to_reply", "_": "somebody wrote and is owed a reply, nothing drafted yet" },
+    { "if": "list", "stage": "todo", "_": "a to-do's checklist or a goal's steps are the move" },
+    { "stage": "to_start", "_": "an ask nothing has worked yet - the agent is the move" }
+  ],
+  "stages": [
+    { "key": "to_start", "word": "to start", "main": "task", "shows": "the task - its ask and where it came from", "drawer": "right: Agent and Close out", "lit": true, "advisor": "drawer", "verbs": ["regular_agent", "close", "defer"] },
+    { "key": "to_reply", "word": "to reply", "main": "task", "shows": "the task - who wrote and what they asked", "drawer": "right: Agent and Close out, where the reply is written", "lit": true, "advisor": "drawer", "verbs": ["reply", "close", "defer"] },
+    { "key": "todo", "word": "to do", "main": "task", "shows": "the task and its list - a to-do's checklist, a goal's steps", "drawer": "right: Agent and Close out", "lit": false, "advisor": "drawer", "verbs": ["close", "defer"] },
+    { "key": "agent_working", "word": "agent working", "main": "work", "shows": "the agent's session, the whole width", "drawer": "left: Came from, folded to one line", "lit": false, "advisor": "main", "verbs": ["stop_agent"] },
+    { "key": "agent_result", "word": "agent result", "main": "work", "shows": "the agent's Result - or why its run failed, with Try again", "drawer": "left: Came from", "lit": false, "advisor": "main", "verbs": ["close", "continue"] },
+    { "key": "close_out", "word": "close out", "main": "work", "shows": "Close out - the draft or emails waiting for Send, what went out", "drawer": "left: Came from", "lit": false, "advisor": "main", "verbs": ["approve", "redraft", "close"] },
+    { "key": "waiting", "word": "waiting on someone", "main": "task", "shows": "the task, with who it waits on and when it is due - nothing is yours", "drawer": "right: Agent and Close out", "lit": false, "advisor": "drawer", "verbs": ["defer", "close"] },
+    { "key": "done", "word": "done", "main": "work", "shows": "how it closed - the close and its note, what went out, or the agent's Result", "drawer": "left: Came from", "lit": false, "advisor": null, "verbs": ["reopen"] }
+  ]
+}

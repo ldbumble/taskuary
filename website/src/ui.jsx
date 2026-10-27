@@ -1931,13 +1931,15 @@ export const ToRow = ({ to, onSave, disabled }) => {
 export const CcRow = ({ cc, setCc, channel }) => {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
+  const [err, setErr] = useState("");
   const people = useContacts();
   if (String(channel || "").toLowerCase() !== "email") return null;   // a chat has members, not recipients
+  // ...a name nobody matched is said, as To says it (the overnight walk, 2026-10-27: Enter on "gail" did nothing and said nothing)
   const add = (a) => {
     const v = String(a || "").trim();
-    if (!v.includes("@")) return;
+    if (!v.includes("@")) { if (v) setErr("pick a person or type their email address"); return; }
     setCc([...(cc || []).filter((x) => x.toLowerCase() !== v.toLowerCase()), v]);
-    setText(""); setOpen(false);
+    setText(""); setErr(""); setOpen(false);
   };
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.75, flexWrap: "wrap", minWidth: 0 }}>
@@ -1955,7 +1957,7 @@ export const CcRow = ({ cc, setCc, channel }) => {
         <ContactPicker people={people} value={text} onChange={setText} onPick={add} autoFocus
           placeholder="name or email address" sx={{ width: 260 }}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(text); }
-                              if (e.key === "Escape") setOpen(false); }} />
+                              if (e.key === "Escape") { setOpen(false); setErr(""); } }} />
       ) : (
         <Typography {...pressable(() => setOpen(true))}
           sx={{ ...FOCUS_RING, fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600,
@@ -1963,6 +1965,7 @@ export const CcRow = ({ cc, setCc, channel }) => {
           {(cc || []).length ? "+ someone else" : "+ loop someone in"}
         </Typography>
       )}
+      {!!err && open && <Typography variant="caption" sx={{ color: "#6b2733" }}>{err}</Typography>}
     </Box>
   );
 };

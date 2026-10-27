@@ -39,7 +39,7 @@ import { hint as btnHint, label as btn, liveVerb, verbOfRow } from "./buttons.js
 import { readTurn, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive } from "./live.js";
-import { adviceKeyFor, adviceShown, stripWord, taskNote } from "./advice.js";
+import { adviceKeyFor, adviceShown, nothingToAdd, stripWord, taskNote } from "./advice.js";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 // TASKUARY'S MARK IN THE CHAT (the owner, 2026-09-28: "the taskuary logo is blue and very obvious ... you can change the
@@ -1102,7 +1102,7 @@ function AdvisorNotes({ keyOnTable }) {
         {d === null ? <Typography sx={{ color: FAINT, fontSize: 12 }}>Reading…</Typography>
           : d.none === "no_ai" ? <><Typography sx={{ fontSize: 12.5, color: INK }}>{quietWhy("no ai")}</Typography><ConnectAi variant="outlined" sx={{ mt: 0.5 }} /></>
           : note ? <Typography sx={{ fontSize: 12.5, color: INK }}>{d.label ? `${d.label} - ` : ""}{note.line}</Typography>
-          : <Typography sx={{ color: FAINT, fontSize: 12 }}>{d.label && d.verb !== "next" ? `Nothing to add - ${d.label} is the lit button.` : "Nothing to add on this one."}</Typography>}
+          : <Typography sx={{ color: FAINT, fontSize: 12 }}>{nothingToAdd(d)}</Typography>}
         {rests.length > 0 && <Typography sx={{ fontSize: 11.5, color: FAINT }}>Rests on: {rests.map((r) => r.label).join(" · ")}</Typography>}
       </div>
     </div>

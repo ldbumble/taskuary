@@ -2,7 +2,7 @@
 // A real function under test, not a source regex.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { adviceKeyFor, stripWord } from "../src/advice.js";
+import { adviceKeyFor, nothingToAdd, stripWord } from "../src/advice.js";
 
 // C2 (the UI audit, 2026-10-21): the strip's word and the lit button are one decision (advice.stripWord)
 test("a working agent lights Next and says nothing, even with no AI connected", () => {
@@ -66,4 +66,12 @@ test("the page draws the gated line, starts each item with none, and drops a rea
   // ...and while it is out, nothing: no "Thinking..." (the owner, 2026-10-23) - the rule's button is lit at once
   assert.doesNotMatch(src, /data-tq-advice-thinking|Thinking about this one/);
   assert.doesNotMatch(src, /picks up where it left off, and comes back here/, "the continue receipt is gone");
+});
+
+// the menu's Advisor notes with nothing to add (the overnight walk, 2026-10-26): "Copy is the lit button." - never the app's word "lit"
+test("nothing to add names the button in plain words", () => {
+  assert.equal(nothingToAdd({ label: "Copy", verb: "copy" }), "Nothing to add - Copy is the next move.");
+  assert.equal(nothingToAdd({ label: "Next", verb: "next" }), "Nothing to add on this one.");
+  assert.equal(nothingToAdd({}), "Nothing to add on this one.");
+  assert.doesNotMatch(nothingToAdd({ label: "Send", verb: "approve" }), /\blit\b/i);
 });

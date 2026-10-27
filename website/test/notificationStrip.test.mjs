@@ -20,7 +20,8 @@ test("the pile refresh notifies and refreshes, and never advances, clears by eve
   assert.doesNotMatch(events, /setMsgs|setCurrent|surfaceRef|deferInChat/);
   // polling, live events and tab activation only refresh the pile
   assert.match(view, /pollWhileActive\(active, \(\) => \{\s*if \(first \|\| !liveUp\(\) \|\| \+\+n % 10 === 0\) loadPile\(false\);\s*else readChat\(\)/);
-  assert.match(view, /onLive\(\["feed-changed", "task-changed"\], \(ev, meta\) => \{ if \(!coveredByReload\(meta, forcedLoadStartedAt\.current\)\) loadPile\(true\); \}, \{ wait: 1500, max: 5000 \}\)/);
+  assert.match(view, /onLive\(\["feed-changed", "task-changed"\], \(ev, meta\) => reloadFor\(meta\),\n\s+\{ wait: \(ev\) => \(mine\(ev\) \? 1500 : Math\.max\(0, forcedLoadStartedAt\.current \+ 1000 - Date\.now\(\)\)\), max: 5000 \}\)/);
+  assert.match(view, /const stale = \(\) => !coveredByReload\(meta, forcedLoadStartedAt\.current\) && !covers\(pileSeen\.current\.seq, meta\);/);
   assert.doesNotMatch(view, /onLive\([^)]*surface/);
 });
 

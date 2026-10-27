@@ -5,7 +5,7 @@ feed-changed / ingest-status / task-changed / run-tail, and the views refetch on
 actually moved. emit() is safe from any thread (the poll, a click, a pty byte).
 Many writes in one gulp coalesce: forty new mail rows are one feed-changed, not forty.
 """
-import asyncio, threading
+import asyncio, contextvars, itertools, threading
 from loguru import logger
 
 FEED, INGEST, TASK, RUN = 'feed-changed', 'ingest-status', 'task-changed', 'run-tail'
@@ -17,6 +17,28 @@ ARRIVE = 'arrive'
 # the Advisor's line landed on an item (advisor.judge): the prompt box fills for that key, nothing on the rail moves
 ADVICE = 'advice'
 KINDS = (FEED, INGEST, TASK, RUN, CHAT, ARRIVE, ADVICE)
+
+# WHICH WRITES A READ HAS SEEN (the load-once pass, 2026-10-27). Every wake-up about a durable write is stamped `seq` (stamp(), taken
+# once the write committed) and a read is stamped with seq() as it begins: a read whose stamp is at least an event's began after that
+# write committed, so it holds it and the page need not read again. `by`: the tab whose request made the write (X-Taskuary-Tab) - that
+# page already drew what its own press answered, and only it waits for the burst; anyone else's write is read at once.
+# A wake-up with no stamp (a direct emit, a write still inside a transaction) is never covered: the safe error is one read too many.
+_seq = itertools.count(1)
+_last = 0
+TAB = contextvars.ContextVar('taskuary_tab', default=None)
+
+
+def seq() -> int:
+    """The newest stamp handed out: a read begun now has seen every write stamped up to it."""
+    return _last
+
+
+def stamp() -> int:
+    global _last
+    with _lock:
+        _last = next(_seq)
+        return _last
+
 
 _loop = None
 _clients = set()
@@ -64,6 +86,11 @@ def _merged(prev: dict, payload: dict) -> dict:
     its old read (the intake walk, 2026-10-26). Every task the window touched is in `task_ids`; a write that named none is about
     all of them, so the merged event names none either."""
     msg = {**prev, **payload}
+    # a window is covered only when every write in it was stamped, and is one tab's only when every write in it was that tab's
+    if prev:
+        if 'seq' in prev and 'seq' in payload: msg['seq'] = max(prev['seq'], payload['seq'])
+        else: msg.pop('seq', None)
+        if prev.get('by') != payload.get('by'): msg.pop('by', None)
     if not prev or 'task_id' not in msg: return msg
     a = prev.get('task_ids') or ([prev['task_id']] if prev.get('task_id') is not None else None)
     b = [payload['task_id']] if payload.get('task_id') is not None else None
@@ -80,6 +107,11 @@ def emit(kind, **payload):
     (a pty printing, a 150-row catch-up) and the tab heard nothing until it paused."""
     if kind not in KINDS:
         return
+    # a write's wake-up is stamped as it is sent - after the write, as every caller sends it - unless its sender said it cannot be
+    # (seq=None: store._poke inside a transaction); and it names the tab whose request it is (TAB), where there is one
+    if 'seq' in payload and payload['seq'] is None: payload.pop('seq')
+    elif kind in (FEED, TASK) and 'seq' not in payload: payload['seq'] = stamp()
+    if kind in (FEED, TASK) and 'by' not in payload and TAB.get(): payload['by'] = TAB.get()
     with _lock:
         if not _clients:
             return

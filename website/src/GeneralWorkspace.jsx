@@ -615,7 +615,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
 
 export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, dock = false, toolsAt = null,
   dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  onDockNewChat, noAiSaid = false, noTools = false, noComposer = false }) {
+  onDockNewChat, noAiSaid = false, noTools = false, noComposer = false, liveSid = "" }) {
   const [data, setData] = useState(null);
   const [connectorId, setConnectorId] = useState("");
   const [model, setModel] = useState("");
@@ -734,6 +734,11 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const refresh = useCallback(() => {
     api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => accept(r.data)).catch(() => {});
   }, [accept, task.TaskId]);
+  // A SESSION ANOTHER DOOR STARTED (`liveSid`, the page's live one): the canvas's Continue card, the Assistant, the phone. The page
+  // adopted it, but this conversation had loaded before it existed and polls only while it knows of a turn, so a Continue with a note
+  // showed the old turns under an agent that had already asked its question (the agents walk, 2026-10-26). Read again when they differ.
+  const loaded = !!data, knownSid = data?.session?.sid || "";
+  useEffect(() => { if (loaded && liveSid && knownSid !== liveSid) refresh(); }, [loaded, liveSid, knownSid, refresh]);
   const pasted = (e) => {
     const images = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
     if (images.length) { e.preventDefault(); upload(images); }

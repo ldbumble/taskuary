@@ -110,8 +110,9 @@ class Factory:
                                    'Action': action, 'Reason': reason, **kw}, self.actor)
 
     def memory(self, note, scope='sender', scope_key='n@n.com', source='verdict'):
-        return self.s.add_memory({'Scope': scope, 'ScopeKey': scope_key, 'Note': note,
-                                  'Source': source, 'Active': 1, 'CreatedBy': self.actor})
+        """A line in LEARNED.md, the one memory (memorylines) - the raw line."""
+        from . import memorylines
+        return memorylines.keep(self.s, note, scope, scope_key, verdict=source == 'verdict')
 
     def row(self, pic, limit=200):
         """The Timeline row for this picture's mail. Fail loud if it is not on the feed."""

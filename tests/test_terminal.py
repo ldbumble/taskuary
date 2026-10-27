@@ -798,7 +798,7 @@ class TerminalTests(unittest.TestCase):
         # fake_tui reads stdin in CANONICAL mode: macOS caps a line at 1024 bytes and drops the
         # overflow at the tty layer. Real TUIs are raw-mode (no cap) - so trim what only bloats
         # this test's prompt, and assert it fits, or the failure mode is invisible.
-        saved = {n: server.store.get_doc(n) for n in ('agent', 'coding', 'soul')}   # AGENT.md rides in the seed too (PW-182)
+        saved = {n: server.store.get_doc(n) for n in ('agent', 'coding', 'soul', 'learned')}   # AGENT.md rides in the seed too (PW-182)
         for n in saved: server.store.save_doc(n, '', 'test')
         # Runtime now restores blank profile documents. This test isolates terminal input,
         # so omit that block explicitly instead of relying on an empty persisted document.
@@ -810,7 +810,6 @@ class TerminalTests(unittest.TestCase):
         # input to it.
         server.store._exec('DELETE FROM boardnote')
         server.store._exec('DELETE FROM lore')          # ...and the hub: another test's entry rides into the seed
-        server.store._exec('DELETE FROM memory')
         server.store._exec('DELETE FROM metric')
         self.addCleanup(lambda: [server.store.save_doc(n, v or '', 'test') for n, v in saved.items()])
         # the sender is a colleague on the owner's domain: an unvouched one is a stranger's, whose seed is longer and points at a file

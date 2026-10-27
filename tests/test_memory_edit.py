@@ -154,4 +154,4 @@ def test_the_tools_are_in_the_catalogue_and_a_plain_fact_goes_into_the_memory(w)
     with mock.patch.object(server, 'store', s):
         out = server._run_operation({'kind': 'memory.remember', 'target': 0, 'params': {'note': 'The office opens at 8'}}, None)
     # a fact about nobody is in LEARNED.md too, where every reader reads it - a saved note was read only on a matching word (2026-10-27)
-    assert not out.get('memoryId') and out['learned']['section'] == 'care' and 'The office opens at 8' in s.get_doc('learned')
+    assert out['learned']['section'] == 'care' and 'The office opens at 8' in s.get_doc('learned')

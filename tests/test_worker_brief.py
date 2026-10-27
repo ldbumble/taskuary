@@ -17,6 +17,7 @@ from unittest import mock
 
 from taskuary import brief, general, ingest, terminal
 from taskuary.store import MemoryStore
+from tests.memlines import note as put_note
 
 TEMPLATES = pathlib.Path(__file__).resolve().parents[1] / 'taskuary' / 'templates'
 MSG = {'external_id': 'e1', 'channel': 'email', 'from_email': 'dana@vendor.example', 'from_name': 'Dana', 'conversation_id': 'AAQk-exp',
@@ -176,7 +177,7 @@ class PromptAuditTests(unittest.TestCase):
         tid = s.create_task({'Title': 'Transaction: 84.10', 'Kind': kind, 'Source': 'email', 'Tags': 'playbook:bill'}, 't')
         s.add_message({'TaskId': tid, 'ExternalId': f'm{tid}', 'Channel': 'email', 'Subject': 'Transaction',
                        'FromEmail': 'alerts@card.example', 'BodyText': 'a new transaction posted', 'Status': 'routed'})
-        s.add_memory({'Scope': 'global', 'ScopeKey': '', 'Note': 'Always CC finance on vendor threads.',
+        put_note(s, {'Scope': 'global', 'ScopeKey': '', 'Note': 'Always CC finance on vendor threads.',
                      'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner'})
         return tid
 

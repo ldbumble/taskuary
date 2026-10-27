@@ -232,14 +232,11 @@ class _AsOf:
     today's notes tells the classifier the answer for that very message - the honest question
     is whether the notes it HAD helped, and this is the view that answers it."""
     def __init__(self, store, until): self.s, self.until = store, until or ''
-    def list_memories(self, active_only=True):
-        return [m for m in self.s.list_memories(active_only) if str(m.get('CreatedAt') or '') < self.until]
     def get_doc(self, name):
-        """...and LEARNED.md without the verdict lines written after it (the notes are lines there since 2026-10-27, memorylines)."""
+        """LEARNED.md without the verdict lines written after it (a verdict is a line there since 2026-10-27, memorylines.teach)."""
         d = self.s.get_doc(name)
         if name != 'learned' or not d: return d
-        from . import memorylines
-        later = {memorylines.of_row(m).strip() for m in self.s.list_memories(False) if str(m.get('CreatedAt') or '') >= self.until}
+        later = {str(r['Text'] or '').strip() for r in self.s._rows("SELECT Text FROM learned_history WHERE Action='said' AND At>=?", (self.until,))}
         return '\n'.join(l for l in d.splitlines() if l.strip() not in later)
     def __getattr__(self, k): return getattr(self.s, k)
 

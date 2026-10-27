@@ -101,12 +101,15 @@ The roads on the Triage tab are not decoration. Correcting a verdict writes the 
 the next message *like* this one, rather than becoming a rule about this one sender.
 
 Every verdict is evidence. Editing a draft teaches voice; rejecting one teaches what should not
-be drafted; **Not our task** teaches where your responsibility ends. The exact decision goes into
-`LEARNED.md` at once, as your own line under `## What you care about`, with the sender and subject
-it was given on and what it is about (`(about: …)`), so future triage - and the routing judge of a
-report - can judge whether a new message is genuinely similar. A newer verdict on the same thing
-replaces the older; what you tell the Assistant ("I don't care about the legacy export any more")
-goes in the same way. `LEARNED.md` is the one memory: there is no separate notes page.
+be drafted; **Not our task** teaches where your responsibility ends. What a verdict says about you
+goes into `LEARNED.md` as one line under `## What you care about`, in words - the kind of work and
+why ("You handle vendor invoice disputes yourself - not agent work"), ending `(about: …)` when it
+holds only for one sender or topic - so future triage, and the routing judge of a report, can judge
+whether a new message is genuinely similar. A line is written only when it adds something: a verdict
+that repeats what is already there writes nothing, and one that sharpens an older line replaces it.
+**Undo** takes the line back out. What you tell the Assistant ("I don't care about the legacy export
+any more") goes in as you said it. `LEARNED.md` is the one memory: there is no separate notes page or
+table.
 
 Repeated patterns become lessons in `LEARNED.md`, one section per subject: `## Your people`,
 `## What you care about`, `## How you work`, `## Promises` and `## What to bring up`. Each reader

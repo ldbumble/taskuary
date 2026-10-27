@@ -312,20 +312,22 @@ def test_the_owners_lines_on_a_persons_page_become_people_lines():
     assert 'Ray covers payroll' in s.get_doc('person-ray@northwind.example'), 'copied, never moved'
 
 
-def test_a_switched_off_note_withdraws_what_it_fed():
+def test_an_undone_verdict_withdraws_what_it_fed():
+    from taskuary import memorylines
+    from tests.memlines import teacher
     s = MemoryStore()
-    ids = [s.add_memory({'Scope': 'sender', 'ScopeKey': 'news@vendor.example', 'Note': f'2026-10-0{i}: "Newsletter" - NOT A TASK', 'Source': 'verdict',
-                         'Active': 1, 'CreatedBy': 'owner'}) for i in (1, 2, 3)]
-    rule = f'- Newsletters from vendor.example are fyi. [s:4 | ev: {", ".join(f"mem{i}" for i in ids)} | seen: 2026-10-03 | k: newsletters fyi]'
+    ids = [f'msg{i}' for i in (1, 2, 3)]
+    for i, ev in enumerate(ids):
+        memorylines.teach(s, 'not_a_task', ev, f'Subject: Newsletter {i}', 'sender', 'news@vendor.example', llm=teacher(f'Vendor newsletter {i} is never work for you'))
+    rule = f'- Newsletters from vendor.example are fyi. [s:4 | ev: {", ".join(ids)} | seen: 2026-10-03 | k: newsletters fyi]'
     s.save_doc('learned', learn._put_block(s.get_doc('learned'), learn.PROP_START, learn.PROP_END, rule), 'reflect')
     assert learn.auto_adopt(s) == ['Newsletters from vendor.example are fyi.']
-    assert 'Newsletters' in learned_cut.section(s.get_doc('learned'), learned_cut.CARE)
-    s.set_memory_active(ids[0], False); learn.withdraw(s, ids[0])
-    s.set_memory_active(ids[1], False); learn.withdraw(s, ids[1])
+    assert 'Newsletters from' in learned_cut.section(s.get_doc('learned'), learned_cut.CARE)
+    memorylines.untaught(s, ids[0]); memorylines.untaught(s, ids[1])
     doc = s.get_doc('learned')
-    assert 'Newsletters' not in learned_cut.section(doc, learned_cut.CARE), "no longer the owner's word: back to Proposed"
-    assert 'Newsletters' in learn._block(doc, learn.PROP_START, learn.PROP_END) and f'mem{ids[0]}' not in doc
-    assert learn.auto_adopt(s) == [], 'auto-adopt reads only the notes still switched on'
+    assert 'Newsletters from' not in learned_cut.section(doc, learned_cut.CARE), "no longer the owner's word: back to Proposed"
+    assert 'Newsletters from' in learn._block(doc, learn.PROP_START, learn.PROP_END) and f'{ids[0]},' not in doc
+    assert learn.auto_adopt(s) == [], 'auto-adopt reads only the verdicts that still stand'
 
 
 def test_adopting_a_line_about_someone_files_it_under_your_people():

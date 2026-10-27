@@ -241,8 +241,10 @@ class DigestReportTests(unittest.TestCase):
         from taskuary.digest import gather
         from taskuary.store import MemoryStore
         s = MemoryStore()
-        s.add_memory({'Scope': 'sender', 'ScopeKey': 'tonya@lillington.example', 'CreatedBy': 'o',
-                      'Note': 'Mail like "Re: Resident Refund Request - Foote" is other people\'s work - file it'})
+        from taskuary import memorylines
+        from tests.memlines import teacher
+        memorylines.teach(s, 'not_ours', 'msg1', 'Subject: Re: Resident Refund Request - Foote', 'sender', 'tonya@lillington.example',
+                          llm=teacher('Mail like "Re: Resident Refund Request - Foote" is other people\'s work - file it'))
         data = gather(s, 3)
         pend = data.split('WAITING ON THE OWNER', 1)[1].split('\n')[1]
         self.assertEqual(pend.strip(), '(none)')

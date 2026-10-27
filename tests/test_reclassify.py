@@ -11,6 +11,8 @@ from unittest import mock
 from fastapi.testclient import TestClient
 
 from taskuary import server
+from taskuary import memorylines
+from tests.memlines import teacher, teaching
 
 c = TestClient(server.app)
 S = server.store
@@ -54,7 +56,7 @@ class RoadTests(unittest.TestCase):
         c.post(f'/api/messages/{mid}/reclassify', json={'road': 'task'})
         out = c.post(f'/api/messages/{mid}/reclassify', json={'road': 'task'}).json()
         self.assertFalse(out['changed'])
-        self.assertIsNone(out.get('memory'))
+        self.assertIsNone(out.get('learned'))
 
     def test_coding_starts_the_agent_it_says_it_does(self):
         mid = _msg('the importer is broken')
@@ -67,21 +69,21 @@ class RoadTests(unittest.TestCase):
 class MemoryTests(unittest.TestCase):
     def test_the_verdict_is_written_where_the_next_one_reads_it(self):
         mid = _msg('honey cake recipe', frm='tess@corp.example')
-        before = len(S.list_memories())
-        out = c.post(f'/api/messages/{mid}/reclassify', json={'road': 'reply'}).json()
-        self.assertTrue(out['memory'])
-        self.assertEqual(len(S.list_memories()), before + 1)
-        note = next(m for m in S.list_memories() if m['MemoryId'] == out['memory'])['Note']
-        self.assertIn('REPLY ONLY', note)
-        self.assertIn('honey cake', note)
+        seen = []
+        with mock.patch.object(memorylines, '_llm', lambda st: teacher('A recipe swap from a colleague only wants a reply', seen=seen)):
+            out = c.post(f'/api/messages/{mid}/reclassify', json={'road': 'reply'}).json()
+        self.assertEqual(out['learned'], f'msg{mid}')
+        self.assertIn('A reply only', seen[0]); self.assertIn('honey cake', seen[0])          # the model reads the verdict and the item
+        self.assertEqual([l['kind'] for l in memorylines.lessons(S) if l['ev'] == f'msg{mid}'], ['road_reply'])
 
     def test_it_is_evidence_about_the_topic_not_a_rule_about_the_person(self):
         """A verdict keyed to the sender alone is how one message becomes a policy about someone."""
         mid = _msg('quarterly close checklist', frm='tess@corp.example')
-        out = c.post(f'/api/messages/{mid}/reclassify', json={'road': 'task'}).json()
-        mem = next(m for m in S.list_memories() if m['MemoryId'] == out['memory'])
-        self.assertEqual(mem['Scope'], 'subject')
-        self.assertEqual(mem['Source'], 'verdict')
+        with teaching('The quarterly close checklist is your own work'):
+            out = c.post(f'/api/messages/{mid}/reclassify', json={'road': 'task'}).json()
+        said = next(l for l in memorylines.lessons(S) if l['ev'] == out['learned'])
+        self.assertIn('(about: the topic "', said['text'])
+        self.assertNotIn('tess@corp.example', said['text'])
 
     def test_the_correction_shows_on_the_panel_as_the_new_road(self):
         """The pill reads the newest route row, so the correction has to be written there too."""

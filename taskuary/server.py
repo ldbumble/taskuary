@@ -27,7 +27,7 @@ from . import policy as policy_engine
 from . import reshape
 from . import terminal as hub_term
 from .wrapup import PAUSE_MARKER, REPORTS, pause_note, reply_target, wrap as end_task
-from . import aisetup, assistant, demo, deps, learn, learnedgraph, operations, outbound, playbooks, rank, responder, waitroom
+from . import aisetup, assistant, demo, deps, learn, learnedgraph, memorylines, operations, outbound, playbooks, rank, responder, waitroom
 from . import live as live_bus
 from . import processing_all
 
@@ -219,7 +219,7 @@ async def _lifespan(_app):
         from . import dashboards                                   # ...and a saved dashboard's cuts on them
         if (n := dashboards.migrate_priorities(store)): logger.info(f'{n} dashboard(s) now cut on regular / important / urgent')
     except Exception as e: logger.warning(f'priority rename skipped: {e}')
-    learn.note_verdicts(store)     # the evidence block in LEARNED.md tracks the verdict table
+    learn.note_verdicts(store)     # an older install's notes table, written into LEARNED.md once and dropped (memorylines.migrate)
     try: blackboard.schedule_due(store)   # a retry that was backing off when the app closed is re-armed, not reset (PW-085)
     except Exception as e: logger.warning(f'retry scheduling skipped: {e}')
     try:                           # historical triage failures stored as filed become retriable errors, once (PW-040)
@@ -2735,19 +2735,28 @@ def _teach_not_a_task(m: dict, background=None):
     thread is still ruled either way: that is the ignore route the callers add."""
     em, topic = (m.get('FromEmail') or '').lower(), _topic_key(m)
     if not (em or topic): return None
-    mid = store.add_memory({'Scope': 'subject' if topic else 'sender', 'ScopeKey': topic or em,
-                            'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR,
-                            'Note': f"{str(m.get('SentAt') or '')[:10]}: \"{(m.get('Subject') or '')[:90]}\""
-                                    + (f' from {em}' if em else '') + (f' - the topic "{topic}"' if topic else '')
-                                    + ' - NOT A TASK: the owner filed it, no task, no reply'})
-    learn.note_verdicts(store)
-    # the sender note is durable already; the GENERAL lesson (what kinds of mail are not tasks
-    # for this owner) is LEARNED.md's to distill
-    if background is not None:
-        background.add_task(learn.learn_from, store,
-                            f"mem{mid}: owner said NOT A TASK: \"{(m.get('Subject') or '')[:80]}\""
-                            + (f' from {em}' if em else '') + ' should never have opened a task')
-    return mid
+    # ...what it teaches about the owner, in words, or nothing (memorylines.teach - the owner, 2026-10-27): the line is the record, its
+    # evidence the message it was given on; the thread's own ruling is the ignore route the callers add, which an Undo takes back
+    src = f"msg{m['MessageId']}"
+    memorylines.teach_soon(store, 'not_a_task', src, _verdict_facts(m), 'subject' if topic else 'sender', topic or em,
+                           background=background, stands=lambda: _put_down(m['MessageId']))
+    return src
+
+
+def _verdict_facts(m: dict = None, t: dict = None, said: str = '') -> str:
+    """The item a verdict was given on, as the lesson writer reads it (memorylines.teach)."""
+    m, t = m or {}, t or {}
+    who = ' '.join(x for x in (m.get('FromName'), f"<{m['FromEmail']}>" if m.get('FromEmail') else '') if x)
+    out = [f'{k}: {v}' for k, v in (('From', who), ('Channel', m.get('Channel')), ('Subject', m.get('Subject')), ('Task', t.get('Title')),
+                                    ('Task summary', str(t.get('Summary') or '')[:400])) if v]
+    if m.get('BodyText'): out.append('Body (start): ' + ' '.join(str(m['BodyText']).split())[:700])
+    if said: out.append(f'What happened: {said}')
+    return '\n'.join(out)
+
+
+def _put_down(mid: int) -> bool:
+    """Is the owner's put-down of this message still standing - its ignore route not taken back by an Undo?"""
+    return bool(store._one("SELECT 1 FROM route WHERE MessageId=? AND Decision='ignore' AND RoutedBy=?", (mid, ACTOR)))
 
 @app.post('/api/tasks/{task_id}/not-coding')
 def not_coding(task_id: int, body: NotATaskBody = None, background: BackgroundTasks = None):
@@ -2779,12 +2788,12 @@ def _teach_not_coding(task_id: int, t: dict, was: tuple, belongs_to: str = None,
     it - and they used to teach different things: the button wrote the evidence line, the learned
     profile and the overturned-verdict record, while the selector, which is the one most people
     reach for, wrote the field and nothing else (TQ-0501, the owner: "i updated the type to 'your
-    task'... does that trigger memory?" - it did not). Four writes, one of them new:
+    task'... does that trigger memory?" - it did not). Three writes:
 
     - the OVERTURNED VERDICT, so what triage said and what the owner made of it stay joined;
-    - an EVIDENCE LINE in the memory table, which ingest.notes_for puts in front of triage on the
-      next message about this sender or topic;
-    - the general lesson, distilled into LEARNED.md by the hot pass (learn.learn_from);
+    - ONE LEARNED.md line saying what kind of work this is for the owner and why (memorylines.teach) -
+      which ingest.notes_for puts in front of triage on the next message about this sender or topic -
+      or none when nothing general can be said: "not for the agent" alone teaches nothing (2026-10-27);
     - the ROUTING FACT, weighted and task-keyed (routingmemory) - and, when the owner typed one,
       WHERE the work actually lives, which is the half no verdict has ever carried.
     """
@@ -2793,22 +2802,22 @@ def _teach_not_coding(task_id: int, t: dict, was: tuple, belongs_to: str = None,
                              verdict=was_kind, route_id=was_route)
     msgs = store.list_messages(task_id)
     learned = None
-    if msgs and learn_it:
-        m = msgs[0]; em = (m.get('FromEmail') or '').lower(); topic = _topic_key(m)
-        said = (m.get('Subject') or t.get('Title') or '')[:90]
-        learned = store.add_memory({'Scope': 'subject' if topic else 'sender' if em else 'global', 'ScopeKey': topic or em or None,
-                                    'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR,
-                                    'Note': f"{str(m.get('SentAt') or '')[:10]}: \"{said}\""
-                                            + (f' from {em}' if em else '') + (f' - the topic "{topic}"' if topic else '')
-                                            + ' - NOT A CODING TASK: real work, kept on the owner\'s list, no agent'
-                                            + (f' - it belongs to {belongs_to.strip()}' if (belongs_to or '').strip() else '')})
-        learn.note_verdicts(store)
-    # the general lesson is _teach_routing's to write, once, in words that name what triage had
-    # actually answered - this used to write its own vaguer copy alongside it. The memory id rides
-    # as the evidence key so LEARNED.md's `ev:` tag points at the line the owner can actually read.
-    return {'memoryId': learned,
+    if learn_it:
+        # ONE line, and it says what kind of work this is for the owner and why - "this is not for the agent" alone teaches nothing (the
+        # owner, 2026-10-27). It used to be two: an evidence line and a ROUTING KIND line, both a record of the press
+        m = msgs[0] if msgs else {}
+        em, topic = (m.get('FromEmail') or '').lower(), _topic_key(m) if m else ''
+        was_said = f'triage had made it {was_kind} work' if was_kind else ''
+        learned = f'task{task_id}'
+        memorylines.teach_soon(store, 'not_for_agent', learned,
+                               _verdict_facts(m, t, '; '.join(x for x in (was_said, f'the owner says it belongs to {belongs_to.strip()}'
+                                                                           if (belongs_to or '').strip() else '') if x)),
+                               'subject' if topic else 'sender' if em else 'global', topic or em or None, background=background,
+                               stands=lambda: str((store.get_task(task_id) or {}).get('Kind') or '') == 'task')
+    # the routing fact (routingmemory) is the mechanical half, task-keyed and weighted; the lesson in words is the line above
+    return {'learned': learned,
             **_teach_routing(task_id, 'kind', 'task', belongs_to=belongs_to, background=background,
-                             ev=f'mem{learned}' if learned else None)}
+                             ev=learned, line=False)}
 
 
 def _reclassify(task_id: int, want: str, background=None) -> None:
@@ -2826,7 +2835,7 @@ def _reclassify(task_id: int, want: str, background=None) -> None:
 
 
 def _teach_routing(task_id: int, field: str, value: str, belongs_to: str = None,
-                   background=None, ev: str = None) -> dict:
+                   background=None, ev: str = None, line: bool = True) -> dict:
     """One correction to a triage verdict, learned wherever it came from.
 
     Every door that overturns a routing field lands here - the task page's button, the kind
@@ -2852,29 +2861,26 @@ def _teach_routing(task_id: int, field: str, value: str, belongs_to: str = None,
             said = rmem.lesson(store, task_id, f, v, belongs_to if f != 'system' else None, ev)
             n = rmem.learn_correction(store, task_id, f, v, ACTOR, reason=said[:200])
             if n: out[f'learned_{f}'] = n
-            # ...and the lesson where every reader reads it (the owner, 2026-10-27: "everything that learns about the user should be
-            # saved in memory"): the routing fact is the mechanical half, this is what it says about the owner
-            _teach_line(task_id, f, said.split(': ', 1)[-1])
-            # the general lesson, once per correction and only when it taught something new -
-            # a re-press of the same button must not spend an AI call restating a known pattern
-            if n and background is not None: background.add_task(learn.learn_from, store, said)
+            # ...and what it says about the owner, in words, where every reader reads it - once per correction and only when it taught
+            # something new: a re-press of the same button must not spend an AI call restating a known pattern (memorylines.teach,
+            # 2026-10-27 - it was the hot pass's Watching guess and a "ROUTING KIND:" line that only recorded the press)
+            if n and line: _teach_line(task_id, f, said, background)
         except Exception as e:
             logger.warning(f'routing memory: {f}={v} on task {task_id} not learned - {e}')
     return out
 
-def _teach_line(task_id: int, field: str, said: str) -> str:
-    """One correction of how a task was routed or judged, as a LEARNED.md line about the topic (else the sender) of the mail it came
-    from - the newer correction of the same field on the same thing replaces the older (memorylines). `said` reads '"title" - what
-    happened'. Never raises."""
-    from . import memorylines
+def _teach_line(task_id: int, field: str, said: str, background=None):
+    """One correction of how a task was routed or judged, taught in words (memorylines.teach) about the topic (else the sender) of the
+    mail it came from - the line, or nothing when it says nothing general about the owner. Never raises."""
     try:
         m = next(iter(store.list_messages(task_id)), None) or {}
         em, topic = (m.get('FromEmail') or '').lower(), _topic_key(m) if m else ''
-        head, _, rest = str(said or '').partition(' - ')
-        text = f"{head} - ROUTING {field.upper().replace('_', ' ')}: {rest}" if rest else f"ROUTING {field.upper().replace('_', ' ')}: {head}"
-        return memorylines.keep(store, text, 'subject' if topic else 'sender' if em else 'global', topic or em or None)
+        kind = 'judged' if field in ('difficulty', 'data_class') else 'routing'
+        memorylines.teach_soon(store, kind, f'task{task_id}', _verdict_facts(m, store.get_task(task_id), said),
+                               'subject' if topic else 'sender' if em else 'global', topic or em or None,
+                               section='care' if field in ('kind', 'system') else 'work', background=background)
     except Exception as e:
-        logger.debug(f'routing lesson not written to memory: {e}'); return ''
+        logger.debug(f'routing lesson not taught: {e}')
 
 @app.post('/api/tasks/{task_id}/not-a-task')
 def not_a_task(task_id: int, body: NotATaskBody = None, background: BackgroundTasks = None):
@@ -2891,15 +2897,15 @@ def not_a_task(task_id: int, body: NotATaskBody = None, background: BackgroundTa
     was_kind, was_route = operations.verdict_of_task(store, task_id)
     operations.record_direct(store, 'task.not_a_task', task_id, {}, ACTOR, {'deleted': True}, verdict=was_kind, route_id=was_route)
     if msgs and (body is None or body.learn):
-        mid = _teach_not_a_task(msgs[0], background)
-        if mid: learned = {'memory_id': mid}
+        src = _teach_not_a_task(msgs[0], background)
+        if src: learned = {'source': src}
     # whatever was (or was not) learned about the sender, THIS conversation has been ruled on:
     # the owner's ignore route is what ingest.veto reads before the next message on it can open
     # a task (store.owner_verdict_on_thread) - the six-tasks-from-one-chat failure
     if msgs:
         snap['ignore'] = store.add_route(msgs[0]['MessageId'], None, 'ignore', None,
                                          f"not a task - {(msgs[0].get('Subject') or 'this conversation')[:80]}", [], ACTOR)
-    if learned: snap['memory'] = learned['memory_id']
+    if learned: snap['taught'] = learned['source']        # ...the Undo takes back the line it teaches (memorylines.untaught)
     kept = recentlydeleted.keep_task(store, snap)
     store.audit('task', task_id, 'not_a_task_delete', ACTOR)
     _drop_task(task_id)
@@ -3457,23 +3463,20 @@ def not_mine(mid: int, body: NotMineBody, background: BackgroundTasks = None):
     key = (topic if scope == 'subject' else None if scope == 'global'
            else em.rsplit('@', 1)[-1] if scope == 'sender_domain' else em)
     note = (body.note or '').strip() or _not_mine_note(m, scope, key if scope == 'subject' else None)
-    memid = store.add_memory({'Scope': scope, 'ScopeKey': key, 'Note': note[:1000],
-                              'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR})
-    learn.note_verdicts(store)
+    src = f'msg{mid}'
     tid = m.get('TaskId')
     fate = ''
     if tid and store.get_task(tid):
-        store.audit('task', tid, 'not_mine_delete', ACTOR, detail={'message_id': mid, 'memory_id': memid})
+        store.audit('task', tid, 'not_mine_delete', ACTOR, detail={'message_id': mid, 'learned': src})
         fate = _file_task(tid, f'not ours - {note[:80]}')     # deleted, or archived when an agent worked it
     store.set_message_status(mid, 'ignored')
     store.add_route(mid, None, 'ignore', None, f'not ours - {note[:200]}', [], ACTOR)
-    store.audit('memory', memid, 'create', ACTOR, detail={'scope': scope, 'key': key, 'from': em})
-    # "not ours" draws a responsibility boundary - the general shape of it belongs in LEARNED.md
-    if background is not None:
-        background.add_task(learn.learn_from, store,
-                            f"mem{memid}: owner said NOT OURS ({scope}): \"{(m.get('Subject') or '')[:80]}\" "
-                            f"from {em or '?'} - {note[:200]}")
-    return {'ok': True, 'memoryId': memid, 'note': note, 'scope': scope, 'scopeKey': key,
+    store.audit('message', mid, 'not_mine', ACTOR, detail={'scope': scope, 'key': key, 'from': em})
+    # "not ours" draws a responsibility boundary: what it says about the owner - whose work this kind is, and why - is a line in their
+    # memory, in words, or nothing (memorylines.teach, 2026-10-27); the owner's own words, when they typed some, are its best evidence
+    memorylines.teach_soon(store, 'not_ours', src, _verdict_facts(m, said=f"the owner's words: {body.note.strip()}" if (body.note or '').strip() else ''),
+                           scope, key, background=background, stands=lambda: _put_down(mid))
+    return {'ok': True, 'learned': src, 'note': note, 'scope': scope, 'scopeKey': key,
             'taskDeleted': fate == 'deleted', 'taskArchived': fate == 'archived', 'ref': task_ref(tid) if tid else None,
             'alsoCovered': _also_covered(scope, key, tid)}
 
@@ -3528,7 +3531,7 @@ def file_message(mid: int, body: NotATaskBody = None, background: BackgroundTask
     except Exception as e: logger.debug(f'the filed message {mid} did not settle read: {e}')
     operations.record_direct(store, 'message.file', mid, {}, ACTOR, {'taskDeleted': fate == 'deleted', 'taskArchived': fate == 'archived'}, verdict=verdict, route_id=route_id)
     return {'ok': True, 'taskDeleted': fate == 'deleted', 'taskArchived': fate == 'archived',
-            'ref': task_ref(tid) if tid else None, 'memoryId': learned}
+            'ref': task_ref(tid) if tid else None, 'learned': learned}
 
 class UnsubscribeBody(BaseModel):
     open: bool = False          # the desktop app has no browser of its own: Taskuary opens the list's page for it (as /api/open-url)
@@ -3779,18 +3782,10 @@ def _learn_promotion(m: dict, background, standing: bool = False):
     if m.get('TaskId') or m.get('Status') != 'filed': return None
     em, topic = (m.get('FromEmail') or '').lower(), _topic_key(m)
     if not (em or topic): return None
-    memid = store.add_memory({'Scope': 'subject' if topic else 'sender', 'ScopeKey': topic or em,
-                              'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR,
-                              'Note': f"{str(m.get('SentAt') or '')[:10]}: \"{(m.get('Subject') or '')[:90]}\""
-                                      + (f' from {em}' if em else '') + (f' - the topic "{topic}"' if topic else '')
-                                      + ' - MADE A TASK: triage filed it, but the owner promoted it as real work'})
-    learn.note_verdicts(store)
-    if background is not None:
-        background.add_task(learn.learn_from, store,
-                            f"mem{memid}: triage filed \"{(m.get('Subject') or '')[:80]}\" from "
-                            f"{m.get('FromEmail') or m.get('SourceName') or '?'} as fyi, but the owner made it a task - "
-                            'triage under-reached')
-    return memid
+    # ...what it says about the owner, in words, or nothing (memorylines.teach, 2026-10-27): a positive verdict is evidence, never a rule
+    src = f"msg{m['MessageId']}"
+    memorylines.teach_soon(store, 'made_task', src, _verdict_facts(m), 'subject' if topic else 'sender', topic or em, background=background)
+    return src
 
 # WHICH ROAD IT SHOULD HAVE TAKEN. The Triage tab shows the five roads and says "correcting this
 # teaches it" - and there was nothing to click. A correction here is worth more than any other
@@ -3799,9 +3794,6 @@ def _learn_promotion(m: dict, background, standing: bool = False):
 # and it writes the verdict down where the next classification will read it.
 ROADS = {'fyi': 'nothing to do', 'reply': 'a sentence settles it', 'coding': 'an agent on a keyboard',
          'general': 'talk it through with the assistant', 'task': 'yours - nothing works it'}
-ROAD_VERDICT = {'fyi': 'FILE IT: not work', 'reply': 'REPLY ONLY: answering it IS the work',
-                'coding': 'CODING TASK: an agent should work it', 'general': 'A CONVERSATION, not a project',
-                'task': "THE OWNER'S OWN TASK: real work, but not an agent's"}
 
 
 class ReclassifyBody(BaseModel):
@@ -3810,25 +3802,17 @@ class ReclassifyBody(BaseModel):
     brain: str | None = None        # WHICH CLI runs it - blank means the brain settings name
 
 
-def _teach_reclassify(m: dict, was: str, road: str, background) -> int:
+def _teach_reclassify(m: dict, was: str, road: str, background) -> str:
     """The correction as EVIDENCE, not as a rule. Keyed to the topic where there is one and to the
     sender otherwise - never to the sender alone on a channel with no address, which is how one
     verdict about one message becomes a policy about a person (see file_message)."""
     em, topic = (m.get('FromEmail') or '').lower(), _topic_key(m)
-    if not (em or topic): return 0
-    memid = store.add_memory({'Scope': 'subject' if topic else 'sender', 'ScopeKey': topic or em,
-                              'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR,
-                              'Note': f"{str(m.get('SentAt') or '')[:10]}: \"{(m.get('Subject') or '')[:90]}\""
-                                      + (f' from {em}' if em else '') + (f' - the topic \"{topic}\"' if topic else '')
-                                      + f' - {ROAD_VERDICT[road]}'
-                                      + (f' (triage had called it {was})' if was else '')})
-    learn.note_verdicts(store)
-    ev = (f'mem{memid}: triage called \"{(m.get("Subject") or "")[:80]}\" from '
-          f'{m.get("FromEmail") or m.get("SourceName") or "?"} {was or "unclassified"}, and the owner '
-          f'reclassified it as {road} - {ROADS[road]}')
-    if background is not None: background.add_task(learn.learn_from, store, ev)
-    else: learn.learn_from(store, ev)
-    return memid
+    if not (em or topic): return ''
+    src = f"msg{m['MessageId']}"
+    said = f'triage called it {was or "unclassified"}; the owner reclassified it as {road} - {ROADS[road]}'
+    memorylines.teach_soon(store, f'road_{road}', src, _verdict_facts(m, said=said), 'subject' if topic else 'sender', topic or em,
+                           background=background)
+    return src
 
 
 def _road_head(road: str) -> str:
@@ -3864,8 +3848,8 @@ def reclassify_message(mid: int, body: ReclassifyBody, background: BackgroundTas
     if road not in ROADS: raise HTTPException(422, f'unknown road: {body.road!r} - one of {", ".join(ROADS)}')
     was = _road_now(m)
     if was == road: return {'ok': True, 'road': road, 'changed': False, 'was': was}
-    memid = _teach_reclassify(m, was, road, background)
-    store.audit('message', mid, 'reclassified', ACTOR, detail={'from': was or None, 'to': road, 'memory': memid or None})
+    src = _teach_reclassify(m, was, road, background)
+    store.audit('message', mid, 'reclassified', ACTOR, detail={'from': was or None, 'to': road, 'learned': src or None})
     # the panel reads the road off the newest route row, so the correction has to be written where
     # the verdict lives - otherwise the pill still shows what triage said
     store.add_route(mid, m.get('TaskId'),
@@ -3873,8 +3857,8 @@ def reclassify_message(mid: int, body: ReclassifyBody, background: BackgroundTas
                     None, f'triage: {_road_head(road)} - you reclassified this'
                           + (f' (triage called it {_road_head(was)})' if was else '') + ' - the verdict is in memory for next time',
                     [], ACTOR)
-    out = {'ok': True, 'road': road, 'changed': True, 'was': was, 'memory': memid or None}
-    if road == 'fyi': file_message(mid, None, background)
+    out = {'ok': True, 'road': road, 'changed': True, 'was': was, 'learned': src or None}
+    if road == 'fyi': file_message(mid, NotATaskBody(learn=False), background)     # ...taught once, as the road it should have taken
     elif road == 'reply': out['reply'] = open_reply(mid, None)
     elif road == 'coding': out['agent'] = dispatch_message(mid, DispatchBody(agent=body.agent, kind='coding'), background)
     elif road == 'general': out['chat'] = chat_message(mid, background)
@@ -10121,7 +10105,7 @@ class JudgedBody(BaseModel):
 
 
 @app.post('/api/tasks/{task_id}/judged')
-def correct_judged(task_id: int, body: JudgedBody):
+def correct_judged(task_id: int, body: JudgedBody, background: BackgroundTasks = None):
     """The owner's correction of how hard a task's work is, or what data it carries. It stands over triage's next reading, and
     it teaches triage the way every other correction does (routingmemory) - the next message like it is judged with it in view."""
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
@@ -10133,9 +10117,9 @@ def correct_judged(task_id: int, body: JudgedBody):
     from . import routingmemory
     title = ' '.join(str((store.get_task(task_id) or {}).get('Title') or '').split())[:80]
     for k, x in v.items():
-        routingmemory.learn_correction(store, task_id, k, x, ACTOR)
-        # ...and in the memory, in words: how hard work like this is for the owner, what data it carries (2026-10-27)
-        _teach_line(task_id, k, f'"{title}" - the owner says ' + (f'the work is {x}' if k == 'difficulty' else f'its data is {x}'))
+        # ...and, when it is news, what it says about the owner in words: how hard work like this is for them, what data it carries
+        if routingmemory.learn_correction(store, task_id, k, x, ACTOR):
+            _teach_line(task_id, k, f'"{title}" - the owner says ' + (f'the work is {x}' if k == 'difficulty' else f'its data is {x}'), background)
     store.audit('task', task_id, 'judged', ACTOR, detail=v)
     return {'judged': _brainroute().judged(store, task_id)}
 

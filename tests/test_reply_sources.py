@@ -13,6 +13,7 @@ from unittest import mock
 
 from taskuary import learn, outbox, responder, verdicts
 from taskuary.store import MemoryStore
+from tests.memlines import note as put_note
 
 STYLE = ('## Reply style\n\n- Two sentences, answer first.\n- Sign off: "Best, Alex" - the quokka signature line.\n')
 LEARNED = '## Active\n- Mail from vendors about invoices deserves a task (the capybara rule) [s:3 | ev: rv1 | seen: 2026-08-01]\n'
@@ -21,9 +22,9 @@ LEARNED = '## Active\n- Mail from vendors about invoices deserves a task (the ca
 def store():
     s = MemoryStore()
     s.save_doc('style', STYLE, 'owner'); s.save_doc('learned', LEARNED, 'owner')
-    s.add_memory({'Scope': 'global', 'ScopeKey': None, 'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner',
+    put_note(s, {'Scope': 'global', 'ScopeKey': None, 'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner',
                   'Note': '2026-08-30: "resident refund" from x@y.com - NOT A TASK: the marmoset verdict'})
-    s.add_memory({'Scope': 'global', 'ScopeKey': None, 'Source': 'writing', 'Active': 1, 'CreatedBy': 'owner',
+    put_note(s, {'Scope': 'global', 'ScopeKey': None, 'Source': 'writing', 'Active': 1, 'CreatedBy': 'owner',
                   'Note': 'Never open with "I hope this finds you well" - the wombat instruction'})
     # ...as they stand after a start: the verdict a LEARNED.md line, the writing note in STYLE.md's Owner notes (memorylines, 2026-10-27)
     from taskuary import memorylines
@@ -119,7 +120,7 @@ class FeedbackRoutingTests(unittest.TestCase):
         once - and never into LEARNED.md, which is triage's."""
         from taskuary import memorylines
         s = store()
-        s.add_memory({'Scope': 'global', 'Note': 'Always close with a next step - the numbat note', 'Source': 'writing', 'Active': 1, 'CreatedBy': 'o'})
+        put_note(s, {'Scope': 'global', 'Note': 'Always close with a next step - the numbat note', 'Source': 'writing', 'Active': 1, 'CreatedBy': 'o'})
         memorylines.migrate(s); memorylines.migrate(s)
         self.assertEqual(s.get_doc('style').count('numbat'), 1)
         self.assertIn('numbat', responder.style_doc(s))

@@ -426,12 +426,12 @@ def gather(store, days: int = DAYS) -> str:
     _block(out, 'OUT OF OFFICE (from their auto-replies):', (f'  {k}: {v}' for k, v in away.items()))
     _block(out, 'OPEN WORK (each line ends with the link that opens the task):', _linked(A._open(store)))
     _block(out, 'FINISHED THIS WINDOW (with the agent\'s own summary where there is one):', _linked(A._done(store, span)))
-    notes = [m for m in store.list_memories() if str(m.get('CreatedAt') or '') >= since]
-    # these quote mail subjects, which is exactly what got recycled into a fake pending
-    # review once - the header says plainly that nothing here is live work
-    _block(out, 'VERDICTS GIVEN THIS WINDOW (already durable in memory - standing rules, NOT open work,\n'
-                'and what they quote is already decided):',
-           (f"  [{m.get('Scope')}:{m.get('ScopeKey') or '*'}] {(m.get('Note') or '')[:110]}" for m in notes[:12]))
+    from .memorylines import lessons
+    # what the owner's verdicts in the window taught, as the lines they are in LEARNED.md (the notes table is gone, 2026-10-27) - the
+    # header says plainly that nothing here is live work: a quoted subject was once recycled into a fake pending review
+    _block(out, 'WHAT YOUR VERDICTS TAUGHT THIS WINDOW (already lines in memory - standing lessons, NOT open work,\n'
+                'and what they say is already decided):',
+           (f"  {str(l['text'] or '').strip().lstrip('-* ')[:140]}" for l in lessons(store, since)[:12]))
     _block(out, 'WHAT THE ASSISTANT ALREADY RAISED (its posts in the window, with their state and your replies):',
            A.raised(store, span))
     n, at = A.notes(store)

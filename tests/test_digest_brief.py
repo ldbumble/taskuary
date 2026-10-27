@@ -8,6 +8,7 @@ from unittest import mock
 
 from taskuary import assistant, digest, reports
 from taskuary.store import MemoryStore
+from tests.memlines import note as put_note
 
 ME, DANA = 'owner@ours.com', 'dana@vendor.com'
 def _ago(days=0, hours=0): return (datetime.now() - timedelta(days=days, hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
@@ -188,7 +189,7 @@ class BriefMemoryTests(unittest.TestCase):
         s = _store()
         _mail(s, DANA, 'Resident Refund Request - Watson, Lisa',
               'The resident refund is still awaiting facility approval.', days=0, conv='refund')
-        s.add_memory({'Scope': 'subject', 'ScopeKey': 'resident refund request approved',
+        put_note(s, {'Scope': 'subject', 'ScopeKey': 'resident refund request approved',
                       'Note': 'Resident refunds are handled by facility staff; do not raise them to Alex.',
                       'Active': 1, 'CreatedBy': 'owner'})
         text = digest.gather(s, 1)
@@ -205,9 +206,8 @@ class BriefMemoryTests(unittest.TestCase):
               'Can you explain why rejected? They have been calling and wanting a refund.', days=0, conv='sawyers')
         s._exec("UPDATE message SET SentAt=? WHERE ConversationId='sawyers'", (_ago(hours=5),))
         _mail(s, 'bob@ours.com', 'Target meeting', 'Can you confirm Thursday still holds?', days=1, conv='target')
-        s.add_memory({'Scope': 'subject', 'ScopeKey': 'resident refund request', 'Note': 'resident refunds are not ours',
+        put_note(s, {'Scope': 'subject', 'ScopeKey': 'resident refund request', 'Note': 'resident refunds are not ours',
                       'Active': 1, 'CreatedBy': 'owner'})
-        s._exec('UPDATE memory SET CreatedAt=?', (_ago(days=17),))
         text = digest.gather(s, 1)
         asks = text[text.index('THEIR ASKS YOU HAVE NOT ANSWERED'):text.index('ASKS YOUR STANDING VERDICTS ALREADY COVER')]
         self.assertIn('Bob asked', asks)
@@ -226,9 +226,8 @@ class BriefMemoryTests(unittest.TestCase):
         _mail(s, 'erin@northwind.example', 'Re: Resident Refund Request Form Rejected - Unit 4',
               'Can you explain why rejected?', days=1, conv='unit4')
         _mail(s, 'gail@northwind.example', 'Target meeting', 'Can you confirm Thursday still holds?', days=1, conv='target')
-        s.add_memory({'Scope': 'global', 'Note': 'Resident refunds are not ours', 'Active': 1, 'CreatedBy': 'owner'})
-        s.add_memory({'Scope': 'global', 'Note': 'Never chase a vendor before noon', 'Active': 1, 'CreatedBy': 'owner'})
-        s._exec('UPDATE memory SET CreatedAt=?', (_ago(days=17),))
+        put_note(s, {'Scope': 'global', 'Note': 'Resident refunds are not ours', 'Active': 1, 'CreatedBy': 'owner'})
+        put_note(s, {'Scope': 'global', 'Note': 'Never chase a vendor before noon', 'Active': 1, 'CreatedBy': 'owner'})
         text = digest.gather(s, 1)
         self.assertNotIn('ASKS YOUR STANDING VERDICTS ALREADY COVER', text)        # nothing moved by word overlap
         asks = text[text.index('THEIR ASKS YOU HAVE NOT ANSWERED'):text.index('MY OPEN LOOPS')]
@@ -245,10 +244,9 @@ class BriefMemoryTests(unittest.TestCase):
         s = _store()
         _mail(s, DANA, 'Resident Refund Request - Watson, Lisa',
               'The resident refund is still awaiting facility approval.', days=0, conv='refund')
-        parking = s.add_memory({'Scope': 'subject', 'ScopeKey': 'parking permits',
+        parking = put_note(s, {'Scope': 'subject', 'ScopeKey': 'parking permits',
                                 'Note': 'Parking permits belong to facilities.', 'Active': 1, 'CreatedBy': 'owner'})
-        retired = s.add_memory({'Scope': 'global', 'Note': 'Retired rule.', 'Active': 0, 'CreatedBy': 'owner'})
-        s._exec('UPDATE memory SET CreatedAt=? WHERE MemoryId IN (?,?)', (_ago(days=3), parking, retired))
+        retired = put_note(s, {'Scope': 'global', 'Note': 'Retired rule.', 'Active': 0, 'CreatedBy': 'owner'})
         text = digest.gather(s, 1)
         self.assertNotIn('Parking permits belong', text)
         self.assertNotIn('Retired rule', text)

@@ -1536,10 +1536,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const notDone = !!t && !["done", "dropped"].includes(t.Status);
   // the bar's button the Advisor lit (advisor.decide - the canvas's decision for the same task); nothing is dark before it answers
   const barLit = (verb) => !!taskAdvice && liveVerb(taskAdvice.verb) === verb;
-  // THE FEW WARNINGS, BESIDE WHAT THEY ARE ABOUT (advice.taskNote; the owner, 2026-10-26: "remove the advisor"): no line over the row or
-  // the bar - the canvas hands its decision's note in (`note`), the Tasks tab reads its own. 'draft' under the draft, 'task' at the head
+  // THE ADVISOR'S SECTION (advice.taskNote; the owner, 2026-10-26: "remove the advisor", then "an advisor section on the task itself part
+  // of the agent thing but separate"): no line over the row or the bar - the canvas hands its decision's line in (`note`), the Tasks tab
+  // reads its own - its own section over Agent work, and only when there is a line
   const warn = notDone ? (canvas ? note : taskNote(taskAdvice)) : null;
-  const warnAt = (at, sx) => (warn?.at === at ? <AdvisorNote note={warn} sx={sx} /> : null);
   // THE TASKS TAB'S BAR IS ONE LINE (2026-10-23, foldBar.js): Change folds first, then Split or merge, Hand off with its rule, Not a task;
   // Mark done and Remind me never fold, nor the button the Advisor lit
   const bar = useFoldBar(BAR_FOLD_BUT[{ remove: "nat", forward: "hand", split: "reshape" }[liveVerb(taskAdvice?.verb)] || ""], `${t?.TaskId}|${notDone}|${finishing}|${t?.RemindAt || ""}`);
@@ -1616,8 +1616,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         ...(pendingReview ? [stopSave] : []),
         ...(notDone ? [runAnother] : []),
       ] : continueHere ? [
-        // ...on the canvas too: the Advisor's strip that carried Connect an AI there is gone (2026-10-26) - the row's own is the lit one
-        ...(runFix ? [{ id: "fix", group: "decide", tone: "p", label: runFix.label, run: () => openAppLink(runFix.href), title: btnHint("fix") }] : []),
+        // ...not a second Connect an AI on the canvas (the owner, 2026-10-26: "why would we need connect an ai? if you don't get through ai
+        // setup the whole thing doesn't work"): the Result's line says why and points at Connections
+        ...(runFix && !(inRow && runFix.href === place("ai").href) ? [{ id: "fix", group: "decide", tone: "p", label: runFix.label, run: () => openAppLink(runFix.href), title: btnHint("fix") }] : []),
         { id: "continue", group: "agent", lead: !pendingReview && !runFix, label: continueWord, disabled: !!startingAgent || !!noAiWhy, why: noAiWhy,
           run: continuePress, title: failedRun ? btnHint("try_again") : hintOfRow("continue") }]
       // EVERY START OPENS THE BOX FIRST (the owner, 2026-10-23: "you need to write prompt what about the email or attachment is the
@@ -1949,7 +1950,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         sx={{ my: -0.5 }}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
                     </Box>}
                     <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1.75 }}>
-                      {!fromDrawer && warnAt("task")}
                       {/* OPEN AGAIN, AND WHY (funnel.news_since_agent): the message that reopened it, said first - the agent's last
                           session is the record under Agent work, not the news (the owner, 2026-10-12) - always, now no strip under the
                           canvas says what to do (2026-10-26) */}
@@ -2146,7 +2146,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     question (the owner, 2026-09-17: keep the stopped header as short as the
                     one a running agent gets). The bar rides IN the heading now, so
                     the sentence and the row that held it both go. */}
-                {fromDrawer && warnAt("task", { mb: 1 })}
+                {/* THE ADVISOR'S OWN SECTION, OVER AGENT WORK (the owner, 2026-10-26: "one is more a guide and one is more doing work but they are
+                    in essence the same idea"): in the main view when the work is it, else in the right drawer with the work, whose tab says so */}
+                {warn && <AdvisorNote note={warn} onDraft={() => { setOpenStage("reply");
+                  requestAnimationFrame(() => workBox.current?.querySelector("textarea")?.scrollIntoView({ block: "center", behavior: "smooth" })); }} />}
                 {/* a queued start: what it waits for, or why it could not start - with Start now and Cancel (T10) */}
                 {!liveSession && listRow?.State === "queued" && listRow?.Queued && <Box sx={{ mb: 1 }}>
                   <QueuedStart taskId={t.TaskId} queued={listRow.Queued} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
@@ -2518,9 +2521,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} onRemind={(e, a) => setRemindAt(a || e?.currentTarget)}
                           onEmailInstead={() => setEmailOpen(true)}
                           onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   /* the list's row moves too (T19) */
-                      ) : null}
-                      {pendingReview && warnAt("draft", { mt: 0.75 })}
-                      {pendingReview ? null : (
+                      ) : (
                         <>
                           {/* WHAT ALREADY WENT OUT, before any envelope: the item ending upstream (the agent's merge) and what was sent
                               from outside a draft here. With neither, a merged pull request's Close out was a bare "To <sender>" over
@@ -2655,7 +2656,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 title={workSide ? "Hide the agent and Close out" : "Show the agent and Close out"} aria-label={workSide ? "Hide the agent and Close out" : "Show the agent and Close out"}
                 aria-expanded={workSide} aria-controls="tq-work-side" onClick={() => { setFromSide(false); setWorkSide((v) => !v); }}>
                 <Box component="span" aria-hidden data-tq-from-chevron="">{workSide ? "›" : "‹"}</Box>
-                <Box component="span" data-tq-from-words="">{workTabWords}</Box></Box>}
+                {/* ...and the Advisor's section in the drawer, said on its tab (the owner, 2026-10-26) */}
+                <Box component="span" data-tq-from-words="">{workTabWords}{warn ? " · 1 note" : ""}</Box></Box>}
               </Box>
               {/* THE TASKS TAB'S BAR, AT THE FOOT (the owner, 2026-10-16: "the buttons stay on bottom by the prompt box like always. No
                   buttons there."). The canvas draws these as its row over the chat line (rowVerbs, ActionRow); the Tasks tab has no

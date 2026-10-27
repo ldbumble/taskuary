@@ -80,9 +80,9 @@ test("the Advisor draws no button of its own; a move the row lacks joins the row
   assert.match(strip, /const lacks = !!\(advice\?\.verb && advice\.verb !== "next" && onPropose\) && !advisedAny\(theirs, advice\);/);
   // ...a refused press is said on the chat's error line (onErr) - there is no strip to say it on
   assert.match(strip, /catch \(err\) \{ onErr\?\.\(proposeFailed\(err\)\); \}/);
-  // ...and Why? rides with a warning the model wrote, in the task (AdvisorNote)
+  // ...and every line in the task's Advisor section keeps its Why? (AdvisorNote, the owner 2026-10-26)
   const note = fs.readFileSync(new URL("../src/AdvisorNote.jsx", import.meta.url), "utf8");
-  assert.match(note, /\{note\.why && <button type="button" className="tq-next-why"[\s\S]{0,120}>Why\?<\/button>\}/);
+  assert.match(note, /<button type="button" className="tq-next-why" aria-haspopup="dialog"[\s\S]{0,120}>Why\?<\/button>/);
   assert.match(note, /api\.get\("\/api\/advice\/notes", \{ params: \{ key: a\.key/);
   assert.match(note, /<Popover open=\{!!at\}/);
 });

@@ -1,6 +1,6 @@
 // The Advisor's line on the item on the table (spec 2026-10-12, build step 3): the pure piece, so it can be tested without a
 // browser. The rest is wiring in AssistantView.jsx: it lights a button on the row (ActionRow), and the few lines that warn are drawn
-// in the task beside what they are about (taskNote, AdvisorNote) - no line stands over the row any more (2026-10-26).
+// in the task's own Advisor section (taskNote, AdvisorNote) - no line stands over the row any more (2026-10-26).
 
 /* Which key to re-read advice for when an `advice` live event lands: the event carries the target's legacy key
    (task:N / msg:N) while the table holds the rail's key (processing:... in a real install) - a card's aliases bridge
@@ -48,16 +48,17 @@ export function stripWord({ speaks, busy, shown = null, lit = null, aiOff = fals
 }
 
 /* THE STRIP IS GONE, ITS LIT BUTTON STAYS (the owner, 2026-10-26: "maybe keep the box but remove the advisor? not sure the advisor is
-   really useful"): a line over the row named a fact about something on the task, a hand's width from it. The FEW that warn are drawn IN
-   the task, beside what they are about - a draft promising what nothing backs under the draft ('draft'); the same ask as another task, or a
-   reason the lit button is not the one you would guess (the model's own line: a duplicate an agent is on, what the owner's memory says)
-   at the head of the task ('task'). Every other line the task already says or the lit button does - a failure is the Result's first line,
-   a clash is on the invite, a stranger in Came from, an age on the rail, a stopped or unpushed agent on its own heading - so: null. */
-const NOTE_AT = { draft_ready: "draft", duplicate: "task" };
+   really useful"), AND WHAT IT SAYS THAT MATTERS HAS A SECTION OF ITS OWN ON THE TASK (the same day: "advisor lines that are important
+   show on the task ... it will be hard to differentiate between task description and the advisor"): the draft promising what nothing
+   backs (`draft`, with a pointer to it), late against the owner's learned usual, the same ask as another task, and a reason the model
+   wrote for a lit button you would not guess (a duplicate an agent is on, what the owner's memory says). Every other line the task
+   already says or the lit button does - a failure is the Result's first line, a clash is in the invite's summary, a stranger in Came
+   from, a bare age on the rail, a stopped or unpushed agent on its own heading - so: null, and no section. */
+const SHOWN = new Set(["draft_ready", "duplicate", "asked_late", "waiting_late_usual"]);
 const SAID = new Set(["failed", "failed_cause", "report_failed", "invite_clash", "invite_free", "stranger", "working", "closed", "agent_asking"]);
 export function taskNote(advice) {
   const line = String(advice?.line || "").trim();
   if (!line || !advice.verb || advice.verb === "next" || SAID.has(advice.state)) return null;
-  const at = NOTE_AT[advice.state] || (advice.by === "model" ? "task" : null);
-  return at ? { at, line: suggestion(line, advice.label, advice.verb), why: advice.by === "model", advice } : null;
+  if (!SHOWN.has(advice.state) && advice.by !== "model") return null;
+  return { line: suggestion(line, advice.label, advice.verb), draft: advice.state === "draft_ready", advice };
 }

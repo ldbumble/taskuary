@@ -12,10 +12,9 @@ import ActionRow, { AdvisorNext } from "./ActionRow.jsx";
 import api from "./api.js";
 import { onLive } from "./live.js";
 import { adviceKeyFor, adviceShown, stripWord, taskNote } from "./advice.js";
-import { TableVerbs, onPressed, useHost, useRowVerbs, useVerbs } from "./actionRow.js";
+import { TableVerbs, onPressed, useHost, useVerbs } from "./actionRow.js";
 import { adviceRead } from "./tableState.js";
 import { hint as btnHint, label as btnLabel } from "./buttons.js";
-import { CONNECT_AI, connectAi } from "./ConnectAi.jsx";
 
 // THE ADVISOR'S PICK ON A PHONE'S ROW (U12): the dock's row is filled by the canvas's advice, but a phone draws its own row at the
 // view's foot, which was handed none - so the suggestion's line stood over a row whose dark button was something else. Read for
@@ -84,15 +83,13 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
   // flight, and drawn as it was then (`steady`): it flashed grey for the ~300 ms of every switch (the owner, 2026-10-26)
   useVerbs("next", [{ id: "next", group: "next", label: btnLabel("next"), disabled: !!busy && !picking, steady: true, run: () => onNext(), title: btnHint("next") }]);
   const read = useItemAdvice(card, phone);
-  const rowHas = useRowVerbs().list.some((v) => v.label === CONNECT_AI && !v.disabled);   // the row's own Connect is lit there (ActionRow)
   // the Assistant's lit button outranks the Advisor's line, as it does over the composer (assistantLight.js)
   const advised = lit ? null : adviceShown(read, { key: card.key, lane: card.lane }, busy);
   // ...and the strip's word and the button it lights are ONE decision, the dock's (advice.stripWord, the UI audit's C2)
   const { noAi, pick } = stripWord({ speaks: true, busy, shown: advised, lit, advice: read, key: card.key, lane: card.lane });
-  // ...with no AI the strip's own Connect an AI went with it (2026-10-26): it joins the row where the row has none, and is the lit one
-  useVerbs("noai", [{ id: "noai:connect", group: "decide", label: CONNECT_AI, title: "No AI is connected - connect one under Connections", run: connectAi }],
-    phone && noAi && !rowHas);
-  // THE FEW WARNINGS, IN THE VIEW (advice.taskNote): the desk's decision for this item (`advice`, AssistantView), a phone's own read
+  // ...and with no AI the strip's own Connect an AI went with it, not onto the row (the owner, 2026-10-26: "if you don't get through ai
+  // setup the whole thing doesn't work"): a no_ai pick lights nothing there
+  // THE ADVISOR'S SECTION, IN THE VIEW (advice.taskNote): the desk's decision for this item (`advice`, AssistantView), a phone's own read
   const note = taskNote(phone ? adviceShown(read, { key: card.key, lane: card.lane }, false)
     : advice && (advice.for === card.key || (card.aliases || []).includes(advice.for)) ? advice : null);
   return (

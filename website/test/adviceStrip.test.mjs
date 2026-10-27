@@ -56,8 +56,8 @@ test("no line is still an answer: only no AI is a sentence, and every other sile
   // phone's row - the lit button is the decision, no AI the row's own Connect an AI (browser/dock-strip.test.mjs measures the dock)
   for (const f of ["AssistantView.jsx", "CanvasItem.jsx", "ActionRow.jsx"]) assert.doesNotMatch(read(f), /className="tq-strip"|data-tq-advice="no_ai"/, f);
   assert.doesNotMatch(read("assistantView.css"), /\.tq-strip/);
-  assert.match(view, /useVerbs\("noai", \[\{ id: "noai:connect", group: "decide", label: CONNECT_AI,[\s\S]{0,200}\], !firstRun && noAi && !rowConnect\);/);
-  assert.match(read("CanvasItem.jsx"), /useVerbs\("noai", \[\{ id: "noai:connect"[\s\S]{0,200}phone && noAi && !rowHas\);/);
+  // ...and no Connect an AI joins the row for it either (the owner, 2026-10-26: "if you don't get through ai setup the whole thing doesn't work")
+  for (const f of ["AssistantView.jsx", "CanvasItem.jsx"]) assert.doesNotMatch(read(f), /noai:connect/, f);
   // ...and the dead-end walk holds the page to all of it (STILL, STRIP, REREAD, LIT)
   const walk = fs.readFileSync(path.join(process.cwd(), "deadend_check.mjs"), "utf8");
   for (const rule of ["STILL", "STRIP", "REREAD", "LIT"]) assert.ok(walk.includes(`note("${rule}"`), rule);
@@ -104,31 +104,39 @@ test("a move greyed only by the owner's own press in flight is not said to be of
   assert.doesNotMatch(read("ActionRow.jsx"), /is off - /);
 });
 
-// THE STRIP'S LINES, SORTED (the owner, 2026-10-26: "maybe keep the box but remove the advisor?"): the few that warn of something on the task
-// are drawn in it beside what they are about; every other one the task or the lit button already says
-test("a warning lands in the task beside its subject, and every other strip line is dropped", async () => {
+// THE STRIP'S LINES, SORTED (the owner, 2026-10-26: "maybe keep the box but remove the advisor?", then "an advisor section on the task itself
+// part of the agent thing but separate"): the lines that matter stand in the task's Advisor section; every other one the task or the lit
+// button already says, and with none there is no section
+test("an important line lands in the task's Advisor section, and every other strip line is dropped", async () => {
   const { taskNote } = await import("../src/advice.js");
   const d = (state, line, extra = {}) => ({ key: "task:7", for: "task:7", verb: "reply", label: "Reply", state, line, by: "rule", ...extra });
-  // the draft promising what nothing backs: under the draft, with its Why?
-  assert.deepEqual((({ at, line, why }) => ({ at, line, why }))(taskNote(d("draft_ready", "The draft promises what nothing here shows.", { verb: "redraft", label: "Redraft", by: "model" }))),
-    { at: "draft", line: "The draft promises what nothing here shows.", why: true });
-  // the same ask as another task, and a model's reason the lit button is not the obvious one: at the task's head
-  assert.equal(taskNote(d("duplicate", "Same ask as TQ-0012.", { verb: "remove" }))?.at, "task");
-  assert.equal(taskNote(d("asked", "TQ-0012 may already cover this - an agent is on it.", { verb: "defer", by: "model" }))?.at, "task");
-  // ...said by the task already, or narration of the lit button: nowhere
+  // the draft promising what nothing backs, pointing at the draft
+  assert.deepEqual((({ line, draft }) => ({ line, draft }))(taskNote(d("draft_ready", "The draft promises what nothing here shows.", { verb: "redraft", label: "Redraft", by: "model" }))),
+    { line: "The draft promises what nothing here shows.", draft: true });
+  // late against the learned usual, the same ask as another task, a model's reason the lit button is not the obvious one
+  for (const n of [d("asked_late", "You usually answer Erin within the hour; this is 3h."), d("waiting_late_usual", "Erin usually answers in a day; this is 4 days.", { verb: "chase" }),
+    d("duplicate", "Same ask as TQ-0012.", { verb: "remove" }), d("asked", "TQ-0012 may already cover this - an agent is on it.", { verb: "defer", by: "model" })])
+    assert.equal(taskNote(n)?.line, n.line, n.state);
+  // ...said by the task already, or narration of the lit button: no section
   for (const [state, line] of [["failed", "Failed: no AI is connected"], ["failed_cause", "Failed: the run stopped"], ["report_failed", "Report failed: timeout"],
     ["invite_clash", "Clashes with Quarter-end planning 9:00-12:00."], ["invite_free", "Free then."], ["stranger", "First mail from vendor.example."],
     ["stopped", "Stopped 2 hours ago."], ["unpushed", "Changes ready - not pushed."], ["waiting_late", "Erin Blake: 4 days, no answer."],
-    ["goal_late", "Pick the vendor: 3 days late."], ["asked", "Erin Blake asked 2 hours ago."], ["asked_late", "You usually answer Erin within the hour; this is 3h."]])
+    ["goal_late", "Pick the vendor: 3 days late."], ["asked", "Erin Blake asked 2 hours ago."]])
     assert.equal(taskNote(d(state, line)), null, state);
   assert.equal(taskNote(d("draft_ready", "")), null, "a silent decision says nothing anywhere");
-  assert.equal(taskNote({ none: "no_ai", for: "task:7" }), null, "no AI is the row's Connect an AI, lit");
-  // ...drawn under the draft and at the head of the main view, on the canvas and the Tasks tab alike - no line over the Tasks tab's bar
-  const page = read("TaskPage.jsx");
+  assert.equal(taskNote({ none: "no_ai", for: "task:7" }), null, "no AI is no line at all");
+  // ...ONE section of its own over Agent work ("one is more a guide and one is more doing work", the owner 2026-10-26), at the head of the
+  // work column, only with a line, its drawer's tab saying so - on the canvas and the Tasks tab alike
+  const page = read("TaskPage.jsx"), sec = read("AdvisorNote.jsx");
   assert.match(page, /const warn = notDone \? \(canvas \? note : taskNote\(taskAdvice\)\) : null;/);
-  assert.match(page, /\{pendingReview && warnAt\("draft", \{ mt: 0\.75 \}\)\}/);
-  assert.match(page, /\{!fromDrawer && warnAt\("task"\)\}/);
-  assert.match(page, /\{fromDrawer && warnAt\("task", \{ mb: 1 \}\)\}/);
+  assert.equal((page.match(/<AdvisorNote /g) || []).length, 1, "one place for the Advisor's words");
+  const col = page.indexOf('<Box ref={workBox} data-tq-work=""'), at = page.indexOf("{warn && <AdvisorNote note={warn}"), head = page.indexOf('<WorkflowHeading number="2"');
+  assert.ok(col > 0 && col < at && at < head, "in the work column, over Agent work and outside it");
+  assert.match(page, /\{workTabWords\}\{warn \? " · 1 note" : ""\}/);
+  assert.match(sec, /aria-label="Advisor" data-tq-advisor=""/);
+  assert.match(sec, /<TaskuaryMark size=\{13\} \/>\s*<Typography[^>]*>Advisor<\/Typography>/);
+  assert.match(sec, /\{note\.draft && onDraft && <button[^>]*data-tq-advisor-draft=""/);
+  assert.match(sec, />Why\?<\/button>/);
   assert.doesNotMatch(page, /data-tq-task-advice/);
   assert.match(read("CanvasItem.jsx"), /onLeave=\{onLeave\} onStay=\{onStay\} note=\{note\} \/>/);
 });

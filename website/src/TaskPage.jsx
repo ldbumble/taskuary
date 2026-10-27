@@ -105,7 +105,7 @@ import { openAppLink } from "./appLinks.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { place } from "./words.js";
 import { announceRemoved, fromAnswer } from "./removed.js";
-import { heldSteps, heldTask, heldTerm, heldWait, keepTask, keepTerms, pageRead } from "./taskDetail.js";
+import { heldSteps, heldTask, heldTerm, keepTask, keepTerms, pageRead } from "./taskDetail.js";
 import { coalesce } from "./coalesce.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
@@ -464,10 +464,19 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // behind an explicit restart action instead of looking like the main thing to do next.
   const [restartOpen, setRestartOpen] = useState(false);
   const [boxAt, setBoxAt] = useState(0);              // each opening of the agent box, so a second press brings it into view again
-  const [startingAgent, setStartingAgent] = useState("");
+  // ONE START PER TASK AT A TIME, HELD IN A REF (the agents walk, 2026-10-26): `startingAgent` was state, so a double press on Send to
+  // agent passed its guard twice before React drew "Starting…" and posted two dispatches; and a start answered after the owner had
+  // moved to another task was never cleared (`stale`), leaving every start there greyed "Starting…". Keyed by task, cleared always.
+  const startFlights = useRef({});
+  const [starting, setStarting] = useState({});
+  const startingAgent = starting[selected] || "";
+  const beginStart = (id, what) => {
+    if (!id || startFlights.current[id]) return false;
+    startFlights.current = { ...startFlights.current, [id]: what }; setStarting(startFlights.current); return true;
+  };
+  const endStart = (id) => { const { [id]: _, ...rest } = startFlights.current; startFlights.current = rest; setStarting(rest); };
   const [generalRevision, setGeneralRevision] = useState(0);
   // the waiting room: notes for the agent, typed in when it stops (waitroom.py)
-  const [wait, setWait] = useState(() => heldWait(selected) || { data: [], state: null });   // ...its waiting room with it (taskDetail.js)
   const [waitText, setWaitText] = useState("");
   const [wrapping, setWrapping] = useState(false);   // declared up here: the poll effect below reads it
   const [wrapped, setWrapped] = useState(null);      // the closing report, shown where the session was
@@ -527,8 +536,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       const { data } = await api.get(`/api/tasks/${id}`, { signal });
       if (stale(id)) return;
       setDetail(data); keepTask(id, data, undefined, asked);
-      try { const w = (await api.get(`/api/tasks/${id}/waitroom`, { signal })).data; if (!stale(id)) { setWait(w); keepTask(id, data, w, asked); } }
-      catch { if (!stale(id)) setWait({ data: [], state: null }); }
+      // ...and no waiting room after it: read on every 3 s poll, in series behind the task, into state nothing drew any more - half of
+      // what a running agent's page asked for (the agents walk, 2026-10-26). The notes box reads its own (ui.jsx)
     } catch (e) {
       if (stale(id) || signal.aborted) return;
       // A task can vanish under an open pane: "not mine" on its message deletes the task and
@@ -546,7 +555,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const loadDetail = useCallback(async (id) => {
     if (!id) { setDetail(null); return; }
     const ahead = heldTask(id);
-    if (ahead) { setDetail((d) => (d?.task?.TaskId === id ? d : ahead)); const w = heldWait(id); if (w) setWait(w); }
+    if (ahead) setDetail((d) => (d?.task?.TaskId === id ? d : ahead));
     return detailReads.current.run(id, id);
   }, []);
   // ...and the read of the task just left is let go of: its answer would be thrown away (stale) after the server spent on it
@@ -669,9 +678,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // report lands on the task when the job has written it (the poll below reads it), and a failure is said on the task.
   // ...and the agent is put down AT THE PRESS, Close out opened with the write-up's pending block in it (the owner, 2026-10-21: "it
   // looks frozen"): the harvest the press waits for is the block's first step, not a pause with the pane still up.
+  // ...once per press: a double press posted /wrap twice before the first had put the pane down (the agents walk, 2026-10-26)
+  const wrapFlight = useRef(null);
   const wrapUp = async () => {
     if (!canWrap && !pressedHere) return;          // ...a write-up that failed here is tried again on the session it left open
     const id = selected, n = (detail?.comments || []).length, sid = term?.sid || pressedHere?.sid || null;
+    if (wrapFlight.current === id) return;
+    wrapFlight.current = id;
     setErr(""); setWritingUpAt({ id, n, sid }); setTerm(null); setSeekCloseOut(true);
     try {
       const { data } = await api.post(`/api/tasks/${id}/wrap`, { close: false, background: true });
@@ -682,7 +695,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       if (stale(id)) return;
       setWritingUpAt(null); findTerm(id);      // nothing was written up: the session comes back as it was
       setErr(e?.response?.data?.detail || "Could not save the agent's work - press Stop and save again.");
-    }
+    } finally { if (wrapFlight.current === id) wrapFlight.current = null; }
   };
   // Pausing is not finishing: no report, no reply draft, the task stays open. What it worked
   // out becomes a handover note that gets typed into the NEXT session, because a pty has no
@@ -840,11 +853,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and the SAME session's new word too: the detail reloads on every task-changed, but only a new sid was adopted, so an agent
   // that asked while the page was open kept its header on "working" and its row without Answer it until the task was opened again (G7)
   const liveWord = sessionWord(detail?.session);
+  // ...nor a regular agent's session its own conversation has just read as gone (generalSession): a task read from before it ended
+  // put it back, the conversation read it gone again, and the view flipped between the live pane and the Result - eight remounts in
+  // three seconds after a turn that died, until a newer read landed (the agents walk, 2026-10-26)
+  const goneSid = useRef("");
   useEffect(() => {
     const live = detail?.session;
     if (!live?.alive || live.taskId !== selected) return;
     // ...never the session Stop and save is writing up: its pty lives until the report is safe, and adopting it put the agent back
     if (pressedHere?.sid && live.sid === pressedHere.sid) return;
+    if (live.sid === goneSid.current) return;
     if (live.sid !== term?.sid) setTerm(live);
     else if (liveWord !== sessionWord(term)) setTerm((was) => (was?.sid === live.sid ? { ...was, ...live } : was));
   }, [detail?.session, term?.sid, selected, liveWord]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -867,7 +885,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   }, [loadDetail, loadTasks, onChanged]);
   // ...never a live terminal's row put out by the conversation having none: an agent asking from a terminal on a general task read
   // as no session at all, its Agent work folded shut over the question (the UI audit's W6, 2026-10-21)
-  const generalSession = useCallback((session) => setTerm((was) => session || (was?.alive && was.mode !== "assistant" ? was : null)), []);
+  const generalSession = useCallback((session) => setTerm((was) => {
+    if (!session && was?.alive && was.mode === "assistant") goneSid.current = was.sid;
+    return session || (was?.alive && was.mode !== "assistant" ? was : null);
+  }), []);
   // "New task -> live session" lands here: put the CLI on it once we know this task has no
   // session already, so a reload never spawns a second one.
   // A GENERAL task has no repository and no CLI - it is a question, worked in the assistant's
@@ -1246,6 +1267,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // with its Try again - From folds to its one line over it. Two columns only where no agent ever ran (taskLayout.layoutOf).
   const layout = layoutOf({ sessionView }), wide = layout === "full";
   const settled = (resultShown || failedRun) && !term?.alive;   // the agent acted and is gone: its Result, or the run that failed
+  // ...whose record line already names the AI it ran on ("Claude Code (on this computer) · 07:05 · 6s"): an "AI claude" pill under
+  // it said it twice (the agents walk, 2026-10-26)
+  const factBrain = isGeneral && settled ? "" : brainPill;
   const replyState = replyPhase(detail?.reviews || []);
   // ONE question per page. A running session is itself the agent stage, so it is never folded; the
   // hand-picked stage wins over the computed one until you leave the task (start an agent on a task
@@ -1328,9 +1352,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // nothing to do and must not offer a chevron that does nothing.
   const stageProps = (name) => ({ folded: pane !== name, onToggle: pane === name ? null : () => setOpenStage(name) });
   const startCodingAgent = async () => {
-    if (!selected || startingAgent) return;
     const id = selected;
-    setStartingAgent("coding"); setErr(""); setStartFail(null);
+    if (!beginStart(id, "coding")) return;
+    setErr(""); setStartFail(null);
     try {
       // the repository chosen in the panel is pinned first - the tag is the override the start obeys
       if (startRepo) await api.put(`/api/tasks/${id}/repo`, { repo: startRepo, ...(run.agent ? { agent: run.agent } : {}) });
@@ -1356,12 +1380,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       if (e?.outcome?.dispatch === "needs_repo" || /no local path|could not tell which checkout/i.test(msg)) {
         setErr(""); setRepoPick(true); setResumeAfterRepo({ dispatch: true });
       } else { setErr(msg); setStartFail({ ...failOf(e), text: msg, again: startCodingAgent }); }
-    } finally { if (!stale(id)) setStartingAgent(""); }
+    } finally { endStart(id); }
   };
   const startGeneralAgent = async () => {
-    if (!selected || startingAgent) return;
     const id = selected;
-    setStartingAgent("general"); setErr(""); setStartFail(null);
+    if (!beginStart(id, "general")) return;
+    setErr(""); setStartFail(null);
     try {
       // one shared dispatch whatever the task's kind was: it switches the kind, starts (or reuses) the
       // assistant session and records the live worker - a relabelled task is not a started one (PW-213)
@@ -1382,15 +1406,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         const msg = e?.response?.data?.detail || "Could not start the agent - check that an AI is connected under Connections, then press it again.";
         setErr(msg); setStartFail({ ...failOf(e), text: msg, again: startGeneralAgent });
       }
-    } finally { if (!stale(id)) setStartingAgent(""); }
+    } finally { endStart(id); }
   };
   // START AN AGENT ON A GOAL (the owner, 2026-10-12): the goal is up to its first step not done. That step becomes a task
   // of its own if it is not one yet (the goal's repository rides along), the regular agent starts on it through the one
   // dispatch door, and the step opens on the table so what the agent does is what you see.
   const startGoalStep = async () => {
-    if (!selected || startingAgent) return;
     const id = selected;
-    setStartingAgent("step"); setErr(""); setStartFail(null);
+    if (!beginStart(id, "step")) return;
+    setErr(""); setStartFail(null);
     try {
       const { data: got } = await api.get(`/api/tasks/${id}/steps`);
       const step = (got.steps || []).find((s) => !s.done);
@@ -1409,7 +1433,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     } catch (e) {
       // ...with its ways past it as buttons on the error, as the task's own start has: the sentence stood alone (the matrix's verify, 2026-10-20)
       if (!stale(id)) { const msg = e?.response?.data?.detail || "Could not start the agent on the next step"; setErr(msg); setStartFail({ ...failOf(e), text: msg, again: startGoalStep }); }
-    } finally { if (!stale(id)) setStartingAgent(""); }
+    } finally { endStart(id); }
   };
   // CONTINUE SESSION is the rail's box here too (T14): one road (/continue-work) for a coding and a regular agent, and
   // what you type is the first thing it hears. The page had two older roads with no note (continue-session, resume).
@@ -1440,12 +1464,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const runFix = failedRun ? detail?.agentStory?.fix || null : null;
   const tryAgain = async () => {
     const id = selected;
-    if (!id || startingAgent) return;
-    setStartingAgent("resume"); setErr(""); setStartFail(null);
+    if (!beginStart(id, "resume")) return;
+    setErr(""); setStartFail(null);
     try { await api.post(`/api/tasks/${id}/continue-work`, { note: null }); continued(); }
     catch (e) {
       if (!stale(id)) { const msg = e?.response?.data?.detail || e?.message || "It could not start again."; setErr(msg); setStartFail({ ...failOf(e), text: msg, again: tryAgain }); }
-    } finally { if (!stale(id)) setStartingAgent(""); }
+    } finally { endStart(id); }
   };
   const continueWord = startingAgent === "resume" ? (failedRun ? "Trying again…" : "Continuing…") : failedRun ? btn("try_again") : labelOfRow("continue");
   const continuePress = (e, a) => (failedRun ? tryAgain() : setContinueAt(a || e?.currentTarget));
@@ -2307,7 +2331,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* folded onto the live bar these facts share a ROW with the controls, where a
                       rule above them is stray chrome - they get a rule beside them instead, so the
                       pills you press and the pills you read are two groups and not five in a line */}
-                  {(term?.alive || report || detail?.transcript) && !restartOpen && (runRole || brainPill || repoOf(t)) && (
+                  {(term?.alive || report || detail?.transcript) && !restartOpen && (runRole || factBrain || repoOf(t)) && (
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.7, flexWrap: "wrap",
                       ...(liveSession
                         ? { ml: 0.9, pl: 1.1, borderLeft: `1px solid ${BORDER}`, flexShrink: 0 }
@@ -2315,11 +2339,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {/* plain words on the facts (the audit, 2026-10-17): "role" and "brain" were the app's own vocabulary */}
                       {runRole && <Box sx={{ ...chipBtnStatic }} title="Which instructions this agent follows - set in Settings.">
                         <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>works as</Box>&nbsp;{runRole}</Box>}
-                      {brainPill && <Box sx={{ ...chipBtnStatic }}
-                        title={(brainPill === detail?.ranOn?.brain ? "The AI that did this work. Which AI the agents use is set in Settings, not per task."
+                      {factBrain && <Box sx={{ ...chipBtnStatic }}
+                        title={(factBrain === detail?.ranOn?.brain ? "The AI that did this work. Which AI the agents use is set in Settings, not per task."
                           : "The AI that does the work. Which AI the agents use is set in Settings, not per task.")
                           + (detail?.routeWhy ? ` Last AI call: ${detail.routeWhy}` : "")}>
-                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>AI</Box>&nbsp;{brainPill}</Box>}
+                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>AI</Box>&nbsp;{factBrain}</Box>}
                       {/* the repository pill only where a coding tool is connected (B3) */}
                       {!isGeneral && canCode && <Button size="small" variant="outlined" sx={chipBtn}
                         startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
@@ -2375,6 +2399,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       ...(chatBelow ? { bgcolor: "#fff", border: `1px solid ${FOCUS_EDGE}`, borderTop: 0, borderRadius: "0 0 10px 10px", overflow: "hidden" } : {}) }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession}
+                        liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}
                         onAnswered={() => { findTerm(selected); onChanged?.(); }}
                         toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} noComposer={isGeneral && continueHere} />
                     </React.Suspense>

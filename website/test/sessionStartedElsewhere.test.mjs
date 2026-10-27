@@ -37,8 +37,8 @@ test("the session the detail already carries is adopted", () => {
   assert.match(src, /const live = detail\?\.session;/,
     "the detail carries the live session - sessionAlive is read off it - so the page must take it");
   // ...past the one guard: the session Stop and save is writing up is not taken back (its pty lives until the report is safe)
-  assert.match(src, /if \(!live\?\.alive \|\| live\.taskId !== selected\) return;\s*\n(?:\s*\/\/[^\n]*\n)?\s*if \(pressedHere\?\.sid && live\.sid === pressedHere\.sid\) return;\s*\n\s*if \(live\.sid !== term\?\.sid\) setTerm\(live\);/,
-    "adopt only a LIVE session of THIS task, and a new one whole when it is not the one we hold");
+  assert.match(src, /if \(!live\?\.alive \|\| live\.taskId !== selected\) return;\s*\n(?:\s*\/\/[^\n]*\n)?\s*if \(pressedHere\?\.sid && live\.sid === pressedHere\.sid\) return;\s*\n\s*if \(live\.sid === goneSid\.current\) return;\s*\n\s*if \(live\.sid !== term\?\.sid\) setTerm\(live\);/,
+    "adopt only a LIVE session of THIS task - never one its conversation has read as gone - and a new one whole when it is not the one we hold");
   // ...and the one we hold takes its own new word - waiting, its question - merged in, never another session's (G7)
   assert.match(src, /else if \(liveWord !== sessionWord\(term\)\) setTerm\(\(was\) => \(was\?\.sid === live\.sid \? \{ \.\.\.was, \.\.\.live \} : was\)\)/);
 });

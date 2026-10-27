@@ -2182,6 +2182,7 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
         put({'type': kind, 'name': name, 'detail': detail})
 
     def work():
+        session = None
         try:
             fresh = _refresh_chat_context(task_id=task_id)
             if fresh.get('polled'):
@@ -2211,6 +2212,12 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
             # the browser shows this under the question now; the log is for the run nobody was
             # watching, and for the owner who can only report that nothing happened
             logger.warning(f'assistant stream for task {task_id} failed: {e}')
+            # ...SAID ONCE ITS SESSION IS DOWN: a failed turn's session closes 0.1 s after send_prompt raises (general.py), and the page
+            # reads the conversation again on this event - it found the dead session still alive and kept "Agent is working" and Stop
+            # and save over a CLI that had died mid-turn (the agents walk, 2026-10-26). The dock's chat and a stopped turn stay open.
+            if session is not None and not cancel.is_set() and not general.is_dock(store.get_task(task_id)):
+                end = time.time() + 3
+                while session.alive and time.time() < end: time.sleep(0.05)
             put({'type': 'error', 'error': str(e)})
 
     threading.Thread(target=work, daemon=True).start()
@@ -2468,6 +2475,11 @@ def continue_work(task_id: int, body: ContinueBody = None):
             try: general.start_session(store, task_id, actor=ACTOR).send_prompt(note or continuity.RESUME_PROMPT, imgs or None, as_owner=bool(note or imgs), echo=bool(note),
                                                                               delivery_instructions=news or None)
             except Exception as e: _walk_cannot(task_id, f'The session could not continue: {e}. Your saved conversation is still here.')
+            finally: general.OPENING.discard(task_id)
+        # marked HERE, as /resume and the walk are: the page reloads the conversation the moment this answers, before the thread has
+        # a session, read "nothing running" and never looked again - Continue and Try again left the new turn unseen (the agents walk,
+        # 2026-10-26)
+        general.OPENING.add(task_id)
         threading.Thread(target=go, daemon=True, name=f'continue-{task_id}').start()
         store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': 'general', 'note': bool(note)})
         from . import outcomes

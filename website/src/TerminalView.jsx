@@ -688,7 +688,7 @@ export const TerminalPreview = ({ sid, height = 280, onOpen }) => {
 // narrow for two panes (a Wall tile three across) gets a chip instead, which opens the browser
 // OVER the terminal until dismissed.
 export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus = true, expectBrowser = false,
-                             canFull = false, yourTurn = false }) => {
+                             canFull = false, yourTurn = false, idle = false }) => {
   const slot = useRef(null);
   const [browser, setBrowser] = useState({ open: false, url: "" });
   const [width, setWidth] = useState(0);
@@ -699,6 +699,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   const [peek, setPeek] = useState(false);
   const [localOk, setLocalOk] = useState(false);          // the owner unfolded a local page: it stays shown (isLocalPage)
   const lastPage = useRef("");                            // where the browser last was, for the line that says it closed
+  const slow = useRef(false), kick = useRef(null);
   // A Wall tile is one of four across and a drawer pane is 480px tall: enough to notice an agent
   // working, not enough to watch one - and far too little once a browser is beside the terminal.
   // The chat workspace runs this itself, from its own strip, so it asks for no button here.
@@ -709,8 +710,10 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   useEffect(() => {
     setBrowser({ open: false, url: "" }); setSeen(false); setLocalOk(false); setFolded(!!sid && savedFold(sid)); lastPage.current = "";
     if (!sid) return undefined;
-    let stop = false;
+    let stop = false, timer = 0, asking = false;
     const tick = async () => {
+      if (asking) return;                    // a kick while one read is out: that read is the fresh one, and one chain of timers
+      asking = true; clearTimeout(timer);
       try {
         const r = await api.get(`/api/terminals/${sid}/browser`);
         if (stop) return;
@@ -718,11 +721,18 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
         if (r.data?.open) setSeen(true);
         if (r.data?.open && r.data?.url && !/^about:/.test(r.data.url)) lastPage.current = r.data.url;
       } catch { /* server away for a moment: keep showing what we had */ }
+      asking = false;
+      if (!stop) timer = setTimeout(tick, slow.current ? 15000 : 3000);
     };
+    kick.current = tick;
     tick();
-    const id = setInterval(tick, 3000);
-    return () => { stop = true; clearInterval(id); };
+    return () => { stop = true; clearTimeout(timer); kick.current = null; };
   }, [sid]);
+  // ...EVERY 15 S WHILE NOTHING CAN OPEN ONE (`idle`: the agent waits on the owner, no browser open): 3 s asked twenty times a minute of
+  // an agent that was not running (the agents walk, 2026-10-26). Its next turn asks at once - that is when it may open one
+  slow.current = idle && !browser.open;
+  const wasIdle = useRef(idle);
+  useEffect(() => { if (wasIdle.current && !idle) kick.current?.(); wasIdle.current = idle; }, [idle]);
   useEffect(() => {
     const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width));
     ro.observe(slot.current);

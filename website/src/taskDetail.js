@@ -23,8 +23,6 @@ export const prefetchTask = (api, tid) => {
   rec.p = api.get(`/api/tasks/${id}`).then(({ data }) => {
     rec.data = data; noteRead(id, data, asked);
     if (data?.task?.DoneWhen) api.get(`/api/tasks/${id}/steps`).then(({ data: d }) => { rec.steps = d?.steps || []; }).catch(() => {});
-    // ...and its waiting room, which the view reads straight after the task: drawn without it, the view filled in a beat later
-    api.get(`/api/tasks/${id}/waitroom`).then(({ data: w }) => { rec.wait = w; }).catch(() => {});
     return data;
   }).catch(() => { if (held.get(id) === rec) held.delete(id); return null; });
   held.set(id, rec);
@@ -49,11 +47,10 @@ export const keepTerms = (rows) => { if (Array.isArray(rows)) terms = { at: now(
 // the task as last read, while it is fresh - what a view draws on its first frame
 export const heldTask = (tid) => { const e = held.get(Number(tid)); return fresh(e) && e.data?.task?.TaskId === Number(tid) ? e.data : null; };
 export const heldSteps = (tid) => { const e = held.get(Number(tid)); return fresh(e) && Array.isArray(e.steps) ? e.steps : null; };
-export const heldWait = (tid) => { const e = held.get(Number(tid)); return fresh(e) && e.data && e.wait ? e.wait : null; };
 // ...a view's own read is the newest word on its task; an act on any task makes every held read old. `asked`: when that read was asked
 // (noteRead), never when it landed - a read that waited behind the rail's build reflects the moment it was sent
-export const keepTask = (tid, data, wait = undefined, asked = now()) => { const id = Number(tid), e = held.get(id);
-  if (id && data?.task?.TaskId === id) held.set(id, { at: now(), data, p: Promise.resolve(data), steps: e?.steps, wait: wait === undefined ? e?.wait : wait });
+export const keepTask = (tid, data, _wait = undefined, asked = now()) => { const id = Number(tid), e = held.get(id);
+  if (id && data?.task?.TaskId === id) held.set(id, { at: now(), data, p: Promise.resolve(data), steps: e?.steps });
   noteRead(id, data, asked); };
 // ...one task's write leaves every other task's session as it was: only that task's is unknown again
 export const forgetTasks = (tid = null) => {

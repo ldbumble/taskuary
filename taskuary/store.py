@@ -1896,14 +1896,26 @@ class SQLiteStore:
     def _poke(self, *kinds, **payload):
         """Wake the UI. A write that does not change what a tab is looking at stays quiet."""
         held = getattr(self, '_poke_held', None)
+        # STAMPED WHERE THE WRITE IS POKED (live.stamp), a held batch's too: its rail, read later in the same batch, has seen it. A write
+        # still inside a transaction is not stamped - a read begun now would not see it - and an unstamped wake-up is always read again.
+        # `by`: the tab whose request this is (live.TAB) - a burst only that page's presses made waits for their answers (AssistantView)
+        if 'seq' not in payload and any(k in ('feed-changed', 'task-changed') for k in kinds):
+            from . import live
+            payload['seq'] = None if self.cx.in_transaction else live.stamp()
+            tab = live.TAB.get()
+            if tab: payload['by'] = tab
         if held is not None:
+            key = (kinds, json.dumps({k: v for k, v in payload.items() if k != 'seq'}, sort_keys=True, default=str))
+            if key in held and 'seq' in payload:
+                was = held[key][1].get('seq')
+                payload['seq'] = None if was is None or payload['seq'] is None else max(was, payload['seq'])
             # Keyed by content so a batch shouts once per distinct wake-up - as a canonical
             # string, because a payload can nest: the ingest-status poke carries a dict, and
             # tuple(sorted(items)) made that dict a dict KEY. `_poke_held` is one attribute on
             # the shared store, so the poke that hit it came from ANOTHER thread's batch - the
             # chat lane, mid-poll, inside a settle's one_poke() - and died with
             # "unhashable type: 'dict'" before reading WhatsApp or Telegram (2026-09-16/17).
-            held[(kinds, json.dumps(payload, sort_keys=True, default=str))] = (kinds, payload)
+            held[key] = (kinds, payload)
             return
         try:
             # The Assistant pile is expensive to assemble, so its normal reads use a long cache.

@@ -321,17 +321,18 @@ def capture_from_rail(store, *, only=None, include_surfaced=False, exclude=None,
     The live workers are observed HERE, first, and the cache is compared against that observation:
     an observation that fails is still a refusal (SelectionUnavailable) - a cached pile is not a
     guess to fall back on - and a worker that moved since the build is a rebuilt pile."""
-    from . import funnel, terminal
+    from . import funnel, live, terminal
     if only is None:
+        seen = live.seq()                    # the write stamp the observation below follows (funnel.pile's live_seq)
         try: observed = copy.deepcopy(terminal.live_sessions(tail=6))
         except Exception as error: raise SelectionUnavailable() from error
-        pile = funnel.pile(store, quiet=True, observed=observed)
+        pile = funnel.pile(store, quiet=True, observed=observed, seen=seen)
         # ...and only a build that holds every write so far (the rule funnel.pile keeps for a shared rebuild): a write that landed
         # while this build ran - the Advisor filing its line, say - left the capture a step behind the store, and the commit
         # check, building again with it, refused the press as stale though the pick had not moved (PW-118, 2026-10-20).
         for _ in range(3):
             if funnel.built_as_of_now(store): break
-            pile = funnel.pile(store, quiet=True, observed=observed)
+            pile = funnel.pile(store, quiet=True, observed=observed, seen=seen)
     else: pile = None
     return capture_selection(store, only=only, include_surfaced=include_surfaced, exclude=exclude,
                              now=now, pile=pile)

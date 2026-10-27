@@ -26,7 +26,8 @@ test("mounting, activating, remounting and reconnecting only load - nothing call
   for (const e of effects) if (!kept.includes(e)) assert.doesNotMatch(e, /surface\(\)|surface\(null|turn\(\{ mode: "next"|start\(/, e.slice(0, 120));
   assert.match(view, /useEffect\(\(\) => \{ loadState\(\)\.catch\(\(e\) => setErr\(errText\(e\)\)\); \}, \[loadState\]\);/);
   assert.match(view, /pollWhileActive\(active, \(\) => \{\s*if \(first \|\| !liveUp\(\) \|\| \+\+n % 10 === 0\) loadPile\(false\);\s*else readChat\(\)/);
-  assert.match(view, /onLive\(\["feed-changed", "task-changed"\], \(ev, meta\) => \{ if \(!coveredByReload\(meta, forcedLoadStartedAt\.current\)\) loadPile\(true\); \}, \{ wait: 1500, max: 5000 \}\)/);
+  assert.match(view, /onLive\(\["feed-changed", "task-changed"\], \(ev, meta\) => reloadFor\(meta\),\n\s+\{ wait: \(ev\) => \(mine\(ev\) \? 1500 : Math\.max\(0, forcedLoadStartedAt\.current \+ 1000 - Date\.now\(\)\)\), max: 5000 \}\)/);
+  assert.match(view, /const stale = \(\) => !coveredByReload\(meta, forcedLoadStartedAt\.current\) && !covers\(pileSeen\.current\.seq, meta\);/);
 });
 
 // ...and it STAYS the server's word while the tab is open. The walk can be driven from a phone chat

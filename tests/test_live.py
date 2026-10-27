@@ -342,7 +342,73 @@ class LiveSocketTests(unittest.TestCase):
             self.assertNotIn('task_id', live._pending['task-changed'], 'the window stays about every task')
             live.flush()
             live.emit('task-changed', task_id=7)
-            self.assertEqual(live._pending['task-changed'], {'task_id': 7, 'type': 'task-changed'})
+            self.assertEqual({k: v for k, v in live._pending['task-changed'].items() if k != 'seq'}, {'task_id': 7, 'type': 'task-changed'})
+        finally:
+            live.detach(dummy)
+            live.reset()
+
+    def test_a_wake_up_says_which_writes_a_read_has_seen_and_whose_they_were(self):
+        """THE LOAD-ONCE PASS (2026-10-27): every write's wake-up carries a stamp taken after the write, and a read begun later holds a
+        stamp at least as new (live.seq) - so the page skips reading again what it already holds. A window is covered only when every
+        write in it was stamped; a write still inside a transaction is not; and it is one tab's only when every write in it was that tab's."""
+        dummy = object()
+        live.attach(dummy)
+        try:
+            before = live.seq()
+            live.emit('feed-changed', message_id=1)
+            stamped = live._pending['feed-changed']['seq']
+            self.assertGreater(stamped, before)
+            self.assertGreaterEqual(live.seq(), stamped, 'a read begun now has seen it')
+            live.emit('feed-changed', message_id=2, seq=None)                # unstampable (store._poke inside a transaction)
+            self.assertNotIn('seq', live._pending['feed-changed'], 'one unstamped write leaves the window uncovered')
+            live.flush()
+            token = live.TAB.set('tab-a')
+            try:
+                live.emit('task-changed', task_id=3)
+                self.assertEqual(live._pending['task-changed']['by'], 'tab-a')
+                live.emit('task-changed', task_id=3)
+                self.assertEqual(live._pending['task-changed']['by'], "tab-a", "two writes of one tab stay that tab's")
+            finally: live.TAB.reset(token)
+            live.emit('task-changed', task_id=4)                            # a poll's write in the same window
+            self.assertNotIn("by", live._pending["task-changed"], "a window with anyone else's write is nobody's own")
+            live.emit('ingest-status', ingest={})
+            self.assertNotIn('seq', live._pending['ingest-status'], 'only a write to the rows is stamped')
+        finally:
+            live.detach(dummy)
+            live.reset()
+
+    def test_a_rail_says_the_newest_stamp_it_was_built_after_and_a_cached_one_keeps_its_own(self):
+        s = MemoryStore()
+        dummy = object()
+        live.attach(dummy)
+        try:
+            s.create_task({'Title': 'Check the ledger export', 'Status': 'todo'}, 'owner')
+            stamp = live._pending['task-changed']['seq']
+            built = funnel.pile(s, force=True)
+            self.assertGreaterEqual(built['live_seq'], stamp, 'built after the write: it holds it')
+            live.stamp()                                                     # a write the cache did not see
+            again = funnel.pile(s)
+            if again is built: self.assertEqual(again['live_seq'], built['live_seq'], 'a cached rail never claims a newer stamp')
+        finally:
+            funnel.invalidate()
+            live.detach(dummy)
+            live.reset()
+
+    def test_a_poke_inside_a_transaction_is_never_stamped_and_a_held_batch_keeps_its_stamps(self):
+        s = MemoryStore()
+        dummy = object()
+        live.attach(dummy)
+        try:
+            s.cx.execute('BEGIN')
+            try: s._poke('feed-changed', message_id=5)
+            finally: s.cx.rollback()
+            self.assertNotIn('seq', live._pending['feed-changed'])
+            live.flush()
+            with s.one_poke():
+                s._poke('feed-changed', message_id=6)
+                held = live.seq()
+                s._poke('feed-changed', message_id=6)
+            self.assertEqual(live._pending['feed-changed']['seq'], held + 1, 'a held write keeps the stamp it was poked with, the newest of its copies')
         finally:
             live.detach(dummy)
             live.reset()

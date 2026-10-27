@@ -21,6 +21,8 @@ test("the dock's pill at rest says a hint that fits it, and the whole hint once 
   const rest = await hint(page);
   assert.ok(rest.pill && !rest.open, `the box is the pill beside the row: ${JSON.stringify(rest)}`);
   assert.ok(rest.fits, `the pill's hint fits it: ${JSON.stringify(rest)}`);
+  // ...and it is the SAME words whatever is on the table (the owner, 2026-10-27: "it should always be the same size and words")
+  assert.equal(rest.text, "Ask…");
   await page.focus(".tq-compose-box textarea"); await sleep(500);
   const open = await hint(page);
   assert.ok(open.open && open.fits, `opened, its hint fits: ${JSON.stringify(open)}`);

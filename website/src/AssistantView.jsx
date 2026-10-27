@@ -3244,7 +3244,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   useEffect(() => {
     const el = boxRef.current;
     if (!el || typeof ResizeObserver === "undefined") return undefined;
-    const ro = new ResizeObserver(() => setBoxNarrow(el.getBoundingClientRect().width < 360));
+    // ...and the box OPEN is laid over the canvas, growing up from the pill's corner (assistantView.css): the answer pop-up stands on top
+    // of it, never under it, so its last line is not covered while the owner types (--tq-box-h, the open box's height; 0 at rest)
+    const ro = new ResizeObserver(() => {
+      const r = el.getBoundingClientRect();
+      setBoxNarrow(r.width < 360);
+      el.closest(".tq-compose")?.style.setProperty("--tq-box-h", el.hasAttribute("data-tq-open") ? `${Math.round(r.height)}px` : "0px");
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, [old, walk]);                                   // the box is mounted only while neither is up
@@ -3500,7 +3506,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             {/* a phone's composer is one line tall and the long hint wrapped under its own edge, cut
                 mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there - and the pill's at rest */}
             <textarea ref={composeRef} rows={1} value={text} disabled={resetting} aria-label={tableSays.name}
-              placeholder={phone ? tableSays.phone : !popOn ? (boxNarrow && !boxWide ? tableSays.phone : tableSays.box) : boxWide ? "Tell me what to do with it, or ask about it…" : "Tell me what to do…"}
+              placeholder={boxNarrow && !boxWide ? "Ask…" : phone ? tableSays.phone : !popOn ? tableSays.box : boxWide ? "Tell me what to do with it, or ask about it…" : "Ask…"}
               onChange={(e) => setText(e.target.value)} onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                 // Esc shuts the pop-up first, then hands an empty box back to its pill

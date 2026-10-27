@@ -1067,7 +1067,7 @@ const ringOf = (page) => page.evaluate(() => {
   return { tid: cards.length ? cards[cards.length - 1].getAttribute("data-tq-task-page") : "",
     rows: [...document.querySelectorAll("[data-tq-rail] .tq-pile-row.current")].map((e) => ({ key: e.getAttribute("data-tq-key"), ref: (e.innerText.match(/TQ-\d+/) || [])[0] || "" })),
     box: document.querySelector(".tq-compose-box textarea")?.getAttribute("placeholder") || "",
-    // ...the one-row bar's pill says "Tell me what to do…" of no task: its name, and the answer pop-up's head, say which (2026-10-27)
+    // ...the one-row bar's pill says "Ask…" of no task: its name, and the answer pop-up's head, say which (2026-10-27)
     name: document.querySelector(".tq-compose-box textarea")?.getAttribute("aria-label") || "",
     pop: [...document.querySelectorAll("[data-tq-chat-pop]:not([hidden]) .tq-chat-pop-head")].map((e) => e.innerText).join(" "),
     seen: [...document.querySelectorAll("[data-tq-task-page]")].map((e) => e.getAttribute("data-tq-task-page") + (vis(e) ? "" : "-")).join(",") };
@@ -1233,7 +1233,7 @@ async function searchPass() {
     return !!e && e.contains(document.activeElement); }, fn.toString(), arg)) ? "" : `focus left ${what} for ${await where()} as the page drew`; };
   // a cancel gives focus back: Esc over the search, from the chat's composer, and the words typed next land in the composer
   page.step = "search esc";
-  // ...the composer by its place, not its words: the one-row bar's pill says "Tell me what to do…" (0.3.9.49)
+  // ...the composer by its place, not its words: the one-row bar's pill says "Ask…" (0.3.9.49)
   const comp = await page.$(".tq-compose-box textarea:not([disabled])");
   if (!comp) note("SEARCH", page.step, "no chat composer to type in");
   else {

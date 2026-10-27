@@ -110,7 +110,7 @@ import "./assistantView.css";
 // showing anything, so a stale key restores nothing.
 const WALK_KEY = "taskuary_walk_tid";
 const HOLD_MS = 400;            // the longest a row waits for its item's first decision before it is drawn without one
-const POP_ROOM = 150;          // the least room under the task view the chat pop-up stands in, rather than over the view
+const POP_ROOM = 120;          // the least room under the task view the chat pop-up stands in, rather than over the view (120: the open box above the dock takes ~85px of it, 2026-10-27)
 const POP_LIT_MS = 1800;        // how long the chat pop-up shows the owner's line when the answer was only a lit button
 const isOpenWalk = (t) => !!t && t.SourceRef === "assistant:setup" && !["done", "dropped"].includes(t.Status);
 // markers the server writes on a line that are NOT cards (concierge.SETUP_QUESTIONS): the line is its words
@@ -3259,7 +3259,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [popOpen, setPopOpen] = useState(false), [boxOpen, setBoxOpen] = useState(false);
   const popRef = useRef(null), popBodyRef = useRef(null), boxRef = useRef(null), popOnRef = useRef(false), rowDown = useRef(false);
   popOnRef.current = popOn;
-  const boxWide = boxOpen || !!text.trim() || !!pics.imgs.length || !!emojiEl;
+  // ...and WHILE AN ANSWER IS UP and nothing is typed, the box is its pill again, still focused (2026-10-27): the open box stands above the
+  // dock (assistantView.css) and took the room under the view the answer stands in - the next key typed opens it again
+  const boxWide = (boxOpen && !(popOn && popOpen)) || !!text.trim() || !!pics.imgs.length || !!emojiEl;
   // THE PILL'S HINT FITS THE PILL: with a row beside it and no task on the table the box is the 220px pill, and the long hint ("Ask
   // Taskuary anything — a name or a subject pulls it in…") ran on under its own send button, cut mid-word (the overnight setup walk,
   // 2026-10-26). Measured, because the row beside it is what makes it a pill (the CSS's :has)
@@ -3272,7 +3274,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect();
       setBoxNarrow(r.width < 360);
-      el.closest(".tq-compose")?.style.setProperty("--tq-box-h", el.hasAttribute("data-tq-open") ? `${Math.round(r.height)}px` : "0px");
+      // ...the pop-up's lift: the open box's height and a gap over it while it stands above the dock (desk), none at rest or on a phone
+      const over = el.hasAttribute("data-tq-open") && getComputedStyle(el).position === "absolute";
+      el.closest(".tq-compose")?.style.setProperty("--tq-box-h", over ? `${Math.round(r.height) + 12}px` : "-2px");
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -3306,11 +3310,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [popRoom, setPopRoom] = useState(0);
   useLayoutEffect(() => {
     if (!popOpen) return;
-    const view = popTable && bodyRef.current?.querySelector(`[data-tq-canvas-item="${CSS.escape(popTable)}"]`), floor = popRef.current?.parentElement;
-    setPopRoom(view && floor ? Math.floor(floor.getBoundingClientRect().top - view.getBoundingClientRect().bottom - 8) : 0);
-  }, [popOpen, popTable, popLines.length, popPending, bodyH]);   // eslint-disable-line react-hooks/exhaustive-deps
+    // ...measured from where the pop-up's foot actually stands: over the open box it stands higher than the dock (assistantView.css)
+    const view = popTable && bodyRef.current?.querySelector(`[data-tq-canvas-item="${CSS.escape(popTable)}"]`), pop = popRef.current;
+    setPopRoom(view && pop ? Math.floor(pop.getBoundingClientRect().bottom - view.getBoundingClientRect().bottom - 8) : 0);
+  }, [popOpen, popTable, popLines.length, popPending, bodyH, boxWide]);   // eslint-disable-line react-hooks/exhaustive-deps
   const popTall = Math.max(180, Math.round(bodyH * 0.45)), popMax = popRoom >= POP_ROOM ? Math.min(popTall, popRoom) : popTall;
-  useLayoutEffect(() => { const el = popBodyRef.current; if (el && popOpen) el.scrollTop = el.scrollHeight; }, [popOpen, popLines.length, popPending, words]);
+  useLayoutEffect(() => { const el = popBodyRef.current; if (el && popOpen) el.scrollTop = el.scrollHeight; }, [popOpen, popLines.length, popPending, words, popMax]);
   // ...a line of its own that stands under the card on the table only while the answer is on its way (tq-pending, assistantView.css) -
   // or in the pop-up over it, where the answer it waits for will be
   const pendingLine = <>{(busy || phoneBusy || nextComing || walkDots) && (

@@ -51,11 +51,12 @@ test("one row: the action row and the box share a line, the answer pops up over 
     const line = document.querySelector(".tq-dock .tq-dock-line"), pill = line.querySelector(".tq-compose-box"), verbs = line.querySelector(".tq-arow-verbs");
     return { pill: Math.round(pill.getBoundingClientRect().width), tools: getComputedStyle(line.querySelector(".tq-compose-tools")).display, line: Math.round(line.getBoundingClientRect().height),
       above: Math.round(line.getBoundingClientRect().top - pill.getBoundingClientRect().top),
+      clear: Math.round(document.querySelector(".tq-dock").getBoundingClientRect().top - pill.getBoundingClientRect().bottom),
       next: !!verbs.querySelector("[data-tq-next]"), over: verbs.scrollWidth - verbs.clientWidth, labels: [...verbs.querySelectorAll("button")].map((b) => b.textContent.trim()) };
   });
   assert.ok(wide.pill > rest.pill + 150 && wide.tools !== "none", `it widens with its tools ${JSON.stringify(wide)}`);
   assert.ok(wide.next && wide.over <= 1 && wide.line <= 46, `still one line, Next on it, nothing past its edge ${JSON.stringify(wide)}`);
-  assert.ok(wide.above > 10, `it rises over the canvas, above the row's line ${JSON.stringify(wide)}`);
+  assert.ok(wide.above > 10 && wide.clear >= 0, `it stands over the canvas, above the dock - never over the row ${JSON.stringify(wide)}`);
   assert.deepEqual(wide.labels, rest.labels, "nothing on the row folded or moved while the box is open");
 
   // SENT: the answer comes up above the box, over the task view - which does not move or change size

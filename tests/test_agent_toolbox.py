@@ -79,6 +79,19 @@ class TheServer(unittest.TestCase):
         text, err = tool(tid, 'search_messages', words='uplift')
         self.assertTrue(err); self.assertIn('stranger', text)
 
+    def test_the_owners_memory_is_read_on_demand_and_never_on_a_strangers_task(self):
+        from taskuary import memoryedit
+        memoryedit.remember(self.s, 'Alex keeps Fridays for vendor renewals', section='work')
+        text, err = tool(self.tid, 'owner_memory')
+        self.assertFalse(err, text); self.assertIn('## How you work', text); self.assertIn('Fridays for vendor renewals', text)
+        r = c.get('/api/agent/memory', params={'task_id': self.tid, 'section': 'work'}, headers=hdr(self.tid))
+        self.assertEqual(r.status_code, 200, r.text); self.assertIn('Fridays for vendor renewals', r.json()['says'])
+        self.assertEqual(c.get('/api/agent/memory', params={'task_id': self.tid, 'section': 'gossip'}, headers=hdr(self.tid)).status_code, 422)
+        theirs = self.s.create_task({'Title': 'Look at this', 'Status': 'open', 'OriginBase': 'stranger'}, 'triage')
+        text, err = tool(theirs, 'owner_memory')
+        self.assertTrue(err); self.assertIn('stranger', text); self.assertNotIn('Fridays', text)
+        self.assertEqual(c.get('/api/agent/memory', params={'task_id': theirs}, headers=hdr(theirs)).status_code, 403)
+
     def test_a_reply_is_proposed_never_sent(self):
         tid = self.s.create_task({'Title': 'Answer Gail on the renewal', 'Status': 'open'}, 'owner')
         self.s.add_message({'TaskId': tid, 'ExternalId': 'r2', 'ConversationId': 'conv-r', 'Channel': 'email', 'FromName': 'Gail Moreno',

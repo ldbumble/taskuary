@@ -11,7 +11,7 @@ const read = (f) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.met
 
 test("the task page's owner acts are the task tools, not the endpoints under them", () => {
   const page = read("TaskPage.jsx"), reshape = read("Reshape.jsx");
-  for (const kind of ["task.update", "task.set_kind", "task.check", "task.checklist", "task.not_a_task", "task.clarify", "task.trust"])
+  for (const kind of ["task.update", "task.set_kind", "task.check", "task.checklist", "task.not_a_task", "task.trust"])
     assert.match(page, new RegExp(`(runOperation\\(api, |op\\(|change\\()"${kind.replace(".", "\\.")}"`), kind);
   for (const door of [/api\.patch\(`\/api\/tasks\/\$\{[^}]+\}`/, /\/checklist\/\$\{/, /api\.put\(`\/api\/tasks\/\$\{task\.TaskId\}\/checklist`/,
                       /\/comments`/, /\/not-a-task`/, /\/clarify`/, /\/trust`/])

@@ -359,7 +359,7 @@ DECISIONS = {k: (f'{button_words(k)}: ' if button_words(k) else '') + v for k, v
 def _names(v: str) -> str: return '/'.join(f'"{w}"' for w in [L(v)] + list((buttons.VERBS[v].get('states') or {}).values()))
 # the buttons whose verb is not itself a decision, and the tool each one is
 CHIP_TOOL = {'defer': 'task.defer', 'continue': 'agent.continue', 'test_connection': 'connection.test', 'split': 'task.split',
-             'reopen': 'task.reopen', 'close_note': 'task.complete', 'forward': 'task.handoff', 'ask_sender': 'task.clarify',
+             'reopen': 'task.reopen', 'close_note': 'task.complete', 'forward': 'task.handoff',
              'remove': 'task.not_a_task', 'retriage': 'message.retriage', 'share': 'task.share'}
 # ...and the buttons that are the page's alone: each answers the screen it is on, never a sentence (a test holds every
 # button in buttons.json to one of the three)

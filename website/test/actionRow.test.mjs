@@ -165,7 +165,8 @@ test("a move on a PIECE stays on it; a move on the whole item rides the row (202
   assert.match(src, /i < 3 \|\| a\.verb === "close" \? "decide" : "more"/, "Mark done is never behind More");
   assert.match(src, /row: outer\.row/, "the walk's foot rides in the row as well");
   assert.match(fs.readFileSync(path.join(process.cwd(), "src", "ReplyFiles.jsx"), "utf8"), /toRow && mail/, "Attach a file is a More verb in the row");
-  assert.match(fs.readFileSync(path.join(process.cwd(), "src", "TaskPage.jsx"), "utf8"), /id: "ask-sender", group: "more"/, "Ask sender is a More verb in the row");
+  // ...and no Ask sender (the owner, 2026-10-27): a question for the sender is Reply's
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "src", "TaskPage.jsx"), "utf8"), /ask-sender|setAskSenderOpen/, "no Ask sender on the row");
 });
 
 test("Mark done and Remind me put the task down AT THE PRESS, as Next does, and a failure puts it back", () => {

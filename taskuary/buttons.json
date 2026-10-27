@@ -40,7 +40,6 @@
     "review_changes":  {"label": "Review changes", "hint": "See what the agent changed", "row": ["diff"]},
     "share":           {"label": "Email a summary", "hint": "The AI writes a short summary of what the work found, for someone you pick - it waits in Close out for your Send. One of Share's ways now, not a button of its own", "row": []},
     "share_result":    {"label": "Share", "hint": "Email this result or a summary of it, give people on your network a read-only link, or put it in your OneDrive or Google Drive - each way only where it can work", "row": ["share"]},
-    "ask_sender":      {"label": "Ask sender", "hint": "Ask whoever sent it a question", "row": ["ask-sender"]},
     "forward":         {"label": "Hand it to a person", "hint": "Pass it to a colleague", "row": ["hand"]},
     "remove":          {"label": "Remove - not a task", "hint": "Taskuary stops making tasks from messages like this; the email itself is kept", "row": ["nat"]},
     "run_another":     {"label": "Run another agent", "hint": "Start a second agent on the same task", "row": ["run-another"]},
@@ -75,6 +74,6 @@
   },
   "removed": {
     "_": "Buttons that no longer exist - an old saved card or a typed word lands on the verb named, the button is never drawn",
-    "prep": null, "later": "defer", "skip": "defer", "archive": "not_ours", "done": "close"
+    "prep": null, "later": "defer", "skip": "defer", "archive": "not_ours", "done": "close", "ask_sender": "reply"
   }
 }

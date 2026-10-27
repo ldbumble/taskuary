@@ -286,7 +286,7 @@ export function rowOf({ list, ref }, pick = null) {
 // they lead, unlabelled. The order inside each type is rowOf's - the decision first - and its filled button is always in view.
 export const TYPES = [["reply", "Reply"], ["agent", "Agent"], ["close", "Close"], ["task", "Task"]];
 const TYPE_OF = {
-  reply: "reply", approve: "reply", redraft: "reply", palt: "reply", reject: "reply", email: "reply", "ask-sender": "reply", hand: "reply", attach: "reply", "email-file": "reply", copy: "reply",
+  reply: "reply", approve: "reply", redraft: "reply", palt: "reply", reject: "reply", email: "reply", hand: "reply", attach: "reply", "email-file": "reply", copy: "reply",
   "start-agent": "agent", "run-another": "agent", "strong-again": "agent", continue: "agent", "send-general": "agent", diff: "agent", "save-end": "agent",
   done: "close", "close-note": "close", reopen: "close",
   remind: "task", nat: "task", reshape: "task",

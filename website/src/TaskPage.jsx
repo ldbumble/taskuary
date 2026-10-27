@@ -12,7 +12,7 @@ import { strangerLine, trustInBox } from "./strangerLine.js";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { canSend, cannotStart, draftCanSend, useCapabilities } from "./capabilities.js";
 import {
-  Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
+  Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress,
   Drawer, IconButton, InputAdornment, Link, Menu, MenuItem, TextField, Tooltip, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -70,7 +70,6 @@ import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
-import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import { Divider, ListItemText } from "@mui/material";
 import { TerminalPane } from "./TerminalView.jsx";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
@@ -253,14 +252,16 @@ const WORK_SIDE = (open) => ({ position: "absolute", top: 0, right: 0, bottom: 0
 // drawer is out. `lit`: the drawer holds where the task goes NEXT (the owner, 2026-10-26: "you can open on task but highlight the side bar
 // so people know to go there") - filled in the accent, and it peeks out once as it lands (still for a reader who asked for no motion);
 // a drawer of context only (Came from) stays quiet
+// ...and WHITE at rest, both edges (the owner, 2026-10-27: "the right side thing should be white as well, like the left sidebar - otherwise
+// you won't notice it's there"): a beige strip on the shaded body read as part of the shade; white with its hairline reads as a thing to pull
 const DRAWER_TAB = (open, right = false, lit = false) => ({ appearance: "none", font: "inherit", cursor: "pointer", flex: "0 0 34px", width: 34, p: 0, py: 1.5, border: 0,
-  [right ? "borderLeft" : "borderRight"]: `1px solid ${lit ? ACCENT : BORDER}`, bgcolor: lit ? ACCENT : open ? "#e7e0d4" : "#efeae2", color: lit ? "#fff" : INK,
+  [right ? "borderLeft" : "borderRight"]: `1px solid ${lit ? ACCENT : BORDER}`, bgcolor: lit ? ACCENT : open ? "#f3efe9" : "#fff", color: lit ? "#fff" : INK,
   display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: 1.25, minHeight: 0, overflow: "hidden",
   "& [data-tq-from-chevron]": { width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0, bgcolor: "#fff",
     border: `1px solid ${lit ? "#fff" : BORDER}`, color: ACCENT, fontSize: 21, lineHeight: 1, fontWeight: 600 },
   "& [data-tq-from-words]": { writingMode: "vertical-rl", transform: right ? "none" : "rotate(180deg)", fontSize: 12.5, fontWeight: 600, letterSpacing: ".02em",
     whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minHeight: 0 },
-  "&:hover": { bgcolor: lit ? "#46586a" : "#e7e0d4" }, "&:hover [data-tq-from-chevron]": lit ? {} : { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT },
+  "&:hover": { bgcolor: lit ? "#46586a" : "#f3efe9" }, "&:hover [data-tq-from-chevron]": lit ? {} : { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT },
   "&:focus-visible": { outline: `2px solid ${lit ? INK : ACCENT}`, outlineOffset: -2 },
   ...(lit && !open ? { "@keyframes tqTabPeek": { "0%, 100%": { transform: "none" }, "50%": { transform: `translateX(${right ? -5 : 5}px)` } },
     animation: "tqTabPeek .6s ease-in-out .5s 2", "@media (prefers-reduced-motion: reduce)": { animation: "none" } } : {}) });
@@ -513,13 +514,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // see the actual task and where it came from"). peek shows the task card with the session folded
   // to one line; the session keeps running, and the terminal comes back on a click or a new pick.
   const [peek, setPeek] = useState(false);
-  const [askSenderOpen, setAskSenderOpen] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);          // Email someone (EmailSomeone.jsx)
-  const [senderQuestion, setSenderQuestion] = useState("");
   // "this one is mine" - the verdict that used to be a silent dropdown (TQ-0501)
-  const [askingSender, setAskingSender] = useState(false);
-  const [askErr, setAskErr] = useState("");      // said IN the Ask sender box: the page's own line sat behind the dialog, unseen
-  useEffect(() => { if (askSenderOpen) setAskErr(""); }, [askSenderOpen]);
   const [openingReply, setOpeningReply] = useState(false);
   const [reopening, setReopening] = useState(null);   // the task id whose Reopen is on its way
   const [openStage, setOpenStage] = useState(null);   // a stage you opened by hand, overriding the computed focus
@@ -715,7 +711,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     setWrapping(false); setWrapped(null);
     // a press on another task is that task's: back on it, a job still writing is read from the server's own word (detail.writeup)
     setWritingUpAt((w) => (w?.id === selected ? w : null));
-    setAskSenderOpen(false); setSenderQuestion(""); setAskingSender(false); setOpeningReply(false);
+    setOpeningReply(false);
     setOpenStage(null);
   }, [selected]);
 
@@ -1064,23 +1060,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     ? `Playbook · ${t.Playbook.title}${t.Playbook.uses?.length ? ` · uses ${t.Playbook.uses.join(", ")}` : ""}`
     : t?.Source === "report" && sourceMessage?.SourceName
       ? `Report · ${sourceMessage.SourceName}` : "";
-  const askSender = async () => {
-    const text = senderQuestion.trim();
-    if (!selected || !text || askingSender) return;
-    // ...a task with no message behind it has no sender to ask: said in the box, where the press was (the UI audit, 2026-10-21)
-    if (!sourceMessage?.MessageId) { setAskErr("This task has no message behind it, so there is no sender to ask."); return; }
-    const id = selected;
-    setAskingSender(true); setErr(""); setAskErr("");
-    try {
-      await runOperation(api, "task.clarify", id, { text, message_id: sourceMessage.MessageId });
-      if (stale(id)) return;
-      setAskSenderOpen(false); setSenderQuestion("");
-      await Promise.all([loadDetail(id), loadTasks()]);
-      onChanged?.();
-    } catch (e) {
-      if (!stale(id)) setAskErr(opError(e, "Could not prepare the question for the sender"));
-    } finally { if (!stale(id)) setAskingSender(false); }
-  };
   const openReply = async (generate = false) => {
     if (!replyMessage?.MessageId || openingReply) return;
     const id = selected;
@@ -1719,8 +1698,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         run: openBox, title: ranBefore ? hintOfRow("run-another") : hintOfRow("start-agent") }] : []),
       // MESSAGE SOMEONE - email or chat - whoever started the task (the owner, 2026-10-09) - is Share's "Email a summary" now (the owner,
       // 2026-10-23: one Share button); never where nothing can be sent from here (the owner, 2026-10-22) - useShare below
-      // ...nor Ask sender: its question is a reply too, and leaves by the same channel (a Teams task offered it, 2026-10-22)
-      ...(replyMessage && !liveSession && !cantSend ? [{ id: "ask-sender", group: "more", label: labelOfRow("ask-sender"), run: () => setAskSenderOpen(true), title: hintOfRow("ask-sender") }] : []),
+      // NO ASK SENDER (the owner, 2026-10-27: "remove the Ask sender button"): a question for the sender is a reply - Reply asks it. An agent
+      // or the Assistant may still park one (task.clarify), and it waits in Review for its Send like any draft
       { id: "done", group: "more", label: finishing ? "Marking done…" : labelOfRow("done"), disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession && !pendingReview, beside: liveSession, onCard: !!pendingReview && !liveSession },   // a live session has no primary;
       // ...nor a waiting draft: its Send, under the draft, is the move (2026-10-06), so Mark done stands outlined beside Next -
       // and so do Start an agent and Next (`onCard`): a second filled button on the bar pulled the eye off the draft
@@ -1960,7 +1939,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   Agent · Close out on the right where the task is. The drawer is laid OVER the main view, never beside it, so nothing under
                   it reflows: a terminal is not refitted and the CLI's screen gets no resize (item 6, the owner 2026-10-21) */}
               {/* ...and a drawer pulled out is exactly this body, never taller (the owner, 2026-10-26: "it's bigger then the task box"): a
-                  short card grows to CanvasItem's DRAWER_FLOOR for it, and what the drawer holds past that scrolls inside it */}
+                  card of words is already at least CanvasItem's DRAWER_FLOOR and held there (useHeldHeight), and what the drawer holds past
+                  that scrolls inside it */}
               <Box ref={bodyBox} data-tq-task-body="" data-tq-main={main || "stacked"} data-tq-stage={taskStage} data-tq-drawer-out={(fromDrawer && fromSide) || (workDrawer && workSide) ? "" : undefined}
                 sx={{ display: "flex", flex: 1, minHeight: 0, minWidth: 0 }}>
               {/* ...and the tab reads as a press at a glance (the owner, 2026-10-26: "make it with arrow and more visible to pull out where it
@@ -2528,10 +2508,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             startIcon={openingReply ? <CircularProgress size={11} /> : <ForwardToInboxIcon sx={{ fontSize: 14 }} />}
                             onClick={() => (pendingReview ? setOpenStage("reply") : openReply(true))}>
                             {openingReply ? "Drafting…" : replyPrimary}</Button>
-                          {!cantSend && <Tooltip title={`${labelOfRow("ask-sender")} - ${hintOfRow("ask-sender")}`}>
-                            <IconButton size="small" sx={{ color: "#8a3646" }} onClick={() => setAskSenderOpen(true)}>
-                              <ChatBubbleOutlineIcon sx={{ fontSize: 15 }} /></IconButton>
-                          </Tooltip>}
                         </Box>
                       : null} />
                   {/* WHAT CLOSED IT, where it was closed (the owner, 2026-10-19: "i hit mark done on close out but agent work tab opened up
@@ -2582,10 +2558,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               title="Drafts the reply here, from this task's own context. Nothing is sent until you approve it."
                               onClick={() => openReply(true)}>{openingReply ? "Drafting…" : replyPrimary}</Button>
                           )}
-                          {!inRow && !cantSend && <Button size="small" variant="outlined" sx={barBtn}
-                            startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 15, color: "#8a3646" }} />}
-                            title="Drafts a question to the sender. It waits here for your approval; nothing is sent now."
-                            onClick={() => setAskSenderOpen(true)}>{labelOfRow("ask-sender")}</Button>}
                           <Box sx={{ flex: 1, minWidth: 12 }} />
                           <Typography variant="caption" sx={{ color: FAINT, textAlign: "right", maxWidth: 320 }}>
                             {/* no More button: with these on the surface there is nothing left to hide */}
@@ -2900,28 +2872,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           onStay={(tid, msg) => { if (tid === selected) { setReshape(true); onStay?.(msg); } }} />}
       </Drawer>
 
-      {/* ── new task dialog ───────────────────────────────────────────── */}
-      <Dialog open={askSenderOpen} onClose={() => !askingSender && setAskSenderOpen(false)} fullWidth maxWidth="sm"
-        PaperProps={{ sx: { borderRadius: 3 } }}>
-        <DialogTitle>Ask the sender · {detail?.ref}</DialogTitle>
-        <DialogContent sx={{ pt: "8px !important" }}>
-          <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
-            Write the one fact the agent or task needs. This becomes a clarification draft on the task; it is not sent until you approve it.
-            The task stays open while you wait for the sender's answer.
-          </Typography>
-          <TextField autoFocus fullWidth multiline minRows={3} label="Question for the sender"
-            value={senderQuestion} onChange={(e) => setSenderQuestion(e.target.value)}
-            placeholder="Which distribution spreadsheet and which dashboard should I use?" />
-          {askErr && <Alert severity="error" sx={{ mt: 1.5, py: 0.25, fontSize: 12.5 }}>{askErr}</Alert>}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setAskSenderOpen(false)} disabled={askingSender}>Cancel</Button>
-          <Button variant="contained" disableElevation onClick={askSender}
-            disabled={askingSender || !senderQuestion.trim()}>
-            {askingSender ? <CircularProgress size={15} /> : "Put it on the task"}
-          </Button>
-        </DialogActions>
-      </Dialog>
       {/* Share's menu and its Email the result dialog; the badge stands on the Result (or the workflow run) it shared */}
       {shareMenu}
       {t && <EmailSomeone open={emailOpen} task={t} detail={detail} onClose={() => setEmailOpen(false)}
@@ -2958,19 +2908,23 @@ const Fold = ({ title, children }) => (
 const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle, action, tools, quiet = false }) => (
   <Box {...pressable(onToggle)} aria-expanded={onToggle ? !folded : undefined} data-tq-quiet={quiet ? "" : undefined}
     sx={{ ...FOCUS_RING, display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" },
-    cursor: onToggle ? "pointer" : "default", opacity: quiet ? 0.6 : folded ? 0.72 : 1,
-    "&:hover": onToggle ? { opacity: 1 } : undefined }}>
+    cursor: onToggle ? "pointer" : "default", opacity: quiet ? 0.6 : 1,
+    "&:hover [data-tq-fold-mark]": onToggle ? { color: INK } : undefined }}>
     {/* no step number any more: From is a column of its own, not step 1 (the redesign, 2026-10-21) - the tone says whose move it is */}
     <Box data-tq-step={number} sx={{ width: quiet ? 7 : 9, height: quiet ? 7 : 9, borderRadius: "50%", bgcolor: tone, flexShrink: 0 }} />
     <Box sx={{ minWidth: 0, flex: 1 }}>
-      <Typography sx={{ color: quiet ? DIM : INK, fontSize: quiet ? 12.5 : 14, fontWeight: 600, lineHeight: 1.3 }}>{title}</Typography>
+      {/* A FOLDED SECTION IS A HEADING OF THE WORK, not a row to press (the owner, 2026-10-27: "on the task there is a Close out button, but
+          I thought it's a sidebar thing that pulls out?"): faded, with its arrow at the far edge, folded Close out read as a stray button
+          under the Result. It wears the open heading's own weight now, its fold mark beside its name */}
+      <Typography sx={{ color: quiet ? DIM : INK, fontSize: quiet ? 12.5 : 14, fontWeight: 600, lineHeight: 1.3, display: "flex", alignItems: "center", gap: 0.25 }}>
+        {title}
+        {onToggle && <ExpandMoreIcon data-tq-fold-mark="" sx={{ fontSize: 18, color: FAINT, flexShrink: 0, transform: folded ? "rotate(-90deg)" : "none", transition: "transform .15s, color .15s" }} />}
+      </Typography>
       {description && !folded && <Typography sx={{ color: FAINT, fontSize: 12, display: "block", lineHeight: 1.4 }}>{description}</Typography>}
     </Box>
     {/* the one action a stage cannot afford to hide when it folds. Its click is its own, not the fold's. */}
     {action && <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", flexShrink: 0, flexBasis: { xs: "100%", sm: "auto" }, order: { xs: 9, sm: 0 } }}>{action}</Box>}
     {tools && <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", flexShrink: 1, minWidth: 0 }}>{tools}</Box>}
     {chip}
-    {onToggle && <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, flexShrink: 0,
-      transform: folded ? "rotate(-90deg)" : "none", transition: "transform .15s" }} />}
   </Box>
 );

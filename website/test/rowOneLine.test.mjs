@@ -17,17 +17,17 @@ const draft = (rid, extra = {}) => [v(`${rid}:approve`, "decide", { tone: "p", l
 
 // what each surface registers, read off TaskPage's rowVerbs, ReviewDecision and the cards (invented items; labels from buttons.json)
 const STATES = {
-  "new task": [v("reply", "decide", { tone: "p" }), v("start-agent", "agent", { lead: true }), v("email", "agent"), v("ask-sender", "more"), v("close-note", "more"), ...task(), next],
-  "reply drafted, sendable": [...draft(41), v("start-agent", "agent"), v("email", "agent"), v("ask-sender", "more"), v("close-note", "more"),
+  "new task": [v("reply", "decide", { tone: "p" }), v("start-agent", "agent", { lead: true }), v("email", "agent"), v("close-note", "more"), ...task(), next],
+  "reply drafted, sendable": [...draft(41), v("start-agent", "agent"), v("email", "agent"), v("close-note", "more"),
     ...task().map((x) => (x.id === "done" ? { ...x, promote: false, onCard: true } : x)), next],
   "reply drafted, unsendable chat": [v("41:copy", "decide", { label: "Copy", card: true }), v("41:redraft", "decide", { label: "Redraft", card: true }),
     v("start-agent", "agent"), v("close-note", "more"), ...task(), next],
-  drafting: [v("reply", "decide", { tone: "p", label: "Drafting…", disabled: true }), v("start-agent", "agent", { lead: true }), v("email", "agent"), v("ask-sender", "more"), ...task(), next],
+  drafting: [v("reply", "decide", { tone: "p", label: "Drafting…", disabled: true }), v("start-agent", "agent", { lead: true }), v("email", "agent"), ...task(), next],
   "agent working": [v("save-end", "agent", { lead: true, fill: true }), v("diff", "agent"), v("run-another", "agent"), ...task(true), next],
   "agent asking": [v("save-end", "agent", { lead: true }), v("diff", "agent"), v("run-another", "agent"), ...task(true), next],
   "agent stopped and saved": [v("continue", "agent", { lead: true }), v("run-another", "agent"), v("email", "agent"), v("close-note", "more"), ...task(), next],
   "agent failed": [v("fix", "decide", { tone: "p", label: "Connect Claude again" }), v("continue", "agent", { label: "Try again" }), v("run-another", "agent"), v("email", "agent"), ...task(), next],
-  "agent finished": [v("continue", "agent", { lead: true }), v("run-another", "agent"), v("email", "agent"), v("ask-sender", "more"), v("close-note", "more"), ...task(), next],
+  "agent finished": [v("continue", "agent", { lead: true }), v("run-another", "agent"), v("email", "agent"), v("close-note", "more"), ...task(), next],
   // THE OWNER'S CASE: the agent stopped and saved on a WhatsApp task while its reply drafted - the chat's draft cannot be sent from
   // here (Copy, and "Drafting…" on its Redraft), the session's Continue / Run another agent, the reply's own Reply, Close and Task
   "stopped while drafting a WhatsApp reply": [v("reply", "decide", { tone: "p", label: "Drafting…", disabled: true }), v("41:copy", "decide", { label: "Copy", card: true, disabled: true }),

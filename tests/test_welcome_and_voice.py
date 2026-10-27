@@ -322,6 +322,35 @@ class RepeatsTests(unittest.TestCase):
         mail(s, 'Gail Moreno', 'gail@northwind.example', 'RE: Lease', ago(1), 'And another', tid=tid, conv='c:Lease')
         self.assertIsNone(concierge.repeats(s, tid))
 
+    def chat(self, s, tid, bodies, gap=0.1):
+        """Gail's lines in one WhatsApp chat (the room is the conversation), the second joined as the same as the task."""
+        for i, b in enumerate(bodies):
+            mid = s.add_message({'TaskId': tid, 'ExternalId': f'wa:{i}', 'ConversationId': 'wa:gail', 'Channel': 'whatsapp', 'FromName': 'Gail Moreno',
+                                 'FromEmail': 'gail@chat.example', 'SentAt': ago(hours=(len(bodies) - i) * gap), 'BodyText': b, 'Status': 'routed'})
+            s.add_route(mid, tid, 'attach', 1.0, f'triage: fyi, the same as {task_ref(tid)} - nothing new' if i == 1 else 'continues the ask - same chat', [], 'triage')
+
+    def test_a_chat_of_different_lines_is_not_a_repeat(self):
+        # one same_as join in a chat counted every line of it - "said the same thing 4 times" over four different messages (2026-10-27)
+        s = store(); tid = s.create_task({'Title': 'Rota', 'Summary': 'Gail asks for the new rota.'}, 'triage')
+        self.chat(s, tid, ['Can you send me the new rota?', '(no text - see the attachment)', 'This is the one from last week', 'Any news on the rota today?'])
+        self.assertIsNone(concierge.repeats(s, tid))
+
+    def test_the_same_words_three_times_in_a_chat_are_said(self):
+        s = store(); tid = s.create_task({'Title': 'Rota', 'Summary': 'Gail asks for the new rota.'}, 'triage')
+        self.chat(s, tid, ['Can you send me the new rota?', 'can you send me the new rota', 'Thanks!', 'Can you send me the  new rota??'])
+        got = concierge.repeats(s, tid)
+        self.assertEqual((got['n'], got['line']), (3, 'Gail Moreno said the same thing three times - every one is kept here. All they need now: Gail asks for the new rota.'))
+
+    def test_pictures_empty_lines_and_acks_are_never_the_same_thing(self):
+        s = store(); tid = s.create_task({'Title': 'Rota', 'Summary': 'Gail asks for the new rota.'}, 'triage')
+        self.chat(s, tid, ['(no text - see the attachment)'] * 3 + ['', '', 'ok', 'ok', '👍', '👍'])
+        self.assertIsNone(concierge.repeats(s, tid))
+
+    def test_the_same_words_days_apart_are_not_a_repeat(self):
+        s = store(); tid = s.create_task({'Title': 'Rota', 'Summary': 'Gail asks for the new rota.'}, 'triage')
+        self.chat(s, tid, ['Can you send me the new rota?'] * 2, gap=24 * 5)
+        self.assertIsNone(concierge.repeats(s, tid))
+
     def test_the_task_page_carries_it(self):
         from fastapi.testclient import TestClient
         from taskuary import server

@@ -2652,7 +2652,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   };
   // `pressed`: the label of the button that did it - the folded card wears it as its badge, and no line is said (the owner, 2026-10-22:
   // "we don't need that text ever"). Given, the act landed already; null, only the settle below does it
+  // ...ONCE per item while its settle is out: a double-click on an FYI batch's "All read, next" posted two settles of the same batch
+  // (the overnight walk, 2026-10-26) - the second click lands before the batch has folded
+  const doneFor = useRef(null);
   const done = async (pressed) => {
+    if (current && doneFor.current === current) return;
+    doneFor.current = current;
+    try { await settleDone(pressed); } finally { doneFor.current = null; }
+  };
+  const settleDone = async (pressed) => {
     // the card folds to its line the moment its verb is pressed - see interactiveCardIndex
     setMsgs((m) => { const i = interactiveCardIndex(m);
       return i < 0 ? m : m.map((x, j) => (j === i ? { ...x, done: true, ...(pressed ? { pressed } : {}) } : x)); });

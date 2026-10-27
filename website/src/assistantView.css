@@ -599,7 +599,10 @@
   .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { position: absolute; right: 20px; bottom: calc(100% + 6px); z-index: 6;
     width: min(560px, calc(100% - 54px)); min-height: 72px; align-items: flex-end; padding: 6px 4px 4px 8px; border-radius: 14px;
     box-shadow: 0 10px 32px #39352d26, 0 2px 6px #39352d14; }
-  .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] textarea { min-height: 52px; align-self: stretch; }
+  /* ...ONE ROW, like any chat box (the owner, 2026-10-27: "typing is above where attachments, emojis and voice note is - looks weird"):
+     the tools on the left, the words beside them growing upward as they wrap, send and the box's × on the right */
+  .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] textarea { min-height: 34px; padding: 7px 4px; line-height: 20px; }
+  .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { min-height: 46px; }
 }
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box .tq-send { width: 28px; height: 28px; flex-basis: 28px; border-radius: 50%; }
 /* ...its hint ONE line, cut at the pill's edge: the box's long hint (an FYI batch, the walk's end) wrapped in the 220px pill and half its

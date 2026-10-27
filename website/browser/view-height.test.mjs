@@ -81,9 +81,10 @@ test("a task of words stays at the canvas's top and one height through Reply, th
     }
 
     // A DRAFT TYPED INTO, a long one
-    const draft = await page.$("[data-tq-canvas-item] textarea[data-tq-draft]");
-    if (draft) {
-      await draft.click();
+    // ...the one in view: in a shut drawer it is not on screen to type into, and a click on it threw "not clickable"
+    const draft = await page.evaluateHandle(() => [...document.querySelectorAll("[data-tq-canvas-item] textarea[data-tq-draft]")].find((e) => e.offsetParent && e.getBoundingClientRect().height) || null);
+    if (draft.asElement()) {
+      await draft.asElement().evaluate((e) => e.focus());
       await page.keyboard.type(" Gail Moreno has the signed copy; Ray Colton picks it up on Thursday.\n\nOne more line.\n\nAnd another.\n\nAnd a last one.");
       await sleep(500);
       pinned(base, await measure(page), `with the draft typed into ${say}`);

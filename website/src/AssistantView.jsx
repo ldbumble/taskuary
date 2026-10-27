@@ -110,7 +110,7 @@ import "./assistantView.css";
 // walk itself lives on the server: a reload asks the task whether it is still an open set-up before
 // showing anything, so a stale key restores nothing.
 const WALK_KEY = "taskuary_walk_tid";
-const POP_ROOM = 120;          // the least room under the task view the chat pop-up stands in, rather than over the view (120: the open box above the dock takes ~85px of it, 2026-10-27)
+const POP_ROOM = 140;          // the least room under the task view the chat pop-up stands in, rather than over the view (120: the open box above the dock takes ~85px of it, 2026-10-27)
 const POP_LIT_MS = 1800;        // how long the chat pop-up shows the owner's line when the answer was only a lit button
 const isOpenWalk = (t) => !!t && t.SourceRef === "assistant:setup" && !["done", "dropped"].includes(t.Status);
 // markers the server writes on a line that are NOT cards (concierge.SETUP_QUESTIONS): the line is its words
@@ -3315,11 +3315,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // ...and WHILE AN ANSWER IS UP and nothing is typed, the box is its pill again, still focused (2026-10-27): the open box stands above the
   // dock (assistantView.css) and took the room under the view the answer stands in - the next key typed opens it again
   const [dictating, setDictating] = useState(false);   // the box's mic listening or transcribing: the box stays open for it (MicButton)
-  const boxWide = (boxOpen && !(popOn && popOpen)) || dictating || !!text.trim() || !!pics.imgs.length || !!emojiEl;
+  // ...and ONCE OPEN IT STAYS OPEN (the owner, 2026-10-27: "it gets smaller and bigger at random times ... when you click in, it stays open
+  // until you do X or something"): not shut by a click elsewhere, a look away or an answer coming up - only its × or Esc
+  const boxWide = boxOpen || dictating || !!pics.imgs.length || !!emojiEl || (!popOn && !!text.trim());   // a phone's line box: its words keep it wide
+  const boxOver = () => !!boxRef.current && getComputedStyle(boxRef.current).position === "absolute";   // the desk's box over the canvas
+  const shutBox = () => { setBoxOpen(false); composeRef.current?.blur(); };
   // THE PILL'S HINT FITS THE PILL: with a row beside it and no task on the table the box is the 220px pill, and the long hint ("Ask
   // Taskuary anything — a name or a subject pulls it in…") ran on under its own send button, cut mid-word (the overnight setup walk,
   // 2026-10-26). Measured, because the row beside it is what makes it a pill (the CSS's :has)
-  const [boxNarrow, setBoxNarrow] = useState(false);
+  const [boxNarrow, setBoxNarrow] = useState(false), [boxIsOver, setBoxIsOver] = useState(false);   // ...and whether it stands over the canvas
   useEffect(() => {
     const el = boxRef.current;
     if (!el || typeof ResizeObserver === "undefined") return undefined;
@@ -3327,7 +3331,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // of it, never under it, so its last line is not covered while the owner types (--tq-box-h, the open box's height; 0 at rest)
     const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect();
-      setBoxNarrow(r.width < 360);
+      setBoxNarrow(r.width < 360); setBoxIsOver(getComputedStyle(el).position === "absolute");
       // ...the pop-up's lift: the open box's height and a gap over it while it stands above the dock (desk), none at rest or on a phone
       const over = el.hasAttribute("data-tq-open") && getComputedStyle(el).position === "absolute";
       el.closest(".tq-compose")?.style.setProperty("--tq-box-h", over ? `${Math.round(r.height) + 12}px` : "-2px");
@@ -3582,14 +3586,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             if (boxRef.current?.contains(e.target)) return;
             rowDown.current = true;
             const up = () => { window.removeEventListener("pointerup", up, true); window.removeEventListener("pointercancel", up, true);
-              setTimeout(() => { rowDown.current = false; if (!boxRef.current?.contains(document.activeElement)) setBoxOpen(false); }, 0); };
+              setTimeout(() => { rowDown.current = false; if (!boxOver() && !boxRef.current?.contains(document.activeElement)) setBoxOpen(false); }, 0); };
             window.addEventListener("pointerup", up, true); window.addEventListener("pointercancel", up, true);
           }}>
           {/* ...and during setup its line is the Advisor's (SetupLine): the move setup fills (FirstRun's tone) is the one lit - nothing
               was, so the line said "pick it" over a plain Back and a greyed Next (2026-10-19) */}
           <ActionRow advised={stripPick || setupLit} hold={rowHold} early={rowEarly} />
           <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined} ref={boxRef} data-tq-open={boxWide ? "" : undefined}
-            onFocus={() => setBoxOpen(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget) && !rowDown.current) setBoxOpen(false); }}>
+            onFocus={() => setBoxOpen(true)} onBlur={(e) => { if (!boxOver() && !e.currentTarget.contains(e.relatedTarget) && !rowDown.current) setBoxOpen(false); }}>
             <div className="tq-compose-tools">
             <AttachImage pics={pics} sx={{ color: DIM }} />
             <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onActive={setDictating} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />
@@ -3610,12 +3614,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                 mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there - and the pill's at rest */}
             <textarea ref={composeRef} rows={1} value={text} disabled={resetting} aria-label={tableSays.name}
               placeholder={boxNarrow && !boxWide ? "Ask…" : phone ? tableSays.phone : !popOn ? tableSays.box : boxWide ? "Tell me what to do with it, or ask about it…" : "Ask…"}
-              onChange={(e) => setText(e.target.value)} onKeyDown={(e) => {
+              onChange={(e) => { setText(e.target.value); setBoxOpen(true); }} onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                 // Esc shuts the pop-up first, then hands an empty box back to its pill
-                if (e.key === "Escape") { e.stopPropagation(); if (popOpen) setPopOpen(false); else if (!text.trim()) e.currentTarget.blur(); }
+                if (e.key === "Escape") { e.stopPropagation(); if (popOpen) setPopOpen(false); else shutBox(); }
               }} />
             <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
+            {/* ...its ×: the one way, with Esc, the open box shuts - what is typed stays for the next time it opens */}
+            {boxWide && boxIsOver && (
+              <IconButton size="small" aria-label="Close the box" data-tq-box-close="" onClick={shutBox}
+                sx={{ width: 28, height: 28, p: 0, color: DIM, alignSelf: "flex-end" }}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>)}
           </div>
           </div>
           </div>

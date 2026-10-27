@@ -159,7 +159,8 @@ def test_an_agent_reads_the_people_on_its_own_task_and_nothing_on_a_strangers():
     page = context.build(s, tid)
     assert 'Vendor statements' in page and 'Erin Blake (erin@northwind.example)' in page and 'every Monday' in page
     assert 'gets the headcount questions' not in page, "Gail is not on this task: the owner's notes on her are not the agent's"
-    assert 'Vendor renewals' not in page and 'Newsletter' not in page
+    # ...and everything else it knows about how the owner works (the owner, 2026-10-27: "every part it knows about the user should be in the agents")
+    assert 'Vendor renewals' in page and 'Newsletter' in page
     assert learned_cut.used(s, f'task:{tid}', 'agents')[0]['keys'], 'the read left a receipt'
     from taskuary import origin
     orig = origin.of_task

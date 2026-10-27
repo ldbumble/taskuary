@@ -18,8 +18,10 @@ PEOPLE, CARE, WORK, PROMISES, BRING = SECTIONS.values()
 # so a press, a defer or a reply lag never decides whether mail is a task (ruling 11, 2026-10-23)
 # ...and the people lines about whoever is on the mail, for its PRIORITY only - important is "it matters because of who" (the owner,
 # 2026-10-25); the triage prompt says they never decide whether mail is a task
+# ...and an agent reads ALL of it (the owner, 2026-10-27: "every part it knows about the user should be in the agents") - the people lines
+# still only about the people on its own task, and nothing at all on a stranger's task (context.py)
 READS = {'triage': ('care', 'people'), 'drafter': ('people',), 'advisor': ('people', 'care', 'work', 'promises'), 'assistant': tuple(SECTIONS),
-         'agents': ('people', 'care', 'promises')}
+         'agents': tuple(SECTIONS)}
 # who reads a section, as the owner reads it - triage takes the people lines for a task's PRIORITY only (the owner, 2026-10-25)
 READER_WORDS = {'triage': 'triage', 'drafter': 'drafts', 'advisor': 'the Advisor', 'assistant': 'the Assistant', 'agents': 'agents'}
 
@@ -31,7 +33,7 @@ def reads_label(slug: str) -> str:
 
 
 TITLE = {'people': 'Your people', 'care': 'What you care about', 'work': 'How you work', 'promises': 'Promises', 'bring': 'What to bring up'}
-BUDGET = {'triage': 1500, 'drafter': 600, 'agents': 2500, 'assistant': 2000, 'advisor': 2000}
+BUDGET = {'triage': 1500, 'drafter': 600, 'agents': 3500, 'assistant': 2000, 'advisor': 2000}
 OVER = 'learned_over_budget'          # {reader: [keys]} - the lines a reader's budget left out on its last read
 USE_KEEP = 20_000                     # memory_use rows kept; the oldest go past it
 _PLACEHOLDER = re.compile(r'_\([^)]*\)_', re.S)
@@ -87,10 +89,16 @@ def rank(raw: str, key: str, about: dict) -> int:
     t, s = f'{raw} {key}'.lower(), {k: str(v or '').lower() for k, v in a.items() if isinstance(v, str)}
     if any(s.get(f) and s[f] in t for f in ('sender', 'sender_name')): return 0
     if any(str(p).lower() in t for p in a.get('people') or () if p): return 1
+    # ...a line about one OTHER sender (memorylines' `(about: x@y)`) is theirs alone - a colleague at the same domain is not them
+    from .memorylines import scope_of
+    if scope_of(raw)[0] == 'sender': return 5
     # ...the subject as two of its own longer words in the line: a ranking, so a near miss costs an order, never a read
     if len(set(_TOPIC.findall(s.get('topic', ''))) & set(_TOPIC.findall(t))) >= 2: return 2
     if any(s.get(f) and s[f] in t for f in ('domain', 'repo', 'scope')): return 3
-    return 4
+    # ...and a line about one OTHER sender, domain or topic (memorylines' `(about: ...)` - the owner's verdicts, a line each) comes after
+    # every general line: there are hundreds of them, and the one about someone else says least about this item (2026-10-27)
+    from .memorylines import ABOUT
+    return 5 if ABOUT.search(raw) else 4
 
 
 def people_of(msg: dict) -> set:
@@ -110,11 +118,24 @@ def about_mail(msg: dict) -> dict:
     return {'sender': em, 'domain': em.rsplit('@', 1)[-1] if '@' in em else ''}
 
 
+# WHAT THE OWNER CARES ABOUT IS NEVER THE FIRST CUT (the owner, 2026-10-27: "if I don't care about something the system knows it"). A
+# don't-care line - "the legacy export job is not mine to watch" - is general, so it ranked 4 and the document's order cut it behind every
+# line about someone not on the item; and the owner's own lines sit at the END of their section, so they went before the learned ones.
+# So every reader takes the care lines before lines of the same scope from other sections, and the owner's own words before the learned
+# ones. The lines about the people on this very item still come first: there are few of them, and triage weighs the priority by them.
+
+
 def cut(ls: list, budget: int, about: dict = None) -> tuple:
-    """(lines that fit, keys that did not) - whole lines, closest scope first; the doc's own order breaks ties."""
-    ranked = sorted(enumerate(ls), key=lambda il: (rank(il[1][0], il[1][1], about), il[0]))
+    """(lines that fit, keys that did not) - whole lines, closest scope first; the doc's own order breaks ties. Lines may carry their
+    section slug as a third item: then care lines go before others of the same scope, and the owner's own (untagged) lines before
+    learned ones."""
+    from .learnedgraph import TAG
+    def key(il):
+        i, (raw, k, *s) = il
+        s = s[0] if s else ''
+        return (rank(raw, k, about), bool(s) and s != 'care', bool(s) and bool(TAG.match(raw)), i)
     used, keep, over = 0, [], []
-    for _, (raw, k) in ranked:
+    for _, (raw, k, *_s) in sorted(enumerate(ls), key=key):
         if used + len(raw) + 1 > budget: over.append(k); continue
         keep.append(raw); used += len(raw) + 1
     return keep, over
@@ -176,7 +197,11 @@ def for_reader(store, reader: str, about: dict = None, budget: int = None, doc: 
     want = [s for s in READS[reader] if sections is None or s in sections]
     who = None if people is None else {str(p).lower() for p in people if p}
     ls = [(raw, k, s) for s in want for raw, k in lines(doc or '', SECTIONS[s]) if s != 'people' or who is None or names(raw) & who]
-    keep, over = cut([(raw, k) for raw, k, _ in ls], budget or BUDGET[reader], about)
+    # ...and a line about one OTHER sender, domain or topic (memorylines' `(about: ...)`: a verdict, a line each) is not this reader's:
+    # it reaches the readers of the mail it is about, by what it is about (ingest.applicable_notes) - hundreds of them, about everyone
+    # else, would be the whole budget
+    ls = [x for x in ls if rank(x[0], x[1], about) != 5]
+    keep, over = cut(ls, budget or BUDGET[reader], about)
     at = {raw: i for i, raw in enumerate(keep)}
     try: _note_over(store, reader, over)
     except Exception: pass

@@ -53,11 +53,15 @@ PURPOSE = {
     'report.rerun':             'run that report again',
     # THE ASSISTANT EDITS THE MEMORY (slice 7, approved by the owner 2026-10-25): "Gail moved to Ops" is a fact about how the owner works,
     # written into LEARNED.md where every reader of its section has it, and the line it makes untrue is closed - kept as history
-    'memory.remember':          ("keep a fact - `note`: the fact, in the owner's words. One about how they work with someone or something "
-                                 '("Gail moved to Ops", "Ray handles payroll for me", "I put renewals off to Friday") is kept at once where '
-                                 "the memory's readers read it, when you name it: `about`: the person's address or name; `section`: people | "
-                                 'care | work | promises | bring; `replaces`: the key of the line it makes untrue, closed and kept as history '
-                                 '(memory.about gives the keys). Any other fact brings up the notes page. Who reports to whom and who owns '
+    # ...and EVERY fact, said in the owner's words, lands in LEARNED.md where triage, the report gate, the Advisor and agents read it - a
+    # "don't care" above all (the owner, 2026-10-27: "if I don't care about something the system knows it")
+    'memory.remember':          ("keep a fact about how the owner works, in LEARNED.md, at once - `note`: the fact, in the owner's words "
+                                 '("Gail moved to Ops", "Ray handles payroll for me", "I put renewals off to Friday", "I don\'t care about the '
+                                 'legacy export job any more"); `section`, always: people (who someone is to them, how they deal with them) | '
+                                 'care (what they are responsible for and what they do NOT care about - a legacy process, a system no longer '
+                                 'theirs: triage and the report gate then make no task of it) | work (their rhythm) | promises | bring (what the '
+                                 "Advisor may raise); `about`: the person's address or name, for a people line; `replaces`: the key of the line "
+                                 'it makes untrue, closed and kept as history (memory.about gives the keys). Who reports to whom and who owns '
                                  'what is people.relate'),
     'memory.wrong':             ('take a line Taskuary learned out of its memory - `key` (from memory.about or memory.list), `how`: wrong '
                                  '(it was never true: never written back) | forget (not now: back only on much more evidence) | ended (it '
@@ -309,7 +313,7 @@ _DECIDE = {
     'answer_agent':    'answer the agent waiting on the owner - `text`',
     'stop_agent':      "save and end the agent's session on the item",
     'rerun':           'run the report on the table again',
-    'remember':        'keep a fact - `text`',
+    'remember':        "keep a fact about how the owner works in their memory - `text`, their words (\"I don't care about the legacy export job any more\" too)",
     # ...and a PLAYBOOK, which has its own New playbook: "can I build a playbook for it?" was sent to a general agent as its job (the
     # owner, 2026-10-22: "this is not playbook ui?")
     'setup':           ('build a report, a playbook (how one kind of recurring request is handled from now on), a connection to another '
@@ -485,8 +489,8 @@ READS = {
     'memory.about':     ('who someone is to the owner: every line the memory holds about them, with its key, and what the org chart '
                          'says - `who`: a name or address. Use it for "who\'s Gail to me", "what do you know about Ray", and before '
                          'memory.remember replaces or memory.wrong takes out a line about them'),
-    'memory.list':      ('everything kept about the owner: the saved notes (from "remember this", their verdicts, Settings) '
-                         'and what LEARNED.md has learned from their verdicts. `about`: words to narrow it (a sender, a topic). '
+    'memory.list':      ('everything kept about the owner: LEARNED.md - what they told you ("remember this"), their verdicts, '
+                         'and what it learned from what they did. `about`: words to narrow it (a sender, a topic). '
                          'Use it for "what do you remember", "what do you know about me"'),
     'rules.list':       ('the standing filters on the owner\'s mail - queue mutes set with a reason, and the policy rules '
                          '(skip, ignore, escalate...) that decide before any model reads it. `about`: words to narrow it. '

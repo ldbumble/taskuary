@@ -1619,6 +1619,14 @@ def _system(store, llm=None) -> str:
     from .triage import job_doc
     job = job_doc(store)
     if job: who += f"THE OWNER'S JOB (their own document - weigh what matters by it):\n{job}\n\n"
+    # ...and their MEMORY (LEARNED.md): learned_cut.READS gave the Assistant every section, yet the chat read none of it - "what should I do
+    # first" weighed a job the owner had said they no longer care about like any other (the owner, 2026-10-27: LEARNED.md is the memory,
+    # and every decision-maker reads the parts that help it)
+    from . import learned_cut
+    try: mem = learned_cut.for_reader(store, 'assistant', target='chat')
+    except Exception: mem = ''
+    if mem: who += ("WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (their memory, LEARNED.md - what they care about and what they do not, their "
+                    f"people, their rhythm, their promises; weigh it, the documents above outrank it):\n{mem}\n\n")
     # ...and the repositories a coding job can open in: the model picks one by name (`as`) and code only checks it is one of these
     from . import terminal as term
     try: repos = term.known_repos(store)
@@ -2262,7 +2270,8 @@ def know(store, q: str) -> str:
     from . import handbook as hub, knowledge
     from .routing import tokens
     want = {w for w in tokens(q) if len(w) > 2}
-    kept = [m['Note'] for m in store.list_memories() if want & set(tokens(m.get('Note') or ''))][:8]
+    from . import memorylines                  # the kept facts are LEARNED.md's lines (2026-10-27)
+    kept = [m['Note'] for m in memorylines.notes(store) if want & set(tokens(m.get('Note') or ''))][:8]
     parts = [hub.block(store, q, actions=False) if hub.enabled(store) else '', knowledge.block(store, q),
              ('KEPT FACTS:' + NEWLINE + NEWLINE.join(f'- {n}' for n in kept)) if kept else '']
     found = NEWLINE.join(x.strip() for x in parts if x.strip())
@@ -2507,8 +2516,11 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     if kind == 'people.relate': return _relate(store, tid, params, actor)
     # ...and HOW THE OWNER WORKS WITH THEM, said in the chat (slice 7, approved 2026-10-25: "Gail moved to Ops", "forget that Ray does
     # payroll"): kept at once, the same way - written where the memory's readers read it, the line it makes untrue closed as history
-    if kind == 'memory.wrong' or (kind == 'memory.remember' and (params.get('about') or params.get('section') or params.get('replaces'))):
-        return _memory(store, tid, kind, params)
+    # ...and EVERY fact, not only one naming a person or a section (the owner, 2026-10-27: "it should be anything I add to memory, like 'this
+    # is legacy, don't care' - the system should save that and use it everywhere"): "I don't care about the legacy export job any more" opened
+    # the notes page and was never written, so triage and the report gate went on making tasks of it. LEARNED.md is the memory every reader
+    # reads; a fact about nobody goes under What you care about (memoryedit.remember)
+    if kind in ('memory.wrong', 'memory.remember'): return _memory(store, tid, kind, params)
     # ON THE DESK A NEW JOB IS NEW, FILLED IN (routes): the words on the tab that starts it, its own button the one to press
     if routes() and kind in ('task.create_from_text', 'task.setup'):
         return _new(store, tid, item, str(params.get('kind') or 'general') if kind == 'task.create_from_text' else 'general',
@@ -2878,8 +2890,6 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
         return _answer_now(store, tid, table, target, str(params.get('text') or text or '').strip(), actor)
     if kind == 'script.start':
         return _new(store, tid, table, 'report', '') if 'report' in str(params.get('name') or '') else surface(store, None, None, actor)
-    if kind == 'memory.remember':
-        return _page(store, tid, table, '#settings=memory', f"Opened {places.name('memory')} - add it as a note there; it is used from then on.")
     if tk == 'setting':
         r = next((x for x in appfacts.settings(store) if x['key'] == params.get('setting')), None) or {}
         return _page(store, tid, table, f"#settings=config&group={quote(r.get('group') or '')}&key={quote(str(params.get('setting') or ''))}",
@@ -2986,15 +2996,6 @@ def propose_switch(store, changes: list, says: str, text: str, actor: str = 'own
     return {'reviewId': rid, 'card': {'key': f'review:{rid}', 'kind': 'action', 'lane': 'approve', 'rid': rid,
                                       'title': says, 'who': 'you asked for it', 'why': 'a setting waits for your yes',
                                       'when': _ts(datetime.now())}}
-
-
-def remember_fact(store, note: str, actor: str = 'owner') -> int:
-    """A fact the owner told us to keep. Written HERE rather than left to the page, so the receipt
-    is the fact: "Remembered." used to go out whether or not a row was ever written (2026-09-03)."""
-    mid = store.add_memory({'Scope': 'global', 'ScopeKey': None, 'Note': redact(note.strip())[:1000],
-                            'Source': 'manual', 'Active': 1, 'CreatedBy': actor})
-    store.audit('memory', mid, 'create', actor, detail={'from': 'assistant chat'})
-    return mid
 
 
 def person(store, who: str) -> dict | None:
@@ -4999,7 +5000,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         return setup_turn(store, tid, text, decision.get('text') or text, item, actor, trace=trace, cancel=cancel)
     # ON THE DESK THE WORDS LIGHT THE BUTTON (routes): the item comes up with its own button for the act lit, and nothing runs - except
     # words to an agent that asked, which are its answer; a put-down, which is pressed (PUT_DOWN); a new job is New, filled in; a fact to
-    # keep goes in under Verdicts & notes
+    # keep goes into the memory, LEARNED.md (memory.remember)
     if decision and verb in PROPOSALS and routes():
         if verb == 'answer_agent' and target_item and target_item.get('tid'):
             return _answer_now(store, tid, item, int(target_item['tid']), decision.get('text') or text, actor)

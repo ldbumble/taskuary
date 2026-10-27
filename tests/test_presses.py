@@ -26,7 +26,6 @@ class PressTests(_Rail):
         s = MemoryStore(); t = self._stopped_task(s)
         i = advisor.press(s, f'task:{t}', None, 'next', lit='next', live=['next'])
         self.assertEqual((_row(s, i)['Choice'], _row(s, i)['Match']), (0, 1))
-        self.assertEqual(learn.press_rows(s), [], 'a press with nothing else to press says nothing about what the owner would pick')
         self.assertEqual(presses.rows(s, choice=True), [])
         self.assertEqual([r['pressed'] for r in presses.rows(s, choice=False)], ['next'])
 

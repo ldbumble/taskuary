@@ -25,6 +25,9 @@ def store():
                   'Note': '2026-08-30: "resident refund" from x@y.com - NOT A TASK: the marmoset verdict'})
     s.add_memory({'Scope': 'global', 'ScopeKey': None, 'Source': 'writing', 'Active': 1, 'CreatedBy': 'owner',
                   'Note': 'Never open with "I hope this finds you well" - the wombat instruction'})
+    # ...as they stand after a start: the verdict a LEARNED.md line, the writing note in STYLE.md's Owner notes (memorylines, 2026-10-27)
+    from taskuary import memorylines
+    memorylines.migrate(s)
     return s
 
 
@@ -109,17 +112,18 @@ class FeedbackRoutingTests(unittest.TestCase):
         events = []
         with mock.patch.object(learn, 'learn_from', side_effect=lambda st, ev, **k: events.append(ev)):
             verdicts.decide(s, s.get_review(rid), 'reject', None, 'this never needed a reply - it is a notification')
-        self.assertIn('never needed a reply', events[0]); self.assertNotIn('## Owner notes', s.get_doc('style') or '')
+        self.assertIn('never needed a reply', events[0]); self.assertNotIn('notification', s.get_doc('style') or '')
 
-    def test_writing_notes_can_be_saved_by_hand(self):
-        from fastapi.testclient import TestClient
-        from taskuary import server
+    def test_an_old_writing_note_moves_into_style_once(self):
+        """The notes page is gone (2026-10-27): a writing note saved there is the drafter's, so it moves to STYLE.md's Owner notes -
+        once - and never into LEARNED.md, which is triage's."""
+        from taskuary import memorylines
         s = store()
-        with mock.patch.object(server, 'store', s):
-            r = TestClient(server.app).post('/api/memory', json={'note': 'Always close with a next step - the numbat note', 'scope': 'global', 'source': 'writing'})
-        self.assertEqual(r.status_code, 200)
-        self.assertIn('numbat', ' '.join(responder.writing_notes(s)))
-        self.assertNotIn('marmoset', ' '.join(responder.writing_notes(s)))
+        s.add_memory({'Scope': 'global', 'Note': 'Always close with a next step - the numbat note', 'Source': 'writing', 'Active': 1, 'CreatedBy': 'o'})
+        memorylines.migrate(s); memorylines.migrate(s)
+        self.assertEqual(s.get_doc('style').count('numbat'), 1)
+        self.assertIn('numbat', responder.style_doc(s))
+        self.assertNotIn('numbat', s.get_doc('learned') or '')
 
 
 if __name__ == '__main__':

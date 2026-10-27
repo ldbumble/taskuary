@@ -73,7 +73,14 @@ def mark(store, key: str, how: str) -> dict:
     else:
         if how == 'wrong' and r: store._exec("UPDATE learned_line SET Status='wrong', UpdatedAt=? WHERE Key=?", (_now(), key))
         if raw: _save(store, doc, _without(doc, raw))
-        if own: store.add_learned_event(key, text, 'live', 0, '', 'forgotten', 'owner')
+        if own:
+            store.add_learned_event(key, text, 'live', 0, '', 'forgotten', 'owner')
+            # ...and a verdict line Forgotten switches its record off, as the notes page's switch did: what it fed is withdrawn
+            # (learn.withdraw) and it no longer counts as the owner having said it (memorylines, 2026-10-27)
+            from . import memorylines
+            from .learn import withdraw
+            for m in store.list_memories(active_only=True):
+                if memorylines.of_row(m).strip() == raw.strip(): store.set_memory_active(m['MemoryId'], False); withdraw(store, m['MemoryId'])
         elif how == 'wrong' or not raw:
             # Wrong is final; Forget of a line already out of the document is a tombstone with its evidence counted (sync did it for one in it)
             st, ev = ('wrong', None) if how == 'wrong' else ('forgotten', len([e for e in str(r.get('Ev') or '').split(',') if e]))
@@ -91,7 +98,8 @@ def remember(store, text: str, about: str = '', section: str = '', replaces: str
     Your people when it names someone (`about`, or an address in it) and What you care about otherwise. `replaces`: the key of a line it
     makes untrue, closed with today's date first ("Gail moved to Ops" closes "Gail runs headcount in Finance"). In use at once."""
     from .learn import _under
-    t = ' '.join(str(text or '').split()).lstrip('-* ').strip()
+    from .concierge import redact               # a token typed into a fact never lands in the memory every prompt reads
+    t = redact(' '.join(str(text or '').split()).lstrip('-* ').strip())
     if not t: raise ValueError('say the fact to remember')
     who = str(about or '').strip().lower()
     if who and '@' in who and who not in t.lower(): t = f'{t} ({who})'

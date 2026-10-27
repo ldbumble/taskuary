@@ -512,7 +512,8 @@ class AppReadTests(unittest.TestCase):
         s = self._store()
         self.assertTrue(toolcatalog.is_read('knowledge.search')); self.assertIn('knowledge.search', toolcatalog.block())
         self.assertEqual(toolcatalog.valid('knowledge.search', {}), 'knowledge.search needs query')
-        concierge.remember_fact(s, 'Gail Moreno approves every PO over 5k')
+        from taskuary import memoryedit
+        memoryedit.remember(s, 'Gail Moreno approves every PO over 5k')      # a kept fact is a LEARNED.md line (2026-10-27)
         self.assertIn('Gail Moreno approves', concierge.read_op(s, 'knowledge.search', {'query': 'who approves a PO'}))
         self.assertIn('Nothing the company has written down', concierge.read_op(s, 'knowledge.search', {'query': 'warp drive'}))
 

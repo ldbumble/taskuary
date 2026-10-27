@@ -10,7 +10,6 @@ remember to update it.
 
 The other Settings pages are documented where their subject is: **About you** and the per-channel
 identities, **Routing policies** ([the deterministic layer](how-it-works#what-triage-actually-decides)),
-**Verdicts & notes** ([the evidence behind LEARNED.md](how-it-works#correcting-it-teaches-it)),
 **Audit integrity**, and **Updates** ([updating](index#updating)).
 
 ## How to read this
@@ -42,22 +41,18 @@ you and marks the task urgent — this is the only thing that marks one urgent, 
 whose mail should jump your queue; `auto_answer` auto-approves the draft, which is still never
 sent; `draft` is the targeted default; `task_only` files a task and drafts nothing.
 
-Nothing writes into this table by itself. **Not a task** teaches a verdict in Verdicts & notes,
-not a rule here, and muting a sender is **Skip this sender**.
+Nothing writes into this table by itself. **Not a task** teaches a verdict in your memory
+(`LEARNED.md`), not a rule here, and muting a sender is **Skip this sender**.
 
-## Verdicts & notes
+## Your memory
 
-Two layers, one loop. `LEARNED.md` in Settings → Docs is the general profile — your style, your
-responsibilities, what deserves a task — written by a nightly pass. This page is the evidence
-that pass reads: one dated line per verdict you gave, plus notes you write yourself, each tied to
-a sender, a domain, a subject, or everyone.
-
-When a message arrives, the lines that bear on it ride into triage and into the reply draft, and
-the model judges how alike the new message really is — the same sender asking the same thing is
-binding, a shared word is not.
-
-Toggle off a line that was learned wrong: it stays for the record, is never injected again, and
-the next distillation drops it too.
+There is one memory: `LEARNED.md`, in Settings → Docs. Every verdict you give — **Not ours**,
+**Not a task**, a kind or a road you corrected — and every fact you tell the Assistant ("remember
+that…", "I don't care about the legacy export any more") goes in at once as your own line, under
+the section it is about. A line about one sender, domain or topic ends with `(about: …)`, and a
+newer verdict on the same thing replaces the older one. Triage, report routing, the Advisor, agents
+and the Assistant each read the sections that help them; edit a line, or press **Forget**, to
+change what they read.
 
 ## Audit integrity
 

@@ -1270,7 +1270,27 @@ def report_llm(store, cfg: dict, default_llm):
 JUDGE_AI = 'judge_ai'       # the app-wide "where runs go" brain; blank means the report's own
 
 
-def judge_for(store, cfg: dict, default_llm):
+def judge_memory(store, cfg: dict = None) -> str:
+    """What the owner has said they care about - and do not - as the routing judge reads it: LEARNED.md's "What you care about", the
+    section triage reads, on triage's budget. The judge read no memory at all, so a report finding about a process the owner had said they
+    no longer care about went on to triage and made a task (the owner, 2026-10-27: "if I don't care about something the system knows it")."""
+    from . import learned_cut
+    try: return learned_cut.for_reader(store, 'triage', sections=('care',), target=f"report:{(cfg or {}).get('title') or ''}")
+    except Exception as e:
+        logger.debug(f'the routing judge reads no memory this run: {e}')
+        return ''
+
+
+def memory_rule(learned: str) -> str:
+    """The judge's paragraph on the owner's memory - the owner's own lines, read for what they mean, never matched as words."""
+    if not str(learned or '').strip(): return ''
+    return ('\n\nWhat the owner has said they care about, and what they do not (their memory - read it for what it means, not for its '
+            'words): a run whose findings are all about something they said they do not care about - a legacy process they never switched '
+            'off, a system that is no longer theirs - is a no for TRIAGE and ALERT. Anything else in the run is judged as it would be '
+            'without this.\n' + learned.strip() + '\n')
+
+
+def judge_for(store, cfg: dict, default_llm, learned: str = ''):
     """The judge THIS run gets, as a callable with the booleans contract, or the report's own brain.
 
     The report's brain writes the summary; the judge answers four yes/nos ABOUT it. They were one
@@ -1291,7 +1311,7 @@ def judge_for(store, cfg: dict, default_llm):
         except Exception as e:
             logger.warning(f"the routing judge brain is unavailable, using the report's own: {e}")
             return default_llm
-        return chat_judge(brain) if brain else default_llm
+        return chat_judge(brain, learned) if brain else default_llm
 
     def judge(state: str, ask: list, cfg_: dict):
         """None means this judge did not answer, which `decide` turns into an unjudged run."""
@@ -1299,7 +1319,9 @@ def judge_for(store, cfg: dict, default_llm):
         full = store.get_connector(row['ConnectorId'], with_secret=True)
         # The instruction says what the decision IS and how to read the run; the criterion stays the
         # owner's own sentence, word for word, so `see the prompt` shows what is actually sent.
-        qs = {l: (f'Decide whether to {LINE_SAYS[l]}. {EVIDENCE_RULE}', route_of(cfg_, l)[1]) for l in ask}
+        # ...and for the lines that would make a task or ring the owner, what they said they do not care about (judge_memory)
+        qs = {l: (f'Decide whether to {LINE_SAYS[l]}. {EVIDENCE_RULE}' + (memory_rule(learned) if l in ('triage', 'alert') else ''),
+                  route_of(cfg_, l)[1]) for l in ask}
         try: got = jev.ask(full['Secret'] or '', state, qs)
         except Exception as e:
             logger.warning(f'the routing judge failed, so the run reaches the owner: {e}')
@@ -1312,15 +1334,16 @@ def judge_for(store, cfg: dict, default_llm):
     return judge
 
 
-def with_judge(chosen, default_llm) -> dict:
+def with_judge(chosen, default_llm, learned: str = '') -> dict:
     """The `decide` kwargs for an already-resolved judge - the one place that knows which road, so
     a caller judging many runs resolves once instead of rebuilding a brain per run."""
-    return {'llm': default_llm} if chosen is default_llm else {'judge': chosen}
+    return {'llm': default_llm, 'learned': learned} if chosen is default_llm else {'judge': chosen}
 
 
 def decide_for(store, cfg: dict, res: dict, default_llm) -> dict:
     """`decide` with this install's judge already resolved."""
-    return decide(cfg, res, **with_judge(judge_for(store, cfg, default_llm), default_llm))
+    mem = judge_memory(store, cfg) if asks_ai(cfg) else ''
+    return decide(cfg, res, **with_judge(judge_for(store, cfg, default_llm, mem), default_llm, mem))
 
 
 def is_digest(cfg: dict) -> bool: return 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}
@@ -2153,11 +2176,11 @@ def judge_state(res: dict) -> str:
     return f"{res['head']}\n\n{body}".strip()[:AI_CHARS]
 
 
-def chat_judge(llm):
+def chat_judge(llm, learned: str = ''):
     """An ordinary brain, wearing the judge's contract: `judge(state, ask, cfg) -> {line: bool}`,
     or None for "this judge did not answer"."""
     def judge(state: str, ask: list, cfg: dict):
-        try: out = llm(JUDGE_SYSTEM + judge_prompt(cfg), f'What the run came back with:\n\n{state}',
+        try: out = llm(JUDGE_SYSTEM + judge_prompt(cfg) + memory_rule(learned), f'What the run came back with:\n\n{state}',
                        max_tokens=JUDGE_TOKENS) or ''
         except Exception as e:
             logger.warning(f'the routing judge failed, so the run reaches the owner: {e}')
@@ -2170,7 +2193,7 @@ def chat_judge(llm):
     return judge
 
 
-def decide(cfg: dict, res: dict, llm=None, judge=None) -> dict:
+def decide(cfg: dict, res: dict, llm=None, judge=None, learned: str = '') -> dict:
     """Where this run goes: one bool per line and the sentence that says why.
 
     `llm` writes prose and `judge` answers booleans; they are passed apart so this never guesses.
@@ -2186,7 +2209,7 @@ def decide(cfg: dict, res: dict, llm=None, judge=None) -> dict:
     ask = [l for l in LINES if how[l][0] == 'ai']
     said = {}
     if ask:
-        said = judge(judge_state(res), ask, cfg) if judge is not None else chat_judge(llm)(judge_state(res), ask, cfg) if llm else None
+        said = judge(judge_state(res), ask, cfg) if judge is not None else chat_judge(llm, learned)(judge_state(res), ask, cfg) if llm else None
         if said is None: said = {l: True for l in ask}
     rule = lambda l: bool(condition_fires(**{k: v for k, v in ((cfg.get('route') or {}).get(l) or {}).items() if k in ('rule', 'count', 'text')}, res=res))
     out = {l: rule(l) if h == 'rule' else said.get(l, h == 'always') for l, (h, _) in how.items()}

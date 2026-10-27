@@ -82,7 +82,7 @@ class VoiceTests(unittest.TestCase):
         s.add_memory({'Scope': 'sender', 'ScopeKey': 'meyy@partner.example', 'Active': 1, 'Source': 'verdict',
                       'Note': 'Meyy schedules for the whole vendor team.', 'CreatedBy': 'o'})
         sys_ = _capture(s, tid)['system']
-        self.assertIn('Your own writing instructions', sys_); self.assertIn('two sentences for Meyy', sys_)
+        self.assertIn('two sentences for Meyy', sys_)     # a writing note is STYLE.md's Owner notes now (2026-10-27), read with the style
         self.assertNotIn('Standing notes from the owner', sys_)
         self.assertNotIn('schedules for the whole vendor team', sys_)
 

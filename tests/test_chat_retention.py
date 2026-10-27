@@ -146,8 +146,9 @@ class RetentionTests(unittest.TestCase):
         op = operations.record_direct(s, 'task.complete', t, {}, 'owner', {'status': 'done'})
         s.add_comment(t, 'coding', 'agent', 'AGENT REPORT\nSummary: fixed the export.')
         rv = s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'Fixed.', 'Status': 'approved'})
-        mem = concierge.remember_fact(s, 'Gail signs off on refunds')
-        funnel.remember_mute(s, {'sender': 'pvance@vendor.example', 'words': ['northwind'], 'why': 'the financials process'}, 'o')
+        from taskuary import memoryedit
+        memoryedit.remember(s, 'Gail signs off on refunds')
+        s.set_setting(funnel.MUTES_KEY, json.dumps([{'sender': 'pvance@vendor.example', 'words': ['northwind'], 'why': 'the financials process'}]), 'o')
         s.add_correction({'OpId': op['id'], 'MessageId': m, 'TaskId': t, 'Sender': 'craig@vendor.com', 'Topic': 'export', 'Verdict': 'fyi',
                           'VerdictRouteId': None, 'Change': 'coding', 'ContextJson': '{}'})
         self.assertEqual(retention.cleanup(s)['removed'], [dock])
@@ -158,7 +159,7 @@ class RetentionTests(unittest.TestCase):
         self.assertEqual([h['type'] for h in operations.history(s, task_id=t) if h['type'] != 'discussion'], ['operation', 'correction'])
         self.assertTrue(any('AGENT REPORT' in c['Body'] for c in s.list_comments(t)))
         self.assertEqual(s.get_review(rv)['Status'], 'approved')
-        self.assertEqual([x['Note'] for x in s.list_memories()], ['Gail signs off on refunds'])
+        self.assertIn('- Gail signs off on refunds', s.get_doc('learned'))
         self.assertEqual([r['sender'] for r in funnel.mutes(s)], ['pvance@vendor.example'])
         self.assertEqual(len(s.corrections(task_id=t)), 1)
 

@@ -58,7 +58,8 @@ class LookupTests(unittest.TestCase):
 
     def test_sender_read_gathers_one_person(self):
         s = world()
-        s.add_memory({'Scope': 'sender', 'ScopeKey': 'gail@northwind.example', 'Note': 'She owns the freight budget.', 'Active': 1})
+        from taskuary import memoryedit
+        memoryedit.remember(s, 'She owns the freight budget.', about='gail@northwind.example')
         out = read(s, 'sender.read', who='gail')
         for want in ('Gail Moreno', '1 message', 'Quarterly numbers', 'TQ-0002', 'freight budget'):
             self.assertIn(want, out)
@@ -213,15 +214,17 @@ class AppAtWorkTests(unittest.TestCase):
 class KeptAndFilteredTests(unittest.TestCase):
     """What is kept about the owner, and the rules that filter their mail."""
 
-    def test_memory_list_shows_saved_notes_and_what_learned_md_learned(self):
-        from taskuary import learn
+    def test_memory_list_shows_what_the_owner_said_and_what_learned_md_learned(self):
+        """One memory (2026-10-27): what the owner said and their verdicts are LEARNED.md lines, beside what it learned."""
+        from taskuary import learn, memorylines
         s = world()
-        s.add_memory({'Scope': 'sender', 'ScopeKey': 'gail@northwind.example', 'Note': 'She owns the freight budget.', 'Source': 'manual', 'Active': 1})
-        s.add_memory({'Scope': 'subject', 'ScopeKey': 'weekly spend report', 'Note': 'NOT A TASK', 'Source': 'verdict', 'Active': 1})
-        s.save_doc(learn.DOC, '# Learned\n\n## What becomes a task\n\n- Vendor statements are fyi.\n\n## Hypotheses\n' + learn.HYP_START
+        s.save_doc(learn.DOC, '# Learned\n\n## What you care about\n- Vendor statements are fyi.\n\n## Watching\n' + learn.HYP_START
                    + '\n- Maybe spend reports are fyi too.\n' + learn.HYP_END + '\n', 't')
+        s.add_memory({'Scope': 'sender', 'ScopeKey': 'gail@northwind.example', 'Note': 'She owns the freight budget.', 'Source': 'manual', 'Active': 1})
+        s.add_memory({'Scope': 'subject', 'ScopeKey': 'weekly spend report', 'Note': '"Weekly spend" - NOT A TASK: filed', 'Source': 'verdict', 'Active': 1})
+        memorylines.migrate(s)
         out = read(s, 'memory.list')
-        for want in ('SAVED NOTES (2)', 'freight budget', 'weekly spend report', 'Vendor statements are fyi', 'STILL BEING TESTED', 'spend reports are fyi too'):
+        for want in ('YOUR MEMORY', 'freight budget', 'weekly spend report', 'Vendor statements are fyi', 'STILL BEING TESTED', 'spend reports are fyi too'):
             self.assertIn(want, out)
         narrow = read(s, 'memory.list', about='freight')
         self.assertIn('freight budget', narrow); self.assertNotIn('weekly spend', narrow)
@@ -229,7 +232,8 @@ class KeptAndFilteredTests(unittest.TestCase):
     def test_rules_list_shows_mutes_and_policies_by_what_they_do(self):
         from taskuary import funnel
         s = world()
-        funnel.remember_mute(s, {'sender': 'reports@vendor.example', 'words': ['statement'], 'why': 'finance handles these'})
+        import json      # a mute an older version wrote - nothing writes one now (2026-10-27)
+        s.set_setting(funnel.MUTES_KEY, json.dumps([{'sender': 'reports@vendor.example', 'words': ['statement'], 'why': 'finance handles these'}]), 'o')
         for pat in ('alerts@vendor.example', 'alerts@vendor.example'):
             s.save_policy({'Name': f'skip:{pat}', 'Kind': 'sender', 'Pattern': pat, 'Action': 'skip', 'Active': 1}, 't')
         s.save_policy({'Name': 'not-a-task', 'Kind': 'sender_domain', 'Pattern': 'news.example', 'Action': 'ignore', 'Active': 0}, 't')

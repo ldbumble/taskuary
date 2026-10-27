@@ -51,10 +51,11 @@ def _voice(store) -> str:
     """The same three documents every outgoing reply is written from, so a message the owner
     starts and a message the owner answers sound like the same person. Assembled here rather
     than imported from responder because that module's blocks are all about a thread."""
-    from .responder import BREVITY, CHAT, EMAIL, SYSTEM, owner_of, signature_line, style_doc, writing_notes
+    from .responder import BREVITY, CHAT, EMAIL, SYSTEM, owner_of, signature_line, style_doc
     soul = store.doc('soul') or ''
-    # STYLE for voice, SOUL for identity, explicit writing instructions - and no LEARNED.md, which is triage's (PW-058/059)
-    return (SYSTEM.format(owner=owner_of(store, soul)) + signature_line(store), soul, style_doc(store), '\n'.join(f'- {n}' for n in writing_notes(store)), BREVITY, CHAT, EMAIL)
+    # STYLE for voice and the owner's writing instructions (its Owner notes), SOUL for identity - and no LEARNED.md, which is triage's
+    # (PW-058/059). The fourth slot was the notes table's writing notes; they live in STYLE.md now (memorylines.migrate, 2026-10-27)
+    return (SYSTEM.format(owner=owner_of(store, soul)) + signature_line(store), soul, style_doc(store), '', BREVITY, CHAT, EMAIL)
 
 
 def draft_message(store, channel: str, to, about: str, resolution: str = None, llm=None,

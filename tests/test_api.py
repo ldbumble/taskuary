@@ -840,14 +840,11 @@ class ApiTests(unittest.TestCase):
         back = c.post('/api/policies', json={'PolicyId': r['policyId'], 'Active': False}).json()
         self.assertEqual((back['affected'], len(seen())), (2, 2))   # switching it off restores them
 
-    def test_memory_add_and_toggle(self):
-        r = c.post('/api/memory', json={'note': 'Never draft replies to cash reports', 'scope': 'global'}).json()
-        self.assertTrue(r['ok'])
-        c.patch(f"/api/memory/{r['memoryId']}", json={'active': False})
-        row = next(m for m in c.get('/api/memory').json()['data'] if m['MemoryId'] == r['memoryId'])
-        self.assertEqual(row['Active'], 0)
-        self.assertEqual(c.post('/api/memory', json={'note': ' ', 'scope': 'global'}).status_code, 422)
-        self.assertEqual(c.post('/api/memory', json={'note': 'x', 'scope': 'weird'}).status_code, 422)
+    def test_the_notes_page_api_is_gone(self):
+        """The notes were a second memory read only on a matching word (the owner, 2026-10-27: "probably garbage, remove it"):
+        every row is a LEARNED.md line now, and nothing lists, adds or switches notes any more."""
+        self.assertIn(c.post('/api/memory', json={'note': 'x', 'scope': 'global'}).status_code, (404, 405))
+        self.assertIn(c.patch('/api/memory/1', json={'active': False}).status_code, (404, 405))
 
     def test_not_a_task_learns_and_deletes(self):
         """It writes the verdict to MEMORY and nothing else. It used to also save a sender
@@ -861,8 +858,11 @@ class ApiTests(unittest.TestCase):
         before = len(c.get('/api/policies').json()['data'])
         r = c.post(f'/api/tasks/{tid}/not-a-task').json()
         self.assertEqual(c.get(f'/api/tasks/{tid}').status_code, 404)
-        note = next(m for m in c.get('/api/memory').json()['data'] if m['MemoryId'] == r['learned']['memory_id'])
+        note = next(m for m in server.store.list_memories(active_only=False) if m['MemoryId'] == r['learned']['memory_id'])
         self.assertIn('NOT A TASK', note['Note'])
+        # ...and the verdict is a line in LEARNED.md, where every reader reads it (memorylines, 2026-10-27)
+        from taskuary import memorylines
+        self.assertIn(memorylines.of_row(note), server.store.get_doc('learned'))
         self.assertNotIn('policy', r['learned'])
         self.assertEqual(len(c.get('/api/policies').json()['data']), before)      # nobody was muted
         self.assertFalse(any(p['Pattern'] == 'noise@vendor.com' for p in c.get('/api/policies').json()['data']))
@@ -1265,7 +1265,10 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(len(made), 1)
         self.assertEqual((made[0]['Source'], made[0]['Scope']), ('verdict', 'subject'))
         self.assertIn('MADE A TASK', made[0]['Note'])
-        self.assertIn(f"mem{made[0]['MemoryId']}", server.store.get_doc('learned'))
+        # ...readable as a line in LEARNED.md, about the topic it was given on (memorylines, 2026-10-27)
+        from taskuary import memorylines
+        self.assertIn(memorylines.of_row(made[0]), server.store.get_doc('learned'))
+        self.assertIn('(about: the topic "', memorylines.of_row(made[0]))
         self.assertEqual(server.store.get_message(mid)['TaskId'], out['taskId'])
         distilled.assert_called_once()
 

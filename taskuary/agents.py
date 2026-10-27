@@ -1641,7 +1641,7 @@ def task_context(store, task_id: int) -> str:
 # A VERDICT note is written by Taskuary and quotes the mail it was given on - its subject, its sender (server._learn_promotion
 # and its siblings). On a stranger's task that is the stranger's text, and under "learned from the owner - FOLLOW these" the
 # reviewer and the agent read it as the owner's (task 10 live check: a stranger's subject line rode into the first prompt).
-OWNER_SOURCES = ('manual', 'writing')
+OWNER_SOURCES = ('manual', 'writing', 'owner')     # 'owner': a LEARNED.md line in the owner's own hand (memorylines.notes)
 
 def memory_block(store, messages: list, owner_only: bool = False) -> str:
     """The standing notes an agent working this thread has to follow - the ones that bear on

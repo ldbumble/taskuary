@@ -52,7 +52,7 @@ CASES = [
     Q('navigation', 'show me the workflows', None, 'Here: [Workflows](#report=workflows).', 'link:#report=workflows', tools=('pages',), freq=2),
     Q('navigation', 'go to reports', None, 'Here: [Reports](#report=reports).', 'link:#report=reports', tools=('pages',), demo='open', freq=4),
     Q('navigation', 'show me my dashboards', None, 'Here: [Dashboards](#report=dashboards).', 'link:#report=dashboards', tools=('pages',), freq=3),
-    Q('navigation', 'go to the memory page', None, 'Here: [Verdicts & notes](#settings=memory).', 'link:#settings=memory', tools=('pages',), freq=2),
+    Q('navigation', 'go to the memory page', None, 'Here: [LEARNED.md](#settings=docs&doc=learned).', 'link:#settings=docs&doc=learned', tools=('pages',), freq=2),
     Q('navigation', 'open the GitHub connection', None, 'Here: [GitHub](#connector=github).', 'link:#connector=github', tools=('pages',), freq=2),
     Q('navigation', 'show me the new starter task', None, [c('tasks.list', contains='new starter'), 'That is [TQ-0002](#task=2).'], 'read:tasks.list', demo='open', freq=3),
     Q('navigation', 'bring up the census sync bug', None, [c('tasks.list', contains='census sync'), f'That is [{T12}](#task=12).'], 'read:tasks.list', demo='open', freq=3),
@@ -105,7 +105,7 @@ CASES = [
     Q('item', 'walk me through my tasks', None, c('next'), 'card', freq=5),
     Q('item', 'start over', None, c('next'), 'card', freq=3),
     Q('item', 'mark this done', None, c('close', on=T1), 'light:close', demo='other', freq=3),   # the demo script: "Nothing is on the table" 
-    Q('item', 'remember that Marcus owns the bank feed', 'todo', c('remember', text='Marcus owns the bank feed'), 'open:#settings=memory', freq=2),
+    Q('item', 'remember that Marcus owns the bank feed', 'todo', c('remember', text='Marcus owns the bank feed'), 'did:memory.remember', freq=2),
     Q('item', 'split this into two tasks', 'todo', c('task.split', text='the bank feed; the 4,180 gap'), 'light:split', freq=1),
     Q('item', 'file a note on it: waiting on the bank', 'todo', c('task.comment', text='waiting on the bank'), 'did:task.comment', freq=2),
     Q('item', 'set the due date to friday', 'todo', c('task.update', due='friday'), 'did:task.update', freq=2),

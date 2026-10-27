@@ -425,7 +425,9 @@ def build(store, tid: int, msgs: list = None, repo: str = None, general: bool = 
     task_people = {str(m.get('FromEmail') or '').lower() for m in msgs} | {str(a).lower() for m in msgs for a in _recipients(m)}
     lrn = '' if stranger else learned_cut.for_reader(store, 'agents', {'sender': who, 'domain': who.rsplit('@', 1)[-1] if '@' in who else '', 'repo': repo},
                                                      target=f'task:{tid}', people=task_people - {''})
-    if lrn: parts.append("## The owner's learned profile (from their own verdicts)\n" + lrn.split('\n', 1)[1])
+    # ...each section under its own name: the first heading used to be cut off, and a "don't care about the legacy export job" line then read
+    # as part of nothing in particular (2026-10-27)
+    if lrn: parts.append("## The owner's learned profile (from their own words and verdicts)\n" + re.sub(r'(?m)^## ', '### ', lrn))
     # the documents the owner indexed that speak to this thread - a policy, a contract, a runbook
     from . import knowledge
     kb = knowledge.block(store, ' '.join(f"{t.get('Title') or ''} {m.get('Subject') or ''} {m.get('BodyText') or ''}" for m in msgs)[:4000], budget=2500, limit=6)

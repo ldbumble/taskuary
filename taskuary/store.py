@@ -5510,10 +5510,23 @@ class SQLiteStore:
     def remember_trust(self, mailbox: str, email: str, reason: str):
         self._exec('INSERT OR REPLACE INTO sender_trust (Mailbox, Address, Reason, CheckedAt) VALUES (?,?,?,?)',
                    ((mailbox or '').lower(), (email or '').lower(), reason, _now()))
-    def add_memory(self, fields): return self._insert('memory', fields, MEMORY_COLS, {'CreatedAt': _now()})
+    def add_memory(self, fields):
+        """A verdict's RECORD - and, in the same breath, its line in LEARNED.md, the one memory every reader reads (memorylines, the
+        owner 2026-10-27): no road writes a row that no decision then sees."""
+        mid = self._insert('memory', fields, MEMORY_COLS, {'CreatedAt': _now()})
+        from . import memorylines
+        memorylines.keep_row(self, mid)
+        return mid
     def list_memories(self, active_only=True):
         return self._rows('SELECT * FROM memory' + (' WHERE Active=1' if active_only else '') + ' ORDER BY MemoryId DESC')
-    def set_memory_active(self, mid, active): self._exec('UPDATE memory SET Active=? WHERE MemoryId=?', (1 if active else 0, mid))
+    def set_memory_active(self, mid, active):
+        """A record switched off takes its LEARNED.md line out (an Undo, a Forget); switched back on, the line returns."""
+        from . import memorylines
+        if not active: memorylines.drop_row(self, mid)
+        self._exec('UPDATE memory SET Active=? WHERE MemoryId=?', (1 if active else 0, mid))
+        if active:
+            m = self._one('SELECT * FROM memory WHERE MemoryId=?', (mid,)) or {}
+            if m: memorylines.keep(self, m.get('Note') or '', m.get('Scope') or 'global', m.get('ScopeKey'), verdict=m.get('Source') == 'verdict')
 
     # projects and their identities ---------------------------------------------------------
     def ensure_project(self, name: str, description: str = None, actor: str = 'system') -> int:

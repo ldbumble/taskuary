@@ -4217,6 +4217,9 @@ def op_label(kind: str, p: dict) -> str:
              'task.check': 'Tick the checklist item', 'task.checklist': 'Change the checklist', 'task.watch': 'Watch it for you', 'task.comment': 'File the note', 'task.handoff': 'Write the hand-off for your yes',
              'task.merge': 'Fold it into that task', 'task.clarify': 'Write the question for your yes', 'task.reopen': L('reopen'),
              'task.trust': 'Trust what is on it',
+             # ...and "Done - Clear a SET of items from the pipe at once. Marked 2 FYI read" was the tool's own words read out to the owner
+             # (the overnight walk, 2026-10-26)
+             'pipe.clear': 'Mark them read',
              'task.not_a_task': L('remove'), 'dispatch.prepare': L('regular_agent'), 'agent.continue': L('continue'),
              'review.reject': 'Reject the draft', 'task.split': L('split', 'split'), 'report.rerun': L('rerun'), 'connection.test': L('test_connection'),
              'message.retriage': L('retriage'), 'task.share': L('share'),
@@ -4489,6 +4492,8 @@ def _past(store, op: dict, ref: str) -> str:
     # Fri 23 Oct · TQ-0001. Away until ..." were still the desk's button words (the 2026-10-22 re-walk)
     if kind == 'task.create_from_message' and str((op.get('params') or {}).get('kind')) == 'task' and o.get('ref'): return f"{o['ref']} is on your list."
     if kind == 'message.file': return f'{ref} filed as not ours.' if ref.startswith('TQ-') else f'Filed as not ours: {ref}.' if ref else 'Filed as not ours.'
+    # ...and a set marked read is its count and what it was: "Done - <the tool's description>." led it (the overnight walk, 2026-10-26)
+    if kind == 'pipe.clear': return _outcome_line(kind, op.get('params') or {}, o).strip()
     if kind == 'task.defer' and ref.startswith('TQ-'):
         if not o.get('remindAt'): return f'{ref} is back on your rail now.'
         return f"{ref} is away until {o['when']} - back in front of you that morning." + (f" {o['warn']}" if o.get('warn') else '')

@@ -63,6 +63,28 @@ test("a press calls the card's LATEST handler, not the one it registered first",
   assert.deepEqual(calls, ["new"], "a verb whose card has gone does nothing");
 });
 
+// ONE AT A TIME (the overnight walk, 2026-10-27): a double-click on Accept drafted the calendar's answer twice
+test("a verb still answering is not run again for the same card, and runs again once it has answered", async () => {
+  let n = 0, done;
+  put("cal", [{ ...v("accept_invite", "decide"), run: () => { n++; return new Promise((r) => { done = r; }); } }]);
+  press("accept_invite"); press("accept_invite");
+  assert.equal(n, 1, "the second click of a double-click ran it again");
+  done(); await new Promise((r) => setTimeout(r, 0));
+  press("accept_invite");
+  assert.equal(n, 2, "answered: the next press is a press");
+  // ...a verb that answers at once (it opens a menu, a note) is never held
+  let m = 0;
+  put("cal", [{ ...v("close_note", "decide"), run: () => { m++; } }]);
+  press("close_note"); press("close_note");
+  assert.equal(m, 2);
+  // ...and Next keeps the walk's own rules
+  let x = 0;
+  put("cal", [{ ...v("next", "next"), run: () => { x++; return new Promise(() => {}); } }]);
+  press("next"); press("next");
+  assert.equal(x, 2);
+  put("cal", null);
+});
+
 test("the card's buttons leave the card on the canvas and come back on the Tasks tab", () => {
   const read = (n) => fs.readFileSync(path.join(process.cwd(), "src", n), "utf8");
   const task = read("TaskPage.jsx");

@@ -98,7 +98,11 @@ test("the main view follows where the task is up to: the work with Came from on 
   assert.equal(nextInDrawer({ main: "task", focus: "list", advice: { verb: "reply" } }), false, "advice lights no tab");
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   assert.match(page, /workLit = drawerLit\(\{ main, stage: taskStage \}\)/);
-  assert.match(page, /const taskStage = stageOf\(\{ focus, drafted: replyHas, closed: /, "the stage reads the focus, never the advice");
+  assert.match(page, /const taskStage = stageOf\(\{ focus: restFocus, drafted: replyHas, closed: /, "the stage reads the focus, never the advice");
+  // ...the focus the task opens on - a section opened by hand changes neither the stage nor the main view (the overnight walk, 2026-10-27)
+  const restLine = page.match(/const restFocus = openStage \? focusOf\(\{[^;]*;/)?.[0];
+  assert.ok(restLine, "the stage's focus is the unpicked pane's");
+  assert.doesNotMatch(restLine.replace(/openStage \?/, ""), /openStage|advi|lit/i, "no pick and no advice in the stage's focus");
   const focusLine = page.match(/const focus = focusOf\(\{[^;]*\}\);/)?.[0];
   assert.ok(focusLine, "the page's focus is one focusOf");
   assert.doesNotMatch(focusLine, /advi|lit/i, "the focus reads no advice");

@@ -104,6 +104,21 @@ class MergedPullRequestOwesNoReplyTests(unittest.TestCase):
         self.assertEqual(s.list_reviews('pending'), [])
 
 
+class ContinuedIsNoLongerSavedTests(unittest.TestCase):
+    def test_a_general_session_that_starts_again_clears_saved(self):
+        """Continue on a general task opened a new conversation session under `session:saved`: its turn then died mid-way and the
+        Result said "You stopped it and its report is written" over the failure (the agents walk, 2026-10-26)."""
+        from taskuary import general, ownwork
+        s = MemoryStore(); tid = s.create_task({'Title': 'Compare payroll vendors', 'Kind': 'general', 'Status': 'in_progress'}, 'o')
+        s.tag_task(tid, terminal.SAVED, True, 'owner')
+        fake = mock.Mock(sid='g-saved', browser_wanted=False, pick='', started='2026-10-26 09:00:00')
+        try:
+            with mock.patch.object(general, 'GeneralSession', return_value=fake), mock.patch.object(ownwork, 'ensure'):
+                general.start_session(s, tid, actor='owner')
+        finally: terminal.SESSIONS.pop('g-saved', None)
+        self.assertNotIn(terminal.SAVED, str(s.get_task(tid).get('Tags') or ''))
+
+
 class SavedIsItsOwnLaneTests(unittest.TestCase):
     def test_a_session_you_ended_is_session_saved_on_the_rail(self):
         """A1 + the one vocabulary: `saved` (💾 session saved), never `stopped` (⏹ agent stopped)."""

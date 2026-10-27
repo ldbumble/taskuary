@@ -35,6 +35,7 @@ def install_processing_changes(app, store):
         '/api/fixture/task/closed-elsewhere',
         '/api/fixture/advisor/world',
         '/api/fixture/advisor/say',
+        '/api/fixture/intake/arrive',
     })
 
     def fixture_refuse(method, path):
@@ -616,3 +617,24 @@ def install_processing_changes(app, store):
         from taskuary import learn
         store.save_doc('learned', learn.answer_lines(store, store.get_doc('learned') or ''), 'reflect')
         return {'late': late, 'plain': plain, 'dup1': dup1, 'dup2': dup2, 'working': work, 'finished': fin}
+
+    @app.post('/api/fixture/intake/arrive')
+    def intake_arrive(body: dict):
+        """{messages: [{msg, verdict}]}: each arrives through the real door (ingest.ingest_message) as one poll hands it over, triage scripted to
+        the verdict given (None: no model call is expected). Invented senders only. Returns each outcome and the server's ms for it."""
+        import json, time
+        from unittest import mock
+        from taskuary import ingest
+        items = body.get('messages') if set(body) == {'messages'} else None
+        if not isinstance(items, list) or not 0 < len(items) <= 20 or not all(isinstance(i, dict) and set(i) == {'msg', 'verdict'} for i in items):
+            raise HTTPException(422, 'messages: 1-20 {msg, verdict}')
+        out = []
+        with mock.patch.object(ingest, '_spawn'):          # one wake-up per write, as a channel's poll makes them
+            for i in items:
+                calls, v = [], i['verdict']
+                def llm(system, user, **k): calls.append(1); return json.dumps(v or {'intent': 'fyi', 'why': 'unscripted'})
+                t = time.perf_counter()
+                r = ingest.ingest_message(store, dict(i['msg']), llm=llm)
+                out.append({**{k: r.get(k) for k in ('status', 'task_id', 'message_id')}, 'ms': round((time.perf_counter() - t) * 1000, 1), 'calls': len(calls)})
+        store.reconcile_processing_membership()
+        return {'out': out}

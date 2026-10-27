@@ -20,7 +20,7 @@ test("the draft's decision is Close out, Redraft and Mark done - no Reject, in t
   assert.match(src, /\{ id: no\("redraft"\), group: "decide"/, "Redraft stands beside Close out, not behind More");
   assert.match(src, /\{ id: no\("done"\), group: "decide", closes: true[^\n]*run: onMarkDone/, "Mark done is the task's own close");
   // the task view hands it ITS Mark done - put down at the press, a live session asked first (ac051beb)
-  assert.match(read("TaskPage.jsx"), /<ReviewDecision review=\{pendingReview\} closeout=\{closeoutRv\} toRow=\{inRow\} onMarkDone=\{askFinish\} onSent=\{sent\} onRemind=\{\(e, a\) => setRemindAt\(a \|\| e\?\.currentTarget\)\}/);
+  assert.match(read("TaskPage.jsx"), /<ReviewDecision review=\{pendingReview\} closeout=\{closeoutRv\} toRow=\{inRow\} onMarkDone=\{askFinish\} onSent=\{sent\} onRemind=\{\(e, a\) => setRemindAt\(steady\(a \|\| e\?\.currentTarget\)\)\}/);
 });
 
 test("the row draws Mark done once: the decision's, with the task's own left out of More", () => {

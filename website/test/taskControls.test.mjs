@@ -91,7 +91,9 @@ test("the agent card names the role and the brain, and offers no model", () => {
   const row = tasks.slice(at, at + 1400);
   // ...in plain words (the audit, 2026-10-17): "role" and "brain" were the app's own vocabulary
   assert.ok(row.includes(">works as</Box>") && row.includes(">AI</Box>"), "both pills are labelled");
-  assert.ok(row.includes("{brainPill &&"), "the brain pill renders brainPill, not runBrain");
+  // ...and a settled general Result's record line already names the AI it ran on: the pill is gone there too (2026-10-26)
+  assert.match(tasks, /const factBrain = isGeneral && settled \? "" : brainPill;/);
+  assert.ok(row.includes("{factBrain &&"), "the brain pill renders factBrain, not runBrain");
   assert.ok(!/>model</.test(row), "and there is no model pill - the model is not the task's");
 });
 

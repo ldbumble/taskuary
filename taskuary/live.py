@@ -58,6 +58,20 @@ def reset():
         _loop = None
 
 
+def _merged(prev: dict, payload: dict) -> dict:
+    """Two writes in one window. The last writer's fields win, but not for WHICH TASKS moved: a mail splitting off its thread wrote
+    the thread's task and a new one in the same 80 ms, the event named only the new one, and a tab holding the thread's task kept
+    its old read (the intake walk, 2026-10-26). Every task the window touched is in `task_ids`; a write that named none is about
+    all of them, so the merged event names none either."""
+    msg = {**prev, **payload}
+    if not prev or 'task_id' not in msg: return msg
+    a = prev.get('task_ids') or ([prev['task_id']] if prev.get('task_id') is not None else None)
+    b = [payload['task_id']] if payload.get('task_id') is not None else None
+    if a is None or b is None: msg.pop('task_id', None); msg.pop('task_ids', None)
+    elif len(ids := sorted({*a, *b}, key=str)) > 1: msg['task_ids'] = ids
+    return msg
+
+
 def emit(kind, **payload):
     """Tell every attached tab. Unknown kinds are ignored so a typo cannot wedge the queue.
     No listeners means no timer: a poll writing forty rows must not spawn forty Timers
@@ -69,7 +83,7 @@ def emit(kind, **payload):
     with _lock:
         if not _clients:
             return
-        msg = {**(_pending.get(kind) or {}), **payload, 'type': kind}
+        msg = {**_merged(_pending.get(kind) or {}, payload), 'type': kind}
         _pending[kind] = msg
         if kind in _timers:
             return                      # a window is already open; this write rides it

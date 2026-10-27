@@ -1,15 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { observeSync } from '../src/syncObserver.js';
 import { syncFace, syncPhaseLabel } from '../src/syncTiming.js';
 
 const flush = () => new Promise(setImmediate);
-function harness(read) {
+function harness(read, opts = {}) {
   let clock = 0, id = 0, listener, unsubscribed = false;
   const timers = new Map(), changes = [], errors = [];
   const observer = observeSync({ read, changed: data => changes.push(data), failed: e => errors.push(e),
     now: () => clock, schedule: (fn, ms) => { timers.set(++id, { fn, ms }); return id; },
-    cancel: key => timers.delete(key), subscribe: fn => { listener = fn; return () => { unsubscribed = true; }; } });
+    cancel: key => timers.delete(key), subscribe: fn => { listener = fn; return () => { unsubscribed = true; }; }, ...opts });
   return { observer, changes, errors, timers, event: () => listener(), stopped: () => unsubscribed,
     async tick() { const [key, timer] = timers.entries().next().value; timers.delete(key); clock += timer.ms; await timer.fn(); } };
 }
@@ -92,4 +93,22 @@ test("a refused sync says so on the sync line; a failed connection never does", 
   const { label } = await import("../src/buttons.js");
   assert.equal(label("sync_now"), "Sync now");
   assert.equal(label("sync_now", "unknown"), "Check status");
+});
+
+// THE OVERNIGHT WALK (2026-10-26): a press of Next sent two or three live events, and each read the status again - `gather` reads a
+// burst once, after its last event; the Timeline gathers, and a direct refresh (Sync now) is never held back
+test('a burst of live events is read once, after its last event', async () => {
+  let calls = 0;
+  const h = harness(async () => { calls++; return { status: { state: 'idle' } }; }, { gather: 250 });
+  await flush(); assert.equal(calls, 1);
+  h.timers.clear();
+  h.event(); h.event(); h.event();
+  assert.equal(calls, 1); assert.equal(h.timers.size, 1);
+  assert.equal([...h.timers.values()][0].ms, 250);
+  await h.tick(); await flush();
+  assert.equal(calls, 2);
+  await h.observer.refresh(); assert.equal(calls, 3);
+  h.observer.stop();
+  const f = fs.readFileSync(new URL('../src/FeedView.jsx', import.meta.url), 'utf8');
+  assert.match(f, /api\.get\("\/api\/ingest\/status", \{ timeout: 10000 \}\)\.then\(\(\{ data \}\) => data\), gather: 250,/);
 });

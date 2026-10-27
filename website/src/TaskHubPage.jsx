@@ -212,17 +212,24 @@ function StaleBuild() {
     let mine = loadedAsset();
     // `act`: only on load, focus and a socket (re)connect - the cheap moments a restart shows up at. The minute poll
     // keeps only the line, so the page never reloads under someone reading it.
-    const check = (act) => api.get("/api/build").then(({ data }) => {
-      if (!mine) mine = data?.asset || "";
-      const s = staleWhat(mine, data);
-      setStale(s);
-      if (act && buildMove(mine, data, { busy: isBusy(), reloaded: reloadedFor() }) === "reload" && markReloaded(data.asset)) window.location.reload();
-    }).catch(() => {});
+    // ...one read for the load and the socket's first hello, which land together: two GETs of the same build at every start (the
+    // overnight setup walk, 2026-10-26). A hello seconds later - a restart's - is read as before.
+    let last = 0;
+    const check = (act, hello = false) => {
+      if (hello && Date.now() - last < 3000) return;
+      last = Date.now();
+      api.get("/api/build").then(({ data }) => {
+        if (!mine) mine = data?.asset || "";
+        const s = staleWhat(mine, data);
+        setStale(s);
+        if (act && buildMove(mine, data, { busy: isBusy(), reloaded: reloadedFor() }) === "reload" && markReloaded(data.asset)) window.location.reload();
+      }).catch(() => {});
+    };
     check(true);
     const t = setInterval(() => check(false), 60000);
     const onFocus = () => check(true);
     window.addEventListener("focus", onFocus);
-    const off = onLive("hello", () => check(true));
+    const off = onLive("hello", () => check(true, true));
     return () => { clearInterval(t); window.removeEventListener("focus", onFocus); off(); };
   }, []);
   if (!stale) return null;

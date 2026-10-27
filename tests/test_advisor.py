@@ -50,7 +50,7 @@ def rail(monkeypatch):
                        'SentAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'BodyText': 'x', 'Status': 'routed', 'TaskId': t})
     s.reconcile_processing_membership()
     s.activate_processing_reads(fixed_now=datetime.now().isoformat(), live_state=[])
-    funnel.invalidate(); yield s; funnel.invalidate(); s.cx.close()
+    funnel.invalidate(); yield s; funnel.invalidate(); s.close()
 
 
 def order(s):

@@ -301,10 +301,10 @@ class TimelineClockTests(unittest.TestCase):
         s2 = SQLiteStore(p)
         s2.add_message({'ExternalId': 'old', 'Channel': 'email', 'Subject': 'old', 'Status': 'filed'})
         s2._exec('UPDATE message SET SentAt=? WHERE ExternalId=?', (utc, 'old'))
-        s2.cx.close()
+        s2.close()
         s3 = SQLiteStore(p)                                                          # reopen = heal
         self.assertEqual(s3._one("SELECT SentAt FROM message WHERE ExternalId='old'")['SentAt'], want)
-        s3.cx.close()
+        s3.close()
 
 
 class ApiTests(unittest.TestCase):

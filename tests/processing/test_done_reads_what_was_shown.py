@@ -21,7 +21,7 @@ def db(tmp_path):
     store.set_setting('funnel_hours', '72', 'fixture')
     funnel.invalidate(); funnel.forget_states()
     yield store
-    store.cx.close()
+    store.close()
 
 
 def mail(db, n, body, at, tid):

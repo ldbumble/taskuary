@@ -31,7 +31,7 @@ def db(tmp_path):
     at = ago(); store.reconcile_processing_membership(fixed_now=at); store.activate_processing_reads(fixed_now=at, live_state=[])
     funnel.invalidate()
     with mock.patch('taskuary.terminal.live_sessions', return_value=[]): yield store, tids
-    store.cx.close()
+    store.close()
 
 
 def mail(store, title, minutes, tid=None, cat=None):

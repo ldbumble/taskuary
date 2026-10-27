@@ -22,7 +22,7 @@ def db(tmp_path, monkeypatch):
     rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'reply', 'Status': 'pending', 'DraftText': 'A draft'})
     yield s, tid, mid, rid
     fp.forget_stamps(); funnel.invalidate()
-    s.cx.close()
+    s.close()
 
 
 def pile(s): return funnel.build(s, keep_surfaced=True)
@@ -178,5 +178,5 @@ def test_random_writes_carry_only_untouched_stamps_and_every_stamp_is_the_cold_o
         elif w == 'title': s.update_task(tid, {'Title': f'Retitled {n}'}, 'owner')
         elif w == 'delete' and len(mids) > 6: mids.remove(mid); s.cx.execute('DELETE FROM message WHERE MessageId=?', (mid,)); s.cx.commit()
         elif w == 'other': other.execute('UPDATE message SET BodyText=? WHERE MessageId=?', (f'elsewhere {n}', mid)); other.commit()
-    other.close(); s.cx.close(); fp.forget_stamps()
+    other.close(); s.close(); fp.forget_stamps()
     assert carried, 'some write left some stamps standing'

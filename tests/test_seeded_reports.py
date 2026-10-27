@@ -79,9 +79,9 @@ class WhatShipsTests(unittest.TestCase):
             fn = os.path.join(d, f't{n}.db')
             s = SQLiteStore(fn)
             sid, cfg = next((r['SourceId'], json.loads(r['ConfigJson'])) for r in s.list_sources() if r['Address'] == 'End of day checkup')
-            s.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(cfg | {'ai_prompt': mine}), sid)); s.cx.commit(); s.cx.close()
+            s.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(cfg | {'ai_prompt': mine}), sid)); s.cx.commit(); s.close()
             s = SQLiteStore(fn)
-            self.assertEqual(_reports(s)['End of day checkup']['ai_prompt'], want); s.cx.close()
+            self.assertEqual(_reports(s)['End of day checkup']['ai_prompt'], want); s.close()
 
     def test_automation_ideas_keeps_its_monday_clock(self):
         from tests.automate_fixture import add_automate
@@ -126,7 +126,7 @@ class HealingAnOlderInstallTests(unittest.TestCase):
         path = str(Path(tempfile.mkdtemp()) / 'hub.db')
         s = SQLiteStore(path)
         s.save_source({'Channel': 'report', 'Address': address, 'Active': 1, 'ConfigJson': json.dumps(cfg)}, 'o')
-        s.cx.close()
+        s.close()
         return _reports(SQLiteStore(path))[address]
 
     def test_a_stock_monday_only_brief_learns_to_greet_a_launch(self):
@@ -154,7 +154,7 @@ class HealingAnOlderInstallTests(unittest.TestCase):
         s = SQLiteStore(path); add_automate(s)
         s.save_source({'Channel': 'report', 'Address': 'My toil', 'Active': 1,
                        'ConfigJson': json.dumps({'type': 'automate', 'title': 'My toil', 'days': 30})}, 'owner')
-        s.cx.execute("DELETE FROM setting WHERE Name='automate_report_removed'"); s.cx.commit(); s.cx.close()
+        s.cx.execute("DELETE FROM setting WHERE Name='automate_report_removed'"); s.cx.commit(); s.close()
         got = _reports(SQLiteStore(path))
         self.assertNotIn('Automation ideas', got)
         self.assertEqual(got['My toil']['type'], 'automate')
@@ -189,9 +189,9 @@ class TheAdvisorWasCalledAssistantTests(unittest.TestCase):
             cfg = json.loads(src['ConfigJson']); cfg['title'] = title
             s.cx.execute("UPDATE source SET Address=?, ConfigJson=? WHERE SourceId=?", (title, json.dumps(cfg), src['SourceId']))
             s.cx.execute("DELETE FROM setting WHERE Name='assistant_report_renamed_advisor'")
-            s.cx.commit(); s.cx.close()
+            s.cx.commit(); s.close()
             again = SQLiteStore(p)
             row = next(r for r in again.list_sources(active_only=False) if r['SourceId'] == src['SourceId'])
             self.assertEqual((row['Address'], json.loads(row['ConfigJson'])['title']), (want, want), title)
             self.assertEqual(row['Owner'], 'template')
-            again.cx.close()
+            again.close()

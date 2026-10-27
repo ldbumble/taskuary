@@ -213,7 +213,7 @@ def test_projection_tracks_full_content_and_keeps_display_state_view_only(tmp_pa
         assert working["view_revision"] != previous_view
         assert working["view"]["worker_attention"][0]["sid"] == "fixture-session"
     finally:
-        store.cx.close()
+        store.close()
 
 
 def foundation_rows(store):
@@ -296,14 +296,14 @@ def test_projection_is_deterministic_across_identity_order_and_reopen_and_read_o
         assert foundation_rows(store) == before_rows
         expected = (read_one["context_revision"], read_one["view_revision"])
     finally:
-        store.cx.close()
+        store.close()
 
     reopened = SQLiteStore(str(path))
     try:
         after = reopened.processing_snapshot(item_id, live_state=live_state)
         assert (after["context_revision"], after["view_revision"]) == expected
     finally:
-        reopened.cx.close()
+        reopened.close()
 
 
 def test_message_task_binding_is_context_even_before_membership_reconciliation(tmp_path):
@@ -334,7 +334,7 @@ def test_message_task_binding_is_context_even_before_membership_reconciliation(t
         )
         assert message_context["TaskId"] == replacement_task
     finally:
-        store.cx.close()
+        store.close()
 
 
 def test_retired_relation_excludes_related_idea_content(tmp_path):
@@ -369,4 +369,4 @@ def test_retired_relation_excludes_related_idea_content(tmp_path):
         )
         assert f"idea:{idea_id}" not in retired["related_entity_ids"]
     finally:
-        store.cx.close()
+        store.close()

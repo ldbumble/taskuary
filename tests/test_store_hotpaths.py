@@ -22,7 +22,7 @@ class WalTests(unittest.TestCase):
         self.assertEqual(mode.lower(), 'wal')
         # the sidecar exists once anything has been written (schema already did)
         self.assertTrue(os.path.exists(path + '-wal') or mode.lower() == 'wal')
-        s.cx.close()
+        s.close()
 
     def test_memory_store_still_opens(self):
         """Tests and demos stay on :memory:, which cannot WAL. Opening one must not
@@ -37,7 +37,7 @@ class BusyTimeoutTests(unittest.TestCase):
         s, _ = _file_store()
         ms = s._one('PRAGMA busy_timeout')['timeout']
         self.assertGreaterEqual(int(ms), 5000)
-        s.cx.close()
+        s.close()
 
     def test_memory_store_waits_too(self):
         """Tests share one process with the fixture store; a zero timeout made
@@ -58,10 +58,10 @@ class ExternalIdIndexTests(unittest.TestCase):
     def test_index_exists_on_a_fresh_and_a_reopened_db(self):
         s, path = _file_store()
         self.assertIn('idx_message_external', _index_names(s))
-        s.cx.close()
+        s.close()
         s2 = SQLiteStore(path)
         self.assertIn('idx_message_external', _index_names(s2))
-        s2.cx.close()
+        s2.close()
 
     def test_dedupe_lookup_uses_the_index(self):
         """ingest_message's first line is message_exists(external_id). Without an
@@ -72,16 +72,16 @@ class ExternalIdIndexTests(unittest.TestCase):
         self.assertIn('idx_message_external', plan)
         self.assertTrue(s.message_exists('ext-1'))
         self.assertFalse(s.message_exists('no-such'))
-        s.cx.close()
+        s.close()
 
     def test_heals_a_db_that_was_created_before_the_index(self):
         s, path = _file_store()
         s._exec('DROP INDEX idx_message_external')
         self.assertNotIn('idx_message_external', _index_names(s))
-        s.cx.close()
+        s.close()
         s2 = SQLiteStore(path)
         self.assertIn('idx_message_external', _index_names(s2))
-        s2.cx.close()
+        s2.close()
 
 
 class ThreadIndexTests(unittest.TestCase):
@@ -92,7 +92,7 @@ class ThreadIndexTests(unittest.TestCase):
         plan = _plan(s, 'SELECT * FROM message WHERE ConversationId=? ORDER BY SentAt DESC LIMIT 40', ('c-1',))
         self.assertIn('idx_message_conversation', plan)
         self.assertEqual(len(s.thread_messages('c-1')), 1)
-        s.cx.close()
+        s.close()
 
     def test_pending_triage_and_task_messages_use_indexes(self):
         s, _ = _file_store()
@@ -102,7 +102,7 @@ class ThreadIndexTests(unittest.TestCase):
         self.assertIn('idx_message_task', _plan(s, 'SELECT * FROM message WHERE TaskId=?', (tid,)))
         self.assertEqual(len(s.pending_triage()), 1)
         self.assertEqual(len(s.list_messages(tid)), 1)
-        s.cx.close()
+        s.close()
 
 
 class TimelineIndexTests(unittest.TestCase):
@@ -112,7 +112,7 @@ class TimelineIndexTests(unittest.TestCase):
                        'SentAt': '2026-08-20 10:00:00', 'Status': 'filed'})
         self.assertIn('idx_message_sent', _plan(s, 'SELECT * FROM message ORDER BY SentAt DESC, MessageId DESC LIMIT 100'))
         self.assertIn('idx_message_created', _plan(s, "SELECT * FROM message WHERE CreatedAt >= datetime('now', 'localtime', '-14 days')"))
-        s.cx.close()
+        s.close()
 
     def test_known_sender_uses_the_from_index(self):
         s, _ = _file_store()
@@ -123,7 +123,7 @@ class TimelineIndexTests(unittest.TestCase):
         s.add_message({'ExternalId': 's2', 'Channel': 'email', 'ConversationId': 'c1', 'FromEmail': 'me@corp.example', 'Status': 'context'})
         self.assertTrue(s.known_sender('pat@corp.example'))         # the owner's words on their thread
         self.assertFalse(s.known_sender('nobody@corp.example'))
-        s.cx.close()
+        s.close()
 
 
 class RelatedIndexTests(unittest.TestCase):
@@ -137,7 +137,7 @@ class RelatedIndexTests(unittest.TestCase):
                    'idx_run_task', 'idx_attachment_message', 'idx_comment_task',
                    'idx_audit_entity', 'idx_dispatchq_task', 'idx_waitroom_task'):
             self.assertIn(ix, names, ix)
-        s.cx.close()
+        s.close()
 
     def test_latest_route_and_review_lookups_use_them(self):
         s, _ = _file_store()
@@ -155,7 +155,7 @@ class RelatedIndexTests(unittest.TestCase):
         self.assertEqual(row['Decision'], 'file')
         self.assertEqual(row['ReviewStatus'], 'pending')
         self.assertEqual(row['Attachments'], 1)
-        s.cx.close()
+        s.close()
 
 
 class SnapshotJoinTests(unittest.TestCase):
@@ -293,8 +293,8 @@ class FeedJoinTests(unittest.TestCase):
         a = s.feed_tag()
         Factory(other).message(status='filed', subject='from-elsewhere', external_id='elsewhere')
         self.assertNotEqual(a, s.feed_tag())
-        other.cx.close()
-        s.cx.close()
+        other.close()
+        s.close()
 
 
 class ListTasksJoinTests(unittest.TestCase):

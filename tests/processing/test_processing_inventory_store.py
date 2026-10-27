@@ -83,7 +83,7 @@ def test_empty_inventory_reports_uncatalogued_raw_entities_without_allocating(tm
     assert picture['snapshot_revision'] != store.processing_inventory_snapshot(
         fixed_now='2026-09-06 12:00:01')['snapshot_revision']
     assert dump_owner_tables(store) == before
-    store.cx.close()
+    store.close()
 
 
 def test_display_history_filters_before_projection_and_caches_until_a_write(tmp_path):
@@ -126,7 +126,7 @@ def test_display_history_filters_before_projection_and_caches_until_a_write(tmp_
         store.processing_inventory_snapshot(
             fixed_now='2026-09-06 12:00:03', live_state=[], display_only=True, history_days=14)
         assert projection.call_count > calls
-    store.cx.close()
+    store.close()
 
 
 def test_cached_display_read_does_not_wait_for_the_writer_connection_lock(tmp_path):
@@ -153,7 +153,7 @@ def test_cached_display_read_does_not_wait_for_the_writer_connection_lock(tmp_pa
         assert finished.wait(0.5)
     thread.join()
     assert failures == []
-    store.cx.close()
+    store.close()
 
 
 def test_display_cache_ignores_terminal_tail_ticks_but_not_waiting_transitions(tmp_path):
@@ -180,7 +180,7 @@ def test_display_cache_ignores_terminal_tail_ticks_but_not_waiting_transitions(t
         assert projection.call_count == calls
         assert first_waiting['worker_input_revision'] != store.processing_inventory_snapshot(
             fixed_now=NOW, live_state=next_frame, display_only=True, history_days=14)['worker_input_revision']
-    store.cx.close()
+    store.close()
 
 
 def test_uncapped_inventory_returns_507_sorted_full_snapshots_and_evidence(tmp_path):
@@ -219,7 +219,7 @@ def test_uncapped_inventory_returns_507_sorted_full_snapshots_and_evidence(tmp_p
             'view_revision'} <= set(last)
     for forbidden in ('read', 'defer', 'actionable', 'excluded'):
         assert forbidden not in last
-    store.cx.close()
+    store.close()
 
 
 def test_redirects_deduplicate_roots_and_preserve_source_history_after_reopen(tmp_path):
@@ -232,7 +232,7 @@ def test_redirects_deduplicate_roots_and_preserve_source_history_after_reopen(tm
     source = store.resolve_processing_target('legacy_funnel', f'msg:{first}')['item_id']
     target = store.resolve_processing_target('legacy_funnel', f'msg:{second}')['item_id']
     store.merge_processing_items(source, target, fixed_now='2026-09-06 12:01:00')
-    store.cx.close()
+    store.close()
 
     reopened = SQLiteStore(str(path))
     picture = reopened.processing_inventory_snapshot(fixed_now='2026-09-06 12:02:00')
@@ -247,7 +247,7 @@ def test_redirects_deduplicate_roots_and_preserve_source_history_after_reopen(tm
     assert picture['coverage']['member_count'] == 2
     assert picture['coverage']['uncatalogued']['message'] == 0
     assert picture == reopened.processing_inventory_snapshot(fixed_now='2026-09-06 12:02:00')
-    reopened.cx.close()
+    reopened.close()
 
 
 def test_late_raw_arrivals_are_reported_as_gaps_without_changing_existing_items(tmp_path):
@@ -265,7 +265,7 @@ def test_late_raw_arrivals_are_reported_as_gaps_without_changing_existing_items(
     assert after['coverage']['canonical_item_count'] == 1
     assert [row['item_id'] for row in after['items']] == existing_ids
     assert store.resolve_processing_target('legacy_funnel', f'msg:{first}')['item_id'] == existing_ids[0]
-    store.cx.close()
+    store.close()
 
 
 def test_inventory_uses_one_read_transaction_and_preserves_every_owner_table(tmp_path, monkeypatch):
@@ -305,7 +305,7 @@ def test_inventory_uses_one_read_transaction_and_preserves_every_owner_table(tmp
     assert store.cx.total_changes == changes
     assert store._writes == writes
     assert dump_owner_tables(store) == before
-    store.cx.close()
+    store.close()
 
 
 def test_worker_input_is_frozen_complete_and_revisioned_without_policy_inference(tmp_path):
@@ -341,7 +341,7 @@ def test_worker_input_is_frozen_complete_and_revisioned_without_policy_inference
     assert supplied_empty['worker_attention_available'] is True
     assert unavailable['worker_input_revision'] != supplied_empty['worker_input_revision']
     assert unavailable['snapshot_revision'] != supplied_empty['snapshot_revision']
-    store.cx.close()
+    store.close()
 
 
 def test_inventory_rejects_non_json_worker_input_before_opening_a_read_transaction(tmp_path, monkeypatch):
@@ -364,7 +364,7 @@ def test_inventory_rejects_non_json_worker_input_before_opening_a_read_transacti
     else:
         raise AssertionError('non-JSON worker input must be rejected')
     assert entered is False
-    store.cx.close()
+    store.close()
 
 
 def test_a_mutated_snapshot_never_corrupts_the_display_cache(tmp_path):

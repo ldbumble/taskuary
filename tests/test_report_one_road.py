@@ -210,14 +210,14 @@ def test_the_store_converts_a_report_written_the_old_way_when_it_opens(tmp_path)
     s.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
                  ('report', 'Old', 'owner', 1, json.dumps({'type': 'mssql', 'reach': 'rule', 'triage': True,
                                                              'alert': {'when': 'more_than', 'count': 5, 'to': 'me@example.com'}})))
-    s.cx.commit(); s.cx.close()
+    s.cx.commit(); s.close()
     s = SQLiteStore(db)
     cfg = json.loads(next(x for x in s.list_sources(active_only=False) if x['Address'] == 'Old')['ConfigJson'])
     rule = {'how': 'rule', 'rule': 'more_than', 'count': 5}
     # the triage switch has no line to become: every run is triaged now (2026-09-28)
     assert cfg['route'] == {'timeline': rule, 'alert': rule, 'send': {'how': 'always'}}
     assert cfg['alert'] == {'to': 'me@example.com'} and 'reach' not in cfg and 'triage' not in cfg
-    s.cx.close()
+    s.close()
 
 
 def test_the_demo_runs_no_reports_on_a_clock(monkeypatch):

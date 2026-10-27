@@ -369,7 +369,7 @@ def main(argv=None):
         print(f'load: {n} pictures, feed {len(fx.s.feed(limit=500))} (capped), tasks {len(fx.s.list_tasks())}')
         return 0
     finally:
-        store.cx.close()
+        store.close()
 
 
 if __name__ == '__main__':

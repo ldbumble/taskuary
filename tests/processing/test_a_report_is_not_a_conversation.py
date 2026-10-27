@@ -20,7 +20,7 @@ NOW = datetime.now().replace(microsecond=0)
 def db(tmp_path):
     store = SQLiteStore(str(tmp_path / 'reports.db'))
     yield store
-    store.cx.close()
+    store.close()
 
 
 def a_thread(db, channel, conversation, subjects, source='End of day checkup'):

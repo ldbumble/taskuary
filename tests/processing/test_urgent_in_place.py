@@ -42,7 +42,7 @@ def db(tmp_path):
     for title, m in REPORTS: mail(store, title, m, channel='report')
     settle(store)
     with mock.patch('taskuary.terminal.live_sessions', return_value=[]): yield store, tids
-    store.cx.close()
+    store.close()
 
 
 def settle(store):

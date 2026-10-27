@@ -65,7 +65,7 @@ def test_pending_membership_rejects_detail_before_a_moved_message_can_show_old_t
         assert response.status_code == 409
         assert response.json()['detail']['code'] == 'processing_target_moved'
     finally:
-        store.cx.close()
+        store.close()
 
 
 def test_membership_worker_observes_external_sqlite_write_notifies_and_recovers(tmp_path):
@@ -105,8 +105,8 @@ def test_membership_worker_observes_external_sqlite_write_notifies_and_recovers(
         if worker is not None:
             worker.close()
         if peer is not None:
-            peer.cx.close()
-        store.cx.close()
+            peer.close()
+        store.close()
 
 
 def test_detail_preserves_unavailable_empty_and_supplied_native_session_states(tmp_path):
@@ -136,7 +136,7 @@ def test_detail_preserves_unavailable_empty_and_supplied_native_session_states(t
         assert len({unavailable['view_revision'], observed_empty['view_revision'],
                     supplied['view_revision']}) == 3
     finally:
-        store.cx.close()
+        store.close()
 
 
 def test_dangling_message_task_is_truthfully_hydrated_as_standalone(tmp_path):
@@ -159,7 +159,7 @@ def test_dangling_message_task_is_truthfully_hydrated_as_standalone(tmp_path):
         assert detail['detail']['comments'] == []
         assert detail['detail']['runs'] == []
     finally:
-        store.cx.close()
+        store.close()
 
 
 def test_native_session_generator_is_consumed_once_and_detached_from_caller(tmp_path):
@@ -193,7 +193,7 @@ def test_native_session_generator_is_consumed_once_and_detached_from_caller(tmp_
         assert generated['detail']['session']['question']['text'] == 'Original nested question'
         assert generated['detail']['session_available'] is True
     finally:
-        store.cx.close()
+        store.close()
 
 
 def test_membership_lifecycle_yields_before_initial_work_and_joins_when_cancelled(monkeypatch):
@@ -308,7 +308,7 @@ def test_nullable_review_kind_and_note_time_match_legacy_display_semantics(tmp_p
         assert canonical[note_mid]['NeedsYou'] == 0
         assert canonical[note_mid]['AnsweredAt'] is None
     finally:
-        store.cx.close()
+        store.close()
 
 
 def test_checklist_comments_and_artifacts_refresh_detail_and_correct_revision_layer(tmp_path):
@@ -359,7 +359,7 @@ def test_checklist_comments_and_artifacts_refresh_detail_and_correct_revision_la
         assert len({initial['detail_revision'], after_checklist['detail_revision'],
                     after_comment['detail_revision'], after_artifact['detail_revision']}) == 4
     finally:
-        store.cx.close()
+        store.close()
 
 
 def test_persisted_transcript_exposes_metadata_without_full_text_and_refreshes_view(tmp_path):
@@ -391,7 +391,7 @@ def test_persisted_transcript_exposes_metadata_without_full_text_and_refreshes_v
         assert full_text not in json.dumps(after)
         item_id = selected['item_id']
     finally:
-        store.cx.close()
+        store.close()
 
     reopened = SQLiteStore(str(path))
     try:
@@ -401,7 +401,7 @@ def test_persisted_transcript_exposes_metadata_without_full_text_and_refreshes_v
         assert persisted['detail']['transcript']['chars'] == len(full_text)
         assert full_text not in json.dumps(persisted)
     finally:
-        reopened.cx.close()
+        reopened.close()
 
 
 def test_detail_collection_order_matches_legacy_and_selects_latest_work(tmp_path):
@@ -470,4 +470,4 @@ def test_detail_collection_order_matches_legacy_and_selects_latest_work(tmp_path
         assert latest_owner_reply['MessageId'] == newer
         assert newest_diff['RunId'] == new_run
     finally:
-        store.cx.close()
+        store.close()

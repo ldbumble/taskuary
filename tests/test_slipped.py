@@ -14,7 +14,7 @@ def s(monkeypatch):
     monkeypatch.setattr(terminal, 'live_sessions', lambda tail=0: [])
     monkeypatch.setattr(funnel, '_agenda', lambda _s, **kw: [])
     s.reconcile_processing_membership(); s.activate_processing_reads(fixed_now=datetime.now().isoformat(), live_state=[])
-    funnel.invalidate(); yield s; funnel.invalidate(); s.cx.close()
+    funnel.invalidate(); yield s; funnel.invalidate(); s.close()
 
 def rail(s):
     s.reconcile_processing_membership(); funnel.invalidate()

@@ -44,7 +44,7 @@ def two(tmp_path, monkeypatch):
     fp.forget_stamps(); funnel.invalidate()
     yield a, b
     fp.forget_stamps(); funnel.invalidate()
-    a.cx.close(); b.cx.close()
+    a.close(); b.close()
 
 
 def states(s): return [dict(r) for r in s.cx.execute('SELECT Key, Status, Note, Until FROM funnel_state ORDER BY Key')]

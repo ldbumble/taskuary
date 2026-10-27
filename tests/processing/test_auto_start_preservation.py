@@ -20,7 +20,7 @@ def _legacy_opt_out(path):
     # renames the old switch, seeds the newly introduced one to 1 with no owner, and startup must
     # still recover the older owner's broader "no unattended sessions" choice before intake.
     store._exec("DELETE FROM setting WHERE Name IN ('general_auto_enabled','auto_start_upgraded','coding_auto_enabled')")
-    store.cx.close()
+    store.close()
     reopened = SQLiteStore(str(path))
     seeded = reopened._one("SELECT * FROM setting WHERE Name='general_auto_enabled'")
     assert seeded['Value'] == '1' and not seeded.get('UpdatedBy')
@@ -82,7 +82,7 @@ def test_legacy_owner_opt_out_is_migrated_before_bridge_or_catchup_can_observe_i
         doubles['schedule_due'].assert_called_once_with(store)
         assert doubles['threads'].call_count == 8  # harmless mocked clocks (full, reports, chat, doorway, reason network) + the new walk start after migration + the share links' own port (sharing.sync_listener) + keep-awake while work runs (awake.start, 2026-10-25)
     finally:
-        store.cx.close()
+        store.close()
 
 
 def test_failed_auto_start_upgrade_aborts_before_any_intake_or_worker_admission(tmp_path):
@@ -114,7 +114,7 @@ def test_failed_auto_start_upgrade_aborts_before_any_intake_or_worker_admission(
             "SELECT UpdatedBy FROM setting WHERE Name='general_auto_enabled'")['UpdatedBy']
         assert 'auto_start_upgraded' not in store.get_settings()
     finally:
-        store.cx.close()
+        store.close()
 
 
 def test_retry_timer_requires_an_explicit_test_double(tmp_path, test_safety_events):
@@ -132,4 +132,4 @@ def test_retry_timer_requires_an_explicit_test_double(tmp_path, test_safety_even
         assert timer.return_value.daemon is True
         timer.return_value.start.assert_called_once_with()
     finally:
-        store.cx.close()
+        store.close()

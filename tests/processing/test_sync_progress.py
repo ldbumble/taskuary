@@ -21,7 +21,7 @@ def sync_store(monkeypatch):
     monkeypatch.setattr(server, 'run_due_reports', lambda *a: None)
     monkeypatch.setattr(server, '_drain_worker', lambda _: SimpleNamespace(submit=lambda **kw: SimpleNamespace(wait=lambda: None, error=None)))
     yield store
-    store.cx.close()
+    store.close()
 
 
 def test_first_triage_and_checks_publish_their_phase_while_held(sync_store, monkeypatch):

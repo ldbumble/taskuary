@@ -493,7 +493,22 @@ const rowHandle = (page, verb) => page.evaluateHandle((verb, ids, words) => {
   return [...document.querySelectorAll("[data-tq-row] button[data-tq-verb]")].filter(vis).find((b) => ids.includes(b.getAttribute("data-tq-verb").split(":").pop())
     && (!words.length || words.some((w) => b.innerText.trim().startsWith(w)))) || null;
 }, verb, [verb, ...(VERBS[verb]?.row || [])], verb === "approve" ? sendWords : []);
-const pressVerb = async (page, verb) => { const h = (await rowHandle(page, verb)).asElement(); if (!h) return false; await h.click(); mark(verb, page.step); return true; };
+// ...and one folded behind a ▾ is pressed from its menu (walkdriver.doVerb): the one-row bar's pill takes the row's width, so Send to agent
+// folded on a laptop and the faults pass found "no task with Send to agent to start" (0.3.9.49) - a press the owner makes in two clicks
+const menuHandle = (page, verb) => page.evaluateHandle((ids, words) => [...document.querySelectorAll('[role="menu"] [role="menuitem"][data-tq-verb]')]
+  .find((i) => i.getAttribute("aria-disabled") !== "true" && ids.includes(i.getAttribute("data-tq-verb").split(":").pop())
+    && (!words.length || words.some((w) => i.innerText.trim().startsWith(w)))) || null, [verb, ...(VERBS[verb]?.row || [])], verb === "approve" ? sendWords : []);
+const pressVerb = async (page, verb) => {
+  const h = (await rowHandle(page, verb)).asElement();
+  if (h) { await h.click(); mark(verb, page.step); return true; }
+  for (const m of await page.$$eval("[data-tq-row] [data-tq-more]", (e) => e.map((x) => x.dataset.tqMore))) {
+    await page.evaluate((m) => document.querySelector(`[data-tq-row] [data-tq-more="${m}"]`)?.click(), m); await wait(400);
+    const i = (await menuHandle(page, verb)).asElement();
+    if (i) { await i.click(); mark(verb, page.step); walked.push(`${page.step}: ${verb} pressed from the ${m} ▾`); return true; }
+    await page.keyboard.press("Escape"); await wait(300);
+  }
+  return false;
+};
 const pressNext = async (page) => { const h = await page.$("[data-tq-row] [data-tq-next]"); if (!h) return false; await h.click(); mark("next", page.step); return true; };
 const openItem = async (page, pick) => {                        // a rail row by its key, or the first whose words match
   const s = await look(page);
@@ -744,18 +759,29 @@ async function faults() {
     await wayOut(page.step, [aFix, f === "nocli" ? "Connect a coding tool" : whereCode, (x) => /coding tool/i.test(x.word)]);
     page.expect.delete("/dispatch"); await fault("");
   }
-  // no AI at all: the strip asks for one, with the button that connects it - on an item whose move needs an AI (the owner, 2026-10-23:
-  // a move the rule decides is lit with no AI, and a failure's fix outranks it). The walk has been past every ask by now (Next is
-  // seen-in-this-walk), so the rail's rows are opened in turn until one is
+  // no AI at all: a way forward that connects one. The strip that asked is gone, and the row gets no Connect an AI (the owner, 2026-10-26:
+  // "if you don't get through ai setup the whole thing doesn't work"): a failed run's Result points at Connections, and the box - the
+  // pill - answers anything typed with where to connect one. The rail's rows are opened in turn for the first; the box is the second
   page.step = "faults noai"; await fresh();
+  const toAi = '[data-tq-run-fix], [data-tq-chat-pop]:not([hidden]) a[href^="#c"], [data-tq-chat-pop]:not([hidden]) button, .tq-chat-body a[href^="#c"], .tq-chat-body button';
+  const aiWay = () => page.evaluateHandle((sel) => [...document.querySelectorAll(sel)].find((e) => e.getBoundingClientRect().width > 0
+    && /connect an ai|connections/i.test(e.innerText) && (!e.matches("[data-tq-run-fix]") || /\bAI\b/.test(e.innerText))) || null, toAi);
   for (const r of (await look(page)).rail.slice(0, 16)) {
-    if (await page.$('[data-tq-advice="no_ai"] button')) break;
+    if ((await aiWay()).asElement()) break;
     await openItem(page, r.key); await wait(1500);
   }
-  const s = await look(page);
-  if (!(await page.$('[data-tq-advice="no_ai"] button'))) note("WAYOUT", page.step, "with no AI the Advisor's strip offers no way to connect one");
-  else { const before = s; await (await page.$('[data-tq-advice="no_ai"] button')).click(); await wait(3000);
-    if (sig(await look(page)) === sig(before)) note("WAYOUT", page.step, "the strip's Connect an AI changed nothing"); await closePops(page); }
+  if (!(await aiWay()).asElement()) {
+    const box = await page.$(".tq-compose-box textarea:not([disabled])");
+    if (box) { await box.click(); await box.type("what should I do with this one?"); await page.keyboard.press("Enter"); await wait(6000); }
+  }
+  const way = (await aiWay()).asElement();
+  if (!way) note("WAYOUT", page.step, `with no AI neither a failed run's Result nor the box's answer offers a way to connect one - it said "${
+    await page.evaluate(() => (document.querySelector("[data-tq-chat-pop]")?.innerText || [...document.querySelectorAll(".tq-chat-body .tq-msg")].pop()?.innerText || "nothing").replace(/\s+/g, " ").slice(0, 160))}"`);
+  else { const before = await look(page), word = (await way.evaluate((e) => e.innerText.trim())).slice(0, 40),
+    from = (await way.evaluate((e) => e.matches("[data-tq-run-fix]"))) ? " on a failed run's Result" : " in the box's answer"; await way.click(); await wait(3000);
+    if (sig(await look(page)) === sig(before)) note("WAYOUT", page.step, `"${word}" with no AI changed nothing`);
+    else walked.push(`${page.step}: offered "${word}"${from}`);
+    await closePops(page); }
   // an act on a task closed behind its open card: the act is refused - with the way to reopen it, never only "reopen it first"
   page.step = "faults closed"; await fresh();
   const t = await openItem(page, (x) => x.status === "yours"), ref = t && ((await look(page)).ref.match(/TQ-(\d+)/) || [])[1];
@@ -1009,9 +1035,13 @@ const ringOf = (page) => page.evaluate(() => {
   return { tid: cards.length ? cards[cards.length - 1].getAttribute("data-tq-task-page") : "",
     rows: [...document.querySelectorAll("[data-tq-rail] .tq-pile-row.current")].map((e) => ({ key: e.getAttribute("data-tq-key"), ref: (e.innerText.match(/TQ-\d+/) || [])[0] || "" })),
     box: document.querySelector(".tq-compose-box textarea")?.getAttribute("placeholder") || "",
+    // ...the one-row bar's pill says "Tell me what to do…" of no task: its name, and the answer pop-up's head, say which (2026-10-27)
+    name: document.querySelector(".tq-compose-box textarea")?.getAttribute("aria-label") || "",
+    pop: [...document.querySelectorAll("[data-tq-chat-pop]:not([hidden]) .tq-chat-pop-head")].map((e) => e.innerText).join(" "),
     seen: [...document.querySelectorAll("[data-tq-task-page]")].map((e) => e.getAttribute("data-tq-task-page") + (vis(e) ? "" : "-")).join(",") };
 });
-// RING: the task opened (or whatever task landed) on the table, exactly one row ringed and it is that task's, the box about it - up to
+// RING: the task opened (or whatever task landed) on the table, exactly one row ringed and it is that task's, the box about it - its
+// words "Ask about this one", or the pill's name or the open pop-up's head naming that task (the one-row bar, 0.3.9.49) - up to
 // 8 s, as the card lands when its pull answers
 async function ringed(page, at, tid = "") {
   let r = null;
@@ -1020,7 +1050,8 @@ async function ringed(page, at, tid = "") {
   if (tid && r.tid !== String(tid)) note("RING", at, `${tqOf(tid)} was opened and the table shows ${tqOf(r.tid)} (task views drawn: ${r.seen})`);
   if (r.rows.length !== 1) note("RING", at, `${r.rows.length} rail rows ringed with ${tqOf(r.tid)} on the table: ${JSON.stringify(r.rows.map((x) => x.ref || x.key))}`);
   else if (r.rows[0].ref !== tqOf(r.tid)) note("RING", at, `the ringed row is ${r.rows[0].ref || r.rows[0].key}, the card ${tqOf(r.tid)} (task views drawn: ${r.seen})`);
-  if (!/^Ask about this one/.test(r.box)) note("RING", at, `${tqOf(r.tid)} is on the table and the box says "${r.box}"`);
+  if (!/^Ask about this one/.test(r.box) && !`${r.name} ${r.pop}`.includes(tqOf(r.tid)))
+    note("RING", at, `${tqOf(r.tid)} is on the table and the box says "${r.box}", named "${r.name}"${r.pop ? `, its answer headed "${r.pop}"` : ""}`);
   return r.tid;
 }
 // HEAD: the task view's header is ONE row (the owner, 2026-10-21) - id, title, the triage pills, state and the X on one line, never
@@ -1170,13 +1201,14 @@ async function searchPass() {
     return !!e && e.contains(document.activeElement); }, fn.toString(), arg)) ? "" : `focus left ${what} for ${await where()} as the page drew`; };
   // a cancel gives focus back: Esc over the search, from the chat's composer, and the words typed next land in the composer
   page.step = "search esc";
-  const comp = await page.$("textarea[placeholder^='Ask']");
+  // ...the composer by its place, not its words: the one-row bar's pill says "Tell me what to do…" (0.3.9.49)
+  const comp = await page.$(".tq-compose-box textarea:not([disabled])");
   if (!comp) note("SEARCH", page.step, "no chat composer to type in");
   else {
     await comp.focus(); await page.keyboard.down("Control"); await page.keyboard.press("k"); await page.keyboard.up("Control");
     await page.waitForSelector("[data-tq-search-input]", { timeout: 4000 }).catch(() => {});
     await wait(300); await page.keyboard.press("Escape"); await wait(600);
-    const back = await page.evaluate(() => document.activeElement?.matches?.("textarea[placeholder^='Ask']"));
+    const back = await page.evaluate(() => document.activeElement?.matches?.(".tq-compose-box textarea"));
     if (!back) note("SEARCH", page.step, `Esc from the search left focus on ${await where()}, not the composer it was in`);
     walked.push("search: Esc gives focus back");
   }

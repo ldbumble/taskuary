@@ -78,6 +78,10 @@ test("the action row draws once with the new item's buttons: Reopen, Next, rail,
   for (let i = 1; i <= 3; i += 1) await t.test(`Next ${i}`, async () => {
     await watch(`next ${i}`, () => page.evaluate(() => document.querySelector(".tq-dock [data-tq-row] [data-tq-next]").click())); await settle();
   });
+  // ...and Back, the walk's step up the line (the owner, 2026-10-27): the same one draw
+  for (let i = 1; i <= 2; i += 1) await t.test(`Back ${i}`, async () => {
+    await watch(`back ${i}`, () => page.evaluate(() => document.querySelector(".tq-dock [data-tq-row] [data-tq-walk-back]").click())); await settle();
+  });
   const tasks = (await (await fetch(`${harness.fixtureApi}/api/tasks`, { headers: { "X-Taskuary-Token": harness.token } })).json()).data || [];
   const open = tasks.filter((x) => !["done", "dropped"].includes(x.Status)).map((x) => x.TaskId);
   assert.ok(open.length >= 3, `the demo has open tasks: ${open}`);

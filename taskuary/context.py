@@ -142,6 +142,71 @@ def _topic(words: set, title_toks: set, sum_toks: set):
             0.5 + 0.5 * len(shared) / len(title_toks | sum_toks))
 
 
+# A PERSON WRITES FROM ANOTHER CHANNEL UNDER A NAME, NOT AN ADDRESS (the owner, 2026-10-26: "the triage should decide if it's about the
+# same thing and same person. it should be able to figure it out"). No identity rule and no stored link between a WhatsApp number and
+# a mailbox: a name on an open task's messages from ANOTHER channel that reads like the arrival's sender's is evidence, put in front
+# of triage with both sides named, and same_as says whether it is the same person and the same job.
+NAME_SIM = 0.8           # how alike two name words of four letters or more must read to be one ("Colten"/"Colton")
+
+def _name_words(name) -> list:
+    """A display name as comparable words: accents and case folded, "Colton, Ray" read as "Ray Colton", punctuation gone."""
+    import unicodedata
+    n = ''.join(c for c in unicodedata.normalize('NFKD', str(name or '')) if not unicodedata.combining(c)).casefold()
+    if n.count(',') == 1 and '@' not in n: last, first = n.split(','); n = f'{first} {last}'
+    return re.findall(r'[^\W\d_]+', n)
+
+
+def name_sim(a, b) -> float:
+    """How alike two people's names read, 0..1, in any word order, an initial standing for its word: the share of the shorter
+    name's words the longer one carries. Two words must meet, one of them whole - a first name alone is everybody's."""
+    from difflib import SequenceMatcher
+    x, y = sorted((_name_words(a), _name_words(b)), key=len)
+    if len(x) < 2: return 0.0
+    left, whole, hit = list(y), 0, 0
+    for w in x:
+        m = next((v for v in left if v == w or (len(w) >= 4 and len(v) >= 4 and SequenceMatcher(None, w, v).ratio() >= NAME_SIM)), None)
+        m = m or next((v for v in left if (len(w) == 1 and v[0] == w) or (len(v) == 1 and w[0] == v)), None)
+        if m is None: continue
+        left.remove(m); hit += 1; whole += len(m) > 1 and len(w) > 1
+    return hit / len(x) if hit >= 2 and whole else 0.0
+
+
+def _contact(store, channel, email) -> str:
+    """Where a name wrote from, as a person would say it: "WhatsApp +1 555-010-0100", "<ray@northwind.example>"."""
+    from .senders import channel_name
+    from . import wanames
+    e = str(email or '')
+    if '@' in e and ':' not in e: return f'<{e}> ({channel_name(channel) or "email"})'
+    if e.startswith('whatsapp:') and wanames.digits(e): return f'({channel_name(channel)} {wanames.fmt_phone(wanames.digits(e))})'
+    return f'({channel_name(channel) or "chat"})'
+
+
+def arrival_names(store, msg: dict) -> list:
+    """The names the arrival's sender goes by: their display name, and on WhatsApp the name the owner saved for the chat."""
+    out = [msg.get('from_name')]
+    conv = str(msg.get('conversation_id') or '')
+    if msg.get('channel') == 'whatsapp' and conv.startswith('whatsapp:'):
+        from . import wanames
+        if not wanames.is_group(conv[9:]): out.append(wanames.name_of(store, conv[9:]))
+    return [n for n in dict.fromkeys(' '.join(str(n or '').split()) for n in out) if n and '@' not in n]
+
+
+def same_name(store, msg: dict, names: list, people: list):
+    """(why, sim) when someone on the task, writing from ANOTHER channel under another address, has a name like the arrival's
+    sender - both sides named, with where each wrote from. None otherwise; the model says whether it is the same person."""
+    ch, me = str(msg.get('channel') or ''), str(msg.get('from_email') or '').lower()
+    best = None
+    for p in people or []:
+        if p['channel'] == ch or (me and p['email'].lower() == me): continue
+        for n in names:
+            s = name_sim(n, p['name'])
+            if s and (not best or s > best[0]): best = (s, n, p)
+    if not best: return None
+    s, n, p = best
+    return (f"a similar name on another channel - from: {n} {_contact(store, ch, msg.get('from_email'))}"
+            f" - task's sender: {p['name']} {_contact(store, p['channel'], p['email'])}", s)
+
+
 def recent_open(store, msg: dict, limit: int = OPEN_SEATS) -> list:
     """The OPEN work this arrival touches - the same thread, the same sender, two words of the same subject, or the same topic
     in its body - so triage can say "this is TQ-x again" (same_as) instead of opening a second task for one job
@@ -151,8 +216,10 @@ def recent_open(store, msg: dict, limit: int = OPEN_SEATS) -> list:
     ids = ids_of(f"{msg.get('subject') or ''} {msg.get('body') or ''}")
     # ...a report's words are its body already (_arrival_keys), and its own earlier tasks keep their seats (2026-10-09)
     words = set() if own else toks | set(tokens(str(msg.get('body') or '')[:TOPIC_CHARS]))
-    out = []
-    for t in store.tasks_open_linked():
+    out, rows = [], store.tasks_open_linked()
+    names = [] if own else arrival_names(store, msg)
+    people = store.task_people([t['TaskId'] for t in rows]) if names else {}
+    for t in rows:
         convs = {c for c in str(t.get('Convs') or '').split(',') if c}
         senders = {s for s in str(t.get('Senders') or '').split(',') if s}
         title_toks = set(tokens(t.get('Title') or ''))
@@ -160,11 +227,17 @@ def recent_open(store, msg: dict, limit: int = OPEN_SEATS) -> list:
         hit = (f"the same run or record ({', '.join(sorted(same)[:3])})", 4.0) if same else _match(conv, sender, toks, own, convs, senders, title_toks)
         # ...and the same job in other words when nothing stronger ties them: the same sender alone outranks no topic
         topic = _topic(words, title_toks, set(tokens(t.get('Summary') or ''))) if words and (not hit or hit[1] < 1.0) else None
+        # ...and a name like the sender's on another channel: under the same sender, over nothing - and a name WITH the topic over
+        # the topic alone, as the same person on the same job is the likelier of the two
+        named = same_name(store, msg, names, people.get(t['TaskId'])) if names and (not hit or hit[1] < 0.5) else None
+        if topic and named: topic = (f'{topic[0]}; {named[0]}', topic[1] + 0.4)
+        elif named: named = (named[0], 0.3 + 0.1 * named[1])
         if topic and (not hit or topic[1] > hit[1]): hit = topic
+        elif named and not topic and not hit: hit = named
         if not hit: continue
         why, rank = hit
         out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '', 'from': _who(sender, senders),
-                    'why': why, **({'about': _short(t.get('Summary'), 200)} if hit is topic and t.get('Summary') else {}),
+                    'why': why, **({'about': _short(t.get('Summary'), 200)} if hit in (topic, named) and t.get('Summary') else {}),
                     **_threads(convs), '_rank': rank})
     out.sort(key=lambda r: -r['_rank'])
     return [{k: v for k, v in r.items() if k != '_rank'} for r in out[:limit]]
@@ -273,13 +346,17 @@ def recent_closures(store, msg: dict, days: int = RECENT_DAYS, limit: int = RECE
     # appeared once or twice, so "spendly" and "failures" scored alike. What actually separates them is
     # meaning, which is the model's job - so the code ranks by how much of a closed task's title the
     # arrival shares, hands over the best few, and the prompt says to weigh them (triage.FIELDS).
-    out = []
-    for t in store.tasks_closed_since(since):
+    out, rows = [], store.tasks_closed_since(since)
+    names = [] if own else arrival_names(store, msg)
+    people = store.task_people([t['TaskId'] for t in rows]) if names else {}
+    for t in rows:
         convs = {c for c in str(t.get('Convs') or '').split(',') if c}
         senders = {s for s in str(t.get('Senders') or '').split(',') if s}
         title_toks = set(tokens(t.get('Title') or ''))
         same = _shared_ids(store, t, ids)
         hit = (f"the same run or record ({', '.join(sorted(same)[:3])})", 4.0) if same else _match(conv, sender, toks, own, convs, senders, title_toks)
+        # ...and the same person writing from another channel under a name (recent_open, 2026-10-26), under the same sender
+        if not hit and names and (named := same_name(store, msg, names, people.get(t['TaskId']))): hit = (named[0], 0.3 + 0.1 * named[1])
         if not hit: continue
         why, rank = hit
         out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '', 'from': _who(sender, senders),

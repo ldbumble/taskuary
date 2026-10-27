@@ -2716,6 +2716,16 @@ class SQLiteStore:
             "  FROM task t LEFT JOIN message m ON m.TaskId=t.TaskId "
             " WHERE t.Status NOT IN ('done','dropped') "
             " GROUP BY t.TaskId ORDER BY IFNULL(t.UpdatedAt, t.CreatedAt) DESC LIMIT ?", (limit,))
+    def task_people(self, tids) -> dict:
+        """{TaskId: [{name, email, channel}]} - who wrote on each task, by display name, never the owner's own lines: what a name on
+        another channel is compared against (context.same_name)."""
+        tids = [int(t) for t in tids if t][:200]
+        if not tids: return {}
+        out = {}
+        for r in self._rows(f"SELECT DISTINCT TaskId, FromName, FromEmail, Channel FROM message WHERE TaskId IN ({','.join('?' * len(tids))}) "
+                            "AND IFNULL(FromName,'')<>'' AND IFNULL(Status,'')<>'context' AND IFNULL(Direction,'')<>'out'", tuple(tids)):
+            out.setdefault(r['TaskId'], []).append({'name': r['FromName'], 'email': r['FromEmail'] or '', 'channel': r['Channel'] or ''})
+        return out
     def tasks_owner_worked(self, since: str, before: str, limit=3):
         """The OPEN tasks the owner acted on (an audit row of theirs) between two stamps, last touched first, with when.
         What they had in hand when they sent a mail of their own (context.worked_before)."""

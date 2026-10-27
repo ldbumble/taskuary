@@ -5,7 +5,7 @@ import demoApi, { DEMO } from "./demoApi.js";
 import { keepDetail } from "./apiError.js";
 import { staleToken, UNLINKED_EVENT } from "./unlinked.js";
 import { record, recordAction } from "./lastError.js";
-import { noteWrite } from "./wrote.js";
+import { isWrite, noteWrite } from "./wrote.js";
 const api = axios.create({ baseURL: "" });
 api.interceptors.request.use((c) => {
   const t = localStorage.getItem("taskuary_token");
@@ -16,7 +16,7 @@ api.interceptors.request.use((c) => {
 // A string to render, and the structure to act on, both kept - see apiError.js for why one
 // without the other put a red banner over a refusal the app already knew how to absorb.
 // Any write, answered or refused, may have changed what the sync caption shows (wrote.js).
-const wrote = c => { if (c && !/^(get|head|options)$/i.test(c.method || "get")) noteWrite(); };
+const wrote = c => { if (isWrite(c)) noteWrite(); };
 api.interceptors.response.use((r) => { wrote(r.config); return r; }, (e) => {
   wrote(e?.config);
   if (staleToken(e, localStorage)) window.dispatchEvent(new Event(UNLINKED_EVENT));

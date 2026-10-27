@@ -83,7 +83,8 @@ import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { adviceKeyFor, taskNote } from "./advice.js";
 import AdvisorNote from "./AdvisorNote.jsx";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
-import { CLOSE_BY_HAND, askIsTitle, closeOut, focusOf, fromLine as fromLineOf, layoutOf, mainOf, nextInDrawer, sameWords, waitingOn, workPane } from "./taskLayout.js";
+import { CLOSE_BY_HAND, askIsTitle, closeOut, focusOf, fromLine as fromLineOf, layoutOf, sameWords, waitingOn, workPane } from "./taskLayout.js";
+import { drawerLit, mainView, stageOf } from "./stages.js";
 import { taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
 import { ASK_TAG, BROWSER_TAG } from "./newTask.js";
@@ -1301,8 +1302,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // THE MAIN VIEW AND ITS DRAWERS (taskLayout.mainOf): Came from on the left where the work is the page, Agent and Close out on the right
   // where the task is; a phone's narrow body stays one stacked page. A move that changes where the task is up to shuts whichever was out
   const stacked = !sessionView && bodyW > 0 && bodyW < STACK_BELOW;
-  const main = mainOf({ sessionView, stacked, focus, drafted: replyHas });
-  const fromDrawer = main === "work", workDrawer = main === "task", workLit = nextInDrawer({ main, focus });
+  // ...read off ONE STAGE (stages.json, the owner 2026-10-26: "are these modes defined well anywhere besides the UI"): the focus and what
+  // Close out holds make it, and the stage names the main view and whether the right tab is lit - the server and the Assistant read the same
+  const taskStage = stageOf({ focus, drafted: replyHas, closed: ["done", "dropped"].includes(t?.Status) });
+  const main = mainView({ stage: taskStage, sessionView, stacked });
+  const fromDrawer = main === "work", workDrawer = main === "task", workLit = drawerLit({ main, stage: taskStage });
   // ...and a lit tab names the move: the reply and who to ("Close out · reply to Priya Shah"), else what the drawer holds
   const workTabWords = focus === "reply" && replyMessage?.FromName ? `Close out · reply to ${replyMessage.FromName}` : "Agent · Close out";
   useEffect(() => { setFromSide(false); setWorkSide(false); }, [main]);
@@ -1884,7 +1888,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               {/* THE BODY, between its two drawer tabs (DRAWER_TAB): Came from on the left where the work is the page - a live agent's too - and
                   Agent · Close out on the right where the task is. The drawer is laid OVER the main view, never beside it, so nothing under
                   it reflows: a terminal is not refitted and the CLI's screen gets no resize (item 6, the owner 2026-10-21) */}
-              <Box ref={bodyBox} data-tq-task-body="" data-tq-main={main || "stacked"} sx={{ display: "flex", flex: 1, minHeight: 0, minWidth: 0 }}>
+              <Box ref={bodyBox} data-tq-task-body="" data-tq-main={main || "stacked"} data-tq-stage={taskStage} sx={{ display: "flex", flex: 1, minHeight: 0, minWidth: 0 }}>
               {/* ...and the tab reads as a press at a glance (the owner, 2026-10-26: "make it with arrow and more visible to pull out where it
                   came from"): the whole edge, an arrow in a disc that turns while it is out, a hover title saying what it opens */}
               {fromDrawer && <Box component="button" type="button" ref={fromLineRef} data-tq-from-line="" sx={DRAWER_TAB(fromSide)}

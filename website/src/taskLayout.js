@@ -3,6 +3,7 @@
 import { channelName } from "./taskSources.js";
 import { plural } from "./timeWords.js";
 import { fmtDate } from "./dates.js";
+import { drawerLit, mainView, stageOf } from "./stages.js";
 
 // WHILE AN AGENT WORKS THE WORK TAKES THE WHOLE WIDTH: a live session - coding or general, working or waiting on you (the rail's
 // spinning ring, or its hand) - and From folds to one line over it; the terminal is never covered or squeezed. `sessionView` is the
@@ -29,11 +30,14 @@ export const focusOf = ({ live = false, result = false, failed = false, pane = "
 // narrow body keeps its one stacked page (null).
 // ...and a reply with NOTHING DRAFTED yet opens on the task, its right tab lit (the owner, 2026-10-26: "you can open on task but highlight
 // the side bar so people know to go there"); `drafted` is anything of Close out's own - a draft, emails owed, a close, a write-up
-export const mainOf = ({ sessionView = false, stacked = false, focus = null, drafted = false } = {}) =>
-  sessionView ? "work" : stacked ? null : focus === "agent" || (focus === "reply" && drafted) || focus === null ? "work" : "task";
+// ...ALL OF IT NOW READ FROM THE ONE STAGE MODEL (stages.json, the owner 2026-10-26: "we should define this well"): the focus and what
+// is drafted make the stage, and the stage names its main view and whether the drawer's tab is lit. `closed`: a closed task is `done`,
+// which opens on how it closed
+export const mainOf = ({ sessionView = false, stacked = false, focus = null, drafted = false, closed = false } = {}) =>
+  mainView({ stage: stageOf({ focus, drafted, closed }), sessionView, stacked });
 // ...WHICH DRAWER HOLDS WHAT IS NEXT, so its tab is lit: the right one where the task is the page but the move is the reply (nothing
 // drafted yet) or an agent (an ask nothing has worked: "source"). A to-do's or a goal's list is itself the move; Came from is context only.
-export const nextInDrawer = ({ main = null, focus = null } = {}) => main === "task" && (focus === "reply" || focus === "source");
+export const nextInDrawer = ({ main = null, focus = null } = {}) => drawerLit({ main, stage: stageOf({ focus }) });
 
 // WHICH HALF OF THE WORK COLUMN IS OPEN. The page's focus (taskLifecycle.focusStage) still decides between the agent and the
 // reply; where it named the task itself - now the always-open From column - the work column opens on what the task is for: the

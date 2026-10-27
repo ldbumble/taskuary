@@ -1581,6 +1581,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession;
   const startHere = !liveSession && notDone && !continueHere && !sendGeneral && (stage !== "agent" || (agentBar && !isGeneral));
   const ranBefore = !!(report || detail?.transcript);
+  // held on where the code is: before any run that is a start waiting, after one it is the agent asking to move the work (wrapup.asks_to_move)
+  const heldWhy = ranBefore ? "The agent found the work is not in this code - choose where it is and it starts there"
+    : "Not started: it needs to know where the code is - it starts once you choose";
   // RUN ANOTHER AGENT, on the bar and for any task an agent has worked (the owner, 2026-10-05: "don't see run another agent under
   // more? it should be not in more"). It was offered only behind More, only on a coding task, only once its session had ended -
   // so a general task could never be handed to the coding agent from here. It opens the agent step; a live session is paused
@@ -1596,7 +1599,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // a repository is a coding tool's question: with none connected there is nothing to pick one for (B3)
     // ...and a start HELD for it is the row's own move, not a More item: "It needs a repository" sat over a row with nothing to press
     ...(heldRepo || (!isGeneral && canCode) ? [{ id: "repo", group: heldRepo ? "decide" : "more", tone: heldRepo ? "p" : undefined, label: btn("pick_repo", repoOf(t) ? "set" : null), run: pickRepo,
-      title: heldRepo ? "Not started: it needs to know where the code is - it starts once you choose" : btnHint("pick_repo") }] : []),
+      title: heldRepo ? heldWhy : btnHint("pick_repo") }] : []),
   ];
   // ...and DARK while the agent is running (the owner, 2026-10-20): not over a turn that finished or a question - those are waiting
   const stopSave = { id: "save-end", group: "agent", lead: !pendingReview, fill: liveSession && agentState === AGENT.working && !pendingReview, label: labelOfRow("save-end"), disabled: !!wrapping, run: wrapUp, title: hintOfRow("save-end") };
@@ -2311,7 +2314,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {/* the repository pill only where a coding tool is connected (B3) */}
                       {!isGeneral && canCode && <Button size="small" variant="outlined" sx={chipBtn}
                         startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
-                        title={heldRepo ? "Not started: it needs to know where the code is - it starts once you choose" : btnHint("pick_repo")}
+                        title={heldRepo ? heldWhy : btnHint("pick_repo")}
                         onClick={pickRepo}>{repoOf(t) || PICK_CODE.toLowerCase()}</Button>}
                       {!isGeneral && canCode && heldRepo && !repoOf(t) && <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>not started - {PICK_CODE.toLowerCase()}</Typography>}
                     </Box>

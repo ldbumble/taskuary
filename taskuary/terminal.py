@@ -1764,6 +1764,18 @@ def _cut(text: str, n: int, what: str = 'message') -> str:
     return (text[:n] + f' …[{what} truncated here: {n:,} of {len(text):,} characters. '
             'Ask the owner for the rest before assuming anything past this point.]')
 
+_CUT_NOTE = re.compile(r' …\[message truncated here: [\d,]+ of ([\d,]+) characters\. Ask the owner for the rest before assuming anything past this point\.\]')
+
+def _recut(ask: str, n: int) -> str:
+    """The ask cut again to n for the command line. A message already cut (ASK_CHARS) keeps its note's TRUE size - cut over it, the
+    note said "of 12,000" for a 40,000-character mail - and what follows it stays."""
+    m = _CUT_NOTE.search(ask)
+    if not m: return _cut(ask, n, 'message')
+    after = ask[m.end():]
+    keep = max(0, n - len(after) - 160)
+    return (ask[:m.start()][:keep] + f' …[message truncated here: {keep:,} of {m.group(1)} characters. '
+            'Ask the owner for the rest before assuming anything past this point.]' + after)
+
 
 # An agent working a repository has no use for anybody's email address, and every prompt is
 # a copy handed to a third-party CLI, written into its transcript and its own logs. So the
@@ -1971,9 +1983,12 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     if len(out) > SEED_CEILING:
         over = len(out) - SEED_CEILING
         head, sep, tail = out.partition('FROM ')
-        ask, rsep, rest = tail.partition(' RULES (AGENT.md')
+        # ...and since paragraphs() a blank line, not a space, stands before it: ' RULES (' never matched again, so a seed over the
+        # ceiling lost its END instead of its ask - the closing lines on how to finish and reply (found 2026-10-27, when CODING.md
+        # grew). The LAST one: a mail body quoting the label sits before the real one.
+        ask, rsep, rest = tail.rpartition('\n\nRULES (AGENT.md - every worker)')
         if sep and rsep and len(ask) > over + 400:
-            out = closed(head + sep + _cut(ask, len(ask) - over - 220, 'message')) + rsep + rest
+            out = closed(head + sep + _recut(ask, len(ask) - over - 220)) + rsep + rest
         else:
             out = closed(_cut(out, SEED_CEILING - 20, 'prompt'))
         logger.warning(f'seed for task {tid} trimmed to fit the command line ({len(out)} chars)')

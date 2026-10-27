@@ -63,6 +63,32 @@ def test_a_teams_draft_says_it_cannot_be_sent_from_the_phone():
     assert 'Yes, I can cover Saturday.' in text
 
 
+def test_a_reply_owed_with_no_draft_yet_says_reply_owed_never_ready_to_send():
+    """A reply nothing had drafted yet read "🏁 ready to send" on the phone, over "no reply drafted yet" (the owner, 2026-10-27):
+    it says "reply owed" with no flag until the draft lands - and the funnel's own rows carry the fact it reads."""
+    from taskuary import funnel
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Visitor parking', 'Kind': 'reply', 'Status': 'open'}, 'o')
+    mid = s.add_message({'TaskId': tid, 'Channel': 'email', 'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example',
+                         'Subject': 'Visitor parking', 'BodyText': 'Can you book visitor parking for Friday?', 'Status': 'open'})
+    rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': ''})
+    item = {'key': f'review:{rid}', 'kind': 'review', 'lane': 'approve', 'rid': rid, 'mid': mid, 'tid': tid, 'ref': 'TQ-0001',
+            'who': 'Gail Moreno', 'channel': 'email', 'title': 'Visitor parking', 'draft': False,
+            'why': 'a reply is owed - draft it with AI or write it'}
+    story = ra.story_block(s, item)
+    assert story.split('\n')[0].startswith('✍️ reply owed · TQ-0001'), story
+    assert '🏁' not in story and 'ready to send' not in story, story
+    assert ra.status_line(item).startswith('reply owed - '), ra.status_line(item)
+    # ...the draft lands: the flag and its words come back
+    drafted = {**item, 'draft': True}
+    assert ra.story_block(s, drafted).split('\n')[0].startswith('🏁 ready to send · TQ-0001')
+    assert funnel.mark_for(drafted) == '🏁' and funnel.mark_for(item) == '✍️'
+    # an old row with no draft field, an action and a refused send keep their own words
+    assert funnel.lane_word({'kind': 'review', 'lane': 'approve'}) == 'ready to send'
+    assert funnel.lane_word({**item, 'kind': 'action'}) == 'ready to send'
+    assert funnel.lane_word({**item, 'not_sent': True}) == 'ready to send'
+
+
 def test_a_general_run_with_no_session_mode_is_a_general_agent():
     """F6: a headless or saved general run carries no session `mode`, and its card said "Coding agent"."""
     s = MemoryStore()

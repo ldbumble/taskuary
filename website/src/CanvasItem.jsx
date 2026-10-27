@@ -135,6 +135,8 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         onFinish={async (status, close) => { await close(); onAfter(); }}
         onReminded={(out) => { onReminded?.(out); if (out?.remindAt) onAfter(); }} backArrow={phone}
         // Mark done and Remind me put the task down AT THE PRESS, as Next does; a failure puts it back with the reason
+        // ...and the day the owner typed with Remind me ("remind me Monday"), its picker's first button (assistantLight's light.day)
+        saidDay={lit?.verb === "defer" ? lit.day || null : null}
         onLeave={onLeave} onStay={onStay} note={note} />
       </TableVerbs>
       </Box>

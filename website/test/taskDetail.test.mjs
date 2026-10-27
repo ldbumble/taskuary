@@ -132,5 +132,5 @@ test("the rail stamps its reads and its rows and the header pill take the task's
   assert.match(view, /const page = i\.tid \? pageRead\(i\.tid\) : null, why = rowWhy\(i, page\);/);
   assert.match(view, /railStatus\(i, !canSend\(sendCaps, i\.channel\), page\)/, "the row's icon");
   assert.match(view, /useEffect\(\(\) => watchReads\(\(\) => reread\(\(n\) => n \+ 1\)\), \[\]\);/, "the rail draws again on a new read");
-  assert.match(page, /page: rail\?\.tid \? pageRead\(rail\.tid\) : null \}\);/, "the header pill takes the same read");
+  assert.match(page, /page: rail\?\.tid \? pageRead\(rail\.tid\) : null,\n/, "the header pill takes the same read");
 });

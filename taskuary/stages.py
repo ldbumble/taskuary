@@ -46,7 +46,17 @@ def facts(store, t: dict, state: str | None = None) -> dict:
             'list': checklist or bool(str(t.get('DoneWhen') or '').strip())}
 
 
-def of_task(store, t: dict, state: str | None = None) -> str | None:
-    """The stage of task `t` at rest, or None when it cannot be read."""
-    try: return of(facts(store, t, state))
+def state_of(store, t: dict, session=None) -> str:
+    """taskstate's key for a bare task row - its latest review and run read here, as the list row carries them. `session`: its live
+    session ({alive, waiting}), when the caller has the live ones."""
+    from . import taskstate
+    tid = int(t['TaskId'])
+    rv, rn = store.pending_review(tid), (store.list_runs(tid) or [{}])[0]
+    row = {**t, 'ReviewStatus': t.get('ReviewStatus') or ('pending' if rv else None), 'RunStatus': t.get('RunStatus') or rn.get('Status')}
+    return taskstate.state(store, row, session, store.get_dispatch(tid))
+
+
+def of_task(store, t: dict, state: str | None = None, session=None) -> str | None:
+    """The stage of task `t`, or None when it cannot be read. `state`: its taskstate key when the caller has it (the task detail)."""
+    try: return of(facts(store, t, state or state_of(store, t, session)))
     except Exception: return None

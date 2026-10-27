@@ -7,13 +7,17 @@ import fs from "node:fs";
 
 const src = fs.readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
 
-test("Next is no press that re-reads the item it puts down", () => {
-  assert.match(src, /onPressed\(\(id\) => \{\n\s+const k = onTableRef\.current;\n\s+if \(k && !\/\(\^\|:\)next\$\/\.test\(String\(id \|\| ""\)\) && !leftRef\.current\.has\(`k:\$\{k\}`\)\) readAdvice\(k, true\);\n\s+\}\)/);
+test("Next is no press that re-reads the item it puts down - nor Back, the other walk move", () => {
+  assert.match(fs.readFileSync(new URL("../src/actionRow.js", import.meta.url), "utf8"), /export const walkMove = \(id\) => \/\(\^\|:\)next\$\/\.test\(String\(id \|\| ""\)\) \|\| id === BACK;/);
+  assert.match(src, /onPressed\(\(id\) => \{
+\s+const k = onTableRef\.current;
+\s+if \(k && !walkMove\(id\) && !leftRef\.current\.has\(`k:\$\{k\}`\)\) readAdvice\(k, true\);
+\s+\}\)/);
 });
 
 test("...nor on a phone, whose view reads its own line (CanvasItem useItemAdvice)", () => {
   const item = fs.readFileSync(new URL("../src/CanvasItem.jsx", import.meta.url), "utf8");
-  assert.match(item, /const after = onPressed\(\(id\) => \{ if \(!\/\(\^\|:\)next\$\/\.test\(String\(id \|\| ""\)\)\) read\(\); \}\);/);
+  assert.match(item, /const after = onPressed\(\(id\) => \{ if \(!walkMove\(id\)\) read\(\); \}\);/);
 });
 
 test("a revision or lane move re-reads only the SAME item - a new key is read by the table's own effect", () => {

@@ -12,3 +12,4 @@
 # Left to autocrlf, a checkout on Windows rewrites it and the gate fails for a reason that is
 # not the payload (tests/assistant_payload_fixture.py).
 /tests/data/assistant_payload_golden.txt text eol=lf
+*.sh text eol=lf

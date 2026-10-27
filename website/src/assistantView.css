@@ -573,8 +573,13 @@
 /* ...and at rest the pill is SMALL - "Ask…" and its send (the owner, 2026-10-27: "yes shrink the chat box"): at 220px it took the room
    Mark done, Send to agent and Remind me need, and they folded behind a ▾ on a 1366-1600px laptop - two clicks each. min-width 0: the
    textarea's own 20 columns held the box at ~208px whatever its basis */
-.tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box { flex: 0 0 120px; min-width: 0; width: auto; min-height: 34px; margin: 3px 6px 3px 0; padding: 0 3px 0 10px; gap: 2px;
-  border: 1px solid #d5d0c7; border-radius: 17px; background: #f8f7f3; transition: background-color .12s, border-color .12s; }
+/* ...180px, white and edged in the brand's slate, its arrow the brand's (the owner, 2026-10-27: "still too small to see. even at rest it has
+   to be wider and more prominent ... maybe the up arrow should be in the color of taskuary") - Mark done still on a laptop's row */
+.tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box { flex: 0 0 180px; min-width: 0; width: auto; min-height: 34px; margin: 3px 6px 3px 0; padding: 0 3px 0 12px; gap: 2px;
+  border: 1px solid #a9b6c1; border-radius: 17px; background: #fff; box-shadow: 0 1px 3px #39352d14; transition: background-color .12s, border-color .12s; }
+.tq-dock-line:has(> .tq-arow) > .tq-compose-box textarea::placeholder { color: #55697a; }
+.tq-dock-line:has(> .tq-arow) > .tq-compose-box .tq-send { background: #55697a; }
+.tq-dock-line:has(> .tq-arow) > .tq-compose-box .tq-send:disabled { opacity: .7; }
 .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { flex-basis: min(560px, 46%); padding-left: 3px; background: #fff; border-color: #9fae9f; }
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box:not([data-tq-open]) .tq-compose-tools { display: none; }
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box textarea { min-height: 30px; padding: 5px 4px; }
@@ -585,7 +590,7 @@
    stays on the row as it was (::after draws it, lit), so nothing there moves, folds or is covered while the owner types; the box stands just
    ABOVE the dock, right-aligned, and grows upward. On a phone (under 600px) it widens in its line as before */
 @media (min-width: 601px) {
-  .tq-dock .tq-dock-line:has(> .tq-arow):has(> .tq-compose-box[data-tq-open])::after { content: ""; flex: 0 0 120px; box-sizing: border-box; min-height: 34px;
+  .tq-dock .tq-dock-line:has(> .tq-arow):has(> .tq-compose-box[data-tq-open])::after { content: ""; flex: 0 0 180px; box-sizing: border-box; min-height: 34px;
     margin: 3px 6px 3px 0; border: 1px solid #9fae9f; border-radius: 17px; background: #fff; }
   .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { position: absolute; right: 20px; bottom: calc(100% + 6px); z-index: 6;
     width: min(560px, calc(100% - 54px)); min-height: 72px; align-items: flex-end; padding: 6px 4px 4px 8px; border-radius: 14px;

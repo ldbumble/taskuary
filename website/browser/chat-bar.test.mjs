@@ -39,7 +39,7 @@ test("one row: the action row and the box share a line, the answer pops up over 
   assert.ok(rest.line <= 46, `the row and the box are one line ${say}`);
   assert.ok(rest.mid <= 3 && rest.after, `the pill stands at the row's end, on its line ${say}`);
   // ...a SMALL pill (the owner, 2026-10-27: "yes shrink the chat box"): at 220px it folded Mark done and Send to agent behind a ▾ on a laptop
-  assert.ok(rest.pill >= 110 && rest.pill <= 130 && !rest.open && rest.tools === "none", `a pill at rest ${say}`);
+  assert.ok(rest.pill >= 170 && rest.pill <= 190 && !rest.open && rest.tools === "none", `a pill at rest ${say}`);
   assert.equal(rest.hint, "Ask…");
 
   // FOCUSED: it opens UP AND OVER the canvas with its tools, and the row under it does not move or fold (the owner, 2026-10-27: "it should

@@ -1285,6 +1285,10 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
     elif verb in ('reply', 'redraft') and (on or {}).get('mid'):
         rid = _draft(store, on, verb, decision.get('text') or '')
         if rid:                                             # the draft is the next thing to read, so go to it
+            # ...A DRAFT THAT WAS NOT WRITTEN IS SAID SO (the overnight walk, 2026-10-26): the drafting AI failing still left the review,
+            # empty, and the phone said "Drafting a reply on TQ-0002 - nothing goes out until you say yes." over a card reading "no reply
+            # drafted yet" - the desk says its rewrite did not happen (AssistantView decide). The card stays, its Draft with AI to try again
+            if not _draft_text(store, {'rid': rid}).strip(): said = ['I could not write that draft here - nothing is drafted yet.']
             nxt = _draft_card(store, rid, actor)
             return '\n\n'.join(said + [turn_text(nxt, store=store)])
         said.append('I could not write that draft here - it is waiting on the task page.')

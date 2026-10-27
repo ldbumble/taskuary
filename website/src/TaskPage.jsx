@@ -18,6 +18,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import RemindMe, { RemindPicker } from "./RemindMe.jsx";
+import { steady } from "./steadyAnchor.js";
 import { useFoldBar } from "./foldBar.js";
 import { SlotPicker } from "./CalendarPick.jsx";
 import { onPressed, useVerbs } from "./actionRow.js";
@@ -1472,7 +1473,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     } finally { endStart(id); }
   };
   const continueWord = startingAgent === "resume" ? (failedRun ? "Trying again…" : "Continuing…") : failedRun ? btn("try_again") : labelOfRow("continue");
-  const continuePress = (e, a) => (failedRun ? tryAgain() : setContinueAt(a || e?.currentTarget));
+  const continuePress = (e, a) => (failedRun ? tryAgain() : setContinueAt(steady(a || e?.currentTarget)));
   // THE BAR THE AGENT CARD ACTS THROUGH, built here so it can ride inside the heading beside the
   // chip - where the Task and Reply strips keep theirs. Group one is THIS session, group two is
   // another one, and exactly one move is filled. It is an element, not a component: the handlers
@@ -1599,8 +1600,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const calVerbs = !calAsk ? [] : calAsk.invite ? [
     { id: "accept_invite", group: "decide", tone: "s", label: btn("accept_invite"), run: () => calAnswer("accept"), title: btnHint("accept_invite") },
     { id: "decline_invite", group: "decide", tone: "s", label: btn("decline_invite"), run: () => calAnswer("decline"), title: btnHint("decline_invite") },
-    { id: "propose_time", group: "decide", tone: "s", label: btn("propose_time"), run: (e, a) => setSlotAt({ act: "propose", at: a || e?.currentTarget || document.body }), title: btnHint("propose_time") },
-  ] : [{ id: "find_time", group: "decide", tone: "s", label: btn("find_time"), run: (e, a) => setSlotAt({ act: "schedule", at: a || e?.currentTarget || document.body }), title: btnHint("find_time") }];
+    { id: "propose_time", group: "decide", tone: "s", label: btn("propose_time"), run: (e, a) => setSlotAt({ act: "propose", at: steady(a || e?.currentTarget) || document.body }), title: btnHint("propose_time") },
+  ] : [{ id: "find_time", group: "decide", tone: "s", label: btn("find_time"), run: (e, a) => setSlotAt({ act: "schedule", at: steady(a || e?.currentTarget) || document.body }), title: btnHint("find_time") }];
   // the task's own controls ride in the header strip only while a session hides the task card - and never on the canvas,
   // whose row holds them
   const headControls = sessionView && !inRow && notDone;
@@ -1623,9 +1624,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const runAnother = { id: "run-another", group: "agent", label: labelOfRow("run-another"), disabled: !!noAiWhy, why: noAiWhy,
     run: openBox, title: hintOfRow("run-another") };
   const changeVerbs = !notDone ? [] : [
-    { id: "kind", group: "more", label: labelOfRow("kind"), run: (e, a) => setPick({ what: "kind", at: a || e?.currentTarget }), title: hintOfRow("kind") },
-    { id: "priority", group: "more", label: labelOfRow("priority"), run: (e, a) => setPick({ what: "priority", at: a || e?.currentTarget }), title: hintOfRow("priority") },
-    { id: "assign", group: "more", label: labelOfRow("assign"), run: (e, a) => setPick({ what: "assign", at: a || e?.currentTarget }), title: hintOfRow("assign") },
+    { id: "kind", group: "more", label: labelOfRow("kind"), run: (e, a) => setPick({ what: "kind", at: steady(a || e?.currentTarget) }), title: hintOfRow("kind") },
+    { id: "priority", group: "more", label: labelOfRow("priority"), run: (e, a) => setPick({ what: "priority", at: steady(a || e?.currentTarget) }), title: hintOfRow("priority") },
+    { id: "assign", group: "more", label: labelOfRow("assign"), run: (e, a) => setPick({ what: "assign", at: steady(a || e?.currentTarget) }), title: hintOfRow("assign") },
     // a repository is a coding tool's question: with none connected there is nothing to pick one for (B3)
     // ...and a start HELD for it is the row's own move, not a More item: "It needs a repository" sat over a row with nothing to press
     ...(heldRepo || (!isGeneral && canCode) ? [{ id: "repo", group: heldRepo ? "decide" : "more", tone: heldRepo ? "p" : undefined, label: btn("pick_repo", repoOf(t) ? "set" : null), run: pickRepo,
@@ -1643,7 +1644,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         disabled: !!openingReply, run: () => (pendingReview ? setOpenStage("reply") : openReply(true)), title: hintOfRow("reply") }] : []),
       // done off the app - a call - closes with what came of it: the card opens in the conversation, under the item. It is Mark
       // done with words, so it registers with Mark done and the row stands it beside that (actionRow.rowOf)
-      ...(noteable && !liveSession ? [{ id: "close-note", group: "more", label: labelOfRow("close-note"), run: (e, a) => setNoteAt(a || e?.currentTarget),
+      ...(noteable && !liveSession ? [{ id: "close-note", group: "more", label: labelOfRow("close-note"), run: (e, a) => setNoteAt(steady(a || e?.currentTarget)),
         title: hintOfRow("close-note") }] : []),
       ...(liveSession ? [
         // STOP AND SAVE LEADS A LIVE SESSION'S ROW (owner-approved, 2026-10-20) - working, or idle after its turn, or asking: it stands
@@ -1685,7 +1686,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // and so do Start an agent and Next (`onCard`): a second filled button on the bar pulled the eye off the draft
       // ONE VERB FOR IT, button and dialog (U13): "Dismiss" on the bar deleted the task behind a dialog that said Delete
       { id: "nat", group: "more", label: labelOfRow("nat"), run: notATask, title: NAT_TITLE },
-      { id: "remind", group: "more", label: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : labelOfRow("remind"), run: (e, a) => setRemindAt(a || e?.currentTarget),
+      { id: "remind", group: "more", label: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : labelOfRow("remind"), run: (e, a) => setRemindAt(steady(a || e?.currentTarget)),
         title: hintOfRow("remind") },
       { id: "hand", group: "more", label: labelOfRow("hand"), run: () => setHandoff(true), title: hintOfRow("hand") },
       { id: "reshape", group: "more", label: labelOfRow("reshape"), run: () => setReshape(true), title: hintOfRow("reshape") },
@@ -2562,7 +2563,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {/* THE DECISION ITSELF, on the task that owns it - the same component the review
                           queue mounts, so two surfaces cannot say different things about one draft. */}
                       {pendingReview ? (
-                        <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} onRemind={(e, a) => setRemindAt(a || e?.currentTarget)}
+                        <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} onRemind={(e, a) => setRemindAt(steady(a || e?.currentTarget))}
                           onEmailInstead={() => setEmailOpen(true)}
                           onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   /* the list's row moves too (T19) */
                       ) : (

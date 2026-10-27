@@ -59,6 +59,9 @@ export function stripWord({ speaks, busy, shown = null, lit = null, aiOff = fals
 // ("Waiting on Ray. Due Oct 24, 2 days late."), counted on the same clock, so it is not said twice
 const SHOWN = new Set(["draft_ready", "duplicate", "asked_late", "waiting_late_usual", "waiting_late", "goal_late"]);
 const SAID = new Set(["failed", "failed_cause", "report_failed", "invite_clash", "invite_free", "stranger", "working", "closed", "agent_asking", "waiting_overdue"]);
+// ...and with nothing to add, the menu's notes name the button in the owner's words: "Nothing to add - Copy is the lit button." read the
+// app's own word back to him (the owner, 2026-10-23, over "Lit Mark done": "what the heck is Lit"; the overnight walk, 2026-10-26)
+export const nothingToAdd = (advice) => (advice?.label && advice.verb !== "next" ? `Nothing to add - ${advice.label} is the next move.` : "Nothing to add on this one.");
 export function taskNote(advice) {
   const line = String(advice?.line || "").trim();
   if (!line || !advice.verb || advice.verb === "next" || SAID.has(advice.state)) return null;

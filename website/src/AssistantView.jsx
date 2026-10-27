@@ -39,7 +39,7 @@ import { hint as btnHint, label as btn, liveVerb, verbOfRow } from "./buttons.js
 import { readTurn, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive, taskIdsOf } from "./live.js";
-import { adviceKeyFor, adviceShown, stripWord, taskNote } from "./advice.js";
+import { adviceKeyFor, adviceShown, nothingToAdd, stripWord, taskNote } from "./advice.js";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 // TASKUARY'S MARK IN THE CHAT (the owner, 2026-09-28: "the taskuary logo is blue and very obvious ... you can change the
@@ -109,6 +109,7 @@ import "./assistantView.css";
 // showing anything, so a stale key restores nothing.
 const WALK_KEY = "taskuary_walk_tid";
 const HOLD_MS = 400;            // the longest a row waits for its item's first decision before it is drawn without one
+const POP_ROOM = 150;          // the least room under the task view the chat pop-up stands in, rather than over the view
 const POP_LIT_MS = 1800;        // how long the chat pop-up shows the owner's line when the answer was only a lit button
 const isOpenWalk = (t) => !!t && t.SourceRef === "assistant:setup" && !["done", "dropped"].includes(t.Status);
 // markers the server writes on a line that are NOT cards (concierge.SETUP_QUESTIONS): the line is its words
@@ -1101,7 +1102,7 @@ function AdvisorNotes({ keyOnTable }) {
         {d === null ? <Typography sx={{ color: FAINT, fontSize: 12 }}>Reading…</Typography>
           : d.none === "no_ai" ? <><Typography sx={{ fontSize: 12.5, color: INK }}>{quietWhy("no ai")}</Typography><ConnectAi variant="outlined" sx={{ mt: 0.5 }} /></>
           : note ? <Typography sx={{ fontSize: 12.5, color: INK }}>{d.label ? `${d.label} - ` : ""}{note.line}</Typography>
-          : <Typography sx={{ color: FAINT, fontSize: 12 }}>{d.label && d.verb !== "next" ? `Nothing to add - ${d.label} is the lit button.` : "Nothing to add on this one."}</Typography>}
+          : <Typography sx={{ color: FAINT, fontSize: 12 }}>{nothingToAdd(d)}</Typography>}
         {rests.length > 0 && <Typography sx={{ fontSize: 11.5, color: FAINT }}>Rests on: {rests.map((r) => r.label).join(" · ")}</Typography>}
       </div>
     </div>
@@ -3250,7 +3251,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const popLines = useMemo(() => (popOn ? shown.map((m, i) => [m, i]).filter(([, i]) => i > lastCardIdx).slice(-12) : []), [popOn, shown, lastCardIdx]);
   const popPending = popOn && (busy || phoneBusy);
   const [popOpen, setPopOpen] = useState(false), [boxOpen, setBoxOpen] = useState(false);
-  const popRef = useRef(null), popBodyRef = useRef(null), boxRef = useRef(null), popOnRef = useRef(false);
+  const popRef = useRef(null), popBodyRef = useRef(null), boxRef = useRef(null), popOnRef = useRef(false), rowDown = useRef(false);
   popOnRef.current = popOn;
   const boxWide = boxOpen || !!text.trim() || !!pics.imgs.length || !!emojiEl;
   // ...it opens on the owner's line (send) and on the Assistant speaking up about the task in this session - never on a reload's history
@@ -3276,6 +3277,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     return () => { document.removeEventListener("pointerdown", down, true); document.removeEventListener("keydown", key); };
   }, [popOpen]);
   // ...its newest words in view, as the chat's end is
+  // ...AND STANDS IN THE ROOM UNDER THE VIEW WHEN THERE IS ENOUGH OF IT (the overnight walk, 2026-10-26): most views end well above the dock,
+  // and the pop-up still rose to 45% of the canvas over them - "reply saying Thursday works" answered over the right half of the very draft
+  // it was about. It is no taller than the gap under the view; a view with too little under it is covered as before, the newest words in view
+  const [popRoom, setPopRoom] = useState(0);
+  useLayoutEffect(() => {
+    if (!popOpen) return;
+    const view = popTable && bodyRef.current?.querySelector(`[data-tq-canvas-item="${CSS.escape(popTable)}"]`), floor = popRef.current?.parentElement;
+    setPopRoom(view && floor ? Math.floor(floor.getBoundingClientRect().top - view.getBoundingClientRect().bottom - 8) : 0);
+  }, [popOpen, popTable, popLines.length, popPending, bodyH]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const popTall = Math.max(180, Math.round(bodyH * 0.45)), popMax = popRoom >= POP_ROOM ? Math.min(popTall, popRoom) : popTall;
   useLayoutEffect(() => { const el = popBodyRef.current; if (el && popOpen) el.scrollTop = el.scrollHeight; }, [popOpen, popLines.length, popPending, words]);
   // ...a line of its own that stands under the card on the table only while the answer is on its way (tq-pending, assistantView.css) -
   // or in the pop-up over it, where the answer it waits for will be
@@ -3447,7 +3458,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               tall at most, scrolling inside. Shut, it stays mounted: the last line's chips are on the row either way */}
           {popOn && (!!popLines.length || popPending) && (
             <div className="tq-chat-pop" data-tq-chat-pop="" role="dialog" aria-label="Taskuary's answer" ref={popRef} hidden={!popOpen}
-              style={{ maxHeight: Math.max(180, Math.round(bodyH * 0.45)) }}>
+              style={{ maxHeight: popMax }}>
               <div className="tq-chat-pop-head"><TaskuaryMark size={16} /><b>Taskuary</b>{currentItem?.ref && <span>{`· ${currentItem.ref}`}</span>}<span style={{ flex: 1 }} />
                 <Tooltip title="Past chats"><IconButton size="small" aria-label="Past chats" onClick={() => { setPopOpen(false); openChats(); }}><HistoryIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip>
                 <IconButton size="small" aria-label="Close the answer" onClick={() => setPopOpen(false)}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></div>
@@ -3480,12 +3491,21 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           {/* ONE ROW: the row's groups and the box share a line (the one-row chat bar, 2026-10-26) - the box a pill at its end while at rest,
               widened while it is used, the groups folding into their ▾ for the room (ActionRow measures what is left; Next and the lit
               move never fold). With no row - the day's opener, a phone, whose row rides with its task view - the box is the whole line */}
-          <div className="tq-dock-line">
+          {/* ...A PRESS ON THE ROW LANDS WHERE IT WAS AIMED (the overnight walk, 2026-10-26): the press took focus from the wide box, the box shut
+              to its pill on that mousedown, the folded groups came back and slid the lit Remind me 290 px right before the mouseup - so the
+              click landed on nothing, and the lit button "did nothing" on the first press. The box keeps its width until the press is over */}
+          <div className="tq-dock-line" onPointerDownCapture={(e) => {
+            if (boxRef.current?.contains(e.target)) return;
+            rowDown.current = true;
+            const up = () => { window.removeEventListener("pointerup", up, true); window.removeEventListener("pointercancel", up, true);
+              setTimeout(() => { rowDown.current = false; if (!boxRef.current?.contains(document.activeElement)) setBoxOpen(false); }, 0); };
+            window.addEventListener("pointerup", up, true); window.addEventListener("pointercancel", up, true);
+          }}>
           {/* ...and during setup its line is the Advisor's (SetupLine): the move setup fills (FirstRun's tone) is the one lit - nothing
               was, so the line said "pick it" over a plain Back and a greyed Next (2026-10-19) */}
           <ActionRow advised={stripPick || setupLit} hold={!!reading && reading === onTable} />
           <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined} ref={boxRef} data-tq-open={boxWide ? "" : undefined}
-            onFocus={() => setBoxOpen(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setBoxOpen(false); }}>
+            onFocus={() => setBoxOpen(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget) && !rowDown.current) setBoxOpen(false); }}>
             <div className="tq-compose-tools">
             <AttachImage pics={pics} sx={{ color: DIM }} />
             <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />

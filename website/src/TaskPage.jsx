@@ -1915,7 +1915,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   Agent · Close out on the right where the task is. The drawer is laid OVER the main view, never beside it, so nothing under
                   it reflows: a terminal is not refitted and the CLI's screen gets no resize (item 6, the owner 2026-10-21) */}
               {/* ...and a drawer pulled out is exactly this body, never taller (the owner, 2026-10-26: "it's bigger then the task box"): a
-                  short card grows to CanvasItem's DRAWER_FLOOR for it, and what the drawer holds past that scrolls inside it */}
+                  card of words is already at least CanvasItem's DRAWER_FLOOR and held there (useHeldHeight), and what the drawer holds past
+                  that scrolls inside it */}
               <Box ref={bodyBox} data-tq-task-body="" data-tq-main={main || "stacked"} data-tq-stage={taskStage} data-tq-drawer-out={(fromDrawer && fromSide) || (workDrawer && workSide) ? "" : undefined}
                 sx={{ display: "flex", flex: 1, minHeight: 0, minWidth: 0 }}>
               {/* ...and the tab reads as a press at a glance (the owner, 2026-10-26: "make it with arrow and more visible to pull out where it

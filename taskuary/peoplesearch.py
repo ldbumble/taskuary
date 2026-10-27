@@ -5,7 +5,7 @@ One search over everyone Taskuary knows: who wrote in (store.people), who the ow
 the org chart (orgchart.chart), the people a connected directory named (Microsoft Graph's /me/people and /users, kept under
 DIR_KEY so the next search finds them without the network), and for a chat channel the chats seen on it. A query word matches
 a word of the name, of the company, of the address's mailbox or of its domain - "dynamo" is everyone at dynamo.example or at
-Dynamo Freight, "gail" is Gail Moreno - and the matches are ranked by how often and how lately the owner wrote with them.
+Dynamo Freight, a first name finds whoever has it - and the matches are ranked by how often and how lately the owner wrote with them.
 
 The little AI is a fallback, never a gate: asked once (job 'rank', light gear) only when the plain match found nobody or the
 words read as a description ("the dynamo billing person"), and it may only pick from the known people - an address it invents

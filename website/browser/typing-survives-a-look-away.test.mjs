@@ -31,3 +31,23 @@ test("a reply draft's edit and the agent box's words are still there after Repor
   assert.equal(await page.$eval("textarea[placeholder^='What should it do']", (x) => x.value).catch(() => null), "check the bank feed first");
   assert.deepEqual(errors, []);
 });
+
+// ...and WHO IT COPIES (the overnight walk, 2026-10-27): Priya looped in on the draft, a look at another row, and the CC was empty again
+// while the edited words stood - Send would have gone without her
+test("a CC added to a reply draft is still on it after another row", { timeout: 180000 }, async (t) => {
+  const { page, errors } = await boot(t, { width: 1600, height: 810 });
+  const invoice = await findRow(page, /Invoice 88213/), other = await findRow(page, /Year-end audit/);
+  const cc = () => page.evaluate(() => (document.querySelector("[data-tq-closeout]")?.innerText || "").match(/CC\s+([^\n]*)/)?.[1] || "");
+  await clickRow(page, invoice);
+  await page.waitForFunction(() => [...document.querySelectorAll("[data-tq-closeout] [role=button]")].some((b) => /loop someone in/.test(b.textContent)), { timeout: 20000 });
+  await page.evaluate(() => [...document.querySelectorAll("[data-tq-closeout] [role=button]")].find((b) => /loop someone in/.test(b.textContent)).click());
+  await sleep(500); await page.keyboard.type("priya");
+  await page.waitForSelector(".MuiAutocomplete-popper [role=option]", { timeout: 10000 });
+  await page.keyboard.press("ArrowDown"); await page.keyboard.press("Enter"); await sleep(800);
+  assert.match(await cc(), /pshah@northwind\.example/, "the CC did not take");
+  await clickRow(page, other); await sleep(3000);
+  await clickRow(page, invoice); await sleep(3500);
+  assert.match(await cc(), /pshah@northwind\.example/, "the CC was lost on the way back");
+  assert.match(await page.$eval("[data-tq-closeout]", (e) => e.innerText), /Send, copying 1/);
+  assert.deepEqual(errors, []);
+});

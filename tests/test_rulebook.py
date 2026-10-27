@@ -52,7 +52,7 @@ MATRIX = [
     ('Close the August books', 'done_list', 'close', False),
     ('Move payroll to Payworth', 'goal', 'next', False),
     ('Migrate the census export', 'goal_late', 'chase', True),
-    ('Ray: schema sign-off', 'waiting', 'defer', False),
+    ('Ray: schema sign-off', 'waiting_overdue', 'chase', True),         # due two days ago: late by the header's own clock
     ('Vendor W-9 for the new supplier', 'waiting_late', 'chase', True),
     ('Budget figures for Q4', 'waiting_late', 'chase', True),
 ]
@@ -141,7 +141,10 @@ def test_a_duplicate_needs_the_thread_never_the_same_sender_alone(s):
     b, _n, _ = _asked(s, 'Payworth export (again)', cid='email:payworth')
     c, _o, it3 = _asked(s, 'Lease renewal')                        # Erin again, another thread: another ask
     d = rulebook.decide(s, {**it, 'tid': b, 'key': f'task:{b}'}, _verbs('reply', 'remove'))
-    assert (d['state'], d['verb'], d['line']) == ('duplicate', 'remove', 'Same ask as TQ-0001.')
+    assert (d['state'], d['verb'], d['line']) == ('duplicate', 'remove', 'Same ask as TQ-0001 - fold it into that one.')
+    # ...ONE SURVIVOR PER PAIR (the Advisor audit's judge, 2026-10-26): the one asked first keeps its own move, never folded into its twin
+    assert rulebook.decide(s, it, _verbs('reply', 'remove'))['state'] == 'asked'
+    assert rulebook.decide(s, {**it, 'tid': b, 'key': f'task:{b}'}, _verbs('reply', 'split', 'remove'))['verb'] == 'split', 'folded by merging, where the row can'
     assert rulebook.decide(s, it3, _verbs('reply', 'remove'))['state'] == 'asked'
 
 

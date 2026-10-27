@@ -83,13 +83,17 @@ test("the Advisor draws no button of its own; a move the row lacks joins the row
   // ...and every line in the task's Advisor section keeps its Why? (AdvisorNote, the owner 2026-10-26)
   const note = fs.readFileSync(new URL("../src/AdvisorNote.jsx", import.meta.url), "utf8");
   assert.match(note, /<button type="button" className="tq-next-why" aria-haspopup="dialog"[\s\S]{0,120}>Why\?<\/button>/);
-  assert.match(note, /api\.get\("\/api\/advice\/notes", \{ params: \{ key: a\.key/);
+  // ...reading the decision the row lit (its `rests`), never the older rows (the Advisor audit's judge, 2026-10-26)
+  assert.match(note, /const a = note\.advice \|\| \{\}, rests = a\.rests \|\| \[\];/);
+  assert.doesNotMatch(note, /\/api\/advice\/notes/);
   assert.match(note, /<Popover open=\{!!at\}/);
 });
 
 test("the clock menu offers the Advisor's notes for the item on the table", () => {
   assert.match(src, /Advisor's notes/);
-  assert.match(src, /api\.get\("\/api\/advice\/notes", \{ params: \{ key/);
+  // ...the same decision the task shows, through the same filter, or nothing (the Advisor audit's judge, 2026-10-26)
+  assert.match(src, /api\.get\("\/api\/advice", \{ params: \{ key: keyOnTable \} \}\)/);
+  assert.match(src, /const note = d && taskNote\(d\), rests = \(note && d\.rests\) \|\| \[\];/);
 });
 
 // ...and a greyed one says why it is off rather than drawing nothing: the strip went blank with nothing lit when the draft was cleared

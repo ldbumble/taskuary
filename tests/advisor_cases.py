@@ -54,7 +54,8 @@ CASES = [
     # a goal on track is Next; a step past its day is Chase, named in the line (the design, states 17 and 18)
     ('Move payroll to Payworth', {'next'}, {'not_ours'}, []),
     ('Migrate the census export', {'chase'}, {'not_ours'}, []),
-    ('Ray: schema sign-off', {'defer'}, {'not_ours'}, []),
+    # ...and the step itself, due two days ago, is late on its header's own clock: Chase, as its goal says (the Advisor audit's judge, 2026-10-26)
+    ('Ray: schema sign-off', {'chase'}, {'not_ours', 'defer'}, []),
     # ...the states the matrix lacks
     ('Vendor W-9 for the new supplier', {'chase'}, {'let_go', 'close'}, []),
     ('Budget figures for Q4', {'chase'}, {'let_go'}, []),

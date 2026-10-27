@@ -33,6 +33,8 @@ def install_processing_changes(app, store):
         '/api/fixture/browser/last-frame',
         '/api/fixture/processing/arrive-during-next',
         '/api/fixture/task/closed-elsewhere',
+        '/api/fixture/advisor/world',
+        '/api/fixture/advisor/say',
     })
 
     def fixture_refuse(method, path):
@@ -45,6 +47,9 @@ def install_processing_changes(app, store):
             return ''
         # ...and the answer to the terminal stand-in's sign-in ask, for that task only: its press is the thing under test
         if method == 'POST' and path in answer_paths:
+            return ''
+        # ...and Keep / Wrong / Forget pressed from the Advisor's Why? on a task: that press reaching the task is what the Advisor test checks
+        if method == 'POST' and path == '/api/learned/mark':
             return ''
         return refuse(method, path)
 
@@ -523,3 +528,91 @@ def install_processing_changes(app, store):
         store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, {'held': 'The invoice page is open, waiting on your Approve.',
                           'failed': 'The Pay button on the invoice page did not go through.', 'normal': 'I read the invoice page.'}[body['end']])
         return {'taskId': tid}
+
+    # ── THE ADVISOR AUDIT (2026-10-26): where the Advisor's words land on a task, by stage and drawer ─────────────────────────────────
+    # `world` adds the stages the demo lacks, with the Advisor's REAL rule decisions where the app's facts make one: a late ask against a
+    # counted usual (three answered threads), one thread on two open tasks (duplicate), an ask with no habit, an agent at work and one
+    # that finished. `say` stands in for what only a model writes (a draft warning, a caution): the decision advisor.decide hands every
+    # surface, with the label the row would draw, so the page under test reads it from /api/advice like any other. Invented people.
+    said = {}
+    from taskuary import advisor
+    real_decide = advisor.decide
+
+    # ...and it passes the SAME check a real answer does (advisor.checked, the judge's fix 3, 2026-10-26): a scripted Send under a draft
+    # caution, a Try again nobody can press, Reply over a ready draft - refused and the next sensible move lit, exactly as the app would.
+    # An agent at work is never advised over: the real decide answers before any model is read, and so does this
+    def scripted_decide(st, key, preread=True):
+        out = real_decide(st, key, preread)
+        tgt = advisor.target_of(st, key)
+        o = said.get(int(tgt[1])) if tgt and tgt[0] == 'task' else None
+        if o is None or out.get('state') == 'working': return out
+        item = advisor._item(st, *tgt, key=key)
+        verbs = advisor.offered(st, item) if item else []
+        from taskuary import rulebook
+        r = rulebook.decide(st, item, verbs) if item else {'verb': out.get('verb'), 'line': '', 'evidence': []}
+        state = o.get('state', out.get('state'))
+        d = advisor.checked(st, item or {}, verbs, {**out, **o, 'key': key, 'state': state, 'verb': o.get('verb', out.get('verb')), 'evidence': [],
+                            'kind': o.get('kind') or rulebook.KIND.get(state, 'other')}, {'verb': r['verb'], 'line': r['line'], 'evidence': list(r.get('evidence') or [])})
+        lbl = advisor._label(verbs, d['verb'], item) if d['verb'] else ''
+        return {**d, 'label': lbl, 'pill': lbl, 'scripted': True}
+    advisor.decide = scripted_decide
+
+    @app.post('/api/fixture/advisor/say')
+    def advisor_say(body: dict):
+        """{taskId, decision}: the Advisor's decision for that task from now on ({state, verb, line, by, kind}); null puts the real one back."""
+        if set(body) != {'taskId', 'decision'} or not isinstance(body['taskId'], int): raise HTTPException(422, 'taskId and decision')
+        d = body['decision']
+        if d is None: said.pop(body['taskId'], None)
+        else:
+            if not isinstance(d, dict) or not set(d) <= {'state', 'verb', 'line', 'by', 'kind'}: raise HTTPException(422, 'state, verb, line, by, kind only')
+            said[body['taskId']] = d
+        advisor._emit(f"task:{body['taskId']}", 'task', body['taskId'])
+        return {'ok': True}
+
+    @app.post('/api/fixture/advisor/world')
+    def advisor_world(body: dict):
+        if body: raise HTTPException(422, 'this fixed fixture accepts only an empty object')
+        from taskuary import workerstate as ws
+        now = datetime.now()
+        at = lambda **k: (now - timedelta(**k)).strftime('%Y-%m-%d %H:%M:%S')
+        def msg(tid, who, email, subject, words, sent, cid, out=False):
+            store.add_message({'TaskId': tid, 'Channel': 'email', 'ExternalId': f'adv-{cid}-{sent}-{out}', 'ConversationId': cid,
+                               'FromName': 'Alex Doyle' if out else who, 'FromEmail': 'alex@northwind.example' if out else email,
+                               'Subject': subject, 'BodyText': words, 'SentAt': sent, 'Status': 'routed', **({'Direction': 'out'} if out else {})})
+        # Erin's habit: three past asks the owner answered in about twenty minutes, then today's ask, five hours old and unanswered
+        for n in range(3):
+            old = store.create_task({'Title': f'Erin: vendor form {n + 1}', 'Kind': 'reply', 'Status': 'done', 'Source': 'email'}, 'router')
+            msg(old, 'Erin Blake', 'erin@northwind.example', f'Vendor form {n + 1}', 'Can you sign this off?', at(days=10 + n), f'adv-erin-old-{n}')
+            msg(old, 'Erin Blake', 'erin@northwind.example', f'RE: Vendor form {n + 1}', 'Signed.', at(days=10 + n, minutes=-20), f'adv-erin-old-{n}', out=True)
+        late = store.create_task({'Title': 'Can you approve the Trainly renewal?', 'Kind': 'reply', 'Status': 'open', 'Source': 'email'}, 'router')
+        msg(late, 'Erin Blake', 'erin@northwind.example', 'Trainly renewal', 'Alex, can you approve the Trainly renewal today?', at(hours=5), 'adv-erin-late')
+        # ...and an ask from someone with no habit: no usual can be said of Omar
+        plain = store.create_task({'Title': 'Which cost centre for the PhishGuard seats?', 'Kind': 'reply', 'Status': 'open', 'Source': 'email'}, 'router')
+        msg(plain, 'Omar Keller', 'omar@northwind.example', 'PhishGuard seats', 'Which cost centre should the PhishGuard seats go on?', at(hours=5), 'adv-omar')
+        # one thread on two open tasks: each is the same ask as the other
+        dup1 = store.create_task({'Title': 'Spendly cards for the new site', 'Kind': 'reply', 'Status': 'open', 'Source': 'email'}, 'router')
+        msg(dup1, 'Marcus Reed', 'marcus@northwind.example', 'Spendly cards', 'Can we get Spendly cards for the new site?', at(hours=7), 'adv-dup')
+        dup2 = store.create_task({'Title': 'RE: Spendly cards', 'Kind': 'reply', 'Status': 'open', 'Source': 'email'}, 'router')
+        msg(dup2, 'Marcus Reed', 'marcus@northwind.example', 'RE: Spendly cards', 'Following up on the Spendly cards.', at(hours=2), 'adv-dup')
+        # an agent at work, and one that finished - REACHED this time (the judge: both stages had stayed a plain ask, so "never over a working
+        # agent" was never tried): the working one has a live session the run's own events name (workerstate: working needs a live run), the
+        # finished one its chat and its report, so the page draws its Result
+        from taskuary import general, terminal
+        work = store.create_task({'Title': 'Reconcile the Payworth September export', 'Kind': 'general', 'Status': 'in_progress', 'Source': 'email'}, 'router')
+        msg(work, 'Paula Vance', 'paula@northwind.example', 'Payworth export', 'The September export does not tie out.', at(hours=3), 'adv-work')
+        pane = _demo.Replay(store, work, 'Claude Code', lines=[('Reading the September export and the bank feed side by side...', 0)])
+        terminal.SESSIONS[pane.sid] = pane
+        ws.record(store, work, str(pane.sid), 'working', source='fixture')
+        fin = store.create_task({'Title': 'Summarise the Trainly completion report', 'Kind': 'general', 'Status': 'in_progress', 'Source': 'email'}, 'router')
+        msg(fin, 'Gail Moreno', 'gail@northwind.example', 'Trainly completions', 'Who is still missing the safety module?', at(hours=6), 'adv-fin')
+        store.add_comment(fin, 'owner', general.USER_TYPE, 'Who is still missing the safety module?')
+        store.add_comment(fin, 'assistant', general.ASSISTANT_TYPE, 'Four people are missing the safety module; the list is in the result.')
+        store.add_comment(fin, 'general', 'agent', 'AGENT REPORT\nDetermination: four people are missing the safety module.\n'
+                          'Actions: Read the Trainly completion report.\nSummary: The four names, with their sites.')
+        ws.record(store, fin, f'adv-fin-{fin}', 'working', source='fixture')
+        ws.record(store, fin, f'adv-fin-{fin}', 'finished', text='Four people are missing the safety module; the list is in the result.', source='fixture')
+        # ...AND ERIN'S USUAL AS A LINE IN LEARNED.md, as the day's reflection writes it from the count (learn.answer_lines): the task's late
+        # line reads that line and nothing else, so the task, LEARNED.md and Why? say one thing (the judge's problem 3)
+        from taskuary import learn
+        store.save_doc('learned', learn.answer_lines(store, store.get_doc('learned') or ''), 'reflect')
+        return {'late': late, 'plain': plain, 'dup1': dup1, 'dup2': dup2, 'working': work, 'finished': fin}

@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timedelta
 from unittest import mock
 import pytest
-from taskuary import advisor, funnel, rulebook, terminal, usual
+from taskuary import advisor, funnel, learned_cut as lc, rulebook, terminal, usual
 from taskuary.testing import Factory
 from tests import memory_cases as C
 from tests.memory_cases import put_off, reflected
@@ -32,11 +32,14 @@ def ask(s, who, title, body, hours=3):
 def test_erin_at_three_hours_gets_her_lateness_beside_the_lit_reply(w):
     s, facts = w
     t = ask(s, 'erin', 'Q4 headcount forecast', 'Can you send me the Q4 headcount forecast before the leadership sync?')
+    assert advisor.decide(s, f'task:{t}', preread=False)['state'] == 'asked', 'counted, but no line says her usual yet'
+    reflected(s)                                     # ...the reflection writes it, in the count's words, where the owner can correct it
     d = advisor.decide(s, f'task:{t}', preread=False)
     assert (d['state'], d['verb']) == ('asked_late', 'reply')
     assert d['line'] == 'You usually answer Erin within the hour; this is 3h.'
     assert len(d['line']) <= 60, 'one line on the strip, read whole on a phone'
-    assert d['evidence'] and set(d['evidence']) <= {f'msg{m}' for m in facts['erin_fast']}, 'it cites the answers it was counted from'
+    assert d['evidence'][0] == lc.cite_of(usual.answer_key(C.P['erin'][1])), 'it rests on the one line LEARNED.md says it in'
+    assert set(d['evidence'][1:]) <= {f'msg{m}' for m in facts['erin_fast']}, '...and cites the answers that line was counted from'
 
 
 def test_no_line_when_nothing_is_checkable(w):

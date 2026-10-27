@@ -1462,7 +1462,8 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE, see
     seen_generation = _CACHE.get('generation', 0)
     # the newest write stamp a build begun now has seen (live.seq: the page's reload check) - taken before the workers are, whose
     # moves are stamped too; a caller that observed them itself says when (`seen`), or the build claims no stamp at all
-    if seen is None and observed is _OBSERVE: seen = live.seq()
+    own = seen is None and observed is _OBSERVE
+    if own: seen = live.seq()
     if observed is _OBSERVE:
         try: observed = term.live_sessions(tail=6)
         except Exception: observed = None            # unobservable: never compare, always rebuild (the build says why)
@@ -1490,6 +1491,14 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE, see
                                    and _CACHE.get('generation', 0) != seen_generation and not moved())
         if same_store and _CACHE['pile'] and (refreshed_while_waiting or (not force and time.time() - _CACHE['at'] < PILE_EVERY)):
             return _CACHE['pile']
+        # ...the stamp and the workers as the BUILD begins, not as the wait for the lock did: a read that waited out another build
+        # was built with a press's write that landed meanwhile and still claimed the older stamp - the page read the rail again for a
+        # write it held (CI's slower runners, reads-once). Same order as above: stamp, then workers, then the dirty-row mark.
+        if own:
+            seen = live.seq()
+            try: observed = term.live_sessions(tail=6)
+            except Exception: observed = None
+            workers = workers_signature(observed)
         mark = _rail_top(store)                        # taken BEFORE the build: a write during it counts as after
         # the watcher speaks first: a transition changes the pile too. Quiet, it keeps what it last said.
         events = ((_CACHE['pile'] or {}).get('events') or [] if same_store else []) if quiet else announce(store)

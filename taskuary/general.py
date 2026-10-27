@@ -1411,6 +1411,9 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
                                'session - close it (the ✕ on its pane) and ask again here')
     session = GeneralSession(store, tid, connector_id, model, pick)
     terminal.SESSIONS[session.sid] = session
+    # ...and a saved session is live again, as every terminal door says (terminal.open_session, A22): Continue on a general task kept
+    # "You stopped it and its report is written" over the new run, so a turn that then died read as stopped, not failed (2026-10-26)
+    store.tag_task(tid, terminal.SAVED, False, actor)
     # the chat is work too: a general task started from the Tasks tab gets its Timeline row
     # here, stamped at the moment the session opened (ownwork.ensure is a no-op when a message
     # already speaks for the task, which is every task that arrived from outside)

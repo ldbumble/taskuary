@@ -143,6 +143,42 @@ class TheBriefTests(unittest.TestCase):
         self.assertIn('TASK', got)                       # a brief was written...
         self.assertNotIn('taskuary --search', got)       # ...naming no history
 
+    def test_a_strangers_brief_says_plainly_why_and_names_the_trust_press(self):
+        # the owner, 2026-10-28, over "Prior mail search was unavailable here": withheld on purpose, said so, with the press that opens it
+        s = world(); a_claude(self)
+        tid = strangers(s)
+        mail(s, tid, who='Omar Keller', email='omar@vendor.example', subject='Grant categories', conv='conv-grant', body='Which category fits?')
+        with mock.patch('taskuary.origin._claude_version', return_value=(9, 9, 9)):
+            got = brief(s, tid)
+        self.assertIn("I didn't read your earlier mail because Omar isn't trusted yet - press Trust Omar on the task to let me.", got)
+        self.assertIn('Never call it "unavailable"', got)
+        self.assertNotIn('Renewal terms', got)           # ...and none of the owner's mail rode in
+
+    def test_a_trusted_task_on_a_brain_with_no_search_is_handed_the_senders_earlier_mail(self):
+        # an API card, or a CLI set to look things up only, has no shell and no Taskuary tools: Taskuary searches for it
+        s = world(); a_claude(self)
+        tid = researcher(s)
+        s.set_setting('general_agent_hands', 'look', 'owner')
+        got = brief(s, tid)
+        self.assertIn('TASKUARY SEARCHED THE OWNER\'S SAVED MAIL FOR YOU', got)
+        self.assertIn('EARLIER MAIL', got); self.assertIn('6% uplift', got)       # Gail's mail on the task's subject
+        self.assertNotIn('taskuary --search', got)                                 # no shell, so no shell verb
+
+
+class TheTrustedSessionsToolsTests(unittest.TestCase):
+    def test_a_trusted_claude_session_gets_search_messages_and_a_strangers_does_not(self):
+        from taskuary import agenttools
+        s = world(); tid, sid = researcher(s), strangers(s)
+        self.assertIn('search_messages', agenttools.TOOLS)
+        got = agenttools.session_args(s, 'claude', tid, ['-p'])
+        self.assertEqual(got[0], '--mcp-config')
+        self.assertIn('/api/mcp?task=', open(got[1], encoding='utf-8').read())
+        # ...a stranger's task launches in its reviewer's strict mode, never through session_args (origin.launch_mode)
+        from taskuary import origin
+        with mock.patch('taskuary.origin._claude_version', return_value=(9, 9, 9)):
+            self.assertEqual(origin.launch_mode(s, sid, 'claude', 'claude'), 'auto')
+            self.assertEqual(origin.launch_mode(s, tid, 'claude', 'claude'), 'full')
+
 
 if __name__ == '__main__':
     unittest.main()

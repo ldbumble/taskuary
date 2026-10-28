@@ -55,12 +55,18 @@ PURPOSE = {
     # written into LEARNED.md where every reader of its section has it, and the line it makes untrue is closed - kept as history
     # ...and EVERY fact, said in the owner's words, lands in LEARNED.md where triage, the report gate, the Advisor and agents read it - a
     # "don't care" above all (the owner, 2026-10-27: "if I don't care about something the system knows it")
-    'memory.remember':          ("keep a fact about how the owner works, in LEARNED.md, at once - `note`: the fact, in the owner's words "
+    # ...and a rule about HOW to write goes where the drafter reads its voice, STYLE.md's Owner notes - the model says which, by what the
+    # fact IS (the owner, 2026-10-28: "when I ask the chat to write Mrs X to women from now on it should go to STYLE.md ... It should know
+    # where each memory goes")
+    'memory.remember':          ("keep a fact or rule the owner tells you, at once - `note`: it, in the owner's words "
                                  '("Gail moved to Ops", "Ray handles payroll for me", "I put renewals off to Friday", "I don\'t care about the '
                                  'legacy export job any more"); `section`, always: people (who someone is to them, how they deal with them) | '
                                  'care (what they are responsible for and what they do NOT care about - a legacy process, a system no longer '
                                  'theirs: triage and the report gate then make no task of it) | work (their rhythm) | promises | bring (what the '
-                                 "Advisor may raise); `about`: the person's address or name, for a people line; `replaces`: the key of the line "
+                                 'Advisor may raise) - those five are LEARNED.md, the memory every reader uses | style: a rule about HOW they '
+                                 'write - greetings and salutations ("write Mrs <surname> to women, never her first name"), sign-off, tone, '
+                                 'length, formatting, words to use or avoid - saved to their writing style, STYLE.md\'s Owner notes, which '
+                                 "every draft reads; `about`: the person's address or name, for a people line; `replaces`: the key of the line "
                                  'it makes untrue, closed and kept as history (memory.about gives the keys). Who reports to whom and who owns '
                                  'what is people.relate'),
     'memory.wrong':             ('take a line Taskuary learned out of its memory - `key` (from memory.about or memory.list), `how`: wrong '

@@ -497,7 +497,9 @@ CREATE TABLE IF NOT EXISTS processing_reconcile_state (
   ReconciledGeneration INTEGER NOT NULL DEFAULT 0,
   LastAttemptAt TEXT,
   ConflictsJson TEXT NOT NULL DEFAULT '[]',
-  DiagnosticsJson TEXT NOT NULL DEFAULT '[]');
+  DiagnosticsJson TEXT NOT NULL DEFAULT '[]',
+  MembershipGeneration INTEGER NOT NULL DEFAULT 0,
+  CensusGeneration INTEGER NOT NULL DEFAULT -1);
 INSERT OR IGNORE INTO processing_reconcile_state (Singleton) VALUES (1);
 -- Which rows changed, for the rail (processing_rail): re-project those roots, reuse the rest.
 CREATE TABLE IF NOT EXISTS processing_dirty_row (
@@ -1266,8 +1268,16 @@ class SQLiteStore:
                 AFTER DELETE ON setting WHEN OLD.Name IN ({setting_names}) BEGIN
                   UPDATE processing_reconcile_state SET DirtyGeneration=DirtyGeneration+1 WHERE Singleton=1;
                 END''')
-            from . import processing_rail
+            from . import processing_rail, processing_membership
             processing_rail.install(self.cx, PROCESSING_DIRTY_SETTINGS)
+            # what the census reads, apart from what readers need to see (processing_membership.CENSUS_INPUTS);
+            # -1 never equals a generation, so a database new to these columns runs its next census in full
+            rscols = {r[1] for r in self.cx.execute('PRAGMA table_info(processing_reconcile_state)')}
+            if 'MembershipGeneration' not in rscols:
+                self.cx.execute('ALTER TABLE processing_reconcile_state ADD COLUMN MembershipGeneration INTEGER NOT NULL DEFAULT 0')
+            if 'CensusGeneration' not in rscols:
+                self.cx.execute('ALTER TABLE processing_reconcile_state ADD COLUMN CensusGeneration INTEGER NOT NULL DEFAULT -1')
+            processing_membership.install_census_triggers(self.cx)
             try: self.cx.execute(KB_FTS); self.kb_fts = True
             except sqlite3.OperationalError as e:
                 self.kb_fts = False; logger.warning(f'no FTS5 in this sqlite build - knowledge search falls back to LIKE: {e}')
@@ -2938,7 +2948,11 @@ class SQLiteStore:
         validation from accidentally accepting newly arrived/moved members. Done
         still covers current substantive versions; this is not a content-CAS API.
         """
-        from .processing_membership import reconcile_membership
+        from .processing_membership import reconcile_membership, census_current, mark_census
+        if census_current(cur):         # nothing the census reads moved since a clean one: it would change nothing
+            cur.execute('''UPDATE processing_reconcile_state SET AttemptedGeneration=DirtyGeneration,
+                ReconciledGeneration=DirtyGeneration, LastAttemptAt=? WHERE Singleton=1''', (stamp,))
+            return
         cur.execute('SAVEPOINT processing_settlement_census')
         before_changes = self.cx.total_changes
         try:
@@ -2947,6 +2961,7 @@ class SQLiteStore:
             structural = self.cx.total_changes != before_changes
             if structural or result['conflicts']:
                 raise ValueError('processing membership must be reconciled before settlement')
+            mark_census(cur, True)
             cur.execute('''UPDATE processing_reconcile_state
                 SET AttemptedGeneration=DirtyGeneration,ReconciledGeneration=DirtyGeneration,
                     LastAttemptAt=?,ConflictsJson=?,DiagnosticsJson=? WHERE Singleton=1''',
@@ -3075,7 +3090,7 @@ class SQLiteStore:
         stamp = fixed_now or _now()
         if not isinstance(stamp, str) or not stamp:
             raise ValueError('fixed_now must be a non-empty string')
-        from .processing_membership import reconcile_membership
+        from .processing_membership import reconcile_membership, census_current, mark_census
         with self.lock:
             self._clear_stale(); cur = self.cx.cursor()
             cur.execute('BEGIN IMMEDIATE')
@@ -3091,9 +3106,15 @@ class SQLiteStore:
                         'retired_relations': 0,
                         'status': 'already_current',
                     }
-                result = reconcile_membership(
-                    cur, stamp=stamp, new_item_id=self._processing_item_id,
-                    follow_item=self._processing_follow)
+                if census_current(cur):        # only writes the census never reads: its answer cannot have moved
+                    result = {**dict.fromkeys(('created_items', 'created_members', 'moved_members', 'retired_members', 'redirected_items',
+                                               'created_aliases', 'created_relations', 'retired_relations'), 0),
+                              'conflicts': before['conflicts'], 'diagnostics': before['diagnostics']}
+                else:
+                    result = reconcile_membership(
+                        cur, stamp=stamp, new_item_id=self._processing_item_id,
+                        follow_item=self._processing_follow)
+                    mark_census(cur, not result['conflicts'])
                 dirty = before['dirty_generation']
                 complete = not result['conflicts']
                 cur.execute('''UPDATE processing_reconcile_state

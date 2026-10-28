@@ -21,14 +21,19 @@ test("a finished agent with a draft waiting: Close out is the focus, the Result 
   await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
   await page.waitForSelector(`[data-tq-task-page="${made.taskId}"] [data-tq-result-summary] [data-tq-result-made]`, { timeout: 20000 });
   await page.waitForSelector("[data-tq-closeout] textarea[data-tq-draft]", { timeout: 20000 });
+  // ...in the three sections (2026-10-27) the draft waiting is where the task is up to: Close out opens, the Agent its tab - opened to read
+  const focus = await page.evaluate(() => [...document.querySelectorAll("[data-tq-focus]")].map((e) => (e.matches("[data-tq-closeout]") ? "closeout" : e.querySelector("[data-tq-result-summary]") ? "result" : "other")));
+  assert.equal(await page.$eval("[data-tq-task-body]", (e) => e.getAttribute("data-tq-main")), "close", "the draft waiting opens Close out");
+  await page.click("[data-tq-section-tab=agent]");
+  await page.waitForSelector("[data-tq-result-summary]", { visible: true, timeout: 5000 });
 
-  const at = await page.evaluate(() => ({
-    focus: [...document.querySelectorAll("[data-tq-focus]")].map((e) => (e.matches("[data-tq-closeout]") ? "closeout" : e.querySelector("[data-tq-result-summary]") ? "result" : "other")),
+  const at = await page.evaluate((focus) => ({
+    focus,
     summary: document.querySelector("[data-tq-result-summary]").innerText,
     made: [...document.querySelectorAll("[data-tq-result-made] .tq-published-page")].map((e) => e.innerText),
     open: !!document.querySelector("[data-tq-result-made] [data-tq-open]"),
     record: !!document.querySelector("[data-tq-result]"), chat: !!document.querySelector("[data-tq-agent-room]"),
-    page: document.querySelector("[data-tq-work]").innerText }));
+    page: document.querySelector("[data-tq-work]").innerText }), focus);
   assert.deepEqual(at.focus, ["closeout"], "the draft waiting for Send is the white section, the Result shaded above it");
   assert.match(at.summary, /Ray Colton signs it; the group should be told\./, "what it did, from its write-up");
   assert.match(at.summary, /^Ray Colton signs it[\s\S]*What it found\s+Ray Colton signs the snag list on Thursday\./i, "what it did first, then what it based it on");

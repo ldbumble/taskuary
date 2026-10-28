@@ -67,7 +67,7 @@ test("three sections at every width: a failed run on the Agent, a fresh task on 
     assert.ok(!m.from, `Came from is shut ${say}`);
     const tm = await tabs();
     assert.deepEqual(tm.map((x) => [x.key, x.arrow, x.across]), [["from", "›", true], ["close", "‹", true]], `the tabs either side, words across ${say}`);
-    assert.match(tm[0].words, /Came from[\s\S]*Workflow|Came from[\s\S]*Site ops digest|Came from/, say);
+    assert.match(tm[0].words, /^›\s+Came from\s+\S/, `Came from's tab says where it came from ${say}`);
     assert.deepEqual(m.inner, [], `nothing scrolls inside the open section ${say}`);
     assert.ok(m.title && m.twice === 1, `the title is said once ${say}`);
     assert.match(m.why, /could not start: this tool has no built-in reviewer/, say);
@@ -76,7 +76,7 @@ test("three sections at every width: a failed run on the Agent, a fresh task on 
     // ...Came from's tab opens it and the Agent folds to its tab; the Agent's brings the run back
     await page.click("[data-tq-canvas-item] [data-tq-section-tab=from]");
     await page.waitForSelector("[data-tq-from]", { visible: true, timeout: 5000 });
-    assert.match(await page.$eval("[data-tq-from]", (e) => e.innerText), /Came from[\s\S]*Site ops digest/);
+    assert.match(await page.$eval("[data-tq-from]", (e) => e.innerText), /Came from[\s\S]*What came in[\s\S]*What triage made of it[\s\S]*Full message history/i);
     assert.equal(await main(), "from");
     await page.click("[data-tq-canvas-item] [data-tq-section-tab=agent]");
     await page.waitForSelector("[data-tq-agent-section] [data-tq-result-summary], [data-tq-agent-section] [data-tq-run-why]", { visible: true, timeout: 5000 });

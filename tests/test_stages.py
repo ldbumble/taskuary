@@ -27,7 +27,7 @@ class TheStages(unittest.TestCase):
             if p['advisor']: self.assertEqual(p['advisor'], 'main' if p['main'] == 'work' else 'drawer', k)
             if p['lit']: self.assertEqual(p['main'], 'task', f'{k}: only the right drawer is lit')
             self.assertTrue(p['verbs'] and all(v in buttons.VERBS for v in p['verbs']), k)
-        self.assertEqual(set(stages.KEYS), {'to_start', 'to_reply', 'todo', 'agent_working', 'agent_result', 'close_out', 'waiting', 'done'})
+        self.assertEqual(set(stages.KEYS), {'to_start', 'to_reply', 'todo', 'agent_working', 'agent_result', 'close_out', 'waiting', 'closed_by_agent', 'done'})
 
     def test_the_page_reads_the_same_file(self):
         js = (Path(stages.__file__).parents[1] / 'website' / 'src' / 'stages.js').read_text(encoding='utf-8')
@@ -42,7 +42,8 @@ class TheStages(unittest.TestCase):
         self.assertEqual(stages.of({'result': True, 'owed': True}), 'agent_result')
         self.assertEqual(stages.of({'owed': True, 'list': True}), 'to_reply')
         self.assertEqual(stages.of({'list': True}), 'todo')
-        self.assertEqual(stages.FACTS, ('live', 'waiting', 'closed', 'drafted', 'result', 'owed', 'list'))
+        self.assertEqual(stages.of({'agent_closed': True, 'closed': True, 'drafted': True}), 'closed_by_agent')
+        self.assertEqual(stages.FACTS, ('live', 'waiting', 'agent_closed', 'closed', 'drafted', 'result', 'owed', 'list'))
 
 
 class ATaskReadFromItsRows(unittest.TestCase):

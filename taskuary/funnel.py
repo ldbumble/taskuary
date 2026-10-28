@@ -1406,7 +1406,9 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
         stamps, mailed = made_at
         at = [s for s in (*stamps, *(() if mailed else (i.get('sort_at') or i.get('since') or i.get('when'),))) if _activity_time(s)]
         return min(at, key=_activity_time) if at else (stamps or [None])[0]
-    items = _order([i | {'arrived_at': first(i, made[i['tid']])} if i.get('tid') and made.get(i['tid']) and not i.get('arrived_at') else i
+    from .processing_unread import came_back
+    back = {tid: came_back(store, tid, store.list_messages(tid) if hasattr(store, 'list_messages') else []) for tid in made}
+    items = _order([i | {'arrived_at': back[i['tid']] or first(i, made[i['tid']])} if i.get('tid') and made.get(i['tid']) and not i.get('arrived_at') else i
                     for i in items])
     # the owner's standing rules: what they told us to stop showing them never enters again. Only the
     # lanes with nothing to do - a rule must not be able to hide something asking them for something.

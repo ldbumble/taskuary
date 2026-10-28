@@ -327,8 +327,9 @@ class AsksOwnerVerdictTests(unittest.TestCase):
 
 
 class ReopenedQuestionOnTheRailTests(unittest.TestCase):
-    def test_the_reopened_task_is_back_on_the_rail_in_its_arrival_place(self):
-        """2026-10-25: the closed task had nothing on the rail. Back, it sits where it arrived (rows never move, 2026-10-22), not on top."""
+    def test_the_reopened_task_is_back_on_the_rail_where_the_line_that_reopened_it_arrived(self):
+        """2026-10-25: the closed task had nothing on the rail. Back, it ARRIVES again with the line that reopened it - at the bottom,
+        newest - not at its creation: a two-month-old task reopened this morning read "68d" on the table (the owner, 2026-10-28)."""
         from datetime import datetime, timedelta
         from taskuary import funnel
         def ago(h): return (datetime.now() - timedelta(hours=h)).strftime('%Y-%m-%d %H:%M:%S')
@@ -342,4 +343,4 @@ class ReopenedQuestionOnTheRailTests(unittest.TestCase):
         rail = lambda: [r.get('tid') for r in sorted(funnel.build(s)['items'], key=funnel.order_key)]
         self.assertEqual(rail(), [a, c])
         m('d', asked('reply_only', True, 'Erin asks what separates the accounts'), 'c2', 0, 'Can you explain the difference?')
-        self.assertEqual(rail(), [a, b, c])
+        self.assertEqual(rail(), [a, c, b])

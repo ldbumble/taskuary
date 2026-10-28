@@ -656,7 +656,19 @@ def arrived_at(store, card, task, view, allowed):
     sent = [str(m['SentAt']) for m in view.get('messages') or [] if m.get('SentAt') and (not allowed or m.get('MessageId') in allowed)]
     # the earlier of the task's creation and its first message: triage makes a task a little after the mail that asked for it
     seen = [str(x) for x in (t.get('CreatedAt'), *((idea.get('CreatedAt') or idea.get('FirstSeen'),) if idea and not t else ()), *sent) if x]
+    if tid and (back := came_back(store, tid, [m for m in view.get('messages') or [] if not allowed or m.get('MessageId') in allowed])): return back
     return min(seen, key=funnel_time) if seen else card.get('sort_at') or card.get('since') or card.get('when')
+
+
+def came_back(store, tid, msgs):
+    """A CLOSED task that new mail or chat reopened arrives again, with the line that reopened it: its creation is not its arrival.
+    TQ-0021, made two months before, came back on a chat this morning and the rail read "68d" on the row on the table. The line is the
+    newest one in before the reopen (its SentAt, the rail's clock); the reopen's own time when none is. Later replies are +N, never a move."""
+    at = getattr(store, 'reopened_at', None) and store.reopened_at(int(tid))
+    if not at: return None
+    cut = funnel_time(str(at))
+    ins = [m for m in msgs if m.get('SentAt') and m.get('Direction', 'in') != 'out' and funnel_time(str(m.get('CreatedAt') or m['SentAt'])) <= cut]
+    return str(max(ins, key=lambda m: funnel_time(str(m['SentAt'])))['SentAt']) if ins else str(at)
 
 
 def funnel_time(stamp):

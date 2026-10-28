@@ -147,23 +147,61 @@ def _columns(cur, table):
     return ', '.join(f'"{n}"' for n in names) or '*'
 
 
-def reconcile_membership(cur, *, stamp, new_item_id, follow_item):
-    """Apply one uncapped raw-identity census inside ``cur``'s transaction."""
-    tasks = {str(r['TaskId']): dict(r) for r in cur.execute('SELECT * FROM task ORDER BY TaskId')}
-    messages = {str(r['MessageId']): dict(r) for r in cur.execute(*_grouped_messages_sql(cur))}
-    reviews = {str(r['ReviewId']): dict(r) for r in cur.execute('SELECT * FROM review ORDER BY ReviewId')}
-    ideas = {str(r['IdeaId']): dict(r) for r in cur.execute('SELECT * FROM idea ORDER BY IdeaId')}
+def census_inputs(cur):
+    """Everything a census reads, in one snapshot, with the MembershipGeneration it was read at. The census itself is a
+    function of these alone (CENSUS_INPUTS pins which writes can change them), so they can be read on a reader connection
+    with nobody waiting, and handed to a census under the writer's lock that finds the generation where it was."""
     ungrouped, ungrouped_params = ungrouped_message_sql('m')
-    attachments = {str(r['AttachmentId']): dict(r) for r in cur.execute(
-        f"""SELECT a.* FROM attachment a LEFT JOIN message m ON m.MessageId=a.MessageId
-            WHERE m.MessageId IS NULL OR NOT {ungrouped}
-            ORDER BY a.AttachmentId""", ungrouped_params)}
-    runs = {str(r['RunId']): dict(r) for r in cur.execute('SELECT * FROM run ORDER BY RunId')}
+    row = cur.execute('SELECT MembershipGeneration FROM processing_reconcile_state WHERE Singleton=1').fetchone()
+    return {
+        'generation': row[0] if row else None,
+        'tasks': {str(r['TaskId']): dict(r) for r in cur.execute('SELECT * FROM task ORDER BY TaskId')},
+        'messages': {str(r['MessageId']): dict(r) for r in cur.execute(*_grouped_messages_sql(cur))},
+        'reviews': {str(r['ReviewId']): dict(r) for r in cur.execute('SELECT * FROM review ORDER BY ReviewId')},
+        'ideas': {str(r['IdeaId']): dict(r) for r in cur.execute('SELECT * FROM idea ORDER BY IdeaId')},
+        'attachments': {str(r['AttachmentId']): dict(r) for r in cur.execute(
+            f"""SELECT a.* FROM attachment a LEFT JOIN message m ON m.MessageId=a.MessageId
+                WHERE m.MessageId IS NULL OR NOT {ungrouped}
+                ORDER BY a.AttachmentId""", ungrouped_params)},
+        'runs': {str(r['RunId']): dict(r) for r in cur.execute('SELECT * FROM run ORDER BY RunId')},
+        'item_rows': {r['ItemId']: dict(r) for r in cur.execute('SELECT * FROM processing_item ORDER BY ItemId')},
+        'current_rows': [dict(r) for r in cur.execute('''SELECT * FROM processing_member
+            WHERE RetiredAt IS NULL ORDER BY MemberId''')],
+        # one read, not one per alias (~16k SELECTs a pass on a real mailbox); the active index makes Value unique
+        'aliases': {r['Value']: dict(r) for r in cur.execute('''SELECT Value,EntityKind,LocalId FROM processing_alias
+            WHERE Namespace='legacy_funnel' AND Scope='local' AND RetiredAt IS NULL''')},
+        'relations': [dict(r) for r in cur.execute('''SELECT * FROM processing_relation
+            WHERE RetiredAt IS NULL ORDER BY RelationId''')],
+    }
 
-    item_rows = {r['ItemId']: dict(r) for r in cur.execute(
-        'SELECT * FROM processing_item ORDER BY ItemId')}
-    current_rows = [dict(r) for r in cur.execute('''SELECT * FROM processing_member
-        WHERE RetiredAt IS NULL ORDER BY MemberId''')]
+
+class _WouldWrite(Exception): pass
+
+
+def _would_write(*a): raise _WouldWrite()
+
+
+class _NoWrites:
+    "The cursor a dry census runs on: its inputs are in hand, so the first statement it issues is a write it would make."
+    execute = staticmethod(_would_write)
+
+
+def dry_census(inputs, *, stamp):
+    """The census over `inputs` IF it changes nothing - its result, conflicts and diagnostics included - else None.
+    Run outside every lock: most census-input writes (a message's Status, a task's SourceRef) move no member, and that
+    answer needs no writer at all."""
+    try: return reconcile_membership(_NoWrites(), stamp=stamp, new_item_id=_would_write, follow_item=_would_write, inputs=inputs)
+    except _WouldWrite: return None
+
+
+def reconcile_membership(cur, *, stamp, new_item_id, follow_item, inputs=None):
+    """Apply one uncapped raw-identity census inside ``cur``'s transaction. `inputs`: census_inputs() as read at the
+    generation this transaction still finds (the caller checks that) - the very rows this would read, so not read twice."""
+    inputs = census_inputs(cur) if inputs is None else inputs
+    tasks, messages, reviews, ideas = inputs['tasks'], inputs['messages'], inputs['reviews'], inputs['ideas']
+    attachments, runs, current_rows = inputs['attachments'], inputs['runs'], inputs['current_rows']
+    # the two this pass adds to as it writes: copies, so a dry pass that stopped at its first write leaves them as read
+    item_rows, have_aliases = dict(inputs['item_rows']), dict(inputs['aliases'])
     current = {}
     conflicts, diagnostics = [], []
     roots = {}
@@ -337,7 +375,7 @@ def reconcile_membership(cur, *, stamp, new_item_id, follow_item):
                     {('idea', key) for key in ideas} |
                     {('attachment', key) for key in attachments} |
                     {('run', key) for key in runs})
-    retired_members = 0
+    retired_members, retired_ids = 0, set()
     moved_members = 0
     moved_destinations = {}
     touched_items = set()
@@ -349,14 +387,15 @@ def reconcile_membership(cur, *, stamp, new_item_id, follow_item):
         if entity not in raw_entities or target is None or found['root'] != target or stale_item:
             cur.execute('UPDATE processing_member SET RetiredAt=? WHERE MemberId=?',
                         (stamp, found['row']['MemberId']))
+            retired_ids.add(found['row']['MemberId'])
             retired_members += 1
             touched_items.add(found['root'])
             if target is not None:
                 moved_members += 1
                 moved_destinations.setdefault(found['root'], set()).add(target)
 
-    active = {(r['EntityKind'], r['LocalId']): dict(r) for r in cur.execute('''SELECT *
-        FROM processing_member WHERE RetiredAt IS NULL ORDER BY MemberId''')}
+    # the active rows after the retirements above: what was read, less what this pass retired (re-SELECTed, ~17k rows a pass)
+    active = {(r['EntityKind'], r['LocalId']): dict(r) for r in current_rows if r['MemberId'] not in retired_ids}
     created_members = 0
     primaries = {r['ItemId'] for r in active.values() if r['Role'] == 'primary'}   # kept current below: two SELECTs per group were ~9k a pass
     for group in ordered_groups:
@@ -411,9 +450,6 @@ def reconcile_membership(cur, *, stamp, new_item_id, follow_item):
                        if ('review', rid) not in frozen)
     alias_specs.extend((f'idea:{iid}', 'idea', iid) for iid in sorted(ideas, key=_id_key))
     created_aliases = 0
-    # one read, not one per alias (~16k SELECTs a pass on a real mailbox); the active index makes Value unique
-    have_aliases = {r['Value']: r for r in cur.execute('''SELECT Value,EntityKind,LocalId FROM processing_alias
-        WHERE Namespace='legacy_funnel' AND Scope='local' AND RetiredAt IS NULL''')}
     for value, entity_kind, local_id in alias_specs:
         old = have_aliases.get(value)
         if old and (old['EntityKind'], old['LocalId']) != (entity_kind, local_id):
@@ -466,8 +502,7 @@ def reconcile_membership(cur, *, stamp, new_item_id, follow_item):
                 continue
             desired_relations.add(('message', mid, 'idea', idea_id, 'mentions'))
 
-    active_relations = [dict(r) for r in cur.execute('''SELECT * FROM processing_relation
-        WHERE RetiredAt IS NULL ORDER BY RelationId''')]
+    active_relations = inputs['relations']
     existing_relations = set()
     retired_relations = 0
     for row in active_relations:

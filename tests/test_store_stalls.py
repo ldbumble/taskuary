@@ -85,10 +85,17 @@ class ReadsOffTheWriter(unittest.TestCase):
         finally: release.set()
         self.assertEqual(v, 'alex@northwind.example'); self.assertLess(took, 1.0, 'it read on a reader connection')
 
-    def test_outside_it_reads_still_queue_on_the_writer(self):
-        release = hold(self.s); threading.Timer(0.3, release.set).start()
-        t0 = time.perf_counter(); self.s.get_setting('owner_email')
-        self.assertGreater(time.perf_counter() - t0, 0.2)
+    def test_outside_it_reads_no_longer_queue_on_the_writer(self):
+        "Every plain read is off the writer now (2026-10-28) - a setting read behind a census was the console's whole flood."
+        release = hold(self.s)
+        try: t0 = time.perf_counter(); v = self.s.get_setting('owner_email'); took = time.perf_counter() - t0
+        finally: release.set()
+        self.assertEqual(v, 'alex@northwind.example'); self.assertLess(took, 1.0)
+
+    def test_a_memory_store_still_reads_under_the_lock(self):
+        s = MemoryStore(); release = hold(s); threading.Timer(0.3, release.set).start()
+        t0 = time.perf_counter(); s.get_setting('owner_email')
+        self.assertGreater(time.perf_counter() - t0, 0.2, 'one connection: nowhere else to read')
 
     def test_writes_and_reads_in_a_writer_transaction_stay_on_the_writer(self):
         with self.s.reads_off_writer():

@@ -23,13 +23,24 @@ def check(s):
     with mock.patch('taskuary.terminal.live_sessions', return_value=[]): return sweep.run(s)
 
 
-def ask(s, days, who=('Paula Vance', 'paula@contoso.example'), intent='reply_only', cid=None, sender_class='person', **kw):
-    """Their mail, asking (triage's own verdict), on no task."""
+def item_of(s, mid):
+    s.reconcile_processing_membership()
+    return s._one("SELECT ItemId FROM processing_member WHERE EntityKind='message' AND LocalId=? AND RetiredAt IS NULL", (str(mid),))['ItemId']
+
+
+def let_go(s, mid):
+    """The owner read its row and moved on (Next): the mail has left the rail - the ask this check is for."""
+    funnel.settle(s, f'processing:{item_of(s, mid)}', 'surfaced', 'owner', read=True)
+
+
+def ask(s, days, who=('Paula Vance', 'paula@contoso.example'), intent='reply_only', cid=None, sender_class='person', seen=True, **kw):
+    """Their mail, asking (triage's own verdict), on no task - read and let go unless `seen` is False (then the rail still draws it)."""
     f, cid = Factory(s), cid or f'conv-{days}-{who[1]}'
     mid = f.message(None, status='routed', subject='Can you send the board pack?', body='Can you send me the board pack before Thursday?',
                     from_name=who[0], from_email=who[1], sent_at=ago(days), conversation_id=cid, source_name='alex@contoso.example', **kw)
     s.add_route(mid, None, 'file', None, 'they ask for the board pack', [], 'triage',
                 verdict={'intent': intent, 'kind': 'reply', 'why': 'they ask for the board pack', 'sender_class': sender_class})
+    if seen: let_go(s, mid)
     return mid
 
 
@@ -75,9 +86,7 @@ def test_a_fresh_ask_a_notice_and_a_handled_ask_are_left_alone(s):
     s.add_message({'ExternalId': 'mine', 'ConversationId': 'answered', 'Channel': 'email', 'Status': 'context', 'Direction': 'out',
                    'FromEmail': 'alex@northwind.example', 'SentAt': ago(8), 'BodyText': 'Sent.'})
     ruled = ask(s, 9, ('Omar Keller', 'omar@northwind.example'))
-    s.reconcile_processing_membership()
-    item = s._one("SELECT ItemId FROM processing_member WHERE EntityKind='message' AND LocalId=?", (str(ruled),))['ItemId']
-    funnel.settle(s, f'processing:{item}', 'done', 'owner')
+    funnel.settle(s, f'processing:{item_of(s, ruled)}', 'done', 'owner')
     assert check(s)['asks'] == 0, [i['Text'] for i in s.list_ideas()]
     assert tasked and not s.list_ideas()
 
@@ -98,6 +107,48 @@ def test_an_answer_puts_the_line_down(s):
     s.add_message({'ExternalId': 'mine', 'ConversationId': 'c1', 'Channel': 'email', 'Status': 'context', 'Direction': 'out',
                    'FromEmail': 'alex@northwind.example', 'SentAt': ago(0, 1), 'BodyText': 'Sent.'})
     assert check(s)['cleared'] == 1 and next(iter(lines(s).values()))['Status'] == 'done'
+
+
+# ── one mail, one place (2026-10-28: an aged ask under On you beside the same mail's own row in FYI) ──────────
+
+def test_a_mail_the_rail_still_draws_is_not_raised_whatever_its_lane(s):
+    mid = ask(s, 6, seen=False)
+    row = next(c for c in rail(s) if c.get('mid') == mid)
+    assert row['lane'] == 'fyi'                                       # a mail with no task is drawn under FYI
+    assert check(s)['asks'] == 0 and not lines(s)                     # ...and is not said a second time under On you
+    let_go(s, mid)
+    assert check(s)['asks'] == 1                                      # once it has left the rail, it is the slipped ask
+
+
+def test_not_a_task_on_its_thread_is_a_ruling(s):
+    # Paula's thread: her first mail became a task, the owner pressed Not a task on it, and her later mail on the same thread
+    # (reopened onto that task, gone back to the feed with it) is what the owner ruled on - no "nothing decided" a week on
+    first = ask(s, 9, cid='pack')
+    ask(s, 7, cid='pack', intent='task')
+    s.add_route(first, None, 'ignore', None, 'not a task - Re: board pack', [], 'owner')
+    assert check(s)['asks'] == 0 and not lines(s)
+    # ...and a chat line ruled on itself, where the thread's verdict does not carry
+    line = ask(s, 8, ('Erin Blake', 'erin@northwind.example'), cid='teams:chat-1', channel='teams')
+    s.add_route(line, None, 'ignore', None, 'not a task - lunch?', [], 'owner')
+    assert check(s)['asks'] == 0
+
+
+def test_a_thread_whose_task_is_closed_is_that_tasks(s):
+    f = Factory(s)
+    for cid, closed in (('before', ago(8)), ('after', ago(1))):      # closed before the ask (it is the task's), and after (it answered it)
+        tid = f.task(title='Board pack', status='done', ClosedAt=closed)
+        f.message(tid, subject='Board pack', from_name='Gail Moreno', from_email='gail@northwind.example', sent_at=ago(10),
+                  conversation_id=cid, source_name='alex@contoso.example')
+        ask(s, 6, ('Gail Moreno', 'gail@northwind.example'), cid=cid)
+    assert check(s)['asks'] == 0 and not lines(s)
+
+
+def test_a_line_raised_before_the_ruling_is_put_down(s):
+    mid = ask(s, 6, cid='pack')
+    assert check(s)['asks'] == 1
+    i = next(iter(lines(s).values()))
+    s.add_route(mid, None, 'ignore', None, 'not a task - Re: board pack', [], 'owner')
+    assert check(s)['cleared'] == 1 and s.get_idea(i['IdeaId'])['Status'] == 'done'
 
 
 # ── the open task in no state ────────────────────────────────────────────────────────────────

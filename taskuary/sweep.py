@@ -44,8 +44,15 @@ def _action(i):
 
 def _ruled(store, mid: int, states: dict) -> bool:
     """Did the owner decide anything about this mail? A draft decided (sent, no reply, rejected), a Done / Remind me on its row,
-    or an Advisor line about it put down - each is a ruling, and a ruled ask is not one that slipped."""
+    or an Advisor line about it put down - each is a ruling, and a ruled ask is not one that slipped.
+    ...and NOT A TASK / NOT OURS said on its thread is one too. A closed task reopened on a mail like this (the router's "new work
+    on its thread"), the owner pressed Not a task on it, the task went and its mails went back to the feed with no TaskId - and a
+    week on the check raised the same mail under On you as "no answer, no task, nothing decided", beside its own row in FYI
+    (2026-10-28). The owner's ignore route is the ruling: on the mail itself (a chat line), or anywhere on its email thread."""
     if store._one("SELECT 1 x FROM review WHERE MessageId=? LIMIT 1", (mid,)): return True       # a draft at all: waiting or decided
+    if store._one("SELECT 1 x FROM route WHERE MessageId=? AND Decision='ignore' AND RoutedBy='owner' LIMIT 1", (mid,)): return True
+    m = store.get_message(mid) or {}
+    if store.owner_verdict_on_thread(m.get('ConversationId'), m.get('SentAt'), m.get('FromEmail'), m.get('Channel')): return True
     keys = [f'msg:{mid}']
     row = store._one("SELECT ItemId FROM processing_member WHERE EntityKind='message' AND LocalId=? AND RetiredAt IS NULL", (str(mid),))
     if row: keys.append(f"processing:{row['ItemId']}")
@@ -54,8 +61,8 @@ def _ruled(store, mid: int, states: dict) -> bool:
 
 
 def aged_asks(store, now: datetime = None, shown: set = frozenset()) -> list:
-    """The asks past their day: [{key, kind, text, sig, action}] - the Advisor's candidate shape. `shown` is the mail already on
-    the rail as the owner's move: raising it again would be the same ask twice."""
+    """The asks past their day: [{key, kind, text, sig, action}] - the Advisor's candidate shape. `shown` is the mail the rail
+    already holds, in ANY lane: raising it again is the same mail in two places (run's `shown`)."""
     from .assistant import their_asks
     days = max(1, int(store.get_setting('aged_ask_days', AGED_DAYS) or AGED_DAYS))
     asks, _ = their_asks(store, days=LOOKBACK_DAYS, hours=days * 24)
@@ -201,12 +208,18 @@ def run(store, now: datetime = None) -> dict:
     from . import processing_unread
     canonical = store.processing_reads_active()
     if canonical: store.reconcile_processing_membership()      # the rail as it stands now, not as the last settle left it
-    # the rail as the owner has it, read rows too: what is already on it as their move is not raised twice
+    # the rail as the owner has it, read rows too. ONE MAIL, ONE PLACE (the owner, 2026-10-28: "if the advisor idea belongs in the
+    # tasks why is the email in fyi??"): a mail the rail still draws, in ANY lane, is not raised again - an On you line over its own
+    # FYI row said two things about one mail, and pressing it walked into the FYI row. It was only the On you lanes, and a mail with
+    # no task is drawn under FYI. What this check is for is the ask that has LEFT the rail (read and let go, or past its window).
+    # Every mail of a row counts (member_ids), not only the one it speaks with.
     cards = processing_unread.build(store, now=now, include_read=True)['items'] if canonical else []
     shown = set()
     for c in cards:
         # ...the mail's own row, never this check's line about it: that one is the ask said, not the ask seen
-        if c.get('unread') and lanes.on_you(c) and c.get('mid') and c.get('idea_kind') not in (ASK, LOOSE): shown.add(c['mid'])
+        if c.get('idea_kind') in (ASK, LOOSE) or not processing_unread.on_rail(c): continue
+        shown |= {c['mid']} if c.get('mid') else set()
+        shown |= {int(k.split(':', 1)[1]) for k in c.get('member_ids') or () if str(k).startswith('message:') and k.split(':', 1)[1].isdigit()}
     asks = aged_asks(store, now, shown)
     loose = loose_tasks(store, cards, now) if canonical else []
     said = _say_once(store, asks + loose, stamp)

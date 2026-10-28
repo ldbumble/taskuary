@@ -161,3 +161,25 @@ def test_a_press_keeps_the_state_and_who_lit_it_from_the_decision_at_its_revisio
     rows = {r['Id']: r for r in s._rows('SELECT Id, State, By FROM advice_press')}
     assert (rows[i]['State'], rows[i]['By']) == ('asked', 'model')
     assert (rows[j]['State'], rows[j]['By']) == (None, None), 'a decision kept at another revision is not the one this press answered'
+
+
+# ── a lit button the owner could not press (trust audit A4, 2026-10-28) ──────────────────────────────────────────────────────────────
+def test_a_press_keeps_which_buttons_were_greyed():
+    from taskuary import presses
+    s = MemoryStore()
+    t = s.create_task({'Title': 'Offsite agenda', 'Status': 'open', 'Kind': 'reply'}, 'owner')
+    s.add_message({'ConversationId': f'c{t}', 'Channel': 'email', 'Subject': 'Offsite agenda', 'FromEmail': 'erin@northwind.example', 'FromName': 'Erin Blake',
+                   'SentAt': '2026-10-20 08:00:00', 'BodyText': 'Can you check the agenda?', 'Status': 'routed', 'TaskId': t})
+    i = advisor.press(s, f'task:{t}', None, 'done', lit='regular_agent', live=['reply'], greyed=['regular_agent', 'nat'])
+    assert json.loads(s._one('SELECT Greyed FROM advice_press WHERE Id=?', (i,))['Greyed']) == ['regular_agent', 'remove']
+    assert presses.rows(s)[-1]['greyed'] == ['regular_agent', 'remove']
+
+
+def test_the_tool_flags_a_decision_whose_lit_button_was_greyed(home):
+    home.press(1, 'regular_agent', 'close', '09:00:00', live=['close'])
+    home.press(2, 'close', 'close', '09:01:00', live=['next'])
+    home.s._exec("UPDATE advice_press SET Greyed=? WHERE TargetId=1", (json.dumps(['regular_agent']),))
+    ds = home.ds()
+    assert [d['target'][1] for d in A.lit_greyed(ds)] == [1]
+    out = A.report(ds, DAY)
+    assert 'lit but greyed (the lit button was disabled at a press): 1' in out and 'regular_agent' in out.split('lit but greyed')[1]

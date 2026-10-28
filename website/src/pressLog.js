@@ -14,8 +14,10 @@ export function deskPress(snap, pick, id) {
   const r = rowOf(snap, pick);
   const drawn = [...r.decide, ...r.agent, ...r.more, ...(r.next ? [r.next] : [])].filter((v) => !v.slot);
   const lit = r.primary || (r.next?.tone === "p" ? r.next : null) || r.agent.find((v) => v.tone === "p") || null;
-  const live = [...drawn, ...snap.list.filter((v) => v.card)].filter((v) => !v.disabled).map((v) => verbOf(v.id));
-  return { pressed: verbOf(id), lit: lit ? verbOf(lit.id) : "", live: [...new Set(live.filter(Boolean))] };
+  const all = [...drawn, ...snap.list.filter((v) => v.card)], uniq = (vs) => [...new Set(vs.map((v) => verbOf(v.id)).filter(Boolean))];
+  // ...and which were GREYED at the press (trust audit A4, 2026-10-28): a lit button the owner could not press is a fault the press log
+  // never saw - tools/advisor_agreement.py flags it
+  return { pressed: verbOf(id), lit: lit ? verbOf(lit.id) : "", live: uniq(all.filter((v) => !v.disabled)), greyed: uniq(all.filter((v) => v.disabled)) };
 }
 
 // THE TASKS TAB draws its own buttons, not the row: a button is known by its one name (buttons.json - "one name per button", the
@@ -27,13 +29,13 @@ const filled = (b) => /\bMuiButton-contained\b/.test(String(b?.className || ""))
 export function pagePress(root, btn) {
   const pressed = verbOfLabel(btn?.textContent);
   if (!pressed || !root) return null;
-  const all = [...root.querySelectorAll("button")].filter((b) => !b.disabled);
-  const verbs = (bs) => [...new Set(bs.map((b) => verbOfLabel(b.textContent)).filter(Boolean))];
-  return { pressed, lit: verbs(all.filter(filled))[0] || "", live: verbs(all) };
+  const bs = [...root.querySelectorAll("button")], all = bs.filter((b) => !b.disabled);
+  const verbs = (xs) => [...new Set(xs.map((b) => verbOfLabel(b.textContent)).filter(Boolean))];
+  return { pressed, lit: verbs(bs.filter(filled))[0] || "", live: verbs(all), greyed: verbs(bs.filter((b) => b.disabled)) };
 }
 
 // one press, posted - a lost post costs one observation, never the press
-export function notePress(api, { key, pressed, surface, lit = "", live = null, advised = null, revision = null }) {
+export function notePress(api, { key, pressed, surface, lit = "", live = null, greyed = null, advised = null, revision = null }) {
   if (!key || !pressed) return null;
-  return api.post("/api/advice/press", { key, pressed, surface, lit, live, advised, revision }, { quiet: true }).catch(() => {});
+  return api.post("/api/advice/press", { key, pressed, surface, lit, live, greyed, advised, revision }, { quiet: true }).catch(() => {});
 }

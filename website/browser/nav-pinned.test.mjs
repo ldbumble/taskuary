@@ -30,7 +30,9 @@ test("Next stands at the same x on three tasks in a row", { timeout: 300000 }, a
   }
   // ...the items' own rows differ, so the test means something: a centred row would have moved Next between them
   assert.ok(new Set(seen.map((s) => s.verbs.join("|"))).size > 1, `three items with different buttons: ${JSON.stringify(seen)}`);
-  assert.ok(seen.every((s) => Math.abs(s.x - seen[0].x) <= 1), `Next's x on each of the three: ${JSON.stringify(seen.map((s) => s.x))}`);
+  // ...from the second task on, with Back beside it; the first has no Back and no empty room kept for one (the owner, 2026-10-28: it looked weird)
+  const withBack = seen.slice(1);
+  assert.ok(withBack.every((s) => Math.abs(s.x - withBack[0].x) <= 1), `Next's x once Back is there: ${JSON.stringify(seen.map((s) => s.x))}`);
   assert.deepEqual(errors, []);
 });
 

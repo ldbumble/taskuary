@@ -582,7 +582,7 @@
 
 /* the composer */
 .tq-compose { padding: 2px 20px 8px; background: #fffdfb; box-shadow: 0 -14px 14px -6px #fffdfb; position: relative;
-  --tq-chat-w: min(380px, calc(100% - 40px)); }   /* no rule above it: the row and the box float, a soft fade keeps scrolled content from showing through */
+  --tq-chat-w: min(280px, calc(100% - 40px)); }   /* the pill and the open chat ONE width: opening grows it up, never wider (the owner, 2026-10-28) */   /* no rule above it: the row and the box float, a soft fade keeps scrolled content from showing through */
 /* THE DOCK (canvas I2): one border, three bands, as wide as the card above it (the owner: "the prompt box full width") - the suggestion tinted on top, the row under a hairline, the box its floor */
 .tq-dock { width: 100%; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #d5d0c7; border-radius: 16px; background: #fff; box-shadow: 0 2px 10px #39352d0d; }
 /* ...and A THIRD OF A LAPTOP NO MORE (the owner, 2026-10-26, 1600x810: "you can't see anything ... button height is too high? you can't see
@@ -615,7 +615,7 @@
    textarea's own 20 columns held the box at ~208px whatever its basis */
 /* ...180px, white and edged in the brand's slate, its arrow the brand's (the owner, 2026-10-27: "still too small to see. even at rest it has
    to be wider and more prominent ... maybe the up arrow should be in the color of taskuary") - Mark done still on a laptop's row */
-.tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box { flex: 0 0 180px; min-width: 0; width: auto; min-height: 34px; margin: 3px 6px 3px 0; padding: 0 3px 0 12px; gap: 2px;
+.tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box { flex: 0 0 var(--tq-chat-w); min-width: 0; width: auto; min-height: 34px; margin: 3px 6px 3px 0; padding: 0 3px 0 12px; gap: 2px;
   border: 1px solid #a9b6c1; border-radius: 17px; background: #fff; box-shadow: 0 1px 3px #39352d14; transition: background-color .12s, border-color .12s; }
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box textarea::placeholder { color: #55697a; }
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box .tq-send { background: #55697a; }
@@ -633,9 +633,14 @@
    (::after, an empty slot - drawn as a blank pill it read as a second input, 2026-10-27), so nothing there moves or folds while the owner
    types; with no row (the day's opener) the line keeps its height. On a phone (under 600px) the panel is a bottom sheet, the box its foot */
 @media (min-width: 601px) {
-  .tq-dock .tq-dock-line:has(> .tq-arow):has(> .tq-compose-box[data-tq-open])::after { content: ""; flex: 0 0 180px; box-sizing: border-box; min-height: 34px; margin: 3px 6px 3px 0; }
   .tq-dock .tq-dock-line:not(:has(> .tq-arow)):has(> .tq-compose-box[data-tq-open])::after { content: ""; flex: 1; min-height: 40px; }
-  .tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] { position: absolute; right: 20px; bottom: calc(100% + 6px); z-index: 6;
+  /* ...THE BOX STAYS IN THE BAR (the owner, 2026-10-28: "the button section should end and the chat should come out of the bottom bar and
+     not go all the way up - max 50%"): open, the box is the bar's own right end, --tq-chat-w wide, and the row's buttons end before it (fitRow
+     folds what no longer fits); the window rises out of it */
+  .tq-compose .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { position: relative; flex: 0 0 var(--tq-chat-w); width: var(--tq-chat-w);
+    box-sizing: border-box; margin: 3px 6px 3px 0; min-height: 40px; align-items: stretch; padding: 4px 6px; gap: 0;
+    border: 1px solid #d5d0c7; border-top-color: #ece7de; border-radius: 0 0 14px 14px; background: #fff; box-shadow: none; }
+  .tq-compose .tq-dock .tq-dock-line:not(:has(> .tq-arow)) > .tq-compose-box[data-tq-open] { position: absolute; right: 20px; bottom: calc(100% + 6px); z-index: 6;
     width: var(--tq-chat-w); box-sizing: border-box; margin: 0; min-height: 46px; align-items: stretch; padding: 8px 10px 10px; gap: 0;
     border: 1px solid #d5d0c7; border-top-color: #ece7de; border-radius: 0 0 14px 14px; background: #fff; box-shadow: 0 14px 28px -10px #39352d38; }
 }
@@ -808,9 +813,6 @@
 /* ...but ALONE ON THE ROW it is centred (the owner, 2026-10-28: "nav should be in middle if nothing else" - an FYI batch's Back and All read,
    next sat at the far left of an empty row), and the unseen Back room goes with the pin: centred, it would only push the pill off-centre */
 .tq-arow-verbs > .tq-cl-next:only-child { margin-right: 0; }
-.tq-arow-verbs > .tq-cl-next:only-child [data-tq-back-room] { display: none; }
-/* ...and on the first row, with no Back, Back's room is kept unseen so Next does not slide left (ActionRow data-tq-back-room) */
-.tq-cl [data-tq-back-room] { visibility: hidden; display: inline-flex; align-items: center; pointer-events: none; }
 .tq-arow-verbs.tight > .tq-cl:not(.tq-cl-next) { flex-shrink: 1; }
 /* the unseen copy ActionRow measures: every part in the row's own classes, at its natural width, taking no room */
 .tq-arow-ghost { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }

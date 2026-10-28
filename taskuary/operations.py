@@ -80,6 +80,15 @@ KINDS = {
     # ...and a named set put away until a day, or closed - "snooze everything from Gail until Monday" (the owner, 2026-10-20)
     'pipe.defer':               ('pipe', ('until',), None),
     'pipe.close':               ('pipe', (), None),
+    # ...and the rows the model chose, each by its own button (bulk.py, the owner 2026-10-28): Not ours, Block, Put it on my list
+    'pipe.remove':              ('pipe', (), None),
+    'pipe.block':               ('pipe', (), None),
+    'pipe.mine':                ('pipe', (), None),
+    # ...and the buttons that are a page's alone (concierge._paged): a routing rule changed, a removed thing restored, a Hub comment or vote
+    'rule.change':              ('rule', ('about',), None),
+    'deleted.restore':          ('deleted', ('what',), None),
+    'hub.comment':              ('hub', ('post', 'text'), None),
+    'hub.vote':                 ('hub', ('post',), None),
     # ...and the drafts, one at a time: each still goes by its own Send - this brings the next one up with Send lit
     'review.each':              ('pipe', (), None),
     # ...and any button a row draws, by its name (buttons.json): lit on the row, never pressed

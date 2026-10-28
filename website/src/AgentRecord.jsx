@@ -10,7 +10,7 @@ import api from "./api";
 import { Md } from "./md.jsx";
 import PublishedPages from "./PublishedPages.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
-import { cardParts, hasMore, lastWords, moreParts, plain, recordFacts, recordHead, recordSteps, resultParts, runCost, runsOf, sourceLabel, splitFiles } from "./agentRecord.js";
+import { cardParts, hasMore, lastWords, madeOnce, moreParts, plain, resultLine, recordFacts, recordHead, recordSteps, resultParts, runCost, runsOf, sourceLabel, splitFiles } from "./agentRecord.js";
 import AgentStory, { StoryLine, Timeline } from "./AgentStory.jsx";
 import { plural } from "./timeWords.js";
 
@@ -171,6 +171,30 @@ export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = nul
           full={<SessionRecord s={s} draft={draft} startOpen timeline={story?.steps || []} since={since} earlier={before} />} />
         : s ? <SessionRecord s={s} pages={pages} draft={draft} timeline={story?.steps || []} since={since} earlier={before} inChat={chat} />
         : <PublishedPages pages={pages} />}
+    </Box>);
+};
+
+// THE RESULT AT REST (the owner, 2026-10-27: "if the result is the main thing then we should say nothing - just the summary - and then click
+// Result to see more"): what it did and what it based it on (agentRecord.resultLine), then what it made - each page or file by name with
+// its Open (agentRecord.madeOnce) - and nothing else: no state sentence, no last message, no record. The Result heading unfolds the rest.
+// `pages`: the task's shown and published pages; the files it left for the task are read here (outputs.py)
+export const ResultSummary = ({ taskId, stamp, pages = [], said = "" }) => {
+  const [rec, setRec] = useState(null), [outputs, setOutputs] = useState([]);
+  useEffect(() => {
+    let live = true;
+    api.get(`/api/tasks/${taskId}/record`).then(({ data }) => live && setRec(data)).catch(() => live && setRec({ sessions: [] }));
+    api.get(`/api/task-outputs/${taskId}`).then(({ data }) => live && setOutputs(data?.data || [])).catch(() => live && setOutputs([]));
+    return () => { live = false; };
+  }, [taskId, stamp]);
+  if (!rec) return <CircularProgress size={12} sx={{ mt: 1 }} />;
+  const { did, found } = resultLine(rec.sessions?.[0], said), made = madeOnce(pages, outputs);
+  return (
+    <Box data-tq-result-summary="" sx={{ mt: 0.9, display: "flex", flexDirection: "column", gap: 0.9 }}>
+      {did ? <Box data-tq-result-did="" sx={{ fontSize: 13.5, lineHeight: 1.5, color: INK }}><Md text={did} /></Box>
+        : <Typography sx={{ fontSize: 12.5, color: DIM }}>It ended without a written result - open the Result for what it did.</Typography>}
+      {found && <Box data-tq-result-found=""><Typography sx={head}>What it found</Typography>
+        <Box sx={{ fontSize: 13, lineHeight: 1.5, color: INK }}><Md text={found} /></Box></Box>}
+      {!!made.length && <Box data-tq-result-made=""><Typography sx={head}>What it made</Typography><PublishedPages pages={made} verb="Open" /></Box>}
     </Box>);
 };
 

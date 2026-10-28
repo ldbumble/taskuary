@@ -149,9 +149,13 @@ def install_processing_changes(app, store):
         filed, nothing sent. The browser test then presses Reply and holds the draft - the row the owner saw wrap onto two lines
         (2026-10-23): the agent's session over, its WhatsApp reply drafting. Invented people. `draft`: a reply already drafted and
         waiting on the owner - Close out open on it under the Result (the owner's 2026-10-26 screen, its first row cut in half).
-        `todo`: one long to-do, ticked - a short Result under a Came from drawer that holds more (the owner's 2026-10-26 screen)."""
-        if set(body) - {'draft', 'todo'} or not all(isinstance(body.get(k, ''), str) and len(body.get(k, '')) <= 4000 for k in ('draft', 'todo')):
-            raise HTTPException(422, 'only draft and todo strings are accepted')
+        `todo`: one long to-do, ticked - a short Result under a Came from drawer that holds more (the owner's 2026-10-26 screen).
+        `made`: the file name of a plan it wrote into the task's outputs folder and showed in its chat - the same file twice, the way a
+        general agent leaves a document (the owner's 2026-10-27 screen: "where is the plan?")."""
+        import re
+        if set(body) - {'draft', 'todo', 'made'} or not all(isinstance(body.get(k, ''), str) and len(body.get(k, '')) <= 4000 for k in ('draft', 'todo', 'made')):
+            raise HTTPException(422, 'only draft, todo and made strings are accepted')
+        if body.get('made') and not re.fullmatch(r'[\w-]{1,60}\.md', body['made']): raise HTTPException(422, 'made is a plain .md file name')
         from taskuary import terminal
         tid = store.create_task({'Title': 'Site ops: who signs the snag list on Thursday', 'Kind': 'general', 'Status': 'in_progress', 'Source': 'whatsapp',
                                  'Assignee': 'agent:general', 'Tags': terminal.SAVED}, 'router')
@@ -168,6 +172,11 @@ def install_processing_changes(app, store):
         if body.get('draft'):
             mid = store.list_messages(tid)[0]['MessageId']
             store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': body['draft'], 'Reason': 'needs a reply: Gail asks Alex'})
+        if body.get('made'):
+            from taskuary import outputs, session_artifacts
+            out = outputs.folder(tid); out.mkdir(parents=True, exist_ok=True)
+            (out / body['made']).write_text('# Snag list sign-off\n\n1. Ray Colton signs on Thursday.\n2. Keys are at reception from 7.\n', encoding='utf-8')
+            session_artifacts.shown(store, tid, out / body['made'])
         return {'taskId': tid}
 
     @app.post('/api/fixture/task/coding-saved')

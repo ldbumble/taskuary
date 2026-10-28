@@ -42,8 +42,11 @@ test("task context, expanded messages and agent results fit short laptops and ph
         await page.evaluate(() => document.querySelector("[data-tq-show-older]").click());
         await page.waitForSelector("[data-tq-from] [data-tq-chat-thread]");
       } else if (name === "result") {
-        await page.waitForSelector("[data-tq-result]", { timeout: 20000 });
+        await page.waitForSelector("[data-tq-result-summary]", { timeout: 20000 });
       } else if (name === "rest") {
+        // its chat is the rest of its Result, behind the Result heading (the owner, 2026-10-27: "click Result to see more")
+        await page.waitForSelector("[data-tq-result-summary]", { timeout: 20000 });
+        await page.$eval('[data-tq-work] [data-tq-step="2"]', (dot) => dot.parentElement.click());
         await page.waitForSelector("[data-tq-agent-room='rest'] .tq-aui-viewport", { timeout: 20000 });
       } else if (name === "agent") {
         await page.waitForSelector(".xterm-screen", { timeout: 20000 });

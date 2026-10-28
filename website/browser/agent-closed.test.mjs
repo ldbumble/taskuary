@@ -43,7 +43,9 @@ test("a task its agent closed opens on its Result, saying it is handled, who clo
       closeFolded: folded("Close out"), handled: document.querySelector("[data-tq-handled]")?.textContent || "", text: document.body.innerText };
   });
   assert.equal(seen.agentTitle, "Result", "the agent's half is its Result");
-  assert.equal(seen.agentFolded, false, "the Result is the open half");
+  // ...resting on its summary: its heading unfolds the rest (the owner, 2026-10-27: "just the summary - and then click Result to see more")
+  assert.equal(seen.agentFolded, true, "the Result rests on its summary");
+  assert.ok(await page.$("[data-tq-result-summary]"), "the Result's summary is on screen");
   assert.equal(seen.handled, "Nothing to do. It's handled.");
   assert.equal(seen.closeFolded, true, "Close out is folded");
   assert.ok(seen.text.includes(ANSWER.slice(0, 60)), "the agent's write-up is on screen");

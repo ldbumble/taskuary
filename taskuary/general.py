@@ -524,6 +524,37 @@ HISTORY_LINE = ("THE OWNER'S HISTORY IS IN TASKUARY - SEARCH IT FIRST. For anyth
                 '(any of them; each hit prints its id, when, who, subject, thread and a snippet), then `taskuary --message ID` for one '
                 'in full with its thread; `taskuary --memory` prints what Taskuary has learned about the owner. That is the way in: never write scripts or code to read a mailbox, mail files or '
                 "Taskuary's database, and never go around it. If the search finds nothing, say so and say what you searched for.")
+# ...AND A BRAIN WITH NO SEARCH OF ITS OWN IS HANDED IT (the owner, 2026-10-28: "why is prior mail not available"): an API card, or a CLI
+# set to look things up only, has no shell and no Taskuary tools, and answered "Prior mail search was unavailable here". On the owner's
+# own or a trusted task Taskuary searches for it - the sender's earlier mail and mail on the subject (mailsearch.meeting_reads, as
+# Prepare does) - and says so; a stranger's task is told why it gets none instead (origin.no_history_line).
+SEARCHED_LINE = ("THIS AI HAS NO SEARCH OF ITS OWN, SO TASKUARY SEARCHED THE OWNER'S SAVED MAIL FOR YOU: the sender's earlier messages "
+                 "and mail on this subject are under EARLIER MAIL in the material{none}. Use them. Never say mail search was unavailable - "
+                 "say what was searched when it matters.")
+
+
+def earlier_mail(store, tid: int) -> str:
+    "The owner's earlier mail from this task's senders and on its subject, outside its own thread - '' on a stranger's task or with none."
+    from . import mailsearch, origin
+    if origin.of_task(store, tid)[0] == 'stranger': return ''
+    t, ms = store.get_task(tid) or {}, store.list_messages(tid) or []
+    own = {m['MessageId'] for m in ms}
+    who = list(dict.fromkeys(m['FromEmail'] for m in ms if m.get('FromEmail') and m.get('Direction') != 'out' and m.get('Status') != 'context'))
+    try: hits = [h for h in mailsearch.meeting_reads(store, who, t.get('Title') or '') if h['id'] not in own]
+    except Exception as e:
+        logger.debug(f'general: no earlier mail read for task {tid} - {e}'); hits = []
+    return mailsearch.says(hits) if hits else ''
+
+
+def history_brief(store, tid: int, hands: bool) -> tuple[str, str]:
+    """(system line, user material) about the owner's earlier mail, by what this session can reach: its own search (HISTORY_LINE), the
+    search done for it (SEARCHED_LINE + EARLIER MAIL), or nothing - a stranger's task hears why from _prompt, the dock needs none."""
+    from . import origin
+    if is_dock(store.get_task(tid)) or origin.of_task(store, tid)[0] == 'stranger': return '', ''
+    if hands: return HISTORY_LINE, ''
+    got = earlier_mail(store, tid)
+    from .terminal import fence
+    return SEARCHED_LINE.format(none='' if got else ' (it found none)'), (f'EARLIER MAIL (Taskuary searched it for you)\n{fence(got)}' if got else '')
 
 
 def _turn_only(store, tid: int, text: str) -> str:
@@ -706,6 +737,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     if owed: system = system + '\n\n' + selfclose.REPLY_LINE
     from . import slots
     if slots.all_(store, tid): system = system + '\n\n' + selfclose.DRAFT_LINE
+    if stranger and not dock: system = system + '\n\n' + origin.no_history_line(store, tid)     # closed on purpose, and said so
     md = store.checklist_markdown(tid, ids=True) if hasattr(store, 'checklist_markdown') else ''
     ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words
     chk = f"CHECKLIST - what was asked for, as triage read it:\n{md}\n" if md else ''
@@ -1051,10 +1083,11 @@ class GeneralSession:
                 from . import docsync
                 systems = docsync.agent_systems(self.store)
                 if systems: system = f'{system}\n\n{systems}'
-                # ...and the owner's own mail, which a stranger's task never reads (the route refuses it too: server._owner_history)
-                from . import origin
-                if not is_dock(self.store.get_task(self.task_id)) and origin.of_task(self.store, self.task_id)[0] != 'stranger':
-                    system = f'{system}\n\n{HISTORY_LINE}'
+            # ...and the owner's own mail, which a stranger's task never reads (the route refuses it too: server._owner_history): searched
+            # by the session itself where it has hands, else for it
+            said, prior = history_brief(self.store, self.task_id, hands)
+            if said: system = f'{system}\n\n{said}'
+            if prior: user = f'{prior}\n\n{user}'
             source_paths = [a.get('Path') for a in _task_files(self.store, self.task_id) if a.get('Path')]
             paths = list(dict.fromkeys(source_paths + list(attachments or [])
                                        + [m.group('path') for m in _IMAGE_PATH.finditer(text)]))
@@ -1156,6 +1189,8 @@ class GeneralSession:
                     system = f'{system}\n\n{browserview.brief(held=self.holds_browser())}'
                 system = f'{system}\n\n{_sc.ASK_LINE}'
                 if systems: system = f'{system}\n\n{systems}'
+                if said: system = f'{system}\n\n{said}'           # the fresh conversation hears of the mail as the first did
+                if prior: user = f'{prior}\n\n{user}'
                 build_args = dict(pick=self.pick, model=self.model or None,
                                   trace=visible, cancel=cancel, task_id=self.task_id)
                 if browser_tools or hands:

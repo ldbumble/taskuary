@@ -105,7 +105,7 @@ test("no removed or second name for a button is left where a person can read it"
     "Block them in Settings", "Send back to the agent", "Continue the agent", "Refresh the draft", "Refresh draft", "Mark it handled", "Test the connection",
     "Run the report again", "Send the answer to the agent", "Write reply", "Start an agent", "Start another agent", "Send to non-coding agent",
     "Use non-coding agent", "Start coding session", "Approve & send", "Run action", "Save playbook", "Draft a reply", "Check again"];
-  const hits = [], heading = { "TaskPage.jsx": ["Close out"] };   // the task page's third section is named Close out - a heading, no button
+  const hits = [], heading = { "TaskPage.jsx": ["Close out"], "taskLayout.js": ["Close out"] };   // the task page's third section is named Close out - a heading, no button
   for (const f of files) for (const s of said(strip(fs.readFileSync(path.join(SRC, f), "utf8"))))
     if (gone.includes(s.trim()) && !(heading[f] || []).includes(s.trim())) hits.push(`${f}: "${s.trim()}"`);
   assert.deepEqual(hits, []);

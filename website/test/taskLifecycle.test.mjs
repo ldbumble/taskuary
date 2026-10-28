@@ -90,9 +90,11 @@ test("the task page opens exactly one stage and lets you open the others by hand
   // ...and the task itself is no stage any more: From is its own column, always open (the redesign, 2026-10-21) - the work column
   // opens what the task is for where the focus names the task (taskLayout.workPane)
   assert.ok(!source.includes(`stage !== "task" && (`), "no folded Task strip");
-  assert.match(source, /\{\(!fromDrawer \|\| fromSide\) && \(\s*<Box data-tq-from="" data-tq-task-section=""/);
+  assert.match(source, /\{\(!fromDrawer \|\| fromSide\) && slot\("from",\s*<Box data-tq-from="" data-tq-task-section=""/);
   // ...neither half on a task waiting on a person (the owner, 2026-10-25): both fold to a line
-  assert.match(source, /const pane = waitFor && !openStage \? "" : workPane\(\{ stage, kind: t\?\.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas, picked: !!openStage \}\);/);
+  assert.match(source, /const paneRest = waitFor && !openStage \? "" : workPane\(\{ stage, kind: t\?\.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas, picked: !!openStage \}\);/);
+  // ...and on the desk the open section draws its half: the Agent its own, Close out the reply (the three sections, 2026-10-27)
+  assert.match(source, /const pane = section === "agent" \? "agent" : section === "close" \? "reply" : paneRest;/);
 });
 
 test("a general chat that has answered is agent state, not \"not started\"", () => {

@@ -158,7 +158,10 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         // ...and that floor is now the card's from the start, with WORDS_FLOOR, and its height is held (useHeldHeight): a drawer, Reply or a
         // stage never moves its foot (the owner, 2026-10-27)
         ...(!pin ? { "&:not(:has(.xterm, [data-tq-agent-room='live'], [class*='tq-aui']:not([data-tq-agent-room='rest'] *), canvas, iframe))": {
-          height: held ? `${held}px` : "auto", maxHeight: wordsCap(h), minHeight: wordsFloor(typeof h === "number" ? `${wordsCap(h)}px` : wordsCap(h)) } } : {}),
+          height: held ? `${held}px` : "auto", maxHeight: wordsCap(h), minHeight: wordsFloor(typeof h === "number" ? `${wordsCap(h)}px` : wordsCap(h)) },
+          // ...and A TASK IN ITS THREE SECTIONS TAKES THE CANVAS (the owner, 2026-10-27: "it starts at the top and takes up most of it, down to a
+          // small gap above the dock's buttons"): one height from the start, the cap, through every press - a short section is white under its words
+          "&:has([data-tq-sections]):not(:has(.xterm, [data-tq-agent-room='live'], canvas, iframe))": { height: wordsCap(h), minHeight: wordsCap(h), maxHeight: wordsCap(h) } } : {}),
         ...(pin ? { position: "fixed", top: 8, left: pin.left, width: pin.width, zIndex: 1350 } : {}) }}>
       {/* a COLUMN that shrinks to the box: the task view inside is a flex column too, so its own scroller gets what is left (TaskPage) */}
       <Box sx={{ flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>

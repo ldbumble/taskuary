@@ -36,7 +36,8 @@ test("the chat takes the room on the task page, the way a live session does", ()
 test("on the canvas the agent step scrolls the Task strip away, and another step scrolls it back", () => {
   assert.match(tasks, /const agentUp = !!canvas && pane === "agent" && workspaceMode === "general" && !liveSession;/);
   assert.match(tasks, /if \(!agentUp\) \{ if \(canvas && stepsBox\.current\) stepsBox\.current\.scrollTop = 0; return undefined; \}/);
-  assert.match(tasks, /<Box ref=\{stepsBox\} sx=\{\{ px: liveSession/);
+  // ...the stacked page's one scroller; on the desk each of the three sections scrolls on its own (2026-10-27)
+  assert.match(tasks, /<Box ref=\{stepsBox\} sx=\{threeUp \? \{ flex: 1, minHeight: 0, minWidth: 0, display: "flex", flexDirection: "row"[^\n]*\n\s+: \{ px: liveSession/);
 });
 
 // END SESSION ON A GENERAL AGENT (the owner, 2026-10-13): its chat stayed drawn under Agent work with Close out folded below,

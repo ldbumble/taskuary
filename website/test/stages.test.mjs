@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { RULES, STAGE, drawerLit, mainView, stageFrom, stageOf } from "../src/stages.js";
+import { RULES, SECTION_KEYS, STAGE, drawerLit, mainView, sectionOf, stageFrom, stageOf } from "../src/stages.js";
 import { VERBS } from "../src/buttons.js";
 
 test("every stage names its parts, and every move is a button by its one name", () => {
@@ -15,6 +15,9 @@ test("every stage names its parts, and every move is a button by its one name", 
     // the Advisor stands over the work where the work is the page, in the right drawer where the task is
     if (s.advisor) assert.equal(s.advisor, s.main === "work" ? "main" : "drawer", k);
     assert.ok(s.verbs.length && s.verbs.every((v) => v in VERBS), `${k}: verbs`);
+    // ...and the section of the three it opens on (2026-10-27), where its first move is
+    assert.ok(SECTION_KEYS.includes(s.section), `${k}: section`);
+    assert.equal(sectionOf(k), s.section);
     // a lit tab is the right drawer's: only where the task is the page
     if (s.lit) assert.equal(s.main, "task", k);
   }
@@ -63,7 +66,7 @@ test("a closed task is done, opens on how it closed, and has no Advisor section"
 
 test("the task page reads the stage, and says it on its body", () => {
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  assert.match(page, /import \{ drawerLit, mainView, stageOf \} from "\.\/stages\.js";/);
+  assert.match(page, /import \{ mainView, sectionOf, stageOf \} from "\.\/stages\.js";/);
   // ...read through the held view (2026-10-27: Send must not swap Close out for the task): the stage's view, held once open
   assert.match(page, /const mainNow = mainView\(\{ stage: taskStage, sessionView, stacked \}\);/);
   assert.match(page, /const main = mainHeld\.current\.main;/);

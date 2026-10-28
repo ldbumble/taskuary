@@ -89,3 +89,13 @@ say "verify"
 curl -s "https://pypi.org/pypi/taskuary/$V/json" | python -c "import sys,json; d=json.load(sys.stdin); print('PyPI', d['info']['version'], [u['filename'] for u in d['urls']])"
 curl -s https://api.github.com/repos/ldbumble/taskuary/releases/latest | python -c "import sys,json; d=json.load(sys.stdin); print('GitHub', d['tag_name'], [a['name'] for a in d['assets']])"
 say "v$V is out. The owner's app runs from the main checkout: restart Taskuary to load it."
+
+# THE NUMBER THAT MATTERS (the owner, 2026-10-28: measure the agreement rate after each release): how often the lit button was the one
+# pressed, over the release this one replaces and the last week - read-only on the owner's home, never fatal
+OH="${OWNER_HOME:-$HOME/.taskuary}"
+if [ -f "$OH/taskuary.db" ]; then
+  say "Advisor agreement ($OH, read-only)"
+  PREV=$(git tag --sort=-creatordate | grep -v "^v$V$" | head -1 || true)
+  [ -n "$PREV" ] && python tools/advisor_agreement.py --home "$OH" --line --since "$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M:%S' "$PREV")" || true
+  python tools/advisor_agreement.py --home "$OH" --line --days 7 || true
+fi

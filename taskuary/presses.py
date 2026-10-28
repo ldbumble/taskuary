@@ -59,6 +59,17 @@ def advised_now(store, tgt) -> str:
     except Exception: return ''
 
 
+def decided(store, key: str, rev: str) -> tuple:
+    """(state, by) of the Advisor's decision kept for `key` at revision `rev` (advisor.kept) - (None, None) when none was kept at it.
+    Read, never decided again: the press is recorded as it was shown."""
+    try:
+        r = store._one('SELECT Stamp, Json FROM advice_decision WHERE Key=?', (key,))
+        if not r or not rev or r.get('Stamp') != rev: return None, None
+        d = json.loads(r['Json'] or '{}') or {}
+        return d.get('state'), d.get('by')
+    except Exception: return None, None
+
+
 def live_now(store, item: dict, surface: str = 'desk') -> list:
     """The buttons the item's row draws now (concierge.row_buttons), and Next where the surface has one (the Tasks tab has none) - for a
     surface that did not say what it drew."""
@@ -98,11 +109,12 @@ def kept(store, key, pressed, surface='desk', lit=None, live=None, rev=None, adv
         try: now = advisor.revision(store, *tgt)
         except Exception: now = None
         repo = (m.get('SourceName') or '') if w['channel'] in CODE_CHANNELS else ''
+        st, by = decided(store, key, rev or now)
         rid = store._exec('INSERT INTO advice_press (Key,TargetKind,TargetId,Revision,Advised,Pressed,Match,ItemKind,Channel,Sender,SenderDomain,'
-                          'Scope,Thread,Stale,CreatedAt,Surface,Lit,Live,Choice,Repo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                          'Scope,Thread,Stale,CreatedAt,Surface,Lit,Live,Choice,Repo,State,By) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                           (key, tgt[0], int(tgt[1]), rev or '', adv or None, got, int(bool(shown) and shown == got), str(item.get('kind') or ''),
                            w['channel'], w['sender'], w['domain'], w['scope'], w['thread'], int(bool(rev) and bool(now) and rev != now), _now(),
-                           surface, shown or '', json.dumps(others), int(bool(others)), str(repo).lower()))
+                           surface, shown or '', json.dumps(others), int(bool(others)), str(repo).lower(), st, by))
         with _LOCK:
             last[k] = (time.monotonic(), rid)
             for o in [o for o, (t, _i) in last.items() if time.monotonic() - t > SAME_PRESS_SECS]: last.pop(o, None)

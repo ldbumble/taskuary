@@ -1340,8 +1340,8 @@ def _paged(store, tid: int, item: dict | None, kind: str, p: dict, text: str, ac
     if kind == 'rule.change':
         r, how = find_rule(store, p.get('about')), 'remove' if str(p.get('how') or '').strip().lower() in ('remove', 'delete') else 'edit'
         name = r.get('Name') or r.get('Pattern')
-        if routes(): return _page(store, tid, item, '#settings=policies', f"Opened Routing policies at “{name}” - {'Delete' if how == 'remove' else 'change it'} there.")
-        if how != 'remove': raise CallMiss('A rule is edited at the desk, under Settings → Routing policies - say so in plain words. Nothing was changed.')
+        if routes(): return _page(store, tid, item, '#settings=policies', f"Opened {places.name('rules')} at “{name}” - {'Delete' if how == 'remove' else 'change it'} there.")
+        if how != 'remove': raise CallMiss(f"A rule is edited at the desk, under {places.name('rules')} - say so in plain words. Nothing was changed.")
         prop = _propose_raw(store, tid, kind, int(r['PolicyId']), {'how': how, 'about': name}, f'Delete the rule “{name}”',
                             'its mail reaches triage again; Recently deleted keeps the rule 30 days', WAITS, actor, item)
     elif kind == 'deleted.restore':

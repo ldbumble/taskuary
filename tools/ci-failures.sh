@@ -21,7 +21,7 @@ gh run view "$RUN" --json jobs -q '.jobs[] | select(.conclusion=="cancelled") | 
 for J in $(gh run view "$RUN" --json jobs -q '.jobs[] | select(.conclusion=="failure" and .name!="ci-required") | .databaseId'); do
   echo "FAILED: $(gh run view "$RUN" --json jobs -q ".jobs[] | select(.databaseId==$J) | .name")"
   gh run view "$RUN" --log --job "$J" 2>/dev/null | cut -c60- \
-    | grep -oE "FAILED tests/[^ ]+.{0,160}|not ok [0-9]+ - |^\s*error: '|Verify committed|^\s+(WAYOUT|CRASH|SWAP|SEEN|NAMES|RING|SEARCH|REREAD|AGAIN|BASED) " \
+    | grep -oE "FAILED tests/[^ ]+.{0,160}|not ok [0-9]+ - .{0,160}|error: '.{0,160}|Verify committed.{0,80}|(WAYOUT|CRASH|SWAP|SEEN|NAMES|RING|SEARCH|REREAD|AGAIN|BASED) .{0,160}" \
     | sed 's/^[0-9TZ:.-]* *//' | sort -u | head -12 | cut -c1-260 | sed 's/^/  /'
 done
 exit 1

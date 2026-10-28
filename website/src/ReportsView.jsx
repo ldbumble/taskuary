@@ -509,9 +509,10 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         // NO CLOCK IS A REPORT THAT STOPPED (D2, the owner 2026-09-28): it said "daily" and ran only by hand, so
         // it wears a red border and says so - a workflow is started by hand on purpose and is left alone
         const unscheduled = !sched && !workflowOverview;
+        // ...and every row takes that frame's inset, so Run now, Edit and the switch stand in one column down the list
         return (
-          <Box key={s.SourceId} sx={{ borderBottom: `1px solid ${BORDER}`,
-            ...(unscheduled ? { border: `1px solid ${ALERT}`, borderRadius: 1, my: 0.5, px: 1 } : {}) }}>
+          <Box key={s.SourceId} sx={{ px: 1, border: "1px solid transparent", borderBottom: `1px solid ${BORDER}`,
+            ...(unscheduled ? { borderColor: ALERT, borderRadius: 1, my: 0.5 } : {}) }}>
           <Box onClick={() => openOne(s.SourceId)}
             sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.5, cursor: "pointer",
               "&:hover": { bgcolor: "#faf8f4" } }}>

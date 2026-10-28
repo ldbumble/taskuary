@@ -28,3 +28,24 @@ test("a new report starts on the first connected source, and an unconnected one 
   const { label } = await import("../src/buttons.js");
   assert.equal(label("fix", "card"), "Open the card");
 });
+
+// A DATA REPORT READS AS ONE (the owner, 2026-10-28: "the report on the demo site looks horrible"): its measure and its name picked as the
+// server picks its chart, a run of days drawn as a line and a ranking as bars, every number of a column at one count of decimals, and one
+// line of what it found - the total where a total means something, and the row that stands out
+test("a report's rows say their chart, their columns' decimals and one line of what they found", async () => {
+  const { reportShape, reportSummary, places, fmtNum } = await import("../src/reportRows.js");
+  const ap = [{ vendor: "Alvarez Supply", past_due: 18420.55 }, { vendor: "Northline Linen", past_due: 9310 }, { vendor: "Kesler Medical", past_due: 7715.4 }];
+  const s = reportShape(ap);
+  assert.deepEqual([s.lab, s.val, s.chart, s.dated], ["vendor", "past_due", "bars", false]);
+  assert.equal(places(ap, "past_due"), 2);
+  assert.deepEqual(ap.map((r) => fmtNum(r.past_due, 2)), ["18,420.55", "9,310.00", "7,715.40"]);
+  assert.equal(reportSummary(ap), "3 rows · 35,445.95 past due in all · largest Alvarez Supply at 18,420.55 (52%)");
+  const days = [38, 41, 35, 52, 71].map((t, i) => ({ day: `2026-08-${18 + i}`, tickets: t }));
+  assert.equal(reportShape(days).chart, "line");
+  assert.equal(reportSummary(days), "5 days · 237 tickets in all · peak 71 on Aug 22, the latest day");
+  assert.equal(reportSummary([...days, { day: "2026-08-23", tickets: 9 }]), "6 days · 246 tickets in all · peak 71 on Aug 22, latest 9");
+  // an average is not summed; a table with no number has no chart; numbers sent as strings still count
+  assert.equal(reportSummary([{ site: "Lakeview", avg_wait: 4 }, { site: "Riverside", avg_wait: 7 }]), "2 rows · largest Riverside at 7");
+  assert.equal(reportShape([{ site: "Lakeview", lead: "Erin Blake" }, { site: "Riverside", lead: "Gail Moreno" }]).chart, null);
+  assert.equal(reportShape([{ site: "Lakeview", headcount: "1,112" }, { site: "Riverside", headcount: "98" }]).val, "headcount");
+});

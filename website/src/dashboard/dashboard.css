@@ -42,6 +42,8 @@
   .tq-dash-grid { gap: 8px; }
   .tq-dash-card { padding: 10px 11px; }
   .tq-dash-value { font-size: 26px; }
+  /* ...and the range's words stay on one line each: "7 days" broke in two at a phone's width */
+  .tq-dash-seg button { padding: 5px 8px; white-space: nowrap; }
 }
 
 .tq-dash-card { background: var(--d-surface); border: 1px solid var(--d-border); border-radius: 12px; padding: 14px 16px;
@@ -149,6 +151,8 @@
 .tq-card:has(> .tq-dash-canvas) { display: flex; flex-direction: column; box-sizing: border-box;
   height: max(460px, calc(100cqh + 14px - var(--tq-dash-gap, 2px))); margin-top: 0; margin-bottom: 0; }
 :root[data-theme="dark"] .tq-dash-canvas { background: #121110; }
+/* ...and in a task's three sections (ItemSections) the section is the warm ground and scrolls itself: the dashboard sits straight on it */
+.tq-item-sec .tq-dash-canvas { margin: 0; padding: 0; background: transparent; border-radius: 0; overflow: visible; min-height: 0; flex: none; }
 
 @media (prefers-reduced-motion: reduce) { .tq-dash-card { transition: none; } }
 

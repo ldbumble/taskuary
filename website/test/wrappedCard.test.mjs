@@ -7,7 +7,7 @@ import { replySource, sentElsewhere, unsentReplyReview, replyPhase } from "../sr
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 // Close out, from its heading to the Earlier runs fold under it
 const closeOut = () => {
-  const page = read("TaskPage.jsx"), at = page.indexOf('<WorkflowHeading number="3" title="Close out"');
+  const page = read("TaskPage.jsx"), at = page.indexOf('<WorkflowHeading number="3"');
   return page.slice(at, page.indexOf("<Fold title={`Earlier runs", at));
 };
 

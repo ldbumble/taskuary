@@ -12,9 +12,12 @@ import { startHarness } from "./harness.mjs";
    screen of empty canvas under it: "if an agent is not open it should be pinned to the top of the view - the beginning of the task window -
    then take up at least half or a little more, and not change if I click Reply or anything else, unless I start an agent"). The card
    (CanvasItem useHeldHeight) stays at the canvas's top and at one height - at least 55% of the canvas - through Reply, each drawer out and
-   back, a section opened by hand, a draft typed into and the chat's pop-up; a started agent takes the room. Invented people only. */
+   back, a section opened by hand, a draft typed into and the chat's pop-up; a started agent takes the room. Invented people only.
+   ...AND IN ITS THREE SECTIONS IT TAKES THE CANVAS (the owner, 2026-10-27: "it starts at the top and takes up most of it, down to a small gap
+   above the dock's buttons"): no longer 55% - the canvas less a small gap, through each section's tab as it was through the drawers */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const FLOOR = 0.55;   // CanvasItem WORDS_FLOOR
+const GAP = 30;   // CanvasItem wordsCap: the canvas less a small gap over the dock
+const full = (m) => m.card.h >= m.canvas.h - GAP;
 
 const measure = (page) => page.evaluate(() => {
   const r = (s) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return { top: b.top, h: b.height }; };
@@ -50,17 +53,19 @@ test("a task of words stays at the canvas's top and one height through Reply, th
     await page.waitForSelector(`[data-tq-canvas-item] [data-tq-task-page="${id}"] [data-tq-task-body]`, { timeout: 20000 });
     await sleep(2500);
     const base = await measure(page);
-    assert.equal(base.main, "task", `the task opens on its task view ${say}`);
+    assert.equal(base.main, "from", `a task nothing has worked opens on Came from ${say}`);
     assert.ok(Math.abs(base.card.top - base.canvas.top) <= 2, `the card is pinned to the canvas's top ${say} ${JSON.stringify(base)}`);
-    assert.ok(base.card.h >= FLOOR * base.canvas.h - 1, `the card takes at least ${FLOOR} of the canvas ${say} ${JSON.stringify(base)}`);
+    assert.ok(full(base), `the card takes the canvas ${say} ${JSON.stringify(base)}`);
+    // ...each section's tab, and back (where the drawers were)
     const drawers = async (when) => {
-      for (const tab of ["[data-tq-from-line]", "[data-tq-work-tab]"]) {
-        if (!(await page.$(`[data-tq-canvas-item] ${tab}`))) continue;
-        await page.click(`[data-tq-canvas-item] ${tab}`); await sleep(500);
-        pinned(base, await measure(page), `with ${tab} out ${when} ${say}`);
-        await page.click(`[data-tq-canvas-item] ${tab}`); await sleep(400);
-        pinned(base, await measure(page), `with ${tab} back ${when} ${say}`);
+      const was = await page.evaluate(() => document.querySelector("[data-tq-canvas-item] [data-tq-task-body]")?.getAttribute("data-tq-main"));
+      for (const k of ["from", "agent", "close"]) {
+        if (!(await page.$(`[data-tq-canvas-item] [data-tq-section-tab=${k}]`))) continue;
+        await page.click(`[data-tq-canvas-item] [data-tq-section-tab=${k}]`); await sleep(500);
+        pinned(base, await measure(page), `with ${k} open ${when} ${say}`);
       }
+      if (await page.$(`[data-tq-canvas-item] [data-tq-section-tab=${was}]`)) { await page.click(`[data-tq-canvas-item] [data-tq-section-tab=${was}]`); await sleep(500); }
+      pinned(base, await measure(page), `back on ${was} ${when} ${say}`);
     };
     await drawers("before Reply");
 
@@ -104,9 +109,9 @@ test("a task of words stays at the canvas's top and one height through Reply, th
   assert.deepEqual(errors, []);
 });
 
-// THE DRAWER TABS ARE WHITE, both edges (the owner, 2026-10-27: "the right side thing should be white as well, like the left sidebar -
-// otherwise you won't notice it's there"); lit, the right one wears the accent over it
-test("both drawer tabs are white at rest", { timeout: 180000 }, async (t) => {
+// THE TABS ARE WHITE (the owner, 2026-10-27: "the right side thing should be white as well, like the left sidebar - otherwise you won't
+// notice it's there") - the three sections' closed tabs, on either side of the open one
+test("the closed sections' tabs are white at rest", { timeout: 180000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
   const page = await harness.newPage();
@@ -114,19 +119,17 @@ test("both drawer tabs are white at rest", { timeout: 180000 }, async (t) => {
   await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
   await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 30000 });
   const tasks = (await (await fetch(`${harness.fixtureApi}/api/tasks`, { headers: { "X-Taskuary-Token": harness.token } })).json()).data;
-  const bg = async (id, tab) => {
+  const bg = async (id) => {
     await page.evaluate((id) => { location.hash = ""; location.hash = `task=${id}`; }, id);
     await page.waitForSelector(`[data-tq-task-page="${id}"] [data-tq-task-body]`, { timeout: 20000 });
     await sleep(1500);
-    return page.evaluate((tab) => { const e = document.querySelector(`[data-tq-canvas-item] ${tab}`); return e && { bg: getComputedStyle(e).backgroundColor, lit: e.hasAttribute("data-tq-lit") }; }, tab);
+    return page.evaluate(() => [...document.querySelectorAll("[data-tq-canvas-item] [data-tq-section-tab]")].map((e) => [e.dataset.tqSectionTab, getComputedStyle(e).backgroundColor]));
   };
-  // a fresh task opens on its task view, Agent · Close out on the right; a drafted reply's opens on its work, Came from on the left
-  const right = await bg(tasks.find((x) => /^New starter on Monday/.test(x.Title)).TaskId, "[data-tq-work-tab]");
-  const left = await bg(tasks.find((x) => /^Invoice 88213/.test(x.Title)).TaskId, "[data-tq-from-line]");
-  assert.ok(right && left, JSON.stringify({ right, left }));
-  assert.equal(left.bg, "rgb(255, 255, 255)", "Came from's tab is white");
-  if (!right.lit) assert.equal(right.bg, left.bg, "Agent · Close out's tab is as white as Came from's");
-  else assert.equal(right.bg, "rgb(85, 105, 122)", "lit, it wears the accent");
+  // a fresh task opens on Came from, Agent and Close out its tabs on the right; a drafted reply's on Close out, the two others on the left
+  const right = await bg(tasks.find((x) => /^New starter on Monday/.test(x.Title)).TaskId);
+  const left = await bg(tasks.find((x) => /^Invoice 88213/.test(x.Title)).TaskId);
+  assert.deepEqual(right, [["agent", "rgb(255, 255, 255)"], ["close", "rgb(255, 255, 255)"]]);
+  assert.deepEqual(left, [["from", "rgb(255, 255, 255)"], ["agent", "rgb(255, 255, 255)"]]);
 });
 
 // ...AND A STARTED AGENT TAKES THE ROOM: a stand-in claude (tests/fake_claude.py) on a fresh home, as browser/agent-journey.test.mjs
@@ -155,7 +158,7 @@ test("a card of words is held until an agent starts; the live agent takes the ca
   await page.waitForSelector(`[data-tq-canvas-item] [data-tq-task-page="${made.taskId}"] [data-tq-task-body]`, { timeout: 30000 });
   await sleep(2500);
   const base = await measure(page);
-  assert.ok(Math.abs(base.card.top - base.canvas.top) <= 2 && base.card.h >= FLOOR * base.canvas.h - 1, JSON.stringify(base));
+  assert.ok(Math.abs(base.card.top - base.canvas.top) <= 2 && full(base), JSON.stringify(base));
   await page.waitForFunction(() => [...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Send to agent" && b.offsetParent), { timeout: 30000 });
   await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Send to agent" && b.offsetParent).click());
   await page.waitForSelector("[data-tq-run-form] textarea", { timeout: 15000 });

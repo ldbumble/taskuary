@@ -37,7 +37,10 @@ test("task context, expanded messages and agent results fit short laptops and ph
       await page.waitForSelector(`[data-tq-task-page="${id}"] [data-tq-task-head]`, { timeout: 20000 });
       if (name === "messages") {
         // Came from's tab pulls its drawer out (the owner, 2026-10-26); the phone's compact context opens on a tap - before the older messages.
-        await page.evaluate(() => (document.querySelector("[data-tq-from-line]") || document.querySelector("[data-tq-from]"))?.click());
+        // ...on the desk Came from is the first of the three sections: its tab, then its Full message history (2026-10-27)
+        await page.evaluate(() => (document.querySelector("[data-tq-section-tab=from]") || document.querySelector("[data-tq-from-line]") || document.querySelector("[data-tq-from]"))?.click());
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        await page.evaluate(() => { const h = document.querySelector("[data-tq-from] [data-tq-history-toggle][aria-expanded=false]"); h?.click(); });
         await page.waitForSelector("[data-tq-show-older]", { timeout: 10000 });
         await page.evaluate(() => document.querySelector("[data-tq-show-older]").click());
         await page.waitForSelector("[data-tq-from] [data-tq-chat-thread]");
@@ -97,9 +100,10 @@ test("task context, expanded messages and agent results fit short laptops and ph
           const work = document.querySelector("[data-tq-work]");
           const before = work.getBoundingClientRect().top;
           from.scrollTop = from.scrollHeight;
-          const last = from.querySelector("[data-tq-sorted]").getBoundingClientRect();
+          // ...the last of it: what triage made of it on a phone, the message history's foot in the desk's Came from section
+          const all = from.querySelectorAll("[data-tq-sorted], [data-tq-conversation]"), last = all[all.length - 1].getBoundingClientRect();
           const bounds = from.getBoundingClientRect();
-          return last.bottom <= bounds.bottom + 1 && last.top >= bounds.top && work.getBoundingClientRect().top === before;
+          return last.bottom <= bounds.bottom + 1 && last.bottom > bounds.top && work.getBoundingClientRect().top === before;
         });
         assert.ok(reachable, `all source content is reachable without moving the work: ${say}`);
       }

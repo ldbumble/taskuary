@@ -10,9 +10,12 @@ import { startHarness } from "./harness.mjs";
 // right side arrow should pull out the agent/close out screens. If up to agent or close out open those with coming from in left side
 // draw"): the failed run is the page with Came from behind a tab on the left; a task nothing has worked yet is the page with Agent and
 // Close out behind a tab on the right. A drawer slides OVER the main view - it does not move - and Escape or a press outside shuts it.
+// ...AND IN THREE SECTIONS (the owner, 2026-10-27: "input -> agent/advisor -> close ... opens up to the one it's up to"): the failed run opens
+// on the Agent, Came from and Close out its tabs; a task nothing has worked yet on Came from; a reply nothing has drafted on Close out. A
+// tab opens its section, the others close.
 const rect = (page, sel) => page.$eval(sel, (e) => { const r = e.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }; });
 
-test("one main view at every width: a failed run with Came from on the left, a fresh task with Agent and Close out on the right", { timeout: 300000 }, async (t) => {
+test("three sections at every width: a failed run on the Agent, a fresh task on Came from, a reply owed on Close out", { timeout: 300000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
   const page = await harness.newPage();
@@ -35,15 +38,19 @@ test("one main view at every width: a failed run with Came from on the left, a f
     await page.waitForSelector(".tq-dock [data-tq-row]", { timeout: 20000 });
     await new Promise((resolve) => setTimeout(resolve, 2000));   // past the lit move's hold and the chat's first draw
   };
+  const main = () => page.$eval("[data-tq-canvas-item] [data-tq-task-body]", (e) => e.getAttribute("data-tq-main"));
+  const tabs = () => page.$$eval("[data-tq-canvas-item] [data-tq-section-tab]", (els) => els.map((e) => ({ key: e.dataset.tqSectionTab, words: e.innerText,
+    arrow: e.querySelector("[data-tq-tab-arrow]")?.textContent, across: getComputedStyle(e.querySelector("[data-tq-tab-name]")).writingMode === "horizontal-tb" })));
   for (const [width, height] of [[1920, 1080], [1600, 810], [1366, 768]]) {
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
-    await open(made.taskId, "[data-tq-run-why]");
+    await open(made.taskId, "[data-tq-agent-section] [data-tq-run-why], [data-tq-agent-section] [data-tq-result-summary]");
     const m = await page.evaluate(() => {
       const card = document.querySelector("[data-tq-canvas-item]");
       const scrolls = (e) => /auto|scroll/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight + 1;
       const work = card.querySelector("[data-tq-work]");
       const inner = [...work.querySelectorAll("*")].filter(scrolls).map((e) => `${[...e.attributes].filter((a) => a.name.startsWith("data-")).map((a) => a.name).join(",") || e.className} ${e.clientHeight}/${e.scrollHeight}`);
-      const why = card.querySelector("[data-tq-run-why]"), w = why.getBoundingClientRect();
+      // ...the reason, said as the Result's summary while it rests on it (master, 2026-10-27), else the run's own why line
+      const why = card.querySelector("[data-tq-run-why]") || card.querySelector("[data-tq-result-summary]"), w = why.getBoundingClientRect();
       // seen: inside the window and inside every box above it that clips
       let seen = w.top >= 0 && w.bottom <= innerHeight;
       for (let p = why.parentElement; p && seen; p = p.parentElement) {
@@ -51,65 +58,46 @@ test("one main view at every width: a failed run with Came from on the left, a f
         const b = p.getBoundingClientRect(); seen = w.top >= b.top - 1 && w.bottom <= b.bottom + 1;
       }
       const title = card.querySelector("[data-tq-task-head]").textContent.match(/Create playbook: [^.]{20}/)?.[0] || "";
-      const tab = card.querySelector("[data-tq-from-line]");
-      return { main: card.querySelector("[data-tq-task-body]").getAttribute("data-tq-main"), inner, seen, why: why.textContent, ask: !!card.querySelector("[data-tq-ask]"), title,
+      return { main: card.querySelector("[data-tq-task-body]").getAttribute("data-tq-main"), inner, seen, why: why.textContent, title,
         twice: title ? card.innerText.split(title).length - 1 : -1, dock: document.querySelector(".tq-dock").getBoundingClientRect().height,
-        from: !!card.querySelector("[data-tq-from]"), right: !!card.querySelector("[data-tq-work-tab]"),
-        tab: tab && { arrow: tab.querySelector("[data-tq-from-chevron]").textContent, words: tab.textContent, expanded: tab.getAttribute("aria-expanded"), w: tab.getBoundingClientRect().width } };
+        from: !!card.querySelector("[data-tq-from]")?.getBoundingClientRect().width };
     });
     const say = `${width}x${height}: ${JSON.stringify(m)}`;
-    assert.equal(m.main, "work", `the failed run is the page ${say}`);
-    assert.ok(!m.from && !m.right, `Came from is shut in its drawer, no right tab ${say}`);
-    assert.ok(m.tab && m.tab.arrow === "›" && /Came from/.test(m.tab.words) && m.tab.expanded === "false" && m.tab.w >= 24, `the left tab, its arrow and its words ${say}`);
-    assert.deepEqual(m.inner, [], `nothing scrolls inside the main view ${say}`);
-    assert.ok(m.title && !m.ask && m.twice === 1, `the title is said once ${say}`);
+    assert.equal(m.main, "agent", `the failed run opens on the Agent ${say}`);
+    assert.ok(!m.from, `Came from is shut ${say}`);
+    const tm = await tabs();
+    assert.deepEqual(tm.map((x) => [x.key, x.arrow, x.across]), [["from", "›", true], ["close", "‹", true]], `the tabs either side, words across ${say}`);
+    assert.match(tm[0].words, /Came from[\s\S]*Workflow|Came from[\s\S]*Site ops digest|Came from/, say);
+    assert.deepEqual(m.inner, [], `nothing scrolls inside the open section ${say}`);
+    assert.ok(m.title && m.twice === 1, `the title is said once ${say}`);
     assert.match(m.why, /could not start: this tool has no built-in reviewer/, say);
     assert.ok(m.seen, `the reason is in view ${say}`);
     assert.ok(m.dock <= 120, `the dock is short ${say}`);
-    // ...the tab pulls Came from out OVER the main view, which stays where it was; Escape shuts it and hands focus back to the tab
-    const before = await rect(page, "[data-tq-work]");
-    await page.click("[data-tq-from-line]");
-    await page.waitForSelector("[data-tq-from-side]", { visible: true, timeout: 5000 });
-    assert.match(await page.$eval("[data-tq-from-side]", (e) => e.innerText), /Came from[\s\S]*Site ops digest/);
-    assert.equal(await page.$eval("[data-tq-from-line]", (e) => e.getAttribute("aria-expanded")), "true");
-    assert.deepEqual(await rect(page, "[data-tq-work]"), before, `the main view does not move ${say}`);
-    await page.keyboard.press("Escape");
-    await page.waitForFunction(() => !document.querySelector("[data-tq-from-side]"), { timeout: 5000 });
-    assert.ok(await page.evaluate(() => document.activeElement?.hasAttribute("data-tq-from-line")), "Escape hands focus back to the tab");
+    // ...Came from's tab opens it and the Agent folds to its tab; the Agent's brings the run back
+    await page.click("[data-tq-canvas-item] [data-tq-section-tab=from]");
+    await page.waitForSelector("[data-tq-from]", { visible: true, timeout: 5000 });
+    assert.match(await page.$eval("[data-tq-from]", (e) => e.innerText), /Came from[\s\S]*Site ops digest/);
+    assert.equal(await main(), "from");
+    await page.click("[data-tq-canvas-item] [data-tq-section-tab=agent]");
+    await page.waitForSelector("[data-tq-agent-section] [data-tq-result-summary], [data-tq-agent-section] [data-tq-run-why]", { visible: true, timeout: 5000 });
 
-    // A TASK NOTHING HAS WORKED YET: the task is the page, Agent and Close out behind the right tab
-    await open(fresh.TaskId, "[data-tq-work-tab]");
-    const f = await page.evaluate(() => {
-      const card = document.querySelector("[data-tq-canvas-item]"), tab = card.querySelector("[data-tq-work-tab]"), work = card.querySelector("[data-tq-work]");
-      return { main: card.querySelector("[data-tq-task-body]").getAttribute("data-tq-main"), left: !!card.querySelector("[data-tq-from-line]"),
-        work: work && getComputedStyle(work).display, arrow: tab.querySelector("[data-tq-from-chevron]").textContent, words: tab.textContent };
-    });
-    assert.deepEqual(f, { main: "task", left: false, work: "none", arrow: "‹", words: "‹Agent · Close out" }, `${width}: the fresh task's page`);
+    // A TASK NOTHING HAS WORKED YET: Came from is open, the Agent and Close out its tabs on the right
+    await open(fresh.TaskId, "[data-tq-section-tab=agent]");
+    assert.equal(await main(), "from", `${width}: the fresh task opens on Came from`);
+    assert.deepEqual((await tabs()).map((x) => [x.key, x.arrow]), [["agent", "‹"], ["close", "‹"]], `${width}: its tabs`);
     const from = await rect(page, "[data-tq-from]"), card = await rect(page, "[data-tq-canvas-item]");
-    // ...the main view fills the width (the owner, 2026-10-26: "no main view should fill the screen. why waste space?") - less the tab
-    assert.ok(from.w >= card.w - 80, `${width}: the task fills the width ${JSON.stringify({ from, card })}`);
-    // ...and the tab is lit: the drawer holds the next move (an agent for an ask nothing has worked)
-    assert.ok(await page.$("[data-tq-work-tab][data-tq-lit]"), `${width}: the right tab is lit`);
-    await page.click("[data-tq-work-tab]");
-    await page.waitForSelector("[data-tq-work-side] [data-tq-closeout]", { visible: true, timeout: 5000 });
-    assert.equal(await page.$eval("[data-tq-work-tab]", (e) => e.getAttribute("aria-expanded")), "true");
-    const side = await rect(page, "[data-tq-work-side]");
-    assert.deepEqual(await rect(page, "[data-tq-from]"), from, `${width}: the task under the drawer does not move`);
-    assert.ok(side.x + side.w > from.x + from.w - 1 || side.x > from.x, `${width}: the drawer comes in from the right ${JSON.stringify({ side, from })}`);
-    // ...a press outside it shuts it
-    await page.click("[data-tq-task-head]");
-    await page.waitForFunction(() => getComputedStyle(document.querySelector("[data-tq-work]")).display === "none", { timeout: 5000 });
+    // ...the open section fills the width (the owner, 2026-10-26: "no main view should fill the screen. why waste space?") - less the tabs
+    assert.ok(from.w >= card.w - 2 * 156 - 10, `${width}: Came from fills the width ${JSON.stringify({ from, card })}`);
+    await page.click("[data-tq-canvas-item] [data-tq-section-tab=agent]");
+    await page.waitForSelector("[data-tq-work] [data-tq-run-form]", { visible: true, timeout: 5000 });
+    assert.equal(await main(), "agent");
+    assert.equal(await page.$eval("[data-tq-from]", (e) => e.getBoundingClientRect().width), 0, `${width}: Came from closed as the Agent opened`);
 
-    // A REPLY WITH NOTHING DRAFTED opens on the task, the right tab lit and naming the move (the owner, 2026-10-26: "you can open on task
-    // but highlight the side bar so people know to go there")
-    await open(burst.taskId, "[data-tq-work-tab]");
-    const b = await page.evaluate(() => {
-      const card = document.querySelector("[data-tq-canvas-item]"), tab = card.querySelector("[data-tq-work-tab]");
-      return { main: card.querySelector("[data-tq-task-body]").getAttribute("data-tq-main"), lit: tab.hasAttribute("data-tq-lit"),
-        words: tab.querySelector("[data-tq-from-words]").textContent, bg: getComputedStyle(tab).backgroundColor };
-    });
-    assert.equal(b.main, "task", `${width}: ${JSON.stringify(b)}`);
-    assert.ok(b.lit && b.words === "Close out · reply to Gail Moreno" && b.bg === "rgb(85, 105, 122)", `${width}: the tab is lit and names the reply ${JSON.stringify(b)}`);
+    // A REPLY WITH NOTHING DRAFTED opens on Close out (where the reply is written), Came from's tab naming who wrote
+    await open(burst.taskId, "[data-tq-section-tab=from]");
+    assert.equal(await main(), "close", `${width}: the reply owed opens on Close out`);
+    const bt = await tabs();
+    assert.match(bt.find((x) => x.key === "from").words, /Gail Moreno/, `${width}: ${JSON.stringify(bt)}`);
   }
   assert.deepEqual(errors, []);
 });

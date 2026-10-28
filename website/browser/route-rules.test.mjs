@@ -81,10 +81,10 @@ print(json.dumps({'tid': tid, 'mid': mid}))
 
   // the task wears its hard-work chip, and a press corrects it
   await page.goto(`${harness.ui}#task=${made.tid}`, { waitUntil: "domcontentloaded", timeout: 90000 });
-  // ...in Came from, with what triage made of it: where the work is the page, that is the drawer behind the left tab (0.3.9.48)
-  await until(() => document.querySelector("[data-tq-judged], [data-tq-from-line]"), null, 90000);
-  if (!(await page.$("[data-tq-judged]"))) await page.click("[data-tq-from-line]");
-  await until(() => document.querySelector("[data-tq-judged]"), null, 20000);
+  // ...in Came from, with what triage made of it: where the task opens on another section, Came from is behind its tab (the three sections)
+  await until(() => document.querySelector("[data-tq-task-body][data-tq-main]"), null, 90000);
+  if (await page.$("[data-tq-section-tab=from]")) await page.click("[data-tq-section-tab=from]");
+  await until(() => { const j = document.querySelector("[data-tq-judged]"); return j && j.getBoundingClientRect().width > 0; }, null, 20000);
   assert.match(await page.$eval("[data-tq-judged]", (e) => e.innerText), /hard work/);
   await page.click("[data-tq-judged]");
   await until(() => [...document.querySelectorAll('li[role="menuitem"]')].some((o) => o.innerText === "Ordinary work"));

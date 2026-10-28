@@ -954,6 +954,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # person: anyone else on the thread is not the one it asked (B6, 2026-10-11).
         # ...or of the person the agent said it was waiting on (waiton.py) - the same owner setting, never a start of its own
         if awaited or from_opener(store, tid, msg): _hand_to_agent(store, cfg, tid, msg, actor)
+        # ...and new work on a task whose assistant has STOPPED carries that conversation on, where it would have started by itself
+        _carry_on(store, tid, msg, mid, follow, actor)
     else:
         # Nothing the owner said before decides here without a model. A ruling on THIS thread used
         # to (ingest.ruled_on_thread, until PW-020): every later reply on a dismissed email thread
@@ -1463,6 +1465,7 @@ def _join_same(store, msg: dict, tid: int, intent: dict, actor: str, notes_note:
         rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
                                 'Reason': f"needs a reply: {intent.get('why') or 'question for you'}" + (f' · {unsendable}' if unsendable else '')})
         _spawn(_auto_draft, store, tid, rid)
+    _carry_on(store, tid, msg, mid, intent, actor)
     logger.info(f"ingest: the same as {ref} - joined" + (' and reopened' if closed else ''))
     return {'status': 'routed', 'task_id': tid, 'message_id': mid}
 
@@ -1723,6 +1726,58 @@ def _hand_to_agent(store, cfg: dict, tid, msg: dict, actor: str):
         if origin.of_task(store, tid)[0] == 'stranger' and terminal.mode_of_task(tid) != 'auto': return
         terminal.say_to_task(store, tid, msg, actor)
     except Exception as e: logger.warning(f'answer_to_agent failed for task {tid}: {e}')
+
+
+def carry_on_why(store, tid, msg: dict, mid, follow: dict | None) -> str:
+    """'' when new work on a task whose assistant has stopped should CARRY ON that same conversation by itself - else why not.
+
+    The owner, 2026-10-28, on a group-chat task that was asked for more eleven times after its agent finished: "why is it not
+    triggering a continue agent?" Nothing did: an attached line reopened and retitled the task, and the conversation sat finished
+    under an ask it never heard until the owner pressed Continue. Now new work (a `task` verdict - a question gets its reply drafted,
+    an fyi is filed) carries the stopped conversation on, the new line as its next turn - only where a fresh task would have
+    started its agent by itself (auto_start_ok: the owner's switch, a configured AI, a sender who may), never over a live one, never a
+    second agent. A coding task is not carried on here: its Continue reopens a CLI in a checkout, the owner's press."""
+    from . import general
+    t = store.get_task(tid) or {}
+    if not follow or follow.get('degraded') or follow.get('intent') != 'task': return 'not new work'
+    if msg.get('no_auto'): return 'the channel waits for the owner'
+    if t.get('Status') == 'dropped' or not general.handles(t): return 'not the assistant\'s task'
+    if not general.history(store, tid): return 'no conversation to carry on'
+    if tid in general.OPENING or general.session_for(tid) or any(x['Status'] == 'running' for x in store.list_runs(tid)):
+        return 'an agent is live on it'
+    ok, why = auto_start_ok(store, msg, mid, 'general')
+    return '' if ok else str(why)
+
+
+def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bool:
+    """Carry the task's stopped conversation on with the new line (carry_on_why). The turn is the owner's Continue without the
+    press - the same session, told what came in since (continuity.news_block) - and like every agent turn it sends nothing:
+    a reply it writes waits for the owner's Send."""
+    if carry_on_why(store, tid, msg, mid, follow): return False
+    from . import blackboard as bb
+    if bb.live_count() >= (cap := auto_sessions(store)):
+        store.add_comment(tid, 'router', 'agent', f'Not carried on by itself: {cap} agents are already running - Continue picks it up.')
+        return False
+    from . import general
+    general.OPENING.add(tid)
+    who = msg.get('from_name') or msg.get('from_email') or 'They'
+    store.add_comment(tid, 'router', 'agent', f'{who} wrote again with new work - the assistant carries on its conversation here by itself.')
+    store.audit('task', tid, 'auto_continue', actor, 'agent', {'message_id': mid})
+    _spawn(_continue_general, store, tid)
+    return True
+
+
+def _continue_general(store, tid):
+    from . import continuity, general
+    try:
+        news = continuity.news_block(store, tid)
+        general.start_session(store, tid, actor='router').send_prompt(
+            continuity.RESUME_PROMPT, as_owner=False, echo=False, **({'delivery_instructions': news} if news else {}))
+    except Exception as e:
+        # said, not retried: the start queue's retry opens a conversation without a turn (_start_general prompts a fresh one only)
+        logger.warning(f'assistant carry-on failed for task {tid}: {e}')
+        store.add_comment(tid, 'router', 'agent', f"The assistant couldn't carry on by itself: {' '.join(str(e).split())[:200]} - Continue picks it up.")
+    finally: general.OPENING.discard(tid)
 
 
 def _who(m: dict) -> str:

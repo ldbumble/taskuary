@@ -134,14 +134,6 @@ const nav = async text => {
   await page.waitForFunction(`!!(${find})(${JSON.stringify(text)})`);
   await page.evaluate(`(${find})(${JSON.stringify(text)}).click()`); await delay(1200);
 };
-const clickRow = async text => {
-  // the smallest box on the rail that holds the words - the row itself, not the lane around it
-  const find = t => { const hits = [...document.querySelectorAll('[data-tq-rail] *')].filter(e => e.textContent.includes(t) && e.getBoundingClientRect().height > 24);
-    return hits.sort((a, b) => a.getBoundingClientRect().height - b.getBoundingClientRect().height)[0]; };
-  await page.waitForFunction(`(${find})(${JSON.stringify(text)})`);
-  const r = await page.evaluate(`(() => { const e = (${find})(${JSON.stringify(text)}).getBoundingClientRect(); return { x: e.x + e.width / 2, y: e.y + e.height / 2 }; })()`);
-  await page.mouse.click(r.x, r.y); await delay(1500);
-};
 const shot = async name => {
   await page.mouse.move(1430, 990);
   await delay(400);
@@ -159,6 +151,8 @@ const card = async (name, texts, pad = 12) => {           // pad: one margin, or
     return hits.find(e => !hits.some(o => o !== e && e.contains(o))); })()`;
   await page.waitForFunction(`!!${find}`);
   for (let h = 1000, i = 0; i < 6; i++) {
+    // a resize can redraw the page (the Hub reloads behind a spinner): the words are waited for again before each measure
+    await page.waitForFunction(`!!${find}`); await delay(600);
     // the chat keeps every card it opened; the picture shows this one alone, so everything beside it on the way up is hidden
     const r = await page.evaluate(`(() => { const e = ${find}, stop = e.closest('.tq-chat-body');
       if (stop) for (let a = e; a && a !== stop.parentElement; a = a.parentElement)
@@ -226,15 +220,12 @@ const captureHome = async () => {
   await page.waitForSelector('.tq-day-box'); await delay(800);
   await shot('home');
 };
-// THE STORY (02-05): Ruth's request, in the guided demo - its banner is the demo's own frame, not the app, and is hidden here only
-const guided = async () => {
-  await page.goto(origin + '/?workflow=numbers', { waitUntil: 'networkidle0', timeout: 120000 });
-  await page.addStyleTag({ content: '[data-tq-demo-journey]{display:none!important}' }); await delay(800);
-};
 const captureLearned = async () => {
   await nav('Settings'); await nav('Docs'); await nav('LEARNED.md');
   await page.waitForFunction(()=>[...document.querySelectorAll('textarea')].some(e=>e.value.includes('# LEARNED.md')));
-  await page.setViewport({width:1200,height:1160,deviceScaleFactor:2});
+  await page.setViewport({width:1200,height:1700,deviceScaleFactor:2});
+  // the resize redraws the editor; the one measured below is the one drawn after it
+  await delay(1200); await page.waitForFunction(()=>[...document.querySelectorAll('textarea')].some(e=>e.value.includes('# LEARNED.md')));
   await page.evaluate(()=>{
     const editor=[...document.querySelectorAll('textarea')].find(e=>e.value.includes('# LEARNED.md'));
     editor.style.fontSize='14px'; editor.style.lineHeight='1.55'; editor.dataset.readme='';
@@ -250,7 +241,17 @@ const captureLearned = async () => {
     const hold = () => { if (editor.style.getPropertyPriority('height') !== 'important' || editor.style.height !== h) editor.style.setProperty('height', h, 'important'); };
     hold(); new MutationObserver(hold).observe(editor, { attributes: true, attributeFilter: ['style'] });
   });
-  await card('learned', ['Reflect now', '$# LEARNED.md']);
+  // the document opens in Settings > Docs now, not as a chat card (2026-10-28): the picture is its box, from the title to the words' end
+  await delay(800); await page.mouse.move(2, 2);
+  const clip = await page.evaluate(() => {
+    const ed = [...document.querySelectorAll('textarea')].find(e => e.value.includes('# LEARNED.md')), btn = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Reflect now');
+    let box = ed; while (box && !box.contains(btn)) box = box.parentElement;
+    ed.scrollIntoView({ block: 'center' });
+    const b = box.getBoundingClientRect(), top = btn.getBoundingClientRect().top - 24, bottom = ed.getBoundingClientRect().bottom + 16;
+    return { x: b.left - 16, y: top, width: b.width + 32, height: bottom - top };
+  });
+  await page.screenshot({ path: path.join(scratch, 'learned.png'), clip });
+  console.log('Captured learned');
   await page.setViewport({width:1200,height:1000,deviceScaleFactor:2});
 };
 const captureCli = async () => {
@@ -264,9 +265,9 @@ const captureCli = async () => {
 const captureExtras = async () => {
   await page.goto(origin + '/?demo=explore', { waitUntil: 'networkidle0', timeout: 120000 }); await delay(1500);
   await captureCli();
-  await nav('Hub'); await delay(800); await click('2 comments'); await card('hub', ['Give every customer launch', 'Include the rollback steps', 'Post']);
+  await nav('Hub'); await delay(800); await click('2 comments'); await delay(1500); await card('hub', ['Give every customer launch', 'Include the rollback steps', 'Post']);
   await nav('Board'); await nav('Live handoffs'); await card('handoffs', ['show note history', 'tools/gl_export.py'], 6);
-  await nav('Assistant'); await captureLearned();
+  await nav('Chat'); await captureLearned();
 };
 try {
   await page.goto(origin + '/?workflow=numbers', { waitUntil: 'networkidle0', timeout: 120000 });
@@ -301,28 +302,8 @@ try {
   const [x, y] = [Math.min(...rects.map(r => r[0])), Math.min(...rects.map(r => r[1]))], pad = 12;
   await writeFile(path.join(scratch, 'morning.json'), JSON.stringify([x - pad, y - pad, Math.max(...rects.map(r => r[0] + r[2])) - x + 2 * pad, Math.max(...rects.map(r => r[1] + r[3])) - y + 2 * pad]));
   await page.setViewport({ width: 1200, height: 1000, deviceScaleFactor: 2 });
-  await guided();
-  await click('Task', 'button'); await clickRow('Latest vendor spend');
-  await page.waitForFunction(() => document.body.innerText.includes('talk it through with the assistant'));
-  await shot('task');
-  // a pinned task keeps the pane; the demo starts over on a reload, so the walk begins from the morning
-  await guided();
-  await click('Chat', 'button'); await delay(1500);
-  await click('Walk me through my tasks');
-  await page.waitForFunction(() => document.body.innerText.includes('Where this came from') && document.body.innerText.includes('TQ-0018'));
-  // a shorter window keeps the card and the action row under it in one frame
-  await page.setViewport({ width: 1200, height: 760, deviceScaleFactor: 2 }); await delay(800); await shot('assistant');
-  await page.setViewport({ width: 1200, height: 1000, deviceScaleFactor: 2 });
-  // the row's own "Send to agent" (it was "Start an agent" on the card); a second Send/Start, if a picker asks, confirms it
-  await click('Send to agent'); await delay(1500);
-  await page.evaluate(() => [...document.querySelectorAll('button')].find(b => b.getBoundingClientRect().height && /^(Send to agent|Start|Send)$/.test(b.textContent.trim()) && b.closest('[role="dialog"],[role="presentation"],.MuiPopover-root'))?.click());
-  await delay(800); await page.screenshot({ path: path.join(scratch, 'after-send.png') });
-  await page.waitForFunction(() => document.body.innerText.includes('August vendor spend is ready for review'), { timeout: 30000 });
-  await delay(1500); await card('agent', ['Prepare the latest vendor spend numbers', 'analyst is working', 'Make recurring report']);
-  await click('Task', 'button'); await clickRow('Latest vendor spend');
-  await page.waitForFunction(() => [...document.querySelectorAll('textarea')].some(e => e.value.includes('August vendor spend was')));
-  await card('review', ['waiting on you', 'Approve & send', 'Regenerate with AI'], [10, 12, 12, 30])   // the step dot sits left of the box;
-  await page.setViewport({ width: 1200, height: 1000, deviceScaleFactor: 2 });
+  // 02-05 and 12-14 - the task view, its Result and Close out, the chat window, a report, the dashboard, an FYI batch - are shot on the
+  // demo world's own backend by capture-readme-app.mjs (2026-10-28: the guided demo's task stops at "agent waiting on you", never a Result)
   if (process.argv.includes('--extras')) await captureExtras();
   }
   assert.deepEqual(errors, []);

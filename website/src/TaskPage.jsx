@@ -21,7 +21,7 @@ import RemindMe, { RemindPicker } from "./RemindMe.jsx";
 import { steady } from "./steadyAnchor.js";
 import { useFoldBar } from "./foldBar.js";
 import { SlotPicker } from "./CalendarPick.jsx";
-import { onPressed, useVerbs } from "./actionRow.js";
+import { onPressed, onPressing, useVerbs } from "./actionRow.js";
 import { notePress, pagePress } from "./pressLog.js";
 import { choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
 import { PRIORITIES, level } from "./priority.js";
@@ -255,15 +255,22 @@ const MAIN = { width: "100%", flex: "0 1 auto", minHeight: 0, overflowY: "auto",
 const SLOT_MS = 220;
 const SLOT = (open, w) => ({ position: "relative", overflow: "hidden", minWidth: 0, minHeight: 0, flex: open ? "1 1 0px" : `0 0 ${w}px`,
   transition: `flex-grow ${SLOT_MS}ms ease, flex-basis ${SLOT_MS}ms ease`, "@media (prefers-reduced-motion: reduce)": { transition: "none" } });
-const SECTION = (open, w, live = false) => ({ position: "absolute", top: 0, left: 0, bottom: 0, width: w, display: "flex", flexDirection: "column", bgcolor: "#fff",
+// ...a closed body is not drawn (display none: nothing in it can be found or pressed) - but a LIVE agent's is kept laid out and only made
+// invisible, so its terminal is never measured at nothing and refitted (`keep`)
+const SECTION = (open, w, live = false, keep = false) => ({ position: "absolute", top: 0, left: 0, bottom: 0, width: w,
+  display: open || keep ? "flex" : "none", flexDirection: "column", bgcolor: "#fff",
   overflowY: "auto", scrollbarWidth: "thin", overscrollBehaviorY: "contain", overflowAnchor: "none", containerType: "inline-size",
   px: live ? 1 : { xs: 1.5, md: 2.5 }, py: live ? 0.65 : 1.5, boxSizing: "border-box",
   visibility: open ? "visible" : "hidden", opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none",
-  transition: open ? `opacity 160ms ease ${SLOT_MS}ms, visibility 0s` : `opacity 80ms ease, visibility 0s 80ms`,
+  transition: open ? `opacity 160ms ease ${SLOT_MS}ms, visibility 0s` : "none",
+  ...(open ? { "@starting-style": { opacity: 0 } } : {}),
   "@media (prefers-reduced-motion: reduce)": { transition: "none" } });
 // ...a closed tab's width: 156px, and beside a LIVE agent Came from and Close out fold to slim 44px ones (the owner, 2026-10-27: "keep Came
 // from and Close out as very MINIMAL tabs ... so the live agent keeps nearly all the space")
 const TAB_W = 156, MINI_W = 44;
+// ...which section a press belongs to, by its verb id (a draft's own are "<review>:<verb>", all Close out's)
+const VERB_SECTION = { close: new Set(["reply", "done", "close-note", "hand", "accept_invite", "decline_invite", "propose_time", "find_time"]),
+  agent: new Set(["continue", "run-another", "send-general", "start-agent", "save-end", "diff", "fix", "strong-again"]) };
 const MINI_TAB = (here) => ({ appearance: "none", font: "inherit", cursor: "pointer", position: "absolute", top: 0, left: 0, bottom: 0, width: MINI_W,
   border: 0, bgcolor: "#fff", color: INK, display: "flex", flexDirection: "column", alignItems: "center", gap: 1.25, py: 1.5, px: 0, boxSizing: "border-box",
   "& [data-tq-tab-arrow]": { width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0, fontSize: 15, lineHeight: 1,
@@ -1895,6 +1902,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // of the agent thing but separate"): no line over the row or the bar - the canvas hands its decision's line in (`note`), the Tasks tab
   // reads its own - its own section over Agent work, and only when there is a line
   const warn = notDone ? (canvas ? note : taskNote(taskAdvice)) : null;
+  // THE ADVISOR'S SECTION, one element the layout places: over the work on a phone, in the Agent section on the desk - its draft press opens
+  // Close out where the draft will stand
+  const advisorNote = warn && !liveSession ? <AdvisorNote note={warn} onDraft={() => { setOpenStage("reply"); if (threeUp) openSection("close");
+    requestAnimationFrame(() => (threeUp ? closeOutRef : workBox).current?.querySelector("textarea")?.scrollIntoView({ block: "center", behavior: "smooth" })); }} /> : null;
   // THE TASKS TAB'S BAR IS ONE LINE (2026-10-23, foldBar.js): Change folds first, then Split or merge, Hand off with its rule, Not a task;
   // Mark done and Remind me never fold, nor the button the Advisor lit
   const bar = useFoldBar(BAR_FOLD_BUT[{ remove: "nat", forward: "hand", split: "reshape" }[liveVerb(taskAdvice?.verb)] || ""], `${t?.TaskId}|${notDone}|${finishing}|${t?.RemindAt || ""}`);
@@ -2020,6 +2031,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       ...changeVerbs,
     ];
   useVerbs("task", rowVerbs, inRow && !!t, detail?.ref || "");
+  // A PRESS OPENS THE SECTION IT BELONGS TO (the owner, 2026-10-27: "when you hit a button on the bottom that relates to a group, the correct
+  // section opens"): the reply's, the draft's and the close's presses Close out, the agent's the Agent - never a closed section for the
+  // thing pressed. Heard before it runs (actionRow.onPressing), the row's presses and a card's own alike
+  const openSecRef = useRef(null);
+  openSecRef.current = threeUp && active ? openSection : null;
+  useEffect(() => onPressing((id) => {
+    const k = String(id || ""), sec = k.includes(":") || VERB_SECTION.close.has(k) ? "close" : VERB_SECTION.agent.has(k) ? "agent" : null;
+    if (sec) openSecRef.current?.(sec);
+  }), []);
   // SHARE (the owner, 2026-10-23: one Share button): an agent's Result, or a workflow run's - the server reads what it says off the task
   // (sharing.py) - and "Email a summary", the AI's message about the work (EmailSomeone), wherever something can be sent from here.
   // A draft either way lands in this task's Close out, opened at once for its Send
@@ -2263,9 +2283,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     idea") - IN THE MAIN VIEW WHATEVER THE MAIN VIEW IS (the Advisor audit's judge, 2026-10-26): in the right drawer behind a sideways
                     tab, a late line or the reason for a fold was off screen with only a note-count at the end of the tab to say so. Drawers hold work,
                     never the Advisor's words; a live agent's screen keeps its room (and its decision says nothing over it) */}
-                {/* ...and in the three sections it is the Agent's, under its work (the owner's mockup, 2026-10-27) */}
-                {!threeUp && warn && !liveSession && <AdvisorNote note={warn} onDraft={() => { setOpenStage("reply");
-                  requestAnimationFrame(() => workBox.current?.querySelector("textarea")?.scrollIntoView({ block: "center", behavior: "smooth" })); }} />}
+                {/* ...and in the three sections it is the Agent's, under its work (the owner's mockup, 2026-10-27): drawn once (advisorNote), placed by the layout */}
+                {!threeUp && advisorNote}
                 <Box ref={columnsBox} data-tq-columns="" data-tq-layout={threeUp ? "sections" : sessionView ? "full" : stacked ? "stacked" : main} sx={stacked ? COLUMNS : { display: "contents" }}>
                 {(!fromDrawer || fromSide) && slot("from",
                   <Box data-tq-from="" data-tq-task-section="" data-tq-from-open={fromOpen ? "" : undefined} data-tq-from-side={fromDrawer ? "" : undefined}
@@ -2359,7 +2378,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   sx={sessionView || threeUp ? { display: "contents" } : { minWidth: 0, display: "flex", flexDirection: "column", containerType: "inline-size",
                     ...(main === "work" ? MAIN : settled ? { flex: "0 1 auto", minHeight: 0 } : {}) }}>
                 {slot("agent", <Box data-tq-work={threeUp ? "" : undefined} data-tq-agent-section="" role={threeUp ? "region" : undefined} aria-label={threeUp ? "Agent" : undefined}
-                  sx={threeUp ? SECTION(section === "agent", openW("agent"), sessionView) : { display: "contents" }}>
+                  sx={threeUp ? SECTION(section === "agent", openW("agent"), sessionView, liveSession) : { display: "contents" }}>
                 {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
                     its lap - you type into it like any other terminal. Everything below is
                     reference material about the same task, folded away. */}
@@ -2680,8 +2699,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   </>
                 ) : null}
                 {/* THE ADVISOR'S LINE, in the Agent section under its work (the owner's mockup, 2026-10-27) - never over a live agent's screen */}
-                {threeUp && warn && !liveSession && <Box sx={{ mt: 1.5, flexShrink: 0 }}><AdvisorNote note={warn} onDraft={() => { setOpenStage("reply"); openSection("close");
-                  requestAnimationFrame(() => closeOutRef.current?.querySelector("textarea")?.scrollIntoView({ block: "center", behavior: "smooth" })); }} /></Box>}
+                {threeUp && advisorNote && <Box sx={{ mt: 1.5, flexShrink: 0 }}>{advisorNote}</Box>}
                 {/* runs from before sessions (and any API-driven run) keep their trace here */}
                 {!sessionView && detail.runs.length > 0 && (
                   <Fold title={`Earlier runs · ${detail.runs.length}`}>

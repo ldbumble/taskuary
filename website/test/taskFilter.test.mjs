@@ -103,8 +103,10 @@ test("with a live session, X steps back to the task first and the session keeps 
   assert.match(source, /Back to the agent/);
   // the task card, the reply card and earlier runs all come back while peeking (Context & history went 2026-10-22: Came from is its messages)
   // (the steps are sections of one card since the 2026-10-06 cleanup - `...card, ...step` - the gates are the same)
-  for (const gate of [/\{\(!fromDrawer \|\| fromSide\) && \(\s*<Box data-tq-from=""/,
-    /\{!sessionView && detail\.runs\.length > 0/, /\{!sessionView && <Box ref=\{closeOutRef\} data-tq-closeout="" sx=\{\{ \.\.\.card, \.\.\.step, borderTop: 0, mt: 1, px: 0, py: pane === "reply"/]) {
+  // ...and in the three sections (2026-10-27) Close out is one of them beside a live agent too, a slim tab (slot)
+  for (const gate of [/\{\(!fromDrawer \|\| fromSide\) && slot\("from",\s*<Box data-tq-from=""/,
+    /\{!sessionView && detail\.runs\.length > 0/, /\{\(!sessionView \|\| threeUp\) && slot\("close", <Box ref=\{closeOutRef\} data-tq-closeout=""/,
+    /: \{ \.\.\.card, \.\.\.step, borderTop: 0, mt: 1, px: 0, py: pane === "reply"/]) {
     assert.match(source, gate);
   }
   assert.doesNotMatch(source, /<Fold title=\{`Context & history/, "the fold is gone, not hidden");

@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { CLOSE_BY_HAND, closeOut, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, waitingOn, workPane } from "../src/taskLayout.js";
+import { CLOSE_BY_HAND, SECTIONS, agentStatus, agentWord, closeStatus, closeOut, fromStatus, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, waitingOn, workPane } from "../src/taskLayout.js";
 import { taskSource } from "./taskSource.mjs";
 
 test("two columns at rest, the whole width while an agent works - coding or general, working or waiting on you", () => {
@@ -13,21 +13,24 @@ test("two columns at rest, the whole width while an agent works - coding or gene
   assert.match(src, /const sessionView = liveSession && !peek;/);
   // ...and only a live session since 2026-10-25 (the owner: "keep the 2 columns for when agent is not working")
   assert.match(src, /const layout = layoutOf\(\{ sessionView \}\), wide = layout === "full";/);
-  // ...the columns box steps aside but on a phone's stacked page (mainOf, the owner 2026-10-26: one main view and its drawers)
-  assert.match(src, /<Box ref=\{columnsBox\} data-tq-columns="" data-tq-layout=\{sessionView \? "full" : stacked \? "stacked" : main\} sx=\{stacked \? COLUMNS : \{ display: "contents" \}\}>/);
-  // ...the work column steps aside (display: contents) so the terminal stays a flex child of the page, sized as it always was
-  assert.match(src, /sx=\{sessionView \? \{ display: "contents" \} : \{ minWidth: 0, display: "flex", flexDirection: "column", containerType: "inline-size",\s+\.\.\.\(workDrawer \? WORK_SIDE\(workSide\) : main === "work" \? MAIN : settled \? \{ flex: "0 1 auto", minHeight: 0 \} : \{\}\) \}\}>/);
-  // and From is a tab on the body's left edge, which opens it as a drawer laid OVER the main view (item 6, the owner 2026-10-21; the tab
-  // 2026-10-26): absolutely placed, so the pane underneath is never resized; closed by default, by the tab, its X, Escape or a press outside
+  // ...the columns box steps aside but on a phone's stacked page; on the desk the THREE SECTIONS (the owner, 2026-10-27) are its children
+  assert.match(src, /<Box ref=\{columnsBox\} data-tq-columns="" data-tq-layout=\{threeUp \? "sections" : sessionView \? "full" : stacked \? "stacked" : main\} sx=\{stacked \? COLUMNS : \{ display: "contents" \}\}>/);
+  // ...the work column steps aside (display: contents) so the terminal stays a flex child of its section, sized as it always was
+  assert.match(src, /sx=\{sessionView \|\| threeUp \? \{ display: "contents" \} : \{ minWidth: 0, display: "flex", flexDirection: "column", containerType: "inline-size",\s+\.\.\.\(main === "work" \? MAIN : settled \? \{ flex: "0 1 auto", minHeight: 0 \} : \{\}\) \}\}>/);
+  // and on a phone's narrow body From is still a tab on the body's left edge over a live agent, opening a drawer laid OVER the main view (item
+  // 6, the owner 2026-10-21; the tab 2026-10-26): absolutely placed, so the pane underneath is never resized; shut by the tab, its X, Escape
+  // or a press outside. On the desk Came from is the first of the three sections instead
   assert.match(src, /\{fromDrawer && <Box component="button" type="button" ref=\{fromLineRef\} data-tq-from-line="" sx=\{DRAWER_TAB\(fromSide\)\}/);
-  assert.match(src, /aria-expanded=\{fromSide\} aria-controls="tq-from-side" onClick=\{\(\) => \{ setWorkSide\(false\); setFromSide\(\(v\) => !v\); \}\}/);
-  assert.match(src, /\{\(!fromDrawer \|\| fromSide\) && \(/);
-  assert.match(src, /\.\.\.\(fromDrawer \? \{ \.\.\.card, px: 1\.5, py: 1\.25, \.\.\.FROM_SIDE \} : workDrawer \? MAIN : PHONE_FROM\(fromOpen\)\)/);
+  assert.match(src, /aria-expanded=\{fromSide\} aria-controls="tq-from-side" onClick=\{\(\) => setFromSide\(\(v\) => !v\)\}/);
+  assert.match(src, /const fromDrawer = main === "work" && !threeUp;/);
+  assert.match(src, /\{\(!fromDrawer \|\| fromSide\) && slot\("from",/);
+  assert.match(src, /\.\.\.\(fromDrawer \? \{ \.\.\.card, px: 1\.5, py: 1\.25, \.\.\.FROM_SIDE \} : PHONE_FROM\(fromOpen\)\)/);
   assert.match(src, /const FROM_SIDE = \{ position: "absolute", top: 0, left: 0, bottom: 0,/);
-  assert.match(src, /const \[fromSide, setFromSide\] = useState\(false\), \[workSide, setWorkSide\] = useState\(false\)/);
+  assert.match(src, /const \[fromSide, setFromSide\] = useState\(false\);/);
   assert.match(src, /if \(e\.key === "Escape"\) \{ e\.stopPropagation\(\); shut\(\)\?\.focus\(\); \}/);
   assert.match(src, /document\.addEventListener\("pointerdown", away, true\)/);
   assert.match(src, /useEffect\(\(\) => \{ if \(!sessionView\) setFromSide\(false\); \}, \[sessionView\]\);/);
+  assert.doesNotMatch(src, /data-tq-work-tab|WORK_SIDE|workSide/, "the right drawer is gone: the closed sections are the tabs");
 });
 
 // THE WHOLE WIDTH IS A LIVE SESSION'S ALONE (the owner, 2026-10-25, reversing the 2026-10-22 fold for the states with no agent live): a
@@ -66,7 +69,8 @@ test("the layout: two columns whenever no agent is live - a Result and a failure
   assert.match(src, /\{fromDrawer && <Box sx=\{\{ display: "flex", alignItems: "center" \}\}>\s+<Typography sx=\{\{ \.\.\.label, flex: 1 \}\}>From<\/Typography>\s+<IconButton size="small" aria-label="Close From" data-tq-from-close=""/);
   assert.match(src, /onClickCapture=\{stacked \? phoneFromTap : undefined\}/);
   // ...while what a finished agent offers stays where it was: Close out and its record are drawn whenever no session fills the page
-  assert.match(src, /\{!sessionView && <Box ref=\{closeOutRef\} data-tq-closeout=""/);
+  // ...(and in the three sections it is the third section, beside a live agent too as a slim tab - 2026-10-27)
+  assert.match(src, /\{\(!sessionView \|\| threeUp\) && slot\("close", <Box ref=\{closeOutRef\} data-tq-closeout=""/);
   // ...its record behind the Result's heading while the Result rests on its summary (2026-10-27: "click Result to see more")
   assert.match(src, /\{!sessionView && hasRecord && !resultRest && \(/);
   assert.match(src, /\{resultRest && !sessionView && <ResultSummary /);
@@ -74,8 +78,8 @@ test("the layout: two columns whenever no agent is live - a Result and a failure
 
 // ...and the tab reads as a press (the owner, 2026-10-22: the line looked like plain grey text; 2026-10-26: "make it with arrow and more
 // visible to pull out where it came from") - the whole edge, an arrow in a disc that turns while the drawer is out, a pointer, a tint on
-// hover, a ring on focus. A native button, so Enter and Space press it. The right drawer's tab is the same design.
-test("the drawer tabs look pressable: an arrow that turns, a pointer, a hover tint, a focus ring - left and right alike", () => {
+// hover, a ring on focus. A native button, so Enter and Space press it. The three sections' closed tabs (2026-10-27) are the same kind of press
+test("the tabs look pressable: an arrow, a pointer, a hover tint, a focus ring - the live drawer's and the sections' alike", () => {
   const src = taskSource(), tab = src.slice(src.indexOf("const DRAWER_TAB"), src.indexOf("\n\n", src.indexOf("const DRAWER_TAB")));
   assert.match(tab, /cursor: "pointer"/);
   assert.match(tab, /"&:hover": \{ bgcolor: lit \? "#46586a" : "#f3efe9" \}/);
@@ -86,10 +90,14 @@ test("the drawer tabs look pressable: an arrow that turns, a pointer, a hover ti
   const left = src.slice(src.indexOf('data-tq-from-line=""'), src.indexOf("</Box></Box>}", src.indexOf('data-tq-from-line=""')));
   assert.match(left, /data-tq-from-chevron="">\{fromSide \? "‹" : "›"\}/);
   assert.match(left, /Came from/);
-  const right = src.slice(src.indexOf('data-tq-work-tab=""'), src.indexOf("</Box></Box>}", src.indexOf('data-tq-work-tab=""')));
-  assert.match(right, /sx=\{DRAWER_TAB\(workSide, true, workLit\)\}/);
-  assert.match(right, /aria-expanded=\{workSide\} aria-controls="tq-work-side"/);
-  assert.match(right, /data-tq-from-chevron="">\{workSide \? "›" : "‹"\}/);
+  // a section's closed tab: a native button, its words horizontal, a pointer, a hover tint, a focus ring; and the switch moves smoothly
+  const sec = src.slice(src.indexOf("const SECTION_TAB"), src.indexOf("// ...the TAB each drawer folds to"));
+  assert.match(sec, /appearance: "none", font: "inherit", cursor: "pointer"/);
+  assert.doesNotMatch(sec, /writingMode/, "horizontal words");
+  assert.match(sec, /"&:hover": \{ bgcolor: "#f8f6f2" \}/);
+  assert.match(sec, /"&:focus-visible": \{ outline: `2px solid \$\{ACCENT\}`/);
+  assert.match(src, /<Box component="button" type="button" data-tq-section-tab=\{sec\.key\}/);
+  assert.match(src, /transition: `flex-grow \$\{SLOT_MS\}ms ease, flex-basis \$\{SLOT_MS\}ms ease`, "@media \(prefers-reduced-motion: reduce\)": \{ transition: "none" \}/);
 });
 
 // ONE MAIN VIEW (the owner, 2026-10-26): where the task is up to is the page, the other half its drawer; a phone keeps its stacked page
@@ -107,12 +115,13 @@ test("the main view follows where the task is up to: the work with Came from on 
   // focus, never a word of the Advisor's - the lit tab reads main and focus, and focus is read off the task alone
   assert.equal(nextInDrawer({ main: "task", focus: "list", advice: { verb: "reply" } }), false, "advice lights no tab");
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  assert.match(page, /workLit = drawerLit\(\{ main, stage: taskStage \}\)/);
+  // ...the right drawer and its lit tab went with the three sections (2026-10-27): the section the task is up to is the stage's (sectionOf)
+  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: sectionOf\(taskStage\) \};/);
   assert.match(page, /const taskStage = stageOf\(\{ focus: restFocus, drafted: replyHas, closed: /, "the stage reads the focus, never the advice");
   // ...the focus the task opens on - a section opened by hand changes neither the stage nor the main view (the overnight walk, 2026-10-27)
-  const restLine = page.match(/const restFocus = openStage \? focusOf\(\{[^;]*;/)?.[0];
+  const restLine = page.match(/const restFocus = focusOf\(\{[^;]*;/)?.[0];
   assert.ok(restLine, "the stage's focus is the unpicked pane's");
-  assert.doesNotMatch(restLine.replace(/openStage \?/, ""), /openStage|advi|lit/i, "no pick and no advice in the stage's focus");
+  assert.doesNotMatch(restLine.replace(/!openStage \? paneRest :/, ""), /openStage|advi|lit/i, "no pick and no advice in the stage's focus");
   const focusLine = page.match(/const focus = focusOf\(\{[^;]*\}\);/)?.[0];
   assert.ok(focusLine, "the page's focus is one focusOf");
   assert.doesNotMatch(focusLine, /advi|lit/i, "the focus reads no advice");
@@ -215,4 +224,26 @@ test("a task waiting on a person says who and when it was due", () => {
   assert.equal(waitingOn({ task: { ...task, DueAt: "2026-10-30" }, now }).line, "Waiting on Erin Blake. Due Oct 30.");
   assert.equal(waitingOn({ task: { ...task, Status: "open" }, now }), null, "not waiting");
   assert.equal(waitingOn({ task: { ...task, Assignee: "agent:coding" }, now }), null, "an agent is not a person it waits on");
+});
+
+// THE THREE SECTIONS' CLOSED TABS (the owner, 2026-10-27): the flow's order, and a few short lines each - at the top who and what, at the
+// foot (a book's spine) the one status line
+test("the three sections come in the flow's order, and each closed tab says where it stands", () => {
+  assert.deepEqual(SECTIONS.map((s) => `${s.n} · ${s.name}`), ["1 · Came from", "2 · Agent", "3 · Close out"]);
+  assert.deepEqual(fromStatus({ who: "Erin Blake", channel: "WhatsApp", when: "6:08 PM", words: "So let's\nbuild one.", count: 5, sorted: "Sorted: a reply to send · regular priority" }),
+    { lines: ["Erin Blake · WhatsApp · 6:08 PM", "“So let's build one.”", "5 messages"], foot: "✓ Sorted: a reply to send · regular priority" });
+  assert.deepEqual(fromStatus({ workflow: { title: "Nightly check" } }).lines, ["Workflow · Nightly check"], "a workflow run has no sender");
+  assert.equal(agentWord({}), "not started");
+  assert.equal(agentWord({ live: true, waiting: true }), "needs you");
+  assert.equal(agentWord({ failed: true, result: true }), "failed");
+  assert.equal(agentWord({ result: true }), "finished");
+  assert.deepEqual(agentStatus({ profile: "assistant", word: "finished", said: "Wrote a one-page plan.", made: "Plan for a first box", advisor: "Send" }),
+    { lines: ["assistant · finished", "Wrote a one-page plan.", "Made: Plan for a first box"], foot: "✓ Done · Advisor: Send is next" });
+  assert.deepEqual(agentStatus({}), { lines: ["not started"], foot: "" });
+  assert.deepEqual(closeStatus({ to: "Erin Blake", where: "WhatsApp", draft: "On it.", waiting: true }).lines,
+    ["Reply to Erin Blake in WhatsApp", "“On it.”", "Drafted · waiting for Send"]);
+  assert.deepEqual(closeStatus({ to: "Erin Blake", owed: true }).lines, ["Reply to Erin Blake", "Not drafted yet"]);
+  assert.deepEqual(closeStatus({ sent: true }).lines, ["Sent"]);
+  assert.deepEqual(closeStatus({}).lines, ["Nothing owed"]);
+  assert.deepEqual(closeStatus({ closed: true, note: "paid" }).lines, ["Closed · paid"]);
 });

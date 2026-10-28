@@ -65,8 +65,9 @@ test("Show all draws compact bubbles: the name inside once per run, the time on 
 
 // THE FULL CHAT IS IN TASK, CONDENSED IN CLOSE OUT (the owner, 2026-10-16: "in close out you have the full chat, it's too confusing.
 // full chat should be in task (condensed and full). in close out chats condensed version?")
-const closeOut = page.slice(page.indexOf('<WorkflowHeading number="3" title="Close out"'), page.indexOf("<Fold title={`Earlier runs"));
-const cameFrom = page.slice(page.indexOf('<Part label="Came from"'), page.indexOf("</Part>", page.indexOf('<Part label="Came from"')));
+const closeOut = page.slice(page.indexOf('<WorkflowHeading number="3" title="Close out"'), page.indexOf("THE TASKS TAB'S BAR, AT THE FOOT"));
+// ...Came from's facts and conversations, drawn once and placed by the layout (fromFacts, fromConvs - the three sections, 2026-10-27)
+const cameFrom = page.slice(page.indexOf("const fromFacts = () =>"), page.indexOf("const fromSorted = () =>"));
 test("Show all on a chat draws the back-and-forth in Came from; an email thread keeps its rows", () => {
   assert.match(cameFrom, /\{showAll && isChat\(g\.channel\) \? <ChatThread messages=\{g\.msgs\} maxHeight=\{THREAD_MAX\} \/>/);
   assert.match(cameFrom, /<ConversationRows rows=\{fromRows\(g, 3, showAll\)\} open=\{shownMsg\} onOpen=\{\(f\) => setOpenMsg\(f\(shownMsg\)\)\} narrow/);
@@ -94,7 +95,8 @@ test("Close out says what the draft answers in one line, and the line opens the 
   assert.doesNotMatch(closeOut, /<ConversationRows /, "no condensed rows in Close out");
   assert.match(closeOut, /\{closeGroup && answering && <Box component="button" type="button" data-tq-answering="" onClick=\{seeWholeConversation\}/);
   assert.match(closeOut, /Answering <Box component="span"[^>]*>\{answering\.who\}<\/Box>/);
-  assert.match(page, /const seeWholeConversation = \(\) => \{ setShowAll\(true\); setFromOpen\(true\); if \(fromDrawer\) setFromSide\(true\); setSeekCameFrom\(true\); \};/);
+  // ...and in the three sections it opens Came from with its message history out (2026-10-27)
+  assert.match(page, /const seeWholeConversation = \(\) => \{ setShowAll\(true\); setFromOpen\(true\); setHistOpen\(true\); if \(fromDrawer\) setFromSide\(true\); if \(threeUp\) openSection\("from"\); setSeekCameFrom\(true\); \};/);
   assert.match(page, /<Box ref=\{cameFromRef\}/);
   assert.equal(page.match(/<ConversationRows /g).length, 1, "one component, in From");
 });

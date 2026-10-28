@@ -7,7 +7,8 @@ import { filesByMessage, rowText } from "../src/taskSources.js";
 
 const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
 const att = fs.readFileSync(new URL("../src/Attachments.jsx", import.meta.url), "utf8");
-const cameFrom = page.slice(page.indexOf('<Part label="Came from"'), page.indexOf("</Part>", page.indexOf('<Part label="Came from"')));
+// ...Came from's facts and conversations, drawn once and placed by the layout (fromFacts, fromConvs - the three sections, 2026-10-27)
+const cameFrom = page.slice(page.indexOf("const fromFacts = () =>"), page.indexOf("const fromSorted = () =>"));
 const rowsFn = page.slice(page.indexOf("function ConversationRows("), page.indexOf("// the repo is a filter like the others"));
 
 test("the detail's attachments are grouped by the message they came in", () => {

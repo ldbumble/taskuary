@@ -41,7 +41,8 @@ test("Came from: the boxes, the conversation, the ask, the to-do - each message 
       below: todo ? [...from.querySelectorAll("[data-tq-conversation-row], [data-tq-history-toggle], [data-tq-conversation], [data-tq-came-from]")].filter((e) => after(todo, e)).length : -1,
       notes: Array.from({ length: 15 }, (_, i) => text.split(`Move note ${i + 1}:`).length - 1),
       todoRows: all("[data-tq-todo] .MuiCheckbox-root").length, struck: all("[data-tq-todo] .MuiCheckbox-root.Mui-checked").length,
-      fold: q("[data-tq-todo-done-fold]")?.innerText || "", more: q("[data-tq-conversation-more]")?.innerText || "" };
+      fold: q("[data-tq-todo-done-fold]")?.innerText || "", todoMore: q("[data-tq-todo-more]")?.innerText || "",
+      firstTodo: q("[data-tq-todo] .MuiCheckbox-root")?.closest("[data-tq-todo] > *, [data-tq-todo-item]")?.innerText || "", more: q("[data-tq-conversation-more]")?.innerText || "" };
   }, FROM);
 
   const at = await look();
@@ -53,9 +54,10 @@ test("Came from: the boxes, the conversation, the ask, the to-do - each message 
   assert.ok(at.newest, "the newest is marked");
   assert.ok(at.lastBottom < 900, `the newest is in view without a scroll: ${at.lastBottom}`);
   assert.deepEqual(at.notes, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1], "each shown message once, the hidden ones not at all");
-  assert.equal(at.todoRows, 16, "the open to-dos are what is seen");
+  assert.equal(at.todoRows, 6, "the newest six open to-dos are what is seen (2026-10-28)");
   assert.equal(at.struck, 0, "the done ones are folded away");
   assert.match(at.fold, /^6 done/);
+  assert.match(at.todoMore, /^Show 10 more/, "the other open ones behind Show more");
   assert.match(at.more, /^Show all 15/);
   if (process.env.TASKUARY_SHOT_DIR) await (await page.$(CUR)).screenshot({ path: path.join(process.env.TASKUARY_SHOT_DIR, "came-from-flow.png") });
 
@@ -69,6 +71,8 @@ test("Came from: the boxes, the conversation, the ask, the to-do - each message 
   await page.click(`${FROM} [data-tq-conversation-more]`); await sleep(400);
   assert.equal((await look()).rows.length, 5, "Show fewer folds it back");
 
+  await page.click(`${FROM} [data-tq-todo-more]`); await sleep(300);
+  assert.equal((await look()).todoRows, 16, "Show more opens every open one");
   await page.click(`${FROM} [data-tq-todo-done-fold]`); await sleep(300);
   const done = await look();
   assert.equal(done.todoRows, 22); assert.equal(done.struck, 6, "the fold opens the six done");

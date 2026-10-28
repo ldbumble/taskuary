@@ -58,7 +58,7 @@ const UNIT = { Databases: "database", "AI — agents & models": "key", "AI — v
 const ONE = { outlook: "Outlook mailbox", gmail: "Gmail account", imap: "IMAP mailbox", teams: "Teams account", slack: "Slack workspace",
   telegram: "Telegram bot", discord: "Discord bot", database: "database", sharepoint: "SharePoint site", smb_file: "file share",
   sftp: "SFTP server", winrm: "Windows machine", azure: "Azure subscription", azdo: "Azure DevOps organization", teller: "bank",
-  simplefin: "bank", ollama: "Ollama server", chatgpt: "ChatGPT account", hipaa_ai: "HIPAA AI access code", stt_server: "Whisper server",
+  simplefin: "bank", amazon_sp: "seller account", ollama: "Ollama server", chatgpt: "ChatGPT account", hipaa_ai: "HIPAA AI access code", stt_server: "Whisper server",
   image_server: "image server", prometheus: "Prometheus server", screen: "strategy screen",
   whatsapp: null, imessage: null, knowledge: null, handbook: null, local_whisper: null,
   coingecko: null, frankfurter: null, yahoo: null, sec_edgar: null, fred: null };

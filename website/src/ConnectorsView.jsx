@@ -847,6 +847,28 @@ const DATA_META = {
     agent: ["GET {base}/api/connectors/{cid}/quickbooks/status{hdr}: has_app says whether the Intuit keys are saved; connected says whether a token is. Neither is yours to make - the owner creates the app at developer.intuit.com and presses Connect (a browser sign-in). Ask for the client id and secret, save them in ConfigJson, tell them the redirect URI from status to register, then ask them to press Connect on the card.",
       "Once connected, POST {base}/api/connectors/{cid}/test{hdr}. A 401 in the detail means the refresh token expired (100 days unused) - the owner presses Connect again.",
       "Never post a bill or an expense yourself: propose it (TASKUARY-PROPOSE {\"action\": \"run_tool\", \"type\": \"quickbooks_bill\", \"vendor\": ..., \"amount\": ..., \"account\": ..., \"doc_number\": ...}) and say in the session what it is for. Turn the card on, SETUP DONE."] },
+  // Amazon SP-API (amazon_sp.py): a seller's own reports. READ-ONLY - the card asks Amazon to build a report and reads it,
+  // and reaches no endpoint that changes a listing, a price or an order. A data card: it never puts work on the rail.
+  amazon_sp: { title: "Amazon Seller Central (SP-API)",
+    types: ["amazon_sales_traffic", "amazon_orders", "amazon_inventory", "amazon_settlement", "amazon_report", "amazon_marketplaces"],
+    fields: [["LWA client id (Develop Apps → your app → LWA credentials → View)", "client_id", "amzn1.application-oa2-client.…"],
+      ["LWA client secret", "client_secret"],
+      ["region — na (North America & Brazil), eu (Europe, UK, Middle East, India) or fe (Japan, Australia, Singapore)", "region", "na"],
+      ["marketplace id(s), comma-separated — blank = every marketplace you sell in", "marketplace_ids", "ATVPDKIKX0DER"]],
+    secretLabel: "refresh token (write-only) — the Atzr|… token Authorize shows you",
+    desc: "Your Amazon seller reports as rows: sales & traffic (the Business Report), every order by order date, FBA inventory and settlements — or any report type Amazon offers — for reports, dashboards and agent lookups. Read-only: it asks Amazon to build a report and reads it, nothing else.",
+    howto: ["Seller Central → Apps and Services → Develop Apps (sellercentral.amazon.com/sellingpartner/developerconsole). The first time, Amazon asks you to register as a developer: choose a PRIVATE developer (an app for your own business only) and tick the data roles for the reports you want — Finance and Accounting for settlements, Inventory and Order Tracking for orders, Amazon Fulfillment for FBA inventory, Selling Partner Insights / Brand Analytics for sales & traffic. You must be the account's primary user.",
+      "Once approved, Add new app client: any name, API type SP API, the same roles. Nothing to publish — a self-authorized app works while it is still a draft.",
+      "In the app list, LWA credentials → View: copy the Client identifier and the Client secret into this card.",
+      "Then the app's Edit App ▾ → Authorize → Authorize app. Amazon shows a refresh token (it starts Atzr|) — paste it into the refresh token box. It does not expire, and Taskuary trades it for an hour-long access token as needed.",
+      "Pick the region your marketplaces live in (na, eu or fe) and, if you only want some of them, their marketplace ids (ATVPDKIKX0DER is amazon.com, A2EUQ1WTGCTBG2 amazon.ca, A1F83G8C2ARO7P amazon.co.uk). Save, then Test: it lists the marketplaces this account sells in.",
+      "Build the reports on the REPORTS tab: 'Amazon — sales & traffic', 'orders', 'FBA inventory', 'settlement', or 'Amazon — any report' with a report type name from Amazon's list (developer-docs.amazon.com/sp-api/docs/report-type-values). Dashboards take the same sources.",
+      "Vendor Central works the same way: Integration → API Integration to register and authorize; vendor reports (GET_VENDOR_SALES_REPORT and friends) go through 'any report'.",
+      "Amazon's quotas are small — about one new report a minute — and a report takes a minute to several to build. The card waits a throttle out instead of failing, and keeps a finished report for 15 minutes so a dashboard and a report on the same window ask once."],
+    agent: ["The developer registration, the app and the Authorize press are the owner's to do in their own Seller Central (Apps and Services → Develop Apps); you cannot do them. Ask for the LWA client id, client secret and refresh token, the region (na/eu/fe) and any marketplace ids. Save client_id, client_secret, region and marketplace_ids in ConfigJson and the refresh token as Secret. Never print the secret or the token back.",
+      "POST {base}/api/connectors/{cid}/test{hdr}: it reads the marketplaces this account sells in. 'refused the credentials' is a wrong client id/secret or a revoked token (Authorize again); a 403 is a missing role on the app. Turn the card on, SETUP DONE.",
+      "Lookups are run_tool with type amazon_sales_traffic {days, granularity, by}, amazon_orders {days}, amazon_inventory, amazon_settlement {days, count}, amazon_marketplaces, or amazon_report {report_type, days | start/end, options}. All are reads. Settlement reports cannot be requested — amazon_settlement finds the ones Amazon already built.",
+      "Each report call can take minutes and spends a quota of about one per minute: ask for the window you need once, not in a loop."] },
   // ~3,600 third-party endpoints behind one card. It is ONE card and not ninety because tool
   // definitions live in the model's context: treg's own MCP server exposes about ten fixed
   // tools and keeps the catalogue as DATA behind them, so an agent searches it rather than
@@ -1916,7 +1938,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       ...catalogCards("Cloud & infrastructure"),
     ]},
     { title: "Corporate systems", cards: [
-      ...dataCards(["intacct", "quickbooks", "zoho_invoice"]),
+      ...dataCards(["intacct", "quickbooks", "zoho_invoice", "amazon_sp"]),
       ...catalogCards("Corporate systems"),
     ]},
     { title: "Markets & finance", cards: [

@@ -352,6 +352,9 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] == 'quickbooks':
             from .quickbooks import probe, connection
             detail = probe(connection(store, cid))
+        elif c['Type'] == 'amazon_sp':
+            from .amazon_sp import probe, connection
+            detail = probe(connection(store, cid))
         elif c['Type'] == 'zoho_invoice':
             from .zoho import probe, connection
             detail = probe(connection(store, cid))

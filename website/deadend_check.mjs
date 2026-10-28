@@ -1189,7 +1189,10 @@ async function table() {
     // the link the answer above drew, pressed once the table has moved on
     if (!typed) return null;
     await pressNext(page); await wait(4500);
-    const a = await page.$(`.tq-chat-body a[href="#task=${typed.tid}"]`);
+    // ...the answer is in the chat window now (2026-10-28) - the canvas keeps only the cards. The road's reload shut it (it opens on
+    // what is said in this session, never on a reload's history), so the owner opens it again, as they would: the box
+    if (await page.$("[data-tq-chat-win][hidden]")) { await page.click(".tq-compose-box textarea"); await wait(600); }
+    const a = await page.$(`[data-tq-chat-win]:not([hidden]) a[href="#task=${typed.tid}"], .tq-chat-body a[href="#task=${typed.tid}"]`);
     if (!a) { note("RING", page.step, `the answer to "show me ${typed.ref}" drew no link to it - the reply-link road was not walked`); return null; }
     await a.click();
     return typed.tid;

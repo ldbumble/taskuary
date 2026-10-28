@@ -20,7 +20,7 @@ import api from "./api";
 import { openAppLink } from "./appLinks.js";
 import { prefetchTask } from "./taskDetail.js";
 import { ago } from "./timeWords.js";
-import { arrange, asks, countWords, filters, kindOf, marks, meta, nothingMatches, personHits, terms, totalOf } from "./searchHits.js";
+import { aloneAs, arrange, asks, countWords, filters, kindOf, marks, meta, nothingMatches, nothingYet, personHits, terms, totalOf } from "./searchHits.js";
 import { ASSISTANT, BORDER, DIM, FAINT, INK, PANEL, PANEL2, PALETTE, PILL_COLORS, ACCENT, mono } from "./theme.jsx";
 
 // colour identifies, it never shouts: each pill is a pale tint with its own ink, from the five colours - never the
@@ -276,6 +276,7 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
                 onTask={(tid) => { const find = opened({ tid }); onClose(); onOpenTask?.(tid); focusOpened(find); }} />); })}
           </Box>
         ))}
+        {settled && aloneAs(res) && <Box data-tq-search-alone="" sx={{ px: 2.5, py: 1.25, fontSize: 12.5, color: DIM }}>{nothingYet(aloneAs(res))}</Box>}
       </Box>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, height: 36, borderTop: `1px solid ${BORDER}`, bgcolor: "#faf8f5",
         fontSize: 11, color: FAINT }}>

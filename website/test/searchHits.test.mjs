@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { arrange, asks, filters, marks, meta, personHits, terms, kindOf, nothingMatches, totalOf } from "../src/searchHits.js";
+import { aloneAs, arrange, asks, filters, marks, meta, nothingYet, personHits, terms, kindOf, nothingMatches, totalOf } from "../src/searchHits.js";
 import { readFileSync } from "node:fs";
 
 const hits = [
@@ -77,4 +77,14 @@ test("the directory's people are a group of their own, after Tasks, each address
   assert.equal(kindOf(ps[0]).label, "Person");
   const f = readFileSync(new URL("../src/SearchEverything.jsx", import.meta.url), "utf8");
   assert.match(f, /api\.get\("\/api\/people\/search", \{ params: \{ q: t \} \}\)/, "the pickers' own search");
+});
+
+test("a person opened with nothing on record is said to have nothing yet - never a list of only them to press again", () => {
+  const lena = { type: "person", id: "person:lortiz@dynamo.example", title: "Lena Ortiz", to: "lortiz@dynamo.example" };
+  assert.equal(aloneAs({ q: "lortiz@dynamo.example", hits: [lena] }), "Lena Ortiz");
+  assert.match(nothingYet("Lena Ortiz"), /^Nothing from or about Lena Ortiz yet/);
+  // anything else on the address, the list speaks for itself; a name typed (no address yet) is the people list, not a person opened
+  assert.equal(aloneAs({ q: "lortiz@dynamo.example", hits: [lena, { type: "email", id: "msg:9", title: "Freight quote" }] }), "");
+  assert.equal(aloneAs({ q: "lena", hits: [lena] }), "");
+  assert.equal(aloneAs({ q: "lortiz@dynamo.example", hits: [] }), "");
 });

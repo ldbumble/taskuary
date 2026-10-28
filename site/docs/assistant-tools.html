@@ -156,7 +156,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tr>
 <td><strong>look</strong></td>
 <td>look-ups - they run at once and change nothing</td>
-<td>app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, pipe.read, calendar.read, activity.list, errors.list, memory.about, memory.list, deleted.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search</td>
+<td>app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, pipe.read, calendar.read, activity.list, errors.list, memory.about, memory.list, outputs.find, deleted.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search</td>
 </tr>
 </tbody></table>
 <p>A task you name goes in <code>ref</code> (&quot;TQ-0123&quot;); otherwise the tool acts on what is on the table.</p>
@@ -722,6 +722,13 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <ul>
 <li><code>about</code> - words to narrow it (a sender, a topic)</li>
 </ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="outputs-find"><code>outputs.find</code><a class="anchor" href="#outputs-find" aria-label="Link to this section">#</a></h3>
+<p>The files agents made on tasks - workbooks, PDFs, documents, charts, pages - each once, its newest version, with its task and the link that downloads it. Answer with the link.</p>
+<ul>
+<li><code>query</code> - words of the task or the file (&quot;vendor pricing&quot;)</li>
+<li><code>kind</code> (optional) - xlsx | pdf | doc | deck | csv | picture | page</li>
+<li><code>ref</code> (optional) - one task</li>
+</ul>
 <p class="runs">Runs at once and changes nothing.</p><h3 id="deleted-list"><code>deleted.list</code><a class="anchor" href="#deleted-list" aria-label="Link to this section">#</a></h3>
 <p>What was removed in the last 30 days and can still come back - reports, workflows, dashboards, rules, profiles.</p>
 <p class="runs">Runs at once and changes nothing.</p><h3 id="rules-list"><code>rules.list</code><a class="anchor" href="#rules-list" aria-label="Link to this section">#</a></h3>
@@ -783,7 +790,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">Runs at once and changes nothing.</p>
     </article>
     <nav class="pager"><a class="pn prev" href="./assistant"><span>Previous</span>Assistant buttons</a><a class="pn next" href="./reports"><span>Next</span>Reports and the Advisor</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.63 · updated 2026-10-28</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.64 · updated 2026-10-28</p>
   </main>
 </div>
 <script src="./docs.js"></script>

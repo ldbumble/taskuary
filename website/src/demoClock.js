@@ -27,3 +27,19 @@ export function rebase(obj, anchor, now = Date.now()) {
   };
   return walk(obj);
 }
+
+// ...and a DAY ALONE moves by whole days - but only where the day is WHEN something happened: a dashboard's rows, which its 7-day range
+// reads against today (a recording a month old drew every range empty). A report's day column stays as it was: there the day is the data.
+const DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
+export function shiftDays(obj, anchor, now = Date.now()) {
+  const from = parseStamp(anchor), days = from == null ? 0 : Math.round((now - from) / 864e5);
+  if (!days) return obj;
+  const walk = (v) => {
+    const m = typeof v === "string" && DAY.exec(v);
+    if (m) { const d = new Date(+m[1], +m[2] - 1, +m[3] + days); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+    if (Array.isArray(v)) { for (let i = 0; i < v.length; i++) v[i] = walk(v[i]); return v; }
+    if (v && typeof v === "object") { for (const k of Object.keys(v)) v[k] = walk(v[k]); return v; }
+    return v;
+  };
+  return walk(obj);
+}

@@ -37,7 +37,7 @@ test("selection freshness preserves explicit action advancement while background
 
 test("lazy card reads are revision-bound and discard superseded responses", () => {
   const cards = read("assistantCards.jsx");
-  assert.match(cards, /function FullText\(\{ mid, revision \}\)/);
+  assert.match(cards, /function FullText\(\{ mid, revision, report = null \}\)/);
   // one cached loader (useFetched): a newer revision refreshes quietly, a superseded answer is dropped by
   // `live`, and a grouped task is keyed on the TASK - a moved mid neither blanks nor refetches (2026-09-23)
   assert.match(cards, /\}, \[url, revision\]\);/);

@@ -44,8 +44,8 @@ test("a report opens on itself between slim Came from and Close out tabs, a task
   assert.ok(Math.abs(m.card.top - m.canvas.top) <= 2, `pinned to the canvas's top ${JSON.stringify(m)}`);
   assert.ok(m.card.h >= m.canvas.h - 30, `a task's height: ${m.card.h} of ${m.canvas.h}`);
   // ...its table and its chart, as on its card
-  assert.equal(await page.$$eval("[data-tq-report-body] .tq-rows tbody tr", (r) => r.length), 5);
-  assert.ok(await page.$("[data-tq-report-body] img, [data-tq-report-body] svg"), "its chart is there");
+  assert.equal(await page.$$eval("[data-tq-report-body] [data-tq-report-table] tbody tr", (r) => r.length), 5);
+  assert.ok(await page.$("[data-tq-report-body] [data-tq-report-chart]"), "its chart is there");
   // ...and the row is the report's own: Next, its moves, Share
   for (const w of ["Next", "Put it on my list", "Pause this report", "Share"]) assert.ok(m.row.includes(w), `${w} on the row: ${m.row}`);
 

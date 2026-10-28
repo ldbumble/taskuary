@@ -359,3 +359,52 @@ def test_the_tasks_dataset_leaves_out_the_assistants_own_chat_records():
     s.create_task({'Title': 'Taskuary guide', 'Kind': 'general', 'Status': 'open', 'Source': 'assistant', 'SourceRef': 'assistant:dock'}, 'owner')
     s.create_task({'Title': 'Assistant chat', 'Kind': 'general', 'Status': 'open', 'Source': 'assistant', 'SourceRef': 'assistant:concierge'}, 'owner')
     assert [r['task_id'] for r in dashboards.DATASETS['tasks'][0](s, 90)] == [real]
+
+
+# ── the built-in dashboard reaches every install ONCE: a fresh home, an older one on its first start since - never twice, never back ──
+def _glances(db):
+    from taskuary.store import SQLiteStore
+    s = SQLiteStore(str(db))
+    try: return [r for r in s.list_sources(active_only=False) if r['Address'] == dashboards.GLANCE['title']]
+    finally: s.close()
+
+
+def _older_install(db, made_by_hand=False):
+    """A home from before the built-in dashboard shipped: no sentinel, and no row - or one its owner made from New dashboard's template."""
+    import sqlite3
+    cx = sqlite3.connect(str(db))
+    cx.execute("DELETE FROM setting WHERE Name='glance_dashboard_seeded'")
+    if made_by_hand: cx.execute("UPDATE source SET Owner='owner' WHERE Address=?", (dashboards.GLANCE['title'],))
+    else: cx.execute('DELETE FROM source WHERE Address=?', (dashboards.GLANCE['title'],))
+    cx.commit(); cx.close()
+
+
+def test_a_fresh_home_has_the_built_in_dashboard_once_and_a_restart_adds_no_second(tmp_path):
+    db = tmp_path / 'taskuary.db'
+    one, two = _glances(db), _glances(db)
+    assert len(one) == 1 and [r['SourceId'] for r in two] == [one[0]['SourceId']]
+    assert one[0]['Active'] == 1 and json.loads(one[0]['ConfigJson'])['type'] == 'dashboard'
+
+
+def test_an_older_install_gets_it_on_its_next_start_and_only_once(tmp_path):
+    db = tmp_path / 'taskuary.db'
+    _glances(db); _older_install(db)
+    got, again = _glances(db), _glances(db)
+    assert len(got) == 1 and got[0]['Owner'] == 'template' and [r['SourceId'] for r in again] == [got[0]['SourceId']]
+
+
+def test_an_install_that_already_made_it_from_the_template_keeps_its_own_and_gets_no_twin(tmp_path):
+    db = tmp_path / 'taskuary.db'
+    _glances(db); _older_install(db, made_by_hand=True)
+    got = _glances(db)
+    assert len(got) == 1 and got[0]['Owner'] == 'owner'
+
+
+def test_paused_it_stays_paused_and_deleted_it_stays_deleted(tmp_path):
+    from taskuary.store import SQLiteStore
+    db = tmp_path / 'taskuary.db'
+    (row,) = _glances(db)
+    s = SQLiteStore(str(db)); s.save_source({'SourceId': row['SourceId'], 'Active': 0}, 'owner'); s.close()
+    assert [r['Active'] for r in _glances(db)] == [0]                    # a restart never switches it back on
+    s = SQLiteStore(str(db)); s.delete_source(row['SourceId']); s.close()
+    assert _glances(db) == [] and _glances(db) == []                     # ...and deleted, it does not come back

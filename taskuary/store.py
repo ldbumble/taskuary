@@ -1630,10 +1630,13 @@ class SQLiteStore:
             # ...and its dashboard twin (the owner, 2026-10-23: "like we have end of day report as template let's do the same for
             # dashboard"): Taskuary at a glance, drawn from the app's own tables, so it needs nothing connected. A daily_at with no
             # run yet is due at once (reports.is_due), so the first sync fills it; deleting the row is the off switch, as above.
+            # ...and an install that already made one from New dashboard's template keeps that one: it becomes the default, not a twin
             if not self.cx.execute("SELECT 1 FROM setting WHERE Name='glance_dashboard_seeded'").fetchone():
                 from .dashboards import GLANCE
-                self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
-                                ('report', GLANCE['title'], 'template', 1, json.dumps(GLANCE)))
+                had = self.cx.execute("SELECT 1 FROM source WHERE Channel='report' AND Address=? AND ConfigJson LIKE '%\"dashboard\"%'",
+                                      (GLANCE['title'],)).fetchone()
+                if not had: self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
+                                            ('report', GLANCE['title'], 'template', 1, json.dumps(GLANCE)))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('glance_dashboard_seeded', '1', 'template')")
             # prompt heal: a Morning digest still running a SHIPPED instruction tracks the
             # current one (same deal the template docs get) - an owner-edited prompt is never touched

@@ -63,6 +63,7 @@
     "unpushed":      {"line": "Changes ready - not pushed.", "lit": ["review_changes"]},
     "agent_done":    {"line": "", "lit": ["close"]},
     "stopped":       {"line": "Stopped {ago}.", "lit": ["continue"]},
+    "stopped_done":  {"line": "", "lit": ["close", "continue"]},
     "waiting":       {"line": "", "lit": ["defer"]},
     "waiting_late":  {"line": "{who}: {days} days, no answer.", "lit": ["chase"]},
     "waiting_overdue": {"line": "{who}: {days} days late.", "lit": ["chase"]},

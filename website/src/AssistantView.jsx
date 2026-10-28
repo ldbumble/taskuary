@@ -40,6 +40,7 @@ import { readTurn, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive, taskIdsOf } from "./live.js";
 import { TAB, covers, mine } from "./liveSeq.js";
+import { fyiHeaders } from "./fyiBatch.js";
 import { adviceKeyFor, adviceShown, nothingToAdd, stripWord, taskNote } from "./advice.js";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
@@ -1403,7 +1404,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // endpoint: its invented threads should never look like a model is working behind the page.
     if (DEMO) return plain();
     const token = localStorage.getItem("taskuary_token");
-    const res = await fetch("/api/concierge/stream", { method: "POST", signal: stop.signal, headers: { "Content-Type": "application/json", "X-Taskuary-Tab": TAB, ...(token ? { "X-Taskuary-Token": token } : {}) }, body: JSON.stringify(body) });
+    const res = await fetch("/api/concierge/stream", { method: "POST", signal: stop.signal, headers: { "Content-Type": "application/json", "X-Taskuary-Tab": TAB, ...fyiHeaders(), ...(token ? { "X-Taskuary-Token": token } : {}) }, body: JSON.stringify(body) });
     if (!res.ok) {
       // An old server may not have the streaming door. A selection conflict is authoritative:
       // replaying it through the plain endpoint would submit the same navigation twice.

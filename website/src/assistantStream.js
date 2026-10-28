@@ -1,6 +1,7 @@
 import { record } from "./lastError.js";
 import { noteWrite } from "./wrote.js";
 import { TAB } from "./liveSeq.js";
+import { fyiHeaders } from "./fyiBatch.js";
 
 export async function* readNdjson(body) {
   const reader = body.getReader();
@@ -66,7 +67,7 @@ export async function* streamAssistant(taskId, body, signal) {
   const token = localStorage.getItem("taskuary_token");
   const response = await fetch(`/api/tasks/${taskId}/assistant/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Taskuary-Tab": TAB, ...(token ? { "X-Taskuary-Token": token } : {}) },
+    headers: { "Content-Type": "application/json", "X-Taskuary-Tab": TAB, ...fyiHeaders(), ...(token ? { "X-Taskuary-Token": token } : {}) },
     body: JSON.stringify(body),
     signal,
   });

@@ -15,6 +15,12 @@ test("each old link becomes a canvas request", () => {
   assert.deepEqual(canvasRequestFromHash("#report=workflows").state, { section: "workflows", open: null });
   assert.deepEqual(canvasRequestFromHash("#report=new-agent").state, { section: "workflows", open: "new-agent" });
   assert.equal(canvasRequestFromHash("#connector=gmail").area, "connections");
+  // the Assistant's "Open WhatsApp's Chats": the card, its Chats step searched for the group named - and the link round-trips
+  assert.deepEqual(canvasRequestFromHash("#connector=whatsapp&chats=Northwind%20Team").state,
+    { section: null, open: null, connector: "whatsapp", chats: "Northwind Team" });
+  assert.equal(canvasRequestFromHash("#connector=whatsapp&chats=").state.chats, "");
+  assert.equal(hashFor("connections", { connector: "whatsapp", chats: "Northwind Team" }), "#connector=whatsapp&chats=Northwind%20Team");
+  assert.equal(canvasRequestFromHash("#connector=gmail").state.chats, undefined);
   assert.equal(canvasRequestFromHash("#cli-agents").area, "connections");
   assert.deepEqual(canvasRequestFromHash("#settings=config&group=How%20mail%20is%20sorted").state, { section: "config", open: "How mail is sorted" });
   assert.deepEqual(canvasRequestFromHash("#settings=policies").state, { section: "policies", open: "policies" });

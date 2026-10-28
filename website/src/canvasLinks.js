@@ -40,8 +40,12 @@ export function canvasRequestFromHash(hash, n = 0) {
   // loaded - a link followed while Connections was already open opened nothing. `connector` is the card asked for; the view opens it
   if (/^#cli-agents$/.test(h)) return { kind: "browse", area: "connections", state: { section: null, open: null, connector: "cli-agents" }, n };
   // ...and &step=1: the Assistant brought it up to connect it - the card lights its first step (connectorStep.js)
-  if ((m = /^#connector=([\w-]*)/.exec(h))) return { kind: "browse", area: "connections", state: { section: null, open: null, ...(m[1] ? { connector: m[1] } : {}),
-    ...(m[1] && /&step=1\b/.test(h) ? { step: true } : {}) }, n };
+  // ...and &chats=<name>: its Chats step open with that name searched (troubleshoot.chat_check: "the team group isn't switched on - here")
+  if ((m = /^#connector=([\w-]*)/.exec(h))) {
+    const chats = m[1] ? /&chats=([^&]*)/.exec(h) : null;
+    return { kind: "browse", area: "connections", state: { section: null, open: null, ...(m[1] ? { connector: m[1] } : {}),
+      ...(m[1] && /&step=1\b/.test(h) ? { step: true } : {}), ...(chats ? { chats: decodeURIComponent(chats[1]) } : {}) }, n };
+  }
   // one section of Connections, its cards open ("#connections=AI — voice": the crossed-out mic's Set up voice AI)
   if ((m = /^#connections=([^&]+)/.exec(h))) return { kind: "browse", area: "connections", state: { section: decodeURIComponent(m[1]), open: null }, n };
   if (/^#connections$/.test(h)) return { kind: "browse", area: "connections", state: { section: null, open: null }, n };
@@ -86,7 +90,8 @@ export function hashFor(area, s = {}) {
   s = s || {};
   if (area === "new") return "#new-task";
   if (area === "hub") return `#hub${s.section ? `=${enc(s.section)}` : ""}${s.open != null && /^\d+$/.test(String(s.open)) ? `${s.section ? "" : "="}&post=${s.open}` : ""}`;
-  if (area === "connections") return s.connector === "cli-agents" ? "#cli-agents" : s.connector ? `#connector=${s.connector}`
+  if (area === "connections") return s.connector === "cli-agents" ? "#cli-agents"
+    : s.connector ? `#connector=${s.connector}${s.chats != null ? `&chats=${enc(s.chats)}` : ""}`
     : s.section ? `#connections=${enc(s.section)}` : "#connections";
   if (area === "settings") {
     const p = s.section;

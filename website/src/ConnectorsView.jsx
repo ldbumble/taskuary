@@ -1773,6 +1773,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   // THE FIRST STEP, LIT (the owner, 2026-10-20): a card the Assistant opened lights its Sign in / Connect or the first box it needs, held in
   // view, and tells the chat which (connectorStep.LIT) so its line says what to press
   const [stepAsk, setStepAsk] = useState(""), [scope, setScope] = useState(null);
+  const [chatsAsk, setChatsAsk] = useState(null);       // #connector=whatsapp&chats=<name>: the Chats step open, that name searched
   useEffect(() => (stepAsk && scope ? lightStep(scope, (s) => window.dispatchEvent(new CustomEvent(LIT, { detail: s }))) : undefined), [stepAsk, scope]);
   const groupsRef = useRef([]), took = useRef("");
   // a page or a section asked from outside puts the open card down - the list it named is what was asked for
@@ -1793,6 +1794,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     const g = groupsRef.current.find((x) => x.cards.some((c) => keys.includes(c.key)));
     setErr(""); setOpen(agents ? { kind: "agents" } : { kind: "connector", id: direct.ConnectorId });
     if (!agents && browseState?.step) setStepAsk(ask);                  // the Assistant brought it up: its first step is lit (connectorStep)
+    setChatsAsk(!agents && browseState?.chats != null ? { q: String(browseState.chats), at: ask } : null);
     onBrowseState?.({ ...browseState, section: g?.title ?? browseState.section ?? null, open: g?.cards.find((c) => keys.includes(c.key))?.key ?? null });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectors, want, at]);
@@ -1812,7 +1814,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     : conn.Type === "winrm" ? <WinrmDetail key={conn.ConnectorId} {...shared} />
     : conn.Type === "reason_network" ? <ReasonDetail key={conn.ConnectorId} {...shared} />
     : DATA_META[conn.Type] ? <DataDetail key={conn.ConnectorId} {...shared} meta={DATA_META[conn.Type]} sources={sources} byType={byType} />
-    : <ChannelDetail key={conn.ConnectorId} {...shared} sources={sources} onNavigate={onNavigate} />;
+    : <ChannelDetail key={conn.ConnectorId} {...shared} sources={sources} onNavigate={onNavigate} chatsAsk={chatsAsk} />;
   const detail = page && <AgentsDoor.Provider value={() => setOpen({ kind: "agents" })}><Box ref={setScope} data-tq-connector-scope="">{page}</Box></AgentsDoor.Provider>;
   if (!browse) {
     if (detail) return detail;
@@ -2277,7 +2279,7 @@ const SIMPLE_HINT = {
   hipaa_ai: "The code is yours alone - usage is counted against it.",
 };
 
-export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, onBack: leave, onCreated, onNavigate, simple = false, onConnected }) {
+export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, onBack: leave, onCreated, onNavigate, simple = false, onConnected, chatsAsk = null }) {
   // ONE SAVE FOR THE CARD (ConnectorDraft.jsx): every control below draws from the draft and stages into it
   const draft = useCardDraft(savedConn, savedSources, reload);
   const { conn, sources } = draft;
@@ -2374,6 +2376,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   const setActive = (on) => draft.ctx.stageConn({ ConnectorId: conn.ConnectorId, Active: on });   // saves on the press (splitNow)
   // "12 turned away" opens the chat picker - the sources step, right after Credentials and Test - where each has its switch
   const openPicker = () => { if (m.srcLabel) setStep(2); };
+  useEffect(() => { if (chatsAsk) openPicker(); }, [chatsAsk?.at]);   // eslint-disable-line react-hooks/exhaustive-deps
   // Sync now reads what is saved: there once the server has the card on, greyed while a box or the bar holds an unsaved edit.
   // The boxes are measured against what they last saved, not the row: a sign-in that rewrites the config is not the owner's typing
   const sync = syncState(savedConn, draft.pending, editedBoxes(m.fields.map((f) => f[1]), cfg, cfgSaved, secret));
@@ -2453,7 +2456,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
           </Typography>
         )}
         {m.srcNote && <Typography variant="caption" data-tq-src-note="" sx={{ color: FAINT, display: "block", mb: 1, maxWidth: 560 }}>{m.srcNote}</Typography>}
-        {conn.Type === "whatsapp" && <WaChats conn={conn} mine={mine} reload={reload} onNavigate={onNavigate} onRoster={setRoster} toggle={toggleSource} />}
+        {conn.Type === "whatsapp" && <WaChats conn={conn} mine={mine} reload={reload} onNavigate={onNavigate} onRoster={setRoster} toggle={toggleSource} ask={chatsAsk} />}
         {conn.Type === "telegram" && (
           <>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1, maxWidth: 560 }}>
@@ -3718,7 +3721,7 @@ const WaPair = ({ conn, reload, onStatus, onTurnedAway }) => {
 
 /* ── WhatsApp: the paired account's reachable roster, offered as sources. The catch-all covers
    direct chats; a group only comes into Taskuary once its JID is explicitly added. ── */
-const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle }) => {
+const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle, ask = null }) => {
   const saveConn = useSaveConnector(reload);
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState("");
@@ -3726,9 +3729,17 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle }) => {
   // a paired account knows every group its owner is in - around forty here - and all of them were
   // rendered at once, unsorted, so the one row that matters was unfindable (the owner, 2026-09-17:
   // "there are too many .. where is the myself one")
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(ask?.q || "");
   const [all, setAll] = useState(false);
   const [kind, setKind] = useState("All");
+  // ...asked for by name (the Assistant's "Open WhatsApp's Chats"): that name searched, the list held in view
+  const boxRef = useRef(null);
+  useEffect(() => {
+    if (!ask) return;
+    setQ(ask.q || ""); setKind("All");
+    const t = setTimeout(() => boxRef.current?.scrollIntoView?.({ block: "start", behavior: "smooth" }), 120);
+    return () => clearTimeout(t);
+  }, [ask?.at]);   // eslint-disable-line react-hooks/exhaustive-deps
   const [standing, setStanding] = useState(null);   // the phone_assistant setting
   const SHOWN = 8;
   const guideJid = String(parse(conn.ConfigJson).assistant_chat || parse(conn.ConfigJson).notify_chat || "");
@@ -3790,7 +3801,7 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle }) => {
   const eligible = (rows || []).filter((r) => !r.group || r.self);
   const chosen = eligible.find((r) => r.jid === guideJid) || (guideJid ? { jid: guideJid, name: guideJid, self: true } : null);
   return (
-    <Box sx={{ mb: 1.5, maxWidth: 620 }}>
+    <Box ref={boxRef} data-tq-wa-chats="" sx={{ mb: 1.5, maxWidth: 620 }}>
       {/* THE CHOICE LIVES IN ONE PLACE, and it is not here. "Which chat can the assistant reach me
           in" is one question across WhatsApp and Telegram, and the standing permission is the other
           half of it - so both are Settings -> Assistant on your phone. This card keeps what is

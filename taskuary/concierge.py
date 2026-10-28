@@ -1784,7 +1784,8 @@ THIS_APP = ('USING OR SETTING TASKUARY ITSELF - a setting, a connection, its own
             'its own tool, never handed to an agent and never a set-up: the owner presses it there. Changing Taskuary\'s CODE is a coding '
             'job like any other. When a part of Taskuary is NOT WORKING - a connection, the WhatsApp or Telegram bridge, a sync - look into '
             'it here, never as a task or an agent: CALL app.health with its name, then app.repair when that names a simple repair, and '
-            'say in a sentence or two what you found or did.')
+            'say in a sentence or two what you found or did. One chat not coming in ("the team group is not showing up") is app.health '
+            'with `chat`: its name as the owner said it - that reads whether it is switched on and where its messages went; say THAT cause.')
 
 def _screens(link: bool = True) -> str:
     """The pages the Assistant brings up, each by what it holds (words.json `does`) - with its link on the desk, by name alone on a phone."""
@@ -2409,8 +2410,9 @@ def _trouble(store, kind: str, p: dict) -> str:
     turn = _TURN.get()
     if turn is None: turn = {}
     n, name = len(turn.get('steps') or []), str(p.get('name') or p.get('connection') or '').strip()
-    h = (troubleshoot.repair(store, name, str(p.get('how') or ''), n=n) if kind == 'app.repair'
-         else troubleshoot.health(store, name, p.get('connector_id'), n=n))
+    chat = str(p.get('chat') or '').strip()
+    h = (troubleshoot.repair(store, name, str(p.get('how') or ''), n=n, chat=chat) if kind == 'app.repair'
+         else troubleshoot.health(store, name, p.get('connector_id'), n=n, chat=chat))
     turn.update(steps=[*(turn.get('steps') or []), *h['steps']], trouble=h)
     if turn.get('trace'): turn['trace']('steps', 'troubleshoot', {'steps': turn['steps']})
     return troubleshoot.words(h, desk=routes())

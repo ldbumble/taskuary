@@ -445,6 +445,16 @@ class PlainLineTests(unittest.TestCase):
         self.assertEqual(plain('Remind me later, the meeting moved (out4, mem2).', 'defer', 'Remind me'), 'Remind me later, the meeting moved.')
         self.assertEqual(plain('Close it - Erin already answered.', 'close', 'Close'), 'Close it - Erin already answered.')
 
+    def test_an_id_is_said_as_what_it_is_and_a_dangling_citation_goes(self):
+        """A memory line cited after the sentence read "Automated bank notice; no action asked. an earlier outcome" (the sweep, 2026-10-27)."""
+        from taskuary.advisor import plain
+        self.assertEqual(plain('Automated vendor notice; no action asked. lrn372574', 'not_ours', 'Not ours'), 'Automated vendor notice; no action asked.')
+        self.assertEqual(plain('Vendor notice, no ask here - lrn12, mem3', 'not_ours', 'Not ours'), 'Vendor notice, no ask here')
+        self.assertEqual(plain('Erin wrote again?  msg44', 'reply', 'Reply'), 'Erin wrote again?')
+        self.assertEqual(plain('As lrn12 says, Ray handles payroll', 'forward', 'Hand off'), 'As what Taskuary knows says, Ray handles payroll')
+        self.assertEqual(plain('Erin asked the same in msg44 last week', 'reply', 'Reply'), 'Erin asked the same in an earlier message last week')
+        self.assertEqual(plain('lrn12', 'reply', 'Reply'), '')
+
     def test_continued_is_not_success_and_a_wrong_verb_is_silence(self):
         from taskuary.advisor import SYSTEM
         self.assertIn('never call it a success', SYSTEM)

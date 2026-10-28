@@ -67,7 +67,7 @@ test("three sections in the flow's order, open where the task is up to, tabs tha
       assert.equal(tab.writing, "horizontal-tb", `${tab.key}'s words read across`);
     }
     const from = m.tabs.find((x) => x.key === "from").text, agent = m.tabs.find((x) => x.key === "agent").text;
-    assert.match(from, /Came from[\s\S]*Tom Alvarez · Email[\s\S]*1 message[\s\S]*Sorted: a reply to send[\s\S]*1$/, from);
+    assert.match(from, /Came from[\s\S]*Email · 1 message[\s\S]*Tom Alvarez: “This invoice[\s\S]*Sorted: a reply to send[\s\S]*1$/, from);
     assert.match(agent, /Agent[\s\S]*not started[\s\S]*2$/, agent);
     assert.ok(m.slots[2].w > 600, `the open one fills the rest: ${m.slots[2].w}`);
     // ...the card takes the canvas, pinned at its top, a small gap over the dock

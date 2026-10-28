@@ -20,10 +20,12 @@ git fetch -q origin
 git merge-base --is-ancestor origin/master HEAD || die "HEAD is behind origin/master - merge or rebase first"
 git ls-remote --tags origin "v$V" | grep -q . && die "v$V is already tagged - PyPI numbers are never reused"
 OLD=$(python -c "import re;print(re.search(r'^version = \"([^\"]+)\"',open('pyproject.toml').read(),re.M)[1])")
-[ "$OLD" != "$V" ] || die "pyproject already says $V"
+# ...already bumped (a release that stopped red, fixed on master since): no bump, just build, push, CI and tag
+SAME=0; [ "$OLD" != "$V" ] || SAME=1
 
 say "bump $OLD -> $V in the seven places"
-python - "$OLD" "$V" <<'EOF'
+[ "$SAME" = 1 ] && echo "(already $V - no bump)"
+[ "$SAME" = 1 ] || python - "$OLD" "$V" <<'EOF'
 import sys, re, json, datetime
 old, new = sys.argv[1:]
 def sub(p, n=None):
@@ -55,7 +57,7 @@ fi
 
 say "commit and push"
 git add -A
-git commit -qm "Release $V
+git commit -q --allow-empty -m "Release $V
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 git push -q origin HEAD:master

@@ -199,18 +199,22 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
     const made = await post(page, "/api/fixture/task/coding-saved");
     assert.ok(made.taskId, JSON.stringify(made));
     await open(page, made.taskId);
-    await page.waitForSelector("[data-tq-work] [data-tq-result]", { timeout: 20000 });
+    await page.waitForSelector("[data-tq-work] [data-tq-result-summary]", { timeout: 20000 });
     const l = await layout(page);
     assert.equal(l.layout, "work");
     assert.ok(!l.from && l.work, `the Result alone, Came from shut: ${JSON.stringify(l)}`);
     assert.ok(await page.$("[data-tq-from-line]"), "Came from is behind its tab");
-    const shade = await page.evaluate(() => ({ focus: [...document.querySelectorAll("[data-tq-focus]")].map((e) => (e.querySelector("[data-tq-result]") ? "result" : e.matches("[data-tq-closeout]") ? "closeout" : "other")),
+    const shade = await page.evaluate(() => ({ focus: [...document.querySelectorAll("[data-tq-focus]")].map((e) => (e.querySelector("[data-tq-result-summary]") ? "result" : e.matches("[data-tq-closeout]") ? "closeout" : "other")),
       body: getComputedStyle(document.querySelector("[data-tq-work]").closest("[data-tq-columns]").parentElement).backgroundColor }));
     assert.deepEqual(shade.focus, ["result"], "the Result is the one white section");
     assert.equal(shade.body, "rgb(245, 242, 237)", "the body is shaded");
     assert.ok(await page.$("[data-tq-work] [data-tq-closeout]"), "Close out stays under the Result");
     assert.equal(l.statusKey, "saved");
     assert.match(l.status, /stopped and saved$/);
+    // ...resting on what it did and what it made; its heading unfolds the write-up whole (the owner, 2026-10-27: "click Result to see more")
+    assert.match(await page.$eval("[data-tq-result-summary]", (e) => e.innerText), /^Census sync no longer stops on a site with no manager\./);
+    await page.$eval('[data-tq-work] [data-tq-step="2"]', (dot) => dot.parentElement.click());
+    await page.waitForSelector("[data-tq-work] [data-tq-result]", { timeout: 10000 });
     const r = await page.$eval("[data-tq-result]", (e) => ({ text: e.innerText, parts: [...e.querySelectorAll("[data-tq-result-part]")].map((p) => p.getAttribute("data-tq-result-part")),
       diff: e.querySelector("[data-tq-diff-stat]")?.innerText || "" }));
     assert.deepEqual(r.parts, ["What it found", "How it resolved it", "Summary", "write-up"]);
@@ -233,7 +237,7 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
     const made = await post(page, "/api/fixture/task/coding-saved", { mine: true, writing: true });
     assert.ok(made.taskId, JSON.stringify(made));
     await open(page, made.taskId);
-    await page.waitForSelector("[data-tq-work] [data-tq-result]", { timeout: 20000 });
+    await page.waitForSelector("[data-tq-work] [data-tq-result-summary]", { timeout: 20000 });
     await page.waitForSelector("[data-tq-work] [data-tq-writeup-at=result]", { timeout: 20000 });
     const box = (sel) => page.$eval(sel, (e) => { const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height, bottom: r.bottom }; });
     const area = await box(".tq-chat-body");
@@ -244,7 +248,7 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
       const sc = [...v.querySelectorAll("*")].find((e) => e.scrollHeight > e.clientHeight + 2 && getComputedStyle(e).overflowY === "auto");
       return { scrolls: !!sc }; }, String(made.taskId));
     assert.ok(fit.scrolls || item.h < area.h * 0.98, `no blank under the task (${Math.round(item.h)}px of ${Math.round(area.h)}px)`);
-    const result = await box("[data-tq-result]");
+    const result = await box("[data-tq-result-summary]");
     assert.equal((await layout(page)).layout, "work", "the Result is the page (2026-10-26)");
     // the write-up's progress is a line of the Result, under it - not a box of its own in Close out
     const line = await box("[data-tq-writeup-at=result]");

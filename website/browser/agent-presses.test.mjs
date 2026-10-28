@@ -141,7 +141,7 @@ test("a regular agent on an open task: Send to agent, Continue, Run another agen
 
   await t.test("(b) Continue on the stopped agent: the note at once, working, the answer in the same conversation", async () => {
     await press(page, "Stop and save");
-    await inTask(page, /You stopped it and its report is written/);
+    await inTask(page, /Result/);   // resting on its summary - the story line is behind the Result heading (2026-10-27)
     const pressed = await continueWith(page, "look at the south office first");
     await inTask(page, /look at the south office first/, 1500);
     assert.ok(Date.now() - pressed < 1500, "the note shows with the press's answer");
@@ -154,7 +154,7 @@ test("a regular agent on an open task: Send to agent, Continue, Run another agen
 
   await t.test("(c) Run another agent on the stopped agent: a second run, shown apart from the first", async () => {
     await press(page, "Stop and save");
-    await inTask(page, /You stopped it and its report is written/);
+    await inTask(page, /Result/);   // resting on its summary - the story line is behind the Result heading (2026-10-27)
     await rowVerb(page, "run-another");
     await startFromBox(page, "take a fresh look from the north office", "general");
     await page.waitForSelector("[data-tq-earlier-run]", { timeout: 30000 })

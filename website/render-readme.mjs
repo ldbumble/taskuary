@@ -13,17 +13,22 @@ await mkdir(out, { recursive: true });
 // clip: [x,y,w,h] in the capture's CSS pixels, null = the capture is already the card (capture-readme's card()), or a file of one
 const shots = [
   // 01-06 walk Ruth's request through the Chat and Task views; the rail on the left is the Timeline
-  ['01-timeline-sources-and-times','home','Everything lands in one place.',[0,46,1200,954],'01 / ARRIVE'],
-  ['02-task','task','A request becomes a task.',[350,66,835,360],'02 / ORGANIZE'],
-  ['03-agent','agent','The agent works inside the chat.',null,'03 / WORK'],
+  ['01-timeline-sources-and-times','home','Everything lands in one place.',[0,58,1200,942],'01 / ARRIVE'],
+  // 02-05 and 12-14 are the Taskuary pane on the demo world's backend (capture-readme-app.mjs): the card on its warm ground, the row under it
+  ['02-task','task','A request becomes a task.',null,'02 / ORGANIZE'],
+  ['03-agent','agent','The agent shows what it did and made.',null,'03 / WORK'],
   ['04-review','review','The last word is yours.',null,'04 / APPROVE'],
-  ['05-assistant','assistant','One conversation. One next step.',[350,110,835,600],'05 / YOUR ASSISTANT'],
+  ['05-assistant','assistant','One conversation. One next step.',null,'05 / YOUR ASSISTANT'],
   ['06-morning','home','Your day, before it gets busy.','morning.json','06 / MORNING BRIEF'],
   ['07-coding-clis-chinese','cli','Your tools. Your choice.',null,'KEY FEATURE / CODING CLIS'],
   ['08-hub','hub','Good discoveries stay useful.',null,'KEY FEATURE / SHARED KNOWLEDGE'],
   ['09-handoffs','handoffs','Leave the next agent a head start.',null,'KEY FEATURE / LIVE HANDOFFS'],
   ['11-learned-memory','learned','Memory you can read and change.',null,'KEY FEATURE / LEARNED.MD'],
+  ['12-fyi','fyi','What needs nothing, read in one go.',null,'KEY FEATURE / FYI'],
+  ['13-report','report','Reports land like work.',null,'KEY FEATURE / REPORTS'],
+  ['14-dashboard','dashboard','A dashboard beside your reports.',null,'KEY FEATURE / DASHBOARDS'],
 ];
+const app = ['task','agent','review','assistant','fyi','report','dashboard'];
 const browser = await launch();
 const page = await browser.newPage();
 const escape = text => text.replaceAll('&','&amp;').replaceAll('<','&lt;');
@@ -33,6 +38,8 @@ try {
     if (process.argv.includes('--home-only') && !name.startsWith('01-')) continue;
     if (process.argv.includes('--timeline-only') && source !== 'timeline') continue;
     if (process.argv.includes('--walk') && !/^0[1-6]-/.test(name)) continue;
+    if (process.argv.includes('--app-only') && !app.includes(source)) continue;
+    if (process.argv.includes('--extras-only') && (app.includes(source) || /^0[1-6]-/.test(name))) continue;
     if (process.argv.includes('--memory-update') && !['timeline','learned'].includes(source)) continue;
     const buf = await readFile(path.join(scratch,(name==='06-morning' ? 'morning-24' : source)+'.png')), data = buf.toString('base64');
     const full = [buf.readUInt32BE(16)/2, buf.readUInt32BE(20)/2];       // the PNG's own size, at the capture's 2x

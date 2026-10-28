@@ -24,3 +24,9 @@
 .tq-published-tabs button.on { background: #fff; border-color: #e3ddd2; color: #4d514b; font-weight: 600; }
 .tq-published-tabs + .tq-published-table { border-top: 0; }
 .tq-published-text { margin: 0; border-top: 1px solid #e3ddd2; padding: 10px 14px; max-height: min(70vh, 640px); overflow: auto; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* an agent's files, each thing once (PublishedPages deliver): its earlier versions, the rest of a long list and its working files fold */
+.tq-published .tq-published { margin: 0; }
+.tq-published-more { border: 0; background: none; padding: 0 2px; font: inherit; font-size: 11.5px; color: #8a8d86; cursor: pointer; text-align: left; }
+.tq-published-more:hover { color: #4d514b; }
+.tq-published-folded { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.tq-published-fold[data-tq-fold="earlier"] .tq-published-folded { padding-left: 12px; }

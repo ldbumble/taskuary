@@ -8,7 +8,7 @@ import React, { useEffect, useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import api from "./api";
 import { Md } from "./md.jsx";
-import PublishedPages from "./PublishedPages.jsx";
+import PublishedPages, { FOLD } from "./PublishedPages.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import { cardParts, hasMore, lastWords, madeOnce, moreParts, plain, resultLine, recordFacts, recordHead, recordSteps, resultParts, runCost, runsOf, sourceLabel, splitFiles } from "./agentRecord.js";
 import AgentStory, { StoryLine, Timeline } from "./AgentStory.jsx";
@@ -72,6 +72,16 @@ const sec = { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` };
 const rowsSx = { display: "grid", gridTemplateColumns: "72px minmax(0, 1fr)", columnGap: 1.25, rowGap: 0.6, mt: 0.9, fontSize: 12.5, lineHeight: 1.45,
   color: DIM, overflowWrap: "anywhere", "& > :nth-of-type(odd)": { color: FAINT, fontSize: 11, pt: "1px" } };
 
+// the files it saved in the checkout, by path - past FOLD the rest behind "Show N more" (the owner, 2026-10-28: "a million attachments")
+const FileNames = ({ files }) => {
+  const [all, setAll] = useState(false), shown = all ? files : files.slice(0, FOLD);
+  return <>
+    {shown.map((f) => <Typography key={f} noWrap title={f} sx={{ ...mono, fontSize: 11.5, color: INK }}>{f}</Typography>)}
+    {files.length > FOLD && <Button size="small" data-tq-files-more="" sx={{ ...link, textAlign: "left" }} onClick={() => setAll(!all)}>
+      {all ? "Show fewer" : `Show ${files.length - FOLD} more`}</Button>}
+  </>;
+};
+
 // one session, in reading order: what happened, then ONE More for everything else - its last message in full, what it saved,
 // the run's timeline, what ended it since, every step, earlier sessions (the owner, 2026-10-12: "main summary, then details
 // behind more"). It was what happened + a folded last message + files + its own "Every step" button, under a second section
@@ -87,7 +97,7 @@ export const SessionRecord = ({ s, pages = [], draft = "", startOpen = false, ti
         : <Typography sx={{ fontSize: 12.5, color: DIM }}>It ended without a written result{parts.length ? " - More has what it did." : "."}</Typography>}
       {!!rows.length && <Box sx={rowsSx}>{rows.map(([k, v]) => <React.Fragment key={k}><Box>{k}</Box><Box><Md text={v} /></Box></React.Fragment>)}</Box>}
       {/* what it made to be LOOKED AT belongs with what happened (the owner, 2026-10-10: "it's important to see it") */}
-      {!!pages.length && <Box sx={{ mt: 0.9 }}><PublishedPages pages={pages} /></Box>}
+      {!!pages.length && <Box sx={{ mt: 0.9 }}><PublishedPages pages={pages} deliver /></Box>}
       {!!parts.length && <Box sx={sec}>
         <Button size="small" sx={{ ...link, textAlign: "left" }} onClick={() => setMore(!more)}>More · {parts.join(", ")} {more ? "▾" : "▸"}</Button>
         {more && <Box sx={{ display: "flex", flexDirection: "column", gap: 1.3, mt: 1 }}>
@@ -97,7 +107,7 @@ export const SessionRecord = ({ s, pages = [], draft = "", startOpen = false, ti
           </Box>}
           {s.files?.length > 0 && <Box>
             <Typography sx={head}>Files it saved</Typography>
-            {mine.map((f) => <Typography key={f} noWrap title={f} sx={{ ...mono, fontSize: 11.5, color: INK }}>{f}</Typography>)}
+            <FileNames files={mine} />
             {!!other.length && <Typography title={other.join("\n")} sx={{ fontSize: 12, color: FAINT, mt: mine.length ? 0.4 : 0 }}>
               {mine.length ? "and " : ""}{plural(other.length, "scratch file")} it used while working</Typography>}
           </Box>}
@@ -166,11 +176,11 @@ export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = nul
     // `bare`: the page's white focus is the box (the owner, 2026-10-25), and the record reads as plain sections inside it
     <Box sx={bare ? { width: "100%" } : { width: "100%", bgcolor: PANEL, px: 1.35, py: 1.15, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
       {state && <Box sx={{ mb: 1, pb: 1, borderBottom: `1px solid ${BORDER}` }}><StoryLine kind={state.kind} line={state.line} why={state.why} /></Box>}
-      {s && !chat && result ? <ResultView s={s} before={before} pages={[...pages, ...(outputs || [])]} diff={diff} since={since} draft={draft} story={story} diffOpen={diffOpen} onDiff={onDiff} />
+      {s && !chat && result ? <ResultView s={s} before={before} pages={madeOnce(pages, outputs || [])} diff={diff} since={since} draft={draft} story={story} diffOpen={diffOpen} onDiff={onDiff} />
         : s && !chat ? <RunSummaries sessions={[s, ...before]} pages={pages}
           full={<SessionRecord s={s} draft={draft} startOpen timeline={story?.steps || []} since={since} earlier={before} />} />
         : s ? <SessionRecord s={s} pages={pages} draft={draft} timeline={story?.steps || []} since={since} earlier={before} inChat={chat} />
-        : <PublishedPages pages={pages} />}
+        : <PublishedPages pages={pages} deliver />}
     </Box>);
 };
 
@@ -195,7 +205,7 @@ export const ResultSummary = ({ taskId, stamp, pages = [], said = "", onRecord =
       {rest && <Box data-tq-result-rest="" sx={{ fontSize: 13.5, lineHeight: 1.5, color: INK }}><Md text={rest} /></Box>}
       {found && <Box data-tq-result-found=""><Typography sx={head}>What it found</Typography>
         <Box sx={{ fontSize: 13, lineHeight: 1.5, color: INK }}><Md text={found} /></Box></Box>}
-      {!!made.length && <Box data-tq-result-made=""><Typography sx={head}>What it made</Typography><PublishedPages pages={made} verb="Open" /></Box>}
+      {!!made.length && <Box data-tq-result-made=""><Typography sx={head}>What it made</Typography><PublishedPages pages={made} verb="Open" deliver /></Box>}
       {/* the conversation it came out of is one quiet link under it, never the page (2026-10-28) */}
       {onRecord && <Box><Button size="small" data-tq-full-result="" aria-expanded="false" onClick={onRecord}
         sx={{ ...link, textAlign: "left" }}>The whole conversation ›</Button></Box>}
@@ -222,8 +232,8 @@ const ResultView = ({ s, before, pages, diff, since, draft, story, diffOpen = fa
           {plural(diff.files, "file")} changed <Box component="span" sx={{ color: "#47654a" }}>+{diff.added}</Box> <Box component="span" sx={{ color: "#6b2733" }}>−{diff.removed}</Box>
           {onDiff && <Box component="span" data-tq-diff-toggle="">{" · "}<Button size="small" aria-expanded={diffOpen} onClick={onDiff}
             sx={{ ...link, fontSize: 11.5, verticalAlign: "baseline", textTransform: "none" }}>{diffOpen ? "Hide diff" : "Show diff"}</Button></Box>}</Typography>}
-        {mine.map((f) => <Typography key={f} noWrap title={f} sx={{ ...mono, fontSize: 11.5, color: INK }}>{f}</Typography>)}
-        {!!pages.length && <Box sx={{ mt: mine.length || diff ? 0.75 : 0 }}><PublishedPages pages={pages} /></Box>}
+        <FileNames files={mine} />
+        {!!pages.length && <Box sx={{ mt: mine.length || diff ? 0.75 : 0 }}><PublishedPages pages={pages} deliver /></Box>}
       </Box>}
       {since?.text && <Box sx={sec}><Typography sx={head}>Since then</Typography><Typography sx={{ fontSize: 12.5, color: INK }}>{since.text}</Typography></Box>}
       <Box sx={sec}>
@@ -250,7 +260,7 @@ const RunSummaries = ({ sessions, pages, full }) => {
           {said ? <Box sx={{ fontSize: 13.5, lineHeight: 1.5, color: INK }}><Md text={said} /></Box>
             : <Typography sx={{ fontSize: 12.5, color: DIM }}>It ended without a written result.</Typography>}
         </Box>))}
-      {!!pages.length && <Box sx={{ mt: 1 }}><PublishedPages pages={pages} /></Box>}
+      {!!pages.length && <Box sx={{ mt: 1 }}><PublishedPages pages={pages} deliver /></Box>}
       <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
         <Button size="small" sx={{ ...link, textAlign: "left" }} onClick={() => setOpen(!open)}>Full transcript {open ? "▾" : "▸"}</Button>
         {open && <Box sx={{ mt: 1 }}>{full}</Box>}

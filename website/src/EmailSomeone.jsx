@@ -12,13 +12,17 @@ import { ChatRecipient, EmailRecipients } from "./NewSheet.jsx";
 import { ACCENT, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 import { ChannelIcon } from "./ui.jsx";
 import { label } from "./buttons.js";
+import { deliverables } from "./taskOutputs.js";
 
 // what a task can send on (slots.KINDS): email, and the chats outbound.send_out carries
 export const TASK_CHANNELS = ["email", "teams", "whatsapp", "telegram", "imessage", "discord"];
+const NOTES = new Set(["coding_session", "agent_result"]);
 // the task's own files: what its agents saved or showed, and what came in with its messages
 export const taskFiles = (detail) => [
-  // ...not the session records: those are Taskuary's own notes on a run, not something to hand anybody
-  ...(detail?.artifacts || []).filter((a) => a.url && a.kind !== "coding_session").map((a) => ({ key: `artifact:${a.id}`, kind: "artifact", id: a.id, name: a.name })),
+  // ...not the session records nor the answers saved from them: those are Taskuary's own notes on a run, not something to hand anybody -
+  // a task worked twenty times offered twenty of them (2026-10-28) - and each thing an agent made once, its newest (taskOutputs.deliverables)
+  ...deliverables((detail?.artifacts || []).filter((a) => a.url && !NOTES.has(a.kind))).made
+    .map((a) => ({ key: `artifact:${a.id}`, kind: "artifact", id: a.id, name: a.name })),
   ...(detail?.attachments || []).filter((a) => a.Path || a.saved || a.url)
     .map((a) => ({ key: `attachment:${a.AttachmentId ?? a.id}`, kind: "attachment", id: a.AttachmentId ?? a.id, name: a.Name ?? a.name })),
 ];

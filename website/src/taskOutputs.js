@@ -79,7 +79,38 @@ export function outputRefs(text, tid) {
 }
 
 // the task's files no answer names: listed at the foot of the conversation, so every one is reachable and none is drawn twice
+// ...and an older version of a file an answer names is that file's history, not one more file at the foot (deliverables)
 export const uncited = (listed, answers, tid) => {
-  const named = new Set((answers || []).flatMap((t) => outputRefs(t, tid).files));
-  return (listed || []).filter((r) => !named.has(r.path));
+  const named = new Set((answers || []).flatMap((t) => outputRefs(t, tid).files)), fams = new Set([...named].map(family));
+  return (listed || []).filter((r) => !named.has(r.path) && !fams.has(family(r.name || r.path)));
+};
+
+// ONE OF EACH THING IT MADE (the owner, 2026-10-28: "it looks like it created a million attachments. Agents should not create lists of
+// lists of attachments unless specifically asked"). The same rule as outputs.deliverables - keep the two alike: a FAMILY is one name with
+// its version marks off (v2, _final, (1), a timestamp) and only its newest is listed, the rest `earlier` on it; the agent's own working
+// files (scripts, logs, temp and cache, anything under tmp/ or scratch/) are `working`, folded under one line. Never dropped: reachable.
+const VER = /(?:[ _.-]+(?:v|ver|version|rev)[ _.-]?\d+|[ _.-]+(?:final|draft|copy|old|new|latest|updated|edited|revised)|[ _.-]*\(\d+\)|[ _.-]+\d{8}(?:[ _T-]?\d{4,6})?|[ _.-]+\d{4}-\d\d-\d\d(?:[ _T-]?\d\d[-.]?\d\d(?:[-.]?\d\d)?)?)+$/i;
+const WORK_EXT = new Set(["log", "tmp", "temp", "bak", "pyc", "cache", "lock", "swp", "part", "crdownload",
+  "py", "ps1", "sh", "bat", "cmd", "js", "mjs", "ts", "sql", "r", "ipynb"]);
+const WORK_DIR = /(?:^|\/)(?:tmp|temp|scratch|cache|__pycache__|work|working|intermediate|drafts?)\//i;
+const WORK_NAME = /^(?:tmp|temp|scratch|debug)(?:[ _.-]|$)/i;
+
+export function family(name) {
+  const b = baseName(name).toLowerCase(), i = b.lastIndexOf("."), stem = i > 0 ? b.slice(0, i) : b, x = i > 0 ? b.slice(i) : "";
+  return (stem.replace(VER, "").replace(/^[ _.-]+|[ _.-]+$/g, "") || stem).replace(/[ _.-]+/g, " ") + x;
+}
+export const isWorking = (rel) => {
+  const p = String(rel || "").replace(/\\/g, "/");
+  return WORK_EXT.has(ext(baseName(p))) || WORK_DIR.test(p) || WORK_NAME.test(baseName(p));
+};
+// {made, working}, newest first; a shown or published page is never working - the agent chose to show it
+export const deliverables = (rows) => {
+  const by = new Map(), made = [], working = [], at = (r) => String(r?.at || r?.created_at || "");
+  for (const r of [...(rows || [])].sort((a, b) => at(b).localeCompare(at(a)))) {
+    if (r.kind === "output" && isWorking(r.path || r.name)) { working.push(r); continue; }
+    const k = family(r.name || r.path), kept = by.get(k);
+    if (kept) kept.earlier.push(r);
+    else { const n = { ...r, earlier: [] }; by.set(k, n); made.push(n); }
+  }
+  return { made, working };
 };

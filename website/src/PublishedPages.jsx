@@ -11,6 +11,7 @@ import api from "./api.js";
 import { attUrl } from "./Attachments.jsx";
 import { Md } from "./md.jsx";
 import { csvRows, lockDown } from "./shownPages.js";
+import { deliverables } from "./taskOutputs.js";
 import "./publishedPages.css";
 
 // sandboxed WITHOUT allow-same-origin: the page's scripts run (charts, tabs) but in an opaque origin -
@@ -118,8 +119,23 @@ function OutputFile({ file: p, open, onToggle, verb = "" }) {
   );
 }
 
+// a quiet line that unfolds what it counts: the earlier versions of one file, the rest of a long list, the agent's working files
+function Fold({ label, tag, children }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="tq-published-fold" data-tq-fold={tag}>
+      <button type="button" className="tq-published-more" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "▾" : "▸"} {label}</button>
+      {open && <div className="tq-published-folded">{children}</div>}
+    </div>
+  );
+}
+
 // `verb`: the press that shows each one is a button named for it ("Open", the Result's What it made) rather than the name's own " · show here"
-export default function PublishedPages({ pages, open: openAll = false, verb = "" }) {
+// `deliver`: an agent's files, each thing it made ONCE (taskOutputs.deliverables) - its newest version with "N earlier versions" under it,
+// the agent's working files under one line, and past FOLD the rest behind "Show N more"
+export const FOLD = 5;
+const many = (n, one) => `${n} ${one}${n === 1 ? "" : "s"}`;
+export default function PublishedPages({ pages, open: openAll = false, verb = "", deliver = false }) {
   const [shut, setShut] = useState(() => new Set()), [opened, setOpened] = useState(() => new Set());
   if (!pages?.length) return null;
   const isOpen = (p) => (openAll ? !shut.has(p.id) : opened.has(p.id));
@@ -127,6 +143,19 @@ export default function PublishedPages({ pages, open: openAll = false, verb = ""
     const flip = (s) => { const n = new Set(s); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n; };
     openAll ? setShut(flip) : setOpened(flip);
   };
+  if (deliver) {
+    const { made, working } = deliverables(pages);
+    const one = (p) => <PublishedPages key={p.id} pages={[p]} open={openAll} verb={verb} />;
+    const item = (p) => <React.Fragment key={p.id}>{one(p)}
+      {!!p.earlier?.length && <Fold tag="earlier" label={many(p.earlier.length, "earlier version")}>{p.earlier.map(one)}</Fold>}</React.Fragment>;
+    return (
+      <div className="tq-published" data-tq-made-list="">
+        {made.slice(0, FOLD).map(item)}
+        {made.length > FOLD && <Fold tag="more" label={`Show ${made.length - FOLD} more`}>{made.slice(FOLD).map(item)}</Fold>}
+        {!!working.length && <Fold tag="working" label={`${many(working.length, "working file")} it used`}>{working.map(one)}</Fold>}
+      </div>
+    );
+  }
   return (
     <div className="tq-published">
       {pages.map((p) => isOutput(p) ? <OutputFile key={p.id} file={p} open={isOpen(p)} onToggle={() => toggle(p)} verb={verb} /> : (

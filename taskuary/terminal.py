@@ -59,8 +59,9 @@ DOC_CHARS = 6400
 # 3,087 characters mid-sentence (2026-10-09), so no coding session ever read how to end with --done/--reply/
 # --no-reply - DOC_CHARS's trap again. 4000 holds the 3,358 it measures now, with room for an edit; past the
 # ceiling the ask still gives, never the rules. ...and it grew to 4,034 unnoticed, so the closing "a session John
-# opened is theirs to end" was cut away; 4800 holds the 4,249 the no-promised-later-step rule makes it (2026-10-20).
-AGENT_CHARS = 4800
+# opened is theirs to end" was cut away; 4800 holds the 4,249 the no-promised-later-step rule makes it (2026-10-20); 5600 the ~5,050
+# that "Files you make" (one final file per thing asked, 2026-10-28) makes it.
+AGENT_CHARS = 5600
 SOUL_CHARS = 1200                   # legacy budget; SOUL.md no longer rides in a worker prompt (PW-184)
 # The fastest way to type a prompt is not to type it at all: these CLIs take the first prompt
 # on the COMMAND LINE, so the session starts with it already submitted - instant, and immune
@@ -1743,6 +1744,9 @@ def with_fence_rule(rules: str) -> str:
     if 'Taskuary tools' not in rules:                   # the toolbox (2026-10-25): an owner's copy from before it still hears of it
         from .agenttools import TOOLS_LINE
         rules = f'{rules} {TOOLS_LINE}'
+    if 'one final file' not in rules:                   # one file per thing asked (2026-10-28): an owner's copy from before it hears it too
+        from .outputs import ONE_FILE
+        rules = f'{rules} Files you make: {ONE_FILE}'
     return rules if 'Big results' in rules else f'{rules} {BIG_LINE}'
 
 

@@ -383,7 +383,28 @@ def deleted_list(store, p: dict) -> str:
     return NL.join([f'RECENTLY DELETED ({len(rows)}) - each comes back with deleted.restore:']
                    + [f"  {r['kind']}: {_cut(r['title'], 100)} ({r['days_left']} days left)" for r in rows[:30]])
 
-READ = {'deleted.list': deleted_list, 'tasks.list': tasks_list, 'message.read': message_read, 'sender.read': sender_read, 'docs.search': docs_search,
+def outputs_find(store, p: dict) -> str:
+    """THE FILE AN AGENT MADE, by what it is about (outputs.find): its name, its task, when, and the link the Result's Download uses -
+    one tap saves it - with its task's own link. On a phone no link opens, so the file and its task are named instead."""
+    from . import outputs
+    from .concierge import DELIVERY, PHONE
+    m = re.search(r'\d+', str(p.get('ref') or ''))
+    hits = outputs.find(store, tokens(str(p.get('query') or p.get('contains') or '')), str(p.get('kind') or ''), int(m.group()) if m else None)
+    if not hits:
+        return ('No file an agent made matches that' + (f" on {task_ref(int(m.group()))}" if m else '')
+                + (' of that kind' if p.get('kind') else '') + ' - try fewer words, or none with the kind alone.')
+    phone = DELIVERY.get() == PHONE
+    out = [f'FILES AGENTS MADE ({len(hits)}, best match first) - ' + (
+        "no link opens on a phone: name the file and its task; the task's card sends the file itself" if phone else
+        'answer with the one that fits as [its name](its link) - one tap downloads it - and its task as [TQ-n](#task=n)') + ':']
+    for h in hits:
+        ref, url = task_ref(h['tid']), h.get('url') or h.get('external_url') or ''
+        more = f" ({plural(len(h['earlier']), 'earlier version')} behind it)" if h.get('earlier') else ''
+        out.append(f"  {h['name']} - {ref} \"{_cut(h['title'], 90)}\" (#task={h['tid']}) - {_day(h.get('at') or h.get('created_at'))}{more}"
+                   + ('' if phone or not url else f' - link: {url}'))
+    return NL.join(out)
+
+READ = {'deleted.list': deleted_list, 'outputs.find': outputs_find, 'tasks.list': tasks_list, 'message.read': message_read, 'sender.read': sender_read, 'docs.search': docs_search,
         'agents.now': agents_now, 'approvals.list': approvals_list, 'pipe.list': pipe_list, 'pipe.read': pipe_read, 'calendar.read': calendar_read,
         'activity.list': activity_list, 'errors.list': errors_list,
         'memory.list': memory_list, 'memory.about': memory_about, 'rules.list': rules_list, 'asks.list': asks_list, 'missed.check': missed_check}

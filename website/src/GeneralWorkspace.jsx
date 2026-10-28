@@ -551,7 +551,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               hover. It was taken out on 2026-10-19 as a repeat of the answer above; an agent asking from a terminal has no answer
               above at all, and an answer needs a box beside the question it answers. */}
           {!dock && asking && <AgentAsks asking={asking} name={name} onAnswer={onAnswer} taskId={task.TaskId} />}
-          {!dock && <PublishedPages pages={published} />}
+          {!dock && <PublishedPages pages={published} deliver />}
           {/* not while it waits on your call: a run that stopped to ask is not one to schedule yet, and the offer took the room
               the answer needed */}
           {/* A PLAYBOOK DRAFTED HERE IS APPROVED HERE (the owner, 2026-10-21): Close out, where it also waits, is hidden while the

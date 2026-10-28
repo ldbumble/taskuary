@@ -16,7 +16,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear(select, scope?), pipe.defer(select, until), pipe.close(select), pipe.remove(select, learn?), pipe.block(select, how?), pipe.mine(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
 | **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how), report.edit(config), report.delete |
 | **app** | settings, connections, scripts, memory, rules, the Hub | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), rule.change(about, how?), deleted.restore(what), hub.publish(title, body, topic?, kind?, why_earned?), hub.comment(post, text), hub.vote(post, up?) |
-| **look** | look-ups - they run at once and change nothing | app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, pipe.read, calendar.read, activity.list, errors.list, memory.about, memory.list, deleted.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
+| **look** | look-ups - they run at once and change nothing | app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, pipe.read, calendar.read, activity.list, errors.list, memory.about, memory.list, outputs.find, deleted.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
 
 A task you name goes in `ref` ("TQ-0123"); otherwise the tool acts on what is on the table.
 
@@ -957,6 +957,16 @@ Who someone is to the owner: every line the memory holds about them, with its ke
 Everything kept about the owner: LEARNED.md - what they told you ("remember this"), their verdicts, and what it learned from what they did. Use it for "what do you remember", "what do you know about me"
 
 - `about` - words to narrow it (a sender, a topic)
+
+<p class="runs">Runs at once and changes nothing.</p>
+
+### `outputs.find`
+
+The files agents made on tasks - workbooks, PDFs, documents, charts, pages - each once, its newest version, with its task and the link that downloads it. Answer with the link.
+
+- `query` - words of the task or the file ("vendor pricing")
+- `kind` (optional) - xlsx | pdf | doc | deck | csv | picture | page
+- `ref` (optional) - one task
 
 <p class="runs">Runs at once and changes nothing.</p>
 

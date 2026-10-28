@@ -546,7 +546,8 @@
 @keyframes tqPulse { 50% { opacity: .35; } }   /* the day strip's now-dot */
 
 /* the composer */
-.tq-compose { padding: 2px 20px 8px; background: #fffdfb; box-shadow: 0 -14px 14px -6px #fffdfb; position: relative; }   /* no rule above it: the row and the box float, a soft fade keeps scrolled content from showing through */
+.tq-compose { padding: 2px 20px 8px; background: #fffdfb; box-shadow: 0 -14px 14px -6px #fffdfb; position: relative;
+  --tq-chat-w: min(380px, calc(100% - 40px)); }   /* no rule above it: the row and the box float, a soft fade keeps scrolled content from showing through */
 /* THE DOCK (canvas I2): one border, three bands, as wide as the card above it (the owner: "the prompt box full width") - the suggestion tinted on top, the row under a hairline, the box its floor */
 .tq-dock { width: 100%; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #d5d0c7; border-radius: 16px; background: #fff; box-shadow: 0 2px 10px #39352d0d; }
 /* ...and A THIRD OF A LAPTOP NO MORE (the owner, 2026-10-26, 1600x810: "you can't see anything ... button height is too high? you can't see
@@ -591,13 +592,15 @@
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box:not([data-tq-open]) textarea { height: 30px; padding: 0 4px; line-height: 30px; overflow: hidden; }
 /* ...and USED, it opens UP AND OVER the canvas (the owner, 2026-10-27: "it should always be the same size and words, unless you click when
    it should expand up and above over the canvas like it was mocked up" - "staying same size but the box becomes bigger above it"): the pill
-   stays on the row as it was (::after draws it, lit), so nothing there moves, folds or is covered while the owner types; the box stands just
-   ABOVE the dock, right-aligned, and grows upward. On a phone (under 600px) it widens in its line as before */
+   keeps its place on the row (::after, an empty slot - drawn as a blank pill it read as a second input, 2026-10-27), so nothing there moves,
+   folds or is covered while the owner types; the box stands just
+   ABOVE the dock, right-aligned, and grows upward - ONE NARROW COLUMN with the answer over it, like a chat helper on an app (the owner,
+   2026-10-27: "doesn't match the size", "a little more narrow"): both are --tq-chat-w wide at the same right edge. On a phone (under
+   600px) it widens in its line as before */
 @media (min-width: 601px) {
-  .tq-dock .tq-dock-line:has(> .tq-arow):has(> .tq-compose-box[data-tq-open])::after { content: ""; flex: 0 0 180px; box-sizing: border-box; min-height: 34px;
-    margin: 3px 6px 3px 0; border: 1px solid #9fae9f; border-radius: 17px; background: #fff; }
+  .tq-dock .tq-dock-line:has(> .tq-arow):has(> .tq-compose-box[data-tq-open])::after { content: ""; flex: 0 0 180px; box-sizing: border-box; min-height: 34px; margin: 3px 6px 3px 0; }
   .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { position: absolute; right: 20px; bottom: calc(100% + 6px); z-index: 6;
-    width: min(560px, calc(100% - 54px)); min-height: 72px; align-items: flex-end; padding: 6px 4px 4px 8px; border-radius: 14px;
+    width: var(--tq-chat-w); box-sizing: border-box; margin: 0; min-height: 72px; align-items: flex-end; padding: 6px 4px 4px 8px; border-radius: 14px;
     box-shadow: 0 10px 32px #39352d26, 0 2px 6px #39352d14; }
   /* ...ONE ROW, like any chat box (the owner, 2026-10-27: "typing is above where attachments, emojis and voice note is - looks weird"):
      the tools on the left, the words beside them growing upward as they wrap, send and the box's × on the right */
@@ -618,7 +621,7 @@
   .tq-dock .tq-compose-box textarea::placeholder { white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
 }
 /* ...and what is said about the task comes up OVER it, anchored above the box: a few turns tall at most, scrolling inside, never moving the view */
-.tq-chat-pop { position: absolute; right: 20px; bottom: calc(100% + var(--tq-box-h, -2px)); z-index: 5; width: min(600px, calc(100% - 40px)); box-sizing: border-box; display: flex; flex-direction: column;
+.tq-chat-pop { position: absolute; right: 20px; bottom: calc(100% + var(--tq-box-h, -2px)); z-index: 5; width: var(--tq-chat-w); box-sizing: border-box; display: flex; flex-direction: column;
   border: 1px solid #d5d0c7; border-radius: 14px; background: #fffdfb; box-shadow: 0 10px 32px #39352d26, 0 2px 6px #39352d14; animation: tqPopIn .14s ease-out; }
 .tq-chat-pop[hidden] { display: none; }
 @keyframes tqPopIn { from { opacity: 0; transform: translateY(6px); } }

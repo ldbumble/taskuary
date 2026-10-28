@@ -27,7 +27,7 @@ from . import policy as policy_engine
 from . import reshape
 from . import terminal as hub_term
 from .wrapup import PAUSE_MARKER, REPORTS, pause_note, reply_target, wrap as end_task
-from . import aisetup, assistant, demo, deps, learn, learnedgraph, memorylines, operations, outbound, playbooks, rank, responder, waitroom
+from . import aisetup, assistant, demo, deps, learn, learnedgraph, memorylines, operations, outbound, playbooks, rank, responder, signatures, waitroom
 from . import live as live_bus
 from . import processing_all
 
@@ -1889,9 +1889,10 @@ def task_detail(task_id: int):
     from . import assistant, concierge, origin, workflows
     # ...and whether its channel can carry a reply, as /api/reviews says: without it a Teams draft offered Send, and
     # the press came back "not sent" instead of the card offering Copy & close from the start
-    memo = {}
+    memo, sigs = {}, {}
     for r in d.get('reviews') or []:
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
+        r['Signature'] = signatures.for_review(store, r, memo=sigs)     # what goes under it: the reply box shows it
     from . import batch as _batch
     batch_rows = store.batch_items(task_id)
     batch_outside = bool(batch_rows) and _batch.outside(store, task_id)
@@ -4099,6 +4100,8 @@ def handoff(task_id: int, body: HandoffBody):
     if not t: raise HTTPException(404, 'task not found')
     try:
         text = (body.text or '').strip() or outbound.draft_handoff(store, task_id, body.to or 'a colleague', body.note)
+        # a forward by email is an email from the owner: signed once, in the draft they see and in what goes (signatures.py)
+        if body.channel == 'email': text = responder.with_signature(text, responder.signature_for(store))
         if body.draft_only: return {'draft': text}
         subject = f"{task_ref(task_id)} {t.get('Title') or ''}".strip()
         chat = [m for m in store.list_messages(task_id) if m['Channel'] == 'teams'] if body.channel == 'teams' else []
@@ -4178,9 +4181,10 @@ def get_run(run_id: int):
 def reviews(status: str = None):
     from .verdicts import context_moved
     rows = store.list_reviews(status)
-    memo = {}
+    memo, sigs = {}, {}
     for r in rows:
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
+        r['Signature'] = signatures.for_review(store, r, memo=sigs)
         moved, latest = context_moved(store, r)          # material change only (PW-240), never a polling timestamp
         r['Stale'] = bool(moved)
         if r['Stale'] and latest:
@@ -7792,12 +7796,33 @@ def capabilities():
     from . import capabilities as caps
     return caps.capabilities(store)
 
+class SignatureLearnBody(BaseModel):
+    mailbox: str | None = None
+
 @app.post('/api/signature/learn')
-def signature_learn():
-    """The closing lines the owner's sent mail shares - read, not saved: Settings and setup show it to check first."""
-    from . import responder
-    try: return {'signature': responder.learn_signature(store)}
+def signature_learn(body: SignatureLearnBody | None = None):
+    """The closing lines the owner's sent mail shares - one mailbox's, when named - read, not saved: Settings and setup show it to
+    check first."""
+    try: return {'signature': signatures.suggest(store, (body.mailbox if body else None) or None)}
     except Exception as e: raise HTTPException(422, f"couldn't read your sent mail - {e}")
+
+@app.get('/api/signature')
+def signature_overview():
+    """Settings' signature: the switch, the default, each mailbox's own when there are several, and whether to offer the one
+    the sent mail ends with (once)."""
+    return signatures.overview(store)
+
+class MailboxSignatureBody(BaseModel):
+    address: str
+    signature: str = ''
+
+@app.post('/api/signature/mailbox')
+def signature_mailbox(body: MailboxSignatureBody):
+    """One mailbox's own signature - blank: the default one is used for mail from it."""
+    try: out = signatures.save_mailbox(store, body.address, body.signature[:4000])
+    except ValueError as e: raise HTTPException(422, str(e))
+    store.audit('setting', 0, 'mailbox_signature', ACTOR, detail={'address': out['address']})
+    return out
 
 @app.post('/api/setup/first-run/about/learn')
 def first_run_about_learn(body: FirstRunAboutBody):

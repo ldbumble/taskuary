@@ -89,7 +89,7 @@ DENIED = (
     (r'POST', r'^/api/cli/(install|update)', "installing or updating a coding CLI runs a vendor installer on this machine - the owner's decision"),
     (r'POST', r'^/api/cli/setup', "setting a coding CLI up runs it on this machine, and signs in as the owner - their decision"),
     (r'POST', r'^/api/setup/first-run/', "choosing the AI that reads the mail, or the mailbox it reads, is the owner's decision"),
-    (r'POST', r'^/api/signature/', "the signature under the owner's email is theirs to read off their mail and check"),
+    (r'POST', r'^/api/signature(/|$)', "the signature under the owner's email is theirs to read off their mail and check"),
     (r'PUT|DELETE|POST', r'^/api/cli/connections', 'CLI commands and connection tests are configured by the owner'),
     (r'POST', r'^/api/problems/', 'what is failing is the owner\'s to read - an agent does not get to clear the bell'),
     # ...and the doors the 2026-09-02 audit found standing open: releasing the held task of the very

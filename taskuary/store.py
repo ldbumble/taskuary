@@ -765,8 +765,10 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     # can never carry one - see outbound.can_reply
                     'reply_channels': 'email,teams,slack,telegram,whatsapp,imessage,discord,github',
                     # the owner's email signature, exactly as it goes under every email (responder.signed); read off their
-                    # sent mail at setup or by Settings' button, checked by them - blank: the writer signs as STYLE.md says
+                    # sent mail at setup or by Settings' button, checked by them - blank: STYLE.md's sign-off line, else the owner's name
                     'email_signature': '',
+                    # that signature under every email Taskuary prepares - drafts, the owner's own typed replies, forwards (signatures.py)
+                    'sign_replies': '1',
                     # watch the CI of a task's pull request and hand red builds back to the
                     # agent that wrote the code: off | watch (status only) | feedback
                     'ci_watch': 'off',

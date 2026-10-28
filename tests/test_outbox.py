@@ -26,7 +26,7 @@ class OutboxEmailTests(unittest.TestCase):
         self.assertEqual(deliver['cc'], ['copy@example.com'])
         self.assertIn('TO: a@example.com, b@example.com', seen['user'])
         self.assertIn('CC: copy@example.com', seen['user'])
-        self.assertIn('exact recurring signature STYLE.md', seen['system'])
+        self.assertIn('Do NOT write a sign-off', seen['system'])         # the signature layer signs, never the writer (signatures.py)
         self.assertIn('Northwind Trading', seen['system'])
 
     def test_a_new_address_is_allowed_and_bad_or_missing_addresses_are_refused(self):

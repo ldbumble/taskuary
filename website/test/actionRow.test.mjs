@@ -103,9 +103,9 @@ test("Decline says what goes out with it: the text in the box exactly as edited,
   assert.match(src, /sends the text above exactly as you have it/);
   assert.match(src, /The box is empty, so nothing is sent/);
   assert.match(src, /`\$\{co\.alt\.label\} & send your text`/, "the label says it sends the owner's text only when there is text");
-  assert.match(src, /reply_text: verb !== "reject" && sendable && value\.trim\(\) \? value : null/, "an empty box sends no reply - Decline only closes the pull request");
+  assert.match(src, /reply_text: verb !== "reject" && sendable && words.trim()\(\) \? value : null/, "an empty box sends no reply - Decline only closes the pull request");
   assert.equal((src.match(/title=\{altTitle\}|title: altTitle/g) || []).length, 2, "the row's Decline and the card's carry the one sentence");
-  assert.doesNotMatch(src, /disabled: busy \|\| \(sendable && !value\.trim\(\)\), run: \(\) => decideBoth\(co\.alt/, "Decline is not disabled by an empty box");
+  assert.doesNotMatch(src, /disabled: busy \|\| \(sendable && !words.trim()\(\)\), run: \(\) => decideBoth\(co\.alt/, "Decline is not disabled by an empty box");
 });
 
 test("Next is the FIRST control of the row, then the types; no task number or waiting words on it (2026-10-13)", () => {

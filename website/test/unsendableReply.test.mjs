@@ -22,7 +22,7 @@ test("an unsendable draft has Copy beside Redraft: it copies, closes nothing, an
   assert.match(rd, /\) : !canSendIt \? \(\s*\/\*[\s\S]*?\*\/\s*<Button size="small" variant=\{lit === no\("copy"\) \? "contained" : "outlined"\}[^>]*onClick=\{copyIt\}\s*title=\{copyTitle\}/);
   assert.match(rd, /\{copied \? `✓ \$\{btn\("copy", "done"\)\}` : btn\("copy"\)\}<\/Button>/);
   // ...registered as the card's own verb, so the Advisor finds it under the draft; the bar never draws it
-  assert.match(rd, /\{ id: no\("copy"\), label: copied \? `✓ \$\{btn\("copy", "done"\)\}` : btn\("copy"\), tone: "s", disabled: busy \|\| !value\.trim\(\), run: copyIt, title: copyTitle,/);
+  assert.match(rd, /\{ id: no\("copy"\), label: copied \? `✓ \$\{btn\("copy", "done"\)\}` : btn\("copy"\), tone: "s", disabled: busy \|\| !words.trim()\(\), run: copyIt, title: copyTitle,/);
   // ...and Redraft still stands beside it
   assert.match(rd, /\{canRedraft && !r\.Stale && !delivery\.frozen && (!warnTop && )?<Button/);   // a warned Redraft sits over the draft (2026-10-28)
 });

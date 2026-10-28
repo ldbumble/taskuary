@@ -10,6 +10,7 @@ import ReplyFiles from "./ReplyFiles.jsx";
 import { holdInView } from "./inView.js";
 import { promisesFiles } from "./replyFiles.js";
 import { proposalPresentation, reviewText } from "./reviewProposal.js";
+import { withSignature, withoutSignature } from "./signature.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
 import { CcRow, DraftField, ToRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
@@ -118,7 +119,10 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   useEffect(() => { if (delivery.frozen) setSent(false); }, [delivery.frozen, r.ReviewId]);
   const filedDelivery = delivery.frozen ? { ...r, Deliver: JSON.stringify(delivery.envelope) } : r;
   const proposal = proposalPresentation(r);
-  const value = delivery.frozen ? delivery.body : text ?? reviewText(r);
+  // the signature that goes under this email (signatures.py) is in the box: an empty one opens on it, a draft gets it once - and
+  // a box holding only it is still "write the reply first"
+  const value = delivery.frozen ? delivery.body : text ?? withSignature(reviewText(r), r.Signature);
+  const words = withoutSignature(value, r.Signature);
   const ccNow = delivery.frozen ? deliveryCc(filedDelivery) : cc ?? deliveryCc(r);
   const meta = deliveryMeta(r);
   const isCal = meta.kind === "calendar";             // an invite answered or a meeting booked: its note may be empty
@@ -180,7 +184,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
     setBusy(true); setErr(""); setSendErr(""); setCoFail(null);
     try {
       const { data } = await api.post(`/api/reviews/${closeout.ReviewId}/decide`,
-        { verb, final_text: null, note: null, reply_text: verb !== "reject" && sendable && value.trim() ? value : null, cc: sendable ? ccNow : null },
+        { verb, final_text: null, note: null, reply_text: verb !== "reject" && sendable && words.trim() ? value : null, cc: sendable ? ccNow : null },
         { timeout: DECIDE_TIMEOUT });
       // refused before anything happened is not "approved, but it did not send"
       if (!data.ok && data.send_error) setCoFail({ text: data.send_error, offers: data.offers || [] });
@@ -281,7 +285,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // the Advisor lit Redraft and said why: the warning and its button go over the draft (warnTop), not a line beside the buttons under it
   const warnTop = !!why && canRedraft && !r.Stale && !delivery.frozen && lit === no("redraft");
   // the alternative (Decline) sends WHAT IS IN THE BOX, edited or not - and with the box empty it just closes the pull request, sending nothing
-  const altSends = sendable && !!value.trim();
+  const altSends = sendable && !!words.trim();
   const altTitle = co?.alt ? `${co.alt.label} ${co.alt.then}${altSends ? ", then sends the text above exactly as you have it - edit it first if it reads as an accept" : ". The box is empty, so nothing is sent"}.` : "";
   // A SEND NOBODY CAN CONFIRM has two ways past it beside Check delivery, as in the chat (concierge.recover): Send anyway - the owner's
   // own word that a second copy is fine - and Mark done, for when it went. Only Check delivery was here (the rebuilt walk, 2026-10-18)
@@ -300,8 +304,8 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       ...(unconfirmed ? [{ id: no("anyway"), label: btn("approve", "unknown"), tone: "s", disabled: busy, run: sendAnyway, title: btnHint("approve", "unknown") },
         ...(r.TaskId ? [{ id: no("done"), label: btn("close"), tone: "s", disabled: busy, run: doneAnyway, title: btnHint("close") }] : [])] : []),
     ] : co && !r.Stale ? [
-      { id: no("approve"), label: busy ? sentOr(co.busyLabel) : co.approveLabel, tone: "p", title: blocked ? gh.reason : thenLine, disabled: busy || blocked || (sendable && !value.trim()), run: () => decideBoth("approve"),
-        why: blocked ? gh.reason.split(" - ")[0] : sendable && !value.trim() ? "write the reply first" : "" },
+      { id: no("approve"), label: busy ? sentOr(co.busyLabel) : co.approveLabel, tone: "p", title: blocked ? gh.reason : thenLine, disabled: busy || blocked || (sendable && !words.trim()), run: () => decideBoth("approve"),
+        why: blocked ? gh.reason.split(" - ")[0] : sendable && !words.trim() ? "write the reply first" : "" },
       ...(co.alt ? [{ id: no("alt"), label: altSends ? `${co.alt.label} & send your text` : co.alt.label, tone: "s", title: altTitle, disabled: busy, run: () => decideBoth(co.alt.verb) }] : []),
     ] : proposal ? [
       { id: no("approve"), label: busy ? sentOr(proposal.busyLabel) : proposal.approveLabel, tone: "p", disabled: busy || (proposal.kind === "closeout" && blocked), run: () => decide("approve"),
@@ -311,17 +315,17 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
     ] : !canSendIt ? [
       // NO CLOSE UNDER A DRAFT THAT CANNOT LEAVE (the owner, 2026-10-22: "there should be no mark done under reply if you can't send
       // out message ... mark done is on the tasks"): the draft is there to copy, Redraft beside it, and the task's own Mark done closes
-      { id: no("copy"), label: copied ? `✓ ${btn("copy", "done")}` : btn("copy"), tone: "s", disabled: busy || !value.trim(), run: copyIt, title: copyTitle,
-        why: value.trim() ? "" : "write the reply first" },
+      { id: no("copy"), label: copied ? `✓ ${btn("copy", "done")}` : btn("copy"), tone: "s", disabled: busy || !words.trim(), run: copyIt, title: copyTitle,
+        why: words.trim() ? "" : "write the reply first" },
     ] : r.Stale ? [
       { id: no("approve"), label: busy ? "Drafting…" : btn("redraft"), tone: "p", disabled: busy, run: redraft, title: btnHint("redraft") },
     ] : chatFile ? [
       { id: no("email-file"), label: "Reply by email with the file", tone: "p", disabled: busy, run: onEmailInstead,
         title: `A ${r.Channel} message cannot carry a file - this writes an email with the file on it, which waits here for your yes` },
-      { id: no("approve"), label: busy ? sentOr("Sending…") : `${sendWord} without the file`, tone: "s", disabled: busy || !value.trim(), why: value.trim() ? "" : "write the reply first",
+      { id: no("approve"), label: busy ? sentOr("Sending…") : `${sendWord} without the file`, tone: "s", disabled: busy || !words.trim(), why: words.trim() ? "" : "write the reply first",
         run: () => decide("approve"), title: `Sends only the words to ${replyContext(r)} - no file goes with them` },
     ] : [
-      { id: no("approve"), label: busy ? sentOr(simulated ? "Simulating…" : "Sending…") : simulated ? "Simulate approval" : `${sendWord}${ccNow.length && !isCal ? `, copying ${ccNow.length}` : ""}`, tone: "p", disabled: busy || (!value.trim() && !isCal), why: value.trim() || isCal ? "" : "write the reply first",
+      { id: no("approve"), label: busy ? sentOr(simulated ? "Simulating…" : "Sending…") : simulated ? "Simulate approval" : `${sendWord}${ccNow.length && !isCal ? `, copying ${ccNow.length}` : ""}`, tone: "p", disabled: busy || (!words.trim() && !isCal), why: words.trim() || isCal ? "" : "write the reply first",
         run: () => decide("approve"), title: simulated ? "Complete this temporary demo; no email is sent" : isCal ? thenLine : `Sends this response to ${replyContext(r)}` },
     ]),
     ...(proposal?.alt ? [{ id: no("palt"), label: proposal.alt.label, tone: "s", disabled: busy, run: () => decide(proposal.alt.verb), title: `${proposal.alt.label} - ${proposal.alt.then}` }] : []),
@@ -471,7 +475,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
              close runs first, and the reply above goes out only once it succeeded. A reply this channel cannot
              carry leaves just the close-out. */
           <>
-            <Button size="small" variant={solid} disableElevation disabled={busy || blocked || (sendable && !value.trim())}
+            <Button size="small" variant={solid} disableElevation disabled={busy || blocked || (sendable && !words.trim())}
               onClick={() => decideBoth("approve")} title={blocked ? gh.reason : thenLine}>
               {busy ? sentOr(co.busyLabel) : co.approveLabel}</Button>
             {co.alt && <Button size="small" variant="outlined" disabled={busy}
@@ -490,7 +494,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         ) : !canSendIt ? (
           /* COPY, BESIDE REDRAFT (the owner, 2026-10-22): the draft goes to the clipboard and the task stays open - its badge says it
              went; the reason nothing here can send it is the hover */
-          <Button size="small" variant={lit === no("copy") ? "contained" : "outlined"} disableElevation disabled={busy || !value.trim()} onClick={copyIt}
+          <Button size="small" variant={lit === no("copy") ? "contained" : "outlined"} disableElevation disabled={busy || !words.trim()} onClick={copyIt}
             title={copyTitle} data-tq-copy={copied ? "done" : ""}>
             {copied ? `✓ ${btn("copy", "done")}` : btn("copy")}</Button>
         ) : r.Stale ? (
@@ -508,13 +512,13 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
             <Button size="small" variant={solid} disableElevation disabled={busy} onClick={onEmailInstead}
               title={`A ${r.Channel} message cannot carry a file - this writes an email with the file on it, which waits here for your yes`}>
               Reply by email with the file</Button>
-            <Button size="small" variant="outlined" disabled={busy || !value.trim()} onClick={() => decide("approve")}
+            <Button size="small" variant="outlined" disabled={busy || !words.trim()} onClick={() => decide("approve")}
               title={`Sends only the words to ${replyContext(r)} - no file goes with them`}>
               {busy ? sentOr("Sending…") : `${sendWord} without the file`}</Button>
           </>
         ) : (
           <Button size="small" variant={solid}
-            disabled={busy || !value.trim()}
+            disabled={busy || !words.trim()}
             onClick={() => decide("approve")}
             title={simulated ? "Complete this temporary demo; no email is sent" : `Sends this response to ${replyContext(r)}`}>
             {/* the one word for the send, as everywhere (buttons.json) */}

@@ -431,7 +431,9 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
         reply = store._one("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind NOT IN ('action','slot') ORDER BY ReviewId DESC LIMIT 1",
                            (rv['TaskId'],))
         if reply:
-            sent = (_post_with_closeout(store, rv, reply, reply_text, actor) if _carried(store, rv, reply)
+            from . import signatures         # the signature alone in the box is no reply text: the filed draft goes, as with an empty box
+            if not signatures.unsigned(reply_text, signatures.for_review(store, reply)).strip(): reply_text = ''
+            sent =(_post_with_closeout(store, rv, reply, reply_text, actor) if _carried(store, rv, reply)
                     else decide(store, reply, 'approve', reply_text, None, actor, learn_async, cc))
             out['reply'] = sent
             if not sent.get('ok'): out['send_error'] = f"Done on GitHub, but the reply was not sent: {sent.get('send_error') or 'it was refused'}"
@@ -486,8 +488,18 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
         return {'ok': True, 'status': 'closed_unsent', 'sent': None, 'send_error': None}
     # ONE approve: if the text differs from the draft, it was edited - no need to declare it
     if verb_in in ('approve', 'edit'):
+        # THE SIGNATURE GOES ON ONCE, HERE (signatures.py): the box shows it, so a box holding only the signature is an empty box,
+        # and the owner's words are compared with the draft above it - adding the block is not an edit the drafter learns from
+        from . import signatures
+        sig = signatures.for_review(store, rv)
+        if sig and (final_text or '').strip() and not signatures.unsigned(final_text, sig).strip(): final_text = ''
+        if sig and not (final_text or '').strip() and not signatures.unsigned(rv.get('DraftText'), sig).strip():
+            return {'ok': False, 'status': 'pending', 'sent': None, 'empty': True,
+                    'send_error': 'there is only your signature in the box - write the reply (or let the AI draft it) and send that'}
         final = final_text if (final_text or '').strip() or (cal and final_text is not None) else rv.get('DraftText')
-        verb = 'edit' if (final or '').strip() != (rv.get('DraftText') or '').strip() else 'approve'
+        bare = lambda t: signatures.unsigned(t, sig).strip()
+        verb = 'edit' if bare(final) != bare(rv.get('DraftText')) else 'approve'
+        if sig: final = signatures.sign(store, rv, final)
     else:
         final, verb = None, verb_in
     # a PROPOSAL is not a draft reply: approving it RUNS the action the agent asked for

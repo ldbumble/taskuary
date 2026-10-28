@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { askLine, cameFromLabel, expands, groupConversations, groupMeta, headerFacts, hidden, latestRows, madeLine, previewRows, routeHead, startedBy, triageLine, workflowOrigin, workflowTitle } from "../src/taskSources.js";
+import { askLine, byLine, cameFromLabel, expands, groupConversations, groupMeta, isIdeaLine, headerFacts, hidden, latestRows, madeLine, previewRows, routeHead, startedBy, triageLine, workflowOrigin, workflowTitle } from "../src/taskSources.js";
 
 const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
 let id = 0;
@@ -221,4 +221,20 @@ test("a to-do says the message that asked for it, only where there is more than 
   assert.equal(by.get("b").who, "Erin Blake");
   assert.equal(by.has("c"), false, "no source, no line");
   assert.equal(todoSources(items, [{ msgs: [groups[0].msgs[0]] }]).size, 0, "one message needs no 'from' on every row");
+});
+
+// A TASK THE ADVISOR RAISED (the owner, 2026-10-28): its own line is not what came in, a name is said once, and a long message's
+// preview ends on a word - "Advisor · Advisor" over words cut at "qualifying donor"
+test("the Advisor's line is set apart, a name said once, a preview cut on a word", () => {
+  assert.equal(isIdeaLine({ Channel: "assistant", ExternalId: "idea:12" }), true);
+  assert.equal(isIdeaLine({ Channel: "assistant", ExternalId: "assistant:2026-10-28 09:51:00" }), false, "the Advisor's post is not an idea's line");
+  assert.equal(isIdeaLine(mail({ ExternalId: "idea:12" })), false, "a mail is a mail");
+  assert.equal(byLine("Advisor", "Advisor", "09:51 AM"), "Advisor · 09:51 AM");
+  assert.equal(byLine("Erin Blake", "Email", "", "09:51 AM"), "Erin Blake · Email · 09:51 AM");
+  const long = `${"Send the year-end statements ".repeat(9)}and the qualifying donor summary`;
+  const ex = groupConversations([mail({ BodyText: long })])[0].msgs[0].excerpt;
+  assert.ok(ex.endsWith("…") && ex.length <= 241, ex);
+  assert.ok(long.startsWith(ex.slice(0, -1)) && long[ex.length - 1] === " ", `ends on a whole word: ${ex}`);
+  assert.match(page, /storedMessages = \(detail\?\.messages \|\| \[\]\)\.filter\(\(m\) => !isIdeaLine\(m\)\)/);
+  assert.match(page, /data-tq-raised[\s\S]{0,400}Raised by/);
 });

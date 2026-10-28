@@ -1096,7 +1096,7 @@ async function ringed(page, at, tid = "") {
   if (tid && r.tid !== String(tid)) note("RING", at, `${tqOf(tid)} was opened and the table shows ${tqOf(r.tid)} (task views drawn: ${r.seen})`);
   if (r.rows.length !== 1) note("RING", at, `${r.rows.length} rail rows ringed with ${tqOf(r.tid)} on the table: ${JSON.stringify(r.rows.map((x) => x.ref || x.key))}`);
   else if (r.rows[0].ref !== tqOf(r.tid)) note("RING", at, `the ringed row is ${r.rows[0].ref || r.rows[0].key}, the card ${tqOf(r.tid)} (task views drawn: ${r.seen})`);
-  if (!/^Ask about this one/.test(r.box) && !`${r.name} ${r.pop}`.includes(tqOf(r.tid)))
+  if (!/^(Ask about this one|Talk to Taskuary)/.test(r.box) && !`${r.name} ${r.pop}`.includes(tqOf(r.tid)))
     note("RING", at, `${tqOf(r.tid)} is on the table and the box says "${r.box}", named "${r.name}"${r.pop ? `, its answer headed "${r.pop}"` : ""}`);
   return r.tid;
 }

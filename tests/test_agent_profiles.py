@@ -172,6 +172,19 @@ class ProfileEditingTests(unittest.TestCase):
         self.s.save_doc('trader', 'The owner wrote this.', 'owner')
         self.assertEqual(self.client.get('/api/doc/trader').json()['content'], 'The owner wrote this.')
 
+    def test_learned_is_edited_with_the_name_and_saved_with_the_token(self):
+        """The setup sweep, 2026-10-28: LEARNED.md's editor showed {{owner_first}} raw."""
+        self.s.set_setting('owner_name', 'Alex Doyle', 'owner')
+        self.s.save_doc('learned', '## Your people\n- {{owner_first}} answers Erin Blake the same day', 'owner')
+        got = self.client.get('/api/doc/learned').json()['content']
+        self.assertIn('- Alex answers Erin Blake', got); self.assertNotIn('{{', got)
+        self.client.put('/api/doc/learned', json={'content': got + '\n- Alex reads the digest first'})
+        self.assertEqual(self.s.get_doc('learned').count('{{owner_first}}'), 2, self.s.get_doc('learned'))
+        self.assertNotIn('Alex', self.s.get_doc('learned'))
+        # ...another document keeps its tokens as written
+        self.s.save_doc('trader', 'Ask {{owner_first}} first.', 'owner')
+        self.assertEqual(self.client.get('/api/doc/trader').json()['content'], 'Ask {{owner_first}} first.')
+
     def test_codex_and_coding_edit_and_run_the_same_document(self):
         self.s.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
         self.s.save_doc('coding', 'Shared coding rules: test every changed behavior.', 'owner')

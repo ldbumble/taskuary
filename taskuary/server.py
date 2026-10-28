@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from . import kinds as task_kinds
 from . import buttons, config, failures, words
 from . import store as store_mod
-from .store import SQLiteStore, is_goal, task_ref
+from .store import SQLiteStore, is_goal, render_doc, retoken_doc, task_ref
 from .ingest import ingest_message, split_message, task_from_message
 from .reports import (PLANNED, REGISTRY, note_app_up, render_report, resolve_cfg, run_due_reports, run_one)
 from . import agents as hub_agents
@@ -8357,8 +8357,16 @@ def get_doc(name: str):
     """Raw for the editor, rendered so you can see what an agent will actually read."""
     name = hub_agents.profile_document(store, name)
     content = _heal_blank_doc(name)
+    if (who := _named_owner(name)): content = render_doc(content, who)
     return {'name': name, 'content': content, 'rendered': store.doc(name) or '',
             'owner': store.owner()}
+
+
+# LEARNED.md IS EDITED WITH THE NAME IN IT (the setup sweep, 2026-10-28): its passes write {{owner_first}} where the name goes, and the
+# editor showed that placeholder raw. It is drawn with the name, and the name typed back is the token again on save (store.retoken_doc)
+def _named_owner(name: str):
+    who = store.owner()
+    return who if name == 'learned' and who['owner'] not in ('', 'the owner') and '{{' not in who['owner'] else None
 
 @app.put('/api/doc/{name}')
 def put_doc(name: str, body: DocBody):
@@ -8369,7 +8377,8 @@ def put_doc(name: str, body: DocBody):
         return {'ok': True, 'restored': True}
     from . import counsel as _counsel
     if name == 'counsel': _counsel.check_budget(store, name, body.content)
-    store.save_doc(name, body.content, ACTOR)
+    who = _named_owner(name)
+    store.save_doc(name, retoken_doc(body.content, who['owner'], who['owner_email']) if who else body.content, ACTOR)
     return {'ok': True}
 
 # ── playbooks: the fourth operator document, one file per kind of job (playbooks.py) ──────

@@ -3,7 +3,7 @@
 // no calendar, so while no Google calendar is on it the card offers this one step: the browser goes to Google asking for
 // calendar.readonly and comes back to this server (googlecal.py), and the box finishes by itself, as Sign in with ChatGPT does.
 // It rides Taskuary's own Google client (the owner, 2026-10-26: "don't want to create my own google client, want to use their own"):
-// nobody creates or pastes one. A build that has none yet says so on the button itself - no instructions to go and make a client.
+// nobody creates or pastes one. A build that has none yet draws no step at all - no instructions to go and make a client.
 import React, { useEffect, useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import api from "./api";
@@ -53,6 +53,8 @@ export function GoogleCalendar({ conn, cfg, reload }) {
   if (signedIn && !detail && conn.PeopleMissing?.length)
     return <Typography data-tq-google-people="" variant="caption" component="div" sx={{ color: DIM, mb: 2 }}>{PEOPLE_MISSING("this account's Google contacts")}</Typography>;
   if (signedIn && !detail) return null;
+  // ...and a build with no Google client draws nothing: a disabled button saying so was a dead box on the card (the setup sweep, 2026-10-28)
+  if (!can && !flow && !detail) return null;
   const start = async () => {
     setBusy(true); setState(""); setDetail("");
     try { const { data } = await api.post(base); setFlow({ ...data, at: Date.now() }); window.open(data.url, "_blank", "noopener"); }
@@ -75,7 +77,7 @@ export function GoogleCalendar({ conn, cfg, reload }) {
         </Typography>
       ) : (
         <Box><Button variant="contained" disableElevation disabled={busy || !can} onClick={start}>
-          {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : can ? G_CAL : G_CAL_NONE}</Button></Box>
+          {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : G_CAL}</Button></Box>
       )}
       {detail && <Typography variant="body2" role={state === "ok" ? undefined : "alert"} sx={{ fontWeight: 600, color: state === "ok" ? "#47654a" : "#6b2733" }}>
         {state === "ok" ? "✓" : "✗"} {detail}</Typography>}

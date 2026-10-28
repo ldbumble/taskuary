@@ -23,7 +23,7 @@ import { writeSetupLine } from "./setupLine.js";
 import { useVerbs } from "./actionRow.js";
 import { buttonOf, cardOf, doneOf, frontierOf, landOn, navMoves, nextOf, openAt, prevOf, reachable, requiredDone } from "./setupSteps.js";
 import { openBugReport } from "./bugReportOpen.js";
-import { AI_SHELF, SETUP_AI } from "./aiShelf.js";
+import { AI_SHELF, AI_WHY, SETUP_AI } from "./aiShelf.js";
 import { label as btnLabel } from "./buttons.js";
 import { plural } from "./timeWords.js";
 
@@ -125,6 +125,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
   const [url, setUrl] = useState(""), [details, setDetails] = useState(false);   // the login's own link; its terminal, hidden
   const [signing, setSigning] = useState(null);                             // {cid, flow, url}: ChatGPT's browser sign-in under way
   const [signFail, setSignFail] = useState(null);                           // {cid}: the last ChatGPT sign-in ENDED without signing in
+  const [instFail, setInstFail] = useState(null);                           // {name, focus}: the last install of a coding tool failed
   const [aboutLine, setAboutLine] = useState("");                           // About your work's question, for the Advisor's line
   const [aboutStep, setAboutStep] = useState("");                           // ...and which question: its mailbox step draws the email cards
   const onAboutStep = useCallback((s) => { setAboutStep(s); setOpen(null); }, []);
@@ -318,7 +319,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
   };
   const planSignin = async (c) => {
     endSignin();                                       // pressed again: the old attempt's listener goes, and this one starts afresh
-    setErr(""); setOpen(null); setBrowse(false); setSignFail(null);
+    setErr(""); setOpen(null); setBrowse(false); setSignFail(null); setInstFail(null);
     const me = { cid: c.ConnectorId }; signRef.current = me;
     const gone = () => signRef.current !== me;
     // ...and read again: the server keeps the failure as setup's fix, so its card is the one that stands with it
@@ -358,7 +359,8 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
   };
   const cancelSignin = () => { endSignin(); setErr(""); };
   const install = async (ai, verb = "Installing") => {
-    setErr(""); setBusy(ai.name); setSaid(`${verb} ${ai.title}… this takes about a minute.`);
+    // ...picked from every card (Pick a different AI): it stands alone while it installs, and with its failure after
+    setErr(""); setBusy(ai.name); setOpen(null); setBrowse(false); setSaid(`${verb} ${ai.title}… this takes about a minute.`);
     try {
       await api.post("/api/cli/install", { name: ai.install });
       const until = Date.now() + INSTALL_MS;
@@ -371,7 +373,9 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
         if (Date.now() > until) throw new Error("the install is taking too long");
       }
       setBusy(""); await pick({ ...ai, installed: true, done: true });   // installed: test it right away - one click, the whole step
-    } catch (e) { setBusy(""); setSaid(""); setErr(`${ai.title} didn't install: ${errText(e)} Pick it again to retry, or pick another AI.`); }
+    // A FAILED INSTALL STANDS ALONE WITH ITS ERROR, as a ChatGPT sign-in that did not finish does (the setup sweep, 2026-10-28): the
+    // whole shelf came back with the failure only in the line, and no card said which one it was
+    } catch (e) { setBusy(""); setSaid(""); setInstFail({ name: ai.name, focus: true }); setErr(`${ai.title} didn't install: ${errText(e)} Pick it again to retry, or pick another AI.`); }
   };
 
   // the bar is never blank: while setup loads it says so, or what went wrong - and the failure is tried again, by itself or by Try again
@@ -385,7 +389,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
   const byType = (types) => types.flatMap((t) => conns.filter((c) => c.Type === t));
   // plain: the same card, its state in a first-time owner's words (connCardOf) - the Connections page keeps its own
   // ...pressing another card is the person moving on: the failed sign-in keeps its words on its card, but no longer stands alone
-  const moveOn = () => setSignFail((f) => f && { ...f, focus: false });
+  const moveOn = () => { setSignFail((f) => f && { ...f, focus: false }); setInstFail((f) => f && { ...f, focus: false }); };
   const card = (c, simple) => connCardOf(c, sources, () => { moveOn(); setOpen((o) => (o?.id === c.ConnectorId ? null : { id: c.ConnectorId, simple })); }, true);
   // the CLIs read as cards the catalogue would draw: the AI's name, its maker's logo, and its state in the same plain words
   // ...in words that say what to do: one that can't install here says what to pick instead, one installed needs its sign-in
@@ -393,6 +397,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
   const stateOf = (ai) => (busy === ai.name ? ["on", "Checking it works…"]
     : fix?.name === ai.name ? ["failing", fix.fix === "signin" ? "Needs sign-in" : fix.fix === "install" ? "Not installed - press Install"
       : ["update", "retry"].includes(fix.fix) ? "Signed in · not answering" : !ai.installed ? noInstall : "Not answering"]
+    : instFail?.name === ai.name && !ai.installed ? ["failing", "Didn't install - pick it to try again"]
     : st.step !== "ai" && st.brain.name === ai.title ? ["on", "Your AI - it sorts what comes in"]
     // ...one whose test failed is not connected, and is not lit once another card is the pick (firstrun.FAILED; the UI audit, 2026-10-21)
     : ai.failed && ai.installed ? ["off", "Didn't pass the test - pick it to try again"]
@@ -419,7 +424,10 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
       : planOn ? "Your AI - it sorts what comes in" : "Not set up"}` + " · sign in with your ChatGPT account",
     // ...and pressable while a sign-in waits: pressing it again starts a fresh one - it did nothing, and the old one never ended
     go: busy || planOn ? undefined : () => planSignin(plan) };
-  const keyCards = byType(SETUP_AI).map((c) => ({ ...card(c, true), type: c.Type, pick: `connector:${c.ConnectorId}` }));
+  const keyCards = byType(SETUP_AI).map((c) => {
+    const k = card(c, true);
+    return { ...k, desc: AI_WHY[c.Type] ? `${k.desc} · ${AI_WHY[c.Type]}` : k.desc, type: c.Type, pick: `connector:${c.ConnectorId}` };
+  });
   // WHAT MOST PEOPLE HAVE LEADS (the non-coder audit, 2026-10-17): the first four were ChatGPT and three coding tools, with the
   // organisation's card and the keys under More AI. ChatGPT, the organisation card when there is one, the keys - and the coding
   // tools under a heading of their own
@@ -459,7 +467,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
   // to fix"). Checking: say so. Needs sign-in: one button that runs the CLI's own login, and the check runs by itself when it ends.
   // the card JUST tried stands alone with its failure - a failure of an earlier pick (the server's fix) stood there instead, and the
   // ChatGPT card just pressed was nowhere on the screen (2026-10-20)
-  const justFailed = signFail?.focus && plan && signFail.cid === plan.ConnectorId ? planKey : null;
+  const justFailed = signFail?.focus && plan && signFail.cid === plan.ConnectorId ? planKey : instFail?.focus ? `cli-${instFail.name}` : null;
   const focus = !open && focusOf({ ...st, step: q === "ai" ? "ai" : st.step }, planBusy ? "" : busy, browse,
     signing ? `c${signing.cid}` : planBusy ? busy : justFailed);
   const check = () => (fix?.key ? planCheck(Number(fix.key.slice(1))) : fixed && pick(fixed));

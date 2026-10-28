@@ -4,15 +4,14 @@ import test from "node:test";
 import { clickNav, startHarness } from "./harness.mjs";
 
 const CHAT_CARDS = [
-  ["teams", "Microsoft Teams", /every chat this connector brings in/i],
-  ["slack", "Slack", /every chat this connector brings in/i],
-  ["telegram", "Telegram", /every chat this connector brings in/i],
-  ["whatsapp", "WhatsApp", /inbound messages from every chat/i],
-  ["imessage", "Apple Messages", /every chat Messages\.app brings in/i],
-  ["discord", "Discord", /every chat this connector brings in/i],
+  ["teams", "Microsoft Teams"], ["slack", "Slack"], ["telegram", "Telegram"],
+  ["whatsapp", "WhatsApp"], ["imessage", "Apple Messages"], ["discord", "Discord"],
 ];
 
-const fieldLabel = "Check for new messages every N seconds (blank = 30, 0 = no fast polling)";
+// one short label and one line of hint, folded under Advanced after the token (the setup sweep, 2026-10-28): the label was cut off
+// and a five-line hint led Credentials. Settings' Background sync help (below) keeps the full story
+const fieldLabel = "Check for new messages every (seconds)";
+const fieldHelp = "Blank = 30; 0 = no fast check (background sync and Sync now still read it).";
 
 async function clickVisibleExact(page, text, selector = "div,p,span") {
   const clicked = await page.evaluate(({ wanted, query }) => {
@@ -86,7 +85,7 @@ test("PW-003/PW-004/PW-005 render the six chat clocks and global off help read-o
   await page.waitForFunction(() => document.body.innerText.includes("Apple Messages"), { timeout: 10000 });
 
   const rendered = [];
-  for (const [, name, coverage] of CHAT_CARDS) {
+  for (const [, name] of CHAT_CARDS) {
     await clickVisibleExact(page, name, "p");
     await page.waitForSelector('input[placeholder="30"]', { timeout: 5000 });
     const field = await page.$eval('input[placeholder="30"]', (input) => {
@@ -95,23 +94,14 @@ test("PW-003/PW-004/PW-005 render the six chat clocks and global off help read-o
         value: input.value,
         label: control?.querySelector("label")?.textContent?.trim() || "",
         helper: control?.querySelector(".MuiFormHelperText-root")?.textContent?.trim() || "",
+        advanced: !!input.closest("[data-tq-advanced-fold]"),
       };
     });
     rendered.push(`${field.label} ${field.helper}`);
     assert.equal(field.value, "", `${name}: the synthetic blank value stays blank`);
     assert.equal(field.label, fieldLabel, `${name}: the visible field states default and zero`);
-    assert.match(field.helper, coverage, `${name}: connector intake coverage is visible`);
-    assert.match(field.helper, /recurring fast clock is separate from the full background-sync clock/i, name);
-    assert.match(field.helper, /Blank uses 30 seconds/i, name);
-    assert.match(field.helper, /0 disables this fast poll/i, name);
-    assert.match(field.helper, /recurring background sync can still poll the connector/i, name);
-    assert.match(field.helper, /manual Sync now, action-time freshness checks, and startup catch-up can still fetch it/i, name);
-    assert.match(field.helper, /Background sync 0 in Settings disables both recurring clocks/i, name);
-    assert.match(field.helper, /explicit and startup fetches remain available/i, name);
-    if (name === "WhatsApp") {
-      assert.match(field.helper, /replies in the notification chat are polled too/i);
-      assert.match(field.helper, /sending notifications is event-driven/i);
-    }
+    assert.equal(field.helper, fieldHelp, `${name}: one line says blank, zero and what still reads it`);
+    assert.equal(field.advanced, true, `${name}: the clock is under Advanced, after the token`);
 
     await press(page, "[data-tq-browse-back]");
     // the list is back when the open card is gone - "Apple Messages" alone is also the title of that card while it is open

@@ -391,6 +391,9 @@ def choose_key(store, typ: str, secret: str, cid: int = None, config: dict = Non
     return out
 
 
+KEYLESS = ('ollama',)              # the AI cards that run without a key
+
+
 def _choose_key(store, c, typ: str, secret: str, config: dict = None) -> dict:
     from .channels import test_connector
     secret = str(secret or '').strip()
@@ -403,8 +406,11 @@ def _choose_key(store, c, typ: str, secret: str, config: dict = None) -> dict:
         try: saved = json.loads(c.get('ConfigJson') or '{}')
         except ValueError: saved = {}
         if not (config['base_url'] or saved.get('base_url') or llm.OPENAI_COMPATIBLE['hipaa_ai'][0]): return {'ok': False, 'why': llm.GATEWAY_MISSING}
-    if len(secret) < 12: return {'ok': False, 'why': "That doesn't look like a whole key - copy it again and paste the full thing."}
-    row = {'ConnectorId': c['ConnectorId'], 'Secret': secret, 'Active': 1}
+    # a local model server needs no key (llm: keyless ollama): its card says "optional", and Connect stayed shut on an empty box. A key
+    # that IS given is still checked whole
+    if not (typ in KEYLESS and not secret) and len(secret) < 12:
+        return {'ok': False, 'why': "That doesn't look like a whole key - copy it again and paste the full thing."}
+    row = {'ConnectorId': c['ConnectorId'], 'Active': 1, **({'Secret': secret} if secret else {})}
     if config:
         try: conf = json.loads(c.get('ConfigJson') or '{}')
         except ValueError: conf = {}
@@ -415,7 +421,9 @@ def _choose_key(store, c, typ: str, secret: str, config: dict = None) -> dict:
         store.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 0}, 'owner')
         # the gateway's own words already say which of the address or the code is wrong (llm.gateway_problem)
         if typ == 'hipaa_ai': return {'ok': False, 'why': str(out.get('detail') or llm.GATEWAY_SILENT)[:300]}
-        return {'ok': False, 'why': f"That key didn't work ({str(out.get('detail') or 'the provider said no')[:200]}). Copy all of it again and press Connect."}
+        said = str(out.get('detail') or 'the provider said no')[:200]
+        if not secret: return {'ok': False, 'why': f"{c.get('Name') or typ} didn't answer ({said}). Check it is running and the model is named, then press Connect."}
+        return {'ok': False, 'why': f"That key didn't work ({said}). Copy all of it again and press Connect."}
     was = _brains(store)
     _everywhere(store, f"connector:{c['ConnectorId']}")
     if (why := _prove(store)):
@@ -428,7 +436,8 @@ def _choose_key(store, c, typ: str, secret: str, config: dict = None) -> dict:
             # the jobs said, not the model names behind them - Settings has those for whoever wants them
             return {'ok': True, 'why': "Your access code works - a quick model sorts what comes in and runs the Assistant"
                                        + (', a stronger one does the agent work.' if m['agent'] else '.')}
-    return {'ok': True, 'why': f"Your {c.get('Name') or typ.capitalize()} key works - it will sort what comes in."}
+    name = c.get('Name') or typ.capitalize()
+    return {'ok': True, 'why': f"Your {name} key works - it will sort what comes in." if secret else f"{name} works - it will sort what comes in."}
 
 
 def choose_connector(store, cid: int) -> dict:
@@ -707,11 +716,23 @@ def learn(store, ans: dict, wait: bool = False, docs=DRAFTS):
             st = ds[d]
             try: histgen.generate(store, d); st.update(state='ready', why='')
             except Exception as e:
-                logger.info(f'setup: {d} not learned from the mail - {e}'); st.update(state='failed', why=str(e)[:240])
+                logger.info(f'setup: {d} not learned from the mail - {e}'); st.update(state='failed', why=_unread(store, e))
             with _LOCK:
                 if st['again']: st.update(state='running', again=False); ds['_q'].append(d)
     if wait: go()
     else: threading.Thread(target=go, daemon=True, name='setup-learn').start()
+
+
+# A MAILBOX CONNECTED BUT NOT YET READ is not "connect a mailbox" (the setup sweep, 2026-10-28): histgen finds no history until the
+# first sync lands, and the screen told an owner who had just connected one to go and connect one
+FIRST_READ = 'The first read is still running - press Write it again in a minute.'
+
+
+def _unread(store, e) -> str:
+    why = str(e)[:240]
+    if 'connect a mailbox' not in why: return why
+    try: return FIRST_READ if sources(store) else why
+    except Exception: return why
 
 
 def job_state(store, name: str = 'job') -> dict:

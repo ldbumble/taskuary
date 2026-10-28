@@ -60,6 +60,9 @@ test("setup: every AI card says what happened, never the opposite, and opens aga
       await until(page, () => /didn't install|can't be installed|isn't on this computer|Can't install/i.test(document.body.innerText));
       row.failure = (await line(page)).slice(0, 90);
       assert.doesNotMatch(row.failure, /works|is ready|connected/i, `${row.card}: a failure is never said as a success`);
+      // ...and the card that failed stands alone, saying so, as ChatGPT's failed sign-in does (the setup sweep, 2026-10-28)
+      if (/didn't install/.test(row.failure)) await until(page, (k) => document.querySelectorAll("[data-tq-firstrun] [data-tq-card]").length === 1
+        && /Didn't install - pick it to try again/.test(document.querySelector(`[data-tq-firstrun] [data-tq-card="${k}"]`)?.innerText || ""), c.key);
     } else if (/ChatGPT/.test(c.title)) {
       await until(page, () => /sign-in didn't finish/i.test(document.querySelector(".tq-next-txt")?.innerText || ""));
       row.failure = (await line(page)).slice(0, 90);
@@ -72,6 +75,9 @@ test("setup: every AI card says what happened, never the opposite, and opens aga
       // an organisation's gateway (HIPAA AI) needs its address too, or Connect stays off - an address that answers nothing here
       const gw = await page.evaluateHandle(() => [...document.querySelectorAll('[data-tq-firstrun] label')].find((l) => /Gateway address/i.test(l.innerText))?.parentElement?.querySelector('input'));
       if (gw.asElement()) await gw.asElement().type("https://ai.northwind.example");
+      // ...and a local model server names its model (its key is optional; the model is what it cannot run without)
+      const model = await page.evaluateHandle(() => [...document.querySelectorAll('[data-tq-firstrun] label')].find((l) => /model/i.test(l.innerText))?.parentElement?.querySelector('input'));
+      if (model.asElement()) await model.asElement().type("llama3.2");
       const connect = () => page.evaluate(() => { const b = [...document.querySelectorAll("[data-tq-firstrun] button")].find((x) => x.innerText.trim() === "Connect" && !x.disabled); b?.click(); return !!b; });
       assert.ok(await connect(), `${row.card}: Connect`);
       await until(page, () => /✗/.test(document.querySelector("[data-tq-firstrun]")?.innerText || ""), null, 120000);

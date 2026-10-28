@@ -7,7 +7,7 @@ const fn = (name) => { const at = cv.indexOf(`function ${name}(`); return cv.sli
 
 // #242: a data card's Save and "Use it" sent Active: true, so editing a card the owner had switched off turned it back on.
 // Save saves the settings; the card's own switch is what turns it on - and since Save was the only way a data card ever
-// came on, the switch sits on the Connection tab right under Save, so a first setup is not stranded off.
+// came on, the switch sits on the Setup tab right under Save, so a first setup is not stranded off.
 test("a data card's Save and Use it save settings, never switch the card on", () => {
   const dd = fn("DataDetail");
   assert.doesNotMatch(dd, /Active: true/, "no post of DataDetail's turns the card on by itself");
@@ -19,8 +19,8 @@ test("a data card has its own on/off switch, beside Save, saved on the press lik
   const dd = fn("DataDetail");
   assert.match(dd, /const setActive = \(on\) => draft\.ctx\.stageConn\(\{ ConnectorId: conn\.ConnectorId, Active: on \}\);/);
   assert.match(dd, /<Switch data-tq-card-on="" checked=\{!!conn\.Active\} disabled=\{draft\.flipping\} onChange=\{\(e\) => setActive\(e\.target\.checked\)\} \/>/);
-  // on the Connection tab, after the Save row - where the person who just saved is looking
-  const tab = dd.slice(dd.indexOf('{tab === "Connection" && ('));
+  // on the Setup tab, after the Save row - where the person who just saved is looking
+  const tab = dd.slice(dd.indexOf('{tab === "Setup" && ('));
   assert.ok(tab.indexOf("data-tq-card-on") > tab.indexOf('"Save"}</Button>'), "the switch comes after Save");
-  assert.ok(tab.indexOf("data-tq-card-on") < tab.indexOf("<CloudObjects"), "...on the Connection tab");
+  assert.ok(tab.indexOf("data-tq-card-on") < tab.indexOf("<CloudObjects"), "...on the Setup tab");
 });

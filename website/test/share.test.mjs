@@ -102,7 +102,7 @@ test("Allow saving files on the Microsoft and Google cards - a choice, never the
   assert.match(fa, /api\.post\(`\/api\/connectors\/\$\{conn\.ConnectorId\}\/google\/files`, \{ on \}\)/);
   assert.match(cv, /api\.post\(`\/api\/connectors\/\$\{conn\.ConnectorId\}\/ms\/signin`, \{ files: !!want, code \}\)/);
   assert.match(cv, /useState\(!!cfg\.allow_files\)/);
-  assert.match(cv, /conn\.Type === "gmail" && <Box sx=\{\{ mb: 2 \}\}><GoogleFiles/);
+  assert.match(cv, /conn\.Type === "gmail" && <GoogleFiles/);
 });
 
 test("the share switch's hover says Windows may ask about its firewall - not a line", () => {

@@ -414,11 +414,12 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>kind</code> - coding | general | task</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="meeting-new"><code>meeting.new</code><a class="anchor" href="#meeting-new" aria-label="Link to this section">#</a></h3>
-<p>Set up a meeting or call (&quot;a meeting with Gail about the budget friday&quot;). On a task whose thread asks for a time it lights that task&#39;s Find a time; with none it says scheduling lives there and writes the meeting into New as the owner&#39;s to-do; with no calendar, the card that connects one. Nothing goes out before the owner&#39;s Send. Never an agent&#39;s job.</p>
+<p>Set up a meeting or call (&quot;a meeting with Gail about the budget friday&quot;). On a task whose thread asks for a time it lights that task&#39;s Find a time; with none it brings up New → Meeting filled in, whose Find times reads the calendars; with no calendar, the card that connects one. Nothing goes out before the owner&#39;s Send. Never an agent&#39;s job.</p>
 <ul>
 <li><code>who</code> (optional) - the names or addresses it is with</li>
 <li><code>about</code> (optional) - its subject</li>
-<li><code>when</code> (optional) - the day or time they said</li>
+<li><code>when</code> (optional) - the day they said as YYYY-MM-DD, or this_week / next_week</li>
+<li><code>minutes</code> (optional) - 15, 30, 45 or 60</li>
 <li><code>ref</code> (optional) - the task it is about (TQ-0123) when it is not the one on the table</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="task-setup"><code>task.setup</code><a class="anchor" href="#task-setup" aria-label="Link to this section">#</a></h3>
@@ -565,9 +566,9 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>name</code></li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="memory-remember"><code>memory.remember</code><a class="anchor" href="#memory-remember" aria-label="Link to this section">#</a></h3>
-<p>Keep a fact about how the owner works, in LEARNED.md, at once. Who reports to whom and who owns what is people.relate.</p>
+<p>Keep a fact or rule the owner tells you, at once - those five are LEARNED.md, the memory every reader uses | style: a rule about HOW they write - greetings and salutations (&quot;write Mrs <surname> to women, never her first name&quot;), sign-off, tone, length, formatting, words to use or avoid - saved to their writing style, STYLE.md&#39;s Owner notes, which every draft reads. Who reports to whom and who owns what is people.relate.</p>
 <ul>
-<li><code>note</code> - the fact, in the owner&#39;s words (&quot;Gail moved to Ops&quot;, &quot;Ray handles payroll for me&quot;, &quot;I put renewals off to Friday&quot;, &quot;I don&#39;t care about the legacy export job any more&quot;)</li>
+<li><code>note</code> - it, in the owner&#39;s words (&quot;Gail moved to Ops&quot;, &quot;Ray handles payroll for me&quot;, &quot;I put renewals off to Friday&quot;, &quot;I don&#39;t care about the legacy export job any more&quot;)</li>
 <li><code>about</code> (optional) - the person&#39;s address or name, for a people line</li>
 <li><code>section</code> (optional) - , always: people (who someone is to them, how they deal with them) | care (what they are responsible for and what they do NOT care about - a legacy process, a system no longer theirs: triage and the report gate then make no task of it) | work (their rhythm) | promises | bring (what the Advisor may raise)</li>
 <li><code>replaces</code> (optional) - the key of the line it makes untrue, closed and kept as history (memory.about gives the keys)</li>
@@ -740,7 +741,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">Runs at once and changes nothing.</p>
     </article>
     <nav class="pager"><a class="pn prev" href="./assistant"><span>Previous</span>Assistant buttons</a><a class="pn next" href="./reports"><span>Next</span>Reports and the Advisor</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.61 · updated 2026-10-28</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.62 · updated 2026-10-28</p>
   </main>
 </div>
 <script src="./docs.js"></script>

@@ -200,6 +200,17 @@ def _playbook_menu(store=None) -> str:
         logger.debug(f'ingest: playbook menu skipped - {e}'); return ''
 
 
+def danger(store, msg: dict, mid=None, verdict: dict = None) -> str:
+    """What this message reads as trying to make an AI do - the verdict's own `danger`, the one triage gave it on its way in (msg
+    `_danger`), else the reading kept on the message (triage or ranking) - or '' for none."""
+    try: kept = (store.get_message(int(mid)) or {}).get('Danger') if mid else None
+    except (TypeError, ValueError): kept = None
+    for v in ((verdict or {}).get('danger') if isinstance(verdict, dict) else None, (msg or {}).get('_danger'), kept):
+        s = ' '.join(str(v or '').split())
+        if s and s.lower() not in ('null', 'none', 'no', 'false'): return s[:160]
+    return ''
+
+
 def auto_start_ok(store, msg: dict, mid: int, kind: str) -> tuple:
     """May this task start ITS worker by itself? (ok, why-not). Both kinds start by default (owner,
     2026-09-05, PW-069): coding opens its CLI, general opens its assistant session, a personal `task`
@@ -209,6 +220,9 @@ def auto_start_ok(store, msg: dict, mid: int, kind: str) -> tuple:
     unattended start only: the task is still triaged, shown and dispatchable by hand."""
     cfg = store.get_settings()
     said = senders._said
+    # MAIL THAT TRIES TO STEER AN AI STARTS NOTHING BY ITSELF (the Advisor design rev 2, the owner's ruling 2026-10-28): what triage or
+    # ranking read it as trying to make an AI do (message.Danger - the model's reading, never a word list) holds the start for the owner
+    if (d := danger(store, msg, mid)): return False, said(f'It reads as an attempt to steer an AI ({d}) - nothing starts until you press.')
     if kind == 'general':
         if cfg.get('general_auto_enabled', '1') != '1': return False, said(f"Starting an agent by itself is switched off in {words.name('coding')}.")
         from . import general
@@ -231,6 +245,7 @@ def _start_workflow(store, msg: dict, intent: dict, actor: str, note: str = '') 
     steps = flow.steps_of(workflows.cfg_of(src))
     agent = not flow.is_flow(workflows.cfg_of(src)) or any(s.get('kind') == 'agent' for s in steps)
     if agent:
+        if (d := danger(store, {}, None, intent)): msg['_danger'] = d
         ok, why = auto_start_ok(store, msg, msg.get('_mid'), 'general')
         if not ok:
             msg['_workflow_held'] = f"Matches the workflow \"{workflows.definition(store, src)['title']}\", which hands it to an agent - {why}"
@@ -1090,6 +1105,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # (draft_task_fields). Nothing downstream second-guesses it - auto_start_ok only asks who may start.
         f = draft_task_fields(msg, urgent=pol['action'] == 'escalate' or bool(intent.get('urgent')), kind=intent.get('kind'),
                               important=intent.get('priority') == 'important')
+        if (d := danger(store, {}, None, intent)): msg['_danger'] = d         # read before the route keeps it: the start below asks
         if intent['intent'] == 'reply_only': f['kind'] = 'reply'
         # CODING STAYS CODING (the owner, 2026-09-25: "why not ask the coding CLI to choose it instead of turning it
         # into a general agent?"). A coding job whose repository triage could not tell used to become the
@@ -1786,6 +1802,8 @@ def carry_on_why(store, tid, msg: dict, mid, follow: dict | None) -> str:
     t = store.get_task(tid) or {}
     if not follow or follow.get('degraded') or follow.get('intent') != 'task': return 'not new work'
     if msg.get('no_auto'): return 'the channel waits for the owner'
+    # ...nor a line that reads as steering an AI (the owner, 2026-10-28): it waits for the owner's press
+    if (d := danger(store, msg, mid, follow)): return f'it reads as an attempt to steer an AI ({d}) - it waits for you'
     if t.get('Status') == 'dropped': return 'the task was dismissed'
     if live_agent(store, tid): return 'an agent is live on it'
     if general.handles(t):
@@ -1808,6 +1826,7 @@ def pass_in_why(store, tid, msg: dict, mid, follow: dict | None) -> str:
     if store.get_setting('answer_to_agent') == 'off': return 'passing lines to the agent is switched off'
     if msg.get('no_auto'): return 'the channel waits for the owner'
     if live_agent(store, tid) not in task_kinds.AGENT: return 'no live session to pass it to'
+    if (d := danger(store, msg, mid, follow)): return f'it reads as an attempt to steer an AI ({d}) - it waits for you'
     ok, why = senders.known(store, msg, exclude_mid=mid, deep=True)
     return '' if ok else str(why)
 

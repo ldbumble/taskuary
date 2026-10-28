@@ -81,8 +81,11 @@ BRIEF = 12      # words beside a component brought up (the owner, 2026-10-21: "f
 
 
 def words(say: str) -> int:
-    """Words as the owner reads them: a markdown link counts as its label."""
-    return len(re.sub(r'\[([^\]]*)\]\([^)]*\)', r'\1', say or '').split())
+    """Words as the owner reads them: a markdown link counts as its label. A kept fact's own words, quoted back, and the readers its save
+    names ("read by triage · drafts") are not the Assistant's prose (the owner's ruling, 2026-10-28: every save says where it went and who
+    reads it) - they are not counted."""
+    say = re.sub(r'\(read by [^()]*(?:\([^()]*\)[^()]*)*\)|“[^”]*”', '', say or '')
+    return len(re.sub(r'\[([^\]]*)\]\([^)]*\)', r'\1', say).split())
 
 
 def brief(step, say: str) -> bool:

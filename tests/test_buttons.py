@@ -181,9 +181,12 @@ class TheAssistantIsToldTodaysButtons(unittest.TestCase):
         line = b.split('THE BUTTONS BY NAME')[1].split('\n')[1]
         said = set(re.findall(r'"([^"]+)"', line))
         vs = [v for v in list(toolcatalog.DECISIONS) + list(toolcatalog.CHIP_TOOL) if v in buttons.VERBS]
-        want = {buttons.label(v) for v in vs} | {w for v in vs for w in (buttons.VERBS[v].get('states') or {}).values()}
-        self.assertEqual(said, want)
+        # ONE LABEL PER BUTTON in the index (the owner, 2026-10-28: trim to fit) - the names it wears in a state are in tools.describe
+        self.assertEqual(said, {buttons.label(v) for v in vs})
         self.assertFalse(dropped_in(b))
+        for v in vs:
+            d = toolcatalog.describe(v if v in toolcatalog.DECISIONS else toolcatalog.CHIP_TOOL[v])
+            for w in [buttons.label(v), *(buttons.VERBS[v].get('states') or {}).values()]: self.assertIn(f'"{w}"', d, v)
 
     def test_each_decision_quotes_only_its_own_button(self):
         for v, text in toolcatalog.DECISIONS.items():

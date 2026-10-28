@@ -25,7 +25,10 @@ _ROLES = ' | '.join(f"{k} ({r['title'].lower()})" for k, r in roles.ROLES.items(
 PURPOSE = {
     'task.create_from_message': 'hand this message to an agent or put it on the list - `kind`: coding | general | task',
     'task.create_from_text':    ('a new job with no message behind it - `kind`: task (a to-do or reminder the owner does '
-                                 'themselves, no agent) | general (a regular agent) | coding, `text`, and a short `title` in '
+                                 'themselves, no agent) | general (a regular agent) | coding | send (a new message the owner starts, '
+                                 'to someone - `to`: their name or address; drafted in their voice for their Send, never sent from here) | '
+                                 'goal (an outcome with a date, its steps tasks) | dashboard (a page of numbers kept up to date), `text`, '
+                                 'and a short `title` in '
                                  'your own words for the job (never "send it to the agent"). Never for a task that '
                                  'already exists (a TQ ref, or a row on THE RAIL BY NAME): starting an agent on one is '
                                  'dispatch.prepare, its own last session is agent.continue, and "remind me about it" is '
@@ -66,7 +69,13 @@ PURPOSE = {
                                  'Advisor may raise) - those five are LEARNED.md, the memory every reader uses | style: a rule about HOW they '
                                  'write - greetings and salutations ("write Mrs <surname> to women, never her first name"), sign-off, tone, '
                                  'length, formatting, words to use or avoid - saved to their writing style, STYLE.md\'s Owner notes, which '
-                                 "every draft reads; `about`: the person's address or name, for a people line; `replaces`: the key of the line "
+                                 'every draft reads; with `about` (one person: "write to Gail informally") it is kept for that person alone, '
+                                 'read only by the drafts to them | soul: who the owner IS, lasting - their title, company, the systems and '
+                                 'repositories they use ("I\'m now the AP lead", "our ERP is Intacct") - SOUL.md, which triage, drafts, '
+                                 'agents and you read | counsel: how YOU should behave and speak to the owner ("be shorter with me", "don\'t '
+                                 'walk me through the FYI") - COUNSEL.md, your own instructions. SOUL and COUNSEL are added to, never '
+                                 'rewritten; a fact about their job or about what becomes a task is care or work, never these. '
+                                 "`about`: the person's address or name, for a people or style line; `replaces`: the key of the line "
                                  'it makes untrue, closed and kept as history (memory.about gives the keys). Who reports to whom and who owns '
                                  'what is people.relate'),
     'memory.wrong':             ('take a line Taskuary learned out of its memory - `key` (from memory.about or memory.list), `how`: wrong '
@@ -138,6 +147,19 @@ PURPOSE = {
                                  'from Gail until Monday" is select sender: Gail. Runs at once and the count is said'),
     'pipe.close':               ('close a SET at once - `select` (below): each task in it is marked done, each notice read. "Close all '
                                  'the tasks from Priya" is select sender: Priya. Runs at once and the count is said'),
+    # ROWS THE MODEL CHOSE, each by its own button (bulk.py, the owner 2026-10-28: "dismiss the spam"): `select` with `keys` - the TQ refs
+    # and m-numbers pipe.read printed - names a set no field can ("what looks like spam"). Code refuses what a sweep never touches
+    'pipe.remove':              (f'{L("not_ours")} for a SET at once - `select` (below; `keys`: the rows you judged, from pipe.read): each mail is filed, each '
+                                 f'task removed ({L("remove")}), nothing deleted - "dismiss the spam", "get rid of these newsletters". `learn`: true only '
+                                 'when the owner says "from now on" too - then triage learns from each; otherwise it teaches nothing. Never '
+                                 'touches work waiting on the owner, an agent at work, a draft waiting for its Send or a goal - those are '
+                                 'left and said. Runs at once; the receipt lists every row as its link'),
+    'pipe.block':               ('stop a SET\'s senders for good - only when the owner says so ("and stop them", "block them", "unsubscribe '
+                                 'me") - `select` as pipe.remove takes it; `how`: rule (the default: an exclusion rule per sender in Settings, '
+                                 'their mail never reaches triage again) | unsubscribe (a mailing list: its Unsubscribe comes up lit, one '
+                                 'list at a time - the owner presses it). "Dismiss the spam" alone is pipe.remove, never this'),
+    'pipe.mine':                (f'{L("mine")} for a SET of mail - `select`; each becomes a task of the owner\'s, no agent. A row already a '
+                                 'task is left as it is'),
     'review.each':              ('"approve all the drafts": brings the next draft waiting for a Send up with its Send lit, and says how many '
                                  'are left - each one still goes only by its own press; CALL it again for the one after'),
     'button.light':             ('light any button a row draws, by its name - `button`: the verb (THE BUTTONS BY NAME, or a row\'s own: '
@@ -172,13 +194,26 @@ PURPOSE = {
     'connection.pause':         'switch a connection off - `name`; nothing is deleted',
     'connection.resume':        'switch a connection back on - `name`',
     'script.start':             'start a script by its name: walk me through my tasks | set up a report',
+    # THE BUTTONS THAT ARE A PAGE'S ALONE (concierge._paged, the whole-app design 2026-10-28): the page comes up at the thing
+    'rule.change':              ('change or delete one routing rule (Settings → Routing policies) - `about`: words naming it, as rules.list '
+                                 'says it (its sender, pattern or name); `how`: edit (the default) | remove. Adding a rule for a sender '
+                                 'is preference.sender_rule'),
+    'deleted.restore':          ('bring back something removed in the last 30 days - a report, workflow, dashboard, routing rule or profile - '
+                                 '`what`: its title as deleted.list says it'),
+    'hub.comment':              ("add a comment to a Hub post - `post`: its number (#12, as knowledge.search prints it), `text`: the "
+                                 "comment in the owner's words. Others read the Hub: it goes only by the owner's press"),
+    'hub.vote':                 'vote a Hub post up or down - `post`: its number; `up`: false for down',
 }
 
 # THE APP'S OWN KNOBS - reports, settings, connections, scripts - named by what they do. They ran at once, put back from the receipt
 # (the tiers, 2026-09-18) until the owner ruled out undo and the chat's own acts (2026-10-19): each is its page's button now (concierge._route).
 # ...and a fact about the owner's own world with no button and no page to bring up: kept at once and said (concierge._relate)
 # ...and how the owner works with them (slice 7, 2026-10-25): a line taken out of the memory is kept and said the same way (concierge._memory)
-KEPT = frozenset({'people.relate', 'memory.wrong'})
+KEPT = frozenset({'people.relate', 'memory.wrong', 'memory.remember'})
+# ...and a SET named in the owner's words, whose words are the press (pipe.clear's ruling, 2026-10-20; bulk.py 2026-10-28) - a phone asks yes or no
+SETS = frozenset({'pipe.clear', 'pipe.defer', 'pipe.close', 'pipe.remove', 'pipe.block', 'pipe.mine'})
+# ...and the acts whose button is a page's alone: the page comes up at the thing, the owner presses there
+PAGED = frozenset({'rule.change', 'deleted.restore', 'hub.comment', 'hub.vote'})
 INSTANT = frozenset({'report.run', 'report.pause', 'report.resume', 'report.route', 'report.edit', 'setting.set', 'task.defer', 'task.watch',
                      'connection.test', 'connection.pause', 'connection.resume', 'script.start'})
 
@@ -252,7 +287,8 @@ def selector(store=None, live: bool = True) -> str:
         lines.append('  lane       ' + ' | '.join(v['lane']))
     else: lines += ['  category   exactly one of the categories SELECT VALUES IN THE PIPE NOW names (with the owner\'s words)',
                     '  kind       one of the kinds it names', '  lane       one of the lanes it names']
-    lines += ['  sender     an address or a name, matched on the sender only',
+    lines += ['  keys       the rows you chose: the TQ refs and m-numbers pipe.read printed',
+              '  sender     an address or a name, matched on the sender only',
               '  contains   words that must appear in the subject',
               '  older_than_hours  a number',
               '  everything true - every item in the pipe except an agent waiting or working; only when the owner means all',
@@ -283,10 +319,11 @@ def block(store=None) -> str:
         "the item on the table is the target. A decision about a DIFFERENT item than the table's puts the",
         'words that name it in params.on. A SET of items goes in params.select (SELECT below).',
         '',
-        'WHERE THINGS ARE - look before you guess:',
+        'WHERE THINGS ARE - look before you guess (the tool, and its params):',
     ]
+    # ...as the tool and its params, not a whole CALL line apiece: the same wrapper seventeen times was 500 characters of the index (2026-10-28)
     for said, kind, params in WHERE:
-        lines.append(f'  {said} -> CALL: {{"kind": "{kind}", "params": {json.dumps(params)}}}')
+        lines.append(f'  {said} -> "{kind}" {json.dumps(params)}')
     lines += ['', """TOOLS, IN BUCKETS. CALL tools.list with {"bucket": "<name>"} for a bucket's tools,""",
               'or tools.describe with {"kind": "<tool>"}. A tool you know, CALL directly.']
     for name, what, kinds in BUCKETS:
@@ -295,9 +332,11 @@ def block(store=None) -> str:
     # look-ups (agents.now, approvals.list) only behind a `look` bucket the index never named (the 2026-10-20 query walk)
     shown = {k for _, k, _ in WHERE} | {'tools.list', 'tools.describe'}
     lines.append('  look - more look-ups: ' + ', '.join(k for k in READS if k not in shown))
-    lines += ['', 'THE BUTTONS BY NAME (tool "name"/"name in a state") - use only these names:',
-              '  ' + ', '.join([f'{k} {_names(k)}' for k in DECISIONS if k in buttons.VERBS and _has(store, k)]
-                               + [f'{t} {_names(v)}' for v, t in CHIP_TOOL.items()]),
+    # ...ONE LABEL PER BUTTON: the names it wears in a state ("Send anyway", "All read, next") are in tools.describe - the line was a
+    # seventh of the index (the owner, 2026-10-28: "keep the index at 7950 by trimming")
+    lines += ['', 'THE BUTTONS BY NAME (tool "name"; tools.describe has its other names) - use only these names:',
+              '  ' + ', '.join([f'{k} "{L(k)}"' for k in DECISIONS if k in buttons.VERBS and _has(store, k)]
+                               + [f'{t} "{L(v)}"' for v, t in CHIP_TOOL.items()]),
               '', selector(store, live=False), '',
         'WHICH ONE, in this order:',
         '  1. the owner means one of the action words under your line - do that (bucket table).',
@@ -373,6 +412,10 @@ def button_words(v: str) -> str:
     return f'the "{L(v)}" button' + ''.join(f' ("{w}" {_STATES[s]})' for s, w in st.items() if s in _STATES)
 DECISIONS = {k: (f'{button_words(k)}: ' if button_words(k) else '') + v for k, v in _DECIDE.items()}
 def _names(v: str) -> str: return '/'.join(f'"{w}"' for w in [L(v)] + list((buttons.VERBS[v].get('states') or {}).values()))
+def _also(v: str) -> str:
+    """' Its button: "Next" - also "All read, next", "Read" in a state.' - the names the index's one-label line leaves out."""
+    st = list((buttons.VERBS.get(v, {}).get('states') or {}).values())
+    return f' Its button: "{L(v)}"' + (' - also ' + ', '.join(f'"{w}"' for w in st) + ' in a state' if st else '') + '.' if v in buttons.VERBS else ''
 # the buttons whose verb is not itself a decision, and the tool each one is
 CHIP_TOOL = {'defer': 'task.defer', 'continue': 'agent.continue', 'test_connection': 'connection.test', 'split': 'task.split',
              'reopen': 'task.reopen', 'close_note': 'task.complete', 'forward': 'task.handoff',
@@ -431,17 +474,18 @@ BUCKETS = (
     ('agents', "a task's agent; where work belongs",
      ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.stop', 'routing.remember', 'task.ask_agent')),
     ('new', 'new work with no task yet', ('task.create_from_text', 'task.create_from_message', 'meeting.new', 'task.setup')),
-    ('pipe', 'the walk and sets of items, and filing mail', ('pipe.clear', 'pipe.defer', 'pipe.close', 'review.each', 'button.light', 'item.settle', 'message.file', 'message.archive',
+    ('pipe', 'the walk and sets of items, and filing mail', ('pipe.clear', 'pipe.defer', 'pipe.close', 'pipe.remove', 'pipe.block', 'pipe.mine', 'review.each', 'button.light', 'item.settle', 'message.file', 'message.archive',
                                                             'preference.exclude_sender', 'preference.sender_rule', 'message.retriage')),
     ('reports', 'reports and workflows', ('report.create', 'report.run', 'report.rerun', 'report.pause', 'report.resume',
                                           'report.route', 'report.edit', 'report.delete')),
-    ('app', 'settings, connections, scripts, memory', ('setting.set', 'connection.create', 'role.apply', 'connection.test', 'connection.pause',
-                                                             'connection.resume', 'app.repair', 'script.start', 'memory.remember', 'memory.wrong', 'people.relate', 'hub.publish')),
+    ('app', 'settings, connections, scripts, memory, rules, the Hub', ('setting.set', 'connection.create', 'role.apply', 'connection.test', 'connection.pause',
+                                                             'connection.resume', 'app.repair', 'script.start', 'memory.remember', 'memory.wrong', 'people.relate',
+                                                             'rule.change', 'deleted.restore', 'hub.publish', 'hub.comment', 'hub.vote')),
 )
 
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
-HINTS = {'memory.remember': 'note, about?, section?, replaces?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'pipe.clear': 'select, scope?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
+HINTS = {'pipe.remove': 'select, learn?', 'pipe.block': 'select, how?', 'pipe.mine': 'select', 'rule.change': 'about, how?', 'hub.vote': 'post, up?', 'memory.remember': 'note, about?, section?, replaces?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'pipe.clear': 'select, scope?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?', 'task.share': 'who, about?', 'task.complete': 'note?',
          'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?, note?', 'task.checklist': 'add?, items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until', 'meeting.new': 'who?, about?, when?'}
 
@@ -458,14 +502,16 @@ def signature(kind: str) -> str:
 def describe(kind: str) -> str:
     """One tool in full: what it does, what it needs, and whether it waits for the owner's yes."""
     if kind in DECISIONS:
-        return f'{kind} (bucket table) - {DECISIONS[kind]}. Takes `on` for another item than the one on the table.'
+        return f'{kind} (bucket table) - {DECISIONS[kind]}. Takes `on` for another item than the one on the table.{_also(kind)}'
     if kind in READS: return f'{kind} (a look-up - runs at once, changes nothing) - {READS[kind]}'
     if kind in NOW: return f'{kind} (runs at once in the turn, its steps shown - nothing to press) - needs {HINTS[kind]} - {NOW[kind]}'
     if kind in PURPOSE:
         target, required, _ = operations.KINDS[kind]
         asks = [r for r in required if r not in CONTEXT_FILLED]
-        runs = 'runs at once, said' if kind in KEPT else 'the owner presses its button'
-        return f"{kind} (on a {target}; {runs}){' - needs ' + ', '.join(asks) if asks else ''} - {PURPOSE[kind]}"
+        runs = ('runs at once, said' if kind in KEPT or kind in SETS else 'brings up its page for the owner' if kind in PAGED
+                else 'the owner presses its button')
+        also = _also(next((v for v, t in CHIP_TOOL.items() if t == kind), ''))
+        return f"{kind} (on a {target}; {runs}){' - needs ' + ', '.join(asks) if asks else ''} - {PURPOSE[kind]}{'.' + also if also else ''}"
     return f'There is no tool {kind!r}. The buckets: ' + ', '.join(n for n, _, _ in BUCKETS) + ', look.'
 
 
@@ -526,6 +572,7 @@ READS = {
     'memory.list':      ('everything kept about the owner: LEARNED.md - what they told you ("remember this"), their verdicts, '
                          'and what it learned from what they did. `about`: words to narrow it (a sender, a topic). '
                          'Use it for "what do you remember", "what do you know about me"'),
+    'deleted.list':     'what was removed in the last 30 days and can still come back - reports, workflows, dashboards, rules, profiles',
     'rules.list':       ('the standing filters on the owner\'s mail - queue mutes set with a reason, and the policy rules '
                          '(skip, ignore, escalate...) that decide before any model reads it. `about`: words to narrow it. '
                          'Use it for "why did I never see X", "what am I filtering"'),
@@ -586,7 +633,7 @@ def valid(kind: str, params: dict) -> str:
                 'knowledge.search': ('query',), 'tasks.list': (), 'asks.list': (), 'message.read': ('mid', 'id'),
                 'sender.read': ('who', 'sender'), 'docs.search': ('query',), 'agents.now': (), 'approvals.list': (), 'pipe.list': (), 'pipe.read': (),
                 'calendar.read': (), 'activity.list': (), 'errors.list': (), 'memory.list': (), 'memory.about': ('who',), 'rules.list': (), 'missed.check': (), 'app.health': (),
-                'repos.list': (), 'tools.list': (), 'tools.describe': ('kind',)}[kind]
+                'repos.list': (), 'tools.list': (), 'tools.describe': ('kind',), 'deleted.list': ()}[kind]
         if need and not any(str((params or {}).get(n) or '').strip() for n in need):
             return f"{kind} needs {' or '.join(need)}"
         return ''
@@ -683,7 +730,8 @@ def _entry(k: str) -> list:
                            'the task (TQ-0123) - always named, the one on the table included; a new job is task.create_from_text')
     prose = ''.join(s + c for s, c in keep).strip(' -;')
     runs = ('Runs at once and changes nothing.' if k in READS else DECISION_RUNS.get(k, '').capitalize() + '.' if k in DECISION_RUNS
-            else 'Runs at once and says what it changed.' if k in KEPT or k in NOW else 'Brings up its button for you to press.')
+            else 'Runs at once and says what it changed.' if k in KEPT or k in NOW or k in SETS
+            else 'Brings up its page, at the thing, for you to press.' if k in PAGED else 'Brings up its button for you to press.')
     stop = '' if prose.endswith(('.', ')', '"')) else '.'
     out = [f'### `{k}`', '', f'{prose[:1].upper()}{prose[1:]}{stop}', '']
     out += [f"- `{a}`{' (optional)' if a in optional else ''}{' - ' + d if d else ''}" for a, d in args.items()]

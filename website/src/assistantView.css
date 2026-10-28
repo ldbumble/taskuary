@@ -393,6 +393,23 @@
 .tq-fyi.open .tq-fyi-line { padding-bottom: 6px; }
 .tq-fyi.open .tq-card-full { margin: 0 8px 6px; background: #fffdf9; }
 .tq-fyi-acts { margin: 0 8px 8px; }
+/* A REPORT OR AN FYI IN A TASK'S THREE SECTIONS (ItemSections): its section scrolls, so what it says is shown whole - no 420px box inside it */
+.tq-item-sec .tq-card-full { max-height: none; overflow: auto; }
+.tq-item-sec .tq-card-facts { margin-top: 0; }
+.tq-item-sec .tq-card-note { font-size: 12px; margin: 0 0 8px; }
+.tq-item-msg-h { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 7px; row-gap: 1px; width: 100%; min-width: 0; padding: 0; border: 0; background: none; font: inherit;
+  text-align: left; color: #746e64; font-size: 11.5px; }
+.tq-item-msg-h.press { cursor: pointer; border-radius: 6px; }
+.tq-item-msg-h.press:hover b { text-decoration: underline; }
+.tq-item-msg-h b { font-size: 12.5px; color: #262521; font-weight: 600; white-space: nowrap; }
+.tq-item-msg-h .at { margin-left: auto; font-size: 10.5px; color: #8a8378; white-space: nowrap; }
+.tq-item-msg-h .chev { color: #746e64; font-size: 10px; }
+.tq-item-msg-t { margin-top: 3px; font-size: 13.5px; font-weight: 600; line-height: 1.4; color: #2f2d29; overflow-wrap: anywhere; }
+.tq-item-sec .tq-fyi-acts { margin: 8px 0 0; }
+.tq-item-note { margin-top: 8px; font-size: 12px; line-height: 1.5; color: #4d4a43; }
+.tq-item-moves { font-size: 12px; line-height: 1.55; color: #4d4a43; display: grid; gap: 3px; }
+.tq-item-moves-lead { color: #746e64; font-size: 11.5px; margin-bottom: 2px; }
+.tq-item-moves b { font-weight: 600; color: #262521; }
 .tq-card-term { margin-top: 8px; border-radius: 8px; overflow: hidden; border: 1px solid #2a2b33; background: #1e1e2e; }
 /* the assistant's own chat in the card: the page's ground, not a terminal's */
 .tq-card-chat { margin-top: 8px; border-radius: 8px; overflow: hidden; border: 1px solid #ddd6c8; background: #faf7f1; display: flex; flex-direction: column; }

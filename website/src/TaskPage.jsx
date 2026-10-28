@@ -228,8 +228,8 @@ const COLUMNS = { display: "grid", gridTemplateColumns: "minmax(0, 1fr)", rowGap
     "& > [data-tq-work]": { pl: 2.5, borderLeft: `1px solid ${BORDER}` } } };
 // THE SHADE AND THE FOCUS (the owner, 2026-10-25: "shading for what to focus on"): the card's body a warm shade, the one section to act on
 // white with a hairline - no heavy shadow, just white against the shade
-const SHADE = "#f5f2ed", FOCUS_EDGE = "#e4ded4";
-const FOCUS = { bgcolor: "#fff", border: `1px solid ${FOCUS_EDGE}`, borderRadius: "10px", boxShadow: "0 1px 2px rgba(40, 30, 20, 0.04)", px: 2, py: 1.5 };
+export const SHADE = "#f5f2ed", FOCUS_EDGE = "#e4ded4";
+export const FOCUS = { bgcolor: "#fff", border: `1px solid ${FOCUS_EDGE}`, borderRadius: "10px", boxShadow: "0 1px 2px rgba(40, 30, 20, 0.04)", px: 2, py: 1.5 };
 // FROM AS A SIDEBAR while an agent works (item 6, the owner 2026-10-21): laid OVER the agent's left edge - absolutely placed in the steps
 // box, so nothing under it moves or resizes - from under the folded line to the foot, scrolling on its own
 // ...from the tab at the body's left edge (DRAWER_TAB) to the foot, the whole height beside it
@@ -253,11 +253,11 @@ const MAIN = { width: "100%", flex: "0 1 auto", minHeight: 0, overflowY: "auto",
 // as the closing one narrows into its tab - and its BODY is laid at the width it has open (`w`), never reflowed by the move: the slot only
 // reveals it, and its words fade in once the width has settled. A closed body is hidden, not resized, so a live terminal keeps its size
 const SLOT_MS = 220;
-const SLOT = (open, w) => ({ position: "relative", overflow: "hidden", minWidth: 0, minHeight: 0, flex: open ? "1 1 0px" : `0 0 ${w}px`,
+export const SLOT = (open, w) => ({ position: "relative", overflow: "hidden", minWidth: 0, minHeight: 0, flex: open ? "1 1 0px" : `0 0 ${w}px`,
   transition: `flex-grow ${SLOT_MS}ms ease, flex-basis ${SLOT_MS}ms ease`, "@media (prefers-reduced-motion: reduce)": { transition: "none" } });
 // ...a closed body is not drawn (display none: nothing in it can be found or pressed) - but a LIVE agent's is kept laid out and only made
 // invisible, so its terminal is never measured at nothing and refitted (`keep`)
-const SECTION = (open, w, live = false, keep = false) => ({ position: "absolute", top: 0, left: 0, bottom: 0, width: w,
+export const SECTION = (open, w, live = false, keep = false) => ({ position: "absolute", top: 0, left: 0, bottom: 0, width: w,
   display: open || keep ? "flex" : "none", flexDirection: "column", bgcolor: live ? "#fff" : SHADE,   // the warm ground, its cards white
   overflowY: "auto", scrollbarWidth: "thin", overscrollBehaviorY: "contain", overflowAnchor: "none", containerType: "inline-size",
   px: live ? 1 : { xs: 1.5, md: 2.5 }, py: live ? 0.65 : 1.5, boxSizing: "border-box",
@@ -267,7 +267,7 @@ const SECTION = (open, w, live = false, keep = false) => ({ position: "absolute"
   "@media (prefers-reduced-motion: reduce)": { transition: "none" } });
 // ...a closed tab's width: 156px, and beside a LIVE agent Came from and Close out fold to slim 44px ones (the owner, 2026-10-27: "keep Came
 // from and Close out as very MINIMAL tabs ... so the live agent keeps nearly all the space")
-const TAB_W = 156, MINI_W = 44;
+export const TAB_W = 156, MINI_W = 44;
 // ...which section a press belongs to, by its verb id (a draft's own are "<review>:<verb>", all Close out's)
 const VERB_SECTION = { close: new Set(["reply", "done", "close-note", "hand", "accept_invite", "decline_invite", "propose_time", "find_time"]),
   agent: new Set(["continue", "run-another", "send-general", "start-agent", "save-end", "diff", "fix", "strong-again"]) };
@@ -380,13 +380,13 @@ function Part({ label, sub, subTitle, children, focus = false, ...rest }) {
 }
 
 // ONE CLOSED SECTION, AS ITS TAB (SECTION_TAB): the arrow points the way it opens, and a press opens it - the others close
-function SectionTab({ sec, lines = [], foot = "", here = false, before = false, mini = false, onOpen }) {
+export function SectionTab({ sec, lines = [], foot = "", here = false, before = false, mini = false, icon = null, onOpen }) {
   // ...SLIM beside a live agent: the arrow, the section's mark, and at its foot a dot for where it stands - the words are its hover
   if (mini) return (
     <Box component="button" type="button" data-tq-section-tab={sec.key} data-tq-mini="" data-tq-here={here ? "" : undefined} sx={MINI_TAB(here)}
       aria-label={`Open ${sec.name}`} title={[sec.name, ...lines, foot].filter(Boolean).join("\n")} aria-expanded={false} onClick={onOpen}>
       <Box component="span" aria-hidden data-tq-tab-arrow="">{before ? "›" : "‹"}</Box>
-      {sec.key === "from" ? <ChatBubbleOutlineIcon aria-hidden sx={{ fontSize: 18, color: DIM }} /> : <SendIcon aria-hidden sx={{ fontSize: 17, color: DIM }} />}
+      {icon || (sec.key === "from" ? <ChatBubbleOutlineIcon aria-hidden sx={{ fontSize: 18, color: DIM }} /> : <SendIcon aria-hidden sx={{ fontSize: 17, color: DIM }} />)}
       <Box component="span" aria-hidden data-tq-tab-dot="" sx={here ? { bgcolor: ACCENT } : foot ? { bgcolor: "#5f7a5f" } : { border: `1.5px solid ${FAINT}` }} />
       <Box component="span" aria-hidden data-tq-tab-n="">{sec.n}</Box>
     </Box>);
@@ -411,7 +411,7 @@ function SectionTab({ sec, lines = [], foot = "", here = false, before = false, 
 // ...and an open one's head: its NAME, in the closed tabs' own type, and nothing else (the owner, 2026-10-28: "it should just say Close out on
 // top in black without all the small text. It does not help") - the number, what it holds and "up to here" are the tabs' to say
 const SECTION_NAME = { fontSize: 14, fontWeight: 600, lineHeight: 1.35, color: INK };
-function SectionHead({ sec }) {
+export function SectionHead({ sec }) {
   return (
     <Box data-tq-section-head="" sx={{ display: "flex", alignItems: "baseline", mb: 1.25, flexShrink: 0 }}>
       <Typography sx={SECTION_NAME}>{sec.name}</Typography>

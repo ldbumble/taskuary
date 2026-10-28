@@ -91,7 +91,7 @@ import { MORE_PX, backAt, dueWord, placed, pulledRow, rowAbove, sectionDone, sec
 import { isImportant, level as priorityOf } from "./priority.js";
 import { age, ago, band, bandUntil, plural } from "./timeWords.js";
 const GeneralWorkspace = lazyView(loadGeneral);
-import CanvasItem, { CANVAS_ITEM_HEIGHT, showsTask } from "./CanvasItem.jsx";
+import CanvasItem, { CANVAS_ITEM_HEIGHT, showsTask, wordsCap } from "./CanvasItem.jsx";
 import ActionRow, { AdvisorNext } from "./ActionRow.jsx";
 import { floorOf } from "./inView.js";
 const CanvasBrowse = lazyView(() => import("./CanvasBrowse.jsx"));
@@ -970,14 +970,16 @@ function Line({ m, lastBrief = false, live, last, further = false, actions, fres
   const chips = barHolds && !m.card ? []          // the task view's own row under the chat holds its words, Next included
     : said.length || !last || m.role !== "assistant" || m.proposal || kind === "proposal" || kind === "fyis"
     ? said : idle ? IDLE_CHIPS : [{ verb: "next", label: btn("next") }];
+  // A REPORT OR AN FYI ON THE TABLE is drawn in a task's three sections, at a task's height (ItemSections, the owner 2026-10-28)
+  const table = live && canvas && m.card && !foldsAs(canvas.folded, m.card.key) && !canvas.browsing ? wordsCap(canvas.height) : null;
   const card = live && m.card && kind ? {
     proposal: <ProposalCard p={m.proposal || c} onConfirm={actions.confirm} onCancel={actions.cancel} onPreview={actions.preview} />,
     reply: <ReplyCard card={c} onDone={actions.done} onSent={actions.sent} onOpenTask={actions.openTask} onTimeline={actions.timeline} />,
     meeting: <MeetingCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
-    report: <ReportCard card={c} onOpenTask={actions.openTask} onTimeline={actions.timeline} onDone={actions.done} />,
+    report: <ReportCard card={c} onOpenTask={actions.openTask} onTimeline={actions.timeline} onDone={actions.done} table={table} />,
     dashboard: <DashboardCard card={c} onOpenTask={actions.openTask} onDone={actions.done} />,
     idea: <IdeaCard card={c} onOpenTask={actions.openTask} onTimeline={actions.timeline} onNavigate={actions.navigate} onDone={actions.done} />,
-    message: <MessageCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} onSurface={actions.surface} onNavigate={actions.navigate} />,
+    message: <MessageCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} onSurface={actions.surface} onNavigate={actions.navigate} table={table} />,
     setup: <SetupCard card={m.card} onNavigate={actions.navigate} onHandOff={actions.handOff} />,
     walk: <WalkCard card={m.card} at={m.card.n} total={m.card.total} onNavigate={actions.navigate}
       onNext={() => actions.walk(m.card.n + 1)} onBack={() => actions.walk(m.card.n - 1)}
@@ -986,7 +988,7 @@ function Line({ m, lastBrief = false, live, last, further = false, actions, fres
     brief: <BriefCard card={m.card} onStart={actions.start} />,
     // SET UP TASKUARY is the two cards, not the 13-stop walk (the owner, 2026-10-14: "what is this garbage ... where are the cards")
     firstrun: <FirstRun revisit onChanged={actions.reload} onWalk={() => actions.start(null)} />,
-    fyis: <FyisCard card={c} onDone={actions.done} onSurface={actions.surface} onTimeline={actions.timeline} onPropose={actions.propose} onAgent={actions.agent} />,
+    fyis: <FyisCard card={c} onDone={actions.done} onSurface={actions.surface} onTimeline={actions.timeline} onPropose={actions.propose} onAgent={actions.agent} table={table} />,
   }[kind] : null;
   // A STOP THE WALK HAS MOVED PAST is a finished step, not something the assistant said. Falling
   // through to the title note below drew six near-identical rows, each carrying the message avatar

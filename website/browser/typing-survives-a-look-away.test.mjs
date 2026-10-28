@@ -23,9 +23,9 @@ test("a reply draft's edit and the agent box's words are still there after Repor
     assert.equal(await draft(page), before, `${name}, then the row: the edited draft was lost`);
   }
   await clickRow(page, other); await sleep(3000);
-  // ...where the task is the page the agent box is in the drawer behind the right tab (0.3.9.48): pulled out to type into
+  // ...where the task opens on another section the agent box is in the Agent section behind its tab (the three sections, 2026-10-27)
   const box = await page.waitForSelector("textarea[placeholder^='What should it do']", { timeout: 10000 });
-  if (!(await box.evaluate((x) => x.getBoundingClientRect().width > 0))) { await page.click("[data-tq-work-tab]"); await sleep(800); }
+  if (!(await box.evaluate((x) => x.getBoundingClientRect().width > 0))) { await page.click("[data-tq-section-tab=agent]"); await sleep(800); }
   await box.click(); await page.keyboard.type("check the bank feed first"); await sleep(1500);
   await nav(page, "reports"); await sleep(2500); await clickRow(page, other); await sleep(3500);
   assert.equal(await page.$eval("textarea[placeholder^='What should it do']", (x) => x.value).catch(() => null), "check the bank feed first");

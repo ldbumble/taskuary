@@ -26,7 +26,7 @@ test("Send on Close out keeps Close out on the page", { timeout: 300000 }, async
   await sleep(2500);
   const mainOf = () => page.$eval("[data-tq-task-body]", (e) => e.getAttribute("data-tq-main"));
   const before = await mainOf();
-  assert.equal(before, "work", "a drafted reply opens on Close out");
+  assert.equal(before, "close", "a drafted reply opens on Close out");
   // the card's own Send, under the draft
   const sent = await page.evaluate(() => {
     const b = [...document.querySelectorAll("[data-tq-closeout] button")].find((x) => /^Send\b/.test(x.textContent.trim()) && !x.disabled && x.offsetParent);
@@ -35,7 +35,7 @@ test("Send on Close out keeps Close out on the page", { timeout: 300000 }, async
   assert.ok(sent, "Close out offers Send");
   const seen = new Set();
   for (let i = 0; i < 16; i++) { await sleep(500); seen.add(await mainOf()); }
-  assert.deepEqual([...seen], ["work"], `the page stayed on Close out through Send, never the task: ${[...seen]}`);
+  assert.deepEqual([...seen], ["close"], `the page stayed on Close out through Send, never the task: ${[...seen]}`);
   assert.ok(await page.$("[data-tq-task-body] [data-tq-closeout]"), "Close out is still the page");
   assert.deepEqual(errors, []);
 });

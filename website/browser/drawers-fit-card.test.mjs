@@ -15,28 +15,32 @@ const SIZES =[[1920, 1080], [1600, 810], [1366, 768], [1280, 720], [390, 844]];
 const TODO = "Ask the site office for the signed snag list from the last walk-through, check it against the floor plan Gail sent, "
   + "and tell the group who signs it this Thursday and where the keys are picked up from reception";
 
-// every open drawer, tab and pop-up against its container: [what, its rect, the container's], and whatever overflows without a scroller
+// every open drawer, section, tab and pop-up against its container: [what, its rect, the container's], and whatever overflows without a scroller
+// ...the three sections (2026-10-27): each section's slot - the open one or a tab - lies in the body and is its whole height, and an open
+// section's words that run long scroll inside it
 const measure = (page) => page.evaluate(() => {
   const r = (e) => { const b = e.getBoundingClientRect(); return { t: b.top, b: b.bottom, l: b.left, r: b.right }; };
-  const shown = (e) => e && getComputedStyle(e).display !== "none" && e.getBoundingClientRect().height > 0;
+  const shown = (e) => e && getComputedStyle(e).display !== "none" && getComputedStyle(e).visibility !== "hidden" && e.getBoundingClientRect().height > 0;
   const card = document.querySelector("[data-tq-canvas-item]"), body = card?.querySelector("[data-tq-task-body]");
   const out = [], stuck = [], fill = [];
   const inside = (what, e, box) => { if (shown(e) && box) out.push([what, r(e), box.nodeType ? r(box) : box]); };
   inside("body", body, card);
-  for (const sel of ["[data-tq-from-side]", "[data-tq-work-side]", "[data-tq-from-line]", "[data-tq-work-tab]"]) {
-    inside(sel, card?.querySelector(sel), body);
-    // ...and a drawer or tab is the body's whole height, not a box of its own size
-    const e = card?.querySelector(sel);
+  for (const [sel, e] of [...["[data-tq-from-side]", "[data-tq-from-line]"].map((s) => [s, card?.querySelector(s)]),
+    ...[...(card?.querySelectorAll("[data-tq-slot]") || [])].map((s) => [`slot ${s.dataset.tqSlot}`, s])]) {
+    inside(sel, e, body);
+    // ...and a drawer, tab or section is the body's whole height, not a box of its own size
     if (shown(e) && (Math.abs(r(e).t - r(body).t) > 1 || Math.abs(r(e).b - r(body).b) > 1)) fill.push(`${sel} ${Math.round(r(e).t)}-${Math.round(r(e).b)} in ${Math.round(r(body).t)}-${Math.round(r(body).b)}`);
   }
+  const sections = [...(card?.querySelectorAll("[data-tq-slot] > [role=region]") || [])].filter(shown);
+  for (const e of sections) inside(`section ${e.getAttribute("aria-label")}`, e, e.parentElement);
   // the pop-up's room: the canvas and the dock it stands on (it overlaps the dock's top edge by design, chat-bar.test.mjs)
   const pop = document.querySelector("[data-tq-chat-pop]:not([hidden])"), canvas = document.querySelector(".tq-chat-body"), dock = document.querySelector(".tq-dock");
   if (canvas && dock) inside("pop", pop, { ...r(canvas), b: r(dock).b });
-  for (const e of [card?.querySelector("[data-tq-from-side]"), card?.querySelector("[data-tq-work-side]"), pop?.querySelector(".tq-chat-pop-body")])
+  for (const e of [card?.querySelector("[data-tq-from-side]"), ...sections, pop?.querySelector(".tq-chat-pop-body")])
     if (shown(e) && e.scrollHeight > e.clientHeight + 1 && !/auto|scroll/.test(getComputedStyle(e).overflowY)) stuck.push(e.outerHTML.slice(0, 80));
   const rail = document.querySelector("[data-tq-rail]");
   const overRail = pop && shown(rail) && r(pop).l < r(rail).r - 1 && r(pop).r > r(rail).l + 1;
-  return { out, stuck, fill, overRail, main: body?.getAttribute("data-tq-main"), cardH: card && Math.round(card.getBoundingClientRect().height) };
+  return { out, stuck, fill, overRail, open: sections.length, main: body?.getAttribute("data-tq-main"), cardH: card && Math.round(card.getBoundingClientRect().height) };
 });
 // ...every miss at every size gathered, so one run says all of them
 const fails = [];
@@ -49,7 +53,7 @@ const check = (m, say) => {
   if (m.overRail) fails.push(`the pop-up is over the rail ${say}`);
 };
 
-test("every drawer, tab and pop-up lies inside its card or canvas, at five sizes and six kinds of task", { timeout: 900000 }, async (t) => {
+test("every section, drawer, tab and pop-up lies inside its card or canvas, at five sizes and six kinds of task", { timeout: 900000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
   const page = await harness.newPage();
@@ -81,18 +85,21 @@ test("every drawer, tab and pop-up lies inside its card or canvas, at five sizes
       const shut = await measure(page);
       check(shut, `${say}, shut`);
       await shot(`${kind}-${width}x${height}-shut`);
-      for (const tab of ["[data-tq-from-line]", "[data-tq-work-tab]"]) {
+      // ...each closed section's tab (the desk's three sections) - or a phone's live drawer tab - opens it, the card one height through it
+      const tabs = [...await page.$$eval("[data-tq-canvas-item] [data-tq-section-tab]", (els) => els.map((e) => `[data-tq-section-tab=${e.dataset.tqSectionTab}]`)),
+        ...((await page.$("[data-tq-canvas-item] [data-tq-from-line]")) ? ["[data-tq-from-line]"] : [])];
+      for (const tab of tabs) {
         if (!(await page.$(`[data-tq-canvas-item] ${tab}`))) continue;
         await page.click(`[data-tq-canvas-item] ${tab}`);
-        await sleep(500);
+        await sleep(600);
         const m = await measure(page);
-        await shot(`${kind}-${width}x${height}-${tab.includes("from") ? "left" : "right"}`);
+        await shot(`${kind}-${width}x${height}-${tab.replace(/\W+/g, "")}`);
         check(m, `${say}, ${tab} open (${m.main})`);
-        if (!m.out.some(([w]) => /side/.test(w))) fails.push(`the drawer did not open ${say} ${tab}`);
-        // ...and it does not stretch the card past what it says, but to the floor a drawer is read in (CanvasItem DRAWER_FLOOR)
+        if (tab.includes("section-tab") && !(m.open === 1 && tab.includes(m.main))) fails.push(`${tab} did not open its section, alone ${say}: ${m.main}, ${m.open} open`);
+        if (tab.includes("from-line") && !m.out.some(([w]) => /side/.test(w))) fails.push(`the drawer did not open ${say} ${tab}`);
+        // ...and it does not stretch the card: one height through every section (CanvasItem, 2026-10-27), a drawer to its floor
         if (m.cardH > Math.max(shut.cardH, DRAWER_FLOOR) + 1) fails.push(`the card grew ${shut.cardH} -> ${m.cardH} for ${tab} ${say}`);
-        await page.click(`[data-tq-canvas-item] ${tab}`);
-        await sleep(300);
+        if (tab.includes("from-line")) { await page.click(`[data-tq-canvas-item] ${tab}`); await sleep(300); }
       }
     }
     // THE CHAT'S POP-UP over a task with its row (chat-bar.test.mjs): inside the canvas, off the rail, scrolling inside - the desk's

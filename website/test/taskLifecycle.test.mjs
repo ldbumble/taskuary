@@ -110,7 +110,7 @@ test("closing the task never hides behind a fold, and a finished chat can be clo
   const bar = source.slice(source.indexOf('<Box data-tq-task-bar=""'), source.indexOf('labelOfRow("nat")}</Button>'));
   assert.ok(bar.includes('labelOfRow("done")}</Button>'), "the bar carries the done control");
   assert.ok(bar.includes("onClick={askFinish}"), "and it must run the same completion road (askFinish -> finish(\"done\"))");
-  assert.match(source, /const WorkflowHeading = \(\{ number, title, description, chip, tone, folded, onToggle, action, tools, quiet = false \}\)/);
+  assert.match(source, /const WorkflowHeading = \(\{ number, title, description, chip, tone, folded, onToggle, action, tools, quiet = false, sec = null, here = false \}\)/);
   // ...and a general conversation is wrappable once its provider session is gone (server.py/wrapup.py, 2026-09-07)
   assert.match(source, /const canWrap = !!term \|\| !!detail\?\.transcript \|\| hasGeneralHistory/);
   assert.match(source, /conversation: generalStarted/);

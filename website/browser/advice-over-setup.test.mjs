@@ -44,8 +44,10 @@ test("a task opened over setup has its lit button and its line in the task's Adv
   // ...in the task's own Advisor section (the owner, 2026-10-26), its line keeping its Why? - in the MAIN view, never a drawer, so no tab
   // says it holds a note (the Advisor audit's judge, 2026-10-26)
   assert.ok(await page.$("[data-tq-advisor] .tq-next-why"), "the line's Why?");
-  assert.equal(await page.$("[data-tq-work-side] [data-tq-advisor], [data-tq-from-side] [data-tq-advisor]"), null, "not in a drawer");
-  const tab = await page.evaluate(() => document.querySelector("[data-tq-work-tab]")?.textContent || "");
+  assert.equal(await page.$("[data-tq-from-side] [data-tq-advisor]"), null, "not in a drawer");
+  // ...on the desk the Agent section's, under its work (the three sections, the owner's mockup 2026-10-27) - and its tab names the move
+  assert.ok(await page.$("[data-tq-agent-section] [data-tq-advisor]"), "in the Agent section");
+  const tab = await page.evaluate(() => document.querySelector("[data-tq-section-tab=agent]")?.textContent || "");
   assert.doesNotMatch(tab, /note/);
 
   // ...and Back to Setup: setup is in view again, and the task's warning goes with the task

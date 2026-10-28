@@ -1415,7 +1415,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...each section's slot: a closed one its tab's width (slim beside a live agent), the open one the rest - and its body laid at that
   // open width whether it is open or not, so the move never reflows it and a hidden terminal keeps its size
   const closedW = (k) => (sessionView && k !== "agent" ? MINI_W : TAB_W);
-  const openW = (k) => Math.max(320, bodyW - SECTIONS.filter((s) => s.key !== k).reduce((n, s) => n + closedW(s.key), 0));
+  // ...less its slot's own 1px rule on the left (Agent and Close out), so the body lies inside it
+  const openW = (k) => Math.max(320, bodyW - SECTIONS.filter((s) => s.key !== k).reduce((n, s) => n + closedW(s.key), 0) - (k === "from" ? 0 : 1));
   const slot = (k, body) => (!threeUp ? body
     : <Box data-tq-slot={k} data-tq-open={section === k ? "" : undefined} sx={{ ...SLOT(section === k, closedW(k)),
         ...(k !== "from" ? { borderLeft: `1px solid ${FOCUS_EDGE}` } : {}) }}>
@@ -1464,7 +1465,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     from: fromStatus({ who: cameIn?.who || cameIn?.FromName || cameIn?.FromEmail || "", channel: cameIn ? channelName(cameIn.Channel) : "",
       when: cameIn?.SentAt ? whenShort(cameIn.SentAt) : "", words: cameIn ? cleanText(cameIn.ReadText || cameIn.BodyText || "").slice(0, 240) : "",
       count: sourceCount, workflow: fromWorkflow, made: `${detail.ref} · ${made}`, sorted: sortedLine(facts, t?.Kind || "task").replace(/^Sorted as: /, "Sorted: ") }),
-    agent: agentStatus({ profile: runRole || (hasRecord || term ? agentName(t) : ""),
+    agent: agentStatus({ profile: runRole || (hasRecord || term ? String(agentName(t) || "").replace(/^agent$/i, "") : ""),
       word: agentWord({ live: !!term?.alive, waiting: agentState === AGENT.waiting, failed: failedRun, stopped: agentState === AGENT.stopped,
         result: resultShown, record: hasRecord, codeRun }),
       said: cleanText(detail?.closedWhy || detail?.agentStory?.said || String(report?.Body || "").split("\n").find((l) => l.trim()) || (hasRecord ? detail?.agentStory?.line : "") || "")
@@ -1494,7 +1495,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               const mid = detail.attachments?.[0]?.MessageId ?? inbound[0]?.MessageId ?? sources[0]?.msgs[0]?.MessageId;
                               if (mid == null) return;
                               if (!sources.some((g) => fromRows(g, 3, showAll).some((r) => r.m?.MessageId === mid))) setShowAll(true);
-                              setOpenMsg(mid); setSeekLetter(mid);
+                              setHistOpen(true); setOpenMsg(mid); setSeekLetter(mid);
                             }}
                             sx={{ height: 19, fontSize: 10, bgcolor: PANEL2 }} />}
                           {/* ...and how hard triage judged the work, or that it carries sensitive data - only when it is not ordinary, and a
@@ -1641,7 +1642,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and FULL MESSAGE HISTORY (N): the conversations, whole, one press away - a task with no message has none to open
   const fromHistory = () => (!sources.length && !detail.links?.length ? null :
     <Box data-tq-came-from="" data-tq-history={histOpen ? "open" : "shut"} sx={{ minWidth: 0 }}>
-      <Button size="small" data-tq-history-toggle="" aria-expanded={histOpen} onClick={() => { setHistOpen((v) => !v); setShowAll(true); }}
+      <Button size="small" data-tq-history-toggle="" aria-expanded={histOpen} onClick={() => setHistOpen((v) => !v)}
         sx={{ px: 0, minWidth: 0, fontSize: 13, fontWeight: 600, textTransform: "none", color: ACCENT2 }}>
         {histOpen ? "Hide the message history ‹" : `Full message history (${sourceCount}) ›`}</Button>
       {histOpen && fromConvs()}
@@ -2445,7 +2446,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         (taskLifecycle.agentPhase); the heading now says what the chip says. */}
                     {/* AN EMPTY AGENT WORK ROW IS QUIET (the owner, 2026-10-25: Agent work stays where it is, the reply is what the eye should
                         land on): no agent ran, nothing to say - a smaller, dimmer line, the same press opening it */}
-                    <WorkflowHeading number="2" quiet={agentEmpty} title={!term?.alive ? (resultShown ? "Result" : "Agent work")
+                    <WorkflowHeading number="2" sec={threeUp && !sessionView ? SECTIONS[1] : null} here={hereSec === "agent"} quiet={agentEmpty} title={!term?.alive ? (resultShown ? "Result" : "Agent work")
                       : answered ? `${agentName(t)} answered`
                       : agentState === AGENT.waiting ? says(subState(term), agentName(t))   /* asked, approval, stuck (T6) */
                         : `${agentName(t)} is working`}
@@ -2731,7 +2732,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }} data-tq-focus={focus === "reply" ? "" : undefined}>
                   {/* CLOSE OUT, not Reply (the owner, 2026-09-27): what finishes a task is not always a reply - a pull
                       request merges, an issue closes. The label only: the stage's key is still "reply" everywhere. */}
-                  <WorkflowHeading number="3" title="Close out"
+                  <WorkflowHeading number="3" sec={threeUp ? SECTIONS[2] : null} here={hereSec === "close"} title="Close out"
                     description={term?.alive
                       ? (replyMessage ? "Close-out controls return when the agent stops." : "No inbound sender is attached to this task.")
                       : closeoutRv
@@ -3126,14 +3127,22 @@ const Fold = ({ title, children }) => (
 // at 390px meant it kept its width by sitting ON the title ("A… w…" under the continue button,
 // the save button cut off at the card's edge, 2026-09-18). Below sm the bar takes the whole next line.
 // `quiet`: a step with nothing in it - smaller and dimmer, so the step that holds the move is the one read (2026-10-25)
-const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle, action, tools, quiet = false }) => (
+// `sec`: the section it heads in the desk's three (2026-10-27) - then its line is the sections' one style (SectionHead): "2 · AGENT", one dim
+// descriptor (its own title where that is not the section's name, its description), "up to here" where the task is
+const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle, action, tools, quiet = false, sec = null, here = false }) => (
   <Box {...pressable(onToggle)} aria-expanded={onToggle ? !folded : undefined} data-tq-quiet={quiet ? "" : undefined}
     sx={{ ...FOCUS_RING, display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" },
     cursor: onToggle ? "pointer" : "default", opacity: quiet ? 0.6 : 1,
     "&:hover [data-tq-fold-mark]": onToggle ? { color: INK } : undefined }}>
     {/* no step number any more: From is a column of its own, not step 1 (the redesign, 2026-10-21) - the tone says whose move it is */}
-    <Box data-tq-step={number} sx={{ width: quiet ? 7 : 9, height: quiet ? 7 : 9, borderRadius: "50%", bgcolor: tone, flexShrink: 0 }} />
-    <Box sx={{ minWidth: 0, flex: 1 }}>
+    <Box data-tq-step={number} sx={{ width: quiet ? 7 : 9, height: quiet ? 7 : 9, borderRadius: "50%", bgcolor: tone, flexShrink: 0, ...(sec ? { display: "none" } : {}) }} />
+    {sec ? <Box data-tq-section-head="" sx={{ minWidth: 0, flex: 1, display: "flex", alignItems: "baseline", gap: 1.25, flexWrap: "wrap" }}>
+      <Typography sx={{ fontSize: 12, fontWeight: 600, letterSpacing: ".06em", color: here ? ACCENT2 : DIM, textTransform: "uppercase", flexShrink: 0 }}>{sec.n} · {sec.name}</Typography>
+      <Typography sx={{ fontSize: 12, color: FAINT, minWidth: 0, display: "flex", alignItems: "center", gap: 0.25 }}>
+        {[title !== sec.name ? title : "", !folded ? description : "", here ? "up to here" : ""].filter(Boolean).join(" - ")}
+        {onToggle && <ExpandMoreIcon data-tq-fold-mark="" sx={{ fontSize: 16, color: FAINT, flexShrink: 0, transform: folded ? "rotate(-90deg)" : "none", transition: "transform .15s, color .15s" }} />}
+      </Typography>
+    </Box> : <Box sx={{ minWidth: 0, flex: 1 }}>
       {/* A FOLDED SECTION IS A HEADING OF THE WORK, not a row to press (the owner, 2026-10-27: "on the task there is a Close out button, but
           I thought it's a sidebar thing that pulls out?"): faded, with its arrow at the far edge, folded Close out read as a stray button
           under the Result. It wears the open heading's own weight now, its fold mark beside its name */}
@@ -3142,7 +3151,7 @@ const WorkflowHeading = ({ number, title, description, chip, tone, folded, onTog
         {onToggle && <ExpandMoreIcon data-tq-fold-mark="" sx={{ fontSize: 18, color: FAINT, flexShrink: 0, transform: folded ? "rotate(-90deg)" : "none", transition: "transform .15s, color .15s" }} />}
       </Typography>
       {description && !folded && <Typography sx={{ color: FAINT, fontSize: 12, display: "block", lineHeight: 1.4 }}>{description}</Typography>}
-    </Box>
+    </Box>}
     {/* the one action a stage cannot afford to hide when it folds. Its click is its own, not the fold's. */}
     {action && <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", flexShrink: 0, flexBasis: { xs: "100%", sm: "auto" }, order: { xs: 9, sm: 0 } }}>{action}</Box>}
     {tools && <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", flexShrink: 1, minWidth: 0 }}>{tools}</Box>}

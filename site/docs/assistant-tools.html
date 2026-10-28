@@ -141,7 +141,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tr>
 <td><strong>pipe</strong></td>
 <td>the walk and sets of items, and filing mail</td>
-<td>pipe.clear(select, scope?), pipe.defer(select, until), pipe.close(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage</td>
+<td>pipe.clear(select, scope?), pipe.defer(select, until), pipe.close(select), pipe.remove(select, learn?), pipe.block(select, how?), pipe.mine(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage</td>
 </tr>
 <tr>
 <td><strong>reports</strong></td>
@@ -150,13 +150,13 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 </tr>
 <tr>
 <td><strong>app</strong></td>
-<td>settings, connections, scripts, memory</td>
-<td>setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), hub.publish(title, body, topic?, kind?, why_earned?)</td>
+<td>settings, connections, scripts, memory, rules, the Hub</td>
+<td>setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), rule.change(about, how?), deleted.restore(what), hub.publish(title, body, topic?, kind?, why_earned?), hub.comment(post, text), hub.vote(post, up?)</td>
 </tr>
 <tr>
 <td><strong>look</strong></td>
 <td>look-ups - they run at once and change nothing</td>
-<td>app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, pipe.read, calendar.read, activity.list, errors.list, memory.about, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search</td>
+<td>app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, pipe.read, calendar.read, activity.list, errors.list, memory.about, memory.list, deleted.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search</td>
 </tr>
 </tbody></table>
 <p>A task you name goes in <code>ref</code> (&quot;TQ-0123&quot;); otherwise the tool acts on what is on the table.</p>
@@ -405,7 +405,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <h3 id="task-create-from-text"><code>task.create_from_text</code><a class="anchor" href="#task-create-from-text" aria-label="Link to this section">#</a></h3>
 <p>A new job with no message behind it. Never for a task that already exists (a TQ ref, or a row on THE RAIL BY NAME): starting an agent on one is dispatch.prepare, its own last session is agent.continue, and &quot;remind me about it&quot; is task.defer on it.</p>
 <ul>
-<li><code>kind</code> - task (a to-do or reminder the owner does themselves, no agent) | general (a regular agent) | coding</li>
+<li><code>kind</code> - task (a to-do or reminder the owner does themselves, no agent) | general (a regular agent) | coding | send (a new message the owner starts, to someone - <code>to</code>: their name or address; drafted in their voice for their Send, never sent from here) | goal (an outcome with a date, its steps tasks) | dashboard (a page of numbers kept up to date)</li>
 <li><code>text</code> - , and a short <code>title</code> in your own words for the job (never &quot;send it to the agent&quot;)</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="task-create-from-message"><code>task.create_from_message</code><a class="anchor" href="#task-create-from-message" aria-label="Link to this section">#</a></h3>
@@ -436,18 +436,35 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>select</code> - below</li>
 <li><code>scope</code> (optional) - all (the default - every one waiting that <code>select</code> matches, the batch on the table and every one after it: &quot;all the FYI&quot;, &quot;mark every FYI read&quot;, &quot;ignore all the FYI&quot;) | table (only those on the table: &quot;mark these read&quot;, &quot;these four&quot;)</li>
 </ul>
-<p class="runs">Brings up its button for you to press.</p><h3 id="pipe-defer"><code>pipe.defer</code><a class="anchor" href="#pipe-defer" aria-label="Link to this section">#</a></h3>
+<p class="runs">Runs at once and says what it changed.</p><h3 id="pipe-defer"><code>pipe.defer</code><a class="anchor" href="#pipe-defer" aria-label="Link to this section">#</a></h3>
 <p>Put a SET away until a day. Runs at once and the count is said.</p>
 <ul>
 <li><code>select</code> - below</li>
 <li><code>until</code> - (as task.defer takes it): &quot;snooze everything from Gail until Monday&quot; is select sender: Gail</li>
 </ul>
-<p class="runs">Brings up its button for you to press.</p><h3 id="pipe-close"><code>pipe.close</code><a class="anchor" href="#pipe-close" aria-label="Link to this section">#</a></h3>
+<p class="runs">Runs at once and says what it changed.</p><h3 id="pipe-close"><code>pipe.close</code><a class="anchor" href="#pipe-close" aria-label="Link to this section">#</a></h3>
 <p>Close a SET at once. &quot;Close all the tasks from Priya&quot; is select sender: Priya. Runs at once and the count is said.</p>
 <ul>
 <li><code>select</code> - (below): each task in it is marked done, each notice read</li>
 </ul>
-<p class="runs">Brings up its button for you to press.</p><h3 id="review-each"><code>review.each</code><a class="anchor" href="#review-each" aria-label="Link to this section">#</a></h3>
+<p class="runs">Runs at once and says what it changed.</p><h3 id="pipe-remove"><code>pipe.remove</code><a class="anchor" href="#pipe-remove" aria-label="Link to this section">#</a></h3>
+<p>Not ours for a SET at once - &quot;dismiss the spam&quot;, &quot;get rid of these newsletters&quot; - then triage learns from each; otherwise it teaches nothing. Never touches work waiting on the owner, an agent at work, a draft waiting for its Send or a goal - those are left and said. Runs at once; the receipt lists every row as its link.</p>
+<ul>
+<li><code>select</code> - (below; <code>keys</code>: the rows you judged, from pipe.read): each mail is filed, each task removed (Remove - not a task), nothing deleted</li>
+<li><code>learn</code> (optional) - true only when the owner says &quot;from now on&quot; too</li>
+</ul>
+<p class="runs">Runs at once and says what it changed.</p><h3 id="pipe-block"><code>pipe.block</code><a class="anchor" href="#pipe-block" aria-label="Link to this section">#</a></h3>
+<p>Stop a SET&#39;s senders for good - only when the owner says so (&quot;and stop them&quot;, &quot;block them&quot;, &quot;unsubscribe me&quot;). &quot;Dismiss the spam&quot; alone is pipe.remove, never this.</p>
+<ul>
+<li><code>select</code> - as pipe.remove takes it</li>
+<li><code>how</code> (optional) - rule (the default: an exclusion rule per sender in Settings, their mail never reaches triage again) | unsubscribe (a mailing list: its Unsubscribe comes up lit, one list at a time - the owner presses it)</li>
+</ul>
+<p class="runs">Runs at once and says what it changed.</p><h3 id="pipe-mine"><code>pipe.mine</code><a class="anchor" href="#pipe-mine" aria-label="Link to this section">#</a></h3>
+<p>Put it on my list for a SET of mail; each becomes a task of the owner&#39;s, no agent. A row already a task is left as it is.</p>
+<ul>
+<li><code>select</code></li>
+</ul>
+<p class="runs">Runs at once and says what it changed.</p><h3 id="review-each"><code>review.each</code><a class="anchor" href="#review-each" aria-label="Link to this section">#</a></h3>
 <p>&quot;approve all the drafts&quot;: brings the next draft waiting for a Send up with its Send lit, and says how many are left - each one still goes only by its own press; CALL it again for the one after.</p>
 <p class="runs">Brings up its button for you to press.</p><h3 id="button-light"><code>button.light</code><a class="anchor" href="#button-light" aria-label="Link to this section">#</a></h3>
 <p>Light any button a row draws, by its name. A put-down (close, close_note with its note, remove, not_ours) is pressed.</p>
@@ -519,7 +536,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>title</code> - kept 30 days under Recently deleted</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h2 id="app">App<a class="anchor" href="#app" aria-label="Link to this section">#</a></h2>
-<p>Settings, connections, scripts, memory.</p>
+<p>Settings, connections, scripts, memory, rules, the Hub.</p>
 <h3 id="setting-set"><code>setting.set</code><a class="anchor" href="#setting-set" aria-label="Link to this section">#</a></h3>
 <p>Change one setting; the schema says what it takes.</p>
 <ul>
@@ -566,14 +583,14 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>name</code></li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="memory-remember"><code>memory.remember</code><a class="anchor" href="#memory-remember" aria-label="Link to this section">#</a></h3>
-<p>Keep a fact or rule the owner tells you, at once - those five are LEARNED.md, the memory every reader uses | style: a rule about HOW they write - greetings and salutations (&quot;write Mrs <surname> to women, never her first name&quot;), sign-off, tone, length, formatting, words to use or avoid - saved to their writing style, STYLE.md&#39;s Owner notes, which every draft reads. Who reports to whom and who owns what is people.relate.</p>
+<p>Keep a fact or rule the owner tells you, at once - those five are LEARNED.md, the memory every reader uses | style: a rule about HOW they write - greetings and salutations (&quot;write Mrs <surname> to women, never her first name&quot;), sign-off, tone, length, formatting, words to use or avoid - saved to their writing style, STYLE.md&#39;s Owner notes, which every draft reads; with <code>about</code> (one person: &quot;write to Gail informally&quot;) it is kept for that person alone, read only by the drafts to them | soul: who the owner IS, lasting - their title, company, the systems and repositories they use (&quot;I&#39;m now the AP lead&quot;, &quot;our ERP is Intacct&quot;) - SOUL.md, which triage, drafts, agents and you read | counsel: how YOU should behave and speak to the owner (&quot;be shorter with me&quot;, &quot;don&#39;t walk me through the FYI&quot;) - COUNSEL.md, your own instructions. SOUL and COUNSEL are added to, never rewritten; a fact about their job or about what becomes a task is care or work, never these. Who reports to whom and who owns what is people.relate.</p>
 <ul>
 <li><code>note</code> - it, in the owner&#39;s words (&quot;Gail moved to Ops&quot;, &quot;Ray handles payroll for me&quot;, &quot;I put renewals off to Friday&quot;, &quot;I don&#39;t care about the legacy export job any more&quot;)</li>
-<li><code>about</code> (optional) - the person&#39;s address or name, for a people line</li>
+<li><code>about</code> (optional) - the person&#39;s address or name, for a people or style line</li>
 <li><code>section</code> (optional) - , always: people (who someone is to them, how they deal with them) | care (what they are responsible for and what they do NOT care about - a legacy process, a system no longer theirs: triage and the report gate then make no task of it) | work (their rhythm) | promises | bring (what the Advisor may raise)</li>
 <li><code>replaces</code> (optional) - the key of the line it makes untrue, closed and kept as history (memory.about gives the keys)</li>
 </ul>
-<p class="runs">Brings up its button for you to press.</p><h3 id="memory-wrong"><code>memory.wrong</code><a class="anchor" href="#memory-wrong" aria-label="Link to this section">#</a></h3>
+<p class="runs">Runs at once and says what it changed.</p><h3 id="memory-wrong"><code>memory.wrong</code><a class="anchor" href="#memory-wrong" aria-label="Link to this section">#</a></h3>
 <p>Take a line Taskuary learned out of its memory. &quot;forget that Ray does payroll&quot;, &quot;that is wrong about Erin&quot;. A line the owner wrote themselves takes forget only.</p>
 <ul>
 <li><code>key</code> - from memory.about or memory.list</li>
@@ -588,7 +605,18 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>drops</code> - areas taken off</li>
 <li><code>forget</code> - true takes them off the chart</li>
 </ul>
-<p class="runs">Runs at once and says what it changed.</p><h3 id="hub-publish"><code>hub.publish</code><a class="anchor" href="#hub-publish" aria-label="Link to this section">#</a></h3>
+<p class="runs">Runs at once and says what it changed.</p><h3 id="rule-change"><code>rule.change</code><a class="anchor" href="#rule-change" aria-label="Link to this section">#</a></h3>
+<p>Change or delete one routing rule (Settings → Routing policies). Adding a rule for a sender is preference.sender_rule.</p>
+<ul>
+<li><code>about</code> - words naming it, as rules.list says it (its sender, pattern or name)</li>
+<li><code>how</code> (optional) - edit (the default) | remove</li>
+</ul>
+<p class="runs">Brings up its page, at the thing, for you to press.</p><h3 id="deleted-restore"><code>deleted.restore</code><a class="anchor" href="#deleted-restore" aria-label="Link to this section">#</a></h3>
+<p>Bring back something removed in the last 30 days - a report, workflow, dashboard, routing rule or profile.</p>
+<ul>
+<li><code>what</code> - its title as deleted.list says it</li>
+</ul>
+<p class="runs">Brings up its page, at the thing, for you to press.</p><h3 id="hub-publish"><code>hub.publish</code><a class="anchor" href="#hub-publish" aria-label="Link to this section">#</a></h3>
 <p>Save to the company Hub. Only a reusable discovery reached through real work, or a developed idea with its reasons - never a transcript, a task log or a routine answer. When the owner asks to save something there, or a turn clearly earns it.</p>
 <ul>
 <li><code>title</code> - one durable claim</li>
@@ -597,7 +625,19 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>kind</code> (optional) - new_idea | technical_solve | howto | gotcha | decision | system | people</li>
 <li><code>why_earned</code> (optional)</li>
 </ul>
-<p class="runs">Brings up its button for you to press.</p><h2 id="look">Look<a class="anchor" href="#look" aria-label="Link to this section">#</a></h2>
+<p class="runs">Brings up its button for you to press.</p><h3 id="hub-comment"><code>hub.comment</code><a class="anchor" href="#hub-comment" aria-label="Link to this section">#</a></h3>
+<p>Add a comment to a Hub post. Others read the Hub: it goes only by the owner&#39;s press.</p>
+<ul>
+<li><code>post</code> - its number (#12, as knowledge.search prints it)</li>
+<li><code>text</code> - the comment in the owner&#39;s words</li>
+</ul>
+<p class="runs">Brings up its page, at the thing, for you to press.</p><h3 id="hub-vote"><code>hub.vote</code><a class="anchor" href="#hub-vote" aria-label="Link to this section">#</a></h3>
+<p>Vote a Hub post up or down.</p>
+<ul>
+<li><code>post</code> - its number</li>
+<li><code>up</code> (optional) - false for down</li>
+</ul>
+<p class="runs">Brings up its page, at the thing, for you to press.</p><h2 id="look">Look<a class="anchor" href="#look" aria-label="Link to this section">#</a></h2>
 <p>Look-ups - they run at once and change nothing.</p>
 <h3 id="app-find"><code>app.find</code><a class="anchor" href="#app-find" aria-label="Link to this section">#</a></h3>
 <p>Bring ANYTHING in the app up by words - a setting, a connector card (the catalogue&#39;s and the owner&#39;s own, by name), a page, a report or workflow, a document: <code>query</code>, the words that name it (&quot;sound&quot;, &quot;signature&quot;, &quot;second outlook&quot;). It returns the best candidates with their links: link the one that fits, [its name](its link), and it opens.</p>
@@ -682,6 +722,8 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <ul>
 <li><code>about</code> - words to narrow it (a sender, a topic)</li>
 </ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="deleted-list"><code>deleted.list</code><a class="anchor" href="#deleted-list" aria-label="Link to this section">#</a></h3>
+<p>What was removed in the last 30 days and can still come back - reports, workflows, dashboards, rules, profiles.</p>
 <p class="runs">Runs at once and changes nothing.</p><h3 id="rules-list"><code>rules.list</code><a class="anchor" href="#rules-list" aria-label="Link to this section">#</a></h3>
 <p>The standing filters on the owner&#39;s mail - queue mutes set with a reason, and the policy rules (skip, ignore, escalate...) that decide before any model reads it. Use it for &quot;why did I never see X&quot;, &quot;what am I filtering&quot;</p>
 <ul>
@@ -741,7 +783,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">Runs at once and changes nothing.</p>
     </article>
     <nav class="pager"><a class="pn prev" href="./assistant"><span>Previous</span>Assistant buttons</a><a class="pn next" href="./reports"><span>Next</span>Reports and the Advisor</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.62 · updated 2026-10-28</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.63 · updated 2026-10-28</p>
   </main>
 </div>
 <script src="./docs.js"></script>

@@ -35,7 +35,8 @@ const ASK = {
   // from the email and use that in emails ... have a setting so they can check it that it looks good")
   signature: "Is this your email signature? It goes under every email Taskuary writes for you, exactly like this - fix anything that's off.",
   systems: "Which systems do you work in? The ones ticked came up in your email - add any that are missing.",
-  mailboxes: "Add every other place your work comes in - email, chat or a task system - with its card; your job is read from all of them.",
+  // short enough that the line still names the button at 1440 px - it ran out past "Th…" (the setup sweep, 2026-10-27)
+  mailboxes: "Add any other place your work comes in with its card - your job is read from all of them.",
 };
 // each draft's line, by its state - the job's as it was, the other two in the same words
 const SAYS = {
@@ -169,6 +170,8 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
   const line = !a ? "" : draft ? (draft.state === "failed" ? says.failed(draft.why) : says[draft.state])
     : step === "mailboxes" ? (boxes ? `${boxes === 1 ? "One source is" : `${boxes} sources are`} connected. ${ASK.mailboxes} Then press ${nextLabel}.`
       : "Connect your email, chat or task system with its card - your job is read from everything you connect.")
+    // ...and "the ones ticked" only when the mail ticked some: with none it pointed at nothing
+    : step === "systems" && !reading && !seen.length ? `Which systems do you work in? Type each one and press Add a system. Then press ${nextLabel}.`
     : `${ASK[step]}${reading && step !== "systems" ? " I'm reading your email to fill this in." : ""} Then press ${nextLabel}.`;
   useEffect(() => { onLine?.(line); }, [line, onLine]);
   useEffect(() => () => onLine?.(""), [onLine]);

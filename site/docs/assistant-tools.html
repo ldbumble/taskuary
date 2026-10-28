@@ -156,7 +156,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tr>
 <td><strong>look</strong></td>
 <td>look-ups - they run at once and change nothing</td>
-<td>app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.about, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search</td>
+<td>app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, pipe.read, calendar.read, activity.list, errors.list, memory.about, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search</td>
 </tr>
 </tbody></table>
 <p>A task you name goes in <code>ref</code> (&quot;TQ-0123&quot;); otherwise the tool acts on what is on the table.</p>
@@ -640,6 +640,12 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p>Everything waiting for the owner&#39;s yes: drafted replies and the actions agents proposed, with their tasks.</p>
 <p class="runs">Runs at once and changes nothing.</p><h3 id="pipe-list"><code>pipe.list</code><a class="anchor" href="#pipe-list" aria-label="Link to this section">#</a></h3>
 <p>Everything waiting on the owner, lane by lane - replies, asks, approvals, stopped agents, reports: the whole work rail. Use it for &quot;what&#39;s waiting&quot;, &quot;what&#39;s left&quot;, &quot;what do I have&quot;</p>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="pipe-read"><code>pipe.read</code><a class="anchor" href="#pipe-read" aria-label="Link to this section">#</a></h3>
+<p>Every row on the work rail WITH WHAT IT SAYS - sender, subject, lane, age and the sender&#39;s own words (quoted history cut) - in one call, however many rows. Use it for &quot;summarize my FYI&quot;, &quot;what&#39;s in reports&quot;, &quot;anything from Erin on the rail&quot;</p>
+<ul>
+<li><code>section</code> - task | later | reports | ideas | fyi (or a lane; none for all)</li>
+<li><code>who</code> - a sender</li>
+</ul>
 <p class="runs">Runs at once and changes nothing.</p><h3 id="calendar-read"><code>calendar.read</code><a class="anchor" href="#calendar-read" aria-label="Link to this section">#</a></h3>
 <p>The owner&#39;s meetings. Reads the calendar live, so it takes a moment.</p>
 <ul>
@@ -725,7 +731,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">Runs at once and changes nothing.</p>
     </article>
     <nav class="pager"><a class="pn prev" href="./assistant"><span>Previous</span>Assistant buttons</a><a class="pn next" href="./reports"><span>Next</span>Reports and the Advisor</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.55 · updated 2026-10-28</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.56 · updated 2026-10-28</p>
   </main>
 </div>
 <script src="./docs.js"></script>

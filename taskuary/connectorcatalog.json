@@ -43,7 +43,7 @@
       "title": "GitHub",
       "group": "Developer",
       "planned": false,
-      "desc": "Paste a PAT - repos are auto-discovered, feed the Board's repo picker and the coding agent's issue loop. Per repo, choose what issues and PRs do: tasks, feed, or off.",
+      "desc": "Paste a personal access token - repos are auto-discovered, feed the Board's repo picker and the coding agent's issue loop. Per repo, choose what issues and PRs do: tasks, feed, or off.",
       "match": [
         "github"
       ]

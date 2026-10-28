@@ -22,13 +22,16 @@ export function GoogleFiles({ conn, cfg, reload }) {
   const [err, setErr] = useState(""), [went, setWent] = useState(false);
   // a Google sign-in to widen: the calendar's, on Taskuary's own client or the card's (googlecal.client)
   const can = (conn.ConfigSaved || []).includes("google_refresh_token") || !!cfg.google_refresh_token;
+  // no Google sign-in to widen and nothing chosen: a panel holding only a disabled checkbox is not drawn (the setup sweep, 2026-10-28) -
+  // it comes once the calendar's sign-in is on the card
+  if (!can && !cfg.allow_files) return null;
   const flip = async (on) => {
     setErr("");
     try { const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/google/files`, { on }); window.open(data.url, "_blank", "noopener"); setWent(true); }
     catch (e) { setErr(e?.response?.data?.detail || "Google could not be asked - try again."); }
   };
   return (
-    <Box sx={{ p: 1.25, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 0.5 }}>
+    <Box data-tq-google-files="" sx={{ mb: 2, p: 1.25, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 0.5 }}>
       <AllowFiles checked={cfg.allow_files} onChange={flip} disabled={!can}
         hint={can ? G_FILES_HINT : "Needs the Google sign-in first - Sign in with Google for the calendar, above"} />
       {went && <Typography variant="caption" sx={{ color: DIM }}>Finish in the Google tab, then come back - this card reads it again.

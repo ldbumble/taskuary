@@ -85,7 +85,9 @@ test("LinkedIn: typed finds its card at once, and the card connects in plain ste
   // 3. the card: plain fields that say where each comes from, Sign in held until the keys are saved, AI setup only a helper
   const text = await page.evaluate(() => document.querySelector("[data-tq-browse-one]").innerText);
   for (const want of ["Client ID", "developer.linkedin.com/apps → your app → Auth tab → Client ID", "Client Secret", "Sign in with LinkedIn",
-    "Nothing to paste here", "Get AI to set it up", "Add another LinkedIn account"]) assert.ok(text.includes(want), `the card says "${want}"`);
+    "Nothing to paste here", "Get AI to set it up"]) assert.ok(text.includes(want), `the card says "${want}"`);
+  // a second account is offered once this one is connected, not before (the setup sweep, 2026-10-28)
+  assert.ok(!text.includes("Add another LinkedIn account"), "no Add another on a card not yet connected");
   assert.equal(await signIn(page), "disabled", "Sign in waits for the app's keys");
   const aiFilled = await page.evaluate(() => [...document.querySelectorAll("[data-tq-browse-one] button")].find((b) => b.innerText.trim() === "Get AI to set it up")?.className.includes("contained"));
   assert.equal(aiFilled, false, "Get AI to set it up is not the card's filled button");

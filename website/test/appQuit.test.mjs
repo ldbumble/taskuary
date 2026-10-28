@@ -45,3 +45,10 @@ test("the Assistant's #settings=updates&key=update lights the real Update button
   assert.match(card, /lit && canApply && !busy \? \{ "data-tq-asked": "" \}/);
   assert.match(card, /const apply = async \(\) => \{\r?\n {4}setLit\(false\);/);
 });
+
+// the setup sweep, 2026-10-28: a greyed "Couldn't check" beside Check now said what the warning under it already says
+test("a check that did not get through draws no Update button, only Check now and the warning", () => {
+  const card = src("UpdateCard.jsx");
+  assert.match(card, /\{!\(unknown && !busy\) && <Button size="small" variant="contained"/);
+  assert.doesNotMatch(card, /"Couldn't check"/);
+});

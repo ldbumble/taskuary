@@ -4,18 +4,13 @@
 // available; Background sync 0 in Settings turns both recurring clocks off.
 export const CHAT_CONNECTORS = ["teams", "slack", "telegram", "whatsapp", "imessage", "discord"];
 export const CHAT_POLL_SECONDS = 30;
+export const POLL_KEY = "poll_seconds";
 
-const COVERS = {
-  whatsapp: "inbound messages from every chat this connector brings in - not only the assistant chat; replies in the notification chat are polled too, while sending notifications is event-driven",
-  imessage: "every chat Messages.app brings in",
-};
-
+// ONE SHORT LINE (the setup sweep, 2026-10-28): the label was cut off on the card and its five-line hint led Credentials, before the
+// token. The card draws it under Advanced, after the token (ConnectorsView, isPollField); Settings' Background sync help says the rest
 export function pollSecondsField(type) {
   if (!CHAT_CONNECTORS.includes(type)) return null;
-  const covers = COVERS[type] || "every chat this connector brings in";
-  return [`Check for new messages every N seconds (blank = ${CHAT_POLL_SECONDS}, 0 = no fast polling)`, "poll_seconds", String(CHAT_POLL_SECONDS),
-    `Covers ${covers}. This recurring fast clock is separate from the full background-sync clock. `
-    + `Blank uses ${CHAT_POLL_SECONDS} seconds. 0 disables this fast poll; recurring background sync can still poll the connector, `
-    + "and manual Sync now, action-time freshness checks, and startup catch-up can still fetch it. "
-    + "Background sync 0 in Settings disables both recurring clocks; explicit and startup fetches remain available."];
+  return ["Check for new messages every (seconds)", POLL_KEY, String(CHAT_POLL_SECONDS),
+    `Blank = ${CHAT_POLL_SECONDS}; 0 = no fast check (background sync and Sync now still read it).`];
 }
+export const isPollField = (f) => f?.[1] === POLL_KEY;

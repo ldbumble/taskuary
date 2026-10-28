@@ -77,6 +77,9 @@ jobs:
       # hand-edits the HTML, and a source change that was never rebuilt fails here rather than
       # shipping a page that disagrees with docs/site/
       - name: Verify committed docs site matches source
+        # strict on a release commit (tools/release.sh rebuilds the docs into it); an ordinary push between releases may carry a
+        # docs page whose site copy the next release builds - red on every such push turned the README badge red (2026-10-28)
+        if: startsWith(github.event.head_commit.message, 'Release ') || github.event_name == 'pull_request'
         shell: bash
         run: |
           git diff --exit-code -- site/docs

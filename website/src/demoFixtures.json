@@ -1434,6 +1434,94 @@
  "/api/feed": {
   "data": [
    {
+    "MessageId": 60,
+    "Channel": "report",
+    "SourceName": "Taskuary at a glance",
+    "Subject": "Taskuary at a glance — Came in 39 · New tasks 27 · Open now 12",
+    "FromName": "Taskuary at a glance",
+    "FromEmail": null,
+    "SentAt": "2026-09-23 22:18:12",
+    "IngestedAt": "2026-09-23 22:18:12",
+    "ConversationId": "report:8",
+    "Preview": "Came in: 39\nNew tasks: 27\nOpen now: 12\nMedian reply time: 1.2 h\nAgent time per session: 24 min",
+    "MsgStatus": "feed",
+    "SourceLink": "#report=8",
+    "TaskId": null,
+    "Direction": "in",
+    "Brief": null,
+    "TriageTitle": null,
+    "SenderClass": null,
+    "Unsub": null,
+    "Title": null,
+    "TaskStatus": null,
+    "Priority": null,
+    "TaskKind": null,
+    "TaskTags": null,
+    "NeedsYou": 0,
+    "ChainSize": 0,
+    "Decision": null,
+    "RouteReason": null,
+    "ReviewId": null,
+    "ReviewStatus": null,
+    "ReviewKind": null,
+    "HasDraft": null,
+    "DraftError": null,
+    "Attachments": 0,
+    "AnsweredAt": null,
+    "TheirTurn": 0,
+    "Category": "report",
+    "FunnelKey": "report:44",
+    "Unread": 1,
+    "ReportFailed": false,
+    "UnreadRank": 3,
+    "CanSend": false,
+    "SendBlock": "report items cannot be replied to from here"
+   },
+   {
+    "MessageId": 61,
+    "Channel": "report",
+    "SourceName": "Northwind desk",
+    "Subject": "Northwind desk — Open tasks 12 · Came in 39 · Became tasks 27",
+    "FromName": "Northwind desk",
+    "FromEmail": null,
+    "SentAt": "2026-09-23 22:18:12",
+    "IngestedAt": "2026-09-23 22:18:12",
+    "ConversationId": "report:8",
+    "Preview": "Open tasks: 12\nCame in: 39\nBecame tasks: 27",
+    "MsgStatus": "feed",
+    "SourceLink": "#report=8",
+    "TaskId": null,
+    "Direction": "in",
+    "Brief": null,
+    "TriageTitle": null,
+    "SenderClass": null,
+    "Unsub": null,
+    "Title": null,
+    "TaskStatus": null,
+    "Priority": null,
+    "TaskKind": null,
+    "TaskTags": null,
+    "NeedsYou": 0,
+    "ChainSize": 0,
+    "Decision": null,
+    "RouteReason": null,
+    "ReviewId": null,
+    "ReviewStatus": null,
+    "ReviewKind": null,
+    "HasDraft": null,
+    "DraftError": null,
+    "Attachments": 0,
+    "AnsweredAt": null,
+    "TheirTurn": 0,
+    "Category": "report",
+    "FunnelKey": "report:43",
+    "Unread": 1,
+    "ReportFailed": false,
+    "UnreadRank": 3,
+    "CanSend": false,
+    "SendBlock": "report items cannot be replied to from here"
+   },
+   {
     "MessageId": 18,
     "Channel": "github",
     "SourceName": null,
@@ -8977,6 +9065,28 @@
     "Active": 1,
     "ConfigJson": "{\"type\": \"mssql\", \"title\": \"Helpdesk tickets by day, last 14\"}",
     "LastPolledAt": "2026-09-23 22:18:12"
+   },
+   {
+    "SourceId": 7,
+    "Channel": "report",
+    "Address": "Taskuary at a glance",
+    "Owner": "template",
+    "ConnectorId": null,
+    "Active": 1,
+    "ConfigJson": "{\"type\": \"dashboard\", \"title\": \"Taskuary at a glance\", \"daily_at\": \"07:00\", \"sources\": [{\"key\": \"mail\", \"label\": \"What came in\", \"type\": \"taskuary_data\", \"dataset\": \"mail\", \"days\": 90, \"date\": \"day\"}, {\"key\": \"flow\", \"label\": \"How far it got\", \"type\": \"taskuary_data\", \"dataset\": \"flow\", \"days\": 90, \"date\": \"day\"}, {\"key\": \"tasks\", \"label\": \"Tasks\", \"type\": \"taskuary_data\", \"dataset\": \"tasks\", \"days\": 90, \"date\": \"arrived\"}, {\"key\": \"closed\", \"label\": \"Tasks closed\", \"type\": \"taskuary_data\", \"dataset\": \"tasks\", \"days\": 90, \"date\": \"closed\"}, {\"key\": \"agents\", \"label\": \"Agent sessions\", \"type\": \"taskuary_data\", \"dataset\": \"agent_runs\", \"days\": 90, \"date\": \"day\"}, {\"key\": \"replies\", \"label\": \"Replies\", \"type\": \"taskuary_data\", \"dataset\": \"replies\", \"days\": 90, \"date\": \"day\"}], \"filters\": {\"range\": 7, \"segment\": \"channel\"}, \"components\": [{\"kind\": \"stat\", \"title\": \"Came in\", \"source\": \"mail\", \"agg\": \"count\"}, {\"kind\": \"stat\", \"title\": \"New tasks\", \"source\": \"tasks\", \"agg\": \"count\"}, {\"kind\": \"stat\", \"title\": \"Open now\", \"source\": \"tasks\", \"agg\": \"count\", \"where\": {\"state\": \"open\"}, \"range\": false, \"good\": \"down\"}, {\"kind\": \"stat\", \"title\": \"Median reply time\", \"source\": \"replies\", \"agg\": \"median\", \"y\": \"hours\", \"unit\": \"h\", \"good\": \"down\"}, {\"kind\": \"progress\", \"title\": \"Closed this week\", \"source\": \"closed\", \"agg\": \"count\", \"where\": {\"state\": \"closed\"}, \"range\": 7, \"target\": 15}, {\"kind\": \"stat\", \"title\": \"Agent time per session\", \"source\": \"agents\", \"agg\": \"median\", \"y\": \"minutes\", \"unit\": \"min\", \"good\": \"none\"}, {\"kind\": \"bar\", \"title\": \"How far it got\", \"source\": \"flow\", \"x\": \"stage\", \"order\": [\"Came in\", \"Triaged\", \"On a task\", \"Task closed\"], \"share\": true, \"w\": 2}, {\"kind\": \"stacked\", \"title\": \"What came in, by channel\", \"source\": \"mail\", \"x\": \"day\", \"series\": \"channel\", \"w\": 2}, {\"kind\": \"stacked\", \"title\": \"Agent sessions, and how they ended\", \"source\": \"agents\", \"x\": \"day\", \"series\": \"outcome\", \"w\": 2}, {\"kind\": \"bar\", \"title\": \"Open work by kind\", \"source\": \"tasks\", \"x\": \"kind\", \"where\": {\"state\": \"open\"}, \"range\": false, \"w\": 2}, {\"kind\": \"bar\", \"title\": \"Who writes most\", \"source\": \"mail\", \"x\": \"sender\", \"limit\": 8, \"w\": 2}, {\"kind\": \"list\", \"title\": \"Waiting longest on you\", \"source\": \"tasks\", \"label\": \"title\", \"meta\": \"waiting\", \"where\": {\"status\": \"open\"}, \"range\": false, \"sort\": \"arrived\", \"limit\": 6, \"w\": 4}], \"route\": {\"timeline\": {\"how\": \"always\"}, \"alert\": {\"how\": \"never\"}, \"send\": {\"how\": \"always\"}, \"triage\": {\"how\": \"never\"}}}",
+    "LastPolledAt": "2026-09-23 22:18:12",
+    "RouteWords": "Reports: every run; alert: never"
+   },
+   {
+    "SourceId": 8,
+    "Channel": "report",
+    "Address": "Northwind desk",
+    "Owner": null,
+    "ConnectorId": null,
+    "Active": 1,
+    "ConfigJson": "{\"type\": \"dashboard\", \"title\": \"Northwind desk\", \"daily_at\": \"07:00\", \"sources\": [{\"key\": \"tasks\", \"label\": \"Tasks\", \"type\": \"taskuary_data\", \"dataset\": \"tasks\", \"days\": 90, \"date\": \"arrived\"}, {\"key\": \"mail\", \"label\": \"Mail in\", \"type\": \"taskuary_data\", \"dataset\": \"mail\", \"days\": 90, \"date\": \"day\"}], \"filters\": {\"range\": 7, \"segment\": \"channel\"}, \"components\": [{\"kind\": \"stat\", \"title\": \"Open tasks\", \"source\": \"tasks\", \"agg\": \"count\", \"where\": {\"state\": \"open\"}, \"range\": false}, {\"kind\": \"stat\", \"title\": \"Came in\", \"source\": \"mail\", \"agg\": \"count\"}, {\"kind\": \"stat\", \"title\": \"Became tasks\", \"source\": \"mail\", \"agg\": \"count\", \"where\": {\"became_task\": \"yes\"}}, {\"kind\": \"progress\", \"title\": \"Closed toward 25 this week\", \"source\": \"tasks\", \"agg\": \"count\", \"where\": {\"state\": \"closed\"}, \"target\": 25}, {\"kind\": \"stacked\", \"title\": \"Mail in by day\", \"source\": \"mail\", \"x\": \"day\", \"series\": \"channel\", \"w\": 2}, {\"kind\": \"bar\", \"title\": \"Open work by kind\", \"source\": \"tasks\", \"x\": \"kind\", \"where\": {\"state\": \"open\"}, \"range\": false, \"w\": 2}, {\"kind\": \"bar\", \"title\": \"Who wrote most\", \"source\": \"mail\", \"x\": \"sender\", \"limit\": 6, \"w\": 2}, {\"kind\": \"list\", \"title\": \"Open now\", \"source\": \"tasks\", \"label\": \"title\", \"meta\": \"kind\", \"where\": {\"state\": \"open\"}, \"range\": false, \"sort\": \"-arrived\", \"limit\": 8, \"w\": 2}], \"route\": {\"timeline\": {\"how\": \"always\"}, \"alert\": {\"how\": \"never\"}, \"send\": {\"how\": \"always\"}, \"triage\": {\"how\": \"never\"}}}",
+    "LastPolledAt": "2026-09-23 22:18:12",
+    "RouteWords": "Reports: every run; alert: never"
    }
   ],
   "default_repo": null
@@ -9502,7 +9612,40 @@
   ]
  },
  "/api/reports/last-runs": {
-  "data": {}
+  "data": {
+   "7": {
+    "at": "2026-09-23 22:18:12",
+    "type": "dashboard",
+    "title": "Taskuary at a glance",
+    "trigger": "schedule",
+    "ms": 5,
+    "subject": "Taskuary at a glance — Came in 39 · New tasks 27 · Open now 12",
+    "message_id": 60,
+    "failed": false,
+    "files": 0,
+    "said": 0,
+    "reviewed": null,
+    "inputs": "",
+    "lines": [],
+    "summary": "Came in: 39\nNew tasks: 27\nOpen now: 12\nMedian reply time: 1.2 h\nAgent time per session: 24 min"
+   },
+   "8": {
+    "at": "2026-09-23 22:18:12",
+    "type": "dashboard",
+    "title": "Northwind desk",
+    "trigger": "schedule",
+    "ms": 6,
+    "subject": "Northwind desk — Open tasks 12 · Came in 39 · Became tasks 27",
+    "message_id": 61,
+    "failed": false,
+    "files": 0,
+    "said": 0,
+    "reviewed": null,
+    "inputs": "",
+    "lines": [],
+    "summary": "Open tasks: 12\nCame in: 39\nBecame tasks: 27"
+   }
+  }
  },
  "/api/board/notes": {
   "data": [],
@@ -14076,7 +14219,3109 @@
    "RankValue": null,
    "RankWhy": null,
    "ReadText": "Sharing for visibility."
+  },
+  "60": {
+   "MessageId": 60,
+   "TaskId": null,
+   "ExternalId": "report:8:2026-10-28 11:20:21:dashboard",
+   "ConversationId": "report:8",
+   "Channel": "report",
+   "SourceName": "Taskuary at a glance",
+   "Subject": "Taskuary at a glance — Came in 39 · New tasks 27 · Open now 12",
+   "FromName": "Taskuary at a glance",
+   "FromEmail": null,
+   "SentAt": "2026-09-23 22:18:12",
+   "BodyText": "Came in: 39\nNew tasks: 27\nOpen now: 12\nMedian reply time: 1.2 h\nAgent time per session: 24 min",
+   "SourceLink": "#report=8",
+   "Status": "feed",
+   "CreatedAt": "2026-09-23 22:18:12",
+   "Direction": "in",
+   "RecipientsJson": null,
+   "MailMetaJson": null,
+   "OwnText": null,
+   "SenderClass": null,
+   "Brief": null,
+   "TriageTitle": null,
+   "Danger": null,
+   "MeetJson": null,
+   "RankValue": null,
+   "RankWhy": null,
+   "ReadText": "Came in: 39\nNew tasks: 27\nOpen now: 12\nMedian reply time: 1.2 h\nAgent time per session: 24 min"
+  },
+  "61": {
+   "MessageId": 61,
+   "TaskId": null,
+   "ExternalId": "report:8:2026-10-28 11:20:21:dashboard",
+   "ConversationId": "report:8",
+   "Channel": "report",
+   "SourceName": "Northwind desk",
+   "Subject": "Northwind desk — Open tasks 12 · Came in 39 · Became tasks 27",
+   "FromName": "Northwind desk",
+   "FromEmail": null,
+   "SentAt": "2026-09-23 22:18:12",
+   "BodyText": "Open tasks: 12\nCame in: 39\nBecame tasks: 27",
+   "SourceLink": "#report=8",
+   "Status": "feed",
+   "CreatedAt": "2026-09-23 22:18:12",
+   "Direction": "in",
+   "RecipientsJson": null,
+   "MailMetaJson": null,
+   "OwnText": null,
+   "SenderClass": null,
+   "Brief": null,
+   "TriageTitle": null,
+   "Danger": null,
+   "MeetJson": null,
+   "RankValue": null,
+   "RankWhy": null,
+   "ReadText": "Open tasks: 12\nCame in: 39\nBecame tasks: 27"
   }
  },
- "/api/terminals/scrollback": {}
+ "/api/terminals/scrollback": {},
+ "/api/dashboards/7": {
+  "source_id": 7,
+  "active": true,
+  "config": {
+   "type": "dashboard",
+   "title": "Taskuary at a glance",
+   "daily_at": "07:00",
+   "sources": [
+    {
+     "key": "mail",
+     "label": "What came in",
+     "type": "taskuary_data",
+     "dataset": "mail",
+     "days": 90,
+     "date": "day"
+    },
+    {
+     "key": "flow",
+     "label": "How far it got",
+     "type": "taskuary_data",
+     "dataset": "flow",
+     "days": 90,
+     "date": "day"
+    },
+    {
+     "key": "tasks",
+     "label": "Tasks",
+     "type": "taskuary_data",
+     "dataset": "tasks",
+     "days": 90,
+     "date": "arrived"
+    },
+    {
+     "key": "closed",
+     "label": "Tasks closed",
+     "type": "taskuary_data",
+     "dataset": "tasks",
+     "days": 90,
+     "date": "closed"
+    },
+    {
+     "key": "agents",
+     "label": "Agent sessions",
+     "type": "taskuary_data",
+     "dataset": "agent_runs",
+     "days": 90,
+     "date": "day"
+    },
+    {
+     "key": "replies",
+     "label": "Replies",
+     "type": "taskuary_data",
+     "dataset": "replies",
+     "days": 90,
+     "date": "day"
+    }
+   ],
+   "filters": {
+    "range": 7,
+    "segment": "channel"
+   },
+   "components": [
+    {
+     "kind": "stat",
+     "title": "Came in",
+     "source": "mail",
+     "agg": "count"
+    },
+    {
+     "kind": "stat",
+     "title": "New tasks",
+     "source": "tasks",
+     "agg": "count"
+    },
+    {
+     "kind": "stat",
+     "title": "Open now",
+     "source": "tasks",
+     "agg": "count",
+     "where": {
+      "state": "open"
+     },
+     "range": false,
+     "good": "down"
+    },
+    {
+     "kind": "stat",
+     "title": "Median reply time",
+     "source": "replies",
+     "agg": "median",
+     "y": "hours",
+     "unit": "h",
+     "good": "down"
+    },
+    {
+     "kind": "progress",
+     "title": "Closed this week",
+     "source": "closed",
+     "agg": "count",
+     "where": {
+      "state": "closed"
+     },
+     "range": 7,
+     "target": 15
+    },
+    {
+     "kind": "stat",
+     "title": "Agent time per session",
+     "source": "agents",
+     "agg": "median",
+     "y": "minutes",
+     "unit": "min",
+     "good": "none"
+    },
+    {
+     "kind": "bar",
+     "title": "How far it got",
+     "source": "flow",
+     "x": "stage",
+     "order": [
+      "Came in",
+      "Triaged",
+      "On a task",
+      "Task closed"
+     ],
+     "share": true,
+     "w": 2
+    },
+    {
+     "kind": "stacked",
+     "title": "What came in, by channel",
+     "source": "mail",
+     "x": "day",
+     "series": "channel",
+     "w": 2
+    },
+    {
+     "kind": "stacked",
+     "title": "Agent sessions, and how they ended",
+     "source": "agents",
+     "x": "day",
+     "series": "outcome",
+     "w": 2
+    },
+    {
+     "kind": "bar",
+     "title": "Open work by kind",
+     "source": "tasks",
+     "x": "kind",
+     "where": {
+      "state": "open"
+     },
+     "range": false,
+     "w": 2
+    },
+    {
+     "kind": "bar",
+     "title": "Who writes most",
+     "source": "mail",
+     "x": "sender",
+     "limit": 8,
+     "w": 2
+    },
+    {
+     "kind": "list",
+     "title": "Waiting longest on you",
+     "source": "tasks",
+     "label": "title",
+     "meta": "waiting",
+     "where": {
+      "status": "open"
+     },
+     "range": false,
+     "sort": "arrived",
+     "limit": 6,
+     "w": 4
+    }
+   ],
+   "route": {
+    "timeline": {
+     "how": "always"
+    },
+    "alert": {
+     "how": "never"
+    },
+    "send": {
+     "how": "always"
+    },
+    "triage": {
+     "how": "never"
+    }
+   }
+  },
+  "data": {
+   "at": "2026-09-23 22:18:12",
+   "sources": {
+    "mail": {
+     "label": "What came in",
+     "head": "39 mail",
+     "rows": [
+      {
+       "message_id": null,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": null,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Ruth Bennett",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 18,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "github",
+       "sender": "kai",
+       "became_task": "no"
+      },
+      {
+       "message_id": 17,
+       "task_id": 9,
+       "day": "2026-09-23",
+       "channel": "github",
+       "sender": "Marcus Reed",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 16,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Platform Updates",
+       "became_task": "no"
+      },
+      {
+       "message_id": 14,
+       "task_id": 8,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 14,
+       "task_id": 8,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 13,
+       "task_id": 8,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 12,
+       "task_id": 7,
+       "day": "2026-09-23",
+       "channel": "whatsapp",
+       "sender": "Sam Delgado",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 8,
+       "task_id": 6,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Marcus Reed",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 7,
+       "task_id": 5,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Ruth Bennett",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 6,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "teams",
+       "sender": "Priya Shah",
+       "became_task": "no"
+      },
+      {
+       "message_id": 5,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Marcus Reed",
+       "became_task": "no"
+      },
+      {
+       "message_id": 4,
+       "task_id": 4,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Tom Alvarez",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 3,
+       "task_id": 3,
+       "day": "2026-09-23",
+       "channel": "teams",
+       "sender": "Ruth Bennett",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 2,
+       "task_id": 2,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 1,
+       "task_id": 1,
+       "day": "2026-09-22",
+       "channel": "email",
+       "sender": "Marcus Reed",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 19,
+       "task_id": null,
+       "day": "2026-09-22",
+       "channel": "email",
+       "sender": "Marcus Reed",
+       "became_task": "no"
+      },
+      {
+       "message_id": 20,
+       "task_id": null,
+       "day": "2026-09-22",
+       "channel": "teams",
+       "sender": "Ruth Bennett",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 21,
+       "task_id": 10,
+       "day": "2026-09-22",
+       "channel": "email",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 22,
+       "task_id": 11,
+       "day": "2026-09-22",
+       "channel": "github",
+       "sender": "Ruth Bennett",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 23,
+       "task_id": null,
+       "day": "2026-09-21",
+       "channel": "email",
+       "sender": "Tom Alvarez",
+       "became_task": "no"
+      },
+      {
+       "message_id": 24,
+       "task_id": 12,
+       "day": "2026-09-21",
+       "channel": "email",
+       "sender": "Marcus Reed",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 25,
+       "task_id": null,
+       "day": "2026-09-21",
+       "channel": "whatsapp",
+       "sender": "Ruth Bennett",
+       "became_task": "no"
+      },
+      {
+       "message_id": 26,
+       "task_id": null,
+       "day": "2026-09-21",
+       "channel": "email",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 27,
+       "task_id": 13,
+       "day": "2026-09-21",
+       "channel": "email",
+       "sender": "Tom Alvarez",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 28,
+       "task_id": null,
+       "day": "2026-09-20",
+       "channel": "email",
+       "sender": "Marcus Reed",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 29,
+       "task_id": 14,
+       "day": "2026-09-20",
+       "channel": "teams",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 30,
+       "task_id": null,
+       "day": "2026-09-19",
+       "channel": "email",
+       "sender": "Ruth Bennett",
+       "became_task": "no"
+      },
+      {
+       "message_id": 31,
+       "task_id": 15,
+       "day": "2026-09-19",
+       "channel": "email",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 32,
+       "task_id": null,
+       "day": "2026-09-19",
+       "channel": "teams",
+       "sender": "Marcus Reed",
+       "became_task": "no"
+      },
+      {
+       "message_id": 33,
+       "task_id": null,
+       "day": "2026-09-19",
+       "channel": "email",
+       "sender": "Ruth Bennett",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 34,
+       "task_id": 16,
+       "day": "2026-09-19",
+       "channel": "github",
+       "sender": "Marcus Reed",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 35,
+       "task_id": null,
+       "day": "2026-09-18",
+       "channel": "email",
+       "sender": "Tom Alvarez",
+       "became_task": "no"
+      },
+      {
+       "message_id": 36,
+       "task_id": 17,
+       "day": "2026-09-18",
+       "channel": "email",
+       "sender": "Marcus Reed",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 37,
+       "task_id": null,
+       "day": "2026-09-18",
+       "channel": "whatsapp",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 38,
+       "task_id": 18,
+       "day": "2026-09-18",
+       "channel": "email",
+       "sender": "Ruth Bennett",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 39,
+       "task_id": null,
+       "day": "2026-09-18",
+       "channel": "teams",
+       "sender": "Tom Alvarez",
+       "became_task": "no"
+      },
+      {
+       "message_id": 40,
+       "task_id": null,
+       "day": "2026-09-17",
+       "channel": "email",
+       "sender": "Priya Shah",
+       "became_task": "no"
+      }
+     ],
+     "columns": [
+      "message_id",
+      "task_id",
+      "day",
+      "channel",
+      "sender",
+      "became_task"
+     ],
+     "failed": false
+    },
+    "flow": {
+     "label": "How far it got",
+     "head": "119 flow",
+     "rows": [
+      {
+       "message_id": null,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": null,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": null,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "On a task"
+      },
+      {
+       "message_id": null,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": null,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": null,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 18,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "github",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 18,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "github",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 17,
+       "task_id": 9,
+       "day": "2026-09-23",
+       "channel": "github",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 17,
+       "task_id": 9,
+       "day": "2026-09-23",
+       "channel": "github",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 17,
+       "task_id": 9,
+       "day": "2026-09-23",
+       "channel": "github",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 16,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 16,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 14,
+       "task_id": 8,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 14,
+       "task_id": 8,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 14,
+       "task_id": 8,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 14,
+       "task_id": 8,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 14,
+       "task_id": 8,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 14,
+       "task_id": 8,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 13,
+       "task_id": 8,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 13,
+       "task_id": 8,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 13,
+       "task_id": 8,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 12,
+       "task_id": 7,
+       "day": "2026-09-23",
+       "channel": "whatsapp",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 12,
+       "task_id": 7,
+       "day": "2026-09-23",
+       "channel": "whatsapp",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 12,
+       "task_id": 7,
+       "day": "2026-09-23",
+       "channel": "whatsapp",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 8,
+       "task_id": 6,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 8,
+       "task_id": 6,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 8,
+       "task_id": 6,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 7,
+       "task_id": 5,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 7,
+       "task_id": 5,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 7,
+       "task_id": 5,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 6,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "teams",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 6,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "teams",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 5,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 5,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 4,
+       "task_id": 4,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 4,
+       "task_id": 4,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 4,
+       "task_id": 4,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 3,
+       "task_id": 3,
+       "day": "2026-09-23",
+       "channel": "teams",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 3,
+       "task_id": 3,
+       "day": "2026-09-23",
+       "channel": "teams",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 3,
+       "task_id": 3,
+       "day": "2026-09-23",
+       "channel": "teams",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 2,
+       "task_id": 2,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 2,
+       "task_id": 2,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 2,
+       "task_id": 2,
+       "day": "2026-09-23",
+       "channel": "email",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 1,
+       "task_id": 1,
+       "day": "2026-09-22",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 1,
+       "task_id": 1,
+       "day": "2026-09-22",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 1,
+       "task_id": 1,
+       "day": "2026-09-22",
+       "channel": "email",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 19,
+       "task_id": null,
+       "day": "2026-09-22",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 19,
+       "task_id": null,
+       "day": "2026-09-22",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 20,
+       "task_id": null,
+       "day": "2026-09-22",
+       "channel": "teams",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 20,
+       "task_id": null,
+       "day": "2026-09-22",
+       "channel": "teams",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 20,
+       "task_id": null,
+       "day": "2026-09-22",
+       "channel": "teams",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 20,
+       "task_id": null,
+       "day": "2026-09-22",
+       "channel": "teams",
+       "stage": "Task closed"
+      },
+      {
+       "message_id": 21,
+       "task_id": 10,
+       "day": "2026-09-22",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 21,
+       "task_id": 10,
+       "day": "2026-09-22",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 21,
+       "task_id": 10,
+       "day": "2026-09-22",
+       "channel": "email",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 21,
+       "task_id": 10,
+       "day": "2026-09-22",
+       "channel": "email",
+       "stage": "Task closed"
+      },
+      {
+       "message_id": 22,
+       "task_id": 11,
+       "day": "2026-09-22",
+       "channel": "github",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 22,
+       "task_id": 11,
+       "day": "2026-09-22",
+       "channel": "github",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 22,
+       "task_id": 11,
+       "day": "2026-09-22",
+       "channel": "github",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 22,
+       "task_id": 11,
+       "day": "2026-09-22",
+       "channel": "github",
+       "stage": "Task closed"
+      },
+      {
+       "message_id": 23,
+       "task_id": null,
+       "day": "2026-09-21",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 23,
+       "task_id": null,
+       "day": "2026-09-21",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 24,
+       "task_id": 12,
+       "day": "2026-09-21",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 24,
+       "task_id": 12,
+       "day": "2026-09-21",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 24,
+       "task_id": 12,
+       "day": "2026-09-21",
+       "channel": "email",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 24,
+       "task_id": 12,
+       "day": "2026-09-21",
+       "channel": "email",
+       "stage": "Task closed"
+      },
+      {
+       "message_id": 25,
+       "task_id": null,
+       "day": "2026-09-21",
+       "channel": "whatsapp",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 25,
+       "task_id": null,
+       "day": "2026-09-21",
+       "channel": "whatsapp",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 26,
+       "task_id": null,
+       "day": "2026-09-21",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 26,
+       "task_id": null,
+       "day": "2026-09-21",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 26,
+       "task_id": null,
+       "day": "2026-09-21",
+       "channel": "email",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 26,
+       "task_id": null,
+       "day": "2026-09-21",
+       "channel": "email",
+       "stage": "Task closed"
+      },
+      {
+       "message_id": 27,
+       "task_id": 13,
+       "day": "2026-09-21",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 27,
+       "task_id": 13,
+       "day": "2026-09-21",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 27,
+       "task_id": 13,
+       "day": "2026-09-21",
+       "channel": "email",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 27,
+       "task_id": 13,
+       "day": "2026-09-21",
+       "channel": "email",
+       "stage": "Task closed"
+      },
+      {
+       "message_id": 28,
+       "task_id": null,
+       "day": "2026-09-20",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 28,
+       "task_id": null,
+       "day": "2026-09-20",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 28,
+       "task_id": null,
+       "day": "2026-09-20",
+       "channel": "email",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 28,
+       "task_id": null,
+       "day": "2026-09-20",
+       "channel": "email",
+       "stage": "Task closed"
+      },
+      {
+       "message_id": 29,
+       "task_id": 14,
+       "day": "2026-09-20",
+       "channel": "teams",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 29,
+       "task_id": 14,
+       "day": "2026-09-20",
+       "channel": "teams",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 29,
+       "task_id": 14,
+       "day": "2026-09-20",
+       "channel": "teams",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 29,
+       "task_id": 14,
+       "day": "2026-09-20",
+       "channel": "teams",
+       "stage": "Task closed"
+      },
+      {
+       "message_id": 30,
+       "task_id": null,
+       "day": "2026-09-19",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 30,
+       "task_id": null,
+       "day": "2026-09-19",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 31,
+       "task_id": 15,
+       "day": "2026-09-19",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 31,
+       "task_id": 15,
+       "day": "2026-09-19",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 31,
+       "task_id": 15,
+       "day": "2026-09-19",
+       "channel": "email",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 31,
+       "task_id": 15,
+       "day": "2026-09-19",
+       "channel": "email",
+       "stage": "Task closed"
+      },
+      {
+       "message_id": 32,
+       "task_id": null,
+       "day": "2026-09-19",
+       "channel": "teams",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 32,
+       "task_id": null,
+       "day": "2026-09-19",
+       "channel": "teams",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 33,
+       "task_id": null,
+       "day": "2026-09-19",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 33,
+       "task_id": null,
+       "day": "2026-09-19",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 33,
+       "task_id": null,
+       "day": "2026-09-19",
+       "channel": "email",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 33,
+       "task_id": null,
+       "day": "2026-09-19",
+       "channel": "email",
+       "stage": "Task closed"
+      },
+      {
+       "message_id": 34,
+       "task_id": 16,
+       "day": "2026-09-19",
+       "channel": "github",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 34,
+       "task_id": 16,
+       "day": "2026-09-19",
+       "channel": "github",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 34,
+       "task_id": 16,
+       "day": "2026-09-19",
+       "channel": "github",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 34,
+       "task_id": 16,
+       "day": "2026-09-19",
+       "channel": "github",
+       "stage": "Task closed"
+      },
+      {
+       "message_id": 35,
+       "task_id": null,
+       "day": "2026-09-18",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 35,
+       "task_id": null,
+       "day": "2026-09-18",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 36,
+       "task_id": 17,
+       "day": "2026-09-18",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 36,
+       "task_id": 17,
+       "day": "2026-09-18",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 36,
+       "task_id": 17,
+       "day": "2026-09-18",
+       "channel": "email",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 36,
+       "task_id": 17,
+       "day": "2026-09-18",
+       "channel": "email",
+       "stage": "Task closed"
+      },
+      {
+       "message_id": 37,
+       "task_id": null,
+       "day": "2026-09-18",
+       "channel": "whatsapp",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 37,
+       "task_id": null,
+       "day": "2026-09-18",
+       "channel": "whatsapp",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 37,
+       "task_id": null,
+       "day": "2026-09-18",
+       "channel": "whatsapp",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 37,
+       "task_id": null,
+       "day": "2026-09-18",
+       "channel": "whatsapp",
+       "stage": "Task closed"
+      },
+      {
+       "message_id": 38,
+       "task_id": 18,
+       "day": "2026-09-18",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 38,
+       "task_id": 18,
+       "day": "2026-09-18",
+       "channel": "email",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 38,
+       "task_id": 18,
+       "day": "2026-09-18",
+       "channel": "email",
+       "stage": "On a task"
+      },
+      {
+       "message_id": 38,
+       "task_id": 18,
+       "day": "2026-09-18",
+       "channel": "email",
+       "stage": "Task closed"
+      },
+      {
+       "message_id": 39,
+       "task_id": null,
+       "day": "2026-09-18",
+       "channel": "teams",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 39,
+       "task_id": null,
+       "day": "2026-09-18",
+       "channel": "teams",
+       "stage": "Triaged"
+      },
+      {
+       "message_id": 40,
+       "task_id": null,
+       "day": "2026-09-17",
+       "channel": "email",
+       "stage": "Came in"
+      },
+      {
+       "message_id": 40,
+       "task_id": null,
+       "day": "2026-09-17",
+       "channel": "email",
+       "stage": "Triaged"
+      }
+     ],
+     "columns": [
+      "message_id",
+      "task_id",
+      "day",
+      "channel",
+      "stage"
+     ],
+     "failed": false
+    },
+    "tasks": {
+     "label": "Tasks",
+     "head": "27 tasks",
+     "rows": [
+      {
+       "task_id": 19,
+       "ref": "TQ-0019",
+       "title": "This morning, and whether Thursday holds",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 18,
+       "ref": "TQ-0018",
+       "title": "Access review - please confirm your team list",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-18",
+       "closed": "2026-09-18",
+       "waiting": "5 days"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "are you around for ten minutes about the cutover?",
+       "kind": "reply",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-18",
+       "closed": "2026-09-18",
+       "waiting": "5 days"
+      },
+      {
+       "task_id": 17,
+       "ref": "TQ-0017",
+       "title": "Can we get the AP ageing weekly instead of monthly?",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-18",
+       "closed": "2026-09-18",
+       "waiting": "5 days"
+      },
+      {
+       "task_id": 16,
+       "ref": "TQ-0016",
+       "title": "#209 nightly import writes the same warning 4,000 times",
+       "kind": "coding",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-19",
+       "closed": "2026-09-19",
+       "waiting": "4 days"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "RE: Month-end close - the bank feed",
+       "kind": "reply",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-19",
+       "closed": "2026-09-19",
+       "waiting": "4 days"
+      },
+      {
+       "task_id": 15,
+       "ref": "TQ-0015",
+       "title": "Fairhaven wifi is down in the east wing",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-19",
+       "closed": "2026-09-19",
+       "waiting": "4 days"
+      },
+      {
+       "task_id": 14,
+       "ref": "TQ-0014",
+       "title": "the Lakeview dashboard is showing yesterday again",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-20",
+       "closed": "2026-09-20",
+       "waiting": "3 days"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "Quarter close checklist - anything outstanding?",
+       "kind": "reply",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-20",
+       "closed": "2026-09-20",
+       "waiting": "3 days"
+      },
+      {
+       "task_id": 13,
+       "ref": "TQ-0013",
+       "title": "Price increase effective 1 October",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-21",
+       "closed": "2026-09-21",
+       "waiting": "2 days"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "RE: New starter on Monday - laptop + accounts",
+       "kind": "reply",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-21",
+       "closed": "2026-09-21",
+       "waiting": "2 days"
+      },
+      {
+       "task_id": 12,
+       "ref": "TQ-0012",
+       "title": "Payroll export mismatched two employee ids",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-21",
+       "closed": "2026-09-21",
+       "waiting": "2 days"
+      },
+      {
+       "task_id": 11,
+       "ref": "TQ-0011",
+       "title": "#211 census sync retries forever on a 502",
+       "kind": "coding",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-22",
+       "closed": "2026-09-22",
+       "waiting": "yesterday"
+      },
+      {
+       "task_id": 10,
+       "ref": "TQ-0010",
+       "title": "Agency invoices for October - approve by Friday",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-22",
+       "closed": "2026-09-22",
+       "waiting": "yesterday"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "can you approve the Fairhaven PO before you go?",
+       "kind": "reply",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-22",
+       "closed": "2026-09-22",
+       "waiting": "yesterday"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "Half an hour on the audit list",
+       "kind": "reply",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "Invite: AP cutover dry run",
+       "kind": "reply",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 9,
+       "ref": "TQ-0009",
+       "title": "northwind/importers#214 - census sync fails when a site has no manager",
+       "kind": "coding",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 8,
+       "ref": "TQ-0008",
+       "title": "Year-end audit - the first document requests",
+       "kind": "general",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 7,
+       "ref": "TQ-0007",
+       "title": "Can you resend the Q3 numbers?",
+       "kind": "reply",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "Migrate the census export off the old portal",
+       "kind": "task",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 6,
+       "ref": "TQ-0006",
+       "title": "Reconcile the August GL export",
+       "kind": "general",
+       "status": "in_progress",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 5,
+       "ref": "TQ-0005",
+       "title": "Can you confirm the AP cutover date?",
+       "kind": "reply",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 4,
+       "ref": "TQ-0004",
+       "title": "Invoice 88213 - past due",
+       "kind": "reply",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 3,
+       "ref": "TQ-0003",
+       "title": "did the overnight import finish? the dashboard still says ye…",
+       "kind": "reply",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 2,
+       "ref": "TQ-0002",
+       "title": "New starter on Monday - laptop + accounts",
+       "kind": "general",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 1,
+       "ref": "TQ-0001",
+       "title": "Month-end close is short by 4,180",
+       "kind": "general",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-22",
+       "closed": "",
+       "waiting": "yesterday"
+      }
+     ],
+     "columns": [
+      "task_id",
+      "ref",
+      "title",
+      "kind",
+      "status",
+      "state",
+      "priority",
+      "arrived",
+      "closed",
+      "waiting"
+     ],
+     "failed": false
+    },
+    "closed": {
+     "label": "Tasks closed",
+     "head": "27 tasks",
+     "rows": [
+      {
+       "task_id": 19,
+       "ref": "TQ-0019",
+       "title": "This morning, and whether Thursday holds",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 18,
+       "ref": "TQ-0018",
+       "title": "Access review - please confirm your team list",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-18",
+       "closed": "2026-09-18",
+       "waiting": "5 days"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "are you around for ten minutes about the cutover?",
+       "kind": "reply",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-18",
+       "closed": "2026-09-18",
+       "waiting": "5 days"
+      },
+      {
+       "task_id": 17,
+       "ref": "TQ-0017",
+       "title": "Can we get the AP ageing weekly instead of monthly?",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-18",
+       "closed": "2026-09-18",
+       "waiting": "5 days"
+      },
+      {
+       "task_id": 16,
+       "ref": "TQ-0016",
+       "title": "#209 nightly import writes the same warning 4,000 times",
+       "kind": "coding",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-19",
+       "closed": "2026-09-19",
+       "waiting": "4 days"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "RE: Month-end close - the bank feed",
+       "kind": "reply",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-19",
+       "closed": "2026-09-19",
+       "waiting": "4 days"
+      },
+      {
+       "task_id": 15,
+       "ref": "TQ-0015",
+       "title": "Fairhaven wifi is down in the east wing",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-19",
+       "closed": "2026-09-19",
+       "waiting": "4 days"
+      },
+      {
+       "task_id": 14,
+       "ref": "TQ-0014",
+       "title": "the Lakeview dashboard is showing yesterday again",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-20",
+       "closed": "2026-09-20",
+       "waiting": "3 days"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "Quarter close checklist - anything outstanding?",
+       "kind": "reply",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-20",
+       "closed": "2026-09-20",
+       "waiting": "3 days"
+      },
+      {
+       "task_id": 13,
+       "ref": "TQ-0013",
+       "title": "Price increase effective 1 October",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-21",
+       "closed": "2026-09-21",
+       "waiting": "2 days"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "RE: New starter on Monday - laptop + accounts",
+       "kind": "reply",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-21",
+       "closed": "2026-09-21",
+       "waiting": "2 days"
+      },
+      {
+       "task_id": 12,
+       "ref": "TQ-0012",
+       "title": "Payroll export mismatched two employee ids",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-21",
+       "closed": "2026-09-21",
+       "waiting": "2 days"
+      },
+      {
+       "task_id": 11,
+       "ref": "TQ-0011",
+       "title": "#211 census sync retries forever on a 502",
+       "kind": "coding",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-22",
+       "closed": "2026-09-22",
+       "waiting": "yesterday"
+      },
+      {
+       "task_id": 10,
+       "ref": "TQ-0010",
+       "title": "Agency invoices for October - approve by Friday",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-22",
+       "closed": "2026-09-22",
+       "waiting": "yesterday"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "can you approve the Fairhaven PO before you go?",
+       "kind": "reply",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-22",
+       "closed": "2026-09-22",
+       "waiting": "yesterday"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "Half an hour on the audit list",
+       "kind": "reply",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "Invite: AP cutover dry run",
+       "kind": "reply",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 9,
+       "ref": "TQ-0009",
+       "title": "northwind/importers#214 - census sync fails when a site has no manager",
+       "kind": "coding",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 8,
+       "ref": "TQ-0008",
+       "title": "Year-end audit - the first document requests",
+       "kind": "general",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 7,
+       "ref": "TQ-0007",
+       "title": "Can you resend the Q3 numbers?",
+       "kind": "reply",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "Migrate the census export off the old portal",
+       "kind": "task",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 6,
+       "ref": "TQ-0006",
+       "title": "Reconcile the August GL export",
+       "kind": "general",
+       "status": "in_progress",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 5,
+       "ref": "TQ-0005",
+       "title": "Can you confirm the AP cutover date?",
+       "kind": "reply",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 4,
+       "ref": "TQ-0004",
+       "title": "Invoice 88213 - past due",
+       "kind": "reply",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 3,
+       "ref": "TQ-0003",
+       "title": "did the overnight import finish? the dashboard still says ye…",
+       "kind": "reply",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 2,
+       "ref": "TQ-0002",
+       "title": "New starter on Monday - laptop + accounts",
+       "kind": "general",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 1,
+       "ref": "TQ-0001",
+       "title": "Month-end close is short by 4,180",
+       "kind": "general",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-22",
+       "closed": "",
+       "waiting": "yesterday"
+      }
+     ],
+     "columns": [
+      "task_id",
+      "ref",
+      "title",
+      "kind",
+      "status",
+      "state",
+      "priority",
+      "arrived",
+      "closed",
+      "waiting"
+     ],
+     "failed": false
+    },
+    "agents": {
+     "label": "Agent sessions",
+     "head": "6 agent runs",
+     "rows": [
+      {
+       "run_id": "fb45dbcf3f86",
+       "task_id": 10,
+       "ref": "TQ-0010",
+       "day": "2026-09-22",
+       "agent": "agent",
+       "status": "failed",
+       "outcome": "failed",
+       "minutes": 55
+      },
+      {
+       "run_id": "ccb0d48d4ce2",
+       "task_id": 11,
+       "ref": "TQ-0011",
+       "day": "2026-09-22",
+       "agent": "agent",
+       "status": "finished",
+       "outcome": "finished",
+       "minutes": 38
+      },
+      {
+       "run_id": "507e0ba43f2e",
+       "task_id": 12,
+       "ref": "TQ-0012",
+       "day": "2026-09-21",
+       "agent": "agent",
+       "status": "finished",
+       "outcome": "finished",
+       "minutes": 21
+      },
+      {
+       "run_id": "370338ccabd1",
+       "task_id": 13,
+       "ref": "TQ-0013",
+       "day": "2026-09-21",
+       "agent": "agent",
+       "status": "stopped",
+       "outcome": "stopped",
+       "minutes": 9
+      },
+      {
+       "run_id": "b5a0f4ee692d",
+       "task_id": 14,
+       "ref": "TQ-0014",
+       "day": "2026-09-20",
+       "agent": "agent",
+       "status": "finished",
+       "outcome": "finished",
+       "minutes": 27
+      },
+      {
+       "run_id": "f029f79780f4",
+       "task_id": 16,
+       "ref": "TQ-0016",
+       "day": "2026-09-19",
+       "agent": "agent",
+       "status": "finished",
+       "outcome": "finished",
+       "minutes": 12
+      }
+     ],
+     "columns": [
+      "run_id",
+      "task_id",
+      "ref",
+      "day",
+      "agent",
+      "status",
+      "outcome",
+      "minutes"
+     ],
+     "failed": false
+    },
+    "replies": {
+     "label": "Replies",
+     "head": "5 replies",
+     "rows": [
+      {
+       "task_id": null,
+       "day": "2026-09-18",
+       "channel": "whatsapp",
+       "status": "approved",
+       "hours": 0.8
+      },
+      {
+       "task_id": null,
+       "day": "2026-09-19",
+       "channel": "email",
+       "status": "approved",
+       "hours": 4
+      },
+      {
+       "task_id": null,
+       "day": "2026-09-20",
+       "channel": "email",
+       "status": "approved",
+       "hours": 1.2
+      },
+      {
+       "task_id": null,
+       "day": "2026-09-21",
+       "channel": "email",
+       "status": "approved",
+       "hours": 2.5
+      },
+      {
+       "task_id": null,
+       "day": "2026-09-22",
+       "channel": "teams",
+       "status": "approved",
+       "hours": 0.6
+      }
+     ],
+     "columns": [
+      "task_id",
+      "day",
+      "channel",
+      "status",
+      "hours"
+     ],
+     "failed": false
+    }
+   }
+  },
+  "problems": []
+ },
+ "/api/dashboards/8": {
+  "source_id": 8,
+  "active": true,
+  "config": {
+   "type": "dashboard",
+   "title": "Northwind desk",
+   "daily_at": "07:00",
+   "sources": [
+    {
+     "key": "tasks",
+     "label": "Tasks",
+     "type": "taskuary_data",
+     "dataset": "tasks",
+     "days": 90,
+     "date": "arrived"
+    },
+    {
+     "key": "mail",
+     "label": "Mail in",
+     "type": "taskuary_data",
+     "dataset": "mail",
+     "days": 90,
+     "date": "day"
+    }
+   ],
+   "filters": {
+    "range": 7,
+    "segment": "channel"
+   },
+   "components": [
+    {
+     "kind": "stat",
+     "title": "Open tasks",
+     "source": "tasks",
+     "agg": "count",
+     "where": {
+      "state": "open"
+     },
+     "range": false
+    },
+    {
+     "kind": "stat",
+     "title": "Came in",
+     "source": "mail",
+     "agg": "count"
+    },
+    {
+     "kind": "stat",
+     "title": "Became tasks",
+     "source": "mail",
+     "agg": "count",
+     "where": {
+      "became_task": "yes"
+     }
+    },
+    {
+     "kind": "progress",
+     "title": "Closed toward 25 this week",
+     "source": "tasks",
+     "agg": "count",
+     "where": {
+      "state": "closed"
+     },
+     "target": 25
+    },
+    {
+     "kind": "stacked",
+     "title": "Mail in by day",
+     "source": "mail",
+     "x": "day",
+     "series": "channel",
+     "w": 2
+    },
+    {
+     "kind": "bar",
+     "title": "Open work by kind",
+     "source": "tasks",
+     "x": "kind",
+     "where": {
+      "state": "open"
+     },
+     "range": false,
+     "w": 2
+    },
+    {
+     "kind": "bar",
+     "title": "Who wrote most",
+     "source": "mail",
+     "x": "sender",
+     "limit": 6,
+     "w": 2
+    },
+    {
+     "kind": "list",
+     "title": "Open now",
+     "source": "tasks",
+     "label": "title",
+     "meta": "kind",
+     "where": {
+      "state": "open"
+     },
+     "range": false,
+     "sort": "-arrived",
+     "limit": 8,
+     "w": 2
+    }
+   ],
+   "route": {
+    "timeline": {
+     "how": "always"
+    },
+    "alert": {
+     "how": "never"
+    },
+    "send": {
+     "how": "always"
+    },
+    "triage": {
+     "how": "never"
+    }
+   }
+  },
+  "data": {
+   "at": "2026-09-23 22:18:12",
+   "sources": {
+    "tasks": {
+     "label": "Tasks",
+     "head": "27 tasks",
+     "rows": [
+      {
+       "task_id": 19,
+       "ref": "TQ-0019",
+       "title": "This morning, and whether Thursday holds",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 18,
+       "ref": "TQ-0018",
+       "title": "Access review - please confirm your team list",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-18",
+       "closed": "2026-09-18",
+       "waiting": "5 days"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "are you around for ten minutes about the cutover?",
+       "kind": "reply",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-18",
+       "closed": "2026-09-18",
+       "waiting": "5 days"
+      },
+      {
+       "task_id": 17,
+       "ref": "TQ-0017",
+       "title": "Can we get the AP ageing weekly instead of monthly?",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-18",
+       "closed": "2026-09-18",
+       "waiting": "5 days"
+      },
+      {
+       "task_id": 16,
+       "ref": "TQ-0016",
+       "title": "#209 nightly import writes the same warning 4,000 times",
+       "kind": "coding",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-19",
+       "closed": "2026-09-19",
+       "waiting": "4 days"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "RE: Month-end close - the bank feed",
+       "kind": "reply",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-19",
+       "closed": "2026-09-19",
+       "waiting": "4 days"
+      },
+      {
+       "task_id": 15,
+       "ref": "TQ-0015",
+       "title": "Fairhaven wifi is down in the east wing",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-19",
+       "closed": "2026-09-19",
+       "waiting": "4 days"
+      },
+      {
+       "task_id": 14,
+       "ref": "TQ-0014",
+       "title": "the Lakeview dashboard is showing yesterday again",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-20",
+       "closed": "2026-09-20",
+       "waiting": "3 days"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "Quarter close checklist - anything outstanding?",
+       "kind": "reply",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-20",
+       "closed": "2026-09-20",
+       "waiting": "3 days"
+      },
+      {
+       "task_id": 13,
+       "ref": "TQ-0013",
+       "title": "Price increase effective 1 October",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-21",
+       "closed": "2026-09-21",
+       "waiting": "2 days"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "RE: New starter on Monday - laptop + accounts",
+       "kind": "reply",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-21",
+       "closed": "2026-09-21",
+       "waiting": "2 days"
+      },
+      {
+       "task_id": 12,
+       "ref": "TQ-0012",
+       "title": "Payroll export mismatched two employee ids",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-21",
+       "closed": "2026-09-21",
+       "waiting": "2 days"
+      },
+      {
+       "task_id": 11,
+       "ref": "TQ-0011",
+       "title": "#211 census sync retries forever on a 502",
+       "kind": "coding",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-22",
+       "closed": "2026-09-22",
+       "waiting": "yesterday"
+      },
+      {
+       "task_id": 10,
+       "ref": "TQ-0010",
+       "title": "Agency invoices for October - approve by Friday",
+       "kind": "general",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-22",
+       "closed": "2026-09-22",
+       "waiting": "yesterday"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "can you approve the Fairhaven PO before you go?",
+       "kind": "reply",
+       "status": "done",
+       "state": "closed",
+       "priority": "regular",
+       "arrived": "2026-09-22",
+       "closed": "2026-09-22",
+       "waiting": "yesterday"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "Half an hour on the audit list",
+       "kind": "reply",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "Invite: AP cutover dry run",
+       "kind": "reply",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 9,
+       "ref": "TQ-0009",
+       "title": "northwind/importers#214 - census sync fails when a site has no manager",
+       "kind": "coding",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 8,
+       "ref": "TQ-0008",
+       "title": "Year-end audit - the first document requests",
+       "kind": "general",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 7,
+       "ref": "TQ-0007",
+       "title": "Can you resend the Q3 numbers?",
+       "kind": "reply",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": null,
+       "ref": "",
+       "title": "Migrate the census export off the old portal",
+       "kind": "task",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 6,
+       "ref": "TQ-0006",
+       "title": "Reconcile the August GL export",
+       "kind": "general",
+       "status": "in_progress",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 5,
+       "ref": "TQ-0005",
+       "title": "Can you confirm the AP cutover date?",
+       "kind": "reply",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 4,
+       "ref": "TQ-0004",
+       "title": "Invoice 88213 - past due",
+       "kind": "reply",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 3,
+       "ref": "TQ-0003",
+       "title": "did the overnight import finish? the dashboard still says ye…",
+       "kind": "reply",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 2,
+       "ref": "TQ-0002",
+       "title": "New starter on Monday - laptop + accounts",
+       "kind": "general",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-23",
+       "closed": "",
+       "waiting": "today"
+      },
+      {
+       "task_id": 1,
+       "ref": "TQ-0001",
+       "title": "Month-end close is short by 4,180",
+       "kind": "general",
+       "status": "open",
+       "state": "open",
+       "priority": "regular",
+       "arrived": "2026-09-22",
+       "closed": "",
+       "waiting": "yesterday"
+      }
+     ],
+     "columns": [
+      "task_id",
+      "ref",
+      "title",
+      "kind",
+      "status",
+      "state",
+      "priority",
+      "arrived",
+      "closed",
+      "waiting"
+     ],
+     "failed": false
+    },
+    "mail": {
+     "label": "Mail in",
+     "head": "39 mail",
+     "rows": [
+      {
+       "message_id": null,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": null,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Ruth Bennett",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 18,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "github",
+       "sender": "kai",
+       "became_task": "no"
+      },
+      {
+       "message_id": 17,
+       "task_id": 9,
+       "day": "2026-09-23",
+       "channel": "github",
+       "sender": "Marcus Reed",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 16,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Platform Updates",
+       "became_task": "no"
+      },
+      {
+       "message_id": 14,
+       "task_id": 8,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 14,
+       "task_id": 8,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 13,
+       "task_id": 8,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 12,
+       "task_id": 7,
+       "day": "2026-09-23",
+       "channel": "whatsapp",
+       "sender": "Sam Delgado",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 8,
+       "task_id": 6,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Marcus Reed",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 7,
+       "task_id": 5,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Ruth Bennett",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 6,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "teams",
+       "sender": "Priya Shah",
+       "became_task": "no"
+      },
+      {
+       "message_id": 5,
+       "task_id": null,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Marcus Reed",
+       "became_task": "no"
+      },
+      {
+       "message_id": 4,
+       "task_id": 4,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Tom Alvarez",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 3,
+       "task_id": 3,
+       "day": "2026-09-23",
+       "channel": "teams",
+       "sender": "Ruth Bennett",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 2,
+       "task_id": 2,
+       "day": "2026-09-23",
+       "channel": "email",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 1,
+       "task_id": 1,
+       "day": "2026-09-22",
+       "channel": "email",
+       "sender": "Marcus Reed",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 19,
+       "task_id": null,
+       "day": "2026-09-22",
+       "channel": "email",
+       "sender": "Marcus Reed",
+       "became_task": "no"
+      },
+      {
+       "message_id": 20,
+       "task_id": null,
+       "day": "2026-09-22",
+       "channel": "teams",
+       "sender": "Ruth Bennett",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 21,
+       "task_id": 10,
+       "day": "2026-09-22",
+       "channel": "email",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 22,
+       "task_id": 11,
+       "day": "2026-09-22",
+       "channel": "github",
+       "sender": "Ruth Bennett",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 23,
+       "task_id": null,
+       "day": "2026-09-21",
+       "channel": "email",
+       "sender": "Tom Alvarez",
+       "became_task": "no"
+      },
+      {
+       "message_id": 24,
+       "task_id": 12,
+       "day": "2026-09-21",
+       "channel": "email",
+       "sender": "Marcus Reed",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 25,
+       "task_id": null,
+       "day": "2026-09-21",
+       "channel": "whatsapp",
+       "sender": "Ruth Bennett",
+       "became_task": "no"
+      },
+      {
+       "message_id": 26,
+       "task_id": null,
+       "day": "2026-09-21",
+       "channel": "email",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 27,
+       "task_id": 13,
+       "day": "2026-09-21",
+       "channel": "email",
+       "sender": "Tom Alvarez",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 28,
+       "task_id": null,
+       "day": "2026-09-20",
+       "channel": "email",
+       "sender": "Marcus Reed",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 29,
+       "task_id": 14,
+       "day": "2026-09-20",
+       "channel": "teams",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 30,
+       "task_id": null,
+       "day": "2026-09-19",
+       "channel": "email",
+       "sender": "Ruth Bennett",
+       "became_task": "no"
+      },
+      {
+       "message_id": 31,
+       "task_id": 15,
+       "day": "2026-09-19",
+       "channel": "email",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 32,
+       "task_id": null,
+       "day": "2026-09-19",
+       "channel": "teams",
+       "sender": "Marcus Reed",
+       "became_task": "no"
+      },
+      {
+       "message_id": 33,
+       "task_id": null,
+       "day": "2026-09-19",
+       "channel": "email",
+       "sender": "Ruth Bennett",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 34,
+       "task_id": 16,
+       "day": "2026-09-19",
+       "channel": "github",
+       "sender": "Marcus Reed",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 35,
+       "task_id": null,
+       "day": "2026-09-18",
+       "channel": "email",
+       "sender": "Tom Alvarez",
+       "became_task": "no"
+      },
+      {
+       "message_id": 36,
+       "task_id": 17,
+       "day": "2026-09-18",
+       "channel": "email",
+       "sender": "Marcus Reed",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 37,
+       "task_id": null,
+       "day": "2026-09-18",
+       "channel": "whatsapp",
+       "sender": "Priya Shah",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 38,
+       "task_id": 18,
+       "day": "2026-09-18",
+       "channel": "email",
+       "sender": "Ruth Bennett",
+       "became_task": "yes"
+      },
+      {
+       "message_id": 39,
+       "task_id": null,
+       "day": "2026-09-18",
+       "channel": "teams",
+       "sender": "Tom Alvarez",
+       "became_task": "no"
+      },
+      {
+       "message_id": 40,
+       "task_id": null,
+       "day": "2026-09-17",
+       "channel": "email",
+       "sender": "Priya Shah",
+       "became_task": "no"
+      }
+     ],
+     "columns": [
+      "message_id",
+      "task_id",
+      "day",
+      "channel",
+      "sender",
+      "became_task"
+     ],
+     "failed": false
+    }
+   }
+  },
+  "problems": []
+ },
+ "/api/reports/2/runs?limit=1": {
+  "data": []
+ },
+ "/api/reports/3/runs?limit=1": {
+  "data": []
+ },
+ "/api/reports/7/runs?limit=1": {
+  "data": [
+   {
+    "runId": 2,
+    "sourceId": 7,
+    "at": "2026-09-23 22:18:12",
+    "type": "dashboard",
+    "title": "Taskuary at a glance",
+    "ms": 5,
+    "subject": "Taskuary at a glance — Came in 39 · New tasks 27 · Open now 12",
+    "messageId": 60,
+    "failed": false,
+    "error": null,
+    "said": 0,
+    "lines": [],
+    "reviewed": null,
+    "inputChars": 0,
+    "steps": null,
+    "taskId": null,
+    "repairs": []
+   }
+  ]
+ },
+ "/api/reports/4/runs?limit=1": {
+  "data": []
+ },
+ "/api/reports/5/runs?limit=1": {
+  "data": []
+ },
+ "/api/reports/6/runs?limit=1": {
+  "data": []
+ },
+ "/api/reports/8/runs?limit=1": {
+  "data": [
+   {
+    "runId": 1,
+    "sourceId": 8,
+    "at": "2026-09-23 22:18:12",
+    "type": "dashboard",
+    "title": "Northwind desk",
+    "ms": 6,
+    "subject": "Northwind desk — Open tasks 12 · Came in 39 · Became tasks 27",
+    "messageId": 61,
+    "failed": false,
+    "error": null,
+    "said": 0,
+    "lines": [],
+    "reviewed": null,
+    "inputChars": 0,
+    "steps": null,
+    "taskId": null,
+    "repairs": []
+   }
+  ]
+ }
 }

@@ -15,7 +15,7 @@ import { hint, label } from "./buttons.js";
 import { track } from "./demoTrack";
 import { demoTerminalRecording } from "./demoTerminal.js";
 import { DEMO_ASSISTANT_TIMELINE, createDemoAssistantState, installDemoAssistantTimeline } from "./demoAssistantData.js";
-import { fmtStamp, rebase } from "./demoClock.js";
+import { fmtStamp, rebase, shiftDays } from "./demoClock.js";
 import { demoRepair, demoSaveSource, demoStepTest, installDemoWorkflows } from "./demoWorkflows.js";
 import { installNumbersWorkflow, finishNumbersWorkflow, isGuidedDemo, NUMBERS_TASK, NUMBERS_MESSAGE, NUMBERS_REVIEW, NUMBERS_REQUEST, NUMBERS_RESULT } from "./demoNumbers.js";
 
@@ -42,6 +42,8 @@ const SCRIPTED_NOW = "2026-09-03 10:23:00";
 const now = () => fmtStamp(Date.now());
 const scripted = (x) => rebase(x, SCRIPTED_NOW);
 const state = rebase(clone(FIXTURES), FIXTURES?.["/api/version"]?.started);   // the recording, as this visitor has changed it
+// a dashboard's rows carry the days they happened on, which its range reads against today: moved to the visitor's today too
+for (const k of Object.keys(state)) if (/^\/api\/dashboards\/\d+$/.test(k)) shiftDays(state[k]?.data?.sources, FIXTURES?.["/api/version"]?.started);
 installDemoAssistantTimeline(state, scripted(clone(DEMO_ASSISTANT_TIMELINE)));
 installDemoWorkflows(state);          // two workflows built as steps: one ran clean, one failed at its first step
 // Two tasks that are the owner's own ("your task": nothing works them) - the recording has none, and

@@ -57,14 +57,19 @@ export function stripWord({ speaks, busy, shown = null, lit = null, aiOff = fals
 // ...AND WHEN CHASE IS LIT, WHO AND HOW LATE (the Advisor audit's judge, 2026-10-26): a goal lit Chase with its "2 days late" dropped, so
 // the page said only that a step slipped - a late step and a quiet wait say it here; a wait past its due day is the header's own line
 // ("Waiting on Ray. Due Oct 24, 2 days late."), counted on the same clock, so it is not said twice
-const SHOWN = new Set(["draft_ready", "duplicate", "asked_late", "waiting_late_usual", "waiting_late", "goal_late"]);
+// ...AND MARK DONE'S REASON, AND WHAT THE FINISH CHECK FOUND (NO DEFAULT VERB, the owner 2026-10-28: "it should RECOMMEND ACTION"): Mark
+// done is lit only with its reason ("Your reply went at 10:02; nothing since."), so the reason is said; a dropped ball the check found
+// (`by` "check") carries its fix - Continue with this / Redraft with this
+const SHOWN = new Set(["draft_ready", "duplicate", "asked_late", "waiting_late_usual", "waiting_late", "goal_late",
+  "answered", "agent_done", "stopped_done", "done_list"]);
 const SAID = new Set(["failed", "failed_cause", "report_failed", "invite_clash", "invite_free", "stranger", "working", "closed", "agent_asking", "waiting_overdue"]);
 // ...and with nothing to add, the menu's notes name the button in the owner's words: "Nothing to add - Copy is the lit button." read the
 // app's own word back to him (the owner, 2026-10-23, over "Lit Mark done": "what the heck is Lit"; the overnight walk, 2026-10-26)
 export const nothingToAdd = (advice) => (advice?.label && advice.verb !== "next" ? `Nothing to add - ${advice.label} is the next move.` : "Nothing to add on this one.");
 export function taskNote(advice) {
   const line = String(advice?.line || "").trim();
-  if (!line || !advice.verb || advice.verb === "next" || SAID.has(advice.state)) return null;
-  if (!SHOWN.has(advice.state) && advice.by !== "model") return null;
+  // ...a fix the row cannot light (a general agent's Continue) is the section's own button, so its line stands with no lit verb
+  if (!line || (!advice.verb && !advice.fix?.verb) || advice.verb === "next" || SAID.has(advice.state)) return null;
+  if (!SHOWN.has(advice.state) && advice.by !== "model" && advice.by !== "check") return null;
   return { line: suggestion(line, advice.label, advice.verb), draft: advice.state === "draft_ready", advice };
 }

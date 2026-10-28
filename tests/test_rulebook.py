@@ -34,22 +34,23 @@ def _decide(s, syn, item, key=None):
         return advisor.decide(s, key or item['key'], preread=False)
 
 
-# (case, the state the rule reads, the verb lit with no model read, whether a line is said)
+# (case, the state the rule reads, the verb lit with no model read, whether a line is said) - NO DEFAULT VERB (the owner, 2026-10-28):
+# an ask, a draft or an idea lights nothing until the model says a fact for it, a plain stop lights nothing, and Mark done says its reason
 MATRIX = [
-    ('Badge access for the new AP clerk', 'asked', 'reply', False),
+    ('Badge access for the new AP clerk', 'asked', None, False),
     ('did the overnight import finish', 'unsendable', 'copy', False),
-    ('AP cutover - Thursday?', 'draft_ready', 'approve', False),
+    ('AP cutover - Thursday?', 'draft_ready', None, False),
     ('Lease renewal for the Elm Street office', 'failed_cause', 'new_task', True),
-    ('Spendly card limits', 'idea', 'mine', False),
-    ('Q3 accruals file', 'agent_done', 'close', False),
+    ('Spendly card limits', 'idea', None, False),
+    ('Q3 accruals file', 'agent_done', 'close', True),           # "Your reply went at 10:02; nothing since."
     ('Helpdesk tickets by day', 'report_ok', 'next', False),
     ('Vendor portal maintenance', 'fyi', 'next', False),
     ('Reconcile the August GL export', 'working', 'next', False),
     ('agent asking (coding)', 'agent_asking', None, False),
-    ('agent finished (general)', 'agent_done', 'close', False),
+    ('agent finished (general)', 'agent_done', 'close', True),
     ('agent failed (general)', 'failed_cause', 'continue', True),
-    ('agent stopped-saved (coding)', 'stopped', 'continue', True),
-    ('Close the August books', 'done_list', 'close', False),
+    ('agent stopped-saved (coding)', 'stopped', None, False),
+    ('Close the August books', 'done_list', 'close', True),
     ('Move payroll to Payworth', 'goal', 'next', False),
     ('Migrate the census export', 'goal_late', 'chase', True),
     ('Ray: schema sign-off', 'waiting_overdue', 'chase', True),         # due two days ago: late by the header's own clock
@@ -152,7 +153,8 @@ def test_the_owners_reply_after_their_newest_mail_lights_mark_done_not_reply(s):
     """A3: the owner already answered - by a reply sent from here or one typed in their own mail app - so Mark done, never Reply."""
     t, m, it = _asked(s, 'Badge access', d=3)
     s._exec("UPDATE review SET DeliveryState='sent', DecidedAt=? WHERE ReviewId=?", (at(d=2), Factory(s).review(t, m, status='approved', final='Done.')))
-    assert (d := rulebook.decide(s, it, _verbs('reply', 'close')))['state'] == 'answered' and d['verb'] == 'close' and d['line'] == ''
+    assert (d := rulebook.decide(s, it, _verbs('reply', 'close')))['state'] == 'answered' and d['verb'] == 'close'
+    assert d['line'] == 'Your reply went 2 days ago; nothing since.', 'Mark done says its reason (the owner, 2026-10-28)'
     # ...they wrote again after it: Reply again
     Factory(s).message(task_id=t, subject='RE: Badge access', body='and the second door?', from_name=ERIN[0], from_email=ERIN[1], sent_at=at(d=1), conversation_id='email:Badge access')
     assert rulebook.decide(s, it, _verbs('reply', 'close'))['state'] == 'asked'
@@ -198,12 +200,12 @@ def test_an_invite_is_accept_when_free_propose_when_it_clashes_and_next_with_no_
 def test_an_agent_with_work_not_pushed_is_review_changes(s):
     t = Factory(s).task(title='Fix the export', kind='coding')
     it = {'key': f'agent:{t}', 'kind': 'agentdone', 'lane': 'done', 'tid': t}
-    assert rulebook.decide(s, it, _verbs('close', 'review_changes'))['verb'] == 'close', 'nothing shows unpushed work: Mark done'
+    assert rulebook.decide(s, it, _verbs('close', 'review_changes'))['verb'] is None, 'nothing shows unpushed work, nor when it ended: nothing lit'
     s._exec("INSERT INTO boardnote (TaskId, Agent, Cwd, Kind, Body, CreatedAt) VALUES (?, 'coding', 'C:/x', 'ready', 'ready to push', ?)", (t, at()))
     d = rulebook.decide(s, it, _verbs('close', 'review_changes'))
     assert (d['state'], d['verb'], d['line']) == ('unpushed', 'review_changes', 'Changes ready - not pushed.')
     s._exec("INSERT INTO boardnote (TaskId, Agent, Cwd, Kind, Body, CreatedAt) VALUES (?, 'coding', 'C:/x', 'done', 'pushed', ?)", (t, at()))
-    assert rulebook.decide(s, it, _verbs('close', 'review_changes'))['verb'] == 'close'
+    assert rulebook.decide(s, it, _verbs('close', 'review_changes'))['state'] == 'agent_done'
 
 
 def test_waiting_on_someone_is_chase_after_three_working_days(s):
@@ -211,7 +213,7 @@ def test_waiting_on_someone_is_chase_after_three_working_days(s):
     t = f.task(title='Vendor W-9', kind='task', status='waiting'); s._exec("UPDATE task SET WaitingOn='ray.colton@northwind.example' WHERE TaskId=?", (t,))
     it = {'key': f'task:{t}', 'kind': 'todo', 'lane': 'theirs', 'tid': t}
     f.message(task_id=t, subject='W-9?', direction='out', sent_at=at(d=1))
-    assert rulebook.decide(s, it, _verbs('defer', 'chase'))['verb'] == 'defer', 'not late: Remind me, silent'
+    assert rulebook.decide(s, it, _verbs('defer', 'chase'))['verb'] is None, 'not late: nothing lit (the owner, 2026-10-28)'
     s._exec("UPDATE message SET SentAt=? WHERE TaskId=?", (at(d=7), t))
     d = rulebook.decide(s, it, _verbs('defer', 'chase'))
     assert (d['state'], d['verb']) == ('waiting_late', 'chase') and d['line'].startswith('Ray Colton: ') and d['line'].endswith('days, no answer.')
@@ -250,7 +252,7 @@ def _habit(s, text, key):
 def test_a_press_count_lights_nothing(s, monkeypatch):
     """The owner, 2026-10-25: stop learning from presses and remove the habit mark - a press count in the doc, wherever it sits, never
     changes the lit button by itself; the rule (or the model, where intent must be read) decides."""
-    t, m, it = _asked(s, 'Weekly report', who=('Vendor Desk', 'desk@vendor.example'))
+    t, m, it = _asked(s, 'Weekly report', who=('Vendor Desk', 'desk@vendor.example'), d=2)       # its age is the lit Reply's reason
     monkeypatch.setattr(advisor, '_item', lambda store, tk, ti, key=None: it)
     monkeypatch.setattr(advisor, 'notice', lambda *a, **k: None)
     before = advisor.decide(s, it['key'], preread=False)
@@ -276,7 +278,7 @@ def test_send_is_never_lit_on_a_draft_the_check_flagged(s, monkeypatch):
 
 def test_the_model_agreeing_with_the_rule_says_nothing_more(s, monkeypatch):
     """Ruling 1: the obvious button is not explained. The model's verb stands where it differs from the rule's, with its line; agreeing,
-    its sentence goes and the rule's own fact (or silence) stands."""
+    its sentence goes and the rule's own fact stands - and with none, nothing is lit (NO DEFAULT VERB, the owner, 2026-10-28)."""
     t, m, it = _asked(s, 'Badge access')
     monkeypatch.setattr(advisor, '_item', lambda store, tk, ti, key=None: it)
     monkeypatch.setattr(advisor, 'notice', lambda *a, **k: None)
@@ -284,7 +286,7 @@ def test_the_model_agreeing_with_the_rule_says_nothing_more(s, monkeypatch):
     advisor._write(s, target_kind='task', target_id=t, key=it['key'], event=advisor.SHOWN, revision=rev, tier=2,
                    line='Erin is waiting on you - answer her.', verb='reply', label='Reply', model='m')
     d = advisor.decide(s, it['key'], preread=False)
-    assert (d['verb'], d['line'], d['by']) == ('reply', '', 'rule')
+    assert (d['verb'], d['line'], d['by']) == (None, '', 'rule')
 
 
 def test_the_next_two_are_read_ahead_where_the_model_must_read_them(s, monkeypatch):

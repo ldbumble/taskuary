@@ -120,6 +120,14 @@ test("an important line lands in the task's Advisor section, and every other str
     // ...and who and how late, where Chase is lit (the Advisor audit's judge, 2026-10-26)
     d("waiting_late", "Erin Blake: 4 days, no answer.", { verb: "chase" }), d("goal_late", "Pick the vendor: 3 days late.", { verb: "chase" })])
     assert.equal(taskNote(n)?.line, n.line, n.state);
+  // ...NO DEFAULT VERB (the owner, 2026-10-28): Mark done says its reason, and the finish check's dropped ball carries its fix - even where the
+  // row cannot light it (a general agent's Continue is the section's own button)
+  for (const n of [d("answered", "Your reply went at 10:02; nothing since.", { verb: "close" }), d("stopped_done", "Finished at 9:40; nothing since.", { verb: "close" }),
+    d("agent_done", "Finished yesterday; nothing since.", { verb: "close" }), d("done_list", "All 4 to-dos ticked.", { verb: "close" }),
+    d("stopped", "Attach the March export it said it would", { verb: "continue", by: "check" }),
+    d("stopped", "Attach the March export it said it would", { verb: null, by: "check", fix: { verb: "continue", label: "Continue with this", note: "x" } })])
+    assert.equal(taskNote(n)?.line, n.line, `${n.state} ${n.by}`);
+  assert.equal(taskNote(d("stopped", "Attach it", { verb: null, by: "check" })), null, "a line with no action to press is no line");
   // ...said by the task already, or narration of the lit button: no section
   for (const [state, line] of [["failed", "Failed: no AI is connected"], ["failed_cause", "Failed: the run stopped"], ["report_failed", "Report failed: timeout"],
     ["invite_clash", "Clashes with Quarter-end planning 9:00-12:00."], ["invite_free", "Free then."], ["stranger", "First mail from vendor.example."],

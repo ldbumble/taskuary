@@ -114,7 +114,7 @@ class KeyedTests(unittest.TestCase):
              mock.patch.object(advisor, 'notice') as n:
             self.assertIsNone(advisor.for_key(s, agent['key'])['verb'], 'an agent asking is answered in its pane')
             got = advisor.for_key(s, it['key'])
-            self.assertEqual((got['verb'], got['by']), ('approve', 'rule'))      # not the agent card's line
+            self.assertEqual((got['verb'], got['by'], got['line']), (None, 'rule', ''))     # not the agent card's line (and no fact: nothing lit)
         self.assertEqual(n.call_args.kwargs.get('key'), it['key'])                 # ...the draft is judged as itself
 
     def test_a_judgement_is_written_under_the_item_it_judged(self):

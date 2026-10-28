@@ -5,8 +5,8 @@ phone's primary() - and they disagreed on 6 of 21 states; on the phone Send led 
 decided once, from FACTS THE APP KEEPS - a draft and whether it can send from here, the agent's state, a failure, the calendar, the days
 waited, the lane - never the words of a mail (the owner: no hardcoded keyword lists; the model reads intent). A rule answers at once, with
 no "Thinking...", and costs nothing against the hourly model cap. Where intent must be read (an ask that is really work or someone else's,
-a draft promising what nothing shows, a duplicate by subject, a buried ask, an idea) the rule's button is lit at once and the state says
-`ask`: the model may change it (advisor.decide).
+a draft promising what nothing shows, a duplicate by subject, a buried ask, an idea) the state says `ask`: nothing is lit while the model
+reads it, and then its move or the rule's - each only beside its fact (advisor.decide; NO DEFAULT VERB, the owner, 2026-10-28).
 
 What each state says and lights is words.json `advice_rule` - the same on every surface. "Obvious move -> the strip is EMPTY and one
 button is lit" (the owner, 2026-10-23): a line is only a checkable fact the card does not show - an age, a clash, a failure, a promise
@@ -53,6 +53,24 @@ def ago(at, now: datetime = None) -> str:
     from .timewords import ago_m
     m = max(1, ((now or datetime.now()) - t).total_seconds() // 60)
     return 'yesterday' if 1440 <= m < 2880 else ago_m(m, long=True)
+
+
+def when(at, now: datetime = None) -> str:
+    """'at 10:02' today, else ago() - "your reply went at 10:02; nothing since" (the owner, 2026-10-28). '' for a time nothing can read."""
+    t, now = _dt(at), now or datetime.now()
+    if not t: return ''
+    return f'at {t:%H:%M}' if t.date() == now.date() and t <= now else ago(t, now)
+
+
+def finished_quiet(store, tid, at) -> str:
+    """when() the agent's work ended at `at` - '' when nothing says when, or mail reached the task since: Mark done is lit only with
+    its reason, and "nothing since" must be true."""
+    if not at: return ''
+    # ...by when it was written, as answered() reads it (a mail filed in later is still one written before)
+    try: since = store._one("SELECT 1 x FROM message WHERE TaskId=? AND IFNULL(Direction,'in')<>'out' AND Status NOT IN ('context','history','skipped') "
+                            "AND IFNULL(Channel,'')<>'report' AND IFNULL(SentAt,CreatedAt)>? LIMIT 1", (int(tid), str(at).replace('T', ' ')[:19]))
+    except Exception: since = None
+    return '' if since else when(at)
 
 
 def _say(state: str, **facts) -> str:
@@ -225,16 +243,20 @@ def state(store, item: dict, verbs: list) -> tuple:
         except Exception as e: logger.debug(f'rulebook: no clash read - {e}'); clash = ''
         return ('invite_clash', {'clash': _cut(clash[:1].upper() + clash[1:], 58)}) if clash else ('invite_free', {})
     if kind in ('agentdone', 'wrapup'):
-        return ('unpushed', {}) if tid and 'review_changes' in offered and changes_waiting(store, tid) else ('agent_done', {})
+        if tid and 'review_changes' in offered and changes_waiting(store, tid): return 'unpushed', {}
+        # ...its reason the newest of what ended it - the agent's last word, or the owner's reply that went - with nothing come in since
+        try: sent = store.sent_reply(task_id=int(tid)) if tid else None
+        except Exception: sent = None
+        went, work = str((sent or {}).get('DecidedAt') or '')[:19], str(last_word(store, tid) or '')[:19] if tid else ''
+        if not tid or not (went or work): return 'agent_done', {'what': '', 'when': ''}
+        return 'agent_done', {'what': 'Your reply went' if went > work else 'Finished', 'when': finished_quiet(store, tid, max(went, work))}
     # an agent stopped, saved, or paused when Taskuary stopped - its card, or the task's own row in an agent's stopped lane: its work is kept
     if kind == 'agent' or (tid and lane in ('stopped', 'saved')):
-        # when it stopped: its last word on the board of events, else its headless run's last update
-        try: at = (store._one('SELECT MAX(at) AS at FROM (SELECT MAX(CreatedAt) AS at FROM worker_event WHERE TaskId=? UNION ALL '
-                              'SELECT MAX(IFNULL(FinishedAt, UpdatedAt)) FROM run WHERE TaskId=?)', (int(tid), int(tid))) or {}).get('at') if tid else None
-        except Exception: at = None
+        at = last_word(store, tid) if tid else None
         # ...A STOPPED RUN THAT FINISHED ITS WORK is put down, not picked up (the Advisor audit, 2026-10-28: on a stopped agent the owner
-        # pressed Continue 3 of 16 times and Mark done 11) - Continue stays for an agent that stopped mid-work
-        return ('stopped_done', {}) if tid and left_result(store, tid) else ('stopped', {'ago': ago(at)})
+        # pressed Continue 3 of 16 times and Mark done 11) - and a plain stop lights nothing (NO DEFAULT VERB, the owner, 2026-10-28): its
+        # Continue comes only from the finish check, with what it dropped said beside it
+        return ('stopped_done', {'when': finished_quiet(store, tid, at)}) if tid and left_result(store, tid) else ('stopped', {'ago': ago(at)})
     if lane == 'forgotten':
         who, days = slipped(store, it, t)
         return 'waiting_late', {'who': who, 'days': days}
@@ -272,17 +294,25 @@ def state(store, item: dict, verbs: list) -> tuple:
         # THE OWNER ALREADY ANSWERED (trust audit A3, 2026-10-28): their own reply went after the sender's newest message, so nobody is
         # waiting - Mark done, as the model's prompt says ("someone is waiting only when they wrote again after it"); Reply lit there
         # offered to say twice what was said
-        if answered(store, it, ins[-1]): return 'answered', {}
+        if (went := answered(store, it, ins[-1])): return 'answered', {'when': when(went)}
         from . import usual
         if (late := usual.late_reply(store, ins[-1])):
             return 'asked_late', {'who': late['who'], 'usual': late['usual'], 'age': late['age'], EV: late['evidence']}
         return 'asked', {'who': _name(ins[-1]), 'ago': ago(ins[-1].get('SentAt') or ins[-1].get('CreatedAt'))}
-    if t and (cl := advisor._checklist(t)) and all(c.get('done') for c in cl): return 'done_list', {}
+    if t and (cl := advisor._checklist(t)) and all(c.get('done') for c in cl): return 'done_list', {'n': len(cl)}
     return 'own', {}
 
 
-def answered(store, item: dict, last_in: dict) -> bool:
-    """Whether the owner's own reply - one sent from here (its review) or typed anywhere (an outgoing message) - went after `last_in`."""
+def last_word(store, tid):
+    """When the task's agent last did anything: its newest event on the board, else its headless run's last update."""
+    try: return (store._one('SELECT MAX(at) AS at FROM (SELECT MAX(CreatedAt) AS at FROM worker_event WHERE TaskId=? UNION ALL '
+                            'SELECT MAX(IFNULL(FinishedAt, UpdatedAt)) FROM run WHERE TaskId=?)', (int(tid), int(tid))) or {}).get('at')
+    except Exception: return None
+
+
+def answered(store, item: dict, last_in: dict):
+    """When the owner's own reply - one sent from here (its review) or typed anywhere (an outgoing message) - went after `last_in`, the
+    newest such; None when none did."""
     from . import advisor
     tid, mid = item.get('tid'), item.get('mid')
     try: r = store.sent_reply(task_id=int(tid)) if tid else store.sent_reply(message_id=int(mid)) if mid else None
@@ -291,7 +321,8 @@ def answered(store, item: dict, last_in: dict) -> bool:
     except Exception: outs = []
     last = _dt(last_in.get('SentAt') or last_in.get('CreatedAt'))
     ats = [_dt((r or {}).get('DecidedAt') or (r or {}).get('CreatedAt'))] + [_dt(m.get('SentAt') or m.get('CreatedAt')) for m in outs]
-    return bool(last) and any(a and a > last for a in ats)
+    went = [a for a in ats if a and last and a > last]
+    return max(went) if went else None
 
 
 def slipped(store, item: dict, t: dict) -> tuple:
@@ -332,6 +363,9 @@ def decide(store, item: dict, verbs: list) -> dict:
     line = _say(st, **facts) if verb and (verb != 'next' or st in FAILED) else ''
     # ...and an age under a day is on the card already ("2h"): the line speaks from yesterday on
     if st == 'asked' and not re.search(r'yesterday|days ago', line): line = ''
+    # ...and MARK DONE IS NEVER A FALLBACK (the owner, 2026-10-28): lit only with its reason said - a reply that went, a finish nothing
+    # came after, every to-do ticked - else nothing is lit
+    if verb == 'close' and not line: verb = None
     ask, mem = asks(st), []
     if not ask and st in MEMORY_ASKS:
         try: mem = cares_on(store) if st == 'report_ok' and 'report_off' in offered else [] if st == 'report_ok' else memory_on(store, item)

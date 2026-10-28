@@ -273,8 +273,8 @@ class TheScriptedBrainRoutesTests(unittest.TestCase):
 
 class TheAdvisorSpeaksInTheDemoTests(unittest.TestCase):
     def test_an_item_on_the_table_gets_a_verb(self):
-        """The demo is where newcomers first meet the Advisor: an ask has its button lit - and, its move plain, nothing said (the owner,
-        2026-10-23: an obvious move is an empty strip and one lit button)."""
+        """The demo is where newcomers first meet the Advisor: an item on the table is decided at once, never pending - and NO DEFAULT
+        VERB (the owner, 2026-10-28): a button is lit only beside its fact, so the scripted line that only explains the button lights none."""
         from taskuary import advisor, funnel
         s = MemoryStore(); demo.seed(s)
         with on(), mock.patch('taskuary.terminal.live_sessions', lambda tail=0: []):
@@ -285,7 +285,8 @@ class TheAdvisorSpeaksInTheDemoTests(unittest.TestCase):
             advisor.judge(s, advisor.SHOWN, *tgt, advisor.revision(s, *tgt), tier=2, key=keys[0])
             got = advisor.for_key(s, keys[0])
         funnel.invalidate()
-        self.assertTrue(got.get('verb'), got); self.assertNotIn('pending', got)
+        self.assertTrue(got.get('state'), got); self.assertNotIn('pending', got)
+        self.assertTrue(not got.get('verb') or got['verb'] == 'next' or got.get('line'), got)
 
 
 class TheWorldTests(unittest.TestCase):

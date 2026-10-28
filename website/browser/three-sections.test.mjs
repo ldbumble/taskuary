@@ -83,7 +83,8 @@ test("three sections in the flow's order, open where the task is up to, tabs tha
     const m = await look(page);
     assert.equal(m.main, "from");
     assert.deepEqual(m.slots.map((s) => s.open), [true, false, false]);
-    assert.match(await page.$eval("[data-tq-canvas-item] [data-tq-from]", (e) => e.innerText), /What came in[\s\S]*What triage made of it[\s\S]*Full message history/);
+    assert.match(await page.$eval("[data-tq-canvas-item] [data-tq-from]", (e) => e.innerText), /What came in[\s\S]*What triage made of it/);
+    assert.doesNotMatch(await page.$eval("[data-tq-canvas-item] [data-tq-from]", (e) => e.innerText), /Full message history/, "no second copy at the foot");
     const close = m.tabs.find((x) => x.key === "close");
     assert.ok(close.here, "Close out is where the task is up to");
     assert.match(close.text, /Close out[\s\S]*Reply to Tom Alvarez[\s\S]*Drafted · waiting for Send[\s\S]*Up to here[\s\S]*3$/, close.text);

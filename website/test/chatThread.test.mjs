@@ -71,7 +71,7 @@ const cameFrom = page.slice(page.indexOf("const fromFacts = () =>"), page.indexO
 test("Show all on a chat draws the back-and-forth in Came from; an email thread keeps its rows", () => {
   assert.match(cameFrom, /\{showAll && isChat\(g\.channel\) \? <ChatThread messages=\{g\.msgs\} maxHeight=\{THREAD_MAX\} \/>/);
   assert.match(cameFrom, /<ConversationRows rows=\{fromRows\(g, 3, showAll\)\} open=\{shownMsg\} onOpen=\{\(f\) => setOpenMsg\(f\(shownMsg\)\)\} narrow/);
-  assert.match(cameFrom, /\{fromExpands\(sources\) && <Link component="button"/, "a short chat still offers its bubbles");
+  assert.match(cameFrom, /\{!threeUp && fromExpands\(sources\) && <Link component="button"/, "a short chat still offers its bubbles - on a phone; the desk's conversation has its own Show all");
   assert.match(cameFrom, /showAll \? "Show less" : `Show all \$\{sourceCount\}`/, "and a way back");
 });
 
@@ -96,9 +96,9 @@ test("Close out says what the draft answers in one line, and the line opens the 
   assert.match(closeOut, /\{closeGroup && answering && <Box component="button" type="button" data-tq-answering="" onClick=\{seeWholeConversation\}/);
   assert.match(closeOut, /Answering <Box component="span"[^>]*>\{answering\.who\}<\/Box>/);
   // ...and in the three sections it opens Came from with its message history out (2026-10-27)
-  assert.match(page, /const seeWholeConversation = \(\) => \{ setShowAll\(true\); setFromOpen\(true\); setHistOpen\(true\); if \(fromDrawer\) setFromSide\(true\); if \(threeUp\) openSection\("from"\); setSeekCameFrom\(true\); \};/);
+  assert.match(page, /const seeWholeConversation = \(\) => \{ setShowAll\(true\); setCameInFull\(true\); setFromOpen\(true\); setHistOpen\(true\); if \(fromDrawer\) setFromSide\(true\); if \(threeUp\) openSection\("from"\); setSeekCameFrom\(true\); \};/);
   assert.match(page, /<Box ref=\{cameFromRef\}/);
-  assert.equal(page.match(/<ConversationRows /g).length, 1, "one component, in From");
+  assert.equal(page.match(/<ConversationRows /g).length, 2, "one component, in From: a phone's conversations, and the desk's one flow");
 });
 
 // A PROMISE TASK ANSWERS WHOM IT OWES (the owner, 2026-10-26: "if the promise was to x it should save who to send to and draft response

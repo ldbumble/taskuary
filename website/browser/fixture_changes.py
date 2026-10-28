@@ -38,6 +38,7 @@ def install_processing_changes(app, store):
         '/api/fixture/intake/arrive',
         '/api/fixture/task/matrix',
         '/api/fixture/task/advisor-raised',
+        '/api/fixture/task/long-chat',
     })
 
     def fixture_refuse(method, path):
@@ -159,6 +160,23 @@ def install_processing_changes(app, store):
         tid = json.loads(store.get_idea(i['IdeaId'])['ActionJson'] or '{}').get('tid')
         if not tid: raise HTTPException(409, 'the idea opened no task')
         return {'taskId': tid, 'mails': [first, again]}
+
+    @app.post('/api/fixture/task/long-chat')
+    def long_chat(body: dict):
+        """A WhatsApp group's fifteen lines and a 22-item to-do, six ticked, on one task. The owner, 2026-10-28: "I want to be able to see
+        what came in actual chat without going to the bottom ... show all 15 does nothing" - the chat sat under the whole to-do."""
+        if body: raise HTTPException(422, 'this fixed fixture accepts only an empty object')
+        import json
+        tid = store.create_task({'Title': 'Site ops: the move to the new building', 'Kind': 'task', 'Status': 'open', 'Source': 'whatsapp',
+                                 'Summary': 'The site team needs the move to the new building planned and signed off.'}, 'router')
+        start, who = datetime.now() - timedelta(hours=2), ('Ray Colton', 'Gail Moreno', 'Paula Vance')
+        for i in range(15):
+            store.add_message({'TaskId': tid, 'Channel': 'whatsapp', 'SourceName': 'Site ops', 'ExternalId': f'fixture-long-{tid}-{i}',
+                               'FromName': who[i % 3], 'BodyText': f'Move note {i + 1}: ' + ('the crates for floor two' if i % 2 else 'keys and the lift booking'),
+                               'SentAt': (start + timedelta(minutes=7 * i)).isoformat(' ', 'seconds'), 'Status': 'routed'})
+        todo = [{'id': f't{i}', 'text': f'Move step {i + 1}: ' + ('label the crates' if i % 2 else 'book the lift'), 'done': i < 6} for i in range(22)]
+        store._exec('UPDATE task SET Checklist=? WHERE TaskId=?', (json.dumps(todo), tid))
+        return {'taskId': tid}
 
     @app.post('/api/fixture/task/chat-burst')
     def chat_burst(body: dict):

@@ -35,12 +35,15 @@ test("a task made from an Advisor idea comes from the mail, the Advisor said in 
     const item = document.querySelector(CUR), cameIn = item.querySelector("[data-tq-came-in]");
     return { cameIn: cameIn.innerText, words: cameIn.querySelector("[data-tq-came-in-words]")?.innerText || "",
       raised: [...item.querySelectorAll("[data-tq-raised]")].filter((e) => e.offsetParent).map((e) => e.innerText), all: item.innerText,
-      history: item.querySelector("[data-tq-history-toggle]")?.innerText || "" };
+      rows: [...item.querySelectorAll("[data-tq-from] [data-tq-conversation-row]")].map((e) => e.innerText.replace(/\s+/g, " ")) };
   }, CUR);
   assert.match(seen.cameIn, /Erin Blake · /, `What came in is from Erin: ${seen.cameIn}`);
-  assert.match(seen.words, /Following up on the year-end statements/, "her follow-up, the newest of her mails, is what came in");
+  // ...her two mails are the conversation under the boxes, oldest first, her follow-up - what came in - last; each drawn once
+  assert.equal(seen.rows.length, 2, JSON.stringify(seen.rows));
+  assert.match(seen.rows[0], /Could you send the year-end statements/);
+  assert.match(seen.rows[1], /Following up on the year-end statements/);
+  assert.equal(seen.all.split("Following up on the year-end statements").length - 1, 1, "the follow-up once");
   assert.deepEqual(seen.raised, ["Raised by the Advisor: Triage filed Erin's mail as fyi, but her follow-up shows the year-end statements are still outstanding - I'd send them today."]);
-  assert.match(seen.history, /Full message history \(2\)/, `both of Erin's mails and nothing else: ${seen.history}`);
   assert.doesNotMatch(seen.all, /Advisor · Advisor/i, "the name once");
   assert.doesNotMatch(seen.all, /whose move:|the Advisor's suggestion:/i, "no format text");
   if (process.env.TASKUARY_SHOT_DIR) {

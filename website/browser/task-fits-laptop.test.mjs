@@ -76,7 +76,7 @@ test("three sections at every width: a failed run on the Agent, a fresh task on 
     // ...Came from's tab opens it and the Agent folds to its tab; the Agent's brings the run back
     await page.click("[data-tq-canvas-item] [data-tq-section-tab=from]");
     await page.waitForSelector("[data-tq-from]", { visible: true, timeout: 5000 });
-    assert.match(await page.$eval("[data-tq-from]", (e) => e.innerText), /Came from[\s\S]*What came in[\s\S]*What triage made of it[\s\S]*Full message history/i);
+    assert.match(await page.$eval("[data-tq-from]", (e) => e.innerText), /Came from[\s\S]*What came in[\s\S]*What triage made of it/i);
     assert.equal(await main(), "from");
     await page.click("[data-tq-canvas-item] [data-tq-section-tab=agent]");
     await page.waitForSelector("[data-tq-agent-section] [data-tq-result-summary], [data-tq-agent-section] [data-tq-run-why]", { visible: true, timeout: 5000 });

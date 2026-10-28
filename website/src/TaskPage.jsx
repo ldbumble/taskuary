@@ -142,6 +142,8 @@ const whenShort = (s) => {
 // SHOW ALL IS FOR READING (the owner, 2026-10-20: seven messages in a 360px box): the opened thread is as tall as the window
 // leaves room for - the terminal's rule, every row the page can give - and never shorter than the box it was; past that it scrolls
 const THREAD_MAX = "max(360px, calc(100vh - 160px))";
+// Came from's conversation shows its latest few; Show all the rest, in place
+const CONV_KEEP = 5;
 // A CONVERSATION CONDENSED: one line a message - who, the words, when - and "· · · N more" where rows are left out; a row opens its
 // message in full under it. Came from draws it; Close out drew it too (the owner, 2026-10-16) until it became one "Answering ..." line
 // that opens this list (the task-view cleanup, owner-approved 2026-10-25).
@@ -153,7 +155,8 @@ const THREAD_MAX = "max(360px, calc(100vh - 160px))";
 // ...and an OPEN row says its words once (the overnight walk, 2026-10-27: an invitation's one message read its first line in the row, then
 // again in full under it, its subject under the conversation's own): the row keeps who and when, the letter keeps the words, and a
 // subject that is the conversation's (`subject`) is not said again
-function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fetchFor = null, narrow = false, subject = "" }) {
+// ...and `newest`: the row Came from's conversation ends on, marked - it is what came in (the one flow, 2026-10-28)
+function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fetchFor = null, narrow = false, subject = "", newest = null }) {
   return rows.map((r, ri) => r.older ? (
     <Box key={`older${ri}`} component="button" type="button" data-tq-show-older={r.older} onClick={onExpand} title={`Older messages from ${r.names}`}
       sx={{ appearance: "none", font: "inherit", display: "block", width: "100%", textAlign: "left", bgcolor: "transparent", border: 0, cursor: "pointer",
@@ -172,11 +175,13 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
   )) : (
     <React.Fragment key={r.m.MessageId}>
       <Box component="button" type="button" data-tq-conversation-row="" data-tq-mid={r.m.MessageId} aria-expanded={open === r.m.MessageId}
+        data-tq-newest={newest === r.m.MessageId ? "" : undefined}
         onClick={() => onOpen((v) => (v === r.m.MessageId ? null : r.m.MessageId))}
         title="Open the message"
         sx={{ appearance: "none", font: "inherit", width: "100%", textAlign: "left", bgcolor: "transparent", border: 0, cursor: "pointer",
           display: "grid", gridTemplateColumns: narrow ? "minmax(0, 96px) minmax(0, 1fr) auto" : { xs: "minmax(0, 88px) minmax(0, 1fr) auto", sm: "112px minmax(0, 1fr) 64px" }, columnGap: 1.25,
           alignItems: "baseline", px: 0.5, mx: -0.5, py: 0.25, borderRadius: 1, fontSize: 12.5, color: DIM, minWidth: 0,
+          ...(newest === r.m.MessageId ? { bgcolor: "#f6f1e7", color: INK, fontSize: 13.5, py: 0.6 } : {}),
           "&:hover": { bgcolor: "#faf8f4" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
         <Box component="span" sx={{ color: INK, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.m.who}</Box>
         <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{open === r.m.MessageId ? "" : rowText(r.m, files.get(r.m.MessageId))}</Box>
@@ -845,7 +850,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [secPick, setSecPick] = useState({ key: null, sec: null });
   // ...and Came from's whole thread, behind "Full message history (N)"
   const [histOpen, setHistOpen] = useState(false);
-  useEffect(() => { setHistOpen(false); }, [selected]);
+  const [cameInFull, setCameInFull] = useState(false), [doneOpen, setDoneOpen] = useState(false);
+  useEffect(() => { setHistOpen(false); setCameInFull(false); setDoneOpen(false); }, [selected]);
   // the task's body measured: under STACK_BELOW it is a phone's stacked page, not a main view and drawers
   const [bodyW, setBodyW] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
   const bodyRO = useRef(null);
@@ -1207,6 +1213,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // so the ask can be checked against what it came from - "nothing about uncleared checks in there" was the ask built on a mail From never showed
   const sources = groupConversations([...taskMessages, ...(detail?.earlier || [])], { ms: tsMs, clean: cleanText });
   const sourceCount = sources.reduce((n, g) => n + g.count, 0);
+  // ...and on the desk ONE FLOW of them, oldest to newest (fromConversation) - `flow` once there is more than the one message
+  const timeline = sources.flatMap((g) => g.msgs).sort((a, b) => tsMs(a.SentAt) - tsMs(b.SentAt));
   // ...and what they SENT with each message - the photo or screenshot is often the whole ask (the owner, 2026-09-30: "don't see the
   // image on the task incoming message") - drawn under its own row inside the thread; a mail that names a picture it does not
   // carry offers the fetch on the message that opened the task
@@ -1226,7 +1234,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // work column stays where it was - the reply you were reading does not fold under you
   // ...and where the work has the whole width (an agent ran), From is the sidebar over it: the link opens that
   // ...and in the three sections it opens Came from, its message history out
-  const seeWholeConversation = () => { setShowAll(true); setFromOpen(true); setHistOpen(true); if (fromDrawer) setFromSide(true); if (threeUp) openSection("from"); setSeekCameFrom(true); };
+  const seeWholeConversation = () => { setShowAll(true); setCameInFull(true); setFromOpen(true); setHistOpen(true); if (fromDrawer) setFromSide(true); if (threeUp) openSection("from"); setSeekCameFrom(true); };
   const triaged = triageLine({ route: sourceRoute, verdict, task: t || {}, messages: storedMessages, ms: tsMs });
   // THE ASK: the task's summary, else what triage summed it up as, else the message itself - its first sentence, on one line
   // ...and with no summary, the message that OPENED it: the newest is often "and by the 15th", which is not the ask
@@ -1408,6 +1416,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const narrow = bodyW > 0 && bodyW < STACK_BELOW;
   const stacked = !sessionView && narrow;
   const threeUp = !narrow;
+  const flow = threeUp && timeline.length > 1;
   // ...and at rest it is the agent's whole answer under its summary line, what it made, and one link to the conversation (the owner,
   // 2026-10-28: "when agent is done or stopped it should just show what the agent did not the full agent chat")
   const resultRest = resultShown && !resultOpen && !failedRun;
@@ -1520,7 +1529,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             onClick={() => {
                               const mid = detail.attachments?.[0]?.MessageId ?? inbound[0]?.MessageId ?? sources[0]?.msgs[0]?.MessageId;
                               if (mid == null) return;
-                              if (!sources.some((g) => fromRows(g, 3, showAll).some((r) => r.m?.MessageId === mid))) setShowAll(true);
+                              if (threeUp && !flow) { setCameInFull(true); return; }
+                              if (threeUp ? !timeline.slice(-CONV_KEEP).some((m) => m.MessageId === mid) : !sources.some((g) => fromRows(g, 3, showAll).some((r) => r.m?.MessageId === mid))) setShowAll(true);
                               setHistOpen(true); setOpenMsg(mid); setSeekLetter(mid);
                             }}
                             sx={{ height: 19, fontSize: 10, bgcolor: PANEL2 }} />}
@@ -1536,7 +1546,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             {[["ordinary", "Ordinary data"], ["sensitive", "Sensitive data"]].map(([k, l]) => <MenuItem key={k} selected={(detail?.judged?.data_class || "ordinary") === k}
                               sx={{ fontSize: 12 }} onClick={() => judge({ data_class: k })}>{l}</MenuItem>)}
                           </Menu>
-                          {fromExpands(sources) && <Link component="button" type="button" underline="hover" onClick={() => setShowAll((v) => !v)}
+                          {!threeUp && fromExpands(sources) && <Link component="button" type="button" underline="hover" onClick={() => setShowAll((v) => !v)}
                             sx={{ ml: "auto", fontSize: 12 }}>{showAll ? "Show less" : `Show all ${sourceCount}`}</Link>}
                         </Box>
                         {/* ONE SENDER, ONE ITEM, SAID: ingest folds the same sender writing again about this onto one task; said once -
@@ -1618,8 +1628,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                   ? () => { openAppLink(`report=${fromWorkflow.sourceId}&fix=${fromWorkflow.runId}`); } : null} /></Box>}
                           </Box>
                         ) : <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.25 }}>{detail.ref} · {made}</Typography>}
-                        {/* WHAT ITS MESSAGES LINK TO (linkdocs), each once - the items behind the task, a press from it (the redesign,
-                            2026-10-21: "linked items"). What the link names, as its messages named it; its state upstream is not recorded. */}
+                        {fromLinks()}
+  </>);
+  // WHAT ITS MESSAGES LINK TO (linkdocs), each once - the items behind the task, a press from it (the redesign,
+  // 2026-10-21: "linked items"). What the link names, as its messages named it; its state upstream is not recorded.
+  const fromLinks = () => (<>
                         {!!detail.links?.length && <Box data-tq-linked={detail.links.length} sx={{ mt: 0.9, minWidth: 0 }}>
                           <Typography sx={{ ...label, display: "block", mb: 0.25 }}>Linked · {detail.links.length}</Typography>
                           {detail.links.map((l) => (
@@ -1652,9 +1665,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         {cameIn ? <>
           <Typography sx={{ fontSize: 13, color: DIM }}>{byLine(cameIn.who || cameIn.FromName || cameIn.FromEmail, cameIn.SourceName || channelName(cameIn.Channel),
             cameIn.SentAt ? whenShort(cameIn.SentAt) : "")}</Typography>
-          <Typography data-tq-came-in-words="" sx={{ fontSize: 15, lineHeight: 1.5, color: INK, overflowWrap: "anywhere", whiteSpace: "pre-wrap",
-            display: "-webkit-box", WebkitLineClamp: 6, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-            {rowText(cameIn, sourceFiles.get(cameIn.MessageId)) || cleanText(cameIn.ReadText || cameIn.BodyText || "")}</Typography>
+          {flow ? <Typography data-tq-came-in-newest="" sx={{ fontSize: 13, color: FAINT }}>The newest of {timeline.length} messages - the conversation is below</Typography>
+            : <Typography data-tq-came-in-words="" title={cameInFull ? undefined : "Read it all"} onClick={() => setCameInFull((v) => !v)}
+            sx={{ fontSize: 15, lineHeight: 1.5, color: INK, overflowWrap: "anywhere", whiteSpace: "pre-wrap", cursor: "pointer",
+              ...(cameInFull ? {} : { display: "-webkit-box", WebkitLineClamp: 6, WebkitBoxOrient: "vertical", overflow: "hidden" }) }}>
+            {cameInFull ? cleanText(cameIn.ReadText ?? cameIn.BodyText ?? "") || rowText(cameIn, sourceFiles.get(cameIn.MessageId))
+              : rowText(cameIn, sourceFiles.get(cameIn.MessageId)) || cleanText(cameIn.ReadText || cameIn.BodyText || "")}</Typography>}
+          {!flow && cameInFull && typeof cameIn.MessageId === "number" && <Attachments messageId={cameIn.MessageId} dense original={cameIn.SourceLink} />}
         </> : !sources.length && fromWorkflow ? fromConvs() : <Typography sx={{ fontSize: 13, color: DIM }}>{detail.ref} · {made}</Typography>}
         {fromFacts()}
       </Box>
@@ -1669,14 +1686,19 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       </Box>
     </Box>
   );
-  // ...and FULL MESSAGE HISTORY (N): the conversations, whole, one press away - a task with no message has none to open
-  const fromHistory = () => (!sources.length && !detail.links?.length ? null :
-    <Box data-tq-came-from="" data-tq-history={histOpen ? "open" : "shut"} sx={{ minWidth: 0 }}>
-      <Button size="small" data-tq-history-toggle="" aria-expanded={histOpen} onClick={() => setHistOpen((v) => !v)}
-        sx={{ px: 0, minWidth: 0, fontSize: 13, fontWeight: 600, textTransform: "none", color: ACCENT2 }}>
-        {histOpen ? "Hide the message history ‹" : `Full message history (${sourceCount}) ›`}</Button>
-      {histOpen && fromConvs()}
-    </Box>
+  // ...and THE CONVERSATION, right under them (the owner, 2026-10-28: "I want to be able to see what came in actual chat without going to
+  // the bottom" - then "it has to be ONE flow without duplicates"): every message once, oldest to newest, the newest - what came in - last
+  // and marked; its latest CONV_KEEP, Show all opens the rest in place. It replaced "Full message history (N)" at the foot, which drew the
+  // same messages a second time under the To do. A task of one message reads it in What came in, and has no list to repeat it.
+  const fromConversation = () => (
+    <Part label="Conversation" sub={plural(timeline.length, "message")} data-tq-conversation-block="">
+      {timeline.length > CONV_KEEP && <Link component="button" type="button" underline="hover" data-tq-conversation-more="" onClick={() => setShowAll((v) => !v)}
+        sx={{ display: "block", fontSize: 12, mb: 0.4, textAlign: "left" }}>{showAll ? "Show fewer" : `Show all ${timeline.length}`}</Link>}
+      <Box ref={cameFromRef} sx={{ minWidth: 0, scrollMarginTop: 8 }}>
+        <ConversationRows rows={(showAll ? timeline : timeline.slice(-CONV_KEEP)).map((m) => ({ m }))} open={shownMsg} onOpen={(f) => setOpenMsg(f(shownMsg))}
+          files={sourceFiles} fetchFor={fetchFor} newest={timeline.at(-1)?.MessageId} />
+      </Box>
+    </Part>
   );
   // A START THAT STOPPED ON "WHICH REPOSITORY?" (funnel.HELD_REPO): the chip says so and the pick resumes the start, whichever
   // chip you press (the owner, 2026-10-12: "if i don't fill it out it should warn me at least?")
@@ -2340,6 +2362,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {/* A TASK PUT AWAY SAYS SO (trust audit S3, 2026-10-28): opened before its day, nothing on it said Remind me was pressed */}
                       {remindWaiting(t) && <Typography data-tq-put-away="" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>Put away until {remindDay(t.RemindAt)}</Typography>}
                       {threeUp && fromCards()}
+                      {flow && fromConversation()}
                       {/* THE ASK - one line of what is wanted; the whole summary is the tooltip when the line cut it */}
                       {(askBand || waitFor) && <Part label="The ask" data-tq-ask="" data-tq-quoted={askQuoted ? "" : undefined}>
                         {waitFor && <Typography data-tq-waiting-on="" sx={{ color: INK, fontSize: 13.5, fontWeight: 600, lineHeight: 1.45 }}>{waitFor.line}</Typography>}
@@ -2356,7 +2379,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} /></Part>}
                       {!t?.DoneWhen && todo.length > 0 && (
                         <Part label="To do" sub={`${todo.filter((i) => i.done).length} of ${todo.length}`} subTitle={progressLine(todo)} data-tq-todo="" focus={focus === "list"}>
-                          {todo.map((i) => (
+                          {todo.filter((i) => !i.done || doneOpen).map((i) => (
                             <Box key={i.id}>
                               <Box onClick={() => tickItem(i)}
                                 sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.75, ml: -0.75, py: 0.15,
@@ -2387,6 +2410,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                     {noteOf(i)}</Typography>}
                             </Box>
                           ))}
+                          {/* ...the done ones folded into one line, so what is left to do is what is seen (the owner, 2026-10-28) */}
+                          {todo.some((i) => i.done) && <Link component="button" type="button" underline="hover" data-tq-todo-done-fold="" aria-expanded={doneOpen}
+                            onClick={() => setDoneOpen((v) => !v)} sx={{ display: "block", fontSize: 12, color: FAINT, mt: 0.3, textAlign: "left" }}>
+                            {todo.filter((i) => i.done).length} done {doneOpen ? "▾" : "▸"}</Link>}
                         </Part>
                       )}
                       {/* CAME FROM - the task's messages as the conversations they are: each one's first message and its latest two, with
@@ -2395,7 +2422,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           its message in full under it, as the old disclosure did. */}
                       {/* ...in the three sections the conversations are "Full message history (N)", their facts What came in (fromCards) */}
                       {!threeUp ? <Part label="Came from" sub={fromWorkflow && !sources.length ? "a workflow run" : cameFromLabel(sources).replace(/^Came from · /, "").replace(" in ", " · ")} data-tq-came-from="" focus={focus === "source"}>
-                        {fromFacts()}{fromConvs()}</Part> : fromHistory()}
+                        {fromFacts()}{fromConvs()}</Part> : (sources.length || !fromWorkflow) && fromLinks()}
                       {!threeUp && fromSorted()}
                     </Box>
                   </Box>

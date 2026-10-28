@@ -2634,7 +2634,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {runFix ? <Button size="small" variant="contained" disableElevation sx={primaryBtn} data-tq-run-fix="" onClick={() => openAppLink(runFix.href)}>{runFix.label}</Button>
                         : <span title={noAiWhy || undefined}><Button size="small" variant="contained" disableElevation sx={primaryBtn} disabled={!!startingAgent || !!noAiWhy}
                             startIcon={startingAgent === "resume" ? <CircularProgress size={12} /> : <RefreshIcon sx={{ fontSize: 16 }} />}
-                            title={btnHint("try_again")} onClick={continuePress}>{continueWord}</Button></span>}
+                            title={noAiWhy || btnHint("try_again")} onClick={continuePress}>{continueWord}</Button></span>}
                     </Box>)}
                   {failedRun && isGeneral && hasGeneralHistory && !sessionView && (
                     <Box sx={{ mt: 0.75 }}><Button size="small" data-tq-full-result="" aria-expanded={resultOpen ? "true" : "false"}

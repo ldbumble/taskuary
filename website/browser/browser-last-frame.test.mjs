@@ -19,10 +19,13 @@ test("the last frame is shown in the chat with a plain caption on a held or fail
     await page.evaluate((id) => { window.location.hash = `task=${id}`; }, id);
     // the session is over: where an act still waits it leads the page and the chat is one press away, under its Result heading
     const chat = `() => [...document.querySelectorAll(".tq-aui-agent")].some((m) => m.innerText.includes(${JSON.stringify(said)}))`;
-    const folded = () => [...document.querySelectorAll('[aria-expanded="false"]')].find((h) => /^(Result|Agent work)/.test(h.innerText.trim()));
+    // ...in the three sections: the Agent's tab, then its one Full results and record press (2026-10-27)
+    const folded = () => document.querySelector("[data-tq-section-tab=agent]") || document.querySelector('[data-tq-full-result][aria-expanded="false"]')
+      || [...document.querySelectorAll('[aria-expanded="false"]')].find((h) => /^(Result|Agent work)/.test(h.innerText.trim()));
     await page.waitForFunction(`(${chat})() || ((${folded})()?.click(), false)`, { timeout: 30000, polling: 500 });
     await new Promise((r) => setTimeout(r, 800));
-    return page.evaluate(() => ({ names: [...document.querySelectorAll(".tq-published-name b")].map((b) => b.textContent.trim()) }));
+    // ...in the chat, under the answer (the Result's summary may list the same frame under What it made)
+    return page.evaluate(() => ({ names: [...document.querySelectorAll(".tq-aui-agent .tq-published-name b")].map((b) => b.textContent.trim()) }));
   };
 
   for (const [how, caption, said] of [["held", "Where the browser was when it waited for you", "waiting on your Approve"],

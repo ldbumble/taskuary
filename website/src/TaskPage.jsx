@@ -1351,7 +1351,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const resultShown = !term?.alive && hasRecord && !news && [AGENT.saved, AGENT.stopped, AGENT.finished].includes(agentState);
   // ...but THE RESULT FOLDS TWICE (the owner, 2026-10-27: "just the summary - and then click Result to see more"): at rest, folded or open, it
   // is its summary and what it made (ResultSummary); its heading unfolds the rest - the full message, the record, the replay - and folds it back
-  const resultRest = resultShown && !resultOpen;
+  // ...but a run that FAILED says why, with Try again, first (the owner, 2026-10-26: "you can't see what you have to do"): it never rests
+  const resultRest = resultShown && !resultOpen && !failedRun;
   // ...and THE WORK TAKES THE WHOLE WIDTH once an agent has acted (the owner, 2026-10-22: "on a regular agent that is completed we should
   // also only show the agent result with the From expandable over the top"): working or waiting, finished with its Result, or failed
   // with its Try again - From folds to its one line over it. Two columns only where no agent ever ran (taskLayout.layoutOf).
@@ -1430,7 +1431,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...the open section draws its half of the work: the Agent its own, Close out the reply; Came from leaves the halves as they were
   const pane = section === "agent" ? "agent" : section === "close" ? "reply" : paneRest;
   // ...and a reply owed with nothing drafted shows its empty box in Close out, Draft with AI under it (the three sections, 2026-10-27)
-  const replyEmpty = threeUp && !!replyMessage && !pendingReview && !sentReview && !unsentReview && !ended && !liveSession
+  // ...and only where nothing else waits there: a close-out to approve, a proposal, emails owed or a write-up under way have their own box
+  const replyEmpty = threeUp && !!replyMessage && !pendingReview && !sentReview && !unsentReview && !ended && !liveSession && !closeoutRv && !allProposals.length
+    && !owesEmails && !emailsWaiting && !writeup
     && !!t && !["done", "dropped"].includes(t.Status);
   // ONE SCROLLER IN THE WORK COLUMN (the owner, 2026-10-26, a failed run on a laptop: "you can't see anything"): a settled agent's part
   // scrolled inside the column with its transcript scrolling inside THAT, and the reason it failed sat at the foot of the inner one. Now
@@ -2502,7 +2505,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {resultRest && !sessionView && <ResultSummary taskId={selected} stamp={recordProps.stamp} said={story?.said || ""}
                     pages={(detail?.artifacts || []).filter((a) => isPublished(a) || a.kind === "shown")} />}
                   {/* ...and in the three sections ONE press unfolds the rest and folds it back - the only way to it there (the owner, 2026-10-27) */}
-                  {resultShown && !sessionView && threeUp && <Box sx={{ mt: 1.5 }}><Button size="small" variant="outlined" data-tq-full-result="" aria-expanded={!resultRest}
+                  {resultShown && !failedRun && !sessionView && threeUp && <Box sx={{ mt: 1.5 }}><Button size="small" variant="outlined" data-tq-full-result="" aria-expanded={!resultRest}
                     onClick={() => { if (pane !== "agent") setOpenStage("agent"); setResultOpen((v) => !v); }}
                     sx={{ borderRadius: 999, px: 2, fontSize: 13, fontWeight: 600, textTransform: "none", color: INK, borderColor: "#c9c3b8" }}>
                     {resultRest ? "Full results and record ›" : "‹ Back to the summary"}</Button></Box>}
@@ -2653,7 +2656,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       ...(chatBelow ? { bgcolor: "#fff", border: `1px solid ${FOCUS_EDGE}`, borderTop: 0, borderRadius: "0 0 10px 10px", overflow: "hidden" } : {}),
                       // ...a finished agent's chat is the rest of its Result, behind the Result heading while the Result rests on its summary
                       // (the owner, 2026-10-27) - unless it holds a question the agent is waiting on you for, which is the move itself
-                      ...(resultRest ? { "&:not(:has([data-tq-asking]))": { display: "none" } } : {}) }}>
+                      // ...or that is at work again - a turn under way is the move, never a rest (2026-10-28, CI: a working agent's chat stood hidden)
+                      ...(resultRest ? { "&:not(:has([data-tq-asking], .tq-aui-band, .tq-aui-thinking))": { display: "none" } } : {}) }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}

@@ -3921,6 +3921,8 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
             : "The sign-in code expired before it was used. Press Sign in with Microsoft for a fresh one.");
           return;
         }
+        // the tenant refused the people scopes: a fresh code for the base ones replaces the old (server _ms_retry_base)
+        if (data.status === "pending" && data.restart) { setFlow({ ...flow, ...data.restart, at: Date.now() }); return; }
         if (data.status === "pending") { setTimeout(tick, wait); return; }
         setFlow(null);
         if (data.status === "ok") {

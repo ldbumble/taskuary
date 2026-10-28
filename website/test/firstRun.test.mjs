@@ -83,7 +83,7 @@ test("saving your name on the walk moves on to the next stop", () => {
 test("other email is the Connections card in its simple mode, and an AI not installed installs on its click", () => {
   const fr = read("FirstRun.jsx"), cv = read("ConnectorsView.jsx");
   assert.match(fr, /<ChannelDetail key=\{conn\.ConnectorId\} conn=\{conn\} sources=\{sources\} reload=\{reload\} simple=\{open\.simple\}/);
-  assert.match(cv, /export function ChannelDetail\(\{[^}]*simple = false, onConnected \}\)/);
+  assert.match(cv, /export function ChannelDetail\(\{[^}]*simple = false, onConnected(, chatsAsk = null)? \}\)/);
   assert.match(cv, /const SIMPLE_FIELDS = \{ gmail: \["address"\], imap: \["address", "imap_host"\] \};/);
   assert.match(fr, /if \(!ai\.installed && ai\.install && !ai\.done\) \{ install\(ai\); return; \}/);
   assert.match(fr, /Pick it again to retry, or pick another AI\./);

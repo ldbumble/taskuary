@@ -21,7 +21,7 @@ test("every connector detail draws Add another, on the card's own identity row",
     assert.match(body, /<ConnectorIdentity conn=\{conn\} reload=\{reload\} onCreated=\{onCreated\} \/>/, `${fn} has Add another`);
   }
   // ...and the Outlook card is a ChannelDetail: no detail of its own that could leave the row out
-  assert.match(cv, /: <ChannelDetail key=\{conn\.ConnectorId\} \{\.\.\.shared\} sources=\{sources\} onNavigate=\{onNavigate\} \/>;/);
+  assert.match(cv, /: <ChannelDetail key=\{conn\.ConnectorId\} \{\.\.\.shared\} sources=\{sources\} onNavigate=\{onNavigate\}( chatsAsk=\{chatsAsk\})? \/>;/);
   assert.doesNotMatch(cv, /conn\.Type === "outlook" \? <[A-Z]\w*Detail/);
 });
 

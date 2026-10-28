@@ -84,12 +84,13 @@ PURPOSE = {
                                  'verdict was wrong, or where a kind of job really belongs.'),
     'task.split':               'split one arrival into two jobs - `text`',
     # A MEETING IS THE CALENDAR'S, NEVER AN AGENT'S JOB (the owner, 2026-10-28: "schedule a meeting" brought up Give an agent a job): the one
-    # scheduling move is a task's Find a time, drafted for Send (calwrite.draft) - concierge._meeting routes to it, or says there is none
+    # scheduling move is a task's Find a time, drafted for Send (calwrite.draft) - concierge._meeting routes to it, or to New → Meeting
     'meeting.new':              ('set up a meeting or call ("a meeting with Gail about the budget friday") - `who` optional: the names or '
-                                 'addresses it is with, `about` optional: its subject, `when` optional: the day or time they said, `ref` '
+                                 'addresses it is with, `about` optional: its subject, `when` optional: the day they said as YYYY-MM-DD, '
+                                 'or this_week / next_week, `minutes` optional: 15, 30, 45 or 60, `ref` '
                                  "optional: the task it is about (TQ-0123) when it is not the one on the table. On a task whose thread asks "
-                                 "for a time it lights that task's Find a time; with none it says scheduling lives there and writes the "
-                                 "meeting into New as the owner's to-do; with no calendar, the card that connects one. Nothing goes out "
+                                 "for a time it lights that task's Find a time; with none it brings up New → Meeting filled in, whose "
+                                 "Find times reads the calendars; with no calendar, the card that connects one. Nothing goes out "
                                  "before the owner's Send. Never an agent's job"),
     # THE TASK PAGE, as tools (2026-09-25). A task tool acts on the task on the table, or on the one `ref` names
     # (TQ-0123) - never a guess. Each is the page's own button.

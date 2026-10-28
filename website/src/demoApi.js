@@ -197,6 +197,8 @@ const read = (url) => {
   m = p.match(/^\/api\/(?:hub|handbook)\/(\d+)$/);
   if (m) { const r = [...hubRows(false), ...hubRows(true)].find((x) => String(x.LoreId) === m[1]); return clone(r ? { ...r, comments: r.comments || [], votes: [] } : null); }
   if (p.startsWith("/api/tasks")) return clone(state["/api/tasks"]);
+  // New → Meeting: the recorded demo has no calendar behind it - said in its one line, not drawn as a full week
+  if (p === "/api/meetings/slots") return { ok: false, say: "This is the demo - no calendar is behind it. In your own Taskuary, Find times reads yours and theirs.", fix: null };
   return { data: [] };                 // an unrecorded list reads as empty, never as a crash
 };
 

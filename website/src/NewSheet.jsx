@@ -30,6 +30,7 @@ import Composer from "./Composer.jsx";
 import { DRAFT_HASH, handDraft } from "./draftHandoff.js";
 import { useVerbs } from "./actionRow.js";
 import ConnectAi from "./ConnectAi.jsx";
+import NewMeeting from "./NewMeeting.jsx";
 
 // the server's own words for it (general.NO_AI)
 const NO_AI_LINE = "No AI is connected, so an agent can't run this yet - connect one, then send it again.";
@@ -46,6 +47,8 @@ const KINDS = [
   { key: "send",   mark: "✉️", label: "Send something", hint: "a message you start, drafted in your voice and approved by you" },
   { key: "agent",  mark: <TaskuaryMark size={14} />, label: "Give an agent a job", hint: "an agent works on it for you and reports back" },
   { key: "note",   mark: "💡", label: "Note to self", hint: "a reminder or an idea — nothing works it, it just sits on the day you pick" },
+  // ...and a meeting (the owner, 2026-10-28: "probably new meeting screen is better"): free times off your calendar and theirs, the invite drafted for your Send
+  { key: "meeting", mark: "📅", label: "Meeting", hint: "a time with people, found on your calendar and theirs — the invite is drafted for your Send" },
   { key: "goal",   mark: "🎯", label: "Set a goal", hint: "an outcome with a date and steps — the steps are tasks, and it stays on your rail until it is done" },
   // A JOB THAT REPEATS, one tab each (the owner, 2026-10-15: "we need 2, one for reports and one for workflows"): say it in
   // your words and Build it - the draft opens on Reports, filled in, to check and save. The same box Reports has (Composer)
@@ -189,7 +192,7 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
 // `line`: the Assistant's line that wrote this card (concierge._new) - its press says that line again as what it started (`onSaid`)
 // `initialChannel` / `initialTo`: Send something already addressed - a People hit's Message them (SearchEverything, trust audit F6)
 export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false, initialKind = "send", initialHow = "", initialText = "", line = null, onSaid,
-  initialChannel = "", initialTo = "" }) {
+  initialChannel = "", initialTo = "", initialMeeting = null }) {
   const [kind, setKind] = useState(initialKind);
   const said = useRef(null);      // the words, for the repository picker (see NewRepo)
   const repoPick = useRef(null);  // what the picker says to use, read on submit
@@ -267,6 +270,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
     title: "Sending needs a mailbox or a chat with replies on", run: () => openAppLink(place("mail").href) }], open && targetsRead && kind === "send" && !targets.length);
 
   const chanTargets = (targets.find((t) => t.channel === channel)?.to) || [];
+  const mailTargets = (targets.find((t) => t.channel === "email")?.to) || [];
   const close = () => { if (!busy) onClose?.(); };
 
   const submit = useCallback(async () => {
@@ -483,7 +487,13 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           <Composer kind={kind} initial={kind === initialKind ? initialText : ""} onDraft={(config, meta) => { const k = meta?.verdict === "report" ? "report" : kind; handDraft(k, config, meta); onClose?.(); openAppLink(DRAFT_HASH[k]); }} />
         )}
 
-        {!REPEATS.includes(kind) && <Box>
+        {kind === "meeting" && (
+          // ...its own form, its own Find times: the pick is the press, so the footer keeps only Cancel
+          <NewMeeting renderTo={(p) => <EmailRecipients {...p} />} options={mailTargets} initial={initialKind === "meeting" ? initialMeeting || { about: initialText } : {}}
+            onPicked={(d) => { setOk(`${d.ref} — the invite is drafted in Close out, waiting for your ${btn("approve")}. Nothing went out.`); onDone?.(); onOpenTask?.(d.taskId); }} />
+        )}
+
+        {!REPEATS.includes(kind) && kind !== "meeting" && <Box>
           <Label>{kind === "goal" ? "What does done look like" : kind === "send" ? "What's this about"
             : kind === "agent" ? (how === "general" ? "What should it find out or write" : "What should it do")
             : kind === "playbook" ? "What should this playbook do" : "What do you want to remember"}</Label>
@@ -558,7 +568,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end", px: 3, py: 1.75,
         borderTop: `1px solid ${BORDER}`, bgcolor: PANEL2 }}>
         <Button size="small" onClick={close} sx={{ color: DIM }}>Cancel</Button>
-        {!REPEATS.includes(kind) && <Button size="small" variant="contained" disableElevation disabled={!canGo || busy} onClick={submit}
+        {!REPEATS.includes(kind) && kind !== "meeting" && <Button size="small" variant="contained" disableElevation disabled={!canGo || busy} onClick={submit}
           startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}
           sx={{ background: GRADIENT }}>{busy ? "Working…" : verb}</Button>}
       </Box>

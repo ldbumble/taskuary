@@ -69,7 +69,8 @@ class TheDoor(Base):
         out = wrapup.agent_reply(self.s, self.tid, AGAIN, 'coding', follow_up=True)
         self.assertTrue(out['ok'])
         rv = self.s.get_review(out['review_id'])
-        self.assertTrue(rv['Reason'].startswith('a follow-up to your 05:33 PM reply'), rv['Reason'])
+        # ...its time, and its day when that is not today ("05:33 PM on Oct 27") - CI ran past midnight UTC and the bare time no longer matched
+        self.assertRegex(rv['Reason'], r'^a follow-up to your 05:33 PM( on \w{3} \d{1,2})? reply', rv['Reason'])
         with mock.patch('taskuary.responder.write_draft') as redraft: wrapup.finish(self.s, self.tid, REP, None, 'coding')
         redraft.assert_not_called()
         [rv] = pending(self.s, self.tid)

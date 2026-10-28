@@ -846,6 +846,10 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if j.get('data_class') in DATA_CLASSES: out['data_class'] = j['data_class']
                 offer = ' '.join(str(j.get('offer') or '').split())[:240]
                 if out['intent'] in ('task', 'reply_only') and offer and offer.lower() not in ('null', 'none'): out['offer'] = offer
+                # ...and what it tries to make an AI do (TRIAGE.md's danger): asked for since 2026-10-15 and dropped here, so only ranking's
+                # reading ever reached message.Danger - and it holds the unattended start now (ingest.danger, the owner 2026-10-28)
+                dg = ' '.join(str(j.get('danger') or '').split())[:200]
+                if dg and dg.lower() not in ('null', 'none', 'no', 'false'): out['danger'] = dg
                 return out
             parse_error = f"invalid intent {j.get('intent')!r}; expected task, reply_only, or fyi"
         except Exception as e:

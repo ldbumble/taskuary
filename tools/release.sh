@@ -46,7 +46,8 @@ if [ "${SKIP_GATES:-}" != 1 ]; then
   say "fast gates (the full suites run in CI)"
   # ...once more on a failure: a few timer tests flake under load, and a real failure fails twice
   (cd website && { "${N[@]}" node --test "test/*.test.mjs" > /tmp/release-node.log 2>&1 || "${N[@]}" node --test "test/*.test.mjs" > /tmp/release-node.log 2>&1; }) || { grep -E "^not ok" /tmp/release-node.log | head; die "node unit tests failed twice"; }
-  U=$(cd website && npm exec --yes --package=node@22 --package=eslint@10.10.0 -- eslint -c eslint.undef.mjs -f json src 2>/dev/null | grep -o '"ruleId":"no-undef"' | wc -l)
+  # (`|| true`: grep finds nothing in the good case and exits 1, which set -e + pipefail would take for a failure)
+  U=$(cd website && { npm exec --yes --package=node@22 --package=eslint@10.10.0 -- eslint -c eslint.undef.mjs -f json src 2>/dev/null | grep -o '"ruleId":"no-undef"' || true; } | wc -l)
   [ "$U" = 0 ] || die "$U undefined names (eslint no-undef)"
   TASKUARY_HOME="$(mktemp -d)" python -m pytest -q -p no:cacheprovider tests/test_docs_manifest.py tests/test_promptmap_and_catalog.py \
     tests/test_stand_ins_stay_out_of_code.py tests/test_timewords.py tests/test_task_tools.py > /tmp/release-py.log 2>&1 || { grep -E "^FAILED" /tmp/release-py.log; die "version/docs pytest gates failed"; }

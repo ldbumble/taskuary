@@ -1213,6 +1213,9 @@ def checked(store, item: dict, verbs: list, d: dict, rule: dict) -> dict:
     # ...ANY reason but a caution about the draft (the Advisor audit, 2026-10-28): Reply was lit over a waiting draft 4 times of 4, and the
     # owner sent the draft every time - lateness was only the first reason found doing it
     elif verb == 'reply' and drafted and kind not in GAPS: why, instead = f'{kind} on a drafted task: the draft is the answer', ['approve']
+    # ...AND THE OWNER ALREADY ANSWERED (the owner, 2026-10-28: "after reply is sent why is the sent email have Reply on it, it should have Mark
+    # done"): their reply went after the sender's newest mail, so the model's Reply there says twice what was said - Mark done stands
+    elif verb == 'reply' and d.get('state') == 'answered': why = 'the owner already answered the newest mail'
     elif kind == 'same_ask' and verb in ('remove', 'split') and _survives(store, item): why = 'the survivor of a duplicate pair is never folded'
     if not why: return {**d, 'kind': kind}
     lit = (rulebook.RULES.get(d.get('state')) or {}).get('lit') or []

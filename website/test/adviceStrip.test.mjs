@@ -151,3 +151,13 @@ test("an important line lands in the task's Advisor section, and every other str
   assert.doesNotMatch(page, /data-tq-task-advice/);
   assert.match(read("CanvasItem.jsx"), /onLeave=\{onLeave\} onStay=\{onStay\} note=\{note\} litMove=\{phone \? pick\?\.verb \|\| pick\?\.id \|\| "" : ""\} \/>/);
 });
+
+test("a critique carries its fix: Continue with this / Redraft with this, pressed with the Advisor's line as its note", () => {
+  // the owner, 2026-10-28: "just judging without action is not worth much" (advisor.fix_of)
+  const page = read("TaskPage.jsx"), sec = read("AdvisorNote.jsx");
+  assert.match(sec, /export const fixOf = \(note\) => \(note\?\.advice\?\.fix\?\.verb && note\.advice\.fix\.note \? note\.advice\.fix : null\);/);
+  assert.match(sec, /\{fix && <button[^>]*data-tq-advisor-fix=\{fix\.verb\}[^>]*onClick=\{runFix\}/);
+  assert.match(page, /<AdvisorNote note=\{warn\} onFix=\{advisorFix\}/);
+  assert.match(page, /fix\.verb === "continue"\) \{ await api\.post\(`\/api\/tasks\/\$\{id\}\/continue-work`, \{ note: fix\.note \}\)/);
+  assert.match(page, /fix\.verb === "redraft" && pendingReview\?\.ReviewId\) \{ setOpenStage\("reply"\); await draftBehind\(api, pendingReview\.ReviewId, fix\.note\)/);
+});

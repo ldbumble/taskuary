@@ -36,7 +36,8 @@ def test_the_decision_over_a_draft_keeps_send_lit(w):
     assert (d['state'], d['verb']) == ('draft_ready', 'approve'), d
     s._exec('DELETE FROM advice WHERE TargetId=?', (t,))
     d, _ = judged(s, t, {'verb': 'reply', 'line': 'The draft promises Thursday; nothing set it.', 'evidence': [], 'kind': 'draft_caution'})
-    assert (d['verb'], d['line']) == ('reply', 'The draft promises Thursday; nothing set it.'), d
+    # ...and a caution carries its fix (advisor.fix_of, 2026-10-28): Redraft, the line as its note - not Reply
+    assert (d['verb'], d['line'], d['fix']['note']) == ('redraft', 'The draft promises Thursday; nothing set it.', d['line']), d
 
 
 # ── 3. no silent override ─────────────────────────────────────────────────────────────────────────────────────────────────────────────

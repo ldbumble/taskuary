@@ -154,7 +154,9 @@ SYSTEM = (
     "Answer with JSON only:{\"verb\": \"<one of the verbs>\" or null, \"line\": \"<sentence>\" or \"\", "
     "\"evidence\": [\"<ids from the lines below>\"], \"kind\": \"<what the line's fact is>\"}. The kind is one of: late (an answer or a "
     "wait past its time), same_ask (another task holds this same ask), draft_caution (the draft is not ready to send as written), "
-    "handoff (someone else does this work), failure (something failed), memory (another fact about how the owner works), other - "
+    "handoff (someone else does this work), failure (something failed), memory (another fact about how the owner works), work_gap (an "
+    "agent's result or a draft leaves out something the person asked for - a question unanswered, a promise nothing shows - and the "
+    "line says what, as the instruction to fix it: \"Answer her question about the start date\"), other - "
     "\"other\" with an empty line. "
     "EXCEPT when the EVENT is item.shown: the owner is looking at this item right now and is owed a next step, so pick the verb the "
     f"item's own facts make right (a person waiting on them: {L('reply')}; an agent asking them something is answered in its own pane, "
@@ -200,7 +202,7 @@ def _system(store) -> str:
     return f"{SYSTEM}\n\nHOW THE LINE SPEAKS (the owner's own rules):\n{voice}" if voice else SYSTEM
 # the event every item on the table gets, when no other event judged it at its current revision (Advisor audit, 2026-10-15)
 SHOWN = 'item.shown'
-KINDS = ('late', 'same_ask', 'draft_caution', 'handoff', 'failure', 'memory', 'other')
+KINDS = ('late', 'same_ask', 'draft_caution', 'handoff', 'failure', 'memory', 'work_gap', 'other')
 WANT = {'type': 'object', 'properties': {'verb': {'type': ['string', 'null']}, 'line': {'type': 'string'},
                                          'evidence': {'type': 'array', 'items': {'type': 'string'}}, 'kind': {'type': 'string', 'enum': list(KINDS)}},
         'required': ['verb', 'line', 'evidence']}
@@ -1078,6 +1080,9 @@ def decide(store, key: str, preread: bool = True) -> dict:
         # W-9s now" were read, used, and dropped for agreeing with the lit button - the memory never reached the strip. A line that cites
         # a memory line or a counted usual (memory_ids) is a fact the card does not show; it stands in the rule's place, one line - unless
         # the rule's own line is already a counted usual (asked_late: it carries its evidence)
+        # ...AND A GAP IN THE WORK IS SAID AGREEING TOO: "the draft leaves her question unanswered" is never the obvious button explained
+        elif hit and said and (m.get('Kind') or '') in GAPS:
+            by, ev, line, kind = 'model', json.loads(m.get('EvidenceJson') or '[]'), _whole_words(said, 64), m['Kind']
         elif hit and r['state'] != 'idea' and said and not (line and r.get('evidence')):
             mev = json.loads(m.get('EvidenceJson') or '[]')
             if set(mev) & memory_ids(store, item, *tgt):
@@ -1091,9 +1096,12 @@ def decide(store, key: str, preread: bool = True) -> dict:
     if preread: _preread(store, key)
     d = checked(store, item, verbs, {'key': key, 'state': r['state'], 'verb': verb, 'line': line, 'by': by, 'evidence': ev, 'kind': kind},
                 {'verb': r['verb'], 'line': r['line'], 'evidence': list(r.get('evidence') or [])})
+    fix = fix_of(store, item, verbs, d)
+    # ...lit on the row where the row has it; a general agent's Continue is the strip's alone, and the row lights the draft's Redraft
+    if fix: d = {**d, 'verb': next((v for v in (fix['verb'], 'redraft') if not pressable(store, item, v, verbs)), d['verb'])}
     verb, line, by, ev = d['verb'], d['line'], d['by'], d['evidence']
     lbl = _label(verbs, verb, item) if verb else ''
-    out = {'key': key, 'state': r['state'], 'verb': verb, 'label': lbl, 'line': line, 'by': by, 'revision': rev, 'pill': lbl, 'evidence': ev,
+    out = {'key': key, **({'fix': fix} if fix else {}), 'state': r['state'], 'verb': verb, 'label': lbl, 'line': line, 'by': by, 'revision': rev, 'pill': lbl, 'evidence': ev,
            'ask': r['ask'], 'needs_ai': r['state'] in rulebook.NEEDS_AI, 'kind': d['kind'], **({'checked': d['checked']} if d.get('checked') else {})}
     # a fix is a place, not a proposal: the page opens its href where the row has no '<rid>:fix' of its own to press (a failed act with
     # no draft on the table) - read live, so a fix already made carries no stale link
@@ -1146,15 +1154,15 @@ def checked(store, item: dict, verbs: list, d: dict, rule: dict) -> dict:
     verb, kind, why, instead = d['verb'], d.get('kind') or 'other', '', []
     drafted = 'approve' in {v['verb'] for v in verbs}
     if (no := pressable(store, item, verb, verbs)): why = f'{verb}: {no}'
-    elif kind == 'draft_caution' and verb == 'approve': why, instead = 'a caution about the draft over its Send', ['redraft']
+    elif kind in GAPS and verb == 'approve': why, instead = 'a caution about the draft over its Send', ['redraft']
     # ...ANY reason but a caution about the draft (the Advisor audit, 2026-10-28): Reply was lit over a waiting draft 4 times of 4, and the
     # owner sent the draft every time - lateness was only the first reason found doing it
-    elif verb == 'reply' and drafted and kind != 'draft_caution': why, instead = f'{kind} on a drafted task: the draft is the answer', ['approve']
+    elif verb == 'reply' and drafted and kind not in GAPS: why, instead = f'{kind} on a drafted task: the draft is the answer', ['approve']
     elif kind == 'same_ask' and verb in ('remove', 'split') and _survives(store, item): why = 'the survivor of a duplicate pair is never folded'
     if not why: return {**d, 'kind': kind}
     lit = (rulebook.RULES.get(d.get('state')) or {}).get('lit') or []
     pick = next((v for v in [*instead, rule['verb'], *lit] if v and v != verb and not pressable(store, item, v, verbs)
-                 and not (kind == 'draft_caution' and v == 'approve')), 'next')
+                 and not (kind in GAPS and v == 'approve')), 'next')
     keep = pick in instead                       # the line is still this move's reason
     logger.info(f"advisor: {d['key']} {verb} refused ({why}) - {pick} lit instead")
     if keep: return {**d, 'verb': pick, 'kind': kind, 'checked': why}
@@ -1162,6 +1170,25 @@ def checked(store, item: dict, verbs: list, d: dict, rule: dict) -> dict:
     return {**d, 'verb': pick, 'by': 'rule', 'kind': rulebook.KIND.get(d.get('state'), 'rule'), 'checked': why,
             # ...a failure is the fact whatever is lit (rulebook.decide), so its line stays over the move that gets past it
             'line': rule['line'] if (same and pick != 'next') or d.get('state') in rulebook.FAILED else '', 'evidence': rule['evidence'] if same else []}
+
+
+# A CRITIQUE CARRIES ITS FIX (the owner, 2026-10-28: "if the advisor is saying the agent did not do its job then it should tell you to continue
+# the agent or something. just judging without action is not worth much"): a line that says the work leaves something out lights the move
+# that puts it right, with the line as that move's note - the agent's Continue where an agent made the work, else Redraft. Read from the
+# decision's kind and whether an agent ran on the task, never from the line's words.
+GAPS = frozenset({'draft_caution', 'work_gap'})
+FIX_LABEL = {'continue': 'Continue with this', 'redraft': 'Redraft with this'}
+
+def fix_of(store, item: dict, verbs: list, d: dict) -> dict | None:
+    """{verb, label, note} - the press that fixes what the decision's line says is missing - or None: no gap, no line, or no such button."""
+    if d.get('kind') not in GAPS or not str(d.get('line') or '').strip() or not item.get('tid'): return None
+    from . import continuity
+    by_agent = bool(continuity.last_agent_turn(store, int(item['tid'])))
+    # ...a general agent's row draws no Continue (concierge.chips_for: its chat is the way on), but its conversation is picked up the same
+    # way (/continue-work), so the strip's own button can press it wherever an agent can start
+    ok = lambda v: not pressable(store, item, v, verbs) or (v == 'continue' and concierge._general(store, item) and not _agent_ready(store, item))
+    v = next((v for v in (('continue', 'redraft') if by_agent else ('redraft',)) if ok(v)), None)
+    return {'verb': v, 'label': FIX_LABEL[v], 'note': d['line']} if v else None
 
 
 def _survives(store, item: dict) -> bool:

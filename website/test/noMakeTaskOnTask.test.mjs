@@ -14,6 +14,6 @@ test("an opened fyi line offers Make task and the agents' tasks only when it has
   assert.match(fyis, /\{i\.mid && !i\.tid && <Button[^\n]*propose\("mine", i\)/, "mine is not offered on a task");
   // the two hand-offs open the agent box under the line (setAsking) - offered on the same terms
   for (const coding of [true, false])
-    assert.match(fyis, new RegExp(`\\{i\\.mid && !i\\.tid && (canCode && )?<Button[^\\n]*setAsking\\(\\{ key: i\\.key, coding: ${coding} \\}\\)`), `an agent is not offered on a task`);
+    assert.match(fyis, new RegExp(`\\{i\\.mid && !i\\.tid && (canCode && )?(<span[^>]*>)?<Button[^\\n]*setAsking\\(\\{ key: i\\.key, coding: ${coding} \\}\\)`), `an agent is not offered on a task`);
   assert.match(fyis, /\{i\.mid && <Button[^\n]*onClick=\{\(\) => reply\(i\)\}/, "Reply still is");
 });

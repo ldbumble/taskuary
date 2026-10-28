@@ -19,7 +19,9 @@ const look = (page) => page.evaluate(() => {
     open: [...it.querySelectorAll("[data-tq-slot] > [role=region]")].filter(vis).map((e) => e.getAttribute("aria-label")),
     msgs: [...it.querySelectorAll("[data-tq-fyi-msg]")].filter((e) => vis(e.closest("[role=region]"))).map((e) => ({
       who: e.querySelector(".tq-item-msg-h b")?.textContent || "", at: e.querySelector(".tq-item-msg-h .at")?.textContent || "",
-      words: (e.querySelector(".tq-card-full, .tq-thr-words")?.innerText || "").trim() })),
+      // ...folded, its words are the line under it - or its subject, where what they wrote is the subject (a chat line: fyiRow gistFor)
+      words: ((e.querySelector(".tq-card-full, .tq-thr-words, .tq-item-msg-g") || e.querySelector(".tq-item-msg-h .t"))?.innerText || "").trim(), open: e.hasAttribute("data-tq-open"),
+      full: !!e.querySelector(".tq-card-full"), imgs: e.querySelectorAll("img").length, h: Math.round(e.getBoundingClientRect().height) })),
     row: [...document.querySelectorAll("[data-tq-row] button")].filter((b) => b.getBoundingClientRect().width > 0).map((b) => b.textContent.trim()).filter(Boolean) };
 });
 const tab = (page, key) => page.evaluate((k) => document.querySelector(`[data-tq-item-sections] [data-tq-section-tab="${k}"]`)?.click(), key);
@@ -82,6 +84,10 @@ test("an FYI opens on what came in: one message, or a batch's all together, Agen
   assert.equal(one.msgs.length, 1);
   assert.equal(one.msgs[0].who, "Priya Shah");
   assert.ok(one.msgs[0].at && /Sharing for visibility/.test(one.msgs[0].words), JSON.stringify(one.msgs));
+  // ...folded as a batch's are, and its line opens it whole
+  assert.ok(!one.msgs[0].open && !one.msgs[0].full, JSON.stringify(one.msgs));
+  await page.click("[data-tq-item-sections] [data-tq-fyi-msg] .tq-item-msg-h.press"); await sleep(1200);
+  assert.ok((await look(page)).msgs[0].full, "its line opened it whole");
   assert.ok(one.row.includes("Next"), one.row);
   // the Agent tab opens on press and says nobody is on it
   await tab(page, "agent"); await sleep(600);
@@ -96,9 +102,27 @@ test("an FYI opens on what came in: one message, or a batch's all together, Agen
   for (const x of b.msgs) assert.ok(x.who && x.at && x.words, `who, when and its own words: ${JSON.stringify(x)}`);
   assert.ok(b.row.includes("All read, next"), `the batch's way on is still the row's: ${b.row}`);
   assert.ok(b.card.h >= b.canvas.h - 30, `a task's height: ${b.card.h} of ${b.canvas.h}`);
-  // a message's line opens its own moves under it, as on the batch's card
-  await page.evaluate(() => document.querySelector("[data-tq-item-sections] [data-tq-fyi-msg] .tq-item-msg-h.press").click()); await sleep(400);
+  // FOLDED UNTIL OPENED (the owner, 2026-10-28: "this should be closed if it's a fyi email unless you open it"): each message is its line and
+  // a line of its words - no whole body, no pictures from it - so six fit 1440x900 with no scrolling
+  assert.equal(n, 6, "1440x900 reads six together (fyiBatch.js)");
+  assert.ok(b.msgs.every((x) => !x.open && !x.full && !x.imgs && x.h <= 60), `every message folded to a line or two: ${JSON.stringify(b.msgs)}`);
+  assert.equal(await page.$eval('[data-tq-item-sections] [data-tq-slot="from"] [role=region]', (e) => e.scrollHeight - e.clientHeight), 0, "the six fit without scrolling");
+  // a message's line opens it whole, with its own moves under it, as on the batch's card - and folds it again
+  const line = (k) => `[data-tq-item-sections] [data-tq-fyi-msg="${k}"] .tq-item-msg-h.press`, k0 = await page.$eval("[data-tq-item-sections] [data-tq-fyi-msg]", (e) => e.dataset.tqFyiMsg);
+  await page.click(line(k0)); await sleep(1200);
+  let o = (await look(page)).msgs[0];
+  assert.ok(o.open && o.full, `pressed, it opened whole: ${JSON.stringify(o)}`);
+  assert.equal(await page.$eval(line(k0), (e) => e.getAttribute("aria-expanded")), "true");
   assert.ok(await page.$("[data-tq-item-sections] [data-tq-fyi-msg][data-tq-open] .tq-fyi-acts button"), "its moves opened under it");
+  await page.click(line(k0)); await sleep(500);
+  o = (await look(page)).msgs[0];
+  assert.ok(!o.open && !o.full, `pressed again, it folded: ${JSON.stringify(o)}`);
+  // ...and from the keyboard: the line is a button, Enter opens it and Enter folds it
+  await page.focus(line(k0)); await page.keyboard.press("Enter"); await sleep(800);
+  assert.ok((await look(page)).msgs[0].open, "Enter opened it");
+  await page.keyboard.press("Enter"); await sleep(500);
+  assert.ok(!(await look(page)).msgs[0].open, "Enter folded it");
+  await page.click(line(k0)); await sleep(800);
   // ...and All read, next still settles the handful and walks on
   const was = b.msgs.map((x) => x.words).join("|");
   assert.ok(await pressNext(page)); await sleep(4000);

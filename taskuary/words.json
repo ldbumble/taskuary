@@ -76,6 +76,7 @@
     "duplicate":     {"line": "Same ask as {ref} - fold it into that one.", "lit": ["split", "remove"]},
     "asked":         {"line": "{who} asked {ago}.", "lit": ["reply"], "ask": true},
     "asked_late":    {"line": "You usually answer {who} {usual}; this is {age}.", "lit": ["reply"], "ask": true},
+    "answered":      {"line": "", "lit": ["close"], "ask": true},
     "done_list":     {"line": "", "lit": ["close"]},
     "own":           {"line": "", "lit": ["next"]}
   },

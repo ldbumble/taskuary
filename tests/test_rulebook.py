@@ -148,6 +148,20 @@ def test_a_duplicate_needs_the_thread_never_the_same_sender_alone(s):
     assert rulebook.decide(s, it3, _verbs('reply', 'remove'))['state'] == 'asked'
 
 
+def test_the_owners_reply_after_their_newest_mail_lights_mark_done_not_reply(s):
+    """A3: the owner already answered - by a reply sent from here or one typed in their own mail app - so Mark done, never Reply."""
+    t, m, it = _asked(s, 'Badge access', d=3)
+    s._exec("UPDATE review SET DeliveryState='sent', DecidedAt=? WHERE ReviewId=?", (at(d=2), Factory(s).review(t, m, status='approved', final='Done.')))
+    assert (d := rulebook.decide(s, it, _verbs('reply', 'close')))['state'] == 'answered' and d['verb'] == 'close' and d['line'] == ''
+    # ...they wrote again after it: Reply again
+    Factory(s).message(task_id=t, subject='RE: Badge access', body='and the second door?', from_name=ERIN[0], from_email=ERIN[1], sent_at=at(d=1), conversation_id='email:Badge access')
+    assert rulebook.decide(s, it, _verbs('reply', 'close'))['state'] == 'asked'
+    # ...an outgoing message typed elsewhere counts as much as a sent review
+    u, _m, it2 = _asked(s, 'Trainly seats', who=RAY, d=2)
+    Factory(s).message(task_id=u, subject='RE: Trainly seats', body='Sorted.', direction='out', from_email='alex@northwind.example', sent_at=at(d=1), conversation_id='email:Trainly seats')
+    assert rulebook.decide(s, it2, _verbs('reply', 'close'))['verb'] == 'close'
+
+
 def test_a_first_mail_from_an_unknown_address_is_reply_never_an_agent(s):
     from taskuary.ingest import HOLD_TAG
     t, m, it = _asked(s, 'Your quote', who=('Sam Ortiz', 'sam@vendor.example'))

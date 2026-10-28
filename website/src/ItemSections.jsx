@@ -7,7 +7,7 @@
 // the dock's row from wherever they are drawn, whichever section is open
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Box, Typography } from "@mui/material";
-import { FOCUS, FOCUS_EDGE, MINI_W, SECTION, SHADE, SLOT, SectionHead, SectionTab, TAB_W } from "./TaskPage.jsx";
+import { FOCUS, FOCUS_EDGE, MINI_W, SECTION, SHADE, SLOT, STACK_BELOW, SectionHead, SectionTab, TAB_W } from "./TaskPage.jsx";
 import { BORDER, DIM, INK, frameInner } from "./theme.jsx";
 
 // a section's white card on the warm ground, as a task's focus is
@@ -30,6 +30,8 @@ export default function ItemSections({ kind, label, title, aside, sections, abou
   const closedW = (k) => (k === about ? TAB_W : MINI_W);
   const openW = (k) => Math.max(240, w - sections.filter((s) => s.key !== k).reduce((n, s) => n + closedW(s.key), 0) - (k === sections[0].key ? 0 : 1));
   const at = (k) => sections.findIndex((s) => s.key === k);
+  // ON A PHONE THEY STACK, as a task's sections do under STACK_BELOW (trust audit R1, 2026-10-28): slim side tabs left a report 240px wide
+  const stacked = w > 0 && w < STACK_BELOW;
   return (
     <Box data-tq-item-sections={kind} sx={{ ...frameInner, height, display: "flex", flexDirection: "column", boxSizing: "border-box", minWidth: 0 }}>
       {/* THE HEADER LINE a task's is (TaskPage data-tq-task-head): what kind it is in the ref's place, its title, and when */}
@@ -38,9 +40,18 @@ export default function ItemSections({ kind, label, title, aside, sections, abou
         <Typography noWrap title={typeof title === "string" ? title : undefined} sx={{ color: INK, flex: 1, minWidth: 0, fontWeight: 600, fontSize: 14, letterSpacing: "-.005em" }}>{title}</Typography>
         {aside && <Box sx={{ flexShrink: 0, color: DIM, fontSize: 11.5, display: "flex", alignItems: "center", gap: 0.75 }}>{aside}</Box>}
       </Box>
-      <Box ref={body} data-tq-item-body="" data-tq-sections="" data-tq-main={open}
-        sx={{ flex: 1, minHeight: 0, minWidth: 0, display: "flex", flexDirection: "row", bgcolor: SHADE, position: "relative", overflow: "hidden" }}>
-        {sections.map((s, i) => (
+      <Box ref={body} data-tq-item-body="" data-tq-sections="" data-tq-main={open} data-tq-stacked={stacked ? "" : undefined}
+        sx={stacked ? { flex: 1, minHeight: 0, minWidth: 0, display: "flex", flexDirection: "column", gap: 1.5, bgcolor: SHADE, overflowY: "auto",
+          scrollbarWidth: "thin", overscrollBehaviorY: "contain", px: 1.25, py: 1.25, boxSizing: "border-box" }
+          : { flex: 1, minHeight: 0, minWidth: 0, display: "flex", flexDirection: "row", bgcolor: SHADE, position: "relative", overflow: "hidden" }}>
+        {sections.map((s, i) => stacked ? (
+          <Box key={s.key} data-tq-slot={s.key} data-tq-open="" sx={{ minWidth: 0, flexShrink: 0 }}>
+            <Box role="region" aria-label={s.name} className="tq-item-sec" sx={{ display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}>
+              <SectionHead sec={s} />
+              {s.body}
+            </Box>
+          </Box>
+        ) : (
           <Box key={s.key} data-tq-slot={s.key} data-tq-open={open === s.key ? "" : undefined}
             sx={{ ...SLOT(open === s.key, closedW(s.key)), ...(i ? { borderLeft: `1px solid ${FOCUS_EDGE}` } : {}) }}>
             {open !== s.key && <SectionTab sec={s} lines={s.lines || []} foot={s.foot || ""} icon={s.icon} here={here === s.key && open !== here}

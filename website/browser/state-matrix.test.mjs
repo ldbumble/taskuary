@@ -84,8 +84,9 @@ const CELLS = (ids) => [
   ["calendar invite", ids.invite, { section: "from", ran: false, has: /AP cutover dry run/, moves: [/^Accept/] }],
   // ...a rail row, by its words: the first of these still on the rail (an item read at the desk has left it by the phone's pass)
   ["report item", /Headcount by site|AP ageing over 30 days|Helpdesk tickets by day/, { card: true, has: /REPORT/i }],
-  ["FYI item", /Regional operations newsletter|Riverside export ran clean|badge printer is back|Statement of account/, { card: true, has: /FYI|read/i }],
-  ["FYI batch", /Regional operations newsletter|Riverside export ran clean|badge printer is back|Statement of account/, { card: true, batch: true, lit: /All read/ }],
+  // ...an FYI batch the desk pass walked has left the rail too, and the one after it (by thread, sized to the screen) is the phone pass's
+  ["FYI item", /Regional operations newsletter|Riverside export ran clean|badge printer is back|Statement of account|Quarterly newsletter/, { card: true, has: /FYI|read/i }],
+  ["FYI batch", /Regional operations newsletter|Riverside export ran clean|badge printer is back|Statement of account|Quarterly newsletter/, { card: true, batch: true, lit: /All read/ }],
   ["Advisor idea", /weekly report could send it/, { card: true, has: /AP ageing/ }],
   ["news (sender wrote again after a result)", ids.news, { section: "from", ran: true, has: /Ray is away this week/, not: /record is below/, result: false }],
 ];

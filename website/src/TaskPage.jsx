@@ -246,6 +246,7 @@ const FROM_SIDE = { position: "absolute", top: 0, left: 0, bottom: 0, width: "mi
 // one on the right, each laid OVER the main view behind a tab, so nothing under it reflows. Two columns cut the owner's 1600x810 laptop
 // to a ~700px work column whose failure reason sat out of sight. A phone (the body under 760px) keeps its stacked page.
 export const STACK_BELOW = 760;
+const TODO_SHOWN = 6;   // open to-dos shown before "Show N more"
 const REOPEN_ROW_MS = 2500;     // the longest the row says "Reopening…" past the server's yes, waiting on the re-read to draw from
 // ...the main view the whole width, as a live agent's is (the owner, 2026-10-26: "no main view should fill the screen. why waste space?" -
 // a 900px column had been tried), scrolling on its own
@@ -850,7 +851,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [secPick, setSecPick] = useState({ key: null, sec: null });
   // ...and Came from's whole thread, behind "Full message history (N)"
   const [histOpen, setHistOpen] = useState(false);
-  const [cameInFull, setCameInFull] = useState(false), [doneOpen, setDoneOpen] = useState(false);
+  const [cameInFull, setCameInFull] = useState(false), [doneOpen, setDoneOpen] = useState(false), [todoAll, setTodoAll] = useState(false);
   useEffect(() => { setHistOpen(false); setCameInFull(false); setDoneOpen(false); }, [selected]);
   // the task's body measured: under STACK_BELOW it is a phone's stacked page, not a main view and drawers
   const [bodyW, setBodyW] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
@@ -2379,7 +2380,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} /></Part>}
                       {!t?.DoneWhen && todo.length > 0 && (
                         <Part label="To do" sub={`${todo.filter((i) => i.done).length} of ${todo.length}`} subTitle={progressLine(todo)} data-tq-todo="" focus={focus === "list"}>
-                          {todo.filter((i) => !i.done || doneOpen).map((i) => (
+                          {/* NEWEST FIRST, the open ones only - TODO_SHOWN of them, the rest behind "Show N more" (the owner, 2026-10-28: "hide the
+                              done ones and show the open ones only with a button for show more. also it should be newest first") */}
+                          {[...todo].reverse().filter((i) => !i.done).filter((_, n) => todoAll || n < TODO_SHOWN)
+                            .concat(doneOpen ? [...todo].reverse().filter((i) => i.done) : []).map((i) => (
                             <Box key={i.id}>
                               <Box onClick={() => tickItem(i)}
                                 sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.75, ml: -0.75, py: 0.15,
@@ -2411,6 +2415,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             </Box>
                           ))}
                           {/* ...the done ones folded into one line, so what is left to do is what is seen (the owner, 2026-10-28) */}
+                          {todo.filter((i) => !i.done).length > TODO_SHOWN && <Link component="button" type="button" underline="hover" data-tq-todo-more=""
+                            aria-expanded={todoAll} onClick={() => setTodoAll((v) => !v)} sx={{ display: "block", fontSize: 12, color: FAINT, mt: 0.3, textAlign: "left" }}>
+                            {todoAll ? "Show fewer" : `Show ${todo.filter((i) => !i.done).length - TODO_SHOWN} more`}</Link>}
                           {todo.some((i) => i.done) && <Link component="button" type="button" underline="hover" data-tq-todo-done-fold="" aria-expanded={doneOpen}
                             onClick={() => setDoneOpen((v) => !v)} sx={{ display: "block", fontSize: 12, color: FAINT, mt: 0.3, textAlign: "left" }}>
                             {todo.filter((i) => i.done).length} done {doneOpen ? "▾" : "▸"}</Link>}

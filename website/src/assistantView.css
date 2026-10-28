@@ -636,14 +636,23 @@
   .tq-dock .tq-dock-line:has(> .tq-arow):has(> .tq-compose-box[data-tq-open])::after { content: ""; flex: 0 0 180px; box-sizing: border-box; min-height: 34px; margin: 3px 6px 3px 0; }
   .tq-dock .tq-dock-line:not(:has(> .tq-arow)):has(> .tq-compose-box[data-tq-open])::after { content: ""; flex: 1; min-height: 40px; }
   .tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] { position: absolute; right: 20px; bottom: calc(100% + 6px); z-index: 6;
-    width: var(--tq-chat-w); box-sizing: border-box; margin: 0; min-height: 46px; align-items: flex-end; padding: 6px 6px 6px 8px; gap: 2px;
+    width: var(--tq-chat-w); box-sizing: border-box; margin: 0; min-height: 46px; align-items: stretch; padding: 8px 10px 10px; gap: 0;
     border: 1px solid #d5d0c7; border-top-color: #ece7de; border-radius: 0 0 14px 14px; background: #fff; box-shadow: 0 14px 28px -10px #39352d38; }
 }
+/* ...ITS FLOOR IS A FIELD YOU CAN SEE (the owner, 2026-10-28, of a flat white strip of icons and words: "it does not look like a prompt input
+   box?"): under the window's hairline, a bordered, rounded field as in a support chat - the tools inside it on the left, the words beside
+   them growing upward to five lines, send inside on the right, filled once there is something to send. At rest the field is nothing
+   (display: contents) and the pill is unchanged */
+.tq-compose-field { display: contents; }
+.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] > .tq-compose-field { flex: 1; min-width: 0; display: flex; align-items: flex-end; gap: 2px;
+  padding: 3px 4px 3px 3px; border: 1px solid #d5d0c7; border-radius: 12px; background: #fff; transition: border-color .12s, box-shadow .12s; }
+.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] > .tq-compose-field:hover { border-color: #b5aea3; }
+.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] > .tq-compose-field:focus-within { border-color: #55697a; box-shadow: 0 0 0 3px #55697a29; }
 /* ...ONE ROW, like any chat box (the owner, 2026-10-27: "typing is above where attachments, emojis and voice note is - looks weird"): the
    tools on the left, the words beside them growing upward as they wrap, send on the right */
-.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] textarea { min-height: 34px; padding: 7px 4px; line-height: 20px; }
-.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] .tq-send { width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; margin-bottom: 2px; background: #55697a; }
-.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] .tq-send:disabled { opacity: .55; }
+.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] textarea { min-height: 34px; max-height: 114px; padding: 7px 4px; line-height: 20px; }
+.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] .tq-send { width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; margin-bottom: 2px; background: #55697a; transition: background-color .12s, color .12s; }
+.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] .tq-send:disabled { opacity: 1; background: #ebe8e2; color: #a19b91; }
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box .tq-send { width: 28px; height: 28px; flex-basis: 28px; border-radius: 50%; }
 /* ...its hint ONE line, cut at the pill's edge: the box's long hint (an FYI batch, the walk's end) wrapped in the 220px pill and half its
    second line showed under the first (the overnight walk, 2026-10-26) */
@@ -677,7 +686,7 @@
 /* ...ON A PHONE, A BOTTOM SHEET: the conversation over the box, both the screen's width, the box at the screen's foot */
 @media (max-width: 600px) {
   .tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1200; width: auto; flex: none;
-    margin: 0; min-height: 52px; align-items: flex-end; padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px)); gap: 2px;
+    margin: 0; min-height: 52px; align-items: stretch; padding: 8px 10px calc(10px + env(safe-area-inset-bottom, 0px)); gap: 0;
     border: 0; border-top: 1px solid #ece7de; border-radius: 0; background: #fff; box-shadow: none; }
   .tq-dock .tq-dock-line:has(> .tq-compose-box[data-tq-open])::after { content: ""; flex: 0 0 104px; min-height: 34px; }
   .tq-dock .tq-dock-line:not(:has(> .tq-arow)):has(> .tq-compose-box[data-tq-open])::after { flex: 1; min-height: 40px; }

@@ -3687,6 +3687,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           <ActionRow advised={stripPick || setupLit} hold={rowHold} early={rowEarly} />
           <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined} ref={boxRef} data-tq-open={boxWide ? "" : undefined}
             onFocus={() => setBoxOpen(true)} onBlur={(e) => { if (!boxOver() && !e.currentTarget.contains(e.relatedTarget) && !rowDown.current) setBoxOpen(false); }}>
+            {/* THE FIELD: nothing of its own at rest (display: contents - the pill is the box); in the chat window it is the bordered
+                field the words are typed in, tools and send inside it (the owner, 2026-10-28: "it does not look like a prompt input box?") */}
+            <div className="tq-compose-field">
             <div className="tq-compose-tools">
             <AttachImage pics={pics} sx={{ color: DIM }} />
             <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onActive={setDictating} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />
@@ -3708,6 +3711,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                 if (e.key === "Escape") { e.stopPropagation(); shutBox(); }
               }} />
             <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
+            </div>
           </div>
           </div>
           </div>

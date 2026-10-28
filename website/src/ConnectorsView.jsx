@@ -759,6 +759,9 @@ const META = {
       "Test draws one small grey square — a Replicate run takes a few seconds longer because it queues. Enable to use it."],
     agent: ["Ask the owner for a Replicate API token, save it as Secret, leave model blank for flux-schnell unless they name one, Test, turn it on, SETUP DONE."] },
 };
+// a chat card off the fast clock (pollFields.CHAT_CONNECTORS) gets null for its poll field: opening Mattermost, Rocket.Chat, Matrix
+// or Google Chat drew "Something in this view failed to draw" (the setup sweep, 2026-10-27)
+for (const m of Object.values(META)) if (m.fields) m.fields = m.fields.filter(Boolean);
 
 const MSSQL_HOWTO = [
   "This card is the CONNECTION only - set it up once, Test it, and every SQL report inherits it.",

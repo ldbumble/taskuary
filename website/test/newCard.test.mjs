@@ -40,7 +40,7 @@ test("the chosen repository becomes the new task's repo tag, and a chat has none
 test("New is a card in the conversation, not a popup: the button posts it, a link opens it, closing removes it", () => {
   const view = read("AssistantView.jsx"), feed = read("FeedView.jsx"), browse = read("CanvasBrowse.jsx"), sheet = read("NewSheet.jsx");
   assert.match(feed, /n\.key === "new" && !onGo \? setNewOpen\(true\) : onGo\?\.\(n\.go, n\.key\)/);   // the dialog survives only where there is no canvas
-  assert.match(view, /request\.kind === "new"\) browseRef\.current\?\.\("new", \{\}\)/);
+  assert.match(view, /request\.kind === "new"\) browseRef\.current\?\.\("new", request\.state \|\| \{\}\)/);
   assert.match(view, /browseClose: \(id\) => setMsgs\(\(m\) => m\.filter\(\(x\) => x\.id !== id\)\)/);
   assert.match(browse, /area === "new"\) return \(/);
   assert.match(browse, /<NewSheet key=\{.+?\} inline open onClose=\{onClose\}/);

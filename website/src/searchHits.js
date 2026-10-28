@@ -65,6 +65,19 @@ export const aloneAs = (res) => {
   const q = String(res?.q || "").trim().toLowerCase(), hits = res?.hits || [];
   return q.includes("@") && hits.length && hits.every((h) => h.type === "person" && String(h.to || "").toLowerCase() === q) ? hits[0].title || hits[0].to : "";
 };
+// MESSAGE THEM (the owner's idea, trust audit F6, 2026-10-28): the channels a person can be written on, out of what New's own Send something
+// can send to (/api/send-targets) - email to their address, and any chat whose known conversation is theirs, by address or by name. Each is
+// {channel, to, name}, the To that New's compose is opened with
+export const channelsFor = (person, targets) => {
+  const to = String(person?.to || "").trim(), name = String(person?.title || person?.name || "").trim(), low = (s) => String(s || "").trim().toLowerCase();
+  return (targets || []).flatMap((t) => {
+    if (t.channel === "email") return to.includes("@") ? [{ channel: "email", to, name }] : [];
+    const hit = (t.to || []).find((c) => (to && low(c.to) === low(to)) || (name && low(c.name) === low(name)));
+    return hit ? [{ channel: t.channel, to: hit.to, name: hit.name || name }] : [];
+  });
+};
+// ...and the link that opens New's Send something with it filled in (canvasLinks reads it back)
+export const messageLink = ({ channel, to, name }) => `#new-task&${new URLSearchParams({ kind: "send", channel, to, ...(name ? { name } : {}) })}`;
 export const nothingYet = (name) => `Nothing from or about ${name} yet - what they send, and the tasks they are on, come up here.`;
 
 // ONE WAY TO SAY NOTHING WAS FOUND, on every page with a box (the 2026-10-19 UI walk: each said it its own way, and none said where

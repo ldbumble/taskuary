@@ -15,7 +15,11 @@ export function canvasRequestFromHash(hash, n = 0) {
   // for it (AssistantView.openMsgCard pulls msg:N). It opened a second view of the row - Summary / Message / Triage / Agent - that the
   // owner had taken for gone (2026-10-20: "it should not take you there regardless"); there is no other place a message opens.
   if ((m = /^#(?:msg|message)=(\d+)/.exec(h))) return { kind: "msg", mid: Number(m[1]), n };
-  if (/^#new-task/.test(h)) return { kind: "new", n };
+  // ...and New's Send something already addressed (Message them, a People hit in the search - trust audit F6): #new-task&kind=send&channel=&to=
+  if ((m = /^#new-task(?:&(.*))?/.exec(h))) {
+    const q = new URLSearchParams(m[1] || ""), state = Object.fromEntries(["kind", "channel", "to", "name"].filter((k) => q.get(k)).map((k) => [k, q.get(k)]));
+    return { kind: "new", n, ...(Object.keys(state).length ? { state } : {}) };
+  }
   if ((m = /^#report=([^&]+)/.exec(h))) {
     const v = decodeURIComponent(m[1]);
     // a draft New built (draftHandoff): its kind's shelf, the draft open

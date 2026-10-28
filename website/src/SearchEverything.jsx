@@ -20,7 +20,7 @@ import api from "./api";
 import { openAppLink } from "./appLinks.js";
 import { prefetchTask } from "./taskDetail.js";
 import { ago } from "./timeWords.js";
-import { aloneAs, arrange, asks, countWords, filters, kindOf, marks, meta, nothingMatches, nothingYet, personHits, terms, totalOf } from "./searchHits.js";
+import { aloneAs, arrange, asks, channelsFor, countWords, filters, kindOf, marks, messageLink, meta, nothingMatches, nothingYet, personHits, terms, totalOf } from "./searchHits.js";
 import { ASSISTANT, BORDER, DIM, FAINT, INK, PANEL, PANEL2, PALETTE, PILL_COLORS, ACCENT, mono } from "./theme.jsx";
 
 // colour identifies, it never shouts: each pill is a pale tint with its own ink, from the five colours - never the
@@ -77,7 +77,27 @@ export function SearchBar({ onOpen }) {
   );
 }
 
-function Row({ hit, words, on, onPick, onTask, onHover }) {
+// MESSAGE THEM (the owner's idea, trust audit F6, 2026-10-28): a person found is someone to write to - on the channels New's own Send something
+// can reach them on (searchHits.channelsFor), and the pick opens that compose already addressed, the way the New button's does
+const CHANNEL_WORDS = { email: "Email", teams: "Teams", whatsapp: "WhatsApp", telegram: "Telegram", imessage: "iMessage", discord: "Discord", slack: "Slack" };
+function MessageThem({ person, onGo, sx }) {
+  const [ways, setWays] = useState(null);
+  const ask = () => api.get("/api/send-targets").then(({ data }) => setWays(channelsFor(person, data?.data))).catch(() => setWays([]));
+  const btn = { fontFamily: "inherit", fontSize: 11.5, fontWeight: 600, color: ACCENT, bgcolor: "transparent", border: `1px solid ${BORDER}`,
+    borderRadius: "6px", px: 0.8, py: "2px", cursor: "pointer", "&:hover": { borderColor: "#cbd4dc", bgcolor: "#e6ebef" } };
+  return (
+    <Box data-tq-message-them={person.to} onMouseDown={(e) => e.preventDefault()} onClick={(e) => e.stopPropagation()}
+      sx={{ display: "flex", alignItems: "center", gap: 0.6, flexWrap: "wrap", flexShrink: 0, ...sx }}>
+      {ways === null ? <Box component="button" type="button" data-tq-message-open="" onClick={ask} sx={btn}>Message them</Box>
+        : !ways.length ? <Box component="span" sx={{ fontSize: 11.5, color: FAINT }}>Nothing here can reach them yet</Box>
+        : <>{ways.length > 1 && <Box component="span" sx={{ fontSize: 11.5, color: FAINT }}>on</Box>}
+          {ways.map((w) => <Box key={w.channel} component="button" type="button" data-tq-message-channel={w.channel} onClick={() => onGo(w)} sx={btn}>
+            {ways.length > 1 ? CHANNEL_WORDS[w.channel] || w.channel : `Message them on ${CHANNEL_WORDS[w.channel] || w.channel}`}</Box>)}</>}
+    </Box>
+  );
+}
+
+function Row({ hit, words, on, onPick, onTask, onHover, onMessage }) {
   const closed = ["done", "dropped"].includes(hit.status), m = meta(hit);
   const ref = useRef(null);
   useEffect(() => { if (on) ref.current?.scrollIntoView({ block: "nearest" }); }, [on]);
@@ -105,6 +125,7 @@ function Row({ hit, words, on, onPick, onTask, onHover }) {
             WebkitBoxOrient: "vertical", overflow: "hidden" }}><Marked text={hit.snippet} words={words} /></Box>
         )}
       </Box>
+      {hit.type === "person" && onMessage && <MessageThem person={hit} onGo={(w) => onMessage(w)} />}
       {hit.ref && (
         <Tooltip title={hit.type === "task" ? (closed ? "Closed - open it to read or reopen it" : "Open the task") : "Open the task it is on"}>
           <Box component="button" type="button" data-tq-search-task={hit.tid}
@@ -183,6 +204,8 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
   const aheadTid = settled ? shown.flat[at]?.tid || 0 : 0;
   useEffect(() => { if (aheadTid) prefetchTask(api, aheadTid); }, [aheadTid]);
 
+  // ...Message them: the search goes, and New's Send something opens on the canvas, addressed (CanvasBrowse -> NewSheet)
+  const message = (w) => { onClose(); searchPicked(); openAppLink(messageLink(w)); };
   const pick = (h) => {
     if (!h) return;
     // ...a person stays in the box: their address becomes the words, and what they sent and the tasks they are on come up
@@ -272,11 +295,12 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
             <Box sx={{ px: 2.25, pt: 1, pb: 0.4, fontSize: 11.5, fontWeight: 600, color: FAINT, display: "flex", gap: 0.6 }}>
               {g.group}<Box component="span" sx={{ fontWeight: 500 }}>{groupCount(g)}</Box></Box>
             {g.hits.map((h) => { i += 1; const n = i; return (
-              <Row key={h.id} hit={h} words={words} on={n === at} onPick={pick} onHover={() => n !== at && setAt(n)}
+              <Row key={h.id} hit={h} words={words} on={n === at} onPick={pick} onHover={() => n !== at && setAt(n)} onMessage={aloneAs(res) ? null : message}
                 onTask={(tid) => { const find = opened({ tid }); onClose(); onOpenTask?.(tid); focusOpened(find); }} />); })}
           </Box>
         ))}
-        {settled && aloneAs(res) && <Box data-tq-search-alone="" sx={{ px: 2.5, py: 1.25, fontSize: 12.5, color: DIM }}>{nothingYet(aloneAs(res))}</Box>}
+        {settled && aloneAs(res) && <Box data-tq-search-alone="" sx={{ px: 2.5, py: 1.25, fontSize: 12.5, color: DIM }}>{nothingYet(aloneAs(res))}
+          <MessageThem person={hits[0]} onGo={message} sx={{ mt: 0.9 }} /></Box>}
       </Box>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, height: 36, borderTop: `1px solid ${BORDER}`, bgcolor: "#faf8f5",
         fontSize: 11, color: FAINT }}>

@@ -1213,6 +1213,8 @@ def _memory(store, tid: int, kind: str, p: dict) -> dict:
         if kind == 'memory.remember':
             r = memoryedit.remember(store, str(p.get('note') or ''), str(p.get('about') or ''), str(p.get('section') or ''), str(p.get('replaces') or ''))
             c = r.get('closed') or {}
+            if r.get('doc') == 'style':           # said where it went: the writing style every draft reads
+                return _did(store, tid, f"Saved to your writing style: {q(r['text'])} - every draft follows it from the next one.", kind)
             return _did(store, tid, f"Remembered under {r.get('title') or 'your memory'}: {q(r['text'])}"
                         + (f" - {q(c['text'])} is kept as history, true until {c['until']}." if c else '.'), kind)
         how = str(p.get('how') or 'wrong').strip().lower()

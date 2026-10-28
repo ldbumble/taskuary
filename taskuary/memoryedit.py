@@ -93,6 +93,9 @@ def mark(store, key: str, how: str) -> dict:
     return {'ok': True, 'key': key, 'how': how, 'text': text}
 
 
+STYLE = 'style'                 # memory.remember's section for a writing rule: STYLE.md, not LEARNED.md
+
+
 def remember(store, text: str, about: str = '', section: str = '', replaces: str = '') -> dict:
     """A fact in the owner's own words, under the section it belongs in - `section` a slug (people, care, work, promises, bring), else
     Your people when it names someone (`about`, or an address in it) and What you care about otherwise. `replaces`: the key of a line it
@@ -101,6 +104,12 @@ def remember(store, text: str, about: str = '', section: str = '', replaces: str
     from .concierge import redact               # a token typed into a fact never lands in the memory every prompt reads
     t = redact(' '.join(str(text or '').split()).lstrip('-* ').strip())
     if not t: raise ValueError('say the fact to remember')
+    # a rule about HOW to write is the writing style's, not LEARNED.md's: STYLE.md's Owner notes, where an edited draft's note goes and
+    # every draft reads (responder.style_feedback) - the model names the section by what the fact is (2026-10-28)
+    if section == STYLE:
+        from .responder import style_feedback
+        style_feedback(store, t, 'owner')
+        return {'ok': True, 'text': t, 'section': STYLE, 'title': 'your writing style', 'doc': 'style', 'closed': None}
     who = str(about or '').strip().lower()
     if who and '@' in who and who not in t.lower(): t = f'{t} ({who})'
     slug = section if section in lc.SECTIONS else 'people' if (who or lc.subject_of(t)) else 'care'

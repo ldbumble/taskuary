@@ -72,7 +72,7 @@ print(json.dumps({'tid': tid, 'mid': mid}))
 
   // the hard task's draft is routed by the owner's rule, and the reason is in Recent routes. The route is written as the brain is
   // built; the call itself cannot leave the fixture, whose network is shut, so the draft fails - and that is all it does
-  await api(`/api/messages/${made.mid}/reply`, { draft: true }).catch(() => null);
+  await api(`/api/messages/${made.mid}/reply`, { draft: true, ai: true }).catch(() => null);
   const route = (await api(`/api/ai/routes?task=${made.tid}`)).routes.find((r) => r.Job === "draft");
   assert.ok(route, "the draft was routed");
   assert.equal(route.Rule, "hard-draft-strong"); assert.equal(route.Tier, "strong");

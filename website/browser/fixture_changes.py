@@ -37,6 +37,7 @@ def install_processing_changes(app, store):
         '/api/fixture/advisor/say',
         '/api/fixture/intake/arrive',
         '/api/fixture/task/matrix',
+        '/api/fixture/task/advisor-raised',
     })
 
     def fixture_refuse(method, path):
@@ -130,6 +131,34 @@ def install_processing_changes(app, store):
                                          llm=lambda system, user, **k: json.dumps(said))
         if out.get('task_id') != tid: raise HTTPException(409, f'the question did not join its task: {out}')
         return {'taskId': tid, 'status': store.get_task(tid)['Status']}
+
+    @app.post('/api/fixture/task/advisor-raised')
+    def advisor_raised(body: dict):
+        """Erin's mail filed as fyi and her follow-up, then an Advisor idea saying the reply is still owed - judged through the real
+        door (assistant.triage_ideas, triage scripted), which opens the task. The owner, 2026-10-28: its Came from showed only the
+        Advisor's own line, "Advisor · Advisor", with "whose move: ..." in its words, and never Erin's mail."""
+        if body: raise HTTPException(422, 'this fixed fixture accepts only an empty object')
+        import json
+        from unittest import mock
+        from taskuary import assistant, ingest
+        conv, now = 'fixture-advisor-raised', datetime.now()
+        mail = lambda i, ago, words: store.add_message({'Channel': 'email', 'ExternalId': f'{conv}-{i}', 'ConversationId': conv, 'Direction': 'in',
+                                                        'FromName': 'Erin Blake', 'FromEmail': 'erin@vendor.example', 'Subject': 'Year-end statements',
+                                                        'BodyText': words, 'SentAt': (now - ago).isoformat(' ', 'seconds'), 'Status': 'filed'})
+        first = mail(1, timedelta(days=2), 'Could you send the year-end statements for the donor list when you have them?')
+        again = mail(2, timedelta(hours=3), 'Following up on the year-end statements - our board meets Friday and we still need them.')
+        i = store.upsert_idea({'key': f'idea:{conv}', 'kind': 'idea', 'sig': conv,
+                               'text': "Triage filed Erin's mail as fyi, but her follow-up shows the year-end statements are still outstanding - I'd send them today.",
+                               'action': {'type': 'message', 'mid': first, 'whose': 'the owner', 'suggest': 'Send the year-end statements and the donor summary.',
+                                          'why': f'Erin Blake mid {first} asked; her follow-up mid {again} says the board meets Friday.'}},
+                              (now - timedelta(minutes=5)).isoformat(' ', 'seconds'))
+        said = {'intent': 'task', 'kind': 'task', 'why': 'The Advisor says Erin is still waiting on the year-end statements from Alex.',
+                'title': 'Send Erin the year-end statements', 'summary': 'Erin Blake still needs the year-end statements before Friday.'}
+        with mock.patch.object(ingest, '_spawn'):
+            assistant.triage_ideas(store, [i], lambda system, user, **k: json.dumps(said))
+        tid = json.loads(store.get_idea(i['IdeaId'])['ActionJson'] or '{}').get('tid')
+        if not tid: raise HTTPException(409, 'the idea opened no task')
+        return {'taskId': tid, 'mails': [first, again]}
 
     @app.post('/api/fixture/task/chat-burst')
     def chat_burst(body: dict):

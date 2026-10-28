@@ -15,6 +15,13 @@ export const isChat = (ch) => CHATS.has(ch);
 export const isMine = (m) => m?.Status === "context" || m?.Direction === "out" || !!m?.mine;
 export const senderOf = (m) => (isMine(m) ? "You" : m?.FromName || m?.FromEmail || channelName(m?.Channel));
 const oneLine = (s) => String(s || "").replace(/\s+/g, " ").trim();
+// ...cut on a word, never mid-word ("qualifying donor" stood as the end of a sentence, 2026-10-28)
+const clip = (s, n) => s.length <= n ? s : `${s.slice(0, n).replace(/\s+\S*$/, "")}…`;
+// AN ADVISOR IDEA'S OWN LINE on a task is Taskuary's words, not something that came in: Came from says it once (detail.raised) and shows
+// the mail it was about - it drew as the message, "Advisor · Advisor" over the Advisor's text (2026-10-28)
+export const isIdeaLine = (m) => m?.Channel === "assistant" && /^idea:/.test(String(m?.ExternalId || ""));
+// WHO · WHERE · WHEN, each said once: a line whose sender and source are one name ("Advisor · Advisor") says it once
+export const byLine = (...parts) => parts.filter((p, i) => p && parts.findIndex((q) => String(q).toLowerCase() === String(p).toLowerCase()) === i).join(" · ");
 // "RE: Fwd: the export" and "the export" are one email thread when the mail carries no thread id
 const bareSubject = (s) => oneLine(s).replace(/^((re|fw|fwd|aw|sv)\s*:\s*)+/i, "").toLowerCase();
 
@@ -28,7 +35,7 @@ export function groupConversations(messages = [], { ms = (s) => Date.parse(s) ||
       : isChat(m.Channel) && m.SourceName ? `s:${m.Channel}:${m.SourceName}`
       : m.Subject ? `t:${m.Channel}:${bareSubject(m.Subject)}` : `m:${m.MessageId}`;
     if (!groups.has(key)) groups.set(key, { key, channel: m.Channel || "", msgs: [] });
-    groups.get(key).msgs.push({ ...m, who: senderOf(m), excerpt: oneLine(clean(m.ReadText ?? m.BodyText)).slice(0, 240) });
+    groups.get(key).msgs.push({ ...m, who: senderOf(m), excerpt: clip(oneLine(clean(m.ReadText ?? m.BodyText)), 240) });
   }
   return [...groups.values()].map((g) => {
     const first = g.msgs[0], last = g.msgs[g.msgs.length - 1], people = new Set(g.msgs.map((m) => m.who));

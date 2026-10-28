@@ -53,7 +53,7 @@ import { onLive, touches } from "./live.js";
 import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT, ALERT_BD, ALERT_INK, ALERT_TINT, BRAND } from "./theme.jsx";
 import RunSteps from "./RunSteps.jsx";
-import { cameFromLabel, channelName, filesByMessage, fromExpands, fromRows, groupConversations, groupMeta, headerFacts, isChat, madeLine, rowText, sortedLine, todoSources, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
+import { askLine, byLine, cameFromLabel, channelName, filesByMessage, fromExpands, fromRows, groupConversations, groupMeta, headerFacts, isIdeaLine, isChat, madeLine, rowText, sortedLine, todoSources, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
 import { latestTriageVerdict, legacyTriageVerdict, parseTriageVerdict, routeIntent } from "./triageVerdict.js";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
@@ -1127,7 +1127,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // outbound copy. Put that receipt into the task's conversation as a real-looking outgoing
   // message; otherwise completed tasks showed one inbound message and claimed that was the whole
   // exchange while Notes separately said "Sent by email".
-  const storedMessages = detail?.messages || [];
+  // ...an Advisor idea's own line is not among them: Came from says it in one line (raised) and shows the mail it was about
+  const storedMessages = (detail?.messages || []).filter((m) => !isIdeaLine(m));
   const ownBodies = new Set(storedMessages
     .filter((m) => m.Status === "context" || m.Direction === "out")
     .map((m) => cleanText(m.BodyText)));
@@ -1479,7 +1480,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const fromDrawer = main === "work" && !threeUp;
   useEffect(() => { setFromSide(false); }, [main]);
   // WHAT EACH CLOSED SECTION'S TAB SAYS (taskLayout fromStatus / agentStatus / closeStatus), from what its open section draws
-  const cameIn = answering || newestFirst(inbound)[0] || null;
+  // ...and a task the Advisor raised on a mail it never moved here (another task's, or an older build's) came in as that mail
+  const cameIn = answering || newestFirst(inbound)[0]
+    || (detail?.raised && newestFirst((detail?.earlier || []).filter((m) => m.Status !== "context" && m.Direction !== "out"))[0]) || null;
   // ...read when a tab draws (tabFor, in the JSX): the Advisor's note (`warn`) is worked out further down
   const tabLines = () => !threeUp || !t ? {} : {
     from: fromStatus({ channel: cameIn ? cameIn.SourceName || channelName(cameIn.Channel) : sources[0] ? channelName(sources[0].channel) : "",
@@ -1538,6 +1541,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         </Box>
                         {/* ONE SENDER, ONE ITEM, SAID: ingest folds the same sender writing again about this onto one task; said once -
                             how many, and what they need now (concierge.repeats, counted by code) */}
+                        {/* WHO RAISED IT, when Taskuary did: one quiet line - the Advisor's sentence - over the mail it was about (2026-10-28) */}
+                        {detail?.raised?.text && <Typography variant="body2" data-tq-raised="" title={detail.raised.text}
+                          sx={{ color: DIM, mt: 0.4, fontSize: 12.5, overflowWrap: "anywhere" }}>
+                          Raised by {/^advisor$/i.test(detail.raised.by || "") ? "the Advisor" : detail.raised.by}: {askLine(detail.raised.text).line}</Typography>}
                         {detail?.repeats?.line && <Typography variant="body2" sx={{ color: DIM, mt: 0.4, fontSize: 12.5, overflowWrap: "anywhere" }}>{detail.repeats.line}</Typography>}
                         {/* WHOSE WORDS: a stranger's task runs in its CLI's auto mode (origin.py) - said once, quietly, with the reason on
                             hover and the one owner action that changes it, a link. Nothing for the owner's or trusted work. */}
@@ -1643,8 +1650,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       <Box data-tq-came-in="" sx={CARD}>
         <Typography sx={cardHead}>What came in</Typography>
         {cameIn ? <>
-          <Typography sx={{ fontSize: 13, color: DIM }}>{[cameIn.who || cameIn.FromName || cameIn.FromEmail, cameIn.SourceName || channelName(cameIn.Channel),
-            cameIn.SentAt ? whenShort(cameIn.SentAt) : ""].filter(Boolean).join(" · ")}</Typography>
+          <Typography sx={{ fontSize: 13, color: DIM }}>{byLine(cameIn.who || cameIn.FromName || cameIn.FromEmail, cameIn.SourceName || channelName(cameIn.Channel),
+            cameIn.SentAt ? whenShort(cameIn.SentAt) : "")}</Typography>
           <Typography data-tq-came-in-words="" sx={{ fontSize: 15, lineHeight: 1.5, color: INK, overflowWrap: "anywhere", whiteSpace: "pre-wrap",
             display: "-webkit-box", WebkitLineClamp: 6, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
             {rowText(cameIn, sourceFiles.get(cameIn.MessageId)) || cleanText(cameIn.ReadText || cameIn.BodyText || "")}</Typography>

@@ -615,23 +615,23 @@
 /* ...!important over the box's own grow-as-you-type height (AssistantView sets it inline from scrollHeight): measured on the day's opener,
    where the box is the whole line, it held 34px into every task opened after - and the 30px line sat 2px high in it (the 2026-10-27 sweep) */
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box:not([data-tq-open]) textarea { height: 30px !important; min-height: 30px; padding: 0 4px; line-height: 30px; overflow: hidden; }
-/* ...and USED, it opens UP AND OVER the canvas (the owner, 2026-10-27: "it should always be the same size and words, unless you click when
-   it should expand up and above over the canvas like it was mocked up" - "staying same size but the box becomes bigger above it"): the pill
-   keeps its place on the row (::after, an empty slot - drawn as a blank pill it read as a second input, 2026-10-27), so nothing there moves,
-   folds or is covered while the owner types; the box stands just
-   ABOVE the dock, right-aligned, and grows upward - ONE NARROW COLUMN with the answer over it, like a chat helper on an app (the owner,
-   2026-10-27: "doesn't match the size", "a little more narrow"): both are --tq-chat-w wide at the same right edge. On a phone (under
-   600px) it widens in its line as before */
+/* ...and USED, IT IS THE CHAT WINDOW (the owner, 2026-10-28: "let's make that a chat box when you click on the chat box ui to pop up" - "like
+   in support on most websites"): the box leaves the line and becomes the floor of one panel at the canvas's bottom right, the conversation
+   over it (.tq-chat-pop) - --tq-chat-w wide, standing just ABOVE the dock, never over the row's buttons. The pill keeps its place on the row
+   (::after, an empty slot - drawn as a blank pill it read as a second input, 2026-10-27), so nothing there moves or folds while the owner
+   types; with no row (the day's opener) the line keeps its height. On a phone (under 600px) the panel is a bottom sheet, the box its foot */
 @media (min-width: 601px) {
   .tq-dock .tq-dock-line:has(> .tq-arow):has(> .tq-compose-box[data-tq-open])::after { content: ""; flex: 0 0 180px; box-sizing: border-box; min-height: 34px; margin: 3px 6px 3px 0; }
-  .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { position: absolute; right: 20px; bottom: calc(100% + 6px); z-index: 6;
-    width: var(--tq-chat-w); box-sizing: border-box; margin: 0; min-height: 72px; align-items: flex-end; padding: 6px 4px 4px 8px; border-radius: 14px;
-    box-shadow: 0 10px 32px #39352d26, 0 2px 6px #39352d14; }
-  /* ...ONE ROW, like any chat box (the owner, 2026-10-27: "typing is above where attachments, emojis and voice note is - looks weird"):
-     the tools on the left, the words beside them growing upward as they wrap, send and the box's × on the right */
-  .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] textarea { min-height: 34px; padding: 7px 4px; line-height: 20px; }
-  .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { min-height: 46px; }
+  .tq-dock .tq-dock-line:not(:has(> .tq-arow)):has(> .tq-compose-box[data-tq-open])::after { content: ""; flex: 1; min-height: 40px; }
+  .tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] { position: absolute; right: 20px; bottom: calc(100% + 6px); z-index: 6;
+    width: var(--tq-chat-w); box-sizing: border-box; margin: 0; min-height: 46px; align-items: flex-end; padding: 6px 6px 6px 8px; gap: 2px;
+    border: 1px solid #d5d0c7; border-top-color: #ece7de; border-radius: 0 0 14px 14px; background: #fff; box-shadow: 0 14px 28px -10px #39352d38; }
 }
+/* ...ONE ROW, like any chat box (the owner, 2026-10-27: "typing is above where attachments, emojis and voice note is - looks weird"): the
+   tools on the left, the words beside them growing upward as they wrap, send on the right */
+.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] textarea { min-height: 34px; padding: 7px 4px; line-height: 20px; }
+.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] .tq-send { width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; margin-bottom: 2px; background: #55697a; }
+.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] .tq-send:disabled { opacity: .55; }
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box .tq-send { width: 28px; height: 28px; flex-basis: 28px; border-radius: 50%; }
 /* ...its hint ONE line, cut at the pill's edge: the box's long hint (an FYI batch, the walk's end) wrapped in the 220px pill and half its
    second line showed under the first (the overnight walk, 2026-10-26) */
@@ -648,17 +648,30 @@
      task whose title already had little room (the 2026-10-27 overnight walk) - what is typed still grows it */
   .tq-dock .tq-compose-box textarea::placeholder { white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
 }
-/* ...and what is said about the task comes up OVER it, anchored above the box: a few turns tall at most, scrolling inside, never moving the view */
-.tq-chat-pop { position: absolute; right: 20px; bottom: calc(100% + var(--tq-box-h, -2px)); z-index: 5; width: var(--tq-chat-w); box-sizing: border-box; display: flex; flex-direction: column;
-  border: 1px solid #d5d0c7; border-radius: 14px; background: #fffdfb; box-shadow: 0 10px 32px #39352d26, 0 2px 6px #39352d14; animation: tqPopIn .14s ease-out; }
+/* THE CHAT WINDOW's conversation: over the canvas, flush on its box (--tq-box-h, the open box's height and its 6px over the dock) - the
+   panel's head and the lines scrolling inside, newest at the foot; never moving the view */
+.tq-chat-pop { position: absolute; right: 20px; bottom: calc(100% + var(--tq-box-h, -2px)); z-index: 6; width: var(--tq-chat-w); box-sizing: border-box; display: flex; flex-direction: column;
+  border: 1px solid #d5d0c7; border-bottom: 0; border-radius: 14px 14px 0 0; background: #fff; box-shadow: 0 -2px 28px #39352d1f, 0 2px 6px #39352d10; animation: tqPopIn .14s ease-out; }
 .tq-chat-pop[hidden] { display: none; }
 @keyframes tqPopIn { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) { .tq-chat-pop { animation: none; } }
-.tq-chat-pop-head { display: flex; align-items: center; gap: 6px; padding: 5px 6px 5px 12px; border-bottom: 1px solid #ece7de; font-size: 12px; color: #6e685f; }
-.tq-chat-pop-head b { color: #2f3a42; font-weight: 600; }
-.tq-chat-pop-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 14px 4px; }
-.tq-chat-pop-body > .tq-msg { margin-bottom: 10px; }
+.tq-chat-pop-head { display: flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 7px 6px 7px 12px; border-bottom: 1px solid #ece7de; font-size: 12px; color: #6e685f; }
+.tq-chat-pop-head b { color: #2f3a42; font-weight: 600; font-size: 13px; }
+.tq-chat-pop-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px 14px 6px; }
+.tq-chat-pop-body > .tq-msg { margin-bottom: 10px; max-width: none; }
 .tq-chat-pop-body > .tq-msg:first-child > .avatar { visibility: visible; }
+.tq-chat-pop-body > .tq-msg.receipt { margin-bottom: 8px; font-size: 11.5px; color: #6e685f; }
+.tq-chat-pop-empty { margin: 4px 0 10px; color: #8f8b84; font-size: 12.5px; }
+/* ...ON A PHONE, A BOTTOM SHEET: the conversation over the box, both the screen's width, the box at the screen's foot */
+@media (max-width: 600px) {
+  .tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1200; width: auto; flex: none;
+    margin: 0; min-height: 52px; align-items: flex-end; padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px)); gap: 2px;
+    border: 0; border-top: 1px solid #ece7de; border-radius: 0; background: #fff; box-shadow: none; }
+  .tq-dock .tq-dock-line:has(> .tq-compose-box[data-tq-open])::after { content: ""; flex: 0 0 104px; min-height: 34px; }
+  .tq-dock .tq-dock-line:not(:has(> .tq-arow)):has(> .tq-compose-box[data-tq-open])::after { flex: 1; min-height: 40px; }
+  .tq-chat-pop { position: fixed; left: 0; right: 0; width: auto; bottom: var(--tq-box-h, 0px); z-index: 1200; border: 0; border-radius: 16px 16px 0 0;
+    box-shadow: 0 -8px 32px #39352d33; }
+}
 /* the Advisor's pill sits where the arrow does and does what the card's primary button does; typing brings the arrow back */
 /* the walk is on the phone: the composer is replaced by the way back, never sat beside it */
 .tq-handed { margin: 0 20px 10px; padding: 10px 12px; border: 1px solid #d5d0c7; border-top-width: 1px; border-radius: 12px; background: #fffdfb; display: flex; align-items: center; gap: 10px; color: #4a5d4f; }
@@ -860,3 +873,6 @@
 .tq-flash { animation: tq-flash 1.8s ease-out; border-radius: 6px; }
 @keyframes tq-flash { 0%, 35% { box-shadow: 0 0 0 3px rgba(85, 105, 122, 0.38); } 100% { box-shadow: 0 0 0 3px rgba(85, 105, 122, 0); } }
 @media (prefers-reduced-motion: reduce) { .tq-flash { animation: none; box-shadow: 0 0 0 3px rgba(85, 105, 122, 0.38); } }
+/* a task named in an answer: a link that opens it as its rail row does (AssistantView RefLink, md.jsx linkRefs) */
+.tq-ref-link, .tq-chat-pop-body a[data-tq-task-link] { color: #55697a; font-weight: 600; text-decoration: none; border-bottom: 1px solid #c9d2d9; white-space: nowrap; cursor: pointer; }
+.tq-ref-link:hover, .tq-chat-pop-body a[data-tq-task-link]:hover { border-bottom-color: #55697a; }

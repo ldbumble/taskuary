@@ -187,6 +187,53 @@ def pipe_list(store, p: dict) -> str:
         if len(xs) > 15: out.append(f'  ...and {len(xs) - 15} more')
     return NL.join(out)
 
+RAIL_READ_CHARS, OWN_CHARS, OWN_FLOOR = 18_000, 600, 160    # one call holds a whole lane; a long lane gets shorter quotes before fewer rows
+
+def rail_counts(items) -> str:
+    """'Tasks 4, Reports 2, FYI 23' - the rail's sections, in its order."""
+    from . import funnel
+    n = {}
+    for i in items: n[funnel.level_of(i)] = n.get(funnel.level_of(i), 0) + 1
+    return ', '.join(f'{funnel.SECTION_WORDS[s]} {n[s]}' for s in funnel.lanes.LEVEL_ORDER if n.get(s))
+
+def _own(store, i) -> str:
+    # the sender's own words, the chain under them cut off - what the FYI batch card shows of each member (concierge._context)
+    from .triage import own_words
+    m = store.get_message(i['mid']) if i.get('mid') else None
+    return ' '.join((str((m or {}).get('OwnText') or '').strip() or own_words(str((m or {}).get('BodyText') or i.get('preview') or ''))).split())
+
+def pipe_read(store, p: dict) -> str:
+    """EVERY ROW ON THE RAIL WITH WHAT IT SAYS (the owner, 2026-10-28: "summarize the FYI emails" - "it should know everything on the work
+    rail"): pipe.list names rows by subject and the turn's rail block stops at twenty, so a summary of the FYI lane took a message.read
+    per mail and ran out of look-ups. One call reads a whole section; past the size it holds it says how many it left out."""
+    from . import funnel
+    from .funnel_presentation import shows
+    from .timewords import ago
+    pl, want, who = funnel.pile(store), str(p.get('section') or p.get('lane') or '').strip().lower(), str(p.get('who') or '').strip().lower()
+    items = [i for i in pl.get('items') or [] if not i.get('settling')]
+    if not items: return 'The rail is empty - nothing is on it.'
+    words = {**{s: s for s in funnel.lanes.LEVEL_ORDER}, **{w.lower(): s for s, w in funnel.SECTION_WORDS.items()}, 'tasks': 'task', 'report': 'reports'}
+    if want in ('', 'all', 'everything', 'rail'): xs, said = items, 'every row'
+    elif want in words: xs, said = [i for i in items if funnel.level_of(i) == words[want]], funnel.SECTION_WORDS[words[want]]
+    elif want in funnel.LANE_WORDS: xs, said = [i for i in items if i.get('lane') == want], f'lane {want}'
+    else: return f'There is no rail section {want!r} - section: {" | ".join(funnel.lanes.LEVEL_ORDER)} (or a lane: {", ".join(funnel.LANE_WORDS)}).'
+    if who: xs = [i for i in xs if who in f"{shows(i)['who']} {i.get('who') or ''} {i.get('email') or ''}".lower()]
+    # ...and what the rail's own limit (Settings, funnel_max) holds back is said too: those rows are not on it yet
+    held = f" {pl['hidden']} more wait behind the rail's limit and come on as these go." if pl.get('hidden') else ''
+    head = f"THE RAIL: {len(items)} rows ({rail_counts(items)}).{held} {said}{' from ' + who if who else ''}: {len(xs)}."
+    if not xs: return head + ' None.'
+    n = max(OWN_FLOOR, min(OWN_CHARS, RAIL_READ_CHARS // len(xs) - 140))
+    out, used, left = [head], len(head), 0
+    for k, i in enumerate(xs):
+        own = _own(store, i)
+        row = (f"- {task_ref(i['tid']) + ' · ' if i.get('tid') else ''}{'m' + str(i['mid']) + ' · ' if i.get('mid') else ''}{shows(i)['who']} · "
+               f"{_cut(i.get('title'), 120)} [{funnel.LANE_WORDS.get(i.get('lane'), (i.get('lane'),))[0]}, {ago(i.get('since') or i.get('when')) or '?'}]"
+               + (f"{NL}  {own[:n] + ' […]' if len(own) > n else own}" if own else ''))
+        if used + len(row) > RAIL_READ_CHARS: left = len(xs) - k; break
+        out.append(row); used += len(row) + 1
+    if left: out.append(f'...and {left} more not shown - narrow it: section (one of {", ".join(funnel.lanes.LEVEL_ORDER)}) or who (a sender).')
+    return NL.join(out)
+
 def calendar_read(store, p: dict) -> str:
     from . import calendar as cal
     if store.get_setting('calendar_enabled', '1') != '1': return 'The calendar is switched off in Settings.'
@@ -328,7 +375,7 @@ def missed_check(store, p: dict) -> str:
     return NL.join(facts + ['', 'SAY IT LIKE THIS (keep every fact, in your own words if you like):', welcome.missed_says(d)])
 
 READ = {'tasks.list': tasks_list, 'message.read': message_read, 'sender.read': sender_read, 'docs.search': docs_search,
-        'agents.now': agents_now, 'approvals.list': approvals_list, 'pipe.list': pipe_list, 'calendar.read': calendar_read,
+        'agents.now': agents_now, 'approvals.list': approvals_list, 'pipe.list': pipe_list, 'pipe.read': pipe_read, 'calendar.read': calendar_read,
         'activity.list': activity_list, 'errors.list': errors_list,
         'memory.list': memory_list, 'memory.about': memory_about, 'rules.list': rules_list, 'asks.list': asks_list, 'missed.check': missed_check}
 

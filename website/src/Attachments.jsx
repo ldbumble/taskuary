@@ -52,7 +52,8 @@ const titleOf = (a, original) => a.link ? `${a.kind} — ${a.note ? `not read: $
 // a mail whose body points at a picture it does not carry ([image: ...], cid:) - worth a "look for attachments" offer
 export const mentionsPicture = (body) => /\[(image|cid|inline image)|cid:/i.test(String(body || ""));
 
-export const Attachments = ({ messageId, canFetch, dense, original }) => {
+// `asFiles`: the images the page already draws itself (a report's chart, drawn live from its rows - ReportRows) are chips, not pictures
+export const Attachments = ({ messageId, canFetch, dense, original, asFiles = null }) => {
   const [items, setItems] = useState(null);
   const [big, setBig] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -83,9 +84,10 @@ export const Attachments = ({ messageId, canFetch, dense, original }) => {
       {err || "look for attachments on this mail"}
     </Typography>
   ) : null;
-  const imgs = items.filter(drawable);
-  const clips = items.filter((a) => !drawable(a) && playable(a));
-  const files = items.filter((a) => !drawable(a) && !playable(a));
+  const drawn = (a) => drawable(a) && !asFiles?.(a);
+  const imgs = items.filter(drawn);
+  const clips = items.filter((a) => !drawn(a) && playable(a));
+  const files = items.filter((a) => !drawn(a) && !playable(a));
   return (
     <Box sx={{ mt: 1 }}>
       {/* images are PART of the message ("see below" mail IS the screenshot, a report's chart
@@ -139,7 +141,7 @@ export const Attachments = ({ messageId, canFetch, dense, original }) => {
               data-tq-unsaved={!a.link && !a.url ? "" : undefined}
               target="_blank" rel={a.link || !a.url ? "noopener noreferrer" : "noopener"} title={titleOf(a, original)}
               sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.9, py: 0.4, borderRadius: 1.5,
-                border: `1px solid ${BORDER}`, bgcolor: PANEL2, textDecoration: "none", maxWidth: 260,
+                border: `1px solid ${BORDER}`, bgcolor: PANEL2, textDecoration: "none", maxWidth: "min(260px, 100%)", boxSizing: "border-box",
                 cursor: hrefOf(a, original) ? "pointer" : "default", opacity: hrefOf(a, original) ? 1 : 0.6,
                 "&:hover": { borderColor: hrefOf(a, original) ? "#d8cfbe" : BORDER } }}>
               <Typography variant="caption" sx={{ ...mono, fontSize: 9, fontWeight: 600, color: "#55697a" }}>{kindOf(a)}</Typography>

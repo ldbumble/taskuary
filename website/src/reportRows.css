@@ -1,0 +1,39 @@
+/* A DATA REPORT ON ITS WHITE CARD (ReportRows): a heading and the line of what it found, then the chart and the table side by side
+   where there is room for both (the canvas's width, not the window's - .tq-dash is the size container) and one above the other on a
+   phone. The chart and the table sit on the card itself, split by a hairline: no box inside a box. Ink, rules and marks are the
+   dashboards' tokens (dashboard.css), so a report and a dashboard read as one design. */
+.tq-rep { gap: 14px; max-width: 1180px; }
+.tq-rep-h { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.tq-rep-h h2 { margin: 0; font-size: 17px; line-height: 1.3; font-weight: 650; letter-spacing: -.01em; color: var(--d-ink); overflow-wrap: anywhere; }
+.tq-rep-h p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--d-ink2); font-variant-numeric: tabular-nums; }
+
+.tq-rep-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+@container (min-width: 760px) {
+  .tq-rep-grid { grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr); gap: 0; }
+  .tq-rep-grid > .tq-rep-chart { padding-right: 20px; }
+  .tq-rep-grid > .tq-rep-table { padding-left: 20px; border-left: 1px solid var(--d-grid); }
+  .tq-rep-grid.solo { grid-template-columns: minmax(0, 760px); }
+  .tq-rep-grid.solo > .tq-rep-table { padding-left: 0; border-left: 0; }
+}
+/* the chart's frame is the dashboards' card, laid flat on the report's own white */
+.tq-rep .tq-dash-card { border: 0; box-shadow: none; padding: 0; background: transparent; gap: 12px; animation: none; }
+.tq-rep .tq-dash-h h3 { font-size: 12px; color: var(--d-muted); }
+.tq-rep .tq-dash-bars .lbl { max-width: 220px; }
+
+/* the table: a sticky head, light rules, the name column left and every number right in tabular figures */
+.tq-rep-table { min-width: 0; max-height: 400px; overflow: auto; scrollbar-width: thin; }
+.tq-rep-rows { width: 100%; border-collapse: collapse; font-size: 12.5px; line-height: 1.35; }
+.tq-rep-rows th { position: sticky; top: 0; z-index: 1; background: var(--d-surface); text-align: left; font-size: 11.5px; font-weight: 600;
+  color: var(--d-muted); text-transform: capitalize; white-space: nowrap; padding: 0 10px 7px; border-bottom: 1px solid var(--d-border); }
+.tq-rep-rows td { padding: 6px 10px; border-bottom: 1px solid var(--d-grid); color: var(--d-ink); white-space: nowrap;
+  max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.tq-rep-rows th:first-child, .tq-rep-rows td:first-child { padding-left: 2px; }
+.tq-rep-rows th:last-child, .tq-rep-rows td:last-child { padding-right: 2px; }
+.tq-rep-rows .n { text-align: right; font-variant-numeric: tabular-nums; }
+.tq-rep-rows tbody tr:last-child td { border-bottom: 0; }
+.tq-rep-rows tbody tr:hover td { background: var(--d-wash); }
+.tq-rep-rows tbody tr.on td { background: var(--d-wash); box-shadow: inset 0 -1px 0 var(--d-axis); }
+
+/* A REPORT OF WORDS on the same card: the text itself, no tinted box around it, at a reading measure */
+[data-tq-report-body] .tq-card-full.report { background: transparent; border: 0; padding: 0; margin-top: 0; max-width: 78ch;
+  font-size: 13.5px; line-height: 1.6; max-height: none; overflow: visible; }

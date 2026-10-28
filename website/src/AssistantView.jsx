@@ -2843,7 +2843,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // was the same questions with the chat box still under them
     if (!DEMO) { setFirstRun(true); return; }
     if (DEMO) {
-      setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "assistant", text:
+      // ...an `a` id: the Assistant speaking up, so the chat window it is said in opens on it (popLast) - a `w` one was said into a shut window
+      setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text:
         "## Set up Taskuary on your own machine\n\nThis browser demo uses fictional data and cannot connect an inbox. "
         + "[Download Taskuary for Windows](https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe) or "
         + "[follow the installation guide](https://taskuary.com/docs/).\n\n"

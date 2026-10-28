@@ -191,7 +191,9 @@ block Taskuary. Only a user who chooses <em>Sign in with a code instead</em> use
 <li><strong>Redirect URI:</strong> <code>http://localhost/api/ms/callback</code>, on the <em>Mobile and desktop applications</em>
 platform. Entra ignores the port of a <code>localhost</code> redirect for a public client, so this one
 entry covers whatever port Taskuary listens on (7787 unless changed). The admin-approval link
-uses <code>https://login.microsoftonline.com/common/oauth2/nativeclient</code>.</li>
+uses <code>https://login.microsoftonline.com/common/oauth2/nativeclient</code>.
+Missing, Microsoft&#39;s own page stops with error <strong>AADSTS50011</strong> (the redirect URI does not match) and never returns to
+Taskuary - the card says so while it waits.</li>
 <li><strong>Delegated permissions (Microsoft Graph)</strong>, all a user&#39;s own consent:<ul>
 <li>Outlook: <code>offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite People.Read Contacts.Read</code></li>
 <li>Teams: <code>offline_access User.Read User.ReadBasic.All Chat.ReadWrite ChatMessage.Send People.Read</code></li>
@@ -567,7 +569,7 @@ Content-Type: application/json
 
     </article>
     <nav class="pager"><a class="pn prev" href="./how-it-works"><span>Previous</span>How it works</a><a class="pn next" href="./tasks-and-agents"><span>Next</span>Tasks and agents</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.54 · updated 2026-10-27</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.55 · updated 2026-10-28</p>
   </main>
 </div>
 <script src="./docs.js"></script>

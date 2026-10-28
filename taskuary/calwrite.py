@@ -481,6 +481,33 @@ def draft(store, mid: int, act: str, start: str = None, end: str = None, actor: 
     return {'reviewId': rid, 'taskId': msg.get('TaskId'), 'say': head + (f' ({clash})' if clash else '') + f'. It waits for your {send_word()}.'}
 
 
+# ── a meeting asked for in the chat (the owner, 2026-10-28: "schedule a meeting" opened an agent's job) ──────────────────────────
+def can_book(store) -> bool:
+    """A card that can put a meeting on a calendar is connected - Outlook with a mailbox, or a Gmail card signed in with Google.
+    Whether it may WRITE is asked at the press (require_write), where the refusal carries its sign-in."""
+    try: account(store); return True
+    except NoAccess: return False
+
+
+def connect_fix(store) -> dict:
+    """Where a calendar is connected from: the Gmail card's Sign in with Google when the owner's mail is on a Gmail card, else Outlook."""
+    gm = any(c.get('Active') for c in store.connectors_by_type('gmail'))
+    return {'label': 'Connect a calendar', 'href': '#connector=gmail' if gm else MS_FIX[1]}
+
+
+def people_of(store, who) -> tuple:
+    """(addresses, names nobody could place) for the people a meeting is with - an address as given, a name through the people search
+    the pickers use (peoplesearch.search), its best hit taken. A name with no hit is said back, never guessed into an address."""
+    from . import peoplesearch
+    names = [w.strip() for w in (who if isinstance(who, (list, tuple)) else re.split(r'[,;]|\band\b', str(who or ''))) if str(w or '').strip()]
+    got, miss = [], []
+    for n in names[:20]:
+        if '@' in n: got.append(n.lower()); continue
+        hit = next(iter(peoplesearch.search(store, n[:120], 'email').get('data') or []), None)
+        (got.append(hit['to'].lower()) if hit and '@' in str(hit.get('to')) else miss.append(n))
+    return list(dict.fromkeys(got)), miss
+
+
 def env_of(r) -> dict:
     """A review's delivery envelope - {} when it has none."""
     try: return json.loads(r.get('Deliver') or '{}') or {}

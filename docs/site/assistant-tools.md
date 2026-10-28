@@ -12,7 +12,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 | **table** | decide about the item on the table | reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, report_off, remember(text), setup(text), confirm, cancel, chase, let_go, accept_invite, decline_invite, propose_time, find_time, prepare, elsewhere |
 | **task** | change any task - the table's, or one named by ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?, note?), task.checklist(add?, items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?), review.approve, review.reject |
 | **agents** | a task's agent; where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value), task.ask_agent(who, text) |
-| **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text) |
+| **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), meeting.new(who?, about?, when?), task.setup(text) |
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear(select, scope?), pipe.defer(select, until), pipe.close(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
 | **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how), report.edit(config), report.delete |
 | **app** | settings, connections, scripts, memory | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), hub.publish(title, body, topic?, kind?, why_earned?) |
@@ -55,7 +55,7 @@ The "Put it on my list" button: make it a task on the owner's own list - no agen
 
 ### `regular_agent`
 
-The "Send to agent" button: send it to an agent that does not write code - it becomes a task of its own. Never for Taskuary's own settings, connections or update: those are its own screens (app.find)
+The "Send to agent" button: send it to an agent that does not write code - it becomes a task of its own. Never for Taskuary's own settings, connections or update: those are its own screens (app.find), nor for setting up a meeting: meeting.new.
 
 - `text` - the job
 - `as` (optional) - a profile from agents.list, only when one fits
@@ -460,6 +460,17 @@ A new job with no message behind it. Never for a task that already exists (a TQ 
 Hand this message to an agent or put it on the list.
 
 - `kind` - coding | general | task
+
+<p class="runs">Brings up its button for you to press.</p>
+
+### `meeting.new`
+
+Set up a meeting or call ("a meeting with Gail about the budget friday"). On a task whose thread asks for a time it lights that task's Find a time; with none it says scheduling lives there and writes the meeting into New as the owner's to-do; with no calendar, the card that connects one. Nothing goes out before the owner's Send. Never an agent's job.
+
+- `who` (optional) - the names or addresses it is with
+- `about` (optional) - its subject
+- `when` (optional) - the day or time they said
+- `ref` (optional) - the task it is about (TQ-0123) when it is not the one on the table
 
 <p class="runs">Brings up its button for you to press.</p>
 

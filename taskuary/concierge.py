@@ -1252,6 +1252,44 @@ def _new(store, tid: int, table: dict | None, want: str, text: str) -> dict:
             'new': {'kind': kind, 'how': how, 'text': str(text or '').strip()[:2000], 'line': line}}
 
 
+# A MEETING IS THE CALENDAR'S (the owner, 2026-10-28: "schedule a meeting" brought up Give an agent a job - "is that what we want?"). The one
+# scheduling move the app has is a task's Find a time (a thread triage read as asking for a time, calwrite.draft 'schedule' - drafted for Send),
+# so on such a task - the table's, or the one the ask names - it is that row's Find a time, lit. With no such task it says so in one line and
+# writes the meeting into New as a to-do of the owner's (the new-task road); with no calendar, one line and the card that connects one. There
+# is no meeting screen of its own - whether there should be is the owner's call, not this router's.
+NO_CALENDAR = 'No calendar is connected, so I cannot set up a meeting yet - connect one and ask again.'
+NO_THREAD = "Scheduling works from a task's Find a time, on a thread that asks for a time - nothing here does."
+
+def _meeting(store, tid: int, table: dict | None, params: dict, text: str, actor: str) -> dict:
+    from . import calwrite
+    if not calwrite.can_book(store):
+        fix = calwrite.connect_fix(store)
+        said = NO_CALENDAR if routes() else f"{NO_CALENDAR[:-1]} - under {places.name('connections')}, on the {'Gmail' if 'gmail' in fix['href'] else 'Outlook'} card."
+        record(store, tid, 'assistant', said)
+        return {'say': said, 'options': [], 'chips': [{'verb': 'go', **fix}] if routes() else [], 'decision': None, 'open': ''}
+    who_ = params.get('who') or params.get('with') or ''
+    named = who_ if isinstance(who_, list) else [w.strip() for w in re.split(r'[,;]|\band\b', str(who_)) if w.strip()]
+    ref = re.search(r'(\d+)', str(params.get('ref') or ''))
+    on = funnel.item_for_key(store, f'task:{int(ref.group(1))}') if ref else table
+    # ...the task asking for a time is the meeting meant, unless the ask named people who are not on its thread
+    if on and on.get('mid') and calendar_asks(store, on)[1]:
+        them = {a.lower() for a in calwrite._people(store, store.get_message(int(on['mid'])) or {})}
+        if not named or set(calwrite.people_of(store, named)[0]) <= them:
+            if routes(): return _lit(store, tid, table, on, 'find_time')
+            raise CallMiss(f"That is {_where(on) or 'this'}'s Find a time - CALL find_time on it. Nothing was drafted.")
+    about = re.sub(r'\s+', ' ', str(params.get('about') or params.get('subject') or '')).strip()[:200]
+    job = ' '.join(x for x in ('Meeting', f"with {', '.join(map(str, named))}" if named else '', f'about {about}' if about else '',
+                               str(params.get('when') or '').strip()[:60]) if x)
+    if not routes():
+        said = f'{NO_THREAD} Say "make a task: {job}" and it goes on your list.'
+        record(store, tid, 'assistant', said)
+        return {'say': said, 'options': [], 'decision': None}
+    out = _new(store, tid, table, 'task', job)
+    out['say'] = f'{NO_THREAD} Wrote "{job}" into New - Note it there makes it a task.'
+    rewrite(store, out['new']['line'], out['say'])
+    return out
+
+
 def said_started(store, cid, out: dict) -> str:
     """The chat's "Wrote it into New" line said again as what its card STARTED. Its Send to agent starts the task and takes the card away,
     and the line stood over a researcher already working, promising a press nobody had left to make (the owner, 2026-10-21: every acting
@@ -2638,6 +2676,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # the notes page and was never written, so triage and the report gate went on making tasks of it. LEARNED.md is the memory every reader
     # reads; a fact about nobody goes under What you care about (memoryedit.remember)
     if kind in ('memory.wrong', 'memory.remember'): return _memory(store, tid, kind, params)
+    if kind == 'meeting.new': return _meeting(store, tid, item, params, text, actor)
     # ON THE DESK A NEW JOB IS NEW, FILLED IN (routes): the words on the tab that starts it, its own button the one to press
     if routes() and kind in ('task.create_from_text', 'task.setup'):
         return _new(store, tid, item, str(params.get('kind') or 'general') if kind == 'task.create_from_text' else 'general',

@@ -77,6 +77,14 @@ PURPOSE = {
                                  'plainly ("ADP"). It teaches triage and moves nothing - say it when the owner tells you a '
                                  'verdict was wrong, or where a kind of job really belongs.'),
     'task.split':               'split one arrival into two jobs - `text`',
+    # A MEETING IS THE CALENDAR'S, NEVER AN AGENT'S JOB (the owner, 2026-10-28: "schedule a meeting" brought up Give an agent a job): the one
+    # scheduling move is a task's Find a time, drafted for Send (calwrite.draft) - concierge._meeting routes to it, or says there is none
+    'meeting.new':              ('set up a meeting or call ("a meeting with Gail about the budget friday") - `who` optional: the names or '
+                                 'addresses it is with, `about` optional: its subject, `when` optional: the day or time they said, `ref` '
+                                 "optional: the task it is about (TQ-0123) when it is not the one on the table. On a task whose thread asks "
+                                 "for a time it lights that task's Find a time; with none it says scheduling lives there and writes the "
+                                 "meeting into New as the owner's to-do; with no calendar, the card that connects one. Nothing goes out "
+                                 "before the owner's Send. Never an agent's job"),
     # THE TASK PAGE, as tools (2026-09-25). A task tool acts on the task on the table, or on the one `ref` names
     # (TQ-0123) - never a guess. Each is the page's own button.
     'task.update':              ("change a task's priority, title, owner or due day - any of `priority`: regular | important | urgent, "
@@ -255,7 +263,7 @@ def block(store=None) -> str:
         'HOW YOU ACT (code reads your last line)',
         # the owner, 2026-10-21: "free text should almost never be used in the assistant - it should be bringing up UI components"
         'BRINGING SOMETHING UP IS THE ANSWER: a task, a page, a card or a button the owner asked for comes up with a few words at most',
-        '(under 12) - never what it shows: no sender, story or summary of it beside it. Longer words only answer a real question.',
+        '(under 12) - never what it shows: no sender, story or summary beside it. Longer words only answer a real question.',
         # the owner, 2026-10-27: the words before a press were written, then thrown away - the lit button says nothing (2026-10-23)
         'A CALL that presses or lights a button - an action word for the item on the table, a put-down, a reminder - is the CALL line',
         'alone, no words before it: the button is the whole answer.',
@@ -286,12 +294,12 @@ def block(store=None) -> str:
               '', selector(store, live=False), '',
         'WHICH ONE, in this order:',
         '  1. the owner means one of the action words under your line - do that (bucket table).',
-        '  2. they want detail, history or a summary - LOOK IT UP and answer with what you read. Search the period',
-        '     THEY mean: six months ago means days: 200, not the last week.',
+        '  2. they want detail, history or a summary - LOOK IT UP and answer from it. Search the period',
+        '     THEY mean: six months ago is days: 200.',
         '  3. they want something DONE and it says what - CALL it now; its button is their confirmation. A reminder or',
-        '     a to-do they will do themselves is task.create_from_text kind task; a task that exists is never a new',
-        '     one - change it with the task bucket.',
-        '  4. it is not clear which - LOOK first; then, if two different things still fit, ASK one short question',
+        '     a to-do they will do themselves is task.create_from_text kind task, a meeting meeting.new; a task that',
+        '     exists is never a new one - change it with the task bucket.',
+        '  4. it is not clear which - LOOK first; then, if two things still fit, ASK one short question',
         '     naming both. A question about this app itself - its settings, reports, connections, agents - is',
         '     answered from the look-ups, never handed to an agent.']
     return '\n'.join(lines)
@@ -311,7 +319,7 @@ _DECIDE = {
     'mine':            "make it a task on the owner's own list - no agent",
     'regular_agent':   ('send it to an agent that does not write code - `text`: the job; `as`: a profile from agents.list, only when one fits; '
                         '`new`: true when the job is NOT about the item on the table - it becomes a task of its own. Never for Taskuary\'s own '
-                        'settings, connections or update: those are its own screens (app.find)'),
+                        'settings, connections or update: those are its own screens (app.find), nor for setting up a meeting: meeting.new'),
     'coding_agent':    ('send it to a coding agent - `text`: what is wanted; `as`: the repository (repos.list), only when sure. '
                         'Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick. '
                         '`new`: true when the job is NOT about the item on the table'),
@@ -398,7 +406,7 @@ WHERE = (
     ('how Taskuary itself works', 'docs.search', {'query': 'remind me'}),
     ('reports and workflows', 'reports.list', {}),
     ('agents, profiles and which brain does what', 'agents.list', {}),
-    ('the repositories a coding agent can work in', 'repos.list', {}),
+    ('the repositories a coding agent works in', 'repos.list', {}),
     ("the owner's meetings", 'calendar.read', {'from': 'tomorrow'}),
     ('what is failing, or failed', 'errors.list', {}),
     ('a part of Taskuary NOT WORKING - a connection, a bridge, a sync', 'app.health', {'name': 'whatsapp'}),
@@ -415,7 +423,7 @@ BUCKETS = (
       'task.not_a_task', 'task.complete', 'task.defer', 'task.handoff', 'task.clarify', 'task.share', 'review.approve', 'review.reject')),
     ('agents', "a task's agent; where work belongs",
      ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.stop', 'routing.remember', 'task.ask_agent')),
-    ('new', 'new work with no task yet', ('task.create_from_text', 'task.create_from_message', 'task.setup')),
+    ('new', 'new work with no task yet', ('task.create_from_text', 'task.create_from_message', 'meeting.new', 'task.setup')),
     ('pipe', 'the walk and sets of items, and filing mail', ('pipe.clear', 'pipe.defer', 'pipe.close', 'review.each', 'button.light', 'item.settle', 'message.file', 'message.archive',
                                                             'preference.exclude_sender', 'preference.sender_rule', 'message.retriage')),
     ('reports', 'reports and workflows', ('report.create', 'report.run', 'report.rerun', 'report.pause', 'report.resume',
@@ -428,7 +436,7 @@ BUCKETS = (
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
 HINTS = {'memory.remember': 'note, about?, section?, replaces?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'pipe.clear': 'select, scope?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?', 'task.share': 'who, about?', 'task.complete': 'note?',
-         'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?, note?', 'task.checklist': 'add?, items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until'}
+         'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?, note?', 'task.checklist': 'add?, items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until', 'meeting.new': 'who?, about?, when?'}
 
 
 def signature(kind: str) -> str:

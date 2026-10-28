@@ -3401,6 +3401,9 @@ def open_reply(mid: int, body: OpenReplyBody = None):
                      else responder.draft_for_message(store, m, rid, instruction=_reply_nudge(body and body.instruction)))
         except Exception as e:
             logger.warning(f'reply draft failed for message {mid}: {e}')   # the box opens empty; write it yourself
+            # ...with the reason beside it (PW-046): "it only promised to look later" or what it needs is the owner's to read
+            try: store.set_review_draft_error(rid, str(e)[:300])
+            except Exception as e2: logger.debug(f'could not record the draft failure on review {rid}: {e2}')
     if body is not None and body.redraft and draft: store.update_review_draft(rid, draft, (rv or {}).get('RunId'))
     # WHO IT GOES TO, AT ONCE: the envelope was pinned only when the AI's draft landed (responder.write_draft), so a fresh box -
     # Write another above all - showed the sender alone and no CC for the seconds the model took (2026-10-13). It is a lookup on

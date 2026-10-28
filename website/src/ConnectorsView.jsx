@@ -274,7 +274,7 @@ const META = {
       "Run Test (POST {base}/api/connectors/{cid}/test{hdr}) and read detail: it names the HOST that needs Full Disk Access (Terminal, iTerm, the IDE, or the python binary). That permission is the owner's to grant: System Settings > Privacy & Security > Full Disk Access, switch on (or + and add) exactly that host, then relaunch it. Ask them to do that and Test again until the read succeeds.",
       "Ask whether every chat should come in or only some; for some, add chat ids as sources (POST {base}/api/sources{hdr}, Channel imessage). Ask if they want history: lookback_days in ConfigJson reads that many days on the first sync; blank is from now on. Turn the connector on, SETUP DONE - and tell them the first reply will make macOS ask for Automation permission, which they should allow."] },
   gmail: { group: "Messaging", channel: "email", srcLabel: "Mailbox", srcPh: "you@gmail.com",
-    fields: [["mailbox address", "address"],
+    fields: [["Email address", "address"],
       ["Google OAuth client id (your own app - blank uses Taskuary's)", "google_client_id", "", "An admin's road: a Desktop OAuth client of your own, with the Calendar API enabled. Sign in with Google for the calendar needs none of this"],
       ["Google OAuth client secret (your own app)", "google_client_secret"],
       ["Google refresh token (your own app)", "google_refresh_token", "", "Pasted from your own client's consent round - with scope calendar.events, invites are answered from Taskuary too"]],
@@ -289,10 +289,10 @@ const META = {
       "The App Password is the owner's to create (myaccount.google.com > Security > 2-Step Verification on, then App passwords > Mail). Ask them to paste the 16 characters here, save it as Secret, and never echo it back.",
       "Test (POST {base}/api/connectors/{cid}/test{hdr}) logs in and adds the mailbox as a source. Turn the connector on, SETUP DONE. The Google calendar fields are optional and rarely wanted - skip them unless asked."] },
   imap: { group: "Messaging", channel: "email", srcLabel: "Mailbox", srcPh: "you@yourdomain.com",
-    fields: [["mailbox address", "address"], ["IMAP host (e.g. imap.yourdomain.com)", "imap_host"],
+    fields: [["Email address", "address"], ["IMAP host (e.g. imap.yourdomain.com)", "imap_host"],
              ["SMTP host (blank = imap host with imap->smtp)", "smtp_host"],
              ["TLS certificate (blank = check it; a sha256 to accept that one; 'any' for none)", "tls_accept"]],
-    secretLabel: "mailbox password",
+    secretLabel: "Email password",
     desc: "Any mailbox that speaks IMAP - a domain.com address, Yahoo, an ISP, your webhost. In through triage, replies out over its SMTP.",
     howto: ["Find your provider's IMAP and SMTP hostnames (usually imap./smtp. + your domain; ports 993/587).",
       "Enter the address and IMAP host under Credentials; SMTP host only if it does not follow the imap->smtp pattern.",
@@ -504,7 +504,7 @@ const META = {
       "Paste it under Credentials; optionally set a model.",
       "Test runs a real round trip. Enable to wire it into triage - the first active AI connector wins."] },
   azure_openai: { group: "AI — agents & models", channel: "ai", srcLabel: null,
-    fields: [["endpoint", "endpoint"], ["deployment", "deployment"], ["api_version", "api_version"]], secretLabel: "API key",
+    fields: [["Endpoint", "endpoint", "https://YOUR-RESOURCE.openai.azure.com"], ["Deployment name", "deployment"], ["API version (optional)", "api_version"]], secretLabel: "API key",
     desc: "Your Azure OpenAI deployment for intent triage - endpoint + deployment + key.",
     howto: ["Azure Portal → your Azure OpenAI resource → Keys and Endpoint.",
       "Enter the endpoint (https://YOUR-RESOURCE.openai.azure.com), the deployment name, and optionally an api_version.",
@@ -555,7 +555,7 @@ const META = {
       "Paste it under Credentials. Leave model blank for gemini-3.8-flash, or name another one from ai.google.dev/models.",
       "Test runs a real round trip."] },
   vertex_ai: { group: "AI — agents & models", channel: "ai", srcLabel: null,
-    fields: [["project", "project"], ["location (default global)", "location"], ["model (default gemini-3.8-flash)", "model"]], secretLabel: "API key",
+    fields: [["Project id", "project"], ["Location (default global)", "location"], ["Model (default gemini-3.8-flash)", "model"]], secretLabel: "API key",
     desc: "Gemini and partner models through Google Cloud's Agent Platform (Vertex AI) - project + API key.",
     howto: ["Google Cloud console → Agent Platform (Vertex AI) → API keys: create a key. The project id is in the console's project picker.",
       "Enter the project id; leave location blank for global, or name a region (us-central1). Model blank = gemini-3.8-flash; a partner model is named with its publisher (meta/llama-4-maverick).",
@@ -605,7 +605,8 @@ const META = {
   // the card IS the credential, and it is a brain like any other once signed in.
   chatgpt: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (blank = the first model your plan lists)", "model"]], secretLabel: null,
-    desc: "Your ChatGPT plan as Taskuary's brain - triage, the Assistant, reports - with no API key. Calls count against your ChatGPT allowance under a weekly cap you set in ChatGPT.",
+    // the allowance and the cap are the sign-in box's own words, right above this line - said twice, one under the other
+    desc: "Your ChatGPT plan as Taskuary's brain - triage, the Assistant, reports.",
     howto: ["Sign in with ChatGPT above: your browser opens auth.openai.com, you sign in with your own ChatGPT account and allow plan usage, and the card finishes by itself.",
       `Then pick it as a brain under ${placeName("sorting")}. It is text only: screenshots are not sent, and it has no tools.`,
       "Set or raise the weekly cap for Taskuary in ChatGPT's settings. When the cap is used up the brain stops and says so - it does not fall back to paid credits unless you allow that in ChatGPT.",
@@ -2531,6 +2532,8 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       } catch (e) { setTest({ ok: false, detail: `${e?.response?.data?.detail || e?.message || "That didn't work."} Press Connect to try again.` }); }
       setBusy("");
     };
+    // white is the box's, not its hint's: on the root it drew a white band under every field; the hint's link in the app's ink
+    const boxSx = { "& .MuiInputBase-root": { bgcolor: "#fff" }, "& .MuiFormHelperText-root a": { color: "#41525f" } };
     return (
       <Box data-tq-simple-mail={conn.Type} sx={{ display: "flex", flexDirection: "column", gap: 1.25, maxWidth: 520 }}>
         {conn.Type === "imap" && /@(outlook|hotmail|live|msn)\.|office365|outlook\.office/i.test(`${cfg.address || ""} ${cfg.imap_host || ""}`) && (
@@ -2538,10 +2541,10 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
             That is a Microsoft mailbox - use the Microsoft 365 / Outlook card instead.</Typography>
         )}
         {m.fields.filter(([, key]) => keep.includes(key)).map(([label, key, ph, helper]) => (
-          <TextField key={key} size="small" label={label} placeholder={ph || ""} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }}
+          <TextField key={key} size="small" label={label} placeholder={ph || ""} value={cfg[key] || ""} sx={boxSx}
             helperText={helper} onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />
         ))}
-        {m.secretLabel && <TextField size="small" type="password" label={m.secretLabel} value={secret} sx={{ bgcolor: "#fff" }}
+        {m.secretLabel && <TextField size="small" type="password" label={m.secretLabel} value={secret} sx={boxSx}
           onChange={(e) => setSecret(e.target.value)} helperText={SIMPLE_HINT[conn.Type] || (isAI ? (m.howto || [])[0] : (m.howto || [])[1]) || ""} />}
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
           <Button variant="contained" disableElevation disabled={busy === "save" || !ready} onClick={connect}>

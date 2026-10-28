@@ -28,10 +28,10 @@ test("a task its agent closed opens on its Result, saying it is handled, who clo
   assert.ok(made.taskId, `task not closed by its agent: ${JSON.stringify(made)}`);
 
   await page.evaluate((id) => { window.location.hash = `task=${id}`; }, made.taskId);
-  await page.waitForSelector("[data-tq-closeout]", { timeout: 20000 });
-  // ...a closed task opens on Close out (the three sections, 2026-10-27): who closed it and why are the Agent's - its tab opens it
-  await page.waitForSelector("[data-tq-section-tab=agent]", { timeout: 20000 });
-  await page.click("[data-tq-section-tab=agent]");
+  // ...a task its agent closed opens on the AGENT section (trust audit S2, 2026-10-28): who closed it and why are the Agent's - Close
+  // out ("Mark done 1m ago") is its tab
+  await page.waitForSelector("[data-tq-slot=agent][data-tq-open]", { timeout: 20000 });
+  assert.equal(await page.$eval("[data-tq-task-body]", (b) => b.getAttribute("data-tq-stage")), "closed_by_agent");
   await page.waitForFunction((said) => document.querySelector("[data-tq-closed-why]")?.textContent === `Closed by the agent: ${said}`,
     { timeout: 20000 }, SAID);
   // the reason line comes with the task's details; the agent's write-up is its own read and can land a beat later (CI, 2026-10-21)

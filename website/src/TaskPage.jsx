@@ -1417,7 +1417,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // agent it asked for. The stage reads the pane the task would open on; the pick only opens its section in the view it is in
   const restFocus = focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, waiting: !!waitFor, list, owed: sendWaits,
     pane: !openStage ? paneRest : waitFor ? "" : workPane({ stage: restStage, kind: t?.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas }) });
-  const taskStage = stageOf({ focus: restFocus, drafted: replyHas, closed: ["done", "dropped"].includes(t?.Status) });
+  const taskStage = stageOf({ focus: restFocus, drafted: replyHas, closed: ["done", "dropped"].includes(t?.Status), agentClosed: t?.Status === "done" && !!detail?.closedWhy });
   // ...and ONCE OPEN, THE PAGE STAYS WHERE IT IS (the owner, 2026-10-27, Close out swapped for the task on Send): the main view and the open
   // section are read when the task opens and its detail lands, and again only when an agent starts or ends, the task closes or reopens, or
   // the width stacks it - never because a press the owner made changed what the page holds. A closed section's tab opens it (secPick)

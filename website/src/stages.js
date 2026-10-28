@@ -11,9 +11,10 @@ export const stageFrom = (facts = {}) => RULES.find(([f]) => !f || facts[f])[1];
 
 // THE PAGE'S FACTS, from what it draws (TaskPage): a live session has no white section (`focus` null); a task waiting on a person has
 // nothing white ("none"); the agent's Result or failure is the white section ("agent"); Close out is ("reply") - with something of its
-// own (`drafted`) or still to write; a to-do's list ("list"); else the block an ask came in ("source"). `closed`: done or removed.
-export const stageOf = ({ focus = null, drafted = false, closed = false } = {}) => stageFrom({
-  live: focus === null, waiting: focus === "none", closed, drafted: focus === "reply" && drafted,
+// own (`drafted`) or still to write; a to-do's list ("list"); else the block an ask came in ("source"). `closed`: done or removed;
+// `agentClosed`: closed by its own agent (the detail's closedWhy) - it opens on the Agent, who closed it and why
+export const stageOf = ({ focus = null, drafted = false, closed = false, agentClosed = false } = {}) => stageFrom({
+  live: focus === null, waiting: focus === "none", agent_closed: closed && agentClosed, closed, drafted: focus === "reply" && drafted,
   result: focus === "agent", owed: focus === "reply", list: focus === "list",
 });
 

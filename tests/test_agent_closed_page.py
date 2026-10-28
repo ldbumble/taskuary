@@ -50,6 +50,15 @@ def test_the_page_reads_the_agents_close_and_says_why_without_a_list_row(s):
     assert d['closedWhy'] == 'Closed by the agent: the run failed on a missing secret; re-added it and the re-run passed'
 
 
+def test_the_agents_own_close_is_its_own_stage_on_the_agent_section(s):
+    """S2: who closed it and why are the Agent's - the task opens there, not on Close out; one the owner closed is still `done`."""
+    from taskuary import stages
+    tid = worked(s); agent_closes(s, tid)
+    assert server.task_detail(tid)['stage'] == 'closed_by_agent' and stages.parts('closed_by_agent')['section'] == 'agent'
+    mine = worked(s); s.update_task(mine, {'Status': 'done'}, 'owner')
+    assert server.task_detail(mine)['stage'] == 'done'
+
+
 def test_with_no_done_sentence_the_reason_is_the_reports_first_line(s):
     tid = worked(s); agent_closes(s, tid, said='')
     assert server.task_detail(tid)['closedWhy'] == f'Closed by the agent: {ANSWER}'

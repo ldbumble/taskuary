@@ -1,4 +1,4 @@
-"""WHERE A TASK IS UP TO, read from stages.json - the same file the task page reads (website/src/stages.js). Eight stages, each
+"""WHERE A TASK IS UP TO, read from stages.json - the same file the task page reads (website/src/stages.js). Nine stages, each
 with the parts the page draws for it: the main view, the drawer and what is in it, whether that drawer's tab is lit, where the
 Advisor's section stands and the moves it is about (the owner, 2026-10-26: "are these modes defined well anywhere besides the UI ...
 we should define this well"). The page decided all of it from its own facts in TaskPage (focusOf, mainOf, nextInDrawer) and the
@@ -14,7 +14,7 @@ _J = json.loads(Path(__file__).with_name('stages.json').read_text(encoding='utf-
 RULES = tuple((r.get('if'), r['stage']) for r in _J['rules'])
 STAGE = {s['key']: s for s in _J['stages']}
 KEYS = tuple(STAGE)
-FACTS = tuple(f for f, _ in RULES if f)              # live, waiting, closed, drafted, result, owed, list
+FACTS = tuple(f for f, _ in RULES if f)              # live, waiting, agent_closed, closed, drafted, result, owed, list
 
 
 def of(facts: dict) -> str:
@@ -39,7 +39,10 @@ def facts(store, t: dict, state: str | None = None) -> dict:
     sender = any(str(m.get('Direction') or 'in') == 'in' and str(m.get('Status') or '') != 'context' for m in msgs)
     try: checklist = bool(str(store.checklist_markdown(tid) or '').strip())
     except Exception: checklist = False
-    return {'live': st in ('working', 'blocked'), 'waiting': st == 'theirs', 'closed': closed,
+    # ...closed by its own agent (taskstate.closed_why says who and why): it opens on the Agent, not Close out (trust audit S2, 2026-10-28)
+    try: by_agent = closed and bool(taskstate.closed_why(store, t))
+    except Exception: by_agent = False
+    return {'live': st in ('working', 'blocked'), 'waiting': st == 'theirs', 'agent_closed': by_agent, 'closed': closed,
             'drafted': st == 'approve' or (not closed and bool(store.sent_reply(task_id=tid))),
             'result': st in ('saved', 'stopped', 'agentdone'),
             'owed': sender and str(t.get('Kind') or '') not in kinds.AGENT,

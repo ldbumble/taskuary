@@ -58,7 +58,7 @@ const held = (s) => JSON.stringify({ main: s.main, open: s.open, stage: s.stage,
    ran - an agent worked it (its tab never says "not started"; false: nothing ran, so it always does); quiet - no Advisor line (a
    closed task, an agent at work); lit - the dock's lit move by label; moves - labels the row or the card must offer.
    ASK OWNER (2026-10-28), drawn as it is today and pinned so: a failed general run shows its conversation under the reason (the
-   reason said twice), and a task its agent closed opens on Close out ("Mark done 1m ago") with who closed it and why on the Agent tab. */
+   reason said twice). A task its agent closed opens on the Agent section - who closed it and why (trust audit S2, 2026-10-28). */
 const CELLS = (ids) => [
   ["fresh task", ids.fresh, { section: "from", here: null, ran: false, not: /Loading/ }],
   ["reply owed, nothing drafted", ids.owed, { section: "from", here: null, ran: false }],
@@ -73,7 +73,7 @@ const CELLS = (ids) => [
   ["agent stopped and saved (coding)", ids.coding_saved, { section: "agent", ran: true, result: true, chat: false, agentBox: false, has: /Census sync no longer stops/ }],
   ["agent finished", ids.finished, { section: "agent", ran: true, result: true, chat: false, agentBox: false, has: /Three people are missing/ }],
   ["agent failed", ids.failed, { section: "agent", ran: true, tryAgain: true, agentBox: false, has: /could not start/ }],
-  ["agent closed the task", ids.agent_closed, { section: "close", ran: true, quiet: true, has: /missing secret/ }],
+  ["agent closed the task", ids.agent_closed, { section: "agent", ran: true, quiet: true, has: /missing secret/ }],
   ["closed by owner (done)", ids.done, { section: "close", ran: false, quiet: true, has: /Mark done/ }],
   ["closed by owner (with a note)", ids.note, { section: "close", ran: false, quiet: true, has: /loose cable/ }],
   ["closed by owner (not a task)", ids.removed, { gone: true }],

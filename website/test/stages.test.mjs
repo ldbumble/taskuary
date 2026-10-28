@@ -64,6 +64,16 @@ test("a closed task is done, opens on how it closed, and has no Advisor section"
   assert.equal(stageOf({ focus: null, closed: true }), "agent_working", "a session continued on it");
 });
 
+// ...and one its own agent closed opens on the Agent - who closed it and why - not Close out (trust audit S2, 2026-10-28)
+test("a task its agent closed opens on the Agent section", () => {
+  const stage = stageOf({ focus: "reply", closed: true, agentClosed: true });
+  assert.equal(stage, "closed_by_agent");
+  assert.equal(sectionOf(stage), "agent");
+  assert.equal(STAGE[stage].advisor, null);
+  assert.equal(stageOf({ focus: "reply", closed: true }), "done", "closed by the owner: Close out, how it closed");
+  assert.equal(stageOf({ focus: "reply", agentClosed: true }), "to_reply", "an open task is never closed by its agent");
+});
+
 test("the task page reads the stage, and says it on its body", () => {
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   assert.match(page, /import \{ mainView, sectionOf, stageOf \} from "\.\/stages\.js";/);

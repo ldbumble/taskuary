@@ -445,7 +445,7 @@ def without_config_secrets(row: dict) -> dict:
 # Secret column, it can be replaced and not read. The server keeps spending the stored value.
 # LinkedIn's refresh token lives in ConfigJson too (linkedin._save), so it is held back the same way.
 WRITE_ONLY_CONFIG = {'linkedin': ('client_secret', 'refresh_token'),
-                     'quickbooks': ('client_secret',), 'zoho_invoice': ('client_secret',),
+                     'quickbooks': ('client_secret',), 'amazon_sp': ('client_secret',), 'zoho_invoice': ('client_secret',),
                      # the Google cards' OAuth client secret and the Gmail card's calendar refresh token came back readable in plain
                      # boxes on reopen, beside an App Password that was masked (the UI audit, 2026-10-21)
                      'gmail': ('google_client_secret', 'google_refresh_token'),

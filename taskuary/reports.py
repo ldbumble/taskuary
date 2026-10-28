@@ -794,6 +794,14 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'quickbooks': _lazy('quickbooks', 'run_quickbooks'), 'quickbooks_vendors': _lazy('quickbooks', 'run_quickbooks_vendors'),
             'quickbooks_accounts': _lazy('quickbooks', 'run_quickbooks_accounts'),
             'quickbooks_bill': _lazy('quickbooks', 'run_quickbooks_bill'), 'quickbooks_expense': _lazy('quickbooks', 'run_quickbooks_expense'),
+            # Amazon SP-API (amazon_sp.py): a seller's reports, requested, waited for and parsed to rows. READ-ONLY - the
+            # only POST it makes is createReport, which asks Amazon to build a report to read
+            'amazon_report': _lazy('amazon_sp', 'run_amazon_report'),
+            'amazon_sales_traffic': _lazy('amazon_sp', 'run_amazon_sales_traffic'),
+            'amazon_orders': _lazy('amazon_sp', 'run_amazon_orders'),
+            'amazon_inventory': _lazy('amazon_sp', 'run_amazon_inventory'),
+            'amazon_settlement': _lazy('amazon_sp', 'run_amazon_settlement'),
+            'amazon_marketplaces': _lazy('amazon_sp', 'run_amazon_marketplaces'),
             # A stateful report: the scheduler opens a batch, the page confirms amounts, and
             # Review sends. The special run path below owns the state transitions.
             'zoho_monthly_invoices': lambda cfg: ('monthly invoice workflow', 'A monthly batch will be opened; no invoice is created or sent by Preview.'),
@@ -902,6 +910,7 @@ CARD_OF = {'postgresql': 'postgresql', 'mysql': 'mysql', 'clickhouse': 'clickhou
            'sftp_list': 'sftp', 'sftp_get': 'sftp', 'sftp_put': 'sftp', 'sftp_move': 'sftp',
            'quickbooks_vendors': 'quickbooks', 'quickbooks_accounts': 'quickbooks', 'quickbooks_bill': 'quickbooks', 'quickbooks_expense': 'quickbooks',
            'zoho_monthly_invoices': 'zoho_invoice',
+           **{t: 'amazon_sp' for t in ('amazon_report', 'amazon_sales_traffic', 'amazon_orders', 'amazon_inventory', 'amazon_settlement', 'amazon_marketplaces')},
            'teller_accounts': 'teller', 'teller_transactions': 'teller', 'teller_balances': 'teller', 'teller_spend': 'teller',
            'simplefin_accounts': 'simplefin', 'simplefin_transactions': 'simplefin',
            'simplefin_balances': 'simplefin', 'simplefin_spend': 'simplefin',
@@ -998,6 +1007,11 @@ def _teller_connection(store, connector_id=None) -> dict:
 
 def _quickbooks_connection(store, connector_id=None) -> dict:
     from .quickbooks import connection
+    return connection(store, connector_id)
+
+
+def _amazon_connection(store, connector_id=None) -> dict:
+    from .amazon_sp import connection
     return connection(store, connector_id)
 
 
@@ -1132,6 +1146,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'intacct': intacct_connection, 'intacct_fields': intacct_connection,
                  'intacct_create': intacct_connection, 'intacct_update': intacct_connection,
                  **{t: _quickbooks_connection for t in ('quickbooks', 'quickbooks_vendors', 'quickbooks_accounts', 'quickbooks_bill', 'quickbooks_expense')},
+                 **{t: _amazon_connection for t in ('amazon_report', 'amazon_sales_traffic', 'amazon_orders', 'amazon_inventory', 'amazon_settlement', 'amazon_marketplaces')},
                  **{t: _teller_connection for t in ('teller_accounts', 'teller_transactions', 'teller_balances', 'teller_spend')},
                  **{t: _simplefin_connection for t in ('simplefin_accounts', 'simplefin_transactions',
                                                        'simplefin_balances', 'simplefin_spend')},

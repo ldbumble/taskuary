@@ -219,6 +219,18 @@ SimpleFIN or Teller. These are the cards where the read/write distinction bites:
 `read`, so an agent proposes a bill or an invoice and you approve it on the task. Raising a card to
 `write` is what lets a routing policy pass small, known items through without you.
 
+**Selling on Amazon** — the **Amazon Seller Central (SP-API)** card reads your seller reports:
+sales & traffic (the Business Report), every order by order date, FBA inventory, settlements, or any
+other report type Amazon offers by its name. It is a data card for reports, dashboards and agent
+lookups, never a source of work, and it is read-only: the one thing it asks of Amazon is to build a
+report it can download. To connect it, register a private developer profile and a self-authorized
+app in Seller Central (Apps and Services → Develop Apps), copy the app's LWA client id and secret onto
+the card, press **Authorize app** and paste the refresh token it shows, then pick the region (`na`,
+`eu` or `fe`) and, optionally, the marketplace ids. Test lists the marketplaces the account sells in.
+Vendor Central accounts do the same under Integration → API Integration. Amazon's quotas are small,
+about one new report a minute, so a throttled call waits rather than fails, and a finished report is
+kept for 15 minutes. See Amazon's [SP-API documentation](https://developer-docs.amazon.com/sp-api).
+
 **Markets** — Yahoo Finance, CoinGecko, Alchemy, ECB reference rates, SEC EDGAR filings, and a
 strategy screen that filters another card's rows. With a key: **Twelve Data** (quotes and computed
 indicators across stocks, FX and crypto), **Alpha Vantage** (slow limits, no card, no expiry),

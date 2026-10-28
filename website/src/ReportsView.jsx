@@ -119,6 +119,16 @@ export const FIELDS = {
   quickbooks: [["query (QBO SQL — one entity per query)", "query", "multiline", "SELECT * FROM Bill WHERE TxnDate >= '2026-08-01' ORDERBY TxnDate DESC"], AI_FIELD],
   quickbooks_vendors: [["vendor name contains (blank = every active vendor)", "name", "text", "amex"], AI_FIELD],
   quickbooks_accounts: [["account type (blank = every active account)", "type", "text", "Expense · Bank · Credit Card · Accounts Payable"], AI_FIELD],
+  // Amazon SP-API: a window and a shape per named report; "any report" takes Amazon's own report type name
+  amazon_sales_traffic: [["days back", "days", "text", "30"], ["granularity \u2014 DAY, WEEK or MONTH", "granularity", "text", "DAY"],
+    ["one row per \u2014 date, or asin for one per product", "by", "text", "date"], AI_FIELD],
+  amazon_orders: [["days back (by order date)", "days", "text", "7"], AI_FIELD],
+  amazon_inventory: [AI_FIELD],
+  amazon_settlement: [["look back (days, 90 at most)", "days", "text", "60"], ["how many of the newest settlements", "count", "text", "1"], AI_FIELD],
+  amazon_report: [["report type (Amazon's name for it)", "report_type", "text", "GET_MERCHANT_LISTINGS_ALL_DATA"],
+    ["days back (blank = the report type's own default)", "days", "text", "30"],
+    ["report options (JSON, optional)", "options", "text", '{"reportPeriod": "WEEK"}'], AI_FIELD],
+  amazon_marketplaces: [AI_FIELD],
   // the bank feed: which account (last four, a word of its name, or blank for all), how far back
   teller_transactions: [["account — last four digits, a word of its name, or blank for every account", "account", "text", "1234"],
     ["days back", "days", "text", "30"], AI_FIELD],
@@ -179,6 +189,7 @@ export { cronText, TYPE_LABELS };
 const PLACEHOLDER_FOR = {
   intacct: "AP bills due in the next 30 days — the vendor, the amount and the site",
   intacct_fields: "what a vendor bill carries in our company",
+  amazon_sales_traffic: "sales and sessions per day for the last 30 days, best days first",
   metric: "occupancy for each site, last month",
   mssql: "yesterday's census by facility",
   database: "open orders by customer, newest first",
@@ -203,7 +214,8 @@ const TYPE_GROUPS = [
   ["Azure", ["azure", "azure_blob", "azure_logs"]],
   ["Microsoft 365 — Entra ID", ["entra_users", "entra_groups", "entra_signins", "entra_licenses"]],
   ["Monitoring", ["prometheus", "datadog"]],
-  ["Corporate systems", ["intacct", "intacct_fields", "quickbooks", "quickbooks_vendors", "quickbooks_accounts", "metric", "metric_check"]],
+  ["Corporate systems", ["intacct", "intacct_fields", "quickbooks", "quickbooks_vendors", "quickbooks_accounts",
+    "amazon_sales_traffic", "amazon_orders", "amazon_inventory", "amazon_settlement", "amazon_report", "amazon_marketplaces", "metric", "metric_check"]],
   // the bank/card feed is money, not a corporate system: it belongs beside the market sources
   ["Markets & finance", ["simplefin_transactions", "simplefin_accounts", "simplefin_balances", "simplefin_spend",
     "teller_transactions", "teller_accounts", "teller_balances", "teller_spend",
@@ -222,11 +234,13 @@ export const CARD_OF = { s3_object: "aws", cloudwatch_logs: "aws", azure_blob: "
   alchemy_prices: "alchemy", alchemy_wallet: "alchemy",
   zoho_monthly_invoices: "zoho_invoice",
   entra_users: "azure", entra_groups: "azure", entra_signins: "azure", entra_licenses: "azure",
-  intacct_fields: "intacct", sharepoint_list: "sharepoint", sharepoint_file: "sharepoint" };
+  intacct_fields: "intacct", sharepoint_list: "sharepoint", sharepoint_file: "sharepoint",
+  amazon_report: "amazon_sp", amazon_sales_traffic: "amazon_sp", amazon_orders: "amazon_sp", amazon_inventory: "amazon_sp",
+  amazon_settlement: "amazon_sp", amazon_marketplaces: "amazon_sp" };
 const CARD_LABELS = { mssql: "SQL Server", winrm: "Remote Windows", database: "Any database", aws: "AWS", azure: "Azure",
   sharepoint: "SharePoint", google_sheets: "Google Sheets",
   prometheus: "Prometheus", datadog: "Datadog", exa: "Exa", tavily: "Tavily", firecrawl: "Firecrawl",
-  intacct: "Sage Intacct" };
+  intacct: "Sage Intacct", amazon_sp: "Amazon Seller Central" };
 const BLANK = { type: "mssql", title: "", every_minutes: "", daily_at: "" };
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
 const isWorkflowSource = (s) => isWorkflowConfig(parse(s?.ConfigJson));

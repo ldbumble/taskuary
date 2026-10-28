@@ -22,7 +22,7 @@ test("the desk: nothing lit is recorded as nothing lit, with every live button -
   const snap = { ref: "TQ-1", list: [v("12:approve", "decide", { tone: "p", card: true, label: "Send" }), v("12:redraft", "decide", { card: true }),
     v("done", "more"), v("nat", "more", { disabled: true }), v("next", "next")] };
   const got = deskPress(snap, null, "done");
-  assert.deepEqual(got, { pressed: "close", lit: "", live: ["close", "next", "approve", "redraft"] });   // a greyed button is no choice
+  assert.deepEqual(got, { pressed: "close", lit: "", live: ["close", "next", "approve", "redraft"], greyed: ["remove"] });   // a greyed button is no choice - but kept as greyed (A4)
 });
 
 test("the desk: what the row filled is what was lit - the Advisor's pick, Next under a 'nothing to do' line, a running agent's Stop", () => {
@@ -38,7 +38,7 @@ test("the Tasks tab: a button is known by its one name, and the filled one is wh
   const b = (text, extra = {}) => ({ textContent: text, disabled: false, className: "MuiButton-root MuiButton-outlined", ...extra });
   const done = b(label("close"), { className: "MuiButton-root MuiButton-contained" });
   const page = { querySelectorAll: () => [b(label("approve")), done, b(label("defer")), b("Change"), b(label("forward"), { disabled: true })] };
-  assert.deepEqual(pagePress(page, b(label("defer"))), { pressed: "defer", lit: "close", live: ["approve", "close", "defer"] });
+  assert.deepEqual(pagePress(page, b(label("defer"))), { pressed: "defer", lit: "close", live: ["approve", "close", "defer"], greyed: ["forward"] });
   assert.equal(pagePress(page, b("Change")), null);
 });
 
@@ -46,7 +46,7 @@ test("one press is posted with its surface, and a lost post never stops the pres
   const sent = [];
   const api = { post: (url, body, cfg) => { sent.push([url, body, cfg]); return Promise.reject(new Error("offline")); } };
   await notePress(api, { key: "task:3", pressed: "close", surface: "task", lit: "close", live: ["defer"] });
-  assert.deepEqual(sent, [["/api/advice/press", { key: "task:3", pressed: "close", surface: "task", lit: "close", live: ["defer"], advised: null, revision: null }, { quiet: true }]]);
+  assert.deepEqual(sent, [["/api/advice/press", { key: "task:3", pressed: "close", surface: "task", lit: "close", live: ["defer"], greyed: null, advised: null, revision: null }, { quiet: true }]]);
   // ...and that record is no write the sync caption must re-read for: every press of Next asked /api/ingest/status again (overnight walk)
   assert.equal(isWrite({ method: "post", ...sent[0][2] }), false);
   assert.equal(isWrite({ method: "post" }), true);

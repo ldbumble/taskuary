@@ -16,6 +16,8 @@ continue typed in the pane) until the item's next decision or two days; else it 
   wrong    the owner did something else - Next counts only when Next was lit
   unclear  walked past with nothing done, a press with no other button to choose
 Agreement is right / (right + wrong). A decision nothing was pressed on at all is not in the log, so it is not counted.
+A decision whose lit button was GREYED at a press (drawn, but disabled - press log Greyed, since 2026-10-28) is flagged apart: the Advisor
+pointed at a button the owner could not press.
 """
 import argparse, json, os, sqlite3, sys, tempfile
 from collections import Counter, defaultdict
@@ -100,12 +102,15 @@ def decisions(cx, since: str, until: str = '9999') -> list:
         if not lit: continue                                              # nothing lit: no decision of the Advisor's to score
         if key not in open_:
             open_[key] = {'key': key, 'target': (p['TargetKind'], p['TargetId']), 'rev': p.get('Revision') or '', 'lit': lit, 'kind': p.get('ItemKind') or '',
-                          'at': p['CreatedAt'], 'live': [], 'choice': p.get('Choice') is None or bool(p['Choice']), 'ids': [], 'presses': [],
+                          'at': p['CreatedAt'], 'live': [], 'greyed': [], 'choice': p.get('Choice') is None or bool(p['Choice']), 'ids': [], 'presses': [],
                           'kept': (p.get('State'), p.get('By'))}        # the decision as kept at the press (since 2026-10-28)
         d = open_[key]
         try: live = json.loads(p.get('Live') or '[]') or []
         except ValueError: live = []
+        try: grey = json.loads(p.get('Greyed') or '[]') or []
+        except ValueError: grey = []
         d['live'] = list(dict.fromkeys(d['live'] + live + [got]))
+        d['greyed'] = list(dict.fromkeys(d['greyed'] + grey))
         d['ids'].append(p['Id']); d['presses'].append(got)
         if got != 'next': close(d, got, 'pressed', _later(p['CreatedAt'], 0.05))
     # ...a decision left open takes the owner's own act from the outcome ledger, until that item's next decision (or two days)
@@ -232,7 +237,18 @@ def misses(ds, lit='lit', n=8) -> list:
     return sorted(g.items(), key=lambda kv: -len(kv[1]))[:n]
 
 
+def lit_greyed(ds) -> list:
+    """The decisions whose lit button was greyed at one of their presses: the owner was pointed at a button they could not press."""
+    return [d for d in ds if d['lit'] and (d['lit'] in d.get('greyed', ()) or _v(d['lit']) in map(_v, d.get('greyed', ())))]
+
+
 def _ids(xs): return ', '.join(f"{d['target'][0]}:{d['target'][1]} #{d['ids'][0]}" for d in xs[:5])    # target ids and press ids only
+
+
+def _group(ds, f) -> dict:
+    g = defaultdict(list)
+    for d in ds: g[f(d)].append(d)
+    return g
 
 
 def report(ds, since, replayed=False) -> str:
@@ -249,6 +265,10 @@ def report(ds, since, replayed=False) -> str:
     out += ['', "by rule state ('~' read off the button; the kept decision is only an item's latest):"] + by(lambda d: d['state'])
     out += ['', 'top misses (lit, by, state -> what the owner did; e.g. target and first press id):']
     out += [f"  {len(xs):>3}  {lit} ({who}, {st}) -> {act}   e.g. {_ids(xs)}" for (lit, who, st, act), xs in misses(ds)]
+    grey = lit_greyed(ds)
+    out += ['', f'lit but greyed (the lit button was disabled at a press): {len(grey)}']
+    out += [f"  {len(xs):>3}  {lit} ({st})   e.g. {_ids(xs)}" for (lit, st), xs in
+            sorted(_group(grey, lambda d: (d['lit'], d['state'].lstrip('~'))).items(), key=lambda kv: -len(kv[1]))]
     if replayed:
         moved = Counter(d['how'] for d in ds if d['how'] not in ('', 'exact') and d['today'] != d['lit'])
         exact = [d for d in ds if d['how'] == 'exact']
@@ -275,7 +295,9 @@ def main(argv=None):
     cx = connect(a.home)
     ds = decisions(cx, since, a.until)
     if a.until != '9999': since = f'{since} until {a.until}'
-    if a.line: print(line(tally(ds), since)); return 0
+    if a.line:
+        g = len(lit_greyed(ds))
+        print(line(tally(ds), since) + (f'; {g} lit but greyed' if g else '')); return 0
     if a.replay: replay(cx, ds, copied_store(a.home))
     print(report(ds, since, a.replay))
     return 0

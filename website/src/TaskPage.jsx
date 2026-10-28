@@ -185,7 +185,8 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
           "&:hover": { bgcolor: "#faf8f4" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
         <Box component="span" sx={{ color: INK, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.m.who}</Box>
         <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{open === r.m.MessageId ? "" : rowText(r.m, files.get(r.m.MessageId))}</Box>
-        <Box component="span" sx={{ color: FAINT, textAlign: "right", whiteSpace: "nowrap", fontSize: 11.5 }}>{whenShort(r.m.SentAt)}</Box>
+        <Box component="span" sx={{ color: FAINT, textAlign: "right", whiteSpace: "nowrap", fontSize: 11.5 }}>{whenShort(r.m.SentAt)}
+          <Box component="span" aria-hidden data-tq-row-chevron="" sx={{ ml: 0.5 }}>{open === r.m.MessageId ? "▾" : "▸"}</Box></Box>
       </Box>
       {open !== r.m.MessageId && (files.has(r.m.MessageId) || fetchFor === r.m.MessageId) && (
         <Box data-tq-row-files="" sx={{ pl: narrow ? 0 : { xs: 0, sm: "122px" }, mt: -0.5, mb: 0.4, minWidth: 0 }}>
@@ -1672,6 +1673,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               ...(cameInFull ? {} : { display: "-webkit-box", WebkitLineClamp: 6, WebkitBoxOrient: "vertical", overflow: "hidden" }) }}>
             {cameInFull ? cleanText(cameIn.ReadText ?? cameIn.BodyText ?? "") || rowText(cameIn, sourceFiles.get(cameIn.MessageId))
               : rowText(cameIn, sourceFiles.get(cameIn.MessageId)) || cleanText(cameIn.ReadText || cameIn.BodyText || "")}</Typography>}
+          {/* ...and the way to the whole of it is a word you can see, not only a click on the text (the owner, 2026-10-28) */}
+          {!flow && <Link component="button" type="button" underline="hover" data-tq-came-in-more="" aria-expanded={cameInFull}
+            onClick={() => setCameInFull((v) => !v)} sx={{ display: "block", fontSize: 12.5, color: ACCENT, mt: 0.4, textAlign: "left" }}>
+            {cameInFull ? "Show less" : "Show the whole email"}</Link>}
           {!flow && cameInFull && typeof cameIn.MessageId === "number" && <Attachments messageId={cameIn.MessageId} dense original={cameIn.SourceLink} />}
         </> : !sources.length && fromWorkflow ? fromConvs() : <Typography sx={{ fontSize: 13, color: DIM }}>{detail.ref} · {made}</Typography>}
         {fromFacts()}

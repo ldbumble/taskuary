@@ -102,6 +102,19 @@ export function oneCopy(messages = []) {
 // carrying the item gets the button's own label. Nothing found, nothing changes - and still no line.
 const holds = (m, it) => !!m?.card && m.role === "assistant" && !m.proposal && !NOT_ITEM.has(m.card.kind)
   && ((!!it?.key && m.card.key === it.key) || (it?.tid != null && it.tid !== "" && String(m.card.tid ?? "") === String(it.tid)));
+// ...but THE CHAT POP-UP HAS NO CARD TO WEAR THE BADGE (the owner, 2026-10-27: it "disappeared when done", and Show the last answer was
+// "useless"): a turn that only lit or pressed left the owner's own line alone in it. Its receipt says what was done and where, read off the
+// act's own result - the server's line when it gave one - one sentence for every act, never one per verb. {text, status} for a receipt line
+export function actReceipt(data = {}, tableKey = null) {
+  const act = data.pressed || data.light || null;
+  const where = !act ? "" : act.key && act.key === tableKey ? "this task" : act.ref || "this task";
+  const said = String(act?.line || data.receipt || "").trim();
+  if (said) return { text: said, status: data.pressed ? "done" : "warn" };
+  if (!act) return { text: "No answer came back on that - nothing was changed.", status: "warn" };
+  if (!act.label) return { text: `Brought up ${where}.`, status: "warn" };
+  return data.pressed ? { text: `${act.label} - ${where}${act.note ? `: ${act.note}` : ""}.`, status: "done" }
+    : { text: `${act.label} is ready on the row for ${where} - yours to press.`, status: "warn" };
+}
 // ...and a Close with a note carries its note (`note`), drawn after the badge (the owner, 2026-10-23: "write on it marked done with note")
 export function pressLine(messages = [], it, label, note = "") {
   if (!label) return messages;

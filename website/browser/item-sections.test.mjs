@@ -151,8 +151,8 @@ test("a dashboard opens on itself between slim Came from and Close out tabs, lik
   await page.evaluate(() => document.querySelector('[data-tq-section-head="reports"] .fold')?.click()); await sleep(1500);
   assert.ok(await clickRow(page, await findRow(page, /Northwind desk/)));
   const m = await settled(page, "dashboard");
-  assert.equal(m.main, "dashboard", JSON.stringify(m));
-  assert.deepEqual(m.slots.map((s) => [s.key, s.open, s.mini]), [["from", false, true], ["dashboard", true, false], ["close", false, true]]);
+  assert.equal(m.main, "report", JSON.stringify(m));
+  assert.deepEqual(m.slots.map((s) => [s.key, s.open, s.mini]), [["from", false, true], ["report", true, false], ["close", false, true]]);
   assert.ok(await page.$("[data-tq-item-sections] [data-tq-dash-canvas]"), "the dashboard itself is the open section");
   assert.deepEqual(errors, []);
 });

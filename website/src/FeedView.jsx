@@ -150,7 +150,7 @@ function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChan
 const PAGE = 100;
 
 // Today's meetings, fetched once for the rail and re-read every 30 s: a meeting that has started counts in
-// "in today" beside the mail that arrived (a meeting is a row too).
+// "arrived today" beside the mail that arrived (a meeting is a row too).
 // ...through the meetings strip's own read (calendarToday.js): the rail asked for the same day on its own, two GETs at every start,
 // and drew nothing until its answer came while the strip's last one was already in hand (the overnight setup walk, 2026-10-26)
 const useCalToday = () => {
@@ -472,7 +472,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   // meetings are rows too. Counting only messages meant the rail showed three lines under a
   // heading that said two - the invite was on screen and in no total.
   const todayMeetings = splitTimelineMeetings(calEvents, Date.now(), tsMs).started.filter((e) => localDay(e.start) === today).length;
-  const stats = [{ label: "in today", n: todays.length + (canonicalUnread ? 0 : todayMeetings) }, ...[
+  const stats = [{ label: "arrived today", n: todays.length + (canonicalUnread ? 0 : todayMeetings) }, ...[
     { label: "auto", n: todays.filter((r) => r.ReviewStatus === "auto").length },
     { label: "info", n: todays.filter((r) => r.Category === "info").length },
     { label: "promo", n: todays.filter((r) => r.Category === "promo").length },

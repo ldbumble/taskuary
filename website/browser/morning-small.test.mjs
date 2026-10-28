@@ -115,7 +115,7 @@ test("the opener counts the tasks the rail counts: one number", { timeout: 30000
   await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 30000 });
   await page.waitForFunction(() => {
     const h = document.querySelector(".tq-day-wait .tq-day-h")?.textContent || "";
-    return /^\d+ tasks?$/i.test(h.trim());
+    return /^tasks$/i.test(h.trim()) && /^\d+$/.test(document.querySelector(".tq-day-row.lvl-task .n")?.textContent.trim() || "");
   }, { timeout: 30000 });
   await sleep(1500);
   const got = await page.evaluate(() => ({
@@ -124,9 +124,9 @@ test("the opener counts the tasks the rail counts: one number", { timeout: 30000
     rail: document.querySelector("[data-tq-section-head=task] em")?.textContent.trim() || "",
     marks: [...document.querySelectorAll("[data-tq-run=task] .tq-pile-row .tq-mark")].map((m) => m.getAttribute("data-tq-status")),
   }));
-  const n = got.head.match(/^(\d+)/)[1];
-  assert.equal(got.rail, n, `the rail's TASKS and the opener's headline: ${JSON.stringify(got)}`);
-  assert.equal(got.row, n, `...and the opener's Tasks row: ${JSON.stringify(got)}`);
+  // ...said once (2026-10-28): the heading names the band and the Tasks row under it carries the count - "13 TASKS" over "Tasks 13" was twice
+  assert.equal(got.head, "Tasks", `the opener's heading carries no count of its own: ${JSON.stringify(got)}`);
+  assert.equal(got.row, got.rail, `the rail's TASKS and the opener's Tasks row: ${JSON.stringify(got)}`);
   // the case it pins: a task that is not the owner's move (an agent at work, a wait on them) is still one of the tasks
   assert.ok(got.marks.some((k) => ["working", "theirs"].includes(k)), `the demo has a task that is not on you: ${JSON.stringify(got.marks)}`);
   assert.deepEqual(errors, []);

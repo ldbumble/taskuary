@@ -748,16 +748,17 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                 const word = i.settling ? ""
                   : i.kind === "meeting" ? `invite · ${fmtTime12(i.when)}`
                     // a goal says only that it SLIPPED (red); on track or not started, its steps say enough (the owner, 2026-10-21)
-                    : goal ? (i.kind === "goal_slipped" ? meta.word : "") : "";
+                    // ...and a slipped one says the day it slipped past in the same red word, "slipped Dec 11" - its due date (2026-10-28)
+                    : goal ? (i.kind === "goal_slipped" ? [meta.word, dueWord(i.due)].filter(Boolean).join(" ") : "") : "";
                 return (
                   <div key={i.key} className={cls} data-tq-key={i.key} data-tq-urgent={urgentDot ? "" : undefined} data-tq-important={imp ? "" : undefined}
                     style={{ top: falls(i.key) ? -ROW_H : top }}>
                     {/* For later counts DOWN to when it comes back, in the same short form the age column uses */}
                     {/* ...every other row says its ARRIVAL, never a new age for a reply - and no "+N" for one either: what came in since is
                         read inside the task (the owner, 2026-10-26: "if it's in the task it's fine no?") */}
-                    <span className="when" title={level === "later" && backAt(i) ? `back ${ago(backAt(i))}` : goal || i.kind === "meeting" ? undefined : ageHover(i)}>
-                      {goal ? dueWord(i.due)      /* a goal's clock is its date (spec 2026-10-12) */
-                        : level === "later" ? bandUntil(backAt(i)) : band(i.kind === "meeting" ? i.when : arrivedAt(i))}</span>
+                    <span className="when" title={level === "later" && backAt(i) ? `back ${ago(backAt(i))}` : i.kind === "meeting" ? undefined : ageHover(i)}>
+                      {/* ...a goal's too, its age like every row's: its due date is in its words (the owner, 2026-10-28) */}
+                      {level === "later" ? bandUntil(backAt(i)) : band(i.kind === "meeting" ? i.when : arrivedAt(i))}</span>
                     {/* the dot is the BAND's colour, the pill's own (the owner, 2026-10-06: one palette, everywhere) - where it
                         came from is the logo inside the row */}
                     {/* ...and an IMPORTANT row's dot is the theme's slate instead - the category IS the dot's colour, in the app's own
@@ -781,6 +782,9 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                         <b className={goal ? "goal-t" : undefined}>{i.title}</b>
                         {/* a goal's row is "🎯 title · 2 of 5 steps" - its count, never its TQ number (the owner, 2026-10-21) */}
                         {goal && Number.isInteger(i.steps) && i.steps > 0 && <span className="tq-pile-steps">· {i.steps_done || 0} of {i.steps} steps</span>}
+                        {/* ...and WHEN IT IS DUE, in its words (the owner, 2026-10-28): "Dec 11" in the age column read as an age. It gives
+                            way first on a narrow rail - the title keeps its room - and says itself on hover */}
+                        {goal && i.kind !== "goal_slipped" && !!dueWord(i.due) && <span className="tq-pile-due" title={`due ${dueWord(i.due)}`}>· due {dueWord(i.due)}</span>}
                         {/* which task this IS. It is how you say "TQ-0588" to the assistant, how you
                             match a row to the Tasks tab, and it was only ever in the tooltip.
                             ...on the row you are looking at: on every row it cut each subject at a laptop's 334px rail to ~14
@@ -1829,11 +1833,21 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // grows - a reload drew the chat, then the task view, 285px at once, and the observer's "within 240px of the end" let go of it, so
   // the answer the reload was for sat under the fold (the 2026-10-19 UI walk)
   const stuck = useRef(false);
+  // ...unless a line was said AFTER the view (the owner, 2026-10-28: a phone's answer sat under the chat box): a one-line answer under
+  // a tall view is less than toEnd's 48px, and putting the view's top up put the answer below the fold
+  const lastSaid = (el) => [...el.querySelectorAll(".tq-msg:not(.tq-welcome-msg):not(.receipt)")].pop() || null;
+  const saidAfter = (live, said) => !!live && !!said && !live.contains(said) && !!(live.compareDocumentPosition(said) & Node.DOCUMENT_POSITION_FOLLOWING);
   const toEnd = (el) => {
-    const live = [...el.querySelectorAll(".tq-canvas-live")].pop(), box = el.getBoundingClientRect(), r = live?.getBoundingClientRect();
-    const top = r && box.bottom + (el.scrollHeight - el.scrollTop - el.clientHeight) - r.bottom < 48;
+    const live = [...el.querySelectorAll(".tq-canvas-live")].pop(), box = el.getBoundingClientRect(), r = live?.getBoundingClientRect(), said = lastSaid(el);
+    const top = r && !saidAfter(live, said) && box.bottom + (el.scrollHeight - el.scrollTop - el.clientHeight) - r.bottom < 48;
     el.scrollTop = top ? el.scrollTop + r.top - box.top : el.scrollHeight;
     stuck.current = !top;
+    // ...and on a phone the newest line stands clear of the chat box under it, whatever lies over the body's foot
+    if (!top && said && window.matchMedia?.("(max-width:600px)").matches) {
+      const dock = document.querySelector(".tq-dock")?.getBoundingClientRect(), foot = Math.min(box.bottom, dock?.height ? dock.top : Infinity);
+      const over = said.getBoundingClientRect().bottom + 8 - foot;
+      if (over > 0) el.scrollTop += over;
+    }
   };
   // THE CARD ON THE TABLE STAYS IN VIEW (B15; the walk's SEEN, 2026-10-17): putOnTable pins it, and the pin brings its top to the
   // top of the view once it mounts and KEEPS it there while it loads and grows - a receipt or a failure under it, a draft filling
@@ -1903,7 +1917,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const pileLoading = pile === null && !pileRead;
   // THE DAY IS STILL BEING COUNTED - the first read, the launch's mail read ("Counting…" on the card), or rows still settling with
   // nothing the walk can pick yet. The opener said "Nothing to walk through" and greyed Walk under On you rows the card was still
-  // counting (an owner screenshot, 2026-10-20): while it counts it says Loading..., and a Walk press is held until it lands (walkQueued)
+  // counting (an owner screenshot, 2026-10-20): while it counts the card says Counting…, and a Walk press is held until it lands (walkQueued)
   const onYou = useMemo(() => onYouCount(items.length ? summarize(items).groups : []), [items]);
   const counting = pileLoading || mailReading || (!canAdvance && items.some((i) => i.settling));
   const say = useCallback((line) => { if (speakOnState) speak(line); }, [speakOnState]);
@@ -3082,10 +3096,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           digest, on the screen the day opens on (2026-09-23) */}
       <DayHold loading={pileLoading || mailReading}>
       <DayOpener groups={items.length ? summarize(railPile ? pileRows(railPile) : items).groups : []} onSection={walkSection}
-        loading={mailReading} top={<SinceBlock onOpen={(k) => pull(k, null)} onReading={setMailReading} />} />
+        loading={mailReading || pileLoading} top={<SinceBlock onOpen={(k) => pull(k, null)} onReading={setMailReading} />} />
       {/* no "Nothing is waiting on you - ask me anything" line when the day is empty: the card above says it and the buttons below
           are the choices (the owner, 2026-10-22: "what is this blank text?? buttons do the talking.." / "I hate free text") */}
-      {counting && <span data-tq-pile-loading="">Loading...</span>}
+      {/* ...nor a "Loading..." line under the card (the owner, 2026-10-28: a stray line under the calendar while the opener loaded): the
+          card's own "Counting…" says the first read is not in yet */}
       {/* ...nor a line under a greyed Walk explaining why and pointing at the rail (the owner, 2026-10-22:
           "yes remove that walk line too"): the rail's rows are there to click */}
       </DayHold>

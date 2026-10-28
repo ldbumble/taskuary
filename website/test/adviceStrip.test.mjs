@@ -149,5 +149,5 @@ test("an important line lands in the task's Advisor section, and every other str
   assert.match(sec, /\{note\.draft && onDraft && <button[^>]*data-tq-advisor-draft=""/);
   assert.match(sec, />Why\?<\/button>/);
   assert.doesNotMatch(page, /data-tq-task-advice/);
-  assert.match(read("CanvasItem.jsx"), /onLeave=\{onLeave\} onStay=\{onStay\} note=\{note\} \/>/);
+  assert.match(read("CanvasItem.jsx"), /onLeave=\{onLeave\} onStay=\{onStay\} note=\{note\} litMove=\{phone \? pick\?\.verb \|\| pick\?\.id \|\| "" : ""\} \/>/);
 });

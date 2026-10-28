@@ -247,7 +247,9 @@ const COLS = [
   { key: "queued", title: `${LANE_META.queued.mark} ${LANE_META.queued.word}`, dot: "#867f74" },
   { key: "working", title: `${LANE_META.working.mark} ${LANE_META.working.word}`, dot: "#6f8a6e" },
   { key: "blocked", title: `${LANE_META.blocked.mark} ${LANE_META.blocked.word}`, dot: ALERT },
-  { key: "left", title: `${LANE_META.saved.mark} ${LANE_META.saved.word} · ${LANE_META.stopped.mark} ${LANE_META.stopped.word}`, dot: "#a09787" },
+  // ...one name for both lanes it holds (the owner, 2026-10-28): "stopped and saved · agent stopped" wrapped to two lines at 1366px - a
+  // session ended by you is an agent stopped too
+  { key: "left", title: `${LANE_META.stopped.mark} ${LANE_META.stopped.word}`, dot: "#a09787" },
   { key: "agentdone", title: `${KIND_META.agentdone.mark} ${KIND_META.agentdone.word}`, dot: "#47654a" },
 ];
 

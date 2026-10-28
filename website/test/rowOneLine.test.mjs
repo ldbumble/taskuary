@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { fitRow, foldsOf, phoneRow, rowOf, rowWidth } from "../src/actionRow.js";
+import { fitRow, foldsOf, leadOf, phoneRow, rowOf, rowWidth } from "../src/actionRow.js";
 import { barFolds } from "../src/foldBar.js";
 import { labelOfRow } from "../src/buttons.js";
 
@@ -60,9 +60,10 @@ const avail = (vw) => (vw <= 600 ? vw - 24 : vw >= 1100 ? Math.min(vw - 360, 140
 for (const [name, list] of Object.entries(STATES)) {
   test(`one line at every width: ${name}`, () => {
     const row = rowOf({ ref: "TQ-1", list }, PICKS[name] ?? null), ids = (xs) => xs.filter((x) => !x.slot).map((x) => x.id).sort();
-    const every = ids([...row.decide, ...row.agent, ...row.more]), lead = phoneRow(row).shown[0];
+    const every = ids([...row.decide, ...row.agent, ...row.more]), held = leadOf(row, false), pressable = phoneRow(row).shown[0];
     for (const vw of WIDTHS) {
-      const m = model(vw, row), fit = fitRow(row, m, avail(vw), vw <= 600);
+      // ...the lead the folds keep in view, and on a phone its one move, never a greyed one (2026-10-28)
+      const m = model(vw, row), fit = fitRow(row, m, avail(vw), vw <= 600), lead = vw <= 600 ? pressable : held;
       // ...only a move whose own label is longer than the box (the walk's end "Open TQ-... · <title>") is shortened, with an ellipsis -
       // still one line, still in view, its whole label on its hover
       if (fit.tight) assert.ok(lead && lead.label.length > 40 && m.btn[lead.id] + m.next + 2 * m.pad + m.more > avail(vw) - 3 * m.rowGap, `${name} @${vw}: squeezed though it fits`);
@@ -126,6 +127,23 @@ test("a draft's Send leaves no empty slot, on the bar or the phone's row (2026-1
   assert.ok(![...ph.shown, ...ph.rest].some((x) => x.slot));
   assert.deepEqual(ph.shown, [], "no decision, no session verb: Next and the ▾");
   assert.deepEqual(ph.rest.map((x) => x.id), ["remind"]);
+});
+
+// NEVER A GREYED ONE MOVE (the owner, 2026-10-28): a phone's row showed a disabled "Send to agent" as its only move
+test("a phone's one move is never a disabled one: the next pressable move, else the ▾ alone", () => {
+  const row = rowOf({ ref: "", list: [v("41:copy", "decide", { label: "Copy", card: true, disabled: true }), v("start-agent", "agent", { disabled: true, why: "connect an AI" }),
+    v("continue", "agent"), next] });
+  assert.deepEqual(phoneRow(row).shown.map((x) => x.id), ["continue"]);
+  const none = rowOf({ ref: "", list: [v("start-agent", "agent", { disabled: true }), v("nat", "more"), next] }), ph = phoneRow(none);
+  assert.deepEqual(ph.shown, []);
+  assert.ok(ph.rest.some((x) => x.id === "start-agent"), "the greyed move is still in the ▾, its why on hover");
+});
+
+// NAV HOLDS THE ROW'S START (the owner, 2026-10-28): centred with the rest, Next moved between items; the types centre in what is left
+test("Nav is pinned at the row's start and the rest centres in the room left", () => {
+  const css = fs.readFileSync(new URL("../src/assistantView.css", import.meta.url), "utf8");
+  assert.match(css, /^\.tq-arow-verbs > \.tq-cl-next \{ margin-right: auto; \}$/m);
+  assert.match(css, /^\.tq-arow-verbs > \.tq-cl-next ~ \.tq-cl:last-child \{ margin-right: auto; \}$/m);
 });
 
 test("the CSS never wraps the row or a group, and a label never breaks inside its pill", () => {

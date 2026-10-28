@@ -318,9 +318,15 @@ export const typeOf = (v) => TYPE_OF[String(v?.id || "").split(":").pop()] || "a
 // ON A PHONE (narrower than 600px, the owner, 2026-10-22): Next and the ONE move - the lit one, else the row's lead (its first decision,
 // else its first session verb) - and every other button of every type behind one ▾. Four typed bands wrapped to four lines over the box.
 // An empty slot is neither the move nor a menu item: it only holds the Send's width on a wide row.
+// `pressable`: the phone's one move is never a greyed one (the owner, 2026-10-28: a phone's one move was a disabled "Send to agent") - the
+// lit move stays (its busy word is its state), any other is the first pressable one, and with none it is the ▾ alone. The folds read
+// the row's lead move as before (foldsOf: the group holding it folds last), greyed or not
+export const leadOf = (row, pressable = true) => {
+  const ok = (v) => !v.slot && !(pressable && v.disabled);
+  return [...row.decide, ...row.agent, ...row.more].find((v) => v.tone === "p" && !v.slot) || row.decide.find(ok) || (pressable ? row.agent.find(ok) : row.agent[0]) || null;
+};
 export function phoneRow(row) {
-  const all = [...row.decide, ...row.agent, ...row.more].filter((v) => !v.slot);
-  const lead = all.find((v) => v.tone === "p") || row.decide.find((v) => !v.slot) || row.agent[0] || null;
+  const all = [...row.decide, ...row.agent, ...row.more].filter((v) => !v.slot), lead = leadOf(row);
   return { type: "phone", label: "", shown: lead ? [lead] : [], rest: all.filter((v) => v !== lead) };
 }
 export function clustersOf(row, keep = 2) {
@@ -341,7 +347,7 @@ export function clustersOf(row, keep = 2) {
 // holding the lit move last; with every group folded the row is the phone's - Nav, the one move, one ▾. Nav (Back, Next) never folds.
 // foldsOf: every layout from the widest (the typed groups) to the narrowest (phoneRow), each a list of groups for Cluster.
 export function foldsOf(row) {
-  const cs = clustersOf(row), ph = phoneRow(row), lead = ph.shown[0], holds = (g) => !!lead && g.shown.includes(lead);
+  const cs = clustersOf(row), ph = phoneRow(row), lead = leadOf(row, false), holds = (g) => !!lead && g.shown.includes(lead);
   const rest = cs.filter((g) => !holds(g)).reverse(), order = [...rest.filter((g) => g.type !== "close"), ...rest.filter((g) => g.type === "close"), ...cs.filter(holds)], out = [cs];
   for (let k = 1; k < order.length; k++) {
     const gone = new Set(order.slice(0, k)), folded = cs.filter((g) => gone.has(g)).flatMap((g) => [...g.shown, ...g.rest]).filter((v) => !v.slot);

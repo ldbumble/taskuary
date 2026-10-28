@@ -195,7 +195,7 @@ PURPOSE = {
     'connection.resume':        'switch a connection back on - `name`',
     'script.start':             'start a script by its name: walk me through my tasks | set up a report',
     # THE BUTTONS THAT ARE A PAGE'S ALONE (concierge._paged, the whole-app design 2026-10-28): the page comes up at the thing
-    'rule.change':              ('change or delete one routing rule (Settings → Routing policies) - `about`: words naming it, as rules.list '
+    'rule.change':              ('change or delete one routing rule (its page: rules) - `about`: words naming it, as rules.list '
                                  'says it (its sender, pattern or name); `how`: edit (the default) | remove. Adding a rule for a sender '
                                  'is preference.sender_rule'),
     'deleted.restore':          ('bring back something removed in the last 30 days - a report, workflow, dashboard, routing rule or profile - '

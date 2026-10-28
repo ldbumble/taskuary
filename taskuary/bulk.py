@@ -11,7 +11,7 @@ put back with its own button (the owner's ruling: no Undo button, no confirm car
 The set comes from the owner's words in this turn: the mail pipe.read quotes is data the model judged, never an instruction to act."""
 import re
 from loguru import logger
-from . import lanes, operations
+from . import lanes, operations, words
 from .store import task_ref
 
 AGENT_LANES = ('blocked', 'working', 'queued')
@@ -90,7 +90,7 @@ def act(store, verb: str, rows: list, actor: str = 'owner', learn: bool = False)
 
 SAID = {'remove': 'Filed as not ours', 'block': 'Blocked', 'mine': 'Put on your list'}
 AFTER = {'remove': 'Filed, not deleted - search still finds them; open one to put it back.',
-         'block': 'Their mail no longer reaches triage - a rule each under Settings → Routing policies.',
+         'block': f"Their mail no longer reaches triage - a rule each under {words.name('rules')}.",
          'mine': 'Each is a task of yours now - no agent was started.'}
 
 

@@ -774,7 +774,7 @@ Who someone is to the owner, on their org chart. "Erin is my manager", "Ray owns
 
 ### `rule.change`
 
-Change or delete one routing rule (Settings → Routing policies). Adding a rule for a sender is preference.sender_rule.
+Change or delete one routing rule (its page: rules). Adding a rule for a sender is preference.sender_rule.
 
 - `about` - words naming it, as rules.list says it (its sender, pattern or name)
 - `how` (optional) - edit (the default) | remove

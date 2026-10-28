@@ -11,7 +11,7 @@ description: >
 Two separate things, never mixed:
 
 1. **A fix reaches the owner** when it is on `master` - the owner's app runs from the main checkout
-   (`C:\Users\unussbaum\Documents\General\Testing\taskhub`), so a push + fast-forward + their restart is "shipped" for them.
+   (the owner's own working copy of the repo, not a worktree), so a push + fast-forward + their restart is "shipped" for them.
 2. **A release reaches PyPI** when `tools/release.sh X.Y.Z.W` finishes. That is the only way to tag.
 
 ## 1. Land a fix (minutes, not hours)

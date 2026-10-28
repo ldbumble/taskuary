@@ -20,8 +20,11 @@ export const layoutOf = ({ sessionView = false }) => (sessionView ? "full" : "co
 // the agent's part once it has a Result (or its run failed, Try again being the move); Close out where the reply is the move; and where the
 // open half is the agent's box (a to-do, a goal) the task's own LIST instead (the owner's answer, 2026-10-25): a goal's Steps, a to-do's
 // checklist (`list`), else the block that carries the ask's source ("source"). A task waiting on a person has nothing white ("none").
-export const focusOf = ({ live = false, result = false, failed = false, pane = "", waiting = false, list = false } = {}) =>
-  live ? null : waiting ? "none" : result || failed ? "agent" : pane === "agent" ? (list ? "list" : "source") : "reply";
+// ...BUT THE FOCUS FOLLOWS THE NEXT MOVE (the owner, 2026-10-27: "why is the white part the agent result if the focus is on ready to send"):
+// a draft or emails waiting for Send (`owed`) make Close out the white section even under a finished agent - its Result is shaded above.
+// A finished agent with nothing drafted keeps the focus on its Result.
+export const focusOf = ({ live = false, result = false, failed = false, pane = "", waiting = false, list = false, owed = false } = {}) =>
+  live ? null : waiting ? "none" : owed ? "reply" : result || failed ? "agent" : pane === "agent" ? (list ? "list" : "source") : "reply";
 
 // THE MAIN VIEW (the owner, 2026-10-26: "if task view is where the task opens to it should only open on that, and then right side arrow
 // should pull out the agent/close out screens. If up to agent or close out open those with coming from in left side draw"): the focus

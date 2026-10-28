@@ -99,7 +99,7 @@ function Preview({ page }) {
 
 // a file the agent made: its name and kind, Preview where it has one, and Download - or, gone from the folder, says so
 const sizeOf = (n) => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`;
-function OutputFile({ file: p, open, onToggle }) {
+function OutputFile({ file: p, open, onToggle, verb = "" }) {
   const can = !!p.preview && !p.missing;
   return (
     <div className="tq-published-page" data-tq-output={p.path}>
@@ -109,7 +109,7 @@ function OutputFile({ file: p, open, onToggle }) {
           <span>{p.missing ? "not in this task's files any more" : `${label(p)}${p.size ? ` · ${sizeOf(p.size)}` : ""}`}</span>
         </div>
         {can && <Button size="small" variant={open ? "contained" : "outlined"} disableElevation onClick={onToggle}
-          title={open ? "Hide the preview" : "Show it here"}>{open ? "Hide preview" : "Preview"}</Button>}
+          title={open ? "Hide the preview" : "Show it here"} data-tq-open={verb ? "" : undefined}>{open ? (verb ? "Hide" : "Hide preview") : verb || "Preview"}</Button>}
         {!p.missing && <Button size="small" href={attUrl(p, true)} title="Save a copy">Download</Button>}
       </div>
       {p.note && !p.missing && <div className="tq-published-note">{p.note}</div>}
@@ -118,7 +118,8 @@ function OutputFile({ file: p, open, onToggle }) {
   );
 }
 
-export default function PublishedPages({ pages, open: openAll = false }) {
+// `verb`: the press that shows each one is a button named for it ("Open", the Result's What it made) rather than the name's own " · show here"
+export default function PublishedPages({ pages, open: openAll = false, verb = "" }) {
   const [shut, setShut] = useState(() => new Set()), [opened, setOpened] = useState(() => new Set());
   if (!pages?.length) return null;
   const isOpen = (p) => (openAll ? !shut.has(p.id) : opened.has(p.id));
@@ -128,13 +129,15 @@ export default function PublishedPages({ pages, open: openAll = false }) {
   };
   return (
     <div className="tq-published">
-      {pages.map((p) => isOutput(p) ? <OutputFile key={p.id} file={p} open={isOpen(p)} onToggle={() => toggle(p)} /> : (
+      {pages.map((p) => isOutput(p) ? <OutputFile key={p.id} file={p} open={isOpen(p)} onToggle={() => toggle(p)} verb={verb} /> : (
         <div key={p.id} className="tq-published-page">
           <div className="tq-published-row">
             <button type="button" className="tq-published-name" disabled={!p.url} onClick={() => toggle(p)}
               title={p.url ? (isOpen(p) ? "Hide it" : "Show it here") : "No copy was kept - open it on claude.ai"}>
-              <b>{p.name}</b><span>{label(p)}{p.url ? (isOpen(p) ? " · hide" : " · show here") : ""}</span>
+              <b>{p.name}</b><span>{label(p)}{p.url && !verb ? (isOpen(p) ? " · hide" : " · show here") : ""}</span>
             </button>
+            {p.url && verb && <Button size="small" variant={isOpen(p) ? "contained" : "outlined"} disableElevation data-tq-open=""
+              onClick={() => toggle(p)} title={isOpen(p) ? "Hide it" : "Show it here"}>{isOpen(p) ? "Hide" : verb}</Button>}
             {p.url && (
               <Button size="small" href={attUrl(p, true)} title="Save a copy">Download</Button>
             )}

@@ -125,3 +125,20 @@ export const diffStat = (text) => {
   const added = ls.filter((l) => l.startsWith("+") && !l.startsWith("+++")).length, removed = ls.filter((l) => l.startsWith("-") && !l.startsWith("---")).length;
   return files.size || added || removed ? { files: files.size, added, removed } : null;
 };
+
+// THE RESULT AT REST (the owner, 2026-10-27: "where is the plan? ... still not clear why the agent came up with it", then "if the result is
+// the main thing then we should say nothing - just the summary - and then click Result to see more"): what it did in its own first words -
+// the write-up's summary, else the first paragraph of its last message - and what it based that on (the write-up's "what it found"), never
+// the state sentence over a record. Its full message, the record and the replay are behind the Result heading.
+export const resultLine = (s, said = "") => {
+  const r = s?.report || {}, words = String(lastWords(s) || said || "").trim();
+  const did = norm(r.summary) ? String(r.summary).trim() : words.split(/\n\s*\n/)[0].trim();
+  const found = norm(r.decided) && norm(r.decided) !== norm(did) ? String(r.decided).trim() : "";
+  return { did, found };
+};
+// ...and WHAT IT MADE, once: the pages it showed or published, then the files it left in the task's outputs folder - a page shown FROM that
+// folder is the same file, named the same, and is listed once (as the page, which previews as it was shown)
+export const madeOnce = (pages = [], outputs = []) => {
+  const seen = new Set((pages || []).map((p) => String(p.name || "").toLowerCase()));
+  return [...(pages || []), ...(outputs || []).filter((o) => !seen.has(String(o.name || "").toLowerCase()))];
+};

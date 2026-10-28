@@ -10,7 +10,9 @@ const view = src("AssistantView.jsx");
 
 test("unread is its own state, drawn in the empty line's place", () => {
   assert.match(view, /const pileLoading = pile === null && !pileRead;/);
-  assert.match(view, /\{counting && <span data-tq-pile-loading="">Loading\.\.\.<\/span>\}/);
+  // ...said by the card's own "Counting…", not a stray "Loading..." line under it (the owner, 2026-10-28)
+  assert.doesNotMatch(view, /data-tq-pile-loading|>Loading\.\.\.</);
+  assert.match(view, /loading=\{mailReading \|\| pileLoading\} top=\{<SinceBlock/);
 });
 
 // BUTTONS DO THE TALKING (the owner, 2026-10-22: "what is this blank text?? buttons do the talking.."): an empty day draws no
@@ -27,7 +29,9 @@ test("while the day is counted the opener says Loading..., and a greyed Walk has
   assert.doesNotMatch(view, /data-tq-nothing-to-walk|Nothing to walk through right now|Click any row to open it/);
   // ...and the card's headline is the rail's Tasks count, every row under it (the owner, 2026-10-27: "they should match count of tasks")
   assert.match(src("assistantCards.jsx"), /const tasks = act\.reduce\(\(n, g\) => n \+ \(SECTION\[g\.key\]\?\.on_you \? g\.n \?\? g\.rows\.length : 0\), 0\);/);
-  assert.match(src("assistantCards.jsx"), /tasks \? plural\(tasks, "task"\) : "Nothing on you"/);
+  assert.match(src("assistantCards.jsx"), /tasks \? "Tasks" : "Nothing on you"/);
+  // ...and said once: the heading carries no count of its own over the Tasks row that says it (2026-10-28)
+  assert.doesNotMatch(src("assistantCards.jsx"), /plural\(tasks, "task"\)/);
 });
 
 test("the first read, landed or failed, ends the loading - a coverage retry does not", () => {

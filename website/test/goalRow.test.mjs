@@ -4,8 +4,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dueWord, levelOf, rowMeta } from "../src/funnelPile.js";
 
-// a goal's gutter is its date, not its age: for a goal the date is the clock (spec 2026-10-12)
-test("a goal's gutter says its date, short", () => {
+// a goal's date, short - said in its words as "due Dec 1"; its gutter is its age like every row's (the owner, 2026-10-28)
+test("a goal's due date reads short", () => {
   assert.equal(dueWord("2026-12-01"), "Dec 1");
   assert.equal(dueWord("2026-12-01 08:00:00"), "Dec 1");
   assert.equal(dueWord(""), "");
@@ -28,7 +28,10 @@ test("a goal's row says its mark, its title and its steps, and slipped in red", 
   assert.match(view, /goal \? <span className="goal">\{meta\.mark\}<\/span> : <SourceMark/, "the goal's mark where the source logo goes");
   assert.match(view, /<span className="tq-pile-steps">· \{i\.steps_done \|\| 0\} of \{i\.steps\} steps<\/span>/);
   assert.match(view, /!!i\.ref && isCur && !goal &&/, "no TQ number on a goal's row");
-  assert.match(view, /goal \? \(i\.kind === "goal_slipped" \? meta\.word : ""\)/, "only slipped is said");
+  assert.match(view, /goal \? \(i\.kind === "goal_slipped" \? \[meta\.word, dueWord\(i\.due\)\]\.filter\(Boolean\)\.join\(" "\) : ""\)/, "slipped says the day it slipped past");
+  assert.match(view, /\{goal && i\.kind !== "goal_slipped" && !!dueWord\(i\.due\) && <span className="tq-pile-due" title=\{`due \$\{dueWord\(i\.due\)\}`\}>· due \{dueWord\(i\.due\)\}<\/span>/, "its due date in its words");
+  assert.match(src("assistantView.css"), /\.tq-pile-due \{ flex: 0 0 auto;/, "...and the title gives way to it, as to its count and its word");
+  assert.doesNotMatch(view, /\{goal \? dueWord\(i\.due\)/, "the age column is a goal's age, not its date");
   assert.equal(rowMeta({ kind: "goal_slipped", lane: "yours" }).role, "bad", "slipped wears the bad ink - red");
   assert.equal(rowMeta({ kind: "goal_slipped", lane: "yours" }).word, "slipped");
 });
@@ -48,8 +51,8 @@ test("an agent at work rings the row's icon, spinning, and still under reduced m
 test("a rail row carries its state in its icon and its label, and no status word on its right", () => {
   const view = src("AssistantView.jsx"), logo = src("StatusMark.jsx"), css = src("statusMark.css");
   assert.match(view, /const shown = st && \(st\.spins \|\| meta\.word !== BAND_SAYS\[level\]\) \? st : null;/);
-  // the only words left on a row's right: a meeting's time and a goal's "slipped"
-  assert.match(view, /: goal \? \(i\.kind === "goal_slipped" \? meta\.word : ""\) : "";/);
+  // the only words left on a row's right: a meeting's time and a goal's "slipped" (with its day, 2026-10-28)
+  assert.match(view, /: goal \? \(i\.kind === "goal_slipped" \? \[meta\.word, dueWord\(i\.due\)\]\.filter\(Boolean\)\.join\(" "\) : ""\) : "";/);
   assert.match(logo, /role=\{st \? "img" : undefined\} aria-label=\{st \? statusLabel\(st, agent\) : undefined\}/);
   assert.match(logo, /\{badge && <i className=\{`badge\$\{st\.anim \? ` \$\{st\.anim\}` : ""\}`\} aria-hidden="true">\{badge\}<\/i>\}/);
   assert.doesNotMatch(css, /badge\.turn|tq-badge-turn/, "no hourglass turns: waiting to start wears no badge");

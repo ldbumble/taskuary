@@ -46,7 +46,7 @@ test("the opening card loads in place: counts and the digest say they are coming
   assert.match(view, /dg\.waiting \? `Not written yet - \$\{plural\(dg\.waiting, "email"\)\}/, "queued by Finish, it says it waits on the mail");
   assert.doesNotMatch(view, /shownFor\.current !== dg\.at/, "the digest opens folded - See the full digest opens it");
   assert.match(view, /data\?\.said \|\| data\?\.drawn/, "an opener drawn mid catch-up is read at once");
-  assert.match(cards, /loading \? "Counting…" : tasks \? plural\(tasks, "task"\) : "Nothing on you"/);
+  assert.match(cards, /loading \? "Counting…" : tasks \? "Tasks" : "Nothing on you"/);
   assert.match(turns, /turn\.card\?\.kind === "brief"/, "the opener filled in its place is redrawn, not skipped by id");
 });
 

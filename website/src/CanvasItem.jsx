@@ -181,7 +181,7 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         // Mark done and Remind me put the task down AT THE PRESS, as Next does; a failure puts it back with the reason
         // ...and the day the owner typed with Remind me ("remind me Monday"), its picker's first button (assistantLight's light.day)
         saidDay={lit?.verb === "defer" ? lit.day || null : null}
-        onLeave={onLeave} onStay={onStay} note={note} />
+        onLeave={onLeave} onStay={onStay} note={note} litMove={phone ? pick?.verb || pick?.id || "" : ""} />
       </TableVerbs>
       </Box>
       {/* THE BUTTONS ARE NOT HERE (layout B, 2026-09-30): the view registers its verbs and Next, and the ONE row above the chat line

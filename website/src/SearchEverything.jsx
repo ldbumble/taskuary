@@ -15,11 +15,12 @@ import BarChartIcon from "@mui/icons-material/BarChart";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import PowerOutlinedIcon from "@mui/icons-material/PowerOutlined";
 import TuneIcon from "@mui/icons-material/Tune";
+import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import api from "./api";
 import { openAppLink } from "./appLinks.js";
 import { prefetchTask } from "./taskDetail.js";
 import { ago } from "./timeWords.js";
-import { arrange, asks, countWords, filters, kindOf, marks, meta, nothingMatches, terms, totalOf } from "./searchHits.js";
+import { arrange, asks, countWords, filters, kindOf, marks, meta, nothingMatches, personHits, terms, totalOf } from "./searchHits.js";
 import { ASSISTANT, BORDER, DIM, FAINT, INK, PANEL, PANEL2, PALETTE, PILL_COLORS, ACCENT, mono } from "./theme.jsx";
 
 // colour identifies, it never shouts: each pill is a pale tint with its own ink, from the five colours - never the
@@ -27,7 +28,8 @@ import { ASSISTANT, BORDER, DIM, FAINT, INK, PANEL, PANEL2, PALETTE, PILL_COLORS
 const TONES = { slate: [PALETTE.slate, "#e6ebef"], sage: [PALETTE.sage, "#e5ece2"], brass: [PALETTE.brass, "#ede7da"],
   oat: [PALETTE.oat, "#ece8e1"], advisor: [ASSISTANT.ink, "#e8eee4"], pick: [PILL_COLORS.pick.fg, PILL_COLORS.pick.bg] };
 const ICONS = { task: TaskAltIcon, email: MailOutlineIcon, chat: ChatBubbleOutlineIcon, pr: CallMergeIcon, issue: AdjustIcon,
-  advisor: PsychologyOutlinedIcon, report: BarChartIcon, source: PowerOutlinedIcon, setting: TuneIcon, connector: PowerOutlinedIcon };
+  advisor: PsychologyOutlinedIcon, report: BarChartIcon, source: PowerOutlinedIcon, setting: TuneIcon, connector: PowerOutlinedIcon,
+  person: PersonOutlineIcon };
 const MARK = "#efe3bf";            // the matched words: a highlighter's wash, not a colour that means anything
 
 export function Pill({ hit, sx }) {
@@ -164,8 +166,10 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
     const t = q.trim();
     if (!asks(t)) { setRes(null); setBusy(false); held.current = ""; return undefined; }
     let alive = true; setBusy(true);
-    const h = setTimeout(() => api.get("/api/search", { params: { q: t } })
-      .then(({ data }) => { if (alive) { setRes({ ...data, q: t }); setAt(0); } })
+    // ...and the people the To/Cc pickers would offer for the same words, read beside it: a directory that does not answer leaves the rest
+    const people = () => (t.length < 2 ? Promise.resolve([]) : api.get("/api/people/search", { params: { q: t } }).then(({ data }) => personHits(data?.data)).catch(() => []));
+    const h = setTimeout(() => Promise.all([api.get("/api/search", { params: { q: t } }), people()])
+      .then(([{ data }, ps]) => { if (alive) { setRes({ ...data, hits: [...(data?.hits || []), ...ps], q: t }); setAt(0); } })
       .catch(() => { if (alive) setRes({ q: t, hits: [], failed: true }); })
       .finally(() => { if (alive) setBusy(false); }), 180);
     return () => { alive = false; clearTimeout(h); };
@@ -181,6 +185,8 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
 
   const pick = (h) => {
     if (!h) return;
+    // ...a person stays in the box: their address becomes the words, and what they sent and the tasks they are on come up
+    if (h.type === "person") { typed.current = h.to; setQ(h.to); setOnly(""); setAt(0); return; }
     const find = h.type === "source" ? null : opened(h);
     onClose();
     // a setting or a connection: the page that holds it, by its link - the road every in-app link takes, which brings it to view

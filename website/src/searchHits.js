@@ -4,6 +4,8 @@
 // `tone` names the colour SearchEverything.jsx draws the pill in (TONES there)
 export const KINDS = {
   task:    { label: "Task",    group: "Tasks", tone: "slate" },
+  // ...and the people the To and Cc pickers know (/api/people/search, the same directory - the owner, 2026-10-28): a pick searches their mail
+  person:  { label: "Person",  group: "People", tone: "sage" },
   email:   { label: "Email",   group: "Email", tone: "oat" },
   chat:    { label: "Chat",    group: "Chats", tone: "sage" },
   pr:      { label: "PR",      group: "Code", tone: "brass" },
@@ -18,9 +20,13 @@ export const KINDS = {
   setting:   { label: "Setting", group: "Settings", tone: "oat" },
   connector: { label: "Connection", group: "Connections", tone: "pick" },
 };
-export const GROUPS = ["Tasks", "Email", "Chats", "Code", "Advisor", "Reports", "Other", "Sources", "Connections", "Settings"];
+export const GROUPS = ["Tasks", "People", "Email", "Chats", "Code", "Advisor", "Reports", "Other", "Sources", "Connections", "Settings"];
 const FILTER_LABEL = { Code: "Pull requests", Chats: "Chats", Email: "Email" };
 export const kindOf = (h) => KINDS[h?.type] || KINDS.item;
+
+// the directory's people for the words typed, as hits (peoplesearch.py's rows: {to, name, company, org}) - an address once
+export const personHits = (rows, seen = new Set()) => (rows || []).filter((r) => r?.to && !seen.has(String(r.to).toLowerCase()) && seen.add(String(r.to).toLowerCase()))
+  .map((r) => ({ type: "person", id: `person:${String(r.to).toLowerCase()}`, title: r.name || r.to, to: r.to, company: r.company || r.org || "" }));
 
 // The hits in list order - grouped by kind, each group in the server's own order (best match first) - narrowed to one
 // group when a filter is on. `flat` is what the arrow keys walk.
@@ -38,7 +44,7 @@ export function totalOf(res, group = "") {
   const t = res?.totals || {}, hits = res?.hits || [];
   const types = new Set([...Object.keys(t), ...hits.map((h) => h.type)].filter((k) => !group || kindOf({ type: k }).group === group));
   const n = [...types].reduce((a, k) => a + Math.max(t[k] || 0, hits.filter((h) => h.type === k).length), 0);
-  const mail = [...types].some((k) => !["task", "source", "setting", "connector"].includes(k));
+  const mail = [...types].some((k) => !["task", "person", "source", "setting", "connector"].includes(k));
   return { n, more: !!res?.capped && mail };
 }
 export const countWords = ({ n, more }) => `${n}${more ? "+" : ""}`;
@@ -85,6 +91,7 @@ export function meta(h) {
   if (h.type === "task") return [h.sub, h.status && ["done", "dropped"].includes(h.status) ? (h.status === "done" ? "closed" : "dropped") : ""].filter(Boolean);
   // a WhatsApp source is titled by its name or number; its JID is the small line (search.py `sub`)
   if (h.type === "source") return [h.channel, h.sub].filter(Boolean);
+  if (h.type === "person") return [h.to, h.company].filter(Boolean);
   if (h.href) return [h.where, h.sub].filter(Boolean);
   return [h.who, h.where && h.where !== h.who ? h.where : ""].filter(Boolean);
 }

@@ -230,8 +230,10 @@ export function Story({ card, asker = true, agent = "auto", state, did, name, ex
   const showSubject = subject && !said.toLowerCase().includes(subject.replace(/^(PR |Issue )?#\d+(\s·)?\s*/, "").toLowerCase());
   const rest = restOf(doc?.task?.Summary);
   const who = advisor ? "Advisor" : own ? "You" : by === null ? "The task" : personName(by || card?.who || "Someone") || "Someone";
+  // ...an FYI's age said once (the owner, 2026-10-28): its card's header already says "3d ago" over "wrote · Email · 3d ago"
+  const fyi = ["fyi", "report"].includes(card?.lane) || card?.kind === "fyi";
   const from = [advisor ? "an idea" : own ? (card?.mid && card?.channel !== "own" ? channelWord(card.channel) : kindLabel("task")) : channelWord(card?.channel),
-    card?.when ? ago(card.when) : ""].filter(Boolean).join(" · ");
+    card?.when && !fyi ? ago(card.when) : ""].filter(Boolean).join(" · ");
   const rep = reportOf(doc), r = rep ? readReport(rep.Body) : null;
   const found = r?.summary || String(did ?? card?.summary ?? "").trim();
   const drawAgent = agent === true || (agent === "auto" && (found || state || extra));
@@ -243,7 +245,7 @@ export function Story({ card, asker = true, agent = "auto", state, did, name, ex
       {asker && said && (
         <div className="tq-thr">{(drawAgent || tail) && <span className={`tq-thr-rail${drawAgent ? "" : " tail"}`} />}
           <span className={`tq-av ${own ? "tq-av-you" : "tq-av-asker"}${lit("asker")}`}>{TASK_GLYPH}</span>
-          <div className="tq-thr-body"><div className="tq-thr-h"><b>{who}</b>{advisor ? " raised · " : own || by === null ? " · " : ["fyi", "report"].includes(card?.lane) || card?.kind === "fyi" ? " wrote · " : " asked · "}{from}</div><div className="tq-thr-say">{said}</div>
+          <div className="tq-thr-body"><div className="tq-thr-h"><b>{who}</b>{advisor ? " raised · " : own || by === null ? " · " : fyi ? " wrote · " : " asked · "}{from}</div><div className="tq-thr-say">{said}</div>
             {showSubject && <div className="tq-thr-subject">{subject}</div>}
             {rest && <div className="tq-thr-rest">{rest}</div>}{words}</div>
         </div>
@@ -468,9 +470,11 @@ function FullText({ mid, revision }) {
   const cut = body.indexOf("\n--- raw data ---");
   const text = noImages(cut >= 0 ? body.slice(0, cut) : body);
   const morning = doc.SourceName === "Morning digest" || /^Morning digest\b/i.test(doc.Subject || "");
+  // ...a report's table sits in a panel its own width (the owner, 2026-10-28): full width, a two-column table left it 3/4 empty
+  const rows = !morning && jsonRows(text);
   return (
-    <div className="tq-card-full">
-      {morning ? <DigestText text={text} sourceId={/^report:(\d+)/.exec(doc.ConversationId || "")?.[1] ?? null} /> : jsonRows(text) ? <RowsTable rows={jsonRows(text)} /> : looksMd(text) ? <Md text={text} /> : text ? <LinkedText text={text} /> : "(empty)"}
+    <div className={rows ? "tq-card-full fit" : "tq-card-full"}>
+      {morning ? <DigestText text={text} sourceId={/^report:(\d+)/.exec(doc.ConversationId || "")?.[1] ?? null} /> : rows ? <RowsTable rows={rows} /> : looksMd(text) ? <Md text={text} /> : text ? <LinkedText text={text} /> : "(empty)"}
       {/* ...and the pictures pasted into it, drawn - the screenshot is often the whole ask */}
       {!none && !morning && <Attachments messageId={mid} canFetch={String(doc.Channel || "") === "email" && mentionsPicture(doc.BodyText)} dense />}
       {read !== raw && <button type="button" className="tq-card-more" onClick={() => setWhole((v) => !v)}>{whole ? "Just what they wrote" : "Show the whole email"}</button>}
@@ -1245,7 +1249,8 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
       )}
       {waits && (
         <div className="tq-day-wait">
-          <div className="tq-day-h">{loading ? "Counting…" : tasks ? plural(tasks, "task") : "Nothing on you"}</div>
+          {/* ...said ONCE (the owner, 2026-10-28): "13 TASKS" stood over a Tasks row saying 13 - the heading names the band, the row counts it */}
+          <div className="tq-day-h">{loading ? "Counting…" : tasks ? "Tasks" : "Nothing on you"}</div>
           {!groups.length && <div style={{ fontSize: 13, color: "#6e685f" }}>Your mail is still being read - what needs you shows up here.</div>}
           {act.map(row)}
           {!!read.length && <div className="tq-day-h" style={{ marginTop: 8 }}>To read · {loading ? "…" : toRead}</div>}

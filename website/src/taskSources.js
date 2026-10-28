@@ -81,9 +81,18 @@ export function fromRows(group, keep = 3, all = false) {
 }
 // EVERY FILE BELONGS TO ITS MESSAGE (the owner, 2026-10-20: a voice note drawn loose under the Came from card, outside the thread):
 // the task detail's attachment rows by MessageId, so each condensed row knows what rode in with it and draws it under itself
+// A SIGNATURE'S PICTURE IS NOT A FILE OF THE MESSAGE (the owner, 2026-10-28: "I don't need these images unless they relate to the actual
+// message"): an inline image the same name and size on two or more of the task's messages is the sender's signature logo, so it is
+// left out wherever the conversation lists files
+const sigKey = (a) => `${a?.Name || a?.name || ""}|${a?.Size ?? a?.size ?? ""}`;
+export const signatureImages = (atts = []) => {
+  const on = new Map();
+  for (const a of atts || []) if ((a?.Inline ?? a?.inline) && a?.MessageId != null) on.set(sigKey(a), new Set([...(on.get(sigKey(a)) || []), a.MessageId]));
+  return new Set([...on].filter(([, mids]) => mids.size > 1).map(([k]) => k));
+};
 export const filesByMessage = (atts = []) => {
-  const by = new Map();
-  for (const a of atts || []) if (a?.MessageId != null) by.set(a.MessageId, [...(by.get(a.MessageId) || []), a]);
+  const by = new Map(), sig = signatureImages(atts);
+  for (const a of atts || []) if (a?.MessageId != null && !sig.has(sigKey(a))) by.set(a.MessageId, [...(by.get(a.MessageId) || []), a]);
   return by;
 };
 const AUDIO = /\.(ogg|opus|mp3|m4a|aac|wav|webm|flac|amr)$/i;

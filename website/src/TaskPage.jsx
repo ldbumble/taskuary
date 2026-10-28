@@ -188,7 +188,8 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
         <Box component="span" sx={{ color: FAINT, textAlign: "right", whiteSpace: "nowrap", fontSize: 11.5 }}>{whenShort(r.m.SentAt)}
           <Box component="span" aria-hidden data-tq-row-chevron="" sx={{ ml: 0.5 }}>{open === r.m.MessageId ? "▾" : "▸"}</Box></Box>
       </Box>
-      {open !== r.m.MessageId && (files.has(r.m.MessageId) || fetchFor === r.m.MessageId) && (
+      {/* ...a closed row is the row alone - its files show once it is opened (the owner, 2026-10-28: "if they are closed nothing should show") */}
+      {open !== r.m.MessageId && fetchFor === r.m.MessageId && (
         <Box data-tq-row-files="" sx={{ pl: narrow ? 0 : { xs: 0, sm: "122px" }, mt: -0.5, mb: 0.4, minWidth: 0 }}>
           <Attachments messageId={r.m.MessageId} canFetch={fetchFor === r.m.MessageId} dense original={r.m.SourceLink} /></Box>
       )}

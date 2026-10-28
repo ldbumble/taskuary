@@ -17,7 +17,7 @@ export const attUrl = (a, download) => {
   return `${a.url}${q ? `?${q}` : ""}`;
 };
 
-const LOGO = 24 * 1024;
+const LOGO = 48 * 1024;   // a company logo in a signature runs 20-40 KB (24 KB let a 24.4 KB one draw as a picture)
 // A cid-referenced image smaller than a logo IS a signature, not the ask, so it gets a chip like
 // any other file. SVG is exempt: nobody signs their mail in one, and Taskuary's own report charts
 // are small by nature.

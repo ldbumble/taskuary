@@ -22,6 +22,14 @@ def test_reply_over_a_waiting_draft_lights_its_send_for_any_reason_but_a_caution
     assert advisor.checked(s, {'key': 'task:1'}, V('reply'), _d('reply', 'memory', 'asked'), RULE)['verb'] == 'reply', 'no draft: Reply stands'
 
 
+def test_the_models_reply_on_a_thread_the_owner_answered_lights_mark_done():
+    """The owner, 2026-10-28: a sent reply's row lit Reply - their reply went after the sender's newest mail, so Mark done, whatever the reason."""
+    rule = {'verb': 'close', 'line': '', 'evidence': []}
+    for kind in ('late', 'memory', 'other'):
+        d = advisor.checked(MemoryStore(), {'key': 'task:1'}, V('reply', 'close'), _d('reply', kind, 'answered', line='Erin may want more.'), rule)
+        assert (d['verb'], d['line']) == ('close', ''), (kind, d)
+
+
 def drafted(s, who='erin', title='Offsite agenda'):
     t = ask(s, who, title, 'Can you check the offsite agenda before Thursday?')
     mid = s.list_messages(t)[-1]['MessageId']

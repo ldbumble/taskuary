@@ -2388,6 +2388,12 @@ def know(store, q: str) -> str:
                      'Say so plainly; a report or the timeline may still hold it (reports.list, timeline.search).')
 
 
+# what a look-up's answer may run to in the turn: pipe.read holds a whole rail section and cuts itself, saying what it left out
+def read_chars(kind: str) -> int:
+    from .lookups import RAIL_READ_CHARS
+    return RAIL_READ_CHARS + 600 if kind == 'pipe.read' else 6000
+
+
 def _read(store, item: dict | None, call: dict) -> str:
     """A look-up in a turn: a task or message that does not exist, asked for over an item with no thread, says why."""
     found = read_op(store, call['kind'], call['params'])
@@ -4794,8 +4800,14 @@ def _rail_block(p: dict, cap: int = RAIL_CAP) -> str:
         if bits: rows.append(f"- {' · '.join(bits)} ({funnel.LANE_WORDS.get(i.get('lane'), ('',))[0]}"
                              + ('; a drafted reply waits for your yes' if i.get('rid') and i.get('draft') else '') + ')')
     if not rows: return ''
-    more = f"\n- ...and {len(items) - cap} more (timeline.search finds them)" if len(items) > cap else ''
-    return f'{RAIL_HEAD}\n' + '\n'.join(rows) + more             # what it is for is said once (TURN_GUIDE)
+    more = f"\n- ...and {len(items) - cap} more" if len(items) > cap else ''
+    # ...and THE WHOLE RAIL BY COUNT, with the read that holds every row: "summarize the FYI emails" was answered from the twenty
+    # titles above, the rest unknown to it (the owner, 2026-10-28: "it should know everything on the work rail")
+    from .lookups import rail_counts
+    live = [i for i in items if not i.get('settling')]
+    whole = (f"\nTHE WHOLE RAIL: {len(live)} rows ({rail_counts(live)}). pipe.read reads every one with what its sender wrote - "
+             '`section` (task, reports, fyi...) or `who` to narrow it; one call summarizes a whole section.') if live else ''
+    return f'{RAIL_HEAD}\n' + '\n'.join(rows) + more + whole       # what it is for is said once (TURN_GUIDE)
 
 
 def handle_of(i: dict) -> str:
@@ -4925,7 +4937,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             trace and trace('tool', call['kind'], {'params': call['params']})
             then = (LAST_READ if n == READ_ROUNDS - 1 else
                     'Answer them with what you just read, briefly. If it did not answer them and another look-up would, CALL that one now - never offer to look.')
-            raw = str(llm(system, f"{table}\n\nYou looked up {call['kind']} and it says:\n{_cut(found, 6000)}\n\n"
+            raw = str(llm(system, f"{table}\n\nYou looked up {call['kind']} and it says:\n{_cut(found, read_chars(call['kind']))}\n\n"
                                   f"The owner asked: {text}\n{then}",
                           max_tokens=MAX_TOKENS) or '').strip()
             raw, call = parse_call(raw)
@@ -4965,7 +4977,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                 if _ == LOOKUP_ROUNDS: break                 # out of look-ups: said below, never the promise around it
                 found = _read(store, item, call)
                 trace and trace('tool', call['kind'], {'params': call['params']})
-                ask = (f"{table}\n\nYou looked up {call['kind']} and it says:\n{_cut(found, 6000)}\n\nThe owner asked: {text}\n"
+                ask = (f"{table}\n\nYou looked up {call['kind']} and it says:\n{_cut(found, read_chars(call['kind']))}\n\nThe owner asked: {text}\n"
                        'Now CALL the action again with the exact name you read, or answer them in plain words.')
             else:
                 off = table_op_verb(call) if item else None

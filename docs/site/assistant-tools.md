@@ -16,7 +16,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear(select, scope?), pipe.defer(select, until), pipe.close(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
 | **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how), report.edit(config), report.delete |
 | **app** | settings, connections, scripts, memory | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), hub.publish(title, body, topic?, kind?, why_earned?) |
-| **look** | look-ups - they run at once and change nothing | app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.about, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
+| **look** | look-ups - they run at once and change nothing | app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, pipe.read, calendar.read, activity.list, errors.list, memory.about, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
 
 A task you name goes in `ref` ("TQ-0123"); otherwise the tool acts on what is on the table.
 
@@ -833,6 +833,15 @@ Everything waiting for the owner's yes: drafted replies and the actions agents p
 ### `pipe.list`
 
 Everything waiting on the owner, lane by lane - replies, asks, approvals, stopped agents, reports: the whole work rail. Use it for "what's waiting", "what's left", "what do I have"
+
+<p class="runs">Runs at once and changes nothing.</p>
+
+### `pipe.read`
+
+Every row on the work rail WITH WHAT IT SAYS - sender, subject, lane, age and the sender's own words (quoted history cut) - in one call, however many rows. Use it for "summarize my FYI", "what's in reports", "anything from Erin on the rail"
+
+- `section` - task | later | reports | ideas | fyi (or a lane; none for all)
+- `who` - a sender
 
 <p class="runs">Runs at once and changes nothing.</p>
 

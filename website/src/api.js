@@ -7,11 +7,13 @@ import { staleToken, UNLINKED_EVENT } from "./unlinked.js";
 import { record, recordAction } from "./lastError.js";
 import { isWrite, noteWrite } from "./wrote.js";
 import { TAB } from "./liveSeq.js";
+import { FYI_HEADER, fyiBatch } from "./fyiBatch.js";
 const api = axios.create({ baseURL: "" });
 api.interceptors.request.use((c) => {
   const t = localStorage.getItem("taskuary_token");
   if (t) c.headers["X-Taskuary-Token"] = t;
   c.headers["X-Taskuary-Tab"] = TAB;    // the wake-ups this page's own writes cause say so (liveSeq.js)
+  c.headers[FYI_HEADER] = String(fyiBatch());   // how many fyi this screen reads together (fyiBatch.js)
   recordAction(c.method, c.url);         // the shape of each write, for "Report this bug" (lastError.js)
   return c;
 });

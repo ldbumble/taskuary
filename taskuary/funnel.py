@@ -1737,14 +1737,23 @@ def notices(store, states: dict = None) -> list:
     return sorted(out, key=lambda a: str(a.get('at') or ''))
 
 
-FYI_BATCH = 4                             # FYI has no action: the normal chat walk reads four together
+FYI_BATCH = 4                             # FYI has no action: the walk reads a few together - four where no screen said how many
 FYI_BATCH_RANGE = (1, 10)                  # ...and how many is the owner's (Settings -> Assistant)
+# ...BY THE SCREEN THAT ASKED (the owner, 2026-10-28: "by default do 6 at a time so it looks combined? though if the screen is smaller maybe
+# 4 at a time - based off screen size"): the page sends X-Taskuary-Fyi-Batch on every request (website/src/fyiBatch.js) - six on a desktop,
+# four on a laptop under 800px tall or a phone - and the server's middleware puts it here for that request. A number the owner SET wins
+SCREEN_BATCH = contextvars.ContextVar('fyi_batch_screen', default=None)
 
 
 def fyi_batch_size(store) -> int:
     """How many fyi the walk puts up together. Clamped: a hand-edited 0 would empty the fyi lane
     from the walk entirely, and a 500 would answer the day in one unreadable card."""
     lo, hi = FYI_BATCH_RANGE
+    # ...the shipped '4' is a default, not a choice: only a number the owner wrote holds against the screen's (SCREEN_BATCH)
+    screen = SCREEN_BATCH.get()
+    try: own = store.setting_writer('fyi_batch') == 'owner'
+    except Exception: own = False
+    if screen and not own: return max(lo, min(hi, int(screen)))
     # ...and a store that cannot answer gets the default rather than an exception: how many fyi to
     # read together is a preference, and no preference is worth failing a selection over.
     try: n = int(str(store.get_setting('fyi_batch') or FYI_BATCH).strip())

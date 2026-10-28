@@ -405,6 +405,18 @@
 .tq-item-msg-h .at { margin-left: auto; font-size: 10.5px; color: #8a8378; white-space: nowrap; }
 .tq-item-msg-h .chev { color: #746e64; font-size: 10px; }
 .tq-item-msg-t { margin-top: 3px; font-size: 13.5px; font-weight: 600; line-height: 1.4; color: #2f2d29; overflow-wrap: anywhere; }
+/* ...a handful of FYI as ONE list (the owner, 2026-10-28: "too much space in fyi"): six to a laptop's screen. Each message an entry - its line,
+   its subject, its words right under it with no box of their own, "open the original" at the end of them - a hairline between entries */
+.tq-item-msg { padding: 7px 0; }
+.tq-item-msg + .tq-item-msg { border-top: 1px solid #eee9e1; }
+/* ...FOLDED until pressed (the owner, 2026-10-28): its line holds the subject, cut to fit, and one line of what they wrote under it */
+.tq-item-msg-h .t { flex: 1 1 12em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: #2f2d29; }
+.tq-item-msg-h .t + .at { margin-left: 0; }
+.tq-item-msg-h.press:focus-visible { outline: 2px solid #55697a; outline-offset: 2px; }
+.tq-item-msg-g { margin: 1px 0 0 20px; font-size: 12px; line-height: 1.4; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-item-msg .tq-item-msg-t { margin-top: 1px; font-size: 13px; line-height: 1.35; }
+.tq-item-sec .tq-item-msg .tq-card-full { margin-top: 1px; padding: 0; border: 0; border-radius: 0; background: none; color: #4d4a43; line-height: 1.45; }
+.tq-item-sec .tq-item-msg .tq-card-full > .tq-card-note { display: inline-block; margin: 0 0 0 8px; font-size: 10.5px; }
 .tq-item-sec .tq-fyi-acts { margin: 8px 0 0; }
 .tq-item-note { margin-top: 8px; font-size: 12px; line-height: 1.5; color: #4d4a43; }
 .tq-item-moves { font-size: 12px; line-height: 1.55; color: #4d4a43; display: grid; gap: 3px; }

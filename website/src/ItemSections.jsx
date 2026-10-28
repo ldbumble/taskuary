@@ -11,7 +11,7 @@ import { FOCUS, FOCUS_EDGE, MINI_W, SECTION, SHADE, SLOT, SectionHead, SectionTa
 import { BORDER, DIM, INK, frameInner } from "./theme.jsx";
 
 // a section's white card on the warm ground, as a task's focus is
-export const ItemPart = ({ children, ...rest }) => <Box {...rest} sx={{ ...FOCUS, px: { xs: 1.25, sm: 2 }, minWidth: 0 }}>{children}</Box>;
+export const ItemPart = ({ children, sx = null, ...rest }) => <Box {...rest} sx={{ ...FOCUS, px: { xs: 1.25, sm: 2 }, minWidth: 0, ...sx }}>{children}</Box>;
 
 // `sections`: [{ key, n, name, body, lines, foot, icon }] in the flow's order; `about`: the key the item is about (it opens there, and only it
 // folds to a full tab); `here`: the section it is up to; `height`: the canvas's (CanvasItem wordsCap) - one height, like a task's three

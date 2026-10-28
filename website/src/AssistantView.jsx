@@ -3488,9 +3488,21 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     fit(); window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);
   }, [popOpen, phone, bodyH]);
-  const winH = phone ? Math.round(vh * 0.85) : Math.min(room || vh, Math.max(520, Math.round(vh * 0.75)));
+  // ...at most HALF the screen (the owner, 2026-10-28: "not go all the way up - max 50%"), never past the canvas top
+  const winH = phone ? Math.round(vh * 0.85) : Math.min(room || vh, Math.round(vh * 0.5));
   const popH = Math.max(140, winH - boxH);
   useLayoutEffect(() => { const el = popBodyRef.current; if (el && popOpen) el.scrollTop = el.scrollHeight; }, [popOpen, winLines.length, popPending, words, popH]);
+  // ...and on a desk the window STANDS ON THE BOX in the bar, edge to edge (the owner, 2026-10-28: "the chat should come out of the bottom
+  // bar"): its right edge on the box's, its foot on the box's top - measured, since the two sit in different parents
+  useLayoutEffect(() => {
+    const pop = popRef.current, box = boxRef.current;
+    if (!pop || !box || !popOpen || phone) { if (pop) { pop.style.right = ""; pop.style.bottom = ""; } return undefined; }
+    const fit = () => { const par = pop.offsetParent?.getBoundingClientRect(), b = box.getBoundingClientRect();
+      if (!par || getComputedStyle(box).position !== "relative") { pop.style.right = ""; pop.style.bottom = ""; return; }
+      pop.style.right = `${Math.round(par.right - b.right)}px`; pop.style.bottom = `${Math.round(par.bottom - b.top)}px`; };
+    fit(); window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [popOpen, phone, popH, boxH]);
   // ...a line of its own that stands under the card on the table only while the answer is on its way (tq-pending, assistantView.css) -
   // or in the pop-up over it, where the answer it waits for will be
   const pendingLine = <>{(busy || phoneBusy || nextComing || walkDots) && (

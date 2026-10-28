@@ -151,8 +151,6 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
             {back && <button type="button" className={`tq-ab ${back.tone} next`} data-tq-back="" data-tq-walk-back="" data-tq-short={phone ? "" : undefined}
               aria-label={back.label} title={back.title || back.label} disabled={back.disabled}
               onClick={(e) => act(back.id, e, e.currentTarget, back.of)}>{phone ? "" : back.label}</button>}
-            {/* ...and with no Back (the first row) its room is kept, unseen: Next stays where the cursor is from the first item on (2026-10-28) */}
-            {!back && next && !phone && <span className={`tq-ab ${next.tone === "p" ? "s" : next.tone} next`} aria-hidden="true" data-tq-back-room="">{label("back")}</span>}
             {next && <button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} data-tq-steady={next.steady ? "" : undefined} title={next.title || undefined} disabled={next.disabled}
               onClick={(e) => act(next.id, e, e.currentTarget, next.of)}>{next.label}</button>}</div></div>}
         {fit.groups.map((g) => <Cluster key={g.type} g={g} btn={btn} act={act} />)}

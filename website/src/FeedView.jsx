@@ -148,6 +148,7 @@ function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChan
 }
 
 const PAGE = 100;
+const todayMeetingsOf = (cal, today) => splitTimelineMeetings(cal, Date.now(), tsMs).started.filter((e) => localDay(e.start) === today).length;
 
 // Today's meetings, fetched once for the rail and re-read every 30 s: a meeting that has started counts in
 // "arrived today" beside the mail that arrived (a meeting is a row too).
@@ -469,10 +470,15 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const todays = useMemo(() => (canon
     ? (canonItems || []).map(i => ({ SentAt: i.when, Category: i.category, MsgStatus: i.status }))
     : (rows || [])).filter((r) => localDay(r.SentAt) === today), [canon, canonItems, rows, today, tz]);
+  // ...but "arrived today" counts ARRIVALS, read or not (trust audit F2, 2026-10-28): the pile is the UNREAD rows, so 16 fell to 11 and 9
+  // as the owner read them. The pile carries when every recent message came in (processing_unread.arrived)
+  const arrivedToday = useMemo(() => (canon && Array.isArray(unreadInventory?.arrived)
+    ? unreadInventory.arrived.filter((at) => localDay(at) === today).length + todayMeetingsOf(calEvents, today) : null),
+  [canon, unreadInventory, today, tz, calEvents]);
   // meetings are rows too. Counting only messages meant the rail showed three lines under a
   // heading that said two - the invite was on screen and in no total.
   const todayMeetings = splitTimelineMeetings(calEvents, Date.now(), tsMs).started.filter((e) => localDay(e.start) === today).length;
-  const stats = [{ label: "arrived today", n: todays.length + (canonicalUnread ? 0 : todayMeetings) }, ...[
+  const stats = [{ label: "arrived today", n: arrivedToday ?? todays.length + (canonicalUnread ? 0 : todayMeetings) }, ...[
     { label: "auto", n: todays.filter((r) => r.ReviewStatus === "auto").length },
     { label: "info", n: todays.filter((r) => r.Category === "info").length },
     { label: "promo", n: todays.filter((r) => r.Category === "promo").length },

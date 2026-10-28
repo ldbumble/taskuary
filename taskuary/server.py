@@ -1702,6 +1702,27 @@ def _run_kind(op: dict, background: BackgroundTasks):
         try: return (concierge.defer_selected(store, p['select'], p.get('until'), ACTOR) if kind == 'pipe.defer'
                      else concierge.close_selected(store, p['select'], ACTOR))
         except ValueError as e: raise HTTPException(422, str(e))
+    if kind in ('pipe.remove', 'pipe.block', 'pipe.mine'):
+        # the phone's yes to rows the model chose (bulk.py): checked again against the rail as it is now, each by its own button's road
+        from . import bulk, concierge
+        if not p.get('select'): raise HTTPException(422, 'name the rows (select) - nothing was changed')
+        verb = bulk.VERBS[kind]
+        rows = [i for i in concierge.select_items(store, p['select']) if not bulk.refusal(i, verb)]
+        out = bulk.act(store, verb, rows, ACTOR, str(p.get('learn')).strip().lower() in ('true', '1', 'yes'))
+        return {'done': len(out['done']), 'stuck': len(out['stuck']), 'rules': out['rules'], 'links': [bulk.link(i) for i in out['done']], 'verb': verb}
+    # ...and the page-only buttons, on a phone's yes (concierge._paged): the page's own handlers
+    if kind == 'rule.change':
+        if p.get('how') != 'remove': raise HTTPException(422, 'a rule is edited on its page')
+        return delete_policy(int(op['target']))
+    if kind == 'deleted.restore': return deleted_restore(int(op['target']))
+    if kind in ('hub.comment', 'hub.vote'):
+        from . import handbook as hub
+        lid = int(op['target'])
+        if not store.lore_get(lid): raise HTTPException(404, 'no such entry')
+        if kind == 'hub.vote': return hub.vote(store, lid, 1 if p.get('up', True) else -1, ACTOR)
+        text = ' '.join(str(p.get('text') or '').split())[:4000]
+        if not text: raise HTTPException(422, 'say something')
+        return {'commentId': store.lore_comment(lid, text, ACTOR)}
     raise HTTPException(501, f'{kind} has no shared handler yet')
 
 @app.post('/api/operations/{oid}/preview')

@@ -374,7 +374,16 @@ def missed_check(store, p: dict) -> str:
              + [f"URGENT: {task_ref(t['TaskId'])} {_cut(t.get('Title'), 100)}" for t in d['urgent']])
     return NL.join(facts + ['', 'SAY IT LIKE THIS (keep every fact, in your own words if you like):', welcome.missed_says(d)])
 
-READ = {'tasks.list': tasks_list, 'message.read': message_read, 'sender.read': sender_read, 'docs.search': docs_search,
+def deleted_list(store, p: dict) -> str:
+    """RECENTLY DELETED (recentlydeleted.py): what Restore can still bring back - reports, workflows, dashboards, rules, profiles - and when it
+    goes for good. deleted.restore names one by its title."""
+    from . import recentlydeleted
+    rows = recentlydeleted.listing(store)
+    if not rows: return 'Recently deleted is empty - nothing removed in the last 30 days can be restored.'
+    return NL.join([f'RECENTLY DELETED ({len(rows)}) - each comes back with deleted.restore:']
+                   + [f"  {r['kind']}: {_cut(r['title'], 100)} ({r['days_left']} days left)" for r in rows[:30]])
+
+READ = {'deleted.list': deleted_list, 'tasks.list': tasks_list, 'message.read': message_read, 'sender.read': sender_read, 'docs.search': docs_search,
         'agents.now': agents_now, 'approvals.list': approvals_list, 'pipe.list': pipe_list, 'pipe.read': pipe_read, 'calendar.read': calendar_read,
         'activity.list': activity_list, 'errors.list': errors_list,
         'memory.list': memory_list, 'memory.about': memory_about, 'rules.list': rules_list, 'asks.list': asks_list, 'missed.check': missed_check}

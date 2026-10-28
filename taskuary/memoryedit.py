@@ -94,6 +94,43 @@ def mark(store, key: str, how: str) -> dict:
 
 
 STYLE = 'style'                 # memory.remember's section for a writing rule: STYLE.md, not LEARNED.md
+TOLD_DOCS = ('soul', 'counsel')  # ...and the two documents the chat appends to, under TOLD
+TOLD = '## Told to the Assistant'
+TOLD_INTRO = '<!-- what you told the Assistant to keep here, in your words; yours to edit or delete -->'
+# who reads each document the chat may write, said with every save (the design's routing table, 2026-10-28)
+DOC_READS = {'soul': 'read by triage · drafts · the Assistant · agents · the digest', 'counsel': 'read by the Assistant · the morning brief',
+             'style': 'read by every draft', 'style_for': 'read by the drafts to them'}
+
+
+def recipient(store, about: str) -> str:
+    """The one address a writing rule for `about` is kept under - an address or domain as given, else the one a name finds in their mail or
+    the org chart. ValueError when the name finds none, or several (the model asks which)."""
+    w = ' '.join(str(about or '').split()).lower()
+    if '@' in w or re.fullmatch(r'[\w-]+(\.[\w-]+)+', w): return w
+    hits = sorted(n for n in _names(store, w) if '@' in n)
+    if not hits: raise ValueError(f'No address is known for {about!r} - say their address, and the rule is kept for them.')
+    if len(hits) > 1: raise ValueError(f"{about!r} is more than one person here ({', '.join(hits[:4])}) - say which address.")
+    return hits[0]
+
+
+def told(store, doc: str, text: str, actor: str = 'owner') -> dict:
+    """One line appended under TOLD at the end of SOUL.md or COUNSEL.md - outside every generated block (those are spliced between their own
+    markers), never a rewrite: what was there stays, and the audit row keeps the document as it was before."""
+    from pathlib import Path
+    if doc not in TOLD_DOCS: raise ValueError(f'the chat writes only {" or ".join(TOLD_DOCS)} - not {doc!r}')
+    old = store.get_doc(doc)
+    if not (old or '').strip():                       # never written: the shipped text it reads today is what the line joins
+        old = (Path(__file__).parent / 'templates' / f'{doc}.md').read_text(encoding='utf-8')
+    line = f'- {text}'
+    if line in old.splitlines(): return {'ok': True, 'text': text, 'section': doc, 'doc': doc, 'already': True, 'title': f'{doc.upper()}.md'}
+    if TOLD in old:
+        head, rest = old.split(TOLD, 1)
+        parts = rest.split('\n## ', 1)
+        new = head + TOLD + parts[0].rstrip('\n') + '\n' + line + '\n' + ('\n## ' + parts[1] if len(parts) > 1 else '')
+    else: new = old.rstrip('\n') + f'\n\n{TOLD}\n{TOLD_INTRO}\n{line}\n'
+    store.save_doc(doc, new, actor)
+    store.audit('doc', 0, 'assistant_told', actor, detail={'doc': doc, 'line': text[:400], 'before': old})
+    return {'ok': True, 'text': text, 'section': doc, 'doc': doc, 'title': f'{doc.upper()}.md'}
 
 
 def remember(store, text: str, about: str = '', section: str = '', replaces: str = '') -> dict:
@@ -106,10 +143,20 @@ def remember(store, text: str, about: str = '', section: str = '', replaces: str
     if not t: raise ValueError('say the fact to remember')
     # a rule about HOW to write is the writing style's, not LEARNED.md's: STYLE.md's Owner notes, where an edited draft's note goes and
     # every draft reads (responder.style_feedback) - the model names the section by what the fact is (2026-10-28)
+    # ...and a rule for writing to ONE person is that person's line under By recipient, which only their drafts read (byrecipient.py)
+    if section == STYLE and str(about or '').strip():
+        from . import byrecipient
+        who = recipient(store, about)
+        byrecipient.add(store, who, t, 'owner')
+        store.audit('doc', 0, 'style_recipient', 'owner', detail={'doc': 'style', 'who': who, 'line': t[:300]})
+        return {'ok': True, 'text': t, 'section': STYLE, 'title': f'your writing style for {who}', 'doc': 'style', 'who': who, 'closed': None}
     if section == STYLE:
         from .responder import style_feedback
         style_feedback(store, t, 'owner')
         return {'ok': True, 'text': t, 'section': STYLE, 'title': 'your writing style', 'doc': 'style', 'closed': None}
+    # ...and who the owner IS (SOUL.md) and how the Assistant speaks to them (COUNSEL.md): appended, never rewritten (the owner's ruling,
+    # 2026-10-28 - "the chat may write SOUL.md and COUNSEL.md, append-only, audited"; JOB.md and TRIAGE.md never - those facts are LEARNED's)
+    if section in TOLD_DOCS: return {**told(store, section, t), 'closed': None}
     who = str(about or '').strip().lower()
     if who and '@' in who and who not in t.lower(): t = f'{t} ({who})'
     slug = section if section in lc.SECTIONS else 'people' if (who or lc.subject_of(t)) else 'care'

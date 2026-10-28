@@ -1876,7 +1876,7 @@ def task_detail(task_id: int):
     # happened - the Done and Pause buttons used to vanish with the pty
     tr = store.last_transcript(task_id)
     rs = _resumable(task_id)[0]
-    from . import concierge, origin, workflows
+    from . import assistant, concierge, origin, workflows
     # ...and whether its channel can carry a reply, as /api/reviews says: without it a Teams draft offered Send, and
     # the press came back "not sent" instead of the card offering Copy & close from the start
     memo = {}
@@ -1906,6 +1906,8 @@ def task_detail(task_id: int):
             'messages': [_readable(x) for x in d.get('messages') or []],
             # ...and the earlier messages triage said its ask rests on, shown with them, never moved onto this task (rests_on, 2026-10-22)
             'earlier': _earlier(d),
+            # ...and a task Taskuary itself raised (an Advisor idea): who, and its one sentence - Came from's line, not a message card
+            'raised': assistant.raised(store, d['task'], d.get('messages')),
             # ...and on a promise task, the owner's own mail the promise was made in, with whom it was made to: the page answers it as a
             # task's reply source, so Close out says "Answering <them>" and the row leads with Reply (store.promised_in, 2026-10-26)
             'owed': _owed(d),

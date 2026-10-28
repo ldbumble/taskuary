@@ -34,8 +34,10 @@ class FindingApartTests(unittest.TestCase):
         self.assertEqual((line['action']['whose'], line['action']['suggest']), ('the Ops Team', 'Skim it once before Monday for anything aimed at you.'))
         i = s.upsert_idea(line, ago(minutes=1))
         msg, _, _ = assistant._idea_message(s, i, line['action'])
-        self.assertIn('whose move: the Ops Team', msg['body'])
-        self.assertIn("the Advisor's suggestion: Skim it once", msg['body'])
+        # ...beside its words, never in them: the body is what a task made from it shows as the message (2026-10-28)
+        self.assertEqual(msg['idea_context']['whose'], 'the Ops Team')
+        self.assertTrue(msg['idea_context']['suggest'].startswith('Skim it once'))
+        self.assertNotIn('whose move', msg['body'])
 
     def test_a_null_suggestion_is_no_suggestion(self):
         s = MemoryStore()

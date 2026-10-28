@@ -2579,19 +2579,37 @@ class SQLiteStore:
         is nearly always on the thread's own task already (task_for_promise links it only when it is free), and an Advisor
         idea on a closed task's mail opens a fresh task - a message points at one task, so the task carries its message in
         SourceRef ('promise:<mid>', 'assistant:idea:<n>' -> idea.MessageId) and Came from reads it from there, never moving it."""
-        ref, mid = str(t.get('SourceRef') or ''), None
-        if ref.startswith('promise:') and ref[8:].isdigit(): mid = int(ref[8:])
-        elif ref.startswith('assistant:idea:') and ref[15:].isdigit():
-            i = self._one("SELECT COALESCE(MessageId, json_extract(ActionJson,'$.mid')) Mid FROM idea WHERE IdeaId=?", (int(ref[15:]),))
-            mid = (i or {}).get('Mid')
-        m = self.get_message(mid) if mid else None
-        if not m or m.get('Channel') == 'assistant': return []      # an idea read off the Advisor's own line has no source to show
-        if not m.get('ConversationId'): return [m]
-        q = ("SELECT * FROM message WHERE ConversationId=? AND Status<>'skipped' AND IFNULL(Channel,'')<>'assistant' AND MessageId<>? "
-             'AND SentAt{} ? ORDER BY SentAt {} LIMIT ?')
-        a = (m['ConversationId'], m['MessageId'], m.get('SentAt') or '')
-        # ...a window, not the whole thread: a family chat a promise was made in runs to thousands of lines
-        return list(reversed(self._rows(q.format('<=', 'DESC'), a + (before,)))) + [m] + self._rows(q.format('>', 'ASC'), a + (after,))
+        ref, mids = str(t.get('SourceRef') or ''), []
+        if ref.startswith('promise:') and ref[8:].isdigit(): mids = [int(ref[8:])]
+        elif ref.startswith('assistant:idea:') and ref[15:].isdigit(): mids = self.idea_sources(self.get_idea(int(ref[15:])))
+        ms = [m for m in map(self.get_message, mids) if m and m.get('Channel') != 'assistant']   # the Advisor's own line is no source
+        if not ms: return []
+        m, out = ms[0], []
+        if m.get('ConversationId'):
+            q = ("SELECT * FROM message WHERE ConversationId=? AND Status<>'skipped' AND IFNULL(Channel,'')<>'assistant' AND MessageId<>? "
+                 'AND SentAt{} ? ORDER BY SentAt {} LIMIT ?')
+            a = (m['ConversationId'], m['MessageId'], m.get('SentAt') or '')
+            # ...a window, not the whole thread: a family chat a promise was made in runs to thousands of lines
+            out = list(reversed(self._rows(q.format('<=', 'DESC'), a + (before,)))) + [m] + self._rows(q.format('>', 'ASC'), a + (after,))
+        else: out = [m]
+        # ...and the other mails the idea's evidence cites (the follow-up on another thread), oldest first among them
+        seen = {x['MessageId'] for x in out}
+        return out + sorted((x for x in ms[1:] if x['MessageId'] not in seen), key=lambda x: x.get('SentAt') or '')
+    def idea_sources(self, i) -> list:
+        """The messages an Advisor idea is ABOUT, its own pick first: the mail it names (`mid`), then the ones its evidence cites ("Erin
+        mid 41 vs Gail mid 42"), then the line it was read off. idea.MessageId is the Advisor post that SAID it - a task made from the
+        idea used to show that post as what came in, and never the mail the idea was talking about (2026-10-28)."""
+        if not i: return []
+        try: a = json.loads(i.get('ActionJson') or '{}') or {}
+        except (ValueError, TypeError): a = {}
+        cited = [int(n) for g in re.findall(r'\bmids?[\s#:=]*(\d+(?:\s*(?:,|/|&|and)\s*#?\d+)*)', str(a.get('why') or ''))
+                 for n in re.findall(r'\d+', g)]
+        out = []
+        for x in [a.get('mid'), *cited[:4], i.get('MessageId')]:
+            try: x = int(x)
+            except (TypeError, ValueError): continue
+            if x not in out: out.append(x)
+        return out
     def task_for_promise(self, mid: int, what: str, due) -> int:
         """The owner's own promise as a task on them (spec 2026-10-12): made once per sent message, dated when it was,
         saying whom it was made to and carrying the thread it was made in (the review, 2026-10-12: a title alone)."""

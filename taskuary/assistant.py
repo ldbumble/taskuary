@@ -1603,15 +1603,43 @@ def _idea_message(store, i: dict, a: dict, report_title=None) -> tuple:
     stamp = i.get('LastSaid') or i.get('FirstSeen') or datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     who = report_title or 'Advisor'
     # one arrival per idea: the stamp in the id made every re-say a fresh message, and a fresh task once the first closed
+    # ...its body is the idea's own words and nothing else: whose move, the suggestion and the why are triage's to read in idea_context.
+    # Written into the body they were stored on the task's message and drawn on Came from as if someone had sent "whose move: the
+    # owner the Advisor's suggestion: ..." (2026-10-28)
     msg = {'external_id': f"idea:{i['IdeaId']}", 'channel': CHANNEL, 'from_name': who, 'source_name': who,
            'conversation_id': str(i.get('Key') or f"idea:{i['IdeaId']}"), 'subject': f"Advisor idea: {_cut(i.get('Text'), 100)}",
-           'sent_at': stamp, 'body': str(i.get('Text') or '') + (f"\n\nwhose move: {a['whose']}" if a.get('whose') else '')
-                                    + (f"\nthe Advisor's suggestion: {a['suggest']}" if a.get('suggest') else '')
-                                    + (f"\n\nwhy: {a.get('why')}" if a.get('why') else ''),
+           'sent_at': stamp, 'body': str(i.get('Text') or ''),
            'idea_context': {'report': report_title, 'kind': i.get('Kind'),
+                            **{k: a[k] for k in ('whose', 'suggest', 'why') if a.get(k)},
                             'linked_task': f"{task_ref(tid)} [{task.get('Status')}] {_short(task.get('Title'), 80)}" if task else None,
                             'worker': 'an agent is working that task now' if working else ('nobody has that task' if task else None)}}
     return msg, (tid if task else None), active
+
+
+def attach_sources(store, i: dict, tid: int) -> list:
+    """A task an idea OPENED carries the mail(s) the idea was about (store.idea_sources): each one no task holds yet is moved onto it,
+    as a task made from a mail would be - so Came from shows the sender's mail, and the reply answers them. One already on another
+    task stays there (a message points at one task); Came from shows it from the idea (store.made_from). Returns the ids moved."""
+    moved = []
+    for mid in store.idea_sources(i):
+        m = store.get_message(mid)
+        if not m or m.get('Channel') == CHANNEL or m.get('TaskId'): continue
+        store.attach_message(mid, tid); moved.append(mid)
+    return moved
+
+
+def raised(store, t: dict, messages=()) -> dict | None:
+    """Who raised a task Taskuary itself wrote (an Advisor idea) and what it said - Came from's one line, never a message card.
+    {by, text} or None: the idea the task was made from, else an idea line that joined it."""
+    ref = str((t or {}).get('SourceRef') or '')
+    lines = [m for m in messages or () if m.get('Channel') == CHANNEL and str(m.get('ExternalId') or '').startswith('idea:')]
+    iid = ref[15:] if ref.startswith('assistant:idea:') else str(lines[0]['ExternalId'])[5:] if lines else ''
+    i = store.get_idea(int(iid)) if iid.isdigit() else None
+    line = next((m for m in lines if m['ExternalId'] == f'idea:{iid}'), lines[0] if lines else None)
+    # ...an older line carries the format text in its body: the idea's own words come off the idea, else before it
+    text = (i or {}).get('Text') or re.split(r'\n\s*\n?(?:whose move|the Advisor\'s suggestion|why):', str((line or {}).get('BodyText') or ''))[0]
+    text = ' '.join(str(text or '').split())
+    return {'by': str((line or {}).get('FromName') or 'Advisor'), 'text': text} if text and (i or line) else None
 
 
 def retry_stuck_ideas(store, report_id=None, report_title: str = None) -> int:
@@ -1682,6 +1710,7 @@ def triage_ideas(store, rows: list, llm, report_title: str = None) -> list:
                     # only work the idea OPENED is the idea's: one joined to open work keeps where that work came from (2026-10-22)
                     if out.get('status') == 'created':
                         store.update_task(out['task_id'], {'SourceRef': f"assistant:idea:{i['IdeaId']}"}, 'assistant')
+                        attach_sources(store, {**i, 'ActionJson': json.dumps(a)}, out['task_id'])
             except Exception as e:
                 a['triage'] = {'error': f'opening the work failed: {str(e)[:160]}', 'sig': i.get('Sig') or '', 'at': now}
         store.set_idea_action(i['IdeaId'], a); done.append(i['IdeaId'])
@@ -2084,6 +2113,7 @@ def _make_task(store, i: dict, a: dict, agent: bool, actor: str) -> dict:
         if prior: store.add_comment(tid, NOTE_ACTOR, 'assistant_agent', f"Opened from an Advisor idea; the earlier task {task_ref(prior['TaskId'])} is done.")
         store.audit('task', tid, 'create_from_assistant_idea', actor, detail={'idea_id': i['IdeaId'], 'message_id': a.get('mid'),
                                                                               'related_task_id': (prior or {}).get('TaskId')})
+    if not t: attach_sources(store, i, tid)               # ...and the follow-up its evidence cites that no task holds yet
     if not t and a.get('title'): store.update_task(tid, {'Title': str(a['title'])[:200]}, actor)
     store.set_idea_action(i['IdeaId'], a | {'tid': tid})
     if agent:

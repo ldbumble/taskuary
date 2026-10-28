@@ -1349,23 +1349,28 @@ export function BriefCard({ card, onStart }) {
   );
 }
 
-// ONE MESSAGE IN AN FYI'S CAME FROM: who, on what, when, what it is about, then its own words (children). `onHead`: its line is the press
-// that opens its own moves under it (a batch's, as its card's lines are)
+// ONE MESSAGE IN AN FYI'S CAME FROM, an entry in the batch's one list (FyiSections' .tq-item-msgs). FOLDED UNTIL OPENED (the owner,
+// 2026-10-28: "this should be closed if it's a fyi email unless you open it" - two mails' signatures and logos filled the screen): one
+// line - who, the subject, when - and a line of what they wrote (gistFor: their words, no quoted chain, no pictures). Its line is the press
+// that opens it: its whole text, pictures and "open the original" (children, mounted only then) and, in a batch, its own moves. `open` and
+// `onHead` hand the state to the batch (one open at a time); without them the message keeps its own
 const whoName = (w) => String(w || "someone").replace(/\s*<[^>]*>/g, "") || "someone";
-export function FyiMessage({ item, onHead = null, open = false, children }) {
-  const head = <>
-    <SourceMark item={item} size={13} /><b>{whoName(item.who)}</b>
-    <span className="ch">{channelWord(item.channel || "email")}</span>
-    {(item.since || item.when) && <span className="at">{fmtDateTime(item.since || item.when)}</span>}
-    {onHead && <span className="chev">{open ? "▾" : "▸"}</span>}
-  </>;
+export function FyiMessage({ item, onHead = null, open: held = null, children }) {
+  const [mine, setMine] = useState(false);
+  const open = held ?? mine, gist = gistFor(item);
   return (
-    <ItemPart data-tq-fyi-msg={item.key || ""} data-tq-open={open ? "" : undefined}>
-      {onHead ? <button type="button" className="tq-item-msg-h press" onClick={onHead} aria-expanded={open} title={open ? "Fold its moves" : "Its moves"}>{head}</button>
-        : <div className="tq-item-msg-h">{head}</div>}
-      {item.title && <div className="tq-item-msg-t">{item.title}</div>}
-      {children}
-    </ItemPart>
+    <div className="tq-item-msg" data-tq-fyi-msg={item.key || ""} data-tq-open={open ? "" : undefined}>
+      <button type="button" className="tq-item-msg-h press" onClick={onHead || (() => setMine((o) => !o))} aria-expanded={open} title={open ? "Fold it" : "Read it here"}>
+        <SourceMark item={item} size={13} /><b>{whoName(item.who)}</b>
+        <span className="ch">{channelWord(item.channel || "email")}</span>
+        {!open && item.title && <span className="t">{item.title}</span>}
+        {(item.since || item.when) && <span className="at">{fmtDateTime(item.since || item.when)}</span>}
+        <span className="chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
+      </button>
+      {!open && gist && <div className="tq-item-msg-g">{gist}</div>}
+      {open && item.title && <div className="tq-item-msg-t">{item.title}</div>}
+      {open && children}
+    </div>
   );
 }
 
@@ -1380,7 +1385,8 @@ function FyiSections({ card, table, items, msgs, foot, err, next }) {
     sections={[
       { key: "from", n: 1, name: STEPS[0].name, lines: [`${plural(n, "message")} · nothing to decide`, ...items.slice(0, 3).map((i) => `${whoName(i.who)}: “${i.title || ""}”`)],
         foot: "✓ Sorted: FYI",
-        body: <>{msgs}<CardErr err={err} /></> },
+        // ...the handful as ONE list in one card (the owner, 2026-10-28: "too much space in fyi"): a hairline between messages, not a card each
+        body: <><ItemPart className="tq-item-msgs" sx={{ py: 0.25 }}>{msgs}</ItemPart><CardErr err={err} /></> },
       { key: "agent", n: 2, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "#746e64" }} />, lines: ["not started"],
         body: <ItemPart data-tq-fyi-agent="">
           <div className="tq-thr-h"><b>No agent yet</b></div>
@@ -1457,8 +1463,8 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose, onAge
     then={<><b>{btn("next", "batch")}</b> marks {items.length === 1 ? "it" : `all ${items.length}`} read - search finds {items.length === 1 ? "it" : "them"} later.</>}
     where={null} />;
   // ON THE TABLE, IN A TASK'S THREE SECTIONS (ItemSections; the owner, 2026-10-28: "even fyi we should explore it opening on what came in all
-  // together"): Came from open on every message of the handful at once - who, when, and each one's own words, whole - and a message's own
-  // moves under it when its line is pressed, as on the card; Agent and Close out the slim tabs, All read, next still the row's way on
+  // together"): Came from open on every message of the handful at once - each one line, who, what and when, and a line of its words - and
+  // the one pressed opened whole with its own moves under it, as on the card; Agent and Close out the slim tabs, All read, next the row's
   if (table != null) return (
     <FyiSections card={card} table={table} items={items} err={err} foot={foot} next={{ label: btn("next", "batch"), title: btnHint("next", "batch") }}
       msgs={items.map((i) => (

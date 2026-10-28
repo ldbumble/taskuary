@@ -1628,7 +1628,7 @@ def attach_sources(store, i: dict, tid: int) -> list:
     return moved
 
 
-def raised(store, t: dict, messages=()) -> dict | None:
+def raised_by(store, t: dict, messages=()) -> dict | None:
     """Who raised a task Taskuary itself wrote (an Advisor idea) and what it said - Came from's one line, never a message card.
     {by, text} or None: the idea the task was made from, else an idea line that joined it."""
     ref = str((t or {}).get('SourceRef') or '')

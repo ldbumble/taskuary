@@ -94,7 +94,7 @@ ACTIONS = {
 SETTING_ALLOW = {
     'coding_auto_enabled': 'start the coding agent automatically on new coding work',
     'intent_classify_enabled': 'let the brain classify inbound mail at all',
-    'answer_to_agent': 'what happens when an answer arrives for a waiting agent (auto / ask / off)',
+    'answer_to_agent': 'what happens when an answer arrives for a waiting agent (auto / ask / off); off also keeps new work on a task out of its live agent',
     'poll_minutes': 'how often the mailboxes are read',
     'funnel_hours': 'how far back the pipe reaches',
     'funnel_max': 'how much the pipe holds at once',

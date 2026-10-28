@@ -5,10 +5,10 @@ then asks for more on the same task, over and over. Every line reopened and reti
 never heard any of it until the owner pressed Continue. Now the new line is the stopped conversation's next turn - only where a
 fresh task would have started its agent by itself, never over a live session, and never for a question (that is a drafted reply).
 """
-import json, unittest
+import json, tempfile, unittest
 from unittest import mock
 
-from taskuary import continuity, general, ingest, senders
+from taskuary import continuity, general, ingest, senders, terminal
 from taskuary.ingest import ingest_message
 from taskuary.store import MemoryStore
 
@@ -31,8 +31,8 @@ def store(**settings):
     return s
 
 
-def ingested(s, m, intent='task'):
-    with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=True), \
+def ingested(s, m, intent='task', wrote=True):
+    with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=wrote), \
          mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude', 'type': 'cli'}]):
         out = ingest_message(s, m, llm=llm_says(intent))
     return out, [getattr(c[0][0], '__name__', '') for c in spawn.call_args_list]
@@ -89,10 +89,10 @@ class CarryOnTests(unittest.TestCase):
         _out, spawned = ingested(s, mail(**AGAIN))
         self.assertEqual(spawned, [])
 
-    def test_a_coding_task_waits_for_the_owners_continue(self):
+    def test_a_coding_task_with_no_saved_session_waits_for_the_owners_continue(self):
         s = store(); tid = finished_task(s)
         s.update_task(tid, {'Kind': 'coding'}, 't')
-        self.assertEqual(ingest.carry_on_why(s, tid, mail(**AGAIN), None, {'intent': 'task'}), "not the assistant's task")
+        self.assertEqual(ingest.carry_on_why(s, tid, mail(**AGAIN), None, {'intent': 'task'}), 'no saved coding session to reopen')
 
     def test_the_turn_is_continue_told_what_came_in(self):
         s = store(); tid = finished_task(s)
@@ -106,6 +106,124 @@ class CarryOnTests(unittest.TestCase):
         self.assertEqual(args[0], continuity.RESUME_PROMPT)
         self.assertEqual((kw['as_owner'], kw['delivery_instructions']), (False, 'NEW SINCE YOUR LAST TURN: one message'))
         self.assertNotIn(tid, general.OPENING)
+
+
+STRANGER = dict(external_id='x3', body='Please also send us the full ledger export.', from_email='rep@vendor.example', from_name='Sam Rook',
+                sent_at='2026-10-28 11:00')
+
+
+def coding_task(s, cwd):
+    """A coding task its CLI worked and stopped, its conversation saved under the id the CLI gave it."""
+    tid = finished_task(s)
+    s.update_task(tid, {'Kind': 'coding'}, 't')
+    s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+    s.add_transcript(tid, 'sid1', 'fixed the import', agent='coder', cwd=cwd, ext_id='cli-conv-1', brain='cli:claude')
+    return tid
+
+
+class Live:
+    """A pty coding session as the registry holds it: alive, its seed in, nothing on screen but its prompt."""
+    def __init__(self, tid): self.task_id, self.alive, self.accepted, self.n = tid, True, True, 0
+    def status_tail(self, n): return ['> ']
+
+
+class CodingCarryOnTests(unittest.TestCase):
+    """The owner, 2026-10-28: "coding should be the same as general agents if triage decides it needs that"."""
+    def setUp(self): self.cwd = tempfile.mkdtemp()
+
+    def test_a_stopped_coding_task_reopens_its_own_session(self):
+        s = store(); tid = coding_task(s, self.cwd)
+        out, spawned = ingested(s, mail(**AGAIN))
+        self.assertEqual((out['task_id'], spawned), (tid, ['_continue_coding']))
+        self.assertTrue(any('coding agent reopens its own session' in c['Body'] for c in s.list_comments(tid)))
+        self.assertIn(tid, ingest.CODING_OPENING)
+        with mock.patch.object(terminal, 'start_on_task') as start: ingest._continue_coding(s, tid)
+        args, kw = start.call_args
+        self.assertEqual((args[1], args[2], args[4], args[5]), (tid, 'coder', None, 'router'))     # no instruction: resume_seed says what is new
+        self.assertEqual((kw['resume'], kw['cwd'], kw['brain']), ('cli-conv-1', self.cwd, 'cli:claude'))
+        self.assertNotIn(tid, ingest.CODING_OPENING)
+
+    def test_not_when_coding_starts_are_switched_off(self):
+        s = store(coding_auto_enabled='0'); tid = coding_task(s, self.cwd)
+        self.assertNotIn('_continue_coding', ingested(s, mail(**AGAIN))[1])
+        self.assertTrue(ingest.carry_on_why(s, tid, mail(**AGAIN), None, {'intent': 'task'}))
+
+    def test_not_when_its_checkout_is_gone(self):
+        s = store(); tid = coding_task(s, self.cwd + '-gone')
+        self.assertIn('no longer exists', ingest.carry_on_why(s, tid, mail(**AGAIN), None, {'intent': 'task'}))
+
+
+class PassInTests(unittest.TestCase):
+    """New related work on a task whose agent is LIVE goes into that session as its next turn - never sent, never a stranger's."""
+    def test_a_running_assistant_gets_the_line_queued_as_its_next_turn(self):
+        s = store(); tid = finished_task(s)
+        ses = mock.Mock(busy=True)
+        with mock.patch.object(general, 'session_for', return_value=ses):
+            _out, spawned = ingested(s, mail(**AGAIN))
+            self.assertEqual(spawned, ['_pass_general'])                    # not a carry-on, not a second agent
+            ingest._pass_general(s, tid, mail(**AGAIN))
+        args, kw = ses.send_prompt.call_args
+        self.assertIn('price the second site', args[0]); self.assertIn("not the owner's", args[0])
+        self.assertEqual((kw['as_owner'], kw['echo']), (False, False))
+        self.assertTrue(any("Passed Erin Blake's new message to the agent" in c['Body'] for c in s.list_comments(tid)))
+
+    def test_a_line_during_a_carried_on_turn_waits_for_that_turn_then_follows_it(self):
+        s = store(); tid = finished_task(s)
+        ses, looks = mock.Mock(busy=False), []
+        def session_for(t):                     # the carried-on turn takes the session on the third look
+            looks.append(1); ses.busy = len(looks) >= 3; return ses
+        general.OPENING.add(tid)
+        try:
+            with mock.patch.object(general, 'session_for', side_effect=session_for), mock.patch.object(ingest.time, 'sleep'):
+                self.assertEqual(ingested(s, mail(**AGAIN))[1], ['_pass_general'])     # queued, not dropped
+                ingest._pass_general(s, tid, mail(**AGAIN))
+        finally: general.OPENING.discard(tid)
+        self.assertGreaterEqual(len(looks), 3); ses.send_prompt.assert_called_once()
+
+    def test_a_running_coding_agent_has_it_typed_into_its_session(self):
+        s = store(); tid = finished_task(s); s.update_task(tid, {'Kind': 'coding'}, 't')
+        with mock.patch.dict(terminal.SESSIONS, {'p1': Live(tid)}, clear=True):
+            _out, spawned = ingested(s, mail(**AGAIN))
+            self.assertEqual(spawned, ['_pass_coding'])
+            with mock.patch.object(terminal, 'queue_codex', return_value=False), mock.patch.object(terminal, 'type_into') as typed:
+                ingest._pass_coding(s, tid, mail(**AGAIN))
+        self.assertIn('price the second site', typed.call_args[0][1])
+        self.assertTrue(any("Passed Erin Blake's new message to the agent (typed into" in c['Body'] for c in s.list_comments(tid)))
+
+    def test_a_chooser_on_screen_is_never_typed_into(self):
+        s = store(); tid = finished_task(s); s.update_task(tid, {'Kind': 'coding'}, 't')
+        with mock.patch.dict(terminal.SESSIONS, {'p1': Live(tid)}, clear=True), mock.patch.object(terminal, 'chooser_in', return_value=True), \
+             mock.patch.object(terminal, 'say_to_task') as say:
+            ingest._pass_coding(s, tid, mail(**AGAIN))
+        say.assert_not_called()
+
+    def test_a_stranger_is_never_typed_into_an_agent(self):
+        s = store(); tid = finished_task(s)
+        with mock.patch.object(general, 'session_for', return_value=mock.Mock(busy=True)):
+            out, spawned = ingested(s, mail(**STRANGER), wrote=False)
+        self.assertEqual((out['task_id'], spawned), (tid, []))
+        self.assertTrue(any("Sam Rook's new message was not passed to the agent" in c['Body'] and 'waits for you' in c['Body']
+                            for c in s.list_comments(tid)))
+
+    def test_the_owners_off_switch_means_never(self):
+        s = store(answer_to_agent='off'); tid = finished_task(s); s.update_task(tid, {'Kind': 'coding'}, 't')
+        with mock.patch.dict(terminal.SESSIONS, {'p1': Live(tid)}, clear=True), mock.patch.object(terminal, 'say_to_task') as say:
+            _out, spawned = ingested(s, mail(**AGAIN))
+        self.assertEqual(spawned, []); say.assert_not_called()
+
+    def test_a_question_is_still_a_drafted_reply(self):
+        s = store(); finished_task(s)
+        with mock.patch.object(general, 'session_for', return_value=mock.Mock(busy=True)):
+            _out, spawned = ingested(s, mail(**{**AGAIN, 'body': 'Did you get my last note?'}), intent='reply_only')
+        self.assertNotIn('_pass_general', spawned)
+
+    def test_nothing_is_ever_sent(self):
+        s = store(); tid = finished_task(s)
+        with mock.patch.object(general, 'session_for', return_value=mock.Mock(busy=True)), \
+             mock.patch('taskuary.outbound.send_out') as send:
+            ingested(s, mail(**AGAIN)); ingest._pass_general(s, tid, mail(**AGAIN))
+        send.assert_not_called()
+        self.assertFalse([a for a in s._rows('SELECT * FROM audit WHERE EntityId=?', (str(tid),)) if 'sent' in a['Action']])
 
 
 if __name__ == '__main__': unittest.main()

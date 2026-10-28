@@ -67,6 +67,16 @@ def test_an_agreeing_line_on_the_items_own_facts_still_goes(w):
     assert (d['verb'], d['by'], d['line']) == ('reply', 'rule', ''), d
 
 
+def test_a_differing_verbs_long_line_is_cut_at_a_word(w):
+    """The model's verb over the rule's keeps its line, cut to 64 at a word: "...and is waiting on y" read as a slip (the sweep, 2026-10-27)."""
+    s, _ = w
+    t = ask(s, 'erin', 'Offsite agenda', 'Can you check the offsite agenda before Thursday?')
+    long = 'Erin already has the agenda from the planning group and nobody is waiting on you'
+    d, _ = judged(s, t, {'verb': 'close', 'line': long, 'evidence': []})
+    assert (d['verb'], d['by']) == ('close', 'model'), d
+    assert len(d['line']) <= 64 and d['line'].endswith('…') and long.startswith(d['line'][:-1]) and long[len(d['line']) - 1] == ' ', d['line']
+
+
 def test_a_forgotten_line_rests_on_nothing(w):
     s, _ = w
     plant(s, 'people', ERIN)

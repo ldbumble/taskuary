@@ -145,3 +145,16 @@ test("the result reads the write-up's own parts, each once, and nothing it did n
   assert.match(page, /title=\{!term\?\.alive \? \(resultShown \? "Result" : "Agent work"\)/);
   assert.match(page, /rowState === "agentdone" && \(\s*<Typography data-tq-handled="" [^>]*>Nothing to do\. It's handled\.<\/Typography>\)/);
 });
+
+// THE RESULT AT REST (the owner, 2026-10-27): what it did and what it based it on, and what it made listed once
+test("the Result's summary: the write-up's summary and what it found, else its last message's first paragraph; a shown copy of an output once", async () => {
+  const { resultLine, madeOnce } = await import("../src/agentRecord.js");
+  assert.deepEqual(resultLine({ report: { summary: "Wrote a one-page plan.", decided: "Erin asked for one box per site." } }),
+    { did: "Wrote a one-page plan.", found: "Erin asked for one box per site." });
+  const s = { steps: [{ k: "said", text: "I've written the plan for Erin.\n\n**Steps:**\n1. Buy it." }] };
+  assert.deepEqual(resultLine(s), { did: "I've written the plan for Erin.", found: "" });
+  assert.deepEqual(resultLine(null, "Only its last words."), { did: "Only its last words.", found: "" });
+  assert.equal(resultLine({ report: { summary: "Same.", decided: "Same." } }).found, "");
+  const made = madeOnce([{ id: 1, name: "Pilot-plan.md", kind: "shown" }], [{ id: "o1", name: "pilot-plan.md", kind: "output" }, { id: "o2", name: "costs.xlsx", kind: "output" }]);
+  assert.deepEqual(made.map((p) => p.id), [1, "o2"]);
+});

@@ -44,6 +44,14 @@ test("the layout: two columns whenever no agent is live - a Result and a failure
   // the focus: the Result (or the failed run) once an agent acted, the reply where that is the move; none while live
   assert.equal(focusOf({ result: true, pane: "reply" }), "agent");
   assert.equal(focusOf({ failed: true }), "agent");
+  // ...but a draft or emails waiting for Send are the next move: Close out is white, the Result shaded above it (2026-10-27), and the stage is
+  // close_out - the work view, so the main view does not change
+  assert.equal(focusOf({ result: true, pane: "reply", owed: true }), "reply");
+  assert.equal(focusOf({ result: true, pane: "agent", owed: true }), "reply");
+  assert.equal(focusOf({ failed: true, owed: true }), "reply");
+  assert.equal(focusOf({ live: true, owed: true }), null);
+  assert.equal(focusOf({ waiting: true, owed: true }), "none");
+  assert.equal(mainOf({ focus: focusOf({ result: true, owed: true }), drafted: true }), "work");
   assert.equal(focusOf({ pane: "reply" }), "reply");
   assert.equal(focusOf({ live: true, result: true }), null);
   // ...and the owner's answers (2026-10-25): a to-do or a goal whitens its own list, else the block with the ask's source - never
@@ -59,7 +67,9 @@ test("the layout: two columns whenever no agent is live - a Result and a failure
   assert.match(src, /onClickCapture=\{stacked \? phoneFromTap : undefined\}/);
   // ...while what a finished agent offers stays where it was: Close out and its record are drawn whenever no session fills the page
   assert.match(src, /\{!sessionView && <Box ref=\{closeOutRef\} data-tq-closeout=""/);
-  assert.match(src, /\{!sessionView && hasRecord && \(/);
+  // ...its record behind the Result's heading while the Result rests on its summary (2026-10-27: "click Result to see more")
+  assert.match(src, /\{!sessionView && hasRecord && !resultRest && \(/);
+  assert.match(src, /\{resultRest && !sessionView && <ResultSummary /);
 });
 
 // ...and the tab reads as a press (the owner, 2026-10-22: the line looked like plain grey text; 2026-10-26: "make it with arrow and more

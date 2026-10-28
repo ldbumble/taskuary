@@ -71,21 +71,22 @@ test("one row: the action row and the box share a line, the answer pops up over 
   const body = await box(page, ".tq-chat-body");
   assert.ok(pop.y < body.y + body.h && pop.y > body.y, `...over the canvas the task view stands on ${JSON.stringify({ pop, body })}`);
   assert.deepEqual(await box(page, "[data-tq-canvas-item]"), view, "the task view did not move");
-  assert.ok(pop.h <= Math.max(180, Math.ceil(0.45 * body.h)) + 2, `a few turns tall at most ${JSON.stringify({ pop, body })}`);
+  assert.ok(pop.h + input.h <= 0.6 * 810 + 2, `the chat window is at most ~60% of the screen ${JSON.stringify({ pop, input })}`);
   assert.equal(await page.$$eval(".tq-chat-body .tq-msg.you", (els) => els.filter((e) => e.textContent.includes("what does Tom want")).length), 0, "the line is not drawn under the task as well");
   assert.ok((await box(page, ".tq-dock")).h <= dock.h, "the dock did not grow");
 
-  // ESC shuts it; the box's own button brings it back
+  // ESC shuts the chat window, the box back to its pill; the pill opens it again on the same conversation (the chat window, 2026-10-28)
   await page.keyboard.press("Escape");
   await page.waitForSelector("[data-tq-chat-pop][hidden]", { timeout: 5000 });
+  await page.waitForFunction(() => !document.querySelector(".tq-compose-box[data-tq-open]"), { timeout: 5000 });
   assert.deepEqual(await box(page, "[data-tq-canvas-item]"), view, "the task view did not move");
-  await page.click("[data-tq-pop-again]");
-  await page.waitForSelector("[data-tq-chat-pop]:not([hidden])", { timeout: 5000 });
-  // ...and a press outside it shuts it too
-  await page.click("[data-tq-task-head]");
-  await page.waitForSelector("[data-tq-chat-pop][hidden]", { timeout: 5000 });
-  // ...Esc in an empty box gives the pill back
   await page.click(".tq-compose-box textarea");
+  await page.waitForSelector("[data-tq-chat-pop]:not([hidden])", { timeout: 5000 });
+  assert.match(await page.$eval("[data-tq-chat-pop]", (e) => e.textContent), /what does Tom want/, "the same conversation");
+  // ...and a press outside it leaves it open: only its × or Esc shuts it
+  await page.click("[data-tq-task-head]");
+  await sleep(300);
+  assert.equal(await page.$eval("[data-tq-chat-pop]", (e) => e.hidden), false, "a press outside leaves it open");
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => !document.querySelector(".tq-compose-box[data-tq-open]"), { timeout: 5000 });
   assert.deepEqual(errors, []);

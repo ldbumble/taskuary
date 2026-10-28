@@ -230,8 +230,10 @@ test("a task waiting on a person says who and when it was due", () => {
 // foot (a book's spine) the one status line
 test("the three sections come in the flow's order, and each closed tab says where it stands", () => {
   assert.deepEqual(SECTIONS.map((s) => `${s.n} · ${s.name}`), ["1 · Came from", "2 · Agent", "3 · Close out"]);
-  assert.deepEqual(fromStatus({ who: "Erin Blake", channel: "WhatsApp", when: "6:08 PM", words: "So let's\nbuild one.", count: 5, sorted: "Sorted: a reply to send · regular priority" }),
-    { lines: ["Erin Blake · WhatsApp · 6:08 PM", "“So let's build one.”", "5 messages"], foot: "✓ Sorted: a reply to send · regular priority" });
+  // ...at a glance: on what and how many, then the last messages - who and a short line each, three at most
+  assert.deepEqual(fromStatus({ channel: "WhatsApp", count: 5, sorted: "Sorted: a reply to send · regular priority",
+    msgs: [{ who: "Erin Blake", words: "So let's\nbuild one." }, { who: "You", words: "A link" }, { who: "Erin Blake", words: "Look" }, { who: "Ray Colton", words: "Old" }] }),
+    { lines: ["WhatsApp · 5 messages", "Erin Blake: “So let's build one.”", "You: “A link”", "Erin Blake: “Look”"], foot: "✓ Sorted: a reply to send · regular priority" });
   assert.deepEqual(fromStatus({ workflow: { title: "Nightly check" } }).lines, ["Workflow · Nightly check"], "a workflow run has no sender");
   assert.equal(agentWord({}), "not started");
   assert.equal(agentWord({ live: true, waiting: true }), "needs you");
@@ -244,6 +246,8 @@ test("the three sections come in the flow's order, and each closed tab says wher
     ["Reply to Erin Blake in WhatsApp", "“On it.”", "Drafted · waiting for Send"]);
   assert.deepEqual(closeStatus({ to: "Erin Blake", owed: true }).lines, ["Reply to Erin Blake", "Not drafted yet"]);
   assert.deepEqual(closeStatus({ sent: true }).lines, ["Sent"]);
+  assert.deepEqual(closeStatus({ to: "Erin Blake", draft: "On it.", sent: true, sentWhen: "6:21 PM" }).lines, ["Reply to Erin Blake", "“On it.”", "Sent 6:21 PM"]);
+  assert.deepEqual(closeStatus({ emails: 2 }).lines, ["2 emails waiting for Send"]);
   assert.deepEqual(closeStatus({}).lines, ["Nothing owed"]);
   assert.deepEqual(closeStatus({ closed: true, note: "paid" }).lines, ["Closed · paid"]);
 });

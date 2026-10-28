@@ -931,7 +931,8 @@ def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict) -> list:
     # piled under the one being worked (the owner, 2026-10-06: "Task they are working on should be the main thing, nothing
     # else"). The rail drops the row by itself; the task keeps the record.
     from . import funnel
-    if tid: store.add_comment(tid, 'assistant', 'assistant_agent', f'You replied {place} on {where}{excerpt}. '
+    from .sessionrecord import NOTE_ACTOR
+    if tid: store.add_comment(tid, NOTE_ACTOR, 'assistant_agent', f'You replied {place} on {where}{excerpt}. '
                                                                    f'I removed the unused draft; the reply was taken care of.{state}')
     funnel.invalidate()
     # The review transition already wakes the UI, but this final wake happens after the durable

@@ -1137,9 +1137,11 @@ class SQLiteStore:
             # ...ON EVERY SURFACE, LIT OR NOT (the Advisor and memory design, phase B, 2026-10-23): only desk presses under a line were kept.
             # Surface: desk / task (the Tasks tab) / phone. Lit: the button filled on THAT surface (Advised stays the Advisor's own verb).
             # Live: the other buttons that could be pressed, JSON. Choice: 1 when one was there - a press with no other button is no choice
-            # and no evidence. Repo: a code item's repository, named apart from the sender's domain
+            # and no evidence. Repo: a code item's repository, named apart from the sender's domain. State, By: the rule state and who lit it
+            # (rule / model) of the decision kept for the item at that revision - what tools/advisor_agreement.py breaks agreement down by
+            # (advice_decision keeps only an item's latest decision, 2026-10-28)
             apcols = {r[1] for r in self.cx.execute('PRAGMA table_info(advice_press)')}
-            for col, typ in (('Surface', 'TEXT'), ('Lit', 'TEXT'), ('Live', 'TEXT'), ('Choice', 'INTEGER'), ('Repo', 'TEXT')):
+            for col, typ in (('Surface', 'TEXT'), ('Lit', 'TEXT'), ('Live', 'TEXT'), ('Choice', 'INTEGER'), ('Repo', 'TEXT'), ('State', 'TEXT'), ('By', 'TEXT')):
                 if col not in apcols: self.cx.execute(f'ALTER TABLE advice_press ADD COLUMN {col} {typ}')
             self.cx.execute('CREATE INDEX IF NOT EXISTS advice_press_at ON advice_press(CreatedAt)')
             # ...and each learned line's SECTION (Reader holds its slug now), whom it is about (Subject: the address in a people line)

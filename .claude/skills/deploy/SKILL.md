@@ -45,6 +45,8 @@ the tests: fix them on master, run it again with the **same** number (it was nev
 
 Run it in the background and report when it ends; do not babysit runs by hand.
 
+Its last step prints the **Advisor agreement** (lit button vs what the owner did, read-only on `~/.taskuary`) - report it with the release; `tools/advisor_agreement.py --replay` breaks it down.
+
 ## Rules that each cost hours on 2026-10-27
 
 - **Never cancel a run by looking it up by commit** (`gh run list --commit X ... | cancel`) right after a push: it cancelled the

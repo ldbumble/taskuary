@@ -53,7 +53,7 @@ import { onLive, touches } from "./live.js";
 import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT, ALERT_BD, ALERT_INK, ALERT_TINT, BRAND } from "./theme.jsx";
 import RunSteps from "./RunSteps.jsx";
-import { cameFromLabel, channelName, filesByMessage, fromExpands, fromRows, groupConversations, groupMeta, headerFacts, isChat, madeLine, rowText, todoSources, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
+import { cameFromLabel, channelName, filesByMessage, fromExpands, fromRows, groupConversations, groupMeta, headerFacts, isChat, madeLine, rowText, sortedLine, todoSources, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
 import { latestTriageVerdict, legacyTriageVerdict, parseTriageVerdict, routeIntent } from "./triageVerdict.js";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
@@ -70,6 +70,8 @@ import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
+import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
+import SendIcon from "@mui/icons-material/Send";
 import { Divider, ListItemText } from "@mui/material";
 import { TerminalPane } from "./TerminalView.jsx";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
@@ -83,8 +85,8 @@ import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { adviceKeyFor, taskNote } from "./advice.js";
 import AdvisorNote from "./AdvisorNote.jsx";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
-import { CLOSE_BY_HAND, askIsTitle, closeOut, focusOf, fromLine as fromLineOf, layoutOf, sameWords, waitingOn, workPane } from "./taskLayout.js";
-import { drawerLit, mainView, stageOf } from "./stages.js";
+import { CLOSE_BY_HAND, SECTIONS, agentStatus, agentWord, askIsTitle, closeOut, closeStatus, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, waitingOn, workPane } from "./taskLayout.js";
+import { mainView, sectionOf, stageOf } from "./stages.js";
 import { taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
 import { ASK_TAG, BROWSER_TAG } from "./newTask.js";
@@ -243,10 +245,50 @@ const REOPEN_ROW_MS = 2500;     // the longest the row says "Reopening…" past 
 // ...the main view the whole width, as a live agent's is (the owner, 2026-10-26: "no main view should fill the screen. why waste space?" -
 // a 900px column had been tried), scrolling on its own
 const MAIN = { width: "100%", flex: "0 1 auto", minHeight: 0, overflowY: "auto", scrollbarWidth: "thin", overflowAnchor: "none" };
-// ...the right drawer: the work column itself, laid over the main view's right edge, scrolling on its own; `display` keeps it mounted
-// while shut, so a draft half-typed or an agent's chat is where it was when it opens again
-const WORK_SIDE = (open) => ({ position: "absolute", top: 0, right: 0, bottom: 0, width: "min(640px, 92%)", zIndex: 6, overflowY: "auto", scrollbarWidth: "thin",
-  display: open ? "flex" : "none", bgcolor: "#fbf9f6", boxShadow: "-6px 0 18px rgba(38, 37, 33, 0.14)", px: 1.75, py: 1.25, boxSizing: "border-box" });
+// ...UNTIL THREE SECTIONS IN A ROW (the owner, 2026-10-27, from a mockup: "input -> agent/advisor -> close ... 3 sections from left to right
+// showing the flow; on the outside it shows the status of each category and opens up to the one it's up to"): with no live session the
+// desk's body is Came from | Agent | Close out, always in that order (taskLayout.SECTIONS). The open one fills the width and scrolls inside
+// itself, and every one stays MOUNTED, so a draft half-typed, an agent's chat or a live terminal is where it was when it opens again
+// ...and a SWITCH IS ONE MOVE (the owner, 2026-10-27: "must be smooth"): each section is a SLOT whose flex animates - the opening one widens
+// as the closing one narrows into its tab - and its BODY is laid at the width it has open (`w`), never reflowed by the move: the slot only
+// reveals it, and its words fade in once the width has settled. A closed body is hidden, not resized, so a live terminal keeps its size
+const SLOT_MS = 220;
+const SLOT = (open, w) => ({ position: "relative", overflow: "hidden", minWidth: 0, minHeight: 0, flex: open ? "1 1 0px" : `0 0 ${w}px`,
+  transition: `flex-grow ${SLOT_MS}ms ease, flex-basis ${SLOT_MS}ms ease`, "@media (prefers-reduced-motion: reduce)": { transition: "none" } });
+const SECTION = (open, w, live = false) => ({ position: "absolute", top: 0, left: 0, bottom: 0, width: w, display: "flex", flexDirection: "column", bgcolor: "#fff",
+  overflowY: "auto", scrollbarWidth: "thin", overscrollBehaviorY: "contain", overflowAnchor: "none", containerType: "inline-size",
+  px: live ? 1 : { xs: 1.5, md: 2.5 }, py: live ? 0.65 : 1.5, boxSizing: "border-box",
+  visibility: open ? "visible" : "hidden", opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none",
+  transition: open ? `opacity 160ms ease ${SLOT_MS}ms, visibility 0s` : `opacity 80ms ease, visibility 0s 80ms`,
+  "@media (prefers-reduced-motion: reduce)": { transition: "none" } });
+// ...a closed tab's width: 156px, and beside a LIVE agent Came from and Close out fold to slim 44px ones (the owner, 2026-10-27: "keep Came
+// from and Close out as very MINIMAL tabs ... so the live agent keeps nearly all the space")
+const TAB_W = 156, MINI_W = 44;
+const MINI_TAB = (here) => ({ appearance: "none", font: "inherit", cursor: "pointer", position: "absolute", top: 0, left: 0, bottom: 0, width: MINI_W,
+  border: 0, bgcolor: "#fff", color: INK, display: "flex", flexDirection: "column", alignItems: "center", gap: 1.25, py: 1.5, px: 0, boxSizing: "border-box",
+  "& [data-tq-tab-arrow]": { width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0, fontSize: 15, lineHeight: 1,
+    border: `1px solid ${here ? ACCENT : BORDER}`, bgcolor: here ? ACCENT : "#fff", color: here ? "#fff" : ACCENT },
+  "& [data-tq-tab-dot]": { mt: "auto", width: 8, height: 8, borderRadius: 99, boxSizing: "border-box" },
+  "& [data-tq-tab-n]": { fontSize: 20, fontWeight: 600, color: "#c9c3b8", lineHeight: 1 },
+  "&:hover": { bgcolor: "#f8f6f2" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: -2 } });
+// ...and each closed one a TAB, white, its words horizontal ("make the text horizontal and make them a little wider"): an arrow at the top,
+// its name, three short lines of where it stands, each clamped so the tab never scrolls ("maybe a little smaller and have more summary on
+// each one") - and like a book's SPINE (the owner, 2026-10-27), at its foot over a thin rule the one status line ("✓ Sorted: ...", "✓ Done
+// · Advisor: ...", "● Up to here" on the one the task is at - the arrow filled in the accent there) and the section's number, large and faint
+const SECTION_TAB = (here) => ({ appearance: "none", font: "inherit", cursor: "pointer", position: "absolute", top: 0, left: 0, bottom: 0, width: TAB_W,
+  border: 0, bgcolor: "#fff", color: INK, textAlign: "left",
+  display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1, px: 1.5, py: 1.75, boxSizing: "border-box", overflow: "hidden",
+  "& [data-tq-tab-arrow]": { width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0, fontSize: 15, lineHeight: 1,
+    border: `1px solid ${here ? ACCENT : BORDER}`, bgcolor: here ? ACCENT : "#fff", color: here ? "#fff" : ACCENT },
+  "& [data-tq-tab-name]": { fontSize: 12.5, fontWeight: 600, lineHeight: 1.35, flexShrink: 0 },
+  "& [data-tq-tab-line]": { fontSize: 11.5, lineHeight: 1.4, color: DIM, overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical",
+    overflow: "hidden", minHeight: 0, flexShrink: 1, maxWidth: "100%" },
+  "& [data-tq-tab-foot]": { mt: "auto", pt: 1, borderTop: `1px solid ${FOCUS_EDGE}`, width: "100%", display: "flex", flexDirection: "column", gap: 0.5, flexShrink: 0 },
+  "& [data-tq-tab-status]": { fontSize: 11.5, lineHeight: 1.4, color: "#5f7a5f", overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" },
+  "& [data-tq-tab-here]": { fontSize: 11.5, lineHeight: 1.4, color: ACCENT2, fontWeight: 600 },
+  "& [data-tq-tab-n]": { fontSize: 30, fontWeight: 300, color: "#c9c3b8", lineHeight: 1, letterSpacing: "-.02em", mt: 0.5 },
+  "&:hover": { bgcolor: "#f8f6f2" }, "&:hover [data-tq-tab-arrow]": { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT },
+  "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: -2 } });
 // ...the TAB each drawer folds to, one design for both edges and for a live agent's Came from: the whole height of the body, 34px wide, an
 // arrow in a disc at its middle and the drawer's name read along the edge - a tint on hover, a ring on focus, and the arrow turns while the
 // drawer is out. `lit`: the drawer holds where the task goes NEXT (the owner, 2026-10-26: "you can open on task but highlight the side bar
@@ -319,6 +361,41 @@ function Part({ label, sub, subTitle, children, focus = false, ...rest }) {
         {sub && <Typography variant="caption" title={subTitle} sx={{ color: FAINT, display: "block", lineHeight: 1.35 }}>{sub}</Typography>}
       </Box>
       <Box sx={{ minWidth: 0 }}>{children}</Box>
+    </Box>
+  );
+}
+
+// ONE CLOSED SECTION, AS ITS TAB (SECTION_TAB): the arrow points the way it opens, and a press opens it - the others close
+function SectionTab({ sec, lines = [], foot = "", here = false, before = false, mini = false, onOpen }) {
+  // ...SLIM beside a live agent: the arrow, the section's mark, and at its foot a dot for where it stands - the words are its hover
+  if (mini) return (
+    <Box component="button" type="button" data-tq-section-tab={sec.key} data-tq-mini="" data-tq-here={here ? "" : undefined} sx={MINI_TAB(here)}
+      aria-label={`Open ${sec.name}`} title={[sec.name, ...lines, foot].filter(Boolean).join("\n")} aria-expanded={false} onClick={onOpen}>
+      <Box component="span" aria-hidden data-tq-tab-arrow="">{before ? "›" : "‹"}</Box>
+      {sec.key === "from" ? <ChatBubbleOutlineIcon aria-hidden sx={{ fontSize: 18, color: DIM }} /> : <SendIcon aria-hidden sx={{ fontSize: 17, color: DIM }} />}
+      <Box component="span" aria-hidden data-tq-tab-dot="" sx={here ? { bgcolor: ACCENT } : foot ? { bgcolor: "#5f7a5f" } : { border: `1.5px solid ${FAINT}` }} />
+      <Box component="span" aria-hidden data-tq-tab-n="">{sec.n}</Box>
+    </Box>);
+  return (
+    <Box component="button" type="button" data-tq-section-tab={sec.key} data-tq-here={here ? "" : undefined} sx={SECTION_TAB(here)}
+      aria-label={`Open ${sec.name}`} title={`Open ${sec.name}`} aria-expanded={false} onClick={onOpen}>
+      <Box component="span" aria-hidden data-tq-tab-arrow="">{before ? "›" : "‹"}</Box>
+      <Box component="span" data-tq-tab-name="">{sec.name}</Box>
+      {lines.map((l) => <Box component="span" key={l} data-tq-tab-line="">{l}</Box>)}
+      <Box component="span" data-tq-tab-foot="">
+        {foot && <Box component="span" data-tq-tab-status="">{foot}</Box>}
+        {here && <Box component="span" data-tq-tab-here="">● Up to here</Box>}
+        <Box component="span" aria-hidden data-tq-tab-n="">{sec.n}</Box>
+      </Box>
+    </Box>
+  );
+}
+// ...and an open one's head: "1 · CAME FROM", what it holds, and "up to here" where the task is
+function SectionHead({ sec, sub, here = false }) {
+  return (
+    <Box data-tq-section-head="" sx={{ display: "flex", alignItems: "baseline", gap: 1.25, flexWrap: "wrap", mb: 1.25, flexShrink: 0 }}>
+      <Typography sx={{ fontSize: 12, fontWeight: 600, letterSpacing: ".06em", color: here ? ACCENT2 : DIM, textTransform: "uppercase" }}>{sec.n} · {sec.name}</Typography>
+      <Typography sx={{ fontSize: 12, color: FAINT }}>{[sub, here ? "up to here" : ""].filter(Boolean).join(" - ")}</Typography>
     </Box>
   );
 }
@@ -726,24 +803,29 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [fromOpen, setFromOpen] = useState(false);
   // ...and while an agent works, From is a sidebar the folded line opens over the agent's left edge (item 6, the owner 2026-10-21) -
   // closed by default, on every new task and when the session ends
-  // ...and its twin on the right, Agent and Close out, where the task itself is the main view (mainOf, the owner 2026-10-26)
-  const [fromSide, setFromSide] = useState(false), [workSide, setWorkSide] = useState(false);
-  const fromLineRef = useRef(null), workTabRef = useRef(null);
-  useEffect(() => { setFromSide(false); setWorkSide(false); }, [selected]);
+  // ...its twin on the right (Agent and Close out) went with the three sections (2026-10-27): with no live session the closed sections are the tabs
+  const [fromSide, setFromSide] = useState(false);
+  const fromLineRef = useRef(null);
+  useEffect(() => { setFromSide(false); }, [selected]);
   // ...shut by Escape (focus back on its tab) or a press anywhere outside it - a menu or dialog opened from inside it is not outside
   useEffect(() => {
-    if (!fromSide && !workSide) return undefined;
-    const shut = () => { const tab = fromSide ? fromLineRef.current : workTabRef.current; setFromSide(false); setWorkSide(false); return tab; };
+    if (!fromSide) return undefined;
+    const shut = () => { setFromSide(false); return fromLineRef.current; };
     const esc = (e) => { if (e.key === "Escape") { e.stopPropagation(); shut()?.focus(); } };
     const away = (e) => {
       const el = typeof e.target?.closest === "function" ? e.target : null;
-      if (!el || el.closest("[data-tq-from-side], [data-tq-from-line], [data-tq-work-side], [data-tq-work-tab], .MuiPopover-root, .MuiModal-root, .MuiPopper-root")) return;
+      if (!el || el.closest("[data-tq-from-side], [data-tq-from-line], .MuiPopover-root, .MuiModal-root, .MuiPopper-root")) return;
       shut();
     };
     window.addEventListener("keydown", esc, true);
     document.addEventListener("pointerdown", away, true);
     return () => { window.removeEventListener("keydown", esc, true); document.removeEventListener("pointerdown", away, true); };
-  }, [fromSide, workSide]);
+  }, [fromSide]);
+  // THE SECTION OPENED BY HAND (a closed section's tab), held for the view it was pressed in - `key` is the held view's (mainKey below)
+  const [secPick, setSecPick] = useState({ key: null, sec: null });
+  // ...and Came from's whole thread, behind "Full message history (N)"
+  const [histOpen, setHistOpen] = useState(false);
+  useEffect(() => { setHistOpen(false); }, [selected]);
   // the task's body measured: under STACK_BELOW it is a phone's stacked page, not a main view and drawers
   const [bodyW, setBodyW] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
   const bodyRO = useRef(null);
@@ -1122,7 +1204,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...From is always open now (the redesign, 2026-10-21): the link opens the whole conversation there and brings it into view, and the
   // work column stays where it was - the reply you were reading does not fold under you
   // ...and where the work has the whole width (an agent ran), From is the sidebar over it: the link opens that
-  const seeWholeConversation = () => { setShowAll(true); setFromOpen(true); if (fromDrawer) setFromSide(true); setSeekCameFrom(true); };
+  // ...and in the three sections it opens Came from, its message history out
+  const seeWholeConversation = () => { setShowAll(true); setFromOpen(true); setHistOpen(true); if (fromDrawer) setFromSide(true); if (threeUp) openSection("from"); setSeekCameFrom(true); };
   const triaged = triageLine({ route: sourceRoute, verdict, task: t || {}, messages: storedMessages, ms: tsMs });
   // THE ASK: the task's summary, else what triage summed it up as, else the message itself - its first sentence, on one line
   // ...and with no summary, the message that OPENED it: the newest is often "and by the 15th", which is not the ask
@@ -1292,7 +1375,40 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     || ["done", "dropped"].includes(t?.Status) || co.writeupAt === "closeout");
   // ...and NEITHER half on a task waiting on a person (the owner, 2026-10-25): nothing is yours until they answer, so Agent work and Close out
   // are a line each, one click to open - the Send to agent form stood open over a task nobody needed an agent for
-  const pane = waitFor && !openStage ? "" : workPane({ stage, kind: t?.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas, picked: !!openStage });
+  const paneRest = waitFor && !openStage ? "" : workPane({ stage, kind: t?.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas, picked: !!openStage });
+  const list = !!(detail?.batch || t?.DoneWhen || (!t?.DoneWhen && todo.length));
+  // THE MAIN VIEW: a phone's narrow body stays one stacked page (a live session there the work, Came from its left drawer); on the desk the
+  // three sections in a row (SECTIONS), opening on the one the task is up to - a live agent's too, Came from and Close out its slim tabs
+  const narrow = bodyW > 0 && bodyW < STACK_BELOW;
+  const stacked = !sessionView && narrow;
+  const threeUp = !narrow;
+  // ...read off ONE STAGE (stages.json, the owner 2026-10-26: "are these modes defined well anywhere besides the UI"): the focus and what
+  // Close out holds make it, and the stage names the main view and the section it is up to - the server and the Assistant read the same
+  // ...and a section OPENED BY HAND is not where the task is up to (2026-10-27, the overnight walk): Agent work clicked open over a draft
+  // waiting for Send made the stage "to start", the page flipped to the task view and shut both drawers - the click hid the draft AND the
+  // agent it asked for. The stage reads the pane the task would open on; the pick only opens its section in the view it is in
+  const restFocus = focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, waiting: !!waitFor, list,
+    pane: !openStage ? paneRest : waitFor ? "" : workPane({ stage: restStage, kind: t?.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas }) });
+  const taskStage = stageOf({ focus: restFocus, drafted: replyHas, closed: ["done", "dropped"].includes(t?.Status) });
+  // ...and ONCE OPEN, THE PAGE STAYS WHERE IT IS (the owner, 2026-10-27, Close out swapped for the task on Send): the main view and the open
+  // section are read when the task opens and its detail lands, and again only when an agent starts or ends, the task closes or reopens, or
+  // the width stacks it - never because a press the owner made changed what the page holds. A closed section's tab opens it (secPick)
+  const mainNow = mainView({ stage: taskStage, sessionView, stacked });
+  const mainHeld = useRef({ key: null, main: null, sec: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${threeUp}|${t?.Status}`;
+  if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: sectionOf(taskStage) };
+  const main = mainHeld.current.main;
+  const section = threeUp ? (secPick.key === mainKey ? secPick.sec : mainHeld.current.sec) : null, hereSec = sectionOf(taskStage);
+  const openSection = (s) => setSecPick({ key: mainKey, sec: s });
+  // ...each section's slot: a closed one its tab's width (slim beside a live agent), the open one the rest - and its body laid at that
+  // open width whether it is open or not, so the move never reflows it and a hidden terminal keeps its size
+  const closedW = (k) => (sessionView && k !== "agent" ? MINI_W : TAB_W);
+  const openW = (k) => Math.max(320, bodyW - SECTIONS.filter((s) => s.key !== k).reduce((n, s) => n + closedW(s.key), 0));
+  const slot = (k, body) => (!threeUp ? body
+    : <Box data-tq-slot={k} data-tq-open={section === k ? "" : undefined} sx={{ ...SLOT(section === k, closedW(k)),
+        ...(k !== "from" ? { borderLeft: `1px solid ${FOCUS_EDGE}` } : {}) }}>
+        {section !== k && tabFor(k)}{body}</Box>);
+  // ...the open section draws its half of the work: the Agent its own, Close out the reply; Came from leaves the halves as they were
+  const pane = section === "agent" ? "agent" : section === "close" ? "reply" : paneRest;
   // ONE SCROLLER IN THE WORK COLUMN (the owner, 2026-10-26, a failed run on a laptop: "you can't see anything"): a settled agent's part
   // scrolled inside the column with its transcript scrolling inside THAT, and the reason it failed sat at the foot of the inner one. Now
   // the column alone scrolls, the agent's part and its chat at their own height, and a folded Close out keeps its place on screen by
@@ -1323,31 +1439,201 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     finally { setTrusting(null); }
   };
   // the one white section on the shaded body (taskLayout.focusOf); a live session has no shade and no focus - it is the page
-  const list = !!(detail?.batch || t?.DoneWhen || (!t?.DoneWhen && todo.length));
   const focus = focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, pane, waiting: !!waitFor, list });
   const chatBelow = focus === "agent" && workspaceMode === "general" && pane === "agent" && !liveSession;   // its chat joins the focus under it
-  // THE MAIN VIEW AND ITS DRAWERS (taskLayout.mainOf): Came from on the left where the work is the page, Agent and Close out on the right
-  // where the task is; a phone's narrow body stays one stacked page. A move that changes where the task is up to shuts whichever was out
-  const stacked = !sessionView && bodyW > 0 && bodyW < STACK_BELOW;
-  // ...read off ONE STAGE (stages.json, the owner 2026-10-26: "are these modes defined well anywhere besides the UI"): the focus and what
-  // Close out holds make it, and the stage names the main view and whether the right tab is lit - the server and the Assistant read the same
-  // ...and a section OPENED BY HAND is not where the task is up to (2026-10-27, the overnight walk): Agent work clicked open over a draft
-  // waiting for Send made the stage "to start", the page flipped to the task view and shut both drawers - the click hid the draft AND the
-  // agent it asked for. The stage reads the pane the task would open on; the pick only opens its section in the view it is in
-  const restFocus = openStage ? focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, waiting: !!waitFor, list,
-    pane: waitFor ? "" : workPane({ stage: restStage, kind: t?.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas }) }) : focus;
-  const taskStage = stageOf({ focus: restFocus, drafted: replyHas, closed: ["done", "dropped"].includes(t?.Status) });
-  // ...and ONCE OPEN, THE PAGE STAYS WHERE IT IS (the owner, 2026-10-27, Close out swapped for the task on Send): the main view is read when
-  // the task opens and its detail lands, and again only when an agent starts or ends, the task closes or reopens, or the width stacks it -
-  // never because a press the owner made changed what the page holds
-  const mainNow = mainView({ stage: taskStage, sessionView, stacked });
-  const mainHeld = useRef({ key: null, main: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${t?.Status}`;
-  if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow };
-  const main = mainHeld.current.main;
-  const fromDrawer = main === "work", workDrawer = main === "task", workLit = drawerLit({ main, stage: taskStage });
-  // ...and a lit tab names the move: the reply and who to ("Close out · reply to Priya Shah"), else what the drawer holds
-  const workTabWords = focus === "reply" && replyMessage?.FromName ? `Close out · reply to ${replyMessage.FromName}` : "Agent · Close out";
-  useEffect(() => { setFromSide(false); setWorkSide(false); }, [main]);
+  // ...Came from as a left drawer only over a live session now (stages.json `drawer`); the right drawer went with the three sections
+  const fromDrawer = main === "work" && !threeUp;
+  useEffect(() => { setFromSide(false); }, [main]);
+  // WHAT EACH CLOSED SECTION'S TAB SAYS (taskLayout fromStatus / agentStatus / closeStatus), from what its open section draws
+  const cameIn = answering || newestFirst(inbound)[0] || null;
+  // ...read when a tab draws (tabFor, in the JSX): the Advisor's note (`warn`) is worked out further down
+  const tabLines = () => !threeUp || !t ? {} : {
+    from: fromStatus({ who: cameIn?.who || cameIn?.FromName || cameIn?.FromEmail || "", channel: cameIn ? channelName(cameIn.Channel) : "",
+      when: cameIn?.SentAt ? whenShort(cameIn.SentAt) : "", words: cameIn ? cleanText(cameIn.ReadText || cameIn.BodyText || "").slice(0, 240) : "",
+      count: sourceCount, workflow: fromWorkflow, made: `${detail.ref} · ${made}`, sorted: sortedLine(facts, t?.Kind || "task").replace(/^Sorted as: /, "Sorted: ") }),
+    agent: agentStatus({ profile: runRole || (hasRecord || term ? agentName(t) : ""),
+      word: agentWord({ live: !!term?.alive, waiting: agentState === AGENT.waiting, failed: failedRun, stopped: agentState === AGENT.stopped,
+        result: resultShown, record: hasRecord, codeRun }),
+      said: cleanText(detail?.closedWhy || detail?.agentStory?.said || String(report?.Body || "").split("\n").find((l) => l.trim()) || (hasRecord ? detail?.agentStory?.line : "") || "")
+        .replace(/^[#>*\s-]+/, "").slice(0, 240),
+      made: (() => { const p = recordProps.pages || []; const n = p[0]?.title || p[0]?.name || String(p[0]?.path || "").split(/[\\/]/).pop();
+        return n ? `${n}${p.length > 1 ? ` +${p.length - 1}` : ""}` : ""; })(),
+      advisor: warn?.advice?.label || "" }),
+    close: closeStatus({ closed: ["done", "dropped"].includes(t.Status), note: closedNote, to: replyMessage?.FromName || "",
+      where: replyMessage ? replyMessage.SourceName || channelName(replyMessage.Channel) : "",
+      draft: String(pendingReview?.DraftText || sentReview?.FinalText || sentReview?.DraftText || "").slice(0, 240),
+      waiting: !!pendingReview, emails: emailsWaiting, sent: !!(sentReview || sentOutside.length), owed: !!replyMessage }),
+  };
+  // ...a closed section's tab, in place of the section: the arrow points the way it opens
+  const tabFor = (key) => {
+    const sec = SECTIONS.find((s) => s.key === key);
+    return <SectionTab sec={sec} {...(tabLines()[key] || {})} here={hereSec === key} mini={closedW(key) === MINI_W}
+      before={SECTIONS.findIndex((s) => s.key === key) < SECTIONS.findIndex((s) => s.key === section)} onOpen={() => openSection(key)} />;
+  };
+  // CAME FROM'S PARTS, drawn once and arranged by the layout: a phone's stacked page (and a live agent's left drawer there) keeps them as
+  // they were - the facts and the conversations in one Came from part, what triage made of it at the foot - and the three sections set
+  // them out as the owner's mockup does (2026-10-27): What came in | What triage made of it, the ask, then Full message history (N)
+  const fromFacts = () => (<>
+                        <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap", "&:empty": { display: "none" } }}>
+                          {!!(detail.attachments?.length || detail.links?.length) && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
+                            label={filesLine(detail.attachments?.length || 0, detail.links?.length || 0)} data-tq-files-pill="" title="Open the message they came with"
+                            onClick={() => {
+                              const mid = detail.attachments?.[0]?.MessageId ?? inbound[0]?.MessageId ?? sources[0]?.msgs[0]?.MessageId;
+                              if (mid == null) return;
+                              if (!sources.some((g) => fromRows(g, 3, showAll).some((r) => r.m?.MessageId === mid))) setShowAll(true);
+                              setOpenMsg(mid); setSeekLetter(mid);
+                            }}
+                            sx={{ height: 19, fontSize: 10, bgcolor: PANEL2 }} />}
+                          {/* ...and how hard triage judged the work, or that it carries sensitive data - only when it is not ordinary, and a
+                              press corrects it (the router, 2026-10-25) */}
+                          {(detail?.judged?.difficulty === "hard" || detail?.judged?.data_class === "sensitive") && <Chip size="small" data-tq-judged=""
+                            label={[detail.judged.difficulty === "hard" && "hard work", detail.judged.data_class === "sensitive" && "sensitive data"].filter(Boolean).join(" · ")}
+                            title={`${detail.judged.by === "owner" ? "You said so" : "Triage judged it so"} - in Auto, hard work runs on the strong model. Click to correct it.`}
+                            onClick={(e) => setJudgeAt(e.currentTarget)} sx={{ height: 19, fontSize: 10, bgcolor: PANEL2, cursor: "pointer" }} />}
+                          <Menu open={!!judgeAt} anchorEl={judgeAt} onClose={() => setJudgeAt(null)}>
+                            {["quick", "standard", "hard"].map((d) => <MenuItem key={d} selected={detail?.judged?.difficulty === d} sx={{ fontSize: 12 }}
+                              onClick={() => judge({ difficulty: d })}>{d === "quick" ? "Quick work" : d === "hard" ? "Hard work" : "Ordinary work"}</MenuItem>)}
+                            {[["ordinary", "Ordinary data"], ["sensitive", "Sensitive data"]].map(([k, l]) => <MenuItem key={k} selected={(detail?.judged?.data_class || "ordinary") === k}
+                              sx={{ fontSize: 12 }} onClick={() => judge({ data_class: k })}>{l}</MenuItem>)}
+                          </Menu>
+                          {fromExpands(sources) && <Link component="button" type="button" underline="hover" onClick={() => setShowAll((v) => !v)}
+                            sx={{ ml: "auto", fontSize: 12 }}>{showAll ? "Show less" : `Show all ${sourceCount}`}</Link>}
+                        </Box>
+                        {/* ONE SENDER, ONE ITEM, SAID: ingest folds the same sender writing again about this onto one task; said once -
+                            how many, and what they need now (concierge.repeats, counted by code) */}
+                        {detail?.repeats?.line && <Typography variant="body2" sx={{ color: DIM, mt: 0.4, fontSize: 12.5, overflowWrap: "anywhere" }}>{detail.repeats.line}</Typography>}
+                        {/* WHOSE WORDS: a stranger's task runs in its CLI's auto mode (origin.py) - said once, quietly, with the reason on
+                            hover and the one owner action that changes it, a link. Nothing for the owner's or trusted work. */}
+                        {/* ...its presses only where the Agent work box is not already carrying them (trustInBox): one place, one wording */}
+                        {strangerLine(detail) && (
+                          <Typography variant="body2" sx={{ color: DIM, mt: 0.4, fontSize: 12.5 }}>
+                            <Tooltip title={strangerLine(detail).why}><span>{strangerLine(detail).text}</span></Tooltip>
+                            {/* ...pressable LOOKS pressable (the owner, 2026-10-27: "trust has to be clickable like a pill"): small round buttons */}
+                            {!trustBoxed && strangerLine(detail).trust && <>{" "}
+                            <Button size="small" variant="outlined" data-tq-trust="" sx={TRUST_PILL} disabled={!!trusting} onClick={() => trustPress("")}
+                              startIcon={trusting === "person" ? <CircularProgress size={11} color="inherit" /> : null}>
+                              {strangerLine(detail).trust}
+                            </Button>
+                            {/* ...or their whole organisation (the owner, 2026-10-22: "hit trust domain and then all users from that domain are
+                                good"): everyone at that domain, Teams organisation or Slack workspace, from now on (senders.trust_org) */}
+                            {strangerLine(detail).trustOrg && <>{" "}
+                            <Button size="small" variant="outlined" data-tq-trust-org="" sx={TRUST_PILL} disabled={!!trusting} onClick={() => trustPress("org")}
+                              startIcon={trusting === "org" ? <CircularProgress size={11} color="inherit" /> : null}>
+                              {strangerLine(detail).trustOrg}
+                            </Button></>}</>}
+                          </Typography>
+                        )}
+                        {/* ...and what its words read as trying to make an agent do: one line, before anyone presses Start */}
+                        {strangerLine(detail)?.danger && (
+                          <Typography variant="body2" sx={{ color: ALERT, mt: 0.3, fontSize: 12.5, overflowWrap: "anywhere" }}>
+                            ⚠ Reads as an attempt to steer the agent: {strangerLine(detail).danger}
+                          </Typography>
+                        )}
+  </>);
+  const fromConvs = () => (<>
+                        {sources.length > 0 ? (
+                          <Box ref={cameFromRef} sx={{ mt: 0.5, minWidth: 0, scrollMarginTop: 8 }}>
+                            {sources.map((g, gi) => (
+                              <Box key={g.key} data-tq-conversation="" sx={{ py: 0.9, borderTop: gi ? "1px solid #ece7e0" : 0, minWidth: 0 }}>
+                                <Box sx={{ display: "grid", gridTemplateColumns: "24px minmax(0, 1fr)", columnGap: 1, rowGap: 0.15, minWidth: 0 }}>
+                                  <Box sx={{ width: 24, height: 24, borderRadius: 1, bgcolor: "#f1eee8", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                                    <ChannelIcon channel={g.channel} sx={{ fontSize: 14 }} /></Box>
+                                  <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1, minWidth: 0, flexBasis: { xs: "calc(100% - 40px)", sm: "auto" } }} title={g.title}>{g.title}</Typography>
+                                  <Typography noWrap variant="caption" sx={{ color: DIM, fontSize: 11, gridColumn: 2, minWidth: 0 }}>{groupMeta(g)}</Typography>
+                                </Box>
+                                {/* SHOW ALL DRAWS EACH CONVERSATION IN ITS OWN FORM: a chat as the back-and-forth it is - bubbles, yours on the right
+                                    (the owner, 2026-10-16: "wasn't this supposed to be a chat back and forth if you hit show all?") - and an email
+                                    thread as every row, each opening its letter. Each scrolls in its own box, so one long thread cannot bury the next. */}
+                                <Box sx={{ mt: 0.5, minWidth: 0 }}>
+                                  {showAll && isChat(g.channel) ? <ChatThread messages={g.msgs} maxHeight={THREAD_MAX} />
+                                    : <Box data-tq-thread-box="" sx={showAll ? { maxHeight: THREAD_MAX, overflowY: "auto", minWidth: 0 } : undefined}>
+                                        <ConversationRows rows={fromRows(g, 3, showAll)} open={shownMsg} onOpen={(f) => setOpenMsg(f(shownMsg))} narrow
+                                          onExpand={() => setShowAll(true)} files={sourceFiles} fetchFor={fetchFor} subject={g.title} /></Box>}
+                                </Box>
+                              </Box>
+                            ))}
+                          </Box>
+                        ) : fromWorkflow ? (
+                          /* A WORKFLOW RUN has no message to show: where it came from is the workflow and what started it - its clock, your
+                             Run now, the assistant, your phone (the owner, 2026-10-16: "what does it show triggered it in the task card?") */
+                          <Box data-tq-workflow-origin="" sx={{ mt: 0.5, py: 0.9,
+                            display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: fromWorkflow.steps ? "wrap" : "nowrap" } }}>
+                            <Box sx={{ width: 24, height: 24, borderRadius: 1, bgcolor: "#f1eee8", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                              <ChannelIcon channel="workflow" sx={{ fontSize: 14 }} /></Box>
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13 }} title={fromWorkflow.title}>Workflow · {fromWorkflow.title}</Typography>
+                              <Typography variant="caption" sx={{ color: DIM, fontSize: 11.5, display: "block" }} title={`${detail.ref} · ${made}`}>
+                                {fromWorkflow.line} · {whenShort(t?.CreatedAt)}</Typography>
+                            </Box>
+                            {fromWorkflow.link && <Link href={fromWorkflow.link} underline="hover" sx={{ fontSize: 12, flexShrink: 0 }}>Open the workflow</Link>}
+                            {codeRun && shareBadge}
+                            {fromWorkflow.steps && <Box data-tq-workflow-steps="" sx={{ flexBasis: "100%", borderTop: `1px solid ${BORDER}`, pt: 0.75, mt: 0.25, minWidth: 0 }}>
+                              {/* a failed run's fix is one press from its task: the workflow opens with Fix with AI already asked */}
+                              <RunSteps steps={fromWorkflow.steps} dense repairs={fromWorkflow.repairs}
+                                onFix={fromWorkflow.sourceId != null && fromWorkflow.runId != null
+                                  ? () => { openAppLink(`report=${fromWorkflow.sourceId}&fix=${fromWorkflow.runId}`); } : null} /></Box>}
+                          </Box>
+                        ) : <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.25 }}>{detail.ref} · {made}</Typography>}
+                        {/* WHAT ITS MESSAGES LINK TO (linkdocs), each once - the items behind the task, a press from it (the redesign,
+                            2026-10-21: "linked items"). What the link names, as its messages named it; its state upstream is not recorded. */}
+                        {!!detail.links?.length && <Box data-tq-linked={detail.links.length} sx={{ mt: 0.9, minWidth: 0 }}>
+                          <Typography sx={{ ...label, display: "block", mb: 0.25 }}>Linked · {detail.links.length}</Typography>
+                          {detail.links.map((l) => (
+                            <Link key={l.id ?? l.url} href={l.url} target="_blank" rel="noopener" underline="hover" title={l.url}
+                              sx={{ display: "block", fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.label || l.url}</Link>))}
+                        </Box>}
+  </>);
+  const fromSorted = () => (
+                      <Box data-tq-sorted="" title={`${detail.ref} · ${made}${triaged.at ? ` · sorted ${whenShort(triaged.at)}` : ""}`}
+                        sx={{ display: "flex", gap: 1, alignItems: "flex-start", pt: 1, borderTop: `1px solid ${BORDER}` }}>
+                        <AltRouteIcon sx={{ fontSize: 15, color: ACCENT, mt: 0.2, flexShrink: 0 }} />
+                        <Typography sx={{ fontSize: 12, color: DIM, minWidth: 0, overflowWrap: "anywhere", lineHeight: 1.5 }}>
+                          {triageSays(facts, t?.Kind || "task", triaged.why)}
+                          {triaged.later > 0 && ` · ${plural(triaged.later, "later message")} joined it`}
+                          {workContext && <Box component="span" sx={{ display: "block" }}>Works from: {workContext}</Box>}
+                          {/* ...and a warning it carries (a start held for a repository) in the alert ink the header pill wore */}
+                          {facts.pills.filter((p) => p.tone === "alert" && p.key !== "priority").map((p) => (
+                            <Box key={p.key} component="span" data-tq-fact-alert={p.key} sx={{ display: "block", color: ALERT_INK, fontWeight: 600 }}>{p.label}: {p.value}</Box>))}
+                        </Typography>
+                      </Box>
+  );
+  // ...WHAT CAME IN: who, on what, when, and their words - the conversation's newest from them (the one Close out answers), else the
+  // workflow that made it, else where it was made; the facts under it (its files, how hard, whose words and the trust presses)
+  const CARD = { border: `1px solid ${FOCUS_EDGE}`, borderRadius: "12px", px: 2, py: 1.75, minWidth: 0, display: "flex", flexDirection: "column", gap: 0.75 };
+  const cardHead = { fontSize: 12, fontWeight: 600, color: DIM };
+  const fromCards = () => (
+    <Box data-tq-from-cards="" sx={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 2, "@container (min-width: 620px)": { gridTemplateColumns: "repeat(2, minmax(0, 1fr))" } }}>
+      <Box data-tq-came-in="" sx={CARD}>
+        <Typography sx={cardHead}>What came in</Typography>
+        {cameIn ? <>
+          <Typography sx={{ fontSize: 13, color: DIM }}>{[cameIn.who || cameIn.FromName || cameIn.FromEmail, cameIn.SourceName || channelName(cameIn.Channel),
+            cameIn.SentAt ? whenShort(cameIn.SentAt) : ""].filter(Boolean).join(" · ")}</Typography>
+          <Typography data-tq-came-in-words="" sx={{ fontSize: 15, lineHeight: 1.5, color: INK, overflowWrap: "anywhere", whiteSpace: "pre-wrap",
+            display: "-webkit-box", WebkitLineClamp: 6, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+            {rowText(cameIn, sourceFiles.get(cameIn.MessageId)) || cleanText(cameIn.ReadText || cameIn.BodyText || "")}</Typography>
+        </> : !sources.length && fromWorkflow ? fromConvs() : <Typography sx={{ fontSize: 13, color: DIM }}>{detail.ref} · {made}</Typography>}
+        {fromFacts()}
+      </Box>
+      <Box data-tq-sorted="" title={`${detail.ref} · ${made}${triaged.at ? ` · sorted ${whenShort(triaged.at)}` : ""}`} sx={CARD}>
+        <Typography sx={cardHead}>What triage made of it</Typography>
+        <Typography sx={{ fontSize: 15, lineHeight: 1.5, color: INK }}>{sortedLine(facts, t?.Kind || "task").replace(/^Sorted as: /, "")}</Typography>
+        {triaged.why && <Typography sx={{ fontSize: 13, lineHeight: 1.5, color: DIM, overflowWrap: "anywhere" }}>{triaged.why}</Typography>}
+        {triaged.later > 0 && <Typography sx={{ fontSize: 12.5, color: FAINT }}>{plural(triaged.later, "later message")} joined this task</Typography>}
+        {workContext && <Typography sx={{ fontSize: 12.5, color: FAINT }}>Works from: {workContext}</Typography>}
+        {facts.pills.filter((p) => p.tone === "alert" && p.key !== "priority").map((p) => (
+          <Typography key={p.key} data-tq-fact-alert={p.key} sx={{ fontSize: 12.5, color: ALERT_INK, fontWeight: 600 }}>{p.label}: {p.value}</Typography>))}
+      </Box>
+    </Box>
+  );
+  // ...and FULL MESSAGE HISTORY (N): the conversations, whole, one press away - a task with no message has none to open
+  const fromHistory = () => (!sources.length && !detail.links?.length ? null :
+    <Box data-tq-came-from="" data-tq-history={histOpen ? "open" : "shut"} sx={{ minWidth: 0 }}>
+      <Button size="small" data-tq-history-toggle="" aria-expanded={histOpen} onClick={() => { setHistOpen((v) => !v); setShowAll(true); }}
+        sx={{ px: 0, minWidth: 0, fontSize: 13, fontWeight: 600, textTransform: "none", color: ACCENT2 }}>
+        {histOpen ? "Hide the message history ‹" : `Full message history (${sourceCount}) ›`}</Button>
+      {histOpen && fromConvs()}
+    </Box>
+  );
   // A START THAT STOPPED ON "WHICH REPOSITORY?" (funnel.HELD_REPO): the chip says so and the pick resumes the start, whichever
   // chip you press (the owner, 2026-10-12: "if i don't fill it out it should warn me at least?")
   const heldRepo = String(t?.Tags || "").split(/[\s,]+/).includes("held:repo");
@@ -1808,11 +2094,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // agent box ... like we had originally"): the card under the table opened out of sight; the form sits in the work column and is
   // brought into view when it opens
   // ...and its words box takes the cursor, every time a door opens it (boxAt) - a second press found it open and did nothing
-  // ...and where the task is the page the box is in the right drawer: the row's Send to agent pulls it out, or the press opened a box
-  // nobody could see (CI, 0.3.9.48 - the drawer stayed shut over it). After the [main] effect, so a press that moves the main view wins
+  // ...and the box is in the Agent section: the row's Send to agent opens that section, or the press opened a box
+  // nobody could see (CI, 0.3.9.48 - the drawer stayed shut over it)
   useEffect(() => {
     if (!restartOpen) return undefined;
-    if (workDrawer) setWorkSide(true);
+    if (threeUp) openSection("agent");
     const f = requestAnimationFrame(() => {
       const el = document.querySelector("[data-tq-run-form]");
       el?.scrollIntoView({ block: "nearest", behavior: "smooth" }); el?.querySelector("textarea")?.focus({ preventScroll: true });
@@ -1947,70 +2233,38 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               {/* ...and a drawer pulled out is exactly this body, never taller (the owner, 2026-10-26: "it's bigger then the task box"): a
                   card of words is already at least CanvasItem's DRAWER_FLOOR and held there (useHeldHeight), and what the drawer holds past
                   that scrolls inside it */}
-              <Box ref={bodyBox} data-tq-task-body="" data-tq-main={main || "stacked"} data-tq-stage={taskStage} data-tq-drawer-out={(fromDrawer && fromSide) || (workDrawer && workSide) ? "" : undefined}
-                sx={{ display: "flex", flex: 1, minHeight: 0, minWidth: 0 }}>
+              {/* ...UNTIL THREE SECTIONS IN A ROW (2026-10-27): with no live session the body is Came from | Agent | Close out, one open
+                  (data-tq-main names it: from, agent, close), the other two its tabs; a live session's is the work ("work"), a phone's one
+                  stacked page ("stacked") */}
+              <Box ref={bodyBox} data-tq-task-body="" data-tq-main={section || main || "stacked"} data-tq-stage={taskStage} data-tq-drawer-out={fromDrawer && fromSide ? "" : undefined}
+                data-tq-sections={threeUp ? "" : undefined} sx={{ display: "flex", flex: 1, minHeight: 0, minWidth: 0 }}>
               {/* ...and the tab reads as a press at a glance (the owner, 2026-10-26: "make it with arrow and more visible to pull out where it
                   came from"): the whole edge, an arrow in a disc that turns while it is out, a hover title saying what it opens */}
               {fromDrawer && <Box component="button" type="button" ref={fromLineRef} data-tq-from-line="" sx={DRAWER_TAB(fromSide)}
                 title={fromSide ? "Hide where this came from" : "Show where this came from"} aria-label={fromSide ? "Hide where this came from" : "Show where this came from"}
-                aria-expanded={fromSide} aria-controls="tq-from-side" onClick={() => { setWorkSide(false); setFromSide((v) => !v); }}>
+                aria-expanded={fromSide} aria-controls="tq-from-side" onClick={() => setFromSide((v) => !v)}>
                 <Box component="span" aria-hidden data-tq-from-chevron="">{fromSide ? "‹" : "›"}</Box>
                 <Box component="span" data-tq-from-words="">{fromLine ? `Came from · ${fromLine}` : "Came from"}</Box></Box>}
-              <Box ref={stepsBox} sx={{ px: liveSession ? 1 : { xs: 1.25, sm: 1.5 }, py: liveSession ? 0.65 : 0.9, ...(!term?.alive ? { bgcolor: SHADE } : {}),
+              <Box ref={stepsBox} sx={threeUp ? { flex: 1, minHeight: 0, minWidth: 0, display: "flex", flexDirection: "row", bgcolor: SHADE, position: "relative", overflow: "hidden" }
+                : { px: liveSession ? 1 : { xs: 1.25, sm: 1.5 }, py: liveSession ? 0.65 : 0.9, ...(!term?.alive ? { bgcolor: SHADE } : {}),
                 overflowY: "auto", flex: 1, minHeight: 0, minWidth: 0, display: "flex", flexDirection: "column", containerType: "inline-size", position: "relative" }}>
-                {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
-                    its lap - you type into it like any other terminal. Everything below is
-                    reference material about the same task, folded away. */}
-                {/* the session just closed: its write-up takes the space the terminal had, so the
-                    result of the work is the thing you are looking at */}
-                {/* The checkout, and why. A wrong guess means an agent editing the wrong tree in
-                    good faith, so it is stated on the page rather than buried in the prompt. */}
-                {/* In the agent view the task card (and its Came from) is not drawn, and a report task's
-                    whole substance is the report - so it is one click away here (the owner, 2026-09-30) */}
-                {sessionView && t?.Source === "report" && sourceMessage?.BodyText && (
-                  <Box sx={{ ...card, ...step, mb: 0, px: 1.5, py: 1.1, flexShrink: 0 }}>
-                    <Box onClick={() => setReportOpen((v) => !v)} sx={{ display: "flex", alignItems: "center", gap: 0.85, cursor: "pointer" }}>
-                      <Typography sx={{ ...label }}>The report</Typography>
-                      <Typography noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>
-                        {sourceMessage.SourceName || sourceMessage.Subject} · {fmtDateTime(sourceMessage.SentAt)}</Typography>
-                      <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, transition: "transform .15s", transform: reportOpen ? "rotate(180deg)" : "none" }} />
-                    </Box>
-                    {reportOpen && (
-                      <Box sx={{ mt: 0.85, maxHeight: 420, overflowY: "auto", minWidth: 0, overflowWrap: "anywhere" }}>
-                        {looksMd(sourceMessage.BodyText) ? <Md text={cleanText(sourceMessage.BodyText)} />
-                          : <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{cleanText(sourceMessage.BodyText)}</Typography>}
-                      </Box>
-                    )}
-                  </Box>
-                )}
-                {/* ...and a BATCH's items stay in view while its agent works through them: each result lands on its line as the
-                    agent reports it, and the presses on a finished line are usable without leaving the session (batch.py) */}
-                {sessionView && detail?.batch && (
-                  <Box sx={{ ...card, ...step, mb: 0, px: 1.5, py: 1.1, flexShrink: 0 }}>
-                    <Box onClick={() => setItemsOpen((v) => !v)} sx={{ display: "flex", alignItems: "center", gap: 0.85, cursor: "pointer" }}>
-                      <Typography sx={{ ...label }}>The items</Typography>
-                      <Typography noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>{batchProgress(detail.batch)}</Typography>
-                      <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, transition: "transform .15s", transform: itemsOpen ? "rotate(180deg)" : "none" }} />
-                    </Box>
-                    {itemsOpen && <Box sx={{ maxHeight: 360, overflowY: "auto", minWidth: 0 }}>
-                      <BatchItems taskId={t?.TaskId} items={detail.batch} bare
-                        onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} /></Box>}
-                  </Box>
-                )}
                 {/* FROM AND THE WORK (the task page redesign, owner-approved 2026-10-21, replacing the Task / Agent work / Close out accordion):
                     one of them is the main view and the other its drawer (mainOf, the owner 2026-10-26) - a phone's narrow body stacks them */}
                 {/* THE ADVISOR'S OWN SECTION (the owner, 2026-10-26: "one is more a guide and one is more doing work but they are in essence the same
                     idea") - IN THE MAIN VIEW WHATEVER THE MAIN VIEW IS (the Advisor audit's judge, 2026-10-26): in the right drawer behind a sideways
                     tab, a late line or the reason for a fold was off screen with only a note-count at the end of the tab to say so. Drawers hold work,
                     never the Advisor's words; a live agent's screen keeps its room (and its decision says nothing over it) */}
-                {warn && !liveSession && <AdvisorNote note={warn} onDraft={() => { setOpenStage("reply"); if (workDrawer) { setFromSide(false); setWorkSide(true); }
+                {/* ...and in the three sections it is the Agent's, under its work (the owner's mockup, 2026-10-27) */}
+                {!threeUp && warn && !liveSession && <AdvisorNote note={warn} onDraft={() => { setOpenStage("reply");
                   requestAnimationFrame(() => workBox.current?.querySelector("textarea")?.scrollIntoView({ block: "center", behavior: "smooth" })); }} />}
-                <Box ref={columnsBox} data-tq-columns="" data-tq-layout={sessionView ? "full" : stacked ? "stacked" : main} sx={stacked ? COLUMNS : { display: "contents" }}>
-                {(!fromDrawer || fromSide) && (
+                <Box ref={columnsBox} data-tq-columns="" data-tq-layout={threeUp ? "sections" : sessionView ? "full" : stacked ? "stacked" : main} sx={stacked ? COLUMNS : { display: "contents" }}>
+                {(!fromDrawer || fromSide) && slot("from",
                   <Box data-tq-from="" data-tq-task-section="" data-tq-from-open={fromOpen ? "" : undefined} data-tq-from-side={fromDrawer ? "" : undefined}
-                    id={fromDrawer ? "tq-from-side" : undefined} role={fromDrawer ? "complementary" : undefined} aria-label={fromDrawer ? "Came from" : undefined}
-                    onClickCapture={stacked ? phoneFromTap : undefined} sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1.75,
-                    ...(fromDrawer ? { ...card, px: 1.5, py: 1.25, ...FROM_SIDE } : workDrawer ? MAIN : PHONE_FROM(fromOpen)) }}>
+                    id={fromDrawer ? "tq-from-side" : undefined} role={fromDrawer ? "complementary" : threeUp ? "region" : undefined}
+                    aria-label={fromDrawer || threeUp ? "Came from" : undefined} aria-hidden={threeUp && section !== "from" ? true : undefined}
+                    onClickCapture={stacked ? phoneFromTap : undefined} sx={threeUp ? { ...SECTION(section === "from", openW("from")), gap: 1.75 }
+                      : { minWidth: 0, display: "flex", flexDirection: "column", gap: 1.75, ...(fromDrawer ? { ...card, px: 1.5, py: 1.25, ...FROM_SIDE } : PHONE_FROM(fromOpen)) }}>
+                    {threeUp && <SectionHead sec={SECTIONS[0]} sub="what came in, and what triage made of it" here={hereSec === "from"} />}
                     {/* SECTION 1, IN THE ORDER THE OWNER APPROVED (2026-10-16): the ask, what there is to do, where it came from - and no
                         buttons. "The buttons stay on bottom by the prompt box like always. No buttons there." On the canvas that is the row
                         over the chat line; on the Tasks tab, the view's own bar under the sections. */}
@@ -2024,6 +2278,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           session is the record under Agent work, not the news (the owner, 2026-10-12) - always, now no strip under the
                           canvas says what to do (2026-10-26) */}
                       {news && <Typography className="tq-news" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>Open again: {news.line}</Typography>}
+                      {threeUp && fromCards()}
                       {/* THE ASK - one line of what is wanted; the whole summary is the tooltip when the line cut it */}
                       {(askBand || waitFor) && <Part label="The ask" data-tq-ask="" data-tq-quoted={askQuoted ? "" : undefined}>
                         {waitFor && <Typography data-tq-waiting-on="" sx={{ color: INK, fontSize: 13.5, fontWeight: 600, lineHeight: 1.45 }}>{waitFor.line}</Typography>}
@@ -2077,129 +2332,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           how many are between and who wrote them. It replaces "Where this came from" and the stack of later messages under
                           the ask (the owner, 2026-10-16: "you will probably have to have a scroll if it goes really far back"). A row opens
                           its message in full under it, as the old disclosure did. */}
-                      <Part label="Came from" sub={fromWorkflow && !sources.length ? "a workflow run" : cameFromLabel(sources).replace(/^Came from · /, "").replace(" in ", " · ")} data-tq-came-from="" focus={focus === "source"}>
-                        <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap", "&:empty": { display: "none" } }}>
-                          {!!(detail.attachments?.length || detail.links?.length) && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
-                            label={filesLine(detail.attachments?.length || 0, detail.links?.length || 0)} data-tq-files-pill="" title="Open the message they came with"
-                            onClick={() => {
-                              const mid = detail.attachments?.[0]?.MessageId ?? inbound[0]?.MessageId ?? sources[0]?.msgs[0]?.MessageId;
-                              if (mid == null) return;
-                              if (!sources.some((g) => fromRows(g, 3, showAll).some((r) => r.m?.MessageId === mid))) setShowAll(true);
-                              setOpenMsg(mid); setSeekLetter(mid);
-                            }}
-                            sx={{ height: 19, fontSize: 10, bgcolor: PANEL2 }} />}
-                          {/* ...and how hard triage judged the work, or that it carries sensitive data - only when it is not ordinary, and a
-                              press corrects it (the router, 2026-10-25) */}
-                          {(detail?.judged?.difficulty === "hard" || detail?.judged?.data_class === "sensitive") && <Chip size="small" data-tq-judged=""
-                            label={[detail.judged.difficulty === "hard" && "hard work", detail.judged.data_class === "sensitive" && "sensitive data"].filter(Boolean).join(" · ")}
-                            title={`${detail.judged.by === "owner" ? "You said so" : "Triage judged it so"} - in Auto, hard work runs on the strong model. Click to correct it.`}
-                            onClick={(e) => setJudgeAt(e.currentTarget)} sx={{ height: 19, fontSize: 10, bgcolor: PANEL2, cursor: "pointer" }} />}
-                          <Menu open={!!judgeAt} anchorEl={judgeAt} onClose={() => setJudgeAt(null)}>
-                            {["quick", "standard", "hard"].map((d) => <MenuItem key={d} selected={detail?.judged?.difficulty === d} sx={{ fontSize: 12 }}
-                              onClick={() => judge({ difficulty: d })}>{d === "quick" ? "Quick work" : d === "hard" ? "Hard work" : "Ordinary work"}</MenuItem>)}
-                            {[["ordinary", "Ordinary data"], ["sensitive", "Sensitive data"]].map(([k, l]) => <MenuItem key={k} selected={(detail?.judged?.data_class || "ordinary") === k}
-                              sx={{ fontSize: 12 }} onClick={() => judge({ data_class: k })}>{l}</MenuItem>)}
-                          </Menu>
-                          {fromExpands(sources) && <Link component="button" type="button" underline="hover" onClick={() => setShowAll((v) => !v)}
-                            sx={{ ml: "auto", fontSize: 12 }}>{showAll ? "Show less" : `Show all ${sourceCount}`}</Link>}
-                        </Box>
-                        {/* ONE SENDER, ONE ITEM, SAID: ingest folds the same sender writing again about this onto one task; said once -
-                            how many, and what they need now (concierge.repeats, counted by code) */}
-                        {detail?.repeats?.line && <Typography variant="body2" sx={{ color: DIM, mt: 0.4, fontSize: 12.5, overflowWrap: "anywhere" }}>{detail.repeats.line}</Typography>}
-                        {/* WHOSE WORDS: a stranger's task runs in its CLI's auto mode (origin.py) - said once, quietly, with the reason on
-                            hover and the one owner action that changes it, a link. Nothing for the owner's or trusted work. */}
-                        {/* ...its presses only where the Agent work box is not already carrying them (trustInBox): one place, one wording */}
-                        {strangerLine(detail) && (
-                          <Typography variant="body2" sx={{ color: DIM, mt: 0.4, fontSize: 12.5 }}>
-                            <Tooltip title={strangerLine(detail).why}><span>{strangerLine(detail).text}</span></Tooltip>
-                            {/* ...pressable LOOKS pressable (the owner, 2026-10-27: "trust has to be clickable like a pill"): small round buttons */}
-                            {!trustBoxed && strangerLine(detail).trust && <>{" "}
-                            <Button size="small" variant="outlined" data-tq-trust="" sx={TRUST_PILL} disabled={!!trusting} onClick={() => trustPress("")}
-                              startIcon={trusting === "person" ? <CircularProgress size={11} color="inherit" /> : null}>
-                              {strangerLine(detail).trust}
-                            </Button>
-                            {/* ...or their whole organisation (the owner, 2026-10-22: "hit trust domain and then all users from that domain are
-                                good"): everyone at that domain, Teams organisation or Slack workspace, from now on (senders.trust_org) */}
-                            {strangerLine(detail).trustOrg && <>{" "}
-                            <Button size="small" variant="outlined" data-tq-trust-org="" sx={TRUST_PILL} disabled={!!trusting} onClick={() => trustPress("org")}
-                              startIcon={trusting === "org" ? <CircularProgress size={11} color="inherit" /> : null}>
-                              {strangerLine(detail).trustOrg}
-                            </Button></>}</>}
-                          </Typography>
-                        )}
-                        {/* ...and what its words read as trying to make an agent do: one line, before anyone presses Start */}
-                        {strangerLine(detail)?.danger && (
-                          <Typography variant="body2" sx={{ color: ALERT, mt: 0.3, fontSize: 12.5, overflowWrap: "anywhere" }}>
-                            ⚠ Reads as an attempt to steer the agent: {strangerLine(detail).danger}
-                          </Typography>
-                        )}
-                        {sources.length > 0 ? (
-                          <Box ref={cameFromRef} sx={{ mt: 0.5, minWidth: 0, scrollMarginTop: 8 }}>
-                            {sources.map((g, gi) => (
-                              <Box key={g.key} data-tq-conversation="" sx={{ py: 0.9, borderTop: gi ? "1px solid #ece7e0" : 0, minWidth: 0 }}>
-                                <Box sx={{ display: "grid", gridTemplateColumns: "24px minmax(0, 1fr)", columnGap: 1, rowGap: 0.15, minWidth: 0 }}>
-                                  <Box sx={{ width: 24, height: 24, borderRadius: 1, bgcolor: "#f1eee8", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                                    <ChannelIcon channel={g.channel} sx={{ fontSize: 14 }} /></Box>
-                                  <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1, minWidth: 0, flexBasis: { xs: "calc(100% - 40px)", sm: "auto" } }} title={g.title}>{g.title}</Typography>
-                                  <Typography noWrap variant="caption" sx={{ color: DIM, fontSize: 11, gridColumn: 2, minWidth: 0 }}>{groupMeta(g)}</Typography>
-                                </Box>
-                                {/* SHOW ALL DRAWS EACH CONVERSATION IN ITS OWN FORM: a chat as the back-and-forth it is - bubbles, yours on the right
-                                    (the owner, 2026-10-16: "wasn't this supposed to be a chat back and forth if you hit show all?") - and an email
-                                    thread as every row, each opening its letter. Each scrolls in its own box, so one long thread cannot bury the next. */}
-                                <Box sx={{ mt: 0.5, minWidth: 0 }}>
-                                  {showAll && isChat(g.channel) ? <ChatThread messages={g.msgs} maxHeight={THREAD_MAX} />
-                                    : <Box data-tq-thread-box="" sx={showAll ? { maxHeight: THREAD_MAX, overflowY: "auto", minWidth: 0 } : undefined}>
-                                        <ConversationRows rows={fromRows(g, 3, showAll)} open={shownMsg} onOpen={(f) => setOpenMsg(f(shownMsg))} narrow
-                                          onExpand={() => setShowAll(true)} files={sourceFiles} fetchFor={fetchFor} subject={g.title} /></Box>}
-                                </Box>
-                              </Box>
-                            ))}
-                          </Box>
-                        ) : fromWorkflow ? (
-                          /* A WORKFLOW RUN has no message to show: where it came from is the workflow and what started it - its clock, your
-                             Run now, the assistant, your phone (the owner, 2026-10-16: "what does it show triggered it in the task card?") */
-                          <Box data-tq-workflow-origin="" sx={{ mt: 0.5, py: 0.9,
-                            display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: fromWorkflow.steps ? "wrap" : "nowrap" } }}>
-                            <Box sx={{ width: 24, height: 24, borderRadius: 1, bgcolor: "#f1eee8", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                              <ChannelIcon channel="workflow" sx={{ fontSize: 14 }} /></Box>
-                            <Box sx={{ flex: 1, minWidth: 0 }}>
-                              <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13 }} title={fromWorkflow.title}>Workflow · {fromWorkflow.title}</Typography>
-                              <Typography variant="caption" sx={{ color: DIM, fontSize: 11.5, display: "block" }} title={`${detail.ref} · ${made}`}>
-                                {fromWorkflow.line} · {whenShort(t?.CreatedAt)}</Typography>
-                            </Box>
-                            {fromWorkflow.link && <Link href={fromWorkflow.link} underline="hover" sx={{ fontSize: 12, flexShrink: 0 }}>Open the workflow</Link>}
-                            {codeRun && shareBadge}
-                            {fromWorkflow.steps && <Box data-tq-workflow-steps="" sx={{ flexBasis: "100%", borderTop: `1px solid ${BORDER}`, pt: 0.75, mt: 0.25, minWidth: 0 }}>
-                              {/* a failed run's fix is one press from its task: the workflow opens with Fix with AI already asked */}
-                              <RunSteps steps={fromWorkflow.steps} dense repairs={fromWorkflow.repairs}
-                                onFix={fromWorkflow.sourceId != null && fromWorkflow.runId != null
-                                  ? () => { openAppLink(`report=${fromWorkflow.sourceId}&fix=${fromWorkflow.runId}`); } : null} /></Box>}
-                          </Box>
-                        ) : <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.25 }}>{detail.ref} · {made}</Typography>}
-                        {/* WHAT ITS MESSAGES LINK TO (linkdocs), each once - the items behind the task, a press from it (the redesign,
-                            2026-10-21: "linked items"). What the link names, as its messages named it; its state upstream is not recorded. */}
-                        {!!detail.links?.length && <Box data-tq-linked={detail.links.length} sx={{ mt: 0.9, minWidth: 0 }}>
-                          <Typography sx={{ ...label, display: "block", mb: 0.25 }}>Linked · {detail.links.length}</Typography>
-                          {detail.links.map((l) => (
-                            <Link key={l.id ?? l.url} href={l.url} target="_blank" rel="noopener" underline="hover" title={l.url}
-                              sx={{ display: "block", fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.label || l.url}</Link>))}
-                        </Box>}
-                      </Part>
-                      {/* WHAT TRIAGE MADE OF IT, LAST (the redesign, owner-approved 2026-10-21): "Sorted as: <what> · <priority> · <why>" -
-                          what the header's pills said, and the why triage recorded - then what joined it since, and the playbook or report
-                          it works from. The pills beside the title are gone; this is where those facts live now. */}
-                      <Box data-tq-sorted="" title={`${detail.ref} · ${made}${triaged.at ? ` · sorted ${whenShort(triaged.at)}` : ""}`}
-                        sx={{ display: "flex", gap: 1, alignItems: "flex-start", pt: 1, borderTop: `1px solid ${BORDER}` }}>
-                        <AltRouteIcon sx={{ fontSize: 15, color: ACCENT, mt: 0.2, flexShrink: 0 }} />
-                        <Typography sx={{ fontSize: 12, color: DIM, minWidth: 0, overflowWrap: "anywhere", lineHeight: 1.5 }}>
-                          {triageSays(facts, t?.Kind || "task", triaged.why)}
-                          {triaged.later > 0 && ` · ${plural(triaged.later, "later message")} joined it`}
-                          {workContext && <Box component="span" sx={{ display: "block" }}>Works from: {workContext}</Box>}
-                          {/* ...and a warning it carries (a start held for a repository) in the alert ink the header pill wore */}
-                          {facts.pills.filter((p) => p.tone === "alert" && p.key !== "priority").map((p) => (
-                            <Box key={p.key} component="span" data-tq-fact-alert={p.key} sx={{ display: "block", color: ALERT_INK, fontWeight: 600 }}>{p.label}: {p.value}</Box>))}
-                        </Typography>
-                      </Box>
+                      {/* ...in the three sections the conversations are "Full message history (N)", their facts What came in (fromCards) */}
+                      {!threeUp ? <Part label="Came from" sub={fromWorkflow && !sources.length ? "a workflow run" : cameFromLabel(sources).replace(/^Came from · /, "").replace(" in ", " · ")} data-tq-came-from="" focus={focus === "source"}>
+                        {fromFacts()}{fromConvs()}</Part> : fromHistory()}
+                      {!threeUp && fromSorted()}
                     </Box>
                   </Box>
                 )}
@@ -2209,10 +2345,51 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {/* ...in ONE scroller, the column's, with Close out held at its foot (TQ-1215, "screen is wonky and poorly sized"): the Result and a
                     finished agent's chat each shrank into a scroller of their own, and at 1366x640 the Result kept 12px and the chat 40px */}
                 {/* ...only while Close out is OPEN: folded, the column is the one scroller and Close out stands at its foot (oneScroll, 2026-10-26) */}
-                <Box ref={workBox} data-tq-work="" data-tq-work-side={workDrawer ? "" : undefined} id={workDrawer ? "tq-work-side" : undefined}
-                  role={workDrawer ? "complementary" : undefined} aria-label={workDrawer ? "Agent and Close out" : undefined}
-                  sx={sessionView ? { display: "contents" } : { minWidth: 0, display: "flex", flexDirection: "column", containerType: "inline-size",
-                    ...(workDrawer ? WORK_SIDE(workSide) : main === "work" ? MAIN : settled ? { flex: "0 1 auto", minHeight: 0 } : {}) }}>
+                {/* ...in the three sections the column is no box of its own: its Agent part and Close out are two of the sections (slot) */}
+                <Box ref={workBox} data-tq-work={threeUp ? undefined : ""}
+                  sx={sessionView || threeUp ? { display: "contents" } : { minWidth: 0, display: "flex", flexDirection: "column", containerType: "inline-size",
+                    ...(main === "work" ? MAIN : settled ? { flex: "0 1 auto", minHeight: 0 } : {}) }}>
+                {slot("agent", <Box data-tq-work={threeUp ? "" : undefined} data-tq-agent-section="" role={threeUp ? "region" : undefined} aria-label={threeUp ? "Agent" : undefined}
+                  sx={threeUp ? SECTION(section === "agent", openW("agent"), sessionView) : { display: "contents" }}>
+                {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
+                    its lap - you type into it like any other terminal. Everything below is
+                    reference material about the same task, folded away. */}
+                {/* the session just closed: its write-up takes the space the terminal had, so the
+                    result of the work is the thing you are looking at */}
+                {/* The checkout, and why. A wrong guess means an agent editing the wrong tree in
+                    good faith, so it is stated on the page rather than buried in the prompt. */}
+                {/* In the agent view the task card (and its Came from) is not drawn, and a report task's
+                    whole substance is the report - so it is one click away here (the owner, 2026-09-30) */}
+                {sessionView && t?.Source === "report" && sourceMessage?.BodyText && (
+                  <Box sx={{ ...card, ...step, mb: 0, px: 1.5, py: 1.1, flexShrink: 0 }}>
+                    <Box onClick={() => setReportOpen((v) => !v)} sx={{ display: "flex", alignItems: "center", gap: 0.85, cursor: "pointer" }}>
+                      <Typography sx={{ ...label }}>The report</Typography>
+                      <Typography noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>
+                        {sourceMessage.SourceName || sourceMessage.Subject} · {fmtDateTime(sourceMessage.SentAt)}</Typography>
+                      <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, transition: "transform .15s", transform: reportOpen ? "rotate(180deg)" : "none" }} />
+                    </Box>
+                    {reportOpen && (
+                      <Box sx={{ mt: 0.85, maxHeight: 420, overflowY: "auto", minWidth: 0, overflowWrap: "anywhere" }}>
+                        {looksMd(sourceMessage.BodyText) ? <Md text={cleanText(sourceMessage.BodyText)} />
+                          : <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{cleanText(sourceMessage.BodyText)}</Typography>}
+                      </Box>
+                    )}
+                  </Box>
+                )}
+                {/* ...and a BATCH's items stay in view while its agent works through them: each result lands on its line as the
+                    agent reports it, and the presses on a finished line are usable without leaving the session (batch.py) */}
+                {sessionView && detail?.batch && (
+                  <Box sx={{ ...card, ...step, mb: 0, px: 1.5, py: 1.1, flexShrink: 0 }}>
+                    <Box onClick={() => setItemsOpen((v) => !v)} sx={{ display: "flex", alignItems: "center", gap: 0.85, cursor: "pointer" }}>
+                      <Typography sx={{ ...label }}>The items</Typography>
+                      <Typography noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>{batchProgress(detail.batch)}</Typography>
+                      <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, transition: "transform .15s", transform: itemsOpen ? "rotate(180deg)" : "none" }} />
+                    </Box>
+                    {itemsOpen && <Box sx={{ maxHeight: 360, overflowY: "auto", minWidth: 0 }}>
+                      <BatchItems taskId={t?.TaskId} items={detail.batch} bare
+                        onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} /></Box>}
+                  </Box>
+                )}
                 {/* ONE SHORT LINE, LIVE OR NOT. A running session has always been a single strip -
                     heading, chip, controls - while the stopped card answered with a heading, a
                     sentence under it, and a row of buttons under that: three lines for the same
@@ -2483,9 +2660,34 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     )}
                   </>
                 ) : null}
+                {/* THE ADVISOR'S LINE, in the Agent section under its work (the owner's mockup, 2026-10-27) - never over a live agent's screen */}
+                {threeUp && warn && !liveSession && <Box sx={{ mt: 1.5, flexShrink: 0 }}><AdvisorNote note={warn} onDraft={() => { setOpenStage("reply"); openSection("close");
+                  requestAnimationFrame(() => closeOutRef.current?.querySelector("textarea")?.scrollIntoView({ block: "center", behavior: "smooth" })); }} /></Box>}
+                {/* runs from before sessions (and any API-driven run) keep their trace here */}
+                {!sessionView && detail.runs.length > 0 && (
+                  <Fold title={`Earlier runs · ${detail.runs.length}`}>
+                    {detail.runs.map((r) => (
+                      <Box key={r.RunId} sx={{ mb: 0.75, p: 1, bgcolor: r.Status === "running" ? "#dfeade" : PANEL2, borderRadius: 1.5, border: `1px solid ${BORDER}` }}>
+                        <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
+                          <TaskuaryMark size={13} />
+                          <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>run {r.RunId} · {r.AgentName} · {r.Status}</Typography>
+                          {r.Status === "running" && <CircularProgress size={11} />}
+                          <Typography variant="caption" sx={{ color: FAINT }}>· {timeAgo(r.StartedAt)} · by {r.DispatchedBy}</Typography>
+                        </Box>
+                        <RunTrace traceJson={r.TraceJson} running={r.Status === "running"} />
+                        {r.Result && <Typography variant="caption" sx={{ mt: 0.25, whiteSpace: "pre-wrap", color: "#47654a", display: "block" }}>{r.Result}</Typography>}
+                        {r.LastError && <Alert severity="error" sx={{ mt: 0.5, py: 0 }}>{r.LastError}</Alert>}
+                      </Box>
+                    ))}
+                  </Fold>
+                )}
+                </Box>)}
 
                 {/* ...the draft a little heavier than the words round it (the owner, 2026-10-25: "subtly focus the reply"): the eye lands on what goes out */}
-                {!sessionView && <Box ref={closeOutRef} data-tq-closeout="" sx={{ ...card, ...step, borderTop: 0, mt: 1, px: 0, py: pane === "reply" ? 1.25 : 1, flexShrink: 0,
+                {/* ...and in the three sections it is the third, its own section - beside a live agent too, a slim tab */}
+                {(!sessionView || threeUp) && slot("close", <Box ref={closeOutRef} data-tq-closeout="" role={threeUp ? "region" : undefined} aria-label={threeUp ? "Close out" : undefined}
+                  sx={threeUp ? { ...SECTION(section === "close", openW("close")), "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }
+                  : { ...card, ...step, borderTop: 0, mt: 1, px: 0, py: pane === "reply" ? 1.25 : 1, flexShrink: 0,
                   // ...side by side only: a phone's stacked view scrolls whole under its own docked row
                   ...(oneScroll ? { "@container (min-width: 760px)": { position: "sticky", bottom: 0, zIndex: 1, bgcolor: SHADE, mt: 0.5, boxShadow: `0 -1px 0 ${BORDER}` } } : {}),
                   ...(focus === "reply" ? { ...FOCUS, mt: 1.25 } : {}),
@@ -2690,36 +2892,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       Nothing is waiting on you here, and no inbound sender is attached to this task.
                     </Typography>
                   ))}
-                </Box>}
-
-
-                {/* runs from before sessions (and any API-driven run) keep their trace here */}
-                {!sessionView && detail.runs.length > 0 && (
-                  <Fold title={`Earlier runs · ${detail.runs.length}`}>
-                    {detail.runs.map((r) => (
-                      <Box key={r.RunId} sx={{ mb: 0.75, p: 1, bgcolor: r.Status === "running" ? "#dfeade" : PANEL2, borderRadius: 1.5, border: `1px solid ${BORDER}` }}>
-                        <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
-                          <TaskuaryMark size={13} />
-                          <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>run {r.RunId} · {r.AgentName} · {r.Status}</Typography>
-                          {r.Status === "running" && <CircularProgress size={11} />}
-                          <Typography variant="caption" sx={{ color: FAINT }}>· {timeAgo(r.StartedAt)} · by {r.DispatchedBy}</Typography>
-                        </Box>
-                        <RunTrace traceJson={r.TraceJson} running={r.Status === "running"} />
-                        {r.Result && <Typography variant="caption" sx={{ mt: 0.25, whiteSpace: "pre-wrap", color: "#47654a", display: "block" }}>{r.Result}</Typography>}
-                        {r.LastError && <Alert severity="error" sx={{ mt: 0.5, py: 0 }}>{r.LastError}</Alert>}
-                      </Box>
-                    ))}
-                  </Fold>
-                )}
+                </Box>)}
                 </Box>
                 </Box>
               </Box>
-              {workDrawer && <Box component="button" type="button" ref={workTabRef} data-tq-work-tab="" data-tq-lit={workLit ? "" : undefined} sx={DRAWER_TAB(workSide, true, workLit)}
-                title={workSide ? "Hide the agent and Close out" : "Show the agent and Close out"} aria-label={workSide ? "Hide the agent and Close out" : "Show the agent and Close out"}
-                aria-expanded={workSide} aria-controls="tq-work-side" onClick={() => { setFromSide(false); setWorkSide((v) => !v); }}>
-                <Box component="span" aria-hidden data-tq-from-chevron="">{workSide ? "›" : "‹"}</Box>
-                {/* ...and the Advisor's section in the drawer, said on its tab (the owner, 2026-10-26) */}
-                <Box component="span" data-tq-from-words="">{workTabWords}</Box></Box>}
               </Box>
               {/* THE TASKS TAB'S BAR, AT THE FOOT (the owner, 2026-10-16: "the buttons stay on bottom by the prompt box like always. No
                   buttons there."). The canvas draws these as its row over the chat line (rowVerbs, ActionRow); the Tasks tab has no

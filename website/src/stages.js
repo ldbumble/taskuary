@@ -22,3 +22,6 @@ export const mainView = ({ stage, sessionView = false, stacked = false }) =>
   sessionView ? "work" : stacked ? null : STAGE[stage]?.main || "task";
 // ...the right drawer's tab is lit where the stage's next move is in it, and only while it is a drawer
 export const drawerLit = ({ stage, main }) => main === "task" && !!STAGE[stage]?.lit;
+// THE SECTION IT IS UP TO, of the desk's three in a row - Came from | Agent | Close out (the owner, 2026-10-27): the stage's
+export const SECTION_KEYS = ["from", "agent", "close"];
+export const sectionOf = (stage) => STAGE[stage]?.section || "from";

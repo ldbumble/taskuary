@@ -60,7 +60,7 @@ import { Reshape } from "./Reshape.jsx";
 import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
 import { Attachments, mentionsPicture } from "./Attachments.jsx";
 import ChatThread from "./ChatThread.jsx";
-import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, codingProfile, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, LinkedText, Empty, FilterPills, Confirm, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
+import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, codingProfile, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, LinkedText, Empty, FilterPills, Confirm, WorkStrip, isWaiting, TaskuaryMark, DraftField, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -1423,6 +1423,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         {section !== k && tabFor(k)}{body}</Box>);
   // ...the open section draws its half of the work: the Agent its own, Close out the reply; Came from leaves the halves as they were
   const pane = section === "agent" ? "agent" : section === "close" ? "reply" : paneRest;
+  // ...and a reply owed with nothing drafted shows its empty box in Close out, Draft with AI under it (the three sections, 2026-10-27)
+  const replyEmpty = threeUp && !!replyMessage && !pendingReview && !sentReview && !unsentReview && !ended && !liveSession
+    && !!t && !["done", "dropped"].includes(t.Status);
   // ONE SCROLLER IN THE WORK COLUMN (the owner, 2026-10-26, a failed run on a laptop: "you can't see anything"): a settled agent's part
   // scrolled inside the column with its transcript scrolling inside THAT, and the reason it failed sat at the foot of the inner one. Now
   // the column alone scrolls, the agent's part and its chat at their own height, and a folded Close out keeps its place on screen by
@@ -2799,7 +2802,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               to make it go" - the owner, 2026-09-22), and the twin beside it did the thing
                               the first one was named for. The box is still editable, and Redraft below
                               writes it again. */}
-                          {!pendingReview && !inRow && (
+                          {!pendingReview && !inRow && !replyEmpty && (
                             <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
                               sx={primaryBtn}
                               startIcon={openingReply ? <CircularProgress size={12} /> : <ForwardToInboxIcon sx={{ fontSize: 16 }} />}
@@ -2876,6 +2879,24 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                   label={f.size ? `${f.name} · ${sizeText(f.size)}` : f.name}
                                   sx={{ height: 21, fontSize: 10.5, bgcolor: PANEL2, maxWidth: 320 }} />
                               ))}
+                            </Box>
+                          )}
+                          {/* A REPLY OWED, NOTHING DRAFTED YET (the owner, 2026-10-27, Close out opened on an invite: "Answering" and "To" and nothing to
+                              do): the empty reply box under the To line, as a draft with no words wears it (ReviewDecision's "No draft yet - hit Draft
+                              with AI"), and the same press - Draft with AI writes it here; a press in the box opens it to write by hand. The row's Reply
+                              is the same openReply */}
+                          {replyEmpty && (
+                            <Box data-tq-reply-empty="" sx={{ mt: 1 }}>
+                              <Box onMouseDown={(e) => { if (!openingReply) { e.preventDefault(); openReply(false); } }}>
+                                <DraftField value="" onChange={() => {}} placeholder={openingReply === "generate" ? "Drafting…" : "No draft yet — hit Draft with AI"}
+                                  inputProps={{ readOnly: true, style: { fontSize: 12.5, lineHeight: 1.45, cursor: "text" } }} />
+                              </Box>
+                              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1, flexWrap: "wrap" }}>
+                                <Button size="small" variant="contained" disableElevation disabled={!!openingReply} sx={primaryBtn} data-tq-draft-ai=""
+                                  startIcon={openingReply === "generate" ? <CircularProgress size={12} color="inherit" /> : null}
+                                  title={btnHint("redraft")} onClick={() => openReply(true)}>{openingReply === "generate" ? "Drafting…" : btn("redraft", "none")}</Button>
+                                <Typography variant="caption" sx={{ color: FAINT }}>Nothing is sent until you approve it.</Typography>
+                              </Box>
                             </Box>
                           )}
                           {/* the words that LEFT: an edit before the send is the FinalText - the draft read "keep it active" over a

@@ -84,6 +84,62 @@ def _grouped_messages_sql(cur):
     return f'SELECT {_columns(cur, "message")} FROM message WHERE NOT {where} ORDER BY MessageId', params
 
 
+# What the census reads, column by column - and so the only writes that can change its answer. Every other
+# write still bumps DirtyGeneration (PROCESSING_DIRTY_TABLES, which the readers' freshness rests on), but
+# re-running an identical census for a task's Status, a route or a funnel_state row held store.lock 1-4 s
+# every few seconds on a real mailbox (the owner's console, 2026-10-28). These triggers bump
+# MembershipGeneration instead, and a census that finds it where the last clean census left it
+# (CensusGeneration) skips the pass: same inputs, same membership. None means any UPDATE counts.
+# A column the census starts reading must be added here - test_census_skips_what_cannot_move_it pins it.
+CENSUS_INPUTS = {
+    'task': ('TaskId', 'SourceRef'),
+    'message': ('MessageId', 'TaskId', 'Status', 'Channel', 'Brief'),
+    'review': ('ReviewId', 'MessageId', 'TaskId'),
+    'idea': ('IdeaId', 'ActionJson', 'MessageId'),
+    'attachment': ('AttachmentId', 'MessageId'),
+    'run': ('RunId', 'TaskId'),
+    'processing_item': ('ItemId', 'Kind', 'RedirectItemId', 'CreatedAt'),
+    'processing_member': None, 'processing_alias': None, 'processing_relation': None,
+}
+CENSUS_SETTINGS = ('processing_membership_rules',)
+_BUMP = 'UPDATE processing_reconcile_state SET MembershipGeneration=MembershipGeneration+1 WHERE Singleton=1;'
+
+
+def census_triggers():
+    """CREATE TRIGGER statements bumping MembershipGeneration on every write the census can see."""
+    out = []
+    for table, cols in CENSUS_INPUTS.items():
+        for action in ('INSERT', 'UPDATE', 'DELETE'):
+            when = f" WHEN {' OR '.join(f'OLD.{c} IS NOT NEW.{c}' for c in cols)}" if action == 'UPDATE' and cols else ''
+            out.append(f'CREATE TRIGGER IF NOT EXISTS census_dirty_{table}_{action.lower()} AFTER {action} ON {table}{when} BEGIN {_BUMP} END')
+    names = ','.join(f"'{n}'" for n in CENSUS_SETTINGS)
+    for action, rows in (('INSERT', ('NEW',)), ('UPDATE', ('OLD', 'NEW')), ('DELETE', ('OLD',))):
+        when = ' OR '.join(f'{r}.Name IN ({names})' for r in rows)
+        out.append(f'CREATE TRIGGER IF NOT EXISTS census_dirty_setting_{action.lower()} AFTER {action} ON setting WHEN {when} BEGIN {_BUMP} END')
+    return out
+
+
+def install_census_triggers(cx):
+    """Create the triggers, replacing any whose stored text is not today's (a column added above must reach old installs)."""
+    have = dict(cx.execute("SELECT name, sql FROM sqlite_master WHERE type='trigger' AND name LIKE 'census_dirty_%'"))
+    for sql in census_triggers():
+        name, want = sql.split()[5], sql.replace(' IF NOT EXISTS', '', 1)
+        if name in have and have[name] != want: cx.execute(f'DROP TRIGGER {name}')
+        cx.execute(sql)
+
+
+def census_current(cur):
+    """True when nothing the census reads has been written since the last clean census."""
+    row = cur.execute('SELECT MembershipGeneration, CensusGeneration FROM processing_reconcile_state WHERE Singleton=1').fetchone()
+    return bool(row) and row[0] == row[1]
+
+
+def mark_census(cur, clean):
+    """Record the census just run: if clean, the inputs it saw (its own writes included) are current; else the next one runs in full."""
+    cur.execute('UPDATE processing_reconcile_state SET CensusGeneration=CASE WHEN ? THEN MembershipGeneration ELSE -1 END WHERE Singleton=1',
+                (1 if clean else 0,))
+
+
 def _columns(cur, table):
     """Every column of `table` except the ones a census demonstrably does not read."""
     skip = _UNREAD_COLUMNS.get(table, ())
@@ -110,9 +166,23 @@ def reconcile_membership(cur, *, stamp, new_item_id, follow_item):
         WHERE RetiredAt IS NULL ORDER BY MemberId''')]
     current = {}
     conflicts, diagnostics = [], []
+    roots = {}
+
+    def follow_loaded(item_id):
+        # follow_item over the rows just read, memoised: one SELECT per member was ~10k a pass
+        if item_id not in roots:
+            seen, at = set(), item_id
+            while at and at not in seen:
+                seen.add(at)
+                if at not in item_rows: roots[item_id] = None; break
+                if not item_rows[at].get('RedirectItemId'): roots[item_id] = at; break
+                at = item_rows[at]['RedirectItemId']
+            else: raise ValueError(f'processing item redirect cycle at {item_id}')
+        return roots[item_id]
+
     for row in current_rows:
         exact = (row['EntityKind'], row['LocalId'])
-        root = follow_item(cur, row['ItemId'])
+        root = follow_loaded(row['ItemId'])
         if root is None:
             conflicts.append(_problem('missing_member_item', *exact, item_id=row['ItemId']))
             continue
@@ -282,11 +352,10 @@ def reconcile_membership(cur, *, stamp, new_item_id, follow_item):
     active = {(r['EntityKind'], r['LocalId']): dict(r) for r in cur.execute('''SELECT *
         FROM processing_member WHERE RetiredAt IS NULL ORDER BY MemberId''')}
     created_members = 0
+    primaries = {r['ItemId'] for r in active.values() if r['Role'] == 'primary'}   # kept current below: two SELECTs per group were ~9k a pass
     for group in ordered_groups:
         target = targets[group['key']]
-        have_primary = cur.execute('''SELECT 1 FROM processing_member
-            WHERE ItemId=? AND RetiredAt IS NULL AND Role='primary' LIMIT 1''',
-            (target,)).fetchone() is not None
+        have_primary = target in primaries
         entities = sorted(group['entities'], key=_entity_key)
         entities.sort(key=lambda entity: entity != group['primary'])
         for entity in entities:
@@ -296,7 +365,7 @@ def reconcile_membership(cur, *, stamp, new_item_id, follow_item):
                     'attachment' if entity[0] == 'attachment' else
                     'work' if entity[0] == 'run' else 'member')
             if role == 'primary':
-                have_primary = True
+                have_primary = True; primaries.add(target)
             cur.execute('''INSERT INTO processing_member
                 (ItemId,EntityKind,LocalId,Role,JoinedAt) VALUES (?,?,?,?,?)''',
                 (target, entity[0], entity[1], role, stamp))
@@ -307,10 +376,10 @@ def reconcile_membership(cur, *, stamp, new_item_id, follow_item):
 
         # A deleted old primary can leave unchanged members behind.  Preserve the
         # old row as history, then promote the group's preferred surviving entity.
-        if not cur.execute('''SELECT 1 FROM processing_member WHERE ItemId=?
-            AND RetiredAt IS NULL AND Role='primary' LIMIT 1''', (target,)).fetchone():
+        if target not in primaries:
             chosen = next((entity for entity in entities if entity in active), None)
             if chosen is not None:
+                primaries.add(target)
                 row = cur.execute('''SELECT MemberId FROM processing_member
                     WHERE EntityKind=? AND LocalId=? AND RetiredAt IS NULL''', chosen).fetchone()
                 cur.execute('UPDATE processing_member SET RetiredAt=? WHERE MemberId=?',
@@ -336,10 +405,11 @@ def reconcile_membership(cur, *, stamp, new_item_id, follow_item):
                        if ('review', rid) not in frozen)
     alias_specs.extend((f'idea:{iid}', 'idea', iid) for iid in sorted(ideas, key=_id_key))
     created_aliases = 0
+    # one read, not one per alias (~16k SELECTs a pass on a real mailbox); the active index makes Value unique
+    have_aliases = {r['Value']: r for r in cur.execute('''SELECT Value,EntityKind,LocalId FROM processing_alias
+        WHERE Namespace='legacy_funnel' AND Scope='local' AND RetiredAt IS NULL''')}
     for value, entity_kind, local_id in alias_specs:
-        old = cur.execute('''SELECT EntityKind,LocalId FROM processing_alias
-            WHERE Namespace='legacy_funnel' AND Scope='local' AND Value=?
-              AND RetiredAt IS NULL''', (value,)).fetchone()
+        old = have_aliases.get(value)
         if old and (old['EntityKind'], old['LocalId']) != (entity_kind, local_id):
             conflicts.append(_problem('legacy_alias_collision', entity_kind, local_id,
                                       value=value, existing_entity_kind=old['EntityKind'],
@@ -351,6 +421,7 @@ def reconcile_membership(cur, *, stamp, new_item_id, follow_item):
             (Namespace,Scope,Value,EntityKind,LocalId,Provenance,CreatedAt)
             VALUES ('legacy_funnel','local',?,?,?,'processing-membership',?)''',
             (value, entity_kind, local_id, stamp))
+        have_aliases[value] = {'EntityKind': entity_kind, 'LocalId': local_id}
         created_aliases += 1
         target = desired.get((entity_kind, local_id))
         if target:

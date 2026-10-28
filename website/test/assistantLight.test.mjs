@@ -61,12 +61,11 @@ test("a lit button says no line, in the chat or over the row", () => {
   assert.doesNotMatch(light, /export const pressLine/);
   // ...and not even a light that carries one: no strip stands over the row to say it (the owner, 2026-10-26: "remove the advisor")
   assert.doesNotMatch(view + src("CanvasItem.jsx"), /data-tq-advice="lit"/);
-  // ...and the one-row chat bar's pop-up, holding only the owner's own line when the answer was a lit button, shuts itself after a moment
-  // (default chosen 2026-10-26) - never over an error or an answer still on its way
-  assert.match(view, /if \(!popOpen \|\| popPending \|\| err \|\| popLast\?\.role !== "user"\) return undefined;\s*const t = setTimeout\(\(\) => setPopOpen\(false\), POP_LIT_MS\);/);
-  assert.match(view, /const POP_LIT_MS = \d{3,4};/);
-  // ...and a reply that only lit or pressed is no chat line at all: only words get one
+  // ...and the one-row chat bar's pop-up never shuts by itself (the owner, 2026-10-27: "it disappeared when done?") - no timer closes it
+  assert.doesNotMatch(view, /POP_LIT_MS|setTimeout\(\(\) => setPopOpen\(false\)/);
+  // ...and a reply that only lit or pressed is no chat line in the column: only words get one - in the pop-up it ends on its receipt
   assert.match(view, /if \(data\.say \|\| data\.options\?\.length \|\| data\.chips\?\.length\)\s+setMsgs\(\(m\) => \[\.\.\.m, \{ id: aid, role: "assistant"/);
+  assert.match(view, /else if \(popOnRef\.current && !data\.context_update && !data\.decision\) setMsgs\(\(m\) => \[\.\.\.m, \{ id: `r\$\{Date\.now\(\)\}`, role: "receipt", \.\.\.actReceipt\(/);
   assert.doesNotMatch(view, /Thinking about this one/, "no Thinking under it - or anywhere (the owner, 2026-10-23)");
   assert.match(view, /lit: litNow,/);
   assert.match(src("CanvasItem.jsx"), /<ActionRow inline advised=\{pick\} \/>/);

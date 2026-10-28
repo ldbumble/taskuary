@@ -4,7 +4,8 @@ import { boot, sleep, type } from "./walkdriver.mjs";
 
 /* THE PILL'S HINT FITS THE PILL (the overnight setup walk, 2026-10-26): an answer with a row under it (Next) and no task on the table left
    the chat box as the dock's 220px pill holding the long hint, "Ask Taskuary anything — a name or a subject pulls it in…", which ran on
-   under the pill's own send button cut mid-word. At rest the pill says the short one; opened, it says the whole hint again. */
+   under the pill's own send button cut mid-word. At rest the pill says the short one; opened over the canvas - a column as narrow as a
+   phone's line since 2026-10-27 - the phone's short hint, whole. */
 const hint = (page) => page.evaluate(() => {
   const t = document.querySelector(".tq-compose-box textarea"), cs = getComputedStyle(t);
   const ctx = document.createElement("canvas").getContext("2d"); ctx.font = `${cs.fontSize} ${cs.fontFamily}`;

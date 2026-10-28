@@ -70,7 +70,8 @@ test("a stopped general agent: Continue and a line typed after it show at once, 
   await click(page, "Send to agent", "[data-tq-run-form]");
   await inTask(page, /Payworth is cheapest/);
   await visible(page, "Stop and save"); await click(page, "Stop and save");
-  await inTask(page, /You stopped it and its report is written/);
+  // ...resting on its summary, one press from its record (the Result rests, 2026-10-27; the three sections, the one record button)
+  await page.waitForSelector("[data-tq-result-summary], [data-tq-full-result]", { timeout: 30000 });
 
   // CONTINUE, filled out: the note is on the pane at once, the pane is working on it, and the answer lands
   await visible(page, "Continue"); await click(page, "Continue");

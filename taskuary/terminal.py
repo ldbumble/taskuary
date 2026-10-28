@@ -2571,19 +2571,23 @@ def asking_lines(sid: str, n: int = 4) -> list:
 
 def mode_of_task(tid) -> str: return next((t.mode for t in list(SESSIONS.values()) if t.alive and t.task_id == tid), '')
 
-def say_to_task(store, task_id: int, msg: dict, actor: str = 'router') -> bool:
+def say_to_task(store, task_id: int, msg: dict, actor: str = 'router', new: bool = False) -> bool:
     """Type an inbound answer INTO the task's live session. The agent asked a question, the
     hub asked the person, the person answered - the answer belongs in front of the agent,
     not on a timeline it cannot read. Fed in seed()-sized bites (a one-shot paste drops
     bytes mid-stream), then Enter until it lands. False = no live session to tell.
-    Accepts a message as a DB row (BodyText/FromName) or an ingest dict (body/from_name)."""
+    Accepts a message as a DB row (BodyText/FromName) or an ingest dict (body/from_name).
+    `new`: not an answer but new work triage joined to the task (ingest._pass_coding) - said as such, to the agent and on the task."""
     t = next((x for x in list(SESSIONS.values()) if x.task_id == task_id and x.alive), None)
     if not t: return False
     who = msg.get('FromName') or msg.get('from_name') or msg.get('FromEmail') or msg.get('from_email') or 'the sender'
     body = str(msg.get('BodyText') or msg.get('body') or '').strip()
     if not body: return False
-    how = tell(t, f'{who} answered (by {msg.get("Channel") or msg.get("channel") or "mail"}): {body}'[:4000])
-    store.add_comment(task_id, actor, 'agent', f"{who}'s answer was {how} the live session.")
+    ch = msg.get("Channel") or msg.get("channel") or "mail"
+    how = tell(t, (f"{who} wrote again (by {ch}) with more work on this task - their words, not the owner's: {body}" if new
+                   else f'{who} answered (by {ch}): {body}')[:4000])
+    store.add_comment(task_id, actor, 'agent', f"Passed {who}'s new message to the agent ({how} the live session)." if new
+                      else f"{who}'s answer was {how} the live session.")
     store.audit('task', task_id, 'answer_forwarded', actor, detail={'from': who})
     return True
 

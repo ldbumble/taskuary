@@ -960,9 +960,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # panel; 'off' does neither. A dead session just means False - nothing breaks. Only the task's own
         # person: anyone else on the thread is not the one it asked (B6, 2026-10-11).
         # ...or of the person the agent said it was waiting on (waiton.py) - the same owner setting, never a start of its own
-        if awaited or from_opener(store, tid, msg): _hand_to_agent(store, cfg, tid, msg, actor)
-        # ...and new work on a task whose assistant has STOPPED carries that conversation on, where it would have started by itself
-        _carry_on(store, tid, msg, mid, follow, actor)
+        # NEW WORK goes to the task's agent first (_carry_on): a live one hears it as its next turn, a stopped one carries its
+        # conversation on where it would have started by itself - and a line it took is not typed in a second time here
+        if not _carry_on(store, tid, msg, mid, follow, actor) and (awaited or from_opener(store, tid, msg)): _hand_to_agent(store, cfg, tid, msg, actor)
     else:
         # Nothing the owner said before decides here without a model. A ruling on THIS thread used
         # to (ingest.ruled_on_thread, until PW-020): every later reply on a dismissed email thread
@@ -1740,43 +1740,145 @@ def _hand_to_agent(store, cfg: dict, tid, msg: dict, actor: str):
     except Exception as e: logger.warning(f'answer_to_agent failed for task {tid}: {e}')
 
 
+CODING_OPENING = set()      # coding tasks whose saved CLI conversation is being reopened by carry-on: live already, no pane yet
+PASS_WAIT = 180             # seconds a passed-in line waits for a session still opening before it is said as not passed
+
+
+def live_agent(store, tid) -> str:
+    """'general' / 'coding' when a session that can hear a next turn is on the task (or opening), 'run' for a headless run that
+    cannot, '' when nothing is."""
+    from . import general, terminal
+    if tid in general.OPENING or general.session_for(tid): return 'general'
+    if tid in CODING_OPENING or any(getattr(x, 'alive', False) and x.task_id == tid for x in list(terminal.SESSIONS.values())): return 'coding'
+    return 'run' if any(x['Status'] == 'running' for x in store.list_runs(tid)) else ''
+
+
+def _resumable_coding(store, tid) -> tuple:
+    """(the saved CLI conversation a coding task reopens, why not) - the checks of the owner's Continue (server._resumable)."""
+    from pathlib import Path
+    row = store.resumable_session(tid)
+    if not row: return None, 'no saved coding session to reopen'
+    if not store.get_agent(row['Agent'] or ''): return None, f'the profile "{row["Agent"]}" is no longer configured'
+    if not (row['Cwd'] and Path(row['Cwd']).is_dir()): return None, f'the checkout it worked in no longer exists: {row["Cwd"]}'
+    return row, ''
+
+
 def carry_on_why(store, tid, msg: dict, mid, follow: dict | None) -> str:
-    """'' when new work on a task whose assistant has stopped should CARRY ON that same conversation by itself - else why not.
+    """'' when new work on a task whose agent has STOPPED should CARRY ON that same conversation by itself - else why not.
 
     The owner, 2026-10-28, on a group-chat task that was asked for more eleven times after its agent finished: "why is it not
     triggering a continue agent?" Nothing did: an attached line reopened and retitled the task, and the conversation sat finished
     under an ask it never heard until the owner pressed Continue. Now new work (a `task` verdict - a question gets its reply drafted,
     an fyi is filed) carries the stopped conversation on, the new line as its next turn - only where a fresh task would have
-    started its agent by itself (auto_start_ok: the owner's switch, a configured AI, a sender who may), never over a live one, never a
-    second agent. A coding task is not carried on here: its Continue reopens a CLI in a checkout, the owner's press."""
+    started its agent by itself (auto_start_ok: the owner's switch, a configured AI, a sender who may), never a second agent.
+    ...and a CODING task the same (the owner, same day: "coding should be the same as general agents"): its own CLI conversation
+    reopens by the id its CLI gave it, as Continue does - where there is none to reopen, Continue's fresh handover stays the owner's.
+    A LIVE agent is not carried on but told (pass_in_why)."""
     from . import general
     t = store.get_task(tid) or {}
     if not follow or follow.get('degraded') or follow.get('intent') != 'task': return 'not new work'
     if msg.get('no_auto'): return 'the channel waits for the owner'
-    if t.get('Status') == 'dropped' or not general.handles(t): return 'not the assistant\'s task'
-    if not general.history(store, tid): return 'no conversation to carry on'
-    if tid in general.OPENING or general.session_for(tid) or any(x['Status'] == 'running' for x in store.list_runs(tid)):
-        return 'an agent is live on it'
-    ok, why = auto_start_ok(store, msg, mid, 'general')
+    if t.get('Status') == 'dropped': return 'the task was dismissed'
+    if live_agent(store, tid): return 'an agent is live on it'
+    if general.handles(t):
+        if not general.history(store, tid): return 'no conversation to carry on'
+        kind = 'general'
+    elif t.get('Kind') == 'coding':
+        if not (rs := _resumable_coding(store, tid))[0]: return rs[1]
+        kind = 'coding'
+    else: return "not an agent's task"
+    ok, why = auto_start_ok(store, msg, mid, kind)
     return '' if ok else str(why)
 
 
+def pass_in_why(store, tid, msg: dict, mid, follow: dict | None) -> str:
+    """'' when new work triage joined to a task whose agent is LIVE - working, or waiting at its prompt - should go INTO that
+    session as its next turn, else why not. The owner, 2026-10-28: "even if agent is running, both coding and regular, it should
+    pass in the new message no?" It is the default now for related new work; answer_to_agent=off still means never. A sender
+    who may not start an agent by themselves (senders.known) is never typed into one - their words wait for the owner."""
+    if not follow or follow.get('degraded') or follow.get('intent') != 'task': return 'not new work'
+    if store.get_setting('answer_to_agent') == 'off': return 'passing lines to the agent is switched off'
+    if msg.get('no_auto'): return 'the channel waits for the owner'
+    if live_agent(store, tid) not in ('general', 'coding'): return 'no live session to pass it to'
+    ok, why = senders.known(store, msg, exclude_mid=mid, deep=True)
+    return '' if ok else str(why)
+
+
+def _who_said(msg: dict) -> str: return msg.get('from_name') or msg.get('from_email') or 'They'
+
+
 def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bool:
-    """Carry the task's stopped conversation on with the new line (carry_on_why). The turn is the owner's Continue without the
-    press - the same session, told what came in since (continuity.news_block) - and like every agent turn it sends nothing:
-    a reply it writes waits for the owner's Send."""
+    """New work on a task with an agent: a live one hears it as its next turn (_pass_in), a stopped one carries its conversation
+    on (carry_on_why). The turn is the owner's Continue without the press - the same session, told what came in since - and like
+    every agent turn it sends nothing: a reply it writes waits for the owner's Send. True when the line went to an agent."""
+    if live_agent(store, tid) in ('general', 'coding'): return _pass_in(store, tid, msg, mid, follow, actor)
     if carry_on_why(store, tid, msg, mid, follow): return False
-    from . import blackboard as bb
+    from . import blackboard as bb, general
     if bb.live_count() >= (cap := auto_sessions(store)):
         store.add_comment(tid, 'router', 'agent', f'Not carried on by itself: {cap} agents are already running - Continue picks it up.')
         return False
-    from . import general
-    general.OPENING.add(tid)
-    who = msg.get('from_name') or msg.get('from_email') or 'They'
-    store.add_comment(tid, 'router', 'agent', f'{who} wrote again with new work - the assistant carries on its conversation here by itself.')
-    store.audit('task', tid, 'auto_continue', actor, 'agent', {'message_id': mid})
-    _spawn(_continue_general, store, tid)
+    coding = not general.handles(store.get_task(tid) or {})
+    (CODING_OPENING if coding else general.OPENING).add(tid)
+    store.add_comment(tid, 'router', 'agent', f'{_who_said(msg)} wrote again with new work - the '
+                      + ('coding agent reopens its own session' if coding else 'assistant carries on its conversation') + ' here by itself.')
+    store.audit('task', tid, 'auto_continue', actor, 'agent', {'message_id': mid, 'kind': 'coding' if coding else 'general'})
+    _spawn(_continue_coding if coding else _continue_general, store, tid)
     return True
+
+
+# Only a line that WOULD have gone in says why it did not: the switch off, or no new work, is silence.
+_QUIET = ('not new work', 'passing lines to the agent is switched off', 'no live session to pass it to')
+
+
+def _pass_in(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bool:
+    why = pass_in_why(store, tid, msg, mid, follow)
+    if why:
+        if why not in _QUIET: store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message was not passed to the agent: {why} It waits for you.")
+        return False
+    store.audit('task', tid, 'passed_to_agent', actor, 'agent', {'message_id': mid})
+    _spawn(_pass_general if live_agent(store, tid) == 'general' else _pass_coding, store, tid, msg)
+    return True
+
+
+def _pass_turn(msg: dict) -> str:
+    body = ' '.join(str(msg.get('body') or msg.get('BodyText') or '').split())[:4000]
+    return (f"NEW MESSAGE ON THIS TASK from {_who_said(msg)} (by {msg.get('channel') or 'mail'}) - triage read it as more work on this task. "
+            f"These are their words, not the owner's: take what they ask into the work. A reply you write waits for the owner's Send.\n\n{body}")
+
+
+def _pass_general(store, tid, msg: dict):
+    """The line as the assistant's NEXT turn: send_prompt takes its turn behind the one running (GeneralSession._take), so a line
+    that lands mid-answer - or while a carried-on turn is still opening - is queued, never dropped."""
+    from . import general
+    end = time.time() + PASS_WAIT
+    # a conversation still opening (carry-on, Continue) takes ITS turn first: this one waits until that turn has the session
+    while time.time() < end and tid in general.OPENING and not getattr(general.session_for(tid), 'busy', False): time.sleep(.25)
+    ses = general.session_for(tid)
+    if not ses:
+        store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message could not be passed in: the assistant's session ended - Continue picks it up.")
+        return
+    store.add_comment(tid, 'router', 'agent', f"Passed {_who_said(msg)}'s new message to the agent - it is the assistant's next turn.")
+    try: ses.send_prompt(_pass_turn(msg), as_owner=False, echo=False)
+    except Exception as e:
+        logger.warning(f'passing a line to the assistant failed for task {tid}: {e}')
+        store.add_comment(tid, 'router', 'agent', f"The assistant couldn't take {_who_said(msg)}'s new message: {' '.join(str(e).split())[:200]} - Continue picks it up.")
+
+
+def _pass_coding(store, tid, msg: dict):
+    """The line typed into the live coding session (terminal.say_to_task: codex's own queue, else typed - a TUI working takes it
+    as its next turn). A pane still reopening is waited for until its own seed went in; a chooser on screen is never typed into
+    (Enter would pick whatever is highlighted) - the line waits for the owner."""
+    from . import terminal, waitroom
+    live = lambda: next((x for x in list(terminal.SESSIONS.values()) if x.task_id == tid and x.alive), None)
+    end = time.time() + PASS_WAIT
+    while time.time() < end and (tid in CODING_OPENING or getattr(live(), 'accepted', True) is None): time.sleep(.5)
+    t = live()
+    try: chooser = bool(t) and terminal.chooser_in(waitroom._screen(t))
+    except Exception: chooser = False
+    if chooser:
+        store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message was not typed in: the agent has a choice open on screen. It waits for you.")
+    elif not terminal.say_to_task(store, tid, msg, 'router', new=True):
+        store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message could not be passed in: the coding session ended - Continue picks it up.")
 
 
 def _continue_general(store, tid):
@@ -1793,6 +1895,21 @@ def _continue_general(store, tid):
 
 
 def _asker(msg: dict) -> str: return person_name(msg.get('from_name')) or msg.get('from_email') or 'someone'
+
+
+def _continue_coding(store, tid):
+    """Continue's resume road (server.continue_session) without the press: the same CLI, the same checkout, its own conversation
+    by the id its CLI gave it. No instruction rides it - terminal.resume_seed tells it how many messages are new and where they are."""
+    from . import terminal
+    try:
+        row, why = _resumable_coding(store, tid)
+        if not row: raise RuntimeError(why)
+        if (store.get_task(tid) or {}).get('Status') not in ('open', 'waiting', 'in_progress'): store.update_task(tid, {'Status': 'in_progress'}, 'router')
+        terminal.start_on_task(store, tid, row['Agent'], None, None, 'router', cwd=row['Cwd'], resume=row['ExtId'], brain=row.get('Brain') or None)
+    except Exception as e:
+        logger.warning(f'coding carry-on failed for task {tid}: {e}')
+        store.add_comment(tid, 'router', 'agent', f"The coding agent couldn't reopen its session by itself: {' '.join(str(e).split())[:200]} - Continue picks it up.")
+    finally: CODING_OPENING.discard(tid)
 
 
 def _who(m: dict) -> str:

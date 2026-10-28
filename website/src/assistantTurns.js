@@ -113,7 +113,8 @@ export function actReceipt(data = {}, tableKey = null) {
   if (!act) return { text: "No answer came back on that - nothing was changed.", status: "warn" };
   if (!act.label) return { text: `Brought up ${where}.`, status: "warn" };
   return data.pressed ? { text: `${act.label} - ${where}${act.note ? `: ${act.note}` : ""}.`, status: "done" }
-    : { text: `${act.label} is ready on the row for ${where} - yours to press.`, status: "warn" };
+    // ...with the day the words named (trust audit F4, 2026-10-28): "remind me Monday" said only "Remind me is ready", the day lost
+    : { text: `${act.label}${act.day?.day ? ` (${act.day.day})` : ""} is ready on the row for ${where} - yours to press.`, status: "warn" };
 }
 // ...and a Close with a note carries its note (`note`), drawn after the badge (the owner, 2026-10-23: "write on it marked done with note")
 export function pressLine(messages = [], it, label, note = "") {

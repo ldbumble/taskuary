@@ -32,9 +32,9 @@ test("connecting is a token in a field, claimed server-side, and never a browser
 });
 
 test("the four reports are buildable and named for the card they come from", () => {
-  const src = read("ReportsView.jsx");
-  assert.match(src, /simplefin_transactions: "Bank & card \(SimpleFIN\)/);
-  assert.match(src, /simplefin_spend: "Bank & card \(SimpleFIN\)/);
+  const src = read("ReportsView.jsx"), labels = read("reportWords.js");   // the labels live beside the schedule's words (reportWords.js)
+  assert.match(labels, /simplefin_transactions: "Bank & card \(SimpleFIN\)/);
+  assert.match(labels, /simplefin_spend: "Bank & card \(SimpleFIN\)/);
   // no last four in this protocol: the account field must not ask for digits
   const field = src.match(/simplefin_transactions: \[\[(.*?)\]/s)[1];
   assert.ok(!/last four/i.test(field), field);

@@ -86,8 +86,10 @@ export const SECTIONS = [{ key: "from", n: 1, name: "Came from" }, { key: "agent
 // bottom over a thin rule, the section's number under it
 const q = (s) => (s ? `“${String(s).replace(/\s+/g, " ").trim()}”` : "");
 // ...Came from: who, on what, when; their latest words; how many - and at its foot what triage made of it ("✓ Sorted: a reply to send · normal priority")
-export const fromStatus = ({ who = "", channel = "", when = "", words = "", count = 0, workflow = null, made = "", sorted = "" } = {}) => ({
-  lines: [[who, channel, when].filter(Boolean).join(" · ") || (workflow ? `Workflow · ${workflow.title}` : made), q(words), count ? plural(count, "message") : ""].filter(Boolean),
+// ...AT A GLANCE (the owner, 2026-10-27: "show more"): on what and how many, then the last two or three messages - who, and a short line each
+export const fromStatus = ({ channel = "", count = 0, msgs = [], workflow = null, made = "", sorted = "" } = {}) => ({
+  lines: [count ? [channel, plural(count, "message")].filter(Boolean).join(" · ") : workflow ? `Workflow · ${workflow.title}` : made,
+    ...msgs.slice(0, 3).map((m) => `${m.who}: ${q(m.words)}`)].filter(Boolean),
   foot: sorted ? `✓ ${sorted}` : "" });
 // ...the Agent: its profile and where it stands, what it did in a line, what it made - and at its foot its state and the Advisor's next move
 export const agentWord = ({ live = false, waiting = false, failed = false, stopped = false, result = false, record = false, codeRun = false } = {}) =>
@@ -96,10 +98,11 @@ export const agentStatus = ({ profile = "", word = "not started", said = "", mad
   lines: [[profile, word].filter(Boolean).join(" · "), said, made ? `Made: ${made}` : ""].filter(Boolean),
   foot: [word === "finished" ? "✓ Done" : "", advisor ? `Advisor: ${advisor} is next` : ""].filter(Boolean).join(" · ") });
 // ...Close out: who it answers and where, the draft's first words, and whether it went - "Drafted · waiting for Send", "Sent", "Nothing owed"
-export const closeStatus = ({ closed = false, note = "", to = "", where = "", draft = "", waiting = false, emails = 0, sent = false, owed = false } = {}) => ({
+// ...and what is in it: the draft's first words, or what was sent and when, the emails owed, the close and its note
+export const closeStatus = ({ closed = false, note = "", to = "", where = "", draft = "", waiting = false, emails = 0, sent = false, sentWhen = "", owed = false } = {}) => ({
   lines: [to ? `Reply to ${to}${where ? ` in ${where}` : ""}` : "", q(draft),
-    closed ? ["Closed", note].filter(Boolean).join(" · ") : waiting ? "Drafted · waiting for Send" : emails ? `${plural(emails, "email")} waiting for Send`
-      : sent ? "Sent" : owed ? "Not drafted yet" : "Nothing owed"].filter(Boolean),
+    closed ? ["Closed", note].filter(Boolean).join(" · ") : waiting ? "Drafted · waiting for Send" : sent ? (sentWhen ? `Sent ${sentWhen}` : "Sent") : owed ? "Not drafted yet" : emails ? "" : "Nothing owed",
+    emails ? `${plural(emails, "email")} waiting for Send` : ""].filter(Boolean),
   foot: "" });
 
 // THE ASK IS THE MESSAGE'S OWN WORDS when triage left no summary of its own (the task-view cleanup, owner-approved 2026-10-25): said

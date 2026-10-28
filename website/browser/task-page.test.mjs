@@ -196,7 +196,7 @@ test("the task page: three sections at rest, the agent nearly the whole width wh
     // ...resting on what it did and what it made; its heading - or the one Full results and record press - unfolds the write-up whole
     assert.match(await page.$eval("[data-tq-result-summary]", (e) => e.innerText), /^Census sync no longer stops on a site with no manager\./);
     assert.ok(await page.$("[data-tq-work] [data-tq-full-result]"), "one press for the full results and record");
-    await page.$eval('[data-tq-work] [data-tq-step="2"]', (dot) => dot.parentElement.click());
+    await page.$eval('[data-tq-work]', (w) => (w.querySelector('[data-tq-full-result]') || w.querySelector('[data-tq-step="2"]').parentElement).click());
     await page.waitForSelector("[data-tq-work] [data-tq-result]", { timeout: 10000 });
     const r = await page.$eval("[data-tq-result]", (e) => ({ text: e.innerText, parts: [...e.querySelectorAll("[data-tq-result-part]")].map((p) => p.getAttribute("data-tq-result-part")),
       diff: e.querySelector("[data-tq-diff-stat]")?.innerText || "" }));
@@ -207,7 +207,9 @@ test("the task page: three sections at rest, the agent nearly the whole width wh
     assert.match(r.diff, /1 file changed \+2 −1/);
     assert.equal(await page.$("[data-tq-work] .xterm"), null, "no terminal: the session is one line");
     const heading = await page.$eval('[data-tq-work] [data-tq-step="2"]', (dot) => dot.parentElement.innerText);
-    assert.match(heading, /^2 · Agent\s+Result/i, "the agent half is called Result, in the sections' heading line");
+    // ...the section's own heading, no second way to the record (the owner, 2026-10-27: "why are there 2 buttons for full results?")
+    assert.match(heading, /^2 · Agent/i, "the agent's section, in the sections' heading line");
+    assert.equal(await page.$eval('[data-tq-work] [data-tq-step="2"]', (dot) => dot.parentElement.getAttribute("aria-expanded")), null, "the heading folds nothing");
     await page.click("[data-tq-replay]");
     await page.waitForFunction(() => document.querySelector("[data-tq-replay]")?.getAttribute("aria-expanded") === "true", { timeout: 5000 });
   });

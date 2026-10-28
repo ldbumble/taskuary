@@ -48,7 +48,7 @@ test("a finished agent with a draft waiting: Close out is the focus, the Result 
   await page.waitForFunction(() => /Keys are at reception from 7/.test(document.querySelector("[data-tq-result-made]")?.innerText || ""), { timeout: 10000 });
 
   // ...and the Result heading unfolds the rest, and folds it back
-  const heading = () => page.$eval('[data-tq-work] [data-tq-step="2"]', (dot) => dot.parentElement.click());
+  const heading = () => page.$eval('[data-tq-work]', (w) => (w.querySelector('[data-tq-full-result]') || w.querySelector('[data-tq-step="2"]').parentElement).click());
   await heading();
   await page.waitForFunction(() => !document.querySelector("[data-tq-result-summary]") && !!document.querySelector("[data-tq-result] [data-tq-replay]"), { timeout: 10000 });
   await heading();

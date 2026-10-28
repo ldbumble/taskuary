@@ -1471,8 +1471,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const cameIn = answering || newestFirst(inbound)[0] || null;
   // ...read when a tab draws (tabFor, in the JSX): the Advisor's note (`warn`) is worked out further down
   const tabLines = () => !threeUp || !t ? {} : {
-    from: fromStatus({ who: cameIn?.who || cameIn?.FromName || cameIn?.FromEmail || "", channel: cameIn ? channelName(cameIn.Channel) : "",
-      when: cameIn?.SentAt ? whenShort(cameIn.SentAt) : "", words: cameIn ? cleanText(cameIn.ReadText || cameIn.BodyText || "").slice(0, 240) : "",
+    from: fromStatus({ channel: cameIn ? cameIn.SourceName || channelName(cameIn.Channel) : sources[0] ? channelName(sources[0].channel) : "",
+      // ...the last few messages of its conversations, newest first: who, and their words
+      msgs: newestFirst(sources.flatMap((g) => g.msgs)).slice(0, 3).map((m) => ({ who: m.who || m.FromName || m.FromEmail || (m.Direction === "out" ? "You" : ""),
+        words: (rowText(m, sourceFiles.get(m.MessageId)) || cleanText(m.ReadText || m.BodyText || "")).slice(0, 200) })),
       count: sourceCount, workflow: fromWorkflow, made: `${detail.ref} · ${made}`, sorted: sortedLine(facts, t?.Kind || "task").replace(/^Sorted as: /, "Sorted: ") }),
     agent: agentStatus({ profile: runRole || (hasRecord || term ? String(agentName(t) || "").replace(/^agent$/i, "") : ""),
       word: agentWord({ live: !!term?.alive, waiting: agentState === AGENT.waiting, failed: failedRun, stopped: agentState === AGENT.stopped,
@@ -1484,8 +1486,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       advisor: warn?.advice?.label || "" }),
     close: closeStatus({ closed: ["done", "dropped"].includes(t.Status), note: closedNote, to: replyMessage?.FromName || "",
       where: replyMessage ? replyMessage.SourceName || channelName(replyMessage.Channel) : "",
-      draft: String(pendingReview?.DraftText || sentReview?.FinalText || sentReview?.DraftText || "").slice(0, 240),
-      waiting: !!pendingReview, emails: emailsWaiting, sent: !!(sentReview || sentOutside.length), owed: !!replyMessage }),
+      draft: String(pendingReview?.DraftText || sentReview?.FinalText || sentReview?.DraftText || newestFirst(sentOutside)[0]?.OwnText || newestFirst(sentOutside)[0]?.BodyText || "").slice(0, 240),
+      waiting: !!pendingReview, emails: emailsWaiting, sent: !!(sentReview || sentOutside.length), owed: !!replyMessage,
+      sentWhen: sentReview?.DecidedAt ? whenShort(sentReview.DecidedAt) : newestFirst(sentOutside)[0]?.SentAt ? whenShort(newestFirst(sentOutside)[0].SentAt) : "" }),
   };
   // ...a closed section's tab, in place of the section: the arrow points the way it opens
   const tabFor = (key) => {
@@ -2463,6 +2466,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                        again (the owner, 2026-10-25); a working agent's chip stays where it is */
                     chip={<>{settled ? null : story && STORY_CHIP[story.kind] ? <StoryChip kind={story.kind} text={STORY_CHIP[story.kind]} />
                       : agentState ? <LifecycleChip kind="agent" phase={agentState} compact /> : null}{resultShown && shareBadge}</>} tone={PALETTE.sage} {...stageProps("agent")}
+                    /* ...in the three sections the one way to the full record is its button under the summary (the owner, 2026-10-27: "why are
+                       there 2 buttons for full results?"): the heading neither folds nor says "Result" there */
+                    {...(threeUp && !sessionView && resultShown ? { onToggle: null, folded: false, sub: "" } : {})}
                     tools={inRow && workspaceMode === "general" && liveSession
                       ? <Box ref={setChatTools} sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }} /> : null}
                     /* folded, this heading carried NOTHING - it passed no action at all, so the one
@@ -2495,11 +2501,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {storyAt === "summary" && !resultShown && <AgentRecord {...recordProps} story={story} folded />}
                   {resultRest && !sessionView && <ResultSummary taskId={selected} stamp={recordProps.stamp} said={story?.said || ""}
                     pages={(detail?.artifacts || []).filter((a) => isPublished(a) || a.kind === "shown")} />}
-                  {/* ...and in the three sections ONE press unfolds the rest, as its heading does (the owner's mockup, 2026-10-27) */}
-                  {resultRest && !sessionView && threeUp && <Button size="small" variant="outlined" data-tq-full-result=""
-                    onClick={() => { if (pane !== "agent") setOpenStage("agent"); setResultOpen(true); }}
-                    sx={{ mt: 1.5, borderRadius: 999, px: 2, fontSize: 13, fontWeight: 600, textTransform: "none", color: INK, borderColor: "#c9c3b8" }}>
-                    Full results and record ›</Button>}
+                  {/* ...and in the three sections ONE press unfolds the rest and folds it back - the only way to it there (the owner, 2026-10-27) */}
+                  {resultShown && !sessionView && threeUp && <Box sx={{ mt: 1.5 }}><Button size="small" variant="outlined" data-tq-full-result="" aria-expanded={!resultRest}
+                    onClick={() => { if (pane !== "agent") setOpenStage("agent"); setResultOpen((v) => !v); }}
+                    sx={{ borderRadius: 999, px: 2, fontSize: 13, fontWeight: 600, textTransform: "none", color: INK, borderColor: "#c9c3b8" }}>
+                    {resultRest ? "Full results and record ›" : "‹ Back to the summary"}</Button></Box>}
                   {(storyAt === "summary" || (resultRest && pane === "agent")) && co.writeupAt === "result" && <WriteupLine view={writeup} />}
                   {pane === "agent" && <>
                   {/* WHO CLOSED IT AND WHY, one plain line over its work (the owner, 2026-10-21: "I have no idea what the agent did
@@ -2579,7 +2585,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* folded onto the live bar these facts share a ROW with the controls, where a
                       rule above them is stray chrome - they get a rule beside them instead, so the
                       pills you press and the pills you read are two groups and not five in a line */}
-                  {(term?.alive || report || detail?.transcript) && !restartOpen && (runRole || factBrain || repoOf(t)) && (
+                  {(term?.alive || report || detail?.transcript) && !restartOpen && !(threeUp && resultRest) && (runRole || factBrain || repoOf(t)) && (
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.7, flexWrap: "wrap",
                       ...(liveSession
                         ? { ml: 0.9, pl: 1.1, borderLeft: `1px solid ${BORDER}`, flexShrink: 0 }
@@ -3156,7 +3162,7 @@ const Fold = ({ title, children }) => (
 // `quiet`: a step with nothing in it - smaller and dimmer, so the step that holds the move is the one read (2026-10-25)
 // `sec`: the section it heads in the desk's three (2026-10-27) - then its line is the sections' one style (SectionHead): "2 · AGENT", one dim
 // descriptor (its own title where that is not the section's name, its description), "up to here" where the task is
-const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle, action, tools, quiet = false, sec = null, here = false }) => (
+const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle, action, tools, quiet = false, sec = null, here = false, sub = undefined }) => (
   <Box {...pressable(onToggle)} aria-expanded={onToggle ? !folded : undefined} data-tq-quiet={quiet ? "" : undefined}
     sx={{ ...FOCUS_RING, display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" },
     cursor: onToggle ? "pointer" : "default", opacity: quiet ? 0.6 : 1,
@@ -3166,7 +3172,7 @@ const WorkflowHeading = ({ number, title, description, chip, tone, folded, onTog
     {sec ? <Box data-tq-section-head="" sx={{ minWidth: 0, flex: 1, display: "flex", alignItems: "baseline", gap: 1.25, flexWrap: "wrap" }}>
       <Typography sx={{ fontSize: 12, fontWeight: 600, letterSpacing: ".06em", color: here ? ACCENT2 : DIM, textTransform: "uppercase", flexShrink: 0 }}>{sec.n} · {sec.name}</Typography>
       <Typography sx={{ fontSize: 12, color: FAINT, minWidth: 0, display: "flex", alignItems: "center", gap: 0.25 }}>
-        {[title !== sec.name ? title : "", !folded ? description : "", here ? "up to here" : ""].filter(Boolean).join(" - ")}
+        {[sub ?? (title !== sec.name ? title : ""), !folded ? description : "", here ? "up to here" : ""].filter(Boolean).join(" - ")}
         {onToggle && <ExpandMoreIcon data-tq-fold-mark="" sx={{ fontSize: 16, color: FAINT, flexShrink: 0, transform: folded ? "rotate(-90deg)" : "none", transition: "transform .15s, color .15s" }} />}
       </Typography>
     </Box> : <Box sx={{ minWidth: 0, flex: 1 }}>

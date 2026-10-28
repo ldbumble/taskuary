@@ -24,6 +24,7 @@ from .wrapup import REPORTS
 
 THOUGHT_N, SAID_N, YOU_N, TARGET_N = 6000, 20000, 3000, 300
 MAX_STEPS = 800
+NOTE_ACTOR = 'taskuary'   # who files Taskuary's own notes into a task's chat - a receipt, the Advisor's word - never an agent's turn
 _FILE_TOOLS = {'Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'apply_patch', 'edit', 'write', 'create', 'str_replace_editor',
                'write_file', 'replace', 'edit_file'}
 _TARGET_KEYS = ('command', 'cmd', 'pattern', 'query', 'url', 'file_path', 'path', 'filePath', 'absolute_path', 'description', 'prompt')
@@ -297,12 +298,24 @@ def general_steps(store, tid: int) -> list:
         for line in p.read_text(encoding='utf-8', errors='replace').splitlines():
             try: j = json.loads(line); by.setdefault(j.get('reply'), []).extend(j.get('steps') or [])
             except ValueError: continue
+    # TASKUARY'S OWN NOTES IN THE CHAT ARE NOT THE AGENT'S WORDS (the owner, 2026-10-27, a finished agent's Result read "You replied in WhatsApp
+    # on TQ-n ... I removed the unused draft"): a receipt or a note Taskuary files there (channels, the Advisor) is a `note` step, never the
+    # said step its last words are read from. One by its actor (NOTE_ACTOR); one written before that, by having no agent turn filed with it -
+    # each turn's reply is audited the moment it is written (general.send_prompt) - where the task has any such audit to go by
+    turns = [_when(a.get('CreatedAt')) for a in store._rows("SELECT CreatedAt FROM audit WHERE EntityType='task' AND EntityId=? AND Action='assistant_reply'", (int(tid),))]
+    def turn(c) -> bool:
+        if c.get('Actor') == NOTE_ACTOR: return False
+        if not turns: return True
+        at = _when(c.get('CreatedAt'))
+        try: t0 = datetime.strptime(at, '%Y-%m-%d %H:%M:%S')
+        except ValueError: return True
+        return any(0 <= (datetime.strptime(t, '%Y-%m-%d %H:%M:%S') - t0).total_seconds() <= 5 for t in turns if len(t) == 19)
     out = []
     for c in chat_rows(store, tid):
         mine = c.get('ActorType') == ASSISTANT_TYPE
         # a turn's own working comes BEFORE its reply - and the reply is the said step, so a streamed copy of it is not said twice
         if mine: out += [s for s in by.get(c['CommentId'], []) if not (s['k'] == 'said' and s['text'].strip() == str(c.get('Body') or '').strip())]
-        out.append({'k': 'said' if mine else 'you', 'text': _cut(c.get('Body'), SAID_N if mine else YOU_N), 'at': c.get('CreatedAt')})
+        out.append({'k': ('said' if turn(c) else 'note') if mine else 'you', 'text': _cut(c.get('Body'), SAID_N if mine else YOU_N), 'at': c.get('CreatedAt')})
     return out
 
 

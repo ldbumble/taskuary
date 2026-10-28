@@ -122,6 +122,27 @@ def test_a_general_chat_keeps_every_turns_working_and_no_reply_twice(home):
     assert rec['result'] == 'August was $192,600, up 8% on July.'
 
 
+# TASKUARY'S OWN NOTE IN THE CHAT IS NOT THE AGENT'S ANSWER (the owner, 2026-10-27: a finished agent's Result read the reply receipt): a note
+# filed by Taskuary - by its actor, or an older one with no agent turn audited with it - is a `note` step, and the result stays the agent's
+def test_a_receipt_in_the_chat_is_a_note_never_the_agents_last_words(home):
+    s = MemoryStore(); tid = Factory(s).task(title='Snag list', kind='general')
+    s.add_comment(tid, 'owner', general.USER_TYPE, 'Who signs the snag list?')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Ray Colton signs it on Thursday.')
+    s.audit('task', tid, 'assistant_reply', 'assistant', 'agent', {'chars': 31})
+    s.add_comment(tid, sessionrecord.NOTE_ACTOR, general.ASSISTANT_TYPE, 'You replied in WhatsApp on TQ-0001. I removed the unused draft.')
+    [rec] = sessionrecord.record(s, tid)['sessions']
+    assert [x['k'] for x in rec['steps']] == ['you', 'said', 'note']
+    assert rec['result'] == 'Ray Colton signs it on Thursday.'
+    # ...an older note, filed under the agent's own actor, is told by having no turn audited with it
+    s2 = MemoryStore(); t2 = Factory(s2).task(title='Snag list', kind='general')
+    s2.add_comment(t2, 'assistant', general.ASSISTANT_TYPE, 'Ray Colton signs it on Thursday.')
+    s2.audit('task', t2, 'assistant_reply', 'assistant', 'agent', {'chars': 31})
+    s2._exec("INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,datetime('now','localtime','+1 minute'))",
+             (t2, 'assistant', general.ASSISTANT_TYPE, 'You replied in WhatsApp on TQ-0001.'))
+    [rec2] = sessionrecord.record(s2, t2)['sessions']
+    assert [x['k'] for x in rec2['steps']] == ['said', 'note']
+
+
 def test_sessions_come_newest_first_each_with_its_own_report(home):
     s = MemoryStore(); tid = Factory(s).task(title='Two runs')
     s._exec("INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)",

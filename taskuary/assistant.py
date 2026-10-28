@@ -2076,7 +2076,8 @@ def _make_task(store, i: dict, a: dict, agent: bool, actor: str) -> dict:
         tid = store.create_task({'Title': str(a.get('title') or i.get('Text') or 'Advisor idea').strip()[:200], 'Summary': summary[:2000],
                                  'Kind': kind if agent else 'task', 'Source': 'assistant', 'SourceRef': f"assistant:idea:{i['IdeaId']}",
                                  **({} if agent else {'Assignee': actor})}, actor)
-        if prior: store.add_comment(tid, 'assistant', 'assistant_agent', f"Opened from an Advisor idea; the earlier task {task_ref(prior['TaskId'])} is done.")
+        from .sessionrecord import NOTE_ACTOR
+        if prior: store.add_comment(tid, NOTE_ACTOR, 'assistant_agent', f"Opened from an Advisor idea; the earlier task {task_ref(prior['TaskId'])} is done.")
         store.audit('task', tid, 'create_from_assistant_idea', actor, detail={'idea_id': i['IdeaId'], 'message_id': a.get('mid'),
                                                                               'related_task_id': (prior or {}).get('TaskId')})
     if not t and a.get('title'): store.update_task(tid, {'Title': str(a['title'])[:200]}, actor)

@@ -641,13 +641,21 @@ def sent_line(store, target_kind, target_id) -> str:
 
 
 _ID = r'\b(?:out|mem|rv|task|msg|fs|sv|idea|lrn)\d+\b'
+# ...an id in the sentence is said as what it IS: every one read "an earlier outcome", and a memory line cited at a sentence's end showed the
+# owner "Automated bank notice; no action asked. an earlier outcome" (the Advisor sweep, 2026-10-27)
+_ID_WORDS = {'out': 'an earlier outcome', 'fs': 'an earlier outcome', 'mem': 'what Taskuary knows', 'lrn': 'what Taskuary knows', 'msg': 'an earlier message',
+             'rv': 'an earlier draft', 'task': 'another task', 'idea': 'an earlier suggestion', 'sv': 'a promise in your sent mail'}
 def plain(line: str, verb: str, label: str) -> str:
     """The owner reads the line, not the prompt: "You should stop_agent because out13 shows..." put the verb's id and the ledger's
-    row id in the prompt box (2026-10-13). An id-shaped verb becomes its label; a cited id in brackets goes, one in the sentence
-    becomes what it is."""
+    row id in the prompt box (2026-10-13). An id-shaped verb becomes its label; a cited id in brackets, or left standing after the
+    sentence as its citation, goes; one in the sentence becomes what it is."""
     t = re.sub(rf'\b{re.escape(verb)}\b', f'"{label}"', line) if '_' in verb else line
     t = re.sub(rf'\s*\((?:{_ID}[,\s]*)+\)', '', t)
-    return ' '.join(re.sub(_ID, 'an earlier outcome', t).split())
+    t = t.strip()
+    if (m := re.search(rf'(?:^|[.;:!?,\-–—])\s*(?:{_ID}[,\s]*)+\.?$', t)):       # "...no action asked. lrn372574"
+        end = m.group(0)[:1]
+        t = t[:m.start()].rstrip(',;:-–— ') + (end if end in '.!?' else '')
+    return ' '.join(re.sub(_ID, lambda m: _ID_WORDS[re.match(r'[a-z]+', m.group(0)).group(0)], t).split())
 
 
 _WORD = re.compile(r"[a-z0-9][a-z0-9'#./-]*")
@@ -1019,7 +1027,8 @@ def decide(store, key: str, preread: bool = True) -> dict:
         # guess; agreeing, the rule's fact stands and the model's sentence goes (ruling 1: no explanation of the obvious button)
         if hit and mv != verb:
             verb, by, ev, kind = mv, 'model', json.loads(m.get('EvidenceJson') or '[]'), m.get('Kind') or 'other'
-            line = '' if r['state'] == 'idea' else _one(plain(m.get('Line') or '', m['Verb'], hit['label']), 64)
+            # ...cut at a word, as the agreeing memory line is: "...is waiting on y" read as a slip (the Advisor sweep, 2026-10-27)
+            line = '' if r['state'] == 'idea' else _whole_words(plain(m.get('Line') or '', m['Verb'], hit['label']), 64)
         # ...AND AGREEING, A MEMORY REASON IS SAID (the live memory A/B, 2026-10-26): "You answer Erin the same day" and "Paula takes
         # W-9s now" were read, used, and dropped for agreeing with the lit button - the memory never reached the strip. A line that cites
         # a memory line or a counted usual (memory_ids) is a fact the card does not show; it stands in the rule's place, one line - unless

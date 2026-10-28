@@ -136,7 +136,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tr>
 <td><strong>new</strong></td>
 <td>new work with no task yet</td>
-<td>task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text)</td>
+<td>task.create_from_text(kind, text), task.create_from_message(kind), meeting.new(who?, about?, when?), task.setup(text)</td>
 </tr>
 <tr>
 <td><strong>pipe</strong></td>
@@ -178,7 +178,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">At once - a draft, nothing sent.</p><h3 id="mine"><code>mine</code><a class="anchor" href="#mine" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Put it on my list&quot; button: make it a task on the owner&#39;s own list - no agent.</p>
 <p class="runs">Brings up its button for you to press.</p><h3 id="regular-agent"><code>regular_agent</code><a class="anchor" href="#regular-agent" aria-label="Link to this section">#</a></h3>
-<p>The &quot;Send to agent&quot; button: send it to an agent that does not write code - it becomes a task of its own. Never for Taskuary&#39;s own settings, connections or update: those are its own screens (app.find)</p>
+<p>The &quot;Send to agent&quot; button: send it to an agent that does not write code - it becomes a task of its own. Never for Taskuary&#39;s own settings, connections or update: those are its own screens (app.find), nor for setting up a meeting: meeting.new.</p>
 <ul>
 <li><code>text</code> - the job</li>
 <li><code>as</code> (optional) - a profile from agents.list, only when one fits</li>
@@ -412,6 +412,14 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p>Hand this message to an agent or put it on the list.</p>
 <ul>
 <li><code>kind</code> - coding | general | task</li>
+</ul>
+<p class="runs">Brings up its button for you to press.</p><h3 id="meeting-new"><code>meeting.new</code><a class="anchor" href="#meeting-new" aria-label="Link to this section">#</a></h3>
+<p>Set up a meeting or call (&quot;a meeting with Gail about the budget friday&quot;). On a task whose thread asks for a time it lights that task&#39;s Find a time; with none it says scheduling lives there and writes the meeting into New as the owner&#39;s to-do; with no calendar, the card that connects one. Nothing goes out before the owner&#39;s Send. Never an agent&#39;s job.</p>
+<ul>
+<li><code>who</code> (optional) - the names or addresses it is with</li>
+<li><code>about</code> (optional) - its subject</li>
+<li><code>when</code> (optional) - the day or time they said</li>
+<li><code>ref</code> (optional) - the task it is about (TQ-0123) when it is not the one on the table</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="task-setup"><code>task.setup</code><a class="anchor" href="#task-setup" aria-label="Link to this section">#</a></h3>
 <p>Open a walk-through with the assistant, for a set-up that needs digging first.</p>
@@ -732,7 +740,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">Runs at once and changes nothing.</p>
     </article>
     <nav class="pager"><a class="pn prev" href="./assistant"><span>Previous</span>Assistant buttons</a><a class="pn next" href="./reports"><span>Next</span>Reports and the Advisor</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.60 · updated 2026-10-28</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.61 · updated 2026-10-28</p>
   </main>
 </div>
 <script src="./docs.js"></script>

@@ -11,7 +11,7 @@ export default [
         + "fetch localStorage sessionStorage location history alert confirm prompt requestAnimationFrame "
         + "cancelAnimationFrame ResizeObserver IntersectionObserver MutationObserver WebSocket URL URLSearchParams "
         + "Blob File FileReader FormData Image Audio AbortController Event CustomEvent KeyboardEvent MouseEvent "
-        + "SpeechSynthesisUtterance speechSynthesis matchMedia getComputedStyle performance crypto atob btoa "
+        + "SpeechSynthesisUtterance speechSynthesis matchMedia getComputedStyle CSS performance crypto atob btoa "
         + "process Buffer __dirname require module exports globalThis structuredClone queueMicrotask "
         + "HTMLElement Node Text DOMParser XMLHttpRequest EventSource Notification navigator screen "
         + "TextDecoder TextEncoder MediaRecorder addEventListener removeEventListener dispatchEvent "

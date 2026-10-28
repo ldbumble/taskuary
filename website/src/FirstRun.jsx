@@ -30,7 +30,9 @@ import { plural } from "./timeWords.js";
 const CHECK_MS = 200_000;           // its test, then one test email sorted (firstrun._prove, 90s at most): past this we say so
 const INSTALL_MS = 6 * 60_000;
 const FIRST = 4;                    // the four most people have; More shows the rest of the same shelf
-const errText = (e) => e?.response?.data?.detail || (e?.code === "ECONNABORTED" ? "That took too long." : e?.message) || "That didn't work.";
+// ...a sentence: what follows it is the next one ("...cannot find the file specified Pick it again" ran on, 2026-10-27)
+const stop = (x) => { const s = String(x).trim(); return /[.!?…]$/.test(s) ? s : `${s}.`; };
+const errText = (e) => stop(e?.response?.data?.detail || (e?.code === "ECONNABORTED" ? "That took too long." : e?.message) || "That didn't work.");
 // the logo each CLI wears is its maker's - the same mark as that maker's API card on Connections
 const CLI_LOGO = { claude: "anthropic", codex: "openai", gemini: "gemini", copilot: "github" };
 const MAIL_TYPES = ["outlook", "gmail", "imap"];      // the main source's shelf before the server says (firstrun.source_types)

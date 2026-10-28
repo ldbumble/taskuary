@@ -427,6 +427,20 @@ def _named(store, rows) -> list:
     return wanames.fill(store, rows)
 
 
+GROUP_CHAT = 'group chat'       # what a group's messages were stored under before the group's own name was
+_RENAMED = set()                # the groups whose older rows were given their name, this run
+
+
+def _group_named(store, jid: str, name: str) -> str:
+    "The group's name for its new messages - and, once a run, for the older ones still filed under GROUP_CHAT, so a search finds them too."
+    if not name: return GROUP_CHAT
+    if jid not in _RENAMED:
+        _RENAMED.add(jid)
+        try: store._exec('UPDATE message SET SourceName=? WHERE ConversationId=? AND SourceName=?', (name, f'whatsapp:{jid}', GROUP_CHAT))
+        except Exception as e: logger.debug(f'whatsapp: the older messages keep "{GROUP_CHAT}" - {e}')
+    return name
+
+
 def _read_media(path: str):
     """The bridge wrote a voice note or a photo to disk beside itself; same machine, so it is
     read straight off. Missing or oversized (over 25 MB - every transcription and vision API's
@@ -490,7 +504,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     from datetime import datetime
     from .ingest import ingest_message
     from .channels import files_for_triage, images_for_triage, ingest_own_message, save_attachments
-    from . import voice, wabridge
+    from . import voice, wabridge, wanames
     # the launch grace lives HERE, in front of the one call that files "bridge not running": the catch-up, the chat clock,
     # the doorway and Sync now all come through, and none of them - nor the mail beside them - waits when no bridge was started
     try: wabridge.ready(8)
@@ -531,6 +545,11 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     if out.get('seq') is not None and int(out['seq']) < seq: _WA_FILTERED.pop(url, None)    # the bridge restarted
     n, took = 0, []
     from . import remote_assistant
+    known = wanames.names(store)
+    def where(m, jid):
+        "A group's messages carry the GROUP's name: as \"group chat\" a search for the group by name found none of them (2026-10-28)."
+        if not (m.get('group') or jid.endswith('@g.us')): return m.get('name') or 'WhatsApp'
+        return _group_named(store, jid, wanames.name_of(store, jid, known))
     # WHAT WAITED OUT A CLOSED TASKUARY in the Assistant chat: only the newest is acted on, the rest get their thumb and are named (A10)
     late = remote_assistant.queued_while_closed([
         (assistant_chat, x.get('id'), x.get('ts'), (x.get('text') or '').strip() or 'a voice note') for x in out.get('messages', [])
@@ -580,7 +599,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
                     'external_id': f"whatsapp:{jid}:{m.get('id')}", 'channel': 'whatsapp', 'subject': None,
                     'body': m['text'].strip(), 'from_email': None, 'conversation_id': f'whatsapp:{jid}',
                     'sent_at': datetime.fromtimestamp(m.get('ts') or 0).strftime('%Y-%m-%d %H:%M:%S'),
-                    'source_name': ('group chat' if m.get('group') else m.get('name')) or 'WhatsApp'},
+                    'source_name': where(m, jid)},
                     'your line in this chat - kept for context')
             took.append(m.get('id'))
             continue
@@ -630,7 +649,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
             'from_email': _wa_sender_id(m.get('sender') or jid),
             'conversation_id': f'whatsapp:{jid}',
             'sent_at': datetime.fromtimestamp(m.get('ts') or 0).strftime('%Y-%m-%d %H:%M:%S'),
-            'source_name': ('group chat' if m.get('group') else m.get('name')) or 'WhatsApp',
+            'source_name': where(m, jid),
             **({'mail_meta': meta} if meta else {}),
             'images': images_for_triage(store, atts), **files_for_triage(atts),
             **({'file_reason': f'voice note - not transcribed: {why[:160]}'} if not transcribed else {})}, llm=llm)

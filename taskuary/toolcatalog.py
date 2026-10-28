@@ -529,7 +529,8 @@ READS = {
     # THE APP'S OWN TROUBLE, looked into in the chat (troubleshoot.py, the owner 2026-10-23) - never a task, never an agent
     'app.health':       ('why a part of Taskuary itself is not working, read now - the connection, the WhatsApp bridge asked directly, '
                          'its log, the last sync and error - and the simple repair it has, if any. `name` optional: the connection '
-                         '(whatsapp, telegram, outlook...), or none for everything failing'),
+                         '(whatsapp, telegram, outlook...), or none for everything failing. `chat` optional: one WhatsApp chat or group '
+                         'by its name - whether it is switched on under Chats, and where its messages went'),
     'agents.list':      'the agents and profiles, and which brain answers which job',
     'repos.list':       'the repositories a coding agent can work in, and what each one is for',
     'tools.list':       'every tool in one `bucket` (table, task, agents, new, pipe, reports, app, look) - what each does and needs',

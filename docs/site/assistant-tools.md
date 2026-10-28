@@ -947,9 +947,10 @@ One connection in full.
 
 ### `app.health`
 
-Why a part of Taskuary itself is not working, read now - the connection, the WhatsApp bridge asked directly, its log, the last sync and error - and the simple repair it has, if any.
+Why a part of Taskuary itself is not working, read now - the connection, the WhatsApp bridge asked directly, its log, the last sync and error - and the simple repair it has, if any - whether it is switched on under Chats, and where its messages went.
 
 - `name` (optional) - the connection (whatsapp, telegram, outlook...), or none for everything failing
+- `chat` (optional) - one WhatsApp chat or group by its name
 
 <p class="runs">Runs at once and changes nothing.</p>
 

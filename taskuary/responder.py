@@ -76,18 +76,17 @@ BREVITY = ('BE SHORT. Two or three sentences, under 60 words. Lead with the answ
 CHAT = ('This is a CHAT or a COMMENT THREAD (Teams, Slack, a GitHub issue...), not email. NO greeting and NO sign-off or name at the end - '
         'the channel already says who you are. One short paragraph, written the way a person types '
         'in a chat window.')
-EMAIL = ('This is EMAIL. Use the greeting, sign-off, and exact recurring signature STYLE.md '
-         'specifies; include the signature once, at the end. If STYLE.md has no learned signature, '
-         'use the sign-off SOUL.md specifies. Nothing else ceremonial.')
-# ...and with a SAVED signature, the signature is not the writer's to write: Taskuary puts the owner's saved block on every email
-# itself (the owner, 2026-10-16: "it should not be based on prompt but hardcoded to emails")
-EMAIL_SIGNED = ('This is EMAIL. Use the greeting STYLE.md specifies. Do NOT write a sign-off, your name or a signature - the '
-                "owner's saved signature is added under your text. Nothing else ceremonial.")
+EMAIL = ('This is EMAIL. Use the greeting STYLE.md specifies. Do NOT write a sign-off, your name or a signature - the '
+         "owner's signature is added under your text. Nothing else ceremonial.")
+# ...the signature is never the writer's to write: Taskuary puts the owner's block on every email itself (the owner, 2026-10-16:
+# "it should not be based on prompt but hardcoded to emails"; 2026-10-28: "It should use the default signature always") - asked
+# to sign "as STYLE.md says" with nothing saved, a STYLE.md without a sign-off line sent replies out with no signature at all
+EMAIL_SIGNED = EMAIL
 
 
 def email_rule(store, mailbox: str = None) -> str:
-    """The email line of the writer's prompt: told not to sign when a signature is saved, else to sign as STYLE.md says."""
-    return EMAIL_SIGNED if signature_for(store, mailbox).strip() else EMAIL
+    """The email line of the writer's prompt: never sign - the signature layer (signatures.py) adds the owner's own."""
+    return EMAIL
 
 # This line used to say "the owner will turn it into a task", and the model answered in kind:
 # a sentence about what someone ELSE would have to do. Say it the way a person would.
@@ -226,8 +225,11 @@ def mailbox_in(m) -> str | None:
 
 def signature_for(store, mailbox: str = None) -> str:
     """The owner's email signature: the sending mailbox's own (its card), else the `email_signature` setting when set, else
-    the `Sign off:` / `Signature:` line in STYLE.md (quotes stripped, literal newlines honoured). '' when none says anything (PW-065)."""
+    the `Sign off:` / `Signature:` line in STYLE.md (quotes stripped, literal newlines honoured), else the name About you gives.
+    '' when none says anything (PW-065) - and always '' with Settings' "Sign every email" off (signatures.ON)."""
     from .outbound import card_signature
+    from .signatures import on
+    if not on(store): return ''
     own = card_signature(store, mailbox) if mailbox else ''
     if own: return own.replace('\\n', '\n')
     sig = str(store.get_setting('email_signature') or '').strip()
@@ -236,8 +238,9 @@ def signature_for(store, mailbox: str = None) -> str:
     q = _SIGN_QUOTED.search(doc)
     if q: return q.group(1).strip().replace('\\n', '\n')
     m = _SIGN_LINE.search(doc)
-    if not m: return ''
-    return m.group(1).strip().strip('"\'').replace('\\n', '\n').strip()
+    if m: return m.group(1).strip().strip('"\'').replace('\\n', '\n').strip()
+    # the writer no longer signs (EMAIL), so with nothing saved the owner's own name is the signature - never none at all
+    return ' '.join(str(store.get_setting('owner_name') or '').split())
 
 
 def signed(text: str, sig: str) -> str:
@@ -253,11 +256,13 @@ def signed(text: str, sig: str) -> str:
 SIG_MAILS, SIG_LINES = 40, 10
 
 
-def learn_signature(store, days: int = 90) -> str:
+def learn_signature(store, days: int = 90, mailbox: str = None) -> str:
+    """`mailbox`: only what that mailbox sent - two mailboxes are two hats, and each signs its own way."""
     from . import histgen
     from .channels import _body
-    ends = []
-    for m in histgen.sent_mail(store, days)[0][-SIG_MAILS:]:
+    ends, box = [], str(mailbox or '').strip().lower()
+    sent = [m for m in histgen.sent_mail(store, days)[0] if not box or str(m.get('mailbox') or '').lower() == box]
+    for m in sent[-SIG_MAILS:]:
         lines = [' '.join(l.split()) for l in histgen.cut_quoted(_body(m)).strip().splitlines()]
         ends.append([l for l in lines if l][-SIG_LINES:])
     ends = [e for e in ends if e]

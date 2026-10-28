@@ -67,9 +67,21 @@ const JSON_KNOBS = new Set(["profile_brains"]);
 // box and saves, since what it read is what the owner then sees and can still change
 function SignatureSetting({ value, save }) {
   const [text, setText] = useState(value), [busy, setBusy] = useState(false), [note, setNote] = useState("");
+  const [boxes, setBoxes] = useState(null), [offer, setOffer] = useState("");   // each mailbox's own (null: not read yet); the one read off the sent mail, unconfirmed
   useEffect(() => { setText(value); }, [value]);
+  // OFFERED ONCE (2026-10-28): with nothing saved, the signature the sent mail ends with is read and put to the owner to confirm -
+  // never saved behind their back
+  useEffect(() => {
+    let live = true;
+    api.get("/api/signature").then(({ data }) => {
+      if (!live) return;
+      setBoxes(data.mailboxes || []);
+      if (data.offer) api.post("/api/signature/learn", {}, { timeout: 120_000 }).then(({ data: d }) => live && d.signature && setOffer(d.signature)).catch(() => {});
+    }).catch(() => {});
+    return () => { live = false; };
+  }, []);
   const read = async () => {
-    setBusy(true); setNote("");
+    setBusy(true); setNote(""); setOffer("");
     try {
       const { data } = await api.post("/api/signature/learn", {}, { timeout: 120_000 });
       if (data.signature) { setText(data.signature); save(data.signature); setNote("Read from your sent mail - check it below."); }
@@ -77,18 +89,43 @@ function SignatureSetting({ value, save }) {
     } catch (e) { setNote(e?.response?.data?.detail || "Couldn't read your sent mail."); }
     setBusy(false);
   };
+  const saveBox = (address, signature) => api.post("/api/signature/mailbox", { address, signature })
+    .then(() => setBoxes((bs) => (bs || []).map((b) => (b.address === address ? { ...b, signature } : b))))
+    .catch(() => setNote(`Couldn't save the one for ${address}.`));
   return (
     <Box data-tq-signature="" sx={{ display: "flex", flexDirection: "column", gap: 1, width: "100%", maxWidth: 460 }}>
+      {offer && !text.trim() && (
+        <Box data-tq-signature-offer="" sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff", px: 1.5, py: 1 }}>
+          <Typography sx={{ fontSize: 12, color: DIM, mb: 0.5 }}>Your sent mail ends with this - is it your signature?</Typography>
+          <Typography sx={{ fontSize: 12.5, color: INK, whiteSpace: "pre-line" }}>{offer}</Typography>
+          <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
+            <Button size="small" variant="contained" disableElevation onClick={() => { setText(offer); save(offer); setOffer(""); }}>Use this</Button>
+            <Button size="small" onClick={() => setOffer("")}>Not this</Button>
+          </Box>
+        </Box>
+      )}
       <TextField multiline minRows={3} value={text} onChange={(e) => setText(e.target.value)} sx={{ bgcolor: "#fff" }}
+        label={boxes?.length > 1 ? "Default - for any mailbox without its own" : undefined}
         inputProps={{ style: { fontSize: 12.5 }, "aria-label": "Email signature" }} onBlur={() => text !== value && save(text.trim())} />
       <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
         <Button size="small" variant="outlined" disabled={busy} onClick={read}>{busy ? "Reading…" : "Read it from my sent mail"}</Button>
         {note && <Typography sx={{ fontSize: 12, color: DIM }}>{note}</Typography>}
       </Box>
+      {(boxes || []).map((b) => <MailboxSignature key={b.address} box={b} save={saveBox} />)}
       <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff", px: 1.5, py: 1, fontSize: 12.5, whiteSpace: "pre-line", color: INK }}>
-        {"Hi Erin,\n\nThanks - that's done.\n\n"}{text.trim() || <span style={{ color: DIM }}>(no signature - drafts sign the way your writing style does)</span>}
+        {"Hi Erin,\n\nThanks - that's done.\n\n"}{text.trim() || <span style={{ color: DIM }}>(no signature - your sign-off in STYLE.md, else your name)</span>}
       </Box>
     </Box>
+  );
+}
+// one mailbox's own signature, saved on the card that sends as it (outbound.card_signature) - blank: the default above
+function MailboxSignature({ box, save }) {
+  const [text, setText] = useState(box.signature || "");
+  useEffect(() => { setText(box.signature || ""); }, [box.signature]);
+  return (
+    <TextField data-tq-mailbox-signature={box.address} multiline minRows={2} size="small" value={text} sx={{ bgcolor: "#fff" }}
+      label={`From ${box.address}`} helperText="Blank uses the default." onChange={(e) => setText(e.target.value)}
+      inputProps={{ style: { fontSize: 12.5 } }} onBlur={() => text.trim() !== (box.signature || "") && save(box.address, text.trim())} />
   );
 }
 const jsonProblem = (v) => {

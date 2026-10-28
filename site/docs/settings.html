@@ -212,7 +212,11 @@ is what you see if those cards cannot load.</li>
 <p><code>email_signature</code> · type: signature · default: blank</p>
 <p>The block that goes under every email Taskuary writes for you - exactly this, once. Read it from your sent mail, then fix anything.</p>
 <p>Saved here, it is the only signature on an email: the AI is told not to sign, any sign-off it writes anyway is taken off, and this block goes under the text exactly as you see it. Chat messages (Teams, Slack, WhatsApp) never get it.</p>
-<p>Read it from my sent mail finds the closing lines most of your sent mail shares - quoted history is cut first. Blank means no saved signature: drafts then sign the way STYLE.md describes.</p>
+<p>Read it from my sent mail finds the closing lines most of your sent mail shares - quoted history is cut first. Blank: the sign-off line in STYLE.md, else your name. With several mailboxes, each can have its own - blank uses this one.</p>
+<h3 id="sign-every-email">Sign every email<a class="anchor" href="#sign-every-email" aria-label="Link to this section">#</a></h3>
+<p><code>sign_replies</code> · type: switch · default: on</p>
+<p>Every email Taskuary prepares ends with the signature above, once - drafts, replies you type, forwards. Chat messages never get it.</p>
+<p>On: the signature above (or the one saved for the mailbox it goes from) is in the reply box when it opens, so you see what will go, and it is checked once more as the email leaves - a draft that already ends with it is not signed twice. Off: no signature is added anywhere; what is in the box is what goes.</p>
 <h3 id="draft-replies-on">Draft replies on<a class="anchor" href="#draft-replies-on" aria-label="Link to this section">#</a></h3>
 <p><code>reply_channels</code> · type: channels · default: <code>email,teams,slack,telegram,whatsapp,imessage,discord,github</code></p>
 <p>Which channels get a drafted reply at all. Switch one off and its questions just file.</p>

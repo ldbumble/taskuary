@@ -10,6 +10,7 @@
     "triage_backup_ai": "",
     "playbooks_enabled": "1",
     "email_signature": "",
+    "sign_replies": "1",
     "reply_channels": "email,teams,slack,telegram,whatsapp,imessage,discord,github",
     "calendar_enabled": "1",
     "assistant_ai": "",

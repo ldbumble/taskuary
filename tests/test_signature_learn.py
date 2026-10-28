@@ -35,12 +35,12 @@ class LearnTests(unittest.TestCase):
 
 
 class OneSignatureTests(unittest.TestCase):
-    def test_a_saved_signature_tells_the_writer_not_to_sign(self):
+    def test_the_writer_is_never_told_to_sign_saved_or_not(self):
+        # with nothing saved it was told to sign "as STYLE.md says", and a STYLE.md with no sign-off sent replies unsigned (2026-10-28)
         s = MemoryStore()
-        self.assertEqual(responder.email_rule(s), responder.EMAIL)
+        self.assertIn('Do NOT write a sign-off', responder.email_rule(s))
         s.set_setting('email_signature', SIG, 'owner')
-        self.assertEqual(responder.email_rule(s), responder.EMAIL_SIGNED)
-        self.assertIn('Do NOT write a sign-off', responder.EMAIL_SIGNED)
+        self.assertIn('Do NOT write a sign-off', responder.email_rule(s))
 
     def test_the_writers_own_sign_off_is_replaced_by_the_saved_block(self):
         self.assertEqual(responder.signed('Here it is.\n\nBest,\nAlex', SIG), f'Here it is.\n\n{SIG}')

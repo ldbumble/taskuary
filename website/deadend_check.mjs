@@ -1390,8 +1390,9 @@ async function based() {
   // the card on the table, and whether it is the source mail's - its key, or a link in it back to that message
   const table = () => page.evaluate(() => {
     const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
-    // the newest card the chat drew: an item's live card, or a task's view when the mail has a task
-    const v = [...document.querySelectorAll(".tq-chat-body .tq-msg.tq-live-card .tq-card, .tq-chat-body [data-tq-task-page]")].filter(vis).pop();
+    // the newest card the chat drew: an item's live card, a task's view when the mail has a task, or an FYI or report in a task's three
+    // sections (ItemSections, 2026-10-28)
+    const v = [...document.querySelectorAll(".tq-chat-body .tq-msg.tq-live-card .tq-card, .tq-chat-body [data-tq-task-page], .tq-chat-body .tq-msg.tq-live-card [data-tq-item-sections]")].filter(vis).pop();
     const ring = document.querySelector("[data-tq-rail] .tq-pile-row.current")?.getAttribute("data-tq-key") || "";
     return v ? { key: ring, text: v.innerText.replace(/\s+/g, " ").slice(0, 600) } : null;
   });

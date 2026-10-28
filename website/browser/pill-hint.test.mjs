@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { boot, sleep, type } from "./walkdriver.mjs";
+import { boot, clickRow, sleep, type } from "./walkdriver.mjs";
 
 /* THE PILL'S HINT FITS THE PILL (the overnight setup walk, 2026-10-26): an answer with a row under it (Next) and no task on the table left
    the chat box as the dock's 220px pill holding the long hint, "Ask Taskuary anything — a name or a subject pulls it in…", which ran on
@@ -12,6 +12,24 @@ const hint = (page) => page.evaluate(() => {
   const room = t.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
   return { text: t.placeholder, fits: ctx.measureText(t.placeholder).width <= room + 1, pill: !!t.closest(".tq-dock-line")?.querySelector(":scope > .tq-arow"),
     open: t.closest(".tq-compose-box").hasAttribute("data-tq-open") };
+});
+
+/* ...AND ITS "Ask…" IN THE MIDDLE OF ITS HEIGHT on a task opened from the day's opener (the 2026-10-27 sweep): the box's grow-as-you-type
+   height was measured while it was the opener's whole line, 34px, and stayed on the pill - its 30px line sat 2px high */
+test("a task opened from the opener: the pill's line is centred in the pill", { timeout: 180000 }, async (t) => {
+  const { page, errors } = await boot(t, { width: 1440, height: 900 });
+  const first = await page.$eval("[data-tq-rail] .tq-pile-row[data-tq-key]", (e) => e.getAttribute("data-tq-key"));
+  await clickRow(page, first);
+  await page.waitForSelector(".tq-dock-line > .tq-arow [data-tq-next]", { timeout: 30000 }); await sleep(1500);
+  const at = await page.evaluate(() => {
+    const box = document.querySelector(".tq-dock-line > .tq-compose-box"), ta = box.querySelector("textarea"), send = box.querySelector(".tq-send");
+    const mid = (e) => { const r = e.getBoundingClientRect(); return r.top + r.height / 2; };
+    return { box: mid(box), ta: mid(ta), send: mid(send), h: ta.getBoundingClientRect().height, open: box.hasAttribute("data-tq-open") };
+  });
+  assert.ok(!at.open, "the pill at rest");
+  assert.equal(at.h, 30, `one 30px line: ${JSON.stringify(at)}`);
+  assert.ok(Math.abs(at.ta - at.box) <= 1 && Math.abs(at.ta - at.send) <= 1, `the line is centred with the pill and its send: ${JSON.stringify(at)}`);
+  assert.deepEqual(errors, []);
 });
 
 test("the dock's pill at rest says a hint that fits it, and the whole hint once opened", { timeout: 180000 }, async (t) => {

@@ -115,7 +115,8 @@ test("nothing measured is the widest layout; a phone starts at the phone's; an o
   assert.equal(fitRow(row, null, 0, true).level, foldsOf(row).length - 1);
   assert.equal(fitRow(row, model(1920, row), 5000, false, 1).level, 1);
   assert.equal(fitRow(row, model(1920, row), 5000, false, 99).level, foldsOf(row).length - 1, "never past the phone's");
-  assert.equal(fitRow(row, model(390, row), 40).tight, true, "too narrow for even that: the one move's label shortens, the line stays one");
+  // ...too narrow for even that: an unlit move goes into the ▾ (a squeezed label read as a stray letter, the 2026-10-27 sweep), the line stays one
+  assert.deepEqual(fitRow(row, model(390, row), 40).groups.map((g) => [g.type, g.shown.length]), [["more", 0]]);
 });
 
 test("a draft's Send leaves no empty slot, on the bar or the phone's row (2026-10-25)", () => {
@@ -138,6 +139,24 @@ test("the CSS never wraps the row or a group, and a label never breaks inside it
   assert.match(row, /const fit = fitRow\(row, m, avail, phone, extra\);/);
   assert.match(row, /new ResizeObserver\(f\)/, "a resize re-fits the row");
   assert.match(row, /\{fit\.groups\.map\(\(g\) => <Cluster key=\{g\.type\} g=\{g\} btn=\{btn\} act=\{act\} \/>\)\}/);
+});
+
+// ...A MOVE SQUEEZED TO A LETTER FOLDS (the 2026-10-27 sweep): a phone's report put Back, Next and the chat pill beside "Put it on my list",
+// and the row drew "Pu". With too little room for its words the move joins the ▾ - unless it is the lit one; with room it is shortened
+test("on a phone, an unlit move with no room for its words goes into the ▾; a lit one, or one with room, is shortened instead", () => {
+  const list = [v("r:task", "decide", { label: "Put it on my list" }), v("r:agent", "agent", { label: "Send to agent" }), v("r:pause", "more", { label: "Pause this report" }), next];
+  const row = rowOf({ ref: "", list }), m = model(390, row), tiny = m.next + m.btn["r:task"] / 4;
+  const fit = fitRow(row, m, tiny, true);
+  assert.deepEqual(fit.groups.map((g) => [g.type, g.shown.length]), [["more", 0]], "Nav and one ▾");
+  assert.deepEqual(fit.groups[0].rest.map((x) => x.id).sort(), ["r:agent", "r:pause", "r:task"], "every verb one press away, once");
+  assert.ok(!fit.tight);
+  const lit = { ...row, decide: row.decide.map((x) => (x.id === "r:task" ? { ...x, tone: "p" } : x)) };
+  const kept = fitRow(lit, m, tiny, true);
+  assert.equal(kept.tight, true, "the lit move stays, shortened");
+  assert.deepEqual(kept.groups[0].shown.map((x) => x.id), ["r:task"]);
+  const roomy = fitRow(row, m, rowWidth(foldsOf(row).at(-1), row.next, m) - 20, true);
+  assert.equal(roomy.tight, true, "room for most of its words: shortened, still on the row");
+  assert.deepEqual(roomy.groups[0].shown.map((x) => x.id), ["r:task"]);
 });
 
 test("the Tasks tab's bar folds the same way: Change first, Mark done and Remind me never", () => {

@@ -53,6 +53,9 @@ test("Run another agent on a stopped general agent starts a new conversation and
 
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
+  // the finished agent's chat is the rest of its Result, behind the Result heading (the owner, 2026-10-27: "click Result to see more")
+  await page.waitForSelector("[data-tq-result-summary]", { timeout: 30000 });
+  await page.$eval('[data-tq-work] [data-tq-step="2"]', (dot) => dot.parentElement.click());
   await page.waitForFunction((old) => [...document.querySelectorAll(".tq-aui-agent")].some((m) => m.innerText.includes(old)), { timeout: 30000 }, OLD);
 
   // Run another agent rides in the row's More - the row is up once it has its ▾ (Mark done folds into it beside Back, the nav pill)

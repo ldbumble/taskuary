@@ -87,7 +87,11 @@ ACTIONS = {
     # a browser act that can't be undone, HELD before it ran (browsergate.py, 2026-10-25): raised only by the shell hook, never an
     # agent's marker - approving it runs that exact command in that task's browser, on the page it was held on
     'browser_act': ("do this in the agent's browser", ('sid', 'args'), None),
+    # ...and a shell step that leaves the machine - a push, a merge, a public post, a publish, a mail - HELD the same way (shellgate.py,
+    # the owner's ruling 2026-10-28): raised only by the shell hook; approving it runs that exact command in the folder it was held in
+    'shell_act': ("run this step of the agent's", ('sid', 'command'), None),
 }
+HELD_ACTS = ('browser_act', 'shell_act')     # raised by a hook before the act ran - never an agent's marker
 
 # What a proposal may touch: routing and visibility only. Never a permission that lets anything OUT
 # (agent_push_enabled, github_replies_ok, reply channels), never a token, key, model or document.
@@ -130,7 +134,7 @@ def parse(text: str) -> list:
         # raised by the run itself (flow._repair_now): an agent that read a mail asking for one could rewrite any workflow, with
         # its own words for what changes on the card the owner approves
         # ...and `flow_run` is the run a workflow's own write waits in: an agent's run_tool naming one would mark that step done
-        if a in ACTIONS and a not in ('merge_pr', 'close_item', 'repair_workflow', 'browser_act'): out.append({**{k: v for k, v in j.items() if k not in ('closeout', 'flow_run')}, 'action': a})
+        if a in ACTIONS and a not in ('merge_pr', 'close_item', 'repair_workflow', *HELD_ACTS): out.append({**{k: v for k, v in j.items() if k not in ('closeout', 'flow_run')}, 'action': a})
         if len(out) >= MAX: break
     return out
 
@@ -221,6 +225,7 @@ def queue(store, task_id: int, p: dict, actor='agent') -> dict | None:
     said = tool_words(store, p) if p['action'] == 'run_tool' else why
     # ...nor a held browser act: the agent did not propose it, it tried it, and the hook stopped it (browsergate.check)
     reason = (f"held before it ran, in the agent's browser: {p.get('what') or p.get('command')}" + (f" - {p['why']}" if p.get('why') else '') if p['action'] == 'browser_act' else
+              f"held before it ran, in the agent's shell: {p.get('what') or 'a step'}" + (f" - {p['why']}" if p.get('why') else '') if p['action'] == 'shell_act' else
               f"the close-out: {'merge pull request #' + str(p.get('number')) if p['action'] == 'merge_pr' else trackers.words(p) if p['action'] == 'close_item' else 'close the issue it came from'}"
               if p.get('closeout') else f"the {'workflow asks' if actor == 'workflow' else 'agent proposes'} to {said}" + (f" - {p['why'][:200]}" if p.get('why') else ''))
     rid = store.add_review({'TaskId': task_id, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p), 'Reason': reason})
@@ -387,6 +392,9 @@ def settle(store, rv: dict, verb: str, actor='owner') -> None:
     if _action(rv) == 'browser_act' and verb not in ('approve', 'edit'):           # dismissed: the waiting agent hears it was not done
         from . import browsergate
         browsergate.declined(store, tid, json.loads(rv.get('DraftText') or '{}'))
+    if _action(rv) == 'shell_act' and verb not in ('approve', 'edit'):
+        from . import shellgate
+        shellgate.declined(store, tid, json.loads(rv.get('DraftText') or '{}'))
     # a pull request opened on the owner's yes AFTER the agent finished is still a task that ends by merging it
     if _action(rv) in ('land', 'open_pr') and verb in ('approve', 'edit') and (store.get_task(tid) or {}).get('Status') != 'dropped':
         due = closeout_due(store, tid)
@@ -527,6 +535,9 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
     elif a == 'browser_act':
         from . import browsergate
         out = browsergate.perform(store, tid, p)
+    elif a == 'shell_act':
+        from . import shellgate
+        out = shellgate.perform(store, tid, p)
     elif a == 'close_item':
         from . import trackers
         out = trackers.close_out(store, p)

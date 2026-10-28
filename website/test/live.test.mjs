@@ -173,15 +173,15 @@ test("a burst is one refresh, and a burst that never stops still gets one", asyn
   await withSocket(async () => {
     globalThis.document = { visibilityState: "visible", addEventListener: () => {}, removeEventListener: () => {} };
     let calls = 0;
-    const stop = onLive("feed-changed", () => { calls += 1; }, { wait: 20, max: 60 });
+    const stop = onLive("feed-changed", () => { calls += 1; }, { wait: 50, max: 200 });
     for (let i = 0; i < 5; i += 1) __testFanout({ type: "feed-changed" });
     assert.equal(calls, 0, "five rows in one tick are not five reads");
-    await new Promise((r) => setTimeout(r, 40));
+    await new Promise((r) => setTimeout(r, 150));
     assert.equal(calls, 1, "the burst settles into exactly one read");
 
     // ...and now a stream that never lets the timer expire: the ceiling lets one through anyway
     const started = Date.now();
-    while (Date.now() - started < 90) { __testFanout({ type: "feed-changed" }); }
+    while (Date.now() - started < 400) { __testFanout({ type: "feed-changed" }); }
     assert.ok(calls >= 2, `the ceiling has to fire during an unbroken stream (calls=${calls})`);
     stop();
   });

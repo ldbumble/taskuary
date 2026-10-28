@@ -2107,7 +2107,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       { id: "nat", group: "more", label: labelOfRow("nat"), run: notATask, title: NAT_TITLE },
       { id: "remind", group: "more", label: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : labelOfRow("remind"), run: (e, a) => remindHere(steady(a || e?.currentTarget)),
         title: hintOfRow("remind") },
-      { id: "hand", group: "more", label: labelOfRow("hand"), run: () => setHandoff(true), title: hintOfRow("hand") },
+      // ...a reply that went needs at most Reply on its row: Hand it to a person waits in the ▾ (the owner, 2026-10-28)
+      { id: "hand", group: "more", label: labelOfRow("hand"), run: () => setHandoff(true), title: hintOfRow("hand"), tucked: !!sentReview },
       { id: "reshape", group: "more", label: labelOfRow("reshape"), run: () => setReshape(true), title: hintOfRow("reshape") },
       // ...whenever an agent has worked it and the bar's lead is not already the agent step (a paused general session had neither)
       ...(!liveSession && notDone && (ranBefore || generalStarted) && !startHere ? [runAnother] : []),

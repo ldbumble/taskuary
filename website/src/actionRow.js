@@ -12,7 +12,7 @@ const live = new Map();          // id -> the latest verb (its run closes over t
 const ofs = new Map();           // id -> the card that registered it: the item a button drawn from it was drawn for (press)
 const owners = new Map();        // owner -> { verbs, ref, at }
 const subs = new Set();
-const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", ...(v.blank ? { blank: v.blank } : {}), promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.fill ? { fill: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}), ...(v.card ? { card: true } : {}), ...(v.steady ? { steady: true } : {}) });
+const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", ...(v.blank ? { blank: v.blank } : {}), promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.fill ? { fill: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}), ...(v.card ? { card: true } : {}), ...(v.steady ? { steady: true } : {}), ...(v.tucked ? { tucked: true } : {}) });
 let snap = { list: [], ref: "" }, sig = "";
 // THE WALK'S TWO WAYS, ONE PILL (the owner, 2026-10-27: "We have a Next button - let's have a Back button that goes up the line as well ...
 // on the first one no Back, like no Next on the last one. Combine Next/Back into one big pill called Nav"): Back is the walk's step up the
@@ -290,11 +290,13 @@ export function rowOf({ list, ref, end: last = false }, pick = null) {
     why: head?.disabled && head.why ? `${head.label} is off - ${head.why}` : "" };
 }
 
-// THE ROW BY TYPE (the owner, 2026-10-13, canvas H2: "2 most common buttons per type and then down arrow for more on all of them"):
-// what a button acts on - the reply, the agent, closing the task, the task itself - read off its id (a draft's own verbs are
-// `<rid>:approve`, so the last part counts). A card's own words (a report's chip, a chat chip) are none of these:
-// they lead, unlabelled. The order inside each type is rowOf's - the decision first - and its filled button is always in view.
-export const TYPES = [["reply", "Reply"], ["agent", "Agent"], ["close", "Close"], ["task", "Task"]];
+// THE ROW IN THREE (the owner, 2026-10-28): Nav, then ONE pill of the moves that finish or advance this item - Mark done, the agent's move
+// (Send to agent, Continue, Run another agent), the reply's (Reply, Send, Find a time, Accept) and a card's own words - as many in view as
+// the width holds, the rest of their family (Close with a note, Hand it to a person, Copy) behind the pill's ▾; then the moves that CHANGE
+// the task (Remind me, Not a task, Split or merge, its kind and owner) in a small pill of their own. The small-caps REPLY / AGENT / CLOSE
+// words are gone: the moves say what they are. What a button acts on is still read off its id (a draft's own verbs are `<rid>:approve`,
+// so the last part counts) - it says which pill, and where in it.
+export const TYPES = [["move", ""], ["change", "Change"]];
 export const NAV = "Nav";                 // the pill Back and Next share, labelled like the types
 const TYPE_OF = {
   reply: "reply", approve: "reply", redraft: "reply", palt: "reply", reject: "reply", email: "reply", hand: "reply", attach: "reply", "email-file": "reply", copy: "reply",
@@ -315,49 +317,66 @@ const TYPE_OF = {
   share: "share",
 };
 export const typeOf = (v) => TYPE_OF[String(v?.id || "").split(":").pop()] || "act";
-// ON A PHONE (narrower than 600px, the owner, 2026-10-22): Next and the ONE move - the lit one, else the row's lead (its first decision,
-// else its first session verb) - and every other button of every type behind one ▾. Four typed bands wrapped to four lines over the box.
-// An empty slot is neither the move nor a menu item: it only holds the Send's width on a wide row.
-// `pressable`: the phone's one move is never a greyed one (the owner, 2026-10-28: a phone's one move was a disabled "Send to agent") - the
-// lit move stays (its busy word is its state), any other is the first pressable one, and with none it is the ▾ alone. The folds read
-// the row's lead move as before (foldsOf: the group holding it folds last), greyed or not
+// THE ROW'S LEAD: the lit move, else its first decision, else its first session verb - in view at every width.
+// `pressable`: on the narrowest row the lead is never a greyed one (the owner, 2026-10-28: a phone's one move was a disabled "Send to agent") -
+// the lit move stays (its busy word is its state), any other is the first pressable one, and with none it is the ▾ alone.
+// An empty slot is neither a move nor a menu item: it only holds the Send's width on a wide row.
 export const leadOf = (row, pressable = true) => {
   const ok = (v) => !v.slot && !(pressable && v.disabled);
   return [...row.decide, ...row.agent, ...row.more].find((v) => v.tone === "p" && !v.slot) || row.decide.find(ok) || (pressable ? row.agent.find(ok) : row.agent[0]) || null;
 };
-export function phoneRow(row) {
-  const all = [...row.decide, ...row.agent, ...row.more].filter((v) => !v.slot), lead = leadOf(row);
-  return { type: "phone", label: "", shown: lead ? [lead] : [], rest: all.filter((v) => v !== lead) };
+// MARK DONE IS NEVER FOLDED (the owner, 2026-10-28: "You should not have Mark done ever hidden"): a sent reply's row showed Reply and Hand it to
+// a person and kept Mark done behind the ▾. Every layout keeps it in view, first in its pill, and the other moves fold round it
+export const pinOf = (row) => [...row.decide, ...row.agent, ...row.more].find((v) => isDone(v) && !v.slot) || null;
+// the two pills' moves, each in the order they give up their place: the move pill's heads (Mark done, the agent's, the reply's, a card's own
+// words) before the rest of their families; a `tucked` move (a sent reply's Hand it to a person: the reply went, Reply is all it needs) is
+// never in view unless it is lit
+export function pillsOf(row) {
+  const all = [...row.decide, ...row.agent, ...row.more].filter((v) => !v.slot), pin = pinOf(row), of = (t) => all.filter((v) => typeOf(v) === t);
+  const head = (vs) => { const up = vs.filter((v) => !v.tucked || v.tone === "p"); return up.find((v) => v.tone === "p") || up.find((v) => v.lead) || up[0]; };
+  const cl = of("close").filter((v) => v !== pin), ag = of("agent"), rp = of("reply");
+  const move = [...new Set([pin || head(cl), head(ag), head(rp), ...of("act"), ...rp, ...ag, ...cl].filter(Boolean))];
+  const rank = (v) => { const i = CHANGE_FIRST.indexOf(String(v.id).split(":").pop()); return i < 0 ? CHANGE_FIRST.length : i; };
+  // ...a result's Share (Share.jsx) keeps its own small band at the row's end: it acts on the whole result, never on a reply or the task
+  return { move, share: of("share"), change: of("task").map((v, i) => [v, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([v]) => v), pin, lead: leadOf(row), held: leadOf(row, false) };
 }
-export function clustersOf(row, keep = 2) {
-  const all = [...row.decide, ...row.agent, ...row.more];
-  return ["act", ...TYPES.map(([t]) => t), "share"].map((type) => {
-    const vs = all.filter((v) => typeOf(v) === type);
-    if (!vs.length) return null;
-    const lead = vs.findIndex((v) => v.tone === "p");
-    const shown = lead >= keep ? [...vs.slice(0, keep - 1), vs[lead]] : vs.slice(0, keep);
-    return { type, label: (TYPES.find(([t]) => t === type) || [])[1] || "", shown, rest: vs.filter((v) => !shown.includes(v) && !v.slot) };
-  }).filter(Boolean);
-}
+// ...the Change pill's most used first (the owner's list, 2026-10-28: split / merge / not a task / Remind me - Remind me the one pressed most)
+const CHANGE_FIRST = ["remind", "defer", "reshape", "split", "nat"];
+// a pill with `n` of its moves in view: `must` first claims its places, the rest go by the pill's order; drawn in that order
+const pill = (type, vs, n, must) => {
+  const can = vs.filter((v) => !v.tucked || v.tone === "p"), keep = new Set(must.filter((v) => vs.includes(v)));
+  for (const v of can) { if (keep.size >= n) break; keep.add(v); }
+  return { type, label: (TYPES.find(([t]) => t === type) || [])[1] || "", shown: vs.filter((v) => keep.has(v)), rest: vs.filter((v) => !keep.has(v)) };
+};
+// the narrowest row: Nav, Mark done, the lead, and every other move of both pills behind one ▾
+export const phoneRow = (row) => foldsOf(row).at(-1)?.[0] || { type: "move", label: "", shown: [], rest: [] };
+// the widest layout, as groups for Cluster: every move in view
+export const clustersOf = (row) => foldsOf(row)[0];
 
-// THE ROW IS ONE LINE, AT EVERY WIDTH (the owner, 2026-10-23: "the buttons turned into 2 rows ... NEVER do that"): an agent stopped
-// while its WhatsApp reply drafted put five typed groups on a desktop row, and the row wrapped. Nothing wraps now - groups FOLD into
-// one ▾ at the row's end until the line fits: the lowest group first (Task, then Agent, Reply, the card's own), Close after them
-// all (the owner, 2026-10-27: Mark done folds "if there is no space" - it was second, and a laptop reply hid it behind the ▾), the group
-// holding the lit move last; with every group folded the row is the phone's - Nav, the one move, one ▾. Nav (Back, Next) never folds.
-// foldsOf: every layout from the widest (the typed groups) to the narrowest (phoneRow), each a list of groups for Cluster.
+// THE ROW IS ONE LINE, AT EVERY WIDTH (the owner, 2026-10-23: "the buttons turned into 2 rows ... NEVER do that"). Nothing wraps - moves FOLD
+// into their pill's ▾ until the line fits: the Change pill's first, down to its ▾ alone, then the move pill's from its end - never Mark done,
+// never the lit or leading move ("curious to see if we can fit more", 2026-10-28: as many moves in view as the width holds). Narrower still,
+// the Change pill joins the move pill's ▾ - one ▾ - and the move pill gives up its moves again down to Mark done and the lead: the phone's
+// row (it starts there: one ▾ on a phone, as many moves as fit). Nav (Back, Next) never folds.
+// foldsOf: every layout from the widest to the narrowest, each a list of groups for Cluster; `.phone` is where a phone's start.
 export function foldsOf(row) {
-  const cs = clustersOf(row), ph = phoneRow(row), lead = leadOf(row, false), holds = (g) => !!lead && g.shown.includes(lead);
-  const rest = cs.filter((g) => !holds(g)).reverse(), order = [...rest.filter((g) => g.type !== "close"), ...rest.filter((g) => g.type === "close"), ...cs.filter(holds)], out = [cs];
-  for (let k = 1; k < order.length; k++) {
-    const gone = new Set(order.slice(0, k)), folded = cs.filter((g) => gone.has(g)).flatMap((g) => [...g.shown, ...g.rest]).filter((v) => !v.slot);
-    // ...ONE ▾ at the row's end: the group standing beside the shared ▾ gives its own ▾'s buttons to it, first - two ▾ side by side
-    // read as one button drawn twice
-    const left = cs.filter((g) => !gone.has(g)), last = left.at(-1);
-    out.push([...left.slice(0, -1), ...(last ? [{ ...last, rest: [] }] : []), { type: "more", label: "", shown: [], rest: [...(last?.rest || []), ...folded] }]);
-  }
-  out.push([ph].filter((g) => g.shown.length || g.rest.length));
-  return out;
+  // ...the lead kept in view is the row's lead, greyed or not, while the pills stand apart; on one ▾ it is a pressable one (leadOf)
+  const { move, share, change, pin, lead, held } = pillsOf(row), set = (...vs) => [...new Set(vs.filter(Boolean))], wide = set(pin, held), narrow = set(pin, lead);
+  const min = (must) => must.filter((v) => move.includes(v)).length;
+  const two = (n, k) => [...(move.length ? [pill("move", move, n, wide)] : []), ...(change.length ? [pill("change", change, k, wide)] : []),
+    ...(share.length ? [{ type: "share", label: "", shown: share, rest: [] }] : [])];
+  // ...one ▾: the Change pill's moves after the move pill's own, and its lit move kept in view beside them
+  const one = (n) => { const g = pill("move", [...move, ...change, ...share], n + narrow.filter((v) => change.includes(v)).length, narrow); return g.shown.length || g.rest.length ? [{ ...g, type: move.length ? "move" : "change" }] : []; };
+  const out = [];
+  for (let k = change.length; k >= 0; k--) out.push(two(move.length, k));
+  for (let n = move.length - 1; n >= min(wide); n--) out.push(two(n, 0));
+  out.phone = out.length;
+  for (let n = move.length; n >= min(narrow); n--) out.push(one(n));
+  // ...each layout once (a pill with nothing to fold gives the same layout twice)
+  const seen = new Set(), sig = (l) => JSON.stringify(l.map((g) => [g.type, g.shown.map((v) => v.id), g.rest.map((v) => v.id)]));
+  const kept = out.map((l) => !seen.has(sig(l)) && !!seen.add(sig(l))), uniq = out.filter((_, i) => kept[i]);
+  uniq.phone = Math.min(kept.slice(0, out.phone).filter(Boolean).length, uniq.length - 1);
+  return uniq;
 }
 // THE NAV PILL: Back and Next, in the walk's order (up, then down) - never folded, at any width
 export const navOf = (row) => [row?.back, row?.next].filter(Boolean);
@@ -374,17 +393,20 @@ export function rowWidth(groups, nav, m) {
   const parts = [...(ns.length ? [m.pad + (m.label?.nav ? m.label.nav + m.clGap : 0) + ns.reduce((a, v) => a + nw(v), 0) + m.bGap * (ns.length - 1)] : []), ...groups.map(cl)];
   return parts.reduce((a, x) => a + x, 0) + m.rowGap * Math.max(0, parts.length - 1);
 }
-// the widest layout that fits `avail` (a phone starts at the phone's, 2026-10-22); `extra` steps further when the drawn row still
+// the widest layout that fits `avail` (a phone starts at its one-▾ layouts, foldsOf.phone); `extra` steps further when the drawn row still
 // overflows what was measured; nothing measured yet (a test render, no layout) is the widest
 export function fitRow(row, m, avail, phone = false, extra = 0) {
-  const all = foldsOf(row), last = all.length - 1, at = (i) => ({ groups: all[Math.min(last, i)], level: Math.min(last, i), last });
-  if (!m || !(avail > 0)) return at((phone ? last : 0) + extra);
-  for (let i = phone ? last : 0; i <= last; i++) if (rowWidth(all[i], navOf(row), m) <= avail) return at(i + extra);
+  const all = foldsOf(row), last = all.length - 1, from = phone ? all.phone : 0, at = (i) => ({ groups: all[Math.min(last, i)], level: Math.min(last, i), last });
+  if (!m || !(avail > 0)) return at(from + extra);
+  for (let i = from; i <= last; i++) if (rowWidth(all[i], navOf(row), m) <= avail) return at(i + extra);
   // ...and a move left too little room to say anything goes into the ▾ too, unless it is the lit one: a phone's report put Back, Next and
-  // the chat pill beside "Put it on my list", and it read "Pu" (the 2026-10-27 sweep). A long move with room for its words is shortened
-  const ph = all[last][0], lead = ph?.shown[0];
-  if (lead && lead.tone !== "p" && avail - (rowWidth(all[last], navOf(row), m) - (m.btn[lead.id] ?? 0)) < MOVE_MIN)
-    return { ...at(last), groups: [{ type: "more", label: "", shown: [], rest: [...ph.shown, ...ph.rest] }] };
+  // the chat pill beside "Put it on my list", and it read "Pu" (the 2026-10-27 sweep). A long move with room for its words is shortened.
+  // Mark done stays (pinOf): only the move beside it goes
+  const g = all[last][0], lead = g?.shown.find((v) => !isDone(v)), pin = g?.shown.find(isDone);
+  if (lead && lead.tone !== "p" && avail - (rowWidth(all[last], navOf(row), m) - (m.btn[lead.id] ?? 0)) < MOVE_MIN) {
+    const one = { type: pin ? g.type : "more", label: "", shown: pin ? [pin] : [], rest: [...g.shown.filter((v) => v !== pin), ...g.rest] };
+    return { ...at(last), groups: [one], ...(pin && rowWidth([one], navOf(row), m) > avail ? { tight: true } : {}) };
+  }
   return { ...at(last), tight: true };
 }
 const MOVE_MIN = 72;   // a few words and the ellipsis: less reads as a stray letter

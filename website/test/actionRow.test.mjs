@@ -115,16 +115,16 @@ test("Next is the FIRST control of the row, then the types; no task number or wa
   assert.doesNotMatch(row, /data-tq-row-ref|waited/);
 });
 
-test("the row by type: two buttons each, the rest behind that type's own arrow, the filled one always in view", async () => {
+test("the row in three: the moves that finish or advance it in one pill, the task's shape in Change, the filled one always in view", async () => {
   const { clustersOf, typeOf } = await import("../src/actionRow.js");
   const row = rowOf({ ref: "", list: [v("reply", "decide", { tone: "p", label: "Write reply" }), v("email", "agent", { label: "Send out results" }),
     v("hand", "more", { label: "Hand it to a person" }), v("continue", "agent", { label: "Continue" }), v("run-another", "agent"),
     v("save-end", "more"), v("done", "more"), v("close-note", "more"), v("remind", "more"), v("nat", "more"), v("next", "next")] });
   const g = Object.fromEntries(clustersOf(row).map((c) => [c.type, c]));
-  assert.deepEqual(clustersOf(row).map((c) => c.type), ["reply", "agent", "close", "task"]);
-  assert.deepEqual(g.reply.shown.map((x) => x.id), ["reply", "email"]); assert.deepEqual(g.reply.rest.map((x) => x.id), ["hand"]);
-  assert.deepEqual(g.close.shown.map((x) => x.id), ["done", "close-note"]);
-  assert.deepEqual([...g.task.shown, ...g.task.rest].map((x) => x.id).sort(), ["nat", "remind"]);
+  assert.deepEqual(clustersOf(row).map((c) => c.type), ["move", "change"]);
+  // ...Mark done, the agent's move, the reply's - then the rest of their families, in that order
+  assert.deepEqual(g.move.shown.map((x) => x.id), ["done", "continue", "reply", "email", "hand", "run-another", "save-end", "close-note"]);
+  assert.deepEqual(g.change.shown.map((x) => x.id), ["remind", "nat"], "Remind me first");
   // the Advisor's pick behind the arrow comes into view, filled
   const picked = clustersOf(rowOf({ ref: "", list: [v("continue", "agent", { label: "Continue" }), v("run-another", "agent"), v("save-end", "more", { label: "Stop and save" })] },
     { verb: "stop_agent", label: "Stop and save" }));

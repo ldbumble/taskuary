@@ -32,7 +32,8 @@ const look = (page, id) => page.evaluate((id) => {
     open: open?.getAttribute("data-tq-slot") || null, openText: txt(open || body || item).slice(0, 700),
     tabs: [...(item?.querySelectorAll("[data-tq-section-tab]") || [])].map((t) => ({ key: t.dataset.tqSectionTab, here: t.hasAttribute("data-tq-here"),
       foot: txt(t.querySelector("[data-tq-tab-status]")), text: txt(t) })),
-    row: btns, rowWhy: txt(row?.querySelector("[data-tq-row-why]")),
+    row: btns, registered: [...(row?.querySelectorAll(".tq-arow-ghost [data-tq-w]") || [])].map((b) => b.dataset.tqW),   // every verb the row holds, folded or not
+    rowWhy: txt(row?.querySelector("[data-tq-row-why]")),
     advisor: txt(item?.querySelector("[data-tq-advisor-line]")) || [...(item?.querySelectorAll("[data-tq-tab-status]") || [])].map(txt).find((x) => /Advisor:/.test(x)) || "",
     loading: /Loading…|Loading\.\.\./.test(txt(item)),
     result: vis(item?.querySelector("[data-tq-result-summary]")), fullOpen: item?.querySelector("[data-tq-full-result]")?.getAttribute("aria-expanded") === "true",
@@ -63,7 +64,9 @@ const CELLS = (ids) => [
   ["fresh task", ids.fresh, { section: "from", here: null, ran: false, not: /Loading/ }],
   ["reply owed, nothing drafted", ids.owed, { section: "from", here: null, ran: false }],
   ["draft waiting for Send", ids.draft, { section: "close", ran: false, draft: true, moves: [/^Send/] }],
-  ["sent reply", ids.sent, { section: "close", ran: false, has: /Attached - signed this morning/, not: /while its agent is still working/ }],
+  // ...the reply went and nothing newer came: Mark done is the lit move, Reply stands unlit, Hand it to a person waits in the ▾ (the owner, 2026-10-28)
+  ["sent reply", ids.sent, { section: "close", ran: false, has: /Attached - signed this morning/, not: /while its agent is still working/, lit: /^Mark done/,
+    unlit: /^Reply/, hidden: /^Hand it to a person/ }],
   ["agent working (general)", ids.working, { section: "agent", ran: true, quiet: true, has: /is working/, result: false, moves: [/Stop/] }],
   ["agent working (coding)", ids.coding_working, { section: "agent", ran: true, quiet: true, xterm: true, moves: [/Stop/] }],
   ["agent waiting on you (asked)", ids.asked, { section: "agent", ran: true, has: /close both cards today/ }],
@@ -81,7 +84,7 @@ const CELLS = (ids) => [
   ["deferred (Remind me)", ids.deferred, { section: "from", ran: false, has: /^(?=[\s\S]*PhishGuard seats)(?=[\s\S]*Put away until \S)/ }],   // S3: it says it is put away
   ["goal with steps", ids.goal, { section: "from", ran: false, has: /Inventory the fields/ }],
   ["to-do list", ids.todo, { section: "from", ran: false, has: /Print the August bank reconciliations/ }],
-  ["calendar invite", ids.invite, { section: "from", ran: false, has: /AP cutover dry run/, moves: [/^Accept/] }],
+  ["calendar invite", ids.invite, { section: "from", ran: false, has: /AP cutover dry run/, moves: [/^(Accept|Decline|Propose a new time)/] }],   // the answer in view; the others in its ▾
   // ...a rail row, by its words: the first of these still on the rail (an item read at the desk has left it by the phone's pass)
   ["report item", /Headcount by site|AP ageing over 30 days|Helpdesk tickets by day/, { card: true, has: /REPORT/i }],
   // ...an FYI batch the desk pass walked has left the rail too, and the one after it (by thread, sized to the screen) is the phone pass's
@@ -144,6 +147,10 @@ function expect(name, w, s, want, desk) {
   for (const b of s.row.filter((b) => b.lit && b.off)) say(`the lit move "${b.label}" is greyed`);
   if (s.row.filter((b) => b.lit).length > 1) say(`two lit moves: ${s.row.filter((b) => b.lit).map((b) => b.label)}`);
   if (want.lit && !s.row.some((b) => b.lit && want.lit.test(b.label))) say(`lit is ${s.row.find((b) => b.lit)?.label || "nothing"}, want ${want.lit}`);
+  if (want.unlit && s.row.some((b) => b.lit && want.unlit.test(b.label))) say(`${want.unlit} is lit`);
+  if (want.hidden && s.row.some((b) => want.hidden.test(b.label))) say(`${want.hidden} stands on the row, not in its ▾`);
+  // MARK DONE IS NEVER FOLDED on an open task (the owner, 2026-10-28: "You should not have Mark done ever hidden")
+  if (s.task && s.registered.includes("done") && !s.row.some((b) => b.id === "done")) say(`Mark done is folded: ${s.row.map((b) => b.label)}`);
   for (const m of desk ? want.moves || [] : []) if (!s.row.some((b) => m.test(b.label)) && !s.buttons.some((b) => m.test(b))) say(`no ${m} on the row: ${s.row.map((b) => b.label)}`);
   return bad;
 }

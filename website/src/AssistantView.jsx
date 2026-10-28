@@ -3694,7 +3694,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                 mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there - and the pill's at rest, and the open
                 box's over the canvas, a column as narrow as a phone's line (2026-10-27) */}
             <textarea ref={composeRef} rows={1} value={text} disabled={resetting} aria-label={tableSays.name}
-              placeholder={boxNarrow && !boxWide ? "Ask…" : phone || (boxIsOver && boxWide) ? tableSays.phone : !popOn ? tableSays.box : boxWide ? "Tell me what to do with it, or ask about it…" : "Ask…"}
+              placeholder={boxNarrow && !boxWide ? "Ask…" : tableSays.phone /* the chat window's words: "Talk to Taskuary…" on a task (the owner, 2026-10-28) */}
               onChange={(e) => { setText(e.target.value); setBoxOpen(true); }} onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                 // Esc shuts the window, the box back to its pill

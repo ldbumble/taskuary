@@ -87,7 +87,12 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   const { verbs, advised } = seen.current || { verbs: { list: [], ref: "" }, advised: null };
   // ...a held button acts only where it stands for no item and is still live - Next pressed over a pick in flight is held and runs once
   // the pick lands (AssistantView) - never the item being left's own
-  const act = verbs === now ? press : (id, e, a) => { const v = now.list.find((x) => x.id === id && !x.at); return v ? press(id, e, a, v.of) : undefined; };
+  // ...and a held button of the item STILL ON THE TABLE acts too (2026-10-27, Run another agent on a general agent did nothing): while its
+  // write-up ran the row kept re-drawing and stayed held, and every press of the item's own verbs fell through to nothing
+  const act = verbs === now ? press : (id, e, a) => {
+    const at = verbs.list.find((x) => x.id === id)?.at, v = now.list.find((x) => x.id === id && (!x.at || (!!at && x.at === at)));
+    return v ? press(id, e, a, v.of) : undefined;
+  };
   // a "none" answer lights its one move: no AI lights the row's own Connect an AI where the row has one (a failure's fix named after
   // its place) - it lit nothing, a move named "ai" no button carries (the design, phase A) - and any other none lights Next
   const move = advised?.none ? adviceNone(advised.none).move : "";

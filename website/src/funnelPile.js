@@ -614,6 +614,15 @@ export const rowAbove = (items, table, gone = () => false) => {
   return null;
 };
 
+// ...AND FROM THE FIRST FYI, THE LAST REPORT READ (trust audit F1, 2026-10-28): a report read leaves the rail, so the row above the first FYI
+// was the last task and Back skipped every report the walk had just shown. `read`: the last report this walk put on the table ({key})
+export const backFrom = (items, table, gone = () => false, read = null) => {
+  const up = rowAbove(items, table, gone);
+  if (!read?.key || levelOf(table) !== "fyi" || (up && levelOf(up) === "fyi")) return up;
+  const onRail = (items || []).some((i) => i.key === read.key || (i.aliases || []).includes(read.key));
+  return onRail ? up : { key: read.key, kind: "report" };
+};
+
 // ── the FYI tail (funnel.page_fyi) ─────────────────────────────────────────────────────────────
 // Six months of plain FYI was most of a big mailbox's rail and of every answer, while the rail draws a handful of them. The
 // page asks for FYI_PAGE of them whole; the rest come as `fyi_tail`, only the fields the page COUNTS by. So whatever DRAWS

@@ -94,7 +94,7 @@ import { summarize } from "./walkSummary.js";
 import { refreshToday, useCalendarToday } from "./calendarToday.js";
 import { onFirstRun, readFirstRun } from "./firstRunState.js";
 import FeedView from "./FeedView.jsx";
-import { MORE_PX, backAt, dueWord, placed, pulledRow, rowAbove, sectionDone, sectionNext } from "./funnelPile.js";
+import { MORE_PX, backAt, backFrom, dueWord, levelOf, placed, pulledRow, sectionDone, sectionNext } from "./funnelPile.js";
 import { isImportant, level as priorityOf } from "./priority.js";
 import { age, ago, band, bandUntil, plural } from "./timeWords.js";
 const GeneralWorkspace = lazyView(loadGeneral);
@@ -3082,10 +3082,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // draw (actionRow.useRowHold), the ring moving with it. The item it leaves is not put down: it stays unread where it is, and Next from
   // above comes back down to it. The address follows as Next's does (a stream, not a stack). Nothing above: nothing happens
   const backHeld = useRef(false);
+  // ...the last report this walk put on the table: read, it left the rail, and Back from the first FYI goes to it (funnelPile.backFrom)
+  const lastReportRef = useRef(null);
+  useEffect(() => { if (currentItem?.key && levelOf(currentItem) === "reports") lastReportRef.current = { key: currentItem.key }; }, [currentItem?.key]);   // eslint-disable-line react-hooks/exhaustive-deps
   const goBack = () => {
     if (resetting) return undefined;
     if (busy || turnFlight.current) { backHeld.current = true; nextHeld.current = false; return undefined; }
-    const up = rowAbove(pileRef.current?.items, currentRef.current, isDown);
+    const up = backFrom(pileRef.current?.items, currentRef.current, isDown, lastReportRef.current);
     if (!up) return undefined;
     navHow.current = "replace";
     setRailOpen(false); if (old) setOld(null); browseDown();
@@ -3274,7 +3277,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // NAV: BACK BESIDE NEXT, NO NEXT ON THE LAST ONE (the owner, 2026-10-27: "on the first one no Back, like no Next on the last one"). Back
   // stands while the table holds a walk item with a row above it on the rail; Next goes when the walk's own selection for this table
   // (selectionRef, captured for exactly this item) names nothing below it. A section walk picks its own next (sectionNext): Next stays
-  const backTo = table.speaks && !firstRun && !old && !walk && currentItem ? rowAbove(pile?.items, currentItem, isDown) : null;
+  const backTo = table.speaks && !firstRun && !old && !walk && currentItem ? backFrom(pile?.items, currentItem, isDown, lastReportRef.current) : null;
   useVerbs("nav", [{ id: BACK, group: "back", label: btn("back"), title: btnHint("back"), run: () => goBack() }], !!backTo);
   const sel = selectionRef.current;
   const atEnd = !!current && table.speaks && !sectionRef.current && !!sel && sel.scope?.exclude === current

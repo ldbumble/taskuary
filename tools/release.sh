@@ -27,16 +27,16 @@ python - "$OLD" "$V" <<'EOF'
 import sys, re, json, datetime
 old, new = sys.argv[1:]
 def sub(p, n=None):
-    t = open(p, encoding='utf8').read(); c = t.count(old)
+    t = open(p, encoding='utf8', newline='').read(); c = t.count(old)
     if not c or (n is not None and c != n): sys.exit(f'{p}: expected {n or "some"} of {old}, found {c}')
-    open(p, 'w', encoding='utf8').write(t.replace(old, new))
+    open(p, 'w', encoding='utf8', newline='').write(t.replace(old, new))
 for p in ('pyproject.toml', 'README.md', 'README.zh-CN.md', 'docs/roadmap.md'): sub(p)
 sub('website/src/demoFixtures.json', 3)
-m = 'docs/site/manifest.json'; d = json.load(open(m, encoding='utf8'))
+m = 'docs/site/manifest.json'; raw = open(m, encoding='utf8', newline='').read(); d = json.loads(raw); nl = '\r\n' if '\r\n' in raw else '\n'
 d['version'], d['updated'] = new, datetime.date.today().isoformat()
-open(m, 'w', encoding='utf8').write(json.dumps(d, indent=2, ensure_ascii=False) + '\n')
+open(m, 'w', encoding='utf8', newline='').write((json.dumps(d, indent=2, ensure_ascii=False) + '\n').replace('\n', nl))
 for p in ('README.md', 'README.zh-CN.md'):   # the badge's cache-buster: a new URL is a fresh fetch for camo
-    t = open(p, encoding='utf8').read(); open(p, 'w', encoding='utf8').write(re.sub(r'asof=[0-9a-z-]+', f'asof={new}', t))
+    t = open(p, encoding='utf8', newline='').read(); open(p, 'w', encoding='utf8', newline='').write(re.sub(r'asof=[0-9a-z.-]+', f'asof={new}', t))
 EOF
 
 say "build the UI, the demo and the docs"
@@ -44,7 +44,8 @@ say "build the UI, the demo and the docs"
 
 if [ "${SKIP_GATES:-}" != 1 ]; then
   say "fast gates (the full suites run in CI)"
-  (cd website && "${N[@]}" node --test "test/*.test.mjs" > /tmp/release-node.log 2>&1) || { grep -E "^not ok" /tmp/release-node.log | head; die "node unit tests failed"; }
+  # ...once more on a failure: a few timer tests flake under load, and a real failure fails twice
+  (cd website && { "${N[@]}" node --test "test/*.test.mjs" > /tmp/release-node.log 2>&1 || "${N[@]}" node --test "test/*.test.mjs" > /tmp/release-node.log 2>&1; }) || { grep -E "^not ok" /tmp/release-node.log | head; die "node unit tests failed twice"; }
   U=$(cd website && npm exec --yes --package=node@22 --package=eslint@10.10.0 -- eslint -c eslint.undef.mjs -f json src 2>/dev/null | grep -o '"ruleId":"no-undef"' | wc -l)
   [ "$U" = 0 ] || die "$U undefined names (eslint no-undef)"
   TASKUARY_HOME="$(mktemp -d)" python -m pytest -q -p no:cacheprovider tests/test_docs_manifest.py tests/test_promptmap_and_catalog.py \

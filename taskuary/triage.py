@@ -43,6 +43,8 @@ FIELDS = {
     'open_work': "open_work is the OPEN tasks this message touches, each with its tid.",
     'thread_task': "thread_task is the task this message's thread already belongs to - its tid, title, ask and status. The message "
                    "joins it unless you answer new_job: one line saying why this is a different job; null when it is the same.",
+    'room_tasks': "room_tasks are the tasks this chat's same-day lines already sit on, each with its tid, title, ask and status. A line "
+                  "joins one only when it is that task's own ask (same_problem true); a different subject is a new ask (same_problem false).",
     'open_goals': "open_goals is the owner's OPEN GOALS, each with its tid, what done looks like and its steps (id, text, done, who holds it): "
                   "when this message serves one step - it delivers it, answers it, or is plainly about it - answer serves {task, step, done}, "
                   "done true only when the message completes that step; a message that serves no step answers serves null.",
@@ -146,6 +148,7 @@ DUE, SENDER, GOAL, DANGER, MEET = (_bullet('due'), _bullet('sender_class'), _bul
 LEVELS = ('regular', 'important', 'urgent')
 # how much thought the work takes and whether the reader could tell - a verdict apart from priority, read by the router (2026-10-25)
 DIFFICULTY, SURE, DATA = _bullet('difficulty'), _bullet('sure'), _bullet('data_class')
+REFINES = _bullet('refines')
 DATA_CLASSES = ('ordinary', 'sensitive')
 DIFFICULTIES = ('quick', 'standard', 'hard')
 
@@ -220,6 +223,8 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
     if same: p['same_as'] = {'type': ['integer', 'null']}
     # THE THREAD IS A HINT (the owner, 2026-10-26): a message on a task's thread joins it unless this says why it is another job
     if thread_task: p['new_job'] = {'type': ['string', 'null']}
+    # ...and whether a line that joins changes what the task ITSELF asks - only then is it retitled (the owner, 2026-10-28)
+    if thread_task or same or candidates is not None: p['refines'] = {'type': ['boolean', 'null']}
     # the earlier lines of the exchange the ask rests on - shown with the task so its ask can be checked (2026-10-22)
     if earlier: p['rests_on'] = {'type': ['array', 'null'], 'items': {'type': 'integer'}}
     # how hard the WORK is and whether the reader could tell (the router, 2026-10-25): its own verdict, never the priority. Shown on
@@ -573,7 +578,10 @@ def relationship_of(j: dict, candidates: list) -> dict:
     # a model that says no has named a second job. Definitions alone did not move it - a sender's "it says AI not set up"
     # and "it is not re-triaging" joined the DLL-update task six times in six (the owner, 2026-09-24: "different
     # issues are separate tasks")
-    if rel == 'continues' and j.get('same_problem') is False: rel = 'new'
+    # ...and an answer too (the owner, 2026-10-28: "of course emails/chats should be split by triage if they are separate"): one
+    # colleague's morning of lines in a group - onboarding, a report, a chat that will not load, an email's wording - each read as
+    # continuing the first, joined one task and renamed it on every line. Said to be another subject, it is its own task
+    if rel in ('continues', 'answers') and j.get('same_problem') is False: rel = 'new'
     return {'relationship': rel, 'related_message_ids': related, 'existing_task_id': task}
 
 
@@ -727,6 +735,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if not shape and '"meet"' not in base: system += '\n\n' + MEET         # ...and whether it asks for a time to meet (2026-10-20)
             if not shape and '"difficulty"' not in base: system += '\n\n' + DIFFICULTY + '\n' + SURE   # ...and how hard, how sure (2026-10-25)
             if not shape and '"data_class"' not in base: system += '\n\n' + DATA                   # ...and what data it carries (2026-10-25)
+            # ...and whether a joining line refines the task's own ask, wherever a task it may join was shown (2026-10-28)
+            if not shape and 'refines' not in base and (home or same_ids or candidates is not None): system += '\n\n' + REFINES
             # the last thing asked for, after every block that says how to JUDGE: the output shape
             if shape: system += '\n\n' + TASK_FIELDS
             # ...and the shape goes on the WIRE as well, where the brain has one: a schema the
@@ -827,6 +837,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if j.get('difficulty') in DIFFICULTIES: out['difficulty'] = j['difficulty']
                 if isinstance(j.get('sure'), bool): out['sure'] = j['sure']
                 if isinstance(j.get('asks_owner'), bool): out['asks_owner'] = j['asks_owner']
+                if j.get('refines') is True and (home or same_ids or candidates is not None): out['refines'] = True
                 if j.get('data_class') in DATA_CLASSES: out['data_class'] = j['data_class']
                 return out
             parse_error = f"invalid intent {j.get('intent')!r}; expected task, reply_only, or fyi"

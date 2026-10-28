@@ -1588,6 +1588,13 @@ def unwritten_full_items(store) -> list | None:
     return full_items(store) if top is not None and _CACHE.get('mark') == top else None
 
 
+def thread_of(store, key: str) -> list:
+    """The keys folded under the FYI row `key` - the other mails on its email thread - as the rail last drew it."""
+    if not str(key or '').startswith('processing:') or _CACHE.get('store') is not store: return []
+    rows = [*(_CACHE.get('full') or ()), *((_CACHE.get('pile') or {}).get('items') or ())]
+    return list(next((i.get('thread') or [] for i in rows if i.get('key') == key and i.get('thread')), []))
+
+
 def rail_item(store, key: str) -> dict | None:
     """The row answering to `key` in the rail's own build, while nothing has been written since it began - or None, and the
     caller looks it up as it always did (next_item). A batch key is no row."""
@@ -1991,6 +1998,10 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
         store.reconcile_processing_membership()
         store.set_funnel_state(key, verb, by, until, note, **kw)
     if verb == 'done': _idea_done(store, key, by)
+    # ...and an FYI row that speaks for its whole email thread settles the mails folded under it (processing_unread.fold_fyi_threads)
+    for k in thread_of(store, key):
+        try: settle(store, k, verb, by, hours, note, read=read, put_down=put_down)
+        except Exception as e: logger.debug(f'funnel: {k} under {key} not settled - {e}')
     invalidate()
     # BULK PROCESSING: an item leaving the head is what pays for the next one to be judged - triage
     # is spent as the owner makes room, not 300 times on arrival (rank.py). `later` counts: it holds

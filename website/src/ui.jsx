@@ -14,6 +14,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import BlockIcon from "@mui/icons-material/Block";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
+import { dictate, dictationError } from "./dictation.js";
 import { onLive, touches } from "./live.js";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { RepoPicker } from "./RepoPicker.jsx";
@@ -481,8 +482,9 @@ const browserVoice = () => { try { return localStorage.getItem(BROWSER_VOICE) ==
 
 // One mic. Press to record, press again to stop; the clip goes to /api/voice/transcribe as its
 // raw bytes and the text lands through onText - into a prompt box, or straight into a session.
-export const MicButton = ({ onText, onActive, size = 18, sx }) => {
+export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) => {
   const voice = useVoiceReady();
+  const live = React.useRef({}); live.current = { onText, onInterim };   // the latest handlers: a session outlives many renders
   const [rec, setRec] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   // ...and SAYS WHILE IT LISTENS OR TRANSCRIBES (the owner, 2026-10-27: "I click on the voice thing, it expands, but while I'm talking it
@@ -491,7 +493,11 @@ export const MicButton = ({ onText, onActive, size = 18, sx }) => {
   React.useEffect(() => { onActive?.(!!rec || busy); }, [!!rec, busy]);   // eslint-disable-line react-hooks/exhaustive-deps
   const [err, setErr] = React.useState("");
   const [ask, setAsk] = React.useState(null), [byBrowser, setByBrowser] = React.useState(browserVoice);
-  const flash = (s) => { setErr(s); setTimeout(() => setErr(""), 5000); };
+  // ...and a mic that stops SAYS WHY, beside it, not in a tooltip nobody hovers (the owner, 2026-10-28: "it just turns right off")
+  const errAt = React.useRef(0), recRef = React.useRef(null); recRef.current = rec;
+  const flash = (s) => { setErr(s); clearTimeout(errAt.current); errAt.current = setTimeout(() => setErr(""), 8000); };
+  React.useEffect(() => () => { clearTimeout(errAt.current); recRef.current?.cancel?.(); }, []);
+  const [hover, setHover] = React.useState(false);
   // NO VOICE AI, NO LIVE MIC (the owner, 2026-10-15: "if there is no voice provider the mic icon ... should be crossed out with popup
   // to configure voice ai before it will activate"): the mic shows crossed out and its press asks - set up a voice AI, or (Edge and
   // Chrome ship their own recogniser, the Web Speech API, free) use the browser's. That one cannot transcribe a voice-note FILE, so
@@ -503,20 +509,20 @@ export const MicButton = ({ onText, onActive, size = 18, sx }) => {
   // set up in the meantime (the popup's own button, or another tab): the mic is live the moment the status says so
   React.useEffect(() => { if (ask && voice?.ready) setAsk(null); }, [ask, voice?.ready]);
   const start = async () => {
+    setErr("");
     if (viaBrowser) {
+      // ...it keeps listening until the owner stops it (dictate, dictation.js): Chrome's own ends are started again, and a stop it will
+      // not take back says why. With onInterim (the chat box) each settled phrase lands as it is said and the rest shows as it is heard;
+      // elsewhere the whole lands at the stop, as before
+      let all = "";
+      const vocab = voice?.vocabulary?.length && window.SpeechRecognitionPhrase ? () => voice.vocabulary.map((term) => new window.SpeechRecognitionPhrase(term, 5)) : null;
       try {
-        const r = new SR(); r.lang = navigator.language || "en-US"; r.continuous = true; r.interimResults = false;
-        // Chrome's contextual-biasing surface is progressive: use it when present, while older
-        // browsers keep dictating normally. Server voice connectors always receive this same list.
-        if (voice?.vocabulary?.length && window.SpeechRecognitionPhrase) {
-          try { r.phrases = voice.vocabulary.map((term) => new window.SpeechRecognitionPhrase(term, 5)); } catch { /* unsupported preview surface */ }
-        }
-        let heard = "";
-        r.onresult = (e) => { heard = Array.from(e.results).filter((x) => x.isFinal).map((x) => x[0].transcript.trim()).join(" "); };
-        r.onerror = (e) => flash(e.error === "not-allowed" ? "microphone blocked in this browser" : `recognition ${e.error}`);
-        r.onend = () => { setRec(null); if (heard) onText?.(heard); else flash("nothing heard"); };
-        r.start(); setRec(r);
-      } catch { flash("this browser cannot dictate here"); }
+        const d = dictate({ SR, lang: navigator.language || "en-US", phrases: vocab,
+          onFinal: (t) => { if (live.current.onInterim) live.current.onText?.(t); else all = all ? `${all} ${t}` : t; },
+          onInterim: (t) => live.current.onInterim?.(t),
+          onEnd: (line) => { setRec(null); if (ctl) ctl.current = null; if (all) live.current.onText?.(all); if (line) flash(line); } });
+        setRec(d); if (ctl) ctl.current = { cancel: () => d.cancel() };
+      } catch { flash("This browser cannot dictate here - set up a voice AI instead"); }
       return;
     }
     try {
@@ -536,9 +542,9 @@ export const MicButton = ({ onText, onActive, size = 18, sx }) => {
         setBusy(false);
       };
       mr.start(); setRec(mr);
-    } catch { flash("microphone not available in this browser"); }
+    } catch (e) { flash(e?.name === "NotAllowedError" ? dictationError("not-allowed") : "No microphone this browser can use - plug one in or allow it in the address bar"); }
   };
-  const stop = () => { rec?.stop(); if (!viaBrowser) setRec(null); };   // the browser recogniser reports back through onend
+  const stop = () => { rec?.stop(); if (!viaBrowser) setRec(null); };   // the browser's dictation reports back through onEnd
   const title = err || (!voice ? ""
     : rec ? "Stop and transcribe"
     : voice.ready ? `Dictate (${voice.label || voice.provider})`
@@ -549,7 +555,8 @@ export const MicButton = ({ onText, onActive, size = 18, sx }) => {
     setByBrowser(true); setAsk(null);
   };
   return (<>
-    <MuiTooltip title={ask ? "" : title}><span>
+    <MuiTooltip title={ask ? "" : err ? <span data-tq-mic-err="">{err}</span> : title} open={!ask && (!!err || (hover && !!title))}
+      onOpen={() => setHover(true)} onClose={() => setHover(false)}><span>
       <MuiIconButton size="small" onClick={rec ? stop : press} disabled={busy || !voice} sx={sx} data-tq-mic={off ? "off" : "on"}
         aria-label={rec ? "stop recording" : off ? "voice is off - set up a voice AI" : "dictate"}>
         {busy ? <CircularProgress size={size - 4} /> : rec ? <StopCircleIcon sx={{ fontSize: size, color: "#8a3646" }} />

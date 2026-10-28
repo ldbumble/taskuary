@@ -1203,6 +1203,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [currentItem, setCurrentItem] = useState(null);   // ...and the item itself, drawn at the top of the pipe
   const [cardKey, setCardKey] = useState(null);       // ...or a task opened by name (the Board's open), which is no pile item
   const [text, setText] = useState("");
+  // what the mic is still hearing, shown after the typed words until it settles into them (MicButton's onInterim); micRef cancels it on a send
+  const [heard, setHeard] = useState(""), micRef = useRef(null);
   const [advice, setAdvice] = useState(null);     // the Advisor's line for the key on the table (advisor.py), or null
   // the key the Advisor's last read was for: a new item's row waits for it (actionRow.useRowHold), so the lit button lands with the row
   // instead of reshuffling it under the owner's hand - a lit verb kept in view pushed its neighbour into the ▾ (the dead-end walk's STILL, 2026-10-23)
@@ -2295,17 +2297,19 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const send = async (line, held = false) => {
     // a picture alone is a line too: "what is this?" is what it means
     const images = line == null ? pics.paths : [];
-    const t = String(line ?? text).trim() || (images.length ? "What is this?" : "");
+    const t = String(line ?? (heard ? `${text} ${heard}` : text)).trim() || (images.length ? "What is this?" : "");
     if (!t || pics.busy) return;
     if (busy || resetting || turnFlight.current) {
       // ...but never a second copy: Enter twice in one tick reaches here with the line already going (`sending`)
       if (resetting || images.length || t === sending.current || askLater.current.includes(t)) return;
       askLater.current = [...askLater.current, t];
       if (line == null) setText("");
+      if (line == null) { micRef.current?.cancel(); setHeard(""); }   // ...and the dictation with it: its words went with the line
       setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text: t, shots: [], heldAsk: true }]);
       return;
     }
     turnFlight.current = answering.current = true; sending.current = t;
+    if (line == null) { micRef.current?.cancel(); setHeard(""); }   // a send ends the dictation: its words went with the line
     setText(""); setBusy(true); setErr(""); setLit(null);
     if (winOnRef.current) setPopOpen(true);            // the answer comes up in the chat window
     const shots = line == null ? pics.imgs : [];
@@ -3712,7 +3716,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             <div className="tq-compose-field">
             <div className="tq-compose-tools">
             <AttachImage pics={pics} sx={{ color: DIM }} />
-            <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onActive={setDictating} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />
+            <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onActive={setDictating} ctl={micRef} onInterim={setHeard}
+              onText={(t) => setText((v) => (v.trim() ? `${v.trimEnd()} ${t}` : t))} />
             <Tooltip title="Send an emoji response">
               <IconButton size="small" aria-label="Choose an emoji response" disabled={busy || resetting}
                 onClick={(e) => setEmojiEl(e.currentTarget)} sx={{ width: 34, height: 34, p: 0, color: DIM }}>
@@ -3723,14 +3728,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             {/* a phone's composer is one line tall and the long hint wrapped under its own edge, cut
                 mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there - and the pill's at rest, and the open
                 box's over the canvas, a column as narrow as a phone's line (2026-10-27) */}
-            <textarea ref={composeRef} rows={1} value={text} disabled={resetting} aria-label={tableSays.name}
+            <textarea ref={composeRef} rows={1} value={heard ? (text.trim() ? `${text.trimEnd()} ${heard}` : heard) : text} disabled={resetting} aria-label={tableSays.name}
               placeholder={!boxWide && isMini && winLines.length ? (phone ? "Continue…" : "Continue chat…")
                 : boxNarrow && !boxWide ? "Ask…" : tableSays.phone /* the chat window's words: "Talk to Taskuary…" on a task (the owner, 2026-10-28) */}
-              onChange={(e) => { setText(e.target.value); openBox(); }} onKeyDown={(e) => {
+              onChange={(e) => { const v = e.target.value; setText(heard && v.endsWith(heard) ? v.slice(0, -heard.length).trimEnd() : v); openBox(); }} onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                 // Esc shuts the window, the box back to its pill (escShut, on the box)
               }} />
-            <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
+            <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || heard || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
             </div>
           </div>
           </div>

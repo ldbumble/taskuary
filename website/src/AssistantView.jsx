@@ -20,7 +20,6 @@ import VolumeOffIcon from "@mui/icons-material/VolumeOff";
 import SendIcon from "@mui/icons-material/ArrowUpward";
 import SentimentSatisfiedAltIcon from "@mui/icons-material/SentimentSatisfiedAlt";
 import CloseIcon from "@mui/icons-material/Close";
-import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import ViewSidebarIcon from "@mui/icons-material/ViewSidebar";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import api from "./api.js";
@@ -42,6 +41,7 @@ import { liveUp, onLive, taskIdsOf } from "./live.js";
 import { TAB, covers, mine } from "./liveSeq.js";
 import { adviceKeyFor, adviceShown, nothingToAdd, stripWord, taskNote } from "./advice.js";
 import { Md, looksMd } from "./md.jsx";
+import { refParts, refNumber } from "./mdText.js";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 // TASKUARY'S MARK IN THE CHAT (the owner, 2026-09-28: "the taskuary logo is blue and very obvious ... you can change the
 // taskuary logo ... at least how it shows in the assistant"): its six-point star drawn in Taskuary's sage, outlined like
@@ -49,6 +49,12 @@ import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./
 // the speaker's mark is TASKUARY'S OWN LOGO, never a second drawing of it (the owner, 2026-10-06: "logo should match the
 // taskuary one not a different one")
 const AssistantMark = () => <TaskuaryMark size={24} />;
+// A TASK NAMED IN AN ANSWER IS A LINK THAT OPENS IT (the owner, 2026-10-28: "it should hit the task and it should open ... like hitting a task
+// on the work rail"): its ref pressed is a press of its rail row (actions.openRef). A plain line's refs here; a markdown one's in Md (linkRefs)
+const RefLink = ({ refText, onOpen }) => (
+  <a href={`#task=${refNumber(refText)}`} className="tq-ref-link" data-tq-task-link={refNumber(refText)}
+    onClick={(e) => { e.preventDefault(); onOpen(refNumber(refText)); }}>{refText}</a>);
+const withRefs = (p, onOpen) => (onOpen ? refParts(p).map((x, i) => (i % 2 ? <RefLink key={i} refText={x} onOpen={onOpen} /> : x)) : p);
 import { DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, PRIORITY_COLOR, ROLES } from "./theme.jsx";
 import { railShort } from "./batchItems.js";
 import ProposalCard from "./ProposalCard.jsx";
@@ -110,11 +116,13 @@ import "./assistantView.css";
 // walk itself lives on the server: a reload asks the task whether it is still an open set-up before
 // showing anything, so a stale key restores nothing.
 const WALK_KEY = "taskuary_walk_tid";
-const POP_ROOM = 140;          // the least room under the task view the chat pop-up stands in, rather than over the view (120: the open box above the dock takes ~85px of it, 2026-10-27)
 const isOpenWalk = (t) => !!t && t.SourceRef === "assistant:setup" && !["done", "dropped"].includes(t.Status);
 // markers the server writes on a line that are NOT cards (concierge.SETUP_QUESTIONS): the line is its words
 // ...and a line that carries its own words (concierge: a failed act's way on, the already-seen opens): never an item card
 const NOTE_KINDS = new Set(["setup_questions", "words"]);
+// a line of the CONVERSATION - the owner's, the Assistant's words, a receipt - drawn in the chat window, never on the canvas; a card is the canvas's
+const talkLine = (m) => m?.role === "user" || m?.role === "receipt"
+  || (m?.role === "assistant" && !m.proposal && (!m.card || NOTE_KINDS.has(m.card.kind)));
 // the cards that ARE the item on the table (not the assistant talking: a proposal, setup, the walk, the brief) - drawn edge to edge like the task view
 const ITEM_CARDS = new Set(["report", "dashboard", "message", "fyis", "meeting", "idea", "reply"]);
 
@@ -1054,7 +1062,7 @@ function Line({ m, lastBrief = false, live, last, further = false, actions, fres
               first half (the owner, 2026-09-24: "if there is box don't show it again") */}
           {/* WHAT IT LOOKED AT AND PRESSED, over what it says (troubleshoot.py): the general agent's own rows, kept on the line */}
           {!!(m.steps?.length || m.card?.steps?.length) && <AgentSteps data={{ steps: m.steps?.length ? m.steps : m.card.steps }} />}
-          {text && !(m.card && kind && !["proposal", "walk", "setup"].includes(kind)) ? (looksMd(text) ? <Md text={text} /> : text.split("\n").map((p, i) => <p key={i}>{p}</p>)) : null}
+          {text && !(m.card && kind && !["proposal", "walk", "setup"].includes(kind)) ? (looksMd(text) ? <Md text={text} onTask={actions.openRef} /> : text.split("\n").map((p, i) => <p key={i}>{withRefs(p, actions.openRef)}</p>)) : null}
           {/* a word pressed under a line that carries no item (a failure's Update branch): its badge on that line */}
           {!kind && pressedOf(m) && <Pressed label={pressedOf(m)} />}
           {passed && (
@@ -2294,7 +2302,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     }
     turnFlight.current = answering.current = true; sending.current = t;
     setText(""); setBusy(true); setErr(""); setLit(null);
-    if (popOnRef.current) setPopOpen(true);            // the answer comes up over the task (the one-row chat bar)
+    if (winOnRef.current) setPopOpen(true);            // the answer comes up in the chat window
     const shots = line == null ? pics.imgs : [];
     if (images.length) pics.clear();
     // ...a held line is on screen already: it is let go, not drawn twice
@@ -2318,7 +2326,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         say(data.context_update);
       }
       noticedRef.current = null;
-      if (data.item) landed(data);                       // the words pointed at something: it is on the table now
+      if (data.item) {
+        landed(data);                                    // the words pointed at something: it is on the table now
+        // ...and the chat window says so: its words ride the card on the canvas, and the owner's line stood alone in the window
+        const it = data.item;
+        if (winOnRef.current) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: "warn", text: `Brought up ${[it.ref, it.title].filter(Boolean).join(" - ") || "it"} on the canvas.` }]);
+      }
       else {
         // THE ASSISTANT ROUTES (the owner, 2026-10-19: "it should just surface the correct button"): an act comes back as the row's own button
         // to light (`light`), the page that holds it (`open`) or a new job written into New (`new`) - never a card to confirm, and nothing runs
@@ -2328,7 +2341,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           setMsgs((m) => [...m, { id: aid, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [], steps: data.steps || [] }]);
         // ...but IN THE CHAT POP-UP a turn that only acted still ends on words (actReceipt): there is no card in it to wear the badge, and the
         // owner's line stood alone over the task (2026-10-27). A drafted reply (`decision`) writes its own receipt
-        else if (popOnRef.current && !data.context_update && !data.decision) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", ...actReceipt(data, tableKey || current) }]);
+        else if (winOnRef.current && !data.context_update && !data.decision) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", ...actReceipt(data, tableKey || current) }]);
         // A TYPED PUT-DOWN WAS PRESSED (concierge._put_down - the owner, 2026-10-23: "it should collapse the task and write on it marked done
         // with note"): its card wears the button's badge, and on the table it is put down as the row's own press puts it down - folded, the
         // next item up - never a line saying so
@@ -2352,7 +2365,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         // about where to find it. Only a fresh reply opens one - a reloaded history draws its links, it does not open them.
         // ...a reply that carries `open` has decided for itself: "" is the app's own words (no AI), whose links are to press
         const page = "open" in data ? data.open : firstAppLink(data.say);
-        if (page) openAppLink(page);
+        // ...A TASK IT OPENS IS A PRESS OF ITS RAIL ROW (the owner, 2026-10-28: "the assistant should be hitting that button like hitting a task
+        // on the work rail"), said in the chat window
+        const opens = /^#?task=(\d+)$/.exec(page || "");
+        if (opens) {
+          const n = Number(opens[1]), row = (pile?.items || []).find((i) => Number(i.tid) === n);
+          pressRowRef.current?.(n);
+          setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: "done", text: `Opened ${row?.ref || `TQ-${String(n).padStart(4, "0")}`}${row?.title ? ` - ${row.title}` : ""}.` }]);
+        } else if (page) openAppLink(page);
         // ...its line rides with it (`aid`): the card's Send to agent says it again as what it started (concierge.said_started)
         if (data.new) browseRef.current?.("new", { ...data.new, aid });
         const l = lightOf(data.light);
@@ -3056,7 +3076,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // a pull lands through surface() -> landed() -> putOnTable. ONE ASKED FOR WHILE A TURN IS IN FLIGHT WAITS for it, as Open from chat
   // does (above): a rail click mid-pull was refused as busy and did nothing at all - the owner clicked a third task while the second was
   // still coming up, and stayed on the second. The latest ask wins; one queued before it is dropped. A walk handed to a phone refuses nothing.
-  const pullRef = useRef(null);
+  const pullRef = useRef(null), pressRowRef = useRef(null);   // ...pressRowRef: a rail row pressed by number (railPress, below)
   // BACK: the row above the one on the table (rowAbove), brought up the way a click on that row brings it - the same pick, the same one
   // draw (actionRow.useRowHold), the ring moving with it. The item it leaves is not put down: it stays unread where it is, and Next from
   // above comes back down to it. The address follows as Next's does (a stream, not a stack). Nothing above: nothing happens
@@ -3161,7 +3181,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // none, so a move the row lacks drew no line and no button there (the matrix's phone pass, 2026-10-20)
   // SEND TO AGENT WITH NO AI IS GREYED, ITS REASON THE HOVER - on a report, an FYI or a mail as on a task (trust audit F3, 2026-10-28): the
   // card's word stood live there and opened a "No AI connected" box (capabilities.cannotStart, the task page's own check)
-  const actions = { noAi: cannotStart(caps), done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items: pileRows(pile), pressAdvice,
+  const actions = { noAi: cannotStart(caps), openRef: (n) => pressRowRef.current?.(n), done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items: pileRows(pile), pressAdvice,
     reminded: (out, c) => remindReceipt(out, c?.tid, c?.ref, c?.key),
     next: () => { if (picking && busy) nextHeld.current = true; else runChip({ verb: "next" }); }, picking: picking && !resetting, advance: (pile, settled) => advance(pile, settled), reload: () => loadPile(true), changed: onChanged,
     // an earlier line back on the table - or the folded item itself, which only unfolds: it never left the table
@@ -3369,83 +3389,73 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     return c && current && (c.key === current || (c.aliases || []).includes(current)) ? chipsOf(shown[lastCardIdx]) : [];
   }, [shown, lastCardIdx, current]);
   // THE ONE-ROW CHAT BAR (the owner, 2026-10-26: "try one row chat bar with ai pop up. let me see what it looks like"): the box is how the
-  // owner tells Taskuary what to do with the task ("reply saying Thursday works", "remind me Monday") - acting, not a help chat - and it
-  // cost a whole band under the row. It is a pill at the row's end now, widened while it is used, and what is said about the task on the
-  // table - the lines after its view - is drawn in a pop-up over the view instead of under it, so the view never moves. The same lines,
-  // the same Line, mounted while the pop-up is shut (a last line's chips stay on the row); only the place changes. A phone keeps the column.
+  // owner tells Taskuary what to do with the task ("reply saying Thursday works", "remind me Monday") - a pill at the row's end at rest.
+  // `popOn` is only whether a task view holds the table on a desk now - the pill's hint reads it
   const popOn = !phone && !old && !walk && !firstRun && lastCardIdx >= 0 && barHolds;
-  const popLines = useMemo(() => (popOn ? shown.map((m, i) => [m, i]).filter(([, i]) => i > lastCardIdx).slice(-12) : []), [popOn, shown, lastCardIdx]);
-  const popPending = popOn && (busy || phoneBusy);
-  const [popOpen, setPopOpen] = useState(false), [boxOpen, setBoxOpen] = useState(false);
-  const popRef = useRef(null), popBodyRef = useRef(null), boxRef = useRef(null), popOnRef = useRef(false), rowDown = useRef(false);
-  popOnRef.current = popOn;
-  // ...and WHILE AN ANSWER IS UP and nothing is typed, the box is its pill again, still focused (2026-10-27): the open box stands above the
-  // dock (assistantView.css) and took the room under the view the answer stands in - the next key typed opens it again
-  const [dictating, setDictating] = useState(false);   // the box's mic listening or transcribing: the box stays open for it (MicButton)
+  // THE CHAT IS A WINDOW OF ITS OWN (the owner, 2026-10-28, 0.3.9.58: "why is it showing up in the actual canvas???? i thought we moved this
+  // to the side chat box like in support on most websites"): the pop-up held what was said only while a TASK VIEW held the table (popOn) -
+  // a report or an FYI drawn in a task's three sections, a folded view, the day's opener or a phone fell back to drawing the question and its
+  // whole answer in the canvas under the card. The conversation - the owner's lines, the answers, the receipts - is now ALWAYS the window's,
+  // whatever is on the table and at any width (a bottom sheet on a phone); the canvas keeps the cards. The same Line, mounted while it is
+  // shut (a last line's chips stay on the row); only the place changes
+  const winOn = !old && !walk && !firstRun;
+  const winLines = useMemo(() => (winOn ? shown.map((m, i) => [m, i]).filter(([m]) => talkLine(m)).slice(-60) : []), [winOn, shown]);
+  const inWin = useMemo(() => new Set(winLines.map(([m]) => m.id)), [winLines]);
+  const popPending = winOn && (busy || phoneBusy);
+  const [boxOpen, setBoxOpen] = useState(false);
+  const popRef = useRef(null), popBodyRef = useRef(null), boxRef = useRef(null), rowDown = useRef(false), winOnRef = useRef(false);
+  winOnRef.current = winOn;
+  const [dictating, setDictating] = useState(false);   // the box's mic listening or transcribing: the window stays open for it (MicButton)
   // ...and ONCE OPEN IT STAYS OPEN (the owner, 2026-10-27: "it gets smaller and bigger at random times ... when you click in, it stays open
-  // until you do X or something"): not shut by a click elsewhere, a look away or an answer coming up - only its × or Esc
-  const boxWide = boxOpen || dictating || !!pics.imgs.length || !!emojiEl || (!popOn && !!text.trim());   // a phone's line box: its words keep it wide
-  const boxOver = () => !!boxRef.current && getComputedStyle(boxRef.current).position === "absolute";   // the desk's box over the canvas
+  // until you do X or something"): not shut by a click elsewhere, a look away, an answer coming up or the next task - only its × or Esc.
+  // The box open IS the window open: one panel, the conversation over the box
+  const boxWide = boxOpen || dictating || !!pics.imgs.length || !!emojiEl, popOpen = winOn && boxWide;
+  const setPopOpen = setBoxOpen;
+  const boxOver = () => !!boxRef.current && ["absolute", "fixed"].includes(getComputedStyle(boxRef.current).position);   // the window's box, over the canvas
   const shutBox = () => { setBoxOpen(false); composeRef.current?.blur(); };
   // THE PILL'S HINT FITS THE PILL: with a row beside it and no task on the table the box is the 220px pill, and the long hint ("Ask
   // Taskuary anything — a name or a subject pulls it in…") ran on under its own send button, cut mid-word (the overnight setup walk,
   // 2026-10-26). Measured, because the row beside it is what makes it a pill (the CSS's :has)
   const [boxNarrow, setBoxNarrow] = useState(false), [boxIsOver, setBoxIsOver] = useState(false);   // ...and whether it stands over the canvas
+  const [boxH, setBoxH] = useState(0);
   useEffect(() => {
     const el = boxRef.current;
     if (!el || typeof ResizeObserver === "undefined") return undefined;
-    // ...and the box OPEN is laid over the canvas, growing up from the pill's corner (assistantView.css): the answer pop-up stands on top
-    // of it, never under it, so its last line is not covered while the owner types (--tq-box-h, the open box's height; 0 at rest)
+    // ...the window's foot is the box (assistantView.css): the conversation stands flush on it (--tq-box-h) - 6px over the dock on a desk,
+    // the screen's foot on a phone
     const ro = new ResizeObserver(() => {
-      const r = el.getBoundingClientRect();
-      setBoxNarrow(r.width < 360); setBoxIsOver(getComputedStyle(el).position === "absolute");
-      // ...the pop-up's lift: the open box's height and a gap over it while it stands above the dock (desk), none at rest or on a phone
-      const over = el.hasAttribute("data-tq-open") && getComputedStyle(el).position === "absolute";
-      el.closest(".tq-compose")?.style.setProperty("--tq-box-h", over ? `${Math.round(r.height) + 12}px` : "-2px");
+      const r = el.getBoundingClientRect(), pos = getComputedStyle(el).position, over = el.hasAttribute("data-tq-open") && (pos === "absolute" || pos === "fixed");
+      setBoxNarrow(r.width < 360); setBoxIsOver(pos === "absolute" || pos === "fixed"); setBoxH(over ? Math.round(r.height) : 0);
+      el.closest(".tq-compose")?.style.setProperty("--tq-box-h", over ? `${Math.round(r.height) + (pos === "fixed" ? 0 : 6)}px` : "-2px");
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, [old, walk]);                                   // the box is mounted only while neither is up
-  // ...it opens on the owner's line (send) and on the Assistant speaking up about the task in this session - never on a reload's history
-  const popLast = popLines[popLines.length - 1]?.[0];
+  // ...it opens on the owner's line (send) and on the Assistant speaking up in this session - never on a reload's history
+  const popLast = winLines[winLines.length - 1]?.[0];
   useEffect(() => { if (popLast?.role === "assistant" && /^(a|s|d|context)\d/.test(popLast.id)) setPopOpen(true); }, [popLast?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
-  // ...and IT NEVER SHUTS BY ITSELF (the owner, 2026-10-27: "it disappeared when done? not sure what happened"): an answer that only lit a
-  // button shut it after 1.8 s with the owner's own line the only thing in it, and Show the last answer brought back just that line. Every
-  // turn ends on words now (actReceipt), and the pop-up stays until its ×, Esc, a press outside it, or the next task on the table
-  // ...and goes with the task: the next one on the table starts with it shut
-  const popTable = shown[lastCardIdx]?.card?.key || "";
-  useEffect(() => { setPopOpen(false); }, [popTable]);
+  // ...and IT NEVER SHUTS BY ITSELF (the owner, 2026-10-27: "it disappeared when done? not sure what happened"): every turn ends on words
+  // (actReceipt), and the window stays until its × or Esc
   // ...and A PRESS THAT FAILED SAYS SO WHERE IT CAN BE READ (the 2026-10-28 flow walk): a Next whose request never got an answer wrote its
-  // line under the task view, behind the canvas and the dock - the press looked unheard. With the pop-up on, the failure comes up in it
-  const popErr = popOn && !!err;
-  useEffect(() => { if (popErr) setPopOpen(true); }, [popErr, err]);
-  // ...and on a phone, where the column holds it, the column brings it into view: it stood under the composer, past the column's end
+  // line under the task view, behind the canvas and the dock - the press looked unheard. The failure comes up in the window
+  const popErr = winOn && !!err;
+  useEffect(() => { if (popErr) setPopOpen(true); }, [popErr, err]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!err) return undefined;
     const id = requestAnimationFrame(() => [...document.querySelectorAll("[data-tq-err-line]")].find((e) => e.getBoundingClientRect().height > 0)?.scrollIntoView?.({ block: "nearest" }));
     return () => cancelAnimationFrame(id);
   }, [err, popOpen]);
-  // ...shut by Esc, its x, or a press anywhere but on it or the box (a menu it opened is on it)
+  // ...Esc anywhere shuts it - but not the Esc that shuts a menu or a dialog over it
   useEffect(() => {
     if (!popOpen) return undefined;
-    const down = (e) => { if (popRef.current?.contains(e.target) || boxRef.current?.contains(e.target) || e.target.closest?.(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root")) return; setPopOpen(false); };
-    const key = (e) => { if (e.key === "Escape") setPopOpen(false); };
-    document.addEventListener("pointerdown", down, true); document.addEventListener("keydown", key);
-    return () => { document.removeEventListener("pointerdown", down, true); document.removeEventListener("keydown", key); };
-  }, [popOpen]);
-  // ...its newest words in view, as the chat's end is
-  // ...AND STANDS IN THE ROOM UNDER THE VIEW WHEN THERE IS ENOUGH OF IT (the overnight walk, 2026-10-26): most views end well above the dock,
-  // and the pop-up still rose to 45% of the canvas over them - "reply saying Thursday works" answered over the right half of the very draft
-  // it was about. It is no taller than the gap under the view; a view with too little under it is covered as before, the newest words in view
-  const [popRoom, setPopRoom] = useState(0);
-  useLayoutEffect(() => {
-    if (!popOpen) return;
-    // ...measured from where the pop-up's foot actually stands: over the open box it stands higher than the dock (assistantView.css)
-    const view = popTable && bodyRef.current?.querySelector(`[data-tq-canvas-item="${CSS.escape(popTable)}"]`), pop = popRef.current;
-    setPopRoom(view && pop ? Math.floor(pop.getBoundingClientRect().bottom - view.getBoundingClientRect().bottom - 8) : 0);
-  }, [popOpen, popTable, popLines.length, popPending, bodyH, boxWide]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const popTall = Math.max(180, Math.round(bodyH * 0.45)), popMax = popRoom >= POP_ROOM ? Math.min(popTall, popRoom) : popTall;
-  useLayoutEffect(() => { const el = popBodyRef.current; if (el && popOpen) el.scrollTop = el.scrollHeight; }, [popOpen, popLines.length, popPending, words, popMax]);
+    const key = (e) => { if (e.key === "Escape" && !e.defaultPrevented && !e.target?.closest?.(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root")) shutBox(); };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, [popOpen]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // ...at most ~60% of the screen with its box (a phone's sheet 80%), and never past the canvas's top; its newest words in view
+  const vh = typeof window === "undefined" ? 800 : window.innerHeight;
+  const popMax = Math.max(140, Math.min(Math.round(vh * (phone ? 0.8 : 0.6)) - boxH, phone ? Infinity : bodyH + 40 - boxH));
+  useLayoutEffect(() => { const el = popBodyRef.current; if (el && popOpen) el.scrollTop = el.scrollHeight; }, [popOpen, winLines.length, popPending, words, popMax]);
   // ...a line of its own that stands under the card on the table only while the answer is on its way (tq-pending, assistantView.css) -
   // or in the pop-up over it, where the answer it waits for will be
   const pendingLine = <>{(busy || phoneBusy || nextComing || walkDots) && (
@@ -3554,8 +3564,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                   actions={actions} fresh={currentItem} canvas={canvasState} />}
           </div>}
           {firstRun ? state && <div data-tq-setup-under={setupCovered.current ? "hidden" : ""} style={setupCovered.current ? { display: "none" } : undefined}>{welcome()}</div>
-            : state && !shown.length && !busy && !starting && welcome()}
-          {!firstRun && shown.map((m, i) => popOn && i > lastCardIdx ? null : <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} further={!old && i === furtherIdx} tableChips={tableChips} barHolds={barHolds}
+            : state && !shown.some((m) => !inWin.has(m.id)) && (!busy || popOpen) && !starting && welcome()}
+          {!firstRun && shown.map((m, i) => inWin.has(m.id) ? null : <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} further={!old && i === furtherIdx} tableChips={tableChips} barHolds={barHolds}
                                      actions={actions} fresh={currentItem} canvas={old ? null : canvasState} />)}
           {/* CONTINUE, IN LINE (the owner, 2026-09-30): a card under the item, like New - the mic and pictures in it */}
           {!old && continueOn && (
@@ -3598,7 +3608,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             </div>
           )}
           {!popPending && pendingLine}
-          {!(popOn && popOpen) && errLine}
+          {!popOpen && errLine}
           {/* the floor's Next is the filled button under the chat - no line telling the owner to press it (the owner, 2026-10-15: "Don't be
               dumb like saying click next to move on if it's obvious") */}
           </>}
@@ -3614,16 +3624,20 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           lock the screen on desktop but we should probably get rid of that"): the box stays, and the table follows the phone's walk */}
       {!old && !walk && (
         <div className="tq-compose" {...pics.drop}>
-          {/* THE ANSWER POP-UP (the one-row chat bar, 2026-10-26): the lines after the task view, over it - it never moves - a few turns
-              tall at most, scrolling inside. Shut, it stays mounted: the last line's chips are on the row either way */}
-          {popOn && (!!popLines.length || popPending || popErr) && (
-            <div className="tq-chat-pop" data-tq-chat-pop="" role="dialog" aria-label="Taskuary's answer" ref={popRef} hidden={!popOpen}
+          {/* THE CHAT WINDOW (the owner, 2026-10-28: "let's make that a chat box when you click on the chat box ui to pop up"): a support-style
+              panel at the canvas's bottom right, over the dock - its head, the conversation scrolling inside, newest at the foot, and the box
+              under it as its floor (the box is the panel's last band, assistantView.css). Shut, it stays mounted: the last line's chips are
+              on the row either way, and opened again it is the same conversation */}
+          {winOn && (
+            <div className="tq-chat-pop" data-tq-chat-pop="" data-tq-chat-win="" role="dialog" aria-label="Chat with Taskuary" ref={popRef} hidden={!popOpen}
               style={{ maxHeight: popMax }}>
               <div className="tq-chat-pop-head"><TaskuaryMark size={16} /><b>Taskuary</b>{currentItem?.ref && <span>{`· ${currentItem.ref}`}</span>}<span style={{ flex: 1 }} />
-                <Tooltip title="Past chats"><IconButton size="small" aria-label="Past chats" onClick={() => { setPopOpen(false); openChats(); }}><HistoryIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip>
-                <IconButton size="small" aria-label="Close the answer" onClick={() => setPopOpen(false)}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></div>
+                <Tooltip title="Past chats"><IconButton size="small" aria-label="Past chats" onClick={() => { shutBox(); openChats(); }}><HistoryIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip>
+                {/* ...its ×: the one way, with Esc, the window shuts - what is typed stays for the next time it opens */}
+                <Tooltip title="Close (Esc)"><IconButton size="small" aria-label="Close the chat" data-tq-box-close="" onClick={shutBox}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip></div>
               <div className="tq-chat-pop-body" ref={popBodyRef}>
-                {popLines.map(([m, i]) => <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={false} last={i === lastSaidIdx} tableChips={tableChips} barHolds={barHolds}
+                {!winLines.length && !popPending && !popErr && <p className="tq-chat-pop-empty">{currentItem?.ref ? `Ask about ${currentItem.ref}, or anything on your list.` : "Ask about anything on your list."}</p>}
+                {winLines.map(([m, i]) => <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={false} last={!old && i === lastSaidIdx} further={!old && i === furtherIdx} tableChips={tableChips} barHolds={barHolds}
                   actions={actions} fresh={currentItem} canvas={canvasState} />)}
                 {popPending && pendingLine}
                 {popOpen && errLine}
@@ -3676,12 +3690,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               </IconButton>
             </Tooltip>
             </div>
-            {/* ...the pop-up shut, what was said comes back from here */}
-            {popOn && !popOpen && (!!popLines.length || popPending || popErr) && (
-              <Tooltip title={popPending ? "Answering…" : "Show the last answer"}>
-                <IconButton size="small" aria-label="Show the last answer" data-tq-pop-again="" onClick={() => setPopOpen(true)}
-                  sx={{ width: 28, height: 28, p: 0, color: popPending ? "#526b53" : DIM }}><ChatBubbleOutlineIcon sx={{ fontSize: 16 }} /></IconButton>
-              </Tooltip>)}
             {/* a phone's composer is one line tall and the long hint wrapped under its own edge, cut
                 mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there - and the pill's at rest, and the open
                 box's over the canvas, a column as narrow as a phone's line (2026-10-27) */}
@@ -3689,14 +3697,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               placeholder={boxNarrow && !boxWide ? "Ask…" : phone || (boxIsOver && boxWide) ? tableSays.phone : !popOn ? tableSays.box : boxWide ? "Tell me what to do with it, or ask about it…" : "Ask…"}
               onChange={(e) => { setText(e.target.value); setBoxOpen(true); }} onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
-                // Esc shuts the pop-up first, then hands an empty box back to its pill
-                if (e.key === "Escape") { e.stopPropagation(); if (popOpen) setPopOpen(false); else shutBox(); }
+                // Esc shuts the window, the box back to its pill
+                if (e.key === "Escape") { e.stopPropagation(); shutBox(); }
               }} />
             <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
-            {/* ...its ×: the one way, with Esc, the open box shuts - what is typed stays for the next time it opens */}
-            {boxWide && boxIsOver && (
-              <IconButton size="small" aria-label="Close the box" data-tq-box-close="" onClick={shutBox}
-                sx={{ width: 28, height: 28, p: 0, color: DIM, alignSelf: "flex-end" }}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>)}
           </div>
           </div>
           </div>
@@ -3725,6 +3729,21 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // A TASK FOLDED BY ITS X IS PUT AWAY (UX walk, 2026-10-22): its rail row lost the "on the table" mark and the address its #task, which
   // said it was still in view - so its row is an ordinary row now, and a click on it opens it again in place, as its folded line does
   const unfoldTable = () => { setRailOpen(false); setFoldedKey(null); browseDown(); putOnTable(null, "view"); };
+  // A PRESS OF A RAIL ROW, by key: the rail's own click and a task named in the chat (actions.openRef, a link or the Assistant's open) take
+  // the one road - the canvas shows it, the rail rings it, the walk stands on it. The row already on the table only unfolds
+  const railPress = (key) => {
+    sectionRef.current = null;
+    const isCur = !!currentItem && !old && !table.folded && currentItem.key === key;
+    if (isCur || (table.folded && key === table.key)) { setRailOpen(false); if (table.folded || table.place) unfoldTable(); return; }
+    pull(key, null);
+  };
+  // ...a task by number: its row when the rail holds it, else the task link's own road (a closed task is on no rail)
+  const pressRow = (n) => {
+    const row = (pile?.items || []).find((i) => Number(i.tid) === Number(n) && i.lane !== "unjudged");
+    if (row) railPress(row.key); else openAppLink(`task=${n}`);
+    return !!row;
+  };
+  pressRowRef.current = pressRow;
   return (
     <>
     {DEMO && <DemoJourney onChanged={() => { loadPile(true); onChanged?.(); }} />}
@@ -3734,7 +3753,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       top={<><UndoLine kinds={["task"]} onRestored={() => { loadPile(true); onChanged?.(); }} sx={{ mx: 1, mt: 1, mb: 1 }} /><Pile pile={railPile} settingUp={firstRun ? setupTodo || "finish setting up" : ""} noAi={!!state && !(state.providers || []).length}
         current={old || table.folded || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem} coming={nextComing || busy}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
-        onPull={(key, asUser) => { sectionRef.current = null; if (table.folded && key === table.key) unfoldTable(); else pull(key, asUser); }}
+        onPull={(key, asUser) => { if (asUser) { sectionRef.current = null; pull(key, asUser); } else railPress(key); }}
         onSection={walkSection} onMoreFyi={moreFyi} tag={tableSays.tag} onCurrent={() => { setRailOpen(false); if (table.folded || table.place) unfoldTable(); }} /></>}
       stage={chat}
       onPull={(r, o) => pull(keyForRow(r), o?.quiet ? null : `Tell me about “${r.Subject || r.Title || "this"}”`)}

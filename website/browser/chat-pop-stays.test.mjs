@@ -58,10 +58,10 @@ test("the box and the pop-up are one column, the row's slot is unseen, and an ac
   assert.match(after.you, /remind me Monday/);
   assert.match(after.receipt, /Remind me/, `a receipt line naming what it did ${JSON.stringify(after)}`);
 
-  // ...and Show the last answer brings the whole exchange back, the receipt with it
-  await page.click("[data-tq-chat-pop] [aria-label='Close the answer']");
+  // ...and the pill, pressed again, brings the whole exchange back, the receipt with it (the chat window, 2026-10-28)
+  await page.click("[data-tq-chat-pop] [aria-label='Close the chat']");
   await page.waitForSelector("[data-tq-chat-pop][hidden]", { timeout: 5000 });
-  await page.click("[data-tq-pop-again]");
+  await page.click(".tq-compose-box textarea");
   await page.waitForSelector("[data-tq-chat-pop]:not([hidden])", { timeout: 5000 });
   assert.match(await page.$eval("[data-tq-chat-pop] .tq-chat-pop-body", (b) => b.textContent), /remind me Monday[\s\S]*Remind me/);
   assert.deepEqual(errors, []);

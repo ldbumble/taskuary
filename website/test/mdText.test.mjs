@@ -3,7 +3,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { looksMd, refParts } from "../src/mdText.js";
+import { linkRefs, looksMd, refNumber, refParts } from "../src/mdText.js";
+
+// A TASK NAMED IN AN ANSWER OPENS (the owner, 2026-10-28): a bare ref becomes a link to it; one already a link, in code or in an address does not
+test("a bare task ref in an answer becomes its link, nothing else does", () => {
+  assert.equal(linkRefs("TQ-1173, the reconciliation, is next."), "[TQ-1173](#task=1173), the reconciliation, is next.");
+  assert.equal(linkRefs("See [TQ-0002](#task=2)."), "See [TQ-0002](#task=2).");
+  assert.equal(linkRefs("run `open TQ-0005` and TQ-0006"), "run `open TQ-0005` and [TQ-0006](#task=6)");
+  assert.equal(linkRefs("/outputs/TQ-0007/report.md"), "/outputs/TQ-0007/report.md");
+  assert.equal(refNumber("TQ-0042"), 42);
+  assert.equal(refNumber("nope"), 0);
+});
 
 test("a fence, inline code or a link is markdown; plain prose and an email's asterisk are not", () => {
   for (const s of ["```\n┌──┐\n│ a │\n└──┘\n```", "Run `Get-ChildItem -Recurse` there", "Start at [the portal](https://entra.example/users)",

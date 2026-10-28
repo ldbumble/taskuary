@@ -38,7 +38,9 @@ test("a reply opens the page it names - else the one task it points at, never on
 });
 
 test("the chat opens it on a fresh reply, and a link in the text opens it in place", () => {
-  assert.match(read("AssistantView.jsx"), /const page = "open" in data \? data\.open : firstAppLink\(data\.say\);\n\s*if \(page\) openAppLink\(page\);/);
+  assert.match(read("AssistantView.jsx"), /const page = "open" in data \? data\.open : firstAppLink\(data\.say\);\n[^]*?\} else if \(page\) openAppLink\(page\);/);
+  // ...a task it opens is a press of its rail row (the owner, 2026-10-28), said in the chat window
+  assert.match(read("AssistantView.jsx"), /const opens = \/\^#\?task=\(\\d\+\)\$\/\.exec\(page \|\| ""\);\n\s*if \(opens\) \{\n[^\n]*\n\s*pressRowRef\.current\?\.\(n\);\n\s*setMsgs\(\(m\) => \[\.\.\.m, \{ id: `r\$\{Date\.now\(\)\}`, role: "receipt", status: "done", text: `Opened /);
   assert.match(read("md.jsx"), /else if \(page\) \{ e\.preventDefault\(\); openAppLink\(page\); \}/);
   assert.match(read("ChatThread.jsx"), /\{hasFiles && <Attachments messageId=\{m\.MessageId\} \/>\}/);    // pictures at reading size
 });

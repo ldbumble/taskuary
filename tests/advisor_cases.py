@@ -14,23 +14,24 @@ from unittest import mock
 
 # (title or key fragment, ok verbs, never verbs, prompt needs) - graded against THE ONE DECISION (advisor.decide, the design phase A,
 # 2026-10-23): `next` is Next lit and nothing said, None is nothing lit; `needs` is checked only where the model was asked (the rule
-# decides the rest from the item's facts, and no prompt is written)
+# decides the rest from the item's facts, and no prompt is written). NO DEFAULT VERB (the owner, 2026-10-28): where the scripted brain says
+# no fact for the move - it only explains the obvious button - nothing lit is right too (None); a plain stop lights nothing of the rule's
 CASES = [
     # the same sender asking two things is not a duplicate (the design, 2026-10-23): with nothing on its thread, the ask is answered
-    ('Month-end close is short', {'reply', 'regular_agent', 'defer'}, {'not_ours', 'close'}, []),
-    ('New starter on Monday', {'reply', 'regular_agent'}, {'not_ours'}, []),
+    ('Month-end close is short', {'reply', 'regular_agent', 'defer', None}, {'not_ours', 'close'}, []),
+    ('New starter on Monday', {'reply', 'regular_agent', None}, {'not_ours'}, []),
     # a draft that cannot go from here: Copy lit, said by nothing - the reason is its hover (the owner, 2026-10-22)
     ('did the overnight import finish', {'copy'}, {'not_ours', 'approve'}, []),
     ('Invoice 88213', {'redraft'}, {'approve'}, ["Friday's payment run", 'ATTACHED TO THE DRAFT: nothing']),
-    ('AP cutover - Thursday?', {'approve'}, {'not_ours'}, ['Thursday still works']),
+    ('AP cutover - Thursday?', {'approve', None}, {'not_ours'}, ['Thursday still works']),
     ('Lease renewal for the Elm Street office', {'new_task', 'fix'}, {'redraft', 'approve'}, ['WHAT FAILED', 'no such user']),
-    ('Badge access for the new AP clerk', {'reply'}, {'not_ours'}, []),
+    ('Badge access for the new AP clerk', {'reply', None}, {'not_ours'}, []),
     ('Can you resend the Q3 numbers', {'redraft'}, {'approve'}, ['Sending the Q3 pack now', 'ATTACHED TO THE DRAFT: nothing']),
-    ('Year-end audit', {'reply', 'regular_agent'}, {'not_ours'}, ['THE LAST 3 MESSAGES']),
+    ('Year-end audit', {'reply', 'regular_agent', None}, {'not_ours'}, ['THE LAST 3 MESSAGES']),
     ('Spendly card limits', {'mine', 'defer', 'not_ours', 'regular_agent'}, set(), []),
-    ('Vendor master clean-up', {'reply'}, {'close'}, ['A REPLY WAS ALREADY SENT']),
-    ('Trainly seats', {'reply'}, {'close'}, []),
-    ('importers#214', {'regular_agent', 'coding_agent'}, {'reply', 'not_ours'}, ['Traceback']),
+    ('Vendor master clean-up', {'reply', None}, {'close'}, ['A REPLY WAS ALREADY SENT']),
+    ('Trainly seats', {'reply', None}, {'close'}, []),
+    ('importers#214', {'regular_agent', 'coding_agent', None}, {'reply', 'not_ours'}, ['Traceback']),
     ('Q3 accruals file', {'close'}, {'reply'}, []),
     ('Helpdesk tickets by day', {'next'}, set(), []),
     ('Vendor portal maintenance', {'next', 'not_ours'}, {'mine', 'regular_agent'}, []),
@@ -45,8 +46,8 @@ CASES = [
     # a failed general run is tried again from its saved conversation, never made a task of (owner-approved, 2026-10-21)
     ('agent failed (general)', {'continue'}, {'new_task', 'stop_agent'}, ['WHAT FAILED', 'test database was not reachable']),
     ('agent failed (coding)', {'new_task'}, {'continue'}, ['WHAT FAILED', 'test database was not reachable']),
-    ('agent stopped-saved (general)', {'next', 'defer'}, set(), []),
-    ('agent stopped-saved (coding)', {'continue'}, set(), []),
+    ('agent stopped-saved (general)', {'next', 'defer', None}, set(), []),
+    ('agent stopped-saved (coding)', {None}, {'continue'}, []),     # Continue only from the finish check
     ('agent working (coding)', {'next'}, set(), []),
     ('agent working (general)', {'next'}, set(), []),
     ('Close the August books', {'close'}, set(), []),
@@ -59,14 +60,14 @@ CASES = [
     # ...the states the matrix lacks
     ('Vendor W-9 for the new supplier', {'chase'}, {'let_go', 'close'}, []),
     ('Budget figures for Q4', {'chase'}, {'let_go'}, []),
-    ('can you cover the Thursday call', {'reply'}, {'not_ours'}, ['whatsapp']),
+    ('can you cover the Thursday call', {'reply', None}, {'not_ours'}, ['whatsapp']),
     # the owner's own usual (slice 4, 2026-10-25): Marcus is answered within the hour, and this ask has waited 3h - Reply, its lateness
     # the one line beside it, with what it was counted from in the prompt
     ('Q4 forecast numbers', {'reply'}, {'not_ours', 'defer'}, ['HOW SOON YOU ANSWER marcus@northwind.example: within the hour']),
     # ...whom the owner hands this sender's asks to, and the day their mail is put off to - read from the How you work line the owner can
     # correct, never from the count (the memory follow-ups, 2026-10-25)
-    ('Night shift overtime rate', {'reply', 'forward'}, {'not_ours'}, ['WHOM YOU HANDED THEIR ASKS TO: ray@northwind.example, 2 of 2 times']),
-    ('Payworth seat count renewal', {'reply', 'defer'}, {'not_ours'},
+    ('Night shift overtime rate', {'reply', 'forward', None}, {'not_ours'}, ['WHOM YOU HANDED THEIR ASKS TO: ray@northwind.example, 2 of 2 times']),
+    ('Payworth seat count renewal', {'reply', 'defer', None}, {'not_ours'},
      ['WHEN YOU PUT THEIR MAIL OFF (a How you work line the owner can correct): "You put mail from renewals@payworth.example off to Friday"']),
 ]
 LINES = {'Q4 forecast numbers': 'You usually answer Marcus within the hour; this is 3h.'}

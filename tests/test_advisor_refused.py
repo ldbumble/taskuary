@@ -30,7 +30,8 @@ class RefusedTests(_Rail):
 
     def test_a_send_the_demo_refused_is_an_act_and_the_line_moves_off_send(self):
         s = self._world(); key, r = self._draft(s)
-        self.assertEqual(self._advise(s, key).get('verb'), 'approve', 'a draft waiting: the scripted line advises Send')
+        # a draft waiting: the scripted line agrees with Send and says no fact, so nothing is lit (NO DEFAULT VERB, the owner, 2026-10-28)
+        self.assertIsNone(self._advise(s, key).get('verb'), 'a draft waiting with no reason said: nothing lit')
         before = advisor.revision(s, 'task', r['TaskId'])
         self.assertTrue(demo.refused(s, f"/api/reviews/{r['ReviewId']}/decide", demo.SENDS), 'the refusal is left on the item')
         self.assertNotEqual(before, advisor.revision(s, 'task', r['TaskId']), 'a refused press moves the revision')

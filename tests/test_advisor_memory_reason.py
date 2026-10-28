@@ -59,12 +59,17 @@ def test_an_agreeing_model_says_its_memory_reason_in_one_line(w):
 
 
 def test_an_agreeing_line_on_the_items_own_facts_still_goes(w):
-    """Ruling 1 stands: agreeing, a sentence resting on nothing the memory knows is the obvious button explained - the strip stays empty."""
+    """Ruling 1 stands: agreeing, a sentence resting on nothing the memory knows is the obvious button explained - it is not said, and
+    with no fact left for it the button is not lit either (NO DEFAULT VERB, the owner, 2026-10-28)."""
     s, _ = w
     plant(s, 'people', ERIN)
     t = ask(s, 'erin', 'Offsite agenda', 'Can you check the offsite agenda before Thursday?')
     d, _ = judged(s, t, {'verb': 'reply', 'line': 'Erin wants the agenda checked.', 'evidence': []})
-    assert (d['verb'], d['by'], d['line']) == ('reply', 'rule', ''), d
+    assert (d['verb'], d['by'], d['line']) == (None, 'rule', ''), d
+    # ...while an agreeing line that IS a fact of a kind (late, the same ask, a hand-off...) is the lit button's reason
+    s._exec('DELETE FROM advice WHERE TargetId=?', (t,))
+    d, _ = judged(s, t, {'verb': 'reply', 'line': 'Erin asked twice since Monday.', 'evidence': [], 'kind': 'late'})
+    assert (d['verb'], d['by'], d['line']) == ('reply', 'model', 'Erin asked twice since Monday.'), d
 
 
 def test_a_differing_verbs_long_line_is_cut_at_a_word(w):
@@ -101,7 +106,7 @@ def test_a_hand_off_count_is_never_the_reason_for_another_verb(w):
     ids = usual.handed_to(s, C.P['site1'][1], skip=t)['evidence']
     d, _ = judged(s, t, {'verb': 'reply', 'line': 'Ray handles payroll for you.', 'evidence': ids[:1]})
     assert advisor.rows(s, 'task', t)[0]['Dropped'] == 'a hand-off reason over another verb'
-    assert (d['verb'], d['by'], d['line']) == ('reply', 'rule', ''), d
+    assert (d['verb'], d['by'], d['line']) == (None, 'rule', ''), d
     # ...over Hand it to a person it is the reason, said
     t2 = ask(s, 'site2', 'Payroll correction for a site 6', 'One of our staff was paid the wrong rate last cycle - can this be fixed?', hours=1)
     d2, _ = judged(s, t2, {'verb': 'forward', 'line': 'Ray handles payroll for you.', 'evidence': usual.handed_to(s, C.P['site2'][1], skip=t2)['evidence'][:1]})
@@ -135,7 +140,7 @@ def test_a_rule_state_asks_the_model_only_where_a_memory_line_names_someone_on_i
     assert rulebook.decide(s, it, verbs)['ask'] is False, 'a line about someone else is no reason to ask'
     plant(s, 'promises', GAIL_PROMISE)
     r = rulebook.decide(s, it, verbs)
-    assert (r['state'], r['verb'], r['ask'], r['memory']) == ('waiting', 'defer', True, ['gail monday sheet']), r
+    assert (r['state'], r['verb'], r['ask'], r['memory']) == ('waiting', None, True, ['gail monday sheet']), r
     # ...and by full name, where the line carries no address
     s.save_doc('learned', s.get_doc('learned').replace(' (gail@northwind.example)', ''), 'owner')
     assert rulebook.decide(s, it, verbs)['memory'] == ['gail monday sheet']

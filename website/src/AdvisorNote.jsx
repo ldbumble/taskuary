@@ -71,7 +71,7 @@ export default function AdvisorNote({ note, onDraft = null, onFix = null, sx }) 
                         onClick={() => mark(r, m)} style={{ padding: "1px 6px", fontSize: 12, color: m === "wrong" ? ALERT_INK : undefined }}>{MARKS[m]}</button>)}
                     </Box>)}
                 </li>))}</ul></div>)
-            : <Box className="fact" sx={{ color: DIM }}>{a.by === "model" ? "Read from this item by the AI." : "A fact Taskuary keeps about this item."}</Box>}
+            : <Box className="fact" sx={{ color: DIM }}>{a.by === "check" ? "Read from the agent's work by the AI, after it stopped." : a.by === "model" ? "Read from this item by the AI." : "A fact Taskuary keeps about this item."}</Box>}
           {err && <Box role="alert" sx={{ color: ALERT_INK, fontSize: 12 }}>{err}</Box>}
         </div>
       </Popover>

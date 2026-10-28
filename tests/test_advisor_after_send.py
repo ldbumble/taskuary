@@ -44,10 +44,11 @@ class AfterSendTests(_Rail):
         line = advisor.sent_line(s, 'task', t)
         self.assertIn('A REPLY WAS ALREADY SENT', line); self.assertIn('Erin Blake', line); self.assertIn('the numbers stand', line)
         self.assertIn('NOTHING HAS COME IN SINCE IT WENT', line)
-        # the close-out with nothing since is the rule's: Mark done, lit at once and said by nothing (the design, phase A)
+        # the close-out with nothing since is the rule's: Mark done, lit at once - with its reason said (the owner, 2026-10-28)
         from unittest import mock
         with mock.patch.object(advisor, 'notice'): d = advisor.decide(s, f'task:{t}')
-        self.assertEqual((d['verb'], d['line'], d['by']), ('close', '', 'rule'))
+        self.assertEqual((d['verb'], d['by']), ('close', 'rule'))
+        self.assertTrue(d['line'].startswith('Your reply went ') and d['line'].endswith('; nothing since.'), d['line'])
         p = advisor._prompt(s, advisor.SHOWN, advisor._item(s, 'task', t) or {}, [{'verb': 'reply', 'label': 'Reply'}], 1, 'task', t)
         self.assertIn('A REPLY WAS ALREADY SENT', p, 'where the model is asked, it is given the send as evidence')
         # ...and a word from her after it is the evidence that something is owed again - the model reads which

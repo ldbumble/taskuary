@@ -28,7 +28,7 @@ const look = (page, id) => page.evaluate((id) => {
       label: b.textContent.trim(), lit: b.classList.contains("p"), off: b.disabled, more: b.classList.contains("tq-cl-more") }));
   const agent = item?.querySelector("[data-tq-agent-section]");
   return {
-    found: !!item, task: !!item?.querySelector("[data-tq-task-page]"), main: body?.getAttribute("data-tq-main") || null, stage: body?.getAttribute("data-tq-stage") || null,
+    found: !!item, task: !!item?.querySelector("[data-tq-task-page]"), anyTask: [...document.querySelectorAll("[data-tq-task-page]")].some(vis), main: body?.getAttribute("data-tq-main") || null, stage: body?.getAttribute("data-tq-stage") || null,
     open: open?.getAttribute("data-tq-slot") || null, openText: txt(open || body || item).slice(0, 700),
     tabs: [...(item?.querySelectorAll("[data-tq-section-tab]") || [])].map((t) => ({ key: t.dataset.tqSectionTab, here: t.hasAttribute("data-tq-here"),
       foot: txt(t.querySelector("[data-tq-tab-status]")), text: txt(t) })),
@@ -57,8 +57,8 @@ const held = (s) => JSON.stringify({ main: s.main, open: s.open, stage: s.stage,
    conversation and input box at rest (a finished or stopped agent shows what it did, never its chat); xterm - a live terminal;
    ran - an agent worked it (its tab never says "not started"; false: nothing ran, so it always does); quiet - no Advisor line (a
    closed task, an agent at work); lit - the dock's lit move by label; moves - labels the row or the card must offer.
-   ASK OWNER (2026-10-28), drawn as it is today and pinned so: a failed general run shows its conversation under the reason (the
-   reason said twice), and a task its agent closed opens on Close out ("Mark done 1m ago") with who closed it and why on the Agent tab. */
+   The owner's rulings (trust audit, 2026-10-28): a failed general run shows only its reason and its fix, the conversation behind "The
+   whole conversation" (S1); a task its agent closed opens on the Agent section - who closed it and why (S2). */
 const CELLS = (ids) => [
   ["fresh task", ids.fresh, { section: "from", here: null, ran: false, not: /Loading/ }],
   ["reply owed, nothing drafted", ids.owed, { section: "from", here: null, ran: false }],
@@ -72,13 +72,13 @@ const CELLS = (ids) => [
   ["agent stopped and saved (general)", ids.saved, { section: "agent", ran: true, result: true, chat: false, agentBox: false, has: /Ray Colton signs it/ }],
   ["agent stopped and saved (coding)", ids.coding_saved, { section: "agent", ran: true, result: true, chat: false, agentBox: false, has: /Census sync no longer stops/ }],
   ["agent finished", ids.finished, { section: "agent", ran: true, result: true, chat: false, agentBox: false, has: /Three people are missing/ }],
-  ["agent failed", ids.failed, { section: "agent", ran: true, tryAgain: true, agentBox: false, has: /could not start/ }],
-  ["agent closed the task", ids.agent_closed, { section: "close", ran: true, quiet: true, has: /missing secret/ }],
+  ["agent failed", ids.failed, { section: "agent", ran: true, tryAgain: true, chat: false, agentBox: false, has: /could not start/ }],
+  ["agent closed the task", ids.agent_closed, { section: "agent", ran: true, quiet: true, has: /missing secret/ }],
   ["closed by owner (done)", ids.done, { section: "close", ran: false, quiet: true, has: /Mark done/ }],
   ["closed by owner (with a note)", ids.note, { section: "close", ran: false, quiet: true, has: /loose cable/ }],
   ["closed by owner (not a task)", ids.removed, { gone: true }],
   ["waiting on a person", ids.waiting, { section: "from", ran: false, has: /Waiting on Ray/ }],
-  ["deferred (Remind me)", ids.deferred, { section: "from", ran: false, has: /PhishGuard seats/ }],
+  ["deferred (Remind me)", ids.deferred, { section: "from", ran: false, has: /^(?=[\s\S]*PhishGuard seats)(?=[\s\S]*Put away until \S)/ }],   // S3: it says it is put away
   ["goal with steps", ids.goal, { section: "from", ran: false, has: /Inventory the fields/ }],
   ["to-do list", ids.todo, { section: "from", ran: false, has: /Print the August bank reconciliations/ }],
   ["calendar invite", ids.invite, { section: "from", ran: false, has: /AP cutover dry run/, moves: [/^Accept/] }],
@@ -104,7 +104,9 @@ function judge(name, w, a, b, errs, want) {
 function expect(name, w, s, want, desk) {
   const bad = [], say = (m) => bad.push(`${name} @${w}: ${m}`);
   // a removed task (Not a task) is gone: its link draws no task page, and the page says it cannot find it
-  if (want.gone) { if (s.found) say(`a removed task drew as a task: ${s.text.slice(0, 160)}`); if (!/can't find|removed|deleted/i.test(s.said)) say(`nothing said about it: ${s.said}`); return bad; }
+  // ...and nothing else is left standing as if it were the task the link named (trust audit S4, 2026-10-28)
+  if (want.gone) { if (s.found) say(`a removed task drew as a task: ${s.text.slice(0, 160)}`); if (!/That task was removed - it's in Recently deleted\./.test(s.said)) say(`not said as removed: ${s.said}`);
+    if (s.anyTask) say("the card that was on the table is still up under it"); return bad; }
   if (want.card) {
     if (want.has && !want.has.test(s.text)) say(`card does not show ${want.has}: ${s.text.slice(0, 200)}`);
   } else {

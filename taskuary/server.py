@@ -5616,7 +5616,7 @@ def advice_for(key: str):
 
 class AdvicePressBody(BaseModel):
     key: str; pressed: str; advised: str | None = None; revision: str | None = None
-    surface: str = 'desk'; lit: str | None = None; live: list[str] | None = None
+    surface: str = 'desk'; lit: str | None = None; live: list[str] | None = None; greyed: list[str] | None = None
 
 @app.post('/api/advice/press')
 def advice_press(body: AdvicePressBody):
@@ -5625,7 +5625,7 @@ def advice_press(body: AdvicePressBody):
     costs one observation."""
     from . import advisor
     try: return {'id': advisor.press(store, body.key, body.advised, body.pressed, body.revision, surface=body.surface, lit=body.lit,
-                                     live=body.live)}
+                                     live=body.live, greyed=body.greyed)}
     except Exception as e: logger.warning(f'advice press on {body.key} not recorded: {e}'); return {'id': 0}
 
 

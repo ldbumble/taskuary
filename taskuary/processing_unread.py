@@ -686,6 +686,16 @@ def on_rail(card) -> bool:
     return bool(card.get('unread') or (card.get('deferred') and card.get('tid') and not card.get('closed')))
 
 
+def arrived(store, now, query) -> list:
+    """When each message of the last day and a half came in - ARRIVALS, read or not (trust audit F2, 2026-10-28): "16 arrived today"
+    counted the unread cards, so it fell to 11 and 9 as the owner read them. The page counts the ones on its own today (its zone)."""
+    since = now.replace(tzinfo=None) - timedelta(hours=36)            # stamps are the server's own clock, as SentAt is kept
+    try: rows = store._rows("SELECT SentAt, Channel, SourceName FROM message WHERE IFNULL(Direction,'in')<>'out' AND IFNULL(Status,'')<>'context' "
+                            "AND replace(SentAt,'T',' ')>=? ORDER BY SentAt DESC LIMIT 2000", (since.strftime('%Y-%m-%d %H:%M:%S'),))
+    except Exception: return []
+    return [r['SentAt'] for r in rows if processing_all._matches(r.get('Channel') or '', r.get('SourceName') or '', query)]
+
+
 def build(store, *, now=None, live_state=None, include_read=False, only=None,
           full_history=False, keys=None):
     """`keys`: a LOOKUP, not a rail - only the items answering to one of these keys are compacted and carded (calendar
@@ -739,7 +749,7 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
     # the "stopped answering" row said again what the bell says, with no grace for a retry still at work (problems.py).
     cards = funnel._order(cards)
     return {'rev': snapshot['snapshot_revision'], 'items': cards, 'hidden': 0, 'muted': 0,
-            'rules': [], 'canonical': True, 'coverage': coverage,
+            'rules': [], 'canonical': True, 'coverage': coverage, 'arrived': arrived(store, now, query),
             'counts': {'all': counts['total'], 'unread': sum(c['unread'] for c in cards),
                        'actionable': sum(c['actionable'] for c in cards)},
             'lanes': [{'lane': lane, 'word': funnel.LANE_WORDS[lane][0], 'role': funnel.LANE_WORDS[lane][1],

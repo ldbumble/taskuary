@@ -331,6 +331,11 @@ OUT_OF_SCRIPT = ('In the demo I answer from a script, so that one is beyond me -
 _BULK = re.compile(r'\b(all|every|everything|each)\b', re.I)
 _DONE = re.compile(r'\bmark\b.*\bdone\b|^\s*done\W*$', re.I)
 _REMIND = re.compile(r'\bremind me\b', re.I)
+# ...and the other put-downs and hand-offs a visitor types (trust audit F5, 2026-10-28): each CALLs the tool the real Assistant would
+_NOTE = re.compile(r'\bclose\b.*?\bwith (?:a |the )?note\b\s*[:,-]?\s*(.*)$', re.I)
+_NAT = re.compile(r"\bnot (?:a|really a) task\b|\bisn'?t a task\b|\bnever (?:was )?a task\b", re.I)
+_HAND = re.compile(r'\b(?:hand|pass|give)\b(?: (?:this|it|that))?(?: (?:off|over|on))? to ([A-Z][\w.-]*(?: [A-Z][\w.-]*)?|[\w.+-]+@[\w.-]+)', re.I)
+_CHASE = re.compile(r'\bchase\b|\bnudge (?:them|him|her)\b|\bfollow up with them\b', re.I)
 _WHEN = re.compile(r'\b(?:today|tonight|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week|\d+ (?:days?|weeks?))\b'
                    r'(?:\s+at\s+\d{1,2}(?::\d\d)?\s*[ap]m)?', re.I)
 _REF = re.compile(r'\bTQ-(\d{1,6})\b', re.I)
@@ -372,6 +377,10 @@ def _report(asked: str, store) -> str:
 
 def _route(asked: str, store) -> str | None:
     if _BULK.search(asked): return None
+    if (note := _NOTE.search(asked)): return _call('task.complete', **({'note': note[1].strip()} if note[1].strip() else {}))
+    if _NAT.search(asked): return _call('task.not_a_task')
+    if (who := _HAND.search(asked)): return _call('task.handoff', who=who[1].strip())
+    if _CHASE.search(asked): return _call('chase')
     if _DONE.search(asked): return _call('close')
     if _REMIND.search(asked):
         when = _WHEN.search(asked)

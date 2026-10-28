@@ -252,6 +252,13 @@ class TurnTests(unittest.TestCase):
         self.assertTrue(again['chips'][1]['label'].startswith('Open TQ-'))
         gone = concierge.surface(s, key='msg:999', llm=lambda *a, **k: 'never')
         self.assertIsNone(gone['item']); self.assertIn("can't find that one", gone['say'])
+        # ...a task REMOVED says so, and nothing is left on the table (trust audit S4, 2026-10-28)
+        from taskuary import recentlydeleted
+        lunch = s.create_task({'Title': 'Lunch on Friday?', 'Status': 'open'}, 'owner')
+        snap = recentlydeleted.task_snapshot(s, lunch); s.delete_task(lunch); recentlydeleted.keep_task(s, snap)
+        out = concierge.surface(s, key=f'task:{lunch}', llm=lambda *a, **k: 'never')
+        self.assertIsNone(out['item']); self.assertEqual(out['say'], "That task was removed - it's in Recently deleted."); self.assertTrue(out['gone'])
+        self.assertFalse(concierge.surface(s, key='task:9999', llm=lambda *a, **k: 'never').get('gone'), 'never a task: not removed')
 
     def test_words_that_name_a_thing_pull_it_into_the_chat(self):
         s = store()

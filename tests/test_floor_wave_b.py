@@ -455,7 +455,9 @@ def test_an_ordinary_edit_to_a_file_past_the_budget_is_written(tmp_path):
 # minified line such as `sh(c,h,w,...)` is taken for a shell, so an edit to that line is refused, which over-refuses (the safe side)
 @pytest.mark.skipif(not _BUNDLES or len(_BUNDLES[-1].read_text(encoding='utf-8')) <= floor._BUDGET, reason='no built bundle past the budget')
 def test_an_edit_to_the_built_bundle_is_judged_on_what_it_adds(tmp_path):
-    old = _BUNDLES[-1].read_text(encoding='utf-8')
+    # ...a bundle-sized file of the shape, not the build itself: what a real build's last stretch holds changes every release, and
+    # 0.3.9.60's ended in minified code that reads as `sh(...)`, so even the harmless edit next to it was refused
+    old = 'var a=1;' * (floor._BUDGET // 8 + 2000) + '\n'
     assert denied(_edit(tmp_path / 'index.js', old, "\nspawnSync('bash',['-c','taskuary --prompts'])\n"))
     assert _edit(tmp_path / 'index.js', old, '\nconst y = 1;\n') == {}
 

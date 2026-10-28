@@ -75,6 +75,11 @@ test("a general agent that could not start says Failed, offers Try again and Con
   const text = await page.evaluate(() => document.body.innerText);
   assert.doesNotMatch(text, /Not started yet|Agent answered|agent waiting on you|CLI agent or an AI provider/);
   await hasButton(page, "Connect an AI");
+  // ...and the task is still on the rail, with the dock row's moves under it: a failed run is never a page with nothing to press
+  await page.waitForFunction(() => [...document.querySelectorAll("[data-tq-rail] .tq-pile-row")].some((r) => r.offsetParent && /Compare three payroll/.test(r.textContent)),
+    { timeout: 15000 }).catch(() => { throw new Error("the failed task has no row on the rail"); });
+  await page.waitForFunction(() => [...document.querySelectorAll("[data-tq-row] button")].some((b) => b.offsetParent && b.textContent.trim() === "Mark done"),
+    { timeout: 15000 }).catch(() => { throw new Error("the dock row has no Mark done"); });
   if (process.env.TQ_SHOT) await page.screenshot({ path: process.env.TQ_SHOT });
   // Try again with still no AI is greyed, the reason its hover - never pressable into the same failure (the owner, 2026-10-22). On the row,
   // or in its ▾: Close folds last (the owner, 2026-10-27), so on a narrower row the Agent group's greyed Try again folds before Mark done

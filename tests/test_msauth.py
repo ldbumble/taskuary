@@ -122,6 +122,7 @@ class EndpointTests(unittest.TestCase):
         cid = self._outlook()['ConnectorId']
         with mock.patch.object(msauth, 'device_start', return_value={'device_code': 'D', 'user_code': 'X', 'verification_uri': 'u', 'expires_in': 9, 'interval': 1, 'message': ''}):
             flow = c.post(f'/api/connectors/{cid}/ms/signin', json={'code': True}).json()['flow']
+        server._MSFLOWS[flow]['scope'] = msauth.BASE_SCOPES        # nothing optional asked: the refusal stands (no base-only retry)
         with mock.patch.object(msauth, 'device_poll', side_effect=msauth.AdminConsent('needs an admin')), mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', 'app-1'):
             r = c.post(f'/api/connectors/{cid}/ms/poll', json={'flow': flow}).json()
         self.assertEqual(r['status'], 'error'); self.assertIn('adminconsent?client_id=app-1', r['admin_consent_url'])
@@ -241,11 +242,80 @@ class BrowserSignInTests(unittest.TestCase):
         self.assertEqual(c.post(f'/api/connectors/{cid}/ms/poll', json={'flow': d['flow']}).json()['detail'], 'you declined the sign-in')
         d, q = self._start(cid)
         with mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', 'app-1'):
-            r = self.LOCAL.get('/api/ms/callback', params={'state': q['state'][0], 'error': 'consent_required',
-                                                         'error_description': 'AADSTS90094: Admin consent is required.'})
+            for _ in range(2):           # the people scopes refused -> base only; refused again -> the admin link
+                r = self.LOCAL.get('/api/ms/callback', params={'state': q['state'][0], 'error': 'consent_required',
+                                                             'error_description': 'AADSTS90094: Admin consent is required.'}, follow_redirects=False)
+                if r.status_code == 302: q = parse_qs(urlsplit(r.headers['location']).query)
             out = c.post(f'/api/connectors/{cid}/ms/poll', json={'flow': d['flow']}).json()
         self.assertIn('admin', r.text); self.assertIn('adminconsent?client_id=app-1', out['admin_consent_url'])
         self.assertEqual(server.store.get_connector(cid)['Active'], 0, 'a failed sign-in changes nothing on the card')
+
+    # A TENANT THAT APPROVED THE BASE SCOPES ONLY (user consent off, device code blocked) refuses a sign-in asking for People.Read /
+    # Contacts.Read: the round signs in again for the base scopes, in the same tab, and the card stops asking for the people ones.
+    def _refuse(self, q, error='consent_required', desc='AADSTS65001: The user or administrator has not consented to use the application.'):
+        with mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', 'app-1'):
+            return self.LOCAL.get('/api/ms/callback', params={'state': q['state'][0], 'error': error, 'error_description': desc}, follow_redirects=False)
+
+    def _consent_fallback(self, kind, full, base):
+        cid = self._card(kind); d, q = self._start(cid)
+        self.assertEqual(q['scope'][0], full)
+        r = self._refuse(q)
+        self.assertEqual(r.status_code, 302)
+        q2 = parse_qs(urlsplit(r.headers['location']).query)
+        self.assertTrue(r.headers['location'].startswith('https://login.microsoftonline.com/common/oauth2/v2.0/authorize?'))
+        self.assertEqual(q2['scope'][0], base); self.assertNotEqual(q2['state'], q['state'])
+        self.assertNotEqual(q2['code_challenge'], q['code_challenge'], 'a new PKCE pair')
+        self.assertEqual(c.post(f'/api/connectors/{cid}/ms/poll', json={'flow': d['flow']}).json()['status'], 'pending')
+        self.assertIn('already used', self._back(q).text, 'the refused state answers nothing more')
+        tok = R(200, {'access_token': 'A', 'refresh_token': 'RT-base', 'expires_in': 3600, 'scope': base})
+        with mock.patch('taskuary.msauth.requests.post', return_value=tok) as p, mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', 'app-1'), \
+             mock.patch.object(msauth, 'me', return_value={'account': self.who, 'name': 'Erin Blake'}), mock.patch.object(server, '_poll_reports'):
+            self.assertIn('Signed in', self._back(q2).text)
+        self.assertEqual(p.call_args[1]['data']['scope'], base)
+        self.assertEqual(c.post(f'/api/connectors/{cid}/ms/poll', json={'flow': d['flow']}).json()['status'], 'ok')
+        card = server.store.get_connector(cid, with_secret=True); cfg = json.loads(card['ConfigJson'])
+        self.assertEqual((card['Secret'], cfg['granted_scope'], cfg['people_refused']), ('RT-base', base, True))
+        _, q3 = self._start(cid)
+        self.assertEqual(q3['scope'][0], base, 'remembered: the next sign-in asks for the base scopes only')
+
+    def test_refused_people_scopes_sign_in_again_with_the_base_ones(self):
+        self._consent_fallback('outlook', msauth.SCOPES, msauth.BASE_SCOPES)
+        self.assertEqual(msauth.BASE_SCOPES, 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite', 'what admins consented to')
+
+    def test_teams_refused_people_read_signs_in_again_with_its_chat_scopes(self):
+        self._consent_fallback('teams', msauth.TEAMS_SCOPES, msauth.TEAMS_CHAT)
+
+    def test_a_refusal_of_the_token_exchange_falls_back_too(self):
+        cid = self._card(); d, q = self._start(cid)
+        with mock.patch('taskuary.msauth.requests.post', return_value=R(400, {'error': 'invalid_grant', 'error_description': 'AADSTS65001: not consented'})), \
+             mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', 'app-1'):
+            r = self.LOCAL.get('/api/ms/callback', params={'code': 'C', 'state': q['state'][0]}, follow_redirects=False)
+        self.assertEqual(r.status_code, 302); self.assertEqual(parse_qs(urlsplit(r.headers['location']).query)['scope'][0], msauth.BASE_SCOPES)
+
+    def test_the_user_declining_is_not_retried(self):
+        cid = self._card(); d, q = self._start(cid)
+        r = self._refuse(q, 'access_denied', 'AADSTS65004: User declined to consent to access the app.')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(c.post(f'/api/connectors/{cid}/ms/poll', json={'flow': d['flow']}).json()['detail'], 'you declined the sign-in')
+        self.assertFalse(json.loads(server.store.get_connector(cid).get('ConfigJson') or '{}').get('people_refused'))
+
+    def test_the_device_code_falls_back_to_the_base_scopes_too(self):
+        cid = self._card('teams')
+        dev = lambda code: {'device_code': code, 'user_code': f'U-{code}', 'verification_uri': 'https://microsoft.com/devicelogin', 'expires_in': 900, 'interval': 5, 'message': ''}
+        with mock.patch.object(msauth, 'device_start', return_value=dev('D1')) as ds:
+            flow = c.post(f'/api/connectors/{cid}/ms/signin', json={'code': True}).json()['flow']
+        self.assertEqual(ds.call_args[0][1], msauth.TEAMS_SCOPES)
+        with mock.patch.object(msauth, 'device_poll', side_effect=msauth.AdminConsent('needs an admin')), \
+             mock.patch.object(msauth, 'device_start', return_value=dev('D2')) as ds:
+            r = c.post(f'/api/connectors/{cid}/ms/poll', json={'flow': flow}).json()
+        self.assertEqual(ds.call_args[0][1], msauth.TEAMS_CHAT)
+        self.assertEqual((r['status'], r['restart']['user_code'], r['restart']['mode']), ('pending', 'U-D2', 'code')); self.assertNotIn('device_code', r['restart'])
+        tok = {'access_token': 'A', 'refresh_token': 'RT', 'expires_in': 3600, 'scope': msauth.TEAMS_CHAT}
+        with mock.patch.object(msauth, 'device_poll', return_value=tok) as dp, mock.patch.object(msauth, 'me', return_value={'account': self.who, 'name': 'Erin Blake'}), \
+             mock.patch.object(server, '_poll_reports'):
+            self.assertEqual(c.post(f'/api/connectors/{cid}/ms/poll', json={'flow': flow}).json()['status'], 'ok')
+        self.assertEqual(dp.call_args[0][1], 'D2')
+        self.assertTrue(json.loads(server.store.get_connector(cid)['ConfigJson'])['people_refused'])
 
     def test_the_code_is_still_there_when_the_owner_asks_for_it(self):
         cid = self._card()

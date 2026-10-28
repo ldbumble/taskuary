@@ -6765,7 +6765,8 @@ def ms_signin(cid: int, body: MsSignInBody | None = None):
     cfg_ = json.loads(c.get('ConfigJson') or '{}')
     body = body or MsSignInBody()
     if body.files is not None: cfg_['allow_files'] = bool(body.files)
-    scope = msauth.scopes_for(c['Type'], bool(cfg_.get('allow_files')))
+    # a tenant that refused the people scopes once is not asked for them on every sign-in (_ms_retry_base)
+    scope = msauth.scopes_for(c['Type'], bool(cfg_.get('allow_files')), people=not cfg_.get('people_refused'))
     for k, v in list(_MSFLOWS.items()):
         if time.time() - v.get('at', 0) > 1800: _MSFLOWS.pop(k, None)
     flow, f = _secrets.token_urlsafe(12), {'cid': cid, 'kind': c['Type'], 'cfg': cfg_, 'at': time.time()}
@@ -6778,8 +6779,18 @@ def ms_signin(cid: int, body: MsSignInBody | None = None):
     try: d = msauth.device_start(cfg_, scope)
     except RuntimeError as e: raise HTTPException(409, str(e))
     except requests.RequestException as e: raise HTTPException(502, f'could not reach login.microsoftonline.com: {str(e)[:160]}')
-    _MSFLOWS[flow] = {**f, 'device_code': d.pop('device_code')}
+    _MSFLOWS[flow] = {**f, 'device_code': d.pop('device_code'), 'scope': scope}
     return {'flow': flow, 'mode': 'code', **d}
+
+def _ms_retry_base(f):
+    """An admin-approval refusal of a round that asked for the optional people scopes: the base scopes alone, which the admin may well
+    have approved (a tenant consented before the people search existed, user consent off). The round remembers the refusal, and the
+    card keeps it once the sign-in completes (_ms_finish); its people-search caption says why contacts are not searched. None: the
+    round asked for nothing optional, so the refusal is the tenant's answer and stands."""
+    from . import msauth
+    if not msauth.has_optional(f.get('scope') or ''): return None
+    f['cfg']['people_refused'] = True
+    return msauth.scopes_for(f.get('kind'), bool(f['cfg'].get('allow_files')), people=False)
 
 def _reads(cid):
     c = store.get_connector(cid) if cid else None
@@ -6811,6 +6822,13 @@ def ms_poll(cid: int, body: dict):
         return {'status': 'pending'}
     try: t = msauth.device_poll(f['cfg'], f['device_code'])
     except msauth.AdminConsent as e:
+        base = _ms_retry_base(f)
+        if base:                         # a fresh code for the base scopes: the card shows it in place of the old one
+            try: d = msauth.device_start(f['cfg'], base)
+            except (RuntimeError, requests.RequestException) as e2:
+                _MSFLOWS.pop(flow, None); return {'status': 'error', 'detail': str(e2)[:300]}
+            f.update(device_code=d.pop('device_code'), scope=base, at=time.time())
+            return {'status': 'pending', 'restart': {'mode': 'code', **d}}
         _MSFLOWS.pop(flow, None)
         return {'status': 'error', 'detail': str(e), 'admin_consent_url': _ms_admin(f)}
     except RuntimeError as e:
@@ -6850,7 +6868,16 @@ def ms_callback(request: Request, code: str = None, state: str = '', error: str 
         if not code: raise RuntimeError('Microsoft sent no code back')
         t = msauth.code_redeem(f['cfg'], code, f['verifier'], f['redirect'], f['scope'])
         f['done'] = _ms_finish(f['cid'], f, t)
-    except msauth.AdminConsent as e: f['done'] = {'status': 'error', 'detail': str(e), 'admin_consent_url': _ms_admin(f)}
+    except msauth.AdminConsent as e:
+        base = _ms_retry_base(f)
+        if base:                         # the same round, a new state + PKCE, base scopes: the user just signs in again in this tab
+            try: b = msauth.browser_start(f['cfg'], base, f['redirect'])
+            except RuntimeError as e2: b, f['done'] = None, {'status': 'error', 'detail': str(e2)[:300]}
+            if b:
+                f.update(state=b['state'], verifier=b['verifier'], scope=base, at=time.time(), claimed=False)
+                from fastapi.responses import RedirectResponse
+                return RedirectResponse(b['url'], status_code=302)
+        else: f['done'] = {'status': 'error', 'detail': str(e), 'admin_consent_url': _ms_admin(f)}
     except (RuntimeError, requests.RequestException) as e: f['done'] = {'status': 'error', 'detail': str(e)[:300]}
     d = f['done']
     if d.get('status') == 'ok':

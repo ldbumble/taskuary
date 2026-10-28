@@ -36,19 +36,28 @@ GRAPH = 'https://graph.microsoft.com/v1.0'
 # account writes with, outside contacts and their companies included - and Contacts.Read its own address book (/me/contacts). Both are
 # a user's own consent, no admin. A sign-in from before them refreshes with what it was granted (refresh_scope) and the people search
 # skips what it cannot read; the card says a fresh sign-in would add them (peoplesearch.missing).
+# OPTIONAL, NOT BASE: a tenant whose admin consented to the base scopes alone, with user consent switched off, refuses a sign-in that
+# asks for one scope more (AADSTS65001 / AADSTS90094) - its people could not sign in at all. So the people scopes ride along, and a
+# refusal of them signs in again with the base scopes only (server._ms_retry_base); the card remembers it (people_refused).
 PEOPLE_SCOPES = {'outlook': ('People.Read', 'Contacts.Read'), 'teams': ('People.Read',)}
-SCOPES = 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite People.Read Contacts.Read'
+BASE_SCOPES = 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite'
+SCOPES = f"{BASE_SCOPES} {' '.join(PEOPLE_SCOPES['outlook'])}"
 LEGACY_SCOPES = 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.Read'
 # a Teams card's own sign-in: its chats, their senders' names, marking a chat read, and answering in it - none needs an admin.
 # TEAMS_CHAT is what an Outlook sign-in is asked for when a Teams card reads through it (channels.graph_creds): never widened, or every
 # Outlook sign-in from before a new scope would be refused it and its chats read as lapsed. User.ReadBasic.All already finds the
 # organisation's people (/users?$search); People.Read adds the ones this account writes with.
 TEAMS_CHAT = 'offline_access User.Read User.ReadBasic.All Chat.ReadWrite ChatMessage.Send'
-TEAMS_SCOPES = f'{TEAMS_CHAT} People.Read'
+TEAMS_SCOPES = f"{TEAMS_CHAT} {' '.join(PEOPLE_SCOPES['teams'])}"
 # ALLOW SAVING FILES (the owner, 2026-10-23): a card that opts in signs in again asking for Files.ReadWrite as well - its own OneDrive,
 # where Share puts a result (sharing.onedrive). Off by default: the scopes above are never widened unless the card says so.
 FILES_SCOPE = 'Files.ReadWrite'
-def scopes_for(kind, files: bool = False) -> str: return (TEAMS_SCOPES if kind == 'teams' else SCOPES) + (f' {FILES_SCOPE}' if files else '')
+def scopes_for(kind, files: bool = False, people: bool = True) -> str:
+    "What a sign-in asks for. people=False: the base scopes alone - what an admin consented to before the people search existed."
+    base = (TEAMS_SCOPES if people else TEAMS_CHAT) if kind == 'teams' else (SCOPES if people else BASE_SCOPES)
+    return base + (f' {FILES_SCOPE}' if files else '')
+_OPTIONAL = {s.lower() for v in PEOPLE_SCOPES.values() for s in v}
+def has_optional(scope: str) -> bool: return bool({s.lower() for s in (scope or '').split()} & _OPTIONAL)
 def granted(cfg, scope: str):
     "Was `scope` granted to this sign-in? None when the card never wrote down what was (a sign-in from before PW-143): ask and see."
     g = str((cfg or {}).get('granted_scope') or '').strip()
@@ -227,7 +236,8 @@ def _err(r) -> str:
 
 def _needs_admin(desc: str) -> bool:
     d = desc or ''
-    return 'AADSTS65001' in d or 'AADSTS90094' in d or ('consent' in d.lower() and 'admin' in d.lower())
+    return ('AADSTS65001' in d or 'AADSTS90094' in d or 'consent_required' in d.lower()
+            or ('consent' in d.lower() and 'admin' in d.lower()))
 
 
 def _friendly(desc: str) -> str:

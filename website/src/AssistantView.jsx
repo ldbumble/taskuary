@@ -2005,6 +2005,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     unconfirmedRef.current = null; adviceHeld.current = null;
     const same = !!ahead?.hash && ahead.hash === data.answer_hash && !extra, keep = !!ahead && card?.key === ahead.key;
     const id = keep ? ahead.id : `a${Date.now()}`;
+    // ...a link to a REMOVED task (`gone`) puts down the card that was on the table (trust audit S4, 2026-10-28): it stood under "That task
+    // was removed", its buttons on the row, as if it were the task the link named
+    if (data.gone && !card && currentRef.current?.key) { setExpanded(false); setFoldedKey(currentRef.current.key); }
     setMsgs((m) => placeLine(ahead ? m.filter((x) => x.id !== ahead.id) : m, { id, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [], card }));
     if (!same) putOnTable(card);
     if (!ahead || ahead.say !== data.say) say(data.say);

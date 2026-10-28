@@ -49,7 +49,7 @@ def test_a_task_an_idea_opens_carries_the_mails_it_was_about():
     assert {m['MessageId'] for m in ms if m['Channel'] == 'email'} == {first, again}       # both of Erin's mails, moved onto it
     [line] = [m for m in ms if m['Channel'] == 'assistant']
     assert 'whose move' not in line['BodyText']
-    assert assistant.raised(s, s.get_task(tid), ms) == {'by': 'Advisor', 'text': TEXT}
+    assert assistant.raised_by(s, s.get_task(tid), ms) == {'by': 'Advisor', 'text': TEXT}
 
 
 def test_a_mail_another_task_holds_stays_there_and_shows_from_the_idea():
@@ -77,11 +77,11 @@ def test_an_older_task_finds_its_mail_from_the_idea_not_the_advisor_post():
     s.add_message({'TaskId': tid, 'ExternalId': f"idea:{i['IdeaId']}", 'Channel': 'assistant', 'FromName': 'Advisor', 'SourceName': 'Advisor',
                    'SentAt': STAMP, 'BodyText': TEXT + "\n\nwhose move: the owner\nthe Advisor's suggestion: Send it."})
     assert [m['MessageId'] for m in s.made_from(s.get_task(tid))] == [first, again]
-    assert assistant.raised(s, s.get_task(tid), s.list_messages(tid))['text'] == TEXT
+    assert assistant.raised_by(s, s.get_task(tid), s.list_messages(tid))['text'] == TEXT
     s.cx.execute('DELETE FROM idea')                                   # the idea gone, the line's own words before the format text
-    assert assistant.raised(s, s.get_task(tid), s.list_messages(tid)) == {'by': 'Advisor', 'text': TEXT}
+    assert assistant.raised_by(s, s.get_task(tid), s.list_messages(tid)) == {'by': 'Advisor', 'text': TEXT}
 
 
 def test_a_task_nobody_raised_says_nothing():
     s = MemoryStore()
-    assert assistant.raised(s, s.get_task(s.create_task({'Title': 'Typed by hand', 'Kind': 'task'}, 'owner')), []) is None
+    assert assistant.raised_by(s, s.get_task(s.create_task({'Title': 'Typed by hand', 'Kind': 'task'}, 'owner')), []) is None

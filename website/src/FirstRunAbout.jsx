@@ -167,7 +167,9 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
   ] : [], !!a && !hidden);
   // the question is the Advisor's line over the row
   const says = draft && SAYS[step];
-  const line = !a ? "" : draft ? (draft.state === "failed" ? says.failed(draft.why) : says[draft.state])
+  // a mailbox connected but not read yet says so whole (firstrun.FIRST_READ) - not "connect a mailbox" to one who just did
+  const soon = /first read is still running/i.test(draft?.why || "");
+  const line = !a ? "" : draft ? (draft.state === "failed" ? (soon ? draft.why : says.failed(draft.why)) : says[draft.state])
     : step === "mailboxes" ? (boxes ? `${boxes === 1 ? "One source is" : `${boxes} sources are`} connected. ${ASK.mailboxes} Then press ${nextLabel}.`
       : "Connect your email, chat or task system with its card - your job is read from everything you connect.")
     // ...and "the ones ticked" only when the mail ticked some: with none it pointed at nothing
@@ -238,7 +240,7 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
           <Typography sx={{ color: DIM, fontSize: 13.5 }}>{says.busy}</Typography></Box>
       ) : <>
         {draft.state === "failed" && <Typography data-tq-draft-failed="" sx={{ color: "#9b2c2c", fontSize: 13.5 }}>
-          I couldn't write it: {draft.why}</Typography>}
+          {soon ? draft.why : `I couldn't write it: ${draft.why}`}</Typography>}
         {/* READ AS A DOCUMENT, not its markdown (the owner, 2026-10-16: the box showed "### What my job is"): Edit opens the text */}
         {editing === step || !text.trim()
           ? <TextField key={step} multiline fullWidth minRows={10} maxRows={22} value={text} sx={{ ...field, "& textarea": { fontSize: 14, lineHeight: 1.5 } }}

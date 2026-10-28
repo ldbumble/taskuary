@@ -5,10 +5,12 @@
 // OpenAI - wired into intent triage), AI CLI agents, and scheduled report connections.
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
-  Alert, Autocomplete, Box, Button, Chip, CircularProgress, IconButton, InputAdornment, MenuItem, Popover, Radio, Select, Step,
+  Alert, Autocomplete, Box, Button, Chip, CircularProgress, Collapse, IconButton, InputAdornment, MenuItem, Popover, Radio, Select, Step,
   StepButton, StepContent, Stepper, Switch, TextField, Typography,
 } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import AddIcon from "@mui/icons-material/Add";
 import BoltIcon from "@mui/icons-material/Bolt";
 import SearchIcon from "@mui/icons-material/Search";
@@ -32,7 +34,7 @@ import { hasLogo } from "./logos.jsx";
 import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
 import { matchCards, onceEach, oneOf, plannedFor } from "./connectorCatalog.js";
-import { pollSecondsField } from "./pollFields.js";
+import { isPollField, pollSecondsField } from "./pollFields.js";
 import { githubInboundValue } from "./githubInbound.js";
 import { useSaveNote } from "./SaveNote.jsx";
 import { plainError } from "./apiError.js";
@@ -239,9 +241,11 @@ const META = {
       "Chat ids are discovered, never typed: ask the owner to send any message to the bot (or add it to the group and post there), then run a sync yourself with POST {base}/api/ingest/poll{hdr} and GET {base}/api/sources{hdr} - the chat appears as a telegram source, switched OFF.",
       "Read the new sources back to the owner and ask which are theirs; flip those on with POST {base}/api/sources{hdr} and JSON {\"SourceId\": <id>, \"Active\": true}. Never flip on a chat the owner did not name - a bot is public and strangers must not be able to put tasks on the board.",
       "For a group, remind them to disable the bot's privacy mode (@BotFather > /setprivacy) or it will not see messages. Turn the connector on and say SETUP DONE."] },
-  whatsapp: { group: "Messaging", channel: "whatsapp", srcLabel: "Chat JIDs — only the chats listed here come in (a person by number@s.whatsapp.net, a group by its @g.us JID). There is no catch-all: a paired account sees every chat you are in, which is far too much to take.", srcPh: "15551234567@s.whatsapp.net",
-    fields: [["bridge URL (blank = http://127.0.0.1:8977)", "bridge_url"],
-      ["Assistant chat JID", "assistant_chat", "15551234567@s.whatsapp.net",
+  // "Chats", its why in the step's own text (srcNote): the label was a paragraph of JIDs (the setup sweep, 2026-10-28)
+  whatsapp: { group: "Messaging", channel: "whatsapp", srcLabel: "Chats", srcPh: "15551234567@s.whatsapp.net",
+    srcNote: "Only the chats switched on here come in. There is no catch-all: a paired phone sees every chat you are in, which is far too much to take. One typed by hand is a person's number@s.whatsapp.net or a group's address ending @g.us.",
+    fields: [["Bridge address (blank = this computer)", "bridge_url", "http://127.0.0.1:8977"],
+      ["Assistant chat", "assistant_chat", "15551234567@s.whatsapp.net",
        "Your private Message yourself chat - the assistant walks you through your work there"],
       pollSecondsField("whatsapp")],
     secretLabel: null,
@@ -304,7 +308,7 @@ const META = {
       "Ask for the mailbox password (Yahoo and iCloud want an app password instead) and save it as Secret; save address, imap_host and, only if it breaks the imap->smtp pattern, smtp_host in ConfigJson. Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on, SETUP DONE."] },
   github: { group: "Developer", channel: "github", srcLabel: "Repositories", srcPh: "org/repo",
     fields: [], secretLabel: "fine-grained PAT",
-    desc: "Paste a PAT - repos are auto-discovered, feed the Board's repo picker and the coding agent's issue loop. Per repo, choose what issues and PRs do: tasks, feed, or off.",
+    desc: "Paste a personal access token - repos are auto-discovered, feed the Board's repo picker and the coding agent's issue loop. Per repo, choose what issues and PRs do: tasks, feed, or off.",
     howto: ["Create a fine-grained PAT: GitHub → Settings → Developer settings → Fine-grained tokens.",
       "Repository access: the repos the agent may touch. Permissions: Issues Read+Write, Pull requests Read+Write, Metadata Read.",
       "Paste the token under Credentials - that's ALL the config: on save Taskuary discovers every repo the token reaches, adds them under Sources, and writes the repository map into SOUL.md.",
@@ -1382,7 +1386,7 @@ export function ConfigField({ conn, field: [label, key, ph, help], cfg, setCfg, 
     return <TextField label={label} placeholder={ph || ""} helperText={help} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }} onChange={onChange} {...rest} />;
   return <TextField type="password" data-tq-write-only={key} autoComplete="new-password" sx={{ bgcolor: "#fff" }} {...rest}
     label={(conn.ConfigSaved || []).includes(key) ? `${label} — saved, type to replace` : label} placeholder={ph || ""}
-    helperText={help ? `${help} Write-only: never shown again once saved.` : "Write-only: never shown again once saved."}
+    helperText={help ? `${help} Never shown again once saved.` : "Never shown again once saved."}
     value={cfg[key] || ""} onChange={onChange} />;
 }
 // ...and a typed one goes back to empty once it is saved: the server holds it now
@@ -2025,6 +2029,9 @@ function ConnectorIdentity({ conn, reload, onCreated, addOnly = false }) {
   const [err, setErr] = useState("");
   useEffect(() => setName(conn.Name || ""), [conn.Name]);
   const one = oneOf(conn.Type);
+  // ...ONLY ONCE THIS ONE IS CONNECTED (the setup sweep, 2026-10-28): "Add another Outlook mailbox" under a first one not yet signed in
+  // offered a second before there was a first
+  const connected = !!(conn.HasSecret || conn.LastSyncAt);
   const rename = async () => {
     const value = name.trim();
     if (!value || value === conn.Name) return;
@@ -2043,7 +2050,7 @@ function ConnectorIdentity({ conn, reload, onCreated, addOnly = false }) {
     } catch (e) { setErr(e?.response?.data?.detail || "could not add the connector"); }
     setBusy("");
   };
-  if (addOnly && !one) return null;
+  if (addOnly && (!one || !connected)) return null;
   return (
     <Box data-tq-add-another={conn.Type} sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: addOnly ? 0 : 1.5, maxWidth: 720 }}>
       {!addOnly && <>
@@ -2052,7 +2059,7 @@ function ConnectorIdentity({ conn, reload, onCreated, addOnly = false }) {
         <Button size="small" variant="outlined" disabled={busy === "rename" || !name.trim() || name.trim() === conn.Name}
           onClick={rename}>{busy === "rename" ? "Saving…" : "Save name"}</Button>
       </>}
-      {!one ? null : !adding ? (
+      {!one || !connected ? null : !adding ? (
         <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={() => setAdding(true)}>Add another {one}</Button>
       ) : (
         <>
@@ -2255,6 +2262,11 @@ function MacPermissions({ conn, test, busy, runTest }) {
 /* ── channel / AI connector detail: setup wizard + sources ─────────────── */
 // what the SIMPLE card asks for (the first run): the address and the server, never the optional calendar or TLS fields
 const SIMPLE_FIELDS = { gmail: ["address"], imap: ["address", "imap_host"] };
+const KEYLESS_AI = ["ollama"];
+export const MAIL_READS = "Reads your inbox and sent mail. Never sends without you.";
+// a box the card runs without: it says optional, or what blank means, or its default - and never "required"
+const isOptional = ([label]) => /optional|blank|default/i.test(label) && !/required/i.test(label);
+const SECRET_HELP = "Kept on this computer and never shown again.";      // firstrun.KEYLESS: an AI card that connects with its key box empty
 // the simple card's one hint under the password, in words a first-time owner has: the full card's Guide says "under Credentials"
 // and "the imap->smtp pattern", which this screen has neither of (a fresh-home run, 2026-10-15)
 const SIMPLE_HINT = {
@@ -2344,6 +2356,12 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   const [gOwn, setGOwn] = useState(!!cfg.google_client_id);
   const appKeys = MS_SIGNIN.includes(conn.Type) ? MS_APP_KEYS : conn.Type === "gmail" && !gOwn ? G_APP_KEYS : [];
   const ownFields = m.fields.filter(([, key]) => !appKeys.includes(key));
+  // REQUIRED FIRST, THEN THE KEY, THEN WHAT HAS A DEFAULT (the setup sweep, 2026-10-28): optional model and language boxes stood
+  // before the one key the card cannot run without; a chat card's fast clock folds under Advanced, after the token
+  const shownFields = adminFields && MS_SIGNIN.includes(conn.Type) ? m.fields : ownFields;
+  const late = shownFields.filter(isPollField), early = shownFields.filter((f) => !isPollField(f));
+  const need = early.filter((f) => !isOptional(f)), maybe = early.filter(isOptional);
+  const [advanced, setAdvanced] = useState(false);
   const syncHere = async () => {
     setSrcSync(true);
     const r = await run(() => api.post("/api/ingest/poll"), { ok: "Syncing — new items appear in a minute", lead: "Sync didn't start — " });
@@ -2360,9 +2378,12 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   // The boxes are measured against what they last saved, not the row: a sign-in that rewrites the config is not the owner's typing
   const sync = syncState(savedConn, draft.pending, editedBoxes(m.fields.map((f) => f[1]), cfg, cfgSaved, secret));
 
+  // ...and the steps after it are not ticked before it is: Inbound and More roles stood ticked over empty Credentials (the setup sweep,
+  // 2026-10-28)
+  const creds = credsDone(conn, cfg, m);
   const steps = [
     // ticked once a Test has PASSED on them: "saved" ticked a key the service had just refused (the 2026-10-19 UI walk)
-    { label: "Credentials", done: credsDone(conn, cfg, m), body: (
+    { label: "Credentials", done: creds, body: (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
         {MS_SIGNIN.includes(conn.Type) && !adminFields && (
           <Button size="small" variant="text" onClick={() => setAdminFields(true)}
@@ -2382,13 +2403,22 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         )}
         {(adminFields || ownFields.length > 0) && (
           <>
-            {(adminFields && MS_SIGNIN.includes(conn.Type) ? m.fields : ownFields).map((f) => <ConfigField key={f[1]} conn={conn} field={f} cfg={cfg} setCfg={setCfg} />)}
+            {need.map((f) => <ConfigField key={f[1]} conn={conn} field={f} cfg={cfg} setCfg={setCfg} />)}
             {/* WhatsApp has no secret at all - the bridge holds the pairing, not us */}
             {adminFields && m.secretLabel && (
               <TextField label={conn.HasSecret ? `${m.secretLabel} (saved — type to replace)` : m.secretLabel} type="password"
                 value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
-                helperText="Write-only: stored server-side, never returned to the browser." />
+                helperText={SECRET_HELP} />
             )}
+            {maybe.map((f) => <ConfigField key={f[1]} conn={conn} field={f} cfg={cfg} setCfg={setCfg} />)}
+            {late.length > 0 && <>
+              <Button size="small" variant="text" data-tq-advanced="" onClick={() => setAdvanced((v) => !v)}
+                endIcon={advanced ? <ExpandLessIcon sx={{ fontSize: 16 }} /> : <ExpandMoreIcon sx={{ fontSize: 16 }} />}
+                sx={{ alignSelf: "flex-start", fontSize: 12, color: DIM, px: 0.5 }}>Advanced</Button>
+              {/* mounted while folded, so a value already saved is still the one Save sends */}
+              <Collapse in={advanced} data-tq-advanced-fold=""><Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, pt: 0.5 }}>
+                {late.map((f) => <ConfigField key={f[1]} conn={conn} field={f} cfg={cfg} setCfg={setCfg} />)}</Box></Collapse>
+            </>}
             <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
               <Button variant="contained" disableElevation disabled={busy === "save"} onClick={saveCreds}>
                 {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save & continue"}</Button>
@@ -2417,11 +2447,12 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       <Box sx={{ mt: 1 }}>
         {conn.Type === "github" && (
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
-            The repos this connection reaches — discovery fills the list from the PAT. What each
+            The repos this connection reaches — discovery fills the list from the token. What each
             repo's issues and PRs <b>do</b> (become tasks, show as feed, stay ignored) is decided in
             one place: the <b>Inbound — what becomes work</b> step below.
           </Typography>
         )}
+        {m.srcNote && <Typography variant="caption" data-tq-src-note="" sx={{ color: FAINT, display: "block", mb: 1, maxWidth: 560 }}>{m.srcNote}</Typography>}
         {conn.Type === "whatsapp" && <WaChats conn={conn} mine={mine} reload={reload} onNavigate={onNavigate} onRoster={setRoster} toggle={toggleSource} />}
         {conn.Type === "telegram" && (
           <>
@@ -2472,13 +2503,13 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       </Box>
     )}] : []),
     ...(isAI ? [] : [
-      { label: "Inbound — what becomes work", done: inboundDone(conn, mine),
+      { label: "Inbound — what becomes work", done: creds && inboundDone(conn, mine),
         body: <InboundStep conn={conn} m={m} mine={mine} reload={reload} /> },
-      { label: "More roles — reports, agents", done: true,
+      { label: "More roles — reports, agents", done: creds,
         body: <RoleStep conn={conn} reload={reload} only={["report", "tool"]} /> },
     ]),
-    ...(conn.Type === "github" ? [{ label: "Agent permissions", done: true, body: <GithubPerms conn={conn} reload={reload} /> },
-      { label: "Close out — what finishing a task does on GitHub", done: true, body: <GithubCloseout conn={conn} mine={mine} reload={reload} /> }] : []),
+    ...(conn.Type === "github" ? [{ label: "Agent permissions", done: creds, body: <GithubPerms conn={conn} reload={reload} /> },
+      { label: "Close out — what finishing a task does on GitHub", done: creds, body: <GithubCloseout conn={conn} mine={mine} reload={reload} /> }] : []),
     { label: "Enable", done: !!conn.Active, body: (
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 1, flexWrap: "wrap" }}>
         <Switch data-tq-card-on="" checked={!!conn.Active} disabled={draft.flipping} onChange={(e) => setActive(e.target.checked)} />
@@ -2507,18 +2538,25 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   if (simple) {
     // a mailbox card keeps the Connections page's own Add another, so a second account of the same kind has a way in from setup too
     const another = MAIL_CARDS.includes(conn.Type) && <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} addOnly />;
+    // ...and SAYS WHAT IT READS before the owner hands a mailbox over (the setup sweep, 2026-10-28) - drafts wait for their press
+    const reads = MAIL_CARDS.includes(conn.Type) && <Typography variant="body2" data-tq-mail-reads="" sx={{ color: DIM }}>{MAIL_READS}</Typography>;
     // Microsoft is one sign-in, nothing to type; an AI card's key becomes the AI (firstrun.choose_key) - the same card either way
     if (conn.Type === "outlook") return (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25, maxWidth: 720 }}>
         <MsSignIn conn={conn} cfg={cfg} reload={reload} onSignedIn={onConnected} plain />
+        {reads}
         {another}
       </Box>
     );
     // an AI card asks only what it cannot run without - the model and base URL have defaults (Azure's endpoint has none, nor
     // the organisation's gateway: its address came with the access code)
+    // ...a local model server is the one with no key and no default model (llm: keyless ollama, its model named): Connect stayed shut
+    // on its "optional" key box, and its one required box was not on the form
+    const keyless = KEYLESS_AI.includes(conn.Type);
     const keep = SIMPLE_FIELDS[conn.Type] || m.fields.map((f) => f[1])
-      .filter((k) => !isAI || (k !== "model" && (k !== "base_url" || conn.Type === "hipaa_ai")));
-    const ready = isAI ? !!secret.trim() && !needsGateway(conn, cfg) : !!(cfg.address || "").trim() && !!secret.trim();
+      .filter((k) => !isAI || ((k !== "model" || keyless) && (k !== "base_url" || conn.Type === "hipaa_ai")));
+    const ready = isAI ? (keyless ? !!(cfg.model || "").trim() : !!secret.trim()) && !needsGateway(conn, cfg)
+      : !!(cfg.address || "").trim() && !!secret.trim();
     const connect = async () => {
       setBusy("save"); setTest(null);
       try {
@@ -2546,6 +2584,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         ))}
         {m.secretLabel && <TextField size="small" type="password" label={m.secretLabel} value={secret} sx={boxSx}
           onChange={(e) => setSecret(e.target.value)} helperText={SIMPLE_HINT[conn.Type] || (isAI ? (m.howto || [])[0] : (m.howto || [])[1]) || ""} />}
+        {reads}
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
           <Button variant="contained" disableElevation disabled={busy === "save" || !ready} onClick={connect}>
             {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Connect"}</Button>
@@ -2573,7 +2612,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       {MS_SIGNIN.includes(conn.Type) && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} reload={reload} onSignedIn={() => setStep(m.srcLabel ? 2 : 3)} /></Box>}
       {conn.Type === "chatgpt" && <Box sx={{ mb: 2 }}><ChatGptSignIn conn={conn} cfg={cfg} reload={reload} /></Box>}
       {conn.Type === "gmail" && <GoogleCalendar conn={conn} cfg={cfg} reload={reload} />}
-      {conn.Type === "gmail" && <Box sx={{ mb: 2 }}><GoogleFiles conn={conn} cfg={cfg} reload={reload} /></Box>}
+      {conn.Type === "gmail" && <GoogleFiles conn={conn} cfg={cfg} reload={reload} />}
       {conn.Type === "whatsapp" && <Box sx={{ mb: 2 }}><WaPair conn={conn} reload={reload} onStatus={setWaSt} onTurnedAway={openPicker} /></Box>}
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{m.desc}</Typography>
       <UnderTabs tabs={conn.Type === "whatsapp" ? ["Setup", "Guide"] : ["Setup", "Guide", "Agent"]} value={tab} onChange={setTab} />
@@ -2589,7 +2628,9 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         </Stepper>
       )}
       {tab === "Guide" && <Steps steps={m.howto || []} />}
-      {conn.Type !== "whatsapp" && <AiSetup conn={conn} steps={m.howto || []} fields={m.fields || []} secretLabel={m.secretLabel} agentSteps={m.agent || []} reload={reload} />}
+      {/* ...nor a sign-in card (Outlook, Teams, Gmail): under its one-button sign-in, a greyed Get AI to set it up and its Connect an AI
+          were two more things to read for nothing (the setup sweep, 2026-10-28) */}
+      {!NO_AI_WALK.includes(conn.Type) && <AiSetup conn={conn} steps={m.howto || []} fields={m.fields || []} secretLabel={m.secretLabel} agentSteps={m.agent || []} reload={reload} />}
       <SaveBar draft={draft} labels={DRAFT_LABELS} words={DRAFT_WORDS} />
       <CardPlaybooks type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={leave} />
@@ -2602,7 +2643,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
 // THE ODBC DRIVERS ARE ASKED FOR BY THE CARD THAT PICKS ONE: every open of Connections asked the machine for them, for a card most
 // people never open (the overnight setup walk, 2026-10-26)
 function MssqlDetail({ conn, reload, onBack, onCreated }) {
-  const [tab, setTab] = useState("Connection");
+  const [tab, setTab] = useState("Setup");
   const [drivers, setDrivers] = useState([]);
   useEffect(() => { api.get("/api/mssql/drivers").then(({ data }) => setDrivers(data.data || [])).catch(() => {}); }, []);
   if (!conn) return null;
@@ -2613,9 +2654,9 @@ function MssqlDetail({ conn, reload, onBack, onCreated }) {
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         The connection only — build the scheduled reports (query + AI summary) under Reports.
       </Typography>
-      <UnderTabs tabs={["Connection", "Guide", "Agent"]} value={tab} onChange={setTab} />
+      <UnderTabs tabs={["Setup", "Guide", "Agent"]} value={tab} onChange={setTab} />
       {tab === "Agent" && <AgentTab steps={MSSQL_AGENT} />}
-      {tab === "Connection" && <MssqlConnection conn={conn} drivers={drivers} reload={reload} />}
+      {tab === "Setup" && <MssqlConnection conn={conn} drivers={drivers} reload={reload} />}
       {tab === "Guide" && <Steps steps={MSSQL_HOWTO} />}
       <AiSetup conn={conn} steps={MSSQL_HOWTO} agentSteps={MSSQL_AGENT} reload={reload} />
       <CardPlaybooks type={conn.Type} />
@@ -2710,7 +2751,7 @@ function ReasonDetail({ conn, reload, onBack, onCreated }) {
 }
 
 function WinrmDetail({ conn, reload, onBack, onCreated }) {
-  const [tab, setTab] = useState("Connection");
+  const [tab, setTab] = useState("Setup");
   const [cfg, setCfg] = useState(parse(conn?.ConfigJson));
   const [test, setTest] = useState(null);
   const [busy, setBusy] = useState("");
@@ -2740,10 +2781,10 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
         Run PowerShell ON a machine you can RDP into (your Windows credentials) — the connection only;
         build the scheduled reports under Reports.
       </Typography>
-      <UnderTabs tabs={["Connection", "Guide", "Agent"]} value={tab} onChange={setTab} />
+      <UnderTabs tabs={["Setup", "Guide", "Agent"]} value={tab} onChange={setTab} />
       {tab === "Guide" && <Steps steps={WINRM_HOWTO} />}
       {tab === "Agent" && <AgentTab steps={WINRM_AGENT} />}
-      {tab === "Connection" && (
+      {tab === "Setup" && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
           <TextField label="machine name" placeholder="AZWEB01" value={cfg.host || ""} sx={{ bgcolor: "#fff" }}
             onChange={(e) => setCfg({ ...cfg, host: e.target.value })} />
@@ -3025,7 +3066,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
   const draft = useCardDraft(savedConn, savedSources, reload);
   const { conn, sources } = draft;
   const onBack = leave;      // the unsaved changes stay in the card's draft for when it is opened again (keepDraft) - leaving never asks
-  const [tab, setTab] = useState("Connection");
+  const [tab, setTab] = useState("Setup");
   const [cfg, setCfg] = useState(parse(conn?.ConfigJson));
   const [secret, setSecret] = useState("");
   const [test, setTest] = useState(null);
@@ -3033,7 +3074,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
   const [msg, setMsg] = useState("");
   // the AI setup: its button in the row below, its walk under it; a field it asks for brings the Connection tab up to be lit
   const ai = useAiWalk({ conn: conn || {}, steps: meta.howto || [], fields: meta.fields || [], secretLabel: meta.secretLabel,
-    agentSteps: meta.agent || [], reload, onAsk: (a) => { if (a?.field) setTab("Connection"); } });
+    agentSteps: meta.agent || [], reload, onAsk: (a) => { if (a?.field) setTab("Setup"); } });
   if (!conn) return null;
   const objects = (sources || []).filter((s) => s.Channel === conn.Type && s.ConnectorId === conn.ConnectorId);
   // the borrow offer: only when the OTHER card actually has something to lend (a tenant app, a
@@ -3089,10 +3130,10 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         {meta.desc} The connection only — build the scheduled reports under Reports.
       </Typography>
-      <UnderTabs tabs={["Connection", "Guide", "Agent"]} value={tab} onChange={setTab} />
+      <UnderTabs tabs={["Setup", "Guide", "Agent"]} value={tab} onChange={setTab} />
       {tab === "Guide" && <Steps steps={meta.howto} />}
       {tab === "Agent" && <AgentTab steps={meta.agent} />}
-      {tab === "Connection" && (
+      {tab === "Setup" && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 560, mt: 1 }}>
           {canReuse && (
             <Box sx={{ p: 1.25, border: `1px dashed ${BORDER}`, borderRadius: 2, bgcolor: PANEL2 }}>
@@ -3109,7 +3150,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
             {...(f[1] === "conn_str" && !(conn.WriteOnlyKeys || []).includes(f[1]) ? { multiline: true, minRows: 2 } : {})} />)}
           {!meta.noSecret && <TextField label={conn.HasSecret ? `${meta.secretLabel} — saved, type to replace` : meta.secretLabel}
             type="password" value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
-            helperText={meta.secretHelp || "Write-only: stored server-side, never returned to the browser."} />}
+            helperText={meta.secretHelp || SECRET_HELP} />}
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
             <Button variant="contained" disableElevation disabled={busy === "save"} onClick={save}>
               {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save"}</Button>
@@ -3140,7 +3181,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
             : conn.LastError && <Typography variant="body2" sx={{ color: "#6b2733" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>)}
         </Box>
       )}
-      {tab === "Connection" && meta.discovers && (
+      {tab === "Setup" && meta.discovers && (
         <CloudObjects conn={conn} meta={meta} objects={objects} reload={reload} />
       )}
       <Box sx={{ maxWidth: 720, mt: 1.5 }}><AiWalk ai={ai} /></Box>
@@ -3318,6 +3359,7 @@ const GithubCloseout = ({ conn, mine, reload }) => {
 const MAIL_CARDS = ["outlook", "gmail", "imap"];
 // the cards that sign in with Microsoft, each its own account: Outlook for mail and calendar, Teams for chats (msauth.TEAMS_SCOPES)
 const MS_SIGNIN = ["outlook", "teams"];
+const NO_AI_WALK = ["whatsapp", ...MS_SIGNIN, "gmail"];      // the cards with no Get AI to set it up
 const MS_APP_KEYS = ["tenant_id", "client_id"];      // a tenant app registration's fields - an admin's road (adminFields)
 const G_APP_KEYS = ["google_client_id", "google_client_secret", "google_refresh_token"];   // the Gmail card's own Google client (gOwn)
 // ...and a card that reads more than one mailbox (a shared one on the same sign-in) is more than one hat: one field per

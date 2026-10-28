@@ -17,7 +17,7 @@ test("the card asks for the gateway address above the access code, with where it
 test("setup's simple card keeps the address field for this card alone, and shows its hint", () => {
   assert.match(cv, /k !== "base_url" \|\| conn\.Type === "hipaa_ai"/);
   assert.match(cv, /\.map\(\(\[label, key, ph, helper\]\) => \(\s*<TextField key=\{key\} size="small"[^>]*helperText=\{helper\}/);
-  assert.match(cv, /const ready = isAI \? !!secret\.trim\(\) && !needsGateway\(conn, cfg\)/);
+  assert.match(cv, /const ready = isAI \? \(keyless \? !!\(cfg\.model \|\| ""\)\.trim\(\) : !!secret\.trim\(\)\) && !needsGateway\(conn, cfg\)/);
 });
 
 test("Connect waits for an address only when the build ships none", () => {

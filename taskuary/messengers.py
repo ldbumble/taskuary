@@ -280,7 +280,7 @@ def wa_test(store, c) -> str:
     # no catch-all is created here: only the chats the owner (or the setup agent) adds come in.
     # '*' - every direct chat - is a row they add themselves. A '*' that appeared by itself was a
     # timeline full of chats nobody asked for (the owner, 2026-08-30).
-    return f"paired as {st.get('me') or 'your account'} - add the chats you want under Chat JIDs; they flow in on the next sync"
+    return f"paired as {st.get('me') or 'your account'} - switch on the chats you want under Chats; they flow in on the next sync"
 
 
 def wa_status(c) -> dict:

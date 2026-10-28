@@ -23,7 +23,8 @@ test("what Save says is drawn under Save, and a refused key does not move on", (
 });
 
 test("Credentials is ticked only after a Test passed on them", () => {
-  assert.match(src, /label: "Credentials", done: credsDone\(conn, cfg, m\)/);
+  assert.match(src, /const creds = credsDone\(conn, cfg, m\);/);
+  assert.match(src, /label: "Credentials", done: creds,/);
   assert.match(src, /: !m\.secretLabel \|\| \(!!conn\.HasSecret && !!conn\.LastSyncAt && !conn\.LastError\);/);
 });
 

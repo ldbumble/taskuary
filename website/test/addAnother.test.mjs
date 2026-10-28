@@ -11,7 +11,9 @@ test("every connector detail draws Add another, on the card's own identity row",
   const cv = read("ConnectorsView.jsx");
   assert.match(cv, /function ConnectorIdentity\(\{ conn, reload, onCreated, addOnly = false \}\)/);
   assert.match(cv, /api\.post\("\/api\/connectors", \{ Type: conn\.Type, Name: value \}\)/, "a new instance of the same type, no credentials");
-  assert.match(cv, /\{!one \? null : !adding \? \(\s+<Button .*>Add another \{one\}<\/Button>/, "says what it adds, or is not drawn");
+  assert.match(cv, /\{!one \|\| !connected \? null : !adding \? \(\s+<Button .*>Add another \{one\}<\/Button>/, "says what it adds, or is not drawn");
+  // ...and only once this card is connected: a second before there is a first (the setup sweep, 2026-10-28)
+  assert.match(cv, /const connected = !!\(conn\.HasSecret \|\| conn\.LastSyncAt\);/);
   assert.match(cv, /const one = oneOf\(conn\.Type\);/);
   // channel cards (Outlook, Gmail, IMAP, Teams, Slack, GitHub, the AI cards ...), SQL Server, WinRM and every data card
   for (const fn of ["ChannelDetail", "MssqlDetail", "WinrmDetail", "DataDetail"]) {
@@ -26,12 +28,12 @@ test("every connector detail draws Add another, on the card's own identity row",
 test("setup's mailbox cards keep Add another, so a second Outlook account has a way in from the first run", () => {
   const cv = read("ConnectorsView.jsx"), fr = read("FirstRun.jsx");
   assert.match(cv, /const another = MAIL_CARDS\.includes\(conn\.Type\) && <ConnectorIdentity conn=\{conn\} reload=\{reload\} onCreated=\{onCreated\} addOnly \/>;/);
-  assert.match(cv, /<MsSignIn conn=\{conn\} cfg=\{cfg\} reload=\{reload\} onSignedIn=\{onConnected\} plain \/>\s+\{another\}/, "under the Microsoft sign-in");
+  assert.match(cv, /<MsSignIn conn=\{conn\} cfg=\{cfg\} reload=\{reload\} onSignedIn=\{onConnected\} plain \/>\s+\{reads\}\s+\{another\}/, "under the Microsoft sign-in");
   assert.match(cv, /<TestLine test=\{test\} mt=\{0\} \/>\s+\{another\}\s+<\/Box>\s+\);\s+\}\s+return \(/, "under Gmail's and IMAP's Connect");
   assert.match(cv, /const MAIL_CARDS = \["outlook", "gmail", "imap"\];/);
   // addOnly draws the door alone - setup has no name to edit
   assert.match(cv, /\{!addOnly && <>\s+<TextField size="small" label="Connection name"/);
-  assert.match(cv, /if \(addOnly && !one\) return null;/);
+  assert.match(cv, /if \(addOnly && \(!one \|\| !connected\)\) return null;/);
   // the card that was added opens in place, still simple; and Connect names the card pressed, not the first of its type
   assert.match(fr, /onCreated=\{\(id\) => \{ setOpen\(\{ id, simple: open\.simple \}\); reload\(\); \}\}/);
   assert.match(cv, /\{ type: conn\.Type, cid: conn\.ConnectorId, address: cfg\.address \|\| "", password: secret, host: cfg\.imap_host \|\| "" \}/);

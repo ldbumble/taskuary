@@ -80,14 +80,14 @@ def live_now(store, item: dict, surface: str = 'desk') -> list:
 
 
 def record(store, key: str, pressed: str, surface: str = 'desk', lit: str = None, live: list = None, rev: str = None,
-           advised: str = None, item: dict = None) -> int:
+           advised: str = None, item: dict = None, greyed: list = None) -> int:
     """One press on `key`. `lit`: the verb the surface had filled ('' for none; None reads the Advisor's own). `live`: the verbs the owner
-    could have pressed instead (None reads the row's). `advised`: the Advisor's verb, when the surface showed its line. Returns the row id,
+    could have pressed instead (None reads the row's). `greyed`: the verbs drawn but greyed (disabled) at the press. `advised`: the Advisor's verb, when the surface showed its line. Returns the row id,
     or 0 when nothing is kept: a key with nothing behind it, or personal mail. Never raises past a logged warning."""
-    return kept(store, key, pressed, surface, lit, live, rev, advised, item)[0]
+    return kept(store, key, pressed, surface, lit, live, rev, advised, item, greyed)[0]
 
 
-def kept(store, key, pressed, surface='desk', lit=None, live=None, rev=None, advised=None, item=None) -> tuple:
+def kept(store, key, pressed, surface='desk', lit=None, live=None, rev=None, advised=None, item=None, greyed=None) -> tuple:
     """record(), and whether the row is new: (id, True), or (id, False) for the same press told twice."""
     from . import advisor
     try:
@@ -106,15 +106,16 @@ def kept(store, key, pressed, surface='desk', lit=None, live=None, rev=None, adv
         adv = _verb(advised) if advised else advised_now(store, tgt) if advised is None else ''
         shown = adv if lit is None else _verb(lit)
         others = list(dict.fromkeys(v for v in (_verb(x) for x in (live_now(store, item, surface) if live is None else live)) if v and v != got))
+        grey = list(dict.fromkeys(v for v in (_verb(x) for x in greyed or []) if v))
         try: now = advisor.revision(store, *tgt)
         except Exception: now = None
         repo = (m.get('SourceName') or '') if w['channel'] in CODE_CHANNELS else ''
         st, by = decided(store, key, rev or now)
         rid = store._exec('INSERT INTO advice_press (Key,TargetKind,TargetId,Revision,Advised,Pressed,Match,ItemKind,Channel,Sender,SenderDomain,'
-                          'Scope,Thread,Stale,CreatedAt,Surface,Lit,Live,Choice,Repo,State,By) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                          'Scope,Thread,Stale,CreatedAt,Surface,Lit,Live,Choice,Repo,State,By,Greyed) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                           (key, tgt[0], int(tgt[1]), rev or '', adv or None, got, int(bool(shown) and shown == got), str(item.get('kind') or ''),
                            w['channel'], w['sender'], w['domain'], w['scope'], w['thread'], int(bool(rev) and bool(now) and rev != now), _now(),
-                           surface, shown or '', json.dumps(others), int(bool(others)), str(repo).lower(), st, by))
+                           surface, shown or '', json.dumps(others), int(bool(others)), str(repo).lower(), st, by, json.dumps(grey)))
         with _LOCK:
             last[k] = (time.monotonic(), rid)
             for o in [o for o, (t, _i) in last.items() if time.monotonic() - t > SAME_PRESS_SECS]: last.pop(o, None)
@@ -124,11 +125,11 @@ def kept(store, key, pressed, surface='desk', lit=None, live=None, rev=None, adv
 
 
 def _row(r: dict) -> dict:
-    try: live = json.loads(r.get('Live') or '[]') or []
-    except ValueError: live = []
+    try: live, grey = json.loads(r.get('Live') or '[]') or [], json.loads(r.get('Greyed') or '[]') or []
+    except ValueError: live, grey = [], []
     return {'id': r['Id'], 'at': r['CreatedAt'], 'key': r['Key'], 'target': (r['TargetKind'], r['TargetId']), 'surface': r.get('Surface') or 'desk',
             'pressed': r['Pressed'], 'lit': r.get('Lit') if r.get('Surface') else (r.get('Advised') or ''), 'advised': r.get('Advised') or '',
-            'live': live, 'choice': bool(r['Choice']) if r.get('Choice') is not None else True, 'match': bool(r.get('Match')),
+            'live': live, 'greyed': grey, 'choice': bool(r['Choice']) if r.get('Choice') is not None else True, 'match': bool(r.get('Match')),
             'stale': bool(r.get('Stale')), 'kind': r.get('ItemKind') or '', 'channel': r.get('Channel') or '', 'sender': r.get('Sender') or '',
             'domain': r.get('SenderDomain') or '', 'repo': r.get('Repo') or '', 'scope': r.get('Scope') or '', 'thread': r.get('Thread') or ''}
 
@@ -138,7 +139,7 @@ _FIELDS = {'surface': 'Surface', 'pressed': 'Pressed', 'kind': 'ItemKind', 'chan
 
 
 def rows(store, since: str = None, days: int = None, choice: bool = None, fresh: bool = True, limit: int = None, **eq) -> list:
-    """THE PRESS LOG, READ (what phase C learns from): oldest first, as dicts - {id, at, key, surface, pressed, lit, advised, live, choice,
+    """THE PRESS LOG, READ (what phase C learns from): oldest first, as dicts - {id, at, key, surface, pressed, lit, advised, live, greyed, choice,
     match, stale, kind, channel, sender, domain, repo, scope, thread}. Narrow by any of surface / pressed / kind / channel / sender /
     domain / repo / scope / key (exact), `since` or the last `days`, `choice` (only real choices, or only none), `fresh` (drop presses
     that answered an older screen). A row from before 2026-10-23 is a desk press under a line: its lit is the Advisor's verb."""

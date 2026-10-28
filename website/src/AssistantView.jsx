@@ -75,7 +75,7 @@ import { lightOf, litAfter, litOn, litPick, litPull } from "./assistantLight.js"
 import DigestText from "./DigestText.jsx";
 import { canGoBack, firstAppLink, onStep, openAppLink, recordPlace } from "./appLinks.js";
 import { hashFor } from "./canvasLinks.js";
-import { canSend, useCapabilities } from "./capabilities.js";
+import { canSend, cannotStart, useCapabilities } from "./capabilities.js";
 import { place } from "./words.js";
 import ConnectAi, { CONNECT_AI, connectAi } from "./ConnectAi.jsx";
 // FirstRun, the walk's workspace and the browse cards are drawn after the pile or a click, never on the first frame: out of the entry chunk
@@ -1032,7 +1032,10 @@ function Line({ m, lastBrief = false, live, last, further = false, actions, fres
     table: live && !!canvas,
 
     onNext: nextChip ? () => actions.chip(nextChip) : null,
-    also: verbs.filter((c) => c.verb !== "next").map((c) => ({ verb: c.verb, label: c.label, title: c.hint, disabled: actions.busy, onClick: (e) => actions.chip(c, e?.currentTarget) })) };
+    also: verbs.filter((c) => c.verb !== "next").map((c) => {
+      const off = c.verb === "regular_agent" ? actions.noAi || "" : "";
+      return { verb: c.verb, label: c.label, title: off || c.hint, disabled: actions.busy || !!off, onClick: (e) => actions.chip(c, e?.currentTarget) };
+    }) };
   return (
     <>
       {/* the item on the table takes the canvas's whole width, whatever card it wears (the owner, 2026-09-29) */}
@@ -2005,6 +2008,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     unconfirmedRef.current = null; adviceHeld.current = null;
     const same = !!ahead?.hash && ahead.hash === data.answer_hash && !extra, keep = !!ahead && card?.key === ahead.key;
     const id = keep ? ahead.id : `a${Date.now()}`;
+    // ...a link to a REMOVED task (`gone`) puts down the card that was on the table (trust audit S4, 2026-10-28): it stood under "That task
+    // was removed", its buttons on the row, as if it were the task the link named
+    if (data.gone && !card && currentRef.current?.key) { setExpanded(false); setFoldedKey(currentRef.current.key); }
     setMsgs((m) => placeLine(ahead ? m.filter((x) => x.id !== ahead.id) : m, { id, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [], card }));
     if (!same) putOnTable(card);
     if (!ahead || ahead.say !== data.say) say(data.say);
@@ -3153,7 +3159,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   };
   // ...the Advisor's own move (a task to fix what failed, a proposal) pressed from a phone's row as from this one: the phone's strip had
   // none, so a move the row lacks drew no line and no button there (the matrix's phone pass, 2026-10-20)
-  const actions = { done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items: pileRows(pile), pressAdvice,
+  // SEND TO AGENT WITH NO AI IS GREYED, ITS REASON THE HOVER - on a report, an FYI or a mail as on a task (trust audit F3, 2026-10-28): the
+  // card's word stood live there and opened a "No AI connected" box (capabilities.cannotStart, the task page's own check)
+  const actions = { noAi: cannotStart(caps), done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items: pileRows(pile), pressAdvice,
     reminded: (out, c) => remindReceipt(out, c?.tid, c?.ref, c?.key),
     next: () => { if (picking && busy) nextHeld.current = true; else runChip({ verb: "next" }); }, picking: picking && !resetting, advance: (pile, settled) => advance(pile, settled), reload: () => loadPile(true), changed: onChanged,
     // an earlier line back on the table - or the folded item itself, which only unfolds: it never left the table

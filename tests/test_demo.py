@@ -244,6 +244,16 @@ class TheScriptedBrainRoutesTests(unittest.TestCase):
         self.assertEqual(call('remind me about this on friday at 2pm'), {'kind': 'task.defer', 'params': {'until': 'friday at 2pm'}})
         self.assertEqual(call('remind me later'), {'kind': 'task.defer', 'params': {}})
 
+    def test_not_a_task_a_note_a_hand_off_and_a_chase_call_the_real_tools(self):
+        """F5: the visitor's other put-downs and hand-offs reach the same road the real Assistant's CALL takes."""
+        import json
+        call = lambda q: json.loads(self.ask(q).removeprefix('CALL: '))
+        self.assertEqual(call('this is not a task'), {'kind': 'task.not_a_task', 'params': {}})
+        self.assertEqual(call('close this with a note: called Marcus, sorted'), {'kind': 'task.complete', 'params': {'note': 'called Marcus, sorted'}})
+        self.assertEqual(call('hand this to Priya Shah'), {'kind': 'task.handoff', 'params': {'who': 'Priya Shah'}})
+        self.assertEqual(call('pass it to Marcus'), {'kind': 'task.handoff', 'params': {'who': 'Marcus'}})
+        self.assertEqual(call('chase them'), {'kind': 'chase', 'params': {}})
+
     def test_a_ref_a_subject_or_a_name_brings_the_item_up(self):
         self.assertEqual(self.ask('open TQ-0004'), 'Here: [TQ-0004](#task=4).')
         self.assertEqual(self.ask('open the invoice 88213 task'), 'Here: [TQ-0004](#task=4).')

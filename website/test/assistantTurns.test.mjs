@@ -163,6 +163,9 @@ test("an act-only turn gets one receipt read off the act", () => {
   const light = { verb: "defer", label: "Remind me", key: "msg:4", tid: 4, ref: "TQ-0004", line: "" };
   assert.deepEqual(actReceipt({ say: "", light }, "msg:4"), { text: "Remind me is ready on the row for this task - yours to press.", status: "warn" });
   assert.match(actReceipt({ say: "", light }, "msg:9").text, /for TQ-0004/);
+  // ...and a said day is in the words (F4)
+  assert.equal(actReceipt({ light: { ...light, day: { until: "2026-11-02 09:00", day: "Mon 2 Nov" } } }, "msg:4").text,
+    "Remind me (Mon 2 Nov) is ready on the row for this task - yours to press.");
   assert.deepEqual(actReceipt({ pressed: { label: "Mark done", key: "msg:4", ref: "TQ-0004", note: "paid Friday" } }, "msg:9"),
     { text: "Mark done - TQ-0004: paid Friday.", status: "done" });
   assert.equal(actReceipt({ light: { ...light, line: "Remind me is lit for Monday." } }).text, "Remind me is lit for Monday.");

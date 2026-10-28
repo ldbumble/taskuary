@@ -3389,6 +3389,19 @@ def prepare_next(store, selection, token: str) -> dict | None:
 KIND_WORDS = {'report': 'a report', 'idea': 'an Advisor idea', 'meeting': 'a meeting', 'fyi': 'an FYI', 'agentdone': "an agent's result"}
 
 
+def removed_task(store, key: str) -> bool:
+    """`task:N` names a task that is gone and that a Remove kept (recentlydeleted.keep_task)."""
+    m = re.match(r'^task:(\d+)$', str(key or ''))
+    if not m or store.get_task(int(m[1])): return False
+    try: rows = [r for r in store.deleted_rows() if r.get('Kind') == 'task']
+    except Exception: return False
+    for r in rows:
+        try: t = (json.loads(r.get('DataJson') or '{}') or {}).get('task') or {}
+        except ValueError: continue
+        if str(t.get('TaskId')) == m[1]: return True
+    return False
+
+
 def brought_up(item: dict, picked: bool = False) -> str:
     """THE CARD CARRIES IT (the owner, 2026-10-21: "free text should almost never be used in the assistant - it should be bringing up
     UI components"): on the desk an item comes up under a few words that name it, never a paragraph restating the card beside them -
@@ -3440,7 +3453,10 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         # clicked further down, say - is still walkable when the bottom is reached. It is named here, and the next walk starts with it.
         skipped = [i for i in left if i.get('actionable', True) and not i.get('put_down') and not i.get('surfaced') and not i.get('deferred')
                    and not funnel._not_yet(i) and not any(k and k in (i['key'], *i.get('aliases', ())) for k in (leaving, exclude))]
-        if key: say = "I can't find that one - it may be older than what I keep, or it went out under another subject."
+        # ...A TASK REMOVED is said as removed (trust audit S4, 2026-10-28): its link said "I can't find that one", as if it never was
+        gone = bool(key) and removed_task(store, key)
+        if gone: say = "That task was removed - it's in Recently deleted."
+        elif key: say = "I can't find that one - it may be older than what I keep, or it went out under another subject."
         elif not only and skipped:
             n = len(skipped)
             # BUTTONS DO THE TALKING (the owner, 2026-10-23: "yes remove the sentence, just the button"): on the desk the row by the prompt
@@ -3503,13 +3519,14 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             opens = [buttons.chip('walk'), *opens]
         with guarded():
             put_down()
-            if not key: set_current(store, tid, None, actor)                  # the walk ran out: nothing is on the table
+            # the walk ran out, or the link named a removed task - its card is no place to stand: nothing is on the table
+            if not key or gone: set_current(store, tid, None, actor)
             # ...and the next walk is a new one: every open task this walk passed comes up again, from the top (2026-10-21)
             if over: funnel.new_walk(store)
             record(store, tid, 'assistant', say, {'kind': 'words', 'key': None, 'chips': opens} if opens else None)
         # `over`: the walk itself ran out (not a name that was not found, not one filter done) - a phone offers the hand-back
         return {'item': None, 'say': say, 'options': [], 'chips': opens or walk_chips(len(left)), 'left': len(p['items']),
-                'exhausted': only if (only and left) else None, 'over': over}
+                'exhausted': only if (only and left) else None, 'over': over, **({'gone': True} if gone else {})}
     # A TASK AN AGENT IS WORKING is walked like any other task, in the rail's order, and goes on the table with its agent's pane
     # (the owner, 2026-10-21): Next used to say "is with the agent right now" and skip it, so a task jumped out of the walk - and
     # out of On you, to Agents working - every time its agent started, and back when it stopped.

@@ -1289,11 +1289,11 @@ def who_of(store, item: dict) -> dict:
 
 
 def press(store, key: str, advised: str, pressed: str, rev: str = None, surface: str = 'desk', lit: str = None, live: list = None,
-          item: dict = None) -> int:
+          item: dict = None, greyed: list = None) -> int:
     """One press on `key`, on any surface, lit or not (presses.record keeps it - phase B, 2026-10-23: only a desk press under a line was
     kept). `advised`: the Advisor's verb if its line showed, judged at `rev`. Returns the row id, or 0 when nothing was kept."""
     from . import presses
-    rid, _ = presses.kept(store, key, pressed, surface, lit=lit, live=live, rev=rev, advised=advised or '', item=item)
+    rid, _ = presses.kept(store, key, pressed, surface, lit=lit, live=live, rev=rev, advised=advised or '', item=item, greyed=greyed)
     # ...and nothing more: a press is not a fact about how the owner works (the owner, 2026-10-25), and never a correction for the
     # reflection, which writes what TRIAGE reads (2026-10-23)
     return rid

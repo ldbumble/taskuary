@@ -3,7 +3,8 @@
   "rules": [
     { "if": "live", "stage": "agent_working", "_": "an agent's session is open - working, or waiting on you at its prompt" },
     { "if": "waiting", "stage": "waiting", "_": "handed to a person: nothing is yours until they answer" },
-    { "if": "closed", "stage": "done", "_": "marked done, closed by its agent, or removed" },
+    { "if": "agent_closed", "stage": "closed_by_agent", "_": "closed by its own agent: who closed it and why are the Agent's (trust audit S2, 2026-10-28)" },
+    { "if": "closed", "stage": "done", "_": "marked done or removed" },
     { "if": "drafted", "stage": "close_out", "_": "Close out has something of its own: a draft or emails waiting for Send, something that went out, a write-up" },
     { "if": "result", "stage": "agent_result", "_": "an agent finished, stopped or failed, and its Result (or why it failed) is the move" },
     { "if": "owed", "stage": "to_reply", "_": "somebody wrote and is owed a reply, nothing drafted yet" },
@@ -18,6 +19,7 @@
     { "key": "agent_result", "word": "agent result", "section": "agent", "main": "work", "shows": "the agent's Result - or why its run failed, with Try again", "drawer": "left: Came from", "lit": false, "advisor": "main", "verbs": ["close", "continue"] },
     { "key": "close_out", "word": "close out", "section": "close", "main": "work", "shows": "Close out - the draft or emails waiting for Send, what went out", "drawer": "left: Came from", "lit": false, "advisor": "main", "verbs": ["approve", "redraft", "close"] },
     { "key": "waiting", "word": "waiting on someone", "section": "from", "main": "task", "shows": "the task, with who it waits on and when it is due - nothing is yours", "drawer": "right: Agent and Close out", "lit": false, "advisor": "drawer", "verbs": ["defer", "close"] },
+    { "key": "closed_by_agent", "word": "done", "section": "agent", "main": "work", "shows": "the Agent - who closed it and why, and its Result", "drawer": "left: Came from", "lit": false, "advisor": null, "verbs": ["reopen"] },
     { "key": "done", "word": "done", "section": "close", "main": "work", "shows": "how it closed - the close and its note, what went out, or the agent's Result", "drawer": "left: Came from", "lit": false, "advisor": null, "verbs": ["reopen"] }
   ]
 }

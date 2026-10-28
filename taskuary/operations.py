@@ -43,6 +43,7 @@ KINDS = {
     'task.let_go':              ('item', ('key',), None),
     'task.elsewhere':           ('item', ('key',), None),
     'calendar.answer':          ('message', ('act',), None),
+    'meeting.new':              ('text', (), None),            # a meeting asked for in the chat: a task's Find a time, or where to find it (concierge._meeting)
     'calendar.prepare':         ('item', ('key',), None),        # a meeting's Prepare: a researcher on its people and subject (server.calendar_prepare)     # an invite's answer or a thread's meeting, DRAFTED (calwrite.draft)
     'idea.act':                 ('idea', ('verb',), None),        # an Advisor idea's own words (assistant.act)
     'review.approve':           ('review', (), None),

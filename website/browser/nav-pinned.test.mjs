@@ -33,3 +33,32 @@ test("Next stands at the same x on three tasks in a row", { timeout: 300000 }, a
   assert.ok(seen.every((s) => Math.abs(s.x - seen[0].x) <= 1), `Next's x on each of the three: ${JSON.stringify(seen.map((s) => s.x))}`);
   assert.deepEqual(errors, []);
 });
+
+/* ...AND CENTRED WHEN IT IS ALL THE ROW HAS (the owner, 2026-10-28: "nav should be in middle if nothing else"): an FYI batch's row is Back and
+   All read, next and nothing else - pinned to the start it sat at the far left of an empty row. Alone it is centred over the row; with a task's
+   groups beside it, it is back at the start. */
+const navBox = (page) => page.evaluate(() => {
+  const row = document.querySelector(".tq-dock [data-tq-row] .tq-arow-verbs"), nav = row?.querySelector(".tq-cl-next");
+  if (!row || !nav) return null;
+  const r = row.getBoundingClientRect(), n = nav.getBoundingClientRect();
+  return { groups: row.querySelectorAll(":scope > .tq-cl").length, left: Math.round(n.left - r.left), right: Math.round(r.right - n.right),
+    next: nav.querySelector("[data-tq-next]")?.textContent.trim() || "" };
+});
+test("Nav alone on the row is centred; beside other groups it holds the start", { timeout: 300000 }, async (t) => {
+  const { page, errors } = await boot(t, { width: 1366, height: 768 });
+  const run = await page.$$eval("[data-tq-run=task] .tq-pile-row", (els) => els.map((e) => e.getAttribute("data-tq-key")));
+  await clickRow(page, run[0]);
+  await until(async () => (await on(page)) === run[0] && !!(await navBox(page))); await sleep(2500);
+  const task = await navBox(page);
+  assert.ok(task.groups > 1 && task.left <= 2, `a task's row: Nav at the start beside its groups ${JSON.stringify(task)}`);
+  // the first FYI batch, the way fyi-count-between-batches gets there: the last report, then Next
+  await page.evaluate(() => document.querySelector('[data-tq-section-head="reports"] .fold').click()); await sleep(1500);
+  await page.evaluate(() => [...document.querySelectorAll('[data-tq-run="reports"] .tq-pile-row[data-tq-key] .card')].at(-1).click()); await sleep(3500);
+  await pressNext(page);
+  assert.ok(await until(async () => (await navBox(page))?.next === "All read, next"), "an FYI batch is on the table");
+  await sleep(1500);
+  const fyi = await navBox(page);
+  assert.equal(fyi.groups, 1, `the batch's row is Nav alone ${JSON.stringify(fyi)}`);
+  assert.ok(fyi.left > 100 && Math.abs(fyi.left - fyi.right) <= 2, `Nav alone is centred ${JSON.stringify(fyi)}`);
+  assert.deepEqual(errors, []);
+});

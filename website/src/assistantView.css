@@ -767,6 +767,10 @@
    Next left the cursor. Nav holds the start; the item's own types centre in the room left (the two auto margins share it) */
 .tq-arow-verbs > .tq-cl-next { margin-right: auto; }
 .tq-arow-verbs > .tq-cl-next ~ .tq-cl:last-child { margin-right: auto; }
+/* ...but ALONE ON THE ROW it is centred (the owner, 2026-10-28: "nav should be in middle if nothing else" - an FYI batch's Back and All read,
+   next sat at the far left of an empty row), and the unseen Back room goes with the pin: centred, it would only push the pill off-centre */
+.tq-arow-verbs > .tq-cl-next:only-child { margin-right: 0; }
+.tq-arow-verbs > .tq-cl-next:only-child [data-tq-back-room] { display: none; }
 /* ...and on the first row, with no Back, Back's room is kept unseen so Next does not slide left (ActionRow data-tq-back-room) */
 .tq-cl [data-tq-back-room] { visibility: hidden; display: inline-flex; align-items: center; pointer-events: none; }
 .tq-arow-verbs.tight > .tq-cl:not(.tq-cl-next) { flex-shrink: 1; }

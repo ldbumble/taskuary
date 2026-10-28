@@ -92,10 +92,10 @@ def _grouped_messages_sql(cur):
 # (CensusGeneration) skips the pass: same inputs, same membership. None means any UPDATE counts.
 # A column the census starts reading must be added here - test_census_skips_what_cannot_move_it pins it.
 CENSUS_INPUTS = {
-    'task': ('TaskId', 'SourceRef'),
+    'task': ('TaskId', 'SourceRef', 'CreatedAt'),
     'message': ('MessageId', 'TaskId', 'Status', 'Channel', 'Brief'),
     'review': ('ReviewId', 'MessageId', 'TaskId'),
-    'idea': ('IdeaId', 'ActionJson', 'MessageId'),
+    'idea': ('IdeaId', 'ActionJson', 'MessageId', 'FirstSeen'),
     'attachment': ('AttachmentId', 'MessageId'),
     'run': ('RunId', 'TaskId'),
     'processing_item': ('ItemId', 'Kind', 'RedirectItemId', 'CreatedAt'),
@@ -248,6 +248,12 @@ def reconcile_membership(cur, *, stamp, new_item_id, follow_item):
         try: action = json.loads(row.get('ActionJson') or '{}')
         except (ValueError, TypeError): action = {}
         tid = str(action.get('tid')) if action.get('tid') else spawned.get(f'assistant:idea:{iid}')
+        # ...and a line about a MAIL that became work AFTER the line was said is about that task: keyed by the mail alone, it
+        # stayed a root of its own when the owner made a task of the mail, and drew a second row beside the task's (2026-10-28).
+        # Only a task made since: a line said over a task that already stood carries its tid when the task was open
+        # (assistant.parse), and one about work closed before it stands alone, or the closed row would file it (I6)
+        on = message_group.get(str(action.get('mid'))) if not tid and action.get('mid') else None
+        if on and on[0] == 'task' and str(tasks[on[1]].get('CreatedAt') or '') >= str(row.get('FirstSeen') or '~'): tid = on[1]
         key = ('task', tid) if tid in tasks else ('idea', iid)
         if key[0] == 'idea': add_group(key, 'idea', ('idea', iid))
         groups[key]['entities'].add(('idea', iid))

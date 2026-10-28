@@ -1155,6 +1155,10 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES, report_id=N
             # ...and one about work closed LONGER ago stands alone: tied to that task, the rail filed it under a closed
             # row and nobody saw it (I6, 2026-09-27)
             if pick and not act.get('tid') and pick.get('Status') not in ('done', 'dropped'): act['tid'] = pick['TaskId']
+            # ...and a line about a mail ON an open task is that task's, `about` or not: keyed by the mail alone it was a row of its
+            # own beside the task's row for the same mail - one mail in two places (2026-10-28)
+            home = store.get_task((store.get_message(mid) or {}).get('TaskId') or 0) if mid and not act.get('tid') else None
+            if home and home.get('Status') not in ('done', 'dropped'): act['tid'] = home['TaskId']
             # where in the post it goes. Only an idea gets to choose: a candidate the hub found is
             # placed by the producer that found it, and no model answer overrides that.
             act['section'] = section_of({'section': s.get('section'), 'kind': 'idea'})

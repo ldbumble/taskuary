@@ -135,7 +135,7 @@ def row_lane(row: dict) -> str:
     return {1: 'time', 3: 'report', 4: 'fyi'}[band]
 
 
-MEMBERSHIP_RULES = 'skipped-or-autoreply-without-task-ungrouped-2'   # bump when reconcile_membership groups entities differently -
+MEMBERSHIP_RULES = 'idea-joins-the-task-its-mail-became-3'   # bump when reconcile_membership groups entities differently -
 # reconcile returns already_current while nothing is dirty, so a RULE change leaves a graph nothing marks stale until this moves
 PRESENTATION_VERSION = 1
 HIDDEN_MESSAGES = {'context', 'history', 'skipped', 'autoreply'}
@@ -247,6 +247,11 @@ def message_row(message, item, threads, now, *, full=False):
     reviews = [r for r in view.get('reviews', []) if r.get('MessageId') == mid]
     review = max(reviews, key=lambda r: r['ReviewId']) if reviews else {}
     routes = [r for r in view.get('routes', []) if r.get('MessageId') == mid]
+    # A JOIN THE MAIL HAS LEFT IS NOT ITS REASON (2026-10-28): a mail the router attached to a closed task went back to the feed
+    # when the owner pressed Not a task on it, and its FYI row still said "same conversation thread as TQ-n, which was closed"
+    # about a task that was gone. The attach - and the queue entry it settled - speak for a task the mail is no longer on.
+    left = [r['RouteId'] for r in routes if r.get('Decision') == 'attach' and (tid is None or r.get('TaskId') != tid)]   # deleting a task nulls both
+    if left: routes = [r for r in routes if r['RouteId'] not in left and not (r.get('Decision') == 'queued' and r['RouteId'] < max(left))]
     route = max(routes, key=lambda r: r['RouteId']) if routes else {}
     thread = threads.get(message.get('ConversationId'), [])
     sent = message.get('SentAt') or ''

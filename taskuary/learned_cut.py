@@ -23,7 +23,7 @@ PEOPLE, CARE, WORK, PROMISES, BRING = SECTIONS.values()
 # ...and triage, and the report's routing judge, read the WHOLE of it every time, through `whole` - not a budgeted cut (the owner,
 # 2026-10-27: "triage needs the entire thing to make a decision every time"). Agents read it on demand (agenttools' owner_memory,
 # `taskuary --memory`) instead of carrying it in their start prompt (2026-10-27: "progressive disclosure")
-READS = {'triage': tuple(SECTIONS), 'drafter': ('people',), 'advisor': ('people', 'care', 'work', 'promises'), 'assistant': tuple(SECTIONS),
+READS = {'triage': tuple(SECTIONS), 'drafter': ('people',), 'advisor': ('people', 'work', 'care', 'promises'), 'assistant': tuple(SECTIONS),
          'agents': tuple(SECTIONS)}
 # who reads a section, as the owner reads it - triage takes the people lines for a task's PRIORITY only (the owner, 2026-10-25)
 READER_WORDS = {'triage': 'triage', 'drafter': 'drafts', 'advisor': 'the Advisor', 'assistant': 'the Assistant', 'agents': 'agents'}
@@ -36,7 +36,11 @@ def reads_label(slug: str) -> str:
 
 
 TITLE = {'people': 'Your people', 'care': 'What you care about', 'work': 'How you work', 'promises': 'Promises', 'bring': 'What to bring up'}
-BUDGET = {'triage': 1500, 'drafter': 600, 'agents': 3500, 'assistant': 2000, 'advisor': 2000}
+BUDGET = {'triage': 1500, 'drafter': 600, 'agents': 3500, 'assistant': 2000, 'advisor': 4000}
+# ...and the section a reader takes FIRST, after the lines about the people on the item: what the owner cares about, except the Advisor's,
+# which is how they work - its 2000 characters filled with what-becomes-a-task lines and How you work never arrived (the Advisor audit,
+# 2026-10-28); a line saying how the owner handles a thing is what a lit button rests on
+FIRST = {'advisor': 'work'}
 OVER = 'learned_over_budget'          # {reader: [keys]} - the lines a reader's budget left out on its last read
 USE_KEEP = 20_000                     # memory_use rows kept; the oldest go past it
 _PLACEHOLDER = re.compile(r'_\([^)]*\)_', re.S)
@@ -128,15 +132,18 @@ def about_mail(msg: dict) -> dict:
 # ones. The lines about the people on this very item still come first: there are few of them, and triage weighs the priority by them.
 
 
-def cut(ls: list, budget: int, about: dict = None) -> tuple:
+def cut(ls: list, budget: int, about: dict = None, first: str = 'care') -> tuple:
     """(lines that fit, keys that did not) - whole lines, closest scope first; the doc's own order breaks ties. Lines may carry their
     section slug as a third item: then care lines go before others of the same scope, and the owner's own (untagged) lines before
-    learned ones."""
+    learned ones. A `first` other than care leads from scope 2 on: its lines go before every topic, domain and general line of the
+    others, so the budget never fills before it is read."""
     from .learnedgraph import TAG
     def key(il):
         i, (raw, k, *s) = il
         s = s[0] if s else ''
-        return (rank(raw, k, about), bool(s) and s != 'care', bool(s) and bool(TAG.match(raw)), i)
+        r = rank(raw, k, about)
+        if first != 'care' and r >= 2 and r != 5: r = 2 if s == first else r + 0.5
+        return (r, bool(s) and s != first, bool(s) and bool(TAG.match(raw)), i)
     used, keep, over = 0, [], []
     for _, (raw, k, *_s) in sorted(enumerate(ls), key=key):
         if used + len(raw) + 1 > budget: over.append(k); continue
@@ -204,7 +211,7 @@ def for_reader(store, reader: str, about: dict = None, budget: int = None, doc: 
     # it reaches the readers of the mail it is about, by what it is about (ingest.applicable_notes) - hundreds of them, about everyone
     # else, would be the whole budget
     ls = [x for x in ls if rank(x[0], x[1], about) != 5]
-    keep, over = cut(ls, budget or BUDGET[reader], about)
+    keep, over = cut(ls, budget or BUDGET[reader], about, FIRST.get(reader, 'care'))
     at = {raw: i for i, raw in enumerate(keep)}
     try: _note_over(store, reader, over)
     except Exception: pass

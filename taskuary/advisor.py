@@ -135,7 +135,9 @@ SYSTEM = (
     "ask is that person's kind of work - it never makes a draft that promises what nothing here shows ready to send, never answers a "
     "failure (a refused address is fixed, not replied to, however soon the owner answers that person). "
     f"A line saying whom the owner hands a kind of ask to is the reason for {L('forward')} and nothing else - never said over "
-    "another verb. When your line rests on a memory line or a usual line, cite its id. "
+    "another verb. When your line rests on a memory line or a usual line, cite its id - and the line SAYS what that memory is, the "
+    "remembered fact itself (\"you hand payroll asks to Ray\"), never only what the card already shows (\"a notice; no ask here\"): a line that "
+    "cites a memory without saying it is not shown. "
     # ...and A REPORT NOBODY WANTS (the owner, 2026-10-27: the Advisor may suggest switching a report off) - the press stays the owner's
     f"{L('report_off')} only over a report run whose findings are all about something a What you care about line says the owner does "
     "not care about - cite that line, and the line says what it is about; never over a run that failed, never on a guess. "
@@ -157,7 +159,9 @@ SYSTEM = (
     "EXCEPT when the EVENT is item.shown: the owner is looking at this item right now and is owed a next step, so pick the verb the "
     f"item's own facts make right (a person waiting on them: {L('reply')}; an agent asking them something is answered in its own pane, "
     "not by a verb - pick what else its facts make right, or nothing; nothing "
-    f"for them to do: {L('close')} or {L('let_go')}; work an agent left: {L('continue')} or {L('approve')}; a draft waiting: {L('approve')}; "
+    f"for them to do: {L('close')} or {L('let_go')}; work an agent left: {L('continue')} or {L('approve')}; an agent that stopped after "
+    f"finishing (its run ended with a result or a done note): {L('close')} - {L('continue')} only for one that stopped mid-work; a draft waiting: "
+    f"{L('approve')} - {L('reply')} over it only for a caution about the draft itself, said in the line; "
     f"a reply already sent (an A REPLY WAS ALREADY SENT line) - sending never closes the task - and nothing left to do: {L('close')}, "
     "never an answer the sent reply already gave - someone is waiting only when they wrote again after it; a reply that failed to "
     "send: the fix offered with it) - whichever of those is "
@@ -268,7 +272,7 @@ def attached(store, target_kind, target_id) -> str:
 # THE PROMPT IS BOUNDED: every section has its own cap, and past PROMPT_CAP characters whole sections go from the end - the least
 # pointed first (the month's outcomes, the hub's dossier, the owner's documents) - never a cut through a line. The item, its verbs,
 # what failed and what was sent always stay.
-PROMPT_CAP = 9000
+PROMPT_CAP = 11000      # ...with room for the memory's 4000 (learned_cut.BUDGET, 2026-10-28): at 9000 it went first, from the end
 _KEEP = 4                # EVENT, THE ITEM, PREVIEW, VERBS OFFERED
 
 
@@ -344,6 +348,35 @@ def memory_ids(store, item, target_kind, target_id) -> set:
             out.add(learned_cut.cite_of(k))
             if (m := TAG.match(raw)): out |= {e.strip() for e in m.group('ev').split(',') if e.strip()}
     return out
+
+
+def remembered(store, item, target_kind, target_id, ev) -> list:
+    """What the memory an answer cites SAYS: each cited LEARNED line (its cite id, or an episode its tag names) and each usual line
+    naming a cited id - the texts a line resting on them must carry a word of."""
+    from . import learned_cut
+    from .learnedgraph import TAG
+    want, out = {str(e) for e in ev or ()}, []
+    doc = store.doc('learned') or ''
+    for s in learned_cut.READS['advisor']:
+        for raw, k in learned_cut.lines(doc, learned_cut.SECTIONS[s]):
+            m = TAG.match(raw)
+            if learned_cut.cite_of(k) in want or (m and want & {e.strip() for e in (m.group('ev') or '').split(',')}):
+                out.append(m.group('text') if m else raw)
+    if target_kind in ('task', 'message'): out += [l for l in _usual(store, item, target_kind, target_id)[0] if want & set(re.findall(_ID, l))]
+    return out
+def _stems(text) -> set: return {w[:5] for w in _content(re.sub(_ID, ' ', str(text or '')))}
+def hollow(store, item: dict, tgt, line: str, ev) -> bool:
+    """WHETHER A LINE CITES A MEMORY BUT DOES NOT SAY IT (the Advisor audit, 2026-10-28): "GitHub notice; no ask here" cited a memory line
+    and said only what the card shows. Hollow when it cites one the Advisor reads and carries no word of what that memory says beyond
+    the card's own words (its title, who, preview, why). A line citing no memory, or one whose memory cannot be read, is never hollow."""
+    try:
+        if not set(ev or ()) & memory_ids(store, item, *tgt): return False
+        mem = set().union(*[_stems(t) for t in remembered(store, item, *tgt, ev)] or [set()])
+        if not mem: return False
+        card = _stems(' '.join(str((item or {}).get(k) or '') for k in ('title', 'who', 'preview', 'why', 'ref', 'channel')))
+        return not (_stems(line) & (mem - card))
+    except Exception as e:
+        logger.debug(f"advisor: no hollow check for {(item or {}).get('key')} - {e}"); return False
 
 
 def _msgs(store, item, target_kind, target_id) -> list:
@@ -522,6 +555,11 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
             last = next((e for e in reversed(workerstate.events(store, int(target_id), st.get('sid'))) if e['Kind'] == st['state']), {})
             said = ' '.join(str(st.get('result') or last.get('Text') or '').split())[:400]
             lines.append(f"THE AGENT'S RUN ENDED ({st['state']})" + (f': {said}' if said else ' - it left no words'))
+        # ...and whether a stopped run left its work finished (a result, a done note) or stopped mid-work (rulebook.left_result)
+        if st.get('state') in ('stopped', 'disconnected'):
+            from . import rulebook
+            lines.append('IT LEFT ITS WORK FINISHED BEFORE IT STOPPED (a result or a done note)' if rulebook.left_result(store, int(target_id))
+                         else 'IT STOPPED MID-WORK: it left no result and no done note')
         # THE WHOLE STORY of a task that came back: the agent finished, the reply went, then new mail reopened it. Read from the card
         # alone ("paused ... ready to resume") it advised Continue for a reason that was not true, and never said what the new mail
         # wanted (the owner, 2026-10-14: "the advisor should just realize what's going on ... as long as it has full context")
@@ -1023,20 +1061,27 @@ def decide(store, key: str, preread: bool = True) -> dict:
         # ...AND AN ANSWER RESTING ON A MEMORY LINE THE OWNER PUT DOWN rests on nothing (the Advisor audit's judge, 2026-10-26): Wrong on
         # a line left the task saying it - the rule's move stands until the item changes and the model reads it again
         if hit and withdrawn(store, json.loads(m.get('EvidenceJson') or '[]')): hit = None
+        # ...A LINE THAT CITES A MEMORY WITHOUT SAYING IT is not shown (the Advisor audit, 2026-10-28): "GitHub notice; no ask here" cited
+        # a memory line and said only what the card shows - the strip says nothing in its place
+        said = plain(m.get('Line') or '', m['Verb'], hit['label']) if hit and m.get('Line') else ''
+        if said and hollow(store, item, tgt, said, json.loads(m.get('EvidenceJson') or '[]')): said = ''
+        # ...AND NO SILENT OVERRIDE (the same audit): the model's Remind me, or its Reply over a draft's Send, stands only with its reason
+        # said - without one, the rule's button stays. A silent Mark done may stand: it was right every time it was seen
+        if hit and mv != verb and not said and (mv == 'defer' or (mv == 'reply' and verb == 'approve')): hit = None
         # the model's verb stands where it differs from the rule's - with its line, the reason the lit button is not the one you would
         # guess; agreeing, the rule's fact stands and the model's sentence goes (ruling 1: no explanation of the obvious button)
         if hit and mv != verb:
             verb, by, ev, kind = mv, 'model', json.loads(m.get('EvidenceJson') or '[]'), m.get('Kind') or 'other'
             # ...cut at a word, as the agreeing memory line is: "...is waiting on y" read as a slip (the Advisor sweep, 2026-10-27)
-            line = '' if r['state'] == 'idea' else _whole_words(plain(m.get('Line') or '', m['Verb'], hit['label']), 64)
+            line = '' if r['state'] == 'idea' else _whole_words(said, 64)
         # ...AND AGREEING, A MEMORY REASON IS SAID (the live memory A/B, 2026-10-26): "You answer Erin the same day" and "Paula takes
         # W-9s now" were read, used, and dropped for agreeing with the lit button - the memory never reached the strip. A line that cites
         # a memory line or a counted usual (memory_ids) is a fact the card does not show; it stands in the rule's place, one line - unless
         # the rule's own line is already a counted usual (asked_late: it carries its evidence)
-        elif hit and r['state'] != 'idea' and m.get('Line') and not (line and r.get('evidence')):
+        elif hit and r['state'] != 'idea' and said and not (line and r.get('evidence')):
             mev = json.loads(m.get('EvidenceJson') or '[]')
             if set(mev) & memory_ids(store, item, *tgt):
-                by, ev, line, kind = 'model', mev, _whole_words(plain(m['Line'], m['Verb'], hit['label']), 60), m.get('Kind') or 'memory'
+                by, ev, line, kind = 'model', mev, _whole_words(said, 60), m.get('Kind') or 'memory'
 
         # NEVER LEFT GUESSING (the owner, 2026-10-15): the item on the table is read now, at this revision, once - the rule's button
         # stands lit meanwhile, and the model's answer arrives by the `advice` live event the page already reads
@@ -1102,7 +1147,9 @@ def checked(store, item: dict, verbs: list, d: dict, rule: dict) -> dict:
     drafted = 'approve' in {v['verb'] for v in verbs}
     if (no := pressable(store, item, verb, verbs)): why = f'{verb}: {no}'
     elif kind == 'draft_caution' and verb == 'approve': why, instead = 'a caution about the draft over its Send', ['redraft']
-    elif kind == 'late' and verb == 'reply' and drafted: why, instead = 'late on a drafted task: the draft is the answer', ['approve']
+    # ...ANY reason but a caution about the draft (the Advisor audit, 2026-10-28): Reply was lit over a waiting draft 4 times of 4, and the
+    # owner sent the draft every time - lateness was only the first reason found doing it
+    elif verb == 'reply' and drafted and kind != 'draft_caution': why, instead = f'{kind} on a drafted task: the draft is the answer', ['approve']
     elif kind == 'same_ask' and verb in ('remove', 'split') and _survives(store, item): why = 'the survivor of a duplicate pair is never folded'
     if not why: return {**d, 'kind': kind}
     lit = (rulebook.RULES.get(d.get('state')) or {}).get('lit') or []

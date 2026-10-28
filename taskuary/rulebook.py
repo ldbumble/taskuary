@@ -125,6 +125,21 @@ def changes_waiting(store, tid) -> bool:
         logger.debug(f'rulebook: no changes read for {tid} - {e}'); return False
 
 
+def left_result(store, tid) -> bool:
+    """Whether the task's agent left its work finished before it stopped: a done note on the board (newer than any ready note), a
+    finished event no later prompt took up, or a run that kept a result - facts the app keeps, never the words of the result."""
+    try:
+        n = store._one("SELECT Kind FROM boardnote WHERE TaskId=? AND Kind IN ('ready','done') ORDER BY NoteId DESC LIMIT 1", (int(tid),))
+        if n and n.get('Kind') == 'done': return True
+        fin = store.last_worker_event(int(tid), kinds=('finished',))
+        work = fin and store.last_worker_event(int(tid), kinds=('working',))
+        if fin and str(fin.get('Text') or '').strip() and (not work or work['Id'] < fin['Id']): return True
+        r = store._one("SELECT Result, Status FROM run WHERE TaskId=? ORDER BY RunId DESC LIMIT 1", (int(tid),)) or {}
+        return bool(str(r.get('Result') or '').strip()) and r.get('Status') not in ('failed', 'error', 'running')
+    except Exception as e:
+        logger.debug(f'rulebook: no result read for {tid} - {e}'); return False
+
+
 def calendar_on(store) -> bool:
     from . import demo, calendar
     try: return demo.enabled() or calendar.reachable(store)
@@ -217,7 +232,9 @@ def state(store, item: dict, verbs: list) -> tuple:
         try: at = (store._one('SELECT MAX(at) AS at FROM (SELECT MAX(CreatedAt) AS at FROM worker_event WHERE TaskId=? UNION ALL '
                               'SELECT MAX(IFNULL(FinishedAt, UpdatedAt)) FROM run WHERE TaskId=?)', (int(tid), int(tid))) or {}).get('at') if tid else None
         except Exception: at = None
-        return 'stopped', {'ago': ago(at)}
+        # ...A STOPPED RUN THAT FINISHED ITS WORK is put down, not picked up (the Advisor audit, 2026-10-28: on a stopped agent the owner
+        # pressed Continue 3 of 16 times and Mark done 11) - Continue stays for an agent that stopped mid-work
+        return ('stopped_done', {}) if tid and left_result(store, tid) else ('stopped', {'ago': ago(at)})
     if lane == 'forgotten':
         who, days = slipped(store, it, t)
         return 'waiting_late', {'who': who, 'days': days}
@@ -313,7 +330,7 @@ def decide(store, item: dict, verbs: list) -> dict:
 # ...and a REPORT RUN asks it only where What you care about has a line: whether the run's findings are about something the owner said they do
 # not care about is the model's to read (no word lists), and its Pause this report stands only on an answer citing such a line (the owner,
 # 2026-10-27: "the Advisor may suggest switching a report off")
-MEMORY_ASKS = frozenset({'report_ok', 'waiting', 'waiting_late', 'waiting_late_usual', 'waiting_overdue', 'goal', 'goal_late', 'stopped', 'agent_done', 'done_list', 'own'})
+MEMORY_ASKS = frozenset({'report_ok', 'waiting', 'waiting_late', 'waiting_late_usual', 'waiting_overdue', 'goal', 'goal_late', 'stopped', 'stopped_done', 'agent_done', 'done_list', 'own'})
 
 
 def memory_on(store, item: dict) -> list:

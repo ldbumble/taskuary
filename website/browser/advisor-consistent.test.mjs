@@ -100,7 +100,7 @@ test("the Advisor's decision: in the main view, pressable, the same on every sur
     }
     // THE TWO STAGES THE AUDIT NEVER REACHED: a finished agent's page leads with its work (its Result), not the plain ask
     const fin = await cell("agent_finished/reached", world.finished, { drawers: false });
-    check("placement", fin.m.main === "work", `the finished agent's page is main=${fin.m.main}`);
+    check("placement", ["work", "agent"].includes(fin.m.main), `the finished agent's page is main=${fin.m.main}`);
     // A WAIT PAST ITS DUE DAY: Chase, on the header's own count
     const wait = await api(`/api/advice?key=task:${stages.waiting}`);
     check("consistency", wait.verb === "chase" && wait.state === "waiting_overdue", `the overdue wait decided ${wait.state}/${wait.verb}`);

@@ -42,7 +42,7 @@ test("a task its agent closed opens on its Result, saying it is handled, who clo
     return { agentHead: agent?.querySelector("[data-tq-section-head]")?.innerText || "", agentFolded: full?.getAttribute("aria-expanded") === "false",
       closeFolded: !!document.querySelector("[data-tq-section-tab=close]"), handled: document.querySelector("[data-tq-handled]")?.textContent || "", text: document.body.innerText };
   });
-  assert.match(seen.agentHead, /^2 · Agent/i, "the agent's section");
+  assert.match(seen.agentHead, /^Agent/, "the agent's section, by its name alone (2026-10-28)");
   // ...resting on its summary: one press unfolds the rest (the owner, 2026-10-27: "just the summary"; "why are there 2 buttons for full results?")
   assert.equal(seen.agentFolded, true, "the Result rests on its summary");
   assert.ok(await page.$("[data-tq-result-summary]"), "the Result's summary is on screen");

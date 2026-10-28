@@ -67,7 +67,7 @@ class OnTheDesk(unittest.TestCase):
     def test_with_no_such_task_it_says_where_scheduling_lives_and_writes_a_to_do_never_an_agent(self):
         s = outlook_store()
         out, spawn = say(s, ASK, None, call(who='Gail', about='the Q3 budget'))
-        self.assertTrue(out['say'].startswith(concierge.NO_THREAD), out['say'])
+        self.assertTrue(out['say'].startswith(concierge.MEETING_NO_THREAD), out['say'])
         self.assertEqual((out['new']['kind'], out['new']['text']), ('note', 'Meeting with Gail about the Q3 budget'))
         spawn.assert_not_called()
         self.assertEqual([r for r in s._rows('SELECT * FROM review')], [])
@@ -88,7 +88,7 @@ class OnThePhone(unittest.TestCase):
         s = outlook_store()
         with concierge.delivering(concierge.PHONE):
             out, spawn = say(s, ASK, None, call(who='Gail', about='the Q3 budget'))
-        self.assertTrue(out['say'].startswith(concierge.NO_THREAD), out['say'])
+        self.assertTrue(out['say'].startswith(concierge.MEETING_NO_THREAD), out['say'])
         self.assertNotIn('new', out); spawn.assert_not_called()
 
 

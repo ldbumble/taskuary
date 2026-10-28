@@ -4608,10 +4608,10 @@ def task_email(task_id: int, body: TaskEmailBody):
     except ValueError as e: raise HTTPException(422, str(e))
     except Exception as e: raise HTTPException(422, str(e)[:400])
 
-class NoteBody(BaseModel): title: str; body: str = ''; when: str | None = None
+class OwnNoteBody(BaseModel): title: str; body: str = ''; when: str | None = None
 
 @app.post('/api/notes')
-def own_note(body: NoteBody):
+def own_note(body: OwnNoteBody):
     """A note to yourself: a reminder, an idea, a thing to come back to.
 
     Everything on the Timeline until now was something that HAPPENED to the owner - mail, a
@@ -5232,7 +5232,7 @@ def concierge_state():
             # the demo's own brain is a script (demo.brain): "No AI connected" over a chat that answered was a lie (the UX walk, 2026-10-22)
             'scripted': demo.enabled()}
 
-class HandoffBody(BaseModel): channel: str
+class ConciergeHandoffBody(BaseModel): channel: str
 
 # NO DESKTOP LOCK WHILE THE WALK IS ON THE PHONE (the owner, 2026-10-23: "we used to have that if we were talking on the phone it
 # would lock the screen on desktop but we should probably get rid of that"): every desktop turn below runs as it would without a
@@ -5240,7 +5240,7 @@ class HandoffBody(BaseModel): channel: str
 # verdicts.decide's pending check).
 
 @app.post('/api/concierge/handoff')
-def concierge_handoff(body: HandoffBody):
+def concierge_handoff(body: ConciergeHandoffBody):
     """Send the walk to a chat the owner already has connected: it says hello there. The tab keeps working."""
     from . import remote_assistant
     try: return remote_assistant.start_handoff(store, body.channel, ACTOR)

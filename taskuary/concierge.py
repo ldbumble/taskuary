@@ -1258,7 +1258,7 @@ def _new(store, tid: int, table: dict | None, want: str, text: str) -> dict:
 # writes the meeting into New as a to-do of the owner's (the new-task road); with no calendar, one line and the card that connects one. There
 # is no meeting screen of its own - whether there should be is the owner's call, not this router's.
 NO_CALENDAR = 'No calendar is connected, so I cannot set up a meeting yet - connect one and ask again.'
-NO_THREAD = "Scheduling works from a task's Find a time, on a thread that asks for a time - nothing here does."
+MEETING_NO_THREAD = "Scheduling works from a task's Find a time, on a thread that asks for a time - nothing here does."
 
 def _meeting(store, tid: int, table: dict | None, params: dict, text: str, actor: str) -> dict:
     from . import calwrite
@@ -1281,11 +1281,11 @@ def _meeting(store, tid: int, table: dict | None, params: dict, text: str, actor
     job = ' '.join(x for x in ('Meeting', f"with {', '.join(map(str, named))}" if named else '', f'about {about}' if about else '',
                                str(params.get('when') or '').strip()[:60]) if x)
     if not routes():
-        said = f'{NO_THREAD} Say "make a task: {job}" and it goes on your list.'
+        said = f'{MEETING_NO_THREAD} Say "make a task: {job}" and it goes on your list.'
         record(store, tid, 'assistant', said)
         return {'say': said, 'options': [], 'decision': None}
     out = _new(store, tid, table, 'task', job)
-    out['say'] = f'{NO_THREAD} Wrote "{job}" into New - Note it there makes it a task.'
+    out['say'] = f'{MEETING_NO_THREAD} Wrote "{job}" into New for you to file.'
     rewrite(store, out['new']['line'], out['say'])
     return out
 

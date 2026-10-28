@@ -48,7 +48,8 @@ test("an ended general session's chat gives the page back to the stage that is f
   assert.match(src, /\{workspaceMode === "general" && \(liveSession \|\| pane === "agent"\) \? \(/);
   // ...a finished one's chat is the rest of its Result, behind the Result heading while the Result rests on its summary - unless it asks (2026-10-27)
   // ...or that is at work again: a turn under way shows (its band or its thinking line)
-  assert.match(src, /\.\.\.\(resultRest \? \{ "&:not\(:has\(\[data-tq-asking\], \.tq-aui-band, \.tq-aui-thinking\)\)": \{ display: "none" \} \} : \{\}\)/);
+  // ...and a failed run rests on its reason and fix the same way (2026-10-28)
+  assert.match(src, /\.\.\.\(resultRest \|\| \(failedRun && !resultOpen\) \? \{ "&:not\(:has\(\[data-tq-asking\], \.tq-aui-band, \.tq-aui-thinking\)\)": \{ display: "none" \} \} : \{\}\)/);
 });
 
 // THE CHAT'S STRIP RIDES IN THE STEP'S HEADING ON THE CANVAS: "Agent work" on one row and the agent's name, brain and Full screen on

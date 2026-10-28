@@ -291,7 +291,9 @@ const SECTION_TAB = (here) => ({ appearance: "none", font: "inherit", cursor: "p
   "& [data-tq-tab-line]": { fontSize: 11.5, lineHeight: 1.4, color: DIM, overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical",
     overflow: "hidden", minHeight: 0, flexShrink: 1, maxWidth: "100%" },
   "& [data-tq-tab-foot]": { mt: "auto", pt: 1, borderTop: `1px solid ${FOCUS_EDGE}`, width: "100%", display: "flex", flexDirection: "column", gap: 0.5, flexShrink: 0 },
+  "& [data-tq-tab-status-box]": { height: "2.8em", fontSize: 11.5, lineHeight: 1.4, display: "flex", flexDirection: "column", overflow: "hidden" },
   "& [data-tq-tab-status]": { fontSize: 11.5, lineHeight: 1.4, color: "#5f7a5f", overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" },
+  "& [data-tq-tab-status][data-tq-one]": { WebkitLineClamp: 1 },
   "& [data-tq-tab-here]": { fontSize: 11.5, lineHeight: 1.4, color: ACCENT2, fontWeight: 600 },
   "& [data-tq-tab-n]": { fontSize: 30, fontWeight: 300, color: "#c9c3b8", lineHeight: 1, letterSpacing: "-.02em", mt: 0.5 },
   "&:hover": { bgcolor: "#f8f6f2" }, "&:hover [data-tq-tab-arrow]": { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT },
@@ -389,9 +391,13 @@ function SectionTab({ sec, lines = [], foot = "", here = false, before = false, 
       <Box component="span" aria-hidden data-tq-tab-arrow="">{before ? "›" : "‹"}</Box>
       <Box component="span" data-tq-tab-name="">{sec.name}</Box>
       {lines.map((l) => <Box component="span" key={l} data-tq-tab-line="">{l}</Box>)}
+      {/* ...its foot ONE HEIGHT in every tab (the owner, 2026-10-27: "the 1 line and 2 line are not on the same line"): the rule, a status
+          block of two lines - there whether it says anything or not - then the number, so rules and numbers line up across the tabs */}
       <Box component="span" data-tq-tab-foot="">
-        {foot && <Box component="span" data-tq-tab-status="">{foot}</Box>}
-        {here && <Box component="span" data-tq-tab-here="">● Up to here</Box>}
+        <Box component="span" data-tq-tab-status-box="">
+          {here && <Box component="span" data-tq-tab-here="">● Up to here</Box>}
+          {foot && <Box component="span" data-tq-tab-status="" data-tq-one={here ? "" : undefined}>{foot}</Box>}
+        </Box>
         <Box component="span" aria-hidden data-tq-tab-n="">{sec.n}</Box>
       </Box>
     </Box>

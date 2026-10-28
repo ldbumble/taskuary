@@ -3635,7 +3635,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               under it as its floor (the box is the panel's last band, assistantView.css). Shut, it stays mounted: the last line's chips are
               on the row either way, and opened again it is the same conversation */}
           {winOn && (
-            <div className="tq-chat-pop" data-tq-chat-pop="" data-tq-chat-win="" role="dialog" aria-label="Chat with Taskuary" ref={popRef} hidden={!popOpen}
+            <div className="tq-chat-pop" data-tq-chat-pop="" data-tq-chat-win="" role={popOpen ? "dialog" : undefined} aria-label="Chat with Taskuary" ref={popRef} hidden={!popOpen}
               style={{ maxHeight: popMax }}>
               <div className="tq-chat-pop-head"><TaskuaryMark size={16} /><b>Taskuary</b>{currentItem?.ref && <span>{`· ${currentItem.ref}`}</span>}<span style={{ flex: 1 }} />
                 <Tooltip title="Past chats"><IconButton size="small" aria-label="Past chats" onClick={() => { shutBox(); openChats(); }}><HistoryIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip>

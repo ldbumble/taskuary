@@ -1799,7 +1799,7 @@ def pass_in_why(store, tid, msg: dict, mid, follow: dict | None) -> str:
     if not follow or follow.get('degraded') or follow.get('intent') != 'task': return 'not new work'
     if store.get_setting('answer_to_agent') == 'off': return 'passing lines to the agent is switched off'
     if msg.get('no_auto'): return 'the channel waits for the owner'
-    if live_agent(store, tid) not in ('general', 'coding'): return 'no live session to pass it to'
+    if live_agent(store, tid) not in task_kinds.AGENT: return 'no live session to pass it to'
     ok, why = senders.known(store, msg, exclude_mid=mid, deep=True)
     return '' if ok else str(why)
 
@@ -1811,7 +1811,7 @@ def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bo
     """New work on a task with an agent: a live one hears it as its next turn (_pass_in), a stopped one carries its conversation
     on (carry_on_why). The turn is the owner's Continue without the press - the same session, told what came in since - and like
     every agent turn it sends nothing: a reply it writes waits for the owner's Send. True when the line went to an agent."""
-    if live_agent(store, tid) in ('general', 'coding'): return _pass_in(store, tid, msg, mid, follow, actor)
+    if live_agent(store, tid) in task_kinds.AGENT: return _pass_in(store, tid, msg, mid, follow, actor)
     if carry_on_why(store, tid, msg, mid, follow): return False
     from . import blackboard as bb, general
     if bb.live_count() >= (cap := auto_sessions(store)):

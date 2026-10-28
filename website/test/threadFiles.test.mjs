@@ -32,7 +32,7 @@ test("nothing is drawn loose under the card: each row draws its own message's fi
   assert.doesNotMatch(cameFrom, /<Attachments messageId=\{inbound\[0\]/, "the opener's files are not drawn outside the thread");
   assert.match(cameFrom, /files=\{sourceFiles\} fetchFor=\{fetchFor\}/);
   assert.match(page, /const sourceFiles = filesByMessage\(detail\?\.attachments\);/);
-  assert.match(rowsFn, /open !== r\.m\.MessageId && \(files\.has\(r\.m\.MessageId\) \|\| fetchFor === r\.m\.MessageId\) && \(/);
+  assert.match(rowsFn, /open !== r\.m\.MessageId && fetchFor === r\.m\.MessageId && \(/);   // a closed row draws no files (2026-10-28)
   assert.match(rowsFn, /<Attachments messageId=\{r\.m\.MessageId\} canFetch=\{fetchFor === r\.m\.MessageId\} dense original=\{r\.m\.SourceLink\} \/>/);
 });
 

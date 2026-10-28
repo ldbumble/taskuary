@@ -535,7 +535,8 @@ def news_line(store, tid, m=None) -> str:
     day = 'today' if when[:10] == datetime.now().strftime('%Y-%m-%d') else when[:10]
     # THE STATE, never a move: a sentence that names a button names one the item shows (2026-10-17), and this one is read on the task
     # page, the rail and the walk alike - each says its own buttons (concierge._from_you)
-    return f"{frm} wrote again {day} at {when[11:16]}, after {who} last worked on it - its record is below."
+    # ...and no "its record is below": the desk keeps that record in the Agent section beside Came from, not under it (the state matrix, 2026-10-28)
+    return f"{frm} wrote again {day} at {when[11:16]}, after {who} last worked on it."
 
 
 def _cap(x: str) -> str: return x[:1].upper() + x[1:]

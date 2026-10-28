@@ -36,6 +36,7 @@ def install_processing_changes(app, store):
         '/api/fixture/advisor/world',
         '/api/fixture/advisor/say',
         '/api/fixture/intake/arrive',
+        '/api/fixture/task/matrix',
     })
 
     def fixture_refuse(method, path):
@@ -537,6 +538,91 @@ def install_processing_changes(app, store):
         browserview.close(sid)
         store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, {'held': 'The invoice page is open, waiting on your Approve.',
                           'failed': 'The Pay button on the invoice page did not go through.', 'normal': 'I read the invoice page.'}[body['end']])
+        return {'taskId': tid}
+
+    # ── THE STATE MATRIX (browser/state-matrix, 2026-10-28): the task states the demo world lacks, each one task, invented people ──────────
+    MATRIX = ('sent', 'working', 'coding_working', 'asked', 'stopped', 'finished', 'done', 'note', 'deferred', 'todo', 'idea', 'news')
+
+    @app.post('/api/fixture/task/matrix')
+    def matrix_state(body: dict):
+        """{state}: one task in that state, built the way the app leaves it. `sent` a reply that went, the task still open; `working` a
+        general agent's terminal at work, `coding_working` a coding one's; `asked` an agent at its prompt with a question for the owner;
+        `stopped` a coding run cut off mid-work - its screen kept, no write-up; `finished` a general agent whose run said it finished;
+        `done` / `note` closed by the owner, bare or with a note; `deferred` put away with Remind me; `todo` the owner's own to-do list;
+        `idea` an Advisor find on the rail; `news` a saved agent result and then the sender writing again."""
+        if set(body) != {'state'} or body['state'] not in MATRIX: raise HTTPException(422, f'state is one of {MATRIX}')
+        from taskuary import concierge, general, remind, terminal, workerstate as ws
+        s, now = body['state'], datetime.now()
+        at = lambda **k: (now - timedelta(**k)).isoformat(' ', timespec='seconds')
+        def task(title, kind, status='open', **kw): return store.create_task({'Title': title, 'Kind': kind, 'Status': status, 'Source': 'email', **kw}, 'router')
+        def mail(tid, who, words, ago=40, subject=None):
+            return store.add_message({'TaskId': tid, 'Channel': 'email', 'ExternalId': f'matrix-{s}-{tid}-{ago}', 'ConversationId': f'matrix-{s}-{tid}',
+                                      'FromName': who, 'FromEmail': f"{who.split()[0].lower()}@northwind.example", 'Subject': subject or f'About {s}',
+                                      'BodyText': words, 'SentAt': at(minutes=ago), 'Status': 'routed'})
+        def pane(tid, lines, label='Claude Code'):
+            p = _demo.Replay(store, tid, label, lines=lines); terminal.SESSIONS[p.sid] = p; return p
+        if s == 'sent':
+            tid = task('Can you send the signed Trainly order form?', 'reply')
+            mid = mail(tid, 'Erin Blake', 'Can you send the signed Trainly order form back today?')
+            rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Attached - signed this morning.',
+                                    'Reason': 'needs a reply: Erin asks Alex'})
+            store.decide_review(rid, 'approved', 'Attached - signed this morning.', 'owner')
+        elif s in ('working', 'coding_working'):
+            coding = s == 'coding_working'
+            tid = task('org/app#402 export drops the last row' if coding else 'Reconcile the Payworth October export', 'coding' if coding else 'general',
+                       'in_progress', Assignee=f"agent:{'coding' if coding else 'general'}", **({'Tags': 'repo:org/app'} if coding else {}))
+            mail(tid, 'Paula Vance', 'The export drops the last row every night.' if coding else 'The October export does not tie out to the bank feed.')
+            if coding: p = pane(tid, [('Reading the export and the bank feed side by side...', 0), ('', 3600)], 'coding')
+            else:      # a general agent works in its conversation, mid-answer
+                store.add_comment(tid, 'owner', general.USER_TYPE, 'Reconcile the October export against the bank feed.')
+                p = general.GeneralSession(store, tid); p.busy = True; terminal.SESSIONS[p.sid] = p
+            ws.record(store, tid, str(p.sid), 'working', source='fixture')
+        elif s == 'asked':
+            tid = task('Close the Spendly cards for the leavers', 'general', 'in_progress', Assignee='agent:general')
+            mail(tid, 'Gail Moreno', 'Two leavers still have Spendly cards - can they be closed?')
+            p = pane(tid, [('Found two leavers with open cards.', 0)]); p.agent = 'general'
+            ws.record(store, tid, str(p.sid), 'input_needed', text='Should I close both cards today, or wait for their last expense claims?', source='fixture')
+        elif s == 'stopped':
+            tid = task('org/app#405 ledger import skips weekends', 'coding', 'in_progress', Assignee='agent:coding', Tags='repo:org/app')
+            mail(tid, 'Ray Colton', 'The ledger import skips Saturday and Sunday rows.')
+            store.add_transcript(tid, f'matrix-{tid}', "Reading the ledger import.\n> pytest tests/test_import.py -q\n2 failed", agent='coding', cwd='C:/work/org-app', brain='claude')
+            ws.record(store, tid, f'matrix-{tid}', 'working', source='fixture')
+            ws.record(store, tid, f'matrix-{tid}', 'stopped', text='Stopped by you.', source='fixture')
+        elif s == 'finished':
+            tid = task('Who is missing the Trainly safety module?', 'general', 'in_progress')
+            mail(tid, 'Gail Moreno', 'Who is still missing the safety module?', ago=90)
+            store.add_comment(tid, 'owner', general.USER_TYPE, 'Who is still missing the safety module?')
+            store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Three people are missing the safety module: Erin Blake, Omar Keller and Ray Colton.')
+            store.add_comment(tid, 'general', 'agent', 'AGENT REPORT\nDetermination: three people are missing the safety module.\n'
+                              'Actions: Read the Trainly completion report.\nSummary: The three names, with their sites.')
+            ws.record(store, tid, f'matrix-{tid}', 'working', source='fixture')
+            ws.record(store, tid, f'matrix-{tid}', 'finished', text='Three people are missing the safety module.', source='fixture')
+        elif s in ('done', 'note'):
+            tid = task('Book the room for the Thursday walk-through' if s == 'done' else 'Check the Fairhaven badge reader', 'general')
+            mail(tid, 'Marcus Reed', 'Can you book a room for the Thursday walk-through?' if s == 'done' else 'The Fairhaven badge reader is offline again.')
+            if s == 'note': store.add_comment(tid, 'owner', 'human', 'Closed out: Called the site - it was a loose cable, back up now.')
+            concierge.close_task(store, tid, 'owner')
+        elif s == 'deferred':
+            tid = task('Renew the PhishGuard seats', 'general')
+            mail(tid, 'Omar Keller', 'The PhishGuard seats renew next month - can you check the count first?')
+            remind.set_reminder(store, tid, (now + timedelta(days=3)).strftime('%Y-%m-%d'), 'owner')
+        elif s == 'todo':
+            tid = store.create_task({'Title': 'Before the audit', 'Kind': 'task', 'Status': 'open', 'Source': 'assistant'}, 'owner')
+            store.set_task_checklist(tid, ['Print the August bank reconciliations', 'Export the AP ageing for Q3', 'Find the fixed asset register'], 'owner')
+        elif s == 'idea':
+            tid = None
+            store.upsert_idea({'key': f'idea:matrix-weekly-ageing-{now:%H%M%S%f}', 'kind': 'idea', 'sig': 'matrix',
+                               'text': 'The AP ageing is pulled by hand every Monday - a weekly report could send it.', 'action': {}}, at(minutes=5))
+            from taskuary import funnel
+            store.reconcile_processing_membership(); funnel.invalidate(); store._poke('feed-changed')
+        elif s == 'news':
+            tid = task('Site ops: who has the gate code', 'general', 'in_progress', Assignee='agent:general', Tags=terminal.SAVED)
+            mail(tid, 'Gail Moreno', 'Alex, who has the new gate code for the side door?', ago=120)
+            store.add_transcript(tid, f'matrix-{tid}', 'Looking for the gate code.\nThe handover sheet says Ray Colton has it.', agent='general', cwd='C:/work', brain='claude')
+            store.add_comment(tid, 'general', 'agent', 'AGENT REPORT\nDetermination: Ray Colton has the gate code.\nActions: Read the handover sheet.\n'
+                              'Summary: Ray Colton has it; Gail should ask him.')
+            store._exec("UPDATE transcript SET CreatedAt=? WHERE TaskId=?", (at(minutes=60), tid))
+            mail(tid, 'Gail Moreno', 'Ray is away this week - who else has it?', ago=5, subject='RE: About news')
         return {'taskId': tid}
 
     # ── THE ADVISOR AUDIT (2026-10-26): where the Advisor's words land on a task, by stage and drawer ─────────────────────────────────

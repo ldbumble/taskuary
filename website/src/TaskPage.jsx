@@ -85,7 +85,7 @@ import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { adviceKeyFor, taskNote } from "./advice.js";
 import AdvisorNote from "./AdvisorNote.jsx";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
-import { CLOSE_BY_HAND, SECTIONS, agentStatus, agentWord, askIsTitle, closeOut, closeStatus, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, waitingOn, workPane } from "./taskLayout.js";
+import { CLOSE_BY_HAND, SECTIONS, agentStatus, agentWord, reportLine, askIsTitle, closeOut, closeStatus, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, waitingOn, workPane } from "./taskLayout.js";
 import { mainView, sectionOf, stageOf } from "./stages.js";
 import { taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
@@ -1490,7 +1490,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     agent: agentStatus({ profile: runRole || (hasRecord || term ? String(agentName(t) || "").replace(/^agent$/i, "") : ""),
       word: agentWord({ live: !!term?.alive, waiting: agentState === AGENT.waiting, failed: failedRun, stopped: agentState === AGENT.stopped,
         result: resultShown, record: hasRecord, codeRun }),
-      said: cleanText(detail?.closedWhy || detail?.agentStory?.said || String(report?.Body || "").split("\n").find((l) => l.trim()) || (hasRecord ? detail?.agentStory?.line : "") || "")
+      said: cleanText(detail?.closedWhy || detail?.agentStory?.said || reportLine(report?.Body) || (hasRecord ? detail?.agentStory?.line : "") || "")
         .replace(/^[#>*\s-]+/, "").slice(0, 240),
       made: (() => { const p = recordProps.pages || []; const n = p[0]?.title || p[0]?.name || String(p[0]?.path || "").split(/[\\/]/).pop();
         return n ? `${n}${p.length > 1 ? ` +${p.length - 1}` : ""}` : ""; })(),
@@ -2840,7 +2840,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             {pendingReview
                               ? (inRow ? "" : "Nothing is sent until you approve it.")
                               : sentReview
-                              ? `Sent${sentReview.DecidedAt ? ` · ${fmtDateTime(sentReview.DecidedAt)}` : ""}. ${String(t?.Status || "") === "done" ? "The task closed with it." : "The task stays open while its agent is still working."}`
+                              ? `Sent${sentReview.DecidedAt ? ` · ${fmtDateTime(sentReview.DecidedAt)}` : ""}. ${String(t?.Status || "") === "done" ? "The task closed with it." : liveSession ? "The task stays open while its agent is still working." : "The task stays open until you mark it done."}`
                               : inRow ? "" /* the chip already says "not drafted" */ : "A reply is optional. Starting or stopping an agent does not send one."}
                           </Typography>
                         </Box>

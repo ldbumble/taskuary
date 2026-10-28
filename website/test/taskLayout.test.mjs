@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { CLOSE_BY_HAND, SECTIONS, agentStatus, agentWord, closeStatus, closeOut, fromStatus, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, waitingOn, workPane } from "../src/taskLayout.js";
+import { CLOSE_BY_HAND, SECTIONS, agentStatus, agentWord, reportLine, closeStatus, closeOut, fromStatus, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, waitingOn, workPane } from "../src/taskLayout.js";
 import { taskSource } from "./taskSource.mjs";
 
 test("two columns at rest, the whole width while an agent works - coding or general, working or waiting on you", () => {
@@ -250,4 +250,12 @@ test("the three sections come in the flow's order, and each closed tab says wher
   assert.deepEqual(closeStatus({ emails: 2 }).lines, ["2 emails waiting for Send"]);
   assert.deepEqual(closeStatus({}).lines, ["Nothing owed"]);
   assert.deepEqual(closeStatus({ closed: true, note: "paid" }).lines, ["Closed · paid"]);
+});
+
+// the state matrix (2026-10-28): the Agent tab read "AGENT REPORT" - the report's marker, not what it said
+test("a report's line is its Summary, never its AGENT REPORT marker", () => {
+  assert.equal(reportLine("AGENT REPORT\nDetermination: Ray has it.\nActions: Read the sheet.\nSummary: Ray has the code."), "Ray has the code.");
+  assert.equal(reportLine("AGENT REPORT\nDetermination: Ray has it."), "Ray has it.");
+  assert.equal(reportLine("Looked at the sheet."), "Looked at the sheet.");
+  assert.equal(reportLine(""), "");
 });

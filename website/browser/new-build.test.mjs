@@ -50,6 +50,7 @@ test('a changed server build reloads a page at rest once, and only says so to so
   await delay(1500);
   assert.equal(loads, 2, 'typing is never reloaded under');
   assert.equal(await box.evaluate((el) => el.value), 'half a sentence');
-  assert.equal(await page.$('[role="dialog"]'), null, 'no dialog');
+  // ...the words are in the chat window, which the box opens (2026-10-28); no other dialog asks
+  assert.equal(await page.$('[role="dialog"]:not([data-tq-chat-win])'), null, 'no dialog');
   assert.deepEqual(errors, []);
 });

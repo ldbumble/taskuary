@@ -1066,7 +1066,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   // the model is done (the owner, 2026-10-01: "never waits on the AI")
   const draftReply = async () => {
     setBusy("reply"); setErr("");
-    try { const data = await openReply(api, card.mid); onSurface?.(data?.reviewId ? `review:${data.reviewId}` : null, "Drafting a reply…"); }
+    try { const data = await openReply(api, card.mid); onSurface?.(data?.reviewId ? `review:${data.reviewId}` : null, data?.drafting ? "Drafting a reply…" : "Reply opened - write it, or Draft with AI"); }
     catch (e) { setErr(failOf(e)); }
     setBusy("");
   };
@@ -1453,7 +1453,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose, onAge
   // a reply is the one immediate road (PW-126): the draft is written now, nothing is sent, nothing is marked
   const reply = async (i) => {
     setBusy(i.key); setErr("");
-    try { const data = await openReply(api, i.mid); onSurface?.(data.reviewId ? `review:${data.reviewId}` : null, "Drafting a reply…"); }
+    try { const data = await openReply(api, i.mid); onSurface?.(data.reviewId ? `review:${data.reviewId}` : null, data.drafting ? "Drafting a reply…" : "Reply opened - write it, or Draft with AI"); }
     catch (e) { setErr(failOf(e)); }
     setBusy("");
   };

@@ -26,7 +26,7 @@ test("the view takes the list's part as props - it never loads the task list its
 test("Write reply calls the draft helper, not itself - the component's own openReply shadowed the import (2026-10-07)", () => {
   const s = src("TaskPage.jsx");
   assert.doesNotMatch(s, /import \{ openReply \} from "\.\/replyDraft\.js"/);
-  assert.match(s, /generate \? draftReply\(api, replyMessage\.MessageId\)/);
+  assert.match(s, /generate \? draftReply\(api, replyMessage\.MessageId, null, null, generate === "ai"\)/);
 });
 
 // THE AUDIT FOR NON-CODERS (2026-10-17): what the task view offers and says when the person using it never wrote code

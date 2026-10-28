@@ -41,7 +41,7 @@ class NoOneToAnswerTests(unittest.TestCase):
         """PW-237: a real person wrote it. Where the answer leaves from is a different question."""
         _tid, mid = self._message('github', FromEmail='dana@users.noreply.github.com')
         with mock.patch.object(responder, 'write_draft', return_value='Thanks - looking now.') as drafted:
-            r = self.c.post(f'/api/messages/{mid}/reply', json={'draft': True})
+            r = self.c.post(f'/api/messages/{mid}/reply', json={'draft': True, 'ai': True})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertTrue(drafted.called, 'the draft is written; only sending is gated')
         self.assertEqual(r.json()['draft'], 'Thanks - looking now.')

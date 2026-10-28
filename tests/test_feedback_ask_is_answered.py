@@ -58,7 +58,7 @@ def test_a_promise_only_reply_is_asked_for_again_then_failed_with_the_reason(s):
     llm, calls = writer(LATER, GOOD)
     assert responder.draft_reply(s, tid, llm=llm) == GOOD and len(calls) == 2 and 'YOUR FIRST DRAFT only promised' in calls[1]['user']
     llm, calls = writer(LATER)
-    with pytest.raises(RuntimeError, match='only promised to look at it later'): responder.draft_reply(s, tid, llm=llm)
+    with pytest.raises(RuntimeError, match='only promised to look into it later'): responder.draft_reply(s, tid, llm=llm)
     assert len(calls) == 2
 
 
@@ -71,7 +71,7 @@ def test_the_reason_lands_on_the_review_the_owner_sees(s):
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr('taskuary.llm.build_llm', lambda *a, **k: llm)
         ingest._auto_draft(s, tid, rid)
-    assert 'only promised to look at it later' in (s.get_review(rid).get('DraftError') or '')
+    assert 'only promised to look into it later' in (s.get_review(rid).get('DraftError') or '')
 
 
 def test_needs_is_said_to_the_owner_never_mailed(s):
@@ -79,12 +79,13 @@ def test_needs_is_said_to_the_owner_never_mailed(s):
     with pytest.raises(RuntimeError, match='needs the attached budget sheet did not come through'): responder.draft_reply(s, ask(s), llm=llm)
 
 
-def test_a_short_ask_may_still_be_picked_up_later(s):
-    """Nothing in front of the writer to judge: "I'll take a look" is the honest reply, and nothing holds it."""
+def test_a_short_ask_is_never_answered_with_a_promise_either(s):
+    """The owner, 2026-10-28: "don't draft AI slop answers 'I'm looking into it'" - a short ask that needs work gets no placeholder:
+    asked once more, then not drafted (the reply task then goes to an agent, test_reply_needs_agent)."""
     llm, calls = writer("I'll take a look this afternoon.")
     tid = ask(s, 'Can you look at the portal login issue when you get a chance?')
-    assert responder.draft_reply(s, tid, llm=llm) == "I'll take a look this afternoon." and len(calls) == 1
-    assert calls[0]['max_tokens'] == responder.REPLY_TOKENS
+    with pytest.raises(responder.NotDrafted): responder.draft_reply(s, tid, llm=llm)
+    assert len(calls) == 2 and calls[0]['max_tokens'] == responder.REPLY_TOKENS
 
 
 def test_an_owner_instruction_is_theirs_even_if_it_promises(s):

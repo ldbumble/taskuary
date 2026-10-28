@@ -60,7 +60,10 @@ test("every Reply press opens at once, and both views of a draft show Drafting w
   assert.doesNotMatch(cards, /\/reply`, \{ draft: true/, "no card waits on the model");
   assert.equal((cards.match(/openReply\(api, /g) || []).length, 2, "Draft a reply, an fyi's Reply");
   assert.match(view, /if \(verb === "reply" && mid\) \{\n\s+const data = await openReply\(api, mid, d\.text \|\| null, d\.cc \|\| null\);/);
-  assert.match(page, /await \(generate \? draftReply\(api, replyMessage\.MessageId\)/);   // the import, renamed: the page's own openReply shadowed it
+  assert.match(page, /await \(generate \? draftReply\(api, replyMessage\.MessageId, null, null, generate === "ai"\)/);   // the import, renamed: the page's own openReply shadowed it
+  // REPLY WITH NO AGENT WORK OPENS EMPTY (the owner, 2026-10-28): only Draft with AI asks for the AI's draft
+  assert.match(read("replyDraft.js"), /\.\.\.\(ai \? \{ ai: true \} : \{\}\)/);
+  assert.match(page, /data-tq-draft-ai=""[\s\S]{0,300}onClick=\{\(\) => openReply\("ai"\)\}/);
   for (const src of [cards, dec]) assert.match(src, /useDraftJob\(/);
   assert.match(dec, /drafting \? "Drafting…"/);
   assert.match(cards.slice(cards.indexOf("export function ReplyCard"), cards.indexOf("export function MeetingCard")), /drafting \? "Drafting…"/);

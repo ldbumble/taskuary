@@ -1899,6 +1899,12 @@ def _earlier(d: dict) -> list:
     return out
 
 
+def _offer_of(task_id) -> str:
+    from . import ingest
+    try: return ingest.offer_of(store, task_id)
+    except Exception as e: logger.debug(f'offer on task {task_id} not read: {e}'); return ''
+
+
 @app.get('/api/tasks/{task_id}')
 def task_detail(task_id: int):
     d = store.task_detail(task_id)
@@ -1935,6 +1941,8 @@ def task_detail(task_id: int):
             'workflow': workflows.of_task(store, d['task']),
             # an invite waiting on the owner, or a thread asking for a time: the row's Accept / Decline / Propose a new time / Find a time
             'calendar': _calendar_of(task_id),
+            # ...and what triage said an agent could do for the owner about the main ask - one press starts it (/api/tasks/{id}/offer)
+            'offer': _offer_of(task_id),
             'messages': [_readable(x) for x in d.get('messages') or []],
             # ...and the earlier messages triage said its ask rests on, shown with them, never moved onto this task (rests_on, 2026-10-22)
             'earlier': _earlier(d),
@@ -2690,6 +2698,22 @@ def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks)
         _start_failed(_pressed_on(task_id, body), e)
         return JSONResponse(status_code=422, content={'detail': c['sentence'], 'fix': c['fix'], 'retry': c['retry']})
 
+
+@app.post('/api/tasks/{task_id}/offer')
+def accept_offer(task_id: int, background: BackgroundTasks):
+    """The owner's one press on triage's offer ("I can register you for the webinar and put it on your calendar", ingest.offer_of):
+    the general agent starts on the task with that as its job - by the one dispatch door, so every check of Send to agent holds.
+    Anything outside that signs up, books, pays or sends still waits for the owner (ingest.OFFER_JOB)."""
+    from . import ingest
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    offer = ingest.offer_of(store, task_id)
+    if not offer: raise HTTPException(409, 'there is no offer on this task to accept')
+    out = dispatch_task(task_id, DispatchBody(kind='general', instruction=ingest.OFFER_JOB.format(offer=offer)), background)
+    if isinstance(out, dict) and (out.get('started') or out.get('existing')):
+        store.tag_task(task_id, ingest.OFFER_TAG, actor=ACTOR)
+        store.add_comment(task_id, ACTOR, 'agent', f'You accepted the offer: {offer}')
+    return out
+
 class RepoBody(BaseModel):
     repo: str | None = None          # None clears the tag and lets Taskuary guess again
     path: str | None = None          # set the agent's local path for it, if it has none
@@ -3395,6 +3419,26 @@ class OpenReplyBody(BaseModel):
     cc: list[str] | None = None
     # the instruction is the app's own (a chase's brief), not the owner's words: it rides into the draft and is not kept as theirs
     app_words: bool = False
+    # DRAFT WITH AI was pressed: the owner asked for the AI's draft, so it is written even where no agent has worked (_blank_reply)
+    ai: bool = False
+
+
+def _agent_worked(tid) -> bool:
+    """Has an agent worked this task - a session's report, a filed transcript, or the assistant's own turns? What a reply drafts from."""
+    from . import general
+    try: return bool(responder.resolution_of(store, tid) or store.last_transcript(tid) or general.history(store, tid))
+    except Exception as e: logger.debug(f'agent work on task {tid} not read: {e}'); return False
+
+
+def _blank_reply(tid, body) -> bool:
+    """REPLY WITH NOTHING TO SAY OPENS EMPTY (the owner, 2026-10-28: "if you hit Reply on a task with no agent work, the reply is drafted
+    with AI but it has nothing to respond with since it knows nothing. Without an agent run, Reply should just leave it open with no
+    draft"). Reply on a task no agent has worked opens the box with its envelope and no AI draft; Draft with AI (`ai`), Redraft and the
+    owner's own words for it still draft, and a draft triage already wrote stays. A message with no task keeps drafting from itself."""
+    if not tid: return False
+    if body is not None and (body.ai or body.redraft or (body.instruction or '').strip()): return False
+    return not _agent_worked(tid)
+
 
 @app.post('/api/messages/{mid}/reply')
 def open_reply(mid: int, body: OpenReplyBody = None):
@@ -3447,7 +3491,7 @@ def open_reply(mid: int, body: OpenReplyBody = None):
         draft = ''
         # ...and kept, not thrown away once the model has read them (2026-10-23) - the owner's own, never a chase's brief
         if not body.app_words: _keep_instruction(rid, body.instruction)
-    owed = not draft and (body is None or body.draft)
+    owed = not draft and (body is None or body.draft) and not (not promise and _blank_reply(tid, body))
     if owed and not later:
         try:
             draft = (responder.write_draft(store, tid, rid, actor=ACTOR, nudge=_reply_nudge(body and body.instruction)) if tid

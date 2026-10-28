@@ -1427,7 +1427,7 @@ class ApiTests(unittest.TestCase):
         tid = c.post('/api/tasks', json={'Title': 'an agent finished this', 'Kind': 'coding'}).json()['taskId']
         mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:REPLY1', 'Channel': 'email',
                                         'FromEmail': 'asker@corp.com', 'BodyText': 'is it fixed?', 'Status': 'routed'})
-        with mock.patch('taskuary.responder.write_draft', return_value='Fixed - deploys again tonight.') as wd:
+        with mock.patch('taskuary.responder.write_draft', return_value='Fixed - deploys again tonight.') as wd, mock.patch.object(server, '_agent_worked', return_value=True):
             out = c.post(f'/api/messages/{mid}/reply', json={}).json()
         self.assertEqual(out['draft'], 'Fixed - deploys again tonight.')
         self.assertEqual(wd.call_args.args[2], out['reviewId'])

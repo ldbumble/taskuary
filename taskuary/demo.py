@@ -79,6 +79,7 @@ ALLOWED_WRITES = (
     r'^/api/tasks/\d+/judged$',
     r'^/api/messages/\d+/reply$',                      # puts a draft on the table - only approving it sends
     r'^/api/messages/\d+/calendar$',                   # ...and a calendar answer the same way: drafted, never sent (calwrite.py)
+    r'^/api/meetings$',                                # ...and New → Meeting's pick: a task and its invite drafted, never sent (calwrite.draft_new)
     r'^/api/reviews/\d+/draft$',
     # ...and Remove - not a task's Undo (recentlydeleted.restore): only what a Remove here kept can come back, and the demo's only
     # Remove that is not refused is that one - a task, put back in the demo's own database

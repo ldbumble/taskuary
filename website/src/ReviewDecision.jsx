@@ -517,8 +517,10 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
               {busy ? sentOr("Sending…") : `${sendWord} without the file`}</Button>
           </>
         ) : (
+          // ...a calendar answer's note may be empty (verdicts: `cal`), so an invite with none still has its Send - New → Meeting's pick
+          // drafts one with no note, and the button sat grey over it (2026-10-28)
           <Button size="small" variant={solid}
-            disabled={busy || !words.trim()}
+            disabled={busy || (!words.trim() && !isCal)}
             onClick={() => decide("approve")}
             title={simulated ? "Complete this temporary demo; no email is sent" : `Sends this response to ${replyContext(r)}`}>
             {/* the one word for the send, as everywhere (buttons.json) */}

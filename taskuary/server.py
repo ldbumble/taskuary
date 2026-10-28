@@ -7,7 +7,7 @@ from starlette.concurrency import run_in_threadpool
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
@@ -3328,6 +3328,37 @@ def calendar_answer(mid: int, body: CalendarBody):
     try: out = calwrite.draft(store, mid, body.act, body.start, body.end, ACTOR)
     except Exception as e: return _cal_refusal(e)
     return {'ok': True, **out}
+
+# ── New → Meeting (calwrite.suggest / draft_new): free times for people and a length, a pick drafted on a task of its own ──
+def _no_calendar():
+    """No card can put a meeting on a calendar: the Assistant's one line and its Connect a calendar (calwrite.connect_fix)."""
+    from . import calwrite
+    return None if calwrite.can_book(store) else {'ok': False, 'say': calwrite.NO_CAL, 'fix': calwrite.connect_fix(store)}
+
+@app.get('/api/meetings/slots')
+def meeting_slots(to: list[str] = Query([]), minutes: int = 30, within: str = '', start: str = '', end: str = ''):
+    """The 3-5 free times New → Meeting offers, clear on the owner's calendar and the attendees' where the provider answers for them.
+    {ok, slots, minutes, read, unread, later} or {ok: false, say, fix} - a card that may not write says so here, before any pick."""
+    from . import calwrite
+    if (no := _no_calendar()): return no
+    try: return {'ok': True, **calwrite.suggest(store, to, minutes, within, start or None, end or None)}
+    except Exception as e: return _cal_refusal(e)
+
+class MeetingBody(BaseModel):
+    to: list[str] = []
+    subject: str = ''
+    start: str | None = None
+    end: str | None = None
+    note: str = ''
+
+@app.post('/api/meetings')
+def meeting_new(body: MeetingBody):
+    """New → Meeting's pick: a task "Meeting with <who> about <subject>" whose Close out holds the invite DRAFTED for the owner's Send -
+    nothing reaches a calendar here. {ok, taskId, ref, reviewId, title, say} or {ok: false, say, fix}."""
+    from . import calwrite
+    if (no := _no_calendar()): return no
+    try: return {'ok': True, **calwrite.draft_new(store, body.to, body.subject, body.start, body.end, body.note, ACTOR)}
+    except Exception as e: return _cal_refusal(e)
 
 class OpenReplyBody(BaseModel):
     draft: bool = True

@@ -1256,11 +1256,26 @@ def _new(store, tid: int, table: dict | None, want: str, text: str) -> dict:
 
 # A MEETING IS THE CALENDAR'S (the owner, 2026-10-28: "schedule a meeting" brought up Give an agent a job - "is that what we want?"). The one
 # scheduling move the app has is a task's Find a time (a thread triage read as asking for a time, calwrite.draft 'schedule' - drafted for Send),
-# so on such a task - the table's, or the one the ask names - it is that row's Find a time, lit. With no such task it says so in one line and
-# writes the meeting into New as a to-do of the owner's (the new-task road); with no calendar, one line and the card that connects one. There
-# is no meeting screen of its own - whether there should be is the owner's call, not this router's.
+# so on such a task - the table's, or the one the ask names - it is that row's Find a time, lit. With no such task it brings up New → Meeting
+# (the owner, 2026-10-28: "probably new meeting screen is better") filled in with who, what and when - its Find times reads the calendars and a
+# pick drafts the invite on a task of its own (calwrite.draft_new); with no calendar, one line and the card that connects one. The phone has
+# no such screen, so it says where scheduling lives.
 NO_CALENDAR = 'No calendar is connected, so I cannot set up a meeting yet - connect one and ask again.'
 MEETING_NO_THREAD = "Scheduling works from a task's Find a time, on a thread that asks for a time - nothing here does."
+MEETING_OPENED = 'Brought up New → Meeting{with_} - Find times there offers the free times, and nothing goes out before your {send}.'
+
+def meeting_prefill(store, named: list, params: dict) -> dict:
+    """What New → Meeting opens with from the ask: the addresses the names were placed at (calwrite.people_of - the pickers' search), the
+    names nobody could place (said, never guessed), the subject, a length it offers and the days."""
+    from . import calwrite
+    to, miss = calwrite.people_of(store, named) if named else ([], [])
+    try: mins = int(params.get('minutes') or 30)
+    except (TypeError, ValueError): mins = 30
+    within = str(params.get('within') or params.get('when') or '').strip().lower().replace(' ', '_')
+    day = lambda k: (m.group(0) if (m := re.match(r'\d{4}-\d{2}-\d{2}$', str(params.get(k) or '').strip())) else '')
+    return {'to': to, 'unplaced': miss, 'about': re.sub(r'\s+', ' ', str(params.get('about') or params.get('subject') or '')).strip()[:200],
+            'minutes': mins if mins in calwrite.LENGTHS else 30, 'within': within if within in ('this_week', 'next_week') else '',
+            'from': day('from') or day('when'), 'to_day': day('to')}
 
 def _meeting(store, tid: int, table: dict | None, params: dict, text: str, actor: str) -> dict:
     from . import calwrite
@@ -1286,10 +1301,11 @@ def _meeting(store, tid: int, table: dict | None, params: dict, text: str, actor
         said = f'{MEETING_NO_THREAD} Say "make a task: {job}" and it goes on your list.'
         record(store, tid, 'assistant', said)
         return {'say': said, 'options': [], 'decision': None}
-    out = _new(store, tid, table, 'task', job)
-    out['say'] = f'{MEETING_NO_THREAD} Wrote "{job}" into New for you to file.'
-    rewrite(store, out['new']['line'], out['say'])
-    return out
+    pre = meeting_prefill(store, named, params)
+    said = MEETING_OPENED.format(with_=f" with {', '.join(map(str, named))}" if named else '', send=calwrite.send_word())
+    if pre['unplaced']: said += f" I could not place {', '.join(pre['unplaced'])} - add their address there."
+    line = record(store, tid, 'assistant', said)
+    return {'say': said, 'options': [], 'chips': [], 'decision': None, 'new': {'kind': 'meeting', 'how': '', 'text': pre['about'], 'meeting': pre, 'line': line}}
 
 
 def said_started(store, cid, out: dict) -> str:

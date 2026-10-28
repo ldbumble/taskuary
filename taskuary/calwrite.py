@@ -201,19 +201,21 @@ def when(start: str, end: str = '', all_day: bool = False) -> str:
 
 
 # ── the owner's time ─────────────────────────────────────────────────────────────────────
-_BUSY = {'at': 0.0, 'data': None}
+_BUSY = {'at': 0.0, 'data': None, 'days': 0}
 BUSY_TTL = 300
 
 
 def busy(store, days: int = 14) -> list:
-    """The owner's busy events from now for `days` days, every calendar the cards reach - cached like the reply's read. The
-    demo has no calendar behind it, so it has a scripted week (demo.agenda)."""
+    """The owner's busy events from now for `days` days, every calendar the cards reach - cached like the reply's read, and read
+    again when a longer window is asked for than the cache holds. The demo has no calendar behind it, so it has a scripted week
+    (demo.agenda)."""
     from . import demo
     if demo.enabled(): return demo.agenda()
-    if _BUSY['data'] is not None and time.time() - _BUSY['at'] < BUSY_TTL: return _BUSY['data']
+    days = max(14, int(days or 14))
+    if _BUSY['data'] is not None and time.time() - _BUSY['at'] < BUSY_TTL and _BUSY['days'] >= days: return _BUSY['data']
     tz = cal.tz_of(store)
     ag = cal.agenda(store, days=days, start=datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0))
-    _BUSY.update(at=time.time(), data=ag['events'])
+    _BUSY.update(at=time.time(), data=ag['events'], days=days)
     return ag['events']
 
 
@@ -506,6 +508,141 @@ def people_of(store, who) -> tuple:
         hit = next(iter(peoplesearch.search(store, n[:120], 'email').get('data') or []), None)
         (got.append(hit['to'].lower()) if hit and '@' in str(hit.get('to')) else miss.append(n))
     return list(dict.fromkeys(got)), miss
+
+
+# ── a meeting set up from New → Meeting (the owner, 2026-10-28: "probably new meeting screen is better") ──────────────────────
+# The same road as a thread's Find a time, with no thread: the people, a subject and a length typed, free times read off the owner's
+# calendar AND the attendees' where the provider answers for them (Graph getSchedule, Google freeBusy), a pick DRAFTED as a review on a
+# task of its own - its Close out holds the invite with Send. Nothing is created on any calendar before that Send (deliver).
+LENGTHS, PICKS = (15, 30, 45, 60), 5
+NO_CAL = 'No calendar is connected, so a meeting cannot be set up yet - connect one, then find times again.'
+
+
+def within_days(within: str = '', first=None, last=None, today: date = None) -> tuple:
+    """(first, last) day the times are looked for in: 'this_week' is today to Friday (a weekend looks at the week ahead), 'next_week'
+    Monday to Friday after it, else the range typed - never before today - else the coming week."""
+    today = today or date.today()
+    if within == 'next_week':
+        mon = today + timedelta(days=7 - today.weekday()); return mon, mon + timedelta(days=4)
+    if within == 'this_week':
+        return within_days('next_week', today=today) if today.weekday() >= 5 else (today, today + timedelta(days=4 - today.weekday()))
+    def day(v):
+        try: return date.fromisoformat(str(v or '')[:10])
+        except ValueError: return None
+    a, b = day(first), day(last)
+    if a or b:
+        a = max(a or today, today); return a, max(b or a, a)
+    return today, today + timedelta(days=6)
+
+
+def _addrs(people) -> list:
+    from .outbound import addrs
+    return addrs([p for p in (people if isinstance(people, (list, tuple)) else [people]) if p])[:20]
+
+
+def _graph_busy(store, acct: dict, people: list, a: datetime, b: datetime, tz) -> dict:
+    """{address: [busy events]} off Graph getSchedule, asked as the owner's mailbox - only the people it answered for."""
+    from .channels import graph_creds, graph_token
+    cfg, sec, _ = graph_creds(store, store.get_connector(int(acct['connector'] or 0), with_secret=True))
+    t = lambda d: {'dateTime': d.strftime('%Y-%m-%dT%H:%M:%S'), 'timeZone': cal.tz_name(tz)}
+    r = requests.post(f"{GRAPH}/users/{acct['mailbox']}/calendar/getSchedule", timeout=20,
+                      data=json.dumps({'schedules': people, 'startTime': t(a), 'endTime': t(b), 'availabilityViewInterval': 30}),
+                      headers={'Authorization': f'Bearer {graph_token(cfg, sec)}', 'Content-Type': 'application/json',
+                               'Prefer': f'outlook.timezone="{cal.tz_name(tz)}"'})
+    if r.status_code != 200: raise RuntimeError(f'Graph getSchedule refused ({r.status_code})')
+    out = {}
+    for v in (r.json() or {}).get('value') or []:
+        if v.get('error') or not v.get('scheduleId'): continue
+        out[str(v['scheduleId']).lower()] = [{'start': _local(i.get('start'), tz), 'end': _local(i.get('end'), tz), 'subject': 'busy', 'all_day': False}
+                                             for i in v.get('scheduleItems') or [] if str(i.get('status') or 'busy').lower() not in ('free', 'workingelsewhere')]
+    return out
+
+
+def _g_local(s: str, tz) -> str:
+    try: d = datetime.fromisoformat(str(s).replace('Z', '+00:00'))
+    except ValueError: return str(s)[:16].replace('T', ' ')
+    return (d.astimezone(tz) if d.tzinfo and tz else d).strftime('%Y-%m-%d %H:%M')
+
+
+def _google_busy(acct: dict, people: list, a: datetime, b: datetime, tz) -> dict:
+    """{address: [busy events]} off Google freeBusy - a calendar it may not see comes back with errors and is left out."""
+    from .googlecal import access_token
+    r = requests.post('https://www.googleapis.com/calendar/v3/freeBusy', timeout=20,
+                      headers={'Authorization': f"Bearer {access_token(acct['cfg'])}", 'Content-Type': 'application/json'},
+                      data=json.dumps({'timeMin': a.replace(tzinfo=tz).isoformat(), 'timeMax': b.replace(tzinfo=tz).isoformat(),
+                                       'timeZone': cal.tz_name(tz), 'items': [{'id': p} for p in people]}))
+    if r.status_code != 200: raise RuntimeError(f'Google freeBusy refused ({r.status_code})')
+    return {str(k).lower(): [{'start': _g_local(x.get('start'), tz), 'end': _g_local(x.get('end'), tz), 'subject': 'busy', 'all_day': False}
+                             for x in v.get('busy') or []]
+            for k, v in ((r.json() or {}).get('calendars') or {}).items() if not v.get('errors')}
+
+
+def their_busy(store, acct: dict, people: list, first: date, last: date) -> tuple:
+    """(the attendees' busy times, who the provider answered for, who it did not). A failed read is everyone unread - the times
+    are then the owner's alone, and the screen says whose calendars were not seen."""
+    from . import demo
+    people = [p.lower() for p in people]
+    if not people: return [], [], []
+    if demo.enabled(): return [], people, []
+    tz = cal.tz_of(store)
+    a, b = datetime(first.year, first.month, first.day), datetime(last.year, last.month, last.day) + timedelta(days=1)
+    try: got = _google_busy(acct, people, a, b, tz) if acct['provider'] == 'google' else _graph_busy(store, acct, people, a, b, tz)
+    except Exception as e: logger.info(f"calwrite: the attendees' free/busy was not read - {e}"); got = {}
+    return [e for p in people for e in got.get(p, [])], [p for p in people if p in got], [p for p in people if p not in got]
+
+
+def suggest(store, people, minutes: int = 30, within: str = '', first=None, last=None, n: int = PICKS) -> dict:
+    """The free times New → Meeting offers: `n` slots of `minutes` in working hours, one a day first, clear on the owner's calendar
+    and on every attendee's the provider answered for - and when the days asked are full, the next free times after them (`later`).
+    Raises NoAccess with its fix for a card that may not write: the press says so before a pick, not after."""
+    acct = account(store); require_write(store, acct)
+    tz = cal.tz_of(store); today = datetime.now(tz).date()
+    try: mins = int(minutes)
+    except (TypeError, ValueError): mins = 30
+    mins = mins if mins in LENGTHS else 30
+    a, b = within_days(within, first, last, today)
+    theirs, read, unread = their_busy(store, acct, _addrs(people), a, b + timedelta(days=7))
+    evs = busy(store, days=(b - today).days + 8) + theirs
+    out, later = free_slots(store, mins, a, b, n=n, events=evs), False
+    if not out: out, later = free_slots(store, mins, b + timedelta(days=1), b + timedelta(days=7), n=n, events=evs), True
+    return {'slots': out, 'minutes': mins, 'first': str(a), 'last': str(b), 'later': later, 'read': read, 'unread': unread, 'provider': acct['provider']}
+
+
+def name_of(store, addr: str) -> str:
+    """What to call someone in a title: the name the mail, the org chart or the directory knows them by, else the address."""
+    from . import peoplesearch
+    try: hit = next((r for r in peoplesearch.known(store, 'email') if r['to'] == addr.lower() and r.get('name')), None)
+    except Exception: hit = None
+    return hit['name'] if hit else addr
+
+
+def _and(xs: list) -> str: return ' and '.join(xs) if len(xs) < 3 else f"{', '.join(xs[:-1])} and {xs[-1]}"
+
+
+def draft_new(store, people, subject: str, start: str, end: str, note: str = '', actor: str = 'owner') -> dict:
+    """New → Meeting's pick: a task "Meeting with <who> about <subject>" whose Close out holds the invite, drafted as a review whose
+    envelope is the calendar's 'schedule' act - the same one a thread's Find a time drafts. {taskId, ref, reviewId, title, say}.
+    Raises ValueError for what is missing, NoAccess for a card that may not write - and then nothing is made."""
+    from .store import task_ref
+    to, subject = _addrs(people), ' '.join(str(subject or '').split())[:200]
+    if not to: raise ValueError('add who the meeting is with')
+    if not subject: raise ValueError('say what the meeting is about')
+    try: a, b = _dt(start), _dt(end)
+    except (TypeError, ValueError): raise ValueError('pick a time first')
+    if b <= a: raise ValueError('that time ends before it starts')
+    acct = account(store); require_write(store, acct)
+    title = f"Meeting with {_and([name_of(store, x) for x in to])} about {subject}"[:300]
+    line, clash = when(start, end), clash_line(store, start, end)
+    tid = store.create_task({'Title': title, 'Summary': f"{subject} - {line}, with {', '.join(to)}.", 'Kind': 'task', 'Status': 'open',
+                             'Priority': 'normal', 'Source': 'meeting'}, actor)
+    env = {'kind': 'calendar', 'channel': 'calendar', 'act': 'schedule', 'provider': acct['provider'], 'connector_id': acct['connector'],
+           'mailbox': acct['mailbox'], 'subject': subject, 'to': to, 'clash': clash, 'start': start, 'end': end, 'when': line}
+    head = f'Invite {", ".join(to)} to {subject} - {line}'
+    rid = store.add_review({'TaskId': tid, 'Kind': 'outbound', 'Status': 'pending', 'DraftText': str(note or '').strip()[:4000],
+                            'Deliver': json.dumps(env), 'Reason': f"{head}{' · ' + clash if clash else ''} - press {send_word()} and the calendar is told"})
+    store.audit('review', rid, 'calendar_drafted', actor, detail={'act': 'schedule', 'provider': acct['provider'], 'new': True})
+    return {'taskId': tid, 'ref': task_ref(tid), 'reviewId': rid, 'title': title,
+            'say': f"{task_ref(tid)} - {head}" + (f' ({clash})' if clash else '') + f'. The invite waits in Close out for your {send_word()}.'}
 
 
 def env_of(r) -> dict:

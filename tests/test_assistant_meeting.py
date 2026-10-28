@@ -64,11 +64,11 @@ class OnTheDesk(unittest.TestCase):
         find.assert_called_with(s, f"task:{item['tid']}")
         self.assertEqual((out['light']['verb'], out['light']['tid']), ('find_time', item['tid']))
 
-    def test_with_no_such_task_it_says_where_scheduling_lives_and_writes_a_to_do_never_an_agent(self):
+    def test_with_no_such_task_it_brings_up_new_meeting_never_an_agent(self):
         s = outlook_store()
         out, spawn = say(s, ASK, None, call(who='Gail', about='the Q3 budget'))
-        self.assertTrue(out['say'].startswith(concierge.MEETING_NO_THREAD), out['say'])
-        self.assertEqual((out['new']['kind'], out['new']['text']), ('note', 'Meeting with Gail about the Q3 budget'))
+        self.assertTrue(out['say'].startswith('Brought up New → Meeting with Gail'), out['say'])
+        self.assertEqual((out['new']['kind'], out['new']['text'], out['new']['meeting']['unplaced']), ('meeting', 'the Q3 budget', ['Gail']))
         spawn.assert_not_called()
         self.assertEqual([r for r in s._rows('SELECT * FROM review')], [])
         # ...the chat's line is the one said, so a reload draws the same words

@@ -465,11 +465,12 @@ Hand this message to an agent or put it on the list.
 
 ### `meeting.new`
 
-Set up a meeting or call ("a meeting with Gail about the budget friday"). On a task whose thread asks for a time it lights that task's Find a time; with none it says scheduling lives there and writes the meeting into New as the owner's to-do; with no calendar, the card that connects one. Nothing goes out before the owner's Send. Never an agent's job.
+Set up a meeting or call ("a meeting with Gail about the budget friday"). On a task whose thread asks for a time it lights that task's Find a time; with none it brings up New → Meeting filled in, whose Find times reads the calendars; with no calendar, the card that connects one. Nothing goes out before the owner's Send. Never an agent's job.
 
 - `who` (optional) - the names or addresses it is with
 - `about` (optional) - its subject
-- `when` (optional) - the day or time they said
+- `when` (optional) - the day they said as YYYY-MM-DD, or this_week / next_week
+- `minutes` (optional) - 15, 30, 45 or 60
 - `ref` (optional) - the task it is about (TQ-0123) when it is not the one on the table
 
 <p class="runs">Brings up its button for you to press.</p>
@@ -715,9 +716,9 @@ Start a script by its name: walk me through my tasks | set up a report.
 
 ### `memory.remember`
 
-Keep a fact about how the owner works, in LEARNED.md, at once. Who reports to whom and who owns what is people.relate.
+Keep a fact or rule the owner tells you, at once - those five are LEARNED.md, the memory every reader uses | style: a rule about HOW they write - greetings and salutations ("write Mrs <surname> to women, never her first name"), sign-off, tone, length, formatting, words to use or avoid - saved to their writing style, STYLE.md's Owner notes, which every draft reads. Who reports to whom and who owns what is people.relate.
 
-- `note` - the fact, in the owner's words ("Gail moved to Ops", "Ray handles payroll for me", "I put renewals off to Friday", "I don't care about the legacy export job any more")
+- `note` - it, in the owner's words ("Gail moved to Ops", "Ray handles payroll for me", "I put renewals off to Friday", "I don't care about the legacy export job any more")
 - `about` (optional) - the person's address or name, for a people line
 - `section` (optional) - , always: people (who someone is to them, how they deal with them) | care (what they are responsible for and what they do NOT care about - a legacy process, a system no longer theirs: triage and the report gate then make no task of it) | work (their rhythm) | promises | bring (what the Advisor may raise)
 - `replaces` (optional) - the key of the line it makes untrue, closed and kept as history (memory.about gives the keys)

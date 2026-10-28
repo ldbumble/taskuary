@@ -277,8 +277,8 @@ is what you see if those cards cannot load.</li>
 <p>Keeps withdrawn messages, out-of-office auto-replies and threads where yours is the last word off the work rail. On by default.</p>
 <h3 id="fyi-read-together">FYI read together<a class="anchor" href="#fyi-read-together" aria-label="Link to this section">#</a></h3>
 <p><code>fyi_batch</code> · type: number · default: <code>4</code></p>
-<p>How many fyi the assistant puts in front of you at once. 1 to 10; four by default.</p>
-<p>An fyi needs no action, so they come in a batch rather than one at a time. At 1 they arrive singly, which is the slow read-everything walk; at 10 you clear the noise in one card. Anything outside 1-10 is clamped - a 0 would take the fyi lane out of the walk entirely.</p>
+<p>How many fyi the assistant puts in front of you at once. 1 to 10. Until you set it, it follows the screen: six on a large one, four on a laptop or a phone.</p>
+<p>An fyi needs no action, so they come in a batch rather than one at a time. Left alone, the batch is sized to the screen that asks - six where they fit without scrolling, four on a screen under 800 pixels tall or a phone. A number you set here is used on every screen. At 1 they arrive singly, which is the slow read-everything walk; at 10 you clear the noise in one card. Anything outside 1-10 is clamped - a 0 would take the fyi lane out of the walk entirely.</p>
 <h3 id="keep-past-chats-days">Keep past chats (days)<a class="anchor" href="#keep-past-chats-days" aria-label="Link to this section">#</a></h3>
 <p><code>chat_keep_days</code> · type: number · default: <code>15</code></p>
 <p>Archived assistant chats older than this are removed once a day. Fifteen by default.</p>
@@ -546,7 +546,7 @@ answer to &quot;why did this happen&quot; and &quot;who did this&quot; for anyth
 
     </article>
     <nav class="pager"><a class="pn prev" href="./phone"><span>Previous</span>On your phone</a><a class="pn next" href="./faq"><span>Next</span>FAQ</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.59 · updated 2026-10-28</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.60 · updated 2026-10-28</p>
   </main>
 </div>
 <script src="./docs.js"></script>

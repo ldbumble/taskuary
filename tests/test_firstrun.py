@@ -181,6 +181,17 @@ class KeyAndMailTests(unittest.TestCase):
         self.assertTrue(out['ok'], out); self.assertEqual(s.get_setting('triage_ai'), f'connector:{cid}')
         self.assertEqual(json.loads(s.get_connector(cid)['ConfigJson'])['endpoint'], 'https://northwind.example')
 
+    def test_a_local_model_connects_without_a_key_and_a_given_key_is_still_checked_whole(self):
+        """Ollama's key box says optional, and Connect stayed shut on it empty while the server refused anything under 12 characters."""
+        s = MemoryStore()
+        cid = s.get_connector_by_type('ollama')['ConnectorId']
+        with mock.patch('taskuary.channels.test_connector', return_value={'ok': True, 'detail': 'ok'}):
+            out = firstrun.choose_key(s, 'ollama', '', cid=cid, config={'model': 'llama3.2'})
+            self.assertTrue(out['ok'], out); self.assertNotIn('key', out['why'])
+            self.assertEqual(s.get_setting('triage_ai'), f'connector:{cid}')
+            self.assertIn('whole key', firstrun.choose_key(s, 'ollama', 'short', cid=cid)['why'])
+            self.assertIn('whole key', firstrun.choose_key(s, 'anthropic', '')['why'], 'a paid key is never optional')
+
 
 class StateTests(unittest.TestCase):
     def test_step_one_is_a_choice_not_a_cli_that_happens_to_be_installed(self):

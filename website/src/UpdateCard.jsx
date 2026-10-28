@@ -112,15 +112,17 @@ export default function UpdateCard({ asked = false, at = 0 }) {
           <Button size="small" variant="outlined" disabled={!!busy} onClick={() => check(true)}
             startIcon={busy === "check" ? <CircularProgress size={12} /> : null}>Check now</Button>
           {/* data-tq-knob: the Assistant's "update taskuary" lights this one (#settings=updates&key=update, SettingsView's knob) */}
-          <Button size="small" variant="contained" disableElevation disabled={!canApply || !!busy} onClick={apply} data-tq-knob="update"
+          {/* ...and a check that did not get through draws none: a greyed Couldn't check beside Check now said what the warning under
+              it says (the setup sweep, 2026-10-28) */}
+          {!(unknown && !busy) && <Button size="small" variant="contained" disableElevation disabled={!canApply || !!busy} onClick={apply} data-tq-knob="update"
             {...(lit && canApply && !busy ? { "data-tq-asked": "" } : {})}
             sx={lit && canApply && !busy ? { outline: "2px solid #6f8a6e", outlineOffset: 3 } : undefined}
             startIcon={["apply", "waiting", "restarting"].includes(busy) ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}
             title={how === "source" ? "a source checkout updates with git pull" : info?.newer ? `install v${info.latest} and reopen - it waits for running agents and workflows to finish first`
-              : unknown ? "the check did not reach the release page - press Check now to try again" : "nothing newer to install"}>
+              : "nothing newer to install"}>
             {busy === "restarting" ? "Reopening…" : busy === "waiting" ? "Waiting…" : busy === "apply" ? "Updating…" : info?.newer ? `Update to v${info.latest}`
-              : unknown ? "Couldn't check" : info ? "Up to date" : "Checking…"}
-          </Button>
+              : info && !unknown ? "Up to date" : "Checking…"}
+          </Button>}
         </Box>
         {info?.notes && info.newer && (
           <Typography variant="caption" sx={{ display: "block", mt: 1, color: FAINT }}>

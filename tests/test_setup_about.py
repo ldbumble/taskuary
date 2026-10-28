@@ -231,6 +231,19 @@ class AboutTests(unittest.TestCase):
         self.assertEqual(d['soul']['text'], '### What matters to me\n- soul written')
         self.assertEqual(firstrun.about(s)['soul'], '### What matters to me\n- soul written')
 
+    def test_a_mailbox_connected_but_not_yet_read_says_wait_not_connect_one(self):
+        """The setup sweep, 2026-10-28: "Your job" failed with "connect a mailbox" for an owner who had just connected one - its first
+        read had not landed yet."""
+        s = MemoryStore()
+        def gen(store, name, days=90): raise RuntimeError('no mail history to learn the job from - connect a mailbox (Outlook, Gmail or IMAP)')
+        with mock.patch('taskuary.histgen.generate', side_effect=gen):
+            with mock.patch.object(firstrun, 'sources', return_value=[]):
+                firstrun.learn(s, {'name': 'Alex Doyle'}, wait=True, docs=('job',))
+            self.assertIn('connect a mailbox', firstrun.drafts(s)['job']['why'])
+            with mock.patch.object(firstrun, 'sources', return_value=[{'address': 'alex@northwind.example', 'type': 'outlook', 'title': 'Email'}]):
+                firstrun.learn(s, {'name': 'Alex Doyle'}, wait=True, docs=('job',))
+            self.assertEqual(firstrun.drafts(s)['job']['why'], firstrun.FIRST_READ)
+
     def test_a_draft_accepted_as_edited_is_kept_and_one_left_alone_stays_as_written(self):
         s = MemoryStore()
         from taskuary import histgen

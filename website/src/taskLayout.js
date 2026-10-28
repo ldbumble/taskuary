@@ -72,6 +72,33 @@ export const fromLine = ({ sender = null, count = 0, workflow = null, made = "" 
   return made || "";
 };
 
+// THREE SECTIONS IN A ROW, IN THE ORDER THE WORK FLOWS (the owner, 2026-10-27, from a mockup: "input -> agent/advisor -> close ... 3 sections
+// from left to right showing the flow; on the outside it shows the status of each category and opens up to the one it's up to"): one is
+// open and fills the width, the other two are closed tabs that say where each stands in a line or two. `here`: the section the task is up
+// to (stages.sectionOf). Pure, so node --test reads it.
+export const SECTIONS = [{ key: "from", n: 1, name: "Came from" }, { key: "agent", n: 2, name: "Agent" }, { key: "close", n: 3, name: "Close out" }];
+// ...a closed tab says MORE than its name (the owner, 2026-10-27: "maybe a little smaller and have more summary on each one"): three or four
+// short lines, each clamped so a tab never scrolls. Words quoted are somebody's own; each line only where there is something to say.
+// ...and read like a book's SPINE (the owner, 2026-10-27): its `lines` at the top under the name, its `foot` - the one status line - at the
+// bottom over a thin rule, the section's number under it
+const q = (s) => (s ? `“${String(s).replace(/\s+/g, " ").trim()}”` : "");
+// ...Came from: who, on what, when; their latest words; how many - and at its foot what triage made of it ("✓ Sorted: a reply to send · normal priority")
+export const fromStatus = ({ who = "", channel = "", when = "", words = "", count = 0, workflow = null, made = "", sorted = "" } = {}) => ({
+  lines: [[who, channel, when].filter(Boolean).join(" · ") || (workflow ? `Workflow · ${workflow.title}` : made), q(words), count ? plural(count, "message") : ""].filter(Boolean),
+  foot: sorted ? `✓ ${sorted}` : "" });
+// ...the Agent: its profile and where it stands, what it did in a line, what it made - and at its foot its state and the Advisor's next move
+export const agentWord = ({ live = false, waiting = false, failed = false, stopped = false, result = false, record = false, codeRun = false } = {}) =>
+  live ? (waiting ? "needs you" : "working") : failed ? "failed" : stopped ? "stopped" : result ? "finished" : record ? "ran" : codeRun ? "steps ran by code" : "not started";
+export const agentStatus = ({ profile = "", word = "not started", said = "", made = "", advisor = "" } = {}) => ({
+  lines: [[profile, word].filter(Boolean).join(" · "), said, made ? `Made: ${made}` : ""].filter(Boolean),
+  foot: [word === "finished" ? "✓ Done" : "", advisor ? `Advisor: ${advisor} is next` : ""].filter(Boolean).join(" · ") });
+// ...Close out: who it answers and where, the draft's first words, and whether it went - "Drafted · waiting for Send", "Sent", "Nothing owed"
+export const closeStatus = ({ closed = false, note = "", to = "", where = "", draft = "", waiting = false, emails = 0, sent = false, owed = false } = {}) => ({
+  lines: [to ? `Reply to ${to}${where ? ` in ${where}` : ""}` : "", q(draft),
+    closed ? ["Closed", note].filter(Boolean).join(" · ") : waiting ? "Drafted · waiting for Send" : emails ? `${plural(emails, "email")} waiting for Send`
+      : sent ? "Sent" : owed ? "Not drafted yet" : "Nothing owed"].filter(Boolean),
+  foot: "" });
+
 // THE ASK IS THE MESSAGE'S OWN WORDS when triage left no summary of its own (the task-view cleanup, owner-approved 2026-10-25): said
 // once, under the title, and From does not open the same words again as the message under it. Spacing and line breaks aside.
 const squash = (s) => String(s || "").replace(/\s+/g, " ").trim();

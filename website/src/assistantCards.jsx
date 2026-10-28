@@ -1473,7 +1473,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose, onAge
               {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => reply(i)} title={btnHint("reply")} sx={quiet}>{btn("reply")}</Button>}
               {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("mine", i)} title={btnHint("mine")} sx={quiet}>{btn("mine")}</Button>}
               {i.mid && !i.tid && canCode && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => setAsking({ key: i.key, coding: true })} title={btnHint("coding_agent")} sx={quiet}>{btn("coding_agent")}</Button>}
-              {i.mid && !i.tid && <span title={noAi || undefined}><Button size="small" variant="outlined" disabled={!!busy || !!noAi} onClick={() => setAsking({ key: i.key, coding: false })} title={noAi || btnHint("regular_agent")} sx={quiet}>{btn("regular_agent")}</Button></span>}
+              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy || !!noAi} onClick={() => setAsking({ key: i.key, coding: false })} title={noAi || btnHint("regular_agent")} sx={quiet}>{btn("regular_agent")}</Button>}
               {/* one line of the handful can be put down on its own - All read was the only way to let any of it go */}
               {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("not_ours", i)} title={btnHint("not_ours")} sx={quiet}>{btn("not_ours")}</Button>}
               {canUnsubscribe(i) && (left[i.key] ? <span className="tq-pressed" data-tq-pressed={btn("unsubscribe")}>✓ {btn("unsubscribe")}</span>

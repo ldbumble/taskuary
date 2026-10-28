@@ -80,7 +80,9 @@ test("a general agent that could not start says Failed, offers Try again and Con
   // or in its ▾: Close folds last (the owner, 2026-10-27), so on a narrower row the Agent group's greyed Try again folds before Mark done
   const greyed = () => page.evaluate(() => [...document.querySelectorAll('button, [role="menuitem"]')].some((b) => b.textContent.trim().startsWith("Try again")
     && b.offsetParent && (b.disabled || b.getAttribute("aria-disabled") === "true") && /No AI is connected/.test(b.title || b.closest("[title]")?.title || "")));
-  let seen = await greyed();
+  // ...read once the task has drawn whole: the failure's own fix (Connect an AI) can land a beat before the row's Try again
+  let seen = false;
+  for (let i = 0; i < 20 && !(seen = await greyed()); i += 1) await new Promise((r) => setTimeout(r, 500));
   for (const m of seen ? [] : await page.$$eval("[data-tq-row] [data-tq-more]", (e) => e.map((x) => x.dataset.tqMore))) {
     await page.evaluate((m) => document.querySelector(`[data-tq-row] [data-tq-more="${m}"]`)?.click(), m); await new Promise((r) => setTimeout(r, 500));
     if ((seen = await greyed())) break;

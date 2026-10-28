@@ -637,9 +637,14 @@
   /* ...THE BOX STAYS IN THE BAR (the owner, 2026-10-28: "the button section should end and the chat should come out of the bottom bar and
      not go all the way up - max 50%"): open, the box is the bar's own right end, --tq-chat-w wide, and the row's buttons end before it (fitRow
      folds what no longer fits); the window rises out of it */
+  /* ...the box keeps the pill's slot (one line, the pill's width), and its FIELD rises out of it - the words on their own line over the tools
+     and send, growing UP as they wrap, never wider (the owner, 2026-10-28: "it expands only height not width"); the window stands on it */
   .tq-compose .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { position: relative; flex: 0 0 var(--tq-chat-w); width: var(--tq-chat-w);
-    box-sizing: border-box; margin: 3px 6px 3px 0; min-height: 40px; align-items: stretch; padding: 4px 6px; gap: 0;
-    border: 1px solid #d5d0c7; border-top-color: #ece7de; border-radius: 0 0 14px 14px; background: #fff; box-shadow: none; }
+    box-sizing: border-box; margin: 3px 6px 3px 0; min-height: 34px; padding: 0; gap: 0; border: 0; background: transparent; box-shadow: none; }
+  .tq-compose .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] > .tq-compose-field { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6;
+    border-color: #d5d0c7; border-top-color: #ece7de; border-radius: 0 0 14px 14px; box-shadow: 0 6px 16px -8px #39352d38; }
+  /* ...the dock's clip (its round corners) would cut the field off at the dock's top */
+  .tq-compose .tq-dock:has(> .tq-dock-line > .tq-compose-box[data-tq-open]) { overflow: visible; }
   .tq-compose .tq-dock .tq-dock-line:not(:has(> .tq-arow)) > .tq-compose-box[data-tq-open] { position: absolute; right: 20px; bottom: calc(100% + 6px); z-index: 6;
     width: var(--tq-chat-w); box-sizing: border-box; margin: 0; min-height: 46px; align-items: stretch; padding: 8px 10px 10px; gap: 0;
     border: 1px solid #d5d0c7; border-top-color: #ece7de; border-radius: 0 0 14px 14px; background: #fff; box-shadow: 0 14px 28px -10px #39352d38; }
@@ -649,14 +654,18 @@
    them growing upward to five lines, send inside on the right, filled once there is something to send. At rest the field is nothing
    (display: contents) and the pill is unchanged */
 .tq-compose-field { display: contents; }
-.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] > .tq-compose-field { flex: 1; min-width: 0; display: flex; align-items: flex-end; gap: 2px;
-  padding: 3px 4px 3px 3px; border: 1px solid #d5d0c7; border-radius: 12px; background: #fff; transition: border-color .12s, box-shadow .12s; }
+.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] > .tq-compose-field { flex: 1; min-width: 0; box-sizing: border-box; display: grid;
+  grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "words words" "tools send"; align-items: center; gap: 0 2px;
+  padding: 3px 5px 4px 3px; border: 1px solid #d5d0c7; border-radius: 12px; background: #fff; transition: border-color .12s, box-shadow .12s; }
 .tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] > .tq-compose-field:hover { border-color: #b5aea3; }
 .tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] > .tq-compose-field:focus-within { border-color: #55697a; box-shadow: 0 0 0 3px #55697a29; }
-/* ...ONE ROW, like any chat box (the owner, 2026-10-27: "typing is above where attachments, emojis and voice note is - looks weird"): the
-   tools on the left, the words beside them growing upward as they wrap, send on the right */
-.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] textarea { min-height: 34px; max-height: 114px; padding: 7px 4px; line-height: 20px; }
-.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] .tq-send { width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; margin-bottom: 2px; background: #55697a; transition: background-color .12s, color .12s; }
+/* ...THE WORDS ON A LINE OF THEIR OWN, the tools and send under them (the owner, 2026-10-28, of a 280px field whose words started after the
+   paperclip, mic and emoji and lost their first line: ChatGPT's layout) - the words the field's full width, wrapping, up to five lines and
+   scrolling inside past that; attach, mic and emoji on the left under them, send on the right */
+.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] textarea { grid-area: words; width: 100%; min-height: 34px; max-height: 114px; padding: 7px 6px 3px; line-height: 20px; }
+.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] .tq-compose-tools { grid-area: tools; display: flex; align-items: center; gap: 0; min-width: 0; }
+.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] .tq-compose-tools > * { flex: 0 0 auto; }
+.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] .tq-send { grid-area: send; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; background: #55697a; transition: background-color .12s, color .12s; }
 .tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] .tq-send:disabled { opacity: 1; background: #ebe8e2; color: #a19b91; }
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box .tq-send { width: 28px; height: 28px; flex-basis: 28px; border-radius: 50%; }
 /* ...its hint ONE line, cut at the pill's edge: the box's long hint (an FYI batch, the walk's end) wrapped in the 220px pill and half its
@@ -679,6 +688,12 @@
 .tq-chat-pop { position: absolute; right: 20px; bottom: calc(100% + var(--tq-box-h, -2px)); z-index: 6; width: var(--tq-chat-w); box-sizing: border-box; display: flex; flex-direction: column;
   border: 1px solid #d5d0c7; border-bottom: 0; border-radius: 14px 14px 0 0; background: #fff; box-shadow: 0 -2px 28px #39352d1f, 0 2px 6px #39352d10; animation: tqPopIn .14s ease-out; }
 .tq-chat-pop[hidden] { display: none; }
+/* ...MINIMIZED, only its head: a strip on the open box, pressed to bring the window back */
+.tq-chat-pop[data-tq-mini] { height: auto; cursor: pointer; }
+.tq-chat-pop[data-tq-mini] .tq-chat-pop-head { border-bottom: 0; }
+.tq-chat-pop[data-tq-mini] .tq-chat-pop-head:hover { background: #f6f5f1; border-radius: 14px 14px 0 0; }
+.tq-chat-pop-body[hidden] { display: none; }
+.tq-chat-unseen.in-head { position: static; margin-left: 4px; }
 @keyframes tqPopIn { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) { .tq-chat-pop { animation: none; } }
 .tq-chat-pop-head { display: flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 7px 6px 7px 12px; border-bottom: 1px solid #ece7de; font-size: 12px; color: #6e685f; }

@@ -5,8 +5,10 @@ import { startHarness } from "./harness.mjs";
 
 /* ONCE OPEN, THE CHAT BOX STAYS OPEN (the owner, 2026-10-27: "it gets smaller and bigger at random times when you are in there ... when you
    click in, it stays open until you do X or something"; "it should not hover over the buttons but over the canvas"; "typing is above where
-   attachments, emojis and voice note is - looks weird"). Opened: over the canvas, above the dock - never over the row; one row - the tools,
-   the words and send on one line; open through a click elsewhere, a look away and an answer; shut by its × or Esc. */
+   attachments, emojis and voice note is - looks weird"). Opened: the box stays in the bar at the pill's width and its field rises out of it
+   over the canvas - never over the row's buttons (the owner, 2026-10-28: "the chat should come out of the bottom bar"); the words on a line of
+   their own the field's full width, attach, mic and emoji under them on the left and send on the right (the owner, 2026-10-28: the words began
+   after the icons and lost their first line); open through a click elsewhere, a look away and an answer; shut by its × or Esc. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 test("the chat box stays open over the canvas until its × or Esc, in one row, never over the buttons", { timeout: 300000 }, async (t) => {
@@ -25,19 +27,21 @@ test("the chat box stays open over the canvas until its × or Esc, in one row, n
   await sleep(2000);
   const open = () => page.$(".tq-compose-box[data-tq-open]").then(Boolean);
   const shape = () => page.evaluate(() => {
-    const box = document.querySelector(".tq-compose-box"), dock = document.querySelector(".tq-dock"), r = box.getBoundingClientRect();
-    const mid = (e) => { const q = e.getBoundingClientRect(); return q.top + q.height / 2; };
-    const ta = box.querySelector("textarea"), tools = [...box.querySelectorAll(".tq-compose-tools button")].filter((b) => b.offsetParent);
-    return { clear: Math.round(dock.getBoundingClientRect().top - r.bottom), oneRow: tools.every((b) => Math.abs(mid(b) - mid(ta)) <= 12),
-      toolsLeft: tools.every((b) => b.getBoundingClientRect().right <= ta.getBoundingClientRect().left + 1), tools: tools.length };
+    const box = document.querySelector(".tq-compose-box"), line = document.querySelector(".tq-dock-line"), r = (e) => e.getBoundingClientRect();
+    const field = box.querySelector(".tq-compose-field"), ta = box.querySelector("textarea"), send = box.querySelector(".tq-send"), verbs = line.querySelector(".tq-arow-verbs");
+    const tools = [...box.querySelectorAll(".tq-compose-tools button")].filter((b) => b.offsetParent), f = r(field), t = r(ta);
+    return { inBar: r(box).top >= r(line).top - 1 && r(box).bottom <= r(line).bottom + 1, rises: f.top < r(line).top && Math.abs(f.bottom - r(box).bottom) <= 1,
+      clear: Math.round(f.left - r(verbs).right), wordsWide: t.left - f.left <= 8 && f.right - t.right <= 8,
+      toolsUnder: tools.every((b) => r(b).top >= t.bottom - 1 && r(b).right <= r(send).left), sendRight: f.right - r(send).right <= 10 && r(send).top >= t.bottom - 1,
+      tools: tools.length };
   });
 
   await page.click(".tq-compose-box textarea");
   await page.waitForSelector(".tq-compose-box[data-tq-open]", { timeout: 5000 });
   await sleep(300);
   const s = await shape();
-  assert.ok(s.clear >= 0, `the open box stands above the dock, never over the buttons ${JSON.stringify(s)}`);
-  assert.ok(s.tools >= 2 && s.oneRow && s.toolsLeft, `one row: the tools on the left of the words, on their line ${JSON.stringify(s)}`);
+  assert.ok(s.inBar && s.rises && s.clear >= 0, `the box stays in the bar, its field rising out of it - never over the buttons ${JSON.stringify(s)}`);
+  assert.ok(s.tools >= 2 && s.wordsWide && s.toolsUnder && s.sendRight, `the words the field's width, the tools under them on the left, send on the right ${JSON.stringify(s)}`);
 
   // a click on the canvas, a look away: still open
   await page.mouse.click(400, 300); await sleep(600);

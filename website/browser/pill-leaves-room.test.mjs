@@ -58,6 +58,6 @@ test("on the desk the pill's hint is one line", { timeout: 180000 }, async (t) =
   const p = await pill(page);
   assert.equal(p.next?.text, "All read, next");
   assert.equal(p.hint, "nowrap");
-  assert.ok(p.box >= 170 && p.box <= 190, `the desk's pill is the small one at rest (the owner, 2026-10-27): ${p.box}`);
+  assert.ok(p.box >= 276 && p.box <= 284, `the desk's pill is the chat's own 280px at rest (the owner, 2026-10-28): ${p.box}`);
   assert.deepEqual(errors, []);
 });

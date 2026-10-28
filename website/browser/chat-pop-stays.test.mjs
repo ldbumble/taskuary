@@ -6,7 +6,7 @@ import { startHarness } from "./harness.mjs";
 /* THE CHAT POP-UP IS ONE NARROW COLUMN WITH THE BOX, AND STAYS (the owner, 2026-10-27): the open box and the answer over it had different
    widths ("doesn't match the size"), the row kept a blank white pill in the box's slot that read as a second input, and an answer that only
    lit a button shut the pop-up by itself after 1.8 s - "it disappeared when done? not sure what happened" - its Show the last answer
-   bringing back the owner's own line alone ("useless"). At 1600x810, on the demo's invoice: one ~380px column, the slot kept but unseen, and
+   bringing back the owner's own line alone ("useless"). At 1600x810, on the demo's invoice: one ~280px column (the pill's, 2026-10-28), the slot kept but unseen, and
    "remind me Monday" (the demo's brain lights Remind me, no words) leaves a receipt that is still up 5 s later and comes back with it. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const rect = (page, sel) => page.$eval(sel, (e) => { const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width }; });
@@ -27,16 +27,17 @@ test("the box and the pop-up are one column, the row's slot is unseen, and an ac
   await page.waitForSelector(".tq-dock [data-tq-row] [data-tq-next]", { timeout: 20000 });
   await sleep(2500);
 
-  // OPEN: the row keeps the pill's room, but nothing is drawn in it
+  // OPEN: the box keeps the pill's room in the bar (the owner, 2026-10-28: "the chat should come out of the bottom bar"), drawing nothing
+  // of its own there - its field, rising out of it, is the one input
   await page.click(".tq-compose-box textarea");
   await page.waitForSelector(".tq-compose-box[data-tq-open]", { timeout: 5000 });
   await sleep(300);
-  const slot = await page.$eval(".tq-dock .tq-dock-line", (e) => {
-    const s = getComputedStyle(e, "::after");
-    return { content: s.content, w: parseFloat(s.width), border: s.borderTopStyle === "none" || parseFloat(s.borderTopWidth) === 0, bg: s.backgroundColor, shadow: s.boxShadow };
+  const slot = await page.$eval(".tq-compose-box", (e) => {
+    const s = getComputedStyle(e);
+    return { w: e.getBoundingClientRect().width, border: parseFloat(s.borderTopWidth) === 0, bg: s.backgroundColor, shadow: s.boxShadow, fields: e.querySelectorAll(".tq-compose-field").length };
   });
-  assert.ok(slot.content !== "none" && slot.w >= 170, `the slot still holds the pill's room ${JSON.stringify(slot)}`);
-  assert.ok(slot.border && slot.bg === "rgba(0, 0, 0, 0)" && slot.shadow === "none", `...and is not drawn: no blank second input ${JSON.stringify(slot)}`);
+  assert.ok(slot.w >= 276 && slot.w <= 284, `the box still holds the pill's room ${JSON.stringify(slot)}`);
+  assert.ok(slot.border && slot.bg === "rgba(0, 0, 0, 0)" && slot.shadow === "none" && slot.fields === 1, `...and is not drawn: no blank second input ${JSON.stringify(slot)}`);
 
   // SENT: an answer that only lit a button
   await page.keyboard.type("remind me Monday");
@@ -44,10 +45,10 @@ test("the box and the pop-up are one column, the row's slot is unseen, and an ac
   await page.waitForSelector("[data-tq-chat-pop]:not([hidden])", { timeout: 20000 });
   await page.waitForFunction(() => !document.querySelector("[data-tq-chat-pop] .tq-pending"), { timeout: 30000 });
   await sleep(400);
-  const pop = await rect(page, "[data-tq-chat-pop]"), box = await rect(page, ".tq-compose-box");
+  const pop = await rect(page, "[data-tq-chat-pop]"), box = await rect(page, ".tq-compose-box .tq-compose-field");
   const say = JSON.stringify({ pop, box });
   assert.ok(Math.abs(pop.l - box.l) <= 1 && Math.abs(pop.r - box.r) <= 1, `one column: the same left and right edges ${say}`);
-  assert.ok(pop.w >= 370 && pop.w <= 381, `...narrow, like a chat helper on an app ${say}`);
+  assert.ok(pop.w >= 276 && pop.w <= 284, `...the pill's width, like a chat helper on an app ${say}`);
   assert.ok(pop.b <= box.t + 1 && box.t - pop.b <= 8, `...the answer flush above the box ${say}`);
 
   // ...still up 5 s later, ending on words that say what was done

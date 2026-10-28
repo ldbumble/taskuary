@@ -96,7 +96,7 @@ export const CalendarLine = ({ meta }) => (
 // `onSent`: a send or close-out that went through - the task page reads the task and, when that closed it, walks on.
 // `toRow`: the decision's buttons are drawn by the action row above the chat line (layout B), not here - the same handlers, registered.
 // `onEmailInstead`: the task's Send out results - a chat reply that has to carry a file is answered by email instead (U17).
-export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, toRow = false, simulated = false, onDrop = null, onEmailInstead = null }) {
+export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, toRow = false, simulated = false, onDrop = null, onEmailInstead = null, why = "" }) {
   const [text, setTextNow] = useState(() => heldOf(r)?.text ?? null);   // the owner's edit; null means "the draft as filed"
   const setText = (v) => { hold(r, { text: v ?? null }); setTextNow(v); };
   const [cc, setCcNow] = useState(() => heldOf(r)?.cc ?? null);         // null means "the CC the draft was filed with"
@@ -527,6 +527,10 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
             reply mean here? don't think we need that") - the reply is edited or redrafted in place, never rejected apart;
             and a plain draft is Close out, Redraft (at the row's end) or the task bar's own Mark done (2026-10-01) */}
         {proposal && proposal.kind !== "closeout" && <Button size="small" color="error" disabled={busy || delivery.frozen} onClick={() => decide("reject")} title={rejectTitle}>{proposal.rejectLabel}</Button>}
+        {/* WHY IT IS LIT, BESIDE IT (the owner, 2026-10-28): the Advisor's reason for lighting Redraft over Send stood in the folded Agent
+            section, and Close out showed a lit Redraft with no word of why. `why`: the task's Advisor line, said where its button is lit */}
+        {why && String(lit || "").startsWith(`${r.ReviewId}:`) && <Typography component="span" data-tq-lit-why="" variant="body2"
+          sx={{ alignSelf: "center", color: "#55697a", fontSize: 12.5, minWidth: 0, overflowWrap: "anywhere" }}>{why}</Typography>}
         </>
       </Box>
       {/* what the one word does HERE - the buttons never change, this line does */}

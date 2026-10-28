@@ -140,6 +140,8 @@
 .tq-pile-row .logo .goal { width: 15px; font-size: 13px; line-height: 15px; text-align: center; }
 /* a goal's count beside its title - "· 2 of 5 steps" - in the age column's quiet ink */
 .tq-pile-steps { flex: 0 0 auto; font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: #746e64; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* ...and its due date after it - like its count and its word, the title gives way to it, never the other way round (.goal-t) */
+.tq-pile-due { flex: 0 0 auto; font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: #746e64; white-space: nowrap; }
 /* 500, not 600: at 600 every row shouted equally and the column read as a wall of bold (the owner,
    2026-09-16: "it's all too bold"). 11.5px is the size the TIMELINE tab sets its own subjects in
    (FeedView), and the two rails are the same list read two ways, so they read at one size. And the
@@ -400,6 +402,10 @@
 .tq-rows td { padding: 2px 14px 2px 0; border-top: 1px solid #ddd5c7; }
 .tq-rows td.n { text-align: right; font-variant-numeric: tabular-nums; }
 .tq-card-full { margin-top: 7px; padding: 10px 12px; border-radius: 8px; background: #f6f4f1; border: 1px solid #ebe6de; font-size: 12.5px; line-height: 1.55; color: #262521; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; }
+/* ...a report's table: the panel as wide as the table, never past the card (the owner, 2026-10-28) */
+.tq-card-full.fit { width: fit-content; max-width: 100%; box-sizing: border-box; }
+/* ...folded, the table alone sets it: the chart and files under it are below the fold, and their width left the panel 3/4 empty */
+.tq-card-clamp .tq-card-full.fit > :not(table) { width: 0; min-width: 100%; }
 .tq-task-focus { margin-top: 9px; padding: 12px 14px 13px; border: 1px solid #b9c8bb; border-radius: 9px; background: #fff;
   box-shadow: 0 2px 8px rgba(63,89,67,.08); color: #252923; }
 .tq-task-focus-label { display: flex; align-items: center; gap: 8px; color: #58705c;
@@ -740,6 +746,12 @@
    and folded, not squeezed; only the last layout (Next, the one move, ▾) may shorten the move's label, with an ellipsis */
 .tq-arow-verbs { display: flex; flex-wrap: nowrap; align-items: center; justify-content: center; justify-content: safe center; gap: 6px 10px; width: 100%; min-width: 0; }
 .tq-arow-verbs > .tq-cl { flex: 0 0 auto; }
+/* NAV STAYS AT THE ROW'S START (the owner, 2026-10-28): centred with the rest, Back/Next slid between items (519 -> 704 -> 615 px) and
+   Next left the cursor. Nav holds the start; the item's own types centre in the room left (the two auto margins share it) */
+.tq-arow-verbs > .tq-cl-next { margin-right: auto; }
+.tq-arow-verbs > .tq-cl-next ~ .tq-cl:last-child { margin-right: auto; }
+/* ...and on the first row, with no Back, Back's room is kept unseen so Next does not slide left (ActionRow data-tq-back-room) */
+.tq-cl [data-tq-back-room] { visibility: hidden; display: inline-flex; align-items: center; pointer-events: none; }
 .tq-arow-verbs.tight > .tq-cl:not(.tq-cl-next) { flex-shrink: 1; }
 /* the unseen copy ActionRow measures: every part in the row's own classes, at its natural width, taking no room */
 .tq-arow-ghost { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }

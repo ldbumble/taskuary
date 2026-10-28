@@ -513,7 +513,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
             <Box>
               <Label>By</Label>
               <TextField type="date" size="small" value={by} onChange={(e) => setBy(e.target.value)} sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
-              <Typography sx={{ fontSize: 11, color: FAINT, mt: 0.5 }}>The date is the goal's clock: it sits where the age goes on your rail.</Typography>
+              <Typography sx={{ fontSize: 11, color: FAINT, mt: 0.5 }}>The date shows on the goal's row on your rail, as "due" and the day.</Typography>
             </Box>
             <Box>
               <Label>Who is involved</Label>

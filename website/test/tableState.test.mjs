@@ -38,7 +38,7 @@ test("a page over the item: the rail's tag and the box say it is under the page,
   // ...and the box its words - but the one-row bar's pill, at rest and widened, its own short ones (2026-10-26)
   // ...and the pill at rest with no task on the table the short hint, the long one ran on under its send button (2026-10-26)
   // ...and the pill at rest the SAME "Ask…" whatever is on the table (the owner, 2026-10-27: "always the same size and words")
-  assert.match(src, /placeholder=\{boxNarrow && !boxWide \? "Ask…" : phone \? tableSays\.phone : !popOn \? tableSays\.box : boxWide \? "[^"]+" : "Ask…"\}/, "and the box its words");
+  assert.match(src, /placeholder=\{boxNarrow && !boxWide \? "Ask…" : phone \|\| \(boxIsOver && boxWide\) \? tableSays\.phone : !popOn \? tableSays\.box : boxWide \? "[^"]+" : "Ask…"\}/, "and the box its words");
   assert.match(src, /aria-label=\{tableSays\.name\}/, "and its name the task on the table");
 });
 

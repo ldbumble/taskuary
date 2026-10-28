@@ -253,6 +253,7 @@ class TheScriptedBrainRoutesTests(unittest.TestCase):
         self.assertEqual(call('hand this to Priya Shah'), {'kind': 'task.handoff', 'params': {'who': 'Priya Shah'}})
         self.assertEqual(call('pass it to Marcus'), {'kind': 'task.handoff', 'params': {'who': 'Marcus'}})
         self.assertEqual(call('chase them'), {'kind': 'chase', 'params': {}})
+        self.assertFalse(self.ask('hand this to a coding agent').startswith('CALL: {"kind": "task.handoff"'), 'an agent is no person')
 
     def test_a_ref_a_subject_or_a_name_brings_the_item_up(self):
         self.assertEqual(self.ask('open TQ-0004'), 'Here: [TQ-0004](#task=4).')

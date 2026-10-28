@@ -334,7 +334,8 @@ _REMIND = re.compile(r'\bremind me\b', re.I)
 # ...and the other put-downs and hand-offs a visitor types (trust audit F5, 2026-10-28): each CALLs the tool the real Assistant would
 _NOTE = re.compile(r'\bclose\b.*?\bwith (?:a |the )?note\b\s*[:,-]?\s*(.*)$', re.I)
 _NAT = re.compile(r"\bnot (?:a|really a) task\b|\bisn'?t a task\b|\bnever (?:was )?a task\b", re.I)
-_HAND = re.compile(r'\b(?:hand|pass|give)\b(?: (?:this|it|that))?(?: (?:off|over|on))? to ([A-Z][\w.-]*(?: [A-Z][\w.-]*)?|[\w.+-]+@[\w.-]+)', re.I)
+# ...to a PERSON - a capitalised name or an address: "hand this to a coding agent" is an agent's hand-off, the real brain's road
+_HAND = re.compile(r'(?i:\b(?:hand|pass|give)\b(?: (?:this|it|that))?(?: (?:off|over|on))? to) ([A-Z][\w.-]*(?: [A-Z][\w.-]*)?|[\w.+-]+@[\w.-]+)')
 _CHASE = re.compile(r'\bchase\b|\bnudge (?:them|him|her)\b|\bfollow up with them\b', re.I)
 _WHEN = re.compile(r'\b(?:today|tonight|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week|\d+ (?:days?|weeks?))\b'
                    r'(?:\s+at\s+\d{1,2}(?::\d\d)?\s*[ap]m)?', re.I)

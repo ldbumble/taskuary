@@ -12,7 +12,7 @@
   ],
   "stages": [
     { "key": "to_start", "word": "to start", "section": "from", "main": "task", "shows": "the task - its ask and where it came from", "drawer": "right: Agent and Close out", "lit": true, "advisor": "drawer", "verbs": ["regular_agent", "close", "defer"] },
-    { "key": "to_reply", "word": "to reply", "section": "close", "main": "task", "shows": "the task - who wrote and what they asked", "drawer": "right: Agent and Close out, where the reply is written", "lit": true, "advisor": "drawer", "verbs": ["reply", "close", "defer"] },
+    { "key": "to_reply", "word": "to reply", "section": "from", "main": "task", "shows": "the task - who wrote and what they asked", "drawer": "right: Agent and Close out, where the reply is written", "lit": true, "advisor": "drawer", "verbs": ["reply", "close", "defer"] },
     { "key": "todo", "word": "to do", "section": "from", "main": "task", "shows": "the task and its list - a to-do's checklist, a goal's steps", "drawer": "right: Agent and Close out", "lit": false, "advisor": "drawer", "verbs": ["close", "defer"] },
     { "key": "agent_working", "word": "agent working", "section": "agent", "main": "work", "shows": "the agent's session, the whole width", "drawer": "left: Came from, folded to one line", "lit": false, "advisor": "main", "verbs": ["stop_agent"] },
     { "key": "agent_result", "word": "agent result", "section": "agent", "main": "work", "shows": "the agent's Result - or why its run failed, with Try again", "drawer": "left: Came from", "lit": false, "advisor": "main", "verbs": ["close", "continue"] },

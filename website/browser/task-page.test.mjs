@@ -208,7 +208,7 @@ test("the task page: three sections at rest, the agent nearly the whole width wh
     assert.equal(await page.$("[data-tq-work] .xterm"), null, "no terminal: the session is one line");
     const heading = await page.$eval('[data-tq-work] [data-tq-step="2"]', (dot) => dot.parentElement.innerText);
     // ...the section's own heading, no second way to the record (the owner, 2026-10-27: "why are there 2 buttons for full results?")
-    assert.match(heading, /^2 · Agent/i, "the agent's section, in the sections' heading line");
+    assert.match(heading, /^Agent/, "the agent's section, by its name alone (2026-10-28)");
     assert.equal(await page.$eval('[data-tq-work] [data-tq-step="2"]', (dot) => dot.parentElement.getAttribute("aria-expanded")), null, "the heading folds nothing");
     await page.click("[data-tq-replay]");
     await page.waitForFunction(() => document.querySelector("[data-tq-replay]")?.getAttribute("aria-expanded") === "true", { timeout: 5000 });
@@ -245,7 +245,8 @@ test("the task page: three sections at rest, the agent nearly the whole width wh
     await page.waitForSelector("[data-tq-from]", { visible: true, timeout: 5000 });
     assert.equal(await page.$eval("[data-tq-from]", (e) => getComputedStyle(e).overflowY), "auto", "Came from scrolls inside itself");
     await page.click("[data-tq-section-tab=close]");
-    await page.waitForFunction(() => /Mark done closes it, or close it with a note\./.test(document.querySelector("[data-tq-closeout]")?.innerText || ""), { timeout: 5000 });
+    // ...its heading the name alone - its explanation was small text that did not help (the owner, 2026-10-28)
+    await page.waitForFunction(() => document.querySelector("[data-tq-task-body]")?.getAttribute("data-tq-main") === "close" && !!document.querySelector("[data-tq-closeout]"), { timeout: 5000 });
     const opened = await page.$eval("[data-tq-task-page]", (e) => e.innerText);
     assert.doesNotMatch(opened, /Nobody sent this one|not available/i);
     assert.ok(await page.$("[data-tq-work] [data-tq-writeup-at=result]"), "the write-up line stays with the Result");

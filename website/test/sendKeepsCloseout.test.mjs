@@ -13,9 +13,9 @@ test("a reply sent from here is Close out's: the stage stays drafted and Close o
   const drafted = stageOf({ focus: "reply", drafted: true }), owed = stageOf({ focus: "reply", drafted: false });
   assert.equal(mainView({ stage: drafted }), "work", "with the sent reply counted, Close out is the page");
   assert.notEqual(mainView({ stage: owed }), "work", "...which is what the page flipped to without it");
-  // ...and in the three sections (2026-10-27) both are Close out's section: a reply owed or drafted, sent or not
+  // ...and in the three sections a drafted or sent reply is Close out's; one owed with nothing written opens on Came from (2026-10-28)
   assert.equal(sectionOf(drafted), "close");
-  assert.equal(sectionOf(owed), "close");
+  assert.equal(sectionOf(owed), "from");
 });
 
 test("once open, the main view and its section are held: only a new task, its detail landing, an agent starting or ending, a close or a stack re-reads them", () => {

@@ -100,7 +100,7 @@ test("three sections in the flow's order, open where the task is up to, tabs tha
   // ...each kind of task opens where it is up to
   await t.test("each task opens on the section it is up to", async () => {
     for (const [re, want] of [[/^Invoice 88213/, "close"], [/^Reconcile the August GL export/, "agent"], [/^Year-end audit/, "from"],
-      [/^Ray: schema sign-off/, "from"], [/^Migrate the census export/, "from"], [/^Invite: AP cutover dry run/, "close"]]) {
+      [/^Ray: schema sign-off/, "from"], [/^Migrate the census export/, "from"], [/^Invite: AP cutover dry run/, "from"]]) {   // owed, nothing drafted: what came in first (2026-10-28)
       const tid = id(re);
       if (!tid) continue;
       await openTask(page, tid);

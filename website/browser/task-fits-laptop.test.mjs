@@ -15,7 +15,7 @@ import { startHarness } from "./harness.mjs";
 // tab opens its section, the others close.
 const rect = (page, sel) => page.$eval(sel, (e) => { const r = e.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }; });
 
-test("three sections at every width: a failed run on the Agent, a fresh task on Came from, a reply owed on Close out", { timeout: 300000 }, async (t) => {
+test("three sections at every width: a failed run on the Agent, a fresh task on Came from, a reply owed on Came from too", { timeout: 300000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
   const page = await harness.newPage();
@@ -93,11 +93,11 @@ test("three sections at every width: a failed run on the Agent, a fresh task on 
     assert.equal(await main(), "agent");
     assert.equal(await page.$eval("[data-tq-from]", (e) => e.getBoundingClientRect().width), 0, `${width}: Came from closed as the Agent opened`);
 
-    // A REPLY WITH NOTHING DRAFTED opens on Close out (where the reply is written), Came from's tab naming who wrote
-    await open(burst.taskId, "[data-tq-section-tab=from]");
-    assert.equal(await main(), "close", `${width}: the reply owed opens on Close out`);
-    const bt = await tabs();
-    assert.match(bt.find((x) => x.key === "from").words, /Gail Moreno/, `${width}: ${JSON.stringify(bt)}`);
+    // A REPLY WITH NOTHING DRAFTED opens on Came from - what they wrote is read first (the owner, 2026-10-28: "why is it opening on Close out,
+    // not Came from?") - with Close out its tab, where the reply is written
+    await open(burst.taskId, "[data-tq-section-tab=close]");
+    assert.equal(await main(), "from", `${width}: the reply owed opens on Came from`);
+    assert.match(await page.$eval("[data-tq-from]", (e) => e.innerText), /Gail Moreno/, `${width}: who wrote`);
   }
   assert.deepEqual(errors, []);
 });

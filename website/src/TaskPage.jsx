@@ -408,12 +408,13 @@ function SectionTab({ sec, lines = [], foot = "", here = false, before = false, 
     </Box>
   );
 }
-// ...and an open one's head: "1 · CAME FROM", what it holds, and "up to here" where the task is
-function SectionHead({ sec, sub, here = false }) {
+// ...and an open one's head: its NAME, in the closed tabs' own type, and nothing else (the owner, 2026-10-28: "it should just say Close out on
+// top in black without all the small text. It does not help") - the number, what it holds and "up to here" are the tabs' to say
+const SECTION_NAME = { fontSize: 14, fontWeight: 600, lineHeight: 1.35, color: INK };
+function SectionHead({ sec }) {
   return (
-    <Box data-tq-section-head="" sx={{ display: "flex", alignItems: "baseline", gap: 1.25, flexWrap: "wrap", mb: 1.25, flexShrink: 0 }}>
-      <Typography sx={{ fontSize: 12, fontWeight: 600, letterSpacing: ".06em", color: here ? ACCENT2 : DIM, textTransform: "uppercase" }}>{sec.n} · {sec.name}</Typography>
-      <Typography sx={{ fontSize: 12, color: FAINT }}>{[sub, here ? "up to here" : ""].filter(Boolean).join(" - ")}</Typography>
+    <Box data-tq-section-head="" sx={{ display: "flex", alignItems: "baseline", mb: 1.25, flexShrink: 0 }}>
+      <Typography sx={SECTION_NAME}>{sec.name}</Typography>
     </Box>
   );
 }
@@ -3182,9 +3183,8 @@ const WorkflowHeading = ({ number, title, description, chip, tone, folded, onTog
     {/* no step number any more: From is a column of its own, not step 1 (the redesign, 2026-10-21) - the tone says whose move it is */}
     <Box data-tq-step={number} sx={{ width: quiet ? 7 : 9, height: quiet ? 7 : 9, borderRadius: "50%", bgcolor: tone, flexShrink: 0, ...(sec ? { display: "none" } : {}) }} />
     {sec ? <Box data-tq-section-head="" sx={{ minWidth: 0, flex: 1, display: "flex", alignItems: "baseline", gap: 1.25, flexWrap: "wrap" }}>
-      <Typography sx={{ fontSize: 12, fontWeight: 600, letterSpacing: ".06em", color: here ? ACCENT2 : DIM, textTransform: "uppercase", flexShrink: 0 }}>{sec.n} · {sec.name}</Typography>
-      <Typography sx={{ fontSize: 12, color: FAINT, minWidth: 0, display: "flex", alignItems: "center", gap: 0.25 }}>
-        {[sub ?? (title !== sec.name ? title : ""), !folded ? description : "", here ? "up to here" : ""].filter(Boolean).join(" - ")}
+      <Typography sx={{ ...SECTION_NAME, flexShrink: 0, display: "flex", alignItems: "center", gap: 0.25 }}>
+        {sec.name}
         {onToggle && <ExpandMoreIcon data-tq-fold-mark="" sx={{ fontSize: 16, color: FAINT, flexShrink: 0, transform: folded ? "rotate(-90deg)" : "none", transition: "transform .15s, color .15s" }} />}
       </Typography>
     </Box> : <Box sx={{ minWidth: 0, flex: 1 }}>

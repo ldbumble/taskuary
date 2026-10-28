@@ -588,7 +588,8 @@ def install_processing_changes(app, store):
         return {'taskId': tid}
 
     # ── THE STATE MATRIX (browser/state-matrix, 2026-10-28): the task states the demo world lacks, each one task, invented people ──────────
-    MATRIX = ('sent', 'working', 'coding_working', 'asked', 'stopped', 'finished', 'done', 'note', 'deferred', 'todo', 'idea', 'news')
+    MATRIX = ('sent', 'working', 'coding_working', 'asked', 'stopped', 'finished', 'done', 'note', 'deferred', 'todo', 'idea', 'news',
+              'fyi_thread', 'idea_mail')
 
     @app.post('/api/fixture/task/matrix')
     def matrix_state(body: dict):
@@ -596,7 +597,8 @@ def install_processing_changes(app, store):
         general agent's terminal at work, `coding_working` a coding one's; `asked` an agent at its prompt with a question for the owner;
         `stopped` a coding run cut off mid-work - its screen kept, no write-up; `finished` a general agent whose run said it finished;
         `done` / `note` closed by the owner, bare or with a note; `deferred` put away with Remind me; `todo` the owner's own to-do list;
-        `idea` an Advisor find on the rail; `news` a saved agent result and then the sender writing again."""
+        `idea` an Advisor find on the rail; `news` a saved agent result and then the sender writing again; `fyi_thread` three FYI mails on
+        one email thread with no task (one rail row, trust audit P2); `idea_mail` an Advisor find about an FYI mail with no task (P1)."""
         if set(body) != {'state'} or body['state'] not in MATRIX: raise HTTPException(422, f'state is one of {MATRIX}')
         from taskuary import concierge, general, remind, terminal, workerstate as ws
         s, now = body['state'], datetime.now()
@@ -660,6 +662,26 @@ def install_processing_changes(app, store):
             tid = None
             store.upsert_idea({'key': f'idea:matrix-weekly-ageing-{now:%H%M%S%f}', 'kind': 'idea', 'sig': 'matrix',
                                'text': 'The AP ageing is pulled by hand every Monday - a weekly report could send it.', 'action': {}}, at(minutes=5))
+            from taskuary import funnel
+            store.reconcile_processing_membership(); funnel.invalidate(); store._poke('feed-changed')
+        elif s in ('fyi_thread', 'idea_mail'):
+            tid = None
+            def fyi_mail(subject, who, words, ago, cid):
+                mid = store.add_message({'Channel': 'email', 'ExternalId': f'matrix-{s}-{ago}-{now:%H%M%S%f}', 'ConversationId': cid, 'FromName': who,
+                                         'FromEmail': f"{who.split()[0].lower()}@vendor.example", 'Subject': subject, 'BodyText': words,
+                                         'SentAt': at(minutes=ago), 'Status': 'filed'})
+                store.add_route(mid, None, 'file', 0.9, 'for your information - nothing asked', []); return mid
+            if s == 'fyi_thread':
+                cid = f'email:matrix-thread-{now:%H%M%S%f}'
+                for ago, words in ((1850, 'The Riverside site is moving to the new badge readers on Monday.'),
+                                   (1830, 'Correction: the readers go in on Tuesday, not Monday.'), (1810, 'All three readers are in and tested.')):
+                    fyi_mail('Badge reader rollout', 'Omar Keller', words, ago, cid)
+            else:
+                mid = fyi_mail('Statement of account - October', 'Payworth Billing', 'Your October statement is attached. Invoice 88213 is shown as open.',
+                               1808, f'email:matrix-statement-{now:%H%M%S%f}')
+                store.upsert_idea({'key': f'idea:matrix-statement-{now:%H%M%S%f}', 'kind': 'idea', 'sig': 'matrix-statement',
+                                   'text': 'The Payworth statement still shows invoice 88213 open - worth checking it was paid.', 'action': {'mid': mid}},
+                                  at(minutes=1807))
             from taskuary import funnel
             store.reconcile_processing_membership(); funnel.invalidate(); store._poke('feed-changed')
         elif s == 'news':

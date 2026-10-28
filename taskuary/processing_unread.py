@@ -686,6 +686,32 @@ def on_rail(card) -> bool:
     return bool(card.get('unread') or (card.get('deferred') and card.get('tid') and not card.get('closed')))
 
 
+def _fyi_mail(c) -> bool:
+    return (c.get('lane') == 'fyi' and c.get('kind') == 'fyi' and not c.get('tid') and bool(c.get('cid'))
+            and str(c.get('channel') or '').lower() == 'email')
+
+
+def fold_fyi_threads(cards: list) -> list:
+    """ONE FYI ROW PER EMAIL THREAD (trust audit P2, 2026-10-28): three FYI mails on one thread with no task were three rows. They are one -
+    the newest mail speaking, `thread` the keys of the rest (a press on the row settles them too, funnel.settle) and `thread_n` their count
+    for the row's "+N", as a task's burst is one row; `thread_items` the rest for Came from, which opens on all of them. A chat's lines are combined by triage already; a mail on a task is the task's."""
+    by = {}
+    for c in cards:
+        if _fyi_mail(c): by.setdefault(c['cid'], []).append(c)
+    gone = set()
+    for cs in by.values():
+        if len(cs) < 2: continue
+        cs = sorted(cs, key=lambda c: funnel_time(str(c.get('last_at') or c.get('when') or '')))
+        head, rest = cs[-1], cs[:-1]
+        head['thread'] = [k for c in rest for k in (c['key'], *c.get('thread', ()))]
+        head['thread_n'] = len(rest) + sum(c.get('thread_n', 0) for c in rest)
+        # ...and the mails it speaks for, oldest first, for Came from to show them all with it
+        head['thread_items'] = [{k: c.get(k) for k in ('key', 'mid', 'who', 'when', 'title', 'channel', 'source')} for c in rest]
+        head['unread'] = any(c.get('unread') for c in cs)
+        gone |= {id(c) for c in rest}
+    return [c for c in cards if id(c) not in gone]
+
+
 def arrived(store, now, query) -> list:
     """When each message of the last day and a half came in - ARRIVALS, read or not (trust audit F2, 2026-10-28): "16 arrived today"
     counted the unread cards, so it fell to 11 and 9 as the owner read them. The page counts the ones on its own today (its zone)."""
@@ -747,7 +773,7 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
             cards.append(card)
     # A FAILING CONNECTION IS THE BELL'S, NOT A ROW (the owner, 2026-10-26: "it should be only in errors logo in corner"):
     # the "stopped answering" row said again what the bell says, with no grace for a retry still at work (problems.py).
-    cards = funnel._order(cards)
+    cards = funnel._order(fold_fyi_threads(cards))
     return {'rev': snapshot['snapshot_revision'], 'items': cards, 'hidden': 0, 'muted': 0,
             'rules': [], 'canonical': True, 'coverage': coverage, 'arrived': arrived(store, now, query),
             'counts': {'all': counts['total'], 'unread': sum(c['unread'] for c in cards),

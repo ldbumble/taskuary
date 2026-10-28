@@ -792,6 +792,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                         {!!rankNo[i.key] && <span className="tq-pile-rank" title={`#${rankNo[i.key]} of this batch, by importance`}>
                           {CIRCLED[rankNo[i.key] - 1] || rankNo[i.key]}</span>}
                         <b className={goal ? "goal-t" : undefined}>{i.title}</b>
+                        {/* ONE FYI ROW PER EMAIL THREAD (trust audit P2, 2026-10-28): the newest mail speaks, the rest are its "+N" */}
+                        {i.thread_n > 0 && <span className="tq-pile-ref" data-tq-thread-n={i.thread_n} title={`${i.thread_n} more on this thread - it opens on all of them`}>+{i.thread_n}</span>}
                         {/* a goal's row is "🎯 title · 2 of 5 steps" - its count, never its TQ number (the owner, 2026-10-21) */}
                         {goal && Number.isInteger(i.steps) && i.steps > 0 && <span className="tq-pile-steps">· {i.steps_done || 0} of {i.steps} steps</span>}
                         {/* ...and WHEN IT IS DUE, in its words (the owner, 2026-10-28): "Dec 11" in the age column read as an age. It gives

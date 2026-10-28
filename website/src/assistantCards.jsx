@@ -1186,9 +1186,11 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
     : card.mid && !mineAlone ? <div className="tq-thr-words"><Clamp><CombinedTaskText card={card} list={false} /></Clamp></div> : null;
   // AN FYI ON THE TABLE, IN A TASK'S THREE SECTIONS (ItemSections; the owner, 2026-10-28: "even fyi ... opening on what came in"): Came from
   // open on the message - who, when, their own words - and Agent and Close out the slim tabs; its moves stay the row's
+  // ...ONE ROW FOR ITS WHOLE EMAIL THREAD opens on every mail it speaks for, oldest first (processing_unread.fold_fyi_threads, trust audit P2)
+  const thread = [...(card.thread_items || []), card];
   if (table != null && card.kind === "fyi") return (
-    <FyiSections card={card} table={table} items={[card]} err={err}
-      msgs={<FyiMessage item={card}>{card.mid && <FullText mid={card.mid} revision={card.presentation_revision} />}</FyiMessage>}
+    <FyiSections card={card} table={table} items={thread} err={err}
+      msgs={<>{thread.map((it) => <FyiMessage key={it.key || it.mid} item={it}>{it.mid && <FullText mid={it.mid} revision={it === card ? card.presentation_revision : undefined} />}</FyiMessage>)}</>}
       foot={<Foot openTask={onOpenTask} close={card} onDone={onDone}
         extra={canUnsubscribe(card) ? [{ verb: "unsubscribe", label: btn("unsubscribe"), title: btnHint("unsubscribe"), onClick: unsub, disabled: !!busy }] : []}
         covers={[...(own || mineAlone ? (suggestedKind === "coding" ? ["coding_agent", "coder"] : ["regular_agent"]) : ["reply"]), ...(mineAlone ? ["reply", "not_ours"] : [])]}

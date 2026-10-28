@@ -39,11 +39,12 @@ export function AdvisorNext({ advice, onPropose, onErr = null }) {
   return advice?.verb ? <div hidden data-tq-advice="" data-tq-silent="" data-tq-advice-verb={advice.verb} /> : null;
 }
 
-// ONE TYPE: its label, its two most likely buttons joined, and its own ▾ for the rest (clustersOf)
+// ONE PILL: the moves the width holds, and its own ▾ for the rest (foldsOf) - the move pill unlabelled, Change with its one quiet word
+const PILL = { move: "What to do", change: "Change the task", more: "More" };
 function Cluster({ g, btn, act = press }) {
   const [at, setAt] = useState(null);
   return (
-    <div className="tq-cl" role="group" aria-label={g.label || (g.type === "more" ? "More" : "This one")} data-tq-type={g.type}>
+    <div className="tq-cl" role="group" aria-label={g.label || PILL[g.type] || "This one"} data-tq-type={g.type}>
       {g.label && <span className="tq-cl-h" aria-hidden="true">{g.label}</span>}
       <div className="tq-cl-b">
         {g.shown.map(btn)}
@@ -102,7 +103,7 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   const row = rowOf(verbs, pick);
   const { ref, decide, agent, more, next, back, why } = row;
   const hosted = useHosted();
-  // ...a phone's row is Next, the one move and one ▾ (phoneRow) - the width the page calls a phone (AssistantView)
+  // ...a phone's row is Nav, Mark done, as many moves as fit and one ▾ (foldsOf.phone) - the width the page calls a phone (AssistantView)
   const phone = useMediaQuery("(max-width:600px)");
   // the card's own move, advised, is lit on the card (rowOf's `lit`); only the row that is drawn says which
   const drawn = inline || !hosted;

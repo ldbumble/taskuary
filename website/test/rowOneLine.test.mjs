@@ -60,13 +60,16 @@ const avail = (vw) => (vw <= 600 ? vw - 24 : vw >= 1100 ? Math.min(vw - 360, 140
 for (const [name, list] of Object.entries(STATES)) {
   test(`one line at every width: ${name}`, () => {
     const row = rowOf({ ref: "TQ-1", list }, PICKS[name] ?? null), ids = (xs) => xs.filter((x) => !x.slot).map((x) => x.id).sort();
-    const every = ids([...row.decide, ...row.agent, ...row.more]), held = leadOf(row, false), pressable = phoneRow(row).shown[0];
+    const every = ids([...row.decide, ...row.agent, ...row.more]), held = leadOf(row, false), pressable = leadOf(row);
     for (const vw of WIDTHS) {
       // ...the lead the folds keep in view, and on a phone its one move, never a greyed one (2026-10-28)
       const m = model(vw, row), fit = fitRow(row, m, avail(vw), vw <= 600), lead = vw <= 600 ? pressable : held;
       // ...only a move whose own label is longer than the box (the walk's end "Open TQ-... · <title>") is shortened, with an ellipsis -
       // still one line, still in view, its whole label on its hover
-      if (fit.tight) assert.ok(lead && lead.label.length > 40 && m.btn[lead.id] + m.next + 2 * m.pad + m.more > avail(vw) - 3 * m.rowGap, `${name} @${vw}: squeezed though it fits`);
+      // ...or a lit move too long to stand beside Mark done (a failed run's "Connect Claude again" on a phone)
+      const pinW = lead && lead.id !== "done" && every.includes("done") ? m.btn.done + m.bGap : 0;
+      if (fit.tight) assert.ok(lead && (lead.label.length > 40 || pinW) && m.btn[lead.id] + pinW + m.next + 2 * m.pad + m.more > avail(vw) - 3 * m.rowGap,
+        `${name} @${vw}: squeezed though it fits`);
       else assert.ok(rowWidth(fit.groups, row.next, m) <= avail(vw), `${name} @${vw}: ${rowWidth(fit.groups, row.next, m)}px in ${avail(vw)}px`);
       assert.ok(row.next, "Next is on the row"); assert.ok(!fit.groups.some((g) => [...g.shown, ...g.rest].some((x) => x.group === "next")), "Next never folds");
       const shown = fit.groups.flatMap((g) => g.shown), menus = fit.groups.flatMap((g) => g.rest);
@@ -75,49 +78,85 @@ for (const [name, list] of Object.entries(STATES)) {
       if (lit) assert.ok(shown.includes(lit), `${name} @${vw}: the one filled button is never folded`);
       assert.deepEqual(ids([...shown, ...menus]), every, `${name} @${vw}: every verb is reachable, once`);
       if (fit.groups.at(-1)?.type === "more") assert.equal(fit.groups.at(-2)?.rest.length || 0, 0, `${name} @${vw}: one ▾ at the row's end, never two side by side`);
-      if (vw <= 600) assert.equal(fit.groups.length <= 1 && (fit.groups[0]?.shown.length || 0) <= 1, true, `${name} @${vw}: a phone is Next, the one move and one ▾`);
+      // ...Mark done never folds (the owner, 2026-10-28: "You should not have Mark done ever hidden")
+      const done = every.includes("done") && [...row.decide, ...row.agent, ...row.more].find((x) => x.id === "done");
+      if (done) assert.ok(shown.includes(done), `${name} @${vw}: Mark done is in view`);
+      // ...the Change pill gives up its moves before the move pill does (all but a lit one)
+      const mv = fit.groups.find((g) => g.type === "move"), ch = fit.groups.find((g) => g.type === "change");
+      if (mv?.rest.length && ch) assert.ok(ch.shown.every((x) => x.tone === "p"), `${name} @${vw}: a move folded while Change kept ${ch.shown.map((x) => x.label)}`);
+      if (vw <= 600) assert.ok(fit.groups.length <= 1, `${name} @${vw}: a phone is Next, its moves and one ▾`);
     }
   });
 }
 
-test("the owner's case folded on a desktop instead of wrapping: five groups do not fit 1024, so Task folds first and Close (Mark done) after the rest", () => {
+// THE ROW IN THREE (the owner, 2026-10-28): Nav, the moves that finish or advance the item in one pill, the moves that change the task in another
+test("three pills: Mark done, the agent's move and the reply's lead the move pill; Change holds the task's shape", () => {
+  const row = rowOf({ ref: "TQ-1", list: STATES["new task"] }, PICKS["new task"]), all = foldsOf(row);
+  assert.deepEqual(all[0].map((g) => [g.type, g.label]), [["move", ""], ["change", "Change"]], "no REPLY / AGENT / CLOSE words");
+  assert.deepEqual(all[0][0].shown.slice(0, 3).map((x) => x.id), ["done", "start-agent", "reply"]);
+  assert.deepEqual(all[0][1].shown.map((x) => x.id).slice(0, 3), ["remind", "reshape", "nat"], "Remind me first");
+  // ...folding: Change first, to its ▾ alone, then the move pill from its end, then one ▾ for both
+  const shape = (l) => l.map((g) => `${g.type}:${g.shown.length}+${g.rest.length}`).join(" ");
+  const ch = all.findIndex((l) => l.find((g) => g.type === "change")?.shown.length === 0);
+  assert.ok(ch > 0 && all.slice(0, ch).every((l) => !l[0].rest.length), `the move pill folds nothing while Change has moves in view: ${all.map(shape)}`);
+  assert.equal(all.at(-1).length, 1, "the narrowest is one pill and one ▾");
+  assert.deepEqual(all.at(-1)[0].shown.map((x) => x.id), ["done", "reply"], "Mark done and the lit Reply");
+  assert.deepEqual(all.at(-1), [phoneRow(row)]);
+});
+
+test("the owner's case folds instead of wrapping on a desktop: Change first, every move reachable", () => {
   const row = rowOf({ ref: "TQ-1", list: STATES["stopped while drafting a WhatsApp reply"] }), all = foldsOf(row);
-  assert.deepEqual(all[0].map((g) => g.type), ["reply", "agent", "close", "task"]);
-  assert.deepEqual(all[1].map((g) => g.type), ["reply", "agent", "close", "more"], "Task folds first");
-  // ...Close after Agent (the owner, 2026-10-27: Mark done folds "if there is no space"): Reply holds the lit move here, so it stays
-  assert.deepEqual(all[2].map((g) => g.type), ["reply", "close", "more"], "then Agent - Close stays");
-  assert.deepEqual(all.at(-1), [phoneRow(row)], "the narrowest is the phone's");
   const m = model(1024, row), w0 = rowWidth(all[0], row.next, m);
-  assert.ok(w0 > avail(1024), `the typed groups need ${w0}px - the width that wrapped`);
-  assert.ok(fitRow(row, m, avail(1024)).level > 0);
+  assert.ok(w0 > avail(1024), `every move needs ${w0}px - the width that wrapped`);
+  const fit = fitRow(row, m, avail(1024));
+  assert.ok(fit.level > 0);
+  assert.ok(fit.groups.find((g) => g.type === "change")?.shown.length === 0, "Change is its ▾");
   assert.equal(fitRow(row, m, 5000).level, 0, "with room, nothing folds");
 });
 
-test("a group beside the shared ▾ hands its own ▾'s buttons to it: one ▾, first in its menu", () => {
-  const row = rowOf({ ref: "TQ-1", list: STATES["stopped while drafting a WhatsApp reply"] }), all = foldsOf(row), cs = all[0];
-  all.slice(1, -1).forEach((l) => {
-    const before = l.at(-2), was = cs.find((g) => g.type === before.type);
-    assert.deepEqual(before.rest, [], `${before.type} keeps no ▾ of its own beside the shared one`);
-    assert.deepEqual(l.at(-1).rest.slice(0, was.rest.length).map((x) => x.id), was.rest.map((x) => x.id), "its buttons lead the shared ▾");
-  });
+// THE OWNER'S BUG (0.3.9.58): the reply went, and the row lit Reply with Hand it to a person beside it and Mark done behind the ▾
+test("a sent reply: Mark done lit and in view at every width, Reply unlit beside it, Hand it to a person behind the ▾", () => {
+  const list = [v("reply", "decide"), v("close-note", "more"), ...task().map((x) => (x.id === "hand" ? { ...x, tucked: true } : x)), v("run-another", "agent"), next];
+  const row = rowOf({ ref: "TQ-1", list }, { verb: "close", label: "Mark done" });
+  assert.equal([...row.decide, ...row.agent, ...row.more].find((x) => x.tone === "p")?.id, "done");
+  for (const vw of [...WIDTHS, 1366]) {
+    const fit = fitRow(row, model(vw, row), avail(vw), vw <= 600), shown = fit.groups.flatMap((g) => g.shown);
+    assert.ok(shown.some((x) => x.id === "done" && x.tone === "p"), `@${vw}: Mark done lit, in view`);
+    assert.ok(!shown.some((x) => x.id === "reply" && x.tone === "p"), `@${vw}: Reply is not lit`);
+    assert.ok(!shown.some((x) => x.id === "hand"), `@${vw}: Hand it to a person waits in the ▾`);
+    assert.ok(fit.groups.some((g) => g.rest.some((x) => x.id === "hand")));
+  }
+  assert.ok(foldsOf(row)[0][0].shown.some((x) => x.id === "reply"), "with room, Reply stands beside Mark done");
 });
 
-test("the group holding the lit move folds last, and the phone keeps that move", () => {
+test("Mark done never folds, at any width, even with no room at all", () => {
+  for (const [name, list] of Object.entries(STATES)) {
+    const row = rowOf({ ref: "TQ-1", list }, PICKS[name] ?? null), done = [...row.decide, ...row.agent, ...row.more].find((x) => x.id === "done");
+    if (!done) continue;
+    for (const lvl of foldsOf(row)) assert.ok(lvl.some((g) => g.shown.includes(done)), `${name}: a layout hid Mark done`);
+    for (const w of [390, 1366, 40]) assert.ok(fitRow(row, model(w, row), w === 40 ? 40 : avail(w), w <= 600).groups.some((g) => g.shown.includes(done)), `${name} @${w}`);
+  }
+});
+
+test("the lit move in the Change pill stands while the others fold, and the phone keeps it", () => {
   const row = rowOf({ ref: "TQ-1", list: STATES["new task"] }, { verb: "defer", label: "Remind me" });
-  const all = foldsOf(row), lit = row.more.find((x) => x.tone === "p") || [...row.decide, ...row.agent].find((x) => x.tone === "p");
+  const all = foldsOf(row), lit = [...row.decide, ...row.agent, ...row.more].find((x) => x.tone === "p");
   assert.equal(lit.id, "remind");
-  all.slice(0, -1).forEach((l) => assert.ok(l.some((g) => g.type === "task" && g.shown.includes(lit)), "Task, holding the lit Remind me, stands while others fold"));
-  assert.deepEqual(all.at(-1)[0].shown.map((x) => x.id), ["remind"]);
+  all.forEach((l) => assert.ok(l.some((g) => g.shown.includes(lit)), "the lit Remind me stays in view"));
+  assert.deepEqual(all.at(-1)[0].shown.map((x) => x.id), ["done", "remind"]);
 });
 
-test("nothing measured is the widest layout; a phone starts at the phone's; an overflow the parts missed steps one fold further", () => {
-  const row = rowOf({ ref: "", list: STATES["agent finished"] });
+test("nothing measured is the widest layout; a phone starts at its one-▾ layouts; an overflow the parts missed steps one fold further", () => {
+  const row = rowOf({ ref: "", list: STATES["agent finished"] }), all = foldsOf(row);
   assert.equal(fitRow(row, null, 0).level, 0);
-  assert.equal(fitRow(row, null, 0, true).level, foldsOf(row).length - 1);
+  assert.equal(fitRow(row, null, 0, true).level, all.phone);
+  assert.ok(all.slice(all.phone).every((l) => l.length === 1), "one pill, one ▾");
   assert.equal(fitRow(row, model(1920, row), 5000, false, 1).level, 1);
-  assert.equal(fitRow(row, model(1920, row), 5000, false, 99).level, foldsOf(row).length - 1, "never past the phone's");
-  // ...too narrow for even that: an unlit move goes into the ▾ (a squeezed label read as a stray letter, the 2026-10-27 sweep), the line stays one
-  assert.deepEqual(fitRow(row, model(390, row), 40).groups.map((g) => [g.type, g.shown.length]), [["more", 0]]);
+  assert.equal(fitRow(row, model(1920, row), 5000, false, 99).level, all.length - 1, "never past the narrowest");
+  // ...too narrow for even that: an unlit move goes into the ▾ (a squeezed label read as a stray letter, the 2026-10-27 sweep) - Mark done stays
+  assert.deepEqual(fitRow(row, model(390, row), 40).groups.map((g) => [g.type, g.shown.map((x) => x.id)]), [["move", ["done"]]]);
+  const none = rowOf({ ref: "", list: [v("continue", "agent", { lead: true }), v("run-another", "agent"), v("nat", "more"), next] });
+  assert.deepEqual(fitRow(none, model(390, none), 40).groups.map((g) => [g.type, g.shown.length]), [["more", 0]]);
 });
 
 test("a draft's Send leaves no empty slot, on the bar or the phone's row (2026-10-25)", () => {

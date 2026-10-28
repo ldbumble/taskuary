@@ -122,7 +122,7 @@ test("the row puts a leading agent verb first and Mark done beside it (actionRow
   const live = rowOf({ ref: "", list: [v("save-end", "agent", { lead: true }), v("diff", "agent"), v("done", "more"), v("next", "next")] });
   assert.deepEqual(live.agent.map((x) => x.id), ["save-end", "diff", "done"]);
   assert.equal(live.decide.length, 0);
-  assert.equal(clustersOf(live).find((c) => c.type === "agent").shown[0].id, "save-end");
+  assert.deepEqual(clustersOf(live).find((c) => c.type === "move").shown.map((x) => x.id), ["done", "save-end", "diff"], "Mark done, then the agent's lead");
   // ...a reply waiting: its Send leads (a decision), and Stop and save waits after Review changes
   const waiting = rowOf({ ref: "", list: [v("r1:approve", "decide", { tone: "p" }), v("diff", "agent"), v("save-end", "agent"), v("done", "more", { promote: false }), v("next", "next")] });
   assert.equal(waiting.decide[0].id, "r1:approve");

@@ -53,10 +53,11 @@ for (const [state, said, list, want] of MATRIX) {
     // THE DESK: the bar (or the card, for a draft's own move) lights exactly the decision's button, nothing else
     const row = rowOf({ list, ref: "TQ-0004" }, pick);
     assert.deepEqual(litOf(row), [want], state);
-    // THE DESK AT PHONE WIDTH (ruling 6, 2026-10-22): Next and the one lit move, every other button behind one ▾
-    const ph = phoneRow(row);
-    assert.ok(ph.shown.length <= 1, state);
-    if (!want.startsWith("card:") && want !== row.next?.id) assert.equal(ph.shown[0]?.id, want, `${state}: the lit move rides beside Next on a phone`);
+    // THE DESK AT PHONE WIDTH (ruling 6, 2026-10-22): Next and the one lit move, every other button behind one ▾ - and Mark done, never
+    // folded (the owner, 2026-10-28)
+    const ph = phoneRow(row), others = ph.shown.filter((x) => x.id !== "done");
+    assert.ok(others.length <= 1, state);
+    if (!want.startsWith("card:") && want !== row.next?.id) assert.ok(ph.shown.some((x) => x.id === want), `${state}: the lit move rides beside Next on a phone`);
     // THE STRIP: the decision's fact, or nothing - never a sentence explaining the obvious button
     assert.equal(!!pick?.line, !!said.line, state);
     assert.ok((said.line || "").length <= 64, `${state}: a line is read whole on a phone`);

@@ -29,6 +29,7 @@ import { snapshotOf } from "./dashboard/slice.js";
 import { Md, looksMd } from "./md.jsx";
 import { jsonRows, nameAndRest } from "./reportRows.js";
 import DigestText from "./DigestText.jsx";
+import ReportRows from "./ReportRows.jsx";
 import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import { useCalendarToday } from "./calendarToday.js";
 import { ROLES, ASSISTANT, ALERT, ALERT_INK } from "./theme.jsx";
@@ -456,7 +457,8 @@ function RowsTable({ rows }) {
   );
 }
 
-function FullText({ mid, revision }) {
+// `report`: { name } - a report on the table: its rows drawn as a report (ReportRows), its words on the card without a box (reportRows.css)
+function FullText({ mid, revision, report = null }) {
   // a card with no mail behind it asks for nothing. A task whose only message a skip rule hid has no
   // mid, and fetching /api/messages/null painted FastAPI's own validation sentence ("path.mid: Input
   // should be a valid integer") into the card (the owner, 2026-09-15).
@@ -475,8 +477,9 @@ function FullText({ mid, revision }) {
   const morning = doc.SourceName === "Morning digest" || /^Morning digest\b/i.test(doc.Subject || "");
   // ...a report's table sits in a panel its own width (the owner, 2026-10-28): full width, a two-column table left it 3/4 empty
   const rows = !morning && jsonRows(text);
+  if (report && rows) return <ReportRows rows={rows} name={report.name} mid={none ? null : mid} />;
   return (
-    <div className={rows ? "tq-card-full fit" : "tq-card-full"}>
+    <div className={rows ? "tq-card-full fit" : report && !morning ? "tq-card-full report" : "tq-card-full"}>
       {morning ? <DigestText text={text} sourceId={/^report:(\d+)/.exec(doc.ConversationId || "")?.[1] ?? null} /> : rows ? <RowsTable rows={rows} /> : looksMd(text) ? <Md text={text} /> : text ? <LinkedText text={text} /> : "(empty)"}
       {/* ...and the pictures pasted into it, drawn - the screenshot is often the whole ask */}
       {!none && !morning && <Attachments messageId={mid} canFetch={String(doc.Channel || "") === "email" && mentionsPicture(doc.BodyText)} dense />}
@@ -877,7 +880,7 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone, table = null 
           body: <ItemPart data-tq-report-body="">
             {card.bad && <div className="tq-card-excerpt">The run failed — the cause is in the report.</div>}
             {card.brief_today && <TodayMeetingsStrip />}
-            {card.mid && <FullText mid={card.mid} revision={card.presentation_revision} />}
+            {card.mid && <FullText mid={card.mid} revision={card.presentation_revision} report={{ name }} />}
             {share}
           </ItemPart> },
         { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", "Its moves are on the row"],
@@ -909,7 +912,7 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone, table = null 
 
 // A DASHBOARD landed: it is LOOKED AT, so it takes the canvas - the filter row, the tiles, the charts and the lists at the canvas's
 // height, scrolling inside itself - with the day it ran and when its rows were read, like a report card's heading (dashboards.py)
-export function DashboardCard({ card, onOpenTask, onDone }) {
+export function DashboardCard({ card, onOpenTask, onDone, table = null }) {
   const [got, setGot] = useState(null), [err, setErr] = useState("");
   // SHARE IT, like a report (the owner, 2026-10-23: Share on report / workflow / Result / dashboard): the store holds no page for a
   // dashboard, so it brings its own words - the tiles and the rows it drew, frozen at the press (snapshotOf); an email opens at once
@@ -924,12 +927,35 @@ export function DashboardCard({ card, onOpenTask, onDone }) {
     return () => { live = false; };
   }, [card.source_id, card.mid]);
   const [name] = nameAndRest(card.title, card.who), day = dayLabel(card.when), at = got?.data?.at ? fmtTime12(got.data.at) : "";
+  // ON THE TABLE, IN A TASK'S THREE SECTIONS, as a report is (ItemSections): the dashboard open in the middle, what produced it and what
+  // happens next the slim tabs either side, its moves the same ones on the same row
+  const src = useReportSource(table != null ? card.source_id : null);
+  const drawn = <div className="tq-dash-canvas" data-tq-dash-canvas="">
+    {got?.data ? <Dashboard spec={got.config} data={got.data} /> : <div className="tq-card-excerpt">{err || (got ? DASH.never : DASH.loading)}</div>}
+  </div>;
+  if (table != null) {
+    const ran = [card.when && fmtDateTime(card.when), src.run?.ms && `took ${secs(src.run.ms)}`].filter(Boolean).join(" · ");
+    const edit = card.source_id != null && <div className="tq-card-actions"><Button size="small" component="a" href={`#report=${card.source_id}`} sx={faint}>{DASH.edit} ↗</Button></div>;
+    return <ItemSections kind="dashboard" itemKey={card.key} label="Dashboard" height={table} about="report"
+      title={<>{name}<span style={{ fontWeight: 400 }} data-tq-report-day={day || undefined}>{day && ` · ${day}`}{at && ` · ${DASH.updated} ${at}`}</span></>}
+      aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>}
+      sections={[
+        { key: "from", n: 1, name: STEPS[0].name, lines: [name, src.runs && `Runs ${src.runs}`].filter(Boolean), foot: card.when ? `✓ Ran ${fmtDateTime(card.when)}` : "",
+          body: <ItemPart data-tq-dash-from="">
+            <Facts rows={[["Dashboard", <b key="n">{name}</b>], ["Ran", ran], ["Runs", src.runs], ["Reads", src.reads], ["Goes", src.goes], ["Note", src.run?.error]]} />
+            {edit}
+          </ItemPart> },
+        { key: "report", n: 2, name: "Dashboard", icon: <InsertChartOutlinedIcon aria-hidden sx={{ fontSize: 18, color: "#746e64" }} />,
+          lines: [card.title], foot: "✓ Landed",
+          // ...its white cards straight on the section's warm ground, as on the Dashboards page: no card around the cards
+          body: <div data-tq-dash-body="">{drawn}{share}</div> },
+        { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", "Its moves are on the row"],
+          body: <ItemPart data-tq-dash-close=""><RowMoves close={card} /><Foot close={card} onDone={onDone} /></ItemPart> }]} />;
+  }
   return (
     <CardShell card={card} kicker="dashboard" title={card.title}
       lead={<div className="tq-card-lead" data-tq-report-day={day || undefined}><b>{name}</b>{day && ` · ${day}`}{at && ` · ${DASH.updated} ${at}`}</div>}>
-      <div className="tq-dash-canvas" data-tq-dash-canvas="">
-        {got?.data ? <Dashboard spec={got.config} data={got.data} /> : <div className="tq-card-excerpt">{err || (got ? DASH.never : DASH.loading)}</div>}
-      </div>
+      {drawn}
       {share}
       <Foot close={card} onDone={onDone}
         where={card.source_id != null && <Button size="small" component="a" href={`#report=${card.source_id}`} sx={faint}>{DASH.edit} ↗</Button>} />

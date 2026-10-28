@@ -46,7 +46,8 @@ export function Card({ c, w, children, table, stale, onPress, className = "" }) 
     <section className={`tq-dash-card w${w} ${stale ? "stale" : ""} ${className}`} data-tq-dash-kind={c.kind} aria-label={c.title} style={{ "--i": c.i ?? 0 }}
       onClick={onPress} onKeyDown={onPress ? (e) => { if (e.key === "Enter") onPress(e); } : undefined} tabIndex={onPress ? 0 : undefined}>
       <div className="tq-dash-h"><h3 title={c.title}>{c.title}</h3>
-        {table && <button type="button" className="tq-dash-flip" aria-pressed={asTable} onClick={(e) => { e.stopPropagation(); setAsTable(!asTable); }}>
+        {/* ...no switch where the rows' own table stands beside the chart (a report, ReportRows): `twin: false` */}
+        {table && c.twin !== false && <button type="button" className="tq-dash-flip" aria-pressed={asTable} onClick={(e) => { e.stopPropagation(); setAsTable(!asTable); }}>
           {asTable ? DASH.chart : DASH.table}</button>}
       </div>
       {asTable ? table : children}
@@ -182,7 +183,7 @@ export function Stacked({ c, st, slots, onDrill, stale }) {
 function niceMax(v) { if (v <= 0) return 1; const p = 10 ** Math.floor(Math.log10(v)), m = v / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p; }
 export function Line({ c, points, onDrill, stale }) {
   const [ref, w] = useWidth(), [hover, setHover] = useState(null);
-  const H = 170, L = 34, R = 34, T = 10, B = 22, iw = Math.max(10, w - L - R), ih = H - T - B;
+  const H = Number(c.h) || 170, L = 34, R = 34, T = 10, B = 22, iw = Math.max(10, w - L - R), ih = H - T - B;
   const vals = points.map((p) => p.value).filter((v) => v !== null), top = niceMax(Math.max(0, ...vals));
   const x = (i) => L + (points.length < 2 ? iw / 2 : (i / (points.length - 1)) * iw), y = (v) => T + ih - (v / top) * ih;
   const segs = []; let cur = [];

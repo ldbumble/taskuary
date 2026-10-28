@@ -134,7 +134,10 @@ export const resultLine = (s, said = "") => {
   const r = s?.report || {}, words = String(lastWords(s) || said || "").trim();
   const did = norm(r.summary) ? String(r.summary).trim() : words.split(/\n\s*\n/)[0].trim();
   const found = norm(r.decided) && norm(r.decided) !== norm(did) ? String(r.decided).trim() : "";
-  return { did, found };
+  // ...and THE REST OF ITS ANSWER, whole (the owner, 2026-10-28: "it should just show what the agent did", the full result under its
+  // summary - never the chat it came out of): its last words past the paragraph `did` already said
+  const paras = words.split(/\n\s*\n/), rest = (norm(paras[0]) === norm(did) ? paras.slice(1) : paras).join("\n\n").trim();
+  return { did, found, rest: norm(rest) === norm(found) ? "" : rest };
 };
 // ...and WHAT IT MADE, once: the pages it showed or published, then the files it left in the task's outputs folder - a page shown FROM that
 // folder is the same file, named the same, and is listed once (as the page, which previews as it was shown)

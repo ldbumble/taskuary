@@ -258,7 +258,7 @@ const SLOT = (open, w) => ({ position: "relative", overflow: "hidden", minWidth:
 // ...a closed body is not drawn (display none: nothing in it can be found or pressed) - but a LIVE agent's is kept laid out and only made
 // invisible, so its terminal is never measured at nothing and refitted (`keep`)
 const SECTION = (open, w, live = false, keep = false) => ({ position: "absolute", top: 0, left: 0, bottom: 0, width: w,
-  display: open || keep ? "flex" : "none", flexDirection: "column", bgcolor: "#fff",
+  display: open || keep ? "flex" : "none", flexDirection: "column", bgcolor: live ? "#fff" : SHADE,   // the warm ground, its cards white
   overflowY: "auto", scrollbarWidth: "thin", overscrollBehaviorY: "contain", overflowAnchor: "none", containerType: "inline-size",
   px: live ? 1 : { xs: 1.5, md: 2.5 }, py: live ? 0.65 : 1.5, boxSizing: "border-box",
   visibility: open ? "visible" : "hidden", opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none",
@@ -1352,7 +1352,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...but THE RESULT FOLDS TWICE (the owner, 2026-10-27: "just the summary - and then click Result to see more"): at rest, folded or open, it
   // is its summary and what it made (ResultSummary); its heading unfolds the rest - the full message, the record, the replay - and folds it back
   // ...but a run that FAILED says why, with Try again, first (the owner, 2026-10-26: "you can't see what you have to do"): it never rests
-  const resultRest = resultShown && !resultOpen && !failedRun;
   // ...and THE WORK TAKES THE WHOLE WIDTH once an agent has acted (the owner, 2026-10-22: "on a regular agent that is completed we should
   // also only show the agent result with the From expandable over the top"): working or waiting, finished with its Result, or failed
   // with its Try again - From folds to its one line over it. Two columns only where no agent ever ran (taskLayout.layoutOf).
@@ -1402,6 +1401,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const narrow = bodyW > 0 && bodyW < STACK_BELOW;
   const stacked = !sessionView && narrow;
   const threeUp = !narrow;
+  // ...and at rest it is the agent's whole answer under its summary line, what it made, and one link to the conversation (the owner,
+  // 2026-10-28: "when agent is done or stopped it should just show what the agent did not the full agent chat")
+  const resultRest = resultShown && !resultOpen && !failedRun;
   // ...read off ONE STAGE (stages.json, the owner 2026-10-26: "are these modes defined well anywhere besides the UI"): the focus and what
   // Close out holds make it, and the stage names the main view and the section it is up to - the server and the Assistant read the same
   // ...and a section OPENED BY HAND is not where the task is up to (2026-10-27, the overnight walk): Agent work clicked open over a draft
@@ -2503,12 +2505,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* ...folded over a record, its sentence and what happened - the draft it wrote opens below it (2026-09-22) */}
                   {storyAt === "summary" && !resultShown && <AgentRecord {...recordProps} story={story} folded />}
                   {resultRest && !sessionView && <ResultSummary taskId={selected} stamp={recordProps.stamp} said={story?.said || ""}
-                    pages={(detail?.artifacts || []).filter((a) => isPublished(a) || a.kind === "shown")} />}
-                  {/* ...and in the three sections ONE press unfolds the rest and folds it back - the only way to it there (the owner, 2026-10-27) */}
-                  {resultShown && !failedRun && !sessionView && threeUp && <Box sx={{ mt: 1.5 }}><Button size="small" variant="outlined" data-tq-full-result="" aria-expanded={!resultRest}
-                    onClick={() => { if (pane !== "agent") setOpenStage("agent"); setResultOpen((v) => !v); }}
+                    pages={(detail?.artifacts || []).filter((a) => isPublished(a) || a.kind === "shown")}
+                    onRecord={threeUp ? () => { if (pane !== "agent") setOpenStage("agent"); setResultOpen(true); } : null} />}
+                  {/* ...opened, one press back to the result */}
+                  {resultShown && !failedRun && !sessionView && threeUp && !resultRest && <Box sx={{ mt: 1.5 }}><Button size="small" variant="outlined"
+                    data-tq-full-result="" aria-expanded="true" onClick={() => setResultOpen(false)}
                     sx={{ borderRadius: 999, px: 2, fontSize: 13, fontWeight: 600, textTransform: "none", color: INK, borderColor: "#c9c3b8" }}>
-                    {resultRest ? "Full results and record ›" : "‹ Back to the summary"}</Button></Box>}
+                    ‹ Back to the result</Button></Box>}
                   {(storyAt === "summary" || (resultRest && pane === "agent")) && co.writeupAt === "result" && <WriteupLine view={writeup} />}
                   {pane === "agent" && <>
                   {/* WHO CLOSED IT AND WHY, one plain line over its work (the owner, 2026-10-21: "I have no idea what the agent did

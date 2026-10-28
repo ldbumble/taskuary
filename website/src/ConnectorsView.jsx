@@ -4001,6 +4001,10 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
           <a href={flow.url} target="_blank" rel="noreferrer">Open it again</a>
           <Button size="small" onClick={() => { cancel(); start(files, true); }} sx={{ fontSize: 11.5, color: DIM }}>Sign in with a code instead</Button>
           <Button size="small" onClick={cancel} sx={{ fontSize: 11.5, color: DIM }}>Cancel</Button>
+          {/* a redirect the app does not list is refused ON Microsoft's page - it never comes back here, so the card says it ahead */}
+          <Box component="span" data-tq-ms-redirect-hint="" sx={{ flexBasis: "100%" }}>
+            Microsoft shows error AADSTS50011 instead? The Microsoft app this card uses does not list http://localhost/api/ms/callback yet - whoever
+            manages that app adds it under Authentication → Mobile and desktop applications, then press Sign in again.</Box>
         </Typography>
       ) : flow ? (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>

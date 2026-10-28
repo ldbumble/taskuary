@@ -74,6 +74,8 @@ box. It shows a code to type at microsoft.com/devicelogin. It is never used unle
   platform. Entra ignores the port of a `localhost` redirect for a public client, so this one
   entry covers whatever port Taskuary listens on (7787 unless changed). The admin-approval link
   uses `https://login.microsoftonline.com/common/oauth2/nativeclient`.
+  Missing, Microsoft's own page stops with error **AADSTS50011** (the redirect URI does not match) and never returns to
+  Taskuary - the card says so while it waits.
 - **Delegated permissions (Microsoft Graph)**, all a user's own consent:
   - Outlook: `offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite People.Read Contacts.Read`
   - Teams: `offline_access User.Read User.ReadBasic.All Chat.ReadWrite ChatMessage.Send People.Read`

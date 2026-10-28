@@ -112,8 +112,10 @@ def test_replay_send_over_a_draft_unless_the_reason_is_a_caution_about_it(home):
     home.model(3, 'reply', line='', kind='draft_caution')                     # a silent caution is no reason shown
     home.press(3, 'reply', 'approve', '09:00:00', live=['reply'])
     cx = A.connect(home.dir); ds = {d['target'][1]: d for d in A.replay(cx, home.ds())}
-    assert {t: (d['today'], d['how']) for t, d in ds.items()} == {1: ('approve', 'draft'), 2: ('reply', ''), 3: ('approve', 'draft')}
-    assert A.tally(list(ds.values()), 'today')['right'] == 2 and A.tally(list(ds.values()))['right'] == 0
+    # ...and a model's Reply with no reason said lights nothing now (NO DEFAULT VERB, the owner, 2026-10-28): silent, neither right nor wrong
+    assert {t: (d['today'], d['how']) for t, d in ds.items()} == {1: ('approve', 'draft'), 2: ('reply', ''), 3: ('', 'quiet')}
+    t = A.tally(list(ds.values()), 'today')
+    assert (t['right'], t['wrong'], t['silent']) == (1, 1, 1) and A.tally(list(ds.values()))['right'] == 0
 
 
 def test_replay_mark_done_on_a_stopped_agent_that_left_its_work_finished_by_then(home):
@@ -127,7 +129,8 @@ def test_replay_mark_done_on_a_stopped_agent_that_left_its_work_finished_by_then
     for tid in (t1, t2, t3): home.press(tid, 'continue', 'close', '09:00:00', live=['continue'])
     ds = {d['target'][1]: d for d in A.replay(A.connect(home.dir), home.ds())}
     assert (ds[t1]['today'], ds[t2]['today']) == ('close', 'close'), 'a done note, a finished event no later prompt took up'
-    assert (ds[t3]['today'], ds[t3]['how']) == ('continue', ''), 'picked up again after it finished, and the done note came after the press'
+    # ...picked up again after it finished, and the done note came after the press: a plain stop, which lights nothing now (NO DEFAULT VERB)
+    assert (ds[t3]['today'], ds[t3]['how']) == ('', 'quiet')
 
 
 def test_replay_a_silent_remind_me_leaves_the_rules_button(home):
@@ -146,7 +149,7 @@ def test_an_unchanged_item_is_replayed_exactly_by_todays_decide(home, monkeypatc
     monkeypatch.setattr(advisor, 'revision', lambda store, k, i: 'r1' if i == 1 else 'r9')
     monkeypatch.setattr(advisor, 'decide', lambda store, key, preread=True: {'state': 'stopped_done', 'verb': 'close'})
     ds = {d['target'][1]: d for d in A.replay(A.connect(home.dir), home.ds(), store=object())}
-    assert (ds[1]['today'], ds[1]['how']) == ('close', 'exact') and ds[2]['how'] == '', 'a moved item is never replayed against today\'s store'
+    assert (ds[1]['today'], ds[1]['how']) == ('close', 'exact') and ds[2]['how'] != 'exact', 'a moved item is never replayed against today\'s store'
 
 
 # ── the press log keeps the decision it answered ──────────────────────────────────────────────────────────────────────────────────────
@@ -183,3 +186,60 @@ def test_the_tool_flags_a_decision_whose_lit_button_was_greyed(home):
     assert [d['target'][1] for d in A.lit_greyed(ds)] == [1]
     out = A.report(ds, DAY)
     assert 'lit but greyed (the lit button was disabled at a press): 1' in out and 'regular_agent' in out.split('lit but greyed')[1]
+
+
+# ── precision, coverage and dropped balls (the design rev 2, 2026-10-28: NO DEFAULT VERB) ─────────────────────────────────────────────
+def test_silence_is_counted_apart_and_precision_is_agreement_on_what_was_lit(home):
+    home.press(1, 'close', 'close', '09:00:00', live=['continue'], state='answered', by='rule')
+    home.press(2, 'continue', 'continue', '09:01:00', live=['close'], state='stopped', by='check')
+    home.press(3, 'continue', 'close', '09:02:00', live=['close'], state='stopped', by='check')
+    home.press(4, '', 'close', '09:03:00', live=['continue'])                # nothing lit: a silent decision
+    home.press(5, '', 'next', '09:04:00', live=['reply'])
+    every = A.decisions(A.connect(home.dir), DAY, silent=True)
+    assert [d['target'][1] for d in home.ds()] == [1, 2, 3], 'the scored decisions are the lit ones, as before'
+    assert {d['target'][1]: d['by'] for d in every if not d['lit']} == {4: 'silent', 5: 'silent'}
+    p = A.precision(every)
+    assert (p['all']['pct'], p['check']['pct'], p['check']['right'] + p['check']['wrong'], p['rest']['pct']) == (67, 50, 2, 100)
+    assert A.coverage(every) == {'decisions': 5, 'silent': 2, 'pct': 40}
+    assert A.score(next(d for d in every if d['target'][1] == 4)) == 'silent'
+
+
+def test_a_dropped_ball_is_a_silent_decision_answered_by_picking_the_work_up_with_nothing_fired(home):
+    home.press(1, '', 'redraft', '09:00:00', live=['approve', 'redraft'])
+    home.press(2, '', 'stop_agent', '09:00:00', live=['stop_agent'])
+    home.press(3, '', 'try_again', '09:00:00', live=['close'])               # Try again is Continue
+    home.press(4, '', 'close', '09:00:00', live=['continue'])                # put down: no ball dropped
+    home.press(5, '', 'continue', '09:00:00', live=['continue'])
+    home.model(5, 'continue', line='Attach the export it said it would.', kind='work_gap')
+    home.s._exec("UPDATE advice SET CreatedAt=?, Event='agent.check' WHERE TargetId=5", (f'{DAY} 08:30:00',))   # the check fired: no miss
+    cx = A.connect(home.dir)
+    every = A.decisions(cx, DAY, silent=True)
+    assert sorted(d['target'][1] for d in A.dropped_balls(cx, every)) == [1, 2, 3]
+    assert '3 dropped-ball misses' in A.three(cx, every) and 'silent 100% of 5' in A.three(cx, every)
+
+
+def test_a_lit_decision_from_the_finish_checks_row_is_the_checks(home):
+    home.model(1, 'continue', line='Attach the export it said it would.', kind='work_gap')
+    home.s._exec("UPDATE advice SET Event='agent.check' WHERE TargetId=1")
+    home.press(1, 'continue', 'continue', '09:00:00', live=['continue', 'close'])
+    assert home.ds()[0]['by'] == 'check'
+
+
+def test_the_release_line_carries_all_three(home, capsys):
+    home.press(1, 'close', 'close', '09:00:00', live=['continue'])
+    home.press(2, '', 'redraft', '09:01:00', live=['approve'])
+    assert A.main(['--home', str(home.dir), '--since', DAY, '--line']) == 0
+    out = capsys.readouterr().out
+    assert out.startswith('Advisor agreement: 100%') and 'precision 100% on 1 lit' in out and 'silent 50% of 2 decisions' in out
+    assert '1 dropped-ball miss' in out
+
+
+def test_replay_the_reasonless_lights_go_dark(home):
+    home.press(1, 'continue', 'close', '09:00:00', live=['continue', 'close'], state='stopped', by='rule')
+    home.press(2, 'defer', 'close', '09:00:00', live=['defer', 'close'], state='waiting', by='rule')
+    home.press(3, 'regular_agent', 'close', '09:00:00', live=['regular_agent', 'close'], state='asked', by='model')
+    home.press(4, 'chase', 'chase', '09:00:00', live=['chase'], state='waiting_late', by='rule')
+    ds = {d['target'][1]: d for d in A.replay(A.connect(home.dir), home.ds())}
+    assert {t: (d['today'], d['how']) for t, d in ds.items()} == {1: ('', 'quiet'), 2: ('', 'quiet'), 3: ('', 'quiet'), 4: ('chase', '')}
+    t = A.tally(list(ds.values()), 'today')
+    assert (t['right'], t['wrong'], t['silent'], t['pct']) == (1, 0, 3, 100)

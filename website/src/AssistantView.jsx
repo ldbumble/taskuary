@@ -70,7 +70,7 @@ import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
 import { StatusLogo } from "./StatusMark.jsx";
 import { isCoveragePending } from "./processingAll.js";
-import { mergeDurableTurns, nextBadge, pickLine, placeLine, pressChip, pressLine, pressedNoteOf, pressedOf } from "./assistantTurns.js";
+import { actReceipt, mergeDurableTurns, nextBadge, pickLine, placeLine, pressChip, pressLine, pressedNoteOf, pressedOf } from "./assistantTurns.js";
 import { lightOf, litAfter, litOn, litPick, litPull } from "./assistantLight.js";
 import DigestText from "./DigestText.jsx";
 import { canGoBack, firstAppLink, onStep, openAppLink, recordPlace } from "./appLinks.js";
@@ -111,7 +111,6 @@ import "./assistantView.css";
 // showing anything, so a stale key restores nothing.
 const WALK_KEY = "taskuary_walk_tid";
 const POP_ROOM = 140;          // the least room under the task view the chat pop-up stands in, rather than over the view (120: the open box above the dock takes ~85px of it, 2026-10-27)
-const POP_LIT_MS = 1800;        // how long the chat pop-up shows the owner's line when the answer was only a lit button
 const isOpenWalk = (t) => !!t && t.SourceRef === "assistant:setup" && !["done", "dropped"].includes(t.Status);
 // markers the server writes on a line that are NOT cards (concierge.SETUP_QUESTIONS): the line is its words
 // ...and a line that carries its own words (concierge: a failed act's way on, the already-seen opens): never an item card
@@ -2295,6 +2294,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         // ...and a lit button or a press is no line at all (the owner, 2026-10-23: "what the heck is Lit"): only words get one
         if (data.say || data.options?.length || data.chips?.length)
           setMsgs((m) => [...m, { id: aid, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [], steps: data.steps || [] }]);
+        // ...but IN THE CHAT POP-UP a turn that only acted still ends on words (actReceipt): there is no card in it to wear the badge, and the
+        // owner's line stood alone over the task (2026-10-27). A drafted reply (`decision`) writes its own receipt
+        else if (popOnRef.current && !data.context_update && !data.decision) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", ...actReceipt(data, tableKey || current) }]);
         // A TYPED PUT-DOWN WAS PRESSED (concierge._put_down - the owner, 2026-10-23: "it should collapse the task and write on it marked done
         // with note"): its card wears the button's badge, and on the table it is put down as the row's own press puts it down - folded, the
         // next item up - never a line saying so
@@ -3372,14 +3374,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // ...it opens on the owner's line (send) and on the Assistant speaking up about the task in this session - never on a reload's history
   const popLast = popLines[popLines.length - 1]?.[0];
   useEffect(() => { if (popLast?.role === "assistant" && /^(a|s|d|context)\d/.test(popLast.id)) setPopOpen(true); }, [popLast?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
-  // ...and AN ANSWER THAT WAS ONLY A LIT BUTTON shuts it again by itself (the chat bar's open question, default chosen 2026-10-26): a reply
-  // that only lit or pressed is no chat line (only words get one), so the pop-up held the owner's own line alone over the task - it is
-  // shown a moment, the row's dark button being the answer. Never over an error, nor while the answer is still on its way
-  useEffect(() => {
-    if (!popOpen || popPending || err || popLast?.role !== "user") return undefined;
-    const t = setTimeout(() => setPopOpen(false), POP_LIT_MS);
-    return () => clearTimeout(t);
-  }, [popOpen, popPending, err, popLast?.id, popLast?.role]);
+  // ...and IT NEVER SHUTS BY ITSELF (the owner, 2026-10-27: "it disappeared when done? not sure what happened"): an answer that only lit a
+  // button shut it after 1.8 s with the owner's own line the only thing in it, and Show the last answer brought back just that line. Every
+  // turn ends on words now (actReceipt), and the pop-up stays until its ×, Esc, a press outside it, or the next task on the table
   // ...and goes with the task: the next one on the table starts with it shut
   const popTable = shown[lastCardIdx]?.card?.key || "";
   useEffect(() => { setPopOpen(false); }, [popTable]);
@@ -3641,9 +3638,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                   sx={{ width: 28, height: 28, p: 0, color: popPending ? "#526b53" : DIM }}><ChatBubbleOutlineIcon sx={{ fontSize: 16 }} /></IconButton>
               </Tooltip>)}
             {/* a phone's composer is one line tall and the long hint wrapped under its own edge, cut
-                mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there - and the pill's at rest */}
+                mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there - and the pill's at rest, and the open
+                box's over the canvas, a column as narrow as a phone's line (2026-10-27) */}
             <textarea ref={composeRef} rows={1} value={text} disabled={resetting} aria-label={tableSays.name}
-              placeholder={boxNarrow && !boxWide ? "Ask…" : phone ? tableSays.phone : !popOn ? tableSays.box : boxWide ? "Tell me what to do with it, or ask about it…" : "Ask…"}
+              placeholder={boxNarrow && !boxWide ? "Ask…" : phone || (boxIsOver && boxWide) ? tableSays.phone : !popOn ? tableSays.box : boxWide ? "Tell me what to do with it, or ask about it…" : "Ask…"}
               onChange={(e) => { setText(e.target.value); setBoxOpen(true); }} onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                 // Esc shuts the pop-up first, then hands an empty box back to its pill

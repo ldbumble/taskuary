@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { mergeDurableTurns } from "../src/assistantTurns.js";
+import { actReceipt, mergeDurableTurns } from "../src/assistantTurns.js";
 
 test("durable chat turns reconcile with their optimistic bubbles instead of drawing twice", () => {
   const local = [
@@ -155,4 +155,18 @@ test("two lines with the same words but different items are two turns", () => {
   assert.deepEqual(messages.map((m) => [m.id, m.commentId, m.card.title]), [["a1", 500, "Tickets by day"], ["a2", 501, "Ageing by vendor"]]);
   assert.equal(messages[0].done, true);
   assert.deepEqual(added, []);
+});
+
+// AN ACT WITH NO WORDS STILL ENDS ON WORDS in the chat pop-up (the owner, 2026-10-27: it "disappeared when done"): what it did and where,
+// one sentence for every act, the server's own line when it gave one
+test("an act-only turn gets one receipt read off the act", () => {
+  const light = { verb: "defer", label: "Remind me", key: "msg:4", tid: 4, ref: "TQ-0004", line: "" };
+  assert.deepEqual(actReceipt({ say: "", light }, "msg:4"), { text: "Remind me is ready on the row for this task - yours to press.", status: "warn" });
+  assert.match(actReceipt({ say: "", light }, "msg:9").text, /for TQ-0004/);
+  assert.deepEqual(actReceipt({ pressed: { label: "Mark done", key: "msg:4", ref: "TQ-0004", note: "paid Friday" } }, "msg:9"),
+    { text: "Mark done - TQ-0004: paid Friday.", status: "done" });
+  assert.equal(actReceipt({ light: { ...light, line: "Remind me is lit for Monday." } }).text, "Remind me is lit for Monday.");
+  assert.match(actReceipt({ light: { ...light, label: "" } }, "msg:4").text, /^Brought up this task/);
+  assert.equal(actReceipt({}).status, "warn");
+  assert.ok(actReceipt({}).text, "even nothing back is said");
 });

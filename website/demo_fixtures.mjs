@@ -6,8 +6,8 @@
 // hand-written fixture drifts the first time a field is renamed, and a demo that renders a
 // blank page is worse than no demo.
 //
-//   TASKUARY_DEMO=1 TASKUARY_HOME=$(mktemp -d) python -m uvicorn taskuary.server:app --port 7801
-//   node demo_fixtures.mjs http://127.0.0.1:7801 > src/demoFixtures.json
+//   TASKUARY_DEMO=1 TASKUARY_TOKEN=demo-record TASKUARY_HOME=$(mktemp -d) python -m uvicorn taskuary.server:app --port 7801
+//   TASKUARY_TOKEN=demo-record node demo_fixtures.mjs http://127.0.0.1:7801 src/demoFixtures.json
 import { writeFileSync } from "node:fs";
 
 const BASE = process.argv[2] || "http://127.0.0.1:7801";
@@ -21,6 +21,8 @@ const shell = await nativeFetch(BASE + "/").then((r) => r.text()).catch(() => ""
 const tokenMatch = shell.match(/localStorage\.setItem\("taskuary_token",\s*("[^"]*")\)/);
 let token = "";
 try { token = tokenMatch ? JSON.parse(tokenMatch[1]) : ""; } catch { token = ""; }
+// ...or, on a server that no longer seeds it into the page, the one it was started with (TASKUARY_TOKEN, as the browser tests start theirs)
+token ||= process.env.TASKUARY_TOKEN || "";
 const fetch = (input, init = {}) => nativeFetch(input, {
   ...init,
   headers: { ...Object.fromEntries(new Headers(init.headers || {})), ...(token ? { "X-Taskuary-Token": token } : {}) },
@@ -94,6 +96,19 @@ for (const row of (out["/api/feed"]?.data || [])) {
     a.url = `data:${type.split(";")[0]};base64,${b64}`;
   }
   out["/api/messages/attachments"][row.MessageId] = box;
+}
+
+// every DASHBOARD as its card draws it (its spec and its last run's rows), and each report's newest run, which its Came from names -
+// the built-in Taskuary at a glance every install has among them (store.SEEDED_REPORTS)
+for (const s of (out["/api/sources"]?.data || []).filter((x) => x.Channel === "report")) {
+  let cfg = {};
+  try { cfg = JSON.parse(s.ConfigJson || "{}") || {}; } catch { cfg = {}; }
+  if (cfg.type === "dashboard") {
+    const r = await fetch(`${BASE}/api/dashboards/${s.SourceId}`).catch(() => null);
+    if (r && r.ok) out[`/api/dashboards/${s.SourceId}`] = await r.json();
+  }
+  const runs = await fetch(`${BASE}/api/reports/${s.SourceId}/runs?limit=1`).catch(() => null);
+  if (runs && runs.ok) out[`/api/reports/${s.SourceId}/runs?limit=1`] = await runs.json();
 }
 
 // what a replayed coding session had said by the time we looked

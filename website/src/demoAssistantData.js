@@ -75,6 +75,12 @@ const pileItems = [
     who: "Helpdesk report", when: "2026-09-03 05:53:19", why: "the scheduled report landed normally",
     channel: "report", bad: false,
   },
+  // ...and the dashboard every install comes with, refreshed on its morning schedule (store.SEEDED_REPORTS)
+  {
+    bind: { report: "Taskuary at a glance" }, kind: "report", dashboard: true, lane: "report", title: "Taskuary at a glance",
+    who: "Taskuary at a glance", when: "2026-09-03 07:00:12", why: "the built-in dashboard refreshed on its schedule",
+    channel: "report", bad: false,
+  },
   {
     bind: { msg: "Vendor portal maintenance window, Sunday 02:00-04:00" }, kind: "fyi", lane: "fyi", title: "Vendor portal maintenance Sunday, 02:00-04:00",
     who: "Platform Updates", when: "2026-09-03 08:58:19", why: "an automated notice; nothing to do",
@@ -206,7 +212,7 @@ export function createDemoAssistantState(fx = {}) {
         { lane: "approve", word: WORD.approve, role: "you", n: 1 },
         { lane: "asked", word: WORD.asked, role: "working", n: 1 },
         { lane: "forgotten", word: WORD.forgotten, role: "info", n: 1 },
-        { lane: "report", word: WORD.report, role: "info", n: 1 },
+        { lane: "report", word: WORD.report, role: "info", n: 2 },
         { lane: "fyi", word: WORD.fyi, role: null, n: 1 },
         { lane: "working", word: "agent working", role: "working", n: 1 },
       ],

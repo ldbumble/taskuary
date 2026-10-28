@@ -18,8 +18,8 @@ test("while held, the spinner stands in for the conversation and the Advisor str
   assert.match(src, /\{\(!state \|\| holding\) && !err && <Box[^\n]*<CircularProgress/);
   const at = src.indexOf("{!holding && <>"), end = src.indexOf("</>}", at);
   assert.ok(at > 0 && end > at, "the chat body's content is behind the hold");
-  // ...the lines after the table's item drawn in the pop-up over it instead (the one-row chat bar, 2026-10-26)
-  assert.ok(src.slice(at, end).includes("shown.map((m, i) => popOn && i > lastCardIdx ? null : <Line"), "the conversation, the table's item with it");
+  // ...the conversation's lines drawn in the chat window instead, the cards on the canvas (the chat window, 2026-10-28)
+  assert.ok(src.slice(at, end).includes("shown.map((m, i) => inWin.has(m.id) ? null : <Line"), "the conversation, the table's item with it");
   // ...and the Advisor's mark (no strip since 2026-10-26) is not drawn for the item before the link either
   assert.match(src, /\{!firstRun && table\.speaks && !holding && !hostedRow && <>/);
 });

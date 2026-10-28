@@ -73,7 +73,7 @@ test("the page wires the record: the strip, the box's subject, the folded line a
   // folded by its X it is put away (UX walk, 2026-10-22): no "on the table" ring, no #task - and its plain row opens it again in place
   assert.match(src, /current=\{old \|\| table\.folded \|\|/, "a folded task's row is not marked on the table");
   assert.match(src, /litTable\.tid && !table\.folded \? `#task=/, "nor does the address name it");
-  assert.match(src, /if \(table\.folded && key === table\.key\) unfoldTable\(\); else pull\(key, asUser\)/, "its row unfolds it, not a second pull");
+  assert.match(src, /if \(isCur \|\| \(table\.folded && key === table\.key\)\) \{ setRailOpen\(false\); if \(table\.folded \|\| table\.place\) unfoldTable\(\); return; \}\n\s*pull\(key, null\);/, "its row unfolds it, not a second pull");
   assert.match(src, /firstRun && \(browsing \|\| setupCard\) && <div data-tq-setup-over=""/, "a sidebar place - or a task - opens during setup, with the way back");
   assert.doesNotMatch(src, /setTimeout\(\(\) => \{ if \(n === adviceAsk\.current\) setAsking\(null\); \}, 20000\)/, "no 20 s spinner that then shows nothing");
 });

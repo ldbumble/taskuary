@@ -26,12 +26,14 @@ test("each fyi entry shows its own summary and acts alone through the proposal r
   // ...and Send to agent on a line opens the agent box under that line first - it never proposes a start at the press (2026-10-23)
   assert.doesNotMatch(fyis, /propose\("(coding|regular)_agent", i\)/);
   assert.match(fyis, /setAsking\(\{ key: i\.key, coding: true \}\)/); assert.match(fyis, /setAsking\(\{ key: i\.key, coding: false \}\)/);
-  assert.match(fyis, /\{open === i\.key && asking\?\.key === i\.key && \(\s*<AgentAsk [^\n]*coding=\{asking\.coding\}/);
+  // ...the one line's moves (actsOf), drawn only under the line opened - on the card and in the three sections alike (ItemSections, 2026-10-28)
+  assert.match(fyis, /\{asking\?\.key === i\.key && \(\s*<AgentAsk [^\n]*coding=\{asking\.coding\}/);
+  assert.equal((fyis.match(/\{open === i\.key && actsOf\(i\)\}/g) || []).length, 2);
   assert.match(fyis, /onStart=\{async \(o\) => \{ await onAgent\?\.\(i, o\); setAsking\(null\); \}\}/);
   assert.match(fyis, /onPropose\?\.\(verb, i\.key\)/);                               // the entry's own key, never the handful's
   assert.match(fyis, /openReply\(api, i\.mid\)/);   // a reply opens at once, its draft written behind it (replyDraft.js)
   assert.doesNotMatch(fyis.slice(0, fyis.indexOf('variant="contained"')), /onDone\?\./);  // no entry action settles the handful
-  assert.match(fyis, /\{open === i\.key && \(\s*<div className="tq-card-actions tq-fyi-acts"/);   // ...and they belong to the one you opened
+  assert.match(fyis, /const actsOf = \(i\) => \(<>\s*<div className="tq-card-actions tq-fyi-acts"/);   // ...and they belong to the one you opened
   const view = read("AssistantView.jsx");
   assert.match(view, /api\.post\("\/api\/concierge\/propose", \{ verb, key, table, press: true \}\)/);
   assert.match(view, /onPropose=\{actions\.propose\}/);

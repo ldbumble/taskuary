@@ -4730,6 +4730,10 @@ class SQLiteStore:
                             'AND CreatedAt>=? ORDER BY RouteId DESC LIMIT 20'),
                 'actions': q("SELECT NULL TaskId, Kind Who, Error, IFNULL(ExecutedAt, UpdatedAt) At FROM operation WHERE IFNULL(Error,'')<>'' "
                              'AND IFNULL(ExecutedAt, UpdatedAt)>=? ORDER BY UpdatedAt DESC LIMIT 20')}
+    def reopened_at(self, task_id):
+        """When new mail or chat last reopened this task (ingest._reopen's audit row), or None."""
+        r = self._one("SELECT MAX(CreatedAt) m FROM audit WHERE EntityType='task' AND EntityId IN (?,?) AND Action='reopen'", (task_id, str(task_id)))
+        return (r or {}).get('m')
     def list_audit(self, et=None, eid=None, limit=200):
         if et: return self._rows('SELECT * FROM audit WHERE EntityType=? AND EntityId=? ORDER BY Id DESC LIMIT ?', (et, eid, limit))
         return self._rows('SELECT * FROM audit ORDER BY Id DESC LIMIT ?', (limit,))

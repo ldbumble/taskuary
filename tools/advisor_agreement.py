@@ -18,6 +18,14 @@ continue typed in the pane) until the item's next decision or two days; else it 
 Agreement is right / (right + wrong). A decision nothing was pressed on at all is not in the log, so it is not counted.
 A decision whose lit button was GREYED at a press (drawn, but disabled - press log Greyed, since 2026-10-28) is flagged apart: the Advisor
 pointed at a button the owner could not press.
+
+PRECISION, COVERAGE AND DROPPED BALLS (the design rev 2, 2026-10-28: NO DEFAULT VERB - when unsure, nothing is lit). Silence is neither right
+nor wrong, so three numbers say how the Advisor did:
+  precision  agreement on the decisions where something WAS lit - split by who lit it: the finish check (By 'check', or its agent.check
+             row) and the rest
+  silent     the share of decisions where nothing was lit (an item pressed on with no lit button is a decision too, the same way)
+  dropped    a silent decision the owner answered with Redraft, Stop or Continue while no Advisor row had lit anything on that item in the
+             hour before: a ball it should have flagged. Falling week on week is the target, with precision at 80% or more.
 """
 import argparse, json, os, sqlite3, sys, tempfile
 from collections import Counter, defaultdict
@@ -29,6 +37,9 @@ NOT_ANSWERS = {'back', 'reopen'}                    # moving about, never a move
 OWNER = ('owner', 'you')
 ACT = {'task.closed': 'close', 'reply.sent': 'approve', 'agent.continued': 'continue'}   # outcome kinds that are the owner's own acts
 HORIZON_H, LOOKBACK_H = 48, 1 / 6
+CHECK = 'agent.check'                               # the finish check's advice rows (advisor.CHECK)
+DROPPED = {'redraft', 'stop_agent', 'continue'}     # a press that picks up a ball something dropped
+FIRED_H = 1                                         # ...unflagged: no Advisor row lit anything on the item this long before it
 def _v(v): return TWIN.get(v or '', v or '')
 def _in(xs): return ','.join('?' * len(xs))
 
@@ -74,9 +85,10 @@ def _sent(cx, target, a, b) -> str:
     return '' if not r else 'sent' if r['v'] == 'approve' else 'edited'
 
 
-def decisions(cx, since: str, until: str = '9999') -> list:
+def decisions(cx, since: str, until: str = '9999', silent: bool = False) -> list:
     """The decisions pressed on from `since` to before `until`, oldest first: {key, target, rev, lit, by, state, kind, at, live, presses,
-    action, via, ids}. `live` is every button the item's row had (the press log keeps the others; the pressed one is added back)."""
+    action, via, ids}. `live` is every button the item's row had (the press log keeps the others; the pressed one is added back).
+    `silent`: the decisions where nothing was lit as well (lit '', by 'silent') - for coverage and dropped balls, never scored."""
     ps = _rows(cx, 'SELECT * FROM advice_press WHERE CreatedAt>=? AND CreatedAt<? ORDER BY Id', (since, until))
     out, open_, last = [], {}, {}
     def close(d, action, via, until):
@@ -99,7 +111,7 @@ def decisions(cx, since: str, until: str = '9999') -> list:
             if d: d['ids'].append(p['Id'])
             continue
         if d and _v(d['lit']) != _v(lit): close(d, 'next', 'walked past', p['CreatedAt'])
-        if not lit: continue                                              # nothing lit: no decision of the Advisor's to score
+        if not lit and not silent: continue                               # nothing lit: no decision of the Advisor's to score
         if key not in open_:
             open_[key] = {'key': key, 'target': (p['TargetKind'], p['TargetId']), 'rev': p.get('Revision') or '', 'lit': lit, 'kind': p.get('ItemKind') or '',
                           'at': p['CreatedAt'], 'live': [], 'greyed': [], 'choice': p.get('Choice') is None or bool(p['Choice']), 'ids': [], 'presses': [],
@@ -123,8 +135,9 @@ def decisions(cx, since: str, until: str = '9999') -> list:
         close(d, ACT[r['Kind']], 'outcome', end) if r else close(d, 'next', 'walked past', end)
     for d in out:
         st, by = d.pop('kept')
+        if not d['lit']: d['by'], d['state'] = 'silent', st or '?'; continue
         m = None if by else model_row(cx, *d['target'], d['rev'], d['lit'])
-        d['by'] = by or ('model' if m and m.get('Model') else 'rule')
+        d['by'] = by or ('check' if m and m.get('Event') == CHECK else 'model' if m and m.get('Model') else 'rule')
         d['state'] = st or _state(cx, d)
     return sorted(out, key=lambda d: (d['at'], d['ids'][0]))
 
@@ -132,6 +145,7 @@ def decisions(cx, since: str, until: str = '9999') -> list:
 def score(d: dict, lit: str = 'lit') -> str:
     """right, wrong or unclear for one decision, judged by its `lit` field ('lit' as shown, 'today' as replayed)."""
     v, action = _v(d[lit]), d['action']
+    if not v: return 'silent'                           # nothing lit: neither right nor wrong (coverage counts it)
     if not d.get('choice', True): return 'unclear'      # only one button there: pressing it says nothing
     if action == 'edited': return 'right' if v in ('reply', 'approve') else 'wrong'
     if action == 'sent': return 'right' if v == 'approve' or (v == 'reply' and 'approve' not in d.get('live', ())) else 'wrong'
@@ -177,13 +191,21 @@ def _rule_verb(d) -> str:
 
 def mirror(cx, d) -> tuple:
     """(the verb today's code lights, the fix that moved it or '') from what was recorded at the decision."""
-    lit, (tk, ti), live = d['lit'], d['target'], set(d['live'])
+    lit, (tk, ti), live, st = d['lit'], d['target'], set(d['live']), d['state'].lstrip('~')
     m = model_row(cx, tk, ti, d['rev'], lit) if d['by'] == 'model' else None
     silent = bool(m) and not str(m.get('Line') or '').strip()
+    # NO DEFAULT VERB (the owner, 2026-10-28): the model's Send or Reply with no fact said beside it - none, or one that only explains the
+    # button - lights nothing now
+    if lit in ('approve', 'reply') and m and (silent or (m.get('Kind') or 'other') == 'other'): return '', 'quiet'
     if lit == 'reply' and 'approve' in live and (not m or m.get('Kind') != 'draft_caution' or silent): return 'approve', 'draft'
     if lit == 'continue' and tk == 'task' and not failed_at(cx, ti, d['at']) and left_result_at(cx, ti, d['at']):
         return ('close' if 'close' in live or not live else 'continue'), 'done'
     if lit == 'defer' and silent: return _rule_verb(d), 'silent'
+    # ...and the rule's own reasonless lights: Continue on a plain stop, Remind me on a wait nothing is late on, and Hand to an agent but past
+    # a capacity wall (the finish check's Continue with this is not replayable: no model is called)
+    if lit == 'continue' and st == 'stopped' and d['by'] == 'rule': return '', 'quiet'
+    if lit == 'defer' and st == 'waiting' and d['by'] == 'rule': return '', 'quiet'
+    if lit == 'regular_agent' and not (tk == 'task' and failed_at(cx, ti, d['at'])): return '', 'quiet'
     return lit, ''
 
 
@@ -221,12 +243,14 @@ def copied_store(home):
 def tally(ds, lit='lit') -> dict:
     c = Counter(score(d, lit) for d in ds)
     r, w = c['right'], c['wrong']
-    return {'decisions': len(ds), 'right': r, 'wrong': w, 'unclear': c['unclear'], 'pct': round(100 * r / (r + w)) if r + w else None}
+    return {'decisions': len(ds), 'right': r, 'wrong': w, 'unclear': c['unclear'], 'pct': round(100 * r / (r + w)) if r + w else None,
+            **({'silent': c['silent']} if c['silent'] else {})}
 
 
 def line(t: dict, since: str, label='Advisor agreement') -> str:
     pct = f"{t['pct']}%" if t['pct'] is not None else 'n/a'
-    return f"{label}: {pct} ({t['right']} right, {t['wrong']} wrong, {t['unclear']} unclear of {t['decisions']} decisions since {since})"
+    quiet = f", {t['silent']} silent" if t.get('silent') else ''
+    return f"{label}: {pct} ({t['right']} right, {t['wrong']} wrong, {t['unclear']} unclear{quiet} of {t['decisions']} decisions since {since})"
 
 
 def misses(ds, lit='lit', n=8) -> list:
@@ -235,6 +259,42 @@ def misses(ds, lit='lit', n=8) -> list:
     for d in ds:
         if score(d, lit) == 'wrong': g[(d[lit], d['by'], d['state'].lstrip('~'), d['action'])].append(d)
     return sorted(g.items(), key=lambda kv: -len(kv[1]))[:n]
+
+
+def lit(ds) -> list: return [d for d in ds if d['lit']]
+
+
+def precision(ds) -> dict:
+    """Agreement on the lit decisions alone, and split by who lit them: the finish check, and the rest."""
+    on = lit(ds)
+    return {'all': tally(on), 'check': tally([d for d in on if d['by'] == 'check']), 'rest': tally([d for d in on if d['by'] != 'check'])}
+
+
+def coverage(ds) -> dict:
+    """How many decisions had nothing lit, of all of them."""
+    n, quiet = len(ds), sum(1 for d in ds if not d['lit'])
+    return {'decisions': n, 'silent': quiet, 'pct': round(100 * quiet / n) if n else None}
+
+
+def fired(cx, d) -> bool:
+    """Whether any Advisor row lit something on the decision's item in the FIRED_H hours before it."""
+    a = _later(d['at'], -FIRED_H)
+    return bool(cx.execute('SELECT 1 FROM advice WHERE TargetKind=? AND TargetId=? AND Verb IS NOT NULL AND CreatedAt>=? AND CreatedAt<=? LIMIT 1',
+                           (*d['target'], a, d['end'] if d.get('end') else d['at'])).fetchone())
+
+
+def dropped_balls(cx, ds) -> list:
+    """The silent decisions the owner answered with Redraft, Stop or Continue, where nothing of the Advisor's had fired on the item."""
+    return [d for d in ds if not d['lit'] and _v(d['action']) in DROPPED and not fired(cx, d)]
+
+
+def three(cx, ds) -> str:
+    """precision, coverage and dropped balls, in one line (tools/release.sh prints it beside the agreement line)."""
+    p, c, db = precision(ds), coverage(ds), dropped_balls(cx, ds)
+    pct = lambda t: f"{t['pct']}%" if t['pct'] is not None else 'n/a'
+    on = lambda t: t['right'] + t['wrong']
+    return (f"precision {pct(p['all'])} on {on(p['all'])} lit (finish check {pct(p['check'])} on {on(p['check'])}, the rest {pct(p['rest'])} on "
+            f"{on(p['rest'])}); silent {pct(c)} of {c['decisions']} decisions; {len(db)} dropped-ball miss{'' if len(db) == 1 else 'es'}")
 
 
 def lit_greyed(ds) -> list:
@@ -293,13 +353,17 @@ def main(argv=None):
     a = ap.parse_args(argv)
     since = a.since or (datetime.now() - timedelta(days=a.days)).strftime('%Y-%m-%d %H:%M:%S')
     cx = connect(a.home)
-    ds = decisions(cx, since, a.until)
+    every = decisions(cx, since, a.until, silent=True)
+    ds = lit(every)
     if a.until != '9999': since = f'{since} until {a.until}'
     if a.line:
         g = len(lit_greyed(ds))
-        print(line(tally(ds), since) + (f'; {g} lit but greyed' if g else '')); return 0
+        print(line(tally(ds), since) + (f'; {g} lit but greyed' if g else '') + f'; {three(cx, every)}'); return 0
     if a.replay: replay(cx, ds, copied_store(a.home))
     print(report(ds, since, a.replay))
+    db = dropped_balls(cx, every)
+    print('\n'.join(['', f'precision, coverage, dropped balls: {three(cx, every)}']
+                    + [f"  dropped: {d['target'][0]}:{d['target'][1]} #{d['ids'][0]} - nothing lit, the owner pressed {d['action']} ({d['state']})" for d in db[:8]]))
     return 0
 
 

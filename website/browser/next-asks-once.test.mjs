@@ -41,11 +41,14 @@ test("a double-click on All read, next settles the batch once and walks on one b
   const label = () => page.$eval("[data-tq-row] [data-tq-next]", (b) => b.textContent.trim()).catch(() => "");
   const fyi = () => page.$eval('[data-tq-section-head="fyi"]', (e) => e.innerText.replace(/\s+/g, " ")).catch(() => "");
   assert.equal(await label(), "All read, next", "no fyi batch on the table");
+  // ...a batch is as many as this screen reads together (fyiBatch.js: six at 1600x810), counted off the card on the table
+  const size = await page.$$eval('[data-tq-item-sections="fyis"] [data-tq-fyi-msg]', (e) => e.length);
+  assert.equal(size, 6, "a 1600x810 screen reads six together");
   const was = await fyi(), t0 = Date.now();
   await page.evaluate(() => { const b = document.querySelector("[data-tq-row] [data-tq-next]"); b.click(); b.click(); });
   await sleep(5000);
   assert.equal(count(reqs, t0, /^\/api\/funnel\/settle$/, "POST"), 1, "the batch was settled twice");
   const n = (s) => +(/(\d+)/.exec(s)?.[1] || 0);
-  assert.equal(n(was) - n(await fyi()), 4, `one batch read: ${was} -> ${await fyi()}`);
+  assert.equal(n(was) - n(await fyi()), size, `one batch read: ${was} -> ${await fyi()}`);
   assert.deepEqual(errors, []);
 });

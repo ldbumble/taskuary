@@ -349,6 +349,16 @@ async def live_stamp(request: Request, call_next):
     if request.url.path.startswith('/api'): resp.headers['X-Taskuary-Seq'] = str(seen)
     return resp
 
+@app.middleware('http')
+async def fyi_screen(request: Request, call_next):
+    # HOW MANY FYI THE SCREEN THAT ASKED READS TOGETHER (funnel.SCREEN_BATCH, the owner 2026-10-28): six on a desktop, four on a small one -
+    # the page says which on every request (website/src/fyiBatch.js); a request that does not (the phone's doorway) gets the setting
+    from . import funnel
+    n = request.headers.get('x-taskuary-fyi-batch') or ''
+    token = funnel.SCREEN_BATCH.set(int(n) if n.isdigit() and 0 < int(n) <= 50 else None)
+    try: return await call_next(request)
+    finally: funnel.SCREEN_BATCH.reset(token)
+
 # the redirects back from a provider's sign-in: no header can ride on one, so each proves itself with the one-time state it was issued
 OAUTH_RETURNS = ('/api/quickbooks/callback', '/api/zoho/callback', '/api/linkedin/callback', '/api/google/files/callback',
                  '/api/google/calendar/callback', '/api/ms/callback')

@@ -122,6 +122,33 @@ class FyiBatchSettingTests(unittest.TestCase):
         class NoSettings: pass
         self.assertEqual(funnel.fyi_batch_size(NoSettings()), funnel.FYI_BATCH)
 
+    def test_the_screen_that_asked_sets_it_unless_the_owner_chose(self):
+        """Six on a desktop, four on a small one (the owner, 2026-10-28) - the page says which (SCREEN_BATCH); a number SET wins."""
+        s = MemoryStore()
+        for screen, want in ((6, 6), (4, 4), (40, 10)):
+            tok = funnel.SCREEN_BATCH.set(screen)
+            try: self.assertEqual(funnel.fyi_batch_size(s), want, f'the shipped default gives way to a screen of {screen}')
+            finally: funnel.SCREEN_BATCH.reset(tok)
+        s.set_setting('fyi_batch', '3', 'owner')
+        tok = funnel.SCREEN_BATCH.set(6)
+        try: self.assertEqual(funnel.fyi_batch_size(s), 3, "the owner's own number holds on any screen")
+        finally: funnel.SCREEN_BATCH.reset(tok)
+
+    def test_the_page_header_is_the_screen_for_that_request_only(self):
+        """server.fyi_screen reads X-Taskuary-Fyi-Batch (website/src/fyiBatch.js) into SCREEN_BATCH while the request runs - junk is no screen."""
+        import asyncio
+        from starlette.requests import Request
+        from taskuary import server
+        def seen(value):
+            got = []
+            async def call_next(_): got.append(funnel.SCREEN_BATCH.get())
+            hdrs = [(b'x-taskuary-fyi-batch', value.encode())] if value is not None else []
+            asyncio.run(server.fyi_screen(Request({'type': 'http', 'method': 'GET', 'path': '/api/funnel/pile', 'headers': hdrs}), call_next))
+            return got[0]
+        for value, want in (('6', 6), ('4', 4), (None, None), ('', None), ('six', None), ('0', None), ('-2', None), ('999', None)):
+            self.assertEqual(seen(value), want, repr(value))
+        self.assertIsNone(funnel.SCREEN_BATCH.get(), 'reset once the request is done')
+
     def test_the_setting_reaches_the_selection_batch_too(self):
         """Two call sites read it; a setting that reached only one would half-work in silence."""
         first = {'key': 'msg:1', 'lane': 'fyi'}

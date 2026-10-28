@@ -115,6 +115,8 @@ const isOpenWalk = (t) => !!t && t.SourceRef === "assistant:setup" && !["done", 
 // markers the server writes on a line that are NOT cards (concierge.SETUP_QUESTIONS): the line is its words
 // ...and a line that carries its own words (concierge: a failed act's way on, the already-seen opens): never an item card
 const NOTE_KINDS = new Set(["setup_questions", "words"]);
+// the cards that ARE the item on the table (not the assistant talking: a proposal, setup, the walk, the brief) - drawn edge to edge like the task view
+const ITEM_CARDS = new Set(["report", "dashboard", "message", "fyis", "meeting", "idea", "reply"]);
 
 // what a PERSON sent, whatever lane it landed in (funnel.came_in): a slipped follow-up about a mail
 // is still mail, and the walk that skipped it said "0 of them are mail" with five in the pipe
@@ -992,7 +994,9 @@ function Line({ m, lastBrief = false, live, last, further = false, actions, fres
   // ...folded to its title line by its X, or while a browse card is open below it (the mockup's Browse board)
   const foldedNow = !!canvas && live && !!m.card && (foldsAs(canvas.folded, m.card.key) || !!canvas.browsing);
   // a broken connection on the table is drawn like the task view beside it - its own frame, no avatar (the owner, 2026-10-15)
-  const bare = live && c?.kind === "connection" && !foldedNow;
+  // ...and so is every ITEM on the table - a report, a dashboard, an FYI or a batch of them, a message, an invite: walking from a task to a
+  // report moved the card's left edge 38px in, to an avatar column with no avatar in it (the 2026-10-27 sweep)
+  const bare = live && !foldedNow && (c?.kind === "connection" || ITEM_CARDS.has(kind));
   if (live && canvas && m.card && showsTask(c, kind) && !foldedNow) return (
     <div className="tq-canvas-live">
       <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle} phone={canvas.phone}

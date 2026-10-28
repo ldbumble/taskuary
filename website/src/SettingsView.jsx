@@ -117,6 +117,8 @@ const KNOB_META = schema.knobs;
 
    Only chats you are ALONE in are offered, and that is enforced again on the way in
    (remote_assistant.use_chat) - the picker is a convenience, not the guard. */
+// the service's own spelling: capitalize made "Whatsapp", and the button said "Open the whatsapp card"
+const CHANNEL_NAME = { whatsapp: "WhatsApp", telegram: "Telegram" };
 const PhoneDoorways = ({ onLoaded, onNavigate }) => {
   const [rows, setRows] = useState(null);
   const [busy, setBusy] = useState("");
@@ -165,12 +167,12 @@ const PhoneDoorways = ({ onLoaded, onNavigate }) => {
           <Box key={`${r.channel}-${r.connectorId}`} sx={{ py: 2, borderBottom: `1px solid ${BORDER}` }}>
             <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
               <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5, minWidth: 92, textTransform: "capitalize" }}>
-                {r.channel}
+                {CHANNEL_NAME[r.channel] || r.channel}
               </Typography>
               {!r.live ? (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
                   <Typography variant="body2" sx={{ color: DIM }}>not switched on yet</Typography>
-                  <Button size="small" variant="outlined" onClick={() => toCard(r.connectorId || r.channel)}>Open the {r.channel} card</Button>
+                  <Button size="small" variant="outlined" onClick={() => toCard(r.connectorId || r.channel)}>Open the {CHANNEL_NAME[r.channel] || r.channel} card</Button>
                 </Box>
               ) : (
                 <>
@@ -310,16 +312,17 @@ const isState = (name) => name.includes(":") || name.endsWith("_at") || STATE.ha
 // could not tell you which ones you had actually changed, or what the shipped answer had been -
 // and a default written into 55 strings is 55 places to drift. The server sends `Default` straight
 // from store.DEFAULT_SETTINGS; this only decides how to say it.
-const showValue = (v, type) => {
+// ...a choice by the words its box shows: "Default: 0" sat under a box reading "leave it as it is"
+const showValue = (v, m = {}) => {
   if (v === null || v === undefined) return "";
   const s = String(v);
-  if (type === "switch") return s === "1" ? "on" : "off";
-  return s === "" ? "blank" : s;
+  if (m.type === "switch") return s === "1" ? "on" : "off";
+  return m.optionLabels?.[s] || (s === "" ? "blank" : s);
 };
-const defaultNote = (s, type) => {
-  const d = showValue(s.Default, type);
+const defaultNote = (s, m) => {
+  const d = showValue(s.Default, m);
   if (!d) return "";
-  const now = showValue(s.Value, type);
+  const now = showValue(s.Value, m);
   return now === d ? `Default: ${d} \u2014 unchanged.` : `Default: ${d}. Yours: ${now}.`;
 };
 
@@ -730,9 +733,9 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
               <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{m.desc || s.Description}</Typography>
               {/* the line every description was missing: what shipped, and whether this is
                   still it. Quiet on purpose - it is a fact you check, not a thing to read. */}
-              {defaultNote(s, m.type) && (
+              {defaultNote(s, m) && (
                 <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.3 }}>
-                  {defaultNote(s, m.type)}
+                  {defaultNote(s, m)}
                 </Typography>
               )}
             </Box>
@@ -1131,8 +1134,8 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
     // ...each card saying what it is, not which shelf it is on ("Operator documents" in grey under every name)
     const what = { ...Object.fromEntries(OPERATOR_DOCS.map((d) => [`d:${d.name}`, d.blurb])),
       ...Object.fromEntries((docCat.profiles || []).map((r) => [`p:${r.name}`, r.purpose])),
-      "a:new-profile": "a new worker with its own rules", "a:manage-profiles": "add, rename or remove workers",
-      "g:how": "the assistant and the gates a message passes" };
+      "a:new-profile": "A new worker with its own rules", "a:manage-profiles": "Add, rename or remove workers",
+      "g:how": "The assistant and the gates a message passes" };
     let shelf = "";
     const docCards = docsTree(docCat).flatMap((e) => {
       if (e.head) shelf = e.key;

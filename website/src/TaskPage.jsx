@@ -2330,6 +2330,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           session is the record under Agent work, not the news (the owner, 2026-10-12) - always, now no strip under the
                           canvas says what to do (2026-10-26) */}
                       {news && <Typography className="tq-news" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>Open again: {news.line}</Typography>}
+                      {/* A TASK PUT AWAY SAYS SO (trust audit S3, 2026-10-28): opened before its day, nothing on it said Remind me was pressed */}
+                      {remindWaiting(t) && <Typography data-tq-put-away="" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>Put away until {remindDay(t.RemindAt)}</Typography>}
                       {threeUp && fromCards()}
                       {/* THE ASK - one line of what is wanted; the whole summary is the tooltip when the line cut it */}
                       {(askBand || waitFor) && <Part label="The ask" data-tq-ask="" data-tq-quoted={askQuoted ? "" : undefined}>
@@ -2590,6 +2592,21 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     // the sender wrote again since: the earlier session is history, one fold, never the page's lead
                     return news ? <Box data-tq-earlier-session="" sx={{ mt: 1 }}><Fold title="The earlier session, before they wrote again">{record}</Fold></Box> : record;
                   })()}
+                  {/* A FAILED GENERAL RUN IS ITS REASON AND ITS FIX (trust audit S1, 2026-10-28): the conversation under the reason said it twice -
+                      it is one quiet link, the Result's own (ResultSummary), and one press back */}
+                  {/* ...its fix under the reason: the chat's own Try again went with the chat (on the row it may fold into its menu) */}
+                  {failedRun && isGeneral && !resultOpen && !sessionView && (runFix || canContinue) && (
+                    <Box data-tq-failed-fix="" sx={{ mt: 1, display: "flex", gap: 0.75, flexWrap: "wrap" }}>
+                      {runFix ? <Button size="small" variant="contained" disableElevation sx={primaryBtn} data-tq-run-fix="" onClick={() => openAppLink(runFix.href)}>{runFix.label}</Button>
+                        : <span title={noAiWhy || undefined}><Button size="small" variant="contained" disableElevation sx={primaryBtn} disabled={!!startingAgent || !!noAiWhy}
+                            startIcon={startingAgent === "resume" ? <CircularProgress size={12} /> : <RefreshIcon sx={{ fontSize: 16 }} />}
+                            title={btnHint("try_again")} onClick={continuePress}>{continueWord}</Button></span>}
+                    </Box>)}
+                  {failedRun && isGeneral && hasGeneralHistory && !sessionView && (
+                    <Box sx={{ mt: 0.75 }}><Button size="small" data-tq-full-result="" aria-expanded={resultOpen ? "true" : "false"}
+                      onClick={() => { if (!resultOpen && pane !== "agent") setOpenStage("agent"); setResultOpen(!resultOpen); }}
+                      sx={{ fontSize: 11, minHeight: 0, p: 0, minWidth: 0, textAlign: "left" }}>
+                      {resultOpen ? "‹ Hide the conversation" : "The whole conversation ›"}</Button></Box>)}
                   {/* ONE BOX FOR EVERY START: a general task nobody has started had its own row of pickers and a button that started at
                       once with nothing said - it is the same box now, with the words, the mic and the pictures */}
                   {(restartOpen || (!term?.alive && !liveRun && !report && !detail?.transcript && (!isGeneral || !generalStarted)))
@@ -2666,7 +2683,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       // ...a finished agent's chat is the rest of its Result, behind the Result heading while the Result rests on its summary
                       // (the owner, 2026-10-27) - unless it holds a question the agent is waiting on you for, which is the move itself
                       // ...or that is at work again - a turn under way is the move, never a rest (2026-10-28, CI: a working agent's chat stood hidden)
-                      ...(resultRest ? { "&:not(:has([data-tq-asking], .tq-aui-band, .tq-aui-thinking))": { display: "none" } } : {}) }}>
+                      ...(resultRest || (failedRun && !resultOpen) ? { "&:not(:has([data-tq-asking], .tq-aui-band, .tq-aui-thinking))": { display: "none" } } : {}) }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}

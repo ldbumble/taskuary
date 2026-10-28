@@ -24,7 +24,7 @@ test("an unsendable draft has Copy beside Redraft: it copies, closes nothing, an
   // ...registered as the card's own verb, so the Advisor finds it under the draft; the bar never draws it
   assert.match(rd, /\{ id: no\("copy"\), label: copied \? `✓ \$\{btn\("copy", "done"\)\}` : btn\("copy"\), tone: "s", disabled: busy \|\| !value\.trim\(\), run: copyIt, title: copyTitle,/);
   // ...and Redraft still stands beside it
-  assert.match(rd, /\{canRedraft && !r\.Stale && !delivery\.frozen && <Button/);
+  assert.match(rd, /\{canRedraft && !r\.Stale && !delivery\.frozen && (!warnTop && )?<Button/);   // a warned Redraft sits over the draft (2026-10-28)
 });
 
 test("a draft decided already - answered in the chat itself - is not a delivery failure", () => {

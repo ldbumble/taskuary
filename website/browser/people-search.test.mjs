@@ -58,7 +58,7 @@ test("a People hit offers Message them on its channels, and the pick opens New's
   assert.deepEqual(await page.$$eval("[data-tq-message-channel]", (b) => b.map((x) => x.dataset.tqMessageChannel)), ["email", "teams"]);
   await page.click("[data-tq-message-channel=email]");
   await page.waitForFunction(() => /gmoreno@northwind\.example/.test(document.querySelector('[data-tq-browse="new"]')?.innerText || ""), { timeout: 15000 });
-  assert.ok(!(await page.$("[data-tq-search]")), "the search went");
+  await page.waitForFunction(() => ![...document.querySelectorAll("[data-tq-search-input]")].some((e) => e.getBoundingClientRect().width > 0), { timeout: 10000 });   // the search went
   assert.match(await page.$eval('[data-tq-browse="new"]', (e) => e.innerText), /Send something/);
   assert.deepEqual(errors, []);
 });

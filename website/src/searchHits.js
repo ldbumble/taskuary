@@ -58,6 +58,15 @@ export function filters(hits, res = null) {
     ...GROUPS.filter((g) => n[g]).map((g) => ({ key: g, label: FILTER_LABEL[g] || g, n: res ? countWords(totalOf(res, g)) : n[g] }))];
 }
 
+// A PERSON OPENED WITH NOTHING ON RECORD (the 2026-10-28 flow walk): Enter on a person puts their address in the box, and for someone who
+// never wrote in the list came back as that one person - Enter on them again did the same, a press that led nowhere. Their name, so the
+// list can say there is nothing from or about them yet; '' while anything else answers the address
+export const aloneAs = (res) => {
+  const q = String(res?.q || "").trim().toLowerCase(), hits = res?.hits || [];
+  return q.includes("@") && hits.length && hits.every((h) => h.type === "person" && String(h.to || "").toLowerCase() === q) ? hits[0].title || hits[0].to : "";
+};
+export const nothingYet = (name) => `Nothing from or about ${name} yet - what they send, and the tasks they are on, come up here.`;
+
 // ONE WAY TO SAY NOTHING WAS FOUND, on every page with a box (the 2026-10-19 UI walk: each said it its own way, and none said where
 // else to look). A page's own box says what it searched, and that the box at the top searches everything
 export const nothingMatches = (q, where = "") =>

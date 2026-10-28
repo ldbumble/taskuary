@@ -146,6 +146,9 @@ const errText = (e) => {
     ? "That Next request may already have completed. Review the refreshed conversation before acting again."
     : "Taskuary could not move on just now. Press Next to try again.");
   if (demoNo(e)) DEMO_SAID.add(demoNo(e));
+  // a request that never got an answer: axios's "Network Error" and fetch's "Failed to fetch" are no sentence for the owner
+  if (!e?.response && (e?.code === "ERR_NETWORK" || /^(Network Error|Failed to fetch|NetworkError|Load failed$)/.test(String(e?.message || ""))))
+    return "Taskuary did not answer - try again in a moment.";
   return (typeof detail === "string" ? detail : null) || e?.message || "Taskuary could not answer.";
 };
 // THE DEMO SAYING NO (U8, 2026-10-17): a refusal is the demo speaking, so it is posted as a plain line of its own - it came in
@@ -1024,6 +1027,9 @@ function Line({ m, lastBrief = false, live, last, further = false, actions, fres
   const strip = moved ? chips.filter((c) => c.verb === "next") : inCard ? chips.filter((c) => !c.verb) : chips;
   const nextChip = verbs.find((c) => c.verb === "next");
   const nav = { busy: actions.busy, items: actions.items, surface: actions.surface, row: live && last && !!canvas, ref: c?.ref || "",   // Next and the words ride in the row above the chat line
+    // ...and whether this card is still the item on the table, a line said under it or not: a report's Share went from the row the moment
+    // the demo's "switched off" line landed under it, while its Pause and Put it on my list stayed (the 2026-10-28 flow walk)
+    table: live && !!canvas,
 
     onNext: nextChip ? () => actions.chip(nextChip) : null,
     also: verbs.filter((c) => c.verb !== "next").map((c) => ({ verb: c.verb, label: c.label, title: c.hint, disabled: actions.busy, onClick: (e) => actions.chip(c, e?.currentTarget) })) };
@@ -3401,6 +3407,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // ...and goes with the task: the next one on the table starts with it shut
   const popTable = shown[lastCardIdx]?.card?.key || "";
   useEffect(() => { setPopOpen(false); }, [popTable]);
+  // ...and A PRESS THAT FAILED SAYS SO WHERE IT CAN BE READ (the 2026-10-28 flow walk): a Next whose request never got an answer wrote its
+  // line under the task view, behind the canvas and the dock - the press looked unheard. With the pop-up on, the failure comes up in it
+  const popErr = popOn && !!err;
+  useEffect(() => { if (popErr) setPopOpen(true); }, [popErr, err]);
+  // ...and on a phone, where the column holds it, the column brings it into view: it stood under the composer, past the column's end
+  useEffect(() => {
+    if (!err) return undefined;
+    const id = requestAnimationFrame(() => [...document.querySelectorAll("[data-tq-err-line]")].find((e) => e.getBoundingClientRect().height > 0)?.scrollIntoView?.({ block: "nearest" }));
+    return () => cancelAnimationFrame(id);
+  }, [err, popOpen]);
   // ...shut by Esc, its x, or a press anywhere but on it or the box (a menu it opened is on it)
   useEffect(() => {
     if (!popOpen) return undefined;
@@ -3440,7 +3456,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               </div>
             </div>
           )}</>;
-  const errLine = err && <Typography component="div" sx={{ color: "#7a2f3c", fontSize: 12, mb: 1 }}>{err}<ReportLink text={err} /></Typography>;
+  const errLine = err && <Typography component="div" data-tq-err-line="" sx={{ color: "#7a2f3c", fontSize: 12, mb: 1 }}>{err}<ReportLink text={err} /></Typography>;
   const chat = (
     <div className="tq-asst-col" style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div className="tq-chat-head">
@@ -3592,7 +3608,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         <div className="tq-compose" {...pics.drop}>
           {/* THE ANSWER POP-UP (the one-row chat bar, 2026-10-26): the lines after the task view, over it - it never moves - a few turns
               tall at most, scrolling inside. Shut, it stays mounted: the last line's chips are on the row either way */}
-          {popOn && (!!popLines.length || popPending) && (
+          {popOn && (!!popLines.length || popPending || popErr) && (
             <div className="tq-chat-pop" data-tq-chat-pop="" role="dialog" aria-label="Taskuary's answer" ref={popRef} hidden={!popOpen}
               style={{ maxHeight: popMax }}>
               <div className="tq-chat-pop-head"><TaskuaryMark size={16} /><b>Taskuary</b>{currentItem?.ref && <span>{`· ${currentItem.ref}`}</span>}<span style={{ flex: 1 }} />
@@ -3653,7 +3669,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             </Tooltip>
             </div>
             {/* ...the pop-up shut, what was said comes back from here */}
-            {popOn && !popOpen && (!!popLines.length || popPending) && (
+            {popOn && !popOpen && (!!popLines.length || popPending || popErr) && (
               <Tooltip title={popPending ? "Answering…" : "Show the last answer"}>
                 <IconButton size="small" aria-label="Show the last answer" data-tq-pop-again="" onClick={() => setPopOpen(true)}
                   sx={{ width: 28, height: 28, p: 0, color: popPending ? "#526b53" : DIM }}><ChatBubbleOutlineIcon sx={{ fontSize: 16 }} /></IconButton>

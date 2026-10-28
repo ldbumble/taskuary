@@ -855,7 +855,7 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone, table = null 
   // table; the server reads the report off its message, never off the page (sharing.py)
   const nav = React.useContext(CardNav);
   // ...and an email it drafts opens on the table at once, its task's Close out, for the owner to read and Send (the owner, 2026-10-23)
-  const share = useShare(`report:${card.key || card.mid}`, { kind: "report", title: card.title, message: card.mid }, !!nav.row && !!card.mid && !card.bad,
+  const share = useShare(`report:${card.key || card.mid}`, { kind: "report", title: card.title, message: card.mid }, !!(nav.table ?? nav.row) && !!card.mid && !card.bad,
     { onShared: (how, out) => { if (how === "email" && out?.task_id) onOpenTask?.(out.task_id); },
       summaryWhy: "a summary is written from a task's work - a report is its own result; Email the result sends it" });
   // ON THE TABLE, IN A TASK'S THREE SECTIONS (ItemSections; the owner, 2026-10-28): the report itself open in the middle, what produced it
@@ -914,7 +914,7 @@ export function DashboardCard({ card, onOpenTask, onDone }) {
   // SHARE IT, like a report (the owner, 2026-10-23: Share on report / workflow / Result / dashboard): the store holds no page for a
   // dashboard, so it brings its own words - the tiles and the rows it drew, frozen at the press (snapshotOf); an email opens at once
   const nav = React.useContext(CardNav), snap = useMemo(() => (got?.data ? snapshotOf(got.config, got.data) : null), [got]);
-  const share = useShare(`dashboard:${card.key || card.mid || card.source_id}`, { kind: "dashboard", title: card.title, ...(snap || {}) }, !!nav.row && !!snap,
+  const share = useShare(`dashboard:${card.key || card.mid || card.source_id}`, { kind: "dashboard", title: card.title, ...(snap || {}) }, !!(nav.table ?? nav.row) && !!snap,
     { onShared: (how, out) => { if (how === "email" && out?.task_id) onOpenTask?.(out.task_id); },
       summaryWhy: "a summary is written from a task's work - a dashboard is its own result; Email the result sends it" });
   useEffect(() => {

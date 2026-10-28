@@ -18,8 +18,19 @@ import { MARKS, MARK_HINT } from "./learnedGroups.js";
 export const memoryMarks = (r) => (r?.kind !== "memory" || !r.key ? [] : r.own ? ["forget"] : ["keep", "wrong", "forget"]);
 export const MARKED = { keep: "Kept - it is yours now.", wrong: "Marked wrong - it leaves, and the task reads again.", forget: "Forgotten - the task reads again." };
 
-export default function AdvisorNote({ note, onDraft = null, sx }) {
-  const [at, setAt] = useState(null), [done, setDone] = useState({}), [err, setErr] = useState("");
+// A CRITIQUE CARRIES ITS FIX (the owner, 2026-10-28: "just judging without action is not worth much"): a line saying the work leaves
+// something out comes with the press that puts it right (advisor.fix_of) - Continue with this / Redraft with this, the line as its note
+export const fixOf = (note) => (note?.advice?.fix?.verb && note.advice.fix.note ? note.advice.fix : null);
+
+export default function AdvisorNote({ note, onDraft = null, onFix = null, sx }) {
+  const [at, setAt] = useState(null), [done, setDone] = useState({}), [err, setErr] = useState(""), [fixing, setFixing] = useState(false);
+  const fix = onFix ? fixOf(note) : null;
+  const runFix = async () => {
+    setErr(""); setFixing(true);
+    try { await onFix(fix); }
+    catch (e) { setErr(e?.response?.data?.detail || e?.message || "That did not start - nothing was changed."); }
+    finally { setFixing(false); }
+  };
   if (!note?.line) return null;
   const a = note.advice || {}, rests = a.rests || [];
   const mark = async (r, how) => {
@@ -37,9 +48,12 @@ export default function AdvisorNote({ note, onDraft = null, sx }) {
         <Box component="span" data-tq-advisor-line="" sx={{ color: INK, fontWeight: 500, minWidth: 0, overflowWrap: "anywhere" }}>{note.line}</Box>
         {note.draft && onDraft && <button type="button" className="tq-next-why" data-tq-advisor-draft="" onClick={onDraft}
           style={{ padding: "1px 4px", fontSize: 12 }}>See the draft</button>}
+        {fix && <button type="button" className="tq-next-why" data-tq-advisor-fix={fix.verb} disabled={fixing} onClick={runFix}
+          title={fix.note} style={{ padding: "1px 4px", fontSize: 12, fontWeight: 600 }}>{fixing ? "Starting…" : fix.label}</button>}
         <button type="button" className="tq-next-why" aria-haspopup="dialog" aria-expanded={!!at} onClick={(e) => setAt(e.currentTarget)}
           style={{ padding: "1px 4px", fontSize: 12 }}>Why?</button>
       </Box>
+      {err && !at && <Box role="alert" sx={{ color: ALERT_INK, fontSize: 12 }}>{err}</Box>}
       <Popover open={!!at} anchorEl={at} onClose={() => setAt(null)} anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
         transformOrigin={{ vertical: "top", horizontal: "left" }} slotProps={{ paper: { sx: { borderRadius: 2.5, maxWidth: 420 } } }}>
         <div className="tq-next-pop" role="dialog" aria-label="Why the Advisor says this">

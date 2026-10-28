@@ -31,7 +31,7 @@ import DifferenceIcon from "@mui/icons-material/Difference";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
-import { openReply as draftReply } from "./replyDraft.js";   // the component's own openReply below would shadow it, and call itself
+import { openReply as draftReply, draftBehind } from "./replyDraft.js";   // the component's own openReply below would shadow it, and call itself
 import { opError, runOperation } from "./taskOps.js";
 import { ClosingCard, WriteupBlock, WriteupLine, completeTask, writeUpThenClose } from "./closeAgent.jsx";
 import { writeupView } from "./writeupState.js";
@@ -1964,7 +1964,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const warn = notDone ? (canvas ? note : taskNote(taskAdvice)) : null;
   // THE ADVISOR'S SECTION, one element the layout places: over the work on a phone, in the Agent section on the desk - its draft press opens
   // Close out where the draft will stand
-  const advisorNote = warn && !liveSession ? <AdvisorNote note={warn} onDraft={() => { setOpenStage("reply"); if (threeUp) openSection("close");
+  // ...and its fix (advisor.fix_of): the agent's Continue or the draft's Redraft, pressed with the Advisor's line as the note
+  const advisorFix = async (fix) => {
+    const id = selected;
+    if (fix.verb === "continue") { await api.post(`/api/tasks/${id}/continue-work`, { note: fix.note }); continued(); return; }
+    if (fix.verb === "redraft" && pendingReview?.ReviewId) { setOpenStage("reply"); await draftBehind(api, pendingReview.ReviewId, fix.note); if (!stale(id)) loadDetail(id); }
+  };
+  const advisorNote = warn && !liveSession ? <AdvisorNote note={warn} onFix={advisorFix} onDraft={() => { setOpenStage("reply"); if (threeUp) openSection("close");
     requestAnimationFrame(() => (threeUp ? closeOutRef : workBox).current?.querySelector("textarea")?.scrollIntoView({ block: "center", behavior: "smooth" })); }} /> : null;
   // THE TASKS TAB'S BAR IS ONE LINE (2026-10-23, foldBar.js): Change folds first, then Split or merge, Hand off with its rule, Not a task;
   // Mark done and Remind me never fold, nor the button the Advisor lit

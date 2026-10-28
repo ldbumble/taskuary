@@ -124,7 +124,10 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
   // ...pressable while a pick (a rail row, a link) is on its way - AssistantView holds that press (`picking`); greyed only by a Next in
   // flight, and drawn as it was then (`steady`): it flashed grey for the ~300 ms of every switch (the owner, 2026-10-26)
   useVerbs("next", [{ id: "next", group: "next", label: btnLabel("next"), disabled: !!busy && !picking, steady: true, run: () => onNext(), title: btnHint("next") }]);
-  const read = useItemAdvice(card, phone);
+  // ...and while a phone's own read is on its way the desk's decision for this item lights its row: a window narrowed to a phone dropped the
+  // lit Reply for the length of the read, and the row looked as if the move had folded away (row-one-line, walk item 2 @390, 2026-10-28)
+  const own = useItemAdvice(card, phone);
+  const read = own || (phone && advice?.verb && advice.for === card.key ? advice : null);
   // the Assistant's lit button outranks the Advisor's line, as it does over the composer (assistantLight.js)
   const advised = lit ? null : adviceShown(read, { key: card.key, lane: card.lane }, busy);
   // ...and the strip's word and the button it lights are ONE decision, the dock's (advice.stripWord, the UI audit's C2)

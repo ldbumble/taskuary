@@ -21,6 +21,7 @@ import SendIcon from "@mui/icons-material/ArrowUpward";
 import SentimentSatisfiedAltIcon from "@mui/icons-material/SentimentSatisfiedAlt";
 import CloseIcon from "@mui/icons-material/Close";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
+import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import ViewSidebarIcon from "@mui/icons-material/ViewSidebar";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import api from "./api.js";
@@ -1196,7 +1197,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [steps, setSteps] = useState([]);            // ...and its own steps, looking into the app's trouble - kept on the answer after
   const [err, setErrRaw] = useState("");
   const setErr = useCallback((v) => {
-    if (typeof v === "string" && DEMO_SAID.has(v)) { setMsgs((m) => [...m, { id: `d${Date.now()}`, role: "assistant", text: v, options: [] }]); return; }
+    if (typeof v === "string" && DEMO_SAID.has(v)) { setMsgs((m) => [...m, { id: `d${Date.now()}`, role: "assistant", text: v, options: [], refused: true }]); return; }
     setErrRaw(v);
   }, []);
   const [current, setCurrent] = useState(null);       // the key on the table - the walk's item
@@ -2311,7 +2312,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     turnFlight.current = answering.current = true; sending.current = t;
     if (line == null) { micRef.current?.cancel(); setHeard(""); }   // a send ends the dictation: its words went with the line
     setText(""); setBusy(true); setErr(""); setLit(null);
-    if (winOnRef.current) setPopOpen(true);            // the answer comes up in the chat window
+    // ...a TYPED line opens the window (it was typed in its box); a line sent for a press elsewhere never does - the window opens only by
+    // the owner's own hand or for an error (the owner, 2026-10-28: "when the walk-through ended, the chat reopened by itself")
+    if (winOnRef.current && line == null) setPopOpen(true);
     const shots = line == null ? pics.imgs : [];
     if (images.length) pics.clear();
     // ...a held line is on screen already: it is let go, not drawn twice
@@ -2540,7 +2543,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       : await api.post("/api/concierge/propose", { verb, key, table, press: true });
     // refused before any proposal existed: the reason and this item's other words, as a line of its own (no card to confirm)
     if (!data.id) {
-      setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: [], card: { kind: "words", chips: data.chips || [] } }]);
+      setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: [], refused: true, card: { kind: "words", chips: data.chips || [] } }]);
       return data;
     }
     // a move the server runs AT ONCE (concierge.AUTO: Not ours, Mark done, Stop) draws no card: its caller runs it on the spot, and the
@@ -3437,7 +3440,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // the box's blur and a press on the row used to shut it unless a style read at that instant said the box stood over the canvas - one
   // read away from closing whenever an answer moved the focus (a lit button, a task opened, a page brought up). Nothing reads the focus now
   const shutBox = () => { setBoxOpen(false); if (mini) keepMini(null); composeRef.current?.blur(); };
-  const minimize = () => { setBoxOpen(false); keepMini({ tid: chatTid, last: winLines[winLines.length - 1]?.[0]?.id ?? null }); composeRef.current?.blur(); };
+  // ...MINIMIZE IS NOT × (the owner, 2026-10-28: the two did the same): it folds the window down to its head, a strip standing on the open box -
+  // the title, what came since, expand; a press on the strip brings the whole window back. × is the pill again
+  const minimize = () => { keepMini({ tid: chatTid, last: winLines[winLines.length - 1]?.[0]?.id ?? null }); composeRef.current?.blur(); };
+  const expand = () => { if (mini) keepMini(null); };
+  const winFull = popOpen && !isMini;
+  // ...a compose put away by an earlier chat or the setup walk does not come back open with it: only the owner opens it
+  useEffect(() => { if (old || walk || firstRun) setBoxOpen(false); }, [old, walk, firstRun]);
   // THE PILL'S HINT FITS THE PILL: with a row beside it and no task on the table the box is the 220px pill, and the long hint ("Ask
   // Taskuary anything — a name or a subject pulls it in…") ran on under its own send button, cut mid-word (the overnight setup walk,
   // 2026-10-26). Measured, because the row beside it is what makes it a pill (the CSS's :has)
@@ -3448,20 +3457,32 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (!el || typeof ResizeObserver === "undefined") return undefined;
     // ...the window's foot is the box (assistantView.css): the conversation stands flush on it (--tq-box-h) - 6px over the dock on a desk,
     // the screen's foot on a phone
+    // ...and in the bar it is the FIELD that stands out of the box's slot (assistantView.css): its height is what the window stands on
+    const field = el.querySelector(".tq-compose-field");
     const ro = new ResizeObserver(() => {
-      const r = el.getBoundingClientRect(), pos = getComputedStyle(el).position, over = el.hasAttribute("data-tq-open") && (pos === "absolute" || pos === "fixed");
-      setBoxNarrow(r.width < 360); setBoxH(over ? Math.round(r.height) : 0);
+      const r = el.getBoundingClientRect(), pos = getComputedStyle(el).position, open = el.hasAttribute("data-tq-open"), over = open && (pos === "absolute" || pos === "fixed");
+      const inBar = open && field && getComputedStyle(field).position === "absolute";
+      setBoxNarrow(r.width < 360); setBoxH(inBar ? Math.round(field.getBoundingClientRect().height) : over ? Math.round(r.height) : 0);
       el.closest(".tq-compose")?.style.setProperty("--tq-box-h", over ? `${Math.round(r.height) + (pos === "fixed" ? 0 : 6)}px` : "-2px");
     });
-    ro.observe(el);
+    ro.observe(el); if (field) ro.observe(field);
     return () => ro.disconnect();
   }, [old, walk]);                                   // the box is mounted only while neither is up
-  // ...it opens on the owner's line (send) and on the Assistant speaking up in this session - never on a reload's history
+  // ...IT OPENS ONLY BY THE OWNER'S HAND (the owner, 2026-10-28: "when the walk-through ended, the chat reopened by itself"): the pill pressed,
+  // a line typed, Continue chat - or an error to be read. A line that lands while it is shut or folded never opens it: the pill (or the strip)
+  // counts the answers that came since the owner last had it in view (`seen`; over a reload, the minimize's own mark)
   const popLast = winLines[winLines.length - 1]?.[0];
-  // ...but not over a minimize: it was put away on purpose, and the pill counts what came meanwhile (`unseen`)
-  useEffect(() => { if (popLast?.role === "assistant" && /^(a|s|d|context)\d/.test(popLast.id) && !isMini) setPopOpen(true); }, [popLast?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const unseen = useMemo(() => { if (!isMini || mini?.last == null) return 0; const at = winLines.findIndex(([m]) => m.id === mini.last || m.commentId === mini.last);
-    return at < 0 ? 0 : winLines.slice(at + 1).filter(([m]) => m.role !== "user").length; }, [isMini, mini, winLines]);
+  const [seen, setSeen] = useState(() => mini?.last ?? null);
+  useEffect(() => { if (winFull && popLast) setSeen(popLast.id); }, [winFull, popLast?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // ...but a press REFUSED, or one that failed, is said where it can be read: the window comes up for it (the error the owner must see)
+  useEffect(() => { if (popLast && /^[adrw]\d/.test(popLast.id) && (popLast.refused || (popLast.role === "receipt" && popLast.status === "error"))) setPopOpen(true); }, [popLast?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const unseen = useMemo(() => {
+    if (winFull) return 0;
+    const at = seen == null ? -1 : winLines.findIndex(([m]) => m.id === seen || m.commentId === seen);
+    // ...nothing seen yet: only this session's answers count, never a reload's history
+    const after = at >= 0 ? winLines.slice(at + 1) : winLines.filter(([m]) => /^(a|s|d|context)\d/.test(m.id));
+    return after.filter(([m]) => m.role === "assistant").length;
+  }, [winFull, seen, winLines]);
   // ...and IT NEVER SHUTS BY ITSELF (the owner, 2026-10-27: "it disappeared when done? not sure what happened"): every turn ends on words
   // (actReceipt), and the window stays until its × or Esc
   // ...and A PRESS THAT FAILED SAYS SO WHERE IT CAN BE READ (the 2026-10-28 flow walk): a Next whose request never got an answer wrote its
@@ -3483,26 +3504,30 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [room, setRoom] = useState(0);
   useLayoutEffect(() => {
     if (!popOpen || phone) return undefined;
-    const fit = () => { const line = boxRef.current?.parentElement?.getBoundingClientRect(), body = bodyRef.current?.getBoundingClientRect();
-      if (line && body) setRoom(Math.round(line.top - 6 - body.top - 8)); };
+    // ...in the bar the window and its field rise from the box's foot; standing over the dock (no row), from 6px over the line
+    const fit = () => { const box = boxRef.current, line = box?.parentElement?.getBoundingClientRect(), body = bodyRef.current?.getBoundingClientRect();
+      if (!line || !body) return;
+      const foot = getComputedStyle(box).position === "relative" ? box.getBoundingClientRect().bottom : line.top - 6;
+      setRoom(Math.round(foot - body.top - 8)); };
     fit(); window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);
   }, [popOpen, phone, bodyH]);
   // ...at most HALF the screen (the owner, 2026-10-28: "not go all the way up - max 50%"), never past the canvas top
   const winH = phone ? Math.round(vh * 0.85) : Math.min(room || vh, Math.round(vh * 0.5));
   const popH = Math.max(140, winH - boxH);
-  useLayoutEffect(() => { const el = popBodyRef.current; if (el && popOpen) el.scrollTop = el.scrollHeight; }, [popOpen, winLines.length, popPending, words, popH]);
+  useLayoutEffect(() => { const el = popBodyRef.current; if (el && popOpen) el.scrollTop = el.scrollHeight; }, [popOpen, isMini, winLines.length, popPending, words, popH]);
   // ...and on a desk the window STANDS ON THE BOX in the bar, edge to edge (the owner, 2026-10-28: "the chat should come out of the bottom
   // bar"): its right edge on the box's, its foot on the box's top - measured, since the two sit in different parents
   useLayoutEffect(() => {
-    const pop = popRef.current, box = boxRef.current;
+    const pop = popRef.current, box = boxRef.current, field = box?.querySelector(".tq-compose-field");
     if (!pop || !box || !popOpen || phone) { if (pop) { pop.style.right = ""; pop.style.bottom = ""; } return undefined; }
-    const fit = () => { const par = pop.offsetParent?.getBoundingClientRect(), b = box.getBoundingClientRect();
+    // ...on the FIELD: in the bar it rises out of the box's slot, as tall as what is typed
+    const fit = () => { const par = pop.offsetParent?.getBoundingClientRect(), b = box.getBoundingClientRect(), f = field?.getBoundingClientRect() || b;
       if (!par || getComputedStyle(box).position !== "relative") { pop.style.right = ""; pop.style.bottom = ""; return; }
-      pop.style.right = `${Math.round(par.right - b.right)}px`; pop.style.bottom = `${Math.round(par.bottom - b.top)}px`; };
+      pop.style.right = `${Math.round(par.right - b.right)}px`; pop.style.bottom = `${Math.round(par.bottom - f.top)}px`; };
     fit(); window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);
-  }, [popOpen, phone, popH, boxH]);
+  }, [popOpen, isMini, phone, popH, boxH]);
   // ...a line of its own that stands under the card on the table only while the answer is on its way (tq-pending, assistantView.css) -
   // or in the pop-up over it, where the answer it waits for will be
   const pendingLine = <>{(busy || phoneBusy || nextComing || walkDots) && (
@@ -3676,15 +3701,19 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               under it as its floor (the box is the panel's last band, assistantView.css). Shut, it stays mounted: the last line's chips are
               on the row either way, and opened again it is the same conversation */}
           {winOn && (
-            <div className="tq-chat-pop" data-tq-chat-pop="" data-tq-chat-win="" role={popOpen ? "dialog" : undefined} aria-label="Chat with Taskuary" ref={popRef} hidden={!popOpen}
-              style={{ height: popH }} onKeyDown={escShut}>
-              <div className="tq-chat-pop-head"><TaskuaryMark size={16} /><b>Taskuary</b>{currentItem?.ref && <span>{`· ${currentItem.ref}`}</span>}<span style={{ flex: 1 }} />
-                <Tooltip title="Past chats"><IconButton size="small" aria-label="Past chats" onClick={openChats}><HistoryIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip>
-                {/* ...its collapse puts it away to the pill, the conversation kept (the pill says Continue chat) */}
-                <Tooltip title="Minimize - keeps this conversation"><IconButton size="small" aria-label="Minimize the chat" data-tq-box-mini="" onClick={minimize}><CloseFullscreenIcon sx={{ fontSize: 15, color: DIM }} /></IconButton></Tooltip>
-                {/* ...its ×: the one way, with Esc, the window shuts - what is typed stays for the next time it opens */}
-                <Tooltip title="Close (Esc)"><IconButton size="small" aria-label="Close the chat" data-tq-box-close="" onClick={shutBox}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip></div>
-              <div className="tq-chat-pop-body" ref={popBodyRef}>
+            <div className="tq-chat-pop" data-tq-chat-pop="" data-tq-chat-win="" data-tq-mini={popOpen && isMini ? "" : undefined} role={popOpen ? "dialog" : undefined} aria-label="Chat with Taskuary"
+              ref={popRef} hidden={!popOpen} style={isMini ? undefined : { height: popH }} onKeyDown={escShut}>
+              {/* ...folded, the head is all there is - and a press anywhere on it brings the window back */}
+              <div className="tq-chat-pop-head" onClick={isMini ? expand : undefined} title={isMini ? "Open the chat" : undefined}>
+                <TaskuaryMark size={16} /><b>Taskuary</b>{currentItem?.ref && <span>{`· ${currentItem.ref}`}</span>}
+                {isMini && unseen > 0 && <i className="tq-chat-unseen in-head" data-tq-unseen={unseen} aria-label={`${unseen} new in the chat`}>{unseen}</i>}<span style={{ flex: 1 }} />
+                {!isMini && <Tooltip title="Past chats"><IconButton size="small" aria-label="Past chats" onClick={openChats}><HistoryIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip>}
+                {isMini
+                  ? <Tooltip title="Expand the chat"><IconButton size="small" aria-label="Expand the chat" data-tq-box-expand="" onClick={(e) => { e.stopPropagation(); expand(); }}><OpenInFullIcon sx={{ fontSize: 15, color: DIM }} /></IconButton></Tooltip>
+                  : <Tooltip title="Minimize - keeps this conversation"><IconButton size="small" aria-label="Minimize the chat" data-tq-box-mini="" onClick={minimize}><CloseFullscreenIcon sx={{ fontSize: 15, color: DIM }} /></IconButton></Tooltip>}
+                {/* ...its ×: the one way, with Esc, the window shuts to the pill - what is typed stays for the next time it opens */}
+                <Tooltip title="Close (Esc)"><IconButton size="small" aria-label="Close the chat" data-tq-box-close="" onClick={(e) => { e.stopPropagation(); shutBox(); }}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip></div>
+              <div className="tq-chat-pop-body" ref={popBodyRef} hidden={isMini}>
                 {!winLines.length && !popPending && !popErr && <p className="tq-chat-pop-empty">{currentItem?.ref ? `Ask about ${currentItem.ref}, or anything on your list.` : "Ask about anything on your list."}</p>}
                 {winLines.map(([m, i]) => <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={false} last={!old && i === lastSaidIdx} further={!old && i === furtherIdx} tableChips={tableChips} barHolds={barHolds}
                   actions={actions} fresh={currentItem} canvas={canvasState} />)}

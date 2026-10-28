@@ -38,25 +38,25 @@ test("one row: the action row and the box share a line, the answer pops up over 
   const say = JSON.stringify(rest);
   assert.ok(rest.line <= 46, `the row and the box are one line ${say}`);
   assert.ok(rest.mid <= 3 && rest.after, `the pill stands at the row's end, on its line ${say}`);
-  // ...a SMALL pill (the owner, 2026-10-27: "yes shrink the chat box"): at 220px it folded Mark done and Send to agent behind a ▾ on a laptop
-  assert.ok(rest.pill >= 170 && rest.pill <= 190 && !rest.open && rest.tools === "none", `a pill at rest ${say}`);
+  // ...the pill is the chat's own width (the owner, 2026-10-28: "make it narrower to fit the size on the bar"): 280px, the row's buttons end before it
+  assert.ok(rest.pill >= 276 && rest.pill <= 284 && !rest.open && rest.tools === "none", `a pill at rest ${say}`);
   assert.equal(rest.hint, "Ask…");
 
-  // FOCUSED: it opens UP AND OVER the canvas with its tools, and the row under it does not move or fold (the owner, 2026-10-27: "it should
-  // always be the same size and words, unless you click when it should expand up and above over the canvas like it was mocked up")
+  // FOCUSED: it grows UP out of the bar over the canvas with its tools - never wider (the owner, 2026-10-28: "it expands only height not width
+  // when clicked") - and the row beside it does not move or fold
   await page.click(".tq-compose-box textarea");
   await page.waitForSelector(".tq-compose-box[data-tq-open]", { timeout: 5000 });
   await sleep(300);
   const wide = await page.evaluate(() => {
-    const line = document.querySelector(".tq-dock .tq-dock-line"), pill = line.querySelector(".tq-compose-box"), verbs = line.querySelector(".tq-arow-verbs");
-    return { pill: Math.round(pill.getBoundingClientRect().width), tools: getComputedStyle(line.querySelector(".tq-compose-tools")).display, line: Math.round(line.getBoundingClientRect().height),
-      above: Math.round(line.getBoundingClientRect().top - pill.getBoundingClientRect().top),
-      clear: Math.round(document.querySelector(".tq-dock").getBoundingClientRect().top - pill.getBoundingClientRect().bottom),
+    const line = document.querySelector(".tq-dock .tq-dock-line"), pill = line.querySelector(".tq-compose-box"), verbs = line.querySelector(".tq-arow-verbs"), field = pill.querySelector(".tq-compose-field");
+    return { pill: Math.round(pill.getBoundingClientRect().width), field: Math.round(field.getBoundingClientRect().width), tools: getComputedStyle(line.querySelector(".tq-compose-tools")).display,
+      line: Math.round(line.getBoundingClientRect().height), above: Math.round(line.getBoundingClientRect().top - field.getBoundingClientRect().top),
+      clear: Math.round(field.getBoundingClientRect().left - verbs.getBoundingClientRect().right),
       next: !!verbs.querySelector("[data-tq-next]"), over: verbs.scrollWidth - verbs.clientWidth, labels: [...verbs.querySelectorAll("button")].map((b) => b.textContent.trim()) };
   });
-  assert.ok(wide.pill > rest.pill + 150 && wide.tools !== "none", `it widens with its tools ${JSON.stringify(wide)}`);
+  assert.ok(Math.abs(wide.pill - rest.pill) <= 1 && Math.abs(wide.field - rest.pill) <= 1 && wide.tools !== "none", `the same width, with its tools ${JSON.stringify(wide)}`);
   assert.ok(wide.next && wide.over <= 1 && wide.line <= 46, `still one line, Next on it, nothing past its edge ${JSON.stringify(wide)}`);
-  assert.ok(wide.above > 10 && wide.clear >= 0, `it stands over the canvas, above the dock - never over the row ${JSON.stringify(wide)}`);
+  assert.ok(wide.above > 10 && wide.clear >= 0, `it rises over the canvas out of the bar - never over the row's buttons ${JSON.stringify(wide)}`);
   assert.deepEqual(wide.labels, rest.labels, "nothing on the row folded or moved while the box is open");
 
   // SENT: the answer comes up above the box, over the task view - which does not move or change size
@@ -66,12 +66,12 @@ test("one row: the action row and the box share a line, the answer pops up over 
   await page.waitForSelector("[data-tq-chat-pop]:not([hidden])", { timeout: 20000 });
   await page.waitForFunction(() => document.querySelector("[data-tq-chat-pop] .tq-msg.you")?.textContent.includes("what does Tom want"), { timeout: 20000 });
   await page.waitForFunction(() => !document.querySelector("[data-tq-chat-pop] .tq-pending"), { timeout: 30000 });
-  const pop = await box(page, "[data-tq-chat-pop]"), input = await box(page, ".tq-compose-box");
+  const pop = await box(page, "[data-tq-chat-pop]"), input = await box(page, ".tq-compose-box .tq-compose-field");
   assert.ok(pop.y + pop.h <= input.y + 2, `the pop-up stands above the box ${JSON.stringify({ pop, input })}`);
   const body = await box(page, ".tq-chat-body");
   assert.ok(pop.y < body.y + body.h && pop.y > body.y, `...over the canvas the task view stands on ${JSON.stringify({ pop, body })}`);
   assert.deepEqual(await box(page, "[data-tq-canvas-item]"), view, "the task view did not move");
-  assert.ok(pop.h + input.h <= 0.75 * 810 + 2 && pop.h + input.h >= 520, `the chat window is ~75% of the screen, at least 520px ${JSON.stringify({ pop, input })}`);
+  assert.ok(pop.h + input.h <= 0.5 * 810 + 2 && pop.h + input.h >= 300, `the chat window is at most half the screen, at least 300px ${JSON.stringify({ pop, input })}`);
   assert.equal(await page.$$eval(".tq-chat-body .tq-msg.you", (els) => els.filter((e) => e.textContent.includes("what does Tom want")).length), 0, "the line is not drawn under the task as well");
   assert.ok((await box(page, ".tq-dock")).h <= dock.h, "the dock did not grow");
 

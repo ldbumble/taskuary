@@ -146,7 +146,9 @@ test("the Advisor's suggestion reaches the Tasks tab and a phone's own row (U12)
   assert.match(item, /\{phone && <div className="tq-docked">\s*<AdvisorNext advice=\{noAi \? null : advised\} onPropose=\{onPropose\} \/>\s*<ActionRow inline advised=\{pick\} \/><\/div>\}/);
   assert.match(item, /const advised = lit \? null : adviceShown\(read, \{ key: card\.key, lane: card\.lane \}, busy\)/);
   // ...no Thinking while it is read (the owner, 2026-10-23), and the Advisor's own move pressed from the phone's row as from the page's
-  assert.match(item, /const read = useItemAdvice\(card, phone\);/);
+  assert.match(item, /const own = useItemAdvice\(card, phone\);/);
+  // ...and until that read lands, the desk's decision for the same item lights it (a narrowed window kept its lit move)
+  assert.match(item, /const read = own \|\| \(phone && advice\?\.verb && advice\.for === card\.key \? advice : null\);/);
   assert.doesNotMatch(item, /Thinking about this one|AdviceNone/);
   assert.match(src("AssistantView.jsx"), /onPropose=\{actions\.pressAdvice\} \/>/);
 });

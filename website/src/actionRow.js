@@ -374,6 +374,12 @@ export function fitRow(row, m, avail, phone = false, extra = 0) {
   const all = foldsOf(row), last = all.length - 1, at = (i) => ({ groups: all[Math.min(last, i)], level: Math.min(last, i), last });
   if (!m || !(avail > 0)) return at((phone ? last : 0) + extra);
   for (let i = phone ? last : 0; i <= last; i++) if (rowWidth(all[i], navOf(row), m) <= avail) return at(i + extra);
+  // ...and a move left too little room to say anything goes into the ▾ too, unless it is the lit one: a phone's report put Back, Next and
+  // the chat pill beside "Put it on my list", and it read "Pu" (the 2026-10-27 sweep). A long move with room for its words is shortened
+  const ph = all[last][0], lead = ph?.shown[0];
+  if (lead && lead.tone !== "p" && avail - (rowWidth(all[last], navOf(row), m) - (m.btn[lead.id] ?? 0)) < MOVE_MIN)
+    return { ...at(last), groups: [{ type: "more", label: "", shown: [], rest: [...ph.shown, ...ph.rest] }] };
   return { ...at(last), tight: true };
 }
+const MOVE_MIN = 72;   // a few words and the ellipsis: less reads as a stray letter
 

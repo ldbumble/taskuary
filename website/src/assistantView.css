@@ -589,7 +589,9 @@
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box:not([data-tq-open]) .tq-compose-tools { display: none; }
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box textarea { min-height: 30px; padding: 5px 4px; }
 /* ...its "Ask…" in the MIDDLE of the pill's height (the owner, 2026-10-27: "not centered in the height"): one 30px line, no padding to sit it high */
-.tq-dock-line:has(> .tq-arow) > .tq-compose-box:not([data-tq-open]) textarea { height: 30px; padding: 0 4px; line-height: 30px; overflow: hidden; }
+/* ...!important over the box's own grow-as-you-type height (AssistantView sets it inline from scrollHeight): measured on the day's opener,
+   where the box is the whole line, it held 34px into every task opened after - and the 30px line sat 2px high in it (the 2026-10-27 sweep) */
+.tq-dock-line:has(> .tq-arow) > .tq-compose-box:not([data-tq-open]) textarea { height: 30px !important; min-height: 30px; padding: 0 4px; line-height: 30px; overflow: hidden; }
 /* ...and USED, it opens UP AND OVER the canvas (the owner, 2026-10-27: "it should always be the same size and words, unless you click when
    it should expand up and above over the canvas like it was mocked up" - "staying same size but the box becomes bigger above it"): the pill
    keeps its place on the row (::after, an empty slot - drawn as a blank pill it read as a second input, 2026-10-27), so nothing there moves,
@@ -614,7 +616,10 @@
 /* ...and on a phone the pill takes under half the line: at 220px it left the row 88px, and "Walk me through my tasks" read "W." (its
    min-width too: the textarea's own 20-column width held it at 208px whatever its basis) */
 @media (max-width: 600px) {
-  .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box { flex-basis: 40%; min-width: 0; }
+  /* ...and since the walk's Back joined Next (2026-10-27) 40% left a batch's "All read, next →" 20px short at 390: it read "All read, next…"
+     beside a Back cut to "←…" (the 2026-10-27 sweep). The pill at rest is "Ask…" and its send - 104px holds them; the row's sides narrow too */
+  .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box { flex-basis: min(40%, 104px); min-width: 0; }
+  .tq-dock .tq-dock-line > .tq-arow { padding-left: 6px; padding-right: 6px; }
   .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { flex-basis: 62%; }
   /* ...and the whole-line box is ONE line at rest: its hint wrapped under the attach, mic and emoji icons and stood the box 58px tall over a
      task whose title already had little room (the 2026-10-27 overnight walk) - what is typed still grows it */

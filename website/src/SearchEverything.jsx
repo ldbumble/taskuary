@@ -84,7 +84,9 @@ function Row({ hit, words, on, onPick, onTask, onHover }) {
       onMouseDown={(e) => e.preventDefault()}
       sx={{ position: "relative", display: "flex", gap: 1.25, alignItems: "flex-start", px: 1.5, py: 1, mx: 0.75, borderRadius: "9px",
         cursor: "pointer", bgcolor: on ? "#f0ebe3" : "transparent", transition: "background-color .08s" }}>
-      <Pill hit={hit} sx={{ mt: "1px", minWidth: 62, justifyContent: "center" }} />
+      {/* one column of pills, so every title starts at the same x: "Connection" outgrew 62px and its title stood 24px right of the rest */}
+      {/* ...on a desk; a phone keeps the titles' room */}
+      <Pill hit={hit} sx={{ mt: "1px", minWidth: 62, width: { xs: "auto", sm: 88 }, justifyContent: "center" }} />
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.75, minWidth: 0 }}>
           <Box sx={{ fontSize: 13, fontWeight: 600, color: closed ? DIM : INK, lineHeight: 1.35, minWidth: 0,

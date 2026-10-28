@@ -385,8 +385,10 @@ export default function BoardView({ onOpenTask, active = true }) {
                 // stacked on a phone, an EMPTY column that keeps a desktop's height is 200px of
                 // "Nothing here." between you and the column that has the work in it
                 minHeight: { xs: cards.length ? 200 : 0, md: "calc(100vh - 190px)" }, alignSelf: "stretch" }}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.4, pb: 0.85 }}>
-                <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: col.dot }} />
+              {/* the dot and the count on the title's FIRST line: a title that wraps ("stopped and saved · agent stopped" on a laptop) dropped
+                  both to the middle of two lines, out of line with the columns beside it (the 2026-10-27 sweep) */}
+              <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.6, px: 0.4, pb: 0.85 }}>
+                <Box sx={{ width: 7, height: 7, mt: "5px", flexShrink: 0, borderRadius: "50%", bgcolor: col.dot }} />
                 <Typography variant="body2" sx={{ color: INK, fontWeight: 600, flex: 1, fontSize: 11.5 }}>{col.title}</Typography>
                 <Chip size="small" label={cards.length} sx={{ height: 16, fontSize: 9.5, bgcolor: PANEL,
                   border: `1px solid ${BORDER}`, color: DIM, "& .MuiChip-label": { px: 0.65 } }} />

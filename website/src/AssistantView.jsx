@@ -3306,7 +3306,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     }
     else if (request.kind === "task") openTaskRef.current?.(request);
     else if (request.kind === "msg") openMsgRef.current?.(request.mid);   // #msg=N: that message's card (canvasLinks)
-    else if (request.kind === "new") browseRef.current?.("new", {});     // #new-task: the New card in the conversation
+    else if (request.kind === "new") browseRef.current?.("new", request.state || {});     // #new-task: the New card in the conversation (addressed: Message them)
     // Back to the address with no place: the walk's own table, the page over it put down (appLinks.onPlace)
     // ...and on a chat that held nothing but pages, the empty chat comes back as it was - its greeting, day card and Walk button: the folded
     // page headers stood in their place over a lone floor Next, one more for every trip (the 2026-10-25 sweep)

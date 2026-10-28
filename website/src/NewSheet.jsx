@@ -187,7 +187,9 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
 // `inline`: the card the sidebar's New button posts into the conversation (the canvas redesign) - the same tabs and fields,
 // drawn in the conversation's own width instead of a dialog over the page. Without it the dialog stays for any other door.
 // `line`: the Assistant's line that wrote this card (concierge._new) - its press says that line again as what it started (`onSaid`)
-export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false, initialKind = "send", initialHow = "", initialText = "", line = null, onSaid }) {
+// `initialChannel` / `initialTo`: Send something already addressed - a People hit's Message them (SearchEverything, trust audit F6)
+export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false, initialKind = "send", initialHow = "", initialText = "", line = null, onSaid,
+  initialChannel = "", initialTo = "" }) {
   const [kind, setKind] = useState(initialKind);
   const said = useRef(null);      // the words, for the repository picker (see NewRepo)
   const repoPick = useRef(null);  // what the picker says to use, read on submit
@@ -242,7 +244,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
     api.get("/api/send-targets").then(({ data }) => {
       const list = data.data || [];
       setTargets(list); setTargetsRead(true);
-      setChannel((c) => c || list[0]?.channel || "");
+      const asked = initialChannel && list.some((t) => t.channel === initialChannel) ? initialChannel : "";
+      setChannel((c) => asked || c || list[0]?.channel || "");
+      if (asked && initialTo) { if (asked === "email") setEmailTo([initialTo]); else setTo(initialTo); }
       // NOTHING CAN SEND: New opened on Send something anyway, a whole form to fill that could only fail (the walk click-through,
       // 2026-10-17). It opens on the next tab that works; Send something stays one click away and says what it needs.
       if (!list.length) setKind((k) => (k === "send" && initialKind === "send" ? "agent" : k));

@@ -39,3 +39,26 @@ test("typing a company in CC lists its people, and choosing one adds the address
   assert.match((await options(page)).find((o) => o.to === "gmoreno@northwind.example").text, /Gail Moreno/);
   assert.deepEqual(errors, []);
 });
+
+// MESSAGE THEM (the owner's idea, trust audit F6, 2026-10-28): a person found in Ctrl K offers the channels New can reach them on, and the
+// pick opens New's Send something on the canvas already addressed. The demo sends on nothing, so a mailbox and a Teams chat stand in.
+test("a People hit offers Message them on its channels, and the pick opens New's compose addressed to them", { timeout: 180000 }, async (t) => {
+  const { page, errors } = await boot(t, { width: 1440, height: 900 });
+  await page.evaluate(() => {
+    const body = JSON.stringify({ data: [{ channel: "email", to: [] }, { channel: "teams", to: [{ to: "19:gail-chat", name: "Gail Moreno" }] }] });
+    const open = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function (m, url, ...rest) { return open.call(this, m, /\/api\/send-targets/.test(String(url)) ? `data:application/json,${encodeURIComponent(body)}` : url, ...rest); };
+  });
+  await page.keyboard.down("Control"); await page.keyboard.press("k"); await page.keyboard.up("Control");
+  await page.waitForSelector("[data-tq-search-input]", { timeout: 10000 });
+  await page.keyboard.type("gail");
+  await page.waitForSelector('[data-tq-message-them="gmoreno@northwind.example"] [data-tq-message-open]', { timeout: 15000 });
+  await page.click('[data-tq-message-them="gmoreno@northwind.example"] [data-tq-message-open]');
+  await page.waitForSelector("[data-tq-message-channel=teams]", { timeout: 10000 });
+  assert.deepEqual(await page.$$eval("[data-tq-message-channel]", (b) => b.map((x) => x.dataset.tqMessageChannel)), ["email", "teams"]);
+  await page.click("[data-tq-message-channel=email]");
+  await page.waitForFunction(() => /gmoreno@northwind\.example/.test(document.querySelector('[data-tq-browse="new"]')?.innerText || ""), { timeout: 15000 });
+  assert.ok(!(await page.$("[data-tq-search]")), "the search went");
+  assert.match(await page.$eval('[data-tq-browse="new"]', (e) => e.innerText), /Send something/);
+  assert.deepEqual(errors, []);
+});

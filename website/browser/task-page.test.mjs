@@ -101,26 +101,23 @@ test("the task page: three sections at rest, the agent nearly the whole width wh
     if (ring) assert.match(ring.label, /is working on this$/);
   });
 
-  await t.test("a chat burst reads newest on top, the older lines behind Show N older", async () => {
+  await t.test("a chat burst reads as one flow under the boxes: its latest five, newest last, Show all the sixth", async () => {
     const made = await post(page, "/api/fixture/task/chat-burst");
     assert.ok(made.taskId, JSON.stringify(made));
     await open(page, made.taskId);
-    // ...the burst is Came from's: its tab, then its Full message history (the three sections, 2026-10-27)
+    // ...the burst is Came from's: its tab, then the Conversation under the two boxes (the one flow, 2026-10-28)
     await page.waitForSelector("[data-tq-task-body][data-tq-sections]", { timeout: 20000 });
     if (await page.$("[data-tq-section-tab=from]")) await page.click("[data-tq-section-tab=from]");
-    await page.waitForSelector("[data-tq-from] [data-tq-history-toggle]", { visible: true, timeout: 20000 });
-    await page.click("[data-tq-from] [data-tq-history-toggle]");
-    await page.waitForSelector("[data-tq-from] [data-tq-conversation-row]", { timeout: 20000 });
+    await page.waitForSelector("[data-tq-from] [data-tq-conversation-block] [data-tq-conversation-row]", { visible: true, timeout: 20000 });
     const rows = () => page.$$eval("[data-tq-from] [data-tq-conversation-row]", (els) => els.map((e) => e.innerText.replace(/\s+/g, " ").trim()));
     const first = await rows();
-    assert.equal(first.length, 3, `the newest three: ${first}`);
-    assert.match(first[0], /Gail Moreno and bring the floor plan please/, "the newest on top");
+    assert.equal(first.length, 5, `the latest five: ${first}`);
+    assert.match(first[4], /Gail Moreno and bring the floor plan please/, "the newest last");
     assert.match(first[2], /Gail Moreno Alex, can you be there at 9:30\?/);
-    assert.equal(await page.$eval("[data-tq-show-older]", (e) => e.getAttribute("data-tq-show-older")), "3");
-    await page.click("[data-tq-show-older]");
-    await page.waitForSelector("[data-tq-from] [data-tq-chat-thread]", { timeout: 10000 });   // a chat's Show all is its back-and-forth
-    const thread = await page.$eval("[data-tq-from] [data-tq-chat-thread]", (e) => e.innerText);
-    assert.ok(thread.indexOf("floor plan") < thread.indexOf("Morning all"), "still newest on top, the opening line last");
+    await page.click("[data-tq-from] [data-tq-conversation-more]");
+    const all = await rows();
+    assert.equal(all.length, 6, "Show all opens the sixth in place");
+    assert.match(all[0], /Morning all/, "the opening line first");
   });
 
   await t.test("a coding agent working keeps nearly the whole width; Came from and Close out are slim tabs and nothing covers the terminal", async () => {

@@ -40,10 +40,11 @@ test("task context, expanded messages and agent results fit short laptops and ph
         // ...on the desk Came from is the first of the three sections: its tab, then its Full message history (2026-10-27)
         await page.evaluate(() => (document.querySelector("[data-tq-section-tab=from]") || document.querySelector("[data-tq-from-line]") || document.querySelector("[data-tq-from]"))?.click());
         await new Promise((resolve) => setTimeout(resolve, 400));
-        await page.evaluate(() => { const h = document.querySelector("[data-tq-from] [data-tq-history-toggle][aria-expanded=false]"); h?.click(); });
-        await page.waitForSelector("[data-tq-show-older]", { timeout: 10000 });
-        await page.evaluate(() => document.querySelector("[data-tq-show-older]").click());
-        await page.waitForSelector("[data-tq-from] [data-tq-chat-thread]");
+        // ...on the desk the conversation is under the boxes and Show all opens it in place (the one flow, 2026-10-28); a phone keeps Show N older
+        await page.waitForSelector("[data-tq-from] [data-tq-conversation-more], [data-tq-from] [data-tq-conversation-block], [data-tq-show-older]", { timeout: 10000 });
+        const desk = await page.evaluate(() => { const b = document.querySelector("[data-tq-from] [data-tq-conversation-more]"); b?.click();
+          return !!document.querySelector("[data-tq-from] [data-tq-conversation-block]"); });
+        if (!desk) { await page.evaluate(() => document.querySelector("[data-tq-show-older]").click()); await page.waitForSelector("[data-tq-from] [data-tq-chat-thread]"); }
       } else if (name === "result") {
         await page.waitForSelector("[data-tq-result-summary]", { timeout: 20000 });
       } else if (name === "rest") {

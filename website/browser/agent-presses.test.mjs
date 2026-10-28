@@ -141,7 +141,7 @@ test("a regular agent on an open task: Send to agent, Continue, Run another agen
 
   await t.test("(b) Continue on the stopped agent: the note at once, working, the answer in the same conversation", async () => {
     await press(page, "Stop and save");
-    await inTask(page, /Result/);   // resting on its summary - the story line is behind the Result heading (2026-10-27)
+    await page.waitForSelector("[data-tq-result-summary], [data-tq-full-result]", { timeout: 30000 });   // resting on its summary, one press from its record (2026-10-27)
     const pressed = await continueWith(page, "look at the south office first");
     await inTask(page, /look at the south office first/, 1500);
     assert.ok(Date.now() - pressed < 1500, "the note shows with the press's answer");
@@ -154,7 +154,7 @@ test("a regular agent on an open task: Send to agent, Continue, Run another agen
 
   await t.test("(c) Run another agent on the stopped agent: a second run, shown apart from the first", async () => {
     await press(page, "Stop and save");
-    await inTask(page, /Result/);   // resting on its summary - the story line is behind the Result heading (2026-10-27)
+    await page.waitForSelector("[data-tq-result-summary], [data-tq-full-result]", { timeout: 30000 });   // resting on its summary, one press from its record (2026-10-27)
     await rowVerb(page, "run-another");
     await startFromBox(page, "take a fresh look from the north office", "general");
     await page.waitForSelector("[data-tq-earlier-run]", { timeout: 30000 })
@@ -189,7 +189,7 @@ test("a coding agent on an open task: Send to agent, Continue, Run another agent
 
   await t.test("(b) Continue on the stopped agent: the note at once, working, the answer in the same conversation", async () => {
     await press(page, "Stop and save");
-    await inTask(page, /Result/);
+    await page.waitForSelector("[data-tq-result-summary], [data-tq-full-result]", { timeout: 30000 });   // resting on its summary, one press from its record (2026-10-27)
     await continueWith(page, "now rerun the importer", () => w.backend.output()).catch(async (e) => { throw new Error(`${e.message}
 --- terminals: ${JSON.stringify(await w.api("/api/terminals")).slice(0, 3000)}`); });
     await page.waitForSelector("[data-tq-task-page] .xterm-rows", { timeout: 15000 });
@@ -200,7 +200,7 @@ test("a coding agent on an open task: Send to agent, Continue, Run another agent
 
   await t.test("(c) Run another agent on the stopped agent: a second run, shown apart from the first", async () => {
     await press(page, "Stop and save");
-    await inTask(page, /Result/);
+    await page.waitForSelector("[data-tq-result-summary], [data-tq-full-result]", { timeout: 30000 });   // resting on its summary, one press from its record (2026-10-27)
     const before = await w.api(`/api/terminals`);
     await rowVerb(page, "run-another");
     await startFromBox(page, "a second pass on the export", "coding");

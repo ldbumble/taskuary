@@ -74,7 +74,7 @@ class OneRoomManyJobs(unittest.TestCase):
         self.assertNotEqual(out['task_id'], self.first['task_id'])
         self.assertEqual(len(self.s.list_tasks()), 2)
         route = self.s.message_routes(out['message_id'])[-1]
-        self.assertIn('a separate ask in the same chat', route['Reason'])
+        self.assertIn('a separate ask from Tess in Tess', route['Reason'])
 
     def test_the_same_ask_continued_stays_on_its_task(self):
         out = line(self.s, 'still broken by the way', '2026-09-02 16:52:00', brain(same=True))

@@ -12,7 +12,7 @@ from . import kinds as task_kinds
 from .timewords import plural
 from .routing import first_line, draft_task_fields, tokens
 from .policy import evaluate
-from .triage import classify_intent
+from .triage import classify_intent, person_name
 from .store import task_ref, auto_code_enabled, _now
 from . import buttons, remind, senders, words
 from .categories import agent_word, route_head
@@ -583,6 +583,9 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
         if (rel := orgchart.relation_of(store, msg.get('from_email'), msg.get('from_name'))): thread = {**thread, 'sender_relation': rel}
     except Exception as e: logger.debug(f'org chart skipped for triage: {e}')
     candidates = chat_candidates(store, msg) if is_chat(msg) else None
+    # ...and the tasks those lines sit on, by their own ask: a line that follows a sender's earlier lines is not their task for that
+    # (the owner, 2026-10-28) - it is measured against what the task asks (same_problem)
+    if candidates and (rt := room_tasks(store, candidates)): thread = {**thread, 'room_tasks': rt}
     repos = repo_candidates(store)
     # ...and what was actually SAID before this, theirs and ours. A mail quotes its own thread
     # underneath it - until it does not: a reply typed on a phone, or one whose quote we stripped,
@@ -798,7 +801,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 batch.arrived(store, r['task_id'], msg.get('conversation_id'), msg.get('from_name') or msg.get('from_email') or 'someone')
                 return {'status': 'routed', 'task_id': r['task_id'], 'message_id': mid}
     new_rid = None                    # set when a fresh reply task opens a review below
-    split_from = None                    # the thread's task, when triage said this mail on it is a different job (new_job)
+    split_from = r.get('split_from')     # the thread's or the room's task, when triage said this is a different job (new_job, rel new)
     held = ''                            # why the coding agent was NOT auto-started (a robot or a stranger)
     notes, notes_left = [], 0            # standing notes the classifier saw, and any that did not fit
     def _notes_note():
@@ -861,7 +864,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         if follow and follow.get('new_job') and not follow.get('degraded'):
             split_from, verdict = tid, (follow, _fail)
             r = {'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [],
-                 'reason': f"a different job from {task_ref(tid)}, the task on its thread - {follow['new_job']}"}
+                 'reason': f"a separate ask from {_asker(msg)} on the thread of {task_ref(tid)} - a different job: "
+                           f"{follow['new_job']}"}
         # ...and new work on a CLOSED task's thread may be an OPEN task's job (the owner, 2026-10-27: a reply on a finished "explain
         # these figures" thread asked for the change the owner's own reconciliation task was making, and reopened the old task).
         # Triage was shown the open work about it (context.open_same_job) and named one: the reply goes there, the thread's task stays
@@ -904,13 +908,16 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             if talking: _hand_to_agent(store, cfg, tid, msg, actor)
             return {'status': 'filed', 'task_id': tid, 'message_id': mid}
         mid = _land(store, msg, tid, 'routed')
-        if r.get('reopen'): _reopen(store, tid, msg, actor, follow)
+        back = bool(r.get('reopen')) and _reopen(store, tid, msg, actor, follow)
         if awaited: waiton.arrived(store, tid, msg, mid, actor)
         # ...and the task says what is asked NOW (the owner, 2026-10-15): an email thread stays one task, but a new ask on it - a
         # CFO's "export and send the status" on a thread closed two days before - reopened it under the old title, read as the
         # finished thread, and was closed again unseen. _retitle keeps the old title in a note; an owner-written task keeps its own.
+        # ...but a line that only JOINS never renames it (the owner, 2026-10-28): a colleague's morning of lines renamed one group task
+        # on nearly every line, its title drifting to whatever was said last. A line on its topic keeps the title; only one that
+        # brings a closed task back, or changes what the task itself asks (triage's refines), says what is asked now
         if (follow or {}).get('intent') in ('task', 'reply_only') and not follow.get('degraded'):
-            _retitle(store, store.get_task(tid) or {}, msg, follow, actor)
+            _retitle(store, store.get_task(tid) or {}, msg, follow, actor, back)
         if pol['action'] == 'escalate': _escalate(store, tid, pol, actor)
         elif (follow or {}).get('urgent') or (follow or {}).get('priority'): _mark_urgent(store, tid, follow, actor)
         if (follow or {}).get('due'): remind.set_due(store, tid, follow['due'], actor)
@@ -1402,12 +1409,16 @@ def _priority_why(verdict: dict) -> str:
     return re.sub(r'^(important|urgent)\s*[:-]\s*', '', w, flags=re.I) if w else (verdict or {}).get('why') or 'it matters to you'
 
 
-def _retitle(store, t: dict, msg: dict, intent: dict, actor: str) -> bool:
+def _retitle(store, t: dict, msg: dict, intent: dict, actor: str, reopened: bool = False) -> bool:
     """THE TASK SAYS WHAT IS ASKED NOW (the owner, 2026-10-15: "it's still task about come over but now it's about something
     else"). A chat keeps joining one task as the conversation moves on, and its title and summary stayed the FIRST message's
     - "Gabi asks to come over today" over an hour of talk about an ad. A real ask joined here carries triage's own title and
     summary for it, and the task takes them; the old title is kept in a note. Only a task this same channel made: a task the
-    owner wrote, a goal, a workflow run or a report keeps the name it was given."""
+    owner wrote, a goal, a workflow run or a report keeps the name it was given.
+
+    ...and only when the ask itself moved (the owner, 2026-10-28): a separate ask is its own task now, so a line that joins is on
+    the task's topic and the title stands - unless it `reopened` a closed task or triage says it `refines` the task's own ask."""
+    if not (reopened or (intent or {}).get('refines') is True): return False
     title, summary = ' '.join(str(intent.get('title') or '').split())[:120], ' '.join(str(intent.get('summary') or '').split())
     if not title or str(t.get('Source') or '') != str(msg.get('channel') or ''): return False
     if 'goal' in str(t.get('Tags') or '').split(): return False
@@ -1454,7 +1465,7 @@ def _join_same(store, msg: dict, tid: int, intent: dict, actor: str, notes_note:
                     + (' and reopened' if closed else '') + f" - {intent.get('why') or ''}" + notes_note, [], 'triage',
                     verdict=_stored_verdict(intent))
     store.add_comment(tid, actor, 'agent', f"Again from {msg.get('from_email') or msg.get('channel')}: {msg.get('subject') or ''} - the same ask, kept here")
-    _retitle(store, t, msg, intent, actor)
+    _retitle(store, t, msg, intent, actor, closed)
     if intent.get('checklist'): store.merge_task_checklist(tid, intent['checklist'], 'triage', src=mid)
     if intent.get('outputs'):
         from . import slots
@@ -1562,7 +1573,8 @@ def _split_note(store, old, msg: dict, res: dict) -> dict:
     new = (res or {}).get('task_id')
     if old and new and new != old:
         title = (store.get_task(new) or {}).get('Title') or msg.get('subject') or ''
-        store.add_comment(old, 'triage', 'agent', f"A later message on this thread was a different ask -> {task_ref(new)}: {title}")
+        store.add_comment(old, 'triage', 'agent', f"A later message {'in this chat' if is_chat(msg) else 'on this thread'} was a different ask "
+                          f"-> {task_ref(new)}: {title}")
     return res
 
 
@@ -1780,6 +1792,9 @@ def _continue_general(store, tid):
     finally: general.OPENING.discard(tid)
 
 
+def _asker(msg: dict) -> str: return person_name(msg.get('from_name')) or msg.get('from_email') or 'someone'
+
+
 def _who(m: dict) -> str:
     """Who wrote a message, as one comparable key - its address, else its display name (a chat line often has no
     address). Reads a DB row (FromEmail/FromName) or an ingest dict (from_email/from_name)."""
@@ -1910,6 +1925,14 @@ def chat_candidates(store, msg: dict) -> list:
     return out[-20:]
 
 
+ROOM_TASKS = 6          # how many of a room's tasks triage is shown beside its lines
+
+def room_tasks(store, cands: list) -> list:
+    "The tasks a room's same-day lines sit on, newest first, as triage is shown a thread's task (thread_task)."
+    tids = list(dict.fromkeys(c['task_id'] for c in reversed(cands) if _joinable_task(store, c.get('task_id'))))
+    return [t for t in (thread_task(store, x) for x in tids[:ROOM_TASKS]) if t]
+
+
 def _open_task(store, tid):
     t = store.get_task(tid) if tid else None
     return tid if t and t.get('Status') not in ('done', 'dropped') else None
@@ -2000,9 +2023,15 @@ def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
             return ({'decision': 'attach', 'task_id': cur, 'score': 1.0, 'candidates': [], 'reopen': closed,
                      'reason': f'unsure whether it continues {task_ref(cur)} - a one-to-one chat stays on its task unless the line is a new ask'
                                + (' - it was closed, and reopens only on new work or a question to you' if closed else '')}, (intent, fail))
-    why = ('a separate ask in the same chat' if rel == 'new' else
-           'uncertain whether it continues an ask in this chat - not joined on a guess')
-    return ({'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [], 'reason': why + apart}, (intent, fail))
+    # A SEPARATE ASK IS ITS OWN TASK, IN THE SAME CHAT (the owner, 2026-10-28): it says who asked where, and the task it was measured
+    # against and found not to be - when triage named one - is told where it went (_split_note)
+    if rel == 'new':
+        why = f"a separate ask from {_asker(msg)} in {msg.get('source_name') or 'this chat'}" + (
+              f" - not the topic of {task_ref(target)}, so it did not join it" if target else apart)
+        return ({'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [], 'reason': why,
+                 **({'split_from': target} if target else {})}, (intent, fail))
+    return ({'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [],
+             'reason': 'uncertain whether it continues an ask in this chat - not joined on a guess' + apart}, (intent, fail))
 
 
 # ── the first thing they hear ───────────────────────────────────────────────────────────

@@ -54,7 +54,7 @@ class ThreadIsAHint(unittest.TestCase):
         self.assertTrue(any(f'different ask -> {ingest.task_ref(b["task_id"])}' in c['Body'] for c in s.list_comments(tid)))
         route = s.message_routes(b['message_id'])[-1]
         self.assertEqual((route['Decision'], route['RoutedBy']), ('create', 'triage'))
-        self.assertIn(f'a different job from {ingest.task_ref(tid)}', route['Reason'])
+        self.assertIn(f'a separate ask from Gail Moreno on the thread of {ingest.task_ref(tid)} - a different job', route['Reason'])
         self.assertIn('new_job', json.loads(route['VerdictJson']), 'the decision is kept, so a correction can learn from it')
 
     def test_a_different_job_on_a_closed_thread_leaves_it_closed(self):

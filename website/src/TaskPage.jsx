@@ -245,7 +245,7 @@ const FROM_SIDE = { position: "absolute", top: 0, left: 0, bottom: 0, width: "mi
 // in left side draw"): where the task is up to (taskLayout.mainOf) is the page; Came from is a drawer on the left, Agent and Close out
 // one on the right, each laid OVER the main view behind a tab, so nothing under it reflows. Two columns cut the owner's 1600x810 laptop
 // to a ~700px work column whose failure reason sat out of sight. A phone (the body under 760px) keeps its stacked page.
-const STACK_BELOW = 760;
+export const STACK_BELOW = 760;
 const REOPEN_ROW_MS = 2500;     // the longest the row says "Reopening…" past the server's yes, waiting on the re-read to draw from
 // ...the main view the whole width, as a live agent's is (the owner, 2026-10-26: "no main view should fill the screen. why waste space?" -
 // a 900px column had been tried), scrolling on its own

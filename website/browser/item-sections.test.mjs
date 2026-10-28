@@ -131,15 +131,28 @@ test("an FYI opens on what came in: one message, or a batch's all together, Agen
   assert.deepEqual(errors, []);
 });
 
-test("on a phone the same three sections: the open one has the room, the slim tabs at its sides", { timeout: 240000 }, async (t) => {
+// ...ON A PHONE THEY STACK as a task's do (trust audit R1, 2026-10-28): the slim side tabs left a report 240px of a 390px screen
+test("on a phone the three sections stack, each the screen's width, in the flow's order - no slim side tabs", { timeout: 240000 }, async (t) => {
   const { page, errors } = await boot(t, { width: 390, height: 844 });
   assert.ok(await clickRow(page, await findRow(page, /Headcount by site/)));
   const r = await settled(page, "report");
-  assert.deepEqual(r.slots.map((s) => [s.key, s.open, s.w === 44]), [["from", false, true], ["report", true, false], ["close", false, true]]);
-  assert.ok(r.slots[1].w >= 240, `the report has the room: ${r.slots[1].w}`);
+  assert.deepEqual(r.slots.map((s) => [s.key, s.open, s.tab]), [["from", true, false], ["report", true, false], ["close", true, false]]);
+  assert.ok(r.slots.every((s) => s.w >= 300), `each has the width: ${JSON.stringify(r.slots)}`);
+  assert.deepEqual(r.open, ["Came from", "Report", "Close out"], "every section readable, in order");
   const b = await toBatch(page);
-  assert.equal(b.main, "from");
-  assert.deepEqual(b.slots.filter((s) => !s.open).map((s) => s.w), [44, 44]);
+  assert.ok(b.slots.every((s) => s.open && !s.tab), JSON.stringify(b.slots));
   assert.ok(b.msgs.length >= 2 && b.msgs.every((x) => x.who && x.words), JSON.stringify(b.msgs));
+  assert.deepEqual(errors, []);
+});
+
+// A DASHBOARD OPENS IN THE SAME THREE SECTIONS (trust audit R2, 2026-10-28): it took the canvas as a bare card, unlike the report beside it
+test("a dashboard opens on itself between slim Came from and Close out tabs, like a report", { timeout: 240000 }, async (t) => {
+  const { page, errors } = await boot(t, { width: 1440, height: 900 });
+  await page.evaluate(() => document.querySelector('[data-tq-section-head="reports"] .fold')?.click()); await sleep(1500);
+  assert.ok(await clickRow(page, await findRow(page, /Northwind desk/)));
+  const m = await settled(page, "dashboard");
+  assert.equal(m.main, "dashboard", JSON.stringify(m));
+  assert.deepEqual(m.slots.map((s) => [s.key, s.open, s.mini]), [["from", false, true], ["dashboard", true, false], ["close", false, true]]);
+  assert.ok(await page.$("[data-tq-item-sections] [data-tq-dash-canvas]"), "the dashboard itself is the open section");
   assert.deepEqual(errors, []);
 });

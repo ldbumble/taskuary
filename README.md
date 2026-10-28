@@ -42,17 +42,18 @@ one card: what changed since last night, what was learned, the morning digest, y
 what waits in each section - so you never open each system in turn. A goal is a task whose steps
 are tasks: triage opens one for an open-ended ask, and files later mail under the step it serves.
 
-![The work rail sorting today's items into Tasks, Reports, and FYI, beside the opening card: agents that finished and a report that ran since last night, the memory and morning digest lines, today's meetings, and what waits in each section.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=sections)
+![The work rail sorting today's items into Tasks, Reports, and FYI, beside the opening card: agents that finished and a report that ran since last night, the memory and morning digest lines, today's meetings, and what waits in each section.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=row)
 
 ### 2. Let the Assistant walk you through it
 
 Choose **Walk me through my tasks**. The Assistant puts one item on the table at a time, as the
-same task card you would open yourself, with the next actions in one row under it: **Next**, **Reply**,
-**Hand it to a person**, and the rest under ▾. The buttons always do the same thing; for everything else,
-ask - the chat opens as a window over the row, and the Assistant already has the message, the thread,
-and your past decisions to answer from.
+same task card you would open yourself, with one row under it: **Back** and **Next**, the move it is up
+to (**Mark done** first, then **Reply** or **Send to agent**), **Change ▾**, and **Share**. The buttons always do
+the same thing; for everything else, ask in the chat box at the end of the row - the conversation rises
+out of it as a window, and the Assistant already has the message, the thread, and your past decisions to
+answer from.
 
-![Ruth's request on the table with the chat window open over the action row: asked what is on the list, the Assistant answers beside the task without moving it.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/05-assistant.png?v=sections)
+![Ruth's request on the table with the chat window risen out of the chat box at the end of the row: asked what is on the list, the Assistant answers beside the task without moving it.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/05-assistant.png?v=row)
 
 Assistant look-ups clamp result limits to a safe range and use their default when a limit is invalid.
 
@@ -62,7 +63,7 @@ Every task reads left to right in three sections: **Came from** (the message, wh
 and why, the ask), **Agent**, and **Close out**. The section the task is up to opens; the other two fold
 to slim columns beside it that still say where they stand.
 
-![Ruth's request as a task in three sections: Came from open - the email, what triage made of it, the ask - with Agent (not started) and Close out (not drafted yet) folded beside it.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png?v=sections)
+![Ruth's request as a task in three sections: Came from open - the email, what triage made of it, the ask - with Agent (not started) and Close out (not drafted yet) folded beside it.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png?v=row)
 
 ### 4. The agent shows what it did
 
@@ -71,14 +72,14 @@ Result: what it did, its answer, what it found, and **What it made** - each file
 The whole conversation is one link under it. Here the agent prepares the numbers, checks that the
 categories add up, saves a workbook, and drafts the reply. Nothing is sent.
 
-![The agent's Result on Ruth's task: a one-line summary, the July and August totals by category, what it found, and the workbook it made with Open and Download.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png?v=sections)
+![The agent's Result on Ruth's task: a one-line summary, the July and August totals by category, what it found, and the workbook it made with Open and Download.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png?v=row)
 
 ### 5. The last word is yours
 
 The prepared reply waits in **Close out**, addressed to Ruth, with Came from and the agent's Result
 folded beside it. Read it, edit it, and choose **Send** when it is ready - or Redraft.
 
-![Close out open on the reply drafted to Ruth, with To, Cc, the editable draft, Send and Redraft, beside the folded Came from and Agent sections.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/04-review.png?v=sections)
+![Close out open on the reply drafted to Ruth, with To, Cc, the editable draft, Send and Redraft, beside the folded Came from and Agent sections.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/04-review.png?v=row)
 
 ### 6. Start your day before it gets busy
 
@@ -86,7 +87,7 @@ Each morning the Assistant opens on what changed since last night, what it learn
 and what waits in each section - and the morning digest unfolds in place, so it is never stale by the
 time you reach it. Ruth's request has a clear deadline: the 11:30 operations review.
 
-![An animated close-up of the morning: the opening card, then its morning digest unfolding - who wants what, what is in flight, and today's meetings.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/06-morning.gif?v=sections)
+![An animated close-up of the morning: the opening card, then its morning digest unfolding - who wants what, what is in flight, and today's meetings.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/06-morning.gif?v=row)
 
 ## Key features
 
@@ -97,11 +98,11 @@ its table, the files it attached - with the same row under it. Dashboards land b
 What needs nothing from you is batched: one FYI card holds every message of the batch, each folded to
 who, where, and its line, and **All read, next** moves on.
 
-![A report in a task's three sections: Headcount by site, nightly, with its bar chart, table, and attached files, and the row of actions under it.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/13-report.png?v=sections)
+![A report in a task's three sections: Headcount by site, nightly, with its bar chart, table, and attached files, and the row of actions under it.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/13-report.png?v=row)
 
-![The Taskuary at a glance dashboard: what came in, new tasks, open now, reply time, how far items got, and agent sessions.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/14-dashboard.png?v=sections)
+![The Taskuary at a glance dashboard: what came in, new tasks, open now, reply time, how far items got, and agent sessions.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/14-dashboard.png?v=row)
 
-![An FYI batch: six messages that need nothing, each folded to its sender, channel, subject, and first line, with All read, next under them.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/12-fyi.png?v=sections)
+![An FYI batch: six messages that need nothing, each folded to its sender, channel, subject, and first line, with All read, next under them.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/12-fyi.png?v=row)
 
 ### Use your coding CLI
 
@@ -113,21 +114,21 @@ For Qwen Code, see the [setup and compatibility guide](docs/qwen-code.md).
 Use DeepSeek, GLM, or MiniMax through OpenCode, or connect Moonshot's Kimi Code:
 [setup steps and supported roles](docs/chinese-coding-clis.md).
 
-![AI CLI connections for Claude, Qwen, OpenCode with DeepSeek, and Kimi Code.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/07-coding-clis-chinese.png?v=sections)
+![AI CLI connections for Claude, Qwen, OpenCode with DeepSeek, and Kimi Code.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/07-coding-clis-chinese.png?v=row)
 
 ### A shared Hub for what agents learn
 
 Keep discoveries, decisions, and useful warnings by topic. Agents can find what earlier work
 uncovered, discuss it, and correct it instead of starting from scratch.
 
-![A discovery in the Hub, with the discussion two agents had under it.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/08-hub.png?v=sections)
+![A discovery in the Hub, with the discussion two agents had under it.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/08-hub.png?v=row)
 
 ### Agents leave notes for each other
 
 The Board's **Live handoffs** show what agents are working on, what is blocked, and what is ready.
 An agent leaves a note; the next one reads it before picking up the work.
 
-![Live handoff notes on the agent wall, showing progress, shared context, and who has read each note.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/09-handoffs.png?v=sections)
+![Live handoff notes on the agent wall, showing progress, shared context, and who has read each note.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/09-handoffs.png?v=row)
 
 ### Memory that learns how you work
 
@@ -150,7 +151,7 @@ answer, whether a chase is needed, who on copy moves them - and a thread gone qu
 person's own day is *slipped*, on your rail under Tasks, with Chase, Let it go, They answered elsewhere
 and Remind me under it. See [The Advisor](https://taskuary.com/docs/advisor).
 
-![LEARNED.md open in the document editor, with evidence-backed preferences, hypotheses still being tested, and proposed rules awaiting the owner.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/11-learned-memory.png?v=sections)
+![LEARNED.md open in the document editor, with evidence-backed preferences, hypotheses still being tested, and proposed rules awaiting the owner.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/11-learned-memory.png?v=row)
 
 <details>
 <summary>Technical details: how LEARNED.md becomes memory</summary>

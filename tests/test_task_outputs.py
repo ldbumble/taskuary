@@ -144,5 +144,90 @@ class TaskOutputsTests(unittest.TestCase):
         self.assertTrue(outputs.folder(self.tid).is_dir())
 
 
+def _stamp(p: Path, n: int):
+    "Files written n minutes apart, so the newest is known."
+    t = 1_790_000_000 + n * 60
+    os.utime(p, (t, t))
+
+
+class OneOfEachTests(unittest.TestCase):
+    """The owner, 2026-10-28: "it looks like it created a million attachments". A workbook saved v1..v9 beside its helper script, its log
+    and a temp folder is ONE deliverable: its newest version, the eight before it behind it, the working files apart."""
+    def setUp(self):
+        self.store = MemoryStore()
+        self.tid = self.store.create_task({'Title': 'Vendor pricing review', 'Summary': 'Compare what Payworth and Trainly charge.',
+                                           'Kind': 'general'}, 'owner')
+        self.other = self.store.create_task({'Title': 'Snag list for the new office', 'Kind': 'general'}, 'owner')
+        self.addCleanup(shutil.rmtree, config.home() / 'scratch' / 'outputs', True)
+        d = outputs.folder(self.tid); d.mkdir(parents=True, exist_ok=True)
+        for i in range(1, 10):
+            (d / f'pricing comparison v{i}.xlsx').write_bytes(b'x' * i); _stamp(d / f'pricing comparison v{i}.xlsx', i)
+        for name in ('build_sheet.py', 'run.log'): (d / name).write_text('scratch', encoding='utf-8'); _stamp(d / name, 20)
+        (d / 'tmp').mkdir(); (d / 'tmp' / 'rates.csv').write_text('a,b', encoding='utf-8'); _stamp(d / 'tmp' / 'rates.csv', 21)
+        (d / 'summary.pdf').write_bytes(b'%PDF'); _stamp(d / 'summary.pdf', 5)
+        o = outputs.folder(self.other); o.mkdir(parents=True, exist_ok=True)
+        (o / 'snag list.xlsx').write_bytes(b'x'); (o / 'plan.md').write_text('# Plan', encoding='utf-8')
+
+    def test_nine_versions_and_scratch_are_one_file_and_eight_earlier(self):
+        made, working = outputs.deliverables(outputs.listing(self.tid))
+        self.assertEqual([r['name'] for r in made], ['pricing comparison v9.xlsx', 'summary.pdf'])
+        self.assertEqual(len(made[0]['earlier']), 8)
+        self.assertEqual(made[0]['earlier'][0]['name'], 'pricing comparison v8.xlsx')
+        self.assertEqual(sorted(r['path'] for r in working), ['build_sheet.py', 'run.log', 'tmp/rates.csv'])
+
+    def test_a_family_is_one_name_without_its_version_marks(self):
+        one = {outputs.family(n) for n in ('Vendor pricing v9.xlsx', 'vendor_pricing_final.xlsx', 'vendor pricing (2).xlsx',
+                                           'vendor-pricing-20261027-1530.xlsx', 'Vendor Pricing_v2_final.xlsx', 'drafts/vendor pricing draft.xlsx')}
+        self.assertEqual(one, {'vendor pricing.xlsx'})
+        # ...and different things stay different: another year, another kind, a set the ask wanted
+        self.assertEqual(len({outputs.family(n) for n in ('budget 2025.xlsx', 'budget 2026.xlsx', 'budget.pdf', 'region 1.csv', 'region 2.csv')}), 5)
+        self.assertEqual(outputs.family('renew.docx'), 'renew.docx')
+
+    def test_the_phone_offers_each_thing_once(self):
+        from taskuary import remote_assistant
+        self.assertEqual([r['name'] for r in remote_assistant.task_files(self.store, {'tid': self.tid})], ['pricing comparison v9.xlsx', 'summary.pdf'])
+
+    def test_every_worker_hears_one_final_file(self):
+        from taskuary import terminal
+        self.assertIn('one final file', outputs.brief(self.tid))
+        self.assertIn('one final file', self.store.doc('agent') or open(Path(outputs.__file__).parent / 'templates' / 'agent.md', encoding='utf-8').read())
+        older = terminal.with_fence_rule('Rules from before files had a rule.')
+        self.assertIn('one final file', older)
+        self.assertIn('scratch work', older)
+        self.assertEqual(terminal.with_fence_rule(older), older)
+
+    def test_the_assistant_finds_the_excel_on_the_task_about_vendor_pricing(self):
+        from taskuary import concierge
+        hits = outputs.find(self.store, ['vendor', 'pricing'], 'xlsx')
+        self.assertEqual([(h['tid'], h['name']) for h in hits], [(self.tid, 'pricing comparison v9.xlsx')])
+        said = concierge.read_op(self.store, 'outputs.find', {'query': 'the excel on the task about vendor pricing', 'kind': 'xlsx'})
+        self.assertIn('pricing comparison v9.xlsx', said)
+        self.assertIn(f'/api/task-outputs/{self.tid}/pricing%20comparison%20v9.xlsx', said)
+        self.assertIn(f'#task={self.tid}', said)
+        self.assertIn('8 earlier versions', said)
+        self.assertNotIn('build_sheet.py', said)
+        # by the file's own name, by one task, and a miss says so
+        self.assertIn('snag list.xlsx', concierge.read_op(self.store, 'outputs.find', {'query': 'snag', 'kind': 'excel'}))
+        self.assertIn('plan.md', concierge.read_op(self.store, 'outputs.find', {'ref': task_ref(self.other)}))
+        self.assertNotIn('pricing', concierge.read_op(self.store, 'outputs.find', {'ref': task_ref(self.other)}))
+        self.assertIn('No file', concierge.read_op(self.store, 'outputs.find', {'query': 'payroll accruals', 'kind': 'pdf'}))
+
+    def test_on_a_phone_no_link_is_given(self):
+        from taskuary import concierge
+        tok = concierge.DELIVERY.set(concierge.PHONE)
+        try: said = concierge.read_op(self.store, 'outputs.find', {'query': 'vendor pricing'})
+        finally: concierge.DELIVERY.reset(tok)
+        self.assertIn('pricing comparison v9.xlsx', said)
+        self.assertNotIn('/api/task-outputs', said)
+
+    def test_the_catalogue_offers_it_within_the_index(self):
+        from taskuary import toolcatalog
+        b = toolcatalog.block()
+        self.assertIn('"outputs.find"', b)
+        self.assertLess(len(b), 7950)
+        self.assertEqual(toolcatalog.valid('outputs.find', {}), '')
+        self.assertTrue(toolcatalog.is_read('outputs.find'))
+
+
 if __name__ == '__main__':
     unittest.main()

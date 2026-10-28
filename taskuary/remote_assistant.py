@@ -1598,11 +1598,12 @@ def _size(n: int) -> str:
 
 
 def task_files(store, item: dict | None) -> list:
-    """The files in the task's own outputs folder (outputs.listing - no link followed, nothing outside it), newest first."""
+    """The files in the task's own outputs folder (outputs.listing - no link followed, nothing outside it), newest first - each thing it
+    made once, its newest version, and none of the agent's working files (outputs.deliverables)."""
     tid = (item or {}).get('tid')
     if store is None or not str(tid or '').isdigit(): return []
     from . import outputs
-    try: return outputs.listing(int(tid))
+    try: return outputs.deliverables(outputs.listing(int(tid)))[0]
     except Exception as e:
         logger.debug(f'the phone could not list the task files: {e}'); return []
 

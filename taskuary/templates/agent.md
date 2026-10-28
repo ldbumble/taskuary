@@ -36,6 +36,11 @@ coding-specific ones on top. The task brief in your prompt is your context and y
   dropped too much shows. Read something whole only when the job is to read it closely: a diff to
   review, a contract.
 
+## Files you make
+- Deliver one final file per thing asked: overwrite it as you improve it, never leave every draft or
+  version beside it. Keep scratch work - scripts, logs, test data, intermediate files - out of the
+  task's outputs folder. Make several files, or a list of files, only when the ask wants several.
+
 ## Honest reporting
 - Say what you did, what you found and what you changed - files, commands, records, ids - as you
   go, in plain lines. A finished job that is silent looks exactly like a stuck one.

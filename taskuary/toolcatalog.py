@@ -452,6 +452,7 @@ WHERE = (
     ('one message in full', 'message.read', {'mid': 4321}),
     ('a person - how often they write, their open tasks', 'sender.read', {'who': 'Erin'}),
     ('open work', 'tasks.list', {'contains': 'export'}),
+    ('a file an agent made - the Excel, the PDF - and its link', 'outputs.find', {'query': 'vendor pricing', 'kind': 'xlsx'}),
     ('how something is done here - a policy, a system, a site', 'knowledge.search', {'query': 'PO limit'}),
     ('how Taskuary itself works', 'docs.search', {'query': 'remind me'}),
     ('reports and workflows', 'reports.list', {}),
@@ -572,6 +573,10 @@ READS = {
     'memory.list':      ('everything kept about the owner: LEARNED.md - what they told you ("remember this"), their verdicts, '
                          'and what it learned from what they did. `about`: words to narrow it (a sender, a topic). '
                          'Use it for "what do you remember", "what do you know about me"'),
+    # ...and THE FILES THEY MADE (outputs.find, the owner 2026-10-28: "pull up the Excel created by the agent on the task about X")
+    'outputs.find':     ('the files agents made on tasks - workbooks, PDFs, documents, charts, pages - each once, its newest version, with '
+                         'its task and the link that downloads it. `query`: words of the task or the file ("vendor pricing"); `kind` '
+                         'optional: xlsx | pdf | doc | deck | csv | picture | page; `ref` optional: one task. Answer with the link'),
     'deleted.list':     'what was removed in the last 30 days and can still come back - reports, workflows, dashboards, rules, profiles',
     'rules.list':       ('the standing filters on the owner\'s mail - queue mutes set with a reason, and the policy rules '
                          '(skip, ignore, escalate...) that decide before any model reads it. `about`: words to narrow it. '
@@ -633,7 +638,7 @@ def valid(kind: str, params: dict) -> str:
                 'knowledge.search': ('query',), 'tasks.list': (), 'asks.list': (), 'message.read': ('mid', 'id'),
                 'sender.read': ('who', 'sender'), 'docs.search': ('query',), 'agents.now': (), 'approvals.list': (), 'pipe.list': (), 'pipe.read': (),
                 'calendar.read': (), 'activity.list': (), 'errors.list': (), 'memory.list': (), 'memory.about': ('who',), 'rules.list': (), 'missed.check': (), 'app.health': (),
-                'repos.list': (), 'tools.list': (), 'tools.describe': ('kind',), 'deleted.list': ()}[kind]
+                'repos.list': (), 'tools.list': (), 'tools.describe': ('kind',), 'deleted.list': (), 'outputs.find': ()}[kind]
         if need and not any(str((params or {}).get(n) or '').strip() for n in need):
             return f"{kind} needs {' or '.join(need)}"
         return ''

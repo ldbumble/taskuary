@@ -9,6 +9,7 @@ file the agent wrote was on disk and unreachable from the page.
 Now the folder is named: <home>/scratch/outputs/TQ-nnnn/ for task nnnn - the very one the agent picked - it is said in the brief
 (brief), and GET /api/task-outputs/<tid>/<file> serves a file in THAT task's folder and nothing else (resolve)."""
 import mimetypes, re
+from datetime import datetime
 from pathlib import Path
 
 from . import config
@@ -71,8 +72,9 @@ def row(tid: int, p: Path, rel: str) -> dict:
     from urllib.parse import quote
     ext, sheet = p.suffix.lower(), PREVIEW.get(p.suffix.lower())
     if sheet == 'sheet' and not can_sheet(): sheet = None
+    st = p.stat()
     return {'id': f'output:{rel}', 'name': p.name, 'path': rel, 'kind': 'output', 'content_type': content_type(p.name),
-            'size': p.stat().st_size, 'preview': sheet, 'url': f'/api/task-outputs/{int(tid)}/{quote(rel)}',
+            'size': st.st_size, 'at': datetime.fromtimestamp(st.st_mtime).strftime('%Y-%m-%d %H:%M:%S'), 'preview': sheet, 'url': f'/api/task-outputs/{int(tid)}/{quote(rel)}',
             **({'note': 'No preview on this install - Download opens it in your spreadsheet app.'} if PREVIEW.get(ext) == 'sheet' and not sheet else {})}
 
 
@@ -94,6 +96,100 @@ def listing(tid: int) -> list:
                 rel = k.relative_to(base).as_posix()
                 if resolve(tid, rel): out.append((k.stat().st_mtime, row(tid, k, rel)))
     return [r for _, r in sorted(out, key=lambda x: -x[0])][:MAX_FILES]
+
+
+# ONE OF EACH THING IT MADE (the owner, 2026-10-28: "it looks like it created a million attachments. Agents should not create lists of
+# lists of attachments unless specifically asked"). A workbook saved as v1..v9 listed nine rows, with the helper script and its log
+# between them. A FAMILY is one name with its version marks taken off (v2, _final, (1), a timestamp); only its newest is the deliverable,
+# the rest are its earlier versions, kept and reachable behind it. The agent's own working files - its scripts, logs, temp and cache
+# files, anything under a tmp/ or scratch/ folder - are not things it made for the owner, so they fold under one line.
+# taskOutputs.deliverables is the same rule for the page: keep the two alike.
+_VER = re.compile(r'(?:[ _.-]+(?:v|ver|version|rev)[ _.-]?\d+|[ _.-]+(?:final|draft|copy|old|new|latest|updated|edited|revised)'
+                  r'|[ _.-]*\(\d+\)|[ _.-]+\d{8}(?:[ _T-]?\d{4,6})?|[ _.-]+\d{4}-\d\d-\d\d(?:[ _T-]?\d\d[-.]?\d\d(?:[-.]?\d\d)?)?)+$', re.I)
+_WORK_EXT = {'.log', '.tmp', '.temp', '.bak', '.pyc', '.cache', '.lock', '.swp', '.part', '.crdownload',
+             '.py', '.ps1', '.sh', '.bat', '.cmd', '.js', '.mjs', '.ts', '.sql', '.r', '.ipynb'}
+_WORK_DIR = re.compile(r'(?:^|/)(?:tmp|temp|scratch|cache|__pycache__|work|working|intermediate|drafts?)/', re.I)
+_WORK_NAME = re.compile(r'^(?:tmp|temp|scratch|debug)(?:[ _.-]|$)', re.I)
+
+
+def family(name: str) -> str:
+    "A file's name without its version marks: 'Vendor pricing v9.xlsx', 'vendor pricing (2).xlsx' and 'vendor_pricing_final.xlsx' are one."
+    p = Path(str(name or '').replace('\\', '/').rsplit('/', 1)[-1].lower())
+    stem = _VER.sub('', p.stem).strip(' _.-') or p.stem
+    return re.sub(r'[ _.-]+', ' ', stem) + p.suffix
+
+
+def is_working(rel: str) -> bool:
+    "The agent's own working file - a script, a log, a temp or cache file, anything in a tmp/ or scratch/ folder - not a deliverable."
+    rel = str(rel or '').replace('\\', '/')
+    return Path(rel).suffix.lower() in _WORK_EXT or bool(_WORK_DIR.search(rel)) or bool(_WORK_NAME.match(rel.rsplit('/', 1)[-1]))
+
+
+def deliverables(rows: list) -> tuple:
+    """(made, working): each family once - its newest row, the older ones on it as `earlier`, newest first - and the working files apart.
+    A row that is not a file in the folder (a page the agent showed or published) is never a working file: it chose to show it."""
+    made, by, working = [], {}, []
+    for r in sorted(rows or [], key=lambda r: str(r.get('at') or r.get('created_at') or ''), reverse=True):
+        if r.get('kind') == 'output' and is_working(r.get('path') or r.get('name')): working.append(r); continue
+        k = family(r.get('name') or r.get('path'))
+        if k in by: by[k].setdefault('earlier', []).append(r)
+        else: by[k] = dict(r); made.append(by[k])
+    return made, working
+
+
+# WHERE IS THE EXCEL THE AGENT MADE (the owner, 2026-10-28: "if I ask the chat assistant to pull up the Excel created by the agent on the
+# task about X, could it find the link to it? It should be able to"). Every task's outputs folder and the pages its agents showed or
+# published, matched by the task's words and the file's own name - the model passes the words and the kind; nothing reads the sentence.
+_SHEET = ('.xlsx', '.xlsm', '.xls', '.csv', '.tsv')
+KINDS = {'xlsx': _SHEET, 'sheet': _SHEET, 'spreadsheet': _SHEET, 'workbook': _SHEET, 'excel': _SHEET, 'csv': ('.csv', '.tsv'),
+         'pdf': ('.pdf',), 'doc': ('.docx', '.doc', '.md', '.txt', '.rtf'), 'document': ('.docx', '.doc', '.md', '.txt', '.rtf', '.pdf'),
+         'docx': ('.docx', '.doc'), 'word': ('.docx', '.doc'), 'deck': ('.pptx', '.ppt'), 'pptx': ('.pptx', '.ppt'), 'slides': ('.pptx', '.ppt'),
+         'picture': ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'), 'chart': ('.png', '.jpg', '.jpeg', '.svg', '.html'),
+         'page': ('.html', '.htm', '.md'), 'text': ('.md', '.txt')}
+
+
+def exts_of(kind: str) -> tuple:
+    "The extensions a `kind` means: a name in KINDS or an extension itself ('xlsx', '.pdf'); none means any file."
+    k = str(kind or '').strip().lower().lstrip('.')
+    return KINDS.get(k) or KINDS.get(k.rstrip('s')) or ((f'.{k}',) if re.fullmatch(r'[a-z0-9]{1,5}', k) else ())
+
+
+def _tids() -> list:
+    base = config.home() / 'scratch' / 'outputs'
+    try: return sorted({int(m.group(1)) for d in base.iterdir() if d.is_dir() and (m := re.fullmatch(r'TQ-0*(\d+)', d.name))}, reverse=True)
+    except OSError: return []
+
+
+def _page(a: dict) -> dict:
+    "A page an agent showed or published, in the row shape (server._artifact_row) - here, so a look-up never imports the server."
+    return {'id': a['ArtifactId'], 'name': a.get('Name') or 'page', 'kind': a.get('Kind'), 'content_type': a.get('ContentType') or '',
+            'created_at': a.get('CreatedAt'), 'url': f"/api/task-artifacts/{a['ArtifactId']}" if a.get('Path') else None,
+            **({'external_url': a['Url']} if a.get('Url') else {})}
+
+
+def find(store, words=(), kind: str = '', tid: int = None, limit: int = 8) -> list:
+    """The files agents made, best match first: [{tid, title, name, url, at, earlier, ...}] - each family once (deliverables), working
+    files never. `words` match the task's title and summary and the file's own name, each by its stem; `kind` narrows by what it is."""
+    from .concierge import _enough, _stem
+    want, stems = exts_of(kind), list(dict.fromkeys(_stem(w) for w in words or ()))
+    ids, pages = [int(tid)] if tid else _tids(), {}
+    try:
+        for a in store._rows("SELECT * FROM task_artifact WHERE Kind IN ('shown','claude_artifact')" + (' AND TaskId=?' if tid else ''),
+                             (int(tid),) if tid else ()):
+            pages.setdefault(int(a['TaskId']), []).append(_page(a))
+    except Exception: pass
+    hits = []
+    for t in dict.fromkeys(ids + ([] if tid else sorted(pages, reverse=True))):
+        task = store.get_task(t)
+        if not task: continue
+        made, _ = deliverables(listing(t) + pages.get(t, []))
+        about = f"{task.get('Title') or ''} {task.get('Summary') or ''}".lower()
+        for r in made:
+            if want and Path(str(r.get('name') or '')).suffix.lower() not in want: continue
+            n = sum(s in f"{about} {re.sub(r'[_.-]+', ' ', str(r.get('name') or '').lower())}" for s in stems)
+            if stems and n < _enough(stems): continue
+            hits.append((n, str(r.get('at') or r.get('created_at') or ''), {'tid': t, 'title': task.get('Title') or '', **r}))
+    return [r for _, _, r in sorted(hits, key=lambda x: (x[0], x[1]), reverse=True)][:limit]
 
 
 def _cell(v) -> str:
@@ -130,4 +226,10 @@ def brief(tid: int) -> str:
     return (f'FILES YOU MAKE FOR THE OWNER (a spreadsheet, a document, a PDF, a chart): save each one in {d} . Every file there shows on '
             'this task with Preview and Download, so the owner opens it from the chat. To point at one, write its full path in your '
             'answer. Never write a URL or a link to it - Taskuary serves that folder itself, and an address you make up leads nowhere. '
-            'Asked to send it "here", it already is: name the file.')
+            f'Asked to send it "here", it already is: name the file. {ONE_FILE}')
+
+
+# ...and at the source (the owner, 2026-10-28): an agent that leaves every draft and every helper beside the answer is what made the list
+ONE_FILE = ('Deliver one final file per thing asked: overwrite it as you improve it (or keep your drafts elsewhere), never leave every '
+            'version beside it. Keep your scratch work - scripts, logs, test data, intermediate files - out of the folder the owner reads '
+            'from. Make several files, or a list of files, only when the ask wants several.')

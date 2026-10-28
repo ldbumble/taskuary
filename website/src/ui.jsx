@@ -640,7 +640,7 @@ export const AgentReport = ({ body, artifacts: all = [] }) => {
           <Box sx={{ fontSize: 13, color: INK }}><Md text={since} /></Box>
         </Box>
       )}
-      {!!pages.length && <Box sx={{ mt: words ? 1 : 0 }}><PublishedPages pages={pages} /></Box>}
+      {!!pages.length && <Box sx={{ mt: words ? 1 : 0 }}><PublishedPages pages={pages} deliver /></Box>}
     </Box>
   );
 };

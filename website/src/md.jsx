@@ -10,6 +10,7 @@ import { BORDER, DIM, INK, PANEL, mono } from "./theme.jsx";
 import { linkRefs, looksMd, refParts } from "./mdText.js";
 import { appLink, openAppLink } from "./appLinks.js";
 import { plainCitations } from "./taskOutputs.js";
+import { attUrl } from "./Attachments.jsx";
 export { looksMd };
 
 const TASK_LINK = /#task=(\d+)/;
@@ -18,8 +19,11 @@ const A = ({ href, children, onTask }) => {
   const m = TASK_LINK.exec(href || ""), bare = !!m && /^TQ-\d+$/.test(String(React.Children.toArray(children).join("")));
   // ...and a page of the app itself (appLinks.js): opened on the canvas here, never a new browser tab
   const page = m ? null : appLink(href);
+  // ...and a file an agent made, as the Assistant links it (lookups.outputs_find): the Result's own Download - one tap saves it
+  const file = !m && !page && /^\/api\/task-(?:outputs|artifacts)\/\d+/.test(href || "");
+  if (file) href = attUrl({ url: href }, true);
   return (
-    <a href={href} target={m || page ? undefined : "_blank"} rel="noreferrer" style={{ color: "#55697a", fontWeight: 600, textDecoration: "none" }}
+    <a href={href} target={m || page ? undefined : "_blank"} data-tq-file-link={file ? "" : undefined} rel="noreferrer" style={{ color: "#55697a", fontWeight: 600, textDecoration: "none" }}
       data-tq-task-link={m ? m[1] : undefined}
       onClick={(e) => { if (m) { e.preventDefault(); if (onTask) onTask(Number(m[1])); else openAppLink(`task=${m[1]}`); } else if (page) { e.preventDefault(); openAppLink(page); } }}>
       {m && !bare ? `open TQ-${String(m[1]).padStart(4, "0")} →` : children}

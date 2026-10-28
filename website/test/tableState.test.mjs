@@ -40,7 +40,9 @@ test("a page over the item: the rail's tag and the box say it is under the page,
   // ...and the box its words - but the one-row bar's pill, at rest and widened, its own short ones (2026-10-26)
   // ...and the pill at rest with no task on the table the short hint, the long one ran on under its send button (2026-10-26)
   // ...and the pill at rest the SAME "Ask…" whatever is on the table (the owner, 2026-10-27: "always the same size and words")
-  assert.match(src, /placeholder=\{boxNarrow && !boxWide \? "Ask…" : tableSays\.phone /, "and the chat window its words (2026-10-28)");
+  assert.match(src, /: boxNarrow && !boxWide \? "Ask…" : tableSays\.phone /, "and the chat window its words (2026-10-28)");
+  // ...but a chat put away by its minimize says it can be continued (the owner, 2026-10-28: "getting back is obvious")
+  assert.match(src, /placeholder=\{!boxWide && isMini && winLines\.length \? \(phone \? "Continue…" : "Continue chat…"\)/);
   assert.match(src, /aria-label=\{tableSays\.name\}/, "and its name the task on the table");
 });
 

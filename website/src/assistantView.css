@@ -683,6 +683,10 @@
 .tq-chat-pop-body > .tq-msg:first-child > .avatar { visibility: visible; }
 .tq-chat-pop-body > .tq-msg.receipt { margin-bottom: 8px; font-size: 11.5px; color: #6e685f; }
 .tq-chat-pop-empty { margin: 4px 0 10px; color: #8f8b84; font-size: 12.5px; }
+/* ...MINIMIZED, the pill says it can be continued ("Continue chat…") and counts the answers that came while it was put away */
+.tq-compose-box:not([data-tq-open]) { position: relative; }
+.tq-chat-unseen { position: absolute; top: -5px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px;
+  background: #55697a; color: #fff; font-size: 10px; font-weight: 600; line-height: 16px; font-style: normal; text-align: center; pointer-events: none; }
 /* ...ON A PHONE, A BOTTOM SHEET: the conversation over the box, both the screen's width, the box at the screen's foot */
 @media (max-width: 600px) {
   .tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1200; width: auto; flex: none;

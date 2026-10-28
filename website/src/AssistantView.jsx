@@ -20,6 +20,7 @@ import VolumeOffIcon from "@mui/icons-material/VolumeOff";
 import SendIcon from "@mui/icons-material/ArrowUpward";
 import SentimentSatisfiedAltIcon from "@mui/icons-material/SentimentSatisfiedAlt";
 import CloseIcon from "@mui/icons-material/Close";
+import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import ViewSidebarIcon from "@mui/icons-material/ViewSidebar";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import api from "./api.js";
@@ -117,6 +118,7 @@ import "./assistantView.css";
 // walk itself lives on the server: a reload asks the task whether it is still an open set-up before
 // showing anything, so a stale key restores nothing.
 const WALK_KEY = "taskuary_walk_tid";
+const MINI_KEY = "taskuary_chat_minimized";   // this tab's put-away chat window: {tid, last} (sessionStorage)
 const isOpenWalk = (t) => !!t && t.SourceRef === "assistant:setup" && !["done", "dropped"].includes(t.Status);
 // markers the server writes on a line that are NOT cards (concierge.SETUP_QUESTIONS): the line is its words
 // ...and a line that carries its own words (concierge: a failed act's way on, the already-seen opens): never an item card
@@ -3410,20 +3412,32 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const inWin = useMemo(() => new Set(winLines.map(([m]) => m.id)), [winLines]);
   const popPending = winOn && (busy || phoneBusy);
   const [boxOpen, setBoxOpen] = useState(false);
-  const popRef = useRef(null), popBodyRef = useRef(null), boxRef = useRef(null), rowDown = useRef(false), winOnRef = useRef(false);
+  const popRef = useRef(null), popBodyRef = useRef(null), boxRef = useRef(null), winOnRef = useRef(false);
   winOnRef.current = winOn;
+  // ...MINIMIZED, IT IS PUT AWAY, NOT ENDED (the owner, 2026-10-28: a "collapse" beside the ×, and "getting back is obvious"): the pill
+  // says the conversation can be continued and counts the answers that came while it was away; this tab remembers it over a reload
+  // (sessionStorage, the conversation's dock task) - a different conversation by then (New chat elsewhere) is not the one put away
+  const [mini, setMini] = useState(() => { try { return JSON.parse(sessionStorage.getItem(MINI_KEY) || "null"); } catch { return null; } });
+  const keepMini = (v) => { setMini(v); try { if (v) sessionStorage.setItem(MINI_KEY, JSON.stringify(v)); else sessionStorage.removeItem(MINI_KEY); } catch { /* private mode */ } };
+  const chatTid = state?.task?.TaskId ?? null;
+  const isMini = !!mini && (chatTid == null || mini.tid == null || mini.tid === chatTid);
+  useEffect(() => { if (mini && chatTid != null && mini.tid != null && mini.tid !== chatTid) keepMini(null); }, [chatTid]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const openBox = () => { setBoxOpen(true); if (mini) keepMini(null); };
   const [dictating, setDictating] = useState(false);   // the box's mic listening or transcribing: the window stays open for it (MicButton)
   // ...and ONCE OPEN IT STAYS OPEN (the owner, 2026-10-27: "it gets smaller and bigger at random times ... when you click in, it stays open
   // until you do X or something"): not shut by a click elsewhere, a look away, an answer coming up or the next task - only its × or Esc.
   // The box open IS the window open: one panel, the conversation over the box
   const boxWide = boxOpen || dictating || !!pics.imgs.length || !!emojiEl, popOpen = winOn && boxWide;
-  const setPopOpen = setBoxOpen;
-  const boxOver = () => !!boxRef.current && ["absolute", "fixed"].includes(getComputedStyle(boxRef.current).position);   // the window's box, over the canvas
-  const shutBox = () => { setBoxOpen(false); composeRef.current?.blur(); };
+  const setPopOpen = (v) => { if (v) openBox(); else setBoxOpen(false); };
+  // ...ONLY ITS × AND ESC SHUT IT (the owner, 2026-10-28: "it randomly closes ... it closed when it responded. Make sure that never happens"):
+  // the box's blur and a press on the row used to shut it unless a style read at that instant said the box stood over the canvas - one
+  // read away from closing whenever an answer moved the focus (a lit button, a task opened, a page brought up). Nothing reads the focus now
+  const shutBox = () => { setBoxOpen(false); if (mini) keepMini(null); composeRef.current?.blur(); };
+  const minimize = () => { setBoxOpen(false); keepMini({ tid: chatTid, last: winLines[winLines.length - 1]?.[0]?.id ?? null }); composeRef.current?.blur(); };
   // THE PILL'S HINT FITS THE PILL: with a row beside it and no task on the table the box is the 220px pill, and the long hint ("Ask
   // Taskuary anything — a name or a subject pulls it in…") ran on under its own send button, cut mid-word (the overnight setup walk,
   // 2026-10-26). Measured, because the row beside it is what makes it a pill (the CSS's :has)
-  const [boxNarrow, setBoxNarrow] = useState(false), [boxIsOver, setBoxIsOver] = useState(false);   // ...and whether it stands over the canvas
+  const [boxNarrow, setBoxNarrow] = useState(false);
   const [boxH, setBoxH] = useState(0);
   useEffect(() => {
     const el = boxRef.current;
@@ -3432,7 +3446,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // the screen's foot on a phone
     const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect(), pos = getComputedStyle(el).position, over = el.hasAttribute("data-tq-open") && (pos === "absolute" || pos === "fixed");
-      setBoxNarrow(r.width < 360); setBoxIsOver(pos === "absolute" || pos === "fixed"); setBoxH(over ? Math.round(r.height) : 0);
+      setBoxNarrow(r.width < 360); setBoxH(over ? Math.round(r.height) : 0);
       el.closest(".tq-compose")?.style.setProperty("--tq-box-h", over ? `${Math.round(r.height) + (pos === "fixed" ? 0 : 6)}px` : "-2px");
     });
     ro.observe(el);
@@ -3440,7 +3454,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   }, [old, walk]);                                   // the box is mounted only while neither is up
   // ...it opens on the owner's line (send) and on the Assistant speaking up in this session - never on a reload's history
   const popLast = winLines[winLines.length - 1]?.[0];
-  useEffect(() => { if (popLast?.role === "assistant" && /^(a|s|d|context)\d/.test(popLast.id)) setPopOpen(true); }, [popLast?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // ...but not over a minimize: it was put away on purpose, and the pill counts what came meanwhile (`unseen`)
+  useEffect(() => { if (popLast?.role === "assistant" && /^(a|s|d|context)\d/.test(popLast.id) && !isMini) setPopOpen(true); }, [popLast?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const unseen = useMemo(() => { if (!isMini || mini?.last == null) return 0; const at = winLines.findIndex(([m]) => m.id === mini.last || m.commentId === mini.last);
+    return at < 0 ? 0 : winLines.slice(at + 1).filter(([m]) => m.role !== "user").length; }, [isMini, mini, winLines]);
   // ...and IT NEVER SHUTS BY ITSELF (the owner, 2026-10-27: "it disappeared when done? not sure what happened"): every turn ends on words
   // (actReceipt), and the window stays until its × or Esc
   // ...and A PRESS THAT FAILED SAYS SO WHERE IT CAN BE READ (the 2026-10-28 flow walk): a Next whose request never got an answer wrote its
@@ -3452,17 +3469,24 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const id = requestAnimationFrame(() => [...document.querySelectorAll("[data-tq-err-line]")].find((e) => e.getBoundingClientRect().height > 0)?.scrollIntoView?.({ block: "nearest" }));
     return () => cancelAnimationFrame(id);
   }, [err, popOpen]);
-  // ...Esc anywhere shuts it - but not the Esc that shuts a menu or a dialog over it
-  useEffect(() => {
-    if (!popOpen) return undefined;
-    const key = (e) => { if (e.key === "Escape" && !e.defaultPrevented && !e.target?.closest?.(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root")) shutBox(); };
-    document.addEventListener("keydown", key);
-    return () => document.removeEventListener("keydown", key);
-  }, [popOpen]);   // eslint-disable-line react-hooks/exhaustive-deps
-  // ...at most ~60% of the screen with its box (a phone's sheet 80%), and never past the canvas's top; its newest words in view
+  // ...Esc shuts it while the focus is IN it (its box or its conversation) - an Esc on the task view, the rail or a menu is theirs: shutting
+  // the window from anywhere was a close the owner never aimed at it. Not the Esc that shuts a menu or a dialog over it either
+  const escShut = (e) => { if (e.key === "Escape" && !e.defaultPrevented && !e.target?.closest?.(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root")) { e.stopPropagation(); shutBox(); } };
+  // ...TALL ENOUGH TO TALK IN (the owner, 2026-10-28: "it's too small, it should get a little taller"): a fixed height, the conversation
+  // filling it - ~75% of the screen, at least 520px where there is room, never past the canvas's top (its foot stands 6px over the row's
+  // line, never over its buttons); a phone's sheet 85% of the screen
   const vh = typeof window === "undefined" ? 800 : window.innerHeight;
-  const popMax = Math.max(140, Math.min(Math.round(vh * (phone ? 0.8 : 0.6)) - boxH, phone ? Infinity : bodyH + 40 - boxH));
-  useLayoutEffect(() => { const el = popBodyRef.current; if (el && popOpen) el.scrollTop = el.scrollHeight; }, [popOpen, winLines.length, popPending, words, popMax]);
+  const [room, setRoom] = useState(0);
+  useLayoutEffect(() => {
+    if (!popOpen || phone) return undefined;
+    const fit = () => { const line = boxRef.current?.parentElement?.getBoundingClientRect(), body = bodyRef.current?.getBoundingClientRect();
+      if (line && body) setRoom(Math.round(line.top - 6 - body.top - 8)); };
+    fit(); window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [popOpen, phone, bodyH]);
+  const winH = phone ? Math.round(vh * 0.85) : Math.min(room || vh, Math.max(520, Math.round(vh * 0.75)));
+  const popH = Math.max(140, winH - boxH);
+  useLayoutEffect(() => { const el = popBodyRef.current; if (el && popOpen) el.scrollTop = el.scrollHeight; }, [popOpen, winLines.length, popPending, words, popH]);
   // ...a line of its own that stands under the card on the table only while the answer is on its way (tq-pending, assistantView.css) -
   // or in the pop-up over it, where the answer it waits for will be
   const pendingLine = <>{(busy || phoneBusy || nextComing || walkDots) && (
@@ -3637,9 +3661,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               on the row either way, and opened again it is the same conversation */}
           {winOn && (
             <div className="tq-chat-pop" data-tq-chat-pop="" data-tq-chat-win="" role={popOpen ? "dialog" : undefined} aria-label="Chat with Taskuary" ref={popRef} hidden={!popOpen}
-              style={{ maxHeight: popMax }}>
+              style={{ height: popH }} onKeyDown={escShut}>
               <div className="tq-chat-pop-head"><TaskuaryMark size={16} /><b>Taskuary</b>{currentItem?.ref && <span>{`· ${currentItem.ref}`}</span>}<span style={{ flex: 1 }} />
-                <Tooltip title="Past chats"><IconButton size="small" aria-label="Past chats" onClick={() => { shutBox(); openChats(); }}><HistoryIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip>
+                <Tooltip title="Past chats"><IconButton size="small" aria-label="Past chats" onClick={openChats}><HistoryIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip>
+                {/* ...its collapse puts it away to the pill, the conversation kept (the pill says Continue chat) */}
+                <Tooltip title="Minimize - keeps this conversation"><IconButton size="small" aria-label="Minimize the chat" data-tq-box-mini="" onClick={minimize}><CloseFullscreenIcon sx={{ fontSize: 15, color: DIM }} /></IconButton></Tooltip>
                 {/* ...its ×: the one way, with Esc, the window shuts - what is typed stays for the next time it opens */}
                 <Tooltip title="Close (Esc)"><IconButton size="small" aria-label="Close the chat" data-tq-box-close="" onClick={shutBox}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip></div>
               <div className="tq-chat-pop-body" ref={popBodyRef}>
@@ -3672,21 +3698,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           {/* ONE ROW: the row's groups and the box share a line (the one-row chat bar, 2026-10-26) - the box a pill at its end while at rest,
               widened while it is used, the groups folding into their ▾ for the room (ActionRow measures what is left; Next and the lit
               move never fold). With no row - the day's opener, a phone, whose row rides with its task view - the box is the whole line */}
-          {/* ...A PRESS ON THE ROW LANDS WHERE IT WAS AIMED (the overnight walk, 2026-10-26): the press took focus from the wide box, the box shut
-              to its pill on that mousedown, the folded groups came back and slid the lit Remind me 290 px right before the mouseup - so the
-              click landed on nothing, and the lit button "did nothing" on the first press. The box keeps its width until the press is over */}
-          <div className="tq-dock-line" onPointerDownCapture={(e) => {
-            if (boxRef.current?.contains(e.target)) return;
-            rowDown.current = true;
-            const up = () => { window.removeEventListener("pointerup", up, true); window.removeEventListener("pointercancel", up, true);
-              setTimeout(() => { rowDown.current = false; if (!boxOver() && !boxRef.current?.contains(document.activeElement)) setBoxOpen(false); }, 0); };
-            window.addEventListener("pointerup", up, true); window.addEventListener("pointercancel", up, true);
-          }}>
+          {/* ...A PRESS ON THE ROW LANDS WHERE IT WAS AIMED (the overnight walk, 2026-10-26): a press that shut the wide box slid the lit button
+              away under the pointer. The open box stands over the canvas now and nothing on the row shuts it, so the row never moves */}
+          <div className="tq-dock-line">
           {/* ...and during setup its line is the Advisor's (SetupLine): the move setup fills (FirstRun's tone) is the one lit - nothing
               was, so the line said "pick it" over a plain Back and a greyed Next (2026-10-19) */}
           <ActionRow advised={stripPick || setupLit} hold={rowHold} early={rowEarly} />
           <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined} ref={boxRef} data-tq-open={boxWide ? "" : undefined}
-            onFocus={() => setBoxOpen(true)} onBlur={(e) => { if (!boxOver() && !e.currentTarget.contains(e.relatedTarget) && !rowDown.current) setBoxOpen(false); }}>
+            data-tq-continue={!boxWide && isMini && winLines.length ? "" : undefined} onFocus={openBox} onKeyDown={escShut}>
+            {!boxWide && unseen > 0 && <i className="tq-chat-unseen" data-tq-unseen={unseen} aria-label={`${unseen} new in the chat`}>{unseen}</i>}
             {/* THE FIELD: nothing of its own at rest (display: contents - the pill is the box); in the chat window it is the bordered
                 field the words are typed in, tools and send inside it (the owner, 2026-10-28: "it does not look like a prompt input box?") */}
             <div className="tq-compose-field">
@@ -3704,11 +3724,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                 mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there - and the pill's at rest, and the open
                 box's over the canvas, a column as narrow as a phone's line (2026-10-27) */}
             <textarea ref={composeRef} rows={1} value={text} disabled={resetting} aria-label={tableSays.name}
-              placeholder={boxNarrow && !boxWide ? "Ask…" : tableSays.phone /* the chat window's words: "Talk to Taskuary…" on a task (the owner, 2026-10-28) */}
-              onChange={(e) => { setText(e.target.value); setBoxOpen(true); }} onKeyDown={(e) => {
+              placeholder={!boxWide && isMini && winLines.length ? (phone ? "Continue…" : "Continue chat…")
+                : boxNarrow && !boxWide ? "Ask…" : tableSays.phone /* the chat window's words: "Talk to Taskuary…" on a task (the owner, 2026-10-28) */}
+              onChange={(e) => { setText(e.target.value); openBox(); }} onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
-                // Esc shuts the window, the box back to its pill
-                if (e.key === "Escape") { e.stopPropagation(); shutBox(); }
+                // Esc shuts the window, the box back to its pill (escShut, on the box)
               }} />
             <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
             </div>

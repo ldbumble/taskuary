@@ -71,7 +71,7 @@ test("one row: the action row and the box share a line, the answer pops up over 
   const body = await box(page, ".tq-chat-body");
   assert.ok(pop.y < body.y + body.h && pop.y > body.y, `...over the canvas the task view stands on ${JSON.stringify({ pop, body })}`);
   assert.deepEqual(await box(page, "[data-tq-canvas-item]"), view, "the task view did not move");
-  assert.ok(pop.h + input.h <= 0.6 * 810 + 2, `the chat window is at most ~60% of the screen ${JSON.stringify({ pop, input })}`);
+  assert.ok(pop.h + input.h <= 0.75 * 810 + 2 && pop.h + input.h >= 520, `the chat window is ~75% of the screen, at least 520px ${JSON.stringify({ pop, input })}`);
   assert.equal(await page.$$eval(".tq-chat-body .tq-msg.you", (els) => els.filter((e) => e.textContent.includes("what does Tom want")).length), 0, "the line is not drawn under the task as well");
   assert.ok((await box(page, ".tq-dock")).h <= dock.h, "the dock did not grow");
 
@@ -87,6 +87,10 @@ test("one row: the action row and the box share a line, the answer pops up over 
   await page.click("[data-tq-task-head]");
   await sleep(300);
   assert.equal(await page.$eval("[data-tq-chat-pop]", (e) => e.hidden), false, "a press outside leaves it open");
+  // ...and an Esc aimed at the task view is the task view's (the owner, 2026-10-28: "make sure that never happens"); Esc IN it shuts it
+  await page.keyboard.press("Escape"); await sleep(300);
+  assert.equal(await page.$eval("[data-tq-chat-pop]", (e) => e.hidden), false, "an Esc outside leaves it open");
+  await page.click(".tq-compose-box textarea");
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => !document.querySelector(".tq-compose-box[data-tq-open]"), { timeout: 5000 });
   assert.deepEqual(errors, []);

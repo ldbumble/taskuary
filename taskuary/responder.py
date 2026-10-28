@@ -68,7 +68,8 @@ SYSTEM = (
 BREVITY = ('BE SHORT. Two or three sentences, under 60 words. Lead with the answer - fixed, or the '
            'one reason it is not. No preamble ("Thanks for reaching out", "I wanted to let you know"), '
            'no recap of what they just told you, no closing offer of further help unless something '
-           'is genuinely still open.\n')
+           'is genuinely still open. The one exception: asked what you think of something they sent, the reply is your '
+           'specific points on it (FEEDBACK below) - still tight, a short list, under about 150 words.\n')
 
 # Chat is not email. A signature at the end of a Teams message reads like a form letter, and
 # nobody signs their name in a thread that already says who is talking.
@@ -92,7 +93,46 @@ def email_rule(store, mailbox: str = None) -> str:
 # a sentence about what someone ELSE would have to do. Say it the way a person would.
 NOT_YET = ('If a request put to you cannot be answered by a reply alone - it needs work doing - say in one '
            'line that you will pick it up, and stop. Not who will do it, not how, and never that '
-           'you are unable to. Work asked of someone else on the mail is not yours to pick up.')
+           'you are unable to. Work asked of someone else on the mail is not yours to pick up. Reading what they sent and '
+           'saying what you think of it is NOT such work - that is answered now (FEEDBACK).\n')
+
+# "Let me know your thoughts" over a whole pasted draft came back as "I'll review this and send you my thoughts" (2026-10-28): a
+# promise to read what the writer already had in front of it, because BREVITY said 60 words and NOT_YET said "say you will pick
+# it up". Reading is not work for later. NEEDS is the writer's way to say it cannot judge - to the owner, never to the sender.
+NEEDS = 'NEEDS:'
+FEEDBACK = ('FEEDBACK: when they ask for your thoughts, feedback, a review or a yes on something IN the message - a draft they '
+            'pasted, a plan, numbers, an attached file you can read below - you have it in front of you, so the reply IS your '
+            'feedback. Give it now: a few specific points on THEIR content - what works, what to change or cut, anything unclear, '
+            'wrong or missing - in your own voice, a short list when there are several. Never answer with a promise to look at '
+            'it, review it or get back to them ("I\'ll review this and send you my thoughts", "I\'ll take a look") - that is no '
+            'answer. Judge only what is there; never invent facts about it or commitments. If you truly cannot judge it without '
+            'something you do not have (a file that did not come through, a figure only someone else knows), write exactly '
+            f'{NEEDS} and one line, for your own eyes and not theirs, saying what is missing - nothing else.\n')
+
+# ...and said of the REPLY, never of the mail: what they asked is the model's to read (no hardcoded words for intent). A reply
+# that is nothing but a promise to look later, to a mail that carried something to look at, is drafted once more and then failed
+# with the reason on the card - never parked as if it answered.
+_LATER = re.compile(r"\b(i'?ll|i will|let me|i'?m going to|i am going to|will)\b[^.!?\n]{0,60}?\b(review|look|go through|read|check|"
+                    r"get back|circle back|come back|follow up|revert|send (you )?(over )?(my|some) (thoughts|feedback|comments|notes)|"
+                    r"share (my |some )?(thoughts|feedback|comments))", re.I)
+_FILLER = re.compile(r"^(thanks|thank you|many thanks|appreciate (it|this|you)|got it|sounds good|great|noted)\b[^.!?\n]{0,60}[.!?]*$", re.I)
+_GREETING = re.compile(r'^(hi|hello|hey|dear|good (morning|afternoon|evening))\b[^\n]{0,40}$', re.I)
+SUBSTANCE = 400          # the sender's own words (or a readable file) long enough that there is something in front of the writer
+FEEDBACK_TOKENS = 700    # a few specific points need more room than a two-line answer
+PROMISE_ONLY = ('the draft only promised to look at it later, but what they sent is here to answer now - '
+                'Redraft (say what to tell them), or Send to agent')
+
+
+def promise_only(text: str, sig: str = '') -> bool:
+    """True when a reply says nothing but that it will look, review or get back later - greeting, thanks and signature aside."""
+    body = str(text or '').strip()
+    if sig and sig.strip() and body.endswith(sig.strip()): body = body[:-len(sig.strip())].rstrip()
+    body = strip_signoff(body) or body
+    lines = [l.strip() for l in body.splitlines() if l.strip()]
+    if lines and _GREETING.match(lines[0]): lines = lines[1:]
+    sents = [x.strip() for l in lines for x in re.split(r'(?<=[.!?])\s+', l) if x.strip()]
+    if not sents or sum(map(len, sents)) > 400: return False
+    return any(_LATER.search(x) for x in sents) and all(_LATER.search(x) or _FILLER.match(x) for x in sents)
 # the agent has already closed the thread: this reply reports an outcome, never promises one
 # the owner said what this reply says. Every caller that passes one passes THEIR words - the chase that wrote follow-ups is
 # gone - and framing them as a follow-up ("nudge in one or two sentences") under "why you are writing again" made "thanks,
@@ -336,6 +376,24 @@ def _ask(llm, system, user, max_tokens, images=None):
         except TypeError: pass
     return llm(system, user, max_tokens=max_tokens)
 
+AGAIN = ('\n\n--- YOUR FIRST DRAFT only promised to look at this later. What they sent is above: answer it now - your specific '
+         f'points on it - or, if you truly cannot judge it, write {NEEDS} and what is missing.')
+
+
+def _answer(llm, system, user, max_tokens, images=None, guard=False, sig=''):
+    """The writer's text, held to two rules: NEEDS (it cannot judge without something) fails the draft with what is missing, said
+    to the owner; and, under `guard`, a reply that only promises to look later is asked for once more, then failed (PROMISE_ONLY)."""
+    for again in (False, True):
+        out = (_ask(llm, system, user + (AGAIN if again else ''), max_tokens, images) or '').strip()
+        if not out: raise RuntimeError('the AI returned an empty reply')
+        if out.upper().startswith(NEEDS):
+            why = ' '.join(out[len(NEEDS):].split())[:240] or 'something it does not have'
+            raise RuntimeError(f'not drafted - it needs {why.rstrip(".")}. Redraft with it, or Send to agent')
+        if not (guard and promise_only(out, sig)): return out
+        logger.info('the draft only promised to look later' + (' again - failing it' if again else ' - asking once more'))
+    raise RuntimeError(PROMISE_ONLY)
+
+
 def _to_cc(store, m: dict) -> str:
     """The message's To and Cc lines BY NAME, the owner marked "you", and which line the owner is on - who a question was put
     to is the writer's to see (2026-10-22). They went in as raw addresses: a name is what "Erin, can you..." is read against,
@@ -398,7 +456,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     # request. DONE supplies its own completeness/shape rules, so do not put BREVITY in conflict.
     length_rule = '' if resolution else BREVITY
     system = (SYSTEM.format(owner=owner) + signature_line(store) + length_rule + (CHAT if chat else email_rule(store, box)) + '\n'
-              + (OWNER_SAYS if nudge else DONE if resolution else NOT_YET)
+              + (OWNER_SAYS if nudge else DONE if resolution else NOT_YET + FEEDBACK)
               # every block below describes YOU. They are written in the third person because
               # the same documents serve agents working FOR the owner - said once, here, so the
               # model does not read its own biography as notes about somebody else.
@@ -409,13 +467,13 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
                  f'this:\n{sty[:2500]}' if sty else ''))
     # LEARNED.md is triage's document (PW-058): what deserves a task is not how to write a reply
     system += voice_line(store, [last.get('FromEmail')])
-    from .triage import sender_body
+    from .triage import sender_body, EXCHANGE_BUDGET
     # the writer reads the same assembled conversation triage reads (PW-054): the whole chain, history
     # included, cleaned and de-quoted under one budget, with the cut said out loud - not the last six
     # messages chopped at 4,000 characters each and nothing said about the rest
     from .ingest import exchange_lines
     lines = exchange_lines(store, {'conversation_id': last.get('ConversationId'), 'subject': last.get('Subject'), 'sent_at': None})
-    thread = '\n\n'.join(lines) if lines else f"--- {last.get('FromName') or last.get('FromEmail')} · {last.get('SentAt')} · {last.get('Channel')}\n{sender_body(str(last.get('BodyText') or ''), last.get('OwnText'), budget=4000)[0]}"
+    thread = '\n\n'.join(lines) if lines else f"--- {last.get('FromName') or last.get('FromEmail')} · {last.get('SentAt')} · {last.get('Channel')}\n{sender_body(str(last.get('BodyText') or ''), last.get('OwnText'), budget=EXCHANGE_BUDGET)[0]}"
     # WHAT THE MODEL READ, stamped where it was read. Taken by the caller before this function was
     # entered, it named the thread as it stood while the job was still QUEUED - so a line that landed
     # in the seconds before the writer ran, and that the writer then answered, counted as unseen and
@@ -435,8 +493,10 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     images = readable_images(store, [m['MessageId'] for m in reversed(msgs)])
     if images: user += (f'\n\n--- THE PICTURES THEY SENT on this thread ({len(images)}, newest first) are attached: look at them, '
                         'answer about what they show, and never ask for one they already sent.')
-    user += files_block(store, [m['MessageId'] for m in reversed(msgs)])
-    user += triage_read(store, next((m for m in reversed(msgs) if m.get('Direction') != 'out'), last))
+    files = files_block(store, [m['MessageId'] for m in reversed(msgs)])
+    user += files
+    asked = next((m for m in reversed(msgs) if m.get('Direction') != 'out'), last)
+    user += triage_read(store, asked)
     if resolution: user += f'\n\n--- WHAT WAS DONE (your source of truth; the sender has not seen it)\n{resolution}'
     user += replies_block(store, task_id)
     if nudge: user += f'\n\n--- WHAT THE OWNER WANTS THIS REPLY TO SAY (it outranks everything above)\n{nudge}'
@@ -447,8 +507,9 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     if calendar:   # said on the task, so the Review row can be trusted on what the draft knew
         store.add_comment(task_id, 'responder', 'agent', 'Checked your calendar before drafting'
                           + (' - it could not be read, so the draft does not promise a time.' if 'COULD NOT READ' in calendar else '.'))
-    out = (_ask(llm, system, user, COMPLETE_REPLY_TOKENS if resolution else REPLY_TOKENS, images) or '').strip()
-    if not out: raise RuntimeError('the AI returned an empty reply')
+    has = bool(files) or len(sender_body(str(asked.get('BodyText') or ''), asked.get('OwnText'))[0]) >= SUBSTANCE
+    out = _answer(llm, system, user, COMPLETE_REPLY_TOKENS if resolution else FEEDBACK_TOKENS if has else REPLY_TOKENS, images,
+                  guard=has and not nudge and not resolution, sig=signature_for(store, box))
     # THE WRITER SAID NOTHING GOES BACK - with its NO_REPLY token, and only that. A sign-off word list used to decide that
     # "Thanks,\nAlex" was nothing and put the draft down, when a thank-you can be the whole real reply (the owner,
     # 2026-10-11: "everything should be ai"). A reply the owner asked for (nudge) is theirs to want: never dropped, it fails.
@@ -559,14 +620,14 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     """A reply for a message with NO task behind it - chatter that just deserves an answer.
     Same voice, same rules, same channel-awareness; the context is the message itself."""
     from .llm import build_llm
-    from .triage import sender_body
+    from .triage import sender_body, EXCHANGE_BUDGET
     llm = llm or build_llm(store, job='draft', task_id=m.get('TaskId'))
     if not llm: raise RuntimeError('no AI connector is set up to write replies')
     soul = store.doc('soul') or ''
     owner = owner_of(store, soul)
     chat = written_as_chat(m.get('Channel'))
     sty = style_doc(store)
-    system = (SYSTEM.format(owner=owner) + signature_line(store) + BREVITY + (CHAT if chat else email_rule(store, mailbox_in(m))) + '\n' + NOT_YET
+    system = (SYSTEM.format(owner=owner) + signature_line(store) + BREVITY + (CHAT if chat else email_rule(store, mailbox_in(m))) + '\n' + NOT_YET + FEEDBACK
               # every block below describes YOU. They are written in the third person because
               # the same documents serve agents working FOR the owner - said once, here, so the
               # model does not read its own biography as notes about somebody else.
@@ -577,7 +638,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
                  f'this:\n{sty[:2500]}' if sty else ''))
     system += voice_line(store, [m.get('FromEmail')])                # explicit writing instructions are STYLE.md's Owner notes (PW-060)
     user = (f"Subject: {m.get('Subject') or ''}\nFrom: {m.get('FromName')} <{m.get('FromEmail')}>\n\n"
-            f"{sender_body(str(m.get('BodyText') or ''), m.get('OwnText'), budget=4000)[0]}")
+            f"{sender_body(str(m.get('BodyText') or ''), m.get('OwnText'), budget=EXCHANGE_BUDGET)[0]}")
     from . import calendar as cal
     calendar = cal.context_for(store)
     from . import knowledge
@@ -589,9 +650,11 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     from .llm import readable_images
     images = readable_images(store, [m['MessageId']]) if m.get('MessageId') else []
     if images: user += f"\n\n--- The picture{'s' if len(images) > 1 else ''} they sent with it {'are' if len(images) > 1 else 'is'} attached: look at {'them' if len(images) > 1 else 'it'}."
-    if m.get('MessageId'): user += files_block(store, [m['MessageId']])
-    out = (_ask(llm, system, user, REPLY_TOKENS, images) or '').strip()
-    if not out: raise RuntimeError('the AI returned an empty reply')
+    files = files_block(store, [m['MessageId']]) if m.get('MessageId') else ''
+    user += files
+    has = bool(files) or len(sender_body(str(m.get('BodyText') or ''), m.get('OwnText'))[0]) >= SUBSTANCE
+    out = _answer(llm, system, user, FEEDBACK_TOKENS if has else REPLY_TOKENS, images, guard=has and not instruction,
+                  sig=signature_for(store, mailbox_in(m)))
     out = (strip_signoff(out) or out) if chat else signed(out, signature_for(store, mailbox_in(m)))
     if not chat and not store.review_envelope(review_id):
         from . import outbound as _ob

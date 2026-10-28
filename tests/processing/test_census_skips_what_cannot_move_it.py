@@ -20,8 +20,11 @@ def store(tmp_path):
 
 @pytest.fixture
 def censuses(monkeypatch):
+    "Census passes that answered: a dry pass that stopped at its first write is not one - the pass under the lock is."
     calls, real = [], pm.reconcile_membership
-    monkeypatch.setattr(pm, 'reconcile_membership', lambda *a, **k: calls.append(1) or real(*a, **k))
+    def counted(*a, **k):
+        r = real(*a, **k); calls.append(1); return r
+    monkeypatch.setattr(pm, 'reconcile_membership', counted)
     return calls
 
 
@@ -78,7 +81,7 @@ def test_a_conflicted_census_is_never_skipped(store, censuses):
 
 def test_every_column_the_census_reads_is_watched(store):
     """A column the census starts reading but CENSUS_INPUTS leaves out would let a real change skip it."""
-    src = inspect.getsource(pm.reconcile_membership)
+    src = inspect.getsource(pm.reconcile_membership) + inspect.getsource(pm.census_inputs)
     named = {a or b for a, b in re.findall(r"\['(\w+)'\]|get\('(\w+)'", src)}
     named -= set(pm.CENSUS_INPUTS['processing_item'])      # read off processing_item rows (Kind, CreatedAt), watched there
     keys = {'task': 'TaskId', 'message': 'MessageId', 'review': 'ReviewId', 'idea': 'IdeaId', 'attachment': 'AttachmentId', 'run': 'RunId'}

@@ -11,15 +11,29 @@ from . import vault
 # the same second after 20-150 s, and nothing said what they had waited on. The writer's lock now says it: a wait over
 # LOCK_SLOW_WAIT names the waiter and the holder's call site, a hold over LOCK_SLOW_HOLD names the holder, and a request reads
 # its own total wait (lock_wait_meter) for its log line. A free lock costs one non-blocking acquire and a short frame walk.
-LOCK_SLOW_WAIT, LOCK_SLOW_HOLD = 1.0, 2.0
+# ...and says it ONCE A MINUTE per call site (2026-10-28): a busy census put 6-8 waiters behind it every few seconds and the
+# console was nothing but these lines. A wait under 2 s is not news; the first one over it is logged, the rest of that minute
+# from the same site are counted and ride on the next line from it (LOCK_LOG_EVERY).
+LOCK_SLOW_WAIT, LOCK_SLOW_HOLD, LOCK_LOG_EVERY = 2.0, 2.0, 60.0
 _LOCK_WAITED = contextvars.ContextVar('taskuary_lock_waited', default=None)
-_HERE = __file__
+_HERE, _CTX = __file__, contextlib.__file__
+_LOGGED, _LOGGED_LOCK = {}, threading.Lock()   # (kind, site) -> [last logged at, waits since, seconds since, worst since]
 
 def _call_site() -> str:
-    "The first frame outside this file: who asked the store, not which store helper asked the lock."
+    "The first frame outside this file (and contextlib's, which a `with store.x():` puts between): who asked the store."
     f = sys._getframe(1)
-    while f is not None and f.f_code.co_filename == _HERE: f = f.f_back
+    while f is not None and f.f_code.co_filename in (_HERE, _CTX): f = f.f_back
     return f'{os.path.basename(f.f_code.co_filename)}:{f.f_lineno} {f.f_code.co_name}' if f else '?'
+
+def _throttled(kind, site, took, line):
+    "Log `line()` unless this site logged one within LOCK_LOG_EVERY; then it is counted, and the next line says how many."
+    now = time.monotonic()
+    with _LOGGED_LOCK:
+        e = _LOGGED.get((kind, site))
+        if e is not None and now - e[0] < LOCK_LOG_EVERY: e[1] += 1; e[2] += took; e[3] = max(e[3], took); return
+        _LOGGED[(kind, site)] = [now, 0, 0.0, 0.0]
+    more = f' (+{e[1]} more in the last {now - e[0]:.0f}s, {e[2]:.1f}s in all, worst {e[3]:.1f}s)' if e and e[1] else ''
+    logger.warning(line() + more)
 
 @contextlib.contextmanager
 def lock_wait_meter():
@@ -41,9 +55,9 @@ class _TimedLock:
         if (m := _LOCK_WAITED.get()) is not None: m[0] += waited
         if waited > LOCK_SLOW_WAIT:
             # one holder all along is one slow job; many hand-offs is a crowd of short ones (or one that keeps coming back)
-            logger.warning(f'store.lock: {threading.current_thread().name} at {_call_site()} waited {waited:.1f}s - '
-                           f'held by {who or "?"} at {site or "?"} for {max(0.0, t0 - since):.1f}s before the wait began, '
-                           f'{self._n - n} hand-off(s) during it')
+            me, hand = _call_site(), self._n - n
+            _throttled('wait', me, waited, lambda: f'store.lock: {threading.current_thread().name} at {me} waited {waited:.1f}s - '
+                       f'held by {who or "?"} at {site or "?"} for {max(0.0, t0 - since):.1f}s before the wait began, {hand} hand-off(s) during it')
         if got: self._took()
         return got
     def _took(self):
@@ -53,7 +67,7 @@ class _TimedLock:
         self._depth -= 1
         held, who, site = (time.perf_counter() - self._since if self._depth == 0 else 0.0), self._who, self._site
         self._l.release()
-        if held > LOCK_SLOW_HOLD: logger.warning(f'store.lock: held {held:.1f}s by {who} at {site}')
+        if held > LOCK_SLOW_HOLD: _throttled('hold', site, held, lambda: f'store.lock: held {held:.1f}s by {who} at {site}')
     def _is_owned(self): return self._l._is_owned()
     def __enter__(self): return self.acquire()
     def __exit__(self, *a): self.release()
@@ -63,7 +77,11 @@ class _TimedLock:
 # full scans of the message table at 0.3-0.5 s each, two minutes back to back on the writer's lock - queued every request's
 # every statement behind it. Inside reads_off_writer() a plain SELECT through _rows/_one runs on a pooled reader connection
 # (WAL: it sees every committed write) instead; writes, and reads inside a writer transaction, still use the writer.
-_OFF_WRITER = threading.local()
+# ...and now EVERY plain read does (2026-10-28): a setting, the connector list, the owner's name - read a few hundred times a
+# second by the pile, the doorways, the pollers - queued 1-3 s behind each membership census, 6-8 deep. A reader sees exactly
+# what is committed; only the thread that holds the writer's lock (its own open transaction) reads through the writer.
+_OFF_WRITER, _ON_WRITER = threading.local(), threading.local()
+READERS_KEPT = 16      # reader connections kept open for reuse: a request pool's worth of threads reading at once
 
 _LIVE_UNSET = object()
 _POLL_UNSET = object()
@@ -959,6 +977,7 @@ class SQLiteStore:
         self._snap_hold = 0
         self._snap_cache = None
         self._processing_display_cache = {}
+        self._states_cache = None     # funnel_states(): (DirtyGeneration, newest dirty row) -> the rows read at that mark
         self._processing_ignored_writes = 0
         self._writes = 0
         with self.lock:
@@ -1786,9 +1805,19 @@ class SQLiteStore:
         was = getattr(_OFF_WRITER, 'on', False); _OFF_WRITER.on = True
         try: yield
         finally: _OFF_WRITER.on = was
+    @contextlib.contextmanager
+    def _writer_reads(self):
+        "This thread's _processing_read() stays on the writer connection until the block ends. Re-entrant."
+        was = getattr(_ON_WRITER, 'on', False); _ON_WRITER.on = True
+        try: yield
+        finally: _ON_WRITER.on = was
+    def _off_writer(self) -> bool:
+        """May this thread read on a reader connection? Not on a memory database (there is no second one), not from inside
+        the writer's lock (its own open transaction must be read back), and not while a transaction sits open on the writer
+        with nobody holding the lock - a failed write left it (see _undone) and the writer is where it can be seen."""
+        return self._rail_cx is not None and not self.lock._is_owned() and not (self.cx.in_transaction and not self.lock._depth)
     def _rows(self, q, p=()):
-        if (getattr(_OFF_WRITER, 'on', False) and self._rail_cx is not None and q.lstrip()[:6].upper() == 'SELECT'
-                and not self.lock._is_owned()):
+        if q.lstrip()[:6].upper() == 'SELECT' and self._off_writer():
             with self._snapshot_read() as cur: return [dict(r) for r in cur.execute(q, p).fetchall()]
         with self.lock: return [dict(r) for r in self.cx.execute(q, p).fetchall()]
     def _one(self, q, p=()):
@@ -2841,7 +2870,16 @@ class SQLiteStore:
         if ids: self._exec(f"UPDATE idea SET MessageId=? WHERE IdeaId IN ({','.join('?' * len(ids))})", [mid, *ids])
     # ── the pipe (funnel.py): surfaced / done / later, per item key ─────────────────────────
     def funnel_states(self) -> dict:
-        return {r['Key']: r for r in self._rows('SELECT * FROM funnel_state')}
+        """Every funnel_state row by key. One pile build asks three times (the cards, the order, the alerts): ~4k rows each,
+        read again only once something was written - every funnel_state write, in any process, moves DirtyGeneration and
+        leaves a dirty row (its triggers), so the pair read in the same snapshot as the rows says whether they still hold."""
+        if not self._off_writer(): return {r['Key']: r for r in self._rows('SELECT * FROM funnel_state')}
+        with self._snapshot_read() as cur:
+            mark = tuple(cur.execute('SELECT (SELECT DirtyGeneration FROM processing_reconcile_state WHERE Singleton=1), '
+                                     '(SELECT COALESCE(MAX(Id),0) FROM processing_dirty_row)').fetchone())
+            got = self._states_cache
+            if got is None or got[0] != mark: got = self._states_cache = (mark, {r['Key']: dict(r) for r in cur.execute('SELECT * FROM funnel_state')})
+        return {k: dict(v) for k, v in got[1].items()}
     def _units_shown(self, key, iid, picture, shown):
         """What the card pressed on SHOWED (processing_reads.drawn): the revision the press carried, else the card last
         drawn - never what landed after it was drawn. A card never drawn here is the item as it stands."""
@@ -3108,6 +3146,28 @@ class SQLiteStore:
         with self._processing_read() as cur:
             return self._processing_reconcile_status_cursor(cur)
 
+    def processing_census_due(self):
+        """The MembershipGeneration a census would read, when the next reconcile would run one (something it reads was
+        written since the last clean census) - else None, and the next reconcile only advances the generations."""
+        with self._processing_read() as cur:
+            r = cur.execute('SELECT * FROM processing_reconcile_state WHERE Singleton=1').fetchone()
+            due = r['DirtyGeneration'] != r['AttemptedGeneration'] and r['MembershipGeneration'] != r['CensusGeneration']
+            return r['MembershipGeneration'] if due else None
+
+    def _census_off_writer(self, stamp):
+        """THE CENSUS READS WITH NOBODY WAITING (2026-10-28): ~1 s of reading and grouping on a real mailbox, 3-14 s under load,
+        all of it inside BEGIN IMMEDIATE on the writer's lock - every few seconds, with 6-8 requests queued behind it. Its
+        inputs are read here on a reader snapshot and grouped outside any lock; the writer's turn then only checks that
+        MembershipGeneration has not moved (nothing it read was written since) and applies what is left: nothing at all
+        when the census changes no member, which is most of them. None when there is no census to run or no reader."""
+        from .processing_membership import census_current, census_inputs, dry_census
+        if not self._off_writer(): return None
+        with self._snapshot_read() as cur:
+            st = self._processing_reconcile_status_cursor(cur)
+            if st['dirty_generation'] == st['reconciled_generation'] or census_current(cur): return None
+            inputs = census_inputs(cur)
+        return {'inputs': inputs, 'result': dry_census(inputs, stamp=stamp)}
+
     def reconcile_processing_membership(self, *, fixed_now=None):
         """Reconcile exact raw entity relationships in one uncapped write transaction.
 
@@ -3118,6 +3178,7 @@ class SQLiteStore:
         if not isinstance(stamp, str) or not stamp:
             raise ValueError('fixed_now must be a non-empty string')
         from .processing_membership import reconcile_membership, census_current, mark_census
+        pre = self._census_off_writer(stamp)
         with self.lock:
             self._clear_stale(); cur = self.cx.cursor()
             cur.execute('BEGIN IMMEDIATE')
@@ -3138,9 +3199,12 @@ class SQLiteStore:
                                                'created_aliases', 'created_relations', 'retired_relations'), 0),
                               'conflicts': before['conflicts'], 'diagnostics': before['diagnostics']}
                 else:
-                    result = reconcile_membership(
+                    # the census read outside is this one's if nothing it read has been written since (CENSUS_INPUTS)
+                    gen = cur.execute('SELECT MembershipGeneration FROM processing_reconcile_state WHERE Singleton=1').fetchone()[0]
+                    fresh = pre is not None and pre['inputs']['generation'] == gen
+                    result = (pre['result'] if fresh and pre['result'] is not None else reconcile_membership(
                         cur, stamp=stamp, new_item_id=self._processing_item_id,
-                        follow_item=self._processing_follow)
+                        follow_item=self._processing_follow, inputs=pre['inputs'] if fresh else None))
                     mark_census(cur, not result['conflicts'])
                 dirty = before['dirty_generation']
                 complete = not result['conflicts']
@@ -3295,7 +3359,12 @@ class SQLiteStore:
 
     @contextlib.contextmanager
     def _processing_read(self):
-        """Hold one SQLite snapshot across related reads, including external merges."""
+        """Hold one SQLite snapshot across related reads, including external merges - on a reader connection (_off_writer),
+        which is the same snapshot without the writer's lock. Inside _writer_reads(): on the writer, for a read whose answer
+        is compared with that connection's own counters (total_changes, data_version), which only its snapshot can answer."""
+        if not getattr(_ON_WRITER, 'on', False) and self._off_writer():
+            with self._snapshot_read() as cur: yield cur
+            return
         with self.lock:
             self._clear_stale(); cur = self.cx.cursor()
             cur.execute('BEGIN')
@@ -3514,7 +3583,7 @@ class SQLiteStore:
         # afterwards, so a changing terminal tail re-hashes its one owned item instead of issuing
         # the queries for every item in the Timeline again.
         projection_live = ([] if frozen_live is not None else None) if display_only else frozen_live
-        with self._processing_read() as cur:
+        with self._writer_reads(), self._processing_read() as cur:
             cache_key = None
             if not display_only and not include_history:
                 cache_key = (self.cx.total_changes,
@@ -3618,7 +3687,7 @@ class SQLiteStore:
         other request free to run. Read only: what it yields must never write. A memory database has no second
         connection to open, and reads under the writer's lock as before (_processing_read)."""
         if self._rail_cx is None:
-            with self._processing_read() as cur: yield cur
+            with self._writer_reads(), self._processing_read() as cur: yield cur
             return
         with self._readers_lock:
             if self._closed: raise sqlite3.ProgrammingError('Cannot operate on a closed database.')
@@ -3636,7 +3705,7 @@ class SQLiteStore:
             try: cur.close(); cx.rollback(); keep = True
             except sqlite3.Error: keep = False
             with self._readers_lock:
-                if keep and not self._closed and len(self._readers) < 4: self._readers.append(cx); cx = None
+                if keep and not self._closed and len(self._readers) < READERS_KEPT: self._readers.append(cx); cx = None
             if cx is not None: cx.close()
 
     def rail_top(self):

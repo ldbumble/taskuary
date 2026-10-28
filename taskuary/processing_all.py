@@ -506,17 +506,41 @@ def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=Fa
 
 
 
+# AT MOST ONE CENSUS PER CENSUS_EVERY WHILE MAIL IS LANDING (2026-10-28): every census-input write - a message filed, then triaged,
+# then put on its task - asked for a census of its own, ~1 s each on a real mailbox, back to back. A write that no census reads
+# still settles on the next tick. A census waits for its inputs to hold still for one tick (a census read while they move is
+# read again under the lock - store._census_off_writer) and for CENSUS_EVERY since the last one began, and never longer than
+# CENSUS_EVERY after it was first due: a burst is counted once, and a new message still reaches the rail within ~2 s.
+# ...and it is OFF (0) by default, measured: every pile read waits for the census to settle (wait_settled), so holding the
+# census back held the pile back with it - p50 0.6 s with no wait, 1.1 s at 1 s, 1.5 s at 2 s, on a copy of a real store with
+# mail landing every 3 s. With the census read off the writer (store._census_off_writer) a back-to-back census costs CPU, not
+# the lock: 2 s of writer lock in 30 s with no wait, against 9-15 s before. Set it when nothing reads the rail while mail lands.
+CENSUS_EVERY = 0.0
+
+
 class MembershipWorker:
     """One explicitly owned reconciliation loop; external SQL writes also wake All."""
-    def __init__(self, store, *, interval=0.25, notify=None):
+    def __init__(self, store, *, interval=0.25, notify=None, census_every=None):
         self.store, self.interval, self.notify = store, interval, notify
+        self.census_every = CENSUS_EVERY if census_every is None else census_every
         self.stop = threading.Event()
         self.thread = None
+        self.census_at = None       # monotonic: when the last census began
+        self.due_since, self.due_gen = None, None   # since when one has been due, and the generation it saw last tick
 
     def reconcile(self):
         state = self.store.processing_reconcile_status()
         if state['dirty_generation'] <= state['attempted_generation']:
             return
+        due = getattr(self.store, 'processing_census_due', None) if self.census_every else None
+        gen = due() if due is not None else None
+        if gen is not None:
+            now = time.monotonic()
+            if self.due_since is None: self.due_since = now
+            moving, self.due_gen = gen != self.due_gen, gen
+            soon = self.census_at is not None and now - self.census_at < self.census_every
+            if (soon or moving) and now - self.due_since < self.census_every: return
+            self.census_at, self.due_since = now, None
         result = self.store.reconcile_processing_membership()
         if self.notify:
             self.notify(result)

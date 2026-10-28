@@ -269,12 +269,29 @@ def state(store, item: dict, verbs: list) -> tuple:
             return 'duplicate', {'ref': task_ref(keep)}
         # LATE FOR THIS PERSON, BY THE OWNER'S OWN USUAL (the owner, 2026-10-25: "Reply: you usually answer Erin within the hour; this is
         # 3h") - one line, the reason beside the lit Reply, counted from the answers it cites (usual.late_reply)
+        # THE OWNER ALREADY ANSWERED (trust audit A3, 2026-10-28): their own reply went after the sender's newest message, so nobody is
+        # waiting - Mark done, as the model's prompt says ("someone is waiting only when they wrote again after it"); Reply lit there
+        # offered to say twice what was said
+        if answered(store, it, ins[-1]): return 'answered', {}
         from . import usual
         if (late := usual.late_reply(store, ins[-1])):
             return 'asked_late', {'who': late['who'], 'usual': late['usual'], 'age': late['age'], EV: late['evidence']}
         return 'asked', {'who': _name(ins[-1]), 'ago': ago(ins[-1].get('SentAt') or ins[-1].get('CreatedAt'))}
     if t and (cl := advisor._checklist(t)) and all(c.get('done') for c in cl): return 'done_list', {}
     return 'own', {}
+
+
+def answered(store, item: dict, last_in: dict) -> bool:
+    """Whether the owner's own reply - one sent from here (its review) or typed anywhere (an outgoing message) - went after `last_in`."""
+    from . import advisor
+    tid, mid = item.get('tid'), item.get('mid')
+    try: r = store.sent_reply(task_id=int(tid)) if tid else store.sent_reply(message_id=int(mid)) if mid else None
+    except Exception: r = None
+    try: outs = [m for m in advisor._msgs(store, item, 'task' if tid else 'message', tid or mid) if str(m.get('Direction') or 'in') == 'out']
+    except Exception: outs = []
+    last = _dt(last_in.get('SentAt') or last_in.get('CreatedAt'))
+    ats = [_dt((r or {}).get('DecidedAt') or (r or {}).get('CreatedAt'))] + [_dt(m.get('SentAt') or m.get('CreatedAt')) for m in outs]
+    return bool(last) and any(a and a > last for a in ats)
 
 
 def slipped(store, item: dict, t: dict) -> tuple:

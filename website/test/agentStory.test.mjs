@@ -65,7 +65,7 @@ test("the step draws the story once: never beside the record, and its last messa
   const read = (n) => readFileSync(fileURLToPath(new URL(`../src/${n}`, import.meta.url)), "utf8");
   const page = read("TaskPage.jsx"), story = read("AgentStory.jsx");
   assert.match(page, /\(storyAt === "line" \|\| storyAt === "story"\) && <AgentStory /);
-  assert.match(page, /storyAt === "summary" && <AgentRecord \{\.\.\.recordProps\} story=\{story\} folded \/>/);
+  assert.match(page, /storyAt === "summary" && !resultShown && <AgentRecord \{\.\.\.recordProps\} story=\{story\} folded \/>/);
   assert.match(page, /<AgentRecord \{\.\.\.recordProps\} story=\{storyAt === "record" \? story : null\}/);
   assert.doesNotMatch(story.slice(story.indexOf("export default")), /PANEL2|bgcolor/, "no tinted bubble");
   assert.equal(story.match(/setMore\(/g).length, 1, "the timeline is behind one More");

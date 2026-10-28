@@ -92,7 +92,7 @@ import { completionFact, completionLine, waitingEmails, wentOut,
   AGENT, agentPhase, closedLine, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, reopenedDetail, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
-import { AgentRecord } from "./AgentRecord.jsx";
+import { AgentRecord, ResultSummary } from "./AgentRecord.jsx";
 import { diffStat } from "./agentRecord.js";
 import AgentStory, { StoryChip } from "./AgentStory.jsx";
 import { STORY_CHIP, startLabel, storyPlace, storyShown } from "./agentStory.js";
@@ -507,6 +507,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const sessionSettleUntil = useRef(0);
   const [diffOpen, setDiffOpen] = useState(false);   // the pre-push review, in its own drawer
   const [diffShown, setDiffShown] = useState(false);   // a Result's own diff, unfolded under What it made
+  const [resultOpen, setResultOpen] = useState(false);   // the Result unfolded past its summary, by a press on its heading
   useEffect(() => { setDiffShown(false); }, [selected]);
   // THE TASK BEHIND THE SESSION. A live session takes the whole task page, and with it went the
   // one thing the X was expected to reach: the task itself - what it is, where it came from, its
@@ -712,7 +713,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // a press on another task is that task's: back on it, a job still writing is read from the server's own word (detail.writeup)
     setWritingUpAt((w) => (w?.id === selected ? w : null));
     setOpeningReply(false);
-    setOpenStage(null);
+    setOpenStage(null); setResultOpen(false);
   }, [selected]);
 
   const [handoff, setHandoff] = useState(false);
@@ -1252,6 +1253,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // you now - the new message in From, the reply and Continue in the work - with the earlier session folded under Agent work
   // (the owner, 2026-10-22: "it opens up to result ... this is from earlier session ... we need to know what to do now")
   const resultShown = !term?.alive && hasRecord && !news && [AGENT.saved, AGENT.stopped, AGENT.finished].includes(agentState);
+  // ...but THE RESULT FOLDS TWICE (the owner, 2026-10-27: "just the summary - and then click Result to see more"): at rest, folded or open, it
+  // is its summary and what it made (ResultSummary); its heading unfolds the rest - the full message, the record, the replay - and folds it back
+  const resultRest = resultShown && !resultOpen;
   // ...and THE WORK TAKES THE WHOLE WIDTH once an agent has acted (the owner, 2026-10-22: "on a regular agent that is completed we should
   // also only show the agent result with the From expandable over the top"): working or waiting, finished with its Result, or failed
   // with its Try again - From folds to its one line over it. Two columns only where no agent ever ran (taskLayout.layoutOf).
@@ -1324,8 +1328,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   };
   // the one white section on the shaded body (taskLayout.focusOf); a live session has no shade and no focus - it is the page
   const list = !!(detail?.batch || t?.DoneWhen || (!t?.DoneWhen && todo.length));
-  const focus = focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, pane, waiting: !!waitFor, list });
-  const chatBelow = focus === "agent" && workspaceMode === "general" && pane === "agent" && !liveSession;   // its chat joins the focus under it
+  // ...and a draft, a proposal or emails waiting for Send are the next move: Close out is white, the Result shaded above it (2026-10-27)
+  const sendWaits = !!(pendingReview || proposals.length || emailsWaiting || owesEmails);
+  const focus = focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, pane, waiting: !!waitFor, list, owed: sendWaits });
+  const chatBelow = focus === "agent" && workspaceMode === "general" && pane === "agent" && !liveSession && !resultRest;   // its chat joins the focus under it
   // THE MAIN VIEW AND ITS DRAWERS (taskLayout.mainOf): Came from on the left where the work is the page, Agent and Close out on the right
   // where the task is; a phone's narrow body stays one stacked page. A move that changes where the task is up to shuts whichever was out
   const stacked = !sessionView && bodyW > 0 && bodyW < STACK_BELOW;
@@ -1334,7 +1340,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and a section OPENED BY HAND is not where the task is up to (2026-10-27, the overnight walk): Agent work clicked open over a draft
   // waiting for Send made the stage "to start", the page flipped to the task view and shut both drawers - the click hid the draft AND the
   // agent it asked for. The stage reads the pane the task would open on; the pick only opens its section in the view it is in
-  const restFocus = openStage ? focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, waiting: !!waitFor, list,
+  const restFocus = openStage ? focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, waiting: !!waitFor, list, owed: sendWaits,
     pane: waitFor ? "" : workPane({ stage: restStage, kind: t?.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas }) }) : focus;
   const taskStage = stageOf({ focus: restFocus, drafted: replyHas, closed: ["done", "dropped"].includes(t?.Status) });
   // ...and ONCE OPEN, THE PAGE STAYS WHERE IT IS (the owner, 2026-10-27, Close out swapped for the task on Send): the main view is read when
@@ -1354,7 +1360,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const pickRepo = () => { setRepoPick(true); if (heldRepo) setResumeAfterRepo({ dispatch: true }); };
   // only a folded heading is a control: exactly one stage is open, so clicking the open one has
   // nothing to do and must not offer a chevron that does nothing.
-  const stageProps = (name) => ({ folded: pane !== name, onToggle: pane === name ? null : () => setOpenStage(name) });
+  const stageProps = (name) => name === "agent" && resultShown
+    ? { folded: pane !== name || resultRest, onToggle: () => { if (pane !== name) { setOpenStage(name); setResultOpen(true); } else setResultOpen((v) => !v); } }
+    : { folded: pane !== name, onToggle: pane === name ? null : () => setOpenStage(name) };
   const startCodingAgent = async () => {
     const id = selected;
     if (!beginStart(id, "coding")) return;
@@ -1489,7 +1497,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     } finally { endStart(id); }
   };
   const continueWord = startingAgent === "resume" ? (failedRun ? "Trying again…" : "Continuing…") : failedRun ? btn("try_again") : labelOfRow("continue");
-  const continuePress = (e, a) => (failedRun ? tryAgain() : setContinueAt(steady(a || e?.currentTarget)));
+  // ...and Continue picks the agent's conversation back up, so the Result unfolds to it (it rests on its summary otherwise)
+  const continuePress = (e, a) => { setResultOpen(true); return failedRun ? tryAgain() : setContinueAt(steady(a || e?.currentTarget)); };
   // THE BAR THE AGENT CARD ACTS THROUGH, built here so it can ride inside the heading beside the
   // chip - where the Task and Reply strips keep theirs. Group one is THIS session, group two is
   // another one, and exactly one move is filled. It is an element, not a component: the handlers
@@ -2277,8 +2286,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* folded with no record, the step says its one sentence; open with none, the story is the whole account (storyPlace) */}
                   {(storyAt === "line" || storyAt === "story") && <AgentStory story={story} compact={storyAt === "line"} onTrust={trustPress} trusting={trusting} />}
                   {/* ...folded over a record, its sentence and what happened - the draft it wrote opens below it (2026-09-22) */}
-                  {storyAt === "summary" && <AgentRecord {...recordProps} story={story} folded />}
-                  {storyAt === "summary" && co.writeupAt === "result" && <WriteupLine view={writeup} />}
+                  {storyAt === "summary" && !resultShown && <AgentRecord {...recordProps} story={story} folded />}
+                  {resultRest && !sessionView && <ResultSummary taskId={selected} stamp={recordProps.stamp} said={story?.said || ""}
+                    pages={(detail?.artifacts || []).filter((a) => isPublished(a) || a.kind === "shown")} />}
+                  {(storyAt === "summary" || (resultRest && pane === "agent")) && co.writeupAt === "result" && <WriteupLine view={writeup} />}
                   {pane === "agent" && <>
                   {/* WHO CLOSED IT AND WHY, one plain line over its work (the owner, 2026-10-21: "I have no idea what the agent did
                       and why it closed"): the agent's own done sentence, else its report's first line (server taskstate.closed_why) */}
@@ -2330,7 +2341,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       two blocks (a saved answer with no report, or the report) reading two different stores. */}
                   {/* ...and a session that ENDED is this one block too - its state, what happened, More - where a "Session closed"
                       card under the step told the same run a second time, and the story above it a third (the owner, 2026-10-12) */}
-                  {!sessionView && hasRecord && (() => {
+                  {!sessionView && hasRecord && !resultRest && (() => {
                     // A RESULT'S DIFF IS FOLDED (the task-view cleanup, owner-approved 2026-10-25): "N files changed +a −b · Show diff" in What
                     // it made, so Close out stays on screen at a laptop - the raw diff pushed it under the dock. Once the card is 1200px wide
                     // the diff stands open beside the report instead, where the room is
@@ -2422,7 +2433,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     // ...except while its agent is starting and has said nothing: the room is that one line (GeneralWorkspace `quiet`)
                     "&:has([data-tq-starting])": { flex: "0 0 auto", minHeight: 0, "& > *": { flex: "0 0 auto" } } }
                     : { flex: "0 0 auto", mb: canvas ? 1 : 0, display: "flex", flexDirection: "column", "& > *": { flex: "0 0 auto" },
-                      ...(chatBelow ? { bgcolor: "#fff", border: `1px solid ${FOCUS_EDGE}`, borderTop: 0, borderRadius: "0 0 10px 10px", overflow: "hidden" } : {}) }}>
+                      ...(chatBelow ? { bgcolor: "#fff", border: `1px solid ${FOCUS_EDGE}`, borderTop: 0, borderRadius: "0 0 10px 10px", overflow: "hidden" } : {}),
+                      // ...a finished agent's chat is the rest of its Result, behind the Result heading while the Result rests on its summary
+                      // (the owner, 2026-10-27) - unless it holds a question the agent is waiting on you for, which is the move itself
+                      ...(resultRest ? { "&:not(:has([data-tq-asking]))": { display: "none" } } : {}) }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}

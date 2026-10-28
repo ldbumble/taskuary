@@ -54,7 +54,10 @@ s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The comparison is ready
 
   await page.evaluate((id) => { window.location.hash = `task=${id}`; }, made.taskId);
   const chip = '.tq-aui-agent [data-tq-output="vendor comparison.xlsx"]';
-  await page.waitForSelector(chip, { timeout: 20000 });
+  // the finished agent's Result rests on its summary and lists the workbook with its Open; its heading unfolds the chat (2026-10-27)
+  await page.waitForSelector('[data-tq-result-made] [data-tq-output="vendor comparison.xlsx"] [data-tq-open]', { timeout: 20000 });
+  await page.$eval('[data-tq-work] [data-tq-step="2"]', (dot) => dot.parentElement.click());
+  await page.waitForSelector(chip, { visible: true, timeout: 20000 });
 
   // the marker and the dead address are gone from the words; the file sits under them, once
   const answer = await page.$eval(".tq-aui-agent", (el) => ({ text: el.innerText, dead: el.querySelectorAll('a[href*="/outputs/"]').length,

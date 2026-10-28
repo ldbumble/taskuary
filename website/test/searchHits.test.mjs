@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { arrange, asks, filters, marks, terms, kindOf, nothingMatches, totalOf } from "../src/searchHits.js";
+import { arrange, asks, filters, marks, meta, personHits, terms, kindOf, nothingMatches, totalOf } from "../src/searchHits.js";
 import { readFileSync } from "node:fs";
 
 const hits = [
@@ -65,4 +65,16 @@ test("Enter opens what was typed: held until its own answer lands", () => {
   assert.match(f, /const settled = !!res && res\.q === q\.trim\(\) && !busy;/);
   assert.match(f, /if \(settled && res\.q === t\) pick\(shown\.flat\[at\]\);\s*else if \(asks\(t\)\) held\.current = t;/);
   assert.match(f, /disableRestoreFocus/);
+});
+
+// PEOPLE IN THE ONE BOX (the owner, 2026-10-28): the directory the To and Cc pickers search answers here too, under People, an address once
+test("the directory's people are a group of their own, after Tasks, each address once", () => {
+  const ps = personHits([{ to: "gmoreno@northwind.example", name: "Gail Moreno", company: "Northwind" }, { to: "GMoreno@northwind.example", name: "Gail" },
+    { to: "lortiz@dynamo.example", name: "", org: "Dynamo Freight" }, { name: "no address" }]);
+  assert.deepEqual(ps.map((h) => [h.title, h.to, h.company]), [["Gail Moreno", "gmoreno@northwind.example", "Northwind"], ["lortiz@dynamo.example", "lortiz@dynamo.example", "Dynamo Freight"]]);
+  assert.deepEqual(arrange([{ type: "email", id: "m1" }, ...ps, { type: "task", id: "t1" }]).groups.map((g) => g.group), ["Tasks", "People", "Email"]);
+  assert.deepEqual(meta(ps[1]), ["lortiz@dynamo.example", "Dynamo Freight"]);
+  assert.equal(kindOf(ps[0]).label, "Person");
+  const f = readFileSync(new URL("../src/SearchEverything.jsx", import.meta.url), "utf8");
+  assert.match(f, /api\.get\("\/api\/people\/search", \{ params: \{ q: t \} \}\)/, "the pickers' own search");
 });

@@ -383,6 +383,19 @@ export default function TaskHubPage() {
   // visible notification wait on that request made it appear at arbitrary times on a busy server.
   const [raisedQueue, setRaisedQueue] = useState([]);
   const raised = raisedQueue[0] || null;
+  // ...NOT OVER THE BOARD'S OWN CARD (the owner, 2026-10-28): "coding is waiting on you" popped up over the Board whose "agent waiting on
+  // you" column already held that card - said twice. A hand the Board shows is let go; one it does not show still pops
+  const [onBoard, setOnBoard] = useState(false);
+  useLayoutEffect(() => {
+    setOnBoard(false);
+    if (!raised || tab !== "Board" || typeof MutationObserver === "undefined") return undefined;
+    const card = `[data-tq-board-task="${Number(raised.tid)}"]`;
+    const f = () => { if (document.querySelector(card)) { setOnBoard(true); setRaisedQueue(dismissHandRaise); } };
+    f();
+    const mo = new MutationObserver(f);
+    mo.observe(document.body, { subtree: true, childList: true });
+    return () => mo.disconnect();
+  }, [raised, tab]);
   const tabRef = useRef(tab), selRef = useRef(null);
   const selectTask = useCallback((tid) => { setSelectedTask(tid); selRef.current = tid; }, []);
   const onRaise = useCallback((r) => {
@@ -531,7 +544,7 @@ export default function TaskHubPage() {
         {/* bottom-right, not under the top bar: up there it covered the row every tab keeps its
             actions on (the Board's buttons, a task's Mark done) for twelve seconds per hand raised */}
         {/* ...and not on the Assistant tab: the pipe and its by-the-way line already carry a raised hand */}
-        <Snackbar key={raised?.eventId || "no-hand-raised"} open={!!raised && tab !== "Assistant"} autoHideDuration={12000}
+        <Snackbar key={raised?.eventId || "no-hand-raised"} open={!!raised && tab !== "Assistant" && !onBoard} autoHideDuration={12000}
           onClose={() => setRaisedQueue(dismissHandRaise)}
           anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
           sx={{ mb: 8 }}

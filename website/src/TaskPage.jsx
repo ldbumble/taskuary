@@ -23,7 +23,7 @@ import { useFoldBar } from "./foldBar.js";
 import { SlotPicker } from "./CalendarPick.jsx";
 import { onPressed, onPressing, useVerbs } from "./actionRow.js";
 import { notePress, pagePress } from "./pressLog.js";
-import { choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
+import { VERBS, choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
 import { PRIORITIES, level } from "./priority.js";
 import BlockIcon from "@mui/icons-material/Block";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
@@ -271,6 +271,11 @@ const TAB_W = 156, MINI_W = 44;
 // ...which section a press belongs to, by its verb id (a draft's own are "<review>:<verb>", all Close out's)
 const VERB_SECTION = { close: new Set(["reply", "done", "close-note", "hand", "accept_invite", "decline_invite", "propose_time", "find_time"]),
   agent: new Set(["continue", "run-another", "send-general", "start-agent", "save-end", "diff", "fix", "strong-again"]) };
+// ...and the half a phone's stacked page opens on when the row's lit move is there (the owner, 2026-10-28: it opened on the Send to agent
+// form while Reply was lit). `m`: the lit pick's verb or a button's id. Only the reply's and the agent's own moves: Mark done is either's
+const REPLY_MOVES = new Set(["reply", "approve", "redraft", "copy", "accept_invite", "decline_invite", "propose_time", "find_time"]);
+const paneOfMove = (m) => { const k = String(m || ""), v = liveVerb(k), rows = VERBS[v]?.row || [k.split(":").pop()];
+  return k.includes(":") || REPLY_MOVES.has(v) ? "reply" : rows.some((r) => VERB_SECTION.agent.has(r)) ? "agent" : ""; };
 const MINI_TAB = (here) => ({ appearance: "none", font: "inherit", cursor: "pointer", position: "absolute", top: 0, left: 0, bottom: 0, width: MINI_W,
   border: 0, bgcolor: "#fff", color: INK, display: "flex", flexDirection: "column", alignItems: "center", gap: 1.25, py: 1.5, px: 0, boxSizing: "border-box",
   "& [data-tq-tab-arrow]": { width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0, fontSize: 15, lineHeight: 1,
@@ -512,7 +517,7 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
 
 export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, onReminded, onLeave, onStay, onOpenTask,
   onChanged, autostart, onAutostarted, active = true, openAct, onActOpened, canvas = false,
-  onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false, title = "", rail = null, note = null, saidDay = null }) {
+  onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false, title = "", rail = null, note = null, saidDay = null, litMove = "" }) {
   const caps = useCapabilities(), canCode = caps.coding;     // no coding tool connected: coding is not offered (capabilities.js)
   // ...drawn from the task's read held ahead of it (taskDetail.js) - a view on the table opens whole, not as an empty shell (G8)
   const [detail, setDetail] = useState(() => heldTask(selected));
@@ -1431,7 +1436,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         ...(k !== "from" ? { borderLeft: `1px solid ${FOCUS_EDGE}` } : {}) }}>
         {section !== k && tabFor(k)}{body}</Box>);
   // ...the open section draws its half of the work: the Agent its own, Close out the reply; Came from leaves the halves as they were
-  const pane = section === "agent" ? "agent" : section === "close" ? "reply" : paneRest;
+  const pane = section === "agent" ? "agent" : section === "close" ? "reply" : (stacked && !openStage && paneOfMove(litMove)) || paneRest;
   // ...and a reply owed with nothing drafted shows its empty box in Close out, Draft with AI under it (the three sections, 2026-10-27)
   // ...and only where nothing else waits there: a close-out to approve, a proposal, emails owed or a write-up under way have their own box
   const replyEmpty = threeUp && !!replyMessage && !pendingReview && !sentReview && !unsentReview && !ended && !liveSession && !closeoutRv && !allProposals.length
@@ -2843,7 +2848,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           queue mounts, so two surfaces cannot say different things about one draft. */}
                       {pendingReview ? (
                         <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
-                          onEmailInstead={() => setEmailOpen(true)}
+                          onEmailInstead={() => setEmailOpen(true)} why={threeUp ? warn?.line || "" : ""}
                           onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   /* the list's row moves too (T19) */
                       ) : (
                         <>

@@ -94,6 +94,12 @@ export const fromStatus = ({ channel = "", count = 0, msgs = [], workflow = null
 // ...the Agent: its profile and where it stands, what it did in a line, what it made - and at its foot its state and the Advisor's next move
 export const agentWord = ({ live = false, waiting = false, failed = false, stopped = false, result = false, record = false, codeRun = false } = {}) =>
   live ? (waiting ? "needs you" : "working") : failed ? "failed" : stopped ? "stopped" : result ? "finished" : record ? "ran" : codeRun ? "steps ran by code" : "not started";
+// ...what an AGENT REPORT says in a line: its Summary, else its first line of words - never the "AGENT REPORT" marker it opens with (the
+// state matrix, 2026-10-28: the Agent tab of a task whose sender wrote again read "general · ran / AGENT REPORT")
+export const reportLine = (body) => {
+  const ls = String(body || "").split("\n").map((l) => l.trim()).filter((l) => l && !/^(AGENT REPORT|LAST MESSAGE)$/i.test(l));
+  return (ls.find((l) => /^Summary:/i.test(l)) || ls[0] || "").replace(/^(Summary|Determination):\s*/i, "");
+};
 export const agentStatus = ({ profile = "", word = "not started", said = "", made = "", advisor = "" } = {}) => ({
   lines: [[profile, word].filter(Boolean).join(" · "), said, made ? `Made: ${made}` : ""].filter(Boolean),
   foot: [word === "finished" ? "✓ Done" : "", advisor ? `Advisor: ${advisor} is next` : ""].filter(Boolean).join(" · ") });

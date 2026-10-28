@@ -24,7 +24,7 @@ class ReplyOpensAtOnceTests(unittest.TestCase):
     def test_later_opens_the_box_without_the_model_and_says_a_draft_is_owed(self):
         with mock.patch.object(responder, 'write_draft', side_effect=AssertionError('the press never waits on the model')), \
              mock.patch.object(server, '_refresh_chat_context', side_effect=AssertionError('nor on the provider')):
-            r = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': True, 'later': True})
+            r = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': True, 'later': True, 'ai': True})
         self.assertEqual(r.status_code, 200, r.text)
         out = r.json()
         self.assertTrue(out['reviewId'])
@@ -32,7 +32,7 @@ class ReplyOpensAtOnceTests(unittest.TestCase):
         self.assertEqual(self.s.get_review(out['reviewId'])['Status'], 'pending')
 
     def test_the_draft_behind_it_carries_the_owners_words(self):
-        rid = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': True, 'later': True}).json()['reviewId']
+        rid = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': True, 'later': True, 'ai': True}).json()['reviewId']
         seen = {}
         def fake(store, tid, rid_, actor=None, nudge=None, **kw):
             seen['nudge'] = nudge
@@ -46,6 +46,23 @@ class ReplyOpensAtOnceTests(unittest.TestCase):
         with mock.patch.object(responder, 'write_draft', side_effect=fake), mock.patch.object(server, '_refresh_chat_context', return_value={}):
             self.assertEqual(self.c.post(f'/api/reviews/{rid}/draft').status_code, 200)
         self.assertIsNone(seen['nudge'])
+
+    def test_reply_on_a_task_no_agent_worked_opens_empty(self):
+        """The owner, 2026-10-28: "Without an agent run, Reply should just leave it open with no draft" - the drafter knows nothing
+        the owner does not. The box opens with its To line and no AI draft; Draft with AI (`ai`) still asks for one."""
+        with mock.patch.object(responder, 'write_draft', side_effect=AssertionError('no AI draft on a plain Reply')):
+            out = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': True, 'later': True}).json()
+            self.assertEqual((out['draft'], out['drafting']), ('', False))
+            self.assertEqual(self.s.get_review(out['reviewId'])['Status'], 'pending')
+            self.assertTrue(self.s.review_envelope(out['reviewId']))                        # To and Cc are filled
+            out2 = self.c.post(f'/api/messages/{self.mid}/reply', json={}).json()               # an old caller with no later
+            self.assertEqual((out2['reviewId'], out2['draft']), (out['reviewId'], ''))
+        self.assertTrue(self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': True, 'later': True, 'ai': True}).json()['drafting'])
+
+    def test_reply_after_an_agent_worked_still_drafts_from_that_work(self):
+        with mock.patch.object(server, '_agent_worked', return_value=True):
+            out = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': True, 'later': True}).json()
+        self.assertEqual((out['draft'], out['drafting']), ('', True))
 
     def test_a_box_that_already_has_its_draft_owes_none(self):
         rid = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': False}).json()['reviewId']

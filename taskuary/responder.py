@@ -88,17 +88,20 @@ def email_rule(store, mailbox: str = None) -> str:
     """The email line of the writer's prompt: never sign - the signature layer (signatures.py) adds the owner's own."""
     return EMAIL
 
-# This line used to say "the owner will turn it into a task", and the model answered in kind:
-# a sentence about what someone ELSE would have to do. Say it the way a person would.
-NOT_YET = ('If a request put to you cannot be answered by a reply alone - it needs work doing - say in one '
-           'line that you will pick it up, and stop. Not who will do it, not how, and never that '
-           'you are unable to. Work asked of someone else on the mail is not yours to pick up. Reading what they sent and '
-           'saying what you think of it is NOT such work - that is answered now (FEEDBACK).\n')
-
 # "Let me know your thoughts" over a whole pasted draft came back as "I'll review this and send you my thoughts" (2026-10-28): a
 # promise to read what the writer already had in front of it, because BREVITY said 60 words and NOT_YET said "say you will pick
-# it up". Reading is not work for later. NEEDS is the writer's way to say it cannot judge - to the owner, never to the sender.
+# it up". Reading is not work for later. NEEDS is the writer's way to say it cannot answer - to the owner, never to the sender.
 NEEDS = 'NEEDS:'
+# This line used to say "the owner will turn it into a task" (a sentence about what someone ELSE would do), then "say in one line that
+# you will pick it up" - and that is what came back: "I have to look into it and will send that separately" (the owner, 2026-10-28:
+# "don't draft AI slop answers 'I'm looking into it'. that's useless"). A reply that cannot answer is not written: NEEDS says what work
+# it needs, to the owner, and the task goes to an agent that does the work and drafts the real reply (ingest.hand_reply_to_agent).
+NOT_YET = ('A reply is worth sending only if it ANSWERS. When a request put to you cannot be answered substantively from what is in '
+           'front of you - it needs looking into, checking, working out, deciding or doing first - never write a placeholder that '
+           'promises to ("I\'m looking into it", "I\'ll get back to you", "will send that separately"): that is no answer and it is '
+           f'never sent. Write exactly {NEEDS} and one line, for the owner and not the sender, saying what work it needs - an agent '
+           'then does that work and drafts the real reply. Work asked of someone else on the mail is not yours. Reading what they '
+           'sent and saying what you think of it is NOT such work - that is answered now (FEEDBACK).\n')
 FEEDBACK = ('FEEDBACK: when they ask for your thoughts, feedback, a review or a yes on something IN the message - a draft they '
             'pasted, a plan, numbers, an attached file you can read below - you have it in front of you, so the reply IS your '
             'feedback. Give it now: a few specific points on THEIR content - what works, what to change or cut, anything unclear, '
@@ -109,29 +112,44 @@ FEEDBACK = ('FEEDBACK: when they ask for your thoughts, feedback, a review or a 
             f'{NEEDS} and one line, for your own eyes and not theirs, saying what is missing - nothing else.\n')
 
 # ...and said of the REPLY, never of the mail: what they asked is the model's to read (no hardcoded words for intent). A reply
-# that is nothing but a promise to look later, to a mail that carried something to look at, is drafted once more and then failed
-# with the reason on the card - never parked as if it answered.
+# that is mostly a promise to look later is drafted once more and then failed with the reason on the card - never parked as ready
+# to send, whatever the mail carried (the owner, 2026-10-28). Only the owner's own instruction may promise.
 _LATER = re.compile(r"\b(i'?ll|i will|let me|i'?m going to|i am going to|will)\b[^.!?\n]{0,60}?\b(review|look|go through|read|check|"
-                    r"get back|circle back|come back|follow up|revert|send (you )?(over )?(my|some) (thoughts|feedback|comments|notes)|"
-                    r"share (my |some )?(thoughts|feedback|comments))", re.I)
-_FILLER = re.compile(r"^(thanks|thank you|many thanks|appreciate (it|this|you)|got it|sounds good|great|noted)\b[^.!?\n]{0,60}[.!?]*$", re.I)
+                    r"get back|circle back|come back|follow up|revert|send (that |this |it )?separately|"
+                    r"send (you )?(over )?(my|some) (thoughts|feedback|comments|notes)|share (my |some )?(thoughts|feedback|comments))"
+                    r"|\b(i'?m|i am|we'?re|we are) (now |currently )?(looking|checking|reviewing|digging|working on)\b"
+                    r"|\b(i|we) (have|need) to (look|check|review|dig|go through|confirm)\b", re.I)
+_FILLER = re.compile(r"^(thanks|thank you|many thanks|appreciate (it|this|you)|got it|sounds good|great|noted|good (stuff|work)|nice( work)?|"
+                     r"(this|it) (looks|sounds|reads) (good|great|fine|helpful|interesting|like a (good|solid|great) start)|"
+                     r"let me know if|happy to help|hope (you|this|that|all))\b[^.!?\n]{0,60}[.!?]*$", re.I)
 _GREETING = re.compile(r'^(hi|hello|hey|dear|good (morning|afternoon|evening))\b[^\n]{0,40}$', re.I)
 SUBSTANCE = 400          # the sender's own words (or a readable file) long enough that there is something in front of the writer
 FEEDBACK_TOKENS = 700    # a few specific points need more room than a two-line answer
-PROMISE_ONLY = ('the draft only promised to look at it later, but what they sent is here to answer now - '
-                'Redraft (say what to tell them), or Send to agent')
+ASIDE = 60               # "mostly a promise": the one sentence beside it is no longer than this, and carries no figure
+PROMISE_ONLY = ('the draft only promised to look into it later - that is no answer, so it was not drafted. '
+                'An agent can work it out and draft the reply, or Redraft and say what to tell them')
+
+
+class NotDrafted(RuntimeError):
+    """The writer could not answer from what it had - it said what it NEEDS, or would only promise to look later. No draft exists;
+    the reason is the owner's, and a reply task is handed to an agent that does the work (ingest.hand_reply_to_agent)."""
 
 
 def promise_only(text: str, sig: str = '') -> bool:
-    """True when a reply says nothing but that it will look, review or get back later - greeting, thanks and signature aside."""
+    """True when a reply is MOSTLY a promise to look, review or get back later: greeting, thanks, a compliment and the signature aside,
+    and at most one short sentence beside it that says nothing checkable. A list or a figure is an answer."""
     body = str(text or '').strip()
     if sig and sig.strip() and body.endswith(sig.strip()): body = body[:-len(sig.strip())].rstrip()
     body = strip_signoff(body) or body
     lines = [l.strip() for l in body.splitlines() if l.strip()]
     if lines and _GREETING.match(lines[0]): lines = lines[1:]
+    if any(re.match(r'^([-*•]|\d+[.)])\s', l) for l in lines): return False
     sents = [x.strip() for l in lines for x in re.split(r'(?<=[.!?])\s+', l) if x.strip()]
     if not sents or sum(map(len, sents)) > 400: return False
-    return any(_LATER.search(x) for x in sents) and all(_LATER.search(x) or _FILLER.match(x) for x in sents)
+    later = [x for x in sents if _LATER.search(x)]
+    rest = [x for x in sents if not _LATER.search(x) and not _FILLER.match(x)]
+    return bool(later) and (not rest or (len(rest) == 1 and len(rest[0]) <= ASIDE and not re.search(r'\d', rest[0])
+                                         and len(rest[0]) < sum(map(len, later))))
 # the agent has already closed the thread: this reply reports an outcome, never promises one
 # the owner said what this reply says. Every caller that passes one passes THEIR words - the chase that wrote follow-ups is
 # gone - and framing them as a follow-up ("nudge in one or two sentences") under "why you are writing again" made "thanks,
@@ -381,22 +399,24 @@ def _ask(llm, system, user, max_tokens, images=None):
         except TypeError: pass
     return llm(system, user, max_tokens=max_tokens)
 
-AGAIN = ('\n\n--- YOUR FIRST DRAFT only promised to look at this later. What they sent is above: answer it now - your specific '
-         f'points on it - or, if you truly cannot judge it, write {NEEDS} and what is missing.')
+AGAIN = ('\n\n--- YOUR FIRST DRAFT only promised to look into this later - that is no answer and it is never sent. Answer it now from '
+         f'what is above - for something they sent, your specific points on it - or, if it truly needs work first, write {NEEDS} and '
+         'what work it needs.')
 
 
 def _answer(llm, system, user, max_tokens, images=None, guard=False, sig=''):
-    """The writer's text, held to two rules: NEEDS (it cannot judge without something) fails the draft with what is missing, said
-    to the owner; and, under `guard`, a reply that only promises to look later is asked for once more, then failed (PROMISE_ONLY)."""
+    """The writer's text, held to two rules: NEEDS (it cannot answer without work or something it lacks) fails the draft with what
+    is missing, said to the owner; and, under `guard`, a reply that is mostly a promise to look later is asked for once more, then
+    failed (PROMISE_ONLY). Both raise NotDrafted - no placeholder is ever parked as a draft."""
     for again in (False, True):
         out = (_ask(llm, system, user + (AGAIN if again else ''), max_tokens, images) or '').strip()
         if not out: raise RuntimeError('the AI returned an empty reply')
         if out.upper().startswith(NEEDS):
             why = ' '.join(out[len(NEEDS):].split())[:240] or 'something it does not have'
-            raise RuntimeError(f'not drafted - it needs {why.rstrip(".")}. Redraft with it, or Send to agent')
+            raise NotDrafted(f'not drafted - it needs {why.rstrip(".")}. An agent can work it out and draft the reply, or Redraft with it')
         if not (guard and promise_only(out, sig)): return out
         logger.info('the draft only promised to look later' + (' again - failing it' if again else ' - asking once more'))
-    raise RuntimeError(PROMISE_ONLY)
+    raise NotDrafted(PROMISE_ONLY)
 
 
 def _to_cc(store, m: dict) -> str:
@@ -514,7 +534,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
                           + (' - it could not be read, so the draft does not promise a time.' if 'COULD NOT READ' in calendar else '.'))
     has = bool(files) or len(sender_body(str(asked.get('BodyText') or ''), asked.get('OwnText'))[0]) >= SUBSTANCE
     out = _answer(llm, system, user, COMPLETE_REPLY_TOKENS if resolution else FEEDBACK_TOKENS if has else REPLY_TOKENS, images,
-                  guard=has and not nudge and not resolution, sig=signature_for(store, box))
+                  guard=not nudge, sig=signature_for(store, box))
     # THE WRITER SAID NOTHING GOES BACK - with its NO_REPLY token, and only that. A sign-off word list used to decide that
     # "Thanks,\nAlex" was nothing and put the draft down, when a thank-you can be the whole real reply (the owner,
     # 2026-10-11: "everything should be ai"). A reply the owner asked for (nudge) is theirs to want: never dropped, it fails.
@@ -658,7 +678,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     files = files_block(store, [m['MessageId']]) if m.get('MessageId') else ''
     user += files
     has = bool(files) or len(sender_body(str(m.get('BodyText') or ''), m.get('OwnText'))[0]) >= SUBSTANCE
-    out = _answer(llm, system, user, FEEDBACK_TOKENS if has else REPLY_TOKENS, images, guard=has and not instruction,
+    out = _answer(llm, system, user, FEEDBACK_TOKENS if has else REPLY_TOKENS, images, guard=not instruction,
                   sig=signature_for(store, mailbox_in(m)))
     out = (strip_signoff(out) or out) if chat else signed(out, signature_for(store, mailbox_in(m)))
     if not chat and not store.review_envelope(review_id):

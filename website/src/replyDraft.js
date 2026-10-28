@@ -23,8 +23,9 @@ export function draftBehind(api, rid, instruction = null) {
 
 // THE REPLY PRESS: the box at once, the draft behind it. Resolves with /reply's answer as soon as the review exists.
 // `cc`: the people the owner asked to loop in - the server copies the ones it knows and names the ones it does not
-export async function openReply(api, mid, instruction = null, cc = null) {
-  const { data } = await api.post(`/api/messages/${mid}/reply`, { draft: true, later: true, instruction, ...(cc?.length ? { cc } : {}) });
+// `ai`: Draft with AI was pressed - a plain Reply on a task no agent has worked opens the box empty (server._blank_reply, 2026-10-28)
+export async function openReply(api, mid, instruction = null, cc = null, ai = false) {
+  const { data } = await api.post(`/api/messages/${mid}/reply`, { draft: true, later: true, instruction, ...(cc?.length ? { cc } : {}), ...(ai ? { ai: true } : {}) });
   if (data?.reviewId && data.drafting) draftBehind(api, data.reviewId, instruction);
   return data;
 }

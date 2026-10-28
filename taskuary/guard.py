@@ -97,6 +97,7 @@ DENIED = (
     # credentials, and rewriting the documents that govern the agent
     (r'POST', r'^/api/tasks/\d+/(release|land|ci)$', 'releasing a held task or landing its work is the owner\'s decision'),
     (r'POST', r'^/api/tasks/\d+/dispatch/retry$', 'retrying a queued start is the owner\'s decision'),
+    (r'POST', r'^/api/tasks/\d+/offer$', 'accepting what triage offered an agent could do is the owner\'s press'),
     (r'DELETE', r'^/api/tasks/\d+/dispatch$', 'cancelling a queued start is the owner\'s decision'),
     (r'POST', r'^/api/(soul|learn|learned/mark)(/|$)', 'SOUL.md and LEARNED.md are the owner\'s word - propose, do not write'),
     (r'PUT|PATCH', r'^/api/(owner|whoami)$', 'who the owner is'),

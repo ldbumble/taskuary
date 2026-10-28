@@ -441,7 +441,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         <Button size="small" variant="contained" disableElevation disabled={busy || drafting} onClick={redraft} title={btnHint("redraft")}>
           {drafting ? "Drafting…" : redraftWord}</Button>
       </Box>}
-      <Box ref={draftRef}><DraftField value={value} onChange={(e) => setText(e.target.value)}
+      <Box ref={draftRef} data-tq-draft-box=""><DraftField value={value} onChange={(e) => setText(e.target.value)}
         placeholder={proposal?.kind === "closeout" ? proposal.placeholder : isCal ? "A note with your answer - or leave it empty" : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}
         inputProps={{ readOnly: busy || delivery.frozen || !!proposal?.readOnly, style: { fontSize: 12.5, lineHeight: 1.45 } }} /></Box>
       {compare?.reviewId === r.ReviewId && (

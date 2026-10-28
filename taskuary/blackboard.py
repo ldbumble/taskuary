@@ -470,7 +470,9 @@ def drain(store):
                     # a queued GENERAL task opens its assistant session, not a CLI (PW-069). Its failure is counted and
                     # re-armed inside; clearing the row here wrote "Started" over a launch that never happened (PW-073/085)
                     if not _start_general(store, q['TaskId']): continue
-                else: term.start_on_task(store, q['TaskId'], q.get('Agent') or '', actor='router')
+                else:
+                    from .ingest import reply_job       # a reply task's agent is told its job is the reply, queued or not
+                    term.start_on_task(store, q['TaskId'], q.get('Agent') or '', instruction=reply_job(store, q['TaskId']) or None, actor='router')
                 store.clear_dispatch(q['TaskId'])
                 store.add_comment(q['TaskId'], 'router', 'agent', 'Started - '
                                   + ('it was waiting behind ' + task_ref(b) + ' for likely overlap, which no longer holds work back.' if b

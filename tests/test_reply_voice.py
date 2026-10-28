@@ -91,7 +91,7 @@ class VoiceTests(unittest.TestCase):
         """The old line told the model "the owner will turn it into a task" - so it wrote a
         sentence about what somebody else would have to do."""
         self.assertNotIn('the owner will', responder.NOT_YET)
-        self.assertIn('you will pick it up', responder.NOT_YET)
+        self.assertIn(responder.NEEDS, responder.NOT_YET)            # ...and never a promise to pick it up (2026-10-28)
 
     def test_a_finished_job_is_reported_as_the_writers_own_work(self):
         self.assertIn('YOU did this', responder.DONE)

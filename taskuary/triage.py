@@ -149,6 +149,7 @@ LEVELS = ('regular', 'important', 'urgent')
 # how much thought the work takes and whether the reader could tell - a verdict apart from priority, read by the router (2026-10-25)
 DIFFICULTY, SURE, DATA = _bullet('difficulty'), _bullet('sure'), _bullet('data_class')
 REFINES = _bullet('refines')
+OFFER = _bullet('offer')         # what an agent could do for the owner about the main ask (2026-10-28)
 DATA_CLASSES = ('ordinary', 'sensitive')
 DIFFICULTIES = ('quick', 'standard', 'hard')
 
@@ -205,6 +206,9 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
          # the line still waits on the owner - a question or an ask put to them, not a thanks or a "sure" (the owner, 2026-10-25: a
          # colleague's question on a closed task's thread was kept on it, closed, and nearly missed). It is what reopens a closed task
          'asks_owner': {'type': ['boolean', 'null']},
+         # what an agent could do for the owner about the main ask, said to them in one sentence - the task's one-press offer
+         # (the owner, 2026-10-28: "I can register you for the webinar and put it on your calendar"; ingest.offer_of)
+         'offer': {'type': ['string', 'null']},
          # the message asks the owner to find a time to meet: how long and which days (its row's Find a time, calwrite.py)
          'meet': {'type': ['object', 'null'], 'additionalProperties': False, 'required': ['minutes', 'from', 'to'],
                   'properties': {'minutes': {'type': ['integer', 'null']}, 'from': {'type': ['string', 'null']}, 'to': {'type': ['string', 'null']}}},
@@ -737,6 +741,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if not shape and '"data_class"' not in base: system += '\n\n' + DATA                   # ...and what data it carries (2026-10-25)
             # ...and whether a joining line refines the task's own ask, wherever a task it may join was shown (2026-10-28)
             if not shape and 'refines' not in base and (home or same_ids or candidates is not None): system += '\n\n' + REFINES
+            if not shape and '**offer**' not in base: system += '\n\n' + OFFER        # ...and what an agent could do for them (2026-10-28)
             # the last thing asked for, after every block that says how to JUDGE: the output shape
             if shape: system += '\n\n' + TASK_FIELDS
             # ...and the shape goes on the WIRE as well, where the brain has one: a schema the
@@ -839,6 +844,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if isinstance(j.get('asks_owner'), bool): out['asks_owner'] = j['asks_owner']
                 if j.get('refines') is True and (home or same_ids or candidates is not None): out['refines'] = True
                 if j.get('data_class') in DATA_CLASSES: out['data_class'] = j['data_class']
+                offer = ' '.join(str(j.get('offer') or '').split())[:240]
+                if out['intent'] in ('task', 'reply_only') and offer and offer.lower() not in ('null', 'none'): out['offer'] = offer
                 return out
             parse_error = f"invalid intent {j.get('intent')!r}; expected task, reply_only, or fyi"
         except Exception as e:

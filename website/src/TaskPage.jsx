@@ -1178,10 +1178,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     setOpeningReply(generate ? "generate" : "write"); setErr("");
     try {
       // the box at once and the AI's draft behind it, "Drafting…" in the decision meanwhile (replyDraft.js, 2026-10-01)
-      await (generate ? draftReply(api, replyMessage.MessageId) : api.post(`/api/messages/${replyMessage.MessageId}/reply`, { draft: false }));
+      // ...and Reply on a task no agent has worked opens it EMPTY - only Draft with AI ("ai") asks for the AI's draft (2026-10-28)
+      const got = await (generate ? draftReply(api, replyMessage.MessageId, null, null, generate === "ai") : api.post(`/api/messages/${replyMessage.MessageId}/reply`, { draft: false }).then((r) => r.data));
       if (stale(id)) return;
       await loadDetail(id);
       onChanged?.();
+      // an empty box is for writing: the cursor goes in it, under the To line the reply already carries
+      if (!got?.drafting && !got?.draft) setTimeout(() => document.querySelector("[data-tq-draft-box] textarea")?.focus(), 0);
     } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not open the reply"); }
     if (!stale(id)) setOpeningReply(false);
   };
@@ -1776,6 +1779,25 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       if (!stale(id)) {
         const msg = e?.response?.data?.detail || "Could not start the agent - check that an AI is connected under Connections, then press it again.";
         setErr(msg); setStartFail({ ...failOf(e), text: msg, again: startGeneralAgent });
+      }
+    } finally { endStart(id); }
+  };
+  // TRIAGE'S OFFER, taken with one press (the owner, 2026-10-28: "I can register you for the webinar and put it on your calendar"):
+  // the general agent starts on it by the one dispatch door; anything that signs up or sends still waits for the owner's yes
+  const acceptOffer = async () => {
+    const id = selected;
+    if (!beginStart(id, "general")) return;
+    setErr(""); setStartFail(null);
+    try {
+      const { data } = await api.post(`/api/tasks/${id}/offer`, {});
+      const outcome = outcomeOf(data);
+      if (!stale(id)) setTerm(outcome.state === "started" || outcome.state === "existing" ? (data.session || null) : null);
+      await Promise.all([loadDetail(id), loadTasks()]);
+      onChanged?.();
+    } catch (e) {
+      if (!stale(id)) {
+        const msg = e?.response?.data?.detail || "Could not start the agent - check that an AI is connected under Connections, then press it again.";
+        setErr(msg); setStartFail({ ...failOf(e), text: msg, again: acceptOffer });
       }
     } finally { endStart(id); }
   };
@@ -2377,10 +2399,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {threeUp && fromCards()}
                       {flow && fromConversation()}
                       {/* THE ASK - one line of what is wanted; the whole summary is the tooltip when the line cut it */}
-                      {(askBand || waitFor) && <Part label="The ask" data-tq-ask="" data-tq-quoted={askQuoted ? "" : undefined}>
+                      {(askBand || waitFor || detail?.offer) && <Part label="The ask" data-tq-ask="" data-tq-quoted={askQuoted ? "" : undefined}>
                         {waitFor && <Typography data-tq-waiting-on="" sx={{ color: INK, fontSize: 13.5, fontWeight: 600, lineHeight: 1.45 }}>{waitFor.line}</Typography>}
                         {askBand && <Typography title={askText} sx={{ color: INK, fontSize: 14, lineHeight: 1.45, overflowWrap: "anywhere",
                           display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{askBand}</Typography>}
+                        {/* WHAT AN AGENT COULD DO about it, as triage offered it - one press starts it (ingest.offer_of) */}
+                        {detail?.offer && <Box data-tq-offer="" sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.5, flexWrap: "wrap" }}>
+                          <Typography sx={{ color: INK, fontSize: 13.5, lineHeight: 1.45, flex: "1 1 200px", overflowWrap: "anywhere" }}>{detail.offer}</Typography>
+                          <Button size="small" variant="outlined" onClick={acceptOffer} sx={{ textTransform: "none", flex: "0 0 auto" }}>Yes, do it</Button>
+                        </Box>}
                       </Part>}
                       {/* TO DO - the checklist triage drew from the ask (PW-075): boxes are progress on the list, never task completion -
                           closing the task stays the owner's separate decision. The WHOLE LINE is the target, not the 16px box: on a
@@ -2989,7 +3016,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1, flexWrap: "wrap" }}>
                                 <Button size="small" variant="contained" disableElevation disabled={!!openingReply} sx={primaryBtn} data-tq-draft-ai=""
                                   startIcon={openingReply === "generate" ? <CircularProgress size={12} color="inherit" /> : null}
-                                  title={btnHint("redraft")} onClick={() => openReply(true)}>{openingReply === "generate" ? "Drafting…" : btn("redraft", "none")}</Button>
+                                  title={btnHint("redraft")} onClick={() => openReply("ai")}>{openingReply === "generate" ? "Drafting…" : btn("redraft", "none")}</Button>
                                 <Typography variant="caption" sx={{ color: FAINT }}>Nothing is sent until you approve it.</Typography>
                               </Box>
                             </Box>

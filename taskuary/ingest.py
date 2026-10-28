@@ -927,6 +927,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         if remind.waiting(store.get_task(tid) or {}) and str(msg.get('from_email') or '').lower() not in mine:
             store.update_task(tid, {'RemindAt': ''}, actor)
             store.add_comment(tid, actor, 'agent', f"{msg.get('from_name') or msg.get('from_email') or 'They'} wrote again - brought back from {words.name('later')}.")
+        # NEW WORK goes to the task's agent first (_carry_on): a live one hears it as its next turn, a stopped one carries its
+        # conversation on where it would have started by itself, and a REPLY task whose new line needs an agent gets one
+        # (agent_on_reply) - which then drafts the reply itself, so the tool-less writer below is not asked for one too
+        went = _carry_on(store, tid, msg, mid, follow, actor)
         # a drafted reply on this task was written against the thread as it WAS (PW-051): mark it behind, and
         # when the fresh verdict says a reply is still owed, redraft that same review - never a second one
         behind = store.pending_review(tid, kind='draft')
@@ -939,8 +943,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             # the owner still approves it. An fyi never reaches here: it files and returns above.
             if follow and not follow.get('degraded') and not talking:
                 store.update_review_message(behind['ReviewId'], mid)
-                store.add_comment(tid, 'triage', 'agent', 'The thread moved - the drafted reply is behind it and is being rewritten from the latest context.')
-                _spawn(_auto_draft, store, tid, behind['ReviewId'])
+                if not msg.get('_reply_agent'):
+                    store.add_comment(tid, 'triage', 'agent', 'The thread moved - the drafted reply is behind it and is being rewritten from the latest context.')
+                    _spawn(_auto_draft, store, tid, behind['ReviewId'])
         if follow and follow.get('checklist'):
             # a later message that asks for something new adds boxes; nothing moves or unticks, and the
             # change is said on the task rather than made silently (PW-076)
@@ -959,10 +964,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # typed straight into the live session; 'ask' leaves the one-click offer in the
         # panel; 'off' does neither. A dead session just means False - nothing breaks. Only the task's own
         # person: anyone else on the thread is not the one it asked (B6, 2026-10-11).
-        # ...or of the person the agent said it was waiting on (waiton.py) - the same owner setting, never a start of its own
-        # NEW WORK goes to the task's agent first (_carry_on): a live one hears it as its next turn, a stopped one carries its
-        # conversation on where it would have started by itself - and a line it took is not typed in a second time here
-        if not _carry_on(store, tid, msg, mid, follow, actor) and (awaited or from_opener(store, tid, msg)): _hand_to_agent(store, cfg, tid, msg, actor)
+        # ...or of the person the agent said it was waiting on (waiton.py) - the same owner setting, never a start of its own.
+        # A line _carry_on already took (above) is not typed in a second time here
+        if not went and (awaited or from_opener(store, tid, msg)): _hand_to_agent(store, cfg, tid, msg, actor)
     else:
         # Nothing the owner said before decides here without a model. A ruling on THIS thread used
         # to (ingest.ruled_on_thread, until PW-020): every later reply on a dismissed email thread
@@ -1137,6 +1141,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             if intent.get('outputs'):                  # what closes it beyond the reply: emails to other people (slots.py)
                 from . import slots
                 slots.add(store, tid, intent['outputs'], 'triage', sender=_sender(msg))
+            # a person's ask put to the owner that an agent works ("here's my draft, let me know your thoughts") still ends in the
+            # reply to them: the agent is told so (reply_job) - its thoughts are the owner's Result, the reply is built from them
+            if f['kind'] == 'general' and intent.get('asks_owner') is True and intent.get('sender_class', 'person') == 'person':
+                store.tag_task(tid, REPLY_TAG, actor='triage')
             # the repository, decided here and written down, so startup uses it instead of guessing again
             # (PW-092); an owner's repo: tag and a GitHub item's own repository still outrank it (terminal.guess_repo)
             if intent.get('repository'):
@@ -1786,7 +1794,7 @@ def carry_on_why(store, tid, msg: dict, mid, follow: dict | None) -> str:
     elif t.get('Kind') == 'coding':
         if not (rs := _resumable_coding(store, tid))[0]: return rs[1]
         kind = 'coding'
-    else: return "not an agent's task"
+    else: return 'it is your own task, so no agent works it'
     ok, why = auto_start_ok(store, msg, mid, kind)
     return '' if ok else str(why)
 
@@ -1812,10 +1820,13 @@ def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bo
     on (carry_on_why). The turn is the owner's Continue without the press - the same session, told what came in since - and like
     every agent turn it sends nothing: a reply it writes waits for the owner's Send. True when the line went to an agent."""
     if live_agent(store, tid) in task_kinds.AGENT: return _pass_in(store, tid, msg, mid, follow, actor)
-    if carry_on_why(store, tid, msg, mid, follow): return False
+    if (store.get_task(tid) or {}).get('Kind') == 'reply': return agent_on_reply(store, tid, msg, mid, follow, actor)
+    if why := carry_on_why(store, tid, msg, mid, follow):
+        if why not in _QUIET_CARRY: not_started(store, tid, why)
+        return False
     from . import blackboard as bb, general
     if bb.live_count() >= (cap := auto_sessions(store)):
-        store.add_comment(tid, 'router', 'agent', f'Not carried on by itself: {cap} agents are already running - Continue picks it up.')
+        not_started(store, tid, f'{cap} agents are already running - Continue picks it up')
         return False
     coding = not general.handles(store.get_task(tid) or {})
     (CODING_OPENING if coding else general.OPENING).add(tid)
@@ -1824,6 +1835,116 @@ def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bo
     store.audit('task', tid, 'auto_continue', actor, 'agent', {'message_id': mid, 'kind': 'coding' if coding else 'general'})
     _spawn(_continue_coding if coding else _continue_general, store, tid)
     return True
+
+
+# WHY NO AGENT STARTED IS ALWAYS SAID (the owner, 2026-10-28: "yes" - "No agent started: auto-start is off in Settings"). carry_on_why
+# answered "not an agent's task" and wrote it nowhere, so a task that needed an agent sat looking as if nobody had got round to it.
+# Silent only where nothing was asked of an agent (no new work) or one is already on it (_pass_in says its own why).
+_QUIET_CARRY = ('not new work', 'an agent is live on it')
+NOT_STARTED = 'No agent started:'
+
+
+def not_started(store, tid, why) -> None:
+    """'No agent started: <why>' on the task's agent line - once: the same reason on the next line of the thread is not said again."""
+    line = f"{NOT_STARTED} {' '.join(str(why).split()).rstrip('.')}."
+    last = next((c for c in reversed(store.list_comments(tid)) if str(c.get('Body') or '').startswith(NOT_STARTED)), None)
+    if (last or {}).get('Body') != line: store.add_comment(tid, 'router', 'agent', line)
+
+
+# A REPLY THAT NEEDS AN AGENT GETS ONE (the owner, 2026-10-28: "if it needs an agent, even if joining a reply task, start an agent").
+# A reply task only ever ran the tool-less writer; a later mail on its thread that triage judged work for an agent joined it, its kind and
+# repository were dropped, and the writer drafted "I have to look into it and will send that separately". Now that line starts the agent
+# its verdict names, through the same auto-start check as a fresh task; the agent works out the answer and drafts the reply, which waits
+# in Close out for the owner's Send - nothing is sent. The kind moves to the agent's (the machinery that runs one reads it, as the owner's
+# own Send to agent does); REPLY_TAG remembers the job is still the reply, so every start - now, queued, or after a repository pick - is
+# told so (reply_job).
+REPLY_TAG = 'reply-owed'
+REPLY_JOB = ('THIS TASK IS A REPLY OWED to {who}, and it needs work before it can be answered{need}. Work out the answer - read, look '
+             'up, check or think it through - then write the reply they get, in the owner\'s voice, with the substance in it: never a '
+             'promise to look into it later. Nothing is sent: the reply waits for the owner\'s Send. When they asked for your thoughts '
+             'on something (a draft, a plan, numbers), your result for the owner is those thoughts - what works, what to change, the '
+             'specific points - and the reply is built from them.')
+
+
+def reply_job(store, tid) -> str:
+    """What an agent started on a reply task is told its job is - '' on any other task."""
+    if not store.task_has_tag(tid, REPLY_TAG): return ''
+    first = next((m for m in store.list_messages(tid) if not is_ours(m)), None) or {}
+    need = next((str(c['Body'])[len(DRAFTER_NEEDS):] for c in reversed(store.list_comments(tid))
+                 if c.get('Actor') == 'responder' and str(c.get('Body') or '').startswith(DRAFTER_NEEDS)), '')
+    return REPLY_JOB.format(who=first.get('FromName') or first.get('FromEmail') or 'the person who wrote',
+                            need=f' (the reply writer said it needs {need.rstrip(".")})' if need else '')
+
+
+DRAFTER_NEEDS = 'The reply writer could not answer it from what it had - it needs '
+NEEDS_SAID = 'not drafted - it needs '      # how responder._answer words a NEEDS failure
+
+
+def agent_on_reply(store, tid, msg: dict, mid, verdict: dict | None, actor: str) -> bool:
+    """Start the agent a `task` verdict names (general or coding) on a REPLY task, where it may start by itself (auto_start_ok);
+    else say why not on the task. True when one was set going."""
+    v = verdict or {}
+    kind = str(v.get('kind') or '').lower()
+    if v.get('degraded') or v.get('intent') != 'task' or kind not in task_kinds.AGENT: return False
+    if (store.get_task(tid) or {}).get('Status') == 'dropped': return False
+    if msg.get('no_auto'):
+        not_started(store, tid, f'items from {senders.channel_name(msg.get("channel")) or "this channel"} wait for you to start them'); return False
+    choose = kind == 'coding' and not v.get('repository') and v.get('needs_repo_choice')
+    if v.get('repository') and kind == 'coding': store.tag_task(tid, f"{TRIAGE_REPO_TAG}{v['repository']}", actor='triage')
+    ok, who = (True, '') if choose else auto_start_ok(store, msg, mid, kind)
+    if not ok:
+        if getattr(who, 'stranger', False): store.tag_task(tid, HOLD_TAG)
+        not_started(store, tid, who)
+        store.audit('task', tid, 'auto_code_held', actor, 'agent', {'from': msg.get('from_email'), 'why': str(who), 'reply': True})
+        return False
+    store.update_task(tid, {'Kind': kind}, 'triage')
+    store.tag_task(tid, REPLY_TAG, actor='triage')
+    if (store.get_task(tid) or {}).get('Status') in ('done', 'waiting'): store.update_task(tid, {'Status': 'open'}, 'triage')
+    store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s message needs {task_kinds.worker(kind)} before it can be answered: it "
+                      "works out the answer, then drafts the reply for your Send." + (f' Starting by itself: {who}' if who else ''))
+    store.audit('task', tid, 'reply_to_agent', actor, 'agent', {'message_id': mid, 'kind': kind, 'repository': v.get('repository')})
+    msg['_reply_agent'] = True
+    if choose:
+        store.tag_task(tid, NEEDS_REPO_TAG, actor='triage')
+        _spawn(_choose_then_start, store, tid, msg, mid)
+    else: _spawn(_auto_code if kind == 'coding' else _auto_general, store, tid)
+    return True
+
+
+def hand_reply_to_agent(store, tid, rid, why: str) -> bool:
+    """The reply writer could not answer (responder.NotDrafted: NEEDS, or only a promise): no draft, and a reply task goes to the
+    general agent to do the work and draft the real reply - by itself where it may, else the line says why it did not."""
+    t = store.get_task(tid) or {}
+    if t.get('Kind') != 'reply' or t.get('Status') in ('done', 'dropped'): return False
+    rv = store.get_review(rid) or {}
+    m = store.get_message(rv['MessageId']) if rv.get('MessageId') else None
+    if not m: return False
+    w = ' '.join(str(why).split())
+    need = (w[len(NEEDS_SAID):].split('. ')[0] if w.startswith(NEEDS_SAID)
+            else 'the work done first - its draft only promised to look into it later')
+    store.add_comment(tid, 'responder', 'agent', f"{DRAFTER_NEEDS}{need.rstrip('.')}.")
+    return agent_on_reply(store, tid, _from_row(m, store), m['MessageId'], {'intent': 'task', 'kind': 'general', 'why': why}, 'auto-draft')
+
+
+# WHAT AN AGENT COULD DO FOR THE OWNER (the owner, 2026-10-28): triage reads the main ask and may say, in one sentence to the owner, what
+# an agent could do about it - "I can register you for the webinar and put it on your calendar". The task shows it; one press starts the
+# general agent on it (server: /api/tasks/{id}/offer). Only on a task no agent works yet; a banter line on the thread offers nothing, so
+# the newest verdict that made an offer still speaks.
+OFFER_TAG = 'offer-taken'
+OFFER_JOB = ('The owner accepted your offer: "{offer}". Do that for them. Registering, signing up, booking, paying or submitting anything '
+             'outside Taskuary waits for the owner\'s yes - ask them before it, with what you would enter. Nothing is sent: a reply or a '
+             'message you write waits for their Send.')
+
+
+def offer_of(store, tid) -> str:
+    """The offer triage made on this task, '' when there is none, it was taken, or an agent already works the task."""
+    t = store.get_task(tid) or {}
+    if not t or t.get('Kind') in task_kinds.AGENT or t.get('Status') in ('done', 'dropped') or store.task_has_tag(tid, OFFER_TAG): return ''
+    for r in reversed(store.list_routes(tid)):
+        try: v = json.loads(r.get('VerdictJson') or 'null') or {}
+        except (TypeError, ValueError): continue
+        if isinstance(v, dict) and str(v.get('offer') or '').strip(): return ' '.join(str(v['offer']).split())[:240]
+    return ''
 
 
 # Only a line that WOULD have gone in says why it did not: the switch off, or no new work, is silence.
@@ -2375,7 +2496,7 @@ def _auto_code(store, tid):
         # told who else is here and what the model made of the overlap (terminal seed -> bb.briefing)
         cwd = bb.target_cwd(store, tid, agent)
         ps = bb.peers(store, cwd, exclude_tid=tid) if cwd else []
-        term.start_on_task(store, tid, agent, actor='router')
+        term.start_on_task(store, tid, agent, instruction=reply_job(store, tid) or None, actor='router')
         store.add_comment(tid, 'router', 'agent', 'The coding agent started by itself'
                           + (f' - told it about the {len(ps)} other agent(s) working in the same checkout.' if ps else '.'))
     except Exception as e:
@@ -2521,6 +2642,8 @@ def _start_general(store, tid, brief: str = None) -> bool:
                           + ('.' if fresh else ' - it carries on the conversation already open here.'))
         if fresh:
             ask = (brief or str(t.get('Summary') or '').strip() or str(t.get('Title') or '').strip())
+            job = reply_job(store, tid)                    # a reply task's agent: work it out, then draft the reply (agent_on_reply)
+            if job: ask = f'{job}\n\n{ask}'.strip()
             if ask: session.send_prompt(ask)
         return True
     except Exception as e:
@@ -2548,6 +2671,10 @@ def _auto_draft(store, tid, rid):
         logger.warning(f'auto-draft failed for task {tid}: {e}')
         try: store.set_review_draft_error(rid, str(e)[:300])
         except Exception as e2: logger.warning(f'could not record the draft failure on review {rid}: {e2}')
+        # ...and a reply it could not ANSWER is work: the general agent does it and drafts the real reply (the owner, 2026-10-28)
+        if isinstance(e, responder.NotDrafted):
+            try: hand_reply_to_agent(store, tid, rid, str(e))
+            except Exception as e3: logger.warning(f'the reply on task {tid} was not handed to an agent: {e3}')
     finally: DRAFTING.pop(rid, None); done.set()
 
 

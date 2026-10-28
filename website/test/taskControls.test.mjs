@@ -147,7 +147,7 @@ test("complete, reopen, coding start and stop run the shared operations road, ne
 test("saving a result never completes the task, drafts never send, a question waits on the task", () => {
   assert.match(tasks, /\/wrap`, \{ close: false, background: true \}/);     // written up behind the press (writeup.py)
   // the box opens at once and the AI's draft is written behind it (replyDraft.js, 2026-10-01) - neither sends
-  assert.match(tasks, /generate \? draftReply\(api, replyMessage\.MessageId\) : api\.post\(`[^`]*\/reply`, \{ draft: false \}\)/);
+  assert.match(tasks, /generate \? draftReply\(api, replyMessage\.MessageId, null, null, generate === "ai"\) : api\.post\(`[^`]*\/reply`, \{ draft: false \}\)/);
   // ...and no question for the sender of its own (the owner, 2026-10-27: Ask sender is gone - Reply asks it); an agent's or the Assistant's
   // parked question still waits in Review for its Send (task.clarify)
   assert.doesNotMatch(tasks, /"task\.clarify"/);

@@ -1939,8 +1939,10 @@ OFFER_JOB = ('The owner accepted your offer: "{offer}". Do that for them. Regist
 def offer_of(store, tid) -> str:
     """The offer triage made on this task, '' when there is none, it was taken, or an agent already works the task."""
     t = store.get_task(tid) or {}
-    if not t or t.get('Kind') in task_kinds.AGENT or t.get('Status') in ('done', 'dropped') or store.task_has_tag(tid, OFFER_TAG): return ''
-    for r in reversed(store.list_routes(tid)):
+    if not t or t.get('Kind') in task_kinds.AGENT or t.get('Status') in ('done', 'dropped'): return ''
+    if OFFER_TAG in re.split(r'[\s,]+', str(t.get('Tags') or '')): return ''
+    # one indexed read of the verdicts that made an offer, newest first - every task page asks this, so it reads no more than that
+    for r in store._rows("SELECT VerdictJson FROM route WHERE TaskId=? AND VerdictJson LIKE '%\"offer\"%' ORDER BY RouteId DESC LIMIT 5", (tid,)):
         try: v = json.loads(r.get('VerdictJson') or 'null') or {}
         except (TypeError, ValueError): continue
         if isinstance(v, dict) and str(v.get('offer') or '').strip(): return ' '.join(str(v['offer']).split())[:240]

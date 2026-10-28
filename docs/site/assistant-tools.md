@@ -13,10 +13,10 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 | **task** | change any task - the table's, or one named by ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?, note?), task.checklist(add?, items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?), review.approve, review.reject |
 | **agents** | a task's agent; where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value), task.ask_agent(who, text) |
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), meeting.new(who?, about?, when?), task.setup(text) |
-| **pipe** | the walk and sets of items, and filing mail | pipe.clear(select, scope?), pipe.defer(select, until), pipe.close(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
+| **pipe** | the walk and sets of items, and filing mail | pipe.clear(select, scope?), pipe.defer(select, until), pipe.close(select), pipe.remove(select, learn?), pipe.block(select, how?), pipe.mine(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
 | **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how), report.edit(config), report.delete |
-| **app** | settings, connections, scripts, memory | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), hub.publish(title, body, topic?, kind?, why_earned?) |
-| **look** | look-ups - they run at once and change nothing | app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, pipe.read, calendar.read, activity.list, errors.list, memory.about, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
+| **app** | settings, connections, scripts, memory, rules, the Hub | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), rule.change(about, how?), deleted.restore(what), hub.publish(title, body, topic?, kind?, why_earned?), hub.comment(post, text), hub.vote(post, up?) |
+| **look** | look-ups - they run at once and change nothing | app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, pipe.read, calendar.read, activity.list, errors.list, memory.about, memory.list, deleted.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
 
 A task you name goes in `ref` ("TQ-0123"); otherwise the tool acts on what is on the table.
 
@@ -450,7 +450,7 @@ New work with no task yet.
 
 A new job with no message behind it. Never for a task that already exists (a TQ ref, or a row on THE RAIL BY NAME): starting an agent on one is dispatch.prepare, its own last session is agent.continue, and "remind me about it" is task.defer on it.
 
-- `kind` - task (a to-do or reminder the owner does themselves, no agent) | general (a regular agent) | coding
+- `kind` - task (a to-do or reminder the owner does themselves, no agent) | general (a regular agent) | coding | send (a new message the owner starts, to someone - `to`: their name or address; drafted in their voice for their Send, never sent from here) | goal (an outcome with a date, its steps tasks) | dashboard (a page of numbers kept up to date)
 - `text` - , and a short `title` in your own words for the job (never "send it to the agent")
 
 <p class="runs">Brings up its button for you to press.</p>
@@ -495,7 +495,7 @@ Clear a SET of items from the pipe at once - takes `select` (below); read, never
 - `select` - below
 - `scope` (optional) - all (the default - every one waiting that `select` matches, the batch on the table and every one after it: "all the FYI", "mark every FYI read", "ignore all the FYI") | table (only those on the table: "mark these read", "these four")
 
-<p class="runs">Brings up its button for you to press.</p>
+<p class="runs">Runs at once and says what it changed.</p>
 
 ### `pipe.defer`
 
@@ -504,7 +504,7 @@ Put a SET away until a day. Runs at once and the count is said.
 - `select` - below
 - `until` - (as task.defer takes it): "snooze everything from Gail until Monday" is select sender: Gail
 
-<p class="runs">Brings up its button for you to press.</p>
+<p class="runs">Runs at once and says what it changed.</p>
 
 ### `pipe.close`
 
@@ -512,7 +512,33 @@ Close a SET at once. "Close all the tasks from Priya" is select sender: Priya. R
 
 - `select` - (below): each task in it is marked done, each notice read
 
-<p class="runs">Brings up its button for you to press.</p>
+<p class="runs">Runs at once and says what it changed.</p>
+
+### `pipe.remove`
+
+Not ours for a SET at once - "dismiss the spam", "get rid of these newsletters" - then triage learns from each; otherwise it teaches nothing. Never touches work waiting on the owner, an agent at work, a draft waiting for its Send or a goal - those are left and said. Runs at once; the receipt lists every row as its link.
+
+- `select` - (below; `keys`: the rows you judged, from pipe.read): each mail is filed, each task removed (Remove - not a task), nothing deleted
+- `learn` (optional) - true only when the owner says "from now on" too
+
+<p class="runs">Runs at once and says what it changed.</p>
+
+### `pipe.block`
+
+Stop a SET's senders for good - only when the owner says so ("and stop them", "block them", "unsubscribe me"). "Dismiss the spam" alone is pipe.remove, never this.
+
+- `select` - as pipe.remove takes it
+- `how` (optional) - rule (the default: an exclusion rule per sender in Settings, their mail never reaches triage again) | unsubscribe (a mailing list: its Unsubscribe comes up lit, one list at a time - the owner presses it)
+
+<p class="runs">Runs at once and says what it changed.</p>
+
+### `pipe.mine`
+
+Put it on my list for a SET of mail; each becomes a task of the owner's, no agent. A row already a task is left as it is.
+
+- `select`
+
+<p class="runs">Runs at once and says what it changed.</p>
 
 ### `review.each`
 
@@ -643,7 +669,7 @@ Remove a report or workflow.
 
 ## App
 
-Settings, connections, scripts, memory.
+Settings, connections, scripts, memory, rules, the Hub.
 
 ### `setting.set`
 
@@ -716,14 +742,14 @@ Start a script by its name: walk me through my tasks | set up a report.
 
 ### `memory.remember`
 
-Keep a fact or rule the owner tells you, at once - those five are LEARNED.md, the memory every reader uses | style: a rule about HOW they write - greetings and salutations ("write Mrs <surname> to women, never her first name"), sign-off, tone, length, formatting, words to use or avoid - saved to their writing style, STYLE.md's Owner notes, which every draft reads. Who reports to whom and who owns what is people.relate.
+Keep a fact or rule the owner tells you, at once - those five are LEARNED.md, the memory every reader uses | style: a rule about HOW they write - greetings and salutations ("write Mrs <surname> to women, never her first name"), sign-off, tone, length, formatting, words to use or avoid - saved to their writing style, STYLE.md's Owner notes, which every draft reads; with `about` (one person: "write to Gail informally") it is kept for that person alone, read only by the drafts to them | soul: who the owner IS, lasting - their title, company, the systems and repositories they use ("I'm now the AP lead", "our ERP is Intacct") - SOUL.md, which triage, drafts, agents and you read | counsel: how YOU should behave and speak to the owner ("be shorter with me", "don't walk me through the FYI") - COUNSEL.md, your own instructions. SOUL and COUNSEL are added to, never rewritten; a fact about their job or about what becomes a task is care or work, never these. Who reports to whom and who owns what is people.relate.
 
 - `note` - it, in the owner's words ("Gail moved to Ops", "Ray handles payroll for me", "I put renewals off to Friday", "I don't care about the legacy export job any more")
-- `about` (optional) - the person's address or name, for a people line
+- `about` (optional) - the person's address or name, for a people or style line
 - `section` (optional) - , always: people (who someone is to them, how they deal with them) | care (what they are responsible for and what they do NOT care about - a legacy process, a system no longer theirs: triage and the report gate then make no task of it) | work (their rhythm) | promises | bring (what the Advisor may raise)
 - `replaces` (optional) - the key of the line it makes untrue, closed and kept as history (memory.about gives the keys)
 
-<p class="runs">Brings up its button for you to press.</p>
+<p class="runs">Runs at once and says what it changed.</p>
 
 ### `memory.wrong`
 
@@ -746,6 +772,23 @@ Who someone is to the owner, on their org chart. "Erin is my manager", "Ray owns
 
 <p class="runs">Runs at once and says what it changed.</p>
 
+### `rule.change`
+
+Change or delete one routing rule (Settings → Routing policies). Adding a rule for a sender is preference.sender_rule.
+
+- `about` - words naming it, as rules.list says it (its sender, pattern or name)
+- `how` (optional) - edit (the default) | remove
+
+<p class="runs">Brings up its page, at the thing, for you to press.</p>
+
+### `deleted.restore`
+
+Bring back something removed in the last 30 days - a report, workflow, dashboard, routing rule or profile.
+
+- `what` - its title as deleted.list says it
+
+<p class="runs">Brings up its page, at the thing, for you to press.</p>
+
 ### `hub.publish`
 
 Save to the company Hub. Only a reusable discovery reached through real work, or a developed idea with its reasons - never a transcript, a task log or a routine answer. When the owner asks to save something there, or a turn clearly earns it.
@@ -757,6 +800,24 @@ Save to the company Hub. Only a reusable discovery reached through real work, or
 - `why_earned` (optional)
 
 <p class="runs">Brings up its button for you to press.</p>
+
+### `hub.comment`
+
+Add a comment to a Hub post. Others read the Hub: it goes only by the owner's press.
+
+- `post` - its number (#12, as knowledge.search prints it)
+- `text` - the comment in the owner's words
+
+<p class="runs">Brings up its page, at the thing, for you to press.</p>
+
+### `hub.vote`
+
+Vote a Hub post up or down.
+
+- `post` - its number
+- `up` (optional) - false for down
+
+<p class="runs">Brings up its page, at the thing, for you to press.</p>
 
 ## Look
 
@@ -896,6 +957,12 @@ Who someone is to the owner: every line the memory holds about them, with its ke
 Everything kept about the owner: LEARNED.md - what they told you ("remember this"), their verdicts, and what it learned from what they did. Use it for "what do you remember", "what do you know about me"
 
 - `about` - words to narrow it (a sender, a topic)
+
+<p class="runs">Runs at once and changes nothing.</p>
+
+### `deleted.list`
+
+What was removed in the last 30 days and can still come back - reports, workflows, dashboards, rules, profiles.
 
 <p class="runs">Runs at once and changes nothing.</p>
 

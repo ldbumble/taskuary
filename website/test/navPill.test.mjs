@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { BACK, NAV, fitRow, foldsOf, navEnd, navOf, put, rowDrawable, rowNow, rowOf, rowWidth, walkMove } from "../src/actionRow.js";
-import { rowAbove } from "../src/funnelPile.js";
+import { backFrom, rowAbove } from "../src/funnelPile.js";
 import { label } from "../src/buttons.js";
 
 const v = (id, group, extra = {}) => ({ id, group, tone: "s", label: id, title: "", disabled: false, why: "", promote: true, lead: false, ...extra });
@@ -83,10 +83,22 @@ test("an fyi batch goes back from its first member; a task pulled by name, from 
   assert.equal(rowAbove(rows, null), null);
 });
 
+// BACK FROM THE FIRST FYI IS THE LAST REPORT READ (trust audit F1, 2026-10-28): a report read leaves the rail, and Back skipped to the last task
+test("Back from the first FYI goes to the last report the walk read; from a later FYI, or with the report still on the rail, the row above", () => {
+  const rows = [{ key: "task:1", tid: 1, lane: "asked", order_band: 2 }, { key: "msg:7", lane: "fyi", order_band: 4 }, { key: "msg:8", lane: "fyi", order_band: 4 }];
+  const read = { key: "processing:report-6" };
+  assert.deepEqual(backFrom(rows, rows[1], undefined, read), { key: "processing:report-6", kind: "report" });
+  assert.equal(backFrom(rows, rows[1], undefined, null)?.key, "task:1", "no report read this walk: the row above");
+  assert.equal(backFrom(rows, rows[2], undefined, read)?.key, "msg:7", "a later FYI: the FYI above it");
+  assert.equal(backFrom([...rows, { key: "processing:report-6", lane: "report", order_band: 3 }], rows[1], undefined, read)?.key, "processing:report-6",
+    "a report still on the rail is the row above, by the rail's own order");
+  assert.equal(backFrom(rows, rows[0], undefined, read)?.key, undefined, "a task is never sent back to a report");
+});
+
 test("the view registers Back beside the floor and runs it as a row pick; Next is hidden on the last one only from the walk's own capture", () => {
   const view = fs.readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
   assert.match(view, /useVerbs\("nav", \[\{ id: BACK, group: "back", label: btn\("back"\), title: btnHint\("back"\), run: \(\) => goBack\(\) \}\], !!backTo\);/);
-  assert.match(view, /const up = rowAbove\(pileRef\.current\?\.items, currentRef\.current, isDown\);/);
+  assert.match(view, /const up = backFrom\(pileRef\.current\?\.items, currentRef\.current, isDown, lastReportRef\.current\);/);
   assert.match(view, /return surface\(up\.key, null\);/, "the same road as a rail click: one draw, the ring follows");
   assert.match(view, /if \(busy \|\| turnFlight\.current\) \{ backHeld\.current = true;/, "a Back over a move in flight waits for it, and runs once");
   assert.match(view, /sel\.scope\?\.exclude === current\s+&& !sel\.expected_next_key && !\(sel\.expected_next_members \|\| \[\]\)\.length;/);

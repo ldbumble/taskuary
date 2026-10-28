@@ -104,3 +104,20 @@ test("the last row has no Next and keeps its Back; the first has no Back", { tim
   assert.deepEqual((await nav(page)).words, ["Next"], "the first one: Next alone");
   assert.deepEqual(errors, []);
 });
+
+// BACK FROM THE FIRST FYI IS THE LAST REPORT READ (trust audit F1, 2026-10-28): a report read leaves the rail, so Back from the first FYI
+// batch skipped every report the walk had just shown and landed on the last task
+test("Back from the first FYI batch brings up the last report read, not the last task", { timeout: 240000 }, async (t) => {
+  const { page, errors } = await boot(t, { width: 1440, height: 900 });
+  await page.evaluate(() => document.querySelector('[data-tq-section-head="reports"] .fold')?.click()); await sleep(1500);
+  const last = await page.evaluate(() => [...document.querySelectorAll('[data-tq-run="reports"] .tq-pile-row[data-tq-key]')].at(-1)?.getAttribute("data-tq-key"));
+  assert.ok(last, "the demo has reports");
+  await clickRow(page, last); await settle(page);
+  assert.ok(await pressNext(page));
+  await page.waitForSelector('[data-tq-item-sections="fyis"]', { timeout: 20000 }); await settle(page);
+  assert.ok((await nav(page)).back, "the first FYI batch has a Back");
+  assert.ok(await pressBack(page));
+  assert.ok(await until(async () => !!(await page.$('[data-tq-item-sections="report"], [data-tq-item-sections="dashboard"]'))),
+    `Back brought up the report it came from: on ${await on(page)}`);
+  assert.deepEqual(errors, []);
+});

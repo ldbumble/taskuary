@@ -750,13 +750,18 @@ def reason(payload: dict, wait: float = None) -> dict:
 def browser(payload: dict, brain=None, sid: str = '') -> dict:
     """Before one of OUR sessions runs a shell command (browsergate.check): a browser act that can't be undone is refused and held
     for the owner. Not our pane, not a shell tool, nothing of agent-browser in it: {} at once - the command is Claude's."""
-    from . import browsergate
-    if str(payload.get('tool_name') or '') not in ('Bash', 'PowerShell'): return {}
+    from . import browsergate, shellgate
+    tool = str(payload.get('tool_name') or '')
+    if tool not in ('Bash', 'PowerShell'): return {}
     cmd = str((payload.get('tool_input') or {}).get('command') or '')
-    if browsergate.EXE not in cmd.lower(): return {}                 # the cheap test first: this hook sees every shell command
+    # the cheap tests first: this hook sees every shell command - ...and A STEP THAT LEAVES THE MACHINE (a push, a merge, a public post, a
+    # publish, a mail) waits for the owner too (shellgate.py, the Advisor's risky-step hold, the owner 2026-10-28)
+    browse, out = browsergate.EXE in cmd.lower(), shellgate.acts(cmd)
+    if not browse and not out: return {}
     t = _pane(payload, 'claude') or _general(payload, sid)
     st = getattr(t, 'store', None) if t else None
     if not t or not st: return {}
+    if out: return shellgate.check(st, t.task_id, t.sid, cmd, tool, str(payload.get('cwd') or getattr(t, 'cwd', '') or ''))
     return browsergate.check(st, t.task_id, t.sid, cmd, brain)
 
 

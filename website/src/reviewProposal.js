@@ -58,7 +58,7 @@ export const reviewText = (review) => {
   if (proposal?.action === "run_tool") return toolBody(proposal);
   // the WHAT is the context line already (proposals.queue's Reason); the box is the exact command Approve runs, once - with no AI the card
   // said "agent-browser click @e12" three times over (2026-10-25)
-  if (proposal?.action === "browser_act") return proposal.command ? `Approve runs: ${proposal.command}` : proposal.what || "";
+  if (proposal?.action === "browser_act" || proposal?.action === "shell_act") return proposal.command ? `Approve runs: ${proposal.command}` : proposal.what || "";
   return PAGES.has(proposal?.action) && proposal.text ? proposal.text : review?.DraftText || "";
 };
 
@@ -143,6 +143,19 @@ export const proposalPresentation = (review) => {
     context: review.Reason || "Held before it ran · it can't be undone",
     destinationLabel: "On",
     destination: proposal.url || proposal.site || "the agent's browser",
+    approveLabel: APPROVE,
+    busyLabel: "running…",
+    rejectLabel: "Dismiss",
+    readOnly: true,
+  };
+  // ...AND A HELD SHELL STEP (shellgate.py, the owner 2026-10-28): a push, a merge, a public post, a publish or a mail the agent tried to
+  // run - Approve runs that exact command in the folder it was held in
+  if (proposal?.action === "shell_act") return {
+    kind: "action",
+    title: "The agent's step waits for your yes",
+    context: review.Reason || "Held before it ran · it leaves this computer",
+    destinationLabel: "In",
+    destination: proposal.cwd || "the agent's folder",
     approveLabel: APPROVE,
     busyLabel: "running…",
     rejectLabel: "Dismiss",

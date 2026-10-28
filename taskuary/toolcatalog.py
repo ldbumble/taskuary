@@ -494,6 +494,10 @@ READS = {
     'approvals.list':   'everything waiting for the owner\'s yes: drafted replies and the actions agents proposed, with their tasks',
     'pipe.list':        ('everything waiting on the owner, lane by lane - replies, asks, approvals, stopped agents, reports: the whole '
                          'work rail. Use it for "what\'s waiting", "what\'s left", "what do I have"'),
+    # ...and WHAT THE ROWS SAY (2026-10-28: "summarize the FYI emails for me" - pipe.list gives subjects, message.read one mail a call)
+    'pipe.read':        ('every row on the work rail WITH WHAT IT SAYS - sender, subject, lane, age and the sender\'s own words (quoted '
+                         'history cut) - in one call, however many rows. `section`: task | later | reports | ideas | fyi (or a lane; '
+                         'none for all); `who`: a sender. Use it for "summarize my FYI", "what\'s in reports", "anything from Erin on the rail"'),
     'calendar.read':   ('the owner\'s meetings - `from`: today (the default) | tomorrow | YYYY-MM-DD; `days`: how many (7 by default). '
                          'Reads the calendar live, so it takes a moment'),
     'activity.list':    ('what happened, from the audit trail: counts by kind and the latest entries. `days` (1 by default); '
@@ -564,7 +568,7 @@ def valid(kind: str, params: dict) -> str:
                 'reports.list': (), 'settings.list': (), 'setting.read': ('key', 'label'),
                 'connections.list': (), 'connection.read': ('name', 'connector_id'), 'agents.list': (),
                 'knowledge.search': ('query',), 'tasks.list': (), 'asks.list': (), 'message.read': ('mid', 'id'),
-                'sender.read': ('who', 'sender'), 'docs.search': ('query',), 'agents.now': (), 'approvals.list': (), 'pipe.list': (),
+                'sender.read': ('who', 'sender'), 'docs.search': ('query',), 'agents.now': (), 'approvals.list': (), 'pipe.list': (), 'pipe.read': (),
                 'calendar.read': (), 'activity.list': (), 'errors.list': (), 'memory.list': (), 'memory.about': ('who',), 'rules.list': (), 'missed.check': (), 'app.health': (),
                 'repos.list': (), 'tools.list': (), 'tools.describe': ('kind',)}[kind]
         if need and not any(str((params or {}).get(n) or '').strip() for n in need):

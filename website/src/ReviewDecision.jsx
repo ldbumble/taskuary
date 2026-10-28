@@ -278,6 +278,8 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // Redraft (Draft with AI while nothing is drafted): the same handler the in-card button has
   const canRedraft = !proposal && meta.kind !== "zoho_invoice" && !isCal && !isSlot;   // the redrafter writes a REPLY to the sender
   const redraftWord = r.DraftText || r.Stale ? btn("redraft") : btn("redraft", "none");
+  // the Advisor lit Redraft and said why: the warning and its button go over the draft (warnTop), not a line beside the buttons under it
+  const warnTop = !!why && canRedraft && !r.Stale && !delivery.frozen && lit === no("redraft");
   // the alternative (Decline) sends WHAT IS IN THE BOX, edited or not - and with the box empty it just closes the pull request, sending nothing
   const altSends = sendable && !!value.trim();
   const altTitle = co?.alt ? `${co.alt.label} ${co.alt.then}${altSends ? ", then sends the text above exactly as you have it - edit it first if it reads as an accept" : ". The box is empty, so nothing is sent"}.` : "";
@@ -427,6 +429,14 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         </Typography>
       ) : !proposal && <CcRow cc={ccNow} setCc={setCc} channel={r.Channel} />}
       {/* why there is no Send (outbound.send_block, PW-044) is the Copy button's hover under the draft, not a line over it (2026-10-22) */}
+      {/* THE WARNING SITS OVER THE DRAFT IT IS ABOUT, ITS REDRAFT IN IT (the owner, 2026-10-28: "redraft warning on top of the reply should
+          have the redraft button on it, not below the message box") */}
+      {warnTop && <Box data-tq-redraft-warn="" sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 0.75, px: 1.25, py: 0.75,
+        border: "1px solid #e3c9a8", bgcolor: "#fbf3e8", borderRadius: 1.5 }}>
+        <Typography component="span" data-tq-lit-why="" sx={{ flex: "1 1 220px", minWidth: 0, color: "#6b4a1f", fontSize: 13, overflowWrap: "anywhere" }}>{why}</Typography>
+        <Button size="small" variant="contained" disableElevation disabled={busy || drafting} onClick={redraft} title={btnHint("redraft")}>
+          {drafting ? "Drafting…" : redraftWord}</Button>
+      </Box>}
       <Box ref={draftRef}><DraftField value={value} onChange={(e) => setText(e.target.value)}
         placeholder={proposal?.kind === "closeout" ? proposal.placeholder : isCal ? "A note with your answer - or leave it empty" : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}
         inputProps={{ readOnly: busy || delivery.frozen || !!proposal?.readOnly, style: { fontSize: 12.5, lineHeight: 1.45 } }} /></Box>
@@ -513,7 +523,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           </Button>
         )}
         {/* Redraft beside the send, under the draft it rewrites - not at the far end of the row, and not on the task's bar */}
-        {canRedraft && !r.Stale && !delivery.frozen && <Button size="small" variant={lit === no("redraft") ? "contained" : "outlined"} disableElevation disabled={busy || drafting} onClick={redraft}
+        {canRedraft && !r.Stale && !delivery.frozen && !warnTop && <Button size="small" variant={lit === no("redraft") ? "contained" : "outlined"} disableElevation disabled={busy || drafting} onClick={redraft}
           title={btnHint("redraft")}>
           {drafting ? "Drafting…" : redraftWord}</Button>}
         {/* ...and one email of several can be let go: it drops that slot and closes nothing (slots.settled) */}
@@ -529,7 +539,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         {proposal && proposal.kind !== "closeout" && <Button size="small" color="error" disabled={busy || delivery.frozen} onClick={() => decide("reject")} title={rejectTitle}>{proposal.rejectLabel}</Button>}
         {/* WHY IT IS LIT, BESIDE IT (the owner, 2026-10-28): the Advisor's reason for lighting Redraft over Send stood in the folded Agent
             section, and Close out showed a lit Redraft with no word of why. `why`: the task's Advisor line, said where its button is lit */}
-        {why && String(lit || "").startsWith(`${r.ReviewId}:`) && <Typography component="span" data-tq-lit-why="" variant="body2"
+        {why && !warnTop && String(lit || "").startsWith(`${r.ReviewId}:`) && <Typography component="span" data-tq-lit-why="" variant="body2"
           sx={{ alignSelf: "center", color: "#55697a", fontSize: 12.5, minWidth: 0, overflowWrap: "anywhere" }}>{why}</Typography>}
         </>
       </Box>

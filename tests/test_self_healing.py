@@ -119,6 +119,21 @@ class OneFailureShapeTests(unittest.TestCase):
         plain = failures.classify(RuntimeError('the remote end hung up'))
         self.assertEqual((plain['fix'], plain['retry'], plain['unknown']), (None, True, False))
 
+    def test_a_task_with_no_folder_is_fixed_on_its_own_picker(self):
+        """B24 (the email walk, 2026-10-29): "Choose where it works" opened Settings → Coding agent, which has no repository or
+        folder field. With the task known the fix opens the task on its "Which code is this about?" picker - on every road that
+        knows it: the op row, the Advisor's failed run, the rail's failed run."""
+        from taskuary import failures, funnel, workerstate
+        c = failures.classify(ValueError('working directory does not exist: portal'), tid=12)
+        self.assertEqual(c['fix'], {'label': 'Choose where it works', 'href': '#task=12&pick=repo'})
+        s = MemoryStore(); tid = s.create_task({'Title': 'fix the 500', 'Kind': 'coding'}, 't')
+        oid = failures.record(s, task_id=tid, kind='dispatch.prepare', error=ValueError('no repository is set for this task'), what='the start')
+        self.assertEqual(json.loads(s._one('SELECT OutcomeJson FROM operation WHERE OpId=?', (oid,))['OutcomeJson'])['fix']['href'],
+                         failures.pick_repo_href(tid))
+        with mock.patch.object(workerstate, 'ended', return_value='failed'), \
+             mock.patch.object(s, 'last_worker_event', return_value={'Text': 'working directory does not exist: portal'}):
+            self.assertEqual(funnel.run_failed(s, tid)['fix']['href'], f'#task={tid}&pick=repo')
+
     def test_only_a_send_can_be_unknown(self):
         from taskuary import failures
         self.assertTrue(failures.classify(TimeoutError('read timed out'), act='review.approve')['unknown'])

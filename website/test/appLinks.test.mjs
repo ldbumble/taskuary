@@ -24,6 +24,25 @@ test("#setup opens setup mode, the same door as the top bar's Setup", async () =
   delete globalThis.window;
 });
 
+// B24 (the email walk, 2026-10-29): "Choose where it works" opened Settings → Coding agent, which has no folder field - the fix now
+// opens the task on its own "Which code is this about?" picker (failures.pick_repo_href)
+test("a task's pick-repo link opens the task and its picker, once, on that task only", async () => {
+  const { openAppLink, takeRepoPick, PICK_REPO } = await import("../src/appLinks.js");
+  const fired = [];
+  globalThis.window = { location: { hash: "", href: "" }, history: { state: null, replaceState: () => {} }, dispatchEvent: (e) => fired.push(e) };
+  globalThis.CustomEvent = class { constructor(t, o) { this.type = t; this.detail = o?.detail; } };
+  openAppLink("#task=12&pick=repo");
+  assert.equal(window.location.hash, "task=12", "the task opens as #task=12 does");
+  await new Promise((r) => setTimeout(r, 5));
+  assert.deepEqual(fired.map((e) => [e.type, e.detail?.tid]), [[PICK_REPO, 12]]);
+  assert.equal(takeRepoPick(7), false, "another task's page never takes it");
+  assert.equal(takeRepoPick(12), true); assert.equal(takeRepoPick(12), false, "taken once");
+  delete globalThis.window; delete globalThis.CustomEvent;
+  const page = read("TaskPage.jsx");
+  assert.match(page, /const take = \(\) => \{ if \(takeRepoPick\(selected\)\) pickRepoRef\.current\?\.\(\); \};/);
+  assert.match(page, /pickRepoRef\.current = pickRepo;/);
+});
+
 test("a reply opens the page it names - else the one task it points at, never one of several", () => {
   assert.equal(firstAppLink("Here it is: [Open the Sage Intacct connection](#connector=intacct). Fill in the sender ID."), "#connector=intacct");
   assert.equal(firstAppLink("See [TQ-0012](#task=12) and the [settings](#settings=config)."), "#settings=config");

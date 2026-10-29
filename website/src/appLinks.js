@@ -33,10 +33,18 @@ export const firstAppLink = (text) => {
   return tasks.length === 1 ? tasks[0] : null;
 };
 
+// A TASK OPENED ON ITS "WHICH CODE IS THIS ABOUT?" PICKER (failures.pick_repo_href, B24): the link opens the task as #task=N does and
+// asks its page for the picker - the same one its repository pill opens. Held here until that task's page takes it (takeRepoPick)
+export const PICK_REPO = "tq-pick-repo";
+let pickFor = 0;
+export const takeRepoPick = (tid) => { if (!tid || Number(tid) !== pickFor) return false; pickFor = 0; return true; };
+
 // open it on the canvas - the same road a bell or a bookmark takes; the same link twice still opens it again
 export const openAppLink = (h) => {
-  const want = String(h || "").replace(/^#/, "");
+  let want = String(h || "").replace(/^#/, "");
   if (!want) return;
+  const pick = /^task=(\d+)&pick=repo$/.exec(want);
+  if (pick) { want = `task=${pick[1]}`; pickFor = Number(pick[1]); setTimeout(() => window.dispatchEvent(new CustomEvent(PICK_REPO, { detail: { tid: pickFor } })), 0); }
   if (`#${want}` === SETUP) { window.dispatchEvent(new Event("tq-first-run")); return; }
   // ...and SEARCH is a dialog over any view, not a place: its link opens it with the words in its box (concierge.page_href)
   const s = /^search(?:=(.*))?$/.exec(want);

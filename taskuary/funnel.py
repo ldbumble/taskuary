@@ -556,7 +556,7 @@ def run_failed(store, tid, live_too: bool = False) -> dict | None:
     from .failures import classify
     if workerstate.ended(store, tid, live_too) != 'failed': return None          # live_too: whatever the session does (R2)
     last = store.last_worker_event(tid, kinds=('failed',)) or {}
-    c = classify(' '.join(str(last.get('Text') or '').split()) or 'it stopped without saying why')
+    c = classify(' '.join(str(last.get('Text') or '').split()) or 'it stopped without saying why', tid=tid)
     return {'sentence': _sentence(c['sentence']), 'fix': c['fix']}
 
 

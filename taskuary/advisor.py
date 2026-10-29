@@ -850,7 +850,7 @@ def agent_failed(store, item: dict) -> dict | None:
     # ...in plain words, with the place that fixes it (failures.classify): an agent with no AI to run on is fixed by connecting one -
     # it lit "New task to fix this" and turned connecting an AI into another task (owner-approved, 2026-10-21)
     from .failures import classify
-    c = classify(_one(st.get('result') or last.get('Text'), 300) or 'it stopped without saying why')
+    c = classify(_one(st.get('result') or last.get('Text'), 300) or 'it stopped without saying why', tid=int(item['tid']))
     return {'what': "the agent's run failed", 'why': c['sentence'], 'fix': c['fix'], 'unknown': False,
             'kind': 'agent', 'source': 'agent', 'cause': 'taskuary'}
 

@@ -28,11 +28,13 @@ def line(s, body, at, llm, ext=None, name='Tess', conv=CONV, channel='whatsapp')
                               'sent_at': at, 'source_name': name}, llm=llm)
 
 
-def verdict(intent='task', kind='general', relationship='new', related=(), task=None, seen=None):
-    """The ONE brain call the funnel makes per chat line: intent, kind and relationship together."""
+def verdict(intent='task', kind='general', relationship='new', related=(), task=None, seen=None, same=True):
+    """The ONE brain call the funnel makes per chat line: intent, kind and relationship together. A join says outright that it is the
+    same problem (`same`) - in a group a join left unsaid is not made (2026-10-29)."""
     def llm(system, user, **kw):
         if seen is not None: seen.append({'system': system, 'user': json.loads(user)})
         j = {'intent': intent, 'why': 'an ask', 'relationship': relationship, 'related_message_ids': list(related)}
+        if relationship in ('continues', 'answers'): j['same_problem'] = same
         if kind and intent == 'task': j['kind'] = kind
         if task is not None: j['existing_task_id'] = task
         return json.dumps(j)

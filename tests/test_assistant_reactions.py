@@ -279,7 +279,7 @@ class ArrivalsTests(unittest.TestCase):
                 # one brain, ONE question since PW-031: intent, kind and relationship in the same verdict,
                 # the relationship chosen among the room's same-day lines the prompt carries
                 u = json.loads(user)
-                rel = ({'relationship': 'continues', 'related_message_ids': [c['id'] for c in u.get('same_day_lines', [])]}
+                rel = ({'relationship': 'continues', 'related_message_ids': [c['id'] for c in u.get('same_day_lines', [])], 'same_problem': True}
                        if same else {'relationship': 'new'})
                 return json.dumps({'intent': 'task', 'kind': 'coding', 'why': 'an ask', **rel})
             return ingest.ingest_message(

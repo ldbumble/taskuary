@@ -438,13 +438,16 @@ def evidence_lines(store, msg: dict, cap: int = EVIDENCE_CAP) -> list:
     """Past corrections that bear on this message - same sender, or the same topic - worded as what
     happened, for the classifier to weigh (PW-131: evidence, not a rule)."""
     from .routing import subject_topic
-    from .ingest import topic_hit
+    from . import textsim
     sender, topic = str(msg.get('from_email') or '').lower(), subject_topic(msg.get('subject') or '')
     hits = store.corrections(sender=sender) if sender else []
     seen = {c['Id'] for c in hits}
     if topic:
         hits += [c for c in store.corrections(topic=topic) if c['Id'] not in seen]
-        hits += [c for c in store.corrections(limit=50) if c['Id'] not in seen and c.get('Topic') and topic_hit(c['Topic'], msg.get('subject') or '')]
+        # ...and a correction on a topic ALIKE IN MEANING (embeddings), never one sharing half its words (2026-10-28)
+        tops = [c for c in store.corrections(limit=50) if c['Id'] not in {h['Id'] for h in hits} and c.get('Topic')]
+        near = {k for k, _ in textsim.rank(store, msg.get('subject') or '', [(f"topic:{c['Topic']}", c['Topic']) for c in tops]) or []}
+        hits += [c for c in tops if f"topic:{c['Topic']}" in near]
     out, done = [], set()
     for c in sorted(hits, key=lambda c: c['CreatedAt'], reverse=True):
         if c['Id'] in done: continue

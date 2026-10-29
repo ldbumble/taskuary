@@ -36,6 +36,7 @@ def embedder(store):
 
 
 def available(store) -> bool: return embedder(store) is not None
+def floor(store) -> float: return kbembed.floor(store)       # the least similarity that counts as alike - the embedder's own setting
 
 
 def _query(embed, text: str):

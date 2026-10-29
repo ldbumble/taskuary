@@ -414,7 +414,6 @@ def thread_line(store, item, target_kind, target_id, n: int = 3) -> str:
 def related_line(store, item, target_kind, target_id, cap: int = 5) -> str:
     """OTHER OPEN TASKS on the same sender, thread or subject, flagged as possible duplicates: the same ask filed twice was advised
     twice, Reply on each, with the agent already working the other one (the deep dive, 2026-10-20)."""
-    from .ingest import topic_hit
     ms = _msgs(store, item, target_kind, target_id)
     own = int(target_id) if target_kind == 'task' else next((m.get('TaskId') for m in ms if m.get('TaskId')), None)
     senders = {str(m.get('FromEmail') or '').lower() for m in ms if m.get('FromEmail') and str(m.get('Direction') or 'in') != 'out'}
@@ -429,9 +428,11 @@ def related_line(store, item, target_kind, target_id, cap: int = 5) -> str:
             # subject the model then reads, is the evidence; the sender only names who
             if r['TaskId'] == own or r['c'] not in cids: continue
             hits.setdefault(r['TaskId'], set()).add('same thread')
+    # ...and the same subject is the same MEANING (embeddings over each task's title and summary), never shared words (2026-10-28)
     if subj:
-        for t in store.list_tasks(active_only=True):
-            if t['TaskId'] != own and t.get('Title') and topic_hit(subj, t['Title']) and topic_hit(t['Title'], subj): hits.setdefault(t['TaskId'], set()).add('same subject')
+        from .context import alike
+        for tid in alike(store, subj, [t for t in store.list_tasks(active_only=True) if t['TaskId'] != own and t.get('Title')], cap):
+            hits.setdefault(tid, set()).add('same subject')
     out = []
     from .store import task_ref
     from .funnel import working_tids

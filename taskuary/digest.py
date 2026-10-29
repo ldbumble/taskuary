@@ -307,11 +307,11 @@ def _linked(text: str) -> str:
 def _ruled_out(store, c: dict) -> str:
     """The owner's SCOPED standing verdict that covers this ask (assistant.unanswered's candidate), or ''.
 
-    The same memory triage reads (ingest.applicable_notes), applied to the ask's OWN sender, subject
-    and source: a sender-, domain-, subject- or source-scoped note covers the ask by its scope. A
-    GLOBAL note - "Resident refunds are not ours" - is not decided here: a word-overlap test used to
-    say which asks it was "about" (the owner, 2026-10-11: "everything should be ai"), so it goes to the
-    brief model whole, beside the asks (global_rules), and the model judges which ask it covers."""
+    The same memory triage reads (ingest.applicable_notes), applied to the ask's OWN sender and
+    source: a sender-, domain- or source-scoped note covers the ask by its scope. A GLOBAL note - "Resident
+    refunds are not ours" - and a TOPIC note are not decided here: a word-overlap test used to say which asks
+    they were "about" (the owner, 2026-10-11: "everything should be ai"; 2026-10-28: never by shared words), so
+    they go to the brief model whole, beside the asks (global_rules), and the model judges which ask each covers."""
     from .ingest import applicable_notes
     mid = (c.get('action') or {}).get('mid')
     m = store.get_message(mid) if mid else None
@@ -319,14 +319,15 @@ def _ruled_out(store, c: dict) -> str:
     try: notes = applicable_notes(store, [m.get('FromEmail')], str(m.get('Subject') or ''), str(m.get('BodyText') or '')[:2000])
     except Exception as e:
         logger.debug(f'digest: standing verdicts skipped for an ask - {e}'); return ''
-    return next(((n.get('Note') or '').strip() for n in notes if n['Scope'] != 'global' and (n.get('Note') or '').strip()), '')
+    return next(((n.get('Note') or '').strip() for n in notes if n['Scope'] not in ('global', 'subject') and (n.get('Note') or '').strip()), '')
 
 
 def global_rules(store) -> list:
-    """The owner's active GLOBAL verdicts, whole - for the model to hold each ask against."""
+    """The owner's active GLOBAL verdicts, and their TOPIC verdicts with the topic named, whole - for the model to hold each ask against."""
     # ...the owner's own general lines on what they care about, in LEARNED.md (memorylines, 2026-10-27) - what a global note was
     from . import memorylines
-    try: return [n['Note'].strip() for n in memorylines.standing(store) if n['Scope'] == 'global' and str(n.get('Note') or '').strip()]
+    try: return [n['Note'].strip() + (f" (about: {n['ScopeKey']})" if n['Scope'] == 'subject' and n.get('ScopeKey') else '')
+                 for n in memorylines.standing(store) if n['Scope'] in ('global', 'subject') and str(n.get('Note') or '').strip()]
     except Exception as e:
         logger.debug(f'digest: global verdicts skipped - {e}'); return []
 
@@ -402,7 +403,8 @@ def gather(store, days: int = DAYS) -> str:
                     'here, never say nobody is waiting on you):', (f"  {c['facts']}" for c in blank[:10]))
     if live and (rules := global_rules(store)):
         _block(out, 'STANDING RULES THAT APPLY EVERYWHERE (hold every ask above against them: an ask one of these plainly covers is NOT\n'
-                    '"People want" - it ranks below everything, named with the rule; an ask none of them covers stays where it is):',
+                    '"People want" - it ranks below everything, named with the rule; an ask none of them covers stays where it is; a\n'
+                    'rule ending "(about: ...)" covers only asks about that topic):',
                (f'  - {r[:200]}' for r in rules[:12]))
     # the owner's own open loops: what they asked for and never got, what they promised, what went cold
     c = A.cfg(store)

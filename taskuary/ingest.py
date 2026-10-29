@@ -10,11 +10,11 @@ from datetime import datetime, timedelta
 from loguru import logger
 from . import kinds as task_kinds
 from .timewords import plural
-from .routing import first_line, draft_task_fields, tokens
+from .routing import first_line, draft_task_fields
 from .policy import evaluate
 from .triage import classify_intent, person_name
 from .store import task_ref, auto_code_enabled, _now
-from . import buttons, remind, senders, words
+from . import buttons, remind, senders, textsim, words
 from .categories import agent_word, route_head
 
 # A task the stranger gate held back (senders.known). It is a TAG rather than a column because
@@ -579,7 +579,7 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
     notes, notes_left = relevant_notes(store, [msg.get('from_email') or ''],
                                        f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000],
                                        subject=msg.get('subject') or '',
-                                       source=msg.get('source_name') or '')
+                                       source=msg.get('source_name') or '', ids=True)
     # the owner's ruling on this very thread leads the evidence; it is history the model weighs,
     # not a verdict carried forward (it used to file the reply before any model saw it)
     ruled = thread_ruling(store, msg)
@@ -673,7 +673,8 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
     # or topic: both come from LEARNED.md now) is said once, there
     lrn = learned_cut.whole(store, 'triage', target=f"mail:{msg.get('external_id') or ''}")
     from .memorylines import ABOUT
-    said = {str(n).strip() for n in notes}
+    from .triage import note_id
+    said = {str(n)[len(note_id(n)) + 3 if note_id(n) else 0:].strip() for n in notes}     # a note's words, past the id it carries
     blocks = [[l for l in b.splitlines() if l.startswith('#') or ABOUT.sub('', l.strip().lstrip('-* ')).strip() not in said]
               for b in lrn.split('\n\n')]
     lrn = '\n\n'.join('\n'.join(b) for b in blocks if any(not l.startswith('#') for l in b))
@@ -1292,36 +1293,32 @@ NOTE_BUDGET = 2000       # ...and how many characters, whichever runs out first
 # whichever colleague happened to be on screen and never fired again: a 17-person thread has 17
 # senders, and the next mail arrives from the sixteenth.
 #
-# 'subject' scope keys on the subject the verdict was given on and matches by OVERLAP, because
-# the varying part is exactly what you must ignore - "Resident Refund Request - Doe" and
-# "Resident Refund Request - PAYNE" are the same standing decision with a different resident.
-TOPIC_MATCH = 0.5        # this fraction of the remembered subject's words present = the same topic
+# 'subject' scope keys on the subject the verdict was given on. Whether a message is ABOUT that topic is
+# never a share of shared words (the owner, 2026-10-28): every topic note is in scope for every message,
+# ranked by how alike in meaning it is (textsim, embeddings), and triage says which ones it applied
+# (its verdict's notes_applied) - "Resident Refund Request - Doe" and "a refund for a resident" are the
+# same standing decision, and "Refund the vendor's overpayment" is not, whatever words they share.
+SCOPE_PRIOR = {'sender': 3.0, 'sender_domain': 1.5, 'source': 1.5, 'subject': 1.5}     # how narrowly a note was scoped
+# ...and how much what it MEANS adds: less than the step from one scope to the next, so a note about the person in front of you
+# still leads a note about their whole company however alike the latter reads - within one scope, meaning decides
+SIM_WEIGHT = 1.4
 
 
-def topic_hit(key: str, subject: str, text: str = '') -> bool:
-    kt = set(tokens(key))
-    if not kt: return False
-    hay = set(tokens(subject or text))
-    return len(kt & hay) / len(kt) >= TOPIC_MATCH
+def note_text(n: dict) -> str:
+    """What a note is about, as its similarity is read: its words, and the topic it was given on."""
+    return f"{n.get('Note') or ''} {n.get('ScopeKey') or ''}" if n.get('Scope') == 'subject' else str(n.get('Note') or '')
 
 
-def _note_score(n: dict, words: set) -> float:
-    """How likely this note is to change the verdict on the message in hand. Three signals, and
-    the weights say which one wins: the message's OWN words turning up in the note (one quoting
-    the subject you are looking at is the strongest evidence there is), how narrowly the note
-    was scoped, and whether the owner gave it as a verdict or a model distilled it. MemoryId
-    breaks the ties, so a later verdict outranks the one it supersedes."""
-    nw = set(tokens(n.get('Note')))
-    overlap = len(nw & words) / len(nw) if nw else 0.0
-    # 'subject' ranks with 'sender': a topic note is only a candidate because it already matched
-    # the topic, which is as pointed as knowing the person
-    return (4 * overlap + {'sender': 3.0, 'subject': 3.0, 'sender_domain': 1.5, 'source': 1.5}.get(n['Scope'], 0.0)
-            + (1.0 if n.get('Source') == 'verdict' else 0.0) + n['MemoryId'] / 1e6)
+def _note_prior(n: dict) -> float:
+    """How pointed a note is before what it says is weighed: how narrowly it was scoped, whether the owner gave it as a verdict, and
+    MemoryId - a later line outranks the one it supersedes."""
+    return SCOPE_PRIOR.get(n['Scope'], 0.0) + (1.0 if n.get('Source') == 'verdict' else 0.0) + n['MemoryId'] / 1e6
 
 
 def applicable_notes(store, senders, subject: str = '', text: str = '', source: str = '') -> list:
-    """Every ACTIVE note that bears on this message - by sender, by their domain, by the topic
-    it is about, by the connection it arrived on, or globally. A switched-off note is silent.
+    """Every ACTIVE note IN SCOPE for this message - by sender, by their domain, by the connection it arrived on, every topic
+    note, and the global ones. A switched-off note is silent. Which topic note is about this message is never decided here: the
+    model reads them (relevant_notes ranks them by meaning, triage names the ones it applied).
 
     'source' was accepted by POST /api/memory and matched by NOTHING, so a note saved against a
     mailbox or a repo was written, listed in the UI, and then never applied to anything. It is a
@@ -1333,28 +1330,34 @@ def applicable_notes(store, senders, subject: str = '', text: str = '', source: 
     # ...read from LEARNED.md, the one memory (memorylines, the owner 2026-10-27): the notes table is gone
     from . import memorylines
     return [n for n in memorylines.standing(store)
-            if n['Scope'] == 'global'
+            if n['Scope'] in ('global', 'subject')
             or (n['Scope'] == 'sender' and (n.get('ScopeKey') or '').lower() in who)
             or (n['Scope'] == 'sender_domain' and (n.get('ScopeKey') or '').lower() in doms)
-            or (n['Scope'] == 'subject' and topic_hit(n.get('ScopeKey') or '', subject, text))
             or (n['Scope'] == 'source' and src and (n.get('ScopeKey') or '').lower() == src)]
 
 
 def relevant_notes(store, senders, text: str, cap: int = NOTE_CAP, budget: int = NOTE_BUDGET,
-                   subject: str = '', source: str = '', keep=None) -> tuple:
-    """(the notes to put in a prompt, most pointed first; how many matched but were left out).
+                   subject: str = '', source: str = '', keep=None, ids: bool = False) -> tuple:
+    """(the notes to put in a prompt, most pointed first; how many were in scope but left out).
 
-    `senders` is every address on the thread - one message's sender, or a whole chain's. `keep`, when given, says which
-    note rows may be used at all."""
+    Ranked by how alike in MEANING each note is to the message (textsim, embeddings) on top of how narrowly it was scoped; with no
+    embedder, by the scope alone. `senders` is every address on the thread - one message's sender, or a whole chain's. `keep`, when
+    given, says which note rows may be used at all. `ids` puts each note's own id in front of it ("[lrn123] ...") - triage names the
+    ones it applied by it (notes_applied)."""
+    from .learned_cut import cite_of
     hits = [n for n in applicable_notes(store, senders, subject, text, source) if keep is None or keep(n)]
-    words = set(tokens(text))
-    hits.sort(key=lambda n: _note_score(n, words), reverse=True)
+    key = lambda n: f"note:{cite_of(n.get('Key'))}"
+    got = textsim.rank(store, f'{subject}\n{text}', [(key(n), note_text(n)) for n in hits], least=0.0)
+    sims = dict(got or [])
+    # ...where meaning is known, a topic note unlike this message is not about it; with no embedder every one goes, and the model reads
+    if got is not None: hits = [n for n in hits if n['Scope'] != 'subject' or sims.get(key(n), 0.0) >= textsim.floor(store)]
+    hits.sort(key=lambda n: -(SIM_WEIGHT * sims.get(key(n), 0.0) + _note_prior(n)))
     out, used = [], 0
     for n in hits[:cap]:
         note = (n['Note'] or '').strip()
         # a verdict cut in half reads as a DIFFERENT verdict, so notes go in whole or not at all
         if not note or (out and used + len(note) > budget): break
-        out.append(note); used += len(note)
+        out.append(f"[{cite_of(n.get('Key'))}] {note}" if ids else note); used += len(note)
     return out, len(hits) - len(out)
 
 

@@ -2352,16 +2352,19 @@ def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding
     # like a task triage made - but AFTER the press: the task starts on the sender's own words (ask_later).
     from . import triage as _triage
     plain = _triage.extract_ask(m)['summary']
+    # what triage made of it while it was filed travels with it: the reading of the ask hears it, and the task's route keeps it (B4)
+    said = earlier_verdict(store, m, mid)
     tid = store.create_task({'Title': title, 'Summary': plain, 'Kind': kind,
                              'Source': m.get('Channel') or 'api', 'SourceRef': m.get('SourceLink'),
                              **({'Assignee': assignee} if assignee else {})}, actor)
     store.attach_message(mid, tid)
-    ask_later(store, tid, m, plain)
+    ask_later(store, tid, m, plain, said)
     # what was said about THIS message before it was work travels with it (operations.py, PW-133)
     from . import operations
     operations.link_discussion(store, tid, [mid])
     store.add_route(mid, tid, 'create', None,
-                    f"promoted by the owner - {'theirs to do' if assignee else 'to hand it to an agent'}", [], actor)
+                    f"promoted by the owner - {'theirs to do' if assignee else 'to hand it to an agent'}"
+                    + (f"; triage had filed it: {said['why']}" if said['why'] else ''), [], actor)
     store.audit('task', tid, 'create_from_message', actor, detail={'message_id': mid, 'subject': title})
     return tid
 
@@ -2408,18 +2411,30 @@ def _spawn(fn, *args):
 ENRICH_THREAD = 'press-enrich'
 
 
-def ask_later(store, tid: int, m: dict, plain: str):
+def earlier_verdict(store, m: dict, mid) -> dict:
+    """{'why', 'danger'}: what triage said of a message before it was work - its newest stored verdict's why (the route's reason
+    without its head when no verdict was kept) and what it read the words as trying to make an AI do (`danger`)."""
+    why = ''
+    for r in reversed(store.message_routes(mid) if mid else []):
+        try: v = json.loads(r.get('VerdictJson') or 'null')
+        except (TypeError, ValueError): v = None
+        if isinstance(v, dict) and str(v.get('why') or '').strip(): why = str(v['why']); break
+        if str(r.get('Reason') or '').startswith('triage:'): why = str(r['Reason']).split(' - ', 1)[-1]; break
+    return {'why': ' '.join(why.split())[:300], 'danger': danger(store, m, mid)}
+
+
+def ask_later(store, tid: int, m: dict, plain: str, earlier: dict = None):
     """Read the ask out of `m` off the press and put it on `tid`. No brain, nothing to wait for: `plain` is the answer."""
     from . import llm as _llm
     llm = _llm.build_llm(store, job='triage')
-    if llm: threading.Thread(target=_enrich, args=(store, tid, m, plain, llm), daemon=True, name=ENRICH_THREAD).start()
+    if llm: threading.Thread(target=_enrich, args=(store, tid, m, plain, llm, earlier), daemon=True, name=ENRICH_THREAD).start()
 
 
-def _enrich(store, tid: int, m: dict, plain: str, llm):
+def _enrich(store, tid: int, m: dict, plain: str, llm, earlier: dict = None):
     """Fill in only what the press left plain: an ask or a checklist the owner wrote meanwhile is theirs."""
     from . import triage as _triage
     try:
-        ask = _triage.extract_ask(m, llm)
+        ask = _triage.extract_ask(m, llm, earlier=earlier)
         t = store.get_task(tid)
         if not t: return
         if ask['summary'] and ask['summary'] != plain and (t.get('Summary') or '') == plain:

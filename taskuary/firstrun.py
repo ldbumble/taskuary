@@ -515,7 +515,8 @@ def _connect_mail(store, typ: str, address: str, secret: str, host: str = '', ci
     mine = store.owner() or {}
     if not mine.get('owner') or mine.get('owner') == 'the owner':
         guess = ' '.join(w.capitalize() for w in address.split('@')[0].replace('.', ' ').replace('_', ' ').split()) or address
-        store.set_setting('owner_name', guess, 'owner'); store.set_setting('owner_email', address, 'owner')
+        from . import store as store_mod
+        store_mod.set_owner(store, guess, address, 'owner')    # through the one door, or the docs keep saying John Smith
     return {'ok': True, 'why': f'Connected {address} - reading it now.'}
 
 # ABOUT YOUR WORK (the owner, 2026-10-15: "a few short question on setup screen to fill out soul.md and job.md (though you can generate
@@ -675,7 +676,9 @@ def _who(store, ans: dict):
     """Name, organisation and title, kept as each is answered: the name everywhere, the other two where About you keeps them."""
     from . import store as store_mod
     a = {k: str(ans.get(k) or '').strip() for k in ('name', 'org', 'role')}
-    if a['name'] and a['name'] != store.owner()['owner']: store_mod.set_owner(store, a['name'], None, 'owner')
+    # ...and again when the name is unchanged but the docs still name the template: a name saved some other way never reached them
+    if a['name'] and (a['name'] != store.owner()['owner'] or store_mod.docs_hold_template_owner(store)):
+        store_mod.set_owner(store, a['name'], None, 'owner')
     if a['org']: store.set_setting('owner_company', a['org'], 'owner')
     if a['role']: store.set_setting('owner_title', a['role'], 'owner')
     store.set_setting(ABOUT_KEY, json.dumps({**_saved(store), **{k: v for k, v in a.items() if v}}), 'owner')

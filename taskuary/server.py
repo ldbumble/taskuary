@@ -9661,7 +9661,7 @@ def _heal_owner_docs():
         who = store.owner()
         if who['owner'] in ('the owner', '', 'John Smith') or '{{' in who['owner']:
             return                                    # nobody real named yet: the example stands
-        for doc in ('soul', 'job', 'coding', 'digest', 'learned', 'triage', 'style', 'counsel'):
+        for doc in store_mod.OWNER_DOCS:
             raw = store.get_doc(doc)
             if not raw: continue
             t = store_mod.retoken_doc(raw, 'John Smith', 'john.smith@example.com')
@@ -10413,7 +10413,11 @@ def set_setting(body: SettingBody):
     from . import settings_schema
     if why := settings_schema.refuse(body.name, body.value): raise HTTPException(422, why)
     prev = store.get_setting(body.name)
-    store.set_setting(body.name, body.value, ACTOR)
+    # the owner's name and address go through the one door that also turns them into {{owner}} tokens in the docs - set here
+    # plainly, triage and every agent went on reading the template's John Smith beside the new name (the email walk, 2026-10-29)
+    if body.name == 'owner_name' and str(body.value or '').strip(): store_mod.set_owner(store, str(body.value).strip(), None, ACTOR)
+    elif body.name == 'owner_email': store_mod.set_owner(store, (store.get_setting('owner_name') or '').strip(), str(body.value or ''), ACTOR)
+    else: store.set_setting(body.name, body.value, ACTOR)
     store.audit('setting', 0, 'set', ACTOR, detail={'key': body.name, 'from': prev, 'to': body.value})   # as the chat's setting.set does
     # the share-only listener follows its switch and its port at once (sharing.sync_listener)
     if body.name in ('share_links_lan', 'share_port'):

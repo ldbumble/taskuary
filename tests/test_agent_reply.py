@@ -256,5 +256,32 @@ def test_an_undecodable_reply_file_says_why(monkeypatch, capsys, tmp_path):
     assert capsys.readouterr().out.startswith(f'not saved: cannot read {f}: ')
 
 
+class SaidOnceTests(NoHook):
+    """The email walk, 2026-10-29: one reply saved by its marker and by `--reply` in the same turn wrote "agent drafted the reply
+    itself" and "assistant drafted the reply itself" one under the other, and the close then said the reply "is being written"."""
+    def notes(self, s, tid, words): return [c['Body'] for c in s.list_comments(tid) if words in str(c.get('Body') or '')]
+
+    def test_the_same_letter_saved_twice_is_noted_once(self):
+        s = MemoryStore(); tid, _ = task_with(s)
+        wrapup.agent_reply(s, tid, OWN, 'agent')
+        wrapup.agent_reply(s, tid, OWN + '\n', 'assistant')
+        self.assertEqual(len(self.notes(s, tid, 'drafted the reply itself')), 1)
+        wrapup.agent_reply(s, tid, OWN.replace('fixed', 'fixed it'), 'assistant')       # a new letter is said
+        self.assertEqual(len(self.notes(s, tid, 'drafted the reply itself')), 2)
+
+    def test_closing_a_chat_whose_agent_wrote_the_reply_does_not_say_one_is_being_written(self):
+        from taskuary import general
+        s = MemoryStore(); tid, _ = task_with(s)
+        s.update_task(tid, {'Kind': 'general'}, 't')
+        s.add_comment(tid, 'owner', general.USER_TYPE, 'Fix the export and answer Dana')
+        s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Fixed. The reply to Dana is saved.')
+        wrapup.agent_reply(s, tid, OWN, 'assistant')
+        with mock.patch('taskuary.responder.write_draft') as redraft:
+            wrapup.wrap(s, tid, close=True, actor='assistant')
+        redraft.assert_not_called()
+        self.assertEqual(self.notes(s, tid, 'is being written'), [])
+        self.assertEqual(len(self.notes(s, tid, 'Closed out the assistant conversation')), 1)
+
+
 if __name__ == '__main__':
     unittest.main()

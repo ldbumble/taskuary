@@ -600,8 +600,8 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               </IconButton>
               <ComposerPrimitive.Input
                 className="tq-aui-input"
-                placeholder={working ? "Add something for it to pick up…"
-                  : dock ? "Tell Taskuary what to do next…" : "Tell the assistant what to do next…"}
+                /* ...by the name the pane shows (kinds.json `shown`): an analyst's box said "the assistant" (the email walk, 2026-10-29) */
+                placeholder={working ? "Add something for it to pick up…" : `Tell ${dock ? "Taskuary" : name} what to do next…`}
               />
               {/* the one mic, dictating into the box - every other composer had it and this one did not (the owner,
                   2026-09-29: "where is mic to ask it question?") */}

@@ -2404,8 +2404,9 @@ def pipe_holds(store) -> str:
 def select_items(store, sel: dict) -> list:
     """The items a SELECTOR describes. Every field is optional and they AND together; an empty selector
     matches nothing, deliberately - "clear everything" is asked for by name (`everything: true`), never by
-    leaving them all blank."""
-    from .routing import tokens
+    leaving them all blank. `contains` keeps the items whose title MEANS it (embeddings, textsim) - or, with no embedder, carries it
+    whole - never a count of shared words (the owner, 2026-10-28)."""
+    from . import textsim
     sel = {k: v for k, v in (sel or {}).items() if v not in (None, '', [], False)}
     if not sel: return []
     want = lambda f: str(sel.get(f) or '').strip().lower()
@@ -2414,23 +2415,26 @@ def select_items(store, sel: dict) -> list:
     # "mark all the fyi read" left all forty on the rail while "clear all fyis" (kind: fyi) cleared them (2026-09-25)
     what = lambda i: {str(i.get(f) or '').lower() for f in ('category', 'kind', 'lane')}
     who = want('sender')
-    words = [w for w in tokens(str(sel.get('contains') or ''))]
+    about = ' '.join(str(sel.get('contains') or '').split())
     older = sel.get('older_than_hours')
     # ...or the ROWS THEMSELVES, the handles pipe.read printed (bulk.py): "the spam" is a judgement no field can say (2026-10-28)
     keys = bulk_mod.handles(sel['keys']) if sel.get('keys') else None
-    out = []
+    out, pipe = [], _pipe(store)
+    if about:
+        near = textsim.rank(store, about, [(i['key'], i.get('title')) for i in pipe if i.get('key')])
+        near = {k for k, _ in near} if near is not None else {i.get('key') for i in pipe if about.lower() in str(i.get('title') or '').lower()}
     # THE PIPE IS WHAT IS UNREAD. keep_surfaced=True is the whole timeline, all-time: it offered to
     # "clear 72" when seven reports were actually waiting, because 65 of them had been read days ago
     # (the owner, 2026-09-07: "there isn't 72 in the pipeline. There are 8 open report category in
     # unread. 72 is all time but we don't care about those").
-    for i in _pipe(store):
+    for i in pipe:
         if i['lane'] in ('blocked', 'working'): continue                  # an agent's question is never swept
         if keys is not None and not bulk_mod.named(i, keys): continue
         if any(v and v not in what(i) for v in (cat, kind, lane)): continue
         if who:
             hay = f"{i.get('who') or ''} {i.get('email') or ''}".lower()
             if who not in hay: continue
-        if words and not funnel.like(words, set(tokens(i.get('title') or ''))): continue
+        if about and i.get('key') not in near: continue
         if older:
             age = funnel._dt(i.get('since') or i.get('when'))
             if not age or (datetime.now() - age).total_seconds() < float(older) * 3600: continue
@@ -2531,15 +2535,10 @@ def clear_selected(store, sel: dict, actor: str = 'owner', keys: list | None = N
 
 
 # A TASK NAMED BY ITS PERSON AND SUBJECT, NOT BY A SENTENCE (the 2026-10-01 press audit): "what did Omar's Spendly lockout
-# say?" searched for every word, and the mail says "locked me out" - 7 of 11 such asks found nothing. When every word finds
-# nothing, a row is scored by how many of the words it has, each by its stem ("lockout" finds "locked"), and the rows with
-# at least half of them come back best first.
-def _stem(w: str) -> str: return w[:4] if len(w) >= 6 else w
-def word_hits(words: list, text: str) -> int:
-    from .routing import tokens
-    toks = set(tokens(text))
-    return sum(1 for w in words if any(t.startswith(_stem(w)) for t in toks))
-def _enough(words: list) -> int: return max(1, (len(words) + 1) // 2)
+# say?" searched for every word, and the mail says "locked me out" - 7 of 11 such asks found nothing. When the literal search
+# finds nothing, the newest rows are ranked by MEANING (embeddings, textsim) - a count of word stems each row shared ranked them
+# once (the owner, 2026-10-28: no hard-coded words). No embedder: the literal search is the answer.
+LOOSE_ROWS = 600
 
 
 def newest_rows(store, days: int, cap: int = 4000, sent: bool = False):
@@ -2563,7 +2562,7 @@ def search_timeline(store, sel: dict, limit: int = 12) -> list:
     period and surface likely match").
     ...and the owner's OWN sent mail with it: read in from Sent as thread context, it was in no list and so in no search -
     "did I answer the invite?" came back "I could not find any sent messages" (2026-10-26). A hit they sent says so."""
-    from .routing import tokens
+    from .routing import tokens               # the literal words a typed search is matched by, against the index
     sel = {k: v for k, v in (sel or {}).items() if v not in (None, '', [])}
     want = lambda f: str(sel.get(f) or '').strip().lower()
     who, cat = want('sender'), want('category')
@@ -2587,22 +2586,23 @@ def search_timeline(store, sel: dict, limit: int = 12) -> list:
             if not d or (datetime.now() - d).total_seconds() < float(older) * 3600: continue
         out.append(_hit(r))
         if len(out) >= limit: break
-    if not out and len(words) > 1: return _search_loose(store, words, who, cat, days, limit)
+    if not out and len(words) > 1: return _search_loose(store, str(sel.get('contains') or ''), who, cat, days, limit)
     return out
 
 
-def _search_loose(store, words: list, who: str, cat: str, days: int, limit: int) -> list:
-    ids = store.message_search([_stem(w) for w in words], who, days, loose=True)
-    if ids is None: rows = store.feed(limit=4000, days=days, sent=True)
-    else: rank = {i: n for n, i in enumerate(ids)}; rows = sorted(store.feed(limit=len(ids) or 1, days=days, ids=ids, sent=True), key=lambda r: rank[r['MessageId']])
-    scored = []
-    for r in rows:
+def _search_loose(store, about: str, who: str, cat: str, days: int, limit: int) -> list:
+    """The newest rows alike in meaning to what the owner asked about (textsim) - [] with no embedder."""
+    from . import textsim
+    rows = []
+    for r in newest_rows(store, days, cap=LOOSE_ROWS, sent=True):
         if r.get('Channel') == 'assistant': continue
         hay = f"{r.get('FromName') or ''} {r.get('FromEmail') or ''}".lower()
         if (who and who not in hay) or (cat and str(r.get('Category') or '').lower() != cat): continue
-        n = word_hits(words, f"{hay} {r.get('Subject') or ''} {r.get('Preview') or ''}")
-        if n >= _enough(words): scored.append((-n, len(scored), r))
-    return [_hit(r) for *_, r in sorted(scored)[:limit]]
+        rows.append(r)
+    by = {f"message:{r['MessageId']}": r for r in rows}
+    near = textsim.rank(store, about, [(k, f"{r.get('FromName') or ''}: {r.get('Subject') or ''}\n{str(r.get('Preview') or '')[:400]}")
+                                       for k, r in by.items()], limit) or []
+    return [_hit(by[k]) for k, _ in near]
 
 
 def _hit(r: dict) -> dict:
@@ -2615,10 +2615,11 @@ def _hit(r: dict) -> dict:
 def know(store, q: str) -> str:
     """knowledge.search: the Hub, the knowledge base and the kept facts for these words, in one answer."""
     from . import handbook as hub, knowledge
-    from .routing import tokens
-    want = {w for w in tokens(q) if len(w) > 2}
     from . import memorylines                  # the kept facts are LEARNED.md's lines (2026-10-27)
-    kept = [m['Note'] for m in memorylines.notes(store) if want & set(tokens(m.get('Note') or ''))][:8]
+    from .lookups import _bearing              # ...the ones that bear on it by meaning (embeddings), never shared words (2026-10-28)
+    notes = [m['Note'] for m in memorylines.notes(store) if m.get('Note')]
+    near = _bearing(store, ' '.join(str(q or '').split()), notes) if str(q or '').strip() else set()
+    kept = [n for n in notes if n in near][:8]
     parts = [hub.block(store, q, actions=False) if hub.enabled(store) else '', knowledge.block(store, q),
              ('KEPT FACTS:' + NEWLINE + NEWLINE.join(f'- {n}' for n in kept)) if kept else '']
     found = NEWLINE.join(x.strip() for x in parts if x.strip())

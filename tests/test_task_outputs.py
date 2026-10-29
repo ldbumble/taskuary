@@ -198,7 +198,11 @@ class OneOfEachTests(unittest.TestCase):
 
     def test_the_assistant_finds_the_excel_on_the_task_about_vendor_pricing(self):
         from taskuary import concierge
-        hits = outputs.find(self.store, ['vendor', 'pricing'], 'xlsx')
+        # what a file is about is read by meaning (embeddings, textsim), never by counting shared word stems (2026-10-28)
+        from tests import fake_embed
+        meaning = fake_embed.meaning({'pricing': ['pricing'], 'snag': ['snag']})
+        meaning.__enter__(); self.addCleanup(meaning.__exit__, None, None, None)
+        hits = outputs.find(self.store, 'vendor pricing', 'xlsx')
         self.assertEqual([(h['tid'], h['name']) for h in hits], [(self.tid, 'pricing comparison v9.xlsx')])
         said = concierge.read_op(self.store, 'outputs.find', {'query': 'the excel on the task about vendor pricing', 'kind': 'xlsx'})
         self.assertIn('pricing comparison v9.xlsx', said)

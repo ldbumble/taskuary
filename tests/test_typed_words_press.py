@@ -100,6 +100,9 @@ class OnlyRealButtons(unittest.TestCase):
 class ANamedTaskIsFound(unittest.TestCase):
     def test_the_timeline_finds_a_task_by_its_person_and_subject_words(self):
         s, a, b, item = two_tasks()
+        from tests import fake_embed           # by MEANING (embeddings), never a count of shared word stems (2026-10-28)
+        meaning = fake_embed.meaning({'lockout': ['Spendly lockout', 'Spendly locked me out']})
+        meaning.__enter__(); self.addCleanup(meaning.__exit__, None, None, None)
         hits = concierge.search_timeline(s, {'contains': "Omar's Spendly lockout"})
         self.assertTrue(hits, 'the literal phrase is not in the mail; its person and subject are')
         self.assertEqual(hits[0]['ref'], f'TQ-{a:04d}')

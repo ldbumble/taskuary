@@ -167,11 +167,13 @@ def _page(a: dict) -> dict:
             **({'external_url': a['Url']} if a.get('Url') else {})}
 
 
-def find(store, words=(), kind: str = '', tid: int = None, limit: int = 8) -> list:
+def find(store, query: str = '', kind: str = '', tid: int = None, limit: int = 8) -> list:
     """The files agents made, best match first: [{tid, title, name, url, at, earlier, ...}] - each family once (deliverables), working
-    files never. `words` match the task's title and summary and the file's own name, each by its stem; `kind` narrows by what it is."""
-    from .concierge import _enough, _stem
-    want, stems = exts_of(kind), list(dict.fromkeys(_stem(w) for w in words or ()))
+    files never. `query` is matched against the task's title and summary and the file's own name by MEANING (embeddings, textsim) -
+    a count of shared word stems decided it once (the owner, 2026-10-28) - or, with no embedder, found there whole; `kind` narrows
+    by what it is. Newest first when nothing is asked about."""
+    from . import textsim
+    want, q = exts_of(kind), ' '.join(str(query or '').split())
     ids, pages = [int(tid)] if tid else _tids(), {}
     try:
         for a in store._rows("SELECT * FROM task_artifact WHERE Kind IN ('shown','claude_artifact')" + (' AND TaskId=?' if tid else ''),
@@ -183,13 +185,16 @@ def find(store, words=(), kind: str = '', tid: int = None, limit: int = 8) -> li
         task = store.get_task(t)
         if not task: continue
         made, _ = deliverables(listing(t) + pages.get(t, []))
-        about = f"{task.get('Title') or ''} {task.get('Summary') or ''}".lower()
+        about = f"{task.get('Title') or ''} {task.get('Summary') or ''}"
         for r in made:
             if want and Path(str(r.get('name') or '')).suffix.lower() not in want: continue
-            n = sum(s in f"{about} {re.sub(r'[_.-]+', ' ', str(r.get('name') or '').lower())}" for s in stems)
-            if stems and n < _enough(stems): continue
-            hits.append((n, str(r.get('at') or r.get('created_at') or ''), {'tid': t, 'title': task.get('Title') or '', **r}))
-    return [r for _, _, r in sorted(hits, key=lambda x: (x[0], x[1]), reverse=True)][:limit]
+            text = f"{re.sub(r'[_.-]+', ' ', str(r.get('name') or ''))} - {about}"
+            hits.append((f"file:{t}:{r.get('name')}", text, str(r.get('at') or r.get('created_at') or ''), {'tid': t, 'title': task.get('Title') or '', **r}))
+    if not q: return [h[3] for h in sorted(hits, key=lambda h: h[2], reverse=True)][:limit]
+    near = textsim.rank(store, q, [(k, text) for k, text, *_ in hits])
+    by = {h[0]: h for h in hits}
+    if near is not None: return [by[k][3] for k, _ in near][:limit]
+    return [h[3] for h in sorted(hits, key=lambda h: h[2], reverse=True) if q.lower() in ' '.join(h[1].split()).lower()][:limit]
 
 
 def _cell(v) -> str:

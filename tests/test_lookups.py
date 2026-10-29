@@ -163,9 +163,11 @@ class AppAtWorkTests(unittest.TestCase):
         s.add_message({'ExternalId': 'sent:1', 'Channel': 'email', 'FromName': 'Alex Doyle', 'FromEmail': 'alex@northwind.example',
                        'Subject': 'Re: Invite: freight review', 'BodyText': 'Accepted - see you Thursday at two.', 'Status': 'context',
                        'Direction': 'out', 'SentAt': T.ago(2)})
-        for p in ({'contains': 'Thursday'}, {'contains': 'freight review'}, {'contains': 'invite freight zzzz'}, {}):
-            out = read(s, 'timeline.search', **p)
-            self.assertIn('you (sent): Re: Invite: freight review', out, p)
+        from tests import fake_embed           # a loose ask is found by meaning (embeddings), never by counting its words (2026-10-28)
+        with fake_embed.meaning({'freight': ['freight']}):
+            for p in ({'contains': 'Thursday'}, {'contains': 'freight review'}, {'contains': 'invite freight zzzz'}, {}):
+                out = read(s, 'timeline.search', **p)
+                self.assertIn('you (sent): Re: Invite: freight review', out, p)
         self.assertNotIn('Re: Invite', read(s, 'timeline.search', contains='Quarterly'))
         self.assertNotIn('Re: Invite', ''.join(str(r.get('Subject')) for r in s.feed(days=30)))   # the lists stay as they were
 

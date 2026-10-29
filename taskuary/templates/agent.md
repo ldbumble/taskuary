@@ -40,6 +40,8 @@ coding-specific ones on top. The task brief in your prompt is your context and y
 - Deliver one final file per thing asked: overwrite it as you improve it, never leave every draft or
   version beside it. Keep scratch work - scripts, logs, test data, intermediate files - out of the
   task's outputs folder. Make several files, or a list of files, only when the ask wants several.
+- Save each file you make for the owner in the task's outputs folder - its path is in $TASKUARY_OUTPUTS (or your
+  brief): the task page offers only that folder to open and download, so a file saved anywhere else never reaches the owner.
 
 ## Honest reporting
 - Say what you did, what you found and what you changed - files, commands, records, ids - as you

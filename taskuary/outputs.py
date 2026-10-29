@@ -26,7 +26,7 @@ TYPES = {'.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.s
 # how the page previews each kind; anything not here is Download only
 PREVIEW = {'.xlsx': 'sheet', '.xlsm': 'sheet', '.csv': 'table', '.pdf': 'pdf', '.png': 'picture', '.jpg': 'picture', '.jpeg': 'picture',
            '.gif': 'picture', '.webp': 'picture', '.md': 'text', '.txt': 'text', '.json': 'text', '.log': 'text', '.tsv': 'text',
-           '.svg': 'page', '.html': 'page', '.htm': 'page'}
+           '.svg': 'page', '.html': 'page', '.htm': 'page', '.docx': 'document'}
 
 
 def folder(tid: int) -> Path: return config.home() / 'scratch' / 'outputs' / task_ref(tid)
@@ -218,6 +218,32 @@ def sheet(p: Path, name: str = '') -> dict:
     finally: wb.close()
 
 
+DOC_BLOCKS = 400                                     # a document preview: its first paragraphs and tables, never the whole book
+_W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+
+def document(p: Path) -> dict:
+    """A Word document as the page draws it: its paragraphs (a heading marked as one) and its tables as rows, in order, the first
+    DOC_BLOCKS of them - read from the file's own XML (a .docx is a zip), so no library is needed and nothing in it runs."""
+    import zipfile
+    from xml.etree import ElementTree as ET
+    with zipfile.ZipFile(p) as z: root = ET.fromstring(z.read('word/document.xml'))
+    body = root.find(f'{_W}body')
+    text = lambda el: ''.join(t.text or '' for t in el.iter(f'{_W}t'))
+    blocks, more = [], False
+    for el in list(body) if body is not None else []:
+        if len(blocks) >= DOC_BLOCKS: more = True; break
+        if el.tag == f'{_W}p':
+            style = el.find(f'{_W}pPr/{_W}pStyle')
+            head = style is not None and str(style.get(f'{_W}val') or '').lower().startswith(('heading', 'title'))
+            if (t := text(el).strip()) or blocks: blocks.append({'text': _cell(t), **({'heading': True} if head else {})})
+        elif el.tag == f'{_W}tbl':
+            rows = [[_cell(text(c).strip()) for c in r.findall(f'{_W}tc')][:COLS] for r in el.findall(f'{_W}tr')][:ROWS]
+            if rows: blocks.append({'rows': rows})
+    while blocks and not blocks[-1].get('text', True): blocks.pop()
+    return {'blocks': blocks, 'more': more, 'max_blocks': DOC_BLOCKS}
+
+
 def brief(tid: int) -> str:
     "What a chat with hands is told about the files it makes - so it saves them where the page finds them and never invents an address."
     d = folder(tid)
@@ -227,6 +253,24 @@ def brief(tid: int) -> str:
             'this task with Preview and Download, so the owner opens it from the chat. To point at one, write its full path in your '
             'answer. Never write a URL or a link to it - Taskuary serves that folder itself, and an address you make up leads nowhere. '
             f'Asked to send it "here", it already is: name the file. {ONE_FILE}')
+
+
+# ...and a TERMINAL session is told the same by its environment (terminal.session_env: TASKUARY_OUTPUTS) and its standing rules
+# (AGENT.md, or WHERE appended to an older copy - terminal.with_fence_rule), not its seed, which a real TUI types character by
+# character under a budget: a Claude Code session on a task saved every workbook it made to the owner's Downloads and a scratchpad,
+# where the task page - serving only this folder - had nothing to open or download.
+ENV = 'TASKUARY_OUTPUTS'
+WHERE = (f"Save each file you make for the owner in the task's outputs folder - its path is in ${ENV} (or your brief): the task page "
+         'offers only that folder to open and download, so a file saved anywhere else never reaches the owner.')
+
+
+def env_folder(tid) -> str:
+    "The folder a session on task `tid` saves into, made now so the agent finds it there; '' with no task."
+    if not str(tid or '').isdigit(): return ''
+    d = folder(int(tid))
+    try: d.mkdir(parents=True, exist_ok=True)
+    except OSError: pass
+    return str(d)
 
 
 # ...and at the source (the owner, 2026-10-28): an agent that leaves every draft and every helper beside the answer is what made the list

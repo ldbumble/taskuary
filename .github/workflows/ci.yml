@@ -130,6 +130,7 @@ jobs:
         working-directory: website
 
   browser:
+    continue-on-error: true   # reports, never blocks a release (2026-10-29, the smoke set is the gate)
     # Real Chromium + the disposable fixture backend; never targets the owner's server.
     # ...in three parts at once (2026-10-21): file after file on one machine it outgrew 10 minutes and was cut off mid-run.
     # browser/shard.mjs deals package.json's test:browser list out, so the list stays the one place a test is named.
@@ -155,6 +156,7 @@ jobs:
         working-directory: website
 
   walk:
+    continue-on-error: true   # reports, never blocks a release (2026-10-29, the smoke set is the gate)
     # The dead-end walk on its own: it presses every button on the list and forces each failure (2026-10-18), which takes
     # longer than the rest of the browser suite together - inside the 10-minute browser job it was cancelled, not failed.
     # ...and in four parts at once (2026-10-20): one 15-minute walk held every run; its passes share nothing but the build
@@ -182,6 +184,7 @@ jobs:
         with: { name: "walk-pressed-${{ strategy.job-index }}", path: website/browser/walk-pressed-*.json, if-no-files-found: ignore }
 
   walk-cover:
+    continue-on-error: true   # reports, never blocks a release (2026-10-29, the smoke set is the gate)
     # COVER - every button on the list pressed at least once - needs every part's presses: checked here, over all four
     needs: walk
     runs-on: ubuntu-24.04

@@ -4780,8 +4780,12 @@ def _owner_history(request: Request, tid: int):
     from . import origin
     _own_task_only(request, tid)
     if not store.get_task(tid): raise HTTPException(404, 'no such task')
-    if origin.of_task(store, tid)[0] == 'stranger':
-        raise HTTPException(403, "a stranger's task does not read the owner's mail - work from what the task itself holds")
+    o, why = origin.of_task(store, tid)
+    if o == 'stranger':
+        # ...said with its reason and the way on, which the agent passes to the owner: "refused" alone left it nothing to say (2026-10-28)
+        raise HTTPException(403, f"a stranger's task does not read the owner's mail: this task carries a message from someone the owner has "
+                                 f"not vouched for ({why}). Work from what the task itself holds - read_message opens the task's own "
+                                 f"messages. If the owner knows the sender, they can press Trust by that name on the task.")
 
 @app.get('/api/agent/messages')
 def agent_messages(request: Request, task_id: int, sender: str = '', subject: str = '', words: str = '', since: str = '', until: str = '',
@@ -4793,12 +4797,15 @@ def agent_messages(request: Request, task_id: int, sender: str = '', subject: st
     return {'data': hits, 'says': mailsearch.says(hits)}
 
 @app.get('/api/agent/messages/{mid}')
-def agent_message(mid: int, request: Request, task_id: int):
-    """`taskuary --message ID`: one message in full, with its thread."""
-    from . import mailsearch
-    _owner_history(request, task_id)
-    m = mailsearch.message(store, mid)
-    if not m: raise HTTPException(404, 'no such message')
+def agent_message(mid: str, request: Request, task_id: int):
+    """`taskuary --message ID`: one message in full, with its thread. The id as Taskuary writes it - m1073 or 1073."""
+    from . import agenttools, mailsearch
+    try: n = mailsearch.message_id(mid)
+    except ValueError as e: raise HTTPException(422, str(e))
+    if agenttools.own_message(store, task_id, {'id': n}): _own_task_only(request, task_id)    # the task's own mail, a stranger's task too
+    else: _owner_history(request, task_id)
+    m = mailsearch.message(store, n)
+    if not m: raise HTTPException(404, f'Taskuary has no saved message m{n} - `taskuary --search` finds a message and its id')
     return m
 
 @app.get('/api/agent/memory')
@@ -4919,7 +4926,8 @@ async def mcp_rpc(request: Request, task: int = 0):
              'propose': lambda tid, a: agent_propose(AgentProposeBody(**{**a, 'task_id': tid}), request)}
     def run(name, args):
         cls = agenttools.TOOLS[name][0]
-        if cls == 'read' and name not in ('my_task', 'list_systems', 'run_system'): _owner_history(request, task)
+        if cls == 'read' and name not in ('my_task', 'list_systems', 'run_system') and not (
+                name == 'read_message' and agenttools.own_message(store, task, args)): _owner_history(request, task)
         out = agenttools.call(store, task, name, args, doors)
         return out.body.decode() if isinstance(out, JSONResponse) else out
     def one(m): return agenttools.rpc(m, run) if isinstance(m, dict) else {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32600, 'message': 'not a request'}}

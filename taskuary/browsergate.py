@@ -138,13 +138,34 @@ def _own_args(args: list) -> list:
     return out
 
 
+def address(sid: str, st: dict = None) -> str:
+    """The address of the page this session's browser is on: agent-browser's state file, else the browser ASKED (`get url`). The state
+    file alone is not always written - a browser the agent opened itself, an agent-browser that keeps no target file - and an act held
+    with no address could never be approved ("the browser has moved on"), or two blanks matched and it ran unchecked (2026-10-28).
+    '' when even the browser cannot say: then nothing is held or run on a page nobody can name."""
+    from . import browserview
+    u = str((st if st is not None else browserview.state(sid, fresh=True)).get('url') or '')
+    if u: return u
+    try: rc, said = _run(sid, ['get', 'url'], 15, 'url')
+    except Exception as e: logger.debug(f'browsergate: no address from {sid} - {e}'); return ''
+    return next((w for w in reversed(str(said or '').split()) if re.match(r'^(https?|file|about|data):', w, re.I)), '') if rc == 0 else ''
+
+
 def page(sid: str) -> dict:
     "{url, elements} of the tab the act would land on. What cannot be read is left empty - and an empty page is an unsure verdict."
     from . import browserview
     st = browserview.state(sid, fresh=True)
     try: rc, snap = _run(sid, ['snapshot', '-i', '-c'], 20, 'look')
     except Exception as e: logger.debug(f'browsergate: no snapshot of {sid} - {e}'); rc, snap = 1, ''
-    return {'url': str(st.get('url') or ''), 'open': bool(st.get('open')), 'elements': snap[:SNAP_MAX] if rc == 0 else ''}
+    return {'url': address(sid, st), 'open': bool(st.get('open')), 'elements': snap[:SNAP_MAX] if rc == 0 else ''}
+
+
+# WHEN THE PAGE CANNOT BE NAMED, the agent is told what that means and what to say - never "could not verify the current page address"
+# and nothing more, which is all the owner was left with (2026-10-28: "it failed, no explanation?")
+NO_PAGE = ('{held}: Taskuary could not read which page your browser is on, so it could not put this in front of the owner - nothing was '
+           'done. Run `agent-browser get url`. If that names the page, run your command again; if it fails too, the browser has stopped '
+           'answering: tell the owner in one line "The browser stopped answering, so I could not finish on <the site> - send another '
+           'message and I will open it again" and end your turn.')
 
 
 SYSTEM = ('You guard the browser of an AI agent that works for its owner. Before the agent runs a browser command, you decide '
@@ -245,6 +266,7 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
         if not v['hold']: continue
         args = _own_args(a['args'])
         if not args: return _deny(f"{HELD}: a browser command it could not read. Run each agent-browser command on its own line.")
+        if not pg['url']: return _deny(NO_PAGE.format(held=HELD))
         try: site = signin.site_of(pg['url']) or signin.registrable(urlsplit(pg['url']).hostname) or 'the page'
         except ValueError: site = 'the page'
         browserview.ended_on(sid, 'held', store, tid)                          # its last frame is kept if the session stops here
@@ -296,7 +318,11 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
     st = browserview.state(sid, fresh=True)
     # ...and the way on, said: the same Approve stayed and failed every time, with nothing saying Dismiss it (2026-10-25)
     if not st.get('open'): raise RuntimeError(f"the agent's browser is closed - nothing was done. {AGAIN}")
-    if not _same_page(str(st.get('url') or ''), str(p.get('url') or '')):
+    here = address(sid, st)
+    if not here or not p.get('url'):
+        raise RuntimeError(f"Taskuary could not read which page the agent's browser is on, so it could not check it is still on "
+                           f"{p.get('site') or 'the page'} - nothing was done. {AGAIN}")
+    if not _same_page(here, str(p.get('url') or '')):
         raise RuntimeError(f"the agent's browser has moved on from the page this was held on ({p.get('site') or 'its site'}) - nothing was done. {AGAIN}")
     rc, said = (run or (lambda s, a: _run(s, a, 60, 'act')))(sid, args)
     said = ' '.join(str(said or '').split())[-600:]

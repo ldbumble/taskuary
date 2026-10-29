@@ -1109,6 +1109,10 @@ class CoreTests(unittest.TestCase):
         with self.assertRaises(ValueError): reshape.merge_tasks(s, a, b)
 
     def test_merge_candidates_rank_the_task_it_is_really_a_copy_of(self):
+        # alike by MEANING, off embeddings (textsim) - never by the words two tasks share (2026-10-28)
+        from tests import fake_embed
+        meaning = fake_embed.meaning({'pto': ['PTO import'], 'roster': ['112 active employees']})
+        meaning.__enter__(); self.addCleanup(meaning.__exit__, None, None, None)
         s = MemoryStore()
         tid = s.create_task({'Title': 'PTO import mapping is wrong', 'Summary': 'the PTO import maps the wrong column'}, 'owner')
         twin = s.create_task({'Title': 'PTO import maps the wrong column', 'Summary': 'PTO import mapping is wrong'}, 'owner')

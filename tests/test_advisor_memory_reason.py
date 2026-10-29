@@ -49,7 +49,7 @@ def test_an_agreeing_model_says_its_memory_reason_in_one_line(w):
     plant(s, 'people', ERIN)
     t = ask(s, 'erin', 'Offsite agenda', 'Can you check the offsite agenda before Thursday?')
     cite = lc.cite_of('erin blake manager answer')
-    d, prompt = judged(s, t, {'verb': 'reply', 'line': 'You answer Erin the same morning.', 'evidence': [cite]})
+    d, prompt = judged(s, t, {'verb': 'reply', 'line': 'You answer Erin the same morning.', 'memory_says': 'You answer Erin, your manager, the same morning', 'evidence': [cite]})
     assert f'(id {cite})' in prompt, 'each memory line the model reads carries the id it cites'
     assert (d['state'], d['verb'], d['by'], d['line']) == ('asked', 'reply', 'model', 'You answer Erin the same morning.'), d
     assert len(d['line']) <= 60 and d['evidence'] == [cite]
@@ -86,7 +86,7 @@ def test_a_forgotten_line_rests_on_nothing(w):
     s, _ = w
     plant(s, 'people', ERIN)
     t = ask(s, 'erin', 'Offsite agenda', 'Can you check the offsite agenda before Thursday?')
-    judged(s, t, {'verb': 'reply', 'line': 'You answer Erin the same morning.', 'evidence': [lc.cite_of('erin blake manager answer')]})
+    judged(s, t, {'verb': 'reply', 'line': 'You answer Erin the same morning.', 'memory_says': 'You answer Erin, your manager, the same morning', 'evidence': [lc.cite_of('erin blake manager answer')]})
     s.save_doc('learned', s.get_doc('learned').replace(ERIN + '\n', ''), 'owner')
     assert advisor.decide(s, f'task:{t}', preread=False)['line'] == '', 'the line it rested on is gone, so the reason goes with it'
 
@@ -109,7 +109,7 @@ def test_a_hand_off_count_is_never_the_reason_for_another_verb(w):
     assert (d['verb'], d['by'], d['line']) == (None, 'rule', ''), d
     # ...over Hand it to a person it is the reason, said
     t2 = ask(s, 'site2', 'Payroll correction for a site 6', 'One of our staff was paid the wrong rate last cycle - can this be fixed?', hours=1)
-    d2, _ = judged(s, t2, {'verb': 'forward', 'line': 'Ray handles payroll for you.', 'evidence': usual.handed_to(s, C.P['site2'][1], skip=t2)['evidence'][:1]})
+    d2, _ = judged(s, t2, {'verb': 'forward', 'line': 'Ray handles payroll for you.', 'memory_says': 'You hand payroll asks to Ray', 'evidence': usual.handed_to(s, C.P['site2'][1], skip=t2)['evidence'][:1]})
     assert (d2['verb'], d2['line']) == ('forward', 'Ray handles payroll for you.'), d2
 
 
@@ -170,5 +170,5 @@ def test_a_state_asked_for_its_memory_changes_only_on_that_memory(w):
     d, _ = judged(s, t, {'verb': other, 'line': 'It has waited a day.', 'evidence': []})
     assert (d['verb'], d['by']) == (r['verb'], 'rule'), d
     s._exec('DELETE FROM advice WHERE TargetId=?', (t,))
-    d, _ = judged(s, t, {'verb': other, 'line': 'Her sheet is due Monday.', 'evidence': [lc.cite_of('gail monday sheet')]})
+    d, _ = judged(s, t, {'verb': other, 'line': 'Her sheet is due Monday.', 'memory_says': 'Gail promised the headcount sheet by Monday', 'evidence': [lc.cite_of('gail monday sheet')]})
     assert (d['verb'], d['by'], d['line']) == (other, 'model', 'Her sheet is due Monday.'), d

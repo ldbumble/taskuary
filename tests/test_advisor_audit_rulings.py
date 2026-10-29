@@ -136,15 +136,22 @@ def test_a_line_citing_a_memory_it_does_not_say_is_dropped_and_the_button_kept(w
     t = ask(s, 'erin', 'GitHub notice: dependency bump', 'A new dependency bump was opened on northwind/ledger.')
     cite = lc.cite_of('robot bumps')
     it = advisor._item(s, 'task', t, f'task:{t}')
-    assert advisor.hollow(s, it, ('task', t), 'GitHub notice; no ask here.', [cite])
-    assert not advisor.hollow(s, it, ('task', t), 'Robot bumps are never yours to act on.', [cite])
-    assert not advisor.hollow(s, it, ('task', t), 'GitHub notice; no ask here.', []), 'citing no memory, the check does not apply'
-    d, _ = judged(s, t, {'verb': 'close', 'line': 'GitHub notice; no ask here.', 'evidence': [cite]})
+    # ...whether the line says it is the model's own field (memory_says), never the line's words held against the memory's
+    assert advisor.hollow(s, it, ('task', t), '', [cite])
+    assert advisor.hollow(s, it, ('task', t), '   ', [cite])
+    assert not advisor.hollow(s, it, ('task', t), 'Robot bumps are never yours to act on', [cite])
+    assert not advisor.hollow(s, it, ('task', t), '', []), 'citing no memory, the check does not apply'
+    assert not advisor.hollow(s, it, ('task', t), '', ['out999']), 'an outcome id is no memory line'
+    d, _ = judged(s, t, {'verb': 'close', 'line': 'GitHub notice; no ask here.', 'memory_says': '', 'evidence': [cite]})
     assert (d['verb'], d['line']) == (None, ''), d
     s._exec('DELETE FROM advice WHERE TargetId=?', (t,))
-    d, _ = judged(s, t, {'verb': 'close', 'line': 'Robot bumps are never yours to act on.', 'evidence': [cite]})
-    assert (d['verb'], d['line']) == ('close', 'Robot bumps are never yours to act on.'), d
+    # ...a line in other words than the memory's stands when the model says what the memory says
+    d, _ = judged(s, t, {'verb': 'close', 'line': 'Nothing here is yours to act on.', 'evidence': [cite],
+                         'memory_says': 'Dependency bump notices from the build robot are never yours to act on'})
+    assert (d['verb'], d['line']) == ('close', 'Nothing here is yours to act on.'), d
+    assert advisor.rows(s, 'task', t)[0]['MemorySays'].startswith('Dependency bump notices'), 'stored with the row'
 
 
 def test_the_prompt_asks_the_line_to_say_the_remembered_fact():
     assert 'SAYS what that memory is' in advisor.SYSTEM
+    assert 'memory_says' in advisor.SYSTEM and 'memory_says' in advisor.WANT['properties']

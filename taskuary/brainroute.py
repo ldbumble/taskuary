@@ -173,7 +173,7 @@ def _fixed(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
         return want_pick or llm.effective_pick(store, ''), want_model or '', gear or ('light' if job == 'assistant' else 'main'), _backups(store)
     if job == 'assistant':
         from . import concierge
-        return concierge.pick(store), want_model or str(store.get_setting(concierge.MODEL_KEY) or '').strip(), gear or 'light', _backups(store)
+        return concierge.pick(store), want_model or concierge.model_of(store), gear or 'light', _backups(store)
     from . import general
     base, pick = general._selected(store), general.default_pick(store, task)
     model = want_model or (base[2] if pick == base[0] else general._selected(store, pick=pick)[2] if pick else '')

@@ -149,7 +149,7 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
         return { pill: pill && { l: pill.left, r: pill.right, w: pill.width, h: pill.height, b: pill.bottom }, bar: bar && { r: bar.right, b: bar.bottom }, cv: cv && { r: cv.right, b: cv.bottom },
           inBar: !!document.querySelector(".tq-dock .tq-compose-box") }; });
       assert.ok(g.pill && !g.inBar, `the box is not on the bar: ${JSON.stringify(g)}`);
-      assert.ok(g.pill.w >= 300 && g.pill.h <= 48, `the wide ask bar, as wide as the open window (the owner, 2026-10-29): ${JSON.stringify(g.pill)}`);
+      assert.ok(g.pill.w >= 300 && g.pill.h <= 90, `the wide ask bar, as wide as the open window (the owner, 2026-10-29): ${JSON.stringify(g.pill)}`);
       assert.ok(g.pill.l - g.bar.r >= 12, `a gap between the bar and the chat: ${JSON.stringify(g)}`);
       assert.ok(g.cv.r - g.pill.r <= 40 && g.cv.b - g.pill.b <= 30, `in the corner: ${JSON.stringify(g)}`);
     });

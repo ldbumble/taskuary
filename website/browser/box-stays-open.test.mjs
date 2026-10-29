@@ -31,8 +31,9 @@ test("the chat box stays open over the canvas until its × or Esc, in one row, n
     const field = box.querySelector(".tq-compose-field"), ta = box.querySelector("textarea"), send = box.querySelector(".tq-send"), verbs = line.querySelector(".tq-arow-verbs");
     const tools = [...box.querySelectorAll(".tq-compose-tools button")].filter((b) => b.offsetParent), f = r(field), t = r(ta);
     return { apart: !!box.closest(".tq-chat-unit") && !box.closest(".tq-dock"), rises: f.top < r(line).top && Math.abs(f.bottom - r(box).bottom) <= 1,
-      corner: Math.round(r(document.querySelector(".tq-asst-col")).right - f.right), wordsWide: t.left - f.left <= 8 && f.right - t.right <= 8,
-      toolsUnder: tools.every((b) => r(b).top >= t.bottom - 1 && r(b).right <= r(send).left), sendRight: f.right - r(send).right <= 10 && r(send).top >= t.bottom - 1,
+      corner: Math.round(r(document.querySelector(".tq-asst-col")).right - f.right), wordsWide: t.left - f.left <= 8 && f.right - t.right <= 48,
+      // ...the send round at the end of the words' own line, a modern chat composer's (the owner, 2026-10-29)
+      toolsUnder: tools.every((b) => r(b).top >= t.bottom - 1 && r(b).right <= r(send).left), sendRight: f.right - r(send).right <= 10 && r(send).top < t.bottom && r(send).bottom > t.top,
       tools: tools.length };
   });
 
@@ -43,7 +44,7 @@ test("the chat box stays open over the canvas until its × or Esc, in one row, n
   // ...its own unit on a desk (the owner, 2026-10-29: "it looks weird coming out of the bottom bar"): the pill in the corner, apart from the
   // bar, opening up out of its own corner
   assert.ok(s.apart && s.rises && s.corner <= 40, `the box is its own unit, its field rising out of its corner ${JSON.stringify(s)}`);
-  assert.ok(s.tools >= 2 && s.wordsWide && s.toolsUnder && s.sendRight, `the words the field's width, the tools under them on the left, send on the right ${JSON.stringify(s)}`);
+  assert.ok(s.tools >= 2 && s.wordsWide && s.toolsUnder && s.sendRight, `the words the field's width less the send at their line's end, the tools under them on the left ${JSON.stringify(s)}`);
 
   // a click on the canvas, a look away: still open
   await page.mouse.click(400, 300); await sleep(600);

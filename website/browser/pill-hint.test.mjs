@@ -27,8 +27,10 @@ test("a task opened from the opener: the pill's line is centred in the pill", { 
     return { box: mid(box), ta: mid(ta), send: mid(send), h: ta.getBoundingClientRect().height, open: box.hasAttribute("data-tq-open") };
   });
   assert.ok(!at.open, "the pill at rest");
-  assert.equal(at.h, 30, `one 30px line: ${JSON.stringify(at)}`);
-  assert.ok(Math.abs(at.ta - at.box) <= 1 && Math.abs(at.ta - at.send) <= 1, `the line is centred with the pill and its send: ${JSON.stringify(at)}`);
+  // ...on a desk the ask bar is a composer card (the owner, 2026-10-29): its words one 32px line, the send round at that line's end
+  const desk = await page.$(".tq-chat-unit > .tq-compose-box");
+  assert.equal(at.h, desk ? 32 : 30, `one line: ${JSON.stringify(at)}`);
+  assert.ok((desk || Math.abs(at.ta - at.box) <= 1) && Math.abs(at.ta - at.send) <= 2, `the line is centred with its send: ${JSON.stringify(at)}`);
   assert.deepEqual(errors, []);
 });
 
@@ -41,8 +43,9 @@ test("the dock's pill at rest says a hint that fits it, and the whole hint once 
   const rest = await hint(page);
   assert.ok(rest.pill && !rest.open, `the box is the pill, its own unit beside the bar: ${JSON.stringify(rest)}`);
   assert.ok(rest.fits, `the pill's hint fits it: ${JSON.stringify(rest)}`);
-  // ...and it is the SAME words whatever is on the table (the owner, 2026-10-27: "it should always be the same size and words")
-  assert.equal(rest.text, "Ask…");
+  // ...and it is the SAME words whatever is on the table (the owner, 2026-10-27: "it should always be the same size and words") - the
+  // short one in a narrow pill, the box's own words in the desk's wide ask bar (2026-10-29)
+  assert.ok(rest.text === "Ask…" || (await page.$(".tq-chat-unit > .tq-compose-box") && rest.text.length > 3), JSON.stringify(rest));
   await page.focus(".tq-compose-box textarea"); await sleep(500);
   const open = await hint(page);
   assert.ok(open.open && open.fits, `opened, its hint fits: ${JSON.stringify(open)}`);

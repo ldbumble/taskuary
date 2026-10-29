@@ -118,6 +118,48 @@ class FinishCheckTests(_Rail):
         fc.assert_not_called()
 
 
+class ReplyOwedTests(_Rail):
+    """THE DRAFT-WRITTEN CHECK (the design rev 2): the agent finished on a task someone waits on, and no reply was written - the line says
+    what the reply must give them, and the press that writes it is lit. Whether anyone waits is the model's owes_reply, never the mail's words."""
+    OWED = 'Send Gail the new share path'
+    _stopped, _decide = FinishCheckTests._stopped, FinishCheckTests._decide
+    def _owed(self, **kw): return brain_saying({'verdict': 'answered', 'line': '', 'evidence': [], 'owes_reply': True, 'reply_line': self.OWED, **kw})
+
+    def test_a_reply_owed_and_none_written_lights_continue_with_this(self):
+        s = MemoryStore(); t = self._stopped(s, said='Moved the export to the new share.')
+        advisor.finish_check(s, t, wait=True, llm=self._owed())
+        r = s._one('SELECT * FROM advice WHERE Event=?', (advisor.CHECK,))
+        self.assertEqual((r['Verb'], r['Line'], r['Kind']), ('reply', self.OWED, 'work_gap'))
+        d = self._decide(s, t)
+        self.assertEqual((d['line'], d['by']), (self.OWED, 'check'), d)
+        self.assertEqual(d['fix'], {'verb': 'continue', 'label': 'Continue with this', 'note': self.OWED})
+
+    def test_no_agent_to_write_it_lights_the_rows_own_reply(self):
+        s = MemoryStore(); t = self._stopped(s, said='Moved the export to the new share.')
+        advisor.finish_check(s, t, wait=True, llm=self._owed())
+        with mock.patch.object(advisor, 'fix_of', return_value=None), \
+             mock.patch.object(advisor, 'pressable', side_effect=lambda st, it, v, vs: '' if v == 'reply' else 'not on the row'):
+            d = self._decide(s, t)
+        self.assertEqual((d['verb'], d['line'], d.get('fix')), ('reply', self.OWED, None), d)
+
+    def test_nobody_waiting_a_draft_or_a_reply_that_went_lights_nothing_of_its_own(self):
+        s = MemoryStore(); t = self._stopped(s)
+        advisor.finish_check(s, t, wait=True, llm=self._owed(owes_reply=False))
+        self.assertEqual(s._one('SELECT Dropped FROM advice WHERE Event=?', (advisor.CHECK,))['Dropped'], 'answered', 'unsure is silent')
+        from taskuary.testing import Factory
+        s2 = MemoryStore(); t2 = self._stopped(s2)
+        Factory(s2).review(t2, s2.list_messages(t2)[-1]['MessageId'], draft='The export moved to the new share.'); funnel.invalidate()
+        self.assertFalse(advisor.reply_unwritten(s2, t2), 'a draft waits: the reply is written')
+        advisor.finish_check(s2, t2, wait=True, llm=self._owed())
+        self.assertIsNone(s2._one('SELECT Verb FROM advice WHERE Event=?', (advisor.CHECK,))['Verb'])
+
+    def test_the_check_reads_that_no_draft_was_written(self):
+        s = MemoryStore(); t = self._stopped(s)
+        llm = self._owed(owes_reply=False)
+        advisor.finish_check(s, t, wait=True, llm=llm)
+        self.assertIn('THE DRAFT: none was written.', llm.calls[0][1]); self.assertIn('owes_reply', llm.calls[0][0])
+
+
 class NoDefaultVerbTests(_Rail):
     def _asked(self, s):
         t = s.create_task({'Title': 'Offsite agenda', 'Status': 'open', 'Kind': 'reply'}, 'owner')

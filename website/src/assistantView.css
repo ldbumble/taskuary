@@ -926,15 +926,18 @@
    760px the box is not on the bar: the bar ends before it, a gap between them, and the chat stands alone in the corner; used, the same
    corner opens up into the window (its field the floor, the conversation standing on it) and shut it is the bar again. Under 760px it is
    as it was. ...and with the stage moves on their panes the bar is only as wide as what it holds - Back, Next and its few moves together at
-   the left, no empty stretch - and the ask bar takes ALL the rest, a gap between them; the open window is its width, so opening it only
-   grows UP - never wider (the owner, 2026-10-29). The ask bar is never under --tq-pill-min: the bar folds into ▾ first (ActionRow) */
-.tq-compose[data-tq-desk-chat] { --tq-pill-min: 300px; display: flex; flex-direction: row; align-items: flex-end; gap: 16px; min-height: 52px; box-sizing: border-box; }
-.tq-compose[data-tq-desk-chat] .tq-dock { width: fit-content; flex: 0 1 auto; min-width: 0; max-width: calc(100% - var(--tq-pill-min) - 16px); }
+   the left, no empty stretch. ...and THE ASK BAR IS ONE WIDTH, its own, not the room the bar leaves (the owner, 2026-10-29: "freeze the
+   size of chat to the current size ... I don't want it to expand left/right ... Leave the space in the middle blank if there are no
+   buttons"): --tq-ask-w, about a third of a laptop, at rest and open alike - the open window is that width too, so opening only grows UP.
+   The bar stays at the left at its own width and the middle is empty; a bar too long for what is left folds into ▾ first (ActionRow) */
+.tq-compose[data-tq-desk-chat] { --tq-ask-w: min(clamp(360px, 34vw, 520px), 100%); --tq-chat-w: var(--tq-ask-w); display: flex; flex-direction: row;
+  align-items: flex-end; gap: 16px; min-height: 52px; box-sizing: border-box; }
+.tq-compose[data-tq-desk-chat] .tq-dock { width: fit-content; flex: 0 1 auto; min-width: 0; max-width: calc(100% - var(--tq-ask-w) - 16px); }
 .tq-compose[data-tq-desk-chat] .tq-dock .tq-dock-line > .tq-arow { flex: 0 1 auto; width: auto; }
 .tq-compose[data-tq-desk-chat] .tq-dock .tq-dock-line > .tq-arow .tq-arow-verbs { justify-content: flex-start; width: auto; }
 /* ...a bar with nothing on it (the day's opener) is no bar at all: the pill stands alone */
 .tq-compose[data-tq-desk-chat] .tq-dock:not(:has(.tq-arow)):not(:has(> :not(.tq-dock-line, [hidden]))) { display: none; }
-.tq-chat-unit { position: relative; z-index: 7; flex: 1 1 var(--tq-pill-min); min-width: var(--tq-pill-min); display: flex; flex-direction: column; align-items: stretch; }
+.tq-chat-unit { position: relative; z-index: 7; flex: 0 0 var(--tq-ask-w); width: var(--tq-ask-w); min-width: 0; margin-left: auto; display: flex; flex-direction: column; align-items: stretch; }
 /* ...ONE ROUNDED CARD, LIKE A MODERN CHAT COMPOSER (the owner, 2026-10-29): the words on top, the send round at the end of their line, a
    slim row of the chat's own inputs under them on the left (attach, voice, emoji) and the model picker on the right - at rest and open
    alike, so opening only adds the conversation above it. The box is only the place the card stands */

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { startHarness } from "./harness.mjs";
+import { askWidth, startHarness } from "./harness.mjs";
 
 /* THE SMALL PILL LEAVES A LAPTOP ITS BUTTONS (the owner, 2026-10-27: "yes shrink the chat box"). At 220px the one-row bar's chat pill took
    the room Mark done and Send to agent need, and on a 1366-1600px laptop they folded behind a ▾ - two clicks each, and Mark done's next
@@ -36,7 +36,7 @@ test("at rest the pill is small and Mark done stays on the row at 1366, 1440 and
         spine: [...document.querySelectorAll("[data-tq-spine-moves=agent] button[data-tq-verb]")].filter(vis).map((b) => b.getAttribute("data-tq-verb")) };
     });
     const say = `${width}px ${JSON.stringify(s)}`;
-    assert.ok(s.pill >= 300, `the wide ask bar, as wide as the open window (the owner, 2026-10-29) ${say}`);
+    assert.ok(Math.abs(s.pill - askWidth(width)) <= 1, `the ask bar its one width (the owner, 2026-10-29: "freeze the size of chat") ${say}`);
     assert.ok(s.line <= 46, `one line ${say}`);
     console.log(`# ${say}`);
     // ...and Close folds last (the owner, 2026-10-27: "if there is no space"): Mark done is on the row at every laptop width

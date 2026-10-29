@@ -77,24 +77,23 @@ def outlook_events(cfg: dict, secret: str, mailboxes: list, start: datetime, end
     return out
 
 
-# invite bodies are mostly plumbing - the Teams block, dial-ins, "join on your computer" - and the
-# one useful sentence, when there is one, sits above it. VENDOR TEMPLATE strings only, plus links and phone numbers:
-# generic words ("help", "organizer", "learn more", "dial in", "join the meeting", "this is a recurring") deleted real
-# sentences - "Organizer notes: bring the Q3 sheet" vanished (the owner, 2026-10-11: "everything should be ai"). A
-# template's lone link label ("More info", "Learn More", "Need help?") goes only when it is the WHOLE line.
-_BOILER = re.compile(r'(microsoft teams meeting|microsoft teams need help|join on your computer|join on the web|download teams|'
-                     r'meeting id:|passcode:|dial in by phone|dial-in number|conference id:|find a local number|click here to join|'
-                     r'join the meeting now|join with a video conferencing device|meeting options|tenant id:|video id:|'
-                     r'or call in \(audio only\)|phone conference id|reset pin|zoom\.us|teams\.microsoft\.com|meet\.google\.com|'
-                     r'join with google meet|https?://|^\+?[\d\s(),.#*-]{7,}$|^[_\-=|\s]+$|^(more info|learn more|need help\??|help|system reference)$)', re.I)
+# invite bodies are mostly plumbing - the Teams block, dial-ins, "join on your computer" - and the one useful sentence, when
+# there is one, sits above it. Cut by SHAPE only (the owner, 2026-10-28: no hard-coded words): a meeting service lays its block
+# out under a rule line - Teams' underscores, Google's "-::~:~::-" - so the words stop at the first one; a link, a phone number
+# and an id ("Meeting ID: 123 456") are data, never a sentence. A list of vendor phrases decided it before, and generic words in
+# it deleted real sentences ("Organizer notes: bring the Q3 sheet", 2026-10-11).
+_RULE = re.compile(r'^[_\-=~:|*.\s]{5,}$')
+_URL = re.compile(r'<?https?://\S+>?')
+_DATA = re.compile(r'^([^:\d]{1,30}:\s*)?[+\d\s(),.#*-]{4,}$')        # a number, with at most a short label before it
 
 
 def about_text(preview: str, limit: int = 240) -> str:
     """The invite's own words about what the meeting is - or '' when the body is only plumbing."""
-    # Teams lays its plumbing out with pipes on one line ("Download Teams | Join on the web") - split there too
-    lines = [p.strip() for l in str(preview or '').replace('\r', '\n').split('\n') for p in l.split(' | ')]
-    keep = [l for l in lines if l and not _BOILER.search(l) and len(l) > 3]
-    text = ' '.join(' '.join(keep).split())
+    lines = str(preview or '').replace('\r', '\n').split('\n')
+    rule = next((i for i, l in enumerate(lines) if l.strip() and _RULE.match(l.strip())), len(lines))
+    # Teams lays its plumbing out with pipes on one line ("Download Teams | Join on the web") - a pipe is a cell, not a sentence
+    cells = [_URL.sub('', p).strip() for l in lines[:rule] for p in l.split(' | ')]
+    text = ' '.join(' '.join(c for c in cells if c and not _DATA.match(c)).split())
     return text[:limit].rstrip() + ('…' if len(text) > limit else '')
 
 

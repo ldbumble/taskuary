@@ -42,7 +42,7 @@ test("a report opens on itself between slim Came from and Close out tabs, a task
   assert.deepEqual(m.slots.map((s) => s.key), ["from", "report", "close"], "the flow's order");
   assert.deepEqual(m.slots.map((s) => [s.open, s.mini, s.w]), [[false, true, 44], [true, false, m.slots[1].w], [false, true, 44]], JSON.stringify(m.slots));
   assert.ok(m.slots[1].w > 800, `the report keeps nearly all the width: ${m.slots[1].w}`);
-  assert.match(m.head, /^Report Headcount by site, nightly · Today - 5 rows/, m.head);
+  assert.match(m.head, /^Report Headcount by site, nightly · (Today|Yesterday) - 5 rows/, m.head);   // a run after midnight reads Yesterday
   assert.ok(Math.abs(m.card.top - m.canvas.top) <= 2, `pinned to the canvas's top ${JSON.stringify(m)}`);
   assert.ok(m.card.h >= m.canvas.h - 30, `a task's height: ${m.card.h} of ${m.canvas.h}`);
   // ...its table and its chart, as on its card

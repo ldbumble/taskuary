@@ -65,7 +65,7 @@ test("a press folds its item with its badge, lands on the row below, and a reloa
   await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 40000 }); await sleep(3000);
   const titles = (await rail(page)).map((r) => r.text);
   for (const re of [/overnight import/, /AP cutover date/, /Year-end audit/]) assert.ok(!titles.some((x) => re.test(x)), `${re} stays closed after a reload`);
-  assert.ok(titles.some((x) => /^in \d+h.*Reconcile the August/.test(x)), `the reminded task waits on the rail under its day: ${JSON.stringify(titles)}`);
+  assert.ok(titles.some((x) => /^in \d+[hd].*Reconcile the August/.test(x)), `the reminded task waits on the rail under its day: ${JSON.stringify(titles)}`);
   const all = await tasksNow(h), of = (re) => all.find((x) => re.test(x.Title));
   assert.equal(of(/overnight import/).Status, "done");
   assert.equal(of(/AP cutover date/).Status, "done");

@@ -132,5 +132,5 @@ class SummaryWordsTests(unittest.TestCase):
         text = ra.who_wants_what(self.rows())
         self.assertIn('· Gail Moreno - Approve the Q3 invoice', text)
         self.assertNotIn('· example', text); self.assertNotIn('· claude', text)
-        self.assertIn('· General agent - Census export', text)
+        self.assertIn('· Taskuary - Census export', text)
         self.assertIn('· Ray Colton - Back Tuesday', text); self.assertNotIn('(fyi)', text)

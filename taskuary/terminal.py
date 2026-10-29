@@ -653,7 +653,7 @@ def worker_fields(store, t) -> dict:
     except Exception: qs = []
     return {'waiting': bool(w), 'request': req, 'state': sub, 'questions': qs if len(qs) > 1 else [],
             'held': bool(ws.held_for(getattr(t, 'task_id', None))) if req else False,
-            'line': ws.says(sub, ws.shown({'cli': getattr(t, 'cli', '') or cli_of(getattr(t, 'argv', None) or []), 'mode': getattr(t, 'mode', '')}), (req or {}).get('text')) if sub else None}
+            'line': ws.says(sub, ws.shown_agent({'cli': getattr(t, 'cli', '') or cli_of(getattr(t, 'argv', None) or []), 'mode': getattr(t, 'mode', '')}), (req or {}).get('text')) if sub else None}
 
 
 def cli_of(argv) -> str:

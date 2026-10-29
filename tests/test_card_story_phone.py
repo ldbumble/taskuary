@@ -95,7 +95,7 @@ def test_a_general_run_with_no_session_mode_is_a_general_agent():
     tid = s.create_task({'Title': 'Summarise the vendor contract', 'Kind': 'general', 'Status': 'in_progress'}, 'owner')
     text = ra.story_block(s, {'kind': 'agent', 'lane': 'working', 'tid': tid, 'ref': 'TQ-0001', 'agent': 'claude', 'working': 'claude',
                               'who': 'claude', 'channel': ''})
-    assert f'{ra.DOT_AGENT} **General agent**' in text, text
+    assert f'{ra.DOT_AGENT} **Taskuary**' in text, text   # Taskuary, never the profile (2026-10-28)
 
 
 def test_a_finished_agents_card_names_who_asked_never_the_agent_or_the_task():

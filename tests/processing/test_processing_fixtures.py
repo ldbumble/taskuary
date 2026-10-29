@@ -38,9 +38,9 @@ def test_waiting_agent_fixture_is_visible_as_owner_attention():
         item = next(item for item in funnel.build(picture.store)['items']
                     if item.get('tid') == picture.waiting_task)
 
-    assert (row['Working'], row['AgentWaiting'], row['Unread']) == ('fixture-agent', True, 1)
+    assert (row['Working'], row['AgentWaiting'], row['Unread']) == ('Taskuary', True, 1)   # the shown name, never the profile (kinds.shown)
     assert (item['key'], item['lane'], item['agent']) == (
-        f'agent:{picture.waiting_task}', 'blocked', 'fixture-agent')
+        f'agent:{picture.waiting_task}', 'blocked', 'Taskuary')
 
 
 def test_duplicate_turn_fixture_persists_one_identical_assistant_turn():

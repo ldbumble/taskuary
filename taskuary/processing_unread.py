@@ -7,7 +7,7 @@ import json
 import re
 from .timewords import plural
 from .categories import agent_word
-from .kinds import SHOWN, shown
+from .kinds import SHOWN, shown as shown_agent
 from datetime import date, datetime, timedelta
 
 from . import lanes, processing_all, proposals, waiton
@@ -443,7 +443,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
             # drew every row an agent picked up with a terminal instead of the Advisor, report or mail behind it
             card.update({k: v for k, v in agent_cards[0].items() if k != 'channel' or v})
         else:
-            card.update(kind='agent', lane='working', working=shown(worker), agent=shown(worker),   # Taskuary, never the profile sid=worker.get('sid'),
+            card.update(kind='agent', lane='working', working=shown_agent(worker), agent=shown_agent(worker), sid=worker.get('sid'),   # Taskuary, never the profile
                         mode=worker.get('mode') or 'terminal', tail=worker.get('tail') or [],
                         why='An agent is working on this; nothing needs your input yet')
     elif (row.get('Working') or persisted_working) and active:          # ...a headless run too

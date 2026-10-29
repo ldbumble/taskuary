@@ -535,7 +535,7 @@ class LanesTests(unittest.TestCase):
         self.assertEqual([funnel.level_of(i) for i in items], ['task', 'task'])
         self.assertFalse(funnel.on_you(items[0])); self.assertTrue(funnel.on_you(items[1]))   # ...but only the asking one is on you
         items = items[::-1]
-        self.assertTrue(items[0]['asking']); self.assertIn('asked you something', items[0]['why']); self.assertIn('codex has it', items[1]['why'])
+        self.assertTrue(items[0]['asking']); self.assertIn('asked you something', items[0]['why']); self.assertIn('Taskuary has it', items[1]['why'])
         self.assertEqual((items[0].get('sid'), items[0]['mode']), (None, 'terminal'))           # the card embeds the screen when a sid is known
         # the mail that started t1 is not a second line: answering the agent answers the mail
         self.assertEqual(items[0]['mid'], s.list_messages(t1)[0]['MessageId'])
@@ -582,7 +582,7 @@ class LanesTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=working):
             ev = funnel.announce(s)
         self.assertEqual([(e['kind'], e['tid']) for e in ev], [('working', t)])
-        self.assertIn("codex is working on TQ-0001 (Pto) - nothing for you there now.", ev[0]['text'])
+        self.assertIn("Taskuary is working on TQ-0001 (Pto) - nothing for you there now.", ev[0]['text'])
         self.assertNotIn('next thing', ev[0]['text'])                                    # a worker starting is not a nudge to advance (PW-168)
         with mock.patch('taskuary.terminal.live_sessions', return_value=working):
             self.assertEqual(funnel.announce(s), [])                                  # said once
@@ -608,7 +608,7 @@ class LanesTests(unittest.TestCase):
         s = store()
         t = s.create_task({'Title': 'Pto', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
         funnel.notify(s, {'tid': t, 'ref': 'TQ-0001', 'kind': 'working', 'agent': 'codex',
-                          'text': 'codex is working on TQ-0001 (Pto) - nothing for you there now.'})
+                          'text': 'Taskuary is working on TQ-0001 (Pto) - nothing for you there now.'})
         live = [{'taskId': t, 'agent': 'codex', 'label': 'codex', 'started': ago(hours=1), 'idle': 2, 'waiting': False, 'tail': ['editing']}]
         with mock.patch('taskuary.terminal.live_sessions', return_value=live):
             self.assertEqual([a['kind'] for a in funnel.notices(s)], ['working'], 'the agent really is on it')
@@ -887,7 +887,7 @@ class FeedUnreadTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=live):
             row = next(r for r in s.feed() if r['MessageId'] == mid)
             # the same level as any task, and the walk's item in its place (the owner, 2026-10-21)
-            self.assertEqual((row['Unread'], row['UnreadRank'], row['Working']), (1, 2, 'codex'))
+            self.assertEqual((row['Unread'], row['UnreadRank'], row['Working']), (1, 2, 'Taskuary'))
             self.assertEqual(row['FunnelKey'], f'agent:{task}')
             self.assertEqual(funnel.next_item(s)['tid'], task)
         waving = [dict(live[0], idle=200, waiting=True, tail=['Which region should I use?'])]

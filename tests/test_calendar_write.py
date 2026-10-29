@@ -84,6 +84,19 @@ class WhatAnInviteIs(unittest.TestCase):
         self.assertFalse(calwrite.needs_answer(calwrite.from_ics(ics.replace('SEQUENCE:0', 'SEQUENCE:2'), me=(ME,))), 'an update is fyi')
         self.assertEqual(calwrite.from_ics(ics.replace('METHOD:REQUEST', 'METHOD:CANCEL'), me=(ME,))['kind'], 'cancel')
 
+    def test_utc_times_read_without_a_tz_database(self):
+        """Windows has no IANA database without tzdata: ZoneInfo('UTC') raised, ingest crashed and the invite was lost."""
+        from zoneinfo import ZoneInfoNotFoundError
+        from datetime import timezone, timedelta
+        ics = ('BEGIN:VCALENDAR\r\nMETHOD:REQUEST\r\nBEGIN:VEVENT\r\nUID:uid-utc\r\nSUMMARY:Budget sync\r\n'
+               'DTSTART:20261102T140000Z\r\nDTEND;TZID=Nowhere/Unknown:20261102T150000\r\n'
+               f'ORGANIZER;CN=Erin Blake:mailto:{ERIN}\r\nATTENDEE;PARTSTAT=NEEDS-ACTION;CN=Alex:mailto:{ME}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n')
+        def no_db(key): raise ZoneInfoNotFoundError(key)
+        with mock.patch.object(calwrite, 'ZoneInfo', side_effect=no_db):
+            c = calwrite.from_ics(ics, me=(ME,), tz=timezone(timedelta(hours=-5)))
+            self.assertEqual((c['start'], c['end']), ('2026-11-02 09:00', '2026-11-02 15:00'))
+            self.assertEqual(calwrite._local({'dateTime': '2026-11-02T14:00:00', 'timeZone': 'UTC'}, timezone(timedelta(hours=-5))), '2026-11-02 09:00')
+
 
 class TheOwnersMove(unittest.TestCase):
     def test_an_unanswered_invite_is_a_task_that_says_its_clash(self):

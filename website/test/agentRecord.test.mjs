@@ -67,9 +67,10 @@ const SAID = "Merged #41 as reviewed.\n\nYour local main is one commit behind or
 const ended = { report: { summary: "Merged #41; local main is behind." }, result: SAID, files: ["C:/work/portal/a.py"], cwd: "C:/work/portal",
   steps: [{ k: "tool", name: "Bash", text: "gh pr merge 41" }, { k: "said", text: SAID }] };
 
-test("More names everything past what happened: its last message, files, the run, since then, steps, earlier sessions", () => {
+// ...and not the runs before it: those are a line each under the record (EarlierRuns, 2026-10-29), never inside one run's More
+test("More names everything past what happened: its last message, files, the run, since then, steps", () => {
   assert.deepEqual(moreParts(ended, { timeline: [{ text: "Started" }], since: { text: "merged" }, earlier: 1 }),
-    ["its last message", "1 file", "the timeline", "since then", "1 step", "1 earlier session"]);
+    ["its last message", "1 file", "the timeline", "since then", "1 step"]);
   assert.deepEqual(moreParts({ result: "Done." }), [], "nothing past what happened, no More at all");
 });
 
@@ -93,12 +94,13 @@ test("the card has one More and no second section for the last message, files or
   const src = readFileSync(fileURLToPath(new URL("../src/AgentRecord.jsx", import.meta.url)), "utf8");
   const card = src.slice(src.indexOf("export const SessionRecord"), src.indexOf("export const AgentRecord"));
   assert.equal(card.match(/<Button /g).length, 1, "one control on the card");
-  for (const h of ["Its last message", "Files it saved", "Every step", "Since then", "Earlier sessions", "<Timeline "])
+  for (const h of ["Its last message", "Files it saved", "Every step", "Since then", "<Timeline "])
     assert.ok(card.indexOf(h) > card.indexOf("{more && "), `${h} is behind More`);
-  assert.doesNotMatch(src.slice(src.indexOf("export const AgentRecord"), src.indexOf("const ResultView = ")), /Since then|Earlier sessions/, "not repeated outside the card");
+  assert.doesNotMatch(src.slice(src.indexOf("export const AgentRecord"), src.indexOf("const ResultView = ")), /Since then/, "not repeated outside the card");
+  assert.doesNotMatch(card, /Earlier sessions|earlier=/, "earlier runs are listed under the record, not inside one run's More");
   // ...and the Result says Since then once: its replay's record is handed no `since` (the redesign, 2026-10-21)
   const result = src.slice(src.indexOf("const ResultView = "), src.indexOf("// EVERY RUN BY ITS LAST WORDS"));
-  assert.match(result, /<SessionRecord s=\{s\} draft=\{draft\} startOpen timeline=\{story\?\.steps \|\| \[\]\} earlier=\{before\} \/>/);
+  assert.match(result, /<SessionRecord s=\{s\} draft=\{draft\} startOpen timeline=\{story\?\.steps \|\| \[\]\} \/>/);
 });
 
 test("a folded line is plain text", () => assert.equal(plain("**Merged** `#41` as reviewed"), "Merged #41 as reviewed"));

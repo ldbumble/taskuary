@@ -2,7 +2,9 @@
 // server stripped them still drew the reply block, and the answer twice (2026-10-15).
 const REPLY = /\[\[\s*TASKUARY[-_ ]?REPLY\s*\]\][\s\S]*?\[\[\s*\/\s*TASKUARY[-_ ]?REPLY\s*\]\]/gi;
 const LINE = /^[ \t]*\[\[\s*TASKUARY[-_ ]?(?:ATTACH|ASK)\b[^\n]*\n?/gim;
-export const forScreen = (text) => String(text || "").replace(REPLY, "").replace(LINE, "").trim();
+// ...and the done line: its sentence is filed as a comment (or is the answer), and left in it kept dropEcho from seeing the echo (walk 2026-10-29)
+const DONE = /[ \t]*\[\[\s*TASKUARY[-_ ]?DONE\s*\]\][^\n]*/gi;
+export const forScreen = (text) => String(text || "").replace(REPLY, "").replace(LINE, "").replace(DONE, "").trim();
 
 // ...and a progress line that only says what the answer says: a CLI's final text streams in as progress too, so the box repeated
 // the answer under it (2026-10-15). A box with nothing left goes.

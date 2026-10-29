@@ -27,6 +27,13 @@ class ForScreenTests(unittest.TestCase):
         self.assertEqual(selfclose.reply_marker('Here is the draft:\n[[TASKUARY-REPLY]]\nHi Erin, done.\n[[/TASKUARY-REPLY]]'),
                          ('Here is the draft:\nHi Erin, done.', 'Hi Erin, done.'))
 
+    def test_the_done_line_leaves_the_progress_line(self):
+        """[[TASKUARY-DONE]] stayed in the box, and with it the last paragraph no longer matched the answer, so the answer was
+        drawn twice (walk 2026-10-29). Its sentence is the task's comment, never progress."""
+        self.assertEqual(selfclose.for_screen('Booked the room for Thursday.\n[[TASKUARY-DONE]] Booked the room.'), 'Booked the room for Thursday.')
+        self.assertEqual(selfclose.for_screen('[[TASKUARY-DONE]]: Booked the room.'), '')
+        self.assertEqual(selfclose.chat_marker('Booked it.\n[[TASKUARY-DONE]] Booked the room.'), ('Booked it.', 'Booked the room.'))
+
     def test_the_general_chat_filters_its_progress_through_it(self):
         src = (Path(selfclose.__file__).parent / 'general.py').read_text(encoding='utf-8')
         self.assertIn('detail = _sc.for_screen(detail)', src)

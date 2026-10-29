@@ -397,10 +397,15 @@ def turn_marker(text: str) -> tuple:
     return _TURN_RE.sub('', t).rstrip(), ' '.join((m.group(1) or '').split())[:300]
 
 
+# the done line as a progress line carries it: its sentence is filed as the task's comment (or is the answer), never progress
+_DONE_LINE = re.compile(r'[ \t]*\[\[\s*TASKUARY[-_ ]?DONE\s*\]\][^\n]*', re.I)
+
+
 def for_screen(text: str) -> str:
-    """A progress line as the owner reads it: no ask marker, no attach lines, and no reply block - the reply is shown once, as
-    the answer. A CLI's final text streams in as a progress line too, so the box drew the markers and the answer twice (2026-10-15)."""
-    return attach_markers(_REPLY_RE.sub('', without_ask(text)))[0].strip()
+    """A progress line as the owner reads it: no ask marker, no attach lines, no done line, and no reply block - the reply is shown
+    once, as the answer. A CLI's final text streams in as a progress line too, so the box drew the markers and the answer twice
+    (2026-10-15); a done line left in kept the last paragraph from matching the answer, so it was drawn twice again (walk 2026-10-29)."""
+    return attach_markers(_DONE_LINE.sub('', _REPLY_RE.sub('', without_ask(text))))[0].strip()
 
 
 _ASK_ONE = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\]\s*:?', re.I)

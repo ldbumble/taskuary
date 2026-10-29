@@ -76,14 +76,18 @@ class ReadMessage(unittest.TestCase):
         text, err = tool(self.tid, 'read_message', id='the webinar one')
         self.assertTrue(err); self.assertIn('not a message id', text)
 
-    def test_a_strangers_task_reads_its_own_mail_and_nothing_else(self):
+    def test_a_strangers_task_reads_nothing_until_trusted_then_its_own_mail(self):
+        "A full-tools session never reads an unvouched sender's words (agenttools.UNVOUCHED), nor other mail; Trust opens the task's own."
         s, tid, mid, other = world(stranger=True)
         with mock.patch.object(server, 'store', s):
             text, err = tool(tid, 'read_message', id=f'm{mid}')
-            self.assertFalse(err, text); self.assertIn(REGISTER, text)
+            self.assertTrue(err); self.assertNotIn(REGISTER, text); self.assertIn('Trust', text)
             text, err = tool(tid, 'read_message', id=f'm{other}')
             self.assertTrue(err); self.assertNotIn('Numbers attached', text)
             self.assertIn('not vouched for', text); self.assertIn('press Trust', text)               # why, and the owner's way on
+            s.update_task(tid, {'TrustedThrough': mid}, 'owner')
+            text, err = tool(tid, 'read_message', id=f'm{mid}')
+            self.assertFalse(err, text); self.assertIn(REGISTER, text)
 
     def test_the_route_and_the_cli_take_the_m_spelling(self):
         r = c.get(f'/api/agent/messages/m{self.mid}', params={'task_id': self.tid}, headers=hdr(self.tid))

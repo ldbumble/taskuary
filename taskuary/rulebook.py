@@ -232,7 +232,10 @@ def state(store, item: dict, verbs: list) -> tuple:
     try: draft = advisor._draft(store, it, tk, tid or it.get('mid')) if (tid or it.get('mid')) else None
     except Exception: draft = None
     if draft or it.get('closeout') or kind == 'action':
-        return ('draft_ready', {}) if 'approve' in offered else ('unsendable', {})
+        if 'approve' not in offered: return 'unsendable', {}
+        try: out = leaving(store, it, draft) if draft else ''
+        except Exception as e: logger.debug(f"rulebook: no recipients read for {it.get('key')} - {e}"); out = ''
+        return 'draft_ready', ({'leaving': out, EV: [f"rv{draft['ReviewId']}"]} if out else {})
     inv, _meet = concierge.calendar_asks(store, it)
     if inv:
         if not calendar_on(store): return 'invite_no_cal', {}
@@ -301,6 +304,38 @@ def state(store, item: dict, verbs: list) -> tuple:
         return 'asked', {'who': _name(ins[-1]), 'ago': ago(ins[-1].get('SentAt') or ins[-1].get('CreatedAt'))}
     if t and (cl := advisor._checklist(t)) and all(c.get('done') for c in cl): return 'done_list', {'n': len(cl)}
     return 'own', {}
+
+
+# WHAT LEAVES WITH A DRAFT (the design rev 2, data leaving; the owner, 2026-10-28: "a line on top ... it should recommend action", never a
+# new dialog): before Send, an address the thread never had and the files the draft carries are said in one line beside the lit Send.
+# Addresses and files are facts the draft's envelope keeps - read the way the send will read them (verdicts._deliver_review) - never words.
+def recipients(store, rv: dict) -> list:
+    """The addresses a draft will go to, lowercased: its own envelope's To and Cc when it is new mail or a reply with its people set, else
+    whom a reply to its message goes to (outbound.reply_envelope)."""
+    from . import outbound
+    try: env = json.loads(rv.get('Deliver') or '{}') or {}
+    except (TypeError, ValueError): env = {}
+    env = env if isinstance(env, dict) else {}
+    if not env.get('to') and (env.get('kind') == 'reply' or not env.get('channel')):
+        m = store.get_message(int(rv['MessageId'])) if rv.get('MessageId') else None
+        env = {**(outbound.reply_envelope(store, m) or {}), **({'cc': env['cc']} if env.get('cc') is not None else {})}
+    return [str(a).strip().lower() for a in [*(env.get('to') or []), *(env.get('cc') or [])] if '@' in str(a or '')]
+
+
+def leaving(store, item: dict, rv: dict) -> str:
+    """'' or the line: who on the draft is new to its thread, and the files it sends."""
+    from . import advisor, learned_cut
+    from .ingest import owner_addresses, own_addresses
+    tk, ti = ('task', item['tid']) if item.get('tid') else ('message', rv.get('MessageId') or item.get('mid'))
+    known = {a for m in advisor._msgs(store, item, tk, ti) for a in learned_cut.people_of(m)} | owner_addresses(store) | own_addresses(store)
+    new = [a for a in dict.fromkeys(recipients(store, rv)) if a not in known]
+    try: files = [f.get('name') for f in (json.loads(rv.get('Deliver') or '{}') or {}).get('attachments') or [] if isinstance(f, dict) and f.get('name')]
+    except (TypeError, ValueError, AttributeError): files = []
+    who = ', '.join(new[:2]) + (f' +{len(new) - 2}' if len(new) > 2 else '')
+    sends = (f'{len(files)} files' if len(files) > 1 else f'the file {files[0]}') if files else ''
+    if new and files: return f'Goes to {who}, new to this thread, with {sends}.'
+    if new: return f'Goes to {who} - new to this thread.'
+    return f"Sends {sends}{': ' + ', '.join(files[:3]) if len(files) > 1 else ''}." if files else ''
 
 
 def last_word(store, tid):

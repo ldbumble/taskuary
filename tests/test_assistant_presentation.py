@@ -88,7 +88,7 @@ class FyiHandfulTests(unittest.TestCase):
             c = client(s)
             p = c.post('/api/concierge/propose', json={'verb': 'mine', 'key': first['key']}).json()
             self.assertEqual((p['kind'], p['target'], p['params']['kind'], p['settles'], p['label']),
-                             ('task.create_from_message', first['mid'], 'task', False, 'Put it on my list'))
+                             ('task.create_from_message', first['mid'], 'task', False, 'Should be a task'))   # an FYI's own word for it since 2026-10-29
             self.assertIsNone(s.get_message(first['mid'])['TaskId'])                             # proposed, not done
             r = c.post(f"/api/operations/{p['id']}/execute", json={'version': p['version']}).json()
             self.assertEqual(r['status'], 'done')

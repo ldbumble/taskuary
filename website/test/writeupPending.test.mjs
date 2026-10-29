@@ -1,5 +1,5 @@
-// Stop and save opens Close out at once with the write-up's pending block - the server job's own stage - and the draft replaces it in
-// place (the owner, 2026-10-21: "open the Close out right away and show the reply is being created, pending").
+// Stop and save puts the agent down at once and says the write-up's progress - the server job's own stage - as ONE line in the Agent
+// pane where it was pressed (2026-10-29: Close out's box drew two spinners for one write-up); Close out holds the draft once it lands.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
@@ -56,12 +56,14 @@ test("the steps say done, now and to come; the reply step only where somebody is
   assert.equal(writeupHead({ state: "pending" }, false), "Writing up the session…");
 });
 
-test("Stop and save puts the agent down and opens Close out at the press; the block stands where the draft will", () => {
+test("Stop and save puts the agent down and keeps the Agent pane open while it writes; Close out once it has", () => {
   const page = read("TaskPage.jsx");
-  assert.match(page, /setErr\(""\); setWritingUpAt\(\{ id, n, sid \}\); setTerm\(null\); setSeekCloseOut\(true\);\n    try \{\n      const \{ data \} = await api\.post\(`\/api\/tasks\/\$\{id\}\/wrap`, \{ close: false, background: true \}\);/);
+  assert.match(page, /setErr\(""\); setWritingUpAt\(\{ id, n, sid \}\); setTerm\(null\);\n    try \{\n      const \{ data \} = await api\.post\(`\/api\/tasks\/\$\{id\}\/wrap`, \{ close: false, background: true \}\);/);
   assert.match(page, /setWritingUpAt\(null\); findTerm\(id\);/);                                  // a press that fails gives the session back
-  assert.match(page, /\(pressedHere \|\| writeup \? "reply" :/); assert.match(page, /\(openStage \|\| restStage\)/);                    // Close out held open: no jump when it lands
-  // ...where a reply will land; on a task nobody sent, the progress is a line under the Result instead (taskLayout.closeOut)
+  assert.match(page, /const restStage = sessionView \|\| writingUp \? "agent" : \(pressedHere \|\| writeup \? "reply" :/); assert.match(page, /\(openStage \|\| restStage\)/);
+  assert.match(page, /sec: writingUp \? "agent" : sectionHere\(/);                                // the Agent section, while it writes
+  assert.doesNotMatch(page, /setSeekCloseOut/);
+  // ...a failure's Try again is Close out's (taskLayout.closeOut)
   assert.match(page, /\{pane === "reply" && co\.writeupAt === "closeout" && <WriteupBlock view=\{writeup\}/);
   assert.match(page, /\{pane === "reply" && !writeup && \(\(pendingReview \|\|/);                 // ...and the draft in its place, same card
   assert.match(page, /if \(pressedHere\?\.sid && live\.sid === pressedHere\.sid\) return;/);       // the closing pty is not adopted back

@@ -122,7 +122,7 @@ test("the main view follows where the task is up to: the work with Came from on 
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   // ...the right drawer and its lit tab went with the three sections (2026-10-27): the section the task is up to is the stage's (sectionOf),
   // or the one the Advisor's decision names its move is in (sectionHere, 2026-10-29)
-  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: sectionHere\(\{ stage: taskStage, advised \}\) \};/);
+  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: writingUp \? "agent" : sectionHere\(\{ stage: taskStage, advised \}\) \};/);
   assert.match(page, /const taskStage = stageOf\(\{ focus: restFocus, drafted: replyHas, closed: /, "the stage reads the focus, never the advice");
   // ...the focus the task opens on - a section opened by hand changes neither the stage nor the main view (the overnight walk, 2026-10-27)
   const restLine = page.match(/const restFocus = focusOf\(\{[^;]*;/)?.[0];
@@ -164,8 +164,10 @@ test("Close out under a Result on a task nobody sent: no 'Nobody sent this one',
   assert.deepEqual(closeOut({ hasSender: false, result: true, writeup: pending }), { advice: false, chip: false, writeupAt: "result" });
   assert.deepEqual(closeOut({ hasSender: false, result: true }), { advice: false, chip: false, writeupAt: null });
   assert.equal(closeOut({ hasSender: false, result: true, writeup: failed }).writeupAt, "closeout", "a failure keeps its Try again in Close out");
-  // ...a reply being drafted stands where the draft will land (the owner, 2026-10-21: "open the Close out right away")
-  assert.deepEqual(closeOut({ hasSender: true, result: true, writeup: pending }), { advice: true, chip: true, writeupAt: "closeout" });
+  // ...and a reply being drafted is the same one line in the Agent pane (2026-10-29: two spinners in Close out on one Stop)
+  assert.deepEqual(closeOut({ hasSender: true, result: true, writeup: pending }), { advice: true, chip: true, writeupAt: "result" });
+  assert.equal(closeOut({ hasSender: true, result: false, writeup: pending }).writeupAt, "result", "no Result yet: still the Agent pane");
+  assert.equal(closeOut({ hasSender: true, result: true, writeup: failed }).writeupAt, "closeout");
   // ...and an open task nobody sent, nothing done yet, keeps its advice
   assert.deepEqual(closeOut({ hasSender: false, result: false }), { advice: true, chip: true, writeupAt: null });
   assert.equal(CLOSE_BY_HAND, "Mark done closes it, or close it with a note.");
@@ -174,7 +176,10 @@ test("Close out under a Result on a task nobody sent: no 'Nobody sent this one',
   // ...and no reply pill on Close out at all now: the header's pill says it, once (the task-view cleanup, owner-approved 2026-10-25)
   assert.doesNotMatch(src, /<LifecycleChip kind="reply"/);
   assert.match(src, /pane === "reply" && co\.writeupAt === "closeout" && <WriteupBlock/);
-  assert.match(src, /co\.writeupAt === "result" && <WriteupLine view=\{writeup\} \/>/);
+  assert.match(src, /const lineAt = co\.writeupAt !== "result" \? null : pane === "agent" && !sessionView && hasRecord && !resultRest \? "record" : "top";/);
+  assert.equal((src.match(/<WriteupLine /g) || []).length, 2, "two spots, one lineAt: the line is drawn once");
+  assert.match(src, /\{lineAt === "top" && <WriteupLine view=\{writeup\} hasReply=\{!!replyMessage\} \/>\}/);
+  assert.match(src, /\{lineAt === "record" && <WriteupLine view=\{writeup\} hasReply=\{!!replyMessage\} \/>\}/);
   assert.doesNotMatch(src, /Closing the session and writing up what is on screen — the agent is not asked anything\.\s*<\/Typography>\s*\) : workspaceMode === "live" && peek/,
     "the third hint line over the write-up is gone");
 });

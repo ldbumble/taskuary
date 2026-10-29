@@ -3607,7 +3607,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onActive={setDictating} ctl={micRef} onInterim={setHeard}
       onText={(t) => setText((v) => (v.trim() ? `${v.trimEnd()} ${t}` : t))} />
     <Tooltip title="Send an emoji response">
-      <IconButton size="small" aria-label="Choose an emoji response" disabled={busy || resetting}
+      <IconButton size="small" className="tq-compose-emoji" aria-label="Choose an emoji response" disabled={busy || resetting}
         onClick={(e) => setEmojiEl(e.currentTarget)} sx={{ width: 34, height: 34, p: 0, color: DIM }}>
         <SentimentSatisfiedAltIcon sx={{ fontSize: 18 }} />
       </IconButton>

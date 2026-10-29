@@ -66,11 +66,12 @@ const press = async (page, label, within) => { await visible(page, label, within
 // the row's verb, on the row or in one of its ▾
 async function rowVerb(page, id) {
   // the row is up once it has its verbs - not its Next: a task that is the last item has none (the nav pill, 37de8d86)
-  await page.waitForSelector('[data-tq-row] button[data-tq-verb]', { timeout: 20000 });
+  await page.waitForSelector('[data-tq-row] [data-tq-next], [data-tq-row] [data-tq-back], [data-tq-row] button[data-tq-verb]', { timeout: 20000 });
   // ...on the row once its write-up has settled (it is greyed while Stop and save writes up)
   // ...or, a stage move, in the open Agent pane's heading or on its spine (the owner, 2026-10-29: they left the bar)
   let at = await page.waitForSelector([`[data-tq-row] button[data-tq-verb$="${id}"]:not([disabled])`, `[data-tq-pane-moves] button[data-tq-verb$="${id}"]:not([disabled])`,
-    `[data-tq-spine-moves] button[data-tq-verb$="${id}"]:not([disabled])`].join(", "), { timeout: id === "continue" ? 20000 : 3000 }).catch(() => null);
+    `[data-tq-spine-moves] button[data-tq-verb$="${id}"]:not([disabled])`, `[data-tq-head-moves] button[data-tq-verb$="${id}"]:not([disabled])`,
+    `[data-tq-pane-strip] button[data-tq-verb$="${id}"]:not([disabled])`].join(", "), { timeout: id === "continue" ? 20000 : 3000 }).catch(() => null);
   for (const more of await page.$$("[data-tq-row] [data-tq-more]")) {
     if (at) break;
     await more.click();
@@ -115,6 +116,12 @@ async function continueInsideAgent(page) {
         .map((c) => c.closest("[data-tq-slot]")?.dataset.tqSlot || "outside the canvas").join(", "))}`));
     assert.equal(await page.evaluate(() => [...document.querySelectorAll("[data-tq-continue-card]")].filter((c) => !c.closest("[data-tq-slot=agent]")).length), 0,
       `no Continue card outside the Agent pane (${from})`);
+    // ...FIRST in it (the owner, 2026-10-29): the new step's box under the strip, the last run's report below it, its words box taking the cursor
+    const at = await page.evaluate(() => { const slot = document.querySelector("[data-tq-slot=agent]"), card = slot.querySelector("[data-tq-continue-card]");
+      const report = slot.querySelector("[data-tq-result-summary], [data-tq-agent-record], [data-tq-earlier-run], [data-tq-full-result]");
+      return { card: card.getBoundingClientRect().top, report: report ? report.getBoundingClientRect().top : null, focus: !!document.activeElement?.closest("[data-tq-continue-card]") }; });
+    assert.ok(at.report === null || at.card < at.report, `the Continue box above the last run's report (${from}) ${JSON.stringify(at)}`);
+    assert.ok(at.focus, `its field takes the cursor (${from})`);
     await click(page, "Cancel", "[data-tq-continue-card]");
     await page.waitForFunction(() => !document.querySelector("[data-tq-continue-card]"), { timeout: 5000 });
   }

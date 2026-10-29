@@ -43,11 +43,15 @@ export async function doVerb(page, id) {
   const onRow = await page.evaluate((id) => { const b = document.querySelector(`[data-tq-row] button[data-tq-verb="${id}"]`); if (b && !b.disabled) { window.__pressAt = performance.now(); b.click(); return true; } return false; }, id);
   if (onRow) return "row";
   // ...or a stage move, on its pane's spine or in the open pane's heading (the owner, 2026-10-29: they left the bar)
-  const onPane = await page.evaluate((id) => { const b = [...document.querySelectorAll(`[data-tq-spine-moves] button[data-tq-verb="${id}"], [data-tq-pane-moves] button[data-tq-verb="${id}"]`)]
+  // ...or the task's own move, on its title bar, or a live agent's Stop and save, on its strip (the owner, 2026-10-29: the bar is Back and Next)
+  const onPane = await page.evaluate((id) => { const b = [...document.querySelectorAll([`[data-tq-spine-moves] button[data-tq-verb="${id}"]`, `[data-tq-pane-moves] button[data-tq-verb="${id}"]`,
+    `[data-tq-head-moves] button[data-tq-verb="${id}"]`, `[data-tq-pane-strip] button[data-tq-verb="${id}"]`].join(", "))]
     .find((x) => x.offsetParent && !x.disabled); if (b) { window.__pressAt = performance.now(); b.click(); return b.closest("[data-tq-spine-moves]") ? "spine" : "pane"; } return null; }, id);
   if (onPane) return onPane;
-  for (const m of await page.$$eval("[data-tq-row] [data-tq-more]", (e) => e.map((x) => x.dataset.tqMore))) {
-    await page.evaluate((m) => document.querySelector(`[data-tq-row] [data-tq-more="${m}"]`).click(), m); await sleep(400);
+  // ...or behind a ▾: the row's, or the title bar's own and its Change
+  const MORE = "[data-tq-row] [data-tq-more], [data-tq-head-moves] [data-tq-more], [data-tq-pane-moves] [data-tq-more]";
+  for (const [i, m] of (await page.$$eval(MORE, (e) => e.map((x) => x.dataset.tqMore))).entries()) {
+    await page.evaluate((MORE, i) => document.querySelectorAll(MORE)[i]?.click(), MORE, i); await sleep(400);
     const hit = await page.evaluate((id) => { const i = document.querySelector(`[role=menu] [role=menuitem][data-tq-verb="${id}"]`); if (i && i.getAttribute("aria-disabled") !== "true") { window.__pressAt = performance.now(); i.click(); return true; } return false; }, id);
     if (hit) return `menu:${m}`;
     await page.keyboard.press("Escape"); await sleep(300);

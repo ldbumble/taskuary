@@ -33,7 +33,7 @@ const look = (page) => page.evaluate((CUR) => {
     return { moves: [...tab.querySelectorAll("[data-tq-spine-moves] button")].map((b) => ({ word: b.textContent.trim(), lit: b.classList.contains("p") })),
       between: !moves || (y("[data-tq-tab-name]").bottom <= moves.top && moves.bottom <= y("[data-tq-tab-foot]").top), text: tab.innerText,
       rule: !moves || getComputedStyle(tab.querySelector("[data-tq-spine-moves]")).borderTopWidth === "1px" }; };
-  return { bar: words("[data-tq-row] .tq-arow-verbs button").filter((w) => w !== "▾"), open: document.querySelector(`${CUR} [data-tq-slot][data-tq-open]`)?.dataset.tqSlot,
+  return { bar: words("[data-tq-row] .tq-arow-verbs button").filter((w) => w !== "▾"), head: words(`${CUR} [data-tq-head-moves] button`).filter((w) => w !== "▾"), open: document.querySelector(`${CUR} [data-tq-slot][data-tq-open]`)?.dataset.tqSlot,
     from: spine("from"), agent: spine("agent"), close: spine("close"),
     pane: { from: words(`${CUR} [data-tq-pane-moves=from] button`), agent: words(`${CUR} [data-tq-pane-moves=agent] button`), close: words(`${CUR} [data-tq-pane-moves=close] button`) } };
 }, CUR);
@@ -59,11 +59,18 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       const m = await look(page);
       assert.deepEqual(m.agent.moves.map((x) => x.word), ["Send to agent"], JSON.stringify(m.agent));
       assert.ok(m.agent.between && m.agent.rule, "between the pane's name and its status, under a rule");
+      // ...and every move reads as a button at rest (the owner, 2026-10-29: "can't see the buttons"): a tint with the slate edge, INK words
+      const look = await page.evaluate((CUR) => [...document.querySelectorAll(`${CUR} [data-tq-spine-moves] .tq-ab:not(.p), ${CUR} [data-tq-head-moves] .tq-ab:not(.p), ${CUR} [data-tq-pane-moves] .tq-ab:not(.p)`)]
+        .map((b) => { const cs = getComputedStyle(b); return [cs.borderTopColor, cs.backgroundColor]; }), CUR);
+      assert.ok(look.length && look.every(([edge, bg]) => edge === "rgb(85, 105, 122)" && bg === "rgb(241, 244, 247)"), `the moves' resting look ${JSON.stringify(look)}`);
       assert.deepEqual(m.from.moves.map((x) => x.word).sort(), FROM, `Came from's spine: Not a task and Remind me ${JSON.stringify(m.from)}`);
       assert.ok(m.from.between && m.from.rule);
       assert.match(m.agent.text, /^\W*Agent\s+not started[\s\S]*Send to agent[\s\S]*2$/, "the spine's words as they were, the move in their middle");
-      assert.ok(m.bar.includes("Mark done") && m.bar.includes("Share"), `the bar: ${m.bar}`);
-      assert.ok(!m.bar.some((x) => STAGE.test(x)), `no stage move on the bar: ${m.bar}`);
+      // ...the bar is Back and Next alone (the owner, 2026-10-29); the task's own moves are on its title bar, Mark done first
+      assert.deepEqual(m.bar.filter((x) => !/Back$|^Next/.test(x)), [], `the bar: ${m.bar}`);
+      assert.equal(m.head[0], "Mark done", `the title bar: ${m.head}`);
+      assert.ok(m.head.includes("Share") && m.head.some((x) => /^Change/.test(x)), `the title bar: ${m.head}`);
+      assert.ok(!m.head.some((x) => STAGE.test(x)), `no stage move on the title bar: ${m.head}`);
     });
 
     await t.test("an open pane's white strip: its name, its moves, and arrows that fold it back to its spine", async () => {
@@ -90,7 +97,7 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       assert.deepEqual(m.close.moves.map((x) => x.word), ["Redraft", "Hand it to a person"], JSON.stringify(m.close));
       assert.ok(m.close.between && m.close.rule);
       assert.ok(!m.bar.some((x) => STAGE.test(x)), `no stage move on the bar: ${m.bar}`);
-      assert.ok(m.bar.includes("Mark done"), `${m.bar}`);
+      assert.equal(m.head[0], "Mark done", `${m.head}`);
       assert.ok(await page.$(`${CUR} [data-tq-run-form]`), "the agent's own form carries its start");
     });
 
@@ -129,17 +136,18 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       await page.waitForFunction((CUR) => !document.querySelector(`${CUR} [data-tq-handoff-card]`), { timeout: 5000 }, CUR);
     });
 
-    await t.test("a live agent's bar is Back, Next and Stop and save - nothing else", async () => {
+    await t.test("a live agent's bar is Back and Next; its strip holds Stop and save and the session's close", async () => {
       const live = tasks.find((x) => x.State === "working" || /census sync fails/.test(x.Title));
       await openTask(page, live.TaskId);
       await page.waitForSelector(`${CUR} .xterm`, { timeout: 20000 }); await sleep(800);
       const m = await look(page);
-      assert.deepEqual(m.bar.filter((x) => !/^(← )?Back$|^Next/.test(x)), ["Stop and save"], `${m.bar}`);
+      assert.deepEqual(m.bar.filter((x) => !/^(← )?Back$|^Next/.test(x)), [], `${m.bar}`);
+      assert.deepEqual(m.head, [], "nothing on the title bar while the agent works");
       assert.ok(m.bar.some((x) => /^Next/.test(x)), `Next stays: ${m.bar}`);
       const st = await page.evaluate((CUR) => { const e = document.querySelector(`${CUR} [data-tq-pane-strip=agent]`);
-        return e && { live: e.hasAttribute("data-tq-live"), h: Math.round(e.getBoundingClientRect().height), stop: !!e.querySelector("[data-tq-strip-stop]"),
-          arrows: e.querySelectorAll("[data-tq-strip-fold]").length, words: e.innerText.trim() }; }, CUR);
-      assert.ok(st && st.live && st.h <= 34 && st.stop && st.arrows === 2 && !st.words, `a live agent's strip is slim: Stop and save and its arrows, small ${JSON.stringify(st)}`);
+        return e && { live: e.hasAttribute("data-tq-live"), h: Math.round(e.getBoundingClientRect().height), stop: !!e.querySelector("[data-tq-strip-stop]") && !!e.querySelector("[data-tq-strip-close]"),
+          arrows: e.querySelectorAll("[data-tq-strip-fold]").length, words: [...e.querySelectorAll("[data-tq-strip-fold]")].map((a) => a.innerText).join("") + (e.querySelector("[data-tq-section-head], p")?.innerText || "") }; }, CUR);
+      assert.ok(st && st.live && st.h <= 34 && st.stop && st.arrows === 2 && !/Agent/.test(st.words), `a live agent's strip is slim: Stop and save, close and its arrows, small ${JSON.stringify(st)}`);
     });
 
     await t.test("the chat is a small pill in the corner, the bar ending before it", async () => {

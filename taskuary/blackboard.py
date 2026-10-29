@@ -397,11 +397,21 @@ def is_permanent(err) -> bool:
     return any(k in s for k in PERMANENT)
 
 
+def _why(err, n: int = 200) -> str:
+    """The reason, one line and at most n characters - cut at a sentence end, else a word, never mid-word (a start-failure note
+    ended "...the reposit", the email walk 2026-10-29)."""
+    t = ' '.join(str(err or '').split()).rstrip('.')
+    if len(t) <= n: return t
+    head = t[:n]
+    end = head.rfind('. ')
+    return head[:end] if end > n // 2 else head.rsplit(' ', 1)[0].rstrip(',;:-') + '…'
+
+
 def failed_line(err, permanent: bool, tries: int = 0) -> str:
     """What a start that gave up says, wherever it is said (the task's note, the agent step). A configuration error
     said "Press Start now to try again" over "unknown agent: coder" - and Start fails the same way every time until
     the agent is fixed (the owner, 2026-10-16), so a permanent one says what is wrong and that Start waits on the fix."""
-    why = ' '.join(str(err or '').split()).rstrip('.')[:200] or 'no reason was given'
+    why = _why(err) or 'no reason was given'
     if permanent: return (f"Couldn't start: {why}. This is a setup problem, so Start fails the same way until it is fixed - "
                           'check the agent and the repository this task uses.')
     return f"Couldn't start{f' after {tries} tries' if tries else ''}: {why}. Press Start to try again, or Cancel."
@@ -414,7 +424,7 @@ def record_failure(store, tid: int, err, agent: str = '', label: str = 'The agen
     if not store.get_dispatch(tid): store.enqueue_dispatch(tid, None, agent, 'start failed - retrying')
     row = store.dispatch_failed(tid, str(err), is_permanent(err), BACKOFF, MAX_ATTEMPTS)
     if not row: return None
-    n, short = row['Attempts'], ' '.join(str(err).split()).rstrip('.')[:200]
+    n, short = row['Attempts'], _why(err)
     if row['State'] == 'failed': store.add_comment(tid, 'router', 'agent', failed_line(err, is_permanent(err), n))
     else:
         at = str(row.get('NextAt') or '')[11:16]

@@ -76,11 +76,15 @@ class DossierTests(unittest.TestCase):
         _mail(s, 'noise@else.com', 'Weekly newsletter', 'Unrelated.', days=1)
         tid = s.create_task({'Title': 'Review Q3 ledger reconciliation figures', 'Kind': 'general', 'Status': 'open'}, 't')
         new = _mail(s, DANA, 'Re: Q3 ledger reconciliation', 'Any word on the review?', days=0, conv='c1')
-        d = counsel.dossier(s, {'from_email': DANA, 'from_name': 'Dana', 'subject': 'Re: Q3 ledger reconciliation', 'conversation_id': 'c1'}, exclude_mid=new)
+        msg = {'from_email': DANA, 'from_name': 'Dana', 'subject': 'Re: Q3 ledger reconciliation', 'conversation_id': 'c1'}
+        # the same topic is read off embeddings (textsim), never shared subject words (2026-10-28) - with none, structure alone
+        from tests import fake_embed
+        with fake_embed.no_embedder(): self.assertNotIn('SAME TOPIC ELSEWHERE', counsel.dossier(s, msg, exclude_mid=new, calendar=False))
+        with fake_embed.meaning({'ledger': ['ledger reconciliation']}): d = counsel.dossier(s, msg, exclude_mid=new)
         self.assertIn('FROM THIS SENDER', d); self.assertIn('Attaching the reconciled ledger', d)
         self.assertIn('WHAT YOU LAST WROTE TO THEM', d); self.assertIn('review by Friday', d)
         self.assertIn('SAME TOPIC ELSEWHERE', d); self.assertIn('two open items', d)
-        self.assertNotIn('newsletter', d.lower())                                             # one shared word is not a topic
+        self.assertNotIn('newsletter', d.lower())                                             # another topic is not this one
         self.assertIn('OPEN TASKS THAT TOUCH IT', d); self.assertIn(f'TQ-{tid:04d}', d)
         self.assertNotIn('Any word on the review', d)                                          # the message itself is not its own history
 

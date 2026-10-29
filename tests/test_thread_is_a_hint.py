@@ -7,6 +7,7 @@ from unittest import mock
 
 from taskuary import ingest, triage
 from taskuary.store import MemoryStore
+from tests import fake_embed
 
 ASK = 'Alex, can you approve the Payworth refund for the Q3 overpayment? Paperwork attached.'
 
@@ -123,11 +124,13 @@ class NameOnAnotherChannel(unittest.TestCase):
 
     def test_the_same_job_from_whatsapp_is_shown_with_both_names_and_same_as_joins(self):
         seen = []
-        r = wa(self.s, 'w1', 'any luck with the ledger export timeout? close is tonight', brain(seen, relationship='new', same_as=self.tid))
+        # ...the topic is the same MEANING (a stand-in embedder: these two texts are one job), never shared words
+        with fake_embed.meaning({'ledger timeout': ['ledger export', 'export timeout']}):
+            r = wa(self.s, 'w1', 'any luck with the ledger export timeout? close is tonight', brain(seen, relationship='new', same_as=self.tid))
         user = seen[-1][1]
         self.assertIn('a similar name on another channel - from: Ray Colton (WhatsApp', user)
         self.assertIn("task's sender: Ray Colton <ray@northwind.example>", user)
-        self.assertIn('the same topic (', user, 'name and topic together')
+        self.assertIn('about the same thing (', user, 'name and topic together')
         self.assertEqual((r['status'], r['task_id']), ('routed', self.tid))
 
     def test_the_same_name_on_another_job_is_shown_and_its_null_opens_a_task(self):

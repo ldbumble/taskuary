@@ -546,6 +546,9 @@ CREATE TABLE IF NOT EXISTS kb_chunk (ChunkId INTEGER PRIMARY KEY, DocId INTEGER,
 -- optional semantic search (kbembed.py): one unit-length float32 vector per passage, written only while the
 -- owner has it switched on. Keyed by the embedding MODEL: a changed model leaves old rows unread, then re-embedded.
 CREATE TABLE IF NOT EXISTS kb_vec (ChunkId INTEGER PRIMARY KEY, Model TEXT, Dim INTEGER, Vec BLOB);
+-- ...and the same embedder's vectors of the hub's own short texts (textsim.py): a task's title and summary, a memory line - keyed by what
+-- the text is ("task:12") and the model, with a hash of what it said, so a changed title is embedded again and an unchanged one never
+CREATE TABLE IF NOT EXISTS text_vec (Key TEXT, Model TEXT, Hash TEXT, Dim INTEGER, Vec BLOB, PRIMARY KEY (Key, Model));
 CREATE TABLE IF NOT EXISTS metric (MetricId INTEGER PRIMARY KEY, Name TEXT UNIQUE, Label TEXT, Grain TEXT,
   Definition TEXT, SpecJson TEXT, Notes TEXT, Status TEXT DEFAULT 'draft', ConnectorId INTEGER,
   Skill TEXT, LastCheckAt TEXT, LastCheckPass INTEGER, LastCheckNote TEXT,
@@ -6156,6 +6159,21 @@ class SQLiteStore:
         with self.lock:
             self.cx.executemany('INSERT OR REPLACE INTO kb_vec (ChunkId, Model, Dim, Vec) VALUES (?,?,?,?)',
                                 [(i, model, len(b) // 4, b) for i, b in items])
+            self.cx.commit(); self._writes += 1
+    def text_vecs(self, model: str, keys: list) -> dict:
+        """{Key: (Hash, blob)} for the keys embedded with `model` (textsim.vectors)."""
+        out = {}
+        for i in range(0, len(keys), 500):
+            part = list(keys[i:i + 500])
+            with self.lock:
+                out.update({k: (h, v) for k, h, v in self.cx.execute(
+                    f"SELECT Key, Hash, Vec FROM text_vec WHERE Model=? AND Key IN ({','.join('?' * len(part))})", (model, *part)).fetchall()})
+        return out
+    def text_vec_put(self, model: str, items: list):
+        """items: [(Key, Hash, blob)], one transaction."""
+        with self.lock:
+            self.cx.executemany('INSERT OR REPLACE INTO text_vec (Key, Model, Hash, Dim, Vec) VALUES (?,?,?,?,?)',
+                                [(k, model, h, len(b) // 4, b) for k, h, b in items])
             self.cx.commit(); self._writes += 1
     def kb_vectors(self, model: str, cid=None) -> list:
         """[(ChunkId, Dim, blob)] for every passage embedded with `model` - the whole set, because the search is a brute-force scan."""

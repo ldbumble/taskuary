@@ -2,13 +2,14 @@
 to us, then another person sends us about same topic will they get joined on one task ... also if there is teams message then email
 about same task will it join it? We should join them as it's about same thing"). Triage was shown an open task only for the same
 thread, the same sender or two of its title's words in the SUBJECT - so a second colleague's differently-worded mail, or a Teams line,
-never put the task in front of it. Now the arrival's body is read for the task's topic; the model still says same_as."""
+never put the task in front of it. Now an arrival is weighed against every open task by MEANING (embeddings over the task's title and
+summary, textsim) - never by shared words; the model still says same_as. The embedder here is a stand-in (tests/fake_embed.py)."""
 import json, unittest
 from unittest import mock
 
 from taskuary import context, ingest, sentjudge
-from taskuary.routing import tokens
 from taskuary.store import MemoryStore
+from tests import fake_embed
 
 TITLE, SUMMARY = 'Reconcile the Payworth Q3 invoice', 'Gail needs the Payworth Q3 invoice reconciled against the ledger export before the Friday close.'
 
@@ -35,14 +36,19 @@ PAULA = dict(conv='thread-B', frm='paula@northwind.example', name='Paula Vance',
              body='Hi Alex, finance is still waiting on the Payworth invoice for Q3 - has it been reconciled with the ledger yet?')
 
 
+# what the stand-in embedder reads as one job: the invented texts below that are about the Payworth Q3 reconciliation
+JOBS = {'payworth q3': ['payworth q3', 'payworth invoice for q3']}
+
+
 class SameTopicTests(unittest.TestCase):
+    def setUp(self):
+        cm = fake_embed.meaning(JOBS); self.embed = cm.__enter__(); self.addCleanup(cm.__exit__, None, None, None)
+
     def test_another_person_on_another_thread_is_shown_the_task_and_joins_it(self):
         s = MemoryStore(); tid = gails(s)['task_id']; seen = []
-        # the subject shares no word with the title: by the subject alone it was never shown
-        self.assertFalse(set(tokens(PAULA['subject'])) & set(tokens(TITLE)))
         b = arrive(s, 'p', brain(seen, same_as=tid), **PAULA)
         self.assertIn(f'"tid": {tid}', seen[-1])
-        self.assertIn('the same topic (', seen[-1])
+        self.assertIn('about the same thing (', seen[-1])
         self.assertIn('"about": "Gail needs the Payworth Q3 invoice', seen[-1])
         self.assertEqual((b['status'], b['task_id']), ('routed', tid))
         self.assertEqual(len(s.list_tasks()), 1)
@@ -58,7 +64,7 @@ class SameTopicTests(unittest.TestCase):
                    'did the Payworth Q3 invoice get reconciled yet? the ledger is locked tonight', channel='teams')
         self.assertTrue(seen, 'a chat line goes through triage')
         self.assertIn(f'"tid": {tid}', seen[-1])
-        self.assertIn('the same topic (', seen[-1])
+        self.assertIn('about the same thing (', seen[-1])
         self.assertEqual((r['status'], r['task_id']), ('routed', tid))
 
     def test_an_email_is_shown_the_task_a_teams_line_opened(self):
@@ -88,7 +94,28 @@ class SameTopicTests(unittest.TestCase):
         s = MemoryStore(); tid = gails(s)['task_id']
         shown = context.recent_open(s, {'conversation_id': 'rep-1', 'channel': 'report', 'subject': 'Daily check',
                                         'body': 'All clear. Nothing about any invoice or ledger today, Payworth quiet.'})
-        self.assertFalse([w for w in shown if w['why'].startswith('the same topic')])
+        self.assertFalse([w for w in shown if w['why'].startswith('about the same thing')])
+
+    def test_with_no_embedder_only_structure_puts_a_task_in_front_of_triage(self):
+        # no words decide it: another person on another thread is not shown; the same sender is, by structure
+        s = MemoryStore(); tid = gails(s)['task_id']
+        with fake_embed.no_embedder():
+            other = context.recent_open(s, {'conversation_id': 'thread-B', 'from_email': PAULA['frm'], 'channel': 'email',
+                                            'subject': PAULA['subject'], 'body': PAULA['body']})
+            same = context.recent_open(s, {'conversation_id': 'thread-Z', 'from_email': 'gail@northwind.example', 'channel': 'email',
+                                           'subject': 'Lunch', 'body': 'Lunch on Friday?'})
+        self.assertEqual(other, [])
+        self.assertEqual([(w['tid'], w['why']) for w in same], [(tid, 'the same sender')])
+
+    def test_task_vectors_are_kept_and_embedded_again_only_when_the_task_changes(self):
+        s = MemoryStore(); tid = gails(s)['task_id']
+        msg = {'conversation_id': 'thread-B', 'from_email': PAULA['frm'], 'channel': 'email', 'subject': PAULA['subject'], 'body': PAULA['body']}
+        context.recent_open(s, msg); n = sum(map(len, self.embed.calls))
+        context.recent_open(s, msg)
+        self.assertEqual(sum(map(len, self.embed.calls)), n, 'the task and the arrival are not embedded twice')
+        s.update_task(tid, {'Title': 'Reconcile the Payworth Q3 invoice and file it'}, 't')
+        context.recent_open(s, msg)
+        self.assertEqual(self.embed.calls[-1], ['Reconcile the Payworth Q3 invoice and file it ' + SUMMARY], 'only the changed task')
 
 
 if __name__ == '__main__': unittest.main()

@@ -9,6 +9,7 @@ from unittest import mock
 
 from taskuary import ingest, triage
 from taskuary.store import MemoryStore, task_ref
+from tests import fake_embed
 
 
 def brain(intent, same_as=None, title=None, seen=None, kind='task', **extra):
@@ -113,8 +114,9 @@ class SomeoneElsesAskTests(unittest.TestCase):
                      frm='alex@northwind.example', subject='Discord replies are cut off at 2,000 characters')
         s.update_task(issue['task_id'], {'Status': 'done'}, 'owner')
         seen = []
-        mail(s, 'p', brain('task', seen=seen), conv='gh:northwind/ledger#65', frm='ray@vendor.example',
-             subject='Send long Discord replies without truncation', body='Discord replies are cut off at 2,000 characters. Closes #53.')
+        with fake_embed.meaning({'discord': ['discord replies']}):          # the two are alike in meaning (a stand-in embedder)
+            mail(s, 'p', brain('task', seen=seen), conv='gh:northwind/ledger#65', frm='ray@vendor.example',
+                 subject='Send long Discord replies without truncation', body='Discord replies are cut off at 2,000 characters. Closes #53.')
         self.assertIn('"from": "someone else: alex@northwind.example - not this sender"', seen[-1]['usr'])
         self.assertIn("someone else's own ask on a similar subject", seen[-1]['sys'])
 
@@ -180,8 +182,9 @@ class OwnChannelRepeatTests(unittest.TestCase):
                  subject='Process error check', body='The nightly export failed at 02:00.')
         # one task because TRIAGE says this idea IS that task - shown it as open work - not an exact-title check (2026-10-08)
         seen = []
-        b = mail(s, 'i1', brain('task', same_as=a['task_id'], title='Nightly export failed', seen=seen), conv='report:140:idea:export',
-                 channel='assistant', frm='', subject='Idea', body='The nightly export failed - worth a look.')
+        with fake_embed.meaning({'nightly export': ['nightly export']}):     # the run and the idea are alike in meaning (a stand-in embedder)
+            b = mail(s, 'i1', brain('task', same_as=a['task_id'], title='Nightly export failed', seen=seen), conv='report:140:idea:export',
+                     channel='assistant', frm='', subject='Idea', body='The nightly export failed - worth a look.')
         self.assertIn(f"TQ-{a['task_id']:04d}", seen[-1]['usr'])
         self.assertEqual(b['task_id'], a['task_id'])
         self.assertEqual(len(s.list_tasks()), 1)

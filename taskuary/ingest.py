@@ -1961,7 +1961,8 @@ def hand_reply_to_agent(store, tid, rid, why: str) -> bool:
 # the newest verdict that made an offer still speaks.
 OFFER_TAG = 'offer-taken'
 OFFER_JOB = ('The owner accepted your offer: "{offer}". Do that for them. Registering, signing up, booking, paying or submitting anything '
-             'outside Taskuary waits for the owner\'s yes - ask them before it, with what you would enter. Nothing is sent: a reply or a '
+             'outside Taskuary waits for the owner\'s yes - in Taskuary\'s browser its brief says how (a press held for their '
+             'Approve, or asking first); otherwise ask them first, with what you would enter. Never press it unasked. Nothing is sent: a reply or a '
              'message you write waits for their Send.')
 
 
@@ -1992,6 +1993,40 @@ def offer_of(store, tid) -> str:
         if isinstance(v, dict) and str(v.get('offer') or '').strip():
             return '' if v.get('offer_is_reply') is True and _drafted(store, tid) else ' '.join(str(v['offer']).split())[:240]
     return ''
+
+
+# WHAT THE WORK IS DECIDES THE BROWSER, WHEREVER IT IS STARTED (the owner, 2026-10-29: "if it's not hard-coded, triage knows what to do
+# no?"). A forwarded webinar invite with "sign me up" got three outcomes from three doors - the task's box, Send to agent and the
+# assistant chat - because only the New sheet's toggle ever wrote "needs a browser". Triage reads the ask once and says whether it is
+# done on a web page (its verdict's needs_browser); every door that starts an agent on the task opens Taskuary's browser for it, where a
+# submit, a payment or a send is held for the owner's Approve (browserview.HOLD_LINE / ASK_FIRST_LINE) - never pressed by itself.
+def triage_wants_browser(store, tid) -> bool:
+    """Triage said this task's work is done on a web page, and the task is not a stranger's - a stranger's link is not followed by an
+    agent (browserview.STRANGER_LINE). The newest verdict on the task that answered the question decides."""
+    for r in store._rows("SELECT VerdictJson FROM route WHERE TaskId=? AND VerdictJson LIKE '%\"needs_browser\"%' ORDER BY RouteId DESC LIMIT 5", (tid,)):
+        try: v = json.loads(r.get('VerdictJson') or 'null') or {}
+        except (TypeError, ValueError): continue
+        if not isinstance(v, dict) or not isinstance(v.get('needs_browser'), bool): continue
+        if not v['needs_browser']: return False
+        from . import origin
+        try: return origin.of_task(store, tid)[0] != 'stranger'
+        except Exception as e:
+            logger.debug(f'ingest: origin unread on {task_ref(tid)}, no browser - {e}'); return False
+    return False
+
+
+def mark_browser(store, tid, actor: str = 'triage') -> bool:
+    """Tag the task "needs a browser" when triage said so (triage_wants_browser) and it is not tagged yet - said once on the task.
+    True when it now wants one. Called by the doors that start an agent (general.start_session, terminal.start_on_task)."""
+    from . import browserview
+    t = store.get_task(tid) if tid else None
+    if not t: return False
+    if browserview.wanted(t): return True
+    if not triage_wants_browser(store, tid): return False
+    store.tag_task(tid, browserview.WANTS, actor='triage')
+    store.add_comment(tid, 'triage', 'agent', "Triage read this as work on a web page - the agent works it in Taskuary's browser, "
+                      "and anything that would submit, pay or send waits for your Approve.")
+    return True
 
 
 # Only a line that WOULD have gone in says why it did not: the switch off, or no new work, is silence.

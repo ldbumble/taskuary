@@ -16,19 +16,26 @@ export const baseName = (p) => String(p || "").replace(/\\/g, "/").split("/").fi
 export const outputUrl = (tid, rel) => `/api/task-outputs/${Number(tid)}/${String(rel).split("/").map(encodeURIComponent).join("/")}`;
 
 // {tid, rel} for an address or a path into any task's outputs folder, or null. rel is a name inside the folder - no `..`, no drive
-export function parseOutput(raw) {
+// ...and only an ADDRESS is decoded (a URL, or any markdown link's target: `link`), its query and fragment cut first. A path on disk
+// is its name as written - "TQ-0012 % Collected v9.xlsx" or "Q3 #2.xlsx" is a real name, and decoding it, or cutting at its '#',
+// named a file that is not there
+const URLISH = /^(?:https?:|file:|\/outputs\/)/i;
+export function parseOutput(raw, link = false) {
   let s = String(raw || "").trim();
-  try { s = decodeURIComponent(s); } catch { /* a stray % - read it as written */ }
+  if (link || URLISH.test(s)) {
+    s = s.replace(/^(https?:\/\/[^/]*)?(\/outputs\/[^?#]*)[?#].*$/i, "$1$2");
+    try { s = decodeURIComponent(s); } catch { /* a stray % - read it as written */ }
+  }
   s = s.replace(/\\/g, "/").replace(/^file:\/+/i, "");
   let m = ADDRESS.exec(s);
-  const rel = m ? m[2].replace(/[?#].*$/, "") : (m = ON_DISK.exec(s)) && m[2];
+  const rel = m ? m[2] : (m = ON_DISK.exec(s)) && m[2];
   if (!m || !rel || rel.split("/").some((p) => !p || p === "." || p === ".." || p.includes(":"))) return null;
   return { tid: Number(m[1]), rel };
 }
 export const outputOf = (raw, tid) => { const o = parseOutput(raw); return o && tid != null && o.tid === Number(tid) ? o.rel : null; };
 
 const PREVIEW = { xlsx: "sheet", xlsm: "sheet", csv: "table", pdf: "pdf", png: "picture", jpg: "picture", jpeg: "picture", gif: "picture",
-  webp: "picture", md: "text", txt: "text", json: "text", log: "text", tsv: "text", svg: "page", html: "page", htm: "page" };
+  webp: "picture", md: "text", txt: "text", json: "text", log: "text", tsv: "text", svg: "page", html: "page", htm: "page", docx: "document" };
 const TYPES = { csv: "text/csv", md: "text/markdown", txt: "text/plain", json: "application/json", log: "text/plain", tsv: "text/plain",
   pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
   svg: "image/svg+xml", html: "text/html", htm: "text/html" };
@@ -61,7 +68,7 @@ export function outputRefs(text, tid) {
     return p ? `\`${p}\`` : "";
   });
   out = out.replace(LINK, (all, label, href) => {
-    const at = parseOutput(href);
+    const at = parseOutput(href, true);
     if (!at) return all;
     if (at.tid === Number(tid)) add(at.rel);
     // ...and a link into another task's folder is no link at all: its words, nothing to click into a 404 or a neighbour's file

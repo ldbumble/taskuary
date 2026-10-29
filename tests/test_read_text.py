@@ -17,9 +17,11 @@ class ReadTextTests(unittest.TestCase):
         self.assertNotIn('erin@northwind.example', out); self.assertNotIn('555-0100', out)
 
     def test_the_legal_footer_is_not_shown(self):
-        # display only (2026-09-23 ruling, restored 2026-10-11): the model still reads it - test_triage_reads_not_guesses
-        out = triage.read_text(MAIL + '\nNOTICE: This confidential message contains information intended for a specific individual.')
+        # display only (2026-09-23 ruling, restored 2026-10-11): the model still reads it, and names the footer in its verdict's `wrapper`
+        legal = 'NOTICE: This confidential message contains information intended for a specific individual.'
+        out = triage.read_text(MAIL + '\n' + legal, wrapper=[legal])
         self.assertTrue(out.startswith('You will have to resubmit')); self.assertNotIn('NOTICE', out)
+        self.assertIn('NOTICE', triage.read_text(MAIL + '\n' + legal))      # ...never cut by a phrase list before the model has read it
 
     def test_the_mailboxs_own_cut_is_used_when_there_is_one(self):
         words = 'Yes - Thursday works for the review, and I will bring the reconciled export and the vendor list.'

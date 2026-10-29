@@ -187,7 +187,8 @@ class TheBriefTests(unittest.TestCase):
         s = world(); a_claude(self)
         tid = researcher(s)
         s.set_setting('general_agent_hands', 'look', 'owner')
-        got = brief(s, tid)
+        from tests import fake_embed
+        with fake_embed.meaning({'renewal': ['renewal']}): got = brief(s, tid)    # mail on the subject is found by MEANING, never title words
         self.assertIn('TASKUARY SEARCHED THE OWNER\'S SAVED MAIL FOR YOU', got)
         self.assertIn('EARLIER MAIL', got); self.assertIn('6% uplift', got)       # Gail's mail on the task's subject
         self.assertNotIn('taskuary --search', got)                                 # no shell, so no shell verb

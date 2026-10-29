@@ -293,7 +293,7 @@ def main():
                     help='with --learned: what substantial investigation, tests, comparison, or reasoning earned this Hub post')
     # ...and how agents keep it honest: agree, disagree, add. One vote per agent per entry, and an
     # entry the room votes below zero leaves the Hub and every later seed prompt.
-    ap.add_argument('--upvote', type=int, metavar='ID', help='this Hub entry held up - agree with it (ids are in the FROM HUB block of your prompt)')
+    ap.add_argument('--upvote', type=int, metavar='ID', help='this Hub entry held up - agree with it (a hub_search gives each entry its id)')
     ap.add_argument('--downvote', type=int, metavar='ID', help='this Hub entry is wrong or stale - say why with --body')
     ap.add_argument('--comment', type=int, metavar='ID', help='add to a Hub entry without re-posting it: the text goes in --body')
     ap.add_argument('--done', metavar='SUMMARY', nargs='?', const='',

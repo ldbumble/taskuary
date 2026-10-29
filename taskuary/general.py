@@ -725,7 +725,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         *[str(m.get('BodyText') or '') for m in (detail.get('messages') or [])[-12:]],
         *[str(c.get('Body') or '') for c in chat_rows(store, tid, run=True)[-12:]],
     ])
-    hub_context = hub.block(store, hub_query[:8_000], actions=False) if hub.enabled(store) else ''
+    hub_context = hub.block(store, hub_query[:8_000]) if hub.enabled(store) else ''
     # the chat is an agent too, so it is on the wall - the HOUSE lane, the notes with no
     # checkout behind them, which is where it and the owner leave things for everybody
     from . import blackboard as bb, selfclose

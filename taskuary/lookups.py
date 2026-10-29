@@ -7,7 +7,6 @@ what it needs instead of carrying a memory in its prompt
 import hashlib, json, math, re
 from datetime import datetime, timedelta
 from pathlib import Path
-from .routing import tokens
 from .store import task_ref
 from . import textsim
 from .timewords import plural
@@ -405,7 +404,7 @@ def outputs_find(store, p: dict) -> str:
     from . import outputs
     from .concierge import DELIVERY, PHONE
     m = re.search(r'\d+', str(p.get('ref') or ''))
-    hits = outputs.find(store, tokens(str(p.get('query') or p.get('contains') or '')), str(p.get('kind') or ''), int(m.group()) if m else None)
+    hits = outputs.find(store, str(p.get('query') or p.get('contains') or ''), str(p.get('kind') or ''), int(m.group()) if m else None)
     if not hits:
         return ('No file an agent made matches that' + (f" on {task_ref(int(m.group()))}" if m else '')
                 + (' of that kind' if p.get('kind') else '') + ' - try fewer words, or none with the kind alone.')

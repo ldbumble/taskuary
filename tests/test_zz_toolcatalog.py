@@ -514,8 +514,10 @@ class AppReadTests(unittest.TestCase):
         self.assertEqual(toolcatalog.valid('knowledge.search', {}), 'knowledge.search needs query')
         from taskuary import memoryedit
         memoryedit.remember(s, 'Gail Moreno approves every PO over 5k')      # a kept fact is a LEARNED.md line (2026-10-27)
-        self.assertIn('Gail Moreno approves', concierge.read_op(s, 'knowledge.search', {'query': 'who approves a PO'}))
-        self.assertIn('Nothing the company has written down', concierge.read_op(s, 'knowledge.search', {'query': 'warp drive'}))
+        from tests import fake_embed           # ...found by meaning (embeddings), never by shared words (2026-10-28)
+        with fake_embed.meaning({'po': ['approves']}):
+            self.assertIn('Gail Moreno approves', concierge.read_op(s, 'knowledge.search', {'query': 'who approves a PO'}))
+            self.assertIn('Nothing the company has written down', concierge.read_op(s, 'knowledge.search', {'query': 'warp drive'}))
 
     def test_a_brief_for_my_list_says_so_on_the_button_and_the_receipt(self):
         """"Add a to-do: call Ruth" put the MODEL's catalogue sentence on the button ("Start an agent from a

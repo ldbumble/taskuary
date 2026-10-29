@@ -76,5 +76,27 @@ test("Came from: the boxes, the conversation, the ask, the to-do - each message 
   await page.click(`${FROM} [data-tq-todo-done-fold]`); await sleep(300);
   const done = await look();
   assert.equal(done.todoRows, 22); assert.equal(done.struck, 6, "the fold opens the six done");
+
+  // FOLDED TO ITS TAB, the count stays and the lines under it are the newest messages back as far as the room goes (the owner, 2026-10-29:
+  // "4 messages" over a fixed three read as one lost): newest first, none skipped, each whole above the foot - measured, never a fixed number
+  const other = (await page.$(`${CUR} [data-tq-section-tab=close]`)) ? "close" : "agent";
+  await page.click(`${CUR} [data-tq-section-tab=${other}]`); await sleep(800);
+  const tab = await page.evaluate((CUR) => {
+    const t = document.querySelector(`${CUR} [data-tq-section-tab=from]:not([data-tq-mini])`);
+    if (!t) return null;
+    const foot = t.querySelector("[data-tq-tab-foot]").getBoundingClientRect();
+    return { foot: foot.top, footBottom: foot.bottom, bottom: t.getBoundingClientRect().bottom,
+      lines: [...t.querySelectorAll("[data-tq-tab-line]")].map((l) => ({ text: l.textContent, drawn: getComputedStyle(l).display !== "none", bottom: l.getBoundingClientRect().bottom })) };
+  }, CUR);
+  assert.ok(tab, "Came from folds to its tab");
+  assert.match(tab.lines[0].text, /· 15 messages$/, "the count is every message");
+  const msgs = tab.lines.slice(1), drawn = msgs.filter((l) => l.drawn), cut = msgs.findIndex((l) => !l.drawn);
+  assert.equal(msgs.length, 15, "every message goes to the tab");
+  assert.ok(drawn.length >= 2, `as many as the room holds, not one: ${drawn.length}`);
+  assert.ok(cut < 0 || msgs.slice(cut).every((l) => !l.drawn), `a run from the newest, none skipped: ${JSON.stringify(msgs.map((l) => l.drawn))}`);
+  drawn.forEach((l, i) => assert.match(l.text, new RegExp(`Move note ${15 - i}:`), `newest first: ${l.text}`));
+  assert.ok(tab.lines.filter((l) => l.drawn).every((l) => l.bottom <= tab.foot + 0.5), `each drawn line ends above the foot ${JSON.stringify(tab)}`);
+  assert.ok(tab.footBottom <= tab.bottom + 1, "the foot stays in the tab");
+  t.diagnostic(`Came from tab draws ${drawn.length} of 15`);
   assert.deepEqual(errors, []);
 });

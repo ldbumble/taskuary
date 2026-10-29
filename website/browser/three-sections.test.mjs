@@ -33,6 +33,15 @@ const watch = (page, ms, tab) => page.evaluate((ms, CUR, tab) => new Promise((do
   };
   requestAnimationFrame(frame);
 }), ms, CUR, tab);
+// ...a closed tab's lines: which are drawn, and whether each drawn one ends above the foot (TaskPage fitTabLines)
+const tabFit = (page, key) => page.evaluate((CUR, key) => {
+  const tab = document.querySelector(`${CUR} [data-tq-section-tab=${key}]:not([data-tq-mini])`);
+  if (!tab) return null;
+  const foot = tab.querySelector("[data-tq-tab-foot]").getBoundingClientRect(), box = tab.getBoundingClientRect();
+  return { foot: Math.round(foot.top), bottom: Math.round(box.bottom), footBottom: Math.round(foot.bottom),
+    lines: [...tab.querySelectorAll("[data-tq-tab-line]")].map((l) => ({ text: l.textContent, drawn: getComputedStyle(l).display !== "none",
+      bottom: Math.round(l.getBoundingClientRect().bottom) })) };
+}, CUR, key);
 const openTask = async (page, id) => {
   CUR = `[data-tq-canvas-item]:has([data-tq-task-page="${id}"])`;
   await page.evaluate((id) => { location.hash = ""; location.hash = `task=${id}`; }, id);
@@ -101,6 +110,7 @@ test("three sections in the flow's order, open where the task is up to, tabs tha
 
   // ...each kind of task opens where it is up to
   await t.test("each task opens on the section it is up to", async () => {
+    const drew = []; let many = 0;
     for (const [re, want] of [[/^Invoice 88213/, "close"], [/^Reconcile the August GL export/, "agent"], [/^Year-end audit/, "from"],
       [/^Ray: schema sign-off/, "from"], [/^Migrate the census export/, "from"], [/^Invite: AP cutover dry run/, "from"]]) {   // owed, nothing drafted: what came in first (2026-10-28)
       const tid = id(re);
@@ -109,7 +119,17 @@ test("three sections in the flow's order, open where the task is up to, tabs tha
       const m = await look(page);
       assert.equal(m.main, want, `${re}: ${m.stage} opened on ${m.main}`);
       assert.ok(!m.tabs.some((x) => x.here), `${re}: the open section is where it is up to, so no tab says so`);
+      // ...Came from's tab draws its newest messages back as far as the room goes: a run from the top, none skipped, each whole above the foot
+      const f = await tabFit(page, "from");
+      if (!f) continue;
+      const drawn = f.lines.map((l) => l.drawn), cut = drawn.indexOf(false);
+      assert.ok(cut < 0 || drawn.slice(cut).every((d) => !d), `${re}: a gap in the drawn lines ${JSON.stringify(f.lines)}`);
+      assert.ok(f.lines.filter((l) => l.drawn).every((l) => l.bottom <= f.foot), `${re}: a line runs into the foot ${JSON.stringify(f)}`);
+      assert.ok(f.footBottom <= f.bottom + 1, `${re}: the foot stays in the tab ${JSON.stringify(f)}`);
+      if (cut >= 0) drew.push(String(re));
+      many = Math.max(many, drawn.filter(Boolean).length - 1);
     }
+    t.diagnostic(`most messages drawn on one Came from tab: ${many}; cut short on ${drew.length}`);
   });
 
   // A PRESS OPENS THE SECTION IT BELONGS TO (the owner, 2026-10-27)

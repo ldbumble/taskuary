@@ -268,6 +268,11 @@ class Term:
         # what lets files() attribute later dirt to this agent (see blackboard.py)
         from . import blackboard as _bb, witness as _w
         self.dirty0 = _bb.dirty(cwd) if task_id else set()
+        # ...and where the checkout's HEAD stood when the task's agent first worked here: a commit it makes leaves nothing dirty, and
+        # Review changes said "changed no files" over the agent's own committed fix (B23, proof.mark_start)
+        if task_id and store is not None:
+            from . import proof as _proof
+            _proof.mark_start(store, task_id, cwd)
         self._files = ([], 0.0)
         self.witness, self.ext_id = _w.Witness(), ''     # what the agent said and did (hooks / rollout), and the CLI's own session id once a hook names it
         # the browser this session may open is named after it, so the pane can find it (browserview)

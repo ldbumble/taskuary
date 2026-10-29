@@ -7,7 +7,7 @@ ran, timings from the run rows, CI from the checks API. A claim we cannot substa
 left OUT rather than guessed at: 'no test run detected' is information, 'probably fine' is
 not.
 """
-import os, re
+import json, os, re
 from datetime import datetime
 from loguru import logger
 from . import spawn
@@ -258,19 +258,81 @@ def push_base(cwd: str) -> tuple:
     return up, int(ahead or 0), up
 
 
-def working_diff(cwd: str) -> str:
+# UNTRACKED CACHE A RUN LEAVES BEHIND IS NOT WORK (B23, the email walk 2026-10-29): running the tests wrote __pycache__ and .pytest_cache,
+# and Review changes counted them as "3 changed file(s) from other work". Told by the PATH - the tools' own cache folders and compiled
+# files, and any folder carrying the Cache Directory Tagging spec's CACHEDIR.TAG - never by what a file says.
+CACHE_DIRS = frozenset(('__pycache__', '.pytest_cache', '.mypy_cache', '.ruff_cache', '.hypothesis', '.tox', '.nox'))
+CACHE_EXT = ('.pyc', '.pyo')
+
+
+def is_cache(cwd: str, path: str) -> bool:
+    parts = str(path or '').replace('\\', '/').strip('/').split('/')
+    if any(p in CACHE_DIRS for p in parts[:-1]) or parts[-1].endswith(CACHE_EXT) or parts[-1] == 'CACHEDIR.TAG': return True
+    return any(os.path.isfile(os.path.join(cwd, *parts[:i], 'CACHEDIR.TAG')) for i in range(1, len(parts)))
+
+
+START_KEY = 'agent_head'
+
+
+def _head(cwd: str) -> str: return _git(cwd, 'rev-parse', '--verify', '-q', 'HEAD').strip()
+
+
+def mark_start(store, task_id: int, cwd: str) -> str:
+    """Where HEAD stood in `cwd` when this task's agent FIRST worked there - kept on the task (a setting per task, one entry per
+    checkout), never moved by a later session: a Continue's commits are the task's too. '' when it is no git checkout."""
+    from . import blackboard
+    try:
+        if not (cwd and os.path.isdir(cwd)): return ''
+        key, at = f'{START_KEY}:{int(task_id)}', blackboard.norm(cwd)
+        try: marks = json.loads(store.get_setting(key) or '{}') or {}
+        except (TypeError, ValueError): marks = {}
+        if isinstance(marks.get(at), dict) and marks[at].get('head'): return marks[at]['head']
+        head = _head(cwd)
+        if not head: return ''
+        marks[at] = {'head': head, 'at': datetime.now().isoformat(sep=' ', timespec='seconds')}
+        store.set_setting(key, json.dumps(marks), 'agent')
+        return head
+    except Exception as e:
+        logger.debug(f'proof: no start mark for task {task_id} - {e}'); return ''
+
+
+def started_at(store, task_id: int, cwd: str) -> dict:
+    """{'head', 'at'} mark_start kept for this task in this checkout, or {}."""
+    from . import blackboard
+    try: return (json.loads(store.get_setting(f'{START_KEY}:{int(task_id)}') or '{}') or {}).get(blackboard.norm(cwd)) or {}
+    except (TypeError, ValueError, AttributeError): return {}
+
+
+def start_head(store, task_id: int, cwd: str) -> str:
+    """The task's start mark in this checkout when HEAD has moved on from it (commits since), else ''."""
+    head = started_at(store, task_id, cwd).get('head') or ''
+    return head if head and _git(cwd, 'rev-list', '--count', f'{head}..HEAD').strip() not in ('', '0') else ''
+
+
+def _shared_since(store, task_id: int, cwd: str, since: str) -> bool:
+    """Did another task's agent work in this checkout since `since`? Then a commit there is not this task's by its timing alone."""
+    from . import blackboard, terminal as hub_term
+    me = blackboard.norm(cwd)
+    if any(getattr(x, 'task_id', None) not in (None, task_id) and blackboard.norm(getattr(x, 'cwd', '')) == me
+           for x in list(hub_term.SESSIONS.values())): return True
+    rows = store._rows('SELECT TaskId, Cwd FROM transcript WHERE TaskId<>? AND CreatedAt>=?', (task_id, since or ''))
+    return any(blackboard.norm(r.get('Cwd') or '') == me for r in rows)
+
+
+def working_diff(cwd: str, base: str = None) -> str:
     """Everything a push would carry: commits made and not pushed, edits not committed, and
     files the agent created that git has never seen. Three questions, because `git diff HEAD`
     answers only the middle one - it goes quiet the moment work is committed, and says nothing
     ever about an untracked file."""
     import os
     if not cwd or not os.path.isdir(cwd): return ''
-    base, _ahead, _ = push_base(cwd)
+    base = base or push_base(cwd)[0]                           # ...or from where the task's agent started (review, B23)
     out = [_git(cwd, 'diff', base)]                            # committed, staged and unstaged
     status = _git(cwd, 'status', '--porcelain', '-uall')       # -uall: a new FOLDER lists its files
     for line in status.splitlines():
         if not line.startswith('??'): continue
         path = line[3:].strip().strip('"')
+        if is_cache(cwd, path): continue                       # a run's cache is not work (B23)
         # '/dev/null' is git's own spelling for the empty side, understood on Windows too
         out.append(_git(cwd, 'diff', '--no-index', '--', '/dev/null', path, ok=(0, 1)))
     return '\n'.join(x for x in out if x.strip())
@@ -311,18 +373,27 @@ def touched_by(store, task_id: int, cwd: str) -> tuple:
         paths.update(blackboard.trace_files(r.get('TraceJson')))
     base, _ahead, up = push_base(cwd)
     commits = []
-    if up:
-        ref = task_ref(task_id)
-        log = _git(cwd, 'log', '--format=%x1e%H%x1f%s', '--name-only', f'{up}..HEAD')
+    # ...and SINCE THE AGENT STARTED HERE (B23, the email walk 2026-10-29): a checkout with no upstream had no unpushed range at all, so
+    # the agent's own committed fix was nobody's and the drawer said "changed no files". Every commit after the task's start mark is its
+    # own while no other task's agent has worked in the checkout since; on a shared one the rule below decides, as for unpushed ones
+    start = start_head(store, task_id, cwd)
+    alone = bool(start) and not _shared_since(store, task_id, cwd, started_at(store, task_id, cwd).get('at') or '')
+    ranges = [r for r in (f'{up}..HEAD' if up else '', f'{start}..HEAD' if start else '') if r]
+    if ranges:
+        ref, seen = task_ref(task_id), set()
+        log = '\x1e'.join(_git(cwd, 'log', '--format=%x1e%H%x1f%s', '--name-only', r) for r in ranges)
+        mine = set(_git(cwd, 'rev-list', f'{start}..HEAD').split()) if alone else set()
         for chunk in log.split('\x1e'):
             if not chunk.strip(): continue
             head, _, body = chunk.partition('\n')
             sha, _, subj = head.partition('\x1f')
             files = {l.strip() for l in body.splitlines() if l.strip()}
+            if sha in seen: continue
+            seen.add(sha)
             # ITS OWN: the commit names the task, or EVERY file in it is one the task changed. One shared file was enough, and then
             # all the commit's files joined the task's - another task's fix (two transforms and the test file both had touched)
             # showed as "1 commit of its own" in TQ-0930's drawer (the owner, 2026-10-01: "these are the wrong changes")
-            if ref in subj or (files and files <= paths):
+            if sha in mine or ref in subj or (files and files <= paths):
                 commits.append({'sha': sha[:10], 'subject': subj[:120], 'files': sorted(files)})
                 paths.update(files)
     return sorted(paths), commits, known
@@ -385,8 +456,12 @@ def review(store, task_id: int, scope: str = 'task') -> dict:
             # UNKNOWN, not empty - show everything and say why, rather than a false "nothing"
             scope, files = 'checkout', whole
             note = 'No session on record for this task, so this is the whole checkout - some of it may be other work.'
-        else: files = [f for f in whole if f['path'] in set(paths)]
-        others = len(whole) - len(files)
+        else:
+            # the task's own commits are IN its diff (B23): measured from where its agent started when HEAD has moved since -
+            # a checkout with nowhere to push diffed against HEAD and showed nothing of a committed fix
+            start = start_head(store, task_id, cwd)
+            files = [f for f in (split_files(working_diff(cwd, start)) if start else whole) if f['path'] in set(paths)]
+        others = sum(f['path'] not in set(paths) for f in whole) if known else 0
         if known: note = ('' if files else
                 f'This task changed no files in this checkout' + (f' - it has {len(commits)} commit(s) of its own but nothing uncommitted' if commits else '')
                 + '.' + (f' The checkout carries {others} changed file(s)' + (f' and {ahead - len(commits)} unpushed commit(s)' if ahead - len(commits) > 0 else '')

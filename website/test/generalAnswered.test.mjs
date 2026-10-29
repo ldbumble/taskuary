@@ -22,7 +22,7 @@ test("the heading says it answered", () => {
 test("a task read with no live session lets go of the answered chat session the page held", () => {
   // the header kept "agent waiting on you" over an agent that had closed itself, until a reload (email walk 2026-10-29)
   assert.match(readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8"),
-    /if \(!live\?\.alive && detail\?\.task\?\.TaskId === selected && term\?\.alive && term\.mode === "assistant"[\s\S]{0,120}term\.busy === false && !pressedHere\) \{ setTerm\(null\); return; \}/);
+    /if \(detail\?\.session\?\.alive \|\| detail\?\.task\?\.TaskId !== selected\) return;\s*if \(term\?\.alive && term\.mode === "assistant" && term\.taskId === selected && term\.busy === false && !pressedHere\) setTerm\(null\);/);
 });
 
 test("the chat's poll hands the page the session it read, so the turn's end reaches the heading", () => {

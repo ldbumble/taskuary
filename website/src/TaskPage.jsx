@@ -986,11 +986,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const goneSid = useRef("");
   useEffect(() => {
     const live = detail?.session;
-    // ...and THIS task read with no live session ends a regular agent's answered one held here: its close (a self-close, a wrap) is
-    // a task-changed with no session in it, and the header kept "agent waiting on you" over the finished agent until a reload (email
-    // walk, 2026-10-29). Only an idle one - a turn in flight is never put out by a read that may predate it.
-    if (!live?.alive && detail?.task?.TaskId === selected && term?.alive && term.mode === "assistant" && term.taskId === selected
-      && term.busy === false && !pressedHere) { setTerm(null); return; }
     if (!live?.alive || live.taskId !== selected) return;
     // ...never the session Stop and save is writing up: its pty lives until the report is safe, and adopting it put the agent back
     if (pressedHere?.sid && live.sid === pressedHere.sid) return;
@@ -998,6 +993,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     if (live.sid !== term?.sid) setTerm(live);
     else if (liveWord !== sessionWord(term)) setTerm((was) => (was?.sid === live.sid ? { ...was, ...live } : was));
   }, [detail?.session, term?.sid, selected, liveWord]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // ...and THIS task read with no live session ends a regular agent's answered one held here: its close (a self-close, a wrap) is
+  // a task-changed with no session in it, and the header kept "agent waiting on you" over the finished agent until a reload (email
+  // walk, 2026-10-29). Only an idle one - a turn in flight is never put out by a read that may predate it.
+  useEffect(() => {
+    if (detail?.session?.alive || detail?.task?.TaskId !== selected) return;
+    if (term?.alive && term.mode === "assistant" && term.taskId === selected && term.busy === false && !pressedHere) setTerm(null);
+  }, [detail, selected]);   // eslint-disable-line react-hooks/exhaustive-deps
   const openTerm = useCallback(async (body) => {
     try {
       const { data } = await api.post("/api/terminals", body); setTerm(data);

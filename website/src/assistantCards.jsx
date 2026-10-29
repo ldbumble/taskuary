@@ -56,6 +56,7 @@ import { connError, openBugReport } from "./bugReportOpen.js";
 import { dayLabel, fmtTime } from "./dates.js";
 import { useShare } from "./Share.jsx";
 import ItemSections, { ItemPart } from "./ItemSections.jsx";
+import { PaneMoves } from "./TaskPage.jsx";   // an FYI's Came from carries its pane's moves as a task's does
 import { TYPE_LABELS, reportSchedule } from "./reportWords.js";
 import { SECTIONS as STEPS } from "./taskLayout.js";   // a task's three sections, by name (ItemSections)
 
@@ -362,7 +363,9 @@ const TASK_ACTS = [["not_a_task", "remove"], ["handoff", "forward"], ["reshape",
 // a card's word that is the Advisor's to light, never one of the row's own leads (the owner, 2026-10-27: Pause this report on a report)
 const QUIET = new Set(["report_off"]);
 
-export function Foot({ verb, then, where, covers = [], close, onDone, more, promote, extra = [], inline = false, openTask, taskId, moves = false }) {
+// `stages`: { verb: pane } - a word that rides one of the item's own panes instead of the bar (an FYI's Should be a task on its Came from,
+// where a task's Not a task stands: actionRow.splitRow `only`)
+export function Foot({ verb, then, where, covers = [], close, onDone, more, promote, extra = [], inline = false, openTask, taskId, moves = false, stages = {} }) {
   const nav = React.useContext(CardNav);
   const shut = useClose(close || {}, onDone);
   const [open, setOpen] = useState(false);
@@ -380,8 +383,9 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
   const rowed = !!nav.row;
   // The first three of the card's own words stand in the row (a report's Put it on my list, Send to agent); the rest - and Mark done and
   // the task page's acts - sit behind More. The card's own move (its Foot `verb`) stays in the card.
+  const staged = words.find((a) => stages[a.verb]), laid = staged ? { only: stages[staged.verb] } : null;
   const asVerb = (a, group) => ({ id: `w:${a.verb || a.label}`, group, tone: "s", label: a.label, title: a.title, disabled: a.disabled,
-    run: (e, anchor) => a.onClick?.({ currentTarget: anchor || e?.currentTarget }) });
+    ...(stages[a.verb] ? { stage: stages[a.verb] } : {}), ...(laid ? { laid } : {}), run: (e, anchor) => a.onClick?.({ currentTarget: anchor || e?.currentTarget }) });
   useVerbs("foot", rowed ? [
     // a move that IS the way on - a batch's "All read, next" (`moves`) - is the row's Next itself (the design, phase A: the batch verb in
     // the Next group), so the batch shows one way on, and the Advisor's lit Next is it
@@ -1190,7 +1194,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   if (table != null && card.kind === "fyi") return (
     <FyiSections card={card} table={table} items={thread} err={err}
       msgs={<>{thread.map((it) => <FyiMessage key={it.key || it.mid} item={it}>{it.mid && <FullText mid={it.mid} revision={it === card ? card.presentation_revision : undefined} />}</FyiMessage>)}</>}
-      foot={<Foot openTask={onOpenTask} close={card} onDone={onDone}
+      foot={<Foot openTask={onOpenTask} close={card} onDone={onDone} stages={{ mine: "from" }}
         extra={canUnsubscribe(card) ? [{ verb: "unsubscribe", label: btn("unsubscribe"), title: btnHint("unsubscribe"), onClick: unsub, disabled: !!busy }] : []}
         covers={[...(own || mineAlone ? (suggestedKind === "coding" ? ["coding_agent", "coder"] : ["regular_agent"]) : ["reply"]), ...(mineAlone ? ["reply", "not_ours"] : [])]}
         where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />} />
@@ -1418,6 +1422,8 @@ function FyiSections({ card, table, items, msgs, foot, err, next }) {
     sections={[
       { key: "from", n: 1, name: STEPS[0].name, lines: [`${plural(n, "message")} · nothing to decide`, ...items.slice(0, 3).map((i) => `${whoName(i.who)}: “${i.title || ""}”`)],
         foot: "✓ Sorted: FYI",
+        // ...and triage's miss said where a task's Not a task is (the owner, 2026-10-29): Should be a task, from the row's own verbs
+        ...(batch ? {} : { moves: <PaneMoves sec="from" /> }),
         // ...the handful as ONE list in one card (the owner, 2026-10-28: "too much space in fyi"): a hairline between messages, not a card each
         body: <><ItemPart className="tq-item-msgs" sx={{ py: 0.25 }}>{msgs}</ItemPart><CardErr err={err} /></> },
       { key: "agent", n: 2, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "#746e64" }} />, lines: ["not started"],
@@ -1478,7 +1484,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose, onAge
   const actsOf = (i) => (<>
             <div className="tq-card-actions tq-fyi-acts">
               {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => reply(i)} title={btnHint("reply")} sx={quiet}>{btn("reply")}</Button>}
-              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("mine", i)} title={btnHint("mine")} sx={quiet}>{btn("mine")}</Button>}
+              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("mine", i)} title={btnHint("mine", "fyi")} sx={quiet}>{btn("mine", "fyi")}</Button>}
               {i.mid && !i.tid && canCode && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => setAsking({ key: i.key, coding: true })} title={btnHint("coding_agent")} sx={quiet}>{btn("coding_agent")}</Button>}
               {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy || !!noAi} onClick={() => setAsking({ key: i.key, coding: false })} title={noAi || btnHint("regular_agent")} sx={quiet}>{btn("regular_agent")}</Button>}
               {/* one line of the handful can be put down on its own - All read was the only way to let any of it go */}

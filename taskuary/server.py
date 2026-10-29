@@ -3992,8 +3992,12 @@ def _learn_promotion(m: dict, background, standing: bool = False):
     em, topic = (m.get('FromEmail') or '').lower(), _topic_key(m)
     if not (em or topic): return None
     # ...what it says about the owner, in words, or nothing (memorylines.teach, 2026-10-27): a positive verdict is evidence, never a rule
-    src = f"msg{m['MessageId']}"
-    memorylines.teach_soon(store, 'made_task', src, _verdict_facts(m), 'subject' if topic else 'sender', topic or em, background=background)
+    # ...with what triage had made of it (an FYI's Should be a task, the owner 2026-10-29): Not a task's lesson the other way round, so the
+    # line says what this kind of mail is to the owner, and triage reads it on the next one like it
+    from .ingest import earlier_verdict
+    src, why = f"msg{m['MessageId']}", earlier_verdict(store, m, m['MessageId'])['why']
+    memorylines.teach_soon(store, 'made_task', src, _verdict_facts(m, said=f'triage had filed it for information only - "{why}"' if why else ''),
+                           'subject' if topic else 'sender', topic or em, background=background)
     return src
 
 # WHICH ROAD IT SHOULD HAVE TAKEN. The Triage tab shows the five roads and says "correcting this

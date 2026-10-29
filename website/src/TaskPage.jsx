@@ -487,7 +487,7 @@ function SpineMoves({ sec }) {
 // pointing the way its spine's would. A live agent's is slim: Stop and save and the arrows, small, so the terminal keeps its height
 export const STRIP_H = 44, STRIP_LIVE_H = 32;
 const FOLD = { from: [["right", "‹", "agent"]], agent: [["left", "‹", "from"], ["right", "›", "close"]], close: [["left", "›", "agent"]] };
-function PaneMoves({ sec, skip = () => false }) {
+export function PaneMoves({ sec, skip = () => false }) {
   const all = useSpineVerbs(sec).filter((v) => !v.card && !skip(v)), [at, setAt] = useState(null);
   // ...a `tucked` move keeps its rule (a sent reply's Hand it to a person): behind the strip's ▾ unless it is lit
   const vs = all.filter((v) => !v.tucked || v.tone === "p"), rest = all.filter((v) => !vs.includes(v));
@@ -568,10 +568,12 @@ export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, 
 // ...and an open one's head: its NAME, in the closed tabs' own type, and nothing else (the owner, 2026-10-28: "it should just say Close out on
 // top in black without all the small text. It does not help") - the number, what it holds and "up to here" are the tabs' to say
 const SECTION_NAME = { fontSize: 14, fontWeight: 600, lineHeight: 1.35, color: INK };
-export function SectionHead({ sec, action = null }) {
+// ...`moves` beside the name, as an open pane's strip has them (an FYI's Came from: ItemSections)
+export function SectionHead({ sec, action = null, moves = null }) {
   return (
-    <Box data-tq-section-head="" sx={{ display: "flex", alignItems: "baseline", gap: 1.25, mb: 1.25, flexShrink: 0 }}>
+    <Box data-tq-section-head="" sx={{ display: "flex", alignItems: moves ? "center" : "baseline", gap: 1.25, mb: 1.25, flexShrink: 0 }}>
       <Typography sx={{ ...SECTION_NAME, flex: action ? 1 : undefined }}>{sec.name}</Typography>
+      {moves}
       {action}
     </Box>
   );

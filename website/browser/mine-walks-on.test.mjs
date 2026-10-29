@@ -7,8 +7,8 @@ import { boot, clickRow, doVerb, findRow, folded, rail, sleep } from "./walkdriv
    the FYI, the first task at the top), with the folded card's "Put it on my list" badge wiped on the way. The walk goes on to the row below
    the report or the FYI, never back up, and the card keeps its badge. */
 const CASES = [
-  { row: /Headcount by site/, below: /AP ageing over 30 days/ },
-  { row: /Regional operations newsletter/, below: null },
+  { row: /Headcount by site/, below: /AP ageing over 30 days/, badge: "Put it on my list" },
+  { row: /Regional operations newsletter/, below: null, badge: "Should be a task" },   // an FYI says it as the correction it is (2026-10-29)
 ];
 for (const c of CASES) {
   test(`Put it on my list on ${c.row.source} walks on below it and keeps its badge`, { timeout: 180000 }, async (t) => {
@@ -27,7 +27,7 @@ for (const c of CASES) {
     assert.deepEqual(up, [], `the walk went back up into Tasks: ${JSON.stringify(seen)}`);
     if (c.below) assert.match(landed, c.below, `the walk did not go on to the row below: ${JSON.stringify(seen)}`);
     const card = (await folded(page)).find((f) => c.row.test(f.title));
-    assert.equal(card?.badge, "Put it on my list", `the folded card lost its badge: ${JSON.stringify(await folded(page))}`);
+    assert.equal(card?.badge, c.badge, `the folded card lost its badge: ${JSON.stringify(await folded(page))}`);
     assert.deepEqual(errors, []);
   });
 }

@@ -121,9 +121,9 @@ class FyiLeadsWithGotItTests(PhoneCase):
         one = self.ph.tap(next(b for b in batch[-1][1] if 'Quarterly newsletter' in b))
         btns = one[-1][1]
         self.assertEqual(btns[0], 'Got it', btns)
-        self.assertNotIn('Send to agent', btns); self.assertIn('Put it on my list', btns); self.assertIn('Not ours', btns)
-        self.assertNotIn('Put it on my list:', text_of(one))                   # no "then" line for a verb that does not lead
-        self.assertRegex(text_of(self.ph.tap('Put it on my list')), r'TQ-\d{4} is on your list\.')
+        self.assertNotIn('Send to agent', btns); self.assertIn('Should be a task', btns); self.assertIn('Not ours', btns)   # an FYI's Put it on my list (2026-10-29)
+        self.assertNotIn('Should be a task:', text_of(one))                    # no "then" line for a verb that does not lead
+        self.assertRegex(text_of(self.ph.tap('Should be a task')), r'TQ-\d{4} is on your list\.')
 
 
 class ReportLeadsWithNextTests(PhoneCase):

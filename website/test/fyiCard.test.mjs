@@ -20,7 +20,9 @@ test("each fyi entry shows its own summary and acts alone through the proposal r
   assert.match(fyis, /const folded = items\.length > FOLD_AT/);
   assert.doesNotMatch(fyis, /tq-fyi-doors/);                                         // no door on every line (2026-09-23)
   assert.match(fyis, /<button type="button" className="tq-fyi-line" onClick=\{\(\) => setOpen/);   // the line IS the control
-  for (const verb of ["reply", "mine", "coding_agent", "regular_agent", "not_ours"]) assert.match(fyis, new RegExp(`>\\{btn\\("${verb}"\\)\\}</Button>`));
+  for (const verb of ["reply", "coding_agent", "regular_agent", "not_ours"]) assert.match(fyis, new RegExp(`>\\{btn\\("${verb}"\\)\\}</Button>`));
+  // ...an FYI's own Put it on my list is its correction, Should be a task (the owner, 2026-10-29)
+  assert.match(fyis, />\{btn\("mine", "fyi"\)\}<\/Button>/);
   assert.match(fyis, />Talk about it<\/Button>/);
   assert.match(fyis, /propose\("mine", i\)/);
   // ...and Send to agent on a line opens the agent box under that line first - it never proposes a start at the press (2026-10-23)

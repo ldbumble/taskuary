@@ -32,6 +32,8 @@ import RunSteps from "./RunSteps.jsx";
 import { TYPE_LABELS, cronText, reportSchedule, startupText } from "./reportWords.js";
 import { asSteps, runWords } from "./workflowFlow.js";
 import Composer from "./Composer.jsx";
+import BuilderAsks from "./BuilderAsks.jsx";
+import { asksOf, blanks } from "./builderAsks.js";
 import { onDraftHanded, takeDraft } from "./draftHandoff.js";
 import { label as btnLabel } from "./buttons.js";
 import { ideaCounted, ideaWord } from "./lanes.js";   // an Advisor line's kind, in lanes.json's words
@@ -1808,7 +1810,7 @@ function SourceComposer({ typeHint, one, hint, placeholder, onSources }) {
     } catch (e) { setOut({ error: e?.response?.data?.detail || "the composer could not be reached" }); }
     setBusy(false);
   };
-  const answered = out?.questions?.length && out.questions.every((qq) => String(answers[qq] || "").trim());
+  const asks = asksOf(out), answered = asks.length && !blanks(asks, answers);
 
   if (!open) {
     return (
@@ -1842,13 +1844,10 @@ function SourceComposer({ typeHint, one, hint, placeholder, onSources }) {
       {out?.done && <Typography sx={{ mt: 0.9, fontSize: 11.5, color: "#47654a", fontWeight: 600 }}>✓ {out.done}</Typography>}
 
       {/* it did not know something. Better here than as a silently wrong filter. */}
-      {out?.questions?.length > 0 && (
+      {asks.length > 0 && (
         <Box sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 0.9 }}>
           <Typography sx={{ fontSize: 11, color: DIM, fontWeight: 600 }}>A couple of things it will not guess at:</Typography>
-          {out.questions.map((qq) => (
-            <TextField key={qq} size="small" fullWidth label={qq} sx={{ bgcolor: "#fff" }}
-              value={answers[qq] || ""} onChange={(e) => setAnswers({ ...answers, [qq]: e.target.value })} />
-          ))}
+          <BuilderAsks asks={asks} answers={answers} setAnswers={setAnswers} disabled={busy} />
           <Button size="small" variant="contained" disableElevation disabled={busy || !answered}
             onClick={() => go(answers)} sx={{ alignSelf: "flex-start" }}>Answer &amp; write it</Button>
         </Box>

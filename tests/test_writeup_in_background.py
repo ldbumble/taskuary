@@ -185,3 +185,22 @@ def test_a_wrap_outside_a_job_says_no_stage(world):
     c.post(f'/api/tasks/{tid}/wrap', json={'close': False})
     assert writeup.state(tid) is None and c.get(f'/api/tasks/{tid}').json()['writeup'] is None
     wrapup.forget(tid)
+
+
+def test_stop_pressed_twice_from_two_places_runs_one_write_up(world, monkeypatch):
+    "Stop on the Agent pane's strip and the pane's own handle on its session, pressed together: one wrap, one report (2026-10-29)."
+    make, _ = world
+    s, tid = make(); c = TestClient(server.app)
+    real, calls = wrapup.wrap, []
+    def counted(*a, **kw): calls.append(a[1]); return real(*a, **kw)
+    monkeypatch.setattr(wrapup, 'wrap', counted)
+    gate = threading.Event()
+    def slow(system, user, **kw): gate.wait(10); return brain(system, user, **kw)
+    with mock.patch('taskuary.llm.build_llm', return_value=slow):
+        a = c.post(f'/api/tasks/{tid}/wrap', json={'close': False, 'background': True}).json()
+        b = c.post(f'/api/terminals/sid-{tid}/wrap', json={'task_id': tid, 'close': False, 'background': True}).json()
+        gate.set(); assert writeup.wait_for(tid, 30)
+    assert b.get('already') and a['job'] == b['job'], 'the second press joined the first job'
+    assert calls == [tid], 'one wrap-up ran'
+    assert sum(str(x.get('Body') or '').startswith(wrapup.REPORT) for x in s.list_comments(tid)) == 1, 'one report filed'
+    wrapup.forget(tid)

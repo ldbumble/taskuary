@@ -60,10 +60,12 @@ export const workPane = ({ stage, kind, hasSender, codeRun = false, result = fal
 // available" pill are advice for an open task with nothing done yet - under an agent's Result they read as an empty reply section.
 // There Close out says what closes it, and the write-up's progress is a line under the Result it is writing up. A reply being drafted
 // (somebody is owed one) and a write-up that failed (its Try again) stay in Close out, where the draft will stand.
+// ...and A WRITE-UP UNDER WAY IS ONE LINE IN THE AGENT PANE, reply owed or not (the owner, 2026-10-29: Stop drew two spinners - the box's
+// own and its bar - in Close out, away from the agent it was writing up). Only a failure, with its Try again, stands in Close out.
 //   advice - the "Nobody sent this one" line; chip - the reply pill; writeupAt - "closeout", "result" or null
 export const closeOut = ({ hasSender = false, result = false, writeup = null } = {}) => {
   const bare = result && !hasSender;
-  return { advice: !bare, chip: !bare, writeupAt: !writeup ? null : bare && writeup.state !== "failed" ? "result" : "closeout" };
+  return { advice: !bare, chip: !bare, writeupAt: !writeup ? null : writeup.state === "failed" ? "closeout" : "result" };
 };
 export const CLOSE_BY_HAND = "Mark done closes it, or close it with a note.";
 

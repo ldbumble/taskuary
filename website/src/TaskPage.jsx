@@ -735,14 +735,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const writeup = writeupView({ pressed: pressedHere, server: detail?.task?.TaskId === selected ? detail?.writeup : null,
     comments: detail?.comments, review: pendingReplyReview(detail?.reviews || []) });
   const writingUp = writeup?.state === "pending" ? selected : null;
-  // ...and Close out is brought into view at the press, once it has drawn
   const closeOutRef = useRef(null);
-  const [seekCloseOut, setSeekCloseOut] = useState(false);
-  useEffect(() => {
-    if (!seekCloseOut) return undefined;
-    const f = requestAnimationFrame(() => { closeOutRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }); setSeekCloseOut(false); });
-    return () => cancelAnimationFrame(f);
-  }, [seekCloseOut]);
   // Once a live session disappears, its report and reply draft are still being filed. Keep
   // checking briefly so the page cannot freeze forever on the pre-close status it last saw.
   const sessionSettleUntil = useRef(0);
@@ -934,7 +927,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     const id = selected, n = (detail?.comments || []).length, sid = term?.sid || pressedHere?.sid || null;
     if (wrapFlight.current === id) return;
     wrapFlight.current = id;
-    setErr(""); setWritingUpAt({ id, n, sid }); setTerm(null); setSeekCloseOut(true);
+    setErr(""); setWritingUpAt({ id, n, sid }); setTerm(null);
     try {
       const { data } = await api.post(`/api/tasks/${id}/wrap`, { close: false, background: true });
       loadTasks(); onChanged?.();
@@ -1559,7 +1552,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const codeRun = !!fromWorkflow?.byCode && !term?.alive && !generalStarted && !detail?.transcript && !report;
   // ...and Stop and save pressed here holds Close out open - writing, failed or drafted - so the draft replaces the pending block where
   // it stood, never a jump to whichever step the computed focus picks once the job is done
-  const restStage = sessionView ? "agent" : (pressedHere || writeup ? "reply" : peek ? "task" : focusStage({
+  // ...but WHILE IT WRITES, the Agent pane holds its one line (taskLayout.closeOut): the pane the press was made in, not Close out
+  const restStage = sessionView || writingUp ? "agent" : (pressedHere || writeup ? "reply" : peek ? "task" : focusStage({
     kind: t?.Kind, task: taskState, agent: codeRun ? null : agentState, reply: replyState, hasSender: !!replyMessage,
     // what the agent is parked ON decides whether the proposal or the agent opens: an agent
     // waiting for approval is released by the very proposal sitting in stage 3
@@ -1605,8 +1599,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...AND THE ADVISOR'S PICK NAMES THE SECTION ITS MOVE IS IN (advice `section`, taskLayout.sectionHere): a reply that already went opens
   // on Close out, its Mark done lit - read once its decision lands, as the detail is (the canvas hands its decision in with its line, `note`)
   const advised = String((canvas ? note?.advice : taskAdvice)?.section || "");
-  const mainHeld = useRef({ key: null, main: null, sec: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${threeUp}|${t?.Status}|${advised}`;
-  if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: sectionHere({ stage: taskStage, advised }) };
+  const mainHeld = useRef({ key: null, main: null, sec: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${threeUp}|${t?.Status}|${advised}|${!!writingUp}`;
+  if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: writingUp ? "agent" : sectionHere({ stage: taskStage, advised }) };
   const main = mainHeld.current.main;
   const section = threeUp ? (secPick.key === mainKey ? secPick.sec : mainHeld.current.sec) : null, hereSec = sectionHere({ stage: taskStage, advised });
   // ...and the Advisor's line stands in that section, the one it is about
@@ -1659,6 +1653,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const closedNote = String([...(detail?.comments || [])].reverse().find((c) => /^Closed out: /.test(String(c.Body || "")))?.Body || "").replace(/^Closed out: /, "");
   // the news line is said once, at the top of the task stage; open, the agent step is just its record
   const storyAt = storyPlace(news ? null : story, { open: pane === "agent" && !sessionView, hasRecord });
+  // ...and the write-up's line stands in ONE place of the Agent pane: in the open record, else under the Result's summary or the step's top
+  const lineAt = co.writeupAt !== "result" ? null : pane === "agent" && !sessionView && hasRecord && !resultRest ? "record" : "top";
   // the Agent work row with nothing in it: no agent at work, none ran, no story to tell, and not the open half
   const agentEmpty = !term?.alive && !wide && pane !== "agent" && !hasRecord && !["line", "story", "summary"].includes(storyAt);
   // A HELD STEP CARRIES ITS TRUST PRESSES (the owner, 2026-10-26: "we should have button on untrusted user to either trust user or trust
@@ -2854,7 +2850,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     data-tq-full-result="" aria-expanded="true" onClick={() => setResultOpen(false)}
                     sx={{ borderRadius: 999, px: 2, fontSize: 13, fontWeight: 600, textTransform: "none", color: INK, borderColor: "#c9c3b8" }}>
                     ‹ Back to the result</Button></Box>}
-                  {(storyAt === "summary" || (resultRest && pane === "agent")) && co.writeupAt === "result" && <WriteupLine view={writeup} />}
+                  {lineAt === "top" && <WriteupLine view={writeup} hasReply={!!replyMessage} />}
                   {pane === "agent" && <>
                   {/* WHO CLOSED IT AND WHY, one plain line over its work (the owner, 2026-10-21: "I have no idea what the agent did
                       and why it closed"): the agent's own done sentence, else its report's first line (server taskstate.closed_why) */}
@@ -2920,7 +2916,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           result={resultShown} diff={diffRun ? diffStat(diffRun.DiffText) : null} bare={focus === "agent"}
                           diffOpen={diffShown} onDiff={foldDiff ? () => setDiffShown((v) => !v) : null} />
                         {diffRun && <Box data-tq-diff="" sx={{ mt: 0.75, display: foldDiff && !diffShown ? "none" : "block" }}><DiffBlock text={diffRun.DiffText} /></Box>}
-                        {co.writeupAt === "result" && <WriteupLine view={writeup} />}
+                        {lineAt === "record" && <WriteupLine view={writeup} hasReply={!!replyMessage} />}
                       </Box>
                     );
                     // the sender wrote again since: the earlier session is history, one fold, never the page's lead
@@ -3026,7 +3022,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   <ClosingCard mode={wrapping} />
                 ) : writingUp === selected ? (
                   /* Stop and save's write-up runs on the server (writeup.py): the task stays usable, and its progress is said ONCE -
-                     the line under the Result, or the block in Close out where a reply will land. A third hint line here said it again. */
+                     one line in this pane (lineAt); a failure's Try again is Close out's. A third hint line here said it again. */
                   null
                 ) : workspaceMode === "live" && peek ? (
                   /* the session, folded to one line while the task behind it is being read */

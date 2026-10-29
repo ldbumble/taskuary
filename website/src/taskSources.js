@@ -22,6 +22,9 @@ const clip = (s, n) => s.length <= n ? s : `${s.slice(0, n).replace(/\s+\S*$/, "
 export const isIdeaLine = (m) => m?.Channel === "assistant" && /^idea:/.test(String(m?.ExternalId || ""));
 // WHO · WHERE · WHEN, each said once: a line whose sender and source are one name ("Advisor · Advisor") says it once
 export const byLine = (...parts) => parts.filter((p, i) => p && parts.findIndex((q) => String(q).toLowerCase() === String(p).toLowerCase()) === i).join(" · ");
+// ...and WHERE is the sender's address on mail: a mail's SourceName is the owner's own mailbox it arrived in, and "Omar Keller ·
+// alex@northwind.example" read as Omar's address (the email walk, 2026-10-29). A chat or a report keeps its own name.
+export const cameFromWhere = (m) => String(m?.SourceName || "").includes("@") ? (m?.FromEmail || channelName(m?.Channel)) : (m?.SourceName || channelName(m?.Channel));
 // "RE: Fwd: the export" and "the export" are one email thread when the mail carries no thread id
 const bareSubject = (s) => oneLine(s).replace(/^((re|fw|fwd|aw|sv)\s*:\s*)+/i, "").toLowerCase();
 

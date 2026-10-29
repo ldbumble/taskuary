@@ -11,10 +11,9 @@
 // Everything durable lives on the server; this file only draws and pushes buttons.
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { workingLine } from "./agentWork.js";
-import { Box, CircularProgress, IconButton, Menu, MenuItem, Popover, Select, Tooltip, Typography, useMediaQuery } from "@mui/material";
+import { Box, CircularProgress, IconButton, Menu, MenuItem, Popover, Tooltip, Typography, useMediaQuery } from "@mui/material";
 import HistoryIcon from "@mui/icons-material/History";
 import EditNoteIcon from "@mui/icons-material/EditNote";
-import TuneIcon from "@mui/icons-material/Tune";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 import VolumeOffIcon from "@mui/icons-material/VolumeOff";
 import SendIcon from "@mui/icons-material/ArrowUpward";
@@ -172,14 +171,6 @@ const demoNo = (e) => (e?.response?.status === 403 && e.response.data?.demo ? St
 const IDLE_CHIPS = [{ verb: "newtask", label: btn("new_task") }, { verb: "setupask", label: "Set something up" }, { verb: "tour", label: "Change my setup" }];   // not a second "set up" beside "Set something up" (U14)
 // the presses that start an agent on an item: each opens the agent box first (askAgent) - `coder` is coding_agent's old name
 const AGENT_VERBS = ["coding_agent", "regular_agent", "coder"];
-// THE AI POPOVER, from what is connected (J): it named "your coding tool" to people with none, and "chosen elsewhere" with no way there
-export const AI_DEFAULTS = place("ai_defaults").href;
-export const aiSays = (providers = []) => {
-  const acts = providers.some((p) => p.type === "cli"), talks = providers.some((p) => p.type !== "cli" && p.type !== "demo");
-  if (!acts && !talks) return "No AI is connected yet, so I can only offer the buttons. Connect one and I can take instructions in words.";
-  return ["The AI picked here answers you in this chat.", acts && "One that runs on this computer can also look things up and rerun reports for you.",
-    talks && "One connected as an online service answers faster but only talks.", "The agents that do the work have their own settings."].filter(Boolean).join(" ");
-};
 const speakOn = () => { try { return localStorage.getItem("taskuary_speak") === "1"; } catch { return false; } };
 const speak = (text) => {
   if (!text || typeof window === "undefined" || !window.speechSynthesis) return;
@@ -1234,7 +1225,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [chats, setChats] = useState([]);
   const [chatsLoading, setChatsLoading] = useState(false);
   const [old, setOld] = useState(null);               // an earlier chat, read-only
-  const [aiEl, setAiEl] = useState(null);
   const [modelEl, setModelEl] = useState(null);         // the composer's model picker, open (chatAi)
   const [remindOn, setRemindOn] = useState(null);      // the walk's Remind me: { task, anchor }
   const [slotsOn, setSlotsOn] = useState(null);        // the walk's Propose a new time / Find a time: { item, act, anchor }
@@ -3025,12 +3015,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     try { const { data } = await api.get(`/api/concierge/chats/${c.taskId}`); setOld({ ...c, messages: data.messages || [] }); setChatsOpen(false); }
     catch (e) { setChatsErr(`That chat didn't open - ${errText(e)}. Click it again.`); }
   };
-  const pickAi = async (pick) => {
-    const p = (state?.providers || []).find((x) => x.pick === pick);
-    try { const { data } = await api.post("/api/concierge/ai", { pick, model: null }); setState((s) => ({ ...s, pick: data.pick, provider: p?.label || data.pick, model: data.model || p?.model || "" })); }
-    catch (e) { setErr(errText(e)); }
-    setAiEl(null);
-  };
   // THIS CHAT'S OWN AI (the owner, 2026-10-29: the composer's model picker - per chat, never Settings): an empty pick is the Assistant's default again
   const chatAi = async (pick) => {
     setModelEl(null);
@@ -3651,8 +3635,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         <div className="grow" />
         <Tooltip title="Your work"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         <Tooltip title={speakOnState ? "Reading replies aloud — click to stop" : "Read replies aloud"}><IconButton size="small" className="tq-phone-hide" onClick={toggleSpeak}>{speakOnState ? <VolumeUpIcon sx={{ fontSize: 18, color: "#526b53" }} /> : <VolumeOffIcon sx={{ fontSize: 18, color: DIM }} />}</IconButton></Tooltip>
-        {/* no AI to name before the first run picked one - it named a CLI and a profile over the question asking which (2026-10-15) */}
-        {!firstRun && <Tooltip title={state?.scripted ? "Scripted demo - no AI is running" : "Which AI speaks here"}><IconButton size="small" className="tq-phone-hide" onClick={(e) => setAiEl(e.currentTarget)}><TuneIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>}
+        {/* ONE AI PICKER, THE COMPOSER'S (the owner, 2026-10-29): the header's own AI popover is gone - the model picker at the foot of
+            the box chooses this chat's AI, a new chat starts on Settings -> AI defaults, and the default is changed there */}
         <Tooltip title="Past chats"><IconButton size="small" onClick={openChats}><HistoryIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         <Tooltip title="New chat — archives this one"><IconButton size="small" onClick={newChat} disabled={busy || resetting}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip>
       </div>
@@ -3660,20 +3644,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         onDone={(out) => { remindReceipt(out, remindOn.path ? null : remindOn.task.TaskId, remindOn.ref); if (out?.remindAt) advance(); }} />}
       {slotsOn && <SlotPicker mid={slotsOn.item.mid} act={slotsOn.act} anchor={slotsOn.anchor || document.body} onClose={() => setSlotsOn(null)}
         onRefused={(data) => calendarDrafted(data, slotsOn.item)} onPick={(slot) => calendarAnswer(slotsOn.item, slotsOn.act, slot)} />}
-      <Popover open={!!aiEl} anchorEl={aiEl} onClose={() => setAiEl(null)} anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}
-        slotProps={{ paper: { sx: { p: 1.5, width: 320 } } }}>
-        <Typography sx={{ fontSize: 12, fontWeight: 600, color: INK, mb: 0.5 }}>{state?.scripted ? "Scripted demo assistant" : "Which AI speaks here"}</Typography>
-        <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1, lineHeight: 1.45 }}>{state?.scripted
-          ? "Every thread, post, and reply here is invented and runs locally in this page. No AI, agent, mailbox, or outside system is connected."
-          : aiSays(state?.providers)}</Typography>
-        <Select size="small" fullWidth value={state?.pick || ""} displayEmpty disabled={!!state?.scripted} onChange={(e) => pickAi(e.target.value)} sx={{ fontSize: 12 }}>
-          {!state?.providers?.length && <MenuItem value="">{state?.scripted ? "Scripted demo" : "No AI connected"}</MenuItem>}
-          {(state?.providers || []).map((p) => <MenuItem key={p.pick} value={p.pick} sx={{ fontSize: 12 }}>{p.label}{p.type === "demo" ? " · demo" : p.type === "cli" ? " · can look things up and act" : " · fast, talks only"}</MenuItem>)}
-        </Select>
-        {!state?.scripted && <button type="button" className="tq-linkish" style={{ marginTop: 8, fontSize: 12 }}
-          onClick={() => { setAiEl(null); openAppLink(state?.providers?.length ? AI_DEFAULTS : place("ai").href); }}>
-          {state?.providers?.length ? `Choose which AI does what - ${place("ai_defaults").name}` : "Connect an AI"}</button>}
-      </Popover>
       {old && <div className="tq-old-banner"><span>You are reading an earlier chat.</span>
         <button type="button" className="tq-chip" onClick={continueOld} disabled={busy || resetting}>Continue this chat</button>
         <button type="button" className="tq-chip" onClick={() => setOld(null)}>Back to today</button></div>}

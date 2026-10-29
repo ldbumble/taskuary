@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
-const head = view.slice(view.indexOf('<div className="tq-chat-head">'), view.indexOf('<Popover open={!!aiEl}'));
+const head = view.slice(view.indexOf('<div className="tq-chat-head">'), view.indexOf('{remindOn && <RemindPicker'));
 
 // the owner, 2026-10-19: setup is the Setup button at the top - never a choice in the chat, its header or its welcome block
 test("the setup entry is the top bar's Setup, not the chat's header or its welcome block", () => {

@@ -285,4 +285,67 @@ class EveryRoadIsOffered(unittest.TestCase):
         self.assertIn('AP ageing', concierge.read_op(s, 'deleted.list', {}))
 
 
+class StopTheAgents(unittest.TestCase):
+    """"Stop all the agents" / "stop the ones on TQ-1 and TQ-3": the set is the model's; code stops only those running, each by its task page's
+    Stop and save (written up, never thrown away), and lists every one it stopped as its task's link."""
+    def setUp(self):
+        self.s = s = store()
+        self.t = [s.create_task({'Title': f'Job {n}', 'Kind': 'general', 'Status': 'in_progress'}, 'owner') for n in 'ABC']
+        self.live = [{'taskId': self.t[0]}, {'taskId': self.t[1]}]          # A and B have agents at work, C has none
+
+    def stop(self, **params):
+        with mock.patch.object(terminal, 'live_sessions', return_value=self.live), \
+             mock.patch.object(server, '_wrap_task', return_value={'ok': True}) as wrap:
+            out = concierge.call_turn(self.s, dock(self.s), {'kind': 'agents.stop', 'params': params}, None, 'x')
+        return out, sorted(c.args for c in wrap.call_args_list)
+
+    def test_only_running_agents_in_the_set_stop_each_saved_and_listed(self):
+        a, b, c = self.t
+        out, saved = self.stop(refs=[task_ref(a), task_ref(c)])
+        self.assertEqual(saved, [(a, False)], 'Stop and save on A alone - written up, the task left open')
+        self.assertIn('Stopped and saved: 1 agent.', out['say']); self.assertIn(f'(#task={a})', out['say'])
+        self.assertNotIn(f'(#task={b})', out['say'])
+        self.assertIn(f'No agent running on: {task_ref(c)}', out['say'])
+        self.assertNotIn('proposal', out)
+        self.assertIn(str(a), self.s._one("SELECT * FROM audit WHERE Action='bulk_stop'")['Detail'])
+
+    def test_all_stops_every_running_one(self):
+        out, saved = self.stop(all=True)
+        self.assertEqual(saved, [(self.t[0], False), (self.t[1], False)])
+        self.assertIn('Stopped and saved: 2 agents.', out['say'])
+
+    def test_naming_nothing_is_the_models_to_fix_and_none_running_is_said(self):
+        with self.assertRaises(concierge.CallMiss): self.stop()
+        out, saved = self.stop(refs=[task_ref(self.t[2])])
+        self.assertEqual(saved, []); self.assertIn('Nothing was stopped', out['say'])
+
+    def test_on_a_phone_it_is_one_yes(self):
+        with concierge.delivering(concierge.PHONE): out, saved = self.stop(all=True)
+        self.assertEqual(saved, []); self.assertEqual(out['proposal']['kind'], 'agents.stop')
+        with concierge.delivering(concierge.PHONE), mock.patch.object(terminal, 'live_sessions', return_value=self.live[:1]), \
+             mock.patch.object(server, '_wrap_task', return_value={'ok': True}) as wrap:
+            said = concierge.confirm_open(self.s, dock(self.s), None, False)          # the yes, after B's agent finished on its own
+        self.assertEqual([c.args for c in wrap.call_args_list], [(self.t[0], False)])
+        self.assertIn('Stopped and saved: 1 agent.', said['say']); self.assertIn(f'No agent running on: {task_ref(self.t[1])}', said['say'])
+
+
+class TheBoardAndSearch(unittest.TestCase):
+    def test_each_page_comes_up_by_its_own_address(self):
+        s = store()
+        self.assertEqual(call(s, 'page.open', page='board')['open'], '#board')
+        out = call(s, 'page.open', page='search', query='May close numbers')
+        self.assertEqual(out['open'], '#search=May%20close%20numbers'); self.assertIn('May close numbers', out['say'])
+        self.assertEqual(call(s, 'page.open', page='search')['open'], '#search=')
+        with self.assertRaises(concierge.CallMiss): call(s, 'page.open', page='calendar')
+        with concierge.delivering(concierge.PHONE), self.assertRaises(concierge.CallMiss): call(s, 'page.open', page='board')
+
+    def test_the_index_offers_both_within_its_limit(self):
+        b = toolcatalog.block()
+        self.assertLess(len(b), 7950)
+        for k in ('agents.stop(refs|all)', 'page.open(page, query?)'): self.assertIn(k, b)
+        for k in ('agents.stop', 'page.open'): self.assertIn(k, operations.KINDS)
+        self.assertEqual(toolcatalog.valid('page.open', {'page': 'board'}), ''); self.assertIn('needs page', toolcatalog.valid('page.open', {}))
+        self.assertIn('Stop and save', toolcatalog.describe('agents.stop')); self.assertIn('runs at once', toolcatalog.describe('agents.stop'))
+
+
 if __name__ == '__main__': unittest.main()

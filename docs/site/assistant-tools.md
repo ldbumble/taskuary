@@ -11,11 +11,11 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 |---|---|---|
 | **table** | decide about the item on the table | reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, report_off, remember(text), setup(text), confirm, cancel, chase, let_go, accept_invite, decline_invite, propose_time, find_time, prepare, elsewhere |
 | **task** | change any task - the table's, or one named by ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?, note?), task.checklist(add?, items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?), review.approve, review.reject |
-| **agents** | a task's agent; where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value), task.ask_agent(who, text) |
+| **agents** | a task's agent; where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, agents.stop(refs/all), routing.remember(field, value), task.ask_agent(who, text) |
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), meeting.new(who?, about?, when?), task.setup(text) |
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear(select, scope?), pipe.defer(select, until), pipe.close(select), pipe.remove(select, learn?), pipe.block(select, how?), pipe.mine(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
 | **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how), report.edit(config), report.delete |
-| **app** | settings, connections, scripts, memory, rules, the Hub | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), rule.change(about, how?), deleted.restore(what), hub.publish(title, body, topic?, kind?, why_earned?), hub.comment(post, text), hub.vote(post, up?) |
+| **app** | settings, connections, scripts, memory, rules, the Hub, the Board and Search | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), rule.change(about, how?), deleted.restore(what), hub.publish(title, body, topic?, kind?, why_earned?), hub.comment(post, text), hub.vote(post, up?), page.open(page, query?) |
 | **look** | look-ups - they run at once and change nothing | app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, pipe.read, calendar.read, activity.list, errors.list, memory.about, memory.list, outputs.find, deleted.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
 
 A task you name goes in `ref` ("TQ-0123"); otherwise the tool acts on what is on the table.
@@ -417,11 +417,20 @@ Answer the agent that is waiting. With no agent on the task (TASK NOW says so) n
 
 ### `agent.stop`
 
-Save and end an agent's session - the one on the table, or the task `ref` names; never a guess at which.
+Save and end an agent's session - the one on the table, or the task `ref` names; never a guess at which. Several at once is agents.stop.
 
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
 <p class="runs">Brings up its button for you to press.</p>
+
+### `agents.stop`
+
+Stop a SET of agents at once. Each is its task's Stop and save: written up and saved, nothing thrown away, the task left open. One with no agent running is said, never pressed. Runs at once; the receipt lists every task as its link.
+
+- `refs` - the TQ refs of the tasks they are on, as agents.now or pipe.read printed them
+- `all` - true for every agent running ("stop all the agents")
+
+<p class="runs">Runs at once and says what it changed.</p>
 
 ### `routing.remember`
 
@@ -669,7 +678,7 @@ Remove a report or workflow.
 
 ## App
 
-Settings, connections, scripts, memory, rules, the Hub.
+Settings, connections, scripts, memory, rules, the Hub, the Board and Search.
 
 ### `setting.set`
 
@@ -816,6 +825,15 @@ Vote a Hub post up or down.
 
 - `post` - its number
 - `up` (optional) - false for down
+
+<p class="runs">Brings up its page, at the thing, for you to press.</p>
+
+### `page.open`
+
+Bring up a page app.find cannot link. Finding something to answer from is timeline.search or tasks.list - this only shows the owner.
+
+- `page` - board (every agent and task at work, as columns) | search (the search over everything - tasks, mail, chats, PRs, settings)
+- `query` (optional) - the words to search for, with search
 
 <p class="runs">Brings up its page, at the thing, for you to press.</p>
 

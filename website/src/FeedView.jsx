@@ -297,7 +297,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const pendingPick = useRef("");
   useEffect(() => { loadRequest.current += 1; setPick(pendingPick.current); pendingPick.current = ""; }, [cat]); // switching category clears the narrower pick
   // SEARCH OVER EVERYTHING (SearchEverything.jsx): the bar on the rail, or Ctrl+K while this view is on screen
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false), [searchQ, setSearchQ] = useState("");
   useEffect(() => {
     if (!active) return undefined;
     const k = (e) => { if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") { e.preventDefault(); setSearchOpen(true); } };
@@ -307,7 +307,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   // ...and the bar on the top line opens it from ANY view: the dialog floats over the Board or the Game, and only a pick
   // brings Chat up (searchPicked). It used to switch to Chat first, so searching from the Board left it (2026-10-15)
   useEffect(() => {
-    const o = () => setSearchOpen(true);
+    const o = (e) => { setSearchQ(String(e?.detail?.q || "")); setSearchOpen(true); };    // the chat's #search= carries its words
     window.addEventListener(OPEN_SEARCH, o);
     return () => window.removeEventListener(OPEN_SEARCH, o);
   }, []);
@@ -539,7 +539,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               should show up on assistant canvas regardless not on the task view") */}
           {/* ...and QUIET: a pick is not something the owner said, so no "Tell me about ..." bubble rides in above the task
               (the owner, 2026-10-15: "why does the gray thing show up when clicking on searched task. Just show the task") */}
-          <SearchEverything open={searchOpen} onClose={() => setSearchOpen(false)}
+          <SearchEverything open={searchOpen} query={searchQ} onClose={() => { setSearchOpen(false); setSearchQ(""); }}
             onOpenTask={(tid, h) => { searchPicked(); return onPull ? onPull({ TaskId: tid, Title: h?.title }, { quiet: true }) : onOpenTask?.(tid); }}
             onOpenMessage={(mid, h) => { searchPicked(); return onPull ? (onPull({ MessageId: mid, TaskId: h?.tid, Subject: h?.title }, { quiet: true }), true) : false; }}
             onPickSource={(next) => {

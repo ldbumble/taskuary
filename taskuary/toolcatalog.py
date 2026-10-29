@@ -52,7 +52,7 @@ PURPOSE = {
     'agent.answer':             ('answer the agent that is waiting - `text`; `ref` names its task when it is not the one on the table. With no '
                                  'agent on the task (TASK NOW says so) nobody hears it - say so; agent.continue or starting one is '
                                  'the owner\'s call, never this'),
-    'agent.stop':               "save and end an agent's session - the one on the table, or the task `ref` names; never a guess at which",
+    'agent.stop':               "save and end an agent's session - the one on the table, or the task `ref` names; never a guess at which. Several at once is agents.stop",
     'report.rerun':             'run that report again',
     # THE ASSISTANT EDITS THE MEMORY (slice 7, approved by the owner 2026-10-25): "Gail moved to Ops" is a fact about how the owner works,
     # written into LEARNED.md where every reader of its section has it, and the line it makes untrue is closed - kept as history
@@ -160,6 +160,10 @@ PURPOSE = {
                                  'list at a time - the owner presses it). "Dismiss the spam" alone is pipe.remove, never this'),
     'pipe.mine':                (f'{L("mine")} for a SET of mail - `select`; each becomes a task of the owner\'s, no agent. A row already a '
                                  'task is left as it is'),
+    'agents.stop':              ('stop a SET of agents at once - `refs`: the TQ refs of the tasks they are on, as agents.now or pipe.read '
+                                 'printed them; `all`: true for every agent running ("stop all the agents"). Each is its task\'s Stop '
+                                 'and save: written up and saved, nothing thrown away, the task left open. One with no agent running is '
+                                 'said, never pressed. Runs at once; the receipt lists every task as its link'),
     'review.each':              ('"approve all the drafts": brings the next draft waiting for a Send up with its Send lit, and says how many '
                                  'are left - each one still goes only by its own press; CALL it again for the one after'),
     'button.light':             ('light any button a row draws, by its name - `button`: the verb (THE BUTTONS BY NAME, or a row\'s own: '
@@ -203,6 +207,10 @@ PURPOSE = {
     'hub.comment':              ("add a comment to a Hub post - `post`: its number (#12, as knowledge.search prints it), `text`: the "
                                  "comment in the owner's words. Others read the Hub: it goes only by the owner's press"),
     'hub.vote':                 'vote a Hub post up or down - `post`: its number; `up`: false for down',
+    # ...and the two pages app.find has no link for: the Board, and Search with the words already in its box
+    'page.open':                ('bring up a page app.find cannot link - `page`: board (every agent and task at work, as columns) | search '
+                                 '(the search over everything - tasks, mail, chats, PRs, settings); `query`: the words to search for, '
+                                 'with search. Finding something to answer from is timeline.search or tasks.list - this only shows the owner'),
 }
 
 # THE APP'S OWN KNOBS - reports, settings, connections, scripts - named by what they do. They ran at once, put back from the receipt
@@ -211,9 +219,9 @@ PURPOSE = {
 # ...and how the owner works with them (slice 7, 2026-10-25): a line taken out of the memory is kept and said the same way (concierge._memory)
 KEPT = frozenset({'people.relate', 'memory.wrong', 'memory.remember'})
 # ...and a SET named in the owner's words, whose words are the press (pipe.clear's ruling, 2026-10-20; bulk.py 2026-10-28) - a phone asks yes or no
-SETS = frozenset({'pipe.clear', 'pipe.defer', 'pipe.close', 'pipe.remove', 'pipe.block', 'pipe.mine'})
+SETS = frozenset({'pipe.clear', 'pipe.defer', 'pipe.close', 'pipe.remove', 'pipe.block', 'pipe.mine', 'agents.stop'})
 # ...and the acts whose button is a page's alone: the page comes up at the thing, the owner presses there
-PAGED = frozenset({'rule.change', 'deleted.restore', 'hub.comment', 'hub.vote'})
+PAGED = frozenset({'rule.change', 'deleted.restore', 'hub.comment', 'hub.vote', 'page.open'})
 INSTANT = frozenset({'report.run', 'report.pause', 'report.resume', 'report.route', 'report.edit', 'setting.set', 'task.defer', 'task.watch',
                      'connection.test', 'connection.pause', 'connection.resume', 'script.start'})
 
@@ -473,20 +481,20 @@ BUCKETS = (
      ('task.update', 'task.set_kind', 'task.set_repo', 'task.check', 'task.checklist', 'task.watch', 'task.comment', 'task.split', 'task.merge', 'task.reopen',
       'task.not_a_task', 'task.complete', 'task.defer', 'task.handoff', 'task.clarify', 'task.share', 'review.approve', 'review.reject')),
     ('agents', "a task's agent; where work belongs",
-     ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.stop', 'routing.remember', 'task.ask_agent')),
+     ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.stop', 'agents.stop', 'routing.remember', 'task.ask_agent')),
     ('new', 'new work with no task yet', ('task.create_from_text', 'task.create_from_message', 'meeting.new', 'task.setup')),
     ('pipe', 'the walk and sets of items, and filing mail', ('pipe.clear', 'pipe.defer', 'pipe.close', 'pipe.remove', 'pipe.block', 'pipe.mine', 'review.each', 'button.light', 'item.settle', 'message.file', 'message.archive',
                                                             'preference.exclude_sender', 'preference.sender_rule', 'message.retriage')),
     ('reports', 'reports and workflows', ('report.create', 'report.run', 'report.rerun', 'report.pause', 'report.resume',
                                           'report.route', 'report.edit', 'report.delete')),
-    ('app', 'settings, connections, scripts, memory, rules, the Hub', ('setting.set', 'connection.create', 'role.apply', 'connection.test', 'connection.pause',
+    ('app', 'settings, connections, scripts, memory, rules, the Hub, the Board and Search', ('setting.set', 'connection.create', 'role.apply', 'connection.test', 'connection.pause',
                                                              'connection.resume', 'app.repair', 'script.start', 'memory.remember', 'memory.wrong', 'people.relate',
-                                                             'rule.change', 'deleted.restore', 'hub.publish', 'hub.comment', 'hub.vote')),
+                                                             'rule.change', 'deleted.restore', 'hub.publish', 'hub.comment', 'hub.vote', 'page.open')),
 )
 
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
-HINTS = {'pipe.remove': 'select, learn?', 'pipe.block': 'select, how?', 'pipe.mine': 'select', 'rule.change': 'about, how?', 'hub.vote': 'post, up?', 'memory.remember': 'note, about?, section?, replaces?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'pipe.clear': 'select, scope?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
+HINTS = {'pipe.remove': 'select, learn?', 'agents.stop': 'refs|all', 'page.open': 'page, query?', 'pipe.block': 'select, how?', 'pipe.mine': 'select', 'rule.change': 'about, how?', 'hub.vote': 'post, up?', 'memory.remember': 'note, about?, section?, replaces?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'pipe.clear': 'select, scope?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?', 'task.share': 'who, about?', 'task.complete': 'note?',
          'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?, note?', 'task.checklist': 'add?, items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until', 'meeting.new': 'who?, about?, when?'}
 

@@ -17,7 +17,7 @@ import PowerOutlinedIcon from "@mui/icons-material/PowerOutlined";
 import TuneIcon from "@mui/icons-material/Tune";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import api from "./api";
-import { openAppLink } from "./appLinks.js";
+import { OPEN_SEARCH, openAppLink } from "./appLinks.js";
 import { prefetchTask } from "./taskDetail.js";
 import { ago } from "./timeWords.js";
 import { aloneAs, arrange, asks, channelsFor, countWords, filters, kindOf, marks, messageLink, meta, nothingMatches, nothingYet, personHits, terms, totalOf } from "./searchHits.js";
@@ -54,7 +54,7 @@ const Kbd = ({ children }) => (
 
 // The bar on the TOP LINE of the app (the owner, 2026-10-14: "it should be on top line not on top of the work rail"): it looks
 // like a box and opens the real one, wherever the dialog is mounted (FeedView listens for OPEN_SEARCH).
-export const OPEN_SEARCH = "tq-search-open";
+export { OPEN_SEARCH };
 export const openSearch = () => window.dispatchEvent(new Event(OPEN_SEARCH));
 // a hit was picked: the page around the search (TaskHubPage) brings Chat up, which is where a pick is drawn
 export const SEARCH_PICKED = "tq-search-picked";
@@ -174,7 +174,7 @@ const opened = (h) => {
   return () => fresh(ITEM, before);
 };
 
-export default function SearchEverything({ open, onClose, onOpenTask, onOpenMessage, onPickSource }) {
+export default function SearchEverything({ open, onClose, onOpenTask, onOpenMessage, onPickSource, query = "" }) {
   const [q, setQ] = useState(""), [res, setRes] = useState(null), [busy, setBusy] = useState(false);
   const [only, setOnly] = useState(""), [at, setAt] = useState(0);
   // ENTER OPENS WHAT WAS TYPED (the 2026-10-19 UI walk, G9): Enter straight after typing opened the LAST query's top hit - the rows
@@ -183,6 +183,8 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
   const typed = useRef(""), held = useRef("");
   const settled = !!res && res.q === q.trim() && !busy;
   useEffect(() => { if (!open) { setQ(""); setRes(null); setOnly(""); setAt(0); typed.current = held.current = ""; } }, [open]);
+  // ...and opened by the chat's link with words (appLinks #search=): they stand in the box, searched as if typed
+  useEffect(() => { if (open && query) { typed.current = query; setQ(query); } }, [open, query]);
   useEffect(() => {
     const t = q.trim();
     if (!asks(t)) { setRes(null); setBusy(false); held.current = ""; return undefined; }

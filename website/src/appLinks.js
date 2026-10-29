@@ -8,6 +8,8 @@ import { placeHref } from "./words.js";
 // SETUP IS A MODE, not a page the canvas opens: its link asks for it the way the top bar's Setup does (TaskHubPage's openSetup).
 // Without one, "set up taskuary" typed in the chat was answered with a link to Company Hub (2026-10-16)
 const SETUP = "#setup";
+// the event that opens Search everything (SearchEverything.jsx re-exports it; FeedView listens), its words in `detail.q`
+export const OPEN_SEARCH = "tq-search-open";
 
 // an in-app page link - one the canvas opens - or null (a web address, a task link handled elsewhere, anything unknown)
 export const appLink = (href) => {
@@ -36,6 +38,9 @@ export const openAppLink = (h) => {
   const want = String(h || "").replace(/^#/, "");
   if (!want) return;
   if (`#${want}` === SETUP) { window.dispatchEvent(new Event("tq-first-run")); return; }
+  // ...and SEARCH is a dialog over any view, not a place: its link opens it with the words in its box (concierge.page_href)
+  const s = /^search(?:=(.*))?$/.exec(want);
+  if (s) { window.dispatchEvent(new CustomEvent(OPEN_SEARCH, { detail: { q: s[1] ? decodeURIComponent(s[1]) : "" } })); return; }
   // ...the same link again is cleared without a step of its own (it was a hash of its own, a bare "#" for Back to land on)
   if (window.location.hash.replace(/^#/, "") === want) window.history.replaceState(window.history.state, "", here(""));
   const d = depth();

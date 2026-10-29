@@ -44,3 +44,22 @@ test("the chat opens it on a fresh reply, and a link in the text opens it in pla
   assert.match(read("md.jsx"), /else if \(page\) \{ e\.preventDefault\(\); openAppLink\(page\); \}/);
   assert.match(read("ChatThread.jsx"), /\{hasFiles && <Attachments messageId=\{m\.MessageId\} \/>\}/);    // pictures at reading size
 });
+
+// THE BOARD AND SEARCH, from the chat (concierge.page_href, 2026-10-28): the Board is its own address, read by the page's one router;
+// Search is a dialog, so its link opens it with the words in its box and writes no address
+test("#search= opens Search with its words; #board is the Board's own address", async () => {
+  const { openAppLink, OPEN_SEARCH } = await import("../src/appLinks.js");
+  const fired = [];
+  globalThis.window = { location: { hash: "", href: "" }, history: { state: null, replaceState() {} }, dispatchEvent: (e) => fired.push(e) };
+  globalThis.CustomEvent = class { constructor(t, o) { this.type = t; this.detail = o?.detail; } };
+  openAppLink("#search=May%20close%20numbers");
+  openAppLink("#search=");
+  assert.deepEqual(fired.map((e) => [e.type, e.detail.q]), [[OPEN_SEARCH, "May close numbers"], [OPEN_SEARCH, ""]]);
+  assert.equal(window.location.hash, "", "a dialog is no place");
+  openAppLink("#board");
+  assert.equal(window.location.hash, "board");
+  delete globalThis.window; delete globalThis.CustomEvent;
+  assert.match(read("TaskHubPage.jsx"), /if \(h === BOARD\) \{ setTab\("Board"\)/);
+  assert.match(read("FeedView.jsx"), /setSearchQ\(String\(e\?\.detail\?\.q \|\| ""\)\); setSearchOpen\(true\);/);
+  assert.match(read("SearchEverything.jsx"), /if \(open && query\) \{ typed\.current = query; setQ\(query\); \}/);
+});

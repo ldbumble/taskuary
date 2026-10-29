@@ -127,6 +127,14 @@ OWNER_SAYS = ('The owner has told you what this reply must say - it is below, ma
               'outranks the thread and any finished result, which are only there so you get the facts right if they asked '
               'for them. Never add what they did not ask to send.\n')
 NO_REPLY = 'NO REPLY'
+# WHETHER THE DRAFT PROMISES A FILE is the writer's to say, about its own words (the owner, 2026-10-28: never a word list): a regex over
+# the text called "his logins were attached to an old record" a promise and missed "the sheet comes with this". The writer ends a
+# reply that says a file rides with it with this line; it is taken off the draft and kept on the review (store.FilesPromised), and
+# the card says so when nothing is attached - or, on a chat, that the message cannot carry one.
+FILES = 'FILES PROMISED:'
+FILES_RULE = (f'If your reply tells them a file is attached, enclosed or sent with it, end with one more line: {FILES} and the names of '
+              'those files, comma-separated (or "unnamed" when it names none). That line is for the owner and is never sent. Leave it '
+              'out when the reply promises no file - a file mentioned for any other reason is no promise.' + chr(10))
 
 
 class NoReply(Exception):
@@ -377,7 +385,15 @@ def _answer(llm, system, user, max_tokens, images=None, guard=False, sig=''):
     if out.upper().startswith(NEEDS):
         why = ' '.join(out[len(NEEDS):].split())[:240] or 'something it does not have'
         raise NotDrafted(f'not drafted - it needs {why.rstrip(".")}. An agent can work it out and draft the reply, or Redraft with it')
-    return out
+    return files_said(out)
+
+
+def files_said(out: str) -> tuple:
+    """(the reply, the files its writer said ride with it - [] for unnamed, None for none): the writer's own FILES line, taken off."""
+    body, _, last = out.rstrip().rpartition(chr(10))
+    if not last.strip().upper().startswith(FILES): return out, None
+    said = last.strip()[len(FILES):].strip()
+    return body.rstrip(), [] if said.strip('"').lower() in ('', 'unnamed') else [n.strip() for n in said.split(',') if n.strip()]
 
 
 def _to_cc(store, m: dict) -> str:
@@ -442,7 +458,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     # request. DONE supplies its own completeness/shape rules, so do not put BREVITY in conflict.
     length_rule = '' if resolution else BREVITY
     system = (SYSTEM.format(owner=owner) + signature_line(store) + length_rule + (CHAT if chat else email_rule(store, box)) + '\n'
-              + (OWNER_SAYS if nudge else DONE if resolution else NOT_YET + FEEDBACK)
+              + (OWNER_SAYS if nudge else DONE if resolution else NOT_YET + FEEDBACK) + FILES_RULE
               # every block below describes YOU. They are written in the third person because
               # the same documents serve agents working FOR the owner - said once, here, so the
               # model does not read its own biography as notes about somebody else.
@@ -494,8 +510,9 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
         store.add_comment(task_id, 'responder', 'agent', 'Checked your calendar before drafting'
                           + (' - it could not be read, so the draft does not promise a time.' if 'COULD NOT READ' in calendar else '.'))
     has = bool(files) or len(sender_body(str(asked.get('BodyText') or ''), asked.get('OwnText'))[0]) >= SUBSTANCE
-    out = _answer(llm, system, user, COMPLETE_REPLY_TOKENS if resolution else FEEDBACK_TOKENS if has else REPLY_TOKENS, images,
-                  guard=not nudge, sig=signature_for(store, box))
+    out, files = _answer(llm, system, user, COMPLETE_REPLY_TOKENS if resolution else FEEDBACK_TOKENS if has else REPLY_TOKENS, images,
+                         guard=not nudge, sig=signature_for(store, box))
+    if seen is not None: seen['files'] = files
     # THE WRITER SAID NOTHING GOES BACK - with its NO_REPLY token, and only that. A sign-off word list used to decide that
     # "Thanks,\nAlex" was nothing and put the draft down, when a thank-you can be the whole real reply (the owner,
     # 2026-10-11: "everything should be ai"). A reply the owner asked for (nudge) is theirs to want: never dropped, it fails.
@@ -540,7 +557,7 @@ def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: 
         if not store.review_envelope(review_id):
             env = _ob.reply_envelope(store, saw)
             if env: store.set_review_envelope(review_id, env)
-    store.update_review_draft(review_id, text, None)
+    store.update_review_draft(review_id, text, None, files=seen.get('files'))
     if saw: store.pin_review_context(review_id, saw['MessageId'], revision)
     if operations.message_revision(store, task_id) != revision:
         store.mark_review_stale(review_id)
@@ -613,7 +630,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     owner = owner_of(store, soul)
     chat = written_as_chat(m.get('Channel'))
     sty = style_doc(store)
-    system = (SYSTEM.format(owner=owner) + signature_line(store) + BREVITY + (CHAT if chat else email_rule(store, mailbox_in(m))) + '\n' + NOT_YET + FEEDBACK
+    system = (SYSTEM.format(owner=owner) + signature_line(store) + BREVITY + (CHAT if chat else email_rule(store, mailbox_in(m))) + '\n' + NOT_YET + FEEDBACK + FILES_RULE
               # every block below describes YOU. They are written in the third person because
               # the same documents serve agents working FOR the owner - said once, here, so the
               # model does not read its own biography as notes about somebody else.
@@ -639,13 +656,13 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     files = files_block(store, [m['MessageId']]) if m.get('MessageId') else ''
     user += files
     has = bool(files) or len(sender_body(str(m.get('BodyText') or ''), m.get('OwnText'))[0]) >= SUBSTANCE
-    out = _answer(llm, system, user, FEEDBACK_TOKENS if has else REPLY_TOKENS, images, guard=not instruction,
-                  sig=signature_for(store, mailbox_in(m)))
+    out, files = _answer(llm, system, user, FEEDBACK_TOKENS if has else REPLY_TOKENS, images, guard=not instruction,
+                         sig=signature_for(store, mailbox_in(m)))
     out = (strip_signoff(out) or out) if chat else signed(out, signature_for(store, mailbox_in(m)))
     if not chat and not store.review_envelope(review_id):
         from . import outbound as _ob
         env = _ob.reply_envelope(store, m)
         if env: store.set_review_envelope(review_id, env)
-    store.update_review_draft(review_id, out, None)
+    store.update_review_draft(review_id, out, None, files=files)
     store.update_review_message(review_id, m['MessageId'])
     return out

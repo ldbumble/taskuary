@@ -8,7 +8,7 @@ import { Alert, Box, Button, Typography } from "@mui/material";
 import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
 import { holdInView } from "./inView.js";
-import { promisesFiles } from "./replyFiles.js";
+import { filesPromised } from "./replyFiles.js";
 import { proposalPresentation, reviewText } from "./reviewProposal.js";
 import { withSignature, withoutSignature } from "./signature.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
@@ -145,7 +145,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // A CHAT REPLY THAT PROMISES A FILE (U17): WhatsApp and the other chats carry words only, so a send went out with the promise and
   // without the file. The move becomes answering by email with the file; sending the words alone stays beside it.
   const chatFile = !!onEmailInstead && !proposal && !co && !isSlot && !r.Stale && !delivery.frozen && canSendIt
-    && String(r.Channel || "email").toLowerCase() !== "email" && (deliveryFiles(filedDelivery).length > 0 || promisesFiles(value));
+    && String(r.Channel || "email").toLowerCase() !== "email" && (deliveryFiles(filedDelivery).length > 0 || filesPromised(r));
   const thenLine = delivery.frozen ? "" : simulated ? "This approves the fictional reply and completes the demo task. No email is sent."
     : co ? `${co.approveLabel} ${co.then}${sendable ? `, then sends your reply to ${replyContext(r)}` : ""} - and only that; ${stays}.`
     : chatFile ? `A ${r.Channel} message cannot carry a file. Reply by email with the file, or send the words alone.`
@@ -426,7 +426,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         </Box>
       )}
       {!proposal && !isCal && <ReplyFiles reviewId={r.ReviewId} files={deliveryFiles(filedDelivery)}
-        text={value} channel={r.Channel} onChanged={onChanged} toRow={toRow} disabled={busy || delivery.frozen} />}
+        promised={filesPromised(r)} channel={r.Channel} onChanged={onChanged} toRow={toRow} disabled={busy || delivery.frozen} />}
       {isCal ? null : !proposal && (busy || delivery.frozen) ? String(r.Channel || "").toLowerCase() === "email" && (
         <Typography variant="caption" data-tq-delivery-cc sx={{ display: "block", color: DIM, mb: 0.75 }}>
           CC: {ccNow.length ? ccNow.join(", ") : "none"}

@@ -3,6 +3,7 @@ demo refused, both left the line saying "The draft is ready - read it, then send
 for the revision to see, and the scripted Advisor ignored the WHAT FAILED line it was given. A chat draft with no Send got no line
 at all, and the strip told the owner nothing needed a move over a question nobody had answered."""
 import json
+from unittest import mock
 from taskuary import advisor, buttons, demo, funnel
 from taskuary.store import MemoryStore
 from tests.test_advisor import _Rail
@@ -23,8 +24,8 @@ class RefusedTests(_Rail):
         for i in funnel.pile(s)['items']:
             if not i['key'].startswith('review:'): continue
             r = s.get_review(int(i['key'][7:]))
-            # ...one whose words are ready to send: a draft promising a payment date is redrafted, not sent (the deep dive, 2026-10-20)
-            if demo._PROMISE.search(str(r.get('DraftText') or '')): continue
+            # ...one whose words are ready to send: a draft the world stores a redraft verdict for is not sent (demo.VERDICTS)
+            if i.get('title') in demo.VERDICTS: continue
             if (s.get_message(r['MessageId']) or {}).get('Channel') == channel: return i['key'], r
         self.fail(f'the demo has no {channel} draft on its rail')
 
@@ -55,10 +56,12 @@ class RefusedTests(_Rail):
 
     def test_a_send_the_mail_server_refused_for_its_address_fixes_the_address_never_redrafts(self):
         # the address is what is wrong, not the words: Redraft wrote the same mail to the same dead address (the deep dive, 2026-10-20)
+        # ...which the demo's script never reads off the bounce's words: the verdict is the one its world stores with the item (demo.VERDICTS)
         s = self._world(); key, r = self._draft(s)
         s._exec("UPDATE review SET DeliveryState='failed', Reason=? WHERE ReviewId=?",
                 ('Not sent: the mail server refused erin.blake@northwind.example (5.1.1 no such user)', r['ReviewId']))
-        got = self._advise(s, key)
+        title = next(i['title'] for i in funnel.pile(s)['items'] if i['key'] == key)
+        with mock.patch.dict(demo.VERDICTS, {title: demo.VERDICTS['Lease renewal for the Elm Street office']}): got = self._advise(s, key)
         self.assertIn(got.get('verb'), ('fix', 'new_task'), got)
         self.assertIn('erin.blake@northwind.example', got.get('line', ''), 'the line is the fact: which address was refused')
 

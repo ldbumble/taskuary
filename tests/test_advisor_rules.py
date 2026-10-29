@@ -1,6 +1,7 @@
 """The Advisor's rules for the moments the deep dive found it getting wrong (2026-10-20): an agent's failed run is a failure, a send
 refused for its address is fixed at the address, a draft promising what nothing shows is not sent, work an agent can do goes to an
-agent, someone quiet past their day is chased - in the system prompt, and the same in the demo's scripted Advisor."""
+agent, someone quiet past their day is chased - in the system prompt; the demo's scripted Advisor holds each as the verdict stored with
+its item (demo.VERDICTS), never read from the item's words."""
 import json
 from taskuary import advisor, buttons, demo, workerstate
 from taskuary.store import MemoryStore
@@ -46,23 +47,28 @@ def test_a_possible_duplicate_an_agent_is_on_never_lights_reply():
 
 
 def test_a_bounced_address_is_fixed_never_redrafted():
+    """The scripted Advisor never reads the bounce's words (the owner, 2026-10-28): the item the world stores that verdict with is fixed
+    at the address; the same failure on any other item is a failure like any other."""
     bounce = 'WHAT FAILED: the reply was not sent - the mail server refused erin@northwind.example (5.1.1 no such user)'
-    assert ask('new_task (New task to fix this), approve (Send), redraft (Redraft)', bounce)['verb'] == 'new_task'
-    assert ask('fix (Open the address book), approve (Send), redraft (Redraft)', bounce)['verb'] == 'fix'
+    lease = {'title': 'Lease renewal for the Elm Street office', 'channel': 'email'}
+    assert ask('new_task (New task to fix this), approve (Send), redraft (Redraft)', bounce, item=lease)['verb'] == 'new_task'
+    got = ask('fix (Open the address book), approve (Send), redraft (Redraft)', bounce, item=lease)
+    assert got['verb'] == 'fix' and got['line'] == 'The address was refused: the mail server refused erin@northwind.example (5.1.1 no such user).'
+    assert ask('approve (Send), redraft (Redraft)', item=lease)['verb'] != 'fix', 'its verdict is for the failure, not the item at rest'
 
 
 def test_a_draft_promising_what_nothing_shows_is_redrafted_not_sent():
     verbs = 'approve (Send), redraft (Redraft), close (Mark done)'
     promise = 'THE DRAFT WAITING FOR THE OWNER\'S YES: "Sending the Q3 pack now."\nATTACHED TO THE DRAFT: nothing'
-    assert ask(verbs, promise)['verb'] == 'redraft'
-    assert ask(verbs, promise.replace('nothing', 'q3-pack.xlsx'))['verb'] == 'approve', 'the file is attached: it can go'
-    assert ask(verbs, 'THE DRAFT WAITING FOR THE OWNER\'S YES: "Thursday still works."\nATTACHED TO THE DRAFT: nothing')['verb'] == 'approve'
+    assert ask(verbs, promise, item={'title': 'Can you resend the Q3 numbers?'})['verb'] == 'redraft'
+    assert ask(verbs, promise, item={'title': 'Invoice 88213 - past due'})['verb'] == 'redraft'
+    assert ask(verbs, promise)['verb'] == 'approve', 'no verdict stored with the item: its words decide nothing'
 
 
 def test_an_issue_with_a_traceback_goes_to_an_agent_and_a_slipped_person_is_chased():
-    issue = ask('reply (Reply), regular_agent (Send to agent), not_ours (Not ours)', 'PREVIEW: Traceback: manager_id is null', item={'channel': 'github'})
-    assert issue['verb'] == 'regular_agent'
-    assert ask('reply (Reply), regular_agent (Send to agent)', 'PREVIEW: can you approve badge access?')['verb'] == 'reply'
+    issue = {'title': 'northwind/importers#214 - census sync fails when a site has no manager', 'channel': 'github'}
+    assert ask('reply (Reply), regular_agent (Send to agent), not_ours (Not ours)', 'PREVIEW: anything', item=issue)['verb'] == 'regular_agent'
+    assert ask('reply (Reply), regular_agent (Send to agent)', 'PREVIEW: Traceback: manager_id is null')['verb'] == 'reply'
     assert ask('chase (Chase them), let_go (Let it go), defer (Remind me)', 'PREVIEW: ')['verb'] == 'chase'
 
 
@@ -96,7 +102,4 @@ def test_a_goal_says_which_step_is_late_and_when_anything_last_moved():
     assert 'step 2 "Sign-off" held by Gail, due' in line and '3 days late' in line
     quiet = s.create_task({'Title': 'Quiet goal', 'Status': 'open', 'DoneWhen': 'x'}, 'owner')
     assert 'no news since it was set' in advisor.goal_line(s, s.get_task(quiet))
-    got = ask('close (Mark done), defer (Remind me)', line)
-    assert got['verb'] == 'defer' and 'Sign-off is 3 days late' in got['line']
-    assert ask('close (Mark done), defer (Remind me)', advisor.goal_line(s, s.get_task(quiet)))['verb'] == 'defer'
     assert ask('mine (Put it on my list), not_ours (Not ours), defer (Remind me)', 'THE IDEA (the assistant raised it; idea): "a rule?"')['verb'] == 'mine'

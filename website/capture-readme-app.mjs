@@ -53,7 +53,7 @@ try {
   // 05 THE ASSISTANT: the chat window over the bar, on the task on the table
   await page.click('.tq-compose-box textarea');
   await page.waitForSelector('[data-tq-chat-win]:not([hidden])', { timeout: 5000 });
-  await page.keyboard.type("What's on my list today?"); await page.keyboard.press('Enter');
+  await page.keyboard.type("What's on me right now?"); await page.keyboard.press('Enter');
   await page.waitForFunction(() => /looked at your list/.test(document.querySelector('[data-tq-chat-win]')?.innerText || ''), { timeout: 30000 });
   await page.waitForFunction(() => !document.querySelector('[data-tq-chat-win] .tq-pending'), { timeout: 30000 }); await sleep(800);
   await shot('assistant');

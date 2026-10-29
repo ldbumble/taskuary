@@ -57,10 +57,12 @@ class EverydayAsks(unittest.TestCase):
         for r in self.rows:
             with self.subTest(ask=r['q'].text): self.assertEqual(r['ideal']['missing'], [])
 
-    def test_the_demo_line_is_the_one_the_ask_is_about(self):
+    def test_the_demo_reads_no_typed_words_and_says_so_with_its_suggestions(self):
+        """The owner, 2026-10-28: the demo never decides what typed words mean - every ask here gets the honest line and the suggestion
+        chips, never a link, a lit button or a press guessed from its words (demo.PROMPTS answers only its own chips' words)."""
         for r in self.rows:
             with self.subTest(ask=r['q'].text):
-                self.assertEqual(r['demo']['line'], r['q'].demo, r['demo']['say'][:160])
+                self.assertEqual(r['demo']['line'], 'out', r['demo']['say'][:160])
                 self.assertNotEqual(r['demo']['say'].strip(), concierge.RECEIPTS['next'])
 
     def test_a_number_on_the_desk_is_the_action_word_it_numbers(self):

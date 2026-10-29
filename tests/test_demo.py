@@ -155,14 +155,11 @@ class TheCardsOwnButtonsTests(unittest.TestCase):
 
 class TheScriptedBrainTests(unittest.TestCase):
     def test_it_answers_without_a_key_a_cli_or_a_network(self):
-        said = demo.brain()('you are an assistant', 'CONVERSATION\nUSER: what should I do first?')
-        self.assertIn('You asked', said)
-        self.assertIn('what should I do first?', said)
+        self.assertEqual(demo.brain()('you are an assistant', 'CONVERSATION\nUSER: what should I do first?'), demo.OUT_OF_SCRIPT)
 
-    def test_it_quotes_only_what_the_person_typed(self):
+    def test_it_never_quotes_the_prompt_back(self):
         said = demo.brain()('sys', 'TASK TQ-1\nSOUL.md: secrets and documents\nUSER: hello there')
         self.assertNotIn('SOUL.md', said)
-        self.assertIn('hello there', said)
 
     def test_triage_still_gets_the_json_it_expects(self):
         import json
@@ -178,6 +175,18 @@ class TheScriptedBrainTests(unittest.TestCase):
         self.assertEqual(out['verb'], 'reply'); self.assertLessEqual(len(out['line']), 80); self.assertTrue(out['line'])
         self.assertEqual(ask('mine (Make a task), regular_agent (Send to agent), not_ours (Not ours)')['verb'], None)
 
+    def test_the_advisors_verdict_on_an_item_is_the_one_stored_with_it_never_read_from_its_words(self):
+        """The owner, 2026-10-28: what a draft promises or an issue holds is the fixture's own verdict (demo.VERDICTS) - the same words
+        under another title are judged by state alone, and the stored item is judged the same whatever its draft says."""
+        import json
+        ask = lambda title, extra='': json.loads(demo.brain()('JSON', '\n\n'.join(['EVENT: item.shown', 'THE ITEM: ' + json.dumps({'title': title}),
+                                                                                    'VERBS OFFERED: approve (Send), redraft (Redraft), close (Mark done)', extra])))
+        promise = 'THE DRAFT WAITING FOR THE OWNER\'S YES: "Sending the Q3 pack now."\nATTACHED TO THE DRAFT: nothing'
+        self.assertEqual(ask('Can you resend the Q3 numbers?')['verb'], 'redraft')
+        self.assertEqual(ask('Can you resend the Q3 numbers?')['line'], demo.PROMISED)
+        self.assertEqual(ask('Something else entirely', promise)['verb'], 'approve', 'no stored verdict: the words decide nothing')
+        for title, v in demo.VERDICTS.items(): self.assertTrue(v['verbs'] and v['line'], title)
+
     def test_the_canned_count_is_the_rails_own(self):
         """B23: "Three things are waiting on you" stood beside a rail of nine - and "25 things are on it, and 5 are waiting" beside an
         ON YOU of 9 (2026-10-19 UI walk): the count is the ON YOU band's, the greeting's own (lanes.on_you)."""
@@ -188,29 +197,6 @@ class TheScriptedBrainTests(unittest.TestCase):
             self.assertTrue(demo._list_line(s).startswith(f'{n} things are on you'), demo._list_line(s))
         funnel.invalidate()
         self.assertNotIn('Three', ' '.join(demo.CANNED))
-
-    def test_the_answer_fits_the_ask_read_by_the_concierges_own_words(self):
-        """2026-10-19 UI walk: it grepped for "USER: " while the concierge writes concierge.OWNER_SAYS, so every ask got one random line."""
-        from taskuary import concierge
-        ask = lambda q: demo.brain(store=MemoryStore())('You are the assistant.', f'THE RAIL\n\n{concierge.OWNER_SAYS}{q}\nAnswer them, briefly.')
-        plate, draft, weather = ask('what is on my plate today'), ask('draft a reply to the invoice'), ask("what's the weather")
-        self.assertEqual(len({plate, draft, weather}), 3, (plate, draft, weather))
-        self.assertTrue(plate.startswith('I looked at your list.'), plate)
-        self.assertIn('Reply', draft)
-        self.assertTrue(weather.startswith(demo.OUT_OF_SCRIPT) and "what's the weather" in weather, weather)
-
-    def test_a_line_fires_on_its_ask_never_on_a_word_it_shares(self):
-        """The 2026-10-20 query walk: "run the end of day report" was asked for a schedule, and a meeting, a list entry and a task by name
-        were all answered with the rail's count."""
-        from taskuary import concierge
-        ask = lambda q: demo.brain(store=MemoryStore())('You are the assistant.', f'{concierge.OWNER_SAYS}{q}\nAnswer them, briefly.')
-        for q in ('when is my next meeting?', 'put it on my list', 'show me the new starter task', 'next'):
-            self.assertTrue(ask(q).startswith(demo.OUT_OF_SCRIPT), (q, ask(q)))
-        # ...a report is brought up, never the schedule line it shares "day" with
-        self.assertRegex(ask('run the end of day report'), r'^Here: \[End of day[^\]]*\]\(#report=\d+\)\.$')
-        for q in ("what's waiting on me", 'summarize my day', 'how many open tasks do I have'):
-            self.assertTrue(ask(q).startswith('I looked at your list.'), (q, ask(q)))
-        self.assertEqual(ask('every monday send me the overdue invoices'), demo.CANNED[2])
 
     def test_a_draft_is_a_reply_never_a_canned_chat_line(self):
         """2026-10-19 UI walk: TQ-0001's demo draft read "I looked at your list. 25 things are on it..." - the responder's prompt
@@ -224,9 +210,9 @@ class TheScriptedBrainTests(unittest.TestCase):
         for d in (other, *demo.DRAFTS.values()): self.assertFalse(any(d.startswith(c) for c in canned), d)
 
 
-class TheScriptedBrainRoutesTests(unittest.TestCase):
-    """The UX walk, 2026-10-22: the demo chat was a dead end for anything but two phrases, so a visitor never saw the Assistant's
-    routing - it brings up the item, the report or the lit button, the way a good model's CALL or link would (demo._route)."""
+class TheDemoChatAnswersItsSuggestionsTests(unittest.TestCase):
+    """The owner, 2026-10-28: the demo chat never decides what typed words mean. Each suggestion is a chip that sends its own words and
+    gets the answer recorded for them - by string equality, nothing looser; anything else typed is told so, the suggestions under it."""
     @classmethod
     def setUpClass(cls):
         cls.s = MemoryStore()
@@ -236,39 +222,40 @@ class TheScriptedBrainRoutesTests(unittest.TestCase):
         from taskuary import concierge
         return demo.brain(store=self.s)('You are the assistant.', f'THE RAIL\n\n{concierge.OWNER_SAYS}{q}\nAnswer them, briefly.')
 
-    def test_mark_done_and_remind_me_call_the_real_buttons(self):
-        import json
-        call = lambda q: json.loads(self.ask(q).removeprefix('CALL: '))
-        self.assertEqual(call('mark this done'), {'kind': 'close', 'params': {}})
-        self.assertEqual(call('done.'), {'kind': 'close', 'params': {}})
-        self.assertEqual(call('remind me about this on friday at 2pm'), {'kind': 'task.defer', 'params': {'until': 'friday at 2pm'}})
-        self.assertEqual(call('remind me later'), {'kind': 'task.defer', 'params': {}})
+    def test_each_suggestion_gets_its_recorded_answer(self):
+        said = {pid: self.ask(ask) for pid, ask, _ in demo.PROMPTS}
+        self.assertTrue(said['list'].startswith('I looked at your list.'), said['list'])
+        self.assertEqual(said['month_end'], 'Here: [TQ-0001](#task=1).')
+        self.assertEqual(said['reports'], 'Here: [Reports](#report=reports).')
+        self.assertIn('Reply', said['reply'])
+        self.assertEqual(len(set(said.values())), len(demo.PROMPTS), 'each suggestion its own answer')
+        self.assertNotIn(demo.OUT_OF_SCRIPT, said.values())
 
-    def test_not_a_task_a_note_a_hand_off_and_a_chase_call_the_real_tools(self):
-        """F5: the visitor's other put-downs and hand-offs reach the same road the real Assistant's CALL takes."""
-        import json
-        call = lambda q: json.loads(self.ask(q).removeprefix('CALL: '))
-        self.assertEqual(call('this is not a task'), {'kind': 'task.not_a_task', 'params': {}})
-        self.assertEqual(call('close this with a note: called Marcus, sorted'), {'kind': 'task.complete', 'params': {'note': 'called Marcus, sorted'}})
-        self.assertEqual(call('hand this to Priya Shah'), {'kind': 'task.handoff', 'params': {'who': 'Priya Shah'}})
-        self.assertEqual(call('pass it to Marcus'), {'kind': 'task.handoff', 'params': {'who': 'Marcus'}})
-        self.assertEqual(call('chase them'), {'kind': 'chase', 'params': {}})
-        self.assertFalse(self.ask('hand this to a coding agent').startswith('CALL: {"kind": "task.handoff"'), 'an agent is no person')
+    def test_anything_else_typed_is_the_honest_line_whatever_words_it_shares(self):
+        for q in ('mark this done', 'remind me tomorrow', 'open TQ-0004', 'show me the reports', "what's on me right now",
+                  'Open the month-end close please', 'hand this to Priya Shah', 'chase them', "what's the weather"):
+            self.assertEqual(self.ask(q), demo.OUT_OF_SCRIPT, q)
 
-    def test_a_ref_a_subject_or_a_name_brings_the_item_up(self):
-        self.assertEqual(self.ask('open TQ-0004'), 'Here: [TQ-0004](#task=4).')
-        self.assertEqual(self.ask('open the invoice 88213 task'), 'Here: [TQ-0004](#task=4).')
-        self.assertEqual(self.ask("pull up Marcus's month-end close"), 'Here: [TQ-0001](#task=1).')
-        self.assertTrue(self.ask('open TQ-9999').startswith(demo.OUT_OF_SCRIPT))              # no such task: never a dead link
+    def test_a_recording_handed_in_answers_its_own_words_and_no_others(self):
+        """The browser tests' stand-in model (demo.ANSWERS_ENV): the same string equality as the suggestions, and never a chip."""
+        import json, tempfile
+        with tempfile.TemporaryDirectory() as d:
+            fn = os.path.join(d, 'answers.json')
+            with open(fn, 'w', encoding='utf-8') as f: json.dump({'mark this done': 'CALL: {"kind": "close", "params": {}}'}, f)
+            with mock.patch.dict(os.environ, {demo.ANSWERS_ENV: fn}):
+                self.assertEqual(self.ask('mark this done'), 'CALL: {"kind": "close", "params": {}}')
+                self.assertEqual(self.ask('mark this done please'), demo.OUT_OF_SCRIPT)
+                self.assertNotIn('mark this done', [c['ask'] for c in demo.prompt_chips()])
 
-    def test_a_report_brings_up_that_report_or_reports(self):
-        self.assertEqual(self.ask('what did the helpdesk report say?'), 'Here: [Helpdesk tickets by day, last 14](#report=6).')
-        self.assertEqual(self.ask('list my reports'), 'Here: [Reports](#report=reports).')
-
-    def test_a_set_a_person_to_act_toward_and_a_shared_word_bring_nothing_up(self):
-        for q in ('close all the tasks from Priya', 'clear all the reports', 'forward this to Priya', 'tell Marcus I will look at it',
-                  'the sync interval', 'mark all the approvals as done'):
-            self.assertFalse(self.ask(q).startswith(('Here:', 'CALL:')), (q, self.ask(q)))
+    def test_the_honest_line_carries_the_suggestions_and_a_suggestion_does_not(self):
+        from taskuary import concierge
+        with mock.patch('taskuary.terminal.live_sessions', lambda tail=0: []):
+            out = concierge.say(self.s, 'close all the tasks from Priya', llm=demo.brain(store=self.s))
+            self.assertEqual(out['say'], demo.OUT_OF_SCRIPT)
+            self.assertEqual([c for c in out['chips'] if c.get('prompt')], demo.prompt_chips())
+            self.assertTrue(all(c['ask'] == c['label'] for c in demo.prompt_chips()), 'a chip sends exactly the words it shows')
+            out = concierge.say(self.s, demo.PROMPTS[2][1], llm=demo.brain(store=self.s))
+            self.assertFalse([c for c in out.get('chips') or [] if c.get('prompt')])
 
 
 class TheAdvisorSpeaksInTheDemoTests(unittest.TestCase):

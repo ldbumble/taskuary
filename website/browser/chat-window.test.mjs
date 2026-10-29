@@ -75,7 +75,7 @@ test("an answer goes into the chat window on a task and on a report, never into 
   const field = await rect(page, ".tq-compose-box .tq-compose-field"), line = await rect(page, ".tq-dock-line");
   const say = JSON.stringify({ win, box, field, dock, body, line });
   assert.deepEqual(await inCanvas(page), before, "nothing new is drawn in the canvas");
-  assert.match(await page.$eval("[data-tq-chat-win] .tq-chat-pop-body", (e) => e.textContent), /outstanding tasks[\s\S]*scripted/, "the question and its answer are in the window");
+  assert.match(await page.$eval("[data-tq-chat-win] .tq-chat-pop-body", (e) => e.textContent), /outstanding tasks[\s\S]*suggested questions/, "the question and its answer are in the window");
   assert.equal(await page.$eval("[data-tq-chat-win] .tq-chat-pop-head b", (e) => e.textContent), "Taskuary");
   // ...THE PILL'S WIDTH, OUT OF THE BAR, AT MOST HALF THE SCREEN (the owner, 2026-10-28: "the chat should come out of the bottom bar and not go all
   // the way up, max 50%" - "make it narrower to fit the size on the bar and it expands only height not width")
@@ -102,7 +102,7 @@ test("an answer goes into the chat window on a task and on a report, never into 
   await page.waitForFunction(() => !document.querySelector(".tq-compose-box[data-tq-open]"), { timeout: 15000 });
   await press(page, ".tq-compose-box textarea");
   await page.waitForSelector("[data-tq-chat-win]:not([hidden])", { timeout: 15000 });
-  assert.match(await page.$eval("[data-tq-chat-win] .tq-chat-pop-body", (e) => e.textContent), /outstanding tasks[\s\S]*scripted/, "reopened, the same conversation");
+  assert.match(await page.$eval("[data-tq-chat-win] .tq-chat-pop-body", (e) => e.textContent), /outstanding tasks[\s\S]*suggested questions/, "reopened, the same conversation");
   await page.keyboard.press("Escape");
   await page.waitForSelector("[data-tq-chat-win][hidden]", { timeout: 15000 });
 

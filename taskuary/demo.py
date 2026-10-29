@@ -205,7 +205,10 @@ def _list_line(store) -> str:
 # "nothing to say" - the demo, where newcomers first meet it, never showed a suggestion. It names the first offered verb that
 # someone waiting makes right, with a plain line - and like the real one says nothing on a newsletter: "Make a task" over an
 # fyi is the wrong suggestion that is worse than none.
-_VERBS = re.compile(r'^VERBS OFFERED: (.*)$', re.M)
+# NOTHING HERE READS WHAT A MESSAGE OR A DRAFT MEANS (the owner, 2026-10-28: never decide what words mean with a word list). What an item
+# itself calls for - a draft promising a file nothing attaches, an issue an agent can take, an address that bounced - is its verdict
+# STORED with the fixture (VERDICTS, beside the world below); the rest is the item's state, read off the labelled lines advisor._prompt writes.
+VERBS_OFFERED, THE_ITEM, WHAT_FAILED = 'VERBS OFFERED', 'THE ITEM', 'WHAT FAILED'
 # EACH LINE IS A FACT, NEVER THE BUTTON EXPLAINED (the owner, 2026-10-23: "buttons do the talking"; at most 60 characters) - and where the
 # script's verb is the rule's own, the strip says the rule's fact and drops this one (advisor.decide)
 ADVICE = {'answer_agent': 'The agent is waiting on your answer.', 'approve': '',
@@ -238,54 +241,53 @@ COPIED = {'close': 'It cannot be sent from here - copy it to the chat.'}
 DONE = {'approve': ADVICE['approve'], 'reply': ADVICE['reply'], 'close': 'The work on it is done.'}
 
 # ...and like the real one (advisor.SYSTEM's rules, the deep dive 2026-10-20): an agent's failed run is made a task, never continued
-# blind; a send refused for its ADDRESS is fixed at the address, never redrafted; a draft promising what nothing shows is written again,
-# never sent; an issue with a traceback goes to an agent; someone quiet past their day is chased. The script reads the prompt's own
-# lines for these - the real Advisor reads their meaning.
+# blind; someone quiet past their day is chased.
 # ...a general agent's run is tried again (advisor.offered's Try again - it is offered no New task); a coding agent's is made a task
 AGENT_RAN = {'fix': "{what}: {why}.", 'new_task': "{what}: {why}.", 'continue': "{what}: {why}."}
-BOUNCED = {'fix': 'The address was refused: {why}.', 'new_task': 'The address was refused: {why}.'}
-_BOUNCE = re.compile(r'no such user|unknown recipient|recipient\w* refused|refused [^\s]+@|bounced', re.I)
-_PROMISE = re.compile(r"\b(?:sending\b[^.]*\bnow|attached|goes out in|payment run|paid on)\b", re.I)
-PROMISED = {'redraft': 'The draft promises what nothing here shows.',
-            'reply': 'The draft promises what nothing here shows.'}
-AGENT_WORK = {'regular_agent': 'An issue with a traceback in it.'}
 CHASED = {'chase': 'They are quiet past their day.'}
-# ...and a goal and an idea, as the real one reads THE GOAL and THE IDEA lines
-GOAL_LATE = {'chase': '{step} is {days} days late.', 'defer': '{step} is {days} days late.'}
-GOAL_QUIET = {'defer': 'Nothing has moved on this goal yet.'}
 IDEA = {'mine': '', 'defer': ''}
-_LATE = re.compile(r'step \d+ "([^"]+)"[^|\n]*? - (\d+) days late')
+DEMO_SAYS = 'This is the demo - '                     # every refusal sentence above starts so (SENDS, STARTS, OFF, REFUSALS)
+
+
+def _field(text: str, label: str) -> str:
+    """One labelled line of a prompt (advisor._prompt's `LABEL: value`), by its label."""
+    return next((l[len(label) + 2:] for l in text.splitlines() if l.startswith(label + ': ')), '')
+
+def _offered(verbs: str) -> dict:
+    """VERBS OFFERED as {verb: label}: advisor._prompt joins them as `verb (Label), verb (Label)`."""
+    return dict(p.removesuffix(')').split(' (', 1) for p in verbs.split('), ') if ' (' in p)
+
+def _on_it(text: str) -> str:
+    """The ref of a possible duplicate an agent is already on (advisor's own `- TQ-n ... - an agent is on it` row), else ''."""
+    if 'POSSIBLE DUPLICATES' not in text: return ''
+    rows = text.split('POSSIBLE DUPLICATES', 1)[1].split('\n\n', 1)[0].splitlines()[1:]
+    return next((l.split()[1] for l in rows if l.startswith('- TQ-') and l.endswith('an agent is on it')), '')
 
 
 def _advice(text: str) -> str:
     from . import buttons
-    offered = dict(re.findall(r'([a-z_]+) \(([^)]*)\)', _VERBS.search(text).group(1)))
-    failed = (re.search(r'^WHAT FAILED: (.*)$', text, re.M) or [None, ''])[1]
-    try: item = json.loads((re.search(r'^THE ITEM: (.*)$', text, re.M) or [None, '{}'])[1]) or {}
+    offered = _offered(_field(text, VERBS_OFFERED))
+    failed = _field(text, WHAT_FAILED)
+    try: item = json.loads(_field(text, THE_ITEM) or '{}') or {}
     except ValueError: item = {}
     chat = str(item.get('channel') or 'email').lower() != 'email'
-    draft = (re.search(r"^THE DRAFT WAITING FOR THE OWNER'S YES: (.*)$", text, re.M) or [None, ''])[1]
-    bare = 'ATTACHED TO THE DRAFT: nothing' in text
-    preview = (re.search(r'^PREVIEW: (.*)$', text, re.M) or [None, ''])[1]
-    said = (None if 'This is the demo' in failed
+    what = failed.split(' - ')[0].strip() or 'That did not go through'
+    why = failed.split(' - ', 1)[1].rstrip('.') if ' - ' in failed else 'no reason was given'
+    say = lambda said, verb: said[verb].format(label=offered[verb], what=what[:1].upper() + what[1:], why=why) if verb else ''
+    # the fixture's own verdict, at the state it was written for: a failure's (on='failed') only over a failure, the rest only without one
+    v = VERDICTS.get(str(item.get('title') or ''))
+    stored = {k: v['line'] for k in v['verbs']} if v and bool(failed) == (v.get('on') == 'failed') else None
+    said = (None if DEMO_SAYS in failed
             else AGENT_RAN if failed.startswith("the agent's run failed")
-            else BOUNCED if failed and _BOUNCE.search(failed)
+            else stored if stored
             else None if failed
             else CHASED if 'chase' in offered
-            else GOAL_LATE if 'THE GOAL:' in text and _LATE.search(text)
-            else GOAL_QUIET if 'THE GOAL:' in text and 'no news' in text
             else IDEA if 'THE IDEA' in text
-            else PROMISED if draft and bare and _PROMISE.search(draft) and 'approve' in offered
-            else AGENT_WORK if 'regular_agent' in offered and re.search(r'traceback|steps to reproduce', preview, re.I)
             else None)
     if said:
         verb = next((v for v in said if v in offered), None)
-        why = failed.split(' - ', 1)[1].rstrip('.') if ' - ' in failed else 'no reason was given'
-        what = failed.split(' - ')[0].strip() or 'That did not go through'
-        late = _LATE.search(text) or [None, 'A step', '?']
-        return json.dumps({'verb': verb, 'line': said[verb].format(label=offered[verb], what=what[:1].upper() + what[1:], why=why, step=late[1], days=late[2]) if verb else '',
-                           'evidence': []})
-    said = (REFUSED if 'This is the demo' in failed
+        return json.dumps({'verb': verb, 'line': say(said, verb), 'evidence': []})
+    said = (REFUSED if DEMO_SAYS in failed
             else CHECK if 'nobody knows whether it went' in failed else FAILED if failed
             else SENT if 'A REPLY WAS ALREADY SENT' in text and 'NOTHING HAS COME IN SINCE IT WENT' in text
             else COPIED if chat and 'redraft' in offered and 'approve' not in offered
@@ -296,118 +298,76 @@ def _advice(text: str) -> str:
     redo = not failed or failed.startswith('the reply')
     fits = lambda v: v in offered and (redo or v != 'redraft') and (said is not CHECK or v != 'approve' or offered[v] == buttons.label('approve', 'check'))
     verb = next((v for v in said if fits(v)), None)
-    what = failed.split(' - ')[0].strip() or 'That did not go through'
-    why = failed.split(' - ', 1)[1].rstrip('.') if ' - ' in failed else 'no reason was given'
-    line = said[verb].format(label=offered[verb], what=what[:1].upper() + what[1:], why=why) if verb else ''
+    line = say(said, verb)
     # ...and like the real one it reads the tasks that may already cover the ask: an agent already on one is said, never a second answer blind
-    dup = re.search(r'^- (TQ-\d+) [^\n]*an agent is on it$', text.split('POSSIBLE DUPLICATES', 1)[1], re.M) if 'POSSIBLE DUPLICATES' in text else None
     # ...and the button agrees with the line (advisor.SYSTEM): never Reply over "it may already be covered" - Remind me, to look again once
     # that agent is done, else nothing (the UI audit's C2, 2026-10-21)
-    if verb == 'reply' and dup:
+    if verb == 'reply' and (dup := _on_it(text)):
         verb = 'defer' if 'defer' in offered else None
-        line = f'{dup[1]} may already cover this - an agent is on it.' if verb else ''
+        line = f'{dup} may already cover this - an agent is on it.' if verb else ''
     return json.dumps({'verb': verb, 'line': line, 'evidence': []})
 
 
-# THE ANSWER FITS THE ASK (2026-10-19 UI walk): one random line answered "what is on my plate", "draft a reply" and "what's the
-# weather" alike. Each scripted line is picked by what was asked; anything else is said to be beyond a script
-ANSWERS = ((re.compile(r'\b(draft|reply|respond|answer|write)\b', re.I),
-            'Open the item and press Reply - the draft lands on the task, and nothing goes out until you say yes. In the demo the drafts '
-            'are written ahead of time; in your own Taskuary your own AI writes them from the thread.'),
-           # ...and each line fires on what IS that ask, never a word it happens to share: "run the end of day report" was told "give me the
-           # schedule", and "when is my next meeting", "put it on my list" and "show me the new starter task" were all read the rail's count
-           # (the 2026-10-20 query walk, tests/assistant_queries.py). A schedule asks for the report line; a question about the pile, the count.
-           (re.compile(r'\b(every (morning|day|night|week|month|monday|tuesday|wednesday|thursday|friday|weekday)|each (morning|day|week)'
-                       r'|schedule|weekly|daily|nightly)\b', re.I), CANNED[2]),
-           (re.compile(r"\b(on me|on you|on my plate|what'?s on my list|what do i have|my day|what'?s next"
-                       r"|how many (open )?(tasks|things))\b", re.I), 'I looked at your list. {list}'))
-OUT_OF_SCRIPT = ('In the demo I answer from a script, so that one is beyond me - in your own Taskuary your own AI answers it. '
-                 'Ask me what is on your list, or to draft a reply.')
+# THE DEMO CHAT ANSWERS ITS OWN SUGGESTIONS, AND ONLY THOSE (the owner, 2026-10-28: never decide what typed words mean with a word
+# list). A script cannot read what a visitor types, and the keyword router that pretended to (a ref, a name, "remind me", "chase") misread
+# as often as it read. So the chat is driven by what the demo SHOWS: the item's own buttons, and these suggestions - each a chip that
+# sends its words, answered by the line recorded for it, matched by string equality on those words and nothing looser. Anything else
+# typed is told so, with the suggestions under it (with_prompts).
+PROMPTS = (
+    # (id, the words its chip sends, the recorded answer - {list} is the rail's own count, {task:<fixture title>} that task's link)
+    ('list', "What's on me right now?", 'I looked at your list. {list}'),
+    ('month_end', 'Open the month-end close', 'Here: {task:Month-end close is short by 4,180}.'),
+    ('reports', 'Show me the reports', 'Here: [Reports](#report=reports).'),
+    ('reply', 'How does a reply get written?',
+     'Open the item and press Reply - the draft lands on the task, and nothing goes out until you say yes. In the demo the drafts '
+     'are written ahead of time; in your own Taskuary your own AI writes them from the thread.'),
+    ('schedule', 'Can you send me a report every morning?',
+     'Yes - in your own Taskuary that is a report: say what it covers and when, and it is written every morning before you are up. '
+     "The demo's are recorded ones: [Reports](#report=reports)."),
+)
+OUT_OF_SCRIPT = 'In the demo I answer the suggested questions - in your own Taskuary your AI answers anything.'
 
-# THE ASSISTANT'S ROUTING, SCRIPTED (the UX walk, 2026-10-22): the scripted brain only ever answered in words, so a visitor never saw what
-# the real Assistant is for - bringing up the item, the page or the lit button (concierge.CONTRACT). A small decision table, read in order,
-# answers the way a good model would and leaves the rest to Taskuary's own road: Mark done and Remind me CALL the real button on the item
-# on the table, a TQ ref, a report, a person's name or a subject is linked, and a link is the item brought up (appLinks.js).
-# A SET ("all", "everything") is the real brain's pipe.clear/close - lighting one row's button over "close all from Priya" would be wrong.
-_BULK = re.compile(r'\b(all|every|everything|each)\b', re.I)
-_DONE = re.compile(r'\bmark\b.*\bdone\b|^\s*done\W*$', re.I)
-_REMIND = re.compile(r'\bremind me\b', re.I)
-# ...and the other put-downs and hand-offs a visitor types (trust audit F5, 2026-10-28): each CALLs the tool the real Assistant would
-_NOTE = re.compile(r'\bclose\b.*?\bwith (?:a |the )?note\b\s*[:,-]?\s*(.*)$', re.I)
-_NAT = re.compile(r"\bnot (?:a|really a) task\b|\bisn'?t a task\b|\bnever (?:was )?a task\b", re.I)
-# ...to a PERSON - a capitalised name or an address: "hand this to a coding agent" is an agent's hand-off, the real brain's road
-_HAND = re.compile(r'(?i:\b(?:hand|pass|give)\b(?: (?:this|it|that))?(?: (?:off|over|on))? to) ([A-Z][\w.-]*(?: [A-Z][\w.-]*)?|[\w.+-]+@[\w.-]+)')
-_CHASE = re.compile(r'\bchase\b|\bnudge (?:them|him|her)\b|\bfollow up with them\b', re.I)
-_WHEN = re.compile(r'\b(?:today|tonight|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week|\d+ (?:days?|weeks?))\b'
-                   r'(?:\s+at\s+\d{1,2}(?::\d\d)?\s*[ap]m)?', re.I)
-_REF = re.compile(r'\bTQ-(\d{1,6})\b', re.I)
-_REPORT = re.compile(r'\breports?\b', re.I)
-# ...and a name or a subject brings an item up only when the ask is to SEE one: "forward this to Priya" and "tell Marcus" name a person to
-# act toward, and linking that person's own thread over the item on the table would be the wrong thing brought up
-_SEE = re.compile(r"^\s*(open|show|pull|bring|find|get|go|take|where|who|what|which)\b", re.I)
-_WORD = re.compile(r"[a-z0-9][a-z0-9'-]{2,}", re.I)
-_PLAIN = {'the', 'and', 'for', 'with', 'from', 'this', 'that', 'what', 'about', 'can', 'you', 'your', 'are', 'has', 'have', 'did', 'does',
-          'open', 'show', 'pull', 'bring', 'task', 'report', 'reports', 'over', 'last', 'when', 'still', 'says', 'say'}
+def prompt_chips() -> list: return [{'ask': ask, 'label': ask, 'prompt': pid} for pid, ask, _ in PROMPTS]
 
-def _words(text: str) -> set: return {w.lower().strip("'-").removesuffix("'s") for w in _WORD.findall(text or '')} - _PLAIN
+def with_prompts(out):
+    """The suggestions under the line that says they are all the demo answers (concierge.say) - and under nothing else."""
+    if isinstance(out, dict) and OUT_OF_SCRIPT in str(out.get('say') or ''): out['chips'] = [*(out.get('chips') or []), *prompt_chips()]
+    return out
 
-def _call(kind: str, **params) -> str: return 'CALL: ' + json.dumps({'kind': kind, 'params': params})
-
-def _link(name: str, href: str) -> str: return f'Here: [{name}]({href}).'
-
-def _named(asked: str, store):
-    """The one open task the ask names - by its sender's name, or by two words of its subject (one is "sync" in "the sync interval").
-    Two that fit as well are no answer: a sender with three threads open is not one of them."""
+def _task_link(store, title: str) -> str:
     from .store import task_ref
-    if not _SEE.search(asked): return None
-    want = _words(asked)
-    def hits(t):
-        who = _words(str((store.last_inbound_on_task(t['TaskId']) or {}).get('FromName') or '').split(' ')[0])
-        return len(want & _words(t.get('Title'))) + 2 * len(want & who)
-    fit = sorted(((hits(t), t) for t in store.list_tasks(active_only=True)), key=lambda x: -x[0])
-    if not fit or fit[0][0] < 2 or (len(fit) > 1 and fit[1][0] == fit[0][0]): return None
-    return _link(task_ref(fit[0][1]['TaskId']), f"#task={fit[0][1]['TaskId']}")
+    t = next((t for t in store.list_tasks() if t.get('Title') == title), None) if store is not None else None
+    return f"[{task_ref(t['TaskId'])}](#task={t['TaskId']})" if t else title
 
-def _report(asked: str, store) -> str:
-    """The report the ask names by the most words of its title, else the Reports page."""
-    want, best = _words(asked), (0, None)
-    for r in (x for x in store.list_sources(active_only=False) if x.get('Channel') == 'report'):
-        try: title = json.loads(r.get('ConfigJson') or '{}').get('title') or r.get('Address') or ''
-        except ValueError: title = r.get('Address') or ''
-        if len(want & _words(title)) > best[0]: best = (len(want & _words(title)), (title, r['SourceId']))
-    return _link(best[1][0], f'#report={best[1][1]}') if best[1] else _link('Reports', '#report=reports')
+# ...and a recording a run hands in (ANSWERS_ENV: a JSON file of {the words typed: the answer}) - the browser tests' stand-in for a model,
+# so the app's own road for a typed ask (a lit button, a link brought up) is held without a model; the same string equality, never a chip
+ANSWERS_ENV = 'TASKUARY_DEMO_ANSWERS'
 
-def _route(asked: str, store) -> str | None:
-    if _BULK.search(asked): return None
-    if (note := _NOTE.search(asked)): return _call('task.complete', **({'note': note[1].strip()} if note[1].strip() else {}))
-    if _NAT.search(asked): return _call('task.not_a_task')
-    if (who := _HAND.search(asked)): return _call('task.handoff', who=who[1].strip())
-    if _CHASE.search(asked): return _call('chase')
-    if _DONE.search(asked): return _call('close')
-    if _REMIND.search(asked):
-        when = _WHEN.search(asked)
-        return _call('task.defer', **({'until': when[0]} if when else {}))
-    if store is None: return None
-    if (ref := _REF.search(asked)) and store.get_task(int(ref[1])): return _link(f'TQ-{int(ref[1]):04d}', f'#task={int(ref[1])}')
-    if any(rx.search(asked) for rx, _ in ANSWERS): return None          # a reply, a schedule, the list: the scripted line answers those
-    if _REPORT.search(asked): return _report(asked, store)
-    return _named(asked, store)
+def _recorded() -> dict:
+    fn = os.environ.get(ANSWERS_ENV)
+    if not fn: return {}
+    try:
+        with open(fn, encoding='utf-8') as f: return json.load(f)
+    except (OSError, ValueError) as e: logger.warning(f'demo: the recorded answers in {fn} could not be read - {e}'); return {}
 
 def _answer(asked: str, store) -> str:
     store = store if store is not None else _store()
-    if routed := _route(asked, store): return routed
-    said = next((a for rx, a in ANSWERS if rx.search(asked)), None)
-    if said is None: return OUT_OF_SCRIPT + f'\n\n(You asked: "{asked[:160]}" - and this is a scripted answer.)'
-    return said.format(list=_list_line(store)) if '{list}' in said else said
+    said = next((a for _, ask, a in PROMPTS if ask == asked), None) or _recorded().get(asked)
+    if said is None: return OUT_OF_SCRIPT
+    if '{list}' in said: said = said.replace('{list}', _list_line(store))
+    if '{task:' in said:
+        head, rest = said.split('{task:', 1); title, tail = rest.split('}', 1)
+        said = head + _task_link(store, title) + tail
+    return said
 
 
 # A DRAFT IS A REPLY, never the assistant's chat line (2026-10-19 UI walk): the responder's prompt was answered from CANNED, and TQ-0001's
 # draft read "I looked at your list. 25 things are on it...". A thread the world wrote a draft for gets it; any other gets a holding line
 def _draft(user: str) -> str:
-    subject = (re.search(r'^Subject: (.*)$', user, re.M) or [None, ''])[1].strip()
+    subject = _field(user, 'Subject').strip()
     if subject in DRAFTS: return DRAFTS[subject]
     if hit := next((d for k, d in DRAFTS.items() if k in user), None): return hit
-    who = (re.search(r'^From: ([^<\n]*)', user, re.M) or [None, ''])[1].strip().split(' ')[0]
+    who = _field(user, 'From').split('<')[0].strip().split(' ')[0]
     return f"Thanks{' ' + who if who and '@' not in who else ''} - I have this, and I will come back to you on it today."
 
 
@@ -418,7 +378,7 @@ def brain(seed: int = 0, store=None):
     pick = random.Random(seed)
     def llm(system, user, max_tokens=None, images=None, **kw):
         text = str(user or '')
-        if _VERBS.search(text): return _advice(text)
+        if _field(text, VERBS_OFFERED): return _advice(text)
         if str(system or '').startswith('You ARE '): return _draft(text)       # responder.SYSTEM: the owner's own reply
         if 'JSON' in str(system or '') or 'intent' in str(system or '').lower():
             return json.dumps({'intent': 'fyi', 'why': 'the demo files everything it is not sure about'})
@@ -471,6 +431,20 @@ DRAFTS = {
     'did the overnight import finish? the dashboard still says yesterday':
         'It finished at 04:10 - the dashboard catches up on its 7:00 refresh.',
     'Invoice 88213 - past due': "Thanks Tom - it is approved and goes out in Friday's payment run.",
+}
+
+# THE ADVISOR'S VERDICT, WRITTEN WITH THE ITEM it is about (the owner, 2026-10-28): the scripted Advisor (_advice) never reads a draft or a
+# mail for what it means - what an item calls for is part of the world, like its sender and its draft. Keyed by the item's title as the
+# rail shows it; `verbs` in order of preference (the first one offered lights), `on: 'failed'` for a verdict on a failure the item carries.
+PROMISED = 'The draft promises what nothing here shows.'
+VERDICTS = {
+    # the draft says the payment run and the pack go out, and nothing on the item shows either: written again, never sent
+    'Invoice 88213 - past due': {'verbs': ('redraft', 'reply'), 'line': PROMISED},
+    'Can you resend the Q3 numbers?': {'verbs': ('redraft', 'reply'), 'line': PROMISED},
+    # an issue with a traceback in it: work an agent can take
+    'northwind/importers#214 - census sync fails when a site has no manager': {'verbs': ('regular_agent',), 'line': 'An issue with a traceback in it.'},
+    # the advisor matrix's world (faults.world): a reply the mail server bounced for its address - fixed at the address, never redrafted
+    'Lease renewal for the Elm Street office': {'verbs': ('fix', 'new_task'), 'line': 'The address was refused: {why}.', 'on': 'failed'},
 }
 
 # EACH AGENT ITS OWN WORK (B23, 2026-10-17): every agent task replayed the month-end transcript, so the census issue's

@@ -1,0 +1,8 @@
+{
+  "remind me Monday": "CALL: {\"kind\": \"task.defer\", \"params\": {\"until\": \"Monday\"}}",
+  "mark this done": "CALL: {\"kind\": \"close\", \"params\": {}}",
+  "done": "CALL: {\"kind\": \"close\", \"params\": {}}",
+  "open TQ-0001": "Here: [TQ-0001](#task=1).",
+  "open TQ-0004": "Here: [TQ-0004](#task=4).",
+  "open TQ-0011": "Here: [TQ-0011](#task=11)."
+}

@@ -100,6 +100,8 @@ Signs against coding: the work only reads from a system (a query, a report, a lo
 
 ## 5. Describing it
 
+- In `why`, the title and the summary, call the owner by their first name or "the owner", and "they" after that - never "he" or "she": nothing you are given says which.
+
 - **title** - what this IS, 12 words max, in your own words; not the subject line handed back.
 - **summary** - two sentences, for every verdict (an fyi and a report are rows the owner reads too). The first says who wants what from the owner, the asker first and by `from_name` - "Erin Blake wants the Q3 numbers before Friday" - or on an fyi who says what - "Payworth says the September statement is ready". The second adds the one detail that matters: a date, an amount, what was already done. Leave out signatures, confidentiality footers and quoted earlier mail.
 - **rests_on** - when your ask, title or summary leans on an earlier line of the `exchange` - the request this message only supplies data for, the question it picks back up - the ids of those lines (the `[#n]`), so the owner sees what the ask came from. Only lines that are actually about this; [] when the message stands on its own. It joins nothing: it shows them.

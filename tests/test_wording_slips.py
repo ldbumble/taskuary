@@ -39,5 +39,10 @@ class WordingSlipTests(unittest.TestCase):
         self.assertEqual(got, came)
         self.assertEqual(funnel.not_ahead([ahead]), [ahead], 'all ahead: kept, never nothing')
 
+    def test_triage_is_told_to_call_the_owner_by_name_or_they(self):
+        from taskuary.store import MemoryStore
+        guide = MemoryStore().doc('triage')
+        self.assertIn('never "he" or "she"', guide.split('## 5. Describing it', 1)[1].split('## 6', 1)[0])
+
 
 if __name__ == '__main__': unittest.main()

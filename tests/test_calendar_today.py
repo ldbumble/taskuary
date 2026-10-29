@@ -97,3 +97,12 @@ class NotConnectedTests(unittest.TestCase):
         s.set_setting('calendar_enabled', '0', 'owner')
         with mock.patch.dict(cal._TODAY, {'data': None}):
             self.assertTrue(cal.today(s)['off'])
+
+
+def test_an_unreachable_calendar_says_so_in_words():
+    # the opener printed the raw exception when the machine was offline
+    from taskuary import calendar as cal
+    e = RuntimeError("HTTPSConnectionPool(host='login.example', port=443): Max retries exceeded with url: /token "
+                     "(Caused by NameResolutionError(\"Failed to resolve 'login.example'\"))")
+    why = cal.unreadable(e)
+    assert 'offline' in why and 'HTTPSConnectionPool' not in why

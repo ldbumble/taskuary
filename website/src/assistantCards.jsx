@@ -1326,7 +1326,7 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
         <div className="tq-day-agenda" data-tq-cal={cal}>
           <div className="tq-day-h">Your day · {cal === "empty" ? "no meetings" : "calendar"}</div>
           <div className="ev cal-note"><span className="s">{cal === "none" ? "No calendar connected - a calendar-capable card such as Microsoft 365 or Gmail reads it once it is allowed to."
-            : cal === "error" ? `Your calendar could not be read - ${String(today.errors[0]).slice(0, 140)}` : "Nothing on your calendar today."}</span></div>
+            : cal === "error" ? <>Your calendar could not be read.<span className="why">{String(today.errors[0])}</span></> : "Nothing on your calendar today."}</span></div>
           {cal !== "empty" && <button type="button" className="tq-linkish cal-go" onClick={() => openAppLink(place("mail").href)}>
             {cal === "none" ? "Connect a calendar" : "Open the calendar's card"}</button>}
         </div>

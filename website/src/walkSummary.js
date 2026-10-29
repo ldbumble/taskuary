@@ -36,7 +36,9 @@ const gistWord = (i) => whoOf(i) === "Report" ? String(i.title || "").split(/ [-
   : byAgent(i) && i.title ? cut(String(i.title).trim()) : whoOf(i);
 export const gistOf = (g, max = 2) => {
   const ws = [...new Set(g.rows.map(gistWord))].filter(Boolean);
-  return ws.slice(0, max).join(", ") + (ws.length > max ? ` +${ws.length - max}` : "");
+  // a task's title is a sentence: two side by side cut each other off ("I need you to find every…, Thom…") - one, and the count of the rest
+  const k = ws[0]?.length > 24 ? 1 : max;
+  return ws.slice(0, k).join(", ") + (ws.length > k ? ` +${ws.length - k}` : "");
 };
 
 export function summarize(items) {

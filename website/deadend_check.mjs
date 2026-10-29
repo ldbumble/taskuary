@@ -70,7 +70,7 @@
 // on throwaway homes (never the owner's 7787).
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -275,7 +275,10 @@ if ${stopsave ? "True" : "False"}:
                     'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example', 'BodyText': 'And the fuel card statement?',
                     'SentAt': '2026-10-21 09:05:00'})
 sys.argv =['taskuary'${faults || stopsave ? "" : ", '--demo'"}, '--no-browser', '--port', '${p}']; cli.main()`;
-  const env = { ...process.env, TASKUARY_HOME: home, TASKUARY_ALLOW_TEST_HOME: "1", ...(faults ? { TASKUARY_FAULTS: "1" } : stopsave ? {} : { TASKUARY_DEMO: "1" }) };
+  // the demo reads no typed words: what the walk types is answered from a recording it writes, by the exact words (demo.ANSWERS_ENV)
+  const answers = join(home, "demo_answers.json");
+  const env = { ...process.env, TASKUARY_HOME: home, TASKUARY_ALLOW_TEST_HOME: "1", TASKUARY_DEMO_ANSWERS: answers,
+                ...(faults ? { TASKUARY_FAULTS: "1" } : stopsave ? {} : { TASKUARY_DEMO: "1" }) };
   if (!faults) delete env.TASKUARY_FAULTS;
   if (faults || stopsave) delete env.TASKUARY_DEMO;
   const srv = spawn("python", ["-c", launchPy], { cwd: root, env, stdio: ["ignore", "ignore", "pipe"] });
@@ -299,7 +302,8 @@ sys.argv =['taskuary'${faults || stopsave ? "" : ", '--demo'"}, '--no-browser', 
   if (faults || stopsave) await api("POST", "/api/setup/dismiss", { dismissed: true });
   // ...and where the server's own last traceback stands, for a CALLS 500 to say where it broke (CI keeps no server log)
   const where = () => errTail.split(/\r?\n/).filter((l) => /^\s*File "|Error\b|Exception\b/.test(l)).slice(-5).map((l) => l.trim()).join(" | ");
-  return { base, token, api, where, stop: () => { if (!keep) srv.kill(); } };
+  const record = (said) => writeFileSync(answers, JSON.stringify(said));
+  return { base, token, api, where, record, stop: () => { if (!keep) srv.kill(); } };
 }
 
 // ── a page on it: the owner's token put where a launch key would (the demo refuses minting one), the rules' listeners attached ──
@@ -1120,6 +1124,8 @@ async function headNote(page, at) {
 async function table() {
   const srv = await serve(4, { linking: true }), page = await pageOn(srv, "table");
   const tasks = ((await srv.api("GET", "/api/search?q=status:open")).hits || []).filter((h) => h.tid && h.ref);
+  // "show me TQ-n", as a model would answer it: the task's link
+  srv.record(Object.fromEntries(tasks.map((t) => [`show me ${t.ref}`, `Here: [${t.ref}](#task=${t.tid}).`])));
   const onNow = async () => (await ringOf(page)).tid;
   const used = [];
   // a task not on the table, and not one an earlier road opened

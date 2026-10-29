@@ -265,22 +265,49 @@ const demoReply = (taskId, asked) => {
     return `Here is the scripted example draft. In your own Taskuary, your AI adapts it to your answers and connections.\n\n${preview}\nThe draft is on the task (rv${review.ReviewId}) for you to edit. Nothing is saved to your real workspace from this demo.`;
   }
   if (task?.SourceRef !== "assistant:dock") return REPLIES[assistantBox(taskId).messages.length % REPLIES.length];
-  const attention = feedRows().find((r) => r.NeedsYou) || feedRows()[0];
-  const work = taskRows().find((t) => t.Status && !["done", "dropped"].includes(t.Status));
-  if (/agent|coding|output/i.test(asked) && work) {
-    const ref = work.ref || `TQ-${String(work.TaskId).padStart(4, "0")}`;
-    return `The freshest agent work is on [${ref}](#task=${work.TaskId}). Open it to see the live output and filed result; I would check anything marked waiting before starting more work.`;
-  }
-  if (/task|outstanding|stuck|quiet/i.test(asked) && work) {
-    const ref = work.ref || `TQ-${String(work.TaskId).padStart(4, "0")}`;
-    return `Start with [${ref}](#task=${work.TaskId}) — **${work.Title}**. It is ${work.Status || "open"}; after that, I would clear anything already waiting on the task.`;
-  }
-  if (attention) {
-    const ref = attention.TaskId ? `[TQ-${String(attention.TaskId).padStart(4, "0")}](#task=${attention.TaskId})` : "the newest item on your rail";
-    return `I’d start with ${ref}: **${attention.Subject || attention.Title || "the latest message"}**. ${attention.RouteReason || "It is the item currently marked as needing you."} Then open Review for any answer that is already drafted.`;
-  }
-  return "Nothing on your rail is marked as needing you. I’d use this quiet window to review the active task list or ask me about recent agent output.";
+  // the guide answers its suggestions by their exact words and nothing else (DOCK_PROMPTS) - it never reads what was typed for meaning
+  const said = DOCK_PROMPTS.find((p) => p.ask === asked);
+  if (!said) return `${DEMO_OUT} Ask one of these: ${DOCK_PROMPTS.map((p) => `“${p.ask}”`).join(", ")}.`;
+  return said.answer();
 };
+
+// THE DEMO CHAT ANSWERS ITS OWN SUGGESTIONS, AND ONLY THOSE (the owner, 2026-10-28: never decide what typed words mean with a word list).
+// A script cannot read what a visitor types, and the regexes that pretended to ("later", "tomorrow", "done", "agent") misread as often
+// as they read. So each suggestion is a chip that sends its own words and gets the answer recorded for them - matched by string
+// equality, nothing looser - and anything else typed is told so, with the suggestions under it (taskuary/demo.py PROMPTS, the same rule).
+export const DEMO_OUT = "In the demo I answer the suggested questions - in your own Taskuary your AI answers anything.";
+const taskLink = (t) => `[${t.ref || `TQ-${String(t.TaskId).padStart(4, "0")}`}](#task=${t.TaskId})`;
+const openWork = () => taskRows().find((t) => t.Status && !["done", "dropped"].includes(t.Status));
+const DOCK_PROMPTS = [
+  { id: "first", ask: "What needs me first?", answer: () => {
+    const attention = feedRows().find((r) => r.NeedsYou) || feedRows()[0];
+    if (!attention) return "Nothing on your rail is marked as needing you. I’d use this quiet window to review the active task list.";
+    const ref = attention.TaskId ? taskLink(attention) : "the newest item on your rail";
+    return `I’d start with ${ref}: **${attention.Subject || attention.Title || "the latest message"}**. ${attention.RouteReason || "It is the item currently marked as needing you."} Then open Review for any answer that is already drafted.`;
+  } },
+  { id: "agents", ask: "Where is the latest agent work?", answer: () => {
+    const work = openWork();
+    return work ? `The freshest agent work is on ${taskLink(work)}. Open it to see the live output and filed result; I would check anything marked waiting before starting more work.`
+      : "No agent is working on anything right now.";
+  } },
+  { id: "tasks", ask: "Which task should I start with?", answer: () => {
+    const work = openWork();
+    return work ? `Start with ${taskLink(work)} — **${work.Title}**. It is ${work.Status || "open"}; after that, I would clear anything already waiting on the task.`
+      : "Every task is done or dropped.";
+  } },
+];
+// ...and the walk's: each carries its recorded line and the tool call it stands for - the walk moved, or the table's item settled
+const agentAsking = () => scriptedAssistant.pile.items.find((i) => i.kind === "agent" && i.asking)?.key || null;
+const DEMO_PROMPTS = [
+  { id: "next", ask: "What's next?", walk: () => null },
+  { id: "agent", ask: "Show me the agent waiting on me", walk: agentAsking },
+  { id: "approve", ask: "Approve the draft", item: true, decision: "approve", say: "The demo will mark the invented draft handled; nothing is sent." },
+  { id: "later", ask: "Not now", item: true, decision: "later", say: "I will move this invented item back in the demo pipe." },
+  { id: "tomorrow", ask: "Remind me tomorrow", item: true, decision: "skip", say: "It will reappear tomorrow in the demo." },
+  { id: "done", ask: "Mark this done", item: true, decision: "done", say: "Marked done in this temporary demo." },
+];
+// the suggestions a line offers: the walk's always, the item's only with an item on the table
+export const demoPromptChips = (onTable) => DEMO_PROMPTS.filter((p) => onTable || !p.item).map((p) => ({ ask: p.ask, label: p.ask, prompt: p.id }));
 
 const scriptedItemLine = (item) => {
   if (!item) return "The scripted demo pipe is clear. Nothing here connects to a mailbox, an agent, or an AI.";
@@ -327,22 +354,14 @@ const scriptedNext = (key = null, only = null) => {
 
 const scriptedSay = (asked, key) => {
   const text = String(asked || "").trim();
-  if (/^(next|what(?:'s| is) next|keep going)\b/i.test(text)) return scriptedNext(null, null);
-  if (/\b(coding|agent|census|manager)\b/i.test(text)) return scriptedNext(scriptedAssistant.pile.items.find((i) => i.kind === "agent" && i.asking)?.key || null, null);
-  let decision = null;
-  if (/\b(approve|send it|looks good)\b/i.test(text)) decision = { verb: "approve" };
-  else if (/\b(later|not now)\b/i.test(text)) decision = { verb: "later" };
-  else if (/\b(tomorrow|remind me tomorrow)\b/i.test(text)) decision = { verb: "skip" };
-  else if (/^(done|all set|close it)\b/i.test(text)) decision = { verb: "done" };
-  const current = scriptedAssistant.pile.items.find((i) => i.key === key);
-  const say = decision
-    ? ({ approve: "The demo will mark the invented draft handled; nothing is sent.", later: "I will move this invented item back in the demo pipe.", skip: "It will reappear tomorrow in the demo.", done: "Marked done in this temporary demo." }[decision.verb])
-    : current
-      ? `For this scripted example: ${scriptedItemLine(current)}`
-      : "This is a scripted demo response. In your own Taskuary I would read your list and the task history to answer that; no AI or agent is running here.";
+  const onTable = scriptedAssistant.pile.items.some((i) => i.key === key);
+  const p = DEMO_PROMPTS.find((x) => x.ask === text && (onTable || !x.item));
+  if (p?.walk) return scriptedNext(p.walk(), null);
+  const decision = p ? { verb: p.decision } : null;
+  const say = p ? p.say : DEMO_OUT;
   scriptedAssistant.messages.push({ id: `demo-user-${++nextId}`, role: "user", text, at: now() });
   scriptedAssistant.messages.push({ id: `demo-answer-${++nextId}`, role: "assistant", text: say, at: now() });
-  return { say, options: [], decision, item: null, scripted: true };
+  return { say, options: [], decision, item: null, scripted: true, chips: p ? [] : demoPromptChips(onTable) };
 };
 
 // Start the demo's answer OUTSIDE the mounted assistant-ui generator. If the visitor clicks

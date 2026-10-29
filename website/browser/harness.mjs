@@ -171,6 +171,8 @@ export async function startHarness({ fresh = false, bin = "" } = {}) {
     ...process.env,
     TASKUARY_HOME: home,
     TASKUARY_DEMO: "1",
+    // the demo reads no typed words: the asks these tests type are answered from a recording, by their exact words (demo.ANSWERS_ENV)
+    TASKUARY_DEMO_ANSWERS: path.join(here, "demo_answers.json"),
     TASKUARY_PORT: String(backendPort),
     TASKUARY_API: fixtureApi,
     TASKUARY_TOKEN: "phase0-browser-owner-token",

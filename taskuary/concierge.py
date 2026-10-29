@@ -5097,8 +5097,10 @@ def handle_of(i: dict) -> str:
 
 def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None,
         open_card: str | None = None, images: list | None = None) -> dict:
+    from . import demo
     token = _TURN.set({})
-    try: return _say(store, text, key, llm, actor, trace, cancel, item, open_card, images)
+    # ...the demo's script answers only its suggestions, and its "only those" line carries them as chips (demo.with_prompts)
+    try: return demo.with_prompts(_say(store, text, key, llm, actor, trace, cancel, item, open_card, images))
     finally:
         _TURN.reset(token)
         # ...and the turn may have changed the instructions the chat's CLI runs on: the next ask finds the new one already up (warm)

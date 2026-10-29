@@ -94,6 +94,27 @@ test("the default static demo completes one reviewed request and never calls a l
     assert.ok(await page.$('a[href="https://taskuary.com/docs/"]'), "the setup action provides a working installation destination");
     await page.goto(`${origin}/?demo=explore`, { waitUntil: "networkidle0" });
     assert.equal(await page.$('[data-tq-demo-journey]'), null);
+    // THE CHAT ANSWERS ITS SUGGESTIONS, NOTHING TYPED IS READ FOR MEANING (the owner, 2026-10-28): free words get the honest line and
+    // the suggestion chips; a chip's own words get its recorded answer and call - the walk moves, the table's item settles
+    const chat = await page.evaluate(async () => {
+      const { default: api } = await import("/src/api.js");
+      const say = async (text, key) => (await api.post("/api/concierge/say", { text, key })).data;
+      const free = await say("remind me tomorrow");
+      const walked = await say(free.chips.find((c) => c.prompt === "next").ask);
+      const key = walked.item?.key;
+      const onItem = await say("mark it done please", key);
+      const done = await say(onItem.chips.find((c) => c.prompt === "done").ask, key);
+      return { free, walked, onItem, done };
+    });
+    assert.equal(chat.free.say, "In the demo I answer the suggested questions - in your own Taskuary your AI answers anything.");
+    assert.equal(chat.free.decision, null, "free words decide nothing");
+    assert.deepEqual(chat.free.chips.map((c) => c.prompt), ["next", "agent"], "with nothing on the table, only the walk's suggestions");
+    assert.ok(chat.free.chips.every((c) => c.ask === c.label), "a chip sends exactly the words it shows");
+    assert.ok(chat.walked.item?.key, "the walk's suggestion moved the walk");
+    assert.equal(chat.onItem.decision, null);
+    assert.deepEqual(chat.onItem.chips.map((c) => c.prompt), ["next", "agent", "approve", "later", "tomorrow", "done"]);
+    assert.deepEqual(chat.done.decision, { verb: "done" }, "Mark this done carries its call");
+    assert.deepEqual(chat.done.chips, []);
     assert.deepEqual(apiRequests, [], "the static workflow never calls a live API or sends a message");
     assert.deepEqual(errors, []);
   } finally {

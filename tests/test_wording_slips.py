@@ -14,5 +14,15 @@ class WordingSlipTests(unittest.TestCase):
         self.assertEqual(blackboard._why(f'{first}. ' + 'Then the retry timed out waiting for it ' * 6), first)    # a whole sentence
         self.assertEqual(blackboard._why('short reason.'), 'short reason')
 
+    def test_a_review_cited_as_evidence_names_what_it_was_about(self):
+        from taskuary.store import MemoryStore
+        from taskuary import learnedgraph
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Webinar sign-up for Erin', 'Kind': 'reply', 'Status': 'open'}, 'owner')
+        rid = s.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'needs a reply'})
+        self.assertEqual(learnedgraph._resolve(s, f'rv{rid}')['label'], 'pending: Webinar sign-up for Erin')   # never "pending:" alone
+        bare = s.add_review({'TaskId': s.create_task({'Title': '', 'Kind': 'reply', 'Status': 'open'}, 'owner'), 'Kind': 'draft', 'Status': 'pending'})
+        self.assertEqual(learnedgraph._resolve(s, f'rv{bare}')['label'], 'pending')
+
 
 if __name__ == '__main__': unittest.main()

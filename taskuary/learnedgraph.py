@@ -142,8 +142,14 @@ def _resolve(store, ev_id: str) -> dict:
                     'label': str(v['text'] or '').strip().lstrip('-* ') or ev_id, 'verdict': v['kind']}
     if kind == 'rv':
         r = store.get_review(n) or {}
+        # a review row carries no subject of its own: "pending:" stood with nothing after it (the email walk, 2026-10-29) - what it
+        # is about is its task's title, else its message's subject, and with neither the colon goes too
+        about = r.get('Subject') or r.get('Title') or ''
+        if r and not about and r.get('TaskId'): about = (store.get_task(r['TaskId']) or {}).get('Title') or ''
+        if r and not about and r.get('MessageId'): about = (store.get_message(r['MessageId']) or {}).get('Subject') or ''
+        about, what = ' '.join(str(about).split())[:90], r.get('Status') or 'review'
         return {'id': ev_id, 'kind': 'review', 'date': r.get('DecidedAt') or r.get('CreatedAt'),
-                'label': f"{r.get('Status') or 'review'}: {(r.get('Subject') or r.get('Title') or '')[:90]}" if r else ev_id}
+                'label': (f'{what}: {about}' if about else what) if r else ev_id}
     if kind == 'pr':                       # a press: no line is learned from one any more (2026-10-25), but a retired line still cites it
         r = store._one('SELECT * FROM advice_press WHERE Id=?', (n,)) or {}
         return {'id': ev_id, 'kind': 'press', 'date': r.get('CreatedAt'),

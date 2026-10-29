@@ -944,6 +944,22 @@ def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict) -> list:
     return stale
 
 
+def _quotes(q: str, body: str) -> bool:
+    "A quote is the quoted message's text, maybe cut short, and a stored body may carry more (a transcript's header): one starts the other."
+    x, y = (re.sub(r'\s+', ' ', t or '').strip().lower() for t in (q, body))
+    return bool(x and y) and (y.startswith(x[:160]) or x.startswith(y[:160]) or x[:160] in y)
+
+
+def _answered_task(store, conv, sent_at, quoted, open_ids):
+    """Which of a room's open tasks the owner's line answers: the task of the message it quotes, else of the newest one
+    said TO them before it (by SentAt). None when neither is on an open task - the caller's old pick stands."""
+    heard = [m for m in store.thread_messages(conv) if m.get('TaskId') in open_ids and m.get('Direction') != 'out'
+             and m.get('Status') not in ('context', 'history', 'skipped')]
+    hit = next((m for m in reversed(heard) if _quotes(quoted, m.get('BodyText'))), None) if quoted else None
+    before = [m for m in heard if not sent_at or (m.get('SentAt') or '') <= sent_at]
+    return (hit or (before[-1] if before else {})).get('TaskId')
+
+
 def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) -> int:
     """Anything YOU sent - a mail reply, a line in a chat - never gets its own timeline row and
     never becomes work: it rides INSIDE the thread as a 'context' message, which is what the
@@ -955,8 +971,11 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
     the floor - the row kept saying nothing had happened, forever (owner, 2026-09-02)."""
     if store.message_exists(msg['external_id']): return 0
     conv = msg.get('conversation_id')
-    tid = (next((s['task_id'] for s in store.snapshots() if conv and conv in s['conversation_ids']), None)
-           or store.task_for_conversation(conv, msg.get('subject')))
+    on = [s['task_id'] for s in store.snapshots() if conv and conv in s['conversation_ids']]
+    # TWO OPEN TASKS IN ONE ROOM: the first snapshot was arbitrary, and a group's answer to a new voice note was filed on the
+    # older ask beside it. The owner answers what was last said to them - or what their line quotes, when it quotes one.
+    tid = ((_answered_task(store, conv, msg.get('sent_at'), msg.get('quoted'), set(on)) if len(set(on)) > 1 else None)
+           or (on[0] if on else None) or store.task_for_conversation(conv, msg.get('subject')))
     if not tid and not keep_unmatched: return 0
     mid = store.add_message({'TaskId': tid, 'ExternalId': msg['external_id'], 'ConversationId': conv,
                              'Channel': msg['channel'], 'SourceName': msg.get('source_name'),

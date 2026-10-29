@@ -401,7 +401,20 @@ def draft_line(store, item, target_kind, target_id) -> str:
     try: files = [f.get('name') for f in (json.loads(r.get('Deliver') or '{}') or {}).get('attachments') or [] if isinstance(f, dict)]
     except (TypeError, ValueError, AttributeError): files = []
     return (f"THE DRAFT WAITING FOR THE OWNER'S YES: \"{_one(r.get('FinalText') or r.get('DraftText'), 900)}\"\n"
-            f"ATTACHED TO THE DRAFT: {', '.join(filter(None, files)) or 'nothing'}")
+            f"ATTACHED TO THE DRAFT: {', '.join(filter(None, files)) or 'nothing'}" + (f"\n{k}" if (k := known_owner_line(store)) else ''))
+
+
+def known_owner_line(store) -> str:
+    """What the owner saved about themselves, said as KNOWN TRUE: the Advisor read a configured "Operations Director" in the signature
+    as a title nobody had given and lit Remove it (the email walk, 2026-10-29)."""
+    from .responder import signature_for
+    who = [f'{k}: {v}' for k, n in (('name', 'owner_name'), ('job title', 'owner_title'), ('company', 'owner_company'))
+           if (v := ' '.join(str(store.get_setting(n) or '').split()))]
+    try: sig = ' / '.join(l.strip() for l in signature_for(store).splitlines() if l.strip())
+    except Exception: sig = ''
+    if not (who or sig): return ''
+    return ('KNOWN TRUE (the owner saved these in Taskuary - never call them invented or unsupported): ' + '; '.join(who)
+            + (f"{'; ' if who else ''}their saved email signature: \"{_one(sig, 300)}\"" if sig else ''))
 
 
 def thread_line(store, item, target_kind, target_id, n: int = 3) -> str:

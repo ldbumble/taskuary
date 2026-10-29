@@ -22,45 +22,84 @@ def fingerprint(value):
                                     separators=(',', ':'), allow_nan=False).encode()).hexdigest()
 
 
+# WHAT IS NEWS, AND WHAT IS ONLY WRITTEN DOWN ABOUT IT. A receipt hashed every column a row had, so Taskuary's own later
+# writes made a read row a different row and brought it back unread with nothing new in it (the owner, 2026-10-29: ~400 read
+# items back at once). Each was bookkeeping: a WhatsApp group's older messages given the group's name (SourceName), a
+# sender named from the address book (FromName), a calendar verdict or an unsubscribe stamped into MailMetaJson, a report's
+# spreadsheet and chart filed a second after the report was read (attachments, and Path is only where a file is kept), a
+# profile renamed under every note and run it wrote (Actor, AgentName - and the rows sorted by the whole row, so the rename
+# reordered them too), workflow tags (interrupted, reply-owed), and the Assistant's own "Next up" / "Opened" under the task.
+# News is what the sender or the agent SAID: the words, who it came from and when, and what was asked.
+MESSAGE_SUBSTANCE = ('ExternalId', 'ConversationId', 'Channel', 'Subject', 'FromEmail', 'SentAt', 'BodyText',
+                     'SourceLink', 'Direction', 'RecipientsJson')
+_OLD_MESSAGE = ('ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject', 'FromName', 'FromEmail', 'SentAt',
+                'BodyText', 'SourceLink', 'Direction', 'RecipientsJson', 'MailMetaJson')
+_OLD_ATTACHMENT = ('AttachmentId', 'ExternalId', 'Name', 'ContentType', 'Size', 'ContentId', 'Inline', 'Path')
+
+
+def _said(comments, talk):
+    """The notes that are news, in the order they were written - never the Assistant's talk about the task (`talk`: its own
+    words, and the owner's to it), which processing_own_words already treats as no news when it can catch it."""
+    return [_pick(c, ('CommentId', 'Body')) for c in sorted(comments, key=lambda c: c.get('CommentId') or 0)
+            if c.get('ActorType') not in talk]
+
+
+def _was(rows, col, back):
+    """`rows` as they read before a profile was renamed (`back`: its name now -> then), in the order the projection sorted them then."""
+    from .processing_projection import _row_order
+    return _row_order([{**r, col: back[r[col]]} if r.get(col) in back else r for r in rows]) \
+        if any(r.get(col) in back for r in rows) else None
+
+
+def _old_task(row, checklist, comments, artifacts):
+    s = _pick(row, ('Title', 'Summary', 'Kind', 'Tags'))
+    return {**s, 'checklist': checklist, 'artifacts': artifacts,
+            'comments': [_pick(c, ('CommentId', 'Actor', 'ActorType', 'Body')) for c in comments]}
+
+
 def units(view):
-    """Read-bearing members; drafts, priority and processing status are not substance."""
+    """Read-bearing members; drafts, priority and processing status are not substance. `also`: the fingerprints a receipt
+    written before this formula, or before one of Taskuary's own rewrites of the row, was hashed under - it still counts."""
     owned = set(view.get('member_ids', ()))
     result = []
 
-    def add(kind, row, id_field, substance, legacy=None):
+    def add(kind, row, id_field, substance, *legacy):
         local_id = str(row[id_field])
         if f'{kind}:{local_id}' in owned:
             unit = dict(entity_kind=kind, local_id=local_id, fingerprint=fingerprint(substance))
-            also = fingerprint(legacy) if legacy is not None else unit['fingerprint']
-            if also != unit['fingerprint']: unit['also'] = [also]
+            also = list(dict.fromkeys(f for f in map(fingerprint, (l for l in legacy if l is not None)) if f != unit['fingerprint']))
+            if also: unit['also'] = also
             result.append(unit)
 
+    from .agents import RENAMED
+    from .concierge import DISCUSSION_ASSISTANT_TYPE, DISCUSSION_USER_TYPE
+    from .messengers import GROUP_CHAT
+    back, talk = {new: old for old, new in RENAMED.items()}, (DISCUSSION_ASSISTANT_TYPE, DISCUSSION_USER_TYPE)
     for row in view.get('messages', ()):
         # History/context remains available in details, not an independent arrival.
         if row.get('Status') in ('context', 'history', 'skipped', 'autoreply') or row.get('Status') is None:
             continue
-        substance = _pick(row, ('ExternalId', 'ConversationId', 'Channel', 'SourceName',
-            'Subject', 'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink',
-            'Direction', 'RecipientsJson', 'MailMetaJson'))
-        substance['attachments'] = [_pick(a, ('AttachmentId', 'ExternalId', 'Name',
-            'ContentType', 'Size', 'ContentId', 'Inline', 'Path'))
-            for a in view.get('attachments', ()) if a.get('MessageId') == row['MessageId']]
-        add('message', row, 'MessageId', substance)
+        old = _pick(row, _OLD_MESSAGE)
+        old['attachments'] = [_pick(a, _OLD_ATTACHMENT) for a in view.get('attachments', ()) if a.get('MessageId') == row['MessageId']]
+        add('message', row, 'MessageId', _pick(row, MESSAGE_SUBSTANCE), old,
+            {**old, 'attachments': []} if old['attachments'] else None,            # read before its files were filed
+            {**old, 'SourceName': GROUP_CHAT} if row.get('Channel') == 'whatsapp' and row.get('SourceName') != GROUP_CHAT else None)
     for row in view.get('tasks', ()):
-        substance = _pick(row, ('Title', 'Summary', 'Kind', 'Tags'))
         checklist = row.get('Checklist')
         try:
             checklist = json.loads(checklist) if isinstance(checklist, str) else checklist
         except ValueError:
             pass
         # A checkbox is workflow state; changing the requested text is new substance.
-        substance['checklist'] = ([_pick(x, ('id', 'text')) if isinstance(x, dict) else x
-                                  for x in checklist] if isinstance(checklist, list) else checklist)
-        substance['comments'] = [_pick(c, ('CommentId', 'Actor', 'ActorType', 'Body'))
-            for c in view.get('comments', ()) if c.get('TaskId') == row['TaskId']]
-        substance['artifacts'] = [_pick(a, ('ArtifactId', 'Name', 'ContentType', 'Size', 'Path', 'Kind'))
-            for a in view.get('artifacts', ()) if a.get('TaskId') == row['TaskId']]
-        add('task', row, 'TaskId', substance)
+        checklist = ([_pick(x, ('id', 'text')) if isinstance(x, dict) else x
+                      for x in checklist] if isinstance(checklist, list) else checklist)
+        notes = [c for c in view.get('comments', ()) if c.get('TaskId') == row['TaskId']]
+        files = [a for a in view.get('artifacts', ()) if a.get('TaskId') == row['TaskId']]
+        old_files = [_pick(a, ('ArtifactId', 'Name', 'ContentType', 'Size', 'Path', 'Kind')) for a in files]
+        renamed = _was(notes, 'Actor', back)
+        add('task', row, 'TaskId', {**_pick(row, ('Title', 'Summary', 'Kind')), 'checklist': checklist, 'comments': _said(notes, talk),
+            'artifacts': [_pick(a, ('ArtifactId', 'Name', 'ContentType', 'Size', 'Kind')) for a in sorted(files, key=lambda a: a.get('ArtifactId') or 0)]},
+            _old_task(row, checklist, notes, old_files), renamed and _old_task(row, checklist, renamed, old_files))
     for row in view.get('ideas', ()):
         substance, legacy = _pick(row, ('Text', 'Kind', 'ActionJson', 'Sig')), None
         try: action = json.loads(substance['ActionJson'])
@@ -77,9 +116,13 @@ def units(view):
         add('idea', row, 'IdeaId', substance, legacy)
     for row in view.get('reviews', ()):
         add('review', row, 'ReviewId', _pick(row, ('Kind', 'CreatedAt', 'RunId')))
-    for row in view.get('runs', ()):
-        add('run', row, 'RunId', _pick(row, ('AgentName', 'Instruction', 'StartedAt',
-                                          'Result', 'DiffText', 'LastError')))
+    runs = view.get('runs', ())
+    renamed = {r['RunId']: r for r in _was(runs, 'AgentName', back) or ()}
+    for row in runs:
+        old = _pick(row, ('AgentName', 'Instruction', 'StartedAt', 'Result', 'DiffText', 'LastError'))
+        # the profile a run went under is its label, not what it did
+        add('run', row, 'RunId', {k: v for k, v in old.items() if k != 'AgentName'}, old,
+            {**old, 'AgentName': renamed[row['RunId']]['AgentName']} if row['RunId'] in renamed else None)
     return sorted(result, key=lambda x: (x['entity_kind'], x['local_id']))
 
 

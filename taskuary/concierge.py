@@ -1009,6 +1009,8 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
         elif v == 'approve' and item.get('kind') == 'action': out.append(buttons.chip(v, 'action'))
         # on a task an agent holds, "mine" TAKES it - it is a task already (the owner, 2026-09-25); the name stays one name
         elif v == 'mine' and item.get('tid') and item.get('kind') != 'idea': out.append(buttons.chip(v) | {'hint': "Takes the work back - it stays on your list."})
+        # ...and on an FYI it is the correction it is (the owner, 2026-10-29): Should be a task - the same press, triage's miss said in its name
+        elif v == 'mine' and item.get('kind') == 'fyi': out.append(buttons.chip(v, 'fyi'))
         # nothing drafted yet: there is nothing to RE-draft, and the card's own button already says Draft with AI
         elif v == 'redraft' and not item.get('draft'): out.append(buttons.chip(v, 'none') | {'hint': 'Writes a reply for you to check - nothing goes out until you say so'})
         else: out.append(buttons.chip(v))
@@ -4160,7 +4162,10 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         # THE AGENT BOX'S ANSWERS (RunForm.AgentAsk, the owner 2026-10-23): which profile, brain and model it chose ride with the
         # hand-off to the dispatch, beside the owner's words - never on Make a task, which starts nothing
         picked = {k: decision.get(k) for k in AGENT_PICKS if decision.get(k)} if verb != 'mine' else {}
-        if it.get('mid'): target, params = it['mid'], {'kind': want, 'instructions': d_text or None, **picked}
+        if it.get('mid'):
+            # ...an FYI's carries the button's own words, Should be a task (the owner, 2026-10-29) - its badge and its receipt say them
+            target, params = it['mid'], {'kind': want, 'instructions': d_text or None, **picked, **({'state': 'fyi'} if verb == 'mine' and it.get('kind') == 'fyi' else {})}
+            if params.get('state'): label = op_label(kind, params)
         elif verb == 'mine': raise ValueError('nothing is on the table to put on your list')
         else:
             # A hand-off asked for by BUTTON carries no sentence, so the brief is the item itself. Without
@@ -4693,7 +4698,7 @@ def op_label(kind: str, p: dict) -> str:
     label = by_kind.get(kind) or toolcatalog.PURPOSE.get(kind, kind).split(' - ')[0].strip()
     L = buttons.label        # a label that names a button is the button's own name (buttons.json), never a second wording
     hand = {'coding': L('coding_agent'), 'general': L('regular_agent'), 'task': L('mine')}
-    if kind == 'task.create_from_message': label = hand.get(str(p.get('kind')), L('mine'))
+    if kind == 'task.create_from_message': label = L('mine', p['state']) if p.get('state') and p.get('kind') == 'task' else hand.get(str(p.get('kind')), L('mine'))
     if kind == 'task.create_from_text': label = hand.get(str(p.get('kind')), L('regular_agent'))
     if kind == 'preference.exclude_sender': label = L('not_ours_sender') if p.get('scope') == 'sender' else PROPOSALS['not_ours_remember'][1]
     if kind == 'item.settle': label = L('close') if p.get('tid') else L('next')

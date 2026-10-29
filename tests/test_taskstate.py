@@ -123,7 +123,7 @@ class MakeATaskTests(unittest.TestCase):
         live = s.create_task({'Title': 'Payroll notice', 'Kind': 'task', 'Status': 'open'}, 'o')
         fyi = {'key': 'msg:9', 'kind': 'fyi', 'mid': 9, 'tid': live, 'ref': f'TQ-{live:04d}', 'title': 'Payroll notice', 'who': 'Erin Blake'}
         self.assertNotIn(buttons.label('mine'), concierge.fallback(fyi, True))
-        self.assertIn(buttons.label('mine'), concierge.fallback({**fyi, 'tid': None}, True))
+        self.assertIn(buttons.label('mine', 'fyi'), concierge.fallback({**fyi, 'tid': None}, True))   # an FYI's own words for it (2026-10-29)
 
     def test_the_mine_door_on_a_message_with_a_task_returns_that_task_and_makes_no_second(self):
         from unittest import mock

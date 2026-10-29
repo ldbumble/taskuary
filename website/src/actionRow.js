@@ -12,7 +12,7 @@ const live = new Map();          // id -> the latest verb (its run closes over t
 const ofs = new Map();           // id -> the card that registered it: the item a button drawn from it was drawn for (press)
 const owners = new Map();        // owner -> { verbs, ref, at }
 const subs = new Set();
-const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", ...(v.blank ? { blank: v.blank } : {}), promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.fill ? { fill: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}), ...(v.card ? { card: true } : {}), ...(v.steady ? { steady: true } : {}), ...(v.tucked ? { tucked: true } : {}), ...(v.spine ? { spine: v.spine } : {}), ...(v.laid ? { laid: v.laid } : {}) });
+const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", ...(v.blank ? { blank: v.blank } : {}), promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.fill ? { fill: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}), ...(v.card ? { card: true } : {}), ...(v.steady ? { steady: true } : {}), ...(v.tucked ? { tucked: true } : {}), ...(v.spine ? { spine: v.spine } : {}), ...(v.stage ? { stage: v.stage } : {}), ...(v.laid ? { laid: v.laid } : {}) });
 let snap = { list: [], ref: "" }, sig = "";
 // THE WALK'S TWO WAYS, ONE PILL (the owner, 2026-10-27: "We have a Next button - let's have a Back button that goes up the line as well ...
 // on the first one no Back, like no Next on the last one. Combine Next/Back into one big pill called Nav"): Back is the walk's step up the
@@ -424,8 +424,9 @@ const MOVE_MIN = 72;   // a few words and the ellipsis: less reads as a stray le
 // The row draws the rest and hands the stage moves here, by pane (putSpineVerbs, useSpineVerbs)
 const CLOSE_STAGE = new Set(["reply", "redraft", "chase", "accept_invite", "decline_invite", "propose_time", "find_time", "hand"]);
 const FROM_STAGE = new Set(["nat", "remind"]);
+// ...a verb may name its pane itself (`stage`): an FYI's Should be a task rides its Came from, where a task's Not a task does
 export const stageOf = (v) => { const k = String(v?.id || "").split(":").pop(), t = typeOf(v);
-  return CLOSE_STAGE.has(k) ? "close" : FROM_STAGE.has(k) ? "from" : t === "agent" && k !== "save-end" && k !== "diff" ? "agent" : ""; };
+  return v?.stage || (CLOSE_STAGE.has(k) ? "close" : FROM_STAGE.has(k) ? "from" : t === "agent" && k !== "save-end" && k !== "diff" ? "agent" : ""); };
 const NONE = [];
 let spineVerbs = {}, spineSig = "";
 const spineSubs = new Set(), spineSub = (f) => { spineSubs.add(f); return () => spineSubs.delete(f); }, spineDraw = () => spineSubs.forEach((f) => f());
@@ -438,6 +439,9 @@ export function splitRow(row, on, list = []) {
   if (!on) return { row, by: {} };
   const nav = { ...row, decide: [], agent: [], more: [] };
   if (on.live) return { row: nav, by: { live: [...row.decide, ...row.agent, ...row.more].filter((v) => String(v.id).split(":").pop() === "save-end") } };
+  // ...an item that lays ONE pane of its own (`only`: an FYI's Came from) takes that pane's moves off the bar and leaves it the rest
+  if (on.only) { const { move, change } = pillsOf(row), here = [...move, ...change].filter((v) => stageOf(v) === on.only), off = (xs) => xs.filter((v) => !here.includes(v));
+    return { row: { ...row, decide: off(row.decide), agent: off(row.agent), more: off(row.more) }, by: { [on.only]: here } }; }
   const by = {};
   const { move, change } = pillsOf(row);
   for (const v of [...move, ...change]) { const k = stageOf(v); if (k) (by[k] ||= []).push(v); }

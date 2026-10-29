@@ -13,7 +13,7 @@ import { BORDER, DIM, INK, frameInner } from "./theme.jsx";
 // a section's white card on the warm ground, as a task's focus is
 export const ItemPart = ({ children, sx = null, ...rest }) => <Box {...rest} sx={{ ...FOCUS, px: { xs: 1.25, sm: 2 }, minWidth: 0, ...sx }}>{children}</Box>;
 
-// `sections`: [{ key, n, name, body, lines, foot, icon }] in the flow's order; `about`: the key the item is about (it opens there, and only it
+// `sections`: [{ key, n, name, body, lines, foot, icon, moves }] in the flow's order; `about`: the key the item is about (it opens there, and only it
 // folds to a full tab); `here`: the section it is up to; `height`: the canvas's (CanvasItem wordsCap) - one height, like a task's three
 export default function ItemSections({ kind, label, title, aside, sections, about, here = about, height, itemKey }) {
   const [open, setOpen] = useState(about);
@@ -47,7 +47,7 @@ export default function ItemSections({ kind, label, title, aside, sections, abou
         {sections.map((s, i) => stacked ? (
           <Box key={s.key} data-tq-slot={s.key} data-tq-open="" sx={{ minWidth: 0, flexShrink: 0 }}>
             <Box role="region" aria-label={s.name} className="tq-item-sec" sx={{ display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}>
-              <SectionHead sec={s} />
+              <SectionHead sec={s} moves={s.moves} />
               {s.body}
             </Box>
           </Box>
@@ -58,7 +58,7 @@ export default function ItemSections({ kind, label, title, aside, sections, abou
               mini={closedW(s.key) === MINI_W} before={at(s.key) < at(open)} onOpen={() => setOpen(s.key)} />}
             <Box role="region" aria-label={s.name} aria-hidden={open !== s.key ? true : undefined} className="tq-item-sec"
               sx={{ ...SECTION(open === s.key, w ? openW(s.key) : "100%"), gap: 1.5 }}>
-              <SectionHead sec={s} />
+              <SectionHead sec={s} moves={s.moves} />
               {s.body}
             </Box>
           </Box>

@@ -65,7 +65,8 @@ class EveryLabelIsOnTheList(unittest.TestCase):
             for it in ITEMS:
                 for c in chips(it): self.assertIn(c['label'], LABELS, (it['kind'], c))
                 for c in chips(it): self.assertEqual(c['label'], buttons.label(c['verb'], 'action' if c['label'] == 'Approve' else
-                                                                               'none' if c['verb'] == 'redraft' and not it.get('draft') else None), c)
+                                                                               'none' if c['verb'] == 'redraft' and not it.get('draft') else
+                                                                               'fyi' if c['verb'] == 'mine' and it.get('kind') == 'fyi' else None), c)
 
     def test_state_labels_where_the_state_holds(self):
         with mock.patch.object(concierge, '_agent_running', return_value=False):

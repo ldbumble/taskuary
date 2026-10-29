@@ -120,7 +120,8 @@ class SayToTaskTests(unittest.TestCase):
             ok = terminal.say_to_task(s, tid, {'FromName': 'Sarah', 'Channel': 'email',
                                                'BodyText': 'Use the 8/17 file, not 8/16.'})
             self.assertTrue(ok)
-            time.sleep(0.4)
+            end = time.time() + 5          # the note is filed when the line LANDED, not when it was typed
+            while time.time() < end and not s.list_comments(tid): time.sleep(.1)
         typed = ''.join(w for w in fake.writes if w not in ('\r', '\n'))
         self.assertIn('Sarah answered', typed); self.assertIn('8/17 file', typed)
         self.assertTrue(any('typed into the live session' in c['Body'] for c in s.list_comments(tid)))

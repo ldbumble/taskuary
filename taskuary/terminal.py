@@ -2592,18 +2592,27 @@ def say_to_task(store, task_id: int, msg: dict, actor: str = 'router', new: bool
     hub asked the person, the person answered - the answer belongs in front of the agent,
     not on a timeline it cannot read. Fed in seed()-sized bites (a one-shot paste drops
     bytes mid-stream), then Enter until it lands. False = no live session to tell.
-    Accepts a message as a DB row (BodyText/FromName) or an ingest dict (body/from_name).
-    `new`: not an answer but new work triage joined to the task (ingest._pass_coding) - said as such, to the agent and on the task."""
+    Accepts a message as a DB row (BodyText/OwnText/FromName) or an ingest dict (body/own_text/from_name).
+    `new`: not an answer but new work triage joined to the task (ingest._pass_coding) - said as such, to the agent and on the task.
+    What the agent gets is the sender's NEW words (triage.agent_words): never the quoted chain under them, never an address or a
+    number - and a line the session never took is cleared out of its box and said as not delivered, so it waits for the owner."""
+    from .triage import agent_words, sender_called, wrapper_of
     t = next((x for x in list(SESSIONS.values()) if x.task_id == task_id and x.alive), None)
     if not t: return False
-    who = msg.get('FromName') or msg.get('from_name') or msg.get('FromEmail') or msg.get('from_email') or 'the sender'
-    body = str(msg.get('BodyText') or msg.get('body') or '').strip()
+    who, mid = sender_called(msg), msg.get('MessageId') or msg.get('message_id')
+    wrapper = msg.get('wrapper') or (wrapper_of(store.message_verdict(mid)) if mid and hasattr(store, 'message_verdict') else ())
+    body = agent_words(msg, wrapper)
     if not body: return False
     ch = msg.get("Channel") or msg.get("channel") or "mail"
-    how = tell(t, (f"{who} wrote again (by {ch}) with more work on this task - their words, not the owner's: {body}" if new
-                   else f'{who} answered (by {ch}): {body}')[:4000])
-    store.add_comment(task_id, actor, 'agent', f"Passed {who}'s new message to the agent ({how} the live session)." if new
-                      else f"{who}'s answer was {how} the live session.")
+    def landed(how):
+        if how: store.add_comment(task_id, actor, 'agent', f"Passed {who}'s new message to the agent ({how} the live session)." if new
+                                  else f"{who}'s answer was {how} the live session.")
+        else:
+            store.add_comment(task_id, actor, 'agent', f"{who}'s {'new message' if new else 'answer'} was typed in but the agent never took it, "
+                              'so it was cleared out of its box. It waits for you.')
+            store.audit('task', task_id, 'answer_not_delivered', actor, detail={'from': who})
+    tell(t, (f"{who} wrote again (by {ch}) with more work on this task - their words, not the owner's: {body}" if new
+             else f'{who} answered (by {ch}): {body}')[:4000], done=landed)
     store.audit('task', task_id, 'answer_forwarded', actor, detail={'from': who})
     return True
 
@@ -2614,22 +2623,66 @@ def clean_typed(text: str) -> str:
     return ' '.join(re.sub(r'[\x00-\x1f\x7f]', ' ', str(text or '')).split())
 
 
-def type_into(t, text: str):
+# The line a CLI's input box starts on: Claude's '>' or '❯', codex's '›' - behind the box's own border where it draws one.
+_PROMPT = re.compile(r'^\s*[│|]?\s*[>❯›](\s|$)')
+TYPED_ECHO, TYPED_LAND = 8, 3       # seconds: for typed words to show in the box, and for Enter to take them out of it
+
+
+def in_box(t, frag: str):
+    """Is `frag` still sitting in the session's input box - typed, not sent? None when there is no screen to read (a test double).
+    The box is the screen from its LAST prompt line down: a turn already sent is drawn above it, and a line a busy agent queued
+    is too. Never the byte count: a TUI mid-turn repaints its spinner and timer every frame, so "something printed after Enter"
+    is true whether Enter did anything or not - which is how a passed-in line sat unsent in a working Claude's box."""
+    try: lines = render_visible(t.scrollback(), t.cols, t.rows).splitlines()
+    except (AttributeError, TypeError): return None
+    i = next((i for i in range(len(lines) - 1, -1, -1) if _PROMPT.match(lines[i])), max(0, len(lines) - 6))
+    box = ''.join(''.join(lines[i:]).split())
+    return ''.join(frag.split()) in box or '[Pastedtext' in box
+
+
+def _until(cond, secs: float, t) -> bool:
+    end = time.time() + secs
+    while t.alive and not cond() and time.time() < end: time.sleep(.25)
+    return cond()
+
+
+def type_into(t, text: str, done=None):
     """Type `text` into a live session the way seed() proved works: flattened to one line (a
     newline is Enter in a TUI), fed in frame-sized bites (a one-shot paste drops bytes
     mid-stream), then Enter until the box answers. Runs on its own thread; returns at once.
-    Shared by say_to_task (an inbound answer) and waitroom.deliver (the owner's queued notes)."""
+    Shared by say_to_task (an inbound answer) and waitroom.deliver (the owner's queued notes).
+
+    "Answers" is the screen's word: the words are waited for IN the box before Enter (an Enter that
+    lands while the TUI still lays a long paste out is read as part of it), and each Enter is given
+    TYPED_LAND to take them OUT of it. Mid-turn that is right too - Claude queues a line submitted
+    while it works. `done(ok)` hears the outcome; a line that never left the box is cleared out of it
+    first (^U, never Esc: that interrupts the agent), so nothing half-said sits there under its turn."""
     text = clean_typed(text)
     def go():
         for i in range(0, len(text), SEED_CHUNK):
             t.write(text[i:i + SEED_CHUNK])
             time.sleep(SEED_CHUNK_GAP)
         time.sleep(.5)
-        for key in ('\r', '\r', '\n'):
-            was = t.n
+        tail = text[-30:]
+        if in_box(t, tail) is None:              # no screen to read: the old byte count is all there is
+            for key in ('\r', '\r', '\n'):
+                was = t.n
+                t.write(key)
+                time.sleep(SEED_ENTER)
+                if t.n > was: return done and done(True)
+            return done and done(False)
+        _until(lambda: in_box(t, tail), TYPED_ECHO, t)
+        time.sleep(SEED_ENTER)
+        for key in ('\r', '\r', '\r'):
             t.write(key)
-            time.sleep(SEED_ENTER)
-            if t.n > was: return
+            if _until(lambda: not in_box(t, tail), TYPED_LAND, t): return done and done(True)
+        logger.warning(f'terminal {getattr(t, "sid", "?")}: typed {len(text)} chars and Enter never sent them'
+                       + (' - clearing the box' if done else ''))
+        if not done: return
+        for _ in range(len(text) // max(20, int(getattr(t, 'cols', 80) or 80)) + 4):   # ^U may kill one screen row at a time
+            t.write('\x15')
+            if _until(lambda: not in_box(t, tail), .5, t): break
+        done(False)
     threading.Thread(target=go, daemon=True).start()
 
 
@@ -2679,11 +2732,16 @@ def queue_codex(t, text: str) -> bool:
     return r.returncode == 0
 
 
-def tell(t, text: str) -> str:
+def tell(t, text: str, done=None) -> str:
     """Put words in front of a live agent as its next turn: codex through its own queue, everything else typed.
-    Returns how, for the note the caller files ('queued for' / 'typed into')."""
-    if queue_codex(t, text): return 'queued for'
-    type_into(t, text); return 'typed into'
+    Returns how, for the note the caller files ('queued for' / 'typed into'). `done(how)` hears the outcome once
+    it is known - that same how, or None when the typed line never left the box (type_into)."""
+    if queue_codex(t, text):
+        if done: done('queued for')
+        return 'queued for'
+    if done: type_into(t, text, done=lambda ok: done('typed into' if ok else None))
+    else: type_into(t, text)
+    return 'typed into'
 
 
 def session_for(task_id):

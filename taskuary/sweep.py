@@ -116,6 +116,15 @@ def waited_on(store, task: dict, now=None) -> tuple:
     return who, quiet, (outcomes.late_after(store, who, SILENT_DAYS) if who else SILENT_DAYS)
 
 
+def kept_open(task: dict) -> bool:
+    """LEFT OPEN ON PURPOSE (the owner, 2026-10-29: "it's not stale, it's what I want to leave it open"): a task the owner keeps
+    to complete themselves (selfclose's mark, set when they open a session on it), or one an agent holds - working, stopped, or
+    finished with its result kept. Each is a state: the owner's own keeping, or the agent's. Nothing about it is a loose end."""
+    from .selfclose import STAY_TAG
+    return (STAY_TAG in str(task.get('Tags') or '').replace(',', ' ').split()
+            or str(task.get('Assignee') or '').startswith('agent:'))
+
+
 def state_of(task: dict, card: dict | None, *, deferred: bool = False, chased: bool = False, folded: bool = False, now=None,
              waits=None):
     """Which state an open task is in: None when it is in one of them, else (code, who) - why it is in none. `card` is its rail
@@ -124,7 +133,7 @@ def state_of(task: dict, card: dict | None, *, deferred: bool = False, chased: b
     if task.get('Status') not in ('open', 'in_progress', 'waiting'): return None             # closed or dropped: ruled
     now = now or datetime.now()
     if str(task.get('RemindAt') or '') > now.strftime('%Y-%m-%d %H:%M:%S') or deferred: return None
-    if folded: return None                                    # a goal's step told by the goal's own row
+    if folded or kept_open(task): return None                 # a goal's step told by the goal's own row; kept open on purpose
     if card is None: return ('no_step', '')
     lane = card.get('lane_was') or card.get('lane')
     if lane in AGENT_LANES or card.get('kind') in OWED: return None

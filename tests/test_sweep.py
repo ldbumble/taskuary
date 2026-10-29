@@ -207,7 +207,9 @@ def test_a_task_the_rail_does_not_draw_gets_a_row_of_its_own(s):
     assert not [c for c in rail(s, include_read=True) if c.get('tid') == tid]
     assert check(s)['loose'] == 1
     row = next(c for c in rail(s) if c.get('loose'))
-    assert (row['kind'], row['lane'], row['tid'], row['title']) == ('todo', 'yours', tid, f'{task_ref(tid)} has no next step')
+    # the task's OWN name and mark: the line says why it is here, never what it is called (2026-10-29: "of course leave task name")
+    assert (row['kind'], row['lane'], row['tid'], row['title'], row['channel']) == ('todo', 'yours', tid, 'Vendor contract renewal', 'own')
+    assert row['why'] == f'{task_ref(tid)} has no next step'
     # ...and it is THAT task's row: its own verbs, never an idea's Make a task - pressing it made the same work twice
     from taskuary import concierge
     verbs = [c.get('verb') or c.get('id') for c in concierge.chips_for(s, row)]
@@ -221,6 +223,18 @@ def test_a_task_the_rail_does_not_draw_gets_a_row_of_its_own(s):
 def test_remind_me_and_an_agent_are_states(s):
     later = waiting(s, RemindAt=(datetime.now() + timedelta(days=2)).strftime('%Y-%m-%d 08:00:00'))
     assert check(s)['loose'] == 0 and not card_of(s, later).get('loose')
+
+
+def test_a_task_left_open_on_purpose_is_not_a_loose_end(s):
+    """The owner, 2026-10-29: "it's not stale, it's what I want to leave it open". A task they keep to complete themselves (the
+    session mark), and one an agent holds - its result kept - are states, drawn by the rail or not."""
+    from taskuary import selfclose
+    mine, agents = waiting(s, 8), waiting(s, 8, Assignee='agent:coding')
+    selfclose.claim(s, mine, 'owner')
+    for tid in (mine, agents):
+        Factory(s).message(tid, status='context', direction='out', subject='RE: renewal', body='Sent it.', from_email='alex@northwind.example',
+                           sent_at=ago(8), conversation_id=f'renewal-{tid}')
+    assert check(s)['loose'] == 0 and not [c for c in rail(s) if c.get('loose')]
 
 
 def test_the_owners_move_is_a_state(s):

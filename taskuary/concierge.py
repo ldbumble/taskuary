@@ -1251,6 +1251,32 @@ def _bulk(store, tid: int, item: dict | None, kind: str, p: dict, text: str, act
     return {'say': say_, 'options': [], 'chips': [], 'decision': {'verb': 'next' if off else 'setting'}, 'did': kind, 'rows': len(out['done'])}
 
 
+def _stop_agents(store, tid: int, item: dict | None, p: dict, text: str, actor: str) -> dict:
+    """agents.stop (bulk.stop): the agents the model named - by the refs agents.now or pipe.read printed, or every one running - each by its
+    task page's Stop and save, at once on the desk (the owner's words naming the set are the press, as a pipe set's are); on a phone the one
+    yes-or-no. A ref with no agent running is said, never pressed; every agent stopped is in the receipt as its task's link."""
+    every = bulk_mod.running(store)
+    if _yes(p.get('all')): want, idle = every, []
+    else:
+        asked = bulk_mod.tids(p.get('refs') or p.get('ref') or p.get('keys'))
+        if not asked: raise CallMiss('agents.stop needs `refs`: the TQ refs of the tasks whose agents to stop (agents.now lists them), or `all`: '
+                                     'true for every agent running. Nothing was stopped.')
+        want, idle = [t for t in asked if t in every], [t for t in asked if t not in every]
+    if not want:
+        say_ = bulk_mod.stop_receipt({'done': [], 'stuck': []}, idle) if idle else 'No agent is running right now - nothing to stop.'
+        record_related(store, tid, item, 'assistant', say_)
+        return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
+    if not routes():
+        summary = '; '.join(f"{task_ref(t)} {_title_cut((store.get_task(t) or {}).get('Title') or '', 50)}" for t in want[:4]) + (' and more' if len(want) > 4 else '')
+        prop = _propose_raw(store, tid, 'agents.stop', 0, {'refs': [task_ref(t) for t in want], 'text': text},
+                            f"{buttons.label('stop_agent')} - {plural(len(want), 'agent')}", summary, WAITS, actor, item)
+        return {'say': prop['say'], 'options': [], 'chips': [], 'decision': None, 'proposal': prop}
+    out = bulk_mod.stop(store, want, actor)
+    say_ = bulk_mod.stop_receipt(out, idle)
+    record_related(store, tid, item, 'assistant', say_)
+    return {'say': say_, 'options': [], 'chips': [], 'decision': {'verb': 'setting'}, 'did': 'agents.stop', 'rows': len(out['done'])}
+
+
 def _relate(store, tid: int, p: dict, actor: str) -> dict:
     "people.relate, run: the org chart changed and said in one line - or a miss the model fixes (a name that is several people)."
     from . import orgchart
@@ -1334,9 +1360,23 @@ def find_deleted(store, what: str) -> dict:
     return hits[0]
 
 
+# THE PAGES NO OTHER LINK REACHES (the capability map, 2026-10-28): the Board is a view of its own (#board, canvasLinks.BOARD), and Search
+# a dialog over any view - its link carries the words to put in its box (appLinks.openAppLink, #search=)
+def page_href(page, query=None) -> tuple:
+    "('#board', 'the Board') / ('#search=May%20close', 'Search for “May close”') - CallMiss for a page that is neither."
+    w, q = str(page or '').strip().lower(), ' '.join(str(query or '').split())
+    if w == 'board': return '#board', places.name('board')
+    if w == 'search': return '#search=' + quote(q, safe=''), f'Search for “{_title_cut(q, 80)}”' if q else 'Search'
+    raise CallMiss(f'page.open takes page: board or search - not {w or "nothing"}. Any other page is app.find. Nothing was opened.')
+
+
 def _paged(store, tid: int, item: dict | None, kind: str, p: dict, text: str, actor: str) -> dict:
     """rule.change, deleted.restore, hub.comment, hub.vote (the whole-app design, 2026-10-28): each one's button is a page's alone, so the desk
     brings that page up at the thing, to press there; a phone, with no page, asks yes or no and runs the page's own road (server)."""
+    if kind == 'page.open':
+        href, said = page_href(p.get('page'), p.get('query'))
+        if not routes(): raise CallMiss(f'{said} is on the desk - a phone has no page to bring up. Say so in plain words. Nothing was opened.')
+        return _page(store, tid, item, href, f'Opened {said}.')
     if kind == 'rule.change':
         r, how = find_rule(store, p.get('about')), 'remove' if str(p.get('how') or '').strip().lower() in ('remove', 'delete') else 'edit'
         name = r.get('Name') or r.get('Pattern')
@@ -2897,6 +2937,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # ONE PRESS OVER ROWS THE MODEL CHOSE (bulk.py, the owner 2026-10-28): Not ours, Block, Put it on my list for a set - each row its own
     # button's operation, what a sweep never touches left alone and said, every row in the receipt as its link
     if kind in bulk_mod.VERBS: return _bulk(store, tid, item, kind, params, text, actor)
+    if kind == 'agents.stop': return _stop_agents(store, tid, item, params, text, actor)
     if kind in toolcatalog.PAGED: return _paged(store, tid, item, kind, params, text, actor)
     if kind in ('pipe.defer', 'pipe.close'):
         sel = params.get('select') or {}
@@ -4690,6 +4731,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
         if o.get('started') or o.get('chat'): return " It's being worked on now - moving on."
     if kind == 'item.settle' and o.get('closed'): return f" {task_ref(int(o['closed']))} closed."
     if kind == 'agent.stop': return ' The task stays open - say close it when you want it closed.'
+    if kind == 'agents.stop': return ' ' + bulk_mod.stop_receipt({'done': o.get('done') or [], 'stuck': o.get('stuck') or []}, o.get('idle') or [])
     if kind == 'memory.remember':
         c = (o.get('learned') or {}).get('closed') or {}
         tail = f" - and what it replaces is kept as history, true until {c['until']}" if c.get('until') else ''
@@ -4864,7 +4906,7 @@ def _past(store, op: dict, ref: str) -> str:
     if kind == 'task.create_from_message' and str((op.get('params') or {}).get('kind')) == 'task' and o.get('ref'): return f"{o['ref']} is on your list."
     if kind == 'message.file': return f'{ref} filed as not ours.' if ref.startswith('TQ-') else f'Filed as not ours: {ref}.' if ref else 'Filed as not ours.'
     # ...and a set marked read is its count and what it was: "Done - <the tool's description>." led it (the overnight walk, 2026-10-26)
-    if kind == 'pipe.clear' or kind in bulk_mod.VERBS: return _outcome_line(kind, op.get('params') or {}, o).strip()
+    if kind in ('pipe.clear', 'agents.stop') or kind in bulk_mod.VERBS: return _outcome_line(kind, op.get('params') or {}, o).strip()
     if kind == 'task.defer' and ref.startswith('TQ-'):
         if not o.get('remindAt'): return f'{ref} is back on your rail now.'
         return f"{ref} is away until {o['when']} - back in front of you that morning." + (f" {o['warn']}" if o.get('warn') else '')

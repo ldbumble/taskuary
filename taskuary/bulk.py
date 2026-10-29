@@ -107,3 +107,39 @@ def receipt(verb: str, out: dict, refused: list, learn: bool = False) -> str:
         for i, w in refused: why.setdefault(w, []).append(i)
         parts += [f"Left alone - {w}: " + ', '.join(handle_of(link(i)) for i in rs[:12]) + (' …' if len(rs) > 12 else '') for w, rs in why.items()]
     return '\n'.join(p for p in parts if p)
+
+
+# STOP AGENTS IN BULK (the capability map, 2026-10-28: "stop all the agents"): the set is the model's - the TQ refs agents.now or pipe.read
+# printed, or every one running - and each goes by the task page's own Stop and save (agent.stop, wrap): written up and saved, never
+# thrown away. Only an agent at work is stopped; a ref with none running is said, never pressed.
+def running(store) -> list:
+    """The tasks an agent is on now - a live session (terminal or assistant chat) or a run in the background - in task order."""
+    from . import terminal
+    try: live = {int(i['taskId']) for i in terminal.live_sessions(0, details=False) if i.get('taskId')}
+    except Exception: live = set()
+    return sorted(live | {int(r['TaskId']) for r in (store.running_runs() or []) if r.get('TaskId')})
+
+
+def tids(refs) -> list:
+    "'TQ-0012', 12, 'task:12' -> 12; a handle that names no task is dropped."
+    return sorted({int(k[5:]) for k in handles(refs) if k.startswith('task:')})
+
+
+def stop(store, ts: list, actor: str = 'owner') -> dict:
+    "Each by the page's Stop and save. {done: [rows], stuck: [rows]} - audited with every task."
+    done, stuck = [], []
+    for t in ts:
+        (done if _run(store, 'agent.stop', t, {'wrap': True}, actor) else stuck).append({'tid': t, 'title': (store.get_task(t) or {}).get('Title') or ''})
+    store.audit('pipe', 0, 'bulk_stop', actor, detail={'tasks': [i['tid'] for i in done], 'stuck': [i['tid'] for i in stuck]})
+    return {'done': done, 'stuck': stuck}
+
+
+STOP_AFTER = 'Each was written up and saved on its task, which stays open - Continue picks it up where it left off.'
+def stop_receipt(out: dict, idle: list = ()) -> str:
+    "Every agent it stopped, as its task's link, then any that would not stop, then the refs with none running."
+    n, stuck = len(out['done']), out['stuck']
+    parts = [f"Stopped and saved: {n} {'agent' if n == 1 else 'agents'}." if n else 'Nothing was stopped.']
+    if n: parts += [listing(out['done']), STOP_AFTER]
+    if stuck: parts += [f'{len(stuck)} would not stop just then:', listing(stuck)]
+    if idle: parts.append('No agent running on: ' + ', '.join(task_ref(t) for t in idle[:12]) + (' …' if len(idle) > 12 else '') + '.')
+    return '\n'.join(parts)

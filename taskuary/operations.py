@@ -84,6 +84,10 @@ KINDS = {
     'pipe.remove':              ('pipe', (), None),
     'pipe.block':               ('pipe', (), None),
     'pipe.mine':                ('pipe', (), None),
+    # ...and the agents at work, stopped as a set - each by its task page's Stop and save (bulk.stop)
+    'agents.stop':              ('pipe', (), None),
+    # ...and the pages with no other link the chat can follow: the Board, Search with its words (concierge._paged)
+    'page.open':                ('page', ('page',), None),
     # ...and the buttons that are a page's alone (concierge._paged): a routing rule changed, a removed thing restored, a Hub comment or vote
     'rule.change':              ('rule', ('about',), None),
     'deleted.restore':          ('deleted', ('what',), None),

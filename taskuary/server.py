@@ -1710,6 +1710,12 @@ def _run_kind(op: dict, background: BackgroundTasks):
         rows = [i for i in concierge.select_items(store, p['select']) if not bulk.refusal(i, verb)]
         out = bulk.act(store, verb, rows, ACTOR, str(p.get('learn')).strip().lower() in ('true', '1', 'yes'))
         return {'done': len(out['done']), 'stuck': len(out['stuck']), 'rules': out['rules'], 'links': [bulk.link(i) for i in out['done']], 'verb': verb}
+    if kind == 'agents.stop':
+        # the phone's yes to the agents the model named (bulk.stop): only those still running now, each by its page's Stop and save
+        from . import bulk
+        every, asked = set(bulk.running(store)), bulk.tids(p.get('refs'))
+        out = bulk.stop(store, [t for t in asked if t in every], ACTOR)
+        return {**out, 'idle': [t for t in asked if t not in every]}
     # ...and the page-only buttons, on a phone's yes (concierge._paged): the page's own handlers
     if kind == 'rule.change':
         if p.get('how') != 'remove': raise HTTPException(422, 'a rule is edited on its page')

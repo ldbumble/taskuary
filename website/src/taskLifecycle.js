@@ -141,7 +141,9 @@ export const pendingProposals = (reviews = []) =>
 // reply" on a task the owner typed himself drafted an answer TO HIM - the model's own analysis, with
 // a letter suggested underneath it, in the box that sends (the owner, 2026-09-22, TQ-0674).
 export const NO_ONE_BEHIND = ["", "own", "report", "assistant"];
-export const hasCorrespondent = (m) => !!m && !NO_ONE_BEHIND.includes(String(m?.Channel || "").toLowerCase());
+// ...and mail the owner sent from their own address (the server's FromOwner, wrapup.from_owner): a self-forward drafted "Hi Alex"
+// back to the owner (the email walk, 2026-10-29)
+export const hasCorrespondent = (m) => !!m && !m.FromOwner && !NO_ONE_BEHIND.includes(String(m?.Channel || "").toLowerCase());
 // WHAT A REPLY ANSWERS: the newest row that came in from SOMEBODY (wrapup.reply_target) - a report joined onto the task is newer
 // than the colleague's mail and said "Nobody sent this one" over a task with a person waiting (2026-10-13); only a task with
 // nobody behind any row falls back to its newest

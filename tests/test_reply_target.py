@@ -25,3 +25,14 @@ def test_a_task_with_nobody_behind_any_row_still_names_its_newest():
     s = MemoryStore(); tid, add = _task(s)
     only = add(ExternalId='r', Channel='report', FromName='Nightly export', FromEmail=None, SentAt=ago(3), BodyText='Failed.')
     assert wrapup.reply_target(s, tid) == only
+
+
+def test_a_self_forward_has_no_reply_target():
+    """The owner forwarded an invite to their own address with "sign me up?": the reply drafted "Hi Alex" back to them (the email
+    walk, 2026-10-29). Only the owner is behind the row, so nobody is answered."""
+    s = MemoryStore(); tid, add = _task(s)
+    s.set_setting('owner_email', 'alex@northwind.example', 'owner')
+    add(ExternalId='f', FromName='Alex Doyle', FromEmail='Alex@Northwind.example', SentAt=ago(5), BodyText='sign me up?')
+    assert wrapup.reply_target(s, tid) is None
+    erin = add(ExternalId='e', FromName='Erin Blake', FromEmail='erin@vendor.example', SentAt=ago(30), BodyText='Join our webinar')
+    assert wrapup.reply_target(s, tid) == erin

@@ -117,13 +117,20 @@ def reply_source(transcript: str, final_message: str = '') -> str:
     return 'COMPLETE WORK SESSION TRANSCRIPT (the final response is near the end):\n' + str(transcript or '').strip()
 
 
+def from_owner(store, m: dict, own: set = None) -> bool:
+    """Did the owner write this row - mail from one of their own addresses (ingest.own_addresses)? Nobody else is behind it."""
+    from .ingest import own_addresses
+    return str((m or {}).get('FromEmail') or '').strip().lower() in (own if own is not None else own_addresses(store)) - {''}
+
+
 def reply_target(store, task_id: int):
     """Which message a reply answers: the last one that came IN. Our own sent mail rides in
     the chain as 'context', and answering that would mail ourselves; a chat app's mail copy of a
     chat line rides as 'skipped', and answering that mails its no-reply address. And the last one SOMEBODY sent: a report
     joined onto the task (the End of day checkup) became the newest row, so the session's reply to the colleague who had
     written again went to "nobody" and was filed as a result (2026-10-13). Only a task with nobody behind any row gets one."""
-    rows = [m for m in reversed(store.list_messages(task_id)) if m.get('Status') not in ('context', 'skipped')]
+    # ...and never the owner's own mail: a self-forward ("sign me up?") drafted "Hi Alex" back to the owner (the email walk, 2026-10-29)
+    rows = [m for m in reversed(store.list_messages(task_id)) if m.get('Status') not in ('context', 'skipped') and not from_owner(store, m)]
     own = next((m['MessageId'] for m in rows if not no_one_behind(m.get('Channel'))), None)
     # ...and a promise task answers the owner's own mail it was made from: whom they promised is who waits (store.promised_in). Only
     # where nobody on the task's own rows is: a line that came in on it since is the newer ask

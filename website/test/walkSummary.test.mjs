@@ -78,7 +78,8 @@ test("a band's box names an agent's task, never the profile running it", () => {
     { key: "b", lane: "reply", kind: "mail", who: "Erin Blake", title: "Budget question" }];
   const g = gistOf({ rows });
   assert.ok(!/\bcoding\b/.test(g), g);
-  assert.match(g, /^Investigate the missing ledger exports…, Erin Blake$/);
+  // ...alone, with the count of the rest: a cut title and a name beside it were both clipped on the opener's row
+  assert.match(g, /^Investigate the missing ledger exports… \+1$/);
 });
 
 test("a row with no sender but the agent names its task too, never the profile", () => {

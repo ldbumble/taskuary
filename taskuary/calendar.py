@@ -147,6 +147,18 @@ def unread_mail(store) -> list:
     return out
 
 
+_OFFLINE = re.compile(r'Max retries exceeded|Failed to establish a new connection|Connection aborted|ConnectionError', re.I)
+
+def unreadable(e) -> str:
+    """Why a calendar could not be read, in words: the opener shows it to the owner, a draft reads it. The raw error went
+    straight onto My Day ("HTTPSConnectionPool(host='login.microsoftonline...' ... NameRes") when the machine was offline."""
+    from .channels import plain_failure, _DNS, _TIMEOUT
+    raw = str(e); logger.info(f'calendar: could not be read - {raw[:300]}')
+    if _DNS.search(raw) or _TIMEOUT.search(raw) or _OFFLINE.search(raw):
+        return 'The calendar service could not be reached - this computer may be offline. It tries again in a few minutes.'
+    return plain_failure(e)[:240]
+
+
 def agenda(store, days: int = DAYS, start: datetime = None) -> dict:
     """{events, errors, sources, start, end, tz} - every calendar the cards can reach, from `start`
     (now, unless a caller wants the whole day) for `days` days."""
@@ -162,14 +174,14 @@ def agenda(store, days: int = DAYS, start: datetime = None) -> dict:
         if boxes:
             sources.append(f"outlook: {', '.join(boxes)}")
             try: events += outlook_events(json.loads(ol.get('ConfigJson') or '{}'), ol.get('Secret'), boxes, start, end, tz)
-            except Exception as e: errors.append(str(e)[:240])
+            except Exception as e: errors.append(unreadable(e))
     for gm in store.connectors_by_type('gmail', with_secret=True):
         if not gm.get('Active'): continue
         cfg = json.loads(gm.get('ConfigJson') or '{}')
         if cfg.get('google_refresh_token'):
             sources.append(f"google: {cfg.get('address') or 'primary'}")
             try: events += google_events(cfg, start, end, tz)
-            except Exception as e: errors.append(str(e)[:240])
+            except Exception as e: errors.append(unreadable(e))
     events.sort(key=lambda e: e['start'])
     return {'events': events[:MAX_EVENTS], 'errors': errors, 'sources': sources, 'start': _iso(start), 'end': _iso(end),
             'tz': tz_name(tz)}

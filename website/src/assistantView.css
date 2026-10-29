@@ -257,6 +257,8 @@
 .tq-welcome .tq-day-agenda .t { font: 500 11.5px 'IBM Plex Mono', Consolas, monospace; color: #262521; white-space: nowrap; }
 .tq-welcome .tq-day-agenda .s { font-size: 13px; line-height: 1.4; color: #6e685f; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tq-day-agenda .s b { font-weight: 600; color: #262521; }
+/* an unreadable calendar says why on its own line, under the headline */
+.tq-day-agenda .cal-note .why { display: block; margin-top: 4px; }
 .tq-day-agenda .ev.past .t, .tq-day-agenda .ev.past .s, .tq-day-agenda .ev.past .s b { color: #a09b92; font-weight: 400; }
 .tq-day-agenda .ev.past .s { text-decoration: line-through; text-decoration-color: #d8d1c5; }
 .tq-welcome .tq-day-agenda .ev.live .t { color: #8a3646; font-weight: 600; }
@@ -283,7 +285,7 @@
    colour as tasks/reports/fyi") */
 .tq-day-row.lvl-task .n { color: #5f7a5f; }
 .tq-day-row.lvl-reports .n, .tq-day-row.lvl-ideas .n { color: #827356; }
-.tq-day-row.lvl-fyi .n { color: #7b7366; }
+.tq-day-row.lvl-fyi .n, .tq-day-row.lvl-later .n { color: #7b7366; }
 /* ...and the label IS the rail's section pill - same fill, same capitals - so a band reads as the one on the rail */
 .tq-day-row .lbl { justify-self: start; max-width: 100%; color: #fff; background: #b8afa1; border-radius: 99px; padding: 2px 10px;
   font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; }

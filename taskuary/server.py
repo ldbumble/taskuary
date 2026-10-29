@@ -4854,7 +4854,11 @@ def agent_message(mid: str, request: Request, task_id: int):
     from . import agenttools, mailsearch
     try: n = mailsearch.message_id(mid)
     except ValueError as e: raise HTTPException(422, str(e))
-    if agenttools.own_message(store, task_id, {'id': n}): _own_task_only(request, task_id)    # the task's own mail, a stranger's task too
+    if agenttools.own_message(store, task_id, {'id': n}):
+        _own_task_only(request, task_id)                                           # the task's own mail, a stranger's task too
+        # ...but never a stranger's words: a stranger's session is refused this door outright (guard.stranger_denied), so whoever asks here
+        # runs full (agenttools.UNVOUCHED)
+        if agenttools.unvouched(store, task_id, {'id': n}): raise HTTPException(403, agenttools.UNVOUCHED)
     else: _owner_history(request, task_id)
     m = mailsearch.message(store, n)
     if not m: raise HTTPException(404, f'Taskuary has no saved message m{n} - `taskuary --search` finds a message and its id')
@@ -4980,6 +4984,8 @@ async def mcp_rpc(request: Request, task: int = 0):
         cls = agenttools.TOOLS[name][0]
         if cls == 'read' and name not in ('my_task', 'list_systems', 'run_system') and not (
                 name == 'read_message' and agenttools.own_message(store, task, args)): _owner_history(request, task)
+        # ...this door is never a stranger's session's, so a stranger's words on its own task are never read through it (agenttools.UNVOUCHED)
+        if name == 'read_message' and agenttools.unvouched(store, task, args): raise HTTPException(403, agenttools.UNVOUCHED)
         out = agenttools.call(store, task, name, args, doors)
         return out.body.decode() if isinstance(out, JSONResponse) else out
     def one(m): return agenttools.rpc(m, run) if isinstance(m, dict) else {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32600, 'message': 'not a request'}}

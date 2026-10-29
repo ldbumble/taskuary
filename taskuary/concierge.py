@@ -3351,7 +3351,9 @@ def split_item(store, item: dict, text: str, actor: str = 'owner') -> dict:
     # NOT the fast brain: reading two jobs out of one mail is a judgement, and the two-sentence
     # gear missed a mail that plainly carried two ("add Priya to the list" + "remove the Bulk
     # Approve button") and answered "only one ask" (the 2026-09-03 break test)
-    prop = reshape.propose_split(store, tid, brain(store))
+    # ...but WITH NO TOOLS (the Advisor design rev 2: a stranger's words get no agent tools unasked): `fast` is the same model with its tools
+    # off (brain), and the prompt carries the task's mail - a stranger's among it - so it reads and answers, never acts
+    prop = reshape.propose_split(store, tid, brain(store, fast=True))
     if not prop.get('two') or not (prop.get('second') or {}).get('title'):
         return {'ref': task_ref(tid), 'kept': (store.get_task(tid) or {}).get('Title') or '', 'why': prop.get('why') or ''}
     new = reshape.split_task(store, tid, prop['second'], prop.get('first'), prop.get('move_message_ids') or [], actor)

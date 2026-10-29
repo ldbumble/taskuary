@@ -200,6 +200,15 @@ def email_from_soul(soul: str):
     mt = _SOUL_NAME.search(soul or '')
     return (mt.group('email') or '').strip() if mt else ''
 
+# Every document that talks about the owner by name - set_owner and server._heal_owner_docs sweep the same list. AGENT.md was
+# missing from it, so every worker read "John decides" whoever the owner was (the email walk, 2026-10-29).
+OWNER_DOCS = ('soul', 'job', 'agent', 'coding', 'digest', 'learned', 'triage', 'style', 'counsel')
+TEMPLATE_OWNER = ('John Smith', 'john.smith@example.com')
+
+def docs_hold_template_owner(store) -> bool:
+    """Does any owner document still name the shipped example? Then a name saved beside it never reached the docs."""
+    return any(TEMPLATE_OWNER[0] in (store.get_doc(d) or '') for d in OWNER_DOCS)
+
 def set_owner(store, new: str, email=None, actor: str = 'owner') -> dict:
     """Your name, in ONE place (server.put_owner, and setup's About your work). SOUL.md and CODING.md refer to the owner nine times
     between them: every literal occurrence of the OLD name becomes a {{owner}} token, so the documents never drift again."""
@@ -207,14 +216,15 @@ def set_owner(store, new: str, email=None, actor: str = 'owner') -> dict:
     changed = []
     # 'the owner' is the fallback when no name is known, and real prose says those words - never retokenized
     if was['owner'] in ('the owner', '') or '{{' in was['owner']: was = {**was, 'owner': '', 'owner_email': ''}
-    for doc in ('soul', 'coding', 'digest', 'learned', 'triage', 'style', 'counsel'):
+    for doc in OWNER_DOCS:
         raw = store.get_doc(doc)
         if not raw: continue
         tokened = retoken_doc(raw, was['owner'], was['owner_email'])
         # a drifted doc holds BOTH names - the one typed in and the template's John Smith - so the placeholder is swept too
         tokened = retoken_doc(tokened, 'John Smith', 'john.smith@example.com')
         if tokened != raw:
-            store.save_doc(doc, tokened, actor)
+            # tokenizing a name is not editing the document: one nobody touched keeps tracking the template (as _heal_owner_docs)
+            store.save_doc(doc, tokened, 'template' if store.doc_owner(doc) == 'template' else actor)
             changed.append(doc)
     store.set_setting('owner_name', new, actor)
     if email is not None: store.set_setting('owner_email', str(email).strip(), actor)
@@ -5850,7 +5860,9 @@ class SQLiteStore:
         name = (st.get('owner_name') or '').strip() or soul_name or 'the owner'
         email = (st.get('owner_email') or '').strip() or email_from_soul(self.get_doc('soul') or '')
         if email == 'john.smith@example.com': email = ''
-        return {'owner': name, 'owner_first': name.split()[0] if name.split() else name, 'owner_email': email}
+        # nobody named yet: "the owner" whole - its first word rendered {{owner_first}} as "the" ("the presses Next")
+        first = name if name == 'the owner' else name.split()[0] if name.split() else name
+        return {'owner': name, 'owner_first': first, 'owner_email': email}
 
     # feed
     # One definition of "this is on me", used by the chip, the counter and the filter alike:

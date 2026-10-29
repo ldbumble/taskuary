@@ -62,6 +62,9 @@ def revision(store, target_kind: str, target_id) -> str:
         t = store.get_task(target_id) or {}
         ev = store._one('SELECT MAX(Id) AS Id FROM worker_event WHERE TaskId=?', (int(target_id),)) or {}
         base += f"|{t.get('Status')}|{t.get('Assignee')}|{t.get('DueAt')}|{ev.get('Id')}|{t.get('WaitingOn')}|{t.get('WokeMid')}"
+        # ...and whether it has sat untouched too long: crossing that line is read again, though nothing on the task changed
+        from . import rulebook
+        if rulebook.untouched(store, t): base += '|untouched'
     # ...and every act on it: a line judged "Send" before the send failed stood over the failure, advising the same Send (2026-10-18);
     # one judged "Reply" before the reply WENT stood over "Sent" on the close-out, still saying the sender was waiting (2026-10-19)
     base += f"|{_acted(store, target_kind, target_id)}"
@@ -196,7 +199,12 @@ SYSTEM = (
     f"the verb is never {L('reply')}: it is {L('defer')}, to look again once that agent is done, when offered; else say nothing. "
     f"A GOAL (a THE GOAL line): a step past its day, or held by someone late, is named in the line with the move offered that gets it "
     f"going ({L('chase')} when offered, else {L('defer')} to look again on a day); a goal with no news says so, and the move is "
-    f"{L('defer')}. AN IDEA (a THE IDEA line, the assistant's own suggestion): {L('mine')} when it names work worth doing now, "
+    f"{L('defer')}. "
+    # ...and A TASK LEFT SITTING (the design rev 2, untouched too long; the owner, 2026-10-28: "there to hold your hand when something was dropped")
+    "A TASK NOBODY HAS TOUCHED FOR A LONG WHILE (an UNTOUCHED line): read what is still owed on it and to whom, and pick the move offered "
+    "that gets it going, the line saying what is owed as the instruction (\"Erin still needs the signed lease\") - or nothing when nothing "
+    f"is owed any more or you are unsure; never {L('close')} on a guess. "
+    f"AN IDEA (a THE IDEA line, the assistant's own suggestion): {L('mine')} when it names work worth doing now, "
     f"{L('defer')} when it is for later, {L('not_ours')} when it is nothing for the owner.")
 def _system(store) -> str:
     """SYSTEM plus the owner's own Voice section of COUNSEL: the Advisor's line sits in the same box as the chat's, so it
@@ -560,6 +568,8 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
                          "them to it first:\n" + '\n'.join(f"- {m.get('FromName') or m.get('FromEmail')} ({m.get('CreatedAt')}): {m.get('Subject') or ''}"
                                                              f" - {' '.join(str(m.get('BodyText') or '').split())[:500]}" for m in mail[-3:]))
         t = store.get_task(int(target_id)) or {}
+        from . import rulebook
+        if (n := rulebook.untouched(store, t)): lines.append(f'UNTOUCHED: nothing has moved on it for {n} working days')
         # ...and WHO it was waiting on (waiton.py): the agent said only that person could answer, and their answer is in - or not yet
         from . import waiton
         if waiton.waiting(t): lines.append(f"THE AGENT IS WAITING ON {waiton.name_of(t['WaitingOn'])}'S ANSWER - they have not written since; nothing here moves it")

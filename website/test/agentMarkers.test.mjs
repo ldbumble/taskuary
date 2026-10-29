@@ -21,3 +21,10 @@ test("a progress line that only says what the answer says leaves the box; the bo
   const working = [{ type: "reasoning", text: "Reading the census." }];
   assert.deepEqual(dropEcho(working), working);
 });
+
+test("the done marker leaves the box, so the answer's last paragraph is seen as the echo it is (walk 2026-10-29)", () => {
+  assert.equal(forScreen("Booked the room for Thursday.\n[[TASKUARY-DONE]] Booked the room."), "Booked the room for Thursday.");
+  const msg = [{ type: "reasoning", text: "Checking rooms.\n\nBooked the room for Thursday.\n[[TASKUARY-DONE]] Booked the room." },
+               { type: "text", text: "Booked the room for Thursday." }];
+  assert.deepEqual(dropEcho(msg), [{ type: "reasoning", text: "Checking rooms." }, msg[1]]);
+});

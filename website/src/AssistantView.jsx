@@ -2173,6 +2173,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                                                  card: prep.answer.item || null, ...(drawsNow(prep.answer.item) ? {} : { held: true }) }, prep.answer_hash);
     else if (aheadItem && (drawsNow(aheadItem) || (key && showsTask(aheadItem, cardFor(aheadItem)))))
       aheadRef.current = drawAhead({ ...line, text: "", card: aheadItem }, null, { ask: !!key });
+    let done = false;
     try {
       // A named Timeline/pile row remains an explicit pull. Automatic Walk/Next echoes the exact
       // server capture; with none to be had (above), the server's own pick for this scope.
@@ -2200,6 +2201,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     } catch (e) {
       unshow(aheadRef.current); aheadRef.current = null;   // what was put up ahead of the answer comes down, the table back on the item it left
       const guard = selectionGuardDetail(e);
+      // A NEXT THAT ALREADY HAPPENED is not a failure (the email walk, 2026-10-29: "Remove - not a task" came back with a red "This
+      // navigation already completed"): the move it asked for is made, so the conversation and the table are read as the server has
+      // them, and nothing is put back or said
+      done = guard?.reason === "already_completed";
       if (guard) {
         if (optimisticId) setMsgs((m) => m.filter((message) => message.id !== optimisticId));
         const freshCapture = captureNextSelection(guard, scope);
@@ -2208,13 +2213,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         setPile((p) => replaceSelectionToken(p, guard));
         loadPile(true);                       // refresh the rows: the retries above are spent, or this was no list change
       }
-      if (putDown) { setFoldedKey((k) => (k === putDown ? null : k)); wear(false); }
-      if (leftItem) { unleave(leftItem); putOnTable(leftItem, "sync"); }   // the Next did not happen: the item it left is the table's again
-      setErr(errText(e));
+      if (!done && putDown) { setFoldedKey((k) => (k === putDown ? null : k)); wear(false); }
+      if (!done && leftItem) { unleave(leftItem); putOnTable(leftItem, "sync"); }   // the Next did not happen: the item it left is the table's again
+      if (!done) setErr(errText(e));
     }
     turnFlight.current = false;
     setBusy(false); setFlight(null);
-  }, [busy, drawAhead, ensureNextSelection, landed, loadPile, noteLine, putOnTable, resetting, turn, unshow]);
+    if (done) readChatOnce(chatEpoch.current).catch(() => {});
+  }, [busy, drawAhead, ensureNextSelection, landed, loadPile, noteLine, putOnTable, readChatOnce, resetting, turn, unshow]);
   useEffect(() => { surfaceRef.current = surface; }, [surface]);
   // A CLOSE PUTS THE NEXT ONE UP AT ITS PRESS (owner-approved, 2026-10-20): Mark done, Remove and Remind me fold the item at once, and
   // the next was drawn only once the server had recorded the close and the walk asked for it - ~200 ms of a folded line and no view.

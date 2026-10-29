@@ -699,7 +699,11 @@ def agent_story(store, tid) -> dict | None:
     if news_since_agent(store, tid): return {'kind': 'news', 'line': news_line(store, tid)}
     left, q, st = agent_left(store, tid), store.get_dispatch(tid), idle_state(store, tid)
     held, why = st['kind'] == 'held', st['line']
-    if not (str(t.get('Assignee') or '').startswith('agent:') or left or q or held): return None
+    if not (str(t.get('Assignee') or '').startswith('agent:') or left or q or held):
+        # ...but WHY NONE WAS MEANT is said where the agent would be (the email walk, 2026-10-29): the owner's own task and a reply
+        # opened on an empty Agent section, the reason only in triage's panel ("on your list - no agent works it")
+        why = no_agent_why(store, t)
+        return {'kind': 'none', 'line': why} if why else None
     # the sentence is whole and leads with its state ("Waiting for you.", "Couldn't start."): the page adds nothing before it
     # ...and a run that FINISHED is finished, not "not started" over its own "finished its work" sentence (G7, 2026-10-20)
     if not left: return {'kind': 'held' if held else 'queued' if q else 'finished' if session_finished(store, tid) else 'idle', 'line': why,
@@ -739,6 +743,20 @@ def agent_story(store, tid) -> dict | None:
             'said': _said(said['Text']) if said else '', 'said_at': said['CreatedAt'] if said else None,
             **({'why': why} if why and why.rstrip('.') not in line else {}),
             **({'fix': ran.get('fix')} if failed else {})}
+
+
+def no_agent_why(store, t: dict) -> str:
+    """Why no agent works a task of a kind no agent works (task, reply): the newest "No agent started:" line written on it
+    (ingest.not_started), else the ending its route recorded (ingest's `act`, the route reason's last clause). '' for agent work."""
+    from . import general
+    from .ingest import NOT_STARTED
+    if not t or t.get('Kind') in task_kinds.AGENT or general.handles(t): return ''
+    tid = t['TaskId']
+    said = next((str(c['Body']) for c in reversed(store.list_comments(tid) or []) if str(c.get('Body') or '').startswith(NOT_STARTED)), '')
+    if said: return said
+    r = next((r for r in reversed(store.list_routes(tid) or []) if r.get('Decision') != 'attach' and r.get('Reason')), None)
+    tail = str(r['Reason']).rsplit(' · ', 1)[-1].strip().rstrip('.') if r else ''
+    return f'{NOT_STARTED} {tail}.' if tail else ''
 
 
 def left_by_facts(tags, runs) -> str:

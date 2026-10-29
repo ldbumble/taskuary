@@ -10,7 +10,7 @@ const src = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8"
 
 test("opening a general task picks its own role, or blank - never the roster's first name", () => {
   // ...and nor is any task when no coding tool is connected: the general agent is the only one there is (B3)
-  assert.match(src, /agent: agents\.includes\(owned\) \? owned : isGeneralKind\(task\.Kind\) \|\| !canCode \? "" : codingProfile\(agents, kinds\)/);
+  assert.match(src, /agent: agents\.includes\(owned\) \? owned : opensOnRegular\(task\.Kind\) \|\| !canCode \? "" : codingProfile\(agents, kinds\)/);
   assert.doesNotMatch(src, /agents\[0\]/);
 });
 

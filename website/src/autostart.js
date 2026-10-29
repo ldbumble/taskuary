@@ -28,6 +28,12 @@ export const NO_AGENT_KINDS = new Set(["reply", "task", "setup"]);
 
 export const isAgentKind = (kind) => !NO_AGENT_KINDS.has(String(kind || "").toLowerCase());
 
+// WHICH AGENT THE BOX OPENS ON: the regular one for a chat kind AND for work no agent was on yet - the owner's own task, a reply
+// (the email walk, 2026-10-29: a meeting to move opened Send to agent on the coding form, a repository to pick). Not GENERAL_KINDS,
+// which are the kinds the assistant's conversation itself serves (general.handles): a task or a reply has none until an agent starts,
+// and the start moves its kind (dispatch). The coding agent stays one press away in the box.
+export const opensOnRegular = (kind) => isGeneralKind(kind) || NO_AGENT_KINDS.has(String(kind || "").toLowerCase());
+
 /** What the Tasks tab should do right now. `detail` is whatever is loaded, stale or not. */
 export const autostartPlan = ({ autostart, selected, detail, hasSession }) => {
   const task = detail?.task?.TaskId === selected ? detail.task : null;   // never the previous one

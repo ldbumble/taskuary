@@ -82,7 +82,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 // An open tab can still hold yesterday's entry bundle after a local upgrade. Vite names lazy
 // chunks by content, so that tab asks the new server for a filename the build no longer has.
 // Recover once automatically; a real module error still reaches the view boundary on retry.
-import { autostartPlan, isGeneralKind } from "./autostart.js";
+import { autostartPlan, isGeneralKind, opensOnRegular } from "./autostart.js";
 import { adviceKeyFor, taskNote } from "./advice.js";
 import AdvisorNote from "./AdvisorNote.jsx";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
@@ -689,7 +689,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // the roster is user-config - default to whatever actually exists. A GENERAL task's blank is an answer, not a gap: it means
   // "the profile it has", and filling it with the roster's first name sent the coding profile - which the dispatch refuses on a non-coding task (422), so
   // Send to agent failed on every general task nobody had assigned a role (the owner, 2026-10-07: "we don't want the coding profile always")
-  const generalTask = isGeneralKind(detail?.task?.Kind);
+  const generalTask = opensOnRegular(detail?.task?.Kind);
   // the profile a blank pick runs (general.py: the role triage gave, else the assistant's own)
   const ownProfile = (agents.includes(assignedAgent(detail?.task?.Assignee)) && assignedAgent(detail?.task?.Assignee)) || (agents.includes("assistant") ? "assistant" : "");
   useEffect(() => {
@@ -704,11 +704,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     if (!task || task.TaskId !== selected || !agents.length || pickerTask.current === task.TaskId) return;
     pickerTask.current = task.TaskId;
     // another task opens on its own question, not the last one's hand-off - and a general task's box on the regular agent
-    setHandOff(isGeneralKind(task.Kind));
+    setHandOff(opensOnRegular(task.Kind));
     const owned = assignedAgent(task.Assignee);
     // a general task starts from the role it was handed, else blank (its configured profile) - never the roster's first name;
     // a coding task from the profile of kind coding, else blank and the server finds it
-    setRun((r) => ({ ...r, agent: agents.includes(owned) ? owned : isGeneralKind(task.Kind) || !canCode ? "" : codingProfile(agents, kinds), model: "" }));
+    setRun((r) => ({ ...r, agent: agents.includes(owned) ? owned : opensOnRegular(task.Kind) || !canCode ? "" : codingProfile(agents, kinds), model: "" }));
   }, [selected, detail?.task, agents, kinds, canCode]);
   // ...and an error belongs to the task it happened on: a failed Mark done stayed up over the next task opened, as if about it.
   // Only a move from one task straight to another clears it: "That task is gone" empties the selection, and the list then

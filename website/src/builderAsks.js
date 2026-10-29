@@ -12,6 +12,18 @@ export const asksOf = (out) => Array.isArray(out?.asks) && out.asks.length
 export const filled = (v) => !!String(v ?? "").trim();
 export const blanks = (asks, answers) => asks.filter((a) => !filled(answers[a.q])).length;
 
+// ANSWER & BUILD PRESSES WITH SOME LEFT BLANK: what is answered goes back, and what is not the builder decides or asks again.
+// Nothing answered is the same ask twice, so that one waits - and its hover says so.
+export const answerState = (asks, answers, busy) => {
+  const left = blanks(asks, answers), none = asks.length > 0 && left === asks.length;
+  return { disabled: !!busy || none, left,
+    hint: busy ? "Building it from your answers…" : none ? "Answer at least one - it decides the ones you leave blank, or asks again"
+      : left ? `${left} left blank - it decides ${left === 1 ? "that one" : "those"} itself, or asks again` : "" };
+};
+
+// every question goes back, a blank one as "" - so the model knows which it still has to decide
+export const answersFor = (asks, answers) => Object.fromEntries(asks.map((a) => [a.q, String(answers[a.q] ?? "").trim()]));
+
 // a pick list for a repository or a choice: the known rows, an answer typed before that is not one of them kept as its own row
 export const pickRows = (rows, value) => {
   const xs = [...new Set((rows || []).map(String).filter(Boolean))];

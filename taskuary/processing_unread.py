@@ -315,9 +315,14 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
             # its own verbs, Close, Remind me, Send to agent - never an idea's: Make a task on it made the same work twice
             about = sweep_task(store, idea, action)
             if about:
-                card = funnel._item('', 'todo', 'yours', compact['title'], **(base | {'tid': about['TaskId'], 'idea': None, 'idea_kind': None,
-                                                                                        'mid': None, 'priority': about.get('Priority')}))
-                card.update(loose=True, loose_at=idea.get('LastSaid'))
+                # ...under the task's OWN title and mark: the line is why it is here, never its name ("TQ-1173 has no next step" under
+                # the Taskuary logo stood where the task's title and source belonged - the owner, 2026-10-29)
+                own = processing_all.task_mark([about], store.list_messages(about['TaskId'])) or (
+                    'assistant' if processing_all.advisor_task(about) else 'own')
+                card = funnel._item('', 'todo', 'yours', about.get('Title') or compact['title'],
+                                    **(base | {'tid': about['TaskId'], 'idea': None, 'idea_kind': None, 'mid': None, 'channel': own,
+                                               'priority': about.get('Priority'), 'preview': str(about.get('Summary') or '')[:400]}))
+                card.update(loose=True, loose_at=idea.get('LastSaid'), why=idea.get('Text'))
                 if about.get('Status') in ('done', 'dropped'): closed = True     # closed is closed: off at once, the check puts it down
         else:
             card = funnel._item('', 'todo' if kind == 'task' else 'action',

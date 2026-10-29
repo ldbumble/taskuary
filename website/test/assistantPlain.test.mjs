@@ -68,9 +68,19 @@ test("the empty pile's setup chip is not a second 'set up' (U14), and the set-up
   assert.doesNotMatch(view, /no repository is touched/);
 });
 
-test("plain words: the AI popover, the Advisor's notes and the FYI rows (J)", () => {
+// ONE AI PICKER, THE COMPOSER'S (the owner, 2026-10-29): the chat header's "Which AI speaks here" popover is gone - the model picker at the
+// foot of the box picks this chat's AI (chatAi, /api/concierge/chat-ai); a new chat's default and changing it stay in Settings -> AI defaults
+test("the chat's one AI picker is the composer's - no header picker, nothing here changes the default", () => {
+  const head = view.slice(view.indexOf('<div className="tq-chat-head">'), view.indexOf("{remindOn && <RemindPicker"));
+  assert.ok(head.length > 100, "the header was found");
+  assert.doesNotMatch(view, /Which AI speaks here|TuneIcon|setAiEl|pickAi/);
+  assert.doesNotMatch(view, /"\/api\/concierge\/ai"/, "the default is Settings' to change");
+  assert.match(view, /data-tq-model-pick=""/);
+  assert.match(view, /api\.post\("\/api\/concierge\/chat-ai"/);
+});
+
+test("plain words: the Advisor's notes and the FYI rows (J)", () => {
   assert.doesNotMatch(view, /Your coding tool's AI is the default/);
-  assert.match(view, /export const aiSays = /);
   assert.doesNotMatch(view, /`dropped: \$\{r\.dropped\}/, "a raw drop reason");
   assert.doesNotMatch(view, /r\.event, r\.tier/, "an event id like item.shown");
   assert.match(view, /No AI connected yet - connect one under Connections, AI\./);

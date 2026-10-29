@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog,
   DialogContent, DialogTitle, IconButton, ListSubheader, Menu, MenuItem, Select, Step, StepButton, StepContent,
-  Stepper, Switch, TextField, Typography,
+  Stepper, Switch, TextField, Tooltip, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
@@ -33,7 +33,7 @@ import { TYPE_LABELS, cronText, reportSchedule, startupText } from "./reportWord
 import { asSteps, runWords } from "./workflowFlow.js";
 import Composer from "./Composer.jsx";
 import BuilderAsks from "./BuilderAsks.jsx";
-import { asksOf, blanks } from "./builderAsks.js";
+import { answerState, answersFor, asksOf } from "./builderAsks.js";
 import { onDraftHanded, takeDraft } from "./draftHandoff.js";
 import { label as btnLabel } from "./buttons.js";
 import { ideaCounted, ideaWord } from "./lanes.js";   // an Advisor line's kind, in lanes.json's words
@@ -1795,7 +1795,8 @@ function SourceComposer({ typeHint, one, hint, placeholder, onSources }) {
   const [answers, setAnswers] = useState({});
 
   const go = async (withAnswers) => {
-    setBusy(true); setOut(null);
+    if (busy) return;
+    setBusy(true); if (!withAnswers) setOut(null);    // the questions stay up while their answers are read
     try {
       const { data } = await api.post("/api/reports/compose-sources",
         { ask, type: typeHint || undefined, answers: withAnswers || undefined });
@@ -1810,7 +1811,7 @@ function SourceComposer({ typeHint, one, hint, placeholder, onSources }) {
     } catch (e) { setOut({ error: e?.response?.data?.detail || "the composer could not be reached" }); }
     setBusy(false);
   };
-  const asks = asksOf(out), answered = asks.length && !blanks(asks, answers);
+  const asks = asksOf(out), can = answerState(asks, answers, busy);
 
   if (!open) {
     return (
@@ -1848,8 +1849,10 @@ function SourceComposer({ typeHint, one, hint, placeholder, onSources }) {
         <Box sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 0.9 }}>
           <Typography sx={{ fontSize: 11, color: DIM, fontWeight: 600 }}>A couple of things it will not guess at:</Typography>
           <BuilderAsks asks={asks} answers={answers} setAnswers={setAnswers} disabled={busy} />
-          <Button size="small" variant="contained" disableElevation disabled={busy || !answered}
-            onClick={() => go(answers)} sx={{ alignSelf: "flex-start" }}>Answer &amp; write it</Button>
+          <Tooltip title={can.hint} placement="top-start"><span style={{ alignSelf: "flex-start" }}>
+            <Button size="small" variant="contained" disableElevation disabled={can.disabled} onClick={() => go(answersFor(asks, answers))}
+              startIcon={busy ? <CircularProgress size={12} sx={{ color: "inherit" }} /> : null}>{busy ? "Writing it…" : <>Answer &amp; write it</>}</Button>
+          </span></Tooltip>
         </Box>
       )}
     </Box>

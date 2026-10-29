@@ -8,7 +8,7 @@ import { startHarness } from "./harness.mjs";
    Attach a file); the moves that take the task a stage on - Send to agent / Continue / Run another, Draft reply / Reply / Redraft / Hand it
    to a person, and Came from's Not a task / Remind me - stand on their pane's spine while it is folded, under a rule below its words, and
    inside it while it is open, never on the bar. A spine's press opens its pane and starts the step there - Hand it to a person a compose
-   card in Close out. A live agent's bar is Back, Next and Stop and save. The chat is a small pill in the
+   card in Close out. Open, a pane wears a white strip across its top: its name, its moves and the arrows that fold it back. A live agent's bar is Back, Next and Stop and save. The chat is a small pill in the
    corner, apart from the bar, typeable at rest: typing opens it out of its corner into the window, and a line sent lands in it.
    And no pane is a dead end: every open task's open Agent pane and Close out carry their own way on. Invented people only. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -66,6 +66,22 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       assert.ok(!m.bar.some((x) => STAGE.test(x)), `no stage move on the bar: ${m.bar}`);
     });
 
+    await t.test("an open pane's white strip: its name, its moves, and arrows that fold it back to its spine", async () => {
+      for (const [key, arrows] of [["close", ["left"]], ["agent", ["left", "right"]], ["from", ["right"]]]) {
+        await openSec(page, key);
+        const st = await page.evaluate((CUR, key) => { const e = document.querySelector(`${CUR} [data-tq-slot=${key}] [data-tq-pane-strip=${key}]`); if (!e) return null;
+          const r = e.getBoundingClientRect(), s = e.closest("[data-tq-slot]").getBoundingClientRect();
+          return { text: e.innerText, top: Math.round(r.top - s.top), w: Math.round(s.width - r.width), bg: getComputedStyle(e).backgroundColor,
+            arrows: [...e.querySelectorAll("[data-tq-strip-fold]")].map((a) => a.dataset.tqStripFold) }; }, CUR, key);
+        assert.ok(st && st.top === 0 && st.w <= 1 && st.bg === "rgb(255, 255, 255)", `${key}: a white strip across the pane's top ${JSON.stringify(st)}`);
+        assert.match(st.text, { close: /^Close out/, agent: /^Agent/, from: /^Came from/ }[key], JSON.stringify(st));
+        assert.deepEqual(st.arrows, arrows, `${key}'s fold arrows`);
+      }
+      await page.click(`${CUR} [data-tq-pane-strip=from] [data-tq-strip-fold=right]`);
+      await page.waitForFunction((CUR) => !document.querySelector(`${CUR} [data-tq-slot=from][data-tq-open]`), { timeout: 5000 }, CUR);
+      assert.ok(await page.$(`${CUR} [data-tq-section-tab=from]`), "folded back to its spine");
+    });
+
     await t.test("Agent open: Redraft on Close out's spine; the agent's start is its form's, not the bar's", async () => {
       await openSec(page, "agent");
       // ...once the draft card's own verbs have come round again after the switch
@@ -120,6 +136,10 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       const m = await look(page);
       assert.deepEqual(m.bar.filter((x) => !/^(← )?Back$|^Next/.test(x)), ["Stop and save"], `${m.bar}`);
       assert.ok(m.bar.some((x) => /^Next/.test(x)), `Next stays: ${m.bar}`);
+      const st = await page.evaluate((CUR) => { const e = document.querySelector(`${CUR} [data-tq-pane-strip=agent]`);
+        return e && { live: e.hasAttribute("data-tq-live"), h: Math.round(e.getBoundingClientRect().height), stop: !!e.querySelector("[data-tq-strip-stop]"),
+          arrows: e.querySelectorAll("[data-tq-strip-fold]").length, words: e.innerText.trim() }; }, CUR);
+      assert.ok(st && st.live && st.h <= 34 && st.stop && st.arrows === 2 && !st.words, `a live agent's strip is slim: Stop and save and its arrows, small ${JSON.stringify(st)}`);
     });
 
     await t.test("the chat is a small pill in the corner, the bar ending before it", async () => {
@@ -129,7 +149,7 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
         return { pill: pill && { l: pill.left, r: pill.right, w: pill.width, h: pill.height, b: pill.bottom }, bar: bar && { r: bar.right, b: bar.bottom }, cv: cv && { r: cv.right, b: cv.bottom },
           inBar: !!document.querySelector(".tq-dock .tq-compose-box") }; });
       assert.ok(g.pill && !g.inBar, `the box is not on the bar: ${JSON.stringify(g)}`);
-      assert.ok(g.pill.w <= 160 && g.pill.h <= 48, `a small pill: ${JSON.stringify(g.pill)}`);
+      assert.ok(g.pill.w >= 300 && g.pill.h <= 48, `the wide ask bar, as wide as the open window (the owner, 2026-10-29): ${JSON.stringify(g.pill)}`);
       assert.ok(g.pill.l - g.bar.r >= 12, `a gap between the bar and the chat: ${JSON.stringify(g)}`);
       assert.ok(g.cv.r - g.pill.r <= 40 && g.cv.b - g.pill.b <= 30, `in the corner: ${JSON.stringify(g)}`);
     });
@@ -144,14 +164,14 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
         return { w: b.width, r: b.right, pr: p.right, pb: p.bottom, bt: document.querySelector(".tq-chat-unit .tq-compose-field").getBoundingClientRect().top,
           text: document.querySelector(".tq-chat-unit textarea").value }; });
       assert.equal(g.text, "What does Tom want?", "every key typed at rest is in the box");
-      assert.ok(g.w >= 300, `opened to the window's width: ${g.w}`);
+      assert.ok(g.w >= 300, `the window's width: ${g.w}`);
       assert.ok(Math.abs(g.r - before) <= 2 && Math.abs(g.pr - g.r) <= 2, `out of the pill's own corner: ${JSON.stringify(g)} from ${before}`);
       assert.ok(Math.abs(g.pb - g.bt) <= 2, `the window stands on its field: ${JSON.stringify(g)}`);
       await page.keyboard.press("Enter");
       await page.waitForFunction(() => /What does Tom want\?/.test(document.querySelector("[data-tq-chat-pop] .tq-chat-pop-body")?.innerText || ""), { timeout: 15000 });
       await page.click("[data-tq-box-close]");
       await page.waitForFunction(() => !document.querySelector(".tq-chat-unit .tq-compose-box[data-tq-open]")
-        && document.querySelector(".tq-chat-unit .tq-compose-box").getBoundingClientRect().width <= 160, { timeout: 5000 });
+        && document.querySelector(".tq-chat-unit .tq-compose-box").getBoundingClientRect().width >= 300, { timeout: 5000 });
     });
 
     await t.test("no dead end: every open task's open Agent pane and Close out carry their own way on", async () => {

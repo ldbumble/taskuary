@@ -121,11 +121,20 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   useLayoutEffect(() => { if (box && ghost.current) setM(measure(ghost.current, box)); }, [box, parts, narrow, phone, fonts]);
   useLayoutEffect(() => {
     if (!box) return undefined;
-    const f = () => setAvail(box.clientWidth);
+    // ...ON A DESK THE BAR IS AS WIDE AS WHAT IT HOLDS (the owner, 2026-10-29: the room it frees goes to the chat): its own box then says only
+    // what it drew, so the room is the dock's lane - the composer's width, less its sides, the ask bar's least width and the gap, and the
+    // bar's own edges - and the bar folds into ▾ against that, as it did against its own width
+    const lane = box.closest(".tq-compose[data-tq-desk-chat]");
+    const f = () => {
+      if (!lane) { setAvail(box.clientWidth); return; }
+      const cs = getComputedStyle(lane), dock = box.closest(".tq-dock") || box;
+      const ask = parseFloat(cs.getPropertyValue("--tq-pill-min")) || 0, gap = parseFloat(cs.columnGap) || 0;
+      setAvail(Math.floor(lane.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - ask - gap - (dock.offsetWidth - box.clientWidth)));
+    };
     f();
     if (typeof ResizeObserver === "undefined") return undefined;
     const ro = new ResizeObserver(f);
-    ro.observe(box);
+    ro.observe(box); if (lane) ro.observe(lane);
     return () => ro.disconnect();
   }, [box]);
   // ...and if the drawn line still runs past its box (a width the parts did not add up to), one more group folds - until the parts are

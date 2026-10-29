@@ -59,6 +59,6 @@ test("on the desk the pill's hint is one line", { timeout: 180000 }, async (t) =
   assert.equal(p.next?.text, "All read, next");
   assert.equal(p.hint, "nowrap");
   // ...a small pill of its own in the corner, apart from the bar (the owner, 2026-10-29)
-  assert.ok(p.box > 0 && p.box <= 160 && await page.$(".tq-chat-unit > .tq-compose-box"), `the desk's chat is a small pill in the corner: ${p.box}`);
+  assert.ok(p.box >= 300 && await page.$(".tq-chat-unit > .tq-compose-box"), `the desk's chat is the wide ask bar, as wide as the open window (the owner, 2026-10-29): ${p.box}`);
   assert.deepEqual(errors, []);
 });

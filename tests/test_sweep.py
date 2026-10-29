@@ -199,17 +199,18 @@ def test_a_date_takes_the_line_off_at_once_and_the_next_check_puts_it_down(s):
     assert check(s)['cleared'] == 1
 
 
-def test_a_task_the_rail_does_not_draw_gets_a_row_of_its_own(s):
-    # its only mail is the owner's own (read back from Sent): the rail draws no row for it, so the line cannot ride on one
+def test_a_task_whose_only_mail_is_your_own_is_drawn_and_carries_the_line(s):
+    # its only mail is the owner's own (read back from Sent): the rail drew no row for it, so the line stood as a row of its own -
+    # an open task is on the rail however its mail reads (Store._rail_selected, 2026-10-29), so the line rides on the task's row
     tid = waiting(s, 8)
     Factory(s).message(tid, status='context', direction='out', subject='RE: renewal', body='Sent it.', from_email='alex@northwind.example',
                        sent_at=ago(8), conversation_id='renewal')
-    assert not [c for c in rail(s, include_read=True) if c.get('tid') == tid]
+    assert [c['tid'] for c in rail(s, include_read=True) if c.get('tid') == tid] == [tid]
     assert check(s)['loose'] == 1
-    row = next(c for c in rail(s) if c.get('loose'))
+    [row] = [c for c in rail(s) if c.get('loose')]
     # the task's OWN name and mark: the line says why it is here, never what it is called (2026-10-29: "of course leave task name")
     assert (row['kind'], row['lane'], row['tid'], row['title'], row['channel']) == ('todo', 'yours', tid, 'Vendor contract renewal', 'own')
-    assert row['why'] == f'{task_ref(tid)} has no next step'
+    assert row['why'] == f'{task_ref(tid)} is waiting on nobody named'                  # ...its own row reads its own state
     # ...and it is THAT task's row: its own verbs, never an idea's Make a task - pressing it made the same work twice
     from taskuary import concierge
     verbs = [c.get('verb') or c.get('id') for c in concierge.chips_for(s, row)]

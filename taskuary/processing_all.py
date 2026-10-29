@@ -347,6 +347,11 @@ def _muted_candidate(item, row, lane=None):
     return any(isinstance(rule, dict) and muted(rule, candidate) for rule in rules)
 
 
+def open_work(item) -> bool:
+    "The item holds an open task: on the rail whatever the history window says (Store._rail_selected)."
+    return any(t.get('Status') not in ('done', 'dropped') and t.get('SourceRef') != 'assistant:dock' for t in item['view'].get('tasks') or [])
+
+
 def _generic_target(item, query, cutoff, include_excluded=False, vehicles_only=False):
     # `vehicles_only`: every message this item owns is an assistant VEHICLE, which is never a row of
     # its own - so the task or idea it carries is the item, and generic work is exactly right here.
@@ -372,7 +377,7 @@ def _generic_target(item, query, cutoff, include_excluded=False, vehicles_only=F
             candidate = {'Subject': entity.get('Title') or entity.get('Text') or entity.get('Reason'),
                          'FromName': entity.get('CreatedBy'), 'Channel': channel}
             lane = 'asked' if kind == 'task' else 'approve' if kind == 'review' else idea_lane(entity)
-            if (_matches(channel, source, query) and _in_history(stamp, cutoff)
+            if (_matches(channel, source, query) and (_in_history(stamp, cutoff) or (kind == 'task' and open_work(item)))
                     and (include_excluded or not _muted_candidate(item, candidate, lane))):
                 candidates.append((entity, stamp, channel, source))
         if candidates:
@@ -429,8 +434,9 @@ def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=Fa
         # views it is not presented (the duplicate-Assistant regression of 2026-09-04, back on 2026-09-06)
         from .funnel import _assistant_wrapper
         shown = [m for m in view.get('messages', []) if m.get('Status') not in HIDDEN_MESSAGES and not _assistant_wrapper(m)]
+        live = open_work(item)          # ...its messages are its task's, however old (open_work)
         candidates = [m for m in shown if _matches(m.get('Channel'), m.get('SourceName'), query)
-                      and _in_history(m.get('CreatedAt'), cutoff)]
+                      and (live or _in_history(m.get('CreatedAt'), cutoff))]
         if (view.get('processing_read') or {}).get('active') and not include_excluded:
             candidates = [m for m in candidates if not _muted_candidate(
                 item, message_row(m, item, threads, now.strftime('%Y-%m-%d %H:%M:%S')))]

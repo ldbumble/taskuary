@@ -464,8 +464,9 @@ const OUTLINED = { bgcolor: "#fff", borderColor: ACCENT, color: ACCENT };
 export const MOVE_LOOK = {
   "& .tq-ab.fwd:not(.p), & .tq-ab.done:not(.p)": OUTLINED, "& .tq-ab.done:not(.p)": { boxShadow: `inset 0 0 0 1px ${ACCENT}` },
   "& .tq-ab.fwd:not(.p):hover:not(:disabled), & .tq-ab.done:not(.p):hover:not(:disabled)": { bgcolor: "#f1f4f7" },
-  "& .tq-ab.task:not(.p)": { bgcolor: "transparent", borderColor: "transparent", color: DIM },
-  "& .tq-ab.task:not(.p):hover:not(:disabled)": { bgcolor: "#ece9e3", borderColor: "transparent", color: INK },
+  // ...the task's own quiet moves still wear their pill (the owner, 2026-10-29: "these should have circle pills around them"): a faint edge
+  "& .tq-ab.task:not(.p)": { bgcolor: "#fff", borderColor: "#cfc8bc", color: DIM },
+  "& .tq-ab.task:not(.p):hover:not(:disabled)": { bgcolor: "#f6f4f0", borderColor: ACCENT, color: INK },
   "& .tq-ab.down:not(.p)": { bgcolor: "transparent", borderColor: "#d8d1c5", color: FAINT },
   "& .tq-ab.down:not(.p):hover:not(:disabled)": { bgcolor: "#fff", borderColor: ACCENT, color: INK } };
 const SPINE_MOVES = { ...MOVE_LOOK, display: "flex", flexDirection: "column", gap: 0.6, position: "absolute", top: `${MOVES_AT * 100}%`, left: 12, right: 12,

@@ -164,6 +164,9 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         rid = store.add_review({'TaskId': tid, 'Kind': KIND, 'Status': 'pending', 'Deliver': deliver,
                                 'Reason': 'your email - approve to send' if agent == 'owner' else f"{agent} wrote this email - approve to send"})       # who it goes to is on the card once
         mark(store, tid, hit['id'], rid=rid, actor=f'agent:{agent}')
+    if agent != 'owner':                          # the agent's sign-off off, the saved block on once (signatures.agent_signed)
+        from .signatures import agent_signed
+        text = agent_signed(store, store.get_review(rid), text) or text
     store.update_review_draft(rid, text, None, by=f'agent:{agent}')
     return {'ok': True, 'review_id': rid, 'slot': hit['id'], 'added': added}
 

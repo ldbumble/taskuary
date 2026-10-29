@@ -296,7 +296,7 @@ def message_row(message, item, threads, now, *, full=False):
                Decision=route.get('Decision'), RouteReason=route.get('Reason'),
                ReviewId=review.get('ReviewId'), ReviewStatus=review.get('Status'),
                ReviewKind=review.get('Kind'), HasDraft=int(bool(review.get('DraftText'))),
-               DraftError=review.get('DraftError'),
+               DraftError=review.get('DraftError'), DraftNeeds=review.get('DraftNeeds'),
                Attachments=sum(a.get('MessageId') == mid for a in view.get('attachments', [])),
                AnsweredAt=answered, TheirTurn=int(theirs))
     workers = [r for r in view.get('worker_attention', [])

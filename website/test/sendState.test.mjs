@@ -76,6 +76,17 @@ test("the draft state names a failed draft with its reason and offers the retry"
   assert.deepEqual(draftState({ DraftText: "hello", DraftError: null }), { state: "drafted", line: "", retry: false });
 });
 
+test("what the writer needs is a plain line, whole, never a failure - and the reply card draws it (walk 2026-10-29)", () => {
+  const why = "not drafted - it needs the October invoice run. An agent can work it out and draft the reply, or Redraft with it";
+  assert.deepEqual(draftState({ HasDraft: 0, DraftNeeds: why }),
+    { state: "needs", line: "Not drafted - it needs the October invoice run. An agent can work it out and draft the reply, or Redraft with it", retry: true });
+  assert.equal(draftState({ HasDraft: 1, DraftNeeds: why }).state, "drafted");
+  const rd = readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
+  assert.match(rd, /draftState\(r\)\.state === "needs"/);
+  const job = readFileSync(new URL("../src/replyDraft.js", import.meta.url), "utf8");
+  assert.match(job, /needs: data\?\.needs/);
+});
+
 test("the review, task-panel and assistant surfaces are wired to the shared send state", () => {
   for (const f of ["assistantCards.jsx"]) {
     const src = readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");

@@ -256,6 +256,14 @@ def retoken_doc(text: str, old_name: str, old_email: str = '') -> str:
 # numbering read as skipping.
 INTERNAL_TASK_BASE = 1_000_000_000
 def task_ref(task_id): return f'TQ-{int(task_id):04d}'
+def by_sentence(s, n: int = 1200) -> str:
+    """`s` whole when it fits, else cut after its last full sentence inside `n` - a reason cut at a character count ended mid-word
+    on the card (walk 2026-10-29). No sentence end inside: the words up to `n`, never a broken one."""
+    s = ' '.join(str(s or '').split())
+    if len(s) <= n: return s
+    head = s[:n]
+    end = max(head.rfind(c + ' ') for c in '.!?')
+    return head[:end + 1] if end > n // 3 else head.rsplit(' ', 1)[0] + '…'
 def is_goal(t) -> bool: return bool((t or {}).get('DoneWhen'))      # a goal is a task with a done-when sentence (spec 2026-10-12)
 def agent_tickable(i) -> bool: return not (i.get('out') or i.get('tid'))   # an email box ticks when it goes, a goal's step when its task closes
 def auto_code_enabled(src) -> bool:
@@ -1055,6 +1063,8 @@ class SQLiteStore:
             rvcols = {r[1] for r in self.cx.execute('PRAGMA table_info(review)')}
             if 'DraftError' not in rvcols:
                 self.cx.execute('ALTER TABLE review ADD COLUMN DraftError TEXT')
+            # ...and why the writer would not draft it at all (responder.NotDrafted - its own NEEDS): work for an agent, not a failure
+            if 'DraftNeeds' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN DraftNeeds TEXT')
             # what the draft was written against (PW-048): the inbound message set's revision, and whether the
             # thread has moved since - a verdict rechecks it wherever it lands (PW-055)
             if 'ContextRevision' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN ContextRevision TEXT')
@@ -5216,7 +5226,7 @@ class SQLiteStore:
         """`files`: the names the writer said ride with this draft ([] = a file promised, unnamed; None = it promised none). Left out,
         the same text keeps what its writer said and new text from anyone else drops it - a word about other words is no word on these."""
         fp = None if files in (None, ...) else json.dumps({'named': [str(f) for f in files]})
-        self._exec("UPDATE review SET FilesPromised=CASE WHEN ? THEN ? WHEN DraftText IS ? THEN FilesPromised END, DraftText=?, RunId=?, DraftError=NULL, "
+        self._exec("UPDATE review SET FilesPromised=CASE WHEN ? THEN ? WHEN DraftText IS ? THEN FilesPromised END, DraftText=?, RunId=?, DraftError=NULL, DraftNeeds=NULL, "
                    "DraftBy=? WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')",
                    (files is not ..., fp, draft, draft, run_id, by, rid))
         self._review_changed(rid)
@@ -5235,15 +5245,21 @@ class SQLiteStore:
             self.cx.execute('UPDATE review SET Instructions=? WHERE ReviewId=?', (json.dumps(have), rid)); self.cx.commit(); self._writes += 1
     def set_review_draft_error(self, rid, error: str):
         """The draft could not be written: keep the review pending and say why (PW-046)."""
-        self._exec('UPDATE review SET DraftError=? WHERE ReviewId=?', ((error or '')[:300] or None, rid))
+        self._exec('UPDATE review SET DraftError=?, DraftNeeds=NULL WHERE ReviewId=?', (by_sentence(error) or None, rid))
         # ...and WHEN, as an act on its task: the error had no time, so the Advisor read it as the newest failure whatever failed after
         # it - Send to agent failed with its error on the card, and the line still said the reply could not be drafted (the matrix,
         # 2026-10-20). advisor.failure reads the draft's error only while nothing newer failed.
         rv = self.get_review(rid) or {}
         if error and rv.get('TaskId'):
             self.add_operation({'OpId': uuid.uuid4().hex[:12], 'Kind': 'message.reply', 'TargetKind': 'task', 'TargetId': int(rv['TaskId']), 'ParamsJson': '{}',
-                                'Version': 1, 'Status': 'error', 'Error': (error or '')[:300],
+                                'Version': 1, 'Status': 'error', 'Error': by_sentence(error),
                                 'OutcomeJson': json.dumps({'what': 'the reply could not be drafted', 'source': 'draft'})})
+        self._review_changed(rid)
+    def set_review_draft_needs(self, rid, why: str):
+        """The writer would not draft it - it said what it NEEDS (responder.NotDrafted). No draft, and no failure either: the work goes
+        to an agent (Send to agent / Continue), and the reason is the owner's to read whole. It was kept as a DraftError, so the card
+        showed a red app failure cut mid-word and the Advisor lit "New task to fix this" (walk 2026-10-29)."""
+        self._exec('UPDATE review SET DraftNeeds=?, DraftError=NULL WHERE ReviewId=?', (by_sentence(why, 2000) or None, rid))
         self._review_changed(rid)
     def review_envelope(self, rid) -> dict:
         try: d = json.loads((self.get_review(rid) or {}).get('Deliver') or '{}') or {}
@@ -5925,7 +5941,7 @@ class SQLiteStore:
                             WHERE c.TaskId=m.TaskId AND c.Status NOT IN ('context','history')) END ChainSize,
                        rt.Decision, rt.Reason RouteReason,
                        rv.ReviewId, rv.Status ReviewStatus, rv.Kind ReviewKind,
-                       CASE WHEN rv.ReviewId IS NULL THEN NULL WHEN IFNULL(rv.DraftText,'')<>'' THEN 1 ELSE 0 END HasDraft, rv.DraftError,
+                       CASE WHEN rv.ReviewId IS NULL THEN NULL WHEN IFNULL(rv.DraftText,'')<>'' THEN 1 ELSE 0 END HasDraft, rv.DraftError, rv.DraftNeeds,
                        (SELECT COUNT(*) FROM attachment a WHERE a.MessageId=m.MessageId) Attachments,
                        {self.ANSWERED_AT} AnsweredAt,
                        {self.THEIR_TURN} TheirTurn

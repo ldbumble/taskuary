@@ -28,6 +28,7 @@ import { agentName, workOf, doingNow, trailText, turnStart, elapsedText } from "
 import { instructionsHint } from "./kinds.js";
 import { assignedAgent } from "./agentIdentity.js";
 import { Md } from "./md.jsx";
+import { draftState } from "./sendState.js";
 import PublishedPages from "./PublishedPages.jsx";
 import { placeShown } from "./shownPages.js";
 import { outputRefs, outputRow, uncited } from "./taskOutputs.js";
@@ -268,9 +269,9 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
     const key = `review-${r.ReviewId}-redraft`; setBusy(key); setError(""); setReceipt("");
     try {
       const { data } = await api.post(`/api/reviews/${r.ReviewId}/draft`);
-      setReviews((old) => old.map((x) => x.ReviewId === r.ReviewId ? { ...x, DraftText: data.draft } : x));
+      setReviews((old) => old.map((x) => x.ReviewId === r.ReviewId ? { ...x, DraftText: data.draft, DraftNeeds: data.needs || null } : x));
       setEdits((old) => { const next = { ...old }; delete next[r.ReviewId]; return next; });
-      setReceipt("Draft refreshed. Review the text, then use the action button when it is right.");
+      setReceipt(data.needs ? draftState({ DraftNeeds: data.needs }).line : "Draft refreshed. Review the text, then use the action button when it is right.");
     } catch (e) { setError(errText(e)); }
     finally { setBusy(""); }
   };

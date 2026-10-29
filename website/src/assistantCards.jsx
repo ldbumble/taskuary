@@ -638,7 +638,7 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
   const job = useDraftJob(card.rid);
   const drafting = job?.state === "drafting";
   useEffect(() => {
-    if (job?.state === "done") setRv((r) => (r && !r.gone ? { ...r, DraftText: job.draft, HasDraft: job.draft ? 1 : 0, DraftError: null } : r));
+    if (job?.state === "done") setRv((r) => (r && !r.gone ? { ...r, DraftText: job.draft, HasDraft: job.draft ? 1 : 0, DraftError: null, DraftNeeds: job.needs || null } : r));
     if (job?.state === "failed") setErr(`The draft could not be written - ${job.error}. Write it here, or Draft with AI again.`);
   }, [job]);
   const action = rv?.Kind === "action";
@@ -682,7 +682,7 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
   };
   const redraft = async () => {
     setBusy("redraft"); setErr("");
-    try { const { data } = await api.post(`/api/reviews/${card.rid}/draft`); setRv((r) => ({ ...r, DraftText: data.draft, Stale: false })); setText(null); }
+    try { const { data } = await api.post(`/api/reviews/${card.rid}/draft`); setRv((r) => ({ ...r, DraftText: data.draft, DraftNeeds: data.needs || null, Stale: false })); setText(null); }
     catch (e) { setErr(failOf(e)); }
     setBusy("");
   };

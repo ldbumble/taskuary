@@ -178,7 +178,7 @@ def test_the_writer_is_told_never_to_promise_and_to_say_needs():
 def test_needs_leaves_no_draft_and_starts_the_general_agent():
     s = store(); tid = reply_task(s)
     rv, spawned = drafted(s, tid, writer('NEEDS: the October invoice run, to see why the total moved')[0])
-    assert not (rv.get('DraftText') or '').strip() and 'needs the October invoice run' in rv['DraftError']
+    assert not (rv.get('DraftText') or '').strip() and 'needs the October invoice run' in rv['DraftNeeds'] and not rv.get('DraftError')
     assert spawned == ['_auto_general'] and s.get_task(tid)['Kind'] == 'general'
     assert 'the reply writer said it needs the October invoice run' in ingest.reply_job(s, tid)
 
@@ -190,21 +190,21 @@ def test_a_short_mail_the_writer_cannot_answer_is_no_draft():
     llm, calls = writer('NEEDS: the export logs, to see why the total moved')
     rv, spawned = drafted(s, tid, llm)
     assert len(calls) == 1 and not (rv.get('DraftText') or '').strip()
-    assert 'needs the export logs' in rv['DraftError'] and spawned == ['_auto_general']
+    assert 'needs the export logs' in rv['DraftNeeds'] and spawned == ['_auto_general']
 
 
 def test_a_reply_it_cannot_write_with_auto_start_off_lights_send_to_agent_with_the_reason():
     s = store(general_auto_enabled='0'); tid = reply_task(s)
     rv, spawned = drafted(s, tid, writer('NEEDS: the export logs')[0])
     assert spawned == [] and s.get_task(tid)['Kind'] == 'reply'
-    assert 'An agent can work it out' in rv['DraftError']
+    assert 'An agent can work it out' in rv['DraftNeeds']
     assert any(x.startswith('No agent started:') for x in lines(s, tid))
 
 
 def test_a_quick_fact_is_still_drafted_at_once():
     s = store(); tid = reply_task(s)
     rv, spawned = drafted(s, tid, writer('Hi Erin,\n\nYes - Tuesday from 2 works for me.\n\nAlex')[0])
-    assert 'Tuesday from 2 works' in rv['DraftText'] and not rv.get('DraftError') and spawned == []
+    assert 'Tuesday from 2 works' in rv['DraftText'] and not rv.get('DraftError') and not rv.get('DraftNeeds') and spawned == []
     assert s.get_task(tid)['Kind'] == 'reply'
 
 

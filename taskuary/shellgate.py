@@ -8,20 +8,26 @@ deleted, a package published or a mail sent from a script went straight out, and
 Where it is caught: the same PreToolUse hook on the shell tools (hooks.browser, matcher Bash|PowerShell). Which commands go out is each
 tool's own GRAMMAR - git's `push`, the GitHub CLI's `pr merge` or `api -X DELETE`, a package manager's `publish`, a mail tool by its name -
 never a judgement over words, and never the words of a mail. Everything else passes at once.
-- HELD: the tool call is refused with why, and the step goes on the task as a proposal (proposals.ACTIONS 'shell_act') - the existing
-  card with Approve and Dismiss, the exact command shown.
-- APPROVED, Taskuary runs that exact command in the folder the agent ran it from, and tells the agent what happened. Dismissed, the
-  agent is told it was not done.
+- ASKED, where the owner can answer in the CLI (the owner, 2026-10-29: "let's not mess with people's CLIs"): the hook answers `ask`
+  and Claude Code draws its OWN permission prompt in the pane - the owner's yes there is the approval, and the task gets only a line
+  saying what was asked. Held, the agent was refused, the owner typed "yes push" into the CLI, it tried again and was refused again:
+  the one place the owner was looking could not say yes. Which sessions ask is read from the session (asks), never from words.
+- HELD everywhere else (a headless chat, a workflow's run, a stranger's task, a CLI whose hook cannot ask): the tool call is refused
+  with why, and the step goes on the task as a proposal (proposals.ACTIONS 'shell_act') - the card with Approve and Dismiss.
+- APPROVED, Taskuary runs that exact command in the folder the agent ran it from, in the shell it was written for (Git Bash on
+  Windows, never WSL's bash), and tells the agent what happened. Dismissed, the agent is told it was not done.
 
-What this does not cover, said plainly: Codex, Devin and Copilot sessions (their hooks report, they cannot refuse a call); a session whose
-hook could not reach Taskuary (the call runs - the same as the browser hook); and a step reached some other way than these tools by name
-(a script that pushes, an HTTP call made by hand). This gates the commands agents use, not every road there is.
+What this does not cover, said plainly: Codex, Devin and Copilot sessions (their hooks report, they cannot refuse a call - and Codex's
+PreToolUse parses `ask` without supporting it yet); a session whose hook could not reach Taskuary (the call runs - the same as the
+browser hook); and a step reached some other way than these tools by name (a script that pushes, an HTTP call made by hand). This
+gates the commands agents use, not every road there is.
 """
 import json, os, shutil, subprocess
 from loguru import logger
 from .browsergate import _segments, _deny, _tell
 
 HELD = 'Taskuary held this for the owner'
+ASKS = {'claude'}       # the CLIs whose PreToolUse hook can answer `ask` with their own prompt (measured: Claude 2.1.312 honours it)
 # each tool's own words for a step that goes out, as (what it does, in the owner's words): its subcommand, or (subcommand, action)
 GIT = {'push': 'push the agent\'s commits out of this computer'}
 GH = {('pr', 'merge'): 'merge a pull request', ('pr', 'create'): 'open a pull request', ('pr', 'comment'): 'post a public comment on a pull request',
@@ -110,12 +116,27 @@ def _pending(store, tid: int, sid: str, cmd: str):
     return None
 
 
-def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '') -> dict:
-    """The hook's answer for one shell command: {} lets it run; a refusal holds it and puts the step on the task. ONE step held holds
-    the whole command - the shell line is the agent's, and running half of it is not what it asked for."""
+def asks(store, t) -> bool:
+    """Can the owner answer this session's own permission prompt? Only a CLI pane of ours (argv: a terminal, not a headless chat),
+    started 'full' (a stranger's task runs 'auto' and its permit door is the owner's), whose CLI's hook answers `ask`, on a task that
+    is not a workflow's run (nobody sits at a scheduled run's pane). Everything else is held for the task's Approve."""
+    if not getattr(t, 'argv', None) or getattr(t, 'mode', 'full') != 'full': return False
+    from . import clis
+    if clis._base(getattr(t, 'cli', '') or t.argv[0]) not in ASKS: return False
+    return (store.get_task(t.task_id) or {}).get('Source') != 'workflow'
+
+
+def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '', ask: bool = False) -> dict:
+    """The hook's answer for one shell command: {} lets it run; `ask` hands it to the CLI's own prompt (never an allow); else a refusal
+    holds it and puts the step on the task. ONE step holds the whole command - the line is the agent's, and half of it is not what it asked."""
     todo = acts(cmd)
     if not todo: return {}
     what = '; '.join(dict.fromkeys(a['what'] for a in todo))
+    if ask:
+        store.audit('task', tid, 'shell_act_asked', 'taskuary', 'system', {'tools': [a['tool'] for a in todo], 'what': what})
+        store.add_comment_once(tid, 'taskuary', 'agent', f"The agent asked to {what}: `{str(cmd)[:300]}` - its terminal asks you to allow it.")
+        return {'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'ask',
+                                       'permissionDecisionReason': f'Taskuary asks you first: {what} (it leaves this computer).'}}
     if not _pending(store, tid, sid, cmd):
         from . import proposals
         proposals.queue(store, tid, {'action': 'shell_act', 'sid': str(sid), 'command': str(cmd)[:4000], 'shell': shell, 'cwd': cwd or '',
@@ -126,10 +147,44 @@ def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '
                  "with work that does not need it.")
 
 
+def git_bash() -> str:
+    """The bash an agent's Bash tool runs on Windows: Git's, beside git.exe. NEVER System32's bash.exe - WSL's launcher, which on a box
+    with no distribution answered an approved push with "no distribution installed", in UTF-16 (2026-10-29). '' when none is found."""
+    if os.name != 'nt': return shutil.which('bash') or ''
+    cands, g = [os.environ.get('CLAUDE_CODE_GIT_BASH_PATH') or ''], shutil.which('git')     # Claude Code's own setting for that bash first
+    if g:                                       # git.exe sits in <Git>\cmd, <Git>\bin or <Git>\mingw64\bin
+        d = os.path.dirname(os.path.abspath(g))
+        cands += [os.path.join(r, *b) for r in (os.path.dirname(d), os.path.dirname(os.path.dirname(d))) for b in (('bin', 'bash.exe'), ('usr', 'bin', 'bash.exe'))]
+    cands += [os.path.join(os.environ[v], *b) for v in ('ProgramFiles', 'ProgramW6432', 'LOCALAPPDATA') if os.environ.get(v)
+              for b in (('Git', 'bin', 'bash.exe'), ('Programs', 'Git', 'bin', 'bash.exe'))]
+    w, sysroot = shutil.which('bash') or '', os.path.normcase(os.environ.get('SystemRoot') or r'C:\Windows')
+    if w and not os.path.normcase(os.path.abspath(w)).startswith(sysroot) and 'windowsapps' not in w.lower(): cands.append(w)
+    return next((c for c in cands if c and os.path.isfile(c)), '')
+
+
 def _argv(shell: str, cmd: str) -> list:
+    "The held command in the shell it was written in: the agent's PowerShell tool in PowerShell, its Bash tool in Git Bash."
     if str(shell).lower() == 'powershell':
         return [shutil.which('pwsh') or shutil.which('powershell') or 'powershell', '-NoProfile', '-NonInteractive', '-Command', cmd]
-    return [shutil.which('bash') or 'bash', '-c', cmd]
+    b = git_bash()
+    if not b: raise RuntimeError('The held step was not run: no Git Bash (the bash beside git.exe) was found to run it in - nothing was done')
+    return [b, '-c', cmd]
+
+
+def text(raw) -> str:
+    """A child's output as words: UTF-16 when its bytes say so (a byte-order mark, or NULs in every other place - wsl.exe writes it),
+    else UTF-8 with whatever does not decode replaced. Read as UTF-8, WSL's sentence reached the owner as r\\0i\\0b\\0u\\0t\\0i\\0o\\0n."""
+    if raw is None or isinstance(raw, str): return raw or ''
+    if raw[:2] in (b'\xff\xfe', b'\xfe\xff'): return raw.decode('utf-16', errors='replace')
+    odd, even = raw[1::2].count(0), raw[::2].count(0)
+    if len(raw) >= 4 and odd * 2 >= len(raw) // 2 and odd > even: return raw.decode('utf-16-le', errors='replace')
+    return raw.decode('utf-8', errors='replace')
+
+
+def failed(said: str, rc: int) -> str:
+    "What the owner reads when the held step failed: its first lines, which are where WSL, git and gh say why."
+    lines = [l.strip() for l in str(said or '').splitlines() if l.strip()]
+    return f"The held step failed: {' / '.join(lines[:4])[:300] or f'exit {rc}'}"
 
 
 def perform(store, tid: int, p: dict, run=None) -> dict:
@@ -139,11 +194,11 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
     if cwd and not os.path.isdir(cwd): raise RuntimeError(f'the folder it was held in is gone ({cwd}) - nothing was done')
     def go(argv, folder):
         from . import spawn
-        r = spawn.run(argv, cwd=folder or None, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
-        return r.returncode, (r.stdout or '') + (r.stderr or '')
+        r = spawn.run(argv, cwd=folder or None, capture_output=True, timeout=300, stdin=subprocess.DEVNULL)   # bytes: text() reads them
+        return r.returncode, text(r.stdout) + text(r.stderr)
     rc, said = (run or go)(_argv(p.get('shell') or 'Bash', cmd), cwd)
+    if rc != 0: raise RuntimeError(failed(said, rc))
     said = ' '.join(str(said or '').split())[-600:]
-    if rc != 0: raise RuntimeError(f'it ran and failed: {said[-300:] or f"exit {rc}"}')
     _tell(store, tid, f"The owner approved it and Taskuary ran `{cmd[:300]}` in {cwd or 'its folder'}. It said: {said[-300:] or 'done'}. Carry on.")
     store.audit('task', tid, 'shell_act_done', 'owner', 'human', {'what': p.get('what')})
     return {'performed': p.get('what') or cmd[:200], 'said': said[-300:]}

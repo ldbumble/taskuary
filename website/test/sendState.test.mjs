@@ -2,7 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { label } from "../src/buttons.js";
-import { sendBlockLine, draftState, replyEnvelope, replySendFailure, reviewDeliveryState, sendFix } from "../src/sendState.js";
+import { sendBlockLine, draftState, failureHead, replyEnvelope, replySendFailure, reviewDeliveryState, sendFix } from "../src/sendState.js";
+
+// AN APPROVED STEP THAT FAILED IS NOT A REPLY THAT FAILED (2026-10-29): a held push that failed read "The reply was not sent."
+test("a proposal's failure stands alone; a reply's still says it was not sent", () => {
+  const f = replySendFailure({ send_error: "The held step failed: rejected (fetch first)", delivery: "failed" });
+  assert.equal(failureHead(f, true), "");
+  assert.equal(failureHead(f), "The reply was not sent.");
+  assert.equal(failureHead({ ...f, unknown: true }, true), "Delivery has not been confirmed.");
+  const dec = readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
+  assert.match(dec, /<b>\{failureHead\(sendErr, !!proposal\)\}<\/b> \{sendErr\.message\}/);
+  assert.match(dec, /\{\(sendErr\.unknown \|\| !proposal\) && <Box/);     // no "the draft stays on the task" under an act
+});
 
 test("reply envelopes preserve exact saved To and CC and distinguish other delivery kinds", () => {
   const env = { kind: "reply", to: ["a@example.test", "b@example.test"], cc: ["c@example.test"], delivery: "unknown" };

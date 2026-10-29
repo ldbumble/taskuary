@@ -32,6 +32,11 @@ export function replySendFailure(data) {
   return message ? { message, unknown, ...(fix ? { fix } : {}) } : null;
 }
 
+// THE FAILURE'S HEADLINE: a reply that did not go says so; a PROPOSAL that failed sent no reply at all - an approved push that failed
+// read "The reply was not sent. it ran and failed: ..." (2026-10-29) - so its own sentence stands alone ("The held step failed: ...")
+export const failureHead = (failure, act = false) =>
+  failure?.unknown ? "Delivery has not been confirmed." : act ? "" : "The reply was not sent.";
+
 // THE PLACE THAT FIXES A FAILED SEND (outbound.Fixable): from the answer just now, else from the envelope a reload reads - a fix
 // that lived only in the answer was gone after a refresh, and the sentence was all that was left
 export function sendFix(review, failure) {

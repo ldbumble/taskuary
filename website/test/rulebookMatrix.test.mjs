@@ -12,7 +12,7 @@ const v = (id, group, extra = {}) => ({ id, group, tone: "s", label: id, title: 
 const NEXT = v("next", "next", { label: "Next" });
 // what a task's row registers (TaskPage's verbs, by their row ids - buttons.json `row`)
 const TASK = [v("reply", "decide", { label: "Reply" }), v("done", "more", { label: "Mark done" }), v("remind", "more", { label: "Remind me" }),
-  v("nat", "more", { label: "Remove - not a task" }), v("hand", "more", { label: "Hand it to a person" }), NEXT];
+  v("nat", "more", { label: "Not a task" }), v("hand", "more", { label: "Hand it to a person" }), NEXT];
 
 // (state, the decision the server answers, the row drawn, the id lit on the bar or the card)
 const MATRIX = [
@@ -21,7 +21,7 @@ const MATRIX = [
   ["draft_promise", { verb: "redraft", label: "Redraft", line: "Draft promises Friday - nothing here shows it." },
     [...TASK, v("12:approve", "decide", { label: "Send", card: true, tone: "p" }), v("12:redraft", "decide", { label: "Redraft", card: true })], "card:12:redraft"],
   ["unsendable", { verb: "copy", label: "Copy", line: "" }, [...TASK, v("12:copy", "decide", { label: "Copy", card: true })], "card:12:copy"],
-  ["duplicate", { verb: "remove", label: "Remove - not a task", line: "Same ask as TQ-0006." }, TASK, "nat"],
+  ["duplicate", { verb: "remove", label: "Not a task", line: "Same ask as TQ-0006." }, TASK, "nat"],
   ["working", { verb: "next", label: "Next", line: "" }, [v("save-end", "agent", { label: "Stop and save", fill: true }), NEXT], "next"],
   ["unpushed", { verb: "review_changes", label: "Review changes", line: "Changes ready - not pushed." }, [...TASK, v("diff", "agent", { label: "Review changes" })], "diff"],
   ["stopped", { verb: "continue", label: "Continue", line: "Stopped 40 min ago." }, [...TASK, v("continue", "agent", { label: "Continue" })], "continue"],

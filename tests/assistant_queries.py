@@ -89,7 +89,7 @@ CASES = [
     Q('item', 'remind me tomorrow', 'todo', c('task.defer', until='tomorrow 9am'), 'light:defer', freq=5),
     Q('item', 'remind me about this on friday at 2pm', 'todo', c('task.defer', until='friday 2pm'), 'light:defer', freq=4),
     Q('item', 'not ours', 'fyi', c('not_ours'), 'pressed:not_ours', freq=4),
-    Q('item', 'this is not ours', 'todo', c('task.not_a_task'), 'pressed:remove', freq=3, note="a task's row has Remove - not a task, not Not ours"),
+    Q('item', 'this is not ours', 'todo', c('task.not_a_task'), 'pressed:remove', freq=3, note="a task's row has Not a task, not Not ours"),
     Q('item', 'change the priority to high', 'todo', c('task.update', priority='high'), 'light:priority', freq=3),
     Q('item', 'make this urgent', 'todo', c('task.update', priority='urgent'), 'light:priority', freq=3),
     Q('item', 'mark this done', 'todo', c('close'), 'pressed:close', freq=5),

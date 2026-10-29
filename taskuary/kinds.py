@@ -11,6 +11,22 @@ AGENT = tuple(k for k, v in KIND.items() if v['agent'])      # general, coding: 
 TRIAGE = tuple(k for k, v in KIND.items() if v['triage'])    # what triage (or the owner's "make it a task") may name
 
 
+SHOWN = _J['shown']                                          # who the owner sees at work: Taskuary, never the profile (kinds.json `shown_`)
+
+
+def shown(run=None) -> str:
+    """The name an agent goes by on every screen and line the owner reads. A general agent is Taskuary whatever profile it
+    runs under; a coding session may name its tool (`cli`) - a chat session's `cli` is Taskuary's own, never a tool."""
+    r = run if isinstance(run, dict) else {}
+    tool = '' if str(r.get('mode') or '') in ('chat', 'assistant') else str(r.get('cli') or '').strip()
+    return tool if tool and tool.lower() != SHOWN.lower() else SHOWN
+
+
+def instructions(profile) -> str:
+    """The profile, said where only a look for it finds it - a hover, a detail line: 'Instructions: researcher'."""
+    return f'Instructions: {profile}' if profile else ''
+
+
 def label(kind) -> str: return (KIND.get(str(kind or '')) or {}).get('label') or str(kind or '')
 
 

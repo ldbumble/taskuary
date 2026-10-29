@@ -58,6 +58,7 @@ import { readContacts } from "./contacts.js";
 import { personLine, runSearch, withFound } from "./peopleSearch.js";
 export { agentAssignee, assignedAgent, assigneeLabel } from "./agentIdentity.js";
 import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2, label } from "./theme.jsx";
+import { AGENT_SHOWN, shownAgent } from "./kinds.js";
 
 // Taskuary actions wear Taskuary's actual product mark. The generic robot glyph suggested a
 // third-party bot and, on a quiet text button, did not make the dispatch action read as a button.
@@ -1569,7 +1570,7 @@ const workHead = (work, who, waiting, asking, startedAt, promptPending = false, 
 
 export const WorkPane = ({ run, onOpen }) => {
   // the CLI it runs, not the profile's nickname: a profile called codex that runs claude is claude here
-  const work = run?.work || {}, who = run?.cli || run?.AgentName || run?.agent || "agent";
+  const work = run?.work || {}, who = shownAgent(run);
   const waiting = run?.kind === "session" && (run.asking || isWaiting(run));
   const h = workHead(work, who, waiting, run?.asking, run?.StartedAt || run?.started, run?.promptPending, run?.state, run?.request?.text);
   const todos = work.todos || [];
@@ -1781,7 +1782,7 @@ export const LiveConsole = ({ run, agent, lines = 5, onOpen, fill }) => {
   const waiting = run ? (run.kind === "session" && (run.asking || isWaiting(run))) : false;
   const tail = (run?.tail || []).slice(-lines);
   const files = run?.files || [];
-  const who = run?.AgentName || agent || "agent";
+  const who = run ? shownAgent(run) : agent || AGENT_SHOWN;
   return (
     <Box onClick={onOpen} title="Open the task - the real terminal"
       sx={{ bgcolor: CATPPUCCIN.bg, border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 1.5, px: 1.25, py: 0.9, cursor: onOpen ? "pointer" : "default",

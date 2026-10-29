@@ -80,16 +80,17 @@ test("the agent card names the role and the brain, and offers no model", () => {
   assert.match(tasks, /const runRole = assignedAgent\(t\?\.Assignee\) \|\| \(t\?\.Kind === "coding" \? codingProfile\(agents, kinds\) : ""\);/);
   // `term.cli` is the literal string "taskuary" on every general session (general.info), so the
   // pill that exists to name the brain named the PRODUCT. The session's own provider leads now.
-  assert.match(tasks, /const runBrain = term\?\.provider \|\| term\?\.cli \|\| term\?\.agent \|\| detail\?\.ranOn\?\.brain \|\| \(runRole && brains\[runRole\]\) \|\| "";/);
+  assert.match(tasks, /const runBrain = term\?\.provider \|\| term\?\.cli \|\| detail\?\.ranOn\?\.brain \|\| \(runRole && brains\[runRole\]\) \|\| "";/);
   assert.match(tasks, /const brainPill = runBrain && !\(isGeneral && term\?\.alive\) \? runBrain : "";/,
     "a live general session shows the brain in its workspace picker - the pill would be the same fact twice");
   assert.ok(tasks.includes("const { agents, models, kinds, brains, brainList, brainModels, generalBrains, agentsRead, codingReady } = useAgents();"),
     "the roster's role->brain map has to reach the card");
-  const at = tasks.indexOf("{runRole && <Box");
-  assert.notEqual(at, -1, "the role pill must be rendered");
+  // the profile is no pill (the owner, 2026-10-28: "works as researcher" named instructions as the worker) - it is on the AI pill's hover
+  assert.ok(!tasks.includes(">works as</Box>"), "no works-as pill");
+  const at = tasks.indexOf("{factBrain && <Box");
+  assert.notEqual(at, -1, "the AI pill must be rendered");
   const row = tasks.slice(at, at + 1400);
-  // ...in plain words (the audit, 2026-10-17): "role" and "brain" were the app's own vocabulary
-  assert.ok(row.includes(">works as</Box>") && row.includes(">AI</Box>"), "both pills are labelled");
+  assert.ok(row.includes(">AI</Box>") && row.includes("instructionsHint(runRole)"), "the AI pill is labelled and tells the profile on hover");
   // ...and a settled general Result's record line already names the AI it ran on: the pill is gone there too (2026-10-26)
   assert.match(tasks, /const factBrain = isGeneral && settled \? "" : brainPill;/);
   assert.ok(row.includes("{factBrain &&"), "the brain pill renders factBrain, not runBrain");

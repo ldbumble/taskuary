@@ -27,6 +27,7 @@ import QueuedStart from "./QueuedStart.jsx";
 import { label } from "./buttons.js";
 import { LANE_META, KIND_META } from "./funnelPile.js";
 import { remindWaiting } from "./taskFilter.js";
+import { AGENT_SHOWN, shownAgent, instructionsHint } from "./kinds.js";
 
 // Not every ask is about a codebase - "what does this policy mean", "draft me a note", "prepare
 // me for this meeting". The task carries `repo:none`, which is the one answer the picker could
@@ -118,8 +119,8 @@ const LiveTail = ({ run, chat, name }) => {
     ))}
     <Typography variant="caption" sx={{ ...mono, fontSize: 9.5, color: waiting ? CATPPUCCIN.yellow : CATPPUCCIN.cyan,
       ...(waiting ? {} : { "@keyframes tqBlink": { "50%": { opacity: 0.25 } }, animation: "tqBlink 1.1s step-end infinite" }) }}>
-      {waiting ? `⏸ ${run.line || says(subState(run), run.AgentName)}`
-        : `▮ ${run.AgentName} working ${elapsed(run.StartedAt)}`}
+      {waiting ? `⏸ ${run.line || says(subState(run), shownAgent(run))}`
+        : `▮ ${shownAgent(run)} working ${elapsed(run.StartedAt)}`}
     </Typography>
   </Box>
   );
@@ -407,7 +408,7 @@ export default function BoardView({ onOpenTask, active = true }) {
                 // role is the one coding profile, so the name worth showing is the BRAIN. A live session knows
                 // exactly what it launched (`cli`); an idle one takes the brain settings name.
                 const brain = live[t.TaskId]?.cli || brains[assignedAgent(t.Assignee) || codingProfile(agents, kinds)] || "";
-                const badge = agentBadge(chat ? agentName(t) : (brain || live[t.TaskId]?.AgentName || t.RunAgent),
+                const badge = agentBadge(chat ? agentName(t) : (brain || shownAgent(live[t.TaskId])),   /* the tool, else Taskuary - never the profile */
                   t.RunStatus, !!live[t.TaskId], cmds);
                 return (
                 <Box key={t.TaskId} data-tq-board-task={t.TaskId} onClick={() => onOpenTask(t.TaskId)}
@@ -427,13 +428,12 @@ export default function BoardView({ onOpenTask, active = true }) {
                       whiteSpace: "nowrap", flexShrink: 0 }}>{t.ref}</Typography>
                     <ChannelIcon channel={t.Source} sx={{ fontSize: 12 }} />
                     {assignedAgent(t.Assignee) && !badge && <Chip size="small" icon={<TaskuaryMark size={10} />}
-                      label={chat ? assignedAgent(t.Assignee) : (brain || assignedAgent(t.Assignee))}
-                      title={chat ? `${assignedAgent(t.Assignee)} owns this task`
-                        : `${brain || assignedAgent(t.Assignee)} works this task`}
+                      label={chat ? AGENT_SHOWN : (brain || AGENT_SHOWN)}   /* never the profile - it is on hover (the owner, 2026-10-28) */
+                      title={`${chat ? AGENT_SHOWN : brain || AGENT_SHOWN} works this task · ${instructionsHint(assignedAgent(t.Assignee))}`}
                       sx={{ height: 15, fontSize: 8.5, bgcolor: "#e3e6e1", color: "#47654a",
                         "& .MuiChip-label": { px: 0.55 }, "& .MuiChip-icon": { ml: 0.35 } }} />}
                     {t.RunStatus && (
-                      <Chip size="small" label={`${t.RunAgent || "agent"} · ${t.State === "blocked" ? AGENT.waiting : RUN_WORD[t.RunStatus] || t.RunStatus}`
+                      <Chip size="small" label={`${chat ? AGENT_SHOWN : brain || AGENT_SHOWN} · ${t.State === "blocked" ? AGENT.waiting : RUN_WORD[t.RunStatus] || t.RunStatus}`
                         + (live[t.TaskId] ? ` · ${elapsed(live[t.TaskId].StartedAt)}` : "")}
                         sx={{ height: 15, fontSize: 8.5, fontWeight: 600, "& .MuiChip-label": { px: 0.7 },
                           bgcolor: t.RunStatus === "running" ? "#eae4d8" : t.RunStatus === "error" ? "#f0e2e4" : "#dfeade",

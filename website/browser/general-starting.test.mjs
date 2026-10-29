@@ -5,7 +5,7 @@ import { startHarness } from "./harness.mjs";
 
 /* A GENERAL AGENT STARTING IS ONE LINE. Started from the Assistant, the task card opened under "researcher is working" on a pane
    about 300px tall with nothing in it but a spinner at its foot, for as long as the CLI took to come up (the owner, 2026-10-21).
-   Until its first answer the pane is as high as what it shows - "Starting the researcher on Codex…" - and the room comes with
+   Until its first answer the pane is as high as what it shows - "Starting Taskuary on Codex…" (the agent goes by Taskuary, never its profile - 2026-10-28) - and the room comes with
    the answer. The fixture is the session the server started: /api/terminals lists it live, /assistant has it busy and silent. */
 test("a general agent that has said nothing yet is one line, not a tall empty pane", { timeout: 180000 }, async (t) => {
   const harness = await startHarness();
@@ -46,7 +46,7 @@ test("a general agent that has said nothing yet is one line, not a tall empty pa
   const quiet = await page.evaluate(() => ({ line: document.querySelector("[data-tq-starting-line]").innerText,
     pane: document.querySelector("[data-tq-starting]").getBoundingClientRect().height,
     welcome: !!document.querySelector(".tq-aui-welcome") }));
-  assert.match(quiet.line, /Starting the researcher on Codex…/);
+  assert.match(quiet.line, /Starting Taskuary on Codex…/);
   assert.equal(quiet.welcome, false, "no welcome copy over an agent already started");
   // the line, the composer and the pane's own padding - nothing reserved for an answer that has not come
   assert.ok(quiet.pane < 200, `the starting pane should be as high as its line, got ${quiet.pane}px`);

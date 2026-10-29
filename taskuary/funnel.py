@@ -330,7 +330,7 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             if r['TaskId'] in agents: continue
             agents.add(r['TaskId'])
             out.append(_item(f"agent:{r['TaskId']}", 'agent', 'blocked', r.get('Title') or subj, agent=r.get('Working') or 'agent',
-                             why=agent_says('parked', r.get('Working')), **base))
+                             why=agent_says('parked'), **base))
             if group: threads[group] = out[-1]
             continue
         base['working'] = r.get('Working') or ''             # an agent has it: build() lets these go, by name
@@ -888,7 +888,7 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
         if t.get('sid') and live_state is _LIVE_UNSET:
             try: tail = [x for x in term.asking_lines(t['sid'], 4)] or tail
             except Exception as e: logger.debug(f'funnel: no rendered screen for {t.get("sid")} - {e}')
-        agent = t.get('agent') or t.get('label') or 'agent'
+        agent = task_kinds.shown(t)                       # Taskuary, or a coding session's tool - never the profile
         req = t.get('request') or None
         # a workflow run wears the workflow's mark (ChannelIcon 'workflow') - the terminal is for work with no source at all
         src = 'workflow' if task.get('Source') == 'workflow' else ''
@@ -1367,11 +1367,11 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
     def held_item(i):
         if not in_hand(i): return i
         live = live_by_tid.get(i.get('tid')) or {}
-        who = i.get('working') or live.get('agent') or live.get('label') or 'an agent'
+        who = i.get('working') or (task_kinds.shown(live) if live else task_kinds.SHOWN)
         if i['kind'] == 'review': i = i | {'kind': 'agent', 'rid': None, 'draft': False, 'reply_pending': True}
         return i | {'key': f"agent:{i['tid']}" if i.get('tid') else i['key'], 'lane': 'working',
                     'why': f"{who} has it - nothing for you until it stops or asks",
-                    'working': who, 'agent': live.get('agent') or who,
+                    'working': who, 'agent': who,
                     'sid': live.get('sid'), 'tail': live.get('tail') or [],
                     'mode': live.get('mode') or 'terminal'}
     items = [held_item(i) for i in items]
@@ -1638,13 +1638,13 @@ def agent_states(store) -> dict:
         tid = t.get('taskId')
         if not tid or (store.get_task(tid) or {}).get('SourceRef') == 'assistant:dock': continue
         waiting = t.get('waiting') if t.get('waiting') is not None else (t.get('idle') or 0) >= term.IDLE_WAITING
-        out[tid] = (sub_state(waiting, t.get('state') == 'asking', t.get('request')) or 'working', t.get('agent') or t.get('label') or 'the agent')
+        out[tid] = (sub_state(waiting, t.get('state') == 'asking', t.get('request')) or 'working', task_kinds.shown(t))
     for r in store.running_runs():
-        if r.get('TaskId') and r['TaskId'] not in out: out[r['TaskId']] = ('working', r.get('AgentName') or 'the agent')
+        if r.get('TaskId') and r['TaskId'] not in out: out[r['TaskId']] = ('working', task_kinds.SHOWN)
     for tid in list(_STATE):
         if tid in out: continue
         t = store.get_task(tid) or {}
-        out[tid] = (('done' if t.get('Status') in ('done', 'dropped') else 'idle'), _STATE[tid][1] if isinstance(_STATE[tid], tuple) else 'the agent')
+        out[tid] = (('done' if t.get('Status') in ('done', 'dropped') else 'idle'), _STATE[tid][1] if isinstance(_STATE[tid], tuple) else task_kinds.SHOWN)
     return out
 
 
@@ -2091,7 +2091,7 @@ def alerts(store, items: list = None) -> list:
         # a minute apart in two wordings (2026-09-29 audit) - an interruption to say there is nothing to do
         elif i['kind'] == 'agent' and i['lane'] == 'blocked':
             out.append({'key': f"alert:{i['key']}", 'item': i['key'], 'kind': 'agent', 'lane': i['lane'], 'asking': bool(i.get('asking')),
-                        'text': f"{i.get('why') or agent_says('parked', i.get('agent'))} ({i.get('ref') or i['title']})"})
+                        'text': f"{i.get('why') or agent_says('parked', i.get('agent') or task_kinds.SHOWN)} ({i.get('ref') or i['title']})"})
         elif i['lane'] == 'asked' and i['kind'] in ('asked', 'todo') and i.get('who'):
             out.append({'key': f"alert:{i['key']}", 'item': i['key'], 'kind': 'asked', 'lane': 'asked', 'text': f"{i['who']} asked you: {i['title']}"})
         elif i['lane'] in ('time', 'approve') and i['kind'] != 'meeting':      # a meeting further out is not yet news

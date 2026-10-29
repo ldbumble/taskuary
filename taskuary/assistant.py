@@ -1037,7 +1037,7 @@ def _open(store, cap: int = 20) -> str:
     def line(t):
         last = _dt(store.task_last_activity(t['TaskId']) or t.get('UpdatedAt') or t.get('CreatedAt'))
         age = f"{int((datetime.now() - last).total_seconds() // 3600)}h since anything happened" if last else ''
-        state = f"{t.get('RunAgent') or 'an agent'} is working it" if t.get('RunStatus') == 'running' else 'a draft waits for you on the task' if t.get('ReviewStatus') == 'pending' else age
+        state = f"{task_kinds.SHOWN} is working it" if t.get('RunStatus') == 'running' else 'a draft waits for you on the task' if t.get('ReviewStatus') == 'pending' else age
         return f"- {task_ref(t['TaskId'])} [{t['Status']}, {t.get('Kind')}] {_short(t.get('Title'), 80)}" + (f" - {state}" if state else '')
     return '\n'.join(line(t) for t in ts[:cap]) or '(nothing open)'
 
@@ -1557,13 +1557,13 @@ def in_flight(store) -> list:
     [{ref, tid, title, state}] newest activity first, the ones an agent has at the top."""
     from . import terminal as term
     live = {}
-    try: live = {t['taskId']: (t.get('agent') or t.get('label') or 'an agent') for t in term.live_sessions(tail=0) if t.get('taskId')}
+    try: live = {t['taskId']: task_kinds.shown(t) for t in term.live_sessions(tail=0) if t.get('taskId')}
     except Exception: pass
     out = []
     for t in store.list_tasks(active_only=True):
         if t.get('Status') not in ('open', 'in_progress', 'waiting'): continue
         tid = t['TaskId']
-        agent = live.get(tid) or (t.get('RunAgent') if t.get('RunStatus') == 'running' else None)
+        agent = live.get(tid) or (task_kinds.SHOWN if t.get('RunStatus') == 'running' else None)
         last = _dt(store.task_last_activity(tid) or t.get('UpdatedAt') or t.get('CreatedAt'))
         quiet_h = int((datetime.now() - last).total_seconds() // 3600) if last else None
         state = (f'{agent} has it' if agent

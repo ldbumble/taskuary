@@ -15,3 +15,11 @@ export const shortKind = (kind) => String(kindLabel(kind || "task")).replace(/^a
 export const verdictLabel = (kind) => KIND[kind]?.verdict || String(kind || "");
 // "Start the coding agent": who works it, said by what it IS - a profile's name is not a worker (the owner, 2026-10-16)
 export const agentWord = (kind) => KIND[kind === "coding" ? "coding" : "general"].worker;
+// WHO THE OWNER SEES AT WORK (kinds.json `shown_`, the owner 2026-10-28): Taskuary, whatever profile the agent runs under. A coding
+// session may name its tool (`cli`); a chat session's `cli` is Taskuary's own. The profile is told on hover only (instructionsHint).
+export const AGENT_SHOWN = kinds.shown;
+export const shownAgent = (run) => {
+  const tool = ["chat", "assistant"].includes(String(run?.mode || "")) ? "" : String(run?.cli || "").trim();
+  return tool && tool.toLowerCase() !== AGENT_SHOWN.toLowerCase() ? tool : AGENT_SHOWN;
+};
+export const instructionsHint = (profile) => profile ? `Instructions: ${profile}` : "";

@@ -103,7 +103,7 @@ import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import EmailSomeone from "./EmailSomeone.jsx";
 import { useShareParts } from "./Share.jsx";
 import { ago, filesLine, plural } from "./timeWords.js";
-import { KIND_OPTIONS, KINDS, kindLabel, shortKind } from "./kinds.js";
+import { KIND_OPTIONS, KINDS, kindLabel, shortKind, shownAgent, instructionsHint } from "./kinds.js";
 import { openAppLink } from "./appLinks.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { place } from "./words.js";
@@ -1275,7 +1275,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // session resumes from, or the transcript's brain) - never the roster, which names what the role
   // WOULD run on today. A researcher session on the owner's Azure connector read "brain claude" an
   // hour after it closed, because that is the default for a role with no override (2026-09-22).
-  const runBrain = term?.provider || term?.cli || term?.agent || detail?.ranOn?.brain || (runRole && brains[runRole]) || "";
+  const runBrain = term?.provider || term?.cli || detail?.ranOn?.brain || (runRole && brains[runRole]) || "";
   // ...and on a general session that brain is ALREADY on screen, as the live picker in the
   // workspace toolbar a few pixels below - the same two facts twice, one of them editable and one
   // of them stale ("why is it there, the model is below it?"). The pill goes where the picker is.
@@ -1506,7 +1506,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       msgs: newestFirst(sources.flatMap((g) => g.msgs)).slice(0, 3).map((m) => ({ who: m.who || m.FromName || m.FromEmail || (m.Direction === "out" ? "You" : ""),
         words: (rowText(m, sourceFiles.get(m.MessageId)) || cleanText(m.ReadText || m.BodyText || "")).slice(0, 200) })),
       count: sourceCount, workflow: fromWorkflow, made: `${detail.ref} · ${made}`, sorted: sortedLine(facts, t?.Kind || "task").replace(/^Sorted as: /, "Sorted: ") }),
-    agent: agentStatus({ profile: runRole || (hasRecord || term ? String(agentName(t) || "").replace(/^agent$/i, "") : ""),
+    agent: agentStatus({ profile: runRole || hasRecord || term ? agentName(t) : "",   /* Taskuary, never the profile (kinds.js shownAgent) */
       word: agentWord({ live: !!term?.alive, waiting: agentState === AGENT.waiting, failed: failedRun, stopped: agentState === AGENT.stopped,
         result: resultShown, record: hasRecord, codeRun }),
       said: cleanText(detail?.closedWhy || detail?.agentStory?.said || reportLine(report?.Body) || (hasRecord ? detail?.agentStory?.line : "") || "")
@@ -2553,10 +2553,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         (taskLifecycle.agentPhase); the heading now says what the chip says. */}
                     {/* AN EMPTY AGENT WORK ROW IS QUIET (the owner, 2026-10-25: Agent work stays where it is, the reply is what the eye should
                         land on): no agent ran, nothing to say - a smaller, dimmer line, the same press opening it */}
-                    <WorkflowHeading number="2" sec={threeUp && !sessionView ? SECTIONS[1] : null} here={hereSec === "agent"} quiet={agentEmpty} title={!term?.alive ? (resultShown ? "Result" : "Agent work")
+                    <WorkflowHeading number="2" sec={threeUp && !sessionView ? SECTIONS[1] : null} here={hereSec === "agent"} quiet={agentEmpty} title={<span title={instructionsHint(runRole) || undefined}>{!term?.alive ? (resultShown ? "Result" : "Agent work")
                       : answered ? `${agentName(t)} answered`
                       : agentState === AGENT.waiting ? says(subState(term), agentName(t))   /* asked, approval, stuck (T6) */
-                        : `${agentName(t)} is working`}
+                        : `${agentName(t)} is working`}</span>}
                     /* ...and once the agent has acted - its Result, or the run that failed - its "stopped" or "failed" chip is the header's pill
                        again (the owner, 2026-10-25); a working agent's chip stays where it is */
                     chip={<>{settled ? null : story && STORY_CHIP[story.kind] ? <StoryChip kind={story.kind} text={STORY_CHIP[story.kind]} />
@@ -2699,18 +2699,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* folded onto the live bar these facts share a ROW with the controls, where a
                       rule above them is stray chrome - they get a rule beside them instead, so the
                       pills you press and the pills you read are two groups and not five in a line */}
-                  {(term?.alive || report || detail?.transcript) && !restartOpen && !(threeUp && resultRest) && (runRole || factBrain || repoOf(t)) && (
+                  {(term?.alive || report || detail?.transcript) && !restartOpen && !(threeUp && resultRest) && (factBrain || repoOf(t)) && (
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.7, flexWrap: "wrap",
                       ...(liveSession
                         ? { ml: 0.9, pl: 1.1, borderLeft: `1px solid ${BORDER}`, flexShrink: 0 }
                         : { mt: 1.25 }) }}>
                       {/* plain words on the facts (the audit, 2026-10-17): "role" and "brain" were the app's own vocabulary */}
-                      {runRole && <Box sx={{ ...chipBtnStatic }} title="Which instructions this agent follows - set in Settings.">
-                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>works as</Box>&nbsp;{runRole}</Box>}
+                      {/* the profile is no chip of its own (the owner, 2026-10-28: "works as researcher" named instructions as the worker):
+                          it is told on hover, beside the AI it ran on */}
                       {factBrain && <Box sx={{ ...chipBtnStatic }}
                         title={(factBrain === detail?.ranOn?.brain ? "The AI that did this work. Which AI the agents use is set in Settings, not per task."
                           : "The AI that does the work. Which AI the agents use is set in Settings, not per task.")
-                          + (detail?.routeWhy ? ` Last AI call: ${detail.routeWhy}` : "")}>
+                          + (detail?.routeWhy ? ` Last AI call: ${detail.routeWhy}` : "") + (runRole ? ` ${instructionsHint(runRole)} - set in Settings.` : "")}>
                         <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>AI</Box>&nbsp;{factBrain}</Box>}
                       {/* the repository pill only where a coding tool is connected (B3) */}
                       {!isGeneral && canCode && <Button size="small" variant="outlined" sx={chipBtn}
@@ -2838,7 +2838,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       <Box key={r.RunId} sx={{ mb: 0.75, p: 1, bgcolor: r.Status === "running" ? "#dfeade" : PANEL2, borderRadius: 1.5, border: `1px solid ${BORDER}` }}>
                         <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
                           <TaskuaryMark size={13} />
-                          <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>run {r.RunId} · {r.AgentName} · {r.Status}</Typography>
+                          <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} title={instructionsHint(r.AgentName) || undefined}>run {r.RunId} · {shownAgent(r)} · {r.Status}</Typography>
                           {r.Status === "running" && <CircularProgress size={11} />}
                           <Typography variant="caption" sx={{ color: FAINT }}>· {timeAgo(r.StartedAt)} · by {r.DispatchedBy}</Typography>
                         </Box>

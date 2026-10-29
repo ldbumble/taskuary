@@ -4,6 +4,7 @@ import { says, subState } from "./laneSays.js";
 import { ago, band } from "./timeWords.js";
 import { fmtDateTime } from "./dates.js";
 import { LEVEL_META, LEVEL_ORDER, SECTION_WORDS, attentionBand, isUrgent, levelOf, notYet, onYou } from "./lanes.js";
+import { AGENT_SHOWN } from "./kinds.js";
 export { says, subState };
 // the rail's sections and the on-you rule are lanes.js's, re-exported where the rail's readers have always found them
 export { LEVEL_META, LEVEL_ORDER, SECTION_WORDS, attentionBand, isUrgent, levelOf, onYou };
@@ -318,7 +319,7 @@ export const refreshCurrentPresentation = (current, fresh) =>
 // front of you can BECOME working while you read it: either way it is the agent's card.
 export const assistantFocus = (item) => {
   if (!item) return { card: null, lead: "" };
-  const who = item.agent || item.working || "the agent";
+  const who = item.agent || item.working || AGENT_SHOWN;   // the server's shown name (kinds.shown): Taskuary, never the profile
   if (item.lane === "working" && item.tid) return { card: "agent", lead: `${who} is working on this — nothing for you here yet.` };
   // ONE EVENT SEEN TWICE: an agent parked because it PROPOSED something is released by approving
   // that proposal, so the proposal is what you are shown - not a terminal at a prompt with the

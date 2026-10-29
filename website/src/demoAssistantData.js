@@ -52,7 +52,7 @@ const pileItems = [
     bind: { task: "northwind/importers#214 - census sync fails when a site has no manager", key: "agent" },
     kind: "agent", lane: "blocked", title: "Census sync fails when a site has no manager",
     who: "Marcus Reed", when: "2026-09-03 09:35:19", why: "the agent needs one choice from you before it changes anything",
-    agent: "coding", working: "coding", asking: true,
+    agent: "claude", working: "claude", asking: true,
     // the answers it named, and the request they bind to: a raised hand is answered by picking one
     request_id: "q7", request_kind: "input_needed",
     choices: ["Skip only that site and log it", "Fail the whole sync", "Ask me each time"],
@@ -89,7 +89,7 @@ const pileItems = [
   {
     bind: { task: "New starter on Monday - laptop + accounts", key: "agent" }, kind: "agent", lane: "working", title: "New starter on Monday - laptop + accounts",
     who: "Priya Shah", when: "2026-09-03 00:20:19", why: "a regular agent has it; nothing for you until it stops",
-    agent: "assistant", working: "assistant", asking: false, channel: "email",
+    agent: "Taskuary", working: "Taskuary", asking: false, channel: "email",
   },
 ];
 
@@ -131,7 +131,7 @@ export const DEMO_ASSISTANT_TRANSCRIPTS = {
   8900: currentMessages,
   8899: [
     { id: "demo-8899-1", role: "user", at: "2026-09-03 08:03:00", text: "Walk me through what landed overnight." },
-    { id: "demo-8899-2", role: "assistant", at: "2026-09-03 08:03:10", text: "First: Priya's new-starter request is with an agent - it is writing up the laptop and access requests.", card: { bind: { task: "New starter on Monday - laptop + accounts", key: "agent" }, kind: "agent", lane: "working", title: "New starter on Monday - laptop + accounts", agent: "assistant", channel: "email" } },
+    { id: "demo-8899-2", role: "assistant", at: "2026-09-03 08:03:10", text: "First: Priya's new-starter request is with an agent - it is writing up the laptop and access requests.", card: { bind: { task: "New starter on Monday - laptop + accounts", key: "agent" }, kind: "agent", lane: "working", title: "New starter on Monday - laptop + accounts", agent: "Taskuary", channel: "email" } },
     { id: "demo-8899-3", role: "user", at: "2026-09-03 08:05:00", text: "Good. What else?" },
     { id: "demo-8899-4", role: "assistant", at: "2026-09-03 08:05:10", text: "Ruth asked whether Thursday still holds for AP cutover. A short reply is drafted and waiting for review.", card: reviewCard },
     { id: "demo-8899-5", role: "user", at: "2026-09-03 08:07:00", text: "Leave that for the close check. Anything noisy?" },

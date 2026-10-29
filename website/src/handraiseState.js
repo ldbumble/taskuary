@@ -1,11 +1,12 @@
 import { says, subState } from "./laneSays.js";
+import { shownAgent } from "./kinds.js";
 // Pure hand-raise state. Keeping this out of React makes the polling edge cases testable:
 // delayed responses, uncertain idle screens, vanished processes, and multiple live rows.
 
 const payload = (row, identity, cycle, finished = false) => ({
   tid: row.TaskId,
   ref: `TQ-${String(row.TaskId).padStart(4, "0")}`,
-  agent: row.AgentName || "agent",
+  agent: shownAgent(row),   // Taskuary, or a coding session's tool - never the profile (kinds.js)
   title: row.Title || "",
   asking: !finished && !!row.asking,
   state: finished ? "" : row.state || "", line: finished ? "" : row.line || "",   // the ONE sentence (laneSays), from the server

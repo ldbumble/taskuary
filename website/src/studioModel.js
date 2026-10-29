@@ -1,4 +1,4 @@
-import { assignedAgent } from "./agentIdentity.js";
+import { shownAgent } from "./kinds.js";
 import { durSince } from "./timeWords.js";
 
 export const studioTaskIsLive = (task) => !!(task && (task.Session || task.RunStatus === "running"));
@@ -9,11 +9,8 @@ const asks = (s) => !!s && (s.waiting ?? (s.idle >= 45));
 export const studioTaskWaits = (task, liveRow = null) => !!task && (task.Status === "waiting" || task.ReviewStatus === "pending" || task.State === "blocked"
   || (liveRow?.kind === "session" && asks(liveRow)) || (!!task.Session?.alive && asks(task.Session)));
 
-export function studioAgentName(task, liveRow, configuredAgents = []) {
-  const named = liveRow?.AgentName || task?.Session?.agent || task?.RunAgent || assignedAgent(task?.Assignee);
-  if (named) return named;
-  return configuredAgents[0]?.Name || "agent";
-}
+// the desk's name tag: Taskuary, or the tool a coding session runs - never the profile it runs under (kinds.js shownAgent)
+export function studioAgentName(task, liveRow) { return shownAgent(liveRow || task?.Session); }
 
 export function studioPose(task) {
   if (!task) return "free";

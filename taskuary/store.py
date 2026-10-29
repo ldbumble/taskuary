@@ -6,6 +6,7 @@ import contextlib, contextvars, copy, hashlib, json, os, re, sqlite3, sys, threa
 from datetime import datetime, timedelta
 from loguru import logger
 from . import vault
+from .kinds import SHOWN, shown   # the name a chip says for whoever works a task: Taskuary, never the profile
 
 # WHO HELD THE STORE, AND FOR HOW LONG (2026-10-23): three freezes in a day left a log where unrelated requests all finished in
 # the same second after 20-150 s, and nothing said what they had waited on. The writer's lock now says it: a wait over
@@ -3955,7 +3956,7 @@ class SQLiteStore:
         for raw in live_state or ():
             tid = raw.get('taskId', raw.get('task_id'))
             if tid is None: continue
-            live_by_task[int(tid)] = {'working': raw.get('Working') or raw.get('agent') or raw.get('label') or 'agent',
+            live_by_task[int(tid)] = {'working': raw.get('Working') or shown(raw),   # the name the chip says: Taskuary, never the profile
                                       'waiting': bool(raw.get('AgentWaiting', raw.get('waiting', False)))}
         with self.lock:
             cur = self.cx.cursor()
@@ -5948,13 +5949,13 @@ class SQLiteStore:
         # NEEDS_YOU (SQL) only sees `run` rows; an agent in a LIVE pty session is working the task
         # just as much, and the row said "needs you - no agent is working it" over a running
         # console. Working carries the agent's name so the chip can say who.
-        live, parked = {r['TaskId']: r.get('AgentName') or 'agent' for r in self.running_runs()}, {}
+        live, parked = {r['TaskId']: SHOWN for r in self.running_runs()}, {}       # Taskuary, never the profile (kinds.shown)
         try:
             from . import terminal as hub_term
             observed_live = hub_term.live_sessions(tail=0) if live_state is _LIVE_UNSET else live_state
             for t in observed_live:
                 if not t.get('taskId'): continue
-                live[t['taskId']] = t.get('agent') or t.get('label') or 'agent'
+                live[t['taskId']] = shown(t)
                 # "an agent has it" and "an agent stopped and is waiting on you" are opposite
                 # facts and the row wore the same chip for both, so a session sitting on an
                 # unanswered question read as work in progress for as long as nobody looked.

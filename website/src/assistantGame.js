@@ -7,6 +7,7 @@
 // kind it already chose (no-hardcoded-words: the model reads intent, code only routes on it).
 import { isAgentKind, isMail, onYou } from "./lanes.js";
 import { plural } from "./timeWords.js";
+import { AGENT_SHOWN, agentWord } from "./kinds.js";
 
 export const ZONES = [
   { key: "floor", name: "Agent Floor", hotkey: "1", blurb: "agents at their desks - jump into a code space" },
@@ -64,9 +65,8 @@ export const atBottom = (items = [], passed = new Set()) => bossHp(items, passed
 // The matchmaker: who is right for this, and the one move that gets it there. It routes on the
 // judged lane/kind and on the agents actually configured - never on the subject line.
 export function matchFor(item, agents = []) {
-  // the coding profile by its KIND - a name may be renamed or absent, and the roster's first entry may be a researcher
-  const coding = agents.find((a) => a.Kind === "coding")?.Name || "the coding agent";
-  const general = agents.find((a) => a.Kind && a.Kind !== "coding")?.Name || "the general agent";
+  // who works it, never the profile it would run under (the owner, 2026-10-28): Taskuary, or the coding agent for code
+  const coding = agentWord("coding"), general = AGENT_SHOWN;
   const lane = item?.lane, kind = item?.kind;
   if (kind === "agent" && lane === "blocked") return { who: item.working || item.agent || coding, verb: "answer", why: "an agent stopped for your call" };
   if (kind === "agent" && item.paused) return { who: "you", verb: "resume", why: "its session was saved - pick it up where it stopped" };

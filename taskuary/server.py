@@ -4305,7 +4305,7 @@ def live_runs(lines: int = 3):
                         # ...and the ONE sentence for the state (lanes.json via workerstate.says), so the card, the
                         # Wall and the hand-raise ping read it instead of composing their own from `asking`
                         'request': t.get('request'), 'state': (sub := _workerstate().sub_state(bool(w), ask, t.get('request'))),
-                        'line': _workerstate().says(sub, t['agent'] or t['label'], (t.get('request') or {}).get('text')) if sub else None,
+                        'line': _workerstate().says(sub, task_kinds.shown(t), (t.get('request') or {}).get('text')) if sub else None,
                         'Title': (store.get_task(t['taskId']) or {}).get('Title') or '',
                         'files': t.get('files') or [], 'tail': t.get('tail') or [],
                         'cli': t.get('cli'), 'work': t.get('work')})     # the CLI it runs; said and did (witness.py) - the card's pane

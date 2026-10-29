@@ -1313,7 +1313,7 @@ class ApiTests(unittest.TestCase):
         detail = c.get(f'/api/messages/{mid}/thread').json()
         self.assertEqual(detail['reviews'][0]['ReviewId'], rid)
         self.assertEqual(detail['reviews'][0]['DraftText'], 'Feel better. Talk tomorrow.')
-        self.assertEqual(server.store.feed()[0]['HasDraft'], 1)
+        self.assertEqual(next(r for r in server.store.feed() if r['MessageId'] == mid)['HasDraft'], 1)
 
     def test_generate_with_ai_works_for_a_taskless_fyi_reply(self):
         mid = server.store.add_message({'ExternalId': 'teams:fyi-generate', 'Channel': 'teams',

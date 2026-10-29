@@ -62,6 +62,10 @@ def background(store, chars: int = 9_000) -> str:
             if not skip: keep.append(line)
         body = re.sub(r'\n{3,}', '\n\n', '\n'.join(keep)).strip()
         if body: out.append(f'## {what}\n{body[:chars]}')
+    # ...and what About you saved, which no doc carries: an agent asked for the job title the owner had typed in (the email walk, 2026-10-29)
+    saved = [f'{k}: {v}' for k, n in (('Name', 'owner_name'), ('Job title', 'owner_title'), ('Company', 'owner_company'))
+             if (v := ' '.join(str(store.get_setting(n) or '').split()))]
+    if saved: out.insert(0, '## Saved in About you\n' + '\n'.join(saved))
     return ('ABOUT THE OWNER (background for everything below - facts about whom you work for, not tasks to do)\n\n'
             + '\n\n'.join(out)) if out else ''
 

@@ -923,16 +923,18 @@
 .tq-ref-link:hover, .tq-chat-pop-body a[data-tq-task-link]:hover { border-bottom-color: #55697a; }
 
 /* THE CHAT IS ITS OWN UNIT ON A DESK (the owner, 2026-10-29: "it looks weird coming out of the bottom bar"; AssistantView composeBox). From
-   760px the box is not on the bar: the bar ends before it, a gap between them, and the chat stands alone in the corner - at rest a SMALL
-   pill, its mark, "Ask…" and its send, like any app's chat widget; used, the same corner opens up into the window (its field the floor,
-   the conversation standing on it, the window's right edge on the pill's) and shut it is the small pill again. Under 760px it is as it was */
-.tq-compose[data-tq-desk-chat] { --tq-pill-w: 136px; --tq-chat-w: 340px; padding-right: calc(20px + var(--tq-pill-w) + 16px); min-height: 52px; box-sizing: border-box; }
+   760px the box is not on the bar: the bar ends before it, a gap between them, and the chat stands alone in the corner; used, the same
+   corner opens up into the window (its field the floor, the conversation standing on it) and shut it is the bar again. Under 760px it is
+   as it was. ...and with the stage moves on their panes the bar is only as wide as what it holds - Back, Next and its few moves together at
+   the left, no empty stretch - and the ask bar takes ALL the rest, a gap between them; the open window is its width, so opening it only
+   grows UP - never wider (the owner, 2026-10-29). The ask bar is never under --tq-pill-min: the bar folds into ▾ first (ActionRow) */
+.tq-compose[data-tq-desk-chat] { --tq-pill-min: 300px; display: flex; flex-direction: row; align-items: flex-end; gap: 16px; min-height: 52px; box-sizing: border-box; }
+.tq-compose[data-tq-desk-chat] .tq-dock { width: fit-content; flex: 0 1 auto; min-width: 0; max-width: calc(100% - var(--tq-pill-min) - 16px); }
+.tq-compose[data-tq-desk-chat] .tq-dock .tq-dock-line > .tq-arow { flex: 0 1 auto; width: auto; }
+.tq-compose[data-tq-desk-chat] .tq-dock .tq-dock-line > .tq-arow .tq-arow-verbs { justify-content: flex-start; width: auto; }
 /* ...a bar with nothing on it (the day's opener) is no bar at all: the pill stands alone */
 .tq-compose[data-tq-desk-chat] .tq-dock:not(:has(.tq-arow)):not(:has(> :not(.tq-dock-line, [hidden]))) { display: none; }
-.tq-chat-unit { position: absolute; right: 20px; bottom: 8px; z-index: 7; width: var(--tq-pill-w); display: flex; flex-direction: column; align-items: flex-end;
-  transition: width .16s ease; }
-.tq-chat-unit:has(> .tq-compose-box[data-tq-open]) { width: var(--tq-chat-w); }
-@media (prefers-reduced-motion: reduce) { .tq-chat-unit { transition: none; } }
+.tq-chat-unit { position: relative; z-index: 7; flex: 1 1 var(--tq-pill-min); min-width: var(--tq-pill-min); display: flex; flex-direction: column; align-items: stretch; }
 .tq-chat-unit > .tq-compose-box { position: relative; width: 100%; box-sizing: border-box; margin: 0; min-height: 40px; align-items: center; gap: 2px; padding: 0 5px 0 7px;
   border: 1px solid #a9b6c1; border-radius: 20px; background: #fff; box-shadow: 0 4px 16px #39352d24, 0 1px 3px #39352d14; }
 .tq-chat-unit > .tq-compose-box:hover:not([data-tq-open]) { border-color: #55697a; }

@@ -4,7 +4,7 @@ import test from "node:test";
 import { startHarness } from "./harness.mjs";
 
 /* THE CHAT IS ITS OWN UNIT BESIDE THE BAR (the owner, 2026-10-29: "it looks weird coming out of the bottom bar", after the one-row chat
-   bar of 2026-10-26). At 1600x810: the bar is one line and ENDS before the chat, a gap between them; the chat is a small pill in the corner;
+   bar of 2026-10-26). At 1600x810: the bar is one line and ENDS before the chat, a gap between them; the chat is a wide ask bar in the corner;
    focused it opens up out of its own corner into the window, and the bar beside it does not move or fold (Next stays); a line sent comes
    back in the window, over the task view, which does not move; Esc shuts it to the pill, the pill brings it back. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -39,7 +39,7 @@ test("the chat is its own unit: the bar ends before it, it opens out of its corn
   const say = JSON.stringify(rest);
   assert.ok(rest.line <= 46, `the bar is one line ${say}`);
   assert.ok(!rest.inBar && rest.gap >= 12 && rest.mid <= 6, `the bar ends before the chat, a gap between them, on one line ${say}`);
-  assert.ok(rest.pill <= 160 && !rest.open && rest.tools === "none", `a small pill at rest ${say}`);
+  assert.ok(rest.pill >= 300 && !rest.open && rest.tools === "none", `the wide ask bar, as wide as the open window (the owner, 2026-10-29) at rest ${say}`);
   assert.equal(rest.hint, "Ask…");
 
   // FOCUSED: it opens out of its own corner - its right edge where the pill's was - into the window, with its tools; the bar beside it
@@ -53,7 +53,7 @@ test("the chat is its own unit: the bar ends before it, it opens out of its corn
       line: Math.round(dock.getBoundingClientRect().height), above: Math.round(dock.getBoundingClientRect().top - field.getBoundingClientRect().top),
       next: !!verbs.querySelector("[data-tq-next]"), over: verbs.scrollWidth - verbs.clientWidth, labels: [...verbs.querySelectorAll("button")].map((b) => b.textContent.trim()) };
   });
-  assert.ok(wide.field >= 300 && Math.abs(wide.right - rest.right) <= 1 && wide.tools !== "none", `out of its own corner, the window's width, with its tools ${JSON.stringify(wide)}`);
+  assert.ok(Math.abs(wide.field - rest.pill) <= 1 && Math.abs(wide.right - rest.right) <= 1 && wide.tools !== "none", `opened it only grows up - never wider - with its tools ${JSON.stringify(wide)}`);
   assert.ok(wide.next && wide.over <= 1 && wide.line <= 46, `the bar still one line, Next on it, nothing past its edge ${JSON.stringify(wide)}`);
   assert.ok(wide.above > 10, `it rises over the canvas ${JSON.stringify(wide)}`);
   assert.deepEqual(wide.labels, rest.labels, "nothing on the bar folded or moved while the chat is open");

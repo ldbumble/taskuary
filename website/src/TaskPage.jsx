@@ -26,6 +26,7 @@ import { notePress, pagePress } from "./pressLog.js";
 import { VERBS, choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
 import { PRIORITIES, level } from "./priority.js";
 import BlockIcon from "@mui/icons-material/Block";
+import StopCircleOutlinedIcon from "@mui/icons-material/StopCircleOutlined";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import DifferenceIcon from "@mui/icons-material/Difference";
 import RefreshIcon from "@mui/icons-material/Refresh";
@@ -464,13 +465,37 @@ function SpineMoves({ sec }) {
       {vs.map((v) => stageBtn(v, v.spine || v.label))}
     </Box>);
 }
-// ...and OPEN, its stage moves are its heading's (the Tasks tab's own bar stands there): the ones the pane does not already draw - never a
-// card's own (Redraft, Send under the draft) nor the start its open form already carries - so a pane off the bar is never a dead end
+// ...and OPEN, its stage moves are on a WHITE STRIP across the pane's top (the owner, 2026-10-29, "try it": the spine's white look, kept
+// while the pane is open): its name, the moves the pane does not already draw - never a card's own (Redraft, Send under the draft) nor
+// the start its open form already carries - so a pane off the bar is never a dead end, and the arrows that fold it back to its spine,
+// pointing the way its spine's would. A live agent's is slim: Stop and save and the arrows, small, so the terminal keeps its height
+export const STRIP_H = 44, STRIP_LIVE_H = 32;
+const FOLD = { from: [["right", "‹", "agent"]], agent: [["left", "‹", "from"], ["right", "›", "close"]], close: [["left", "›", "agent"]] };
 function PaneMoves({ sec, skip = () => false }) {
   const vs = useSpineVerbs(sec).filter((v) => !v.card && !skip(v));
   if (!vs.length) return null;
-  return <Box data-tq-pane-moves={sec} role="group" aria-label={`${SEC_NAME[sec]} moves`} sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
+  return <Box data-tq-pane-moves={sec} role="group" aria-label={`${SEC_NAME[sec]} moves`} sx={{ display: "flex", gap: 0.75, flexWrap: "nowrap", minWidth: 0, overflow: "hidden" }}>
     {vs.map((v) => stageBtn(v))}</Box>;
+}
+const STRIP_ARROW = { appearance: "none", font: "inherit", cursor: "pointer", width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0,
+  fontSize: 15, lineHeight: 1, border: `1px solid ${BORDER}`, bgcolor: "#fff", color: ACCENT, p: 0,
+  "&:hover": { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } };
+export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, onStop }) {
+  const arrows = FOLD[sec].map(([side, mark, to]) => ({ side, mark, to: fold(to) }));
+  const arrow = (a) => <Box key={a.side} component="button" type="button" data-tq-strip-fold={a.side} aria-label={`Fold ${SEC_NAME[sec]} back`}
+    title={`Fold ${SEC_NAME[sec]} back to its tab`} sx={live ? { ...STRIP_ARROW, width: 22, height: 22, fontSize: 13 } : STRIP_ARROW} onClick={() => onFold(a.to)}>{a.mark}</Box>;
+  return (
+    <Box data-tq-pane-strip={sec} data-tq-live={live ? "" : undefined} sx={{ position: "absolute", top: 0, left: 0, right: 0, height: live ? STRIP_LIVE_H : STRIP_H, zIndex: 2,
+      boxSizing: "border-box", display: "flex", alignItems: "center", gap: 1, px: live ? 1 : 1.5, bgcolor: "#fff", borderBottom: `1px solid ${FOCUS_EDGE}` }}>
+      {arrows.filter((a) => a.side === "left").map(arrow)}
+      {!live && <Typography sx={{ ...SECTION_NAME, flexShrink: 0 }}>{SEC_NAME[sec]}</Typography>}
+      <Box sx={{ flex: 1, minWidth: 0, display: "flex", justifyContent: live ? "flex-end" : "flex-start" }}>
+        {live ? onStop && <Tooltip title={btn("stop_agent")}><IconButton size="small" data-tq-strip-stop="" aria-label={btn("stop_agent")} onClick={onStop}
+            sx={{ width: 24, height: 24, color: ACCENT, border: `1px solid ${BORDER}` }}><StopCircleOutlinedIcon sx={{ fontSize: 15 }} /></IconButton></Tooltip>
+          : <PaneMoves sec={sec} skip={skip} />}
+      </Box>
+      {arrows.filter((a) => a.side === "right").map(arrow)}
+    </Box>);
 }
 // ...and an open one's head: its NAME, in the closed tabs' own type, and nothing else (the owner, 2026-10-28: "it should just say Close out on
 // top in black without all the small text. It does not help") - the number, what it holds and "up to here" are the tabs' to say
@@ -1530,10 +1555,20 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const closedW = (k) => (sessionView && k !== "agent" ? MINI_W : TAB_W);
   // ...less its slot's own 1px rule on the left (Agent and Close out), so the body lies inside it
   const openW = (k) => Math.max(320, bodyW - SECTIONS.filter((s) => s.key !== k).reduce((n, s) => n + closedW(s.key), 0) - (k === "from" ? 0 : 1));
+  // ...and on the canvas the open one wears its white strip (PaneStrip): the body under it, its own name head given to the strip
+  const stripOn = (k) => inRow && section === k;
+  const stripH = (k) => (sessionView && k === "agent" ? STRIP_LIVE_H : STRIP_H);
+  const stripSkip = { from: () => false, agent: (v) => (runFormOpen && OPENS_FORM.has(v.id)) || (v.id === "continue" && failedFix),
+    close: (v) => v.id === "reply" && (replyEmpty || !!pendingReview) };
+  const foldTo = (k) => (to) => (hereSec && hereSec !== k && k !== "agent" ? hereSec : to);
   const slot = (k, body) => (!threeUp ? body
     : <Box data-tq-slot={k} data-tq-open={section === k ? "" : undefined} sx={{ ...SLOT(section === k, closedW(k)),
-        ...(k !== "from" ? { borderLeft: `1px solid ${FOCUS_EDGE}` } : {}) }}>
-        {section !== k && tabFor(k)}{body}</Box>);
+        ...(k !== "from" ? { borderLeft: `1px solid ${FOCUS_EDGE}` } : {}),
+        ...(stripOn(k) ? { "& > [role=region]": { top: `${stripH(k)}px` }, "& > [role=region] [data-tq-section-head]": { display: "none" } } : {}) }}>
+        {section !== k && tabFor(k)}
+        {stripOn(k) && <PaneStrip sec={k} live={sessionView && k === "agent"} skip={stripSkip[k]} fold={foldTo(k)} onFold={openSection}
+          onStop={sessionView && k === "agent" ? () => press("save-end") : null} />}
+        {body}</Box>);
   // ...the open section draws its half of the work: the Agent its own, Close out the reply; Came from leaves the halves as they were
   const pane = section === "agent" ? "agent" : section === "close" ? "reply" : (stacked && !openStage && paneOfMove(litMove)) || paneRest;
   // ...and a reply owed with nothing drafted shows its empty box in Close out, Draft with AI under it (the three sections, 2026-10-27)
@@ -2508,7 +2543,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     onClickCapture={stacked ? phoneFromTap : undefined} sx={threeUp ? { ...SECTION(section === "from", openW("from")), gap: 1.75 }
                       : { minWidth: 0, display: "flex", flexDirection: "column", gap: 1.75, ...(fromDrawer ? { ...card, px: 1.5, py: 1.25, ...FROM_SIDE } : PHONE_FROM(fromOpen)) }}>
                     {threeUp && <SectionHead sec={SECTIONS[0]} sub="what came in, and what triage made of it" here={hereSec === "from"}
-                      action={inRow && section === "from" && !sessionView ? <PaneMoves sec="from" /> : null} />}
+ />}
                     {/* SECTION 1, IN THE ORDER THE OWNER APPROVED (2026-10-16): the ask, what there is to do, where it came from - and no
                         buttons. "The buttons stay on bottom by the prompt box like always. No buttons there." On the canvas that is the row
                         over the chat line; on the Tasks tab, the view's own bar under the sections. */}
@@ -2695,7 +2730,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     /* folded, this heading carried NOTHING - it passed no action at all, so the one
                        card that can actually be picked back up was the one row you could not act on.
                        It gets the move that matches its state, the way the Task strip does. */
-                    action={inRow ? (threeUp && section === "agent" && !sessionView ? <PaneMoves sec="agent" skip={(v) => (runFormOpen && OPENS_FORM.has(v.id)) || (v.id === "continue" && failedFix)} /> : null)
+                    action={inRow ? null
                       : pane === "agent" && agentBar ? agentBarRow :
                       pane !== "agent" && !term?.alive && !["done", "dropped"].includes(t.Status)
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
@@ -3011,7 +3046,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                        does not carry */
                     chip={emailsWaiting ? <LifecycleChip kind="emails" phase={`${emailsWaiting} waiting`} compact /> : null}
                     tone={PALETTE.oat} {...stageProps("reply")}
-                    action={inRow ? (threeUp && section === "close" && !sessionView ? <PaneMoves sec="close" skip={(v) => v.id === "reply" && (replyEmpty || !!pendingReview)} /> : null)
+                    action={inRow ? null
                       : pane !== "reply" && replyMessage
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
                           <Button size="small" variant="contained" disableElevation disabled={!!openingReply}

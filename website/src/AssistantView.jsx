@@ -3551,8 +3551,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (!pop || !box || !popOpen || phone) { if (pop) { pop.style.right = ""; pop.style.bottom = ""; } return undefined; }
     // ...on the FIELD: in the bar it rises out of the box's slot, as tall as what is typed
     const fit = () => { const par = pop.offsetParent?.getBoundingClientRect(), b = box.getBoundingClientRect(), f = field?.getBoundingClientRect() || b;
-      if (!par || getComputedStyle(box).position !== "relative") { pop.style.right = ""; pop.style.bottom = ""; return; }
-      pop.style.right = `${Math.round(par.right - b.right)}px`; pop.style.bottom = `${Math.round(par.bottom - f.top)}px`; };
+      if (!par || getComputedStyle(box).position !== "relative") { pop.style.right = ""; pop.style.bottom = ""; pop.style.width = ""; return; }
+      pop.style.right = `${Math.round(par.right - b.right)}px`; pop.style.bottom = `${Math.round(par.bottom - f.top)}px`;
+      // ...on a desk the window is the ask bar's own width, whatever room it took (the owner, 2026-10-29: opening never changes its width)
+      pop.style.width = box.closest(".tq-chat-unit") ? `${Math.round(b.width)}px` : ""; };
     fit(); window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);
   }, [popOpen, isMini, phone, popH, boxH]);

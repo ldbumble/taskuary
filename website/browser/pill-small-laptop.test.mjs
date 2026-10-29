@@ -35,7 +35,7 @@ test("at rest the pill is small and Mark done stays on the row at 1366, 1440 and
         spine: [...document.querySelectorAll("[data-tq-spine-moves=agent] button[data-tq-verb]")].filter(vis).map((b) => b.getAttribute("data-tq-verb")) };
     });
     const say = `${width}px ${JSON.stringify(s)}`;
-    assert.ok(s.pill <= 160, `the chat is a small pill at rest ${say}`);
+    assert.ok(s.pill >= 300, `the wide ask bar, as wide as the open window (the owner, 2026-10-29) ${say}`);
     assert.ok(s.line <= 46, `one line ${say}`);
     console.log(`# ${say}`);
     // ...and Close folds last (the owner, 2026-10-27: "if there is no space"): Mark done is on the row at every laptop width

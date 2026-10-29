@@ -235,6 +235,13 @@ def test_a_task_left_open_on_purpose_is_not_a_loose_end(s):
         Factory(s).message(tid, status='context', direction='out', subject='RE: renewal', body='Sent it.', from_email='alex@northwind.example',
                            sent_at=ago(8), conversation_id=f'renewal-{tid}')
     assert check(s)['loose'] == 0 and not [c for c in rail(s) if c.get('loose')]
+    # ...and a line said before the owner kept it comes off at once, the way a date takes it off; the next check puts it down
+    late = waiting(s, 8)
+    Factory(s).message(late, status='context', direction='out', subject='RE: renewal', body='Sent it.', from_email='alex@northwind.example',
+                       sent_at=ago(8), conversation_id='renewal-late')
+    assert check(s)['loose'] == 1 and [c for c in rail(s) if c.get('loose')]
+    selfclose.claim(s, late, 'owner')
+    assert not [c for c in rail(s) if c.get('loose')] and check(s)['cleared'] == 1
 
 
 def test_the_owners_move_is_a_state(s):

@@ -97,7 +97,7 @@ test("on the desk nothing moved: words on the pills, Refresh and Quit on the bar
   assert.equal(await page.$("#tqTopNav [data-tq-help]"), null, "Help is the one Report a problem button, no menu");
   const m = await task(page, tasks.find((x) => /^Invoice 88213/.test(x.Title)).TaskId);
   assert.ok(m.pill.wordSeen && m.pill.w > 100, `the pill says "ready to send": ${JSON.stringify(m.pill)}`);
-  // ...a modern chat composer's card at rest on a desk (the owner, 2026-10-29): the words' line over the inputs and the model picker
-  assert.ok(m.box >= 60 && m.box <= 90, `the desk's ask bar at rest: ${m.box}`);
+  // ...one line at rest, the bar's own height (the owner, 2026-10-29)
+  assert.ok(m.box >= 34 && m.box <= 46, `the desk's ask bar at rest: ${m.box}`);
   assert.deepEqual(errors, []);
 });

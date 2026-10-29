@@ -29,7 +29,7 @@ test("a task opened from the opener: the pill's line is centred in the pill", { 
   assert.ok(!at.open, "the pill at rest");
   // ...on a desk the ask bar is a composer card (the owner, 2026-10-29): its words one 32px line, the send round at that line's end
   const desk = await page.$(".tq-chat-unit > .tq-compose-box");
-  assert.equal(at.h, desk ? 32 : 30, `one line: ${JSON.stringify(at)}`);
+  assert.equal(at.h, 30, `one line: ${JSON.stringify(at)}`);
   assert.ok((desk || Math.abs(at.ta - at.box) <= 1) && Math.abs(at.ta - at.send) <= 2, `the line is centred with its send: ${JSON.stringify(at)}`);
   assert.deepEqual(errors, []);
 });

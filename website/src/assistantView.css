@@ -945,10 +945,17 @@
   background: #fff; box-shadow: 0 4px 16px #39352d1f, 0 1px 3px #39352d10; transition: border-color .12s, box-shadow .12s; }
 .tq-chat-unit > .tq-compose-box > .tq-compose-field:hover { border-color: #b5aea3; }
 .tq-chat-unit > .tq-compose-box > .tq-compose-field:focus-within { border-color: #55697a; box-shadow: 0 0 0 3px #55697a29; }
+/* ...AT REST ONE LINE, the bar's own height (the owner, 2026-10-29: "too thick"): attach and voice at its left, the words, the round send -
+   the model picker and the emoji only once it is used; opening only adds the line under it and the conversation above, never width */
+.tq-chat-unit > .tq-compose-box:not([data-tq-open]) > .tq-compose-field { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "tools words send";
+  min-height: 44px; padding: 3px 6px 3px 4px; border-radius: 22px; }
+.tq-chat-unit > .tq-compose-box:not([data-tq-open]) .tq-model-pick,
+.tq-chat-unit > .tq-compose-box:not([data-tq-open]) .tq-compose-emoji { display: none !important; }
+.tq-chat-unit > .tq-compose-box:not([data-tq-open]) textarea { height: 30px !important; min-height: 30px; padding: 0 4px; line-height: 30px; }
 /* ...open it is the window's floor, the conversation flush on it */
 .tq-chat-unit > .tq-compose-box[data-tq-open] > .tq-compose-field { border-radius: 0 0 16px 16px; border-top-color: #ece7de; }
 .tq-chat-unit > .tq-compose-box textarea { grid-area: words; width: 100%; min-height: 32px; max-height: 114px; padding: 6px 6px 2px; line-height: 20px; }
-.tq-chat-unit > .tq-compose-box:not([data-tq-open]) textarea { height: 32px !important; overflow: hidden; cursor: text; }
+.tq-chat-unit > .tq-compose-box:not([data-tq-open]) textarea { overflow: hidden; cursor: text; }
 .tq-chat-unit > .tq-compose-box textarea::placeholder { color: #8f8b84; white-space: nowrap; }
 .tq-chat-unit > .tq-compose-box .tq-compose-tools { grid-area: tools; display: flex; align-items: center; gap: 0; min-width: 0; }
 .tq-chat-unit > .tq-compose-box .tq-compose-tools > * { flex: 0 0 auto; }

@@ -451,7 +451,10 @@ export function SectionTab({ sec, lines = [], foot = "", here = false, before = 
 // starts the step there (the page's "a press opens its section"); a press on the rest of the spine opens it as before. Came from's are Not a
 // task and Remind me, which act where they stand. ...and a thin rule between the spine's words and its moves (the owner, 2026-10-29: "text,
 // a rule, then the buttons"). A `tucked` move (a sent reply's Hand it to a person) is not on a spine unless it is lit: its open pane has it
-const SPINE_MOVES = { display: "flex", flexDirection: "column", gap: 0.6, width: "100%", flexShrink: 0, mt: 1, pt: 1, borderTop: `1px solid ${FOCUS_EDGE}`, cursor: "default",
+// ...and every move there READS AS A BUTTON AT REST (the owner, 2026-10-29: "can't see the buttons on top, maybe we need color?"): the
+// controls' own slate tint with the slate edge (5.7:1 on white) and INK words; the lit one keeps its filled slate
+export const MOVE_LOOK = { "& .tq-ab:not(.p)": { bgcolor: "#f1f4f7", borderColor: ACCENT, color: INK }, "& .tq-ab:not(.p):hover:not(:disabled)": { bgcolor: "#e7eef4" } };
+const SPINE_MOVES = { ...MOVE_LOOK, display: "flex", flexDirection: "column", gap: 0.6, width: "100%", flexShrink: 0, mt: 1, pt: 1, borderTop: `1px solid ${FOCUS_EDGE}`, cursor: "default",
   "& .tq-ab": { width: "100%", minWidth: 0, minHeight: 30, fontSize: 12.5, px: 1, justifyContent: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } };
 const SEC_NAME = { from: "Came from", agent: "Agent", close: "Close out" };
 const OPENS_FORM = new Set(["send-general", "start-agent", "run-another"]);   // the agent's moves that open its start box
@@ -472,10 +475,16 @@ function SpineMoves({ sec }) {
 export const STRIP_H = 44, STRIP_LIVE_H = 32;
 const FOLD = { from: [["right", "‹", "agent"]], agent: [["left", "‹", "from"], ["right", "›", "close"]], close: [["left", "›", "agent"]] };
 function PaneMoves({ sec, skip = () => false }) {
-  const vs = useSpineVerbs(sec).filter((v) => !v.card && !skip(v));
-  if (!vs.length) return null;
-  return <Box data-tq-pane-moves={sec} role="group" aria-label={`${SEC_NAME[sec]} moves`} sx={{ display: "flex", gap: 0.75, flexWrap: "nowrap", minWidth: 0, overflow: "hidden" }}>
-    {vs.map((v) => stageBtn(v))}</Box>;
+  const all = useSpineVerbs(sec).filter((v) => !v.card && !skip(v)), [at, setAt] = useState(null);
+  // ...a `tucked` move keeps its rule (a sent reply's Hand it to a person): behind the strip's ▾ unless it is lit
+  const vs = all.filter((v) => !v.tucked || v.tone === "p"), rest = all.filter((v) => !vs.includes(v));
+  if (!all.length) return null;
+  return <Box data-tq-pane-moves={sec} role="group" aria-label={`${SEC_NAME[sec]} moves`} sx={{ ...MOVE_LOOK, display: "flex", gap: 0.75, flexWrap: "nowrap", minWidth: 0, overflow: "hidden" }}>
+    {vs.map((v) => stageBtn(v))}
+    {rest.length > 0 && <button type="button" className="tq-ab s" aria-label="More" aria-haspopup="menu" data-tq-more={sec} onClick={(e) => setAt(e.currentTarget)}>▾</button>}
+    <Menu open={!!at} anchorEl={at} onClose={() => setAt(null)}>
+      {rest.map((v) => <MenuItem key={v.id} dense disabled={v.disabled} data-tq-verb={v.id} sx={{ fontSize: 12.5 }}
+        onClick={(e) => { const a = at; setAt(null); press(v.id, e, a, v.of); }}>{v.label}</MenuItem>)}</Menu></Box>;
 }
 // THE TASK'S OWN MOVES, ON ITS TITLE BAR (the owner, 2026-10-29: the bar is Back and Next alone): Mark done first, then what acts on the
 // whole task - Close with a note, Attach a file, a card's own words - Change (its moves behind one ▾) and Share, at the right before the
@@ -500,7 +509,7 @@ function HeadMoves() {
   const menuItems = folded.flatMap((x) => (x.change ? x.change : [x.v]));
   return (
     <Box ref={box} data-tq-head-moves="" role="group" aria-label="What to do with this task" onClick={(e) => e.stopPropagation()}
-      sx={{ display: "flex", alignItems: "center", gap: 0.6, flex: "0 1 auto", minWidth: 0, maxWidth: "62%", overflow: "hidden", "& .tq-ab": { minHeight: 26, fontSize: 12, px: 1.25, flexShrink: 0 } }}>
+      sx={{ ...MOVE_LOOK, display: "flex", alignItems: "center", gap: 0.6, flex: "0 1 auto", minWidth: 0, maxWidth: "62%", overflow: "hidden", "& .tq-ab": { minHeight: 26, fontSize: 12, px: 1.25, flexShrink: 0 } }}>
       {shown.map((x) => (x.change
         ? <button key="change" type="button" className="tq-ab s" aria-haspopup="menu" aria-expanded={!!chAt} data-tq-more="change"
             title="Split or merge, who does it, the priority, who it is assigned to" onClick={(e) => setChAt(e.currentTarget)}>{"Change ▾"}</button>
@@ -514,6 +523,8 @@ function HeadMoves() {
           onClick={(e) => { const a = at; setAt(null); press(v.id, e, a, v.of); }}>{v.label}</MenuItem>)}</Menu>
     </Box>);
 }
+// ...an icon's own words, there for a reader and a test, never drawn
+const HIDDEN_WORDS = { position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap" };
 const STRIP_ARROW = { appearance: "none", font: "inherit", cursor: "pointer", width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0,
   fontSize: 15, lineHeight: 1, border: `1px solid ${BORDER}`, bgcolor: "#fff", color: ACCENT, p: 0,
   "&:hover": { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } };
@@ -529,8 +540,9 @@ export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, 
       {!live && <Typography sx={{ ...SECTION_NAME, flexShrink: 0 }}>{SEC_NAME[sec]}</Typography>}
       <Box sx={{ flex: 1, minWidth: 0, display: "flex", justifyContent: live ? "flex-end" : "flex-start" }}>
         {live ? <Box sx={{ display: "flex", gap: 0.5 }}>
-            {onStop && liveMoves.some((v) => !v.disabled) && <Tooltip title={btn("stop_agent")}><IconButton size="small" data-tq-strip-stop="" aria-label={btn("stop_agent")} onClick={onStop}
-              sx={{ width: 24, height: 24, color: ACCENT, border: `1px solid ${BORDER}` }}><StopCircleOutlinedIcon sx={{ fontSize: 15 }} /></IconButton></Tooltip>}
+            {onStop && liveMoves.some((v) => !v.disabled) && <Tooltip title={btn("stop_agent")}><IconButton size="small" data-tq-strip-stop="" data-tq-verb="save-end" aria-label={btn("stop_agent")} onClick={onStop}
+              sx={{ width: 24, height: 24, color: ACCENT, border: `1px solid ${BORDER}` }}><StopCircleOutlinedIcon sx={{ fontSize: 15 }} />
+              <Box component="span" sx={HIDDEN_WORDS}>{btn("stop_agent")}</Box></IconButton></Tooltip>}
             {onClose && <Tooltip title="Back to the task - the session keeps running"><IconButton size="small" data-tq-strip-close="" aria-label="Back to the task"
               onClick={onClose} sx={{ width: 24, height: 24, color: ACCENT, border: `1px solid ${BORDER}` }}><CloseIcon sx={{ fontSize: 14 }} /></IconButton></Tooltip>}</Box>
           : <PaneMoves sec={sec} skip={skip} />}
@@ -2057,6 +2069,19 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const failedFix = failedRun && isGeneral && !resultOpen && !sessionView && !runFix && canContinue;
   // ...and Continue picks the agent's conversation back up, so the Result unfolds to it (it rests on its summary otherwise)
   const continuePress = (e, a) => { setResultOpen(true); return failedRun ? tryAgain() : setContinueAt(steady(a || e?.currentTarget)); };
+  // THE NEW STEP'S BOX - Send to agent's / Run another agent's start, or Continue's - drawn once, placed by the layout (first in the desk's pane)
+  // ...a function: the start box it holds (nextRunForm) is built further down
+  const newStep = () => (<>
+    {/* ONE BOX FOR EVERY START: a general task nobody has started had its own row of pickers and a button that started at
+        once with nothing said - it is the same box now, with the words, the mic and the pictures */}
+    {runFormOpen
+      && <Box data-tq-run-form="">{nextRunForm}</Box>}
+    {continueCard && !runFormOpen && !sessionView && <Box data-tq-continue-pane="" sx={{ mt: 1.25 }}>
+      <ContinueBox inline task={t} taskRef={detail?.ref || ""} initial={continueCard.note || ""} onClose={() => setContinueCard(null)}
+        onPress={() => window.dispatchEvent(new CustomEvent("tq-continuing", { detail: { tid: selected } }))}
+        onFail={() => window.dispatchEvent(new CustomEvent("tq-continuing", { detail: { tid: null } }))}
+        onDone={() => { setContinueCard(null); continued(); }} /></Box>}
+  </>);
   // THE BAR THE AGENT CARD ACTS THROUGH, built here so it can ride inside the heading beside the
   // chip - where the Task and Reply strips keep theirs. Group one is THIS session, group two is
   // another one, and exactly one move is filled. It is an element, not a component: the handlers
@@ -2806,6 +2831,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         </Box>
                       : null} />
                   </Box>
+                  {/* ...THE NEW STEP'S BOX FIRST (the owner, 2026-10-29): Send to agent's, Run another agent's and Continue's box stand at the top of
+                      the Agent pane, under its strip, and the last run's report below it - not past it, a scroll away */}
+                  {threeUp && newStep()}
                   {/* folded with no record, the step says its one sentence; open with none, the story is the whole account (storyPlace) */}
                   {(storyAt === "line" || storyAt === "story") && <AgentStory story={story} compact={storyAt === "line"} onTrust={trustPress} trusting={trusting} />}
                   {/* ...folded over a record, its sentence and what happened - the draft it wrote opens below it (2026-09-22) */}
@@ -2908,15 +2936,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       onClick={() => { if (!resultOpen && pane !== "agent") setOpenStage("agent"); setResultOpen(!resultOpen); }}
                       sx={{ fontSize: 11, minHeight: 0, p: 0, minWidth: 0, textAlign: "left" }}>
                       {resultOpen ? "‹ Hide the conversation" : "The whole conversation ›"}</Button></Box>)}
-                  {/* ONE BOX FOR EVERY START: a general task nobody has started had its own row of pickers and a button that started at
-                      once with nothing said - it is the same box now, with the words, the mic and the pictures */}
-                  {runFormOpen
-                    && <Box data-tq-run-form="">{nextRunForm}</Box>}
-                  {continueCard && !runFormOpen && !sessionView && <Box data-tq-continue-pane="" sx={{ mt: 1.25 }}>
-                    <ContinueBox inline task={t} taskRef={detail?.ref || ""} initial={continueCard.note || ""} onClose={() => setContinueCard(null)}
-                      onPress={() => window.dispatchEvent(new CustomEvent("tq-continuing", { detail: { tid: selected } }))}
-                      onFail={() => window.dispatchEvent(new CustomEvent("tq-continuing", { detail: { tid: null } }))}
-                      onDone={() => { setContinueCard(null); continued(); }} /></Box>}
+                  {!threeUp && newStep()}
                   {/* folded onto the live bar these facts share a ROW with the controls, where a
                       rule above them is stray chrome - they get a rule beside them instead, so the
                       pills you press and the pills you read are two groups and not five in a line */}

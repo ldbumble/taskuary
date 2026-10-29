@@ -50,7 +50,7 @@ const openTask = async (page, id) => {
 };
 // ...a press on the row, or on a folded pane's spine, where its stage moves stand (the owner, 2026-10-29)
 const rowPress = (page, label) => page.evaluate((label) => {
-  const b = [...document.querySelectorAll("[data-tq-row] button, [data-tq-spine-moves] button")].find((x) => x.textContent.trim() === label && !x.disabled);
+  const b = [...document.querySelectorAll("[data-tq-row] button, [data-tq-head-moves] button, [data-tq-spine-moves] button")].find((x) => x.textContent.trim() === label && !x.disabled);
   b?.click(); return !!b;
 }, label);
 

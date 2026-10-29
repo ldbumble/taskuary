@@ -23,7 +23,9 @@ const look = (page, id) => page.evaluate((id) => {
   const body = item?.querySelector("[data-tq-task-body]");
   const open = item?.querySelector("[data-tq-slot][data-tq-open]");
   const row = document.querySelector("[data-tq-row]");
-  const btns = [...(row?.querySelectorAll(".tq-arow-verbs button") || [])].filter(vis)
+  // ...on a desk the moves stand where they belong (the owner, 2026-10-29): Back and Next on the bar, the task's own on its title bar, the
+  // stage moves on their spines and pane strips, a live agent's Stop and save on its strip - all of them the row's moves here
+  const btns = [...(row?.querySelectorAll(".tq-arow-verbs button") || []), ...document.querySelectorAll("[data-tq-head-moves] button, [data-tq-spine-moves] button, [data-tq-pane-moves] button, [data-tq-pane-strip] button[data-tq-verb]")].filter(vis)
     .map((b) => ({ id: b.dataset.tqVerb || (b.hasAttribute("data-tq-next") ? "next" : b.hasAttribute("data-tq-back") ? "back" : b.className),
       label: b.textContent.trim(), lit: b.classList.contains("p"), off: b.disabled, more: b.classList.contains("tq-cl-more") }));
   const agent = item?.querySelector("[data-tq-agent-section]");

@@ -756,7 +756,8 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
         onChange={(e) => (coding ? onBrain : onAgent)(e.target.value)}
         sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 120 }}>
         {handOff && <MenuItem value="" sx={{ fontSize: 12.5 }}>{hasLabel}</MenuItem>}
-        {list.map((a) => (
+        {/* ...and the profile it has is that first line, not a second one further down saying the same */}
+        {list.filter((a) => !(handOff && has && a === has)).map((a) => (
           <MenuItem key={a} value={a} sx={{ fontSize: 12.5 }}>
             {a}{coding && brainModels[a] && brainModels[a].installed === false ? " · not installed" : ""}
           </MenuItem>

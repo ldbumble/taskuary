@@ -160,6 +160,20 @@ def test_a_newsletter_is_not_a_pile_of_documents():
     assert [d['kind'] for d in linkdocs.find(f'see {PAGE} and {CONTRACT}.')] == ['page', 'pdf']
 
 
+def test_the_list_unsubscribe_link_is_not_a_web_page_the_mail_sent():
+    """B33 (the email walk, 2026-10-29): a newsletter's Linked listed its List-Unsubscribe address as a "Web page" beside its one
+    real page. Known by the header that named it (unsubscribe.parse, kept in MailMetaJson) - never by the words around it."""
+    off = 'https://news.vendor.example/unsubscribe?u=alex'
+    body = f'October roundup: {PAGE}\n\nYou get this because you signed up. Unsubscribe: {off}'
+    s = MemoryStore()
+    mid = s.add_message({'Channel': 'email', 'FromEmail': 'news@vendor.example', 'Subject': 'October roundup', 'BodyText': body,
+                         'SentAt': '2026-10-29 08:00', 'MailMetaJson': json.dumps({'unsub': {'via': 'url', 'url': off}})})
+    assert [d['url'] for d in linkdocs.of_message(s, mid)] == [PAGE]
+    # ...the same on its way in, before it is stored (an ingest dict), and a mail with no such header keeps every page it names
+    assert [d['url'] for d in linkdocs.of_msg({'body': body, 'channel': 'email', 'unsub': {'via': 'url', 'url': off}})] == [PAGE]
+    assert [d['url'] for d in linkdocs.of_msg({'body': body, 'channel': 'email'})] == [PAGE, off]
+
+
 def test_an_html_mail_keeps_the_address_of_its_open_button():
     html = (f'<p>Alex, the bills are ready.</p><a href="{SHEET.replace("&", "&amp;")}">Open</a> '
             '<a href="https://track.vendor.example/u?id=1">unsubscribe</a>')

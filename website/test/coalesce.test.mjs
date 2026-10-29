@@ -78,6 +78,6 @@ test("a Send lets go when the decide answers, and after a minute with no answer 
   const card = read("ReviewDecision.jsx");
   assert.equal((card.match(/\/decide`,[\s\S]{0,400}?\{ timeout: DECIDE_TIMEOUT \}\);/g) || []).length, 2, "both decide calls carry the timeout");
   assert.doesNotMatch(card, /await onSent\(\); setBusy\(false\)/, "busy never waits on the re-read after the send");
-  assert.equal((card.match(/setBusy\(false\); await onSent\(\); return;/g) || []).length, 2);
+  assert.equal((card.match(/setBusy\(false\); await onSent\(\{ closes: [^\n]+\}\); return;/g) || []).length, 2);
   assert.equal((card.match(/if \(timedOut\(e\)\) onChanged\?\.\(\);/g) || []).length, 2, "a timeout reads the review again, no line of its own");
 });

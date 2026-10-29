@@ -20,7 +20,7 @@ test("the draft's decision is Close out, Redraft and Mark done - no Reject, in t
   assert.match(src, /\{ id: no\("redraft"\), group: "decide"/, "Redraft stands beside Close out, not behind More");
   assert.match(src, /\{ id: no\("done"\), group: "decide", closes: true[^\n]*run: onMarkDone/, "Mark done is the task's own close");
   // the task view hands it ITS Mark done - put down at the press, a live session asked first (ac051beb)
-  assert.match(read("TaskPage.jsx"), /<ReviewDecision review=\{pendingReview\} closeout=\{closeoutRv\} toRow=\{inRow\} onMarkDone=\{askFinish\} onSent=\{sent\} onRemind=\{\(e, a\) => remindHere\(steady\(a \|\| e\?\.currentTarget\)\)\}/);
+  assert.match(read("TaskPage.jsx"), /<ReviewDecision review=\{pendingReview\} closeout=\{closeoutRv\} toRow=\{inRow\} onMarkDone=\{askFinish\} onSent=\{sent\} closeOnSend onRemind=\{\(e, a\) => remindHere\(steady\(a \|\| e\?\.currentTarget\)\)\}/);
 });
 
 test("the row draws Mark done once: the decision's, with the task's own left out of More", () => {
@@ -49,8 +49,8 @@ test("the walk's reply card offers Redraft over a draft it has", () => {
 test("Send stays off and reads Sent until the page's re-read takes the card away (the owner, 2026-10-26)", () => {
   const src = read("ReviewDecision.jsx");
   assert.match(src, /const busy = busyNow \|\| sent;/);
-  assert.match(src, /onSent\) \{ setSent\(true\); setBusy\(false\); await onSent\(\); return; \}/);
-  assert.match(src, /onSent\) \{ setSent\(verb === "approve"\); setBusy\(false\); await onSent\(\); return; \}/);
+  assert.match(src, /onSent\) \{ setSent\(true\); setBusy\(false\); await onSent\(\{ closes: closesIt && !!data\.reply\?\.ok \}\); return; \}/);
+  assert.match(src, /onSent\) \{\n\s+setSent\(verb === "approve"\); setBusy\(false\); await onSent\(\{ closes: [^\n]+\}\); return;/);
   assert.match(src, /busy \? sentOr\(simulated \? "Simulating…" : "Sending…"\)/);
   assert.match(src, /if \(delivery\.frozen\) setSent\(false\);/, "the review's own delivery line takes over");
 });

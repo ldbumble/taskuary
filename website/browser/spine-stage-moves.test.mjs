@@ -60,9 +60,9 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       assert.deepEqual(m.agent.moves.map((x) => x.word), ["Send to agent"], JSON.stringify(m.agent));
       assert.ok(m.agent.between && m.agent.rule, "between the pane's name and its status, under a rule");
       // ...and every move reads as a button at rest (the owner, 2026-10-29: "can't see the buttons"): a tint with the slate edge, INK words
-      const look = await page.evaluate((CUR) => [...document.querySelectorAll(`${CUR} [data-tq-spine-moves] .tq-ab:not(.p), ${CUR} [data-tq-head-moves] .tq-ab:not(.p), ${CUR} [data-tq-pane-moves] .tq-ab:not(.p)`)]
+      const rest = await page.evaluate((CUR) => [...document.querySelectorAll(`${CUR} [data-tq-spine-moves] .tq-ab:not(.p), ${CUR} [data-tq-head-moves] .tq-ab:not(.p), ${CUR} [data-tq-pane-moves] .tq-ab:not(.p)`)]
         .map((b) => { const cs = getComputedStyle(b); return [cs.borderTopColor, cs.backgroundColor]; }), CUR);
-      assert.ok(look.length && look.every(([edge, bg]) => edge === "rgb(85, 105, 122)" && bg === "rgb(241, 244, 247)"), `the moves' resting look ${JSON.stringify(look)}`);
+      assert.ok(rest.length && rest.every(([edge, bg]) => edge === "rgb(85, 105, 122)" && bg === "rgb(241, 244, 247)"), `the moves' resting look ${JSON.stringify(rest)}`);
       assert.deepEqual(m.from.moves.map((x) => x.word).sort(), FROM, `Came from's spine: Not a task and Remind me ${JSON.stringify(m.from)}`);
       assert.ok(m.from.between && m.from.rule);
       assert.match(m.agent.text, /^\W*Agent\s+not started[\s\S]*Send to agent[\s\S]*2$/, "the spine's words as they were, the move in their middle");
@@ -81,7 +81,7 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
           return { text: e.innerText, top: Math.round(r.top - s.top), w: Math.round(s.width - r.width), bg: getComputedStyle(e).backgroundColor,
             arrows: [...e.querySelectorAll("[data-tq-strip-fold]")].map((a) => a.dataset.tqStripFold) }; }, CUR, key);
         assert.ok(st && st.top === 0 && st.w <= 1 && st.bg === "rgb(255, 255, 255)", `${key}: a white strip across the pane's top ${JSON.stringify(st)}`);
-        assert.match(st.text, { close: /^Close out/, agent: /^Agent/, from: /^Came from/ }[key], JSON.stringify(st));
+        assert.match(st.text, { close: /^\W*Close out/, agent: /^\W*Agent/, from: /^\W*Came from/ }[key], JSON.stringify(st));
         assert.deepEqual(st.arrows, arrows, `${key}'s fold arrows`);
       }
       await page.click(`${CUR} [data-tq-pane-strip=from] [data-tq-strip-fold=right]`);

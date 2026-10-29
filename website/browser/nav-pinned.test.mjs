@@ -28,17 +28,18 @@ test("Next stands at the same x on three tasks in a row", { timeout: 300000 }, a
     await sleep(2500);
     seen.push(await nextAt(page));
   }
-  // ...the items' own rows differ, so the test means something: a centred row would have moved Next between them
-  assert.ok(new Set(seen.map((s) => s.verbs.join("|"))).size > 1, `three items with different buttons: ${JSON.stringify(seen)}`);
+  // ...the items' own rows differ, so the test means something: a centred row would have moved Next between them - or, on a desk where the
+  // bar is Back and Next alone (the owner, 2026-10-29), nothing else is on it to move them
+  assert.ok(new Set(seen.map((s) => s.verbs.join("|"))).size > 1 || seen.every((s) => !s.verbs.length), `three items with different buttons: ${JSON.stringify(seen)}`);
   // ...from the second task on, with Back beside it; the first has no Back and no empty room kept for one (the owner, 2026-10-28: it looked weird)
   const withBack = seen.slice(1);
   assert.ok(withBack.every((s) => Math.abs(s.x - withBack[0].x) <= 1), `Next's x once Back is there: ${JSON.stringify(seen.map((s) => s.x))}`);
   assert.deepEqual(errors, []);
 });
 
-/* ...AND CENTRED WHEN IT IS ALL THE ROW HAS (the owner, 2026-10-28: "nav should be in middle if nothing else"): an FYI batch's row is Back and
-   All read, next and nothing else - pinned to the start it sat at the far left of an empty row. Alone it is centred over the row; with a task's
-   groups beside it, it is back at the start. */
+/* ...AND CENTRED WHEN IT IS ALL THE ROW HAS (the owner, 2026-10-28: "nav should be in middle if nothing else") - until the bar became only as
+   wide as what it holds, Back and Next then the ask bar (the owner, 2026-10-29): on a desk Nav stands at the bar's start, a task's and an FYI
+   batch's alike, with no empty stretch around it. */
 const navBox = (page) => page.evaluate(() => {
   const row = document.querySelector(".tq-dock [data-tq-row] .tq-arow-verbs"), nav = row?.querySelector(".tq-cl-next");
   if (!row || !nav) return null;
@@ -46,13 +47,13 @@ const navBox = (page) => page.evaluate(() => {
   return { groups: row.querySelectorAll(":scope > .tq-cl").length, left: Math.round(n.left - r.left), right: Math.round(r.right - n.right),
     next: nav.querySelector("[data-tq-next]")?.textContent.trim() || "" };
 });
-test("Nav alone on the row is centred; beside other groups it holds the start", { timeout: 300000 }, async (t) => {
+test("on a desk the bar is Nav alone, at its start, for a task and an FYI batch", { timeout: 300000 }, async (t) => {
   const { page, errors } = await boot(t, { width: 1366, height: 768 });
   const run = await page.$$eval("[data-tq-run=task] .tq-pile-row", (els) => els.map((e) => e.getAttribute("data-tq-key")));
   await clickRow(page, run[0]);
   await until(async () => (await on(page)) === run[0] && !!(await navBox(page))); await sleep(2500);
   const task = await navBox(page);
-  assert.ok(task.groups > 1 && task.left <= 2, `a task's row: Nav at the start beside its groups ${JSON.stringify(task)}`);
+  assert.ok(task.groups === 1 && task.left <= 2 && task.right <= 12, `a task's bar: Nav alone, no empty stretch ${JSON.stringify(task)}`);
   // the first FYI batch, the way fyi-count-between-batches gets there: the last report, then Next
   await page.evaluate(() => document.querySelector('[data-tq-section-head="reports"] .fold').click()); await sleep(1500);
   await page.evaluate(() => [...document.querySelectorAll('[data-tq-run="reports"] .tq-pile-row[data-tq-key] .card')].at(-1).click()); await sleep(3500);
@@ -61,6 +62,6 @@ test("Nav alone on the row is centred; beside other groups it holds the start", 
   await sleep(1500);
   const fyi = await navBox(page);
   assert.equal(fyi.groups, 1, `the batch's row is Nav alone ${JSON.stringify(fyi)}`);
-  assert.ok(fyi.left > 100 && Math.abs(fyi.left - fyi.right) <= 2, `Nav alone is centred ${JSON.stringify(fyi)}`);
+  assert.ok(fyi.left <= 2 && fyi.right <= 12, `Nav alone, the bar as wide as it ${JSON.stringify(fyi)}`);
   assert.deepEqual(errors, []);
 });

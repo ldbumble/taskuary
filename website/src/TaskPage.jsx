@@ -1629,7 +1629,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const slot = (k, body) => (!threeUp ? body
     : <Box data-tq-slot={k} data-tq-open={section === k ? "" : undefined} sx={{ ...SLOT(section === k, closedW(k)),
         ...(k !== "from" ? { borderLeft: `1px solid ${FOCUS_EDGE}` } : {}),
-        ...(stripOn(k) ? { "& > [role=region]": { top: `${stripH(k)}px` }, "& > [role=region] [data-tq-section-head]": { display: "none" } } : {}) }}>
+        ...(stripOn(k) ? { "& > [role=region]": { top: `${stripH(k)}px` }, "& > [role=region] [data-tq-section-head]": { display: "none" } } : {}),
+        // ...a live agent's body keeps its place under the strip while it is folded too: it stays laid out (SECTION's keep), and a body
+        // that grew by the strip's height while away refit the terminal and sent the pty a resize
+        ...(inRow && sessionView && k === "agent" && section !== k ? { "& > [role=region]": { top: `${STRIP_LIVE_H}px` } } : {}) }}>
         {section !== k && tabFor(k)}
         {stripOn(k) && <PaneStrip sec={k} live={sessionView && k === "agent"} skip={stripSkip[k]} fold={foldTo(k)} onFold={openSection}
           onStop={sessionView && k === "agent" ? () => press("save-end") : null}

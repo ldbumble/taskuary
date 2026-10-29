@@ -43,8 +43,9 @@ FIELDS = {
     'open_work': "open_work is the OPEN tasks this message touches, each with its tid.",
     'thread_task': "thread_task is the task this message's thread already belongs to - its tid, title, ask and status. The message "
                    "joins it unless you answer new_job: one line saying why this is a different job; null when it is the same.",
-    'room_tasks': "room_tasks are the tasks this chat's same-day lines already sit on, each with its tid, title, ask and status. A line "
-                  "joins one only when it is that task's own ask (same_problem true); a different subject is a new ask (same_problem false). "
+    'room_tasks': "room_tasks are this chat's tasks - the ones its same-day lines already sit on, then its others open or closed in the last "
+                  "week - each with its tid, title, ask and status. A line joins one only when it belongs to that task at the combine level "
+                  "(same_problem true; existing_task_id names it); otherwise it is a new ask (same_problem false). "
                   "Answer same_problem whenever the relationship is continues or answers - in a group a join left unsaid is not made.",
     'open_goals': "open_goals is the owner's OPEN GOALS, each with its tid, what done looks like and its steps (id, text, done, who holds it): "
                   "when this message serves one step - it delivers it, answers it, or is plainly about it - answer serves {task, step, done}, "
@@ -105,6 +106,10 @@ def person_name(name) -> str:
 # so a wording lives in one place and every reader of it reads the same words.
 from pathlib import Path as _Path
 SHIPPED = re.sub(r'<!--.*?-->', '', (_Path(__file__).parent / 'templates' / 'triage.md').read_text(encoding='utf-8'), flags=re.S).strip()
+# the combine level is explained in the guide's own words, for an owner-written document that never mentions it (combine.py)
+_m = re.search(r'^\*\*How far to combine\*\*.*?(?=\n\s*\n|\Z)', SHIPPED, re.M | re.S)
+FIELDS['combine'] = ("combine is the owner's setting for this message's connection - {connection, level}, level 1 (keep separate) to 5 (combine). "
+                     + (_m.group(0) if _m else ''))
 
 
 JOB_CHARS = 2500             # triage's cut of JOB.md; the assistant and the chat read it whole (job_doc)
@@ -634,12 +639,12 @@ REPO_ABOUT = 600        # how much of a repository's description the routing que
 RELATIONSHIPS = ('new', 'continues', 'answers', 'uncertain')
 
 
-def relationship_of(j: dict, candidates: list) -> dict:
+def relationship_of(j: dict, candidates: list, room=()) -> dict:
     """The verdict's relationship, validated against the same-day room lines it was shown (PW-033):
-    ids outside them are dropped, a task id must be one of theirs, and a join with nothing valid
-    left to join - or an unknown word - is `uncertain`, which joins nothing."""
+    ids outside them are dropped, a task id must be one of theirs or of the room's tasks it was shown (`room`, room_tasks),
+    and a join with nothing valid left to join - or an unknown word - is `uncertain`, which joins nothing."""
     ids = {int(c['id']) for c in candidates if c.get('id') is not None}
-    tasks = {int(c['task_id']) for c in candidates if c.get('task_id')}
+    tasks = {int(c['task_id']) for c in candidates if c.get('task_id')} | {int(t) for t in room if t}
     rel = str(j.get('relationship') or 'uncertain').strip().lower()
     if rel not in RELATIONSHIPS: rel = 'uncertain'
     related = []
@@ -870,7 +875,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 pr = str(j.get('profile') or '').strip().lower()
                 if profiles and pr and out['intent'] == 'task' and re.search(rf'^- {re.escape(pr)}: ', profiles, re.M):
                     out['profile'] = pr
-                if candidates is not None: out.update(relationship_of(j, candidates))
+                if candidates is not None: out.update(relationship_of(j, candidates, [t.get('tid') for t in (thread or {}).get('room_tasks') or []]))
                 # same_as: only a tid it was actually shown - a task it made up joins nothing
                 try: same = int(j.get('same_as')) if j.get('same_as') is not None else None
                 except (TypeError, ValueError): same = None

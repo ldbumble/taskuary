@@ -6,7 +6,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   Alert, Autocomplete, Box, Button, Chip, CircularProgress, Collapse, IconButton, InputAdornment, MenuItem, Popover, Radio, Select, Step,
-  StepButton, StepContent, Stepper, Switch, TextField, Typography,
+  Slider, StepButton, StepContent, Stepper, Switch, TextField, Typography,
 } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -36,6 +36,7 @@ import { TerminalPane } from "./TerminalView.jsx";
 import { matchCards, onceEach, oneOf, plannedFor } from "./connectorCatalog.js";
 import { isPollField, pollSecondsField } from "./pollFields.js";
 import { githubInboundValue } from "./githubInbound.js";
+import { ALWAYS, HI, LO, MARKS, SAYS, clampLevel, combines, defaultLevel, kindOf } from "./combineLevel.js";
 import { useSaveNote } from "./SaveNote.jsx";
 import { plainError } from "./apiError.js";
 import { namesRestart, pairAgain, restartBridge } from "./waBridge.js";
@@ -4216,6 +4217,35 @@ const ProcessingStep = ({ conn, reload, n }) => {
   );
 };
 
+// HOW FAR TRIAGE COMBINES this connection's messages into one task (combineLevel.js): saved as it is let go, one level per type
+const CombineStep = ({ conn, n }) => {
+  const kind = kindOf(conn.Type);
+  const [level, setLevel] = useState(defaultLevel(kind));
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    let alive = true;
+    api.get(`/api/combine/${kind}`).then(({ data }) => { if (alive && clampLevel(data.level)) setLevel(data.level); }).catch(() => {});
+    return () => { alive = false; };
+  }, [kind]);
+  const save = async (v) => {
+    const lv = clampLevel(v); if (!lv) return;
+    try { await api.put(`/api/combine/${kind}`, { level: lv }); setErr(""); } catch (e) { setErr(e?.response?.data?.detail || "Not saved"); }
+  };
+  return (
+    <Box sx={{ mt: 2 }} data-testid="combine-level">
+      <Typography variant="caption" sx={{ ...mono, color: FAINT, letterSpacing: 1, fontSize: 10 }}>
+        {n} · COMBINE — HOW READILY MESSAGES FROM HERE JOIN A TASK
+      </Typography>
+      <Box sx={{ px: 1.5, mt: 0.5, maxWidth: 420 }}>
+        <Slider size="small" min={LO} max={HI} step={1} marks={MARKS} value={level} aria-label="Combine level"
+          onChange={(_, v) => setLevel(v)} onChangeCommitted={(_, v) => save(v)} />
+      </Box>
+      <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5 }}>{SAYS[level]} {ALWAYS}</Typography>
+      {err && <Typography variant="caption" sx={{ color: "#a33", display: "block" }}>{err}</Typography>}
+    </Box>
+  );
+};
+
 const InboundStep = ({ conn, m, mine, reload }) => {
   const saveConn = useSaveConnector(reload), saveSrc = useSaveSource(reload);
   const [roles, toggle] = useRoles(conn, reload);
@@ -4291,11 +4321,13 @@ const InboundStep = ({ conn, m, mine, reload }) => {
       {/* processing: one by one, or ranked together - every inbound card, whether on or not */}
       {ask && <Confirm open title={ask.title} text={ask.text} confirmLabel={ask.label} onConfirm={ask.onConfirm} onClose={() => setAsk(null)} />}
       <ProcessingStep conn={conn} reload={reload} n={gh ? "3" : "2"} />
+      {/* how far triage combines its messages into one task - the message connections only */}
+      {combines(conn.Type) && <CombineStep conn={conn} n="3" />}
       {/* the standing prompt, right where inbound is decided */}
       {prompts.length > 0 && (
         <Box sx={{ mt: 2, opacity: on ? 1 : 0.5 }}>
           <Typography variant="caption" sx={{ ...mono, color: FAINT, letterSpacing: 1, fontSize: 10 }}>
-            {gh ? "4" : "3"} · WHAT THE AGENT IS TOLD ABOUT WORK FROM HERE
+            {(gh || combines(conn.Type)) ? "4" : "3"} · WHAT THE AGENT IS TOLD ABOUT WORK FROM HERE
             {on ? "" : " — turn inbound on above first"}
           </Typography>
           {prompts.map(([key, label, hint]) => (

@@ -10468,6 +10468,28 @@ def set_setting(body: SettingBody):
         if why: return {'ok': True, 'warning': why}
     return {'ok': True}
 
+class CombineBody(BaseModel): level: int
+
+@app.get('/api/combine')
+def combine_levels():
+    "Each connection type's combine level, 1 keep separate .. 5 combine - what triage is told about this connection (combine.py)."
+    from . import combine
+    return {'data': combine.levels(store, [c.get('Type') for c in store.list_connectors()]), 'default': combine.BASE}
+
+@app.get('/api/combine/{kind}')
+def combine_level(kind: str):
+    from . import combine
+    return {'kind': combine.kind(kind), 'level': combine.level(store, kind), 'default': combine.default(kind)}
+
+@app.put('/api/combine/{kind}')
+def set_combine_level(kind: str, body: CombineBody):
+    from . import combine
+    prev = combine.level(store, kind)
+    try: n = combine.set_level(store, kind, body.level, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+    store.audit('setting', 0, 'set', ACTOR, detail={'key': combine.KEY + combine.kind(kind), 'from': prev, 'to': n})
+    return {'ok': True, 'kind': combine.kind(kind), 'level': n}
+
 @app.get('/api/assistant/doorways')
 def assistant_doorways():
     """Where the assistant can be reached, per channel - for Settings -> Assistant on your phone."""

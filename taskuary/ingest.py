@@ -600,7 +600,11 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
     candidates = chat_candidates(store, msg) if is_chat(msg) else None
     # ...and the tasks those lines sit on, by their own ask: a line that follows a sender's earlier lines is not their task for that
     # (the owner, 2026-10-28) - it is measured against what the task asks (same_problem)
-    if candidates and (rt := room_tasks(store, candidates)): thread = {**thread, 'room_tasks': rt}
+    # ...and, since the combine level (2026-10-29), the chat's other tasks open or closed in the last week, which a line may belong to
+    if candidates is not None and (rt := room_tasks(store, candidates, msg.get('conversation_id'))): thread = {**thread, 'room_tasks': rt}
+    # ...and how readily this connection's messages join a task already there: the owner's level, which the guide explains (combine.py)
+    from . import combine
+    if (cb := combine.for_triage(store, msg)): thread = {**thread, 'combine': cb}
     repos = repo_candidates(store)
     # ...and what was actually SAID before this, theirs and ours. A mail quotes its own thread
     # underneath it - until it does not: a reply typed on a phone, or one whose quote we stripped,
@@ -2249,9 +2253,16 @@ def chat_candidates(store, msg: dict) -> list:
 
 ROOM_TASKS = 6          # how many of a room's tasks triage is shown beside its lines
 
-def room_tasks(store, cands: list) -> list:
-    "The tasks a room's same-day lines sit on, newest first, as triage is shown a thread's task (thread_task)."
-    tids = list(dict.fromkeys(c['task_id'] for c in reversed(cands) if _joinable_task(store, c.get('task_id'))))
+def room_tasks(store, cands: list, conv=None) -> list:
+    """The tasks a room's same-day lines sit on, newest first, as triage is shown a thread's task (thread_task) - then the room's
+    other tasks, open or closed in the last week (combine.RECENT_DAYS): at a higher combine level a line may belong to one of them."""
+    from . import combine
+    from datetime import datetime, timedelta
+    since = (datetime.now() - timedelta(days=combine.RECENT_DAYS)).isoformat(sep=' ', timespec='seconds')
+    older = [r['TaskId'] for r in store._rows('SELECT m.TaskId FROM message m JOIN task t ON t.TaskId=m.TaskId WHERE m.ConversationId=? '
+                                               "AND (t.Status NOT IN ('done', 'dropped') OR (t.Status='done' AND t.ClosedAt>=?)) "
+                                               'GROUP BY m.TaskId ORDER BY MAX(m.MessageId) DESC LIMIT ?', (conv, since, ROOM_TASKS))] if conv else []
+    tids = list(dict.fromkeys([c['task_id'] for c in reversed(cands) if _joinable_task(store, c.get('task_id'))] + older))
     return [t for t in (thread_task(store, x) for x in tids[:ROOM_TASKS]) if t]
 
 
@@ -2356,7 +2367,9 @@ def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
     # against and found not to be - when triage named one - is told where it went (_split_note)
     # ...and the room's tasks ride on the route when this line was NOT said to be one of their asks - said `new`, or in a group without
     # same_problem true - so it does not join one by `same_as` instead (ingest_message)
-    room_ids = (list(dict.fromkeys(c['task_id'] for c in cands if c.get('task_id')))
+    # ...the room's older tasks too, which it was shown beside them (room_tasks)
+    room_ids = (list(dict.fromkeys([c['task_id'] for c in cands if c.get('task_id')]
+                                   + [t['tid'] for t in room_tasks(store, cands, msg.get('conversation_id'))]))
                 if rel == 'new' or (not dm and intent.get('same_problem') is not True) else [])
     if rel == 'new':
         why = f"a separate ask from {_asker(msg)} in {msg.get('source_name') or 'this chat'}" + (

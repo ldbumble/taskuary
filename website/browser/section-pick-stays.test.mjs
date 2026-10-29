@@ -20,11 +20,11 @@ test("the Agent opened over a draft waiting for Send: the stage stays, the agent
   await clickRow(page, await findRow(page, /Invoice 88213/));
   await page.waitForSelector("[data-tq-canvas-item] [data-tq-closeout] textarea", { timeout: 20000 }); await sleep(1500);
   assert.deepEqual(await state(page), { main: "close", stage: "close_out", agent: false, closeout: true, here: false });
-  await page.click("[data-tq-canvas-item] [data-tq-section-tab=agent]");
+  await page.click("[data-tq-canvas-item] [data-tq-section-tab=agent] [data-tq-tab-arrow]");
   await sleep(1200);
   assert.deepEqual(await state(page), { main: "agent", stage: "close_out", agent: true, closeout: false, here: true }, "the pick flipped the stage");
   // ...and Close out is one press back, its draft where it was
-  await page.click("[data-tq-canvas-item] [data-tq-section-tab=close]");
+  await page.click("[data-tq-canvas-item] [data-tq-section-tab=close] [data-tq-tab-arrow]");
   await sleep(800);
   assert.deepEqual(await state(page), { main: "close", stage: "close_out", agent: false, closeout: true, here: false });
   assert.deepEqual(errors, []);

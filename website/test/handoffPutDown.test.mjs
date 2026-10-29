@@ -17,8 +17,10 @@ test("Send it puts the task down before the request, and a failed send puts it b
 
 test("the task view's hand-off moves on without closing: the drawer goes, the walk moves on, a failure reopens it", () => {
   const page = read("TaskPage.jsx");
-  assert.match(page, /<Drawer anchor="right" open=\{handoff === true && !!t\}[^\n]*ModalProps=\{\{ keepMounted: !!handoff \}\}/,
+  assert.match(page, /<Drawer anchor="right" open=\{handoff === true && !!t && !handInPane\}[^\n]*ModalProps=\{\{ keepMounted: !!handoff && !handInPane \}\}/,
     "the form stays mounted while it sends, so a failure brings back what was typed");
+  // ...and on a desk's canvas the same form is a card in Close out (the owner, 2026-10-29), mounted through "sending" there too
+  assert.match(page, /\{handInPane && handoff && <Box data-tq-handoff-card="" sx=\{\{[^\n]*display: handoff === true \? "block" : "none"/);
   assert.match(page, /<Handoff taskId=\{selected\} onLeave=\{\(\) => \{ setHandoff\("sending"\); onLeave\?\.\(\); \}\}/);
   assert.match(page, /onStay=\{\(msg\) => \{ setHandoff\(true\); onStay\?\.\(msg\); \}\}/);
   assert.match(page, /onSent=\{handedOff\}/);

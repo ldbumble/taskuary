@@ -1254,6 +1254,22 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const continueNote = useRef(null);
   const noteFor = (tid) => (continueNote.current && Number(continueNote.current.tid) === Number(tid) ? continueNote.current.note : "");
   const pics = usePromptImages();                        // pictures sent with the chat line
+  // ...A CONTINUE IN THE AGENT PANE (the owner, 2026-10-29: "Continue box should be inside the canvas always"): a Continue for the task on
+  // the table - the walk's, or the Assistant's lit with notes - is the task view's own card, in its Agent pane, when it lays its panes
+  // (TaskPage claims it, tq-continue-here); only a view that does not (a phone) leaves it to the card under the item here
+  useEffect(() => {
+    if (!continueOn) return;
+    const tid = continueOn.task?.TaskId;
+    let claimed = false;
+    window.dispatchEvent(new CustomEvent("tq-continue-here", { detail: { tid, note: noteFor(tid), claim: () => { claimed = true; } } }));
+    if (claimed) { continueNote.current = null; setContinueOn(null); }
+  }, [continueOn]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // ...and the pane's card says when it presses and if it failed, for the rail's ring (continuingTid)
+  useEffect(() => {
+    const on = (e) => setContinuingTid(e.detail?.tid ?? null);
+    window.addEventListener("tq-continuing", on);
+    return () => window.removeEventListener("tq-continuing", on);
+  }, []);
   // ...and the task view's own Continue on the canvas (TaskPage) asks for the same card
   useEffect(() => {
     const on = (e) => { setNoteOn(null); setAgentOn(null); setContinueOn({ task: e.detail.task, ref: e.detail.ref }); };

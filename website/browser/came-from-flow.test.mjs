@@ -26,7 +26,7 @@ test("Came from: the boxes, the conversation, the ask, the to-do - each message 
   await page.evaluate((id) => { location.hash = ""; location.hash = `task=${id}`; }, made.taskId);
   await page.waitForSelector(`${CUR} [data-tq-task-body][data-tq-sections]`, { timeout: 20000 });
   await sleep(1500);
-  if (await page.$(`${CUR} [data-tq-section-tab=from]`)) { await page.click(`${CUR} [data-tq-section-tab=from]`); await sleep(800); }
+  if (await page.$(`${CUR} [data-tq-section-tab=from]`)) { await page.click(`${CUR} [data-tq-section-tab=from] [data-tq-tab-arrow]`); await sleep(800); }
   await page.waitForSelector(`${FROM} [data-tq-conversation-block]`, { visible: true, timeout: 10000 });
 
   const look = () => page.evaluate((FROM) => {

@@ -83,7 +83,7 @@ print(json.dumps({'tid': tid, 'mid': mid}))
   await page.goto(`${harness.ui}#task=${made.tid}`, { waitUntil: "domcontentloaded", timeout: 90000 });
   // ...in Came from, with what triage made of it: where the task opens on another section, Came from is behind its tab (the three sections)
   await until(() => document.querySelector("[data-tq-task-body][data-tq-main]"), null, 90000);
-  if (await page.$("[data-tq-section-tab=from]")) await page.click("[data-tq-section-tab=from]");
+  if (await page.$("[data-tq-section-tab=from]")) await page.click("[data-tq-section-tab=from] [data-tq-tab-arrow]");
   await until(() => { const j = document.querySelector("[data-tq-judged]"); return j && j.getBoundingClientRect().width > 0; }, null, 20000);
   assert.match(await page.$eval("[data-tq-judged]", (e) => e.innerText), /hard work/);
   await page.click("[data-tq-judged]");

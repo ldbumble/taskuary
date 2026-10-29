@@ -90,7 +90,8 @@ test("every section, drawer, tab and pop-up lies inside its card or canvas, at f
         ...((await page.$("[data-tq-canvas-item] [data-tq-from-line]")) ? ["[data-tq-from-line]"] : [])];
       for (const tab of tabs) {
         if (!(await page.$(`[data-tq-canvas-item] ${tab}`))) continue;
-        await page.click(`[data-tq-canvas-item] ${tab}`);
+        // ...pressed on its arrow: a spine carries its stage moves in its middle now (the owner, 2026-10-29), and a press there is the move
+        await page.click(`[data-tq-canvas-item] ${tab}${tab.includes("section-tab") ? " [data-tq-tab-arrow]" : ""}`);
         await sleep(600);
         const m = await measure(page);
         await shot(`${kind}-${width}x${height}-${tab.replace(/\W+/g, "")}`);

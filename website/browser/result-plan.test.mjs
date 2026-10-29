@@ -24,7 +24,7 @@ test("a finished agent with a draft waiting: Close out is the focus, the Result 
   // ...in the three sections (2026-10-27) the draft waiting is where the task is up to: Close out opens, the Agent its tab - opened to read
   const focus = await page.evaluate(() => [...document.querySelectorAll("[data-tq-focus]")].map((e) => (e.matches("[data-tq-closeout]") ? "closeout" : e.querySelector("[data-tq-result-summary]") ? "result" : "other")));
   assert.equal(await page.$eval("[data-tq-task-body]", (e) => e.getAttribute("data-tq-main")), "close", "the draft waiting opens Close out");
-  await page.click("[data-tq-section-tab=agent]");
+  await page.click("[data-tq-section-tab=agent] [data-tq-tab-arrow]");
   await page.waitForSelector("[data-tq-result-summary]", { visible: true, timeout: 5000 });
 
   const at = await page.evaluate((focus) => ({

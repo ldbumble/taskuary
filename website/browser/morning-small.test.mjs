@@ -90,7 +90,8 @@ test("a typed 'remind me Monday' lights Remind me, and its picker's first button
   await page.click(".tq-compose-box textarea");
   await page.keyboard.type("remind me Monday");
   await page.keyboard.press("Enter");
-  const lit = '.tq-arow-verbs button.tq-ab.p[data-tq-verb$="remind"]';
+  // ...on the row, or - Remind me is Came from's move now (the owner, 2026-10-29) - on its spine or in its open heading
+  const lit = '.tq-arow-verbs button.tq-ab.p[data-tq-verb$="remind"], [data-tq-spine-moves] button.tq-ab.p[data-tq-verb$="remind"], [data-tq-pane-moves] button.tq-ab.p[data-tq-verb$="remind"]';
   await page.waitForSelector(lit, { visible: true, timeout: 20000 });
   const posted = new Promise((resolve) => page.on("request", (r) => {
     if (r.method() === "POST" && r.url().endsWith(`/api/tasks/${inv.TaskId}/remind`)) resolve(r.postData());

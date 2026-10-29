@@ -172,6 +172,25 @@ def own_message(store, tid: int, args: dict) -> bool:
     return bool(m) and m.get('Channel') != 'assistant' and str(m.get('TaskId') or '') == str(tid)
 
 
+# A STRANGER'S WORDS NEVER REACH FULL TOOLS UNASKED (the Advisor design rev 2: "any tool on a stranger's task" is held): a session's mode is
+# set when it starts, so one started full on a trusted task could read a message a stranger filed on that task later - their words
+# steering an agent with every tool and no press of the owner's. Not read through these doors at all - the owner's Trust opens it, and their
+# Continue picks the work up under the reviewer, whose brief carries the task's own words fenced.
+UNVOUCHED = ("this message is from someone the owner has not vouched for, and this session runs with full tools, so it is not read here. "
+             "Tell the owner: Trust by that name on the task, or Continue, which picks the work up under the reviewer.")
+
+
+def unvouched(store, tid: int, args: dict) -> bool:
+    """Whether the message a read_message call names is on THIS task, from someone the owner has not vouched for since they last trusted it
+    (origin.of_message, past the task's TrustedThrough)."""
+    from . import mailsearch, origin
+    try: m = store.get_message(mailsearch.message_id((args or {}).get('id')))
+    except (ValueError, TypeError): return False
+    if not m or str(m.get('TaskId') or '') != str(tid): return False
+    if int(m['MessageId']) <= int((store.get_task(int(tid)) or {}).get('TrustedThrough') or 0): return False
+    return origin.of_message(store, m)[0] == 'stranger'
+
+
 def proposal_of(args: dict) -> dict:
     """The proposal an agent may file, cut to what it may say (proposals.parse's rule): never a close-out, a workflow's own resume, or
     an act only Taskuary raises."""

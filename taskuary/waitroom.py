@@ -123,6 +123,17 @@ def add(store, tid: int, note: str, actor: str = 'owner') -> dict:
         return {'wid': wid, 'delivered': 0, 'state': 'held', 'why': str(e)[:200]}
 
 
+HELD_STRANGER = ("Notes are waiting: someone you have not vouched for wrote on this task since its agent started with full tools, so nothing "
+                 "is typed into it. Continue picks the work up under the reviewer, or Trust them.")
+
+
+def full_on_stranger(store, tid: int, t) -> bool:
+    """Whether the live session `t` runs full while the task is now a stranger's (origin.of_task, worst wins)."""
+    from . import origin
+    try: return getattr(t, 'mode', 'full') != 'auto' and origin.of_task(store, tid)[0] == 'stranger'
+    except Exception: return True
+
+
 def deliver(store, tid: int) -> dict:
     """Hand this task's waiting notes over IF the agent has stopped. {'delivered': n, 'state': ...}
     - 'held' states are the ones where nothing moved: working, asking, closed, full."""
@@ -134,6 +145,13 @@ def deliver(store, tid: int) -> dict:
     # the drip: one note per stop, the rest keep their place in line
     notes = pending[:1] if drip(store) else pending
     left = len(pending) - len(notes)
+    # A STRANGER'S WORDS NEVER REACH FULL TOOLS UNASKED (the Advisor design rev 2): a session started full on a task a stranger has written on
+    # since - a batch's outside contributor among them - gets nothing typed in; the owner's Continue picks it up under the reviewer
+    if st in ('asking', 'parked') and full_on_stranger(store, tid, t):
+        why = HELD_STRANGER
+        last = next((c for c in reversed(store.list_comments(tid)) if c.get('Actor') == 'router'), None)
+        if (last or {}).get('Body') != why: store.add_comment(tid, 'router', 'agent', why)
+        return {'delivered': 0, 'state': 'held_stranger', 'why': why, 'left': len(pending)}
     if st == 'asking':
         # An agent parked on a QUESTION is asking the OWNER, so the words they write next are the
         # ANSWER to it: bound to its open request where the worker reported one, typed in plainly

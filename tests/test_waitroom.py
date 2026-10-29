@@ -164,6 +164,22 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual({w['How'] for w in s.waitroom(tid)}, {'typed'})
         self.assertTrue(any('waiting-room' in c['Body'] for c in s.list_comments(tid)))
 
+    def test_a_full_session_on_a_task_a_stranger_wrote_on_since_gets_nothing_typed(self):
+        """A STRANGER'S WORDS NEVER REACH FULL TOOLS UNASKED (the Advisor design rev 2): a batch's later outside item, or a new sender, made
+        the task a stranger's after its session started full - nothing is typed in, and the task says why and the way on."""
+        from taskuary import origin
+        s = MemoryStore(); tid = task(s)
+        t = FakeTerm(tid, idle=terminal.IDLE_WAITING + 5, tail=['Done - all tests pass.'])
+        with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True), mock.patch.object(origin, 'of_task', return_value=('stranger', 'a new sender')):
+            out = waitroom.add(s, tid, 'NEW ITEMS JOINED THIS BATCH: (3) outside pull request')
+            waitroom.deliver(s, tid)
+            time.sleep(0.3)
+            self.assertEqual((out['delivered'], out['state']), (0, 'held_stranger'))
+            self.assertEqual(t.writes, []); self.assertEqual(len(s.waiting_notes(tid)), 1, 'it keeps its place')
+            self.assertEqual(sum(c['Body'] == waitroom.HELD_STRANGER for c in s.list_comments(tid)), 1, 'said once')
+            t.mode = 'auto'                                       # ...the owner's Continue relaunched it under the reviewer
+            self.assertEqual(waitroom.deliver(s, tid)['state'], 'parked')
+
     def test_a_parked_agent_gets_the_note_at_once(self):
         s = MemoryStore(); tid = task(s)
         t = FakeTerm(tid, idle=terminal.IDLE_WAITING + 5, tail=['Done - all tests pass.'])

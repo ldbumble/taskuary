@@ -58,8 +58,8 @@ are dirty. What it cannot tell them is "the migration is half applied, don't run
   puts one line in the Hub, which every later agent reads before it starts. One line under 140
   characters saying what is TRUE, `--body` for the why. Never what you *did*. Most sessions earn
   nothing for the Hub, and "nothing" is the right answer.
-- **Vote before you post.** Your prompt's FROM HUB block carries the entries that fit this task,
-  each with an id: `taskuary --upvote <id>`, `taskuary --downvote <id> --body "why"`,
+- **Vote before you post.** Your prompt's HUB line says how to search the Hub; each entry it
+  returns has an id: `taskuary --upvote <id>`, `taskuary --downvote <id> --body "why"`,
   `taskuary --comment <id> --body "..."`.
 - **Say when it is safe.** Before you push: `taskuary --note --kind ready "auth refactor pushed,
   suite green"`. If you are stuck, `--kind blocked`. One line per note, plainly, as you go.

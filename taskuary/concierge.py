@@ -2641,7 +2641,7 @@ def know(store, q: str) -> str:
     notes = [m['Note'] for m in memorylines.notes(store) if m.get('Note')]
     near = _bearing(store, ' '.join(str(q or '').split()), notes) if str(q or '').strip() else set()
     kept = [n for n in notes if n in near][:8]
-    parts = [hub.block(store, q, actions=False) if hub.enabled(store) else '', knowledge.block(store, q),
+    parts = [hub.block(store, q) if hub.enabled(store) else '', knowledge.block(store, q),
              ('KEPT FACTS:' + NEWLINE + NEWLINE.join(f'- {n}' for n in kept)) if kept else '']
     found = NEWLINE.join(x.strip() for x in parts if x.strip())
     return found or (f'Nothing the company has written down matches "{q}" - not in the Hub, the documents or the kept facts. '

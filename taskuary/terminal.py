@@ -1970,17 +1970,16 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     from . import selfclose
     if selfclose.stays_open(store, tid): parts.append(selfclose.STAY_LINE)
     elif selfclose.mode(store) != 'off': parts.append(selfclose.SEED_LINE)
-    # what earlier agents worked out about this ground, and how to add to it (handbook.py). The
-    # wall says what is happening in this checkout this hour; the handbook says what is still
-    # true next month, and no agent could see it before.
+    # that earlier agents worked out what is still true here, and how to look it up and judge it (handbook.pointer). The
+    # wall says what is happening in this checkout this hour; the Hub says what is still true next month. A pointer, not the
+    # entries: the agent has a shell and searches for what its work turns on.
     # HOW to write one is not here: it is a standing rule, and standing rules ride in CODING.md,
     # which is already in this prompt and already capped (DOC_CHARS). An unconditional line here
     # is paid for by every session forever - and it pushed the seed past its budget the day the
     # handbook was switched on, which is how we found out it was ever off.
     from . import handbook
     if handbook.enabled(store):
-        known = handbook.block(store, task_blob(store, tid))
-        if known: parts.append(no_emails(' '.join(known.split())))
+        if known := handbook.pointer(store): parts.append(known)
     if stranger:
         parts[0] = f"TASK {task_ref(tid)} - a stranger's task."
         parts.insert(1, _origin.SEED_LINE.format(path=_origin.stranger_file(store, tid, [f"TASK: {t.get('Title') or ''}\nSUMMARY: {t.get('Summary') or ''}", *theirs])))

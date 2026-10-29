@@ -270,8 +270,11 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         if (env := reply_envelope(store, m)): store.set_review_envelope(rid, env)
     from .signatures import agent_signed
     text = agent_signed(store, store.get_review(rid) or rv, text, m) or text
+    # ...said once per letter: the same reply saved twice - its marker and its `--reply` in one turn - wrote "agent drafted the reply
+    # itself" and "assistant drafted the reply itself" one under the other (the email walk, 2026-10-29)
+    same = agent_drafted(rv) and ' '.join(str(rv.get('DraftText') or '').split()) == ' '.join(text.split())
     store.update_review_draft(rid, text, run_id or rv.get('RunId'), by=AGENT_DRAFT + agent)
-    store.add_comment(task_id, agent, 'agent', f'{agent} drafted the reply itself - it is on the task, waiting on your approval.')
+    if not same: store.add_comment(task_id, agent, 'agent', f'{agent} drafted the reply itself - it is on the task, waiting on your approval.')
     return {'ok': True, 'review_id': rid, 'message_id': mid, **attach_files(store, rid, files, agent)}
 
 
@@ -614,7 +617,10 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
         store.add_comment(tid, actor, 'human', ('Closed the general-work session.' if session else 'Closed out the assistant conversation.')
                           # the draft is only ASKED FOR here; its writer runs after this line and may find nothing needs to go back.
                           # "is drafted for you to approve" was said over three closes that drafted nothing (the owner, 2026-10-14)
-                          + (' The reply to whoever asked is being written - it waits for your approval, or the task says why none is needed.'
+                          # ...and one the agent wrote itself is not "being written": its own line said it is waiting (agent_reply) - this
+                          # came after it, as if a second were on the way (the email walk, 2026-10-29)
+                          + ('' if fin.get('drafting') and own_draft(store, tid)
+                             else ' The reply to whoever asked is being written - it waits for your approval, or the task says why none is needed.'
                              if fin.get('drafting')
                              # say what the task IS: a proposal left for the owner keeps it waiting (finish), not done
                              else ' The task waits for your answer to what the agent proposed.' if close and (store.get_task(tid) or {}).get('Status') == 'waiting'

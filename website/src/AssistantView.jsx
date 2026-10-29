@@ -11,7 +11,7 @@
 // Everything durable lives on the server; this file only draws and pushes buttons.
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { workingLine } from "./agentWork.js";
-import { Box, CircularProgress, IconButton, MenuItem, Popover, Select, Tooltip, Typography, useMediaQuery } from "@mui/material";
+import { Box, CircularProgress, IconButton, Menu, MenuItem, Popover, Select, Tooltip, Typography, useMediaQuery } from "@mui/material";
 import HistoryIcon from "@mui/icons-material/History";
 import EditNoteIcon from "@mui/icons-material/EditNote";
 import TuneIcon from "@mui/icons-material/Tune";
@@ -1235,6 +1235,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [chatsLoading, setChatsLoading] = useState(false);
   const [old, setOld] = useState(null);               // an earlier chat, read-only
   const [aiEl, setAiEl] = useState(null);
+  const [modelEl, setModelEl] = useState(null);         // the composer's model picker, open (chatAi)
   const [remindOn, setRemindOn] = useState(null);      // the walk's Remind me: { task, anchor }
   const [slotsOn, setSlotsOn] = useState(null);        // the walk's Propose a new time / Find a time: { item, act, anchor }
   // THE ASSISTANT'S LIT BUTTON (assistantLight.js): a typed act lights the row's own verb for it until a press or the table moves on
@@ -3030,6 +3031,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     catch (e) { setErr(errText(e)); }
     setAiEl(null);
   };
+  // THIS CHAT'S OWN AI (the owner, 2026-10-29: the composer's model picker - per chat, never Settings): an empty pick is the Assistant's default again
+  const chatAi = async (pick) => {
+    setModelEl(null);
+    const p = (state?.providers || []).find((x) => x.pick === (pick || state?.defaultPick));
+    try { const { data } = await api.post("/api/concierge/chat-ai", { pick, model: null });
+      setState((s) => ({ ...s, pick: data.pick, provider: p?.label || data.pick, model: data.model || p?.model || "", chatPick: !!data.chatPick })); }
+    catch (e) { setErr(errText(e)); }
+  };
   const toggleSpeak = () => { const v = !speakOnState; setSpeak(v); try { localStorage.setItem("taskuary_speak", v ? "1" : "0"); } catch { /* private mode */ } if (!v) window.speechSynthesis?.cancel(); };
   // a card's link to its message ("<name>'s message ↗", an idea's Based on): that message's own card, on the table (openMsgCard)
   const timeline = (mid) => openMsgRef.current?.(mid);
@@ -3585,8 +3594,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const composeBox = (
     <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined} ref={boxRef} data-tq-open={boxWide ? "" : undefined}
     data-tq-continue={!boxWide && isMini && winLines.length ? "" : undefined} onFocus={openBox} onKeyDown={escShut}>
-    {/* ...on a desk, at rest, the chat widget's mark: the small pill reads as the chat, not as a field of the bar */}
-    {chatApart && !boxWide && <span className="tq-chat-mark" aria-hidden="true"><AssistantMark /></span>}
     {!boxWide && unseen > 0 && <i className="tq-chat-unseen" data-tq-unseen={unseen} aria-label={`${unseen} new in the chat`}>{unseen}</i>}
     {/* THE FIELD: nothing of its own at rest (display: contents - the pill is the box); in the chat window it is the bordered
         field the words are typed in, tools and send inside it (the owner, 2026-10-28: "it does not look like a prompt input box?") */}
@@ -3613,7 +3620,21 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         // Esc shuts the window, the box back to its pill (escShut, on the box)
       }} />
     <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || heard || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
+    {/* THE MODEL PICKER, bottom right (the owner, 2026-10-29: a modern chat composer): the brain this chat speaks on, the Assistant's default
+        until another is chosen here - for this chat only, Settings stay as they are. A press opens its list, never the chat window */}
+    {chatApart && !!state && <button type="button" className="tq-model-pick" data-tq-model-pick="" aria-haspopup="menu" aria-expanded={!!modelEl}
+      title={state?.chatPick ? "This chat's own AI - Settings stay as they are" : "The Assistant's default AI - choose another for this chat"}
+      onMouseDown={(e) => e.preventDefault()} onFocus={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setModelEl(e.currentTarget); }}>
+      <span>{state?.providers?.length ? state?.provider || "AI" : state?.scripted ? "Scripted demo" : "No AI connected"}</span> ▾</button>}
     </div>
+    {chatApart && <Menu open={!!modelEl} anchorEl={modelEl} onClose={() => setModelEl(null)} anchorOrigin={{ vertical: "top", horizontal: "right" }}
+      transformOrigin={{ vertical: "bottom", horizontal: "right" }} slotProps={{ paper: { sx: { minWidth: 220, borderRadius: 2 } } }}>
+      {(state?.providers || []).map((p) => {
+        const dflt = p.pick === state?.defaultPick;
+        return <MenuItem key={p.pick} dense selected={dflt ? !state?.chatPick : !!state?.chatPick && p.pick === state?.pick} data-tq-model-option={p.pick}
+          onClick={() => chatAi(dflt ? "" : p.pick)} sx={{ fontSize: 12.5 }}>{p.label}{dflt ? " · default" : ""}</MenuItem>; })}
+      {!state?.providers?.length && <MenuItem dense disabled sx={{ fontSize: 12.5 }}>{state?.scripted ? "Scripted demo - no AI is running" : "No AI connected"}</MenuItem>}
+    </Menu>}
   </div>
   );
   const chat = (

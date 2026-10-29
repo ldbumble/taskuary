@@ -31,16 +31,31 @@ test("the chat is its own unit: the bar ends before it, it opens out of its corn
   const rest = await page.evaluate(() => {
     const dock = document.querySelector(".tq-dock"), row = dock.querySelector("[data-tq-row] .tq-arow-verbs"), pill = document.querySelector(".tq-chat-unit .tq-compose-box");
     const r = (e) => e.getBoundingClientRect(), mid = (e) => r(e).top + r(e).height / 2;
-    return { line: Math.round(r(dock).height), mid: Math.abs(mid(dock) - mid(pill)), gap: Math.round(r(pill).left - r(dock).right), pill: Math.round(r(pill).width),
+    return { line: Math.round(r(dock).height), mid: Math.abs(r(dock).bottom - r(pill).bottom), gap: Math.round(r(pill).left - r(dock).right), pill: Math.round(r(pill).width),
       right: Math.round(r(pill).right), inBar: !!dock.querySelector(".tq-compose-box"), open: pill.hasAttribute("data-tq-open"),
       tools: getComputedStyle(pill.querySelector(".tq-compose-tools")).display, hint: pill.querySelector("textarea").placeholder,
       labels: [...row.querySelectorAll("button")].map((b) => b.textContent.trim()) };
   });
   const say = JSON.stringify(rest);
   assert.ok(rest.line <= 46, `the bar is one line ${say}`);
-  assert.ok(!rest.inBar && rest.gap >= 12 && rest.mid <= 6, `the bar ends before the chat, a gap between them, on one line ${say}`);
-  assert.ok(rest.pill >= 300 && !rest.open && rest.tools === "none", `the wide ask bar, as wide as the open window (the owner, 2026-10-29) at rest ${say}`);
-  assert.equal(rest.hint, "Ask…");
+  assert.ok(!rest.inBar && rest.gap >= 12 && rest.mid <= 3, `the bar ends before the chat, a gap between them, their feet on one line ${say}`);
+  assert.ok(rest.pill >= 300 && !rest.open && rest.tools !== "none", `the wide ask bar, as wide as the open window (the owner, 2026-10-29) at rest ${say}`);
+  assert.ok(rest.hint.length > 3, `its placeholder ${say}`);
+  // ...A MODERN CHAT COMPOSER (the owner, 2026-10-29): one rounded card - the words on top, the send round at their line's end, the chat's own
+  // inputs (attach, voice, emoji) along its foot on the left and the model picker on the right, naming the brain it speaks on
+  const card = await page.evaluate(() => {
+    const f = document.querySelector(".tq-chat-unit .tq-compose-field"), r = (e) => e.getBoundingClientRect(), ta = f.querySelector("textarea"), send = f.querySelector(".tq-send");
+    const pick = f.querySelector("[data-tq-model-pick]"), tools = [...f.querySelectorAll(".tq-compose-tools button, .tq-compose-tools label")].filter((b) => b.offsetParent);
+    return { radius: parseFloat(getComputedStyle(f).borderTopLeftRadius), sendOnLine: r(send).top < r(ta).bottom && r(send).bottom > r(ta).top && r(send).left >= r(ta).right - 2,
+      round: Math.abs(r(send).width - r(send).height) <= 1, tools: tools.length, toolsBelow: tools.every((b) => r(b).top >= r(ta).bottom - 1 && r(b).right < r(f).left + r(f).width / 2),
+      pick: pick && { text: pick.textContent, right: Math.round(r(f).right - r(pick).right), below: r(pick).top >= r(ta).bottom - 1 } };
+  });
+  assert.ok(card.radius >= 12 && card.sendOnLine && card.round && card.tools >= 2 && card.toolsBelow, `the composer card ${JSON.stringify(card)}`);
+  assert.ok(card.pick && /▾/.test(card.pick.text) && card.pick.right <= 12 && card.pick.below, `the model picker at its foot, right ${JSON.stringify(card)}`);
+  await page.click("[data-tq-model-pick]");
+  await page.waitForSelector(".MuiMenu-paper [role=menuitem]", { timeout: 5000 });
+  assert.equal(await page.$(".tq-chat-unit .tq-compose-box[data-tq-open]"), null, "the picker opens its list, never the chat window");
+  await page.keyboard.press("Escape"); await sleep(300);
 
   // FOCUSED: it opens out of its own corner - its right edge where the pill's was - into the window, with its tools; the bar beside it
   // does not move or fold

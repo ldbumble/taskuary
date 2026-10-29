@@ -211,9 +211,30 @@ CURRENT_CLOSED = 'assistant_current_closed'   # ...and whether its task was alre
 
 AI_KEY, MODEL_KEY = 'concierge_ai', 'concierge_model'   # this page's own choice - the old dock's assistant_ai stays the dock's and WhatsApp's
 
+# THIS CHAT'S OWN BRAIN (the owner, 2026-10-29: the composer's model picker - "the model choice is per chat and never changes Settings"):
+# f'{CHAT_AI}:{dock task}' -> {"pick", "model"}, so a New chat starts back on the Assistant's default
+CHAT_AI = 'concierge_chat_ai'
+
+def chat_choice(store) -> dict:
+    """This chat's own pick and model, chosen in its composer - {} while it speaks with the Assistant's default."""
+    tid = str(store.get_setting('assistant_dock_task_id') or '').strip()
+    if not tid: return {}
+    try: v = json.loads(store.get_setting(f'{CHAT_AI}:{tid}') or '{}')
+    except ValueError: return {}
+    return v if isinstance(v, dict) and str(v.get('pick') or '').strip() else {}
+
+def model_of(store) -> str:
+    """The model the chat speaks on: this chat's own choice, else the Assistant's configured one ('' for the brain's default)."""
+    c = chat_choice(store)
+    return str((c.get('model') if c else store.get_setting(MODEL_KEY)) or '').strip()
+
 def pick(store) -> str:
-    """Which brain speaks: the owner's choice on the Assistant tab; else the default CLI agent (its
-    tools are what make this a full assistant); else the first API connector."""
+    """Which brain speaks: this chat's own choice (chat_choice); else the Assistant's default (default_pick)."""
+    return str(chat_choice(store).get('pick') or '').strip() or default_pick(store)
+
+def default_pick(store) -> str:
+    """The Assistant's default brain: the owner's choice in Settings' AI defaults (or on the Assistant tab); else the default CLI agent
+    (its tools are what make this a full assistant); else the first API connector."""
     s = store.get_settings()
     chosen = str(s.get(AI_KEY) or '').strip()
     if chosen: return chosen
@@ -245,7 +266,7 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False, keep: str = N
             try: prof = json.loads(row.get('Config') or '{}')
             except ValueError: prof = {}
             cli = re.split(r'[\\/]', str(prof.get('cmd') or name))[-1].lower().rsplit('.', 1)[0]
-            model = str(store.get_setting(MODEL_KEY) or '').strip() or None
+            model = model_of(store) or None
             # the Assistant's OWN model - never the profile's light model, which is triage's: it rode haiku and broke its
             # contract in the 2026-09-24 audit, where sonnet held (ASSISTANT_DEFAULT)
             dflt = '' if model else ASSISTANT_DEFAULT.get(cli, '')
@@ -269,7 +290,7 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False, keep: str = N
                 try: return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep, **({'extra_args': fx} if fx else {}), **own)
                 finally: store.get_agent = store_get
             return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep, **({'extra_args': fx} if fx else {}), **own)
-        return llm_mod.build_llm(store, pick=p, model=str(store.get_setting(MODEL_KEY) or '').strip() or None, trace=trace, cancel=cancel, job='assistant')
+        return llm_mod.build_llm(store, pick=p, model=model_of(store) or None, trace=trace, cancel=cancel, job='assistant')
     except Exception as e:
         logger.debug(f'concierge: no brain - {e}'); return None
 

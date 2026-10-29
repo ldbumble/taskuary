@@ -5398,8 +5398,8 @@ def concierge_state():
     options = general.provider_options(store)
     pick = concierge.pick(store)
     chosen = next((o for o in options if o['pick'] == pick), None)
-    model = str(store.get_setting(concierge.MODEL_KEY) or '').strip() or (chosen or {}).get('model') or ''
-    if pick.startswith('cli:') and not str(store.get_setting(concierge.MODEL_KEY) or '').strip():
+    model = concierge.model_of(store) or (chosen or {}).get('model') or ''
+    if pick.startswith('cli:') and not concierge.model_of(store):
         model = concierge.ASSISTANT_DEFAULT.get(re.split(r'[\\/]', str((chosen or {}).get('label') or pick[4:])).pop().split(' ')[0].lower(), model) or model
     from . import remote_assistant
     return {'task': task, 'ref': task_ref(task['TaskId']), 'messages': concierge.history(store, task['TaskId']),
@@ -5407,6 +5407,8 @@ def concierge_state():
             'current': concierge.restore_current(store, task['TaskId']),
             'providers': general.brain_options(store, keep=pick), 'pick': pick,
             'provider': (chosen or {}).get('label') or pick, 'model': model,
+            # ...and whether this chat chose its own (the composer's picker) or speaks with the Assistant's default, and which that is
+            'chatPick': bool(concierge.chat_choice(store)), 'defaultPick': concierge.default_pick(store),
             # the chats this walk can be handed to, and the one it is in right now
             'doorways': remote_assistant.doorways(store), 'handoff': remote_assistant.handoff(store),
             # the demo's own brain is a script (demo.brain): "No AI connected" over a chat that answered was a lie (the UX walk, 2026-10-22)
@@ -5447,6 +5449,22 @@ def concierge_ai(body: ConciergeAiBody):
     from . import clipool; clipool.close(f"{concierge.LIVE_KEY}:{task['TaskId']}")   # a new brain is a new process
     _warm_assistant()              # ...started now, on the brain just chosen
     return {'pick': concierge.pick(store), 'model': body.model or ''}
+
+class ConciergeChatAiBody(BaseModel): pick: str | None = None; model: str | None = None
+
+@app.post('/api/concierge/chat-ai')
+def concierge_chat_ai(body: ConciergeChatAiBody):
+    """Which AI speaks in THIS chat (the owner, 2026-10-29: the composer's model picker, "per chat and never changes Settings"): kept on
+    the dock task, so a New chat is back on the Assistant's default. Empty pick = the default again. A change starts a fresh CLI
+    conversation, as a change of the default does."""
+    from . import concierge, general
+    task, _ = general.dock_task(store, ACTOR)
+    pick = str(body.pick or '').strip()
+    store.set_setting(f"{concierge.CHAT_AI}:{task['TaskId']}", json.dumps({'pick': pick, 'model': str(body.model or '')}) if pick else '', ACTOR)
+    store.set_setting(f"{concierge.SID_KEY}:{task['TaskId']}", '', ACTOR)
+    from . import clipool; clipool.close(f"{concierge.LIVE_KEY}:{task['TaskId']}")   # a new brain is a new process
+    _warm_assistant()
+    return {'pick': concierge.pick(store), 'model': concierge.model_of(store), 'chatPick': bool(concierge.chat_choice(store))}
 
 @app.get('/api/funnel/mutes')
 def funnel_mutes():

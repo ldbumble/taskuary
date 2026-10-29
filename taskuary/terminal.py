@@ -2269,6 +2269,7 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
     if live:
         if t.get('Status') != 'in_progress': store.update_task(tid, {'Status': 'in_progress'}, actor)
         return {**live, 'existing': True}
+    _sc.forget(tid)          # a new session is a new run: a self-close an earlier one made must not refuse this one's (Continue, Run another)
     from . import agents as hub_agents, workflows
     # A WORKFLOW RUN opens on its workflow's brain and model (workflows.brain) - by every road that starts it: the worker, a queue
     # drain. A brain or model named here (the owner's pick, a failover) or a resumed conversation keeps its own.

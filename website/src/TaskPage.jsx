@@ -104,7 +104,7 @@ import EmailSomeone from "./EmailSomeone.jsx";
 import { useShareParts } from "./Share.jsx";
 import { ago, filesLine, plural } from "./timeWords.js";
 import { KIND_OPTIONS, KINDS, kindLabel, shortKind, shownAgent, instructionsHint } from "./kinds.js";
-import { openAppLink } from "./appLinks.js";
+import { PICK_REPO, openAppLink, takeRepoPick } from "./appLinks.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { place } from "./words.js";
 import { announceRemoved, fromAnswer } from "./removed.js";
@@ -825,6 +825,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [reshape, setReshape] = useState(false);
   const [repoPick, setRepoPick] = useState(false);
   const [resumeAfterRepo, setResumeAfterRepo] = useState(null);
+  // a failure's "Choose where it works" opens THIS picker (appLinks.PICK_REPO, B24): on the task it names, now or once it is open
+  const pickRepoRef = useRef(null);
+  useEffect(() => {
+    const take = () => { if (takeRepoPick(selected)) pickRepoRef.current?.(); };
+    take();
+    window.addEventListener(PICK_REPO, take);
+    return () => window.removeEventListener(PICK_REPO, take);
+  }, [selected]);
   // Came from: every message drawn instead of each conversation's ends, and the one message opened in full under its row
   const [showAll, setShowAll] = useState(false);
   const [openMsg, setOpenMsg] = useState(undefined);
@@ -1716,6 +1724,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // chip you press (the owner, 2026-10-12: "if i don't fill it out it should warn me at least?")
   const heldRepo = String(t?.Tags || "").split(/[\s,]+/).includes("held:repo");
   const pickRepo = () => { setRepoPick(true); if (heldRepo) setResumeAfterRepo({ dispatch: true }); };
+  pickRepoRef.current = pickRepo;
   // only a folded heading is a control: exactly one stage is open, so clicking the open one has
   // nothing to do and must not offer a chevron that does nothing.
   const stageProps = (name) => name === "agent" && resultShown

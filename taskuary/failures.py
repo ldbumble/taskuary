@@ -38,7 +38,12 @@ class Closed(ValueError):
         super().__init__(msg); self.fix = {'label': f"Open it to {buttons.label('reopen').lower()}", 'href': f'#task={int(tid)}'}
 
 
-def classify(e, *, act: str = None) -> dict:
+# WHERE A TASK'S CODE IS CHOSEN is the task's own "Which code is this about?" picker (B24, the email walk 2026-10-29): the fix sent the
+# owner to Settings → Coding agent, which has no repository or folder field at all. With the task known, the link opens it on the picker.
+def pick_repo_href(tid) -> str: return f'#task={int(tid)}&pick=repo'
+
+
+def classify(e, *, act: str = None, tid=None) -> dict:
     """{sentence, fix, retry, unknown} for any failure. `sentence` is plain and scrubbed - it reaches the screen and the model's
     prompt; `fix` is {label, href} or None; `retry` is whether pressing it again could work; `unknown` only for a send that may
     have gone. A string is read as the error's own words (a handler that reported its failure instead of raising)."""
@@ -50,7 +55,8 @@ def classify(e, *, act: str = None) -> dict:
     if isinstance(e, FileNotFoundError) or _NOT_INSTALLED.search(text):
         sentence, fix = "The coding tool isn't installed on this computer", fix or _fix('Connect a coding tool', 'ai_apps')
     elif _NO_TOOL.search(text): fix = fix or _fix('Connect a coding tool', 'ai_apps')       # terminal.NO_CODING_TOOL
-    elif _NO_FOLDER.search(text): fix = fix or _fix('Choose where it works', 'coding')
+    elif _NO_FOLDER.search(text):
+        fix = fix or ({'label': 'Choose where it works', 'href': pick_repo_href(tid)} if tid else _fix('Choose where it works', 'coding'))
     elif _NO_AI.search(text): fix = fix or _fix('Connect an AI', 'ai')
     # an AI CLI that isn't signed in is a sign-in to do on its card, not an app bug to report (agents.signed_out_msg, 2026-10-25)
     elif _SIGNED_OUT.search(text): fix = fix or _fix('Sign it in', 'ai_apps')
@@ -80,7 +86,7 @@ def record(store, *, task_id: int = None, kind: str, error, what: str, fix: dict
     report ('source') or a connector."""
     from .operations import KINDS
     if kind not in KINDS: raise ValueError(f'not a kind of act: {kind}')
-    c = classify(error, act=kind)
+    c = classify(error, act=kind, tid=task_id if not on or on[0] == 'task' else None)
     fix = fix or c['fix'] or area_fix(area); retry = (not fix and not unknown) if retry is None else retry
     oid, (tk, ti) = uuid.uuid4().hex[:12], on or ('task', task_id)
     store.add_operation({'OpId': oid, 'Kind': kind, 'TargetKind': tk, 'TargetId': int(ti), 'ParamsJson': '{}', 'Version': 1,

@@ -69,6 +69,9 @@ export function sendBlockLine(rv) {
 export function draftState(rv) {
   const drafted = rv?.HasDraft === 1 || (rv?.HasDraft == null && !!String(rv?.DraftText || "").trim());
   if (drafted) return { state: "drafted", line: "", retry: false };
+  // THE WRITER SAID WHAT IT NEEDS (store.set_review_draft_needs): no failure - a plain line, whole, and the Advisor lights Send to agent /
+  // Continue. It came as a DraftError: red, cut mid-word, "New task to fix this" (walk 2026-10-29)
+  if (rv?.DraftNeeds) { const s = String(rv.DraftNeeds).trim(); return { state: "needs", line: s.charAt(0).toUpperCase() + s.slice(1), retry: true }; }
   if (rv?.DraftError) return { state: "failed", line: `Draft failed: ${rv.DraftError}. Press ${label("redraft", "none")} again or write the answer yourself.`, retry: true };
   return { state: "undrafted", line: "No draft yet — draft it with AI or write the answer.", retry: true };
 }

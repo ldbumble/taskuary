@@ -20,7 +20,7 @@ import { hint as btnHint, label as btn } from "./buttons.js";   // theme.jsx own
 import { useDraftJob } from "./replyDraft.js";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
 import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
-import { DECIDE_TIMEOUT, replySendFailure, reviewDeliveryState, sendFix, timedOut } from "./sendState.js";
+import { DECIDE_TIMEOUT, draftState, replySendFailure, reviewDeliveryState, sendFix, timedOut } from "./sendState.js";
 import { openAppLink } from "./appLinks.js";
 import { runOperation } from "./taskOps.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
@@ -404,6 +404,10 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         New messages arrived after this draft. Refresh the draft before sending it.
         {r.LatestPreview && <Box sx={{ mt: 0.5, fontSize: 11.5 }}>Latest: {r.LatestPreview}</Box>}
       </Alert>}
+      {/* the writer said what it needs: a plain line, never a red failure - its way on is Send to agent / Continue, lit by the Advisor */}
+      {!proposal && draftState(r).state === "needs" && (
+        <Typography variant="body2" data-tq-draft-needs="" sx={{ color: DIM, mb: 1 }}>{draftState(r).line}</Typography>
+      )}
       {!proposal && <Inbound r={r} />}
       {/* an EMAIL draft's recipient is the owner's to correct (ToRow); a proposal's destination and a chat's room are not - and a
           calendar answer goes to the calendar: what it will be told stands in their place, with no copies and no files */}

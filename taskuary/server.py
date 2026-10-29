@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from . import kinds as task_kinds
 from . import buttons, config, failures, words
 from . import store as store_mod
-from .store import SQLiteStore, is_goal, render_doc, retoken_doc, task_ref
+from .store import SQLiteStore, by_sentence, is_goal, render_doc, retoken_doc, task_ref
 from .ingest import ingest_message, split_message, task_from_message
 from .reports import (PLANNED, REGISTRY, note_app_up, render_report, resolve_cfg, run_due_reports, run_one)
 from . import agents as hub_agents
@@ -3542,8 +3542,8 @@ def open_reply(mid: int, body: OpenReplyBody = None):
                      else responder.draft_for_message(store, m, rid, instruction=_reply_nudge(body and body.instruction)))
         except Exception as e:
             logger.warning(f'reply draft failed for message {mid}: {e}')   # the box opens empty; write it yourself
-            # ...with the reason beside it (PW-046): "it only promised to look later" or what it needs is the owner's to read
-            try: store.set_review_draft_error(rid, str(e)[:300])
+            # ...with the reason beside it (PW-046): what it needs is the owner's to read, whole - work for an agent, never a failure
+            try: (store.set_review_draft_needs if isinstance(e, responder.NotDrafted) else store.set_review_draft_error)(rid, str(e))
             except Exception as e2: logger.debug(f'could not record the draft failure on review {rid}: {e2}')
     if body is not None and body.redraft and draft: store.update_review_draft(rid, draft, (rv or {}).get('RunId'))
     # WHO IT GOES TO, AT ONCE: the envelope was pinned only when the AI's draft landed (responder.write_draft), so a fresh box -
@@ -6068,9 +6068,14 @@ def draft_review(rid: int, body: DraftBody = None):
             _refresh_chat_context(message_id=message['MessageId'])
             message = _latest_context_message(None, message['MessageId']) or message
             draft = responder.draft_for_message(store, message, rid, instruction=_reply_nudge(body and body.instruction))
+    except responder.NotDrafted as e:
+        # THE WRITER SAID WHAT IT NEEDS - no draft, and no failure: a plain line on the card and Send to agent / Continue lit (rulebook
+        # needs_agent). It was a 422 like any error, so the card drew a red app failure cut mid-word (walk 2026-10-29)
+        store.set_review_draft_needs(rid, str(e))
+        return {'ok': False, 'draft': '', 'needs': by_sentence(str(e), 2000)}
     except Exception as e:
-        store.set_review_draft_error(rid, str(e)[:300])     # visible beside the draft box, with Retry (PW-046)
-        raise HTTPException(422, str(e)[:300])
+        store.set_review_draft_error(rid, str(e))     # visible beside the draft box, with Retry (PW-046)
+        raise HTTPException(422, by_sentence(str(e)))
     store.audit('review', rid, 'redraft', ACTOR)
     return {'ok': True, 'draft': draft}
 

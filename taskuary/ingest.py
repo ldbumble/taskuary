@@ -2727,7 +2727,8 @@ def _auto_draft(store, tid, rid):
     try: responder.write_draft(store, tid, rid, actor='auto-draft')
     except Exception as e:
         logger.warning(f'auto-draft failed for task {tid}: {e}')
-        try: store.set_review_draft_error(rid, str(e)[:300])
+        # a writer that said what it NEEDS did not fail: no draft, work for an agent (store.set_review_draft_needs)
+        try: (store.set_review_draft_needs if isinstance(e, responder.NotDrafted) else store.set_review_draft_error)(rid, str(e))
         except Exception as e2: logger.warning(f'could not record the draft failure on review {rid}: {e2}')
         # ...and a reply it could not ANSWER is work: the general agent does it and drafts the real reply (the owner, 2026-10-28)
         if isinstance(e, responder.NotDrafted):

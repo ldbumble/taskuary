@@ -63,7 +63,7 @@ def test_the_writers_own_needs_lands_on_the_review_the_owner_sees(s):
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr('taskuary.llm.build_llm', lambda *a, **k: llm)
         ingest._auto_draft(s, tid, rid)
-    assert 'needs the portal logs' in (s.get_review(rid).get('DraftError') or '') and len(calls) == 1
+    assert 'needs the portal logs' in (s.get_review(rid).get('DraftNeeds') or '') and len(calls) == 1
 
 
 def test_needs_is_said_to_the_owner_never_mailed(s):

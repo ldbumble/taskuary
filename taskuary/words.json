@@ -48,6 +48,7 @@
     "agent_asking":  {"line": "", "lit": []},
     "failed":        {"line": "Failed: {why}", "lit": ["fix"]},
     "failed_cause":  {"line": "Failed: {why}", "lit": ["continue", "report_bug", "new_task"], "ask": true},
+    "needs_agent":   {"line": "", "lit": ["continue", "regular_agent"]},
     "report_failed": {"line": "Report failed: {why}", "lit": ["fix", "rerun"]},
     "report_ok":     {"line": "", "lit": ["next"]},
     "dashboard":     {"line": "", "lit": ["next"]},

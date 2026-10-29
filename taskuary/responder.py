@@ -398,7 +398,7 @@ def _answer(llm, system, user, max_tokens, images=None, guard=False, sig=''):
     out = (_ask(llm, system, user, max_tokens, images) or '').strip()
     if not out: raise RuntimeError('the AI returned an empty reply')
     if out.upper().startswith(NEEDS):
-        why = ' '.join(out[len(NEEDS):].split())[:240] or 'something it does not have'
+        why = ' '.join(out[len(NEEDS):].split()) or 'something it does not have'      # whole: the store keeps it by sentence
         raise NotDrafted(f'not drafted - it needs {why.rstrip(".")}. An agent can work it out and draft the reply, or Redraft with it')
     return files_said(out)
 

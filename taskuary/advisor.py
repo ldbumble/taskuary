@@ -80,7 +80,7 @@ def _acted(store, target_kind, target_id) -> str:
         op = store._one("SELECT OpId, Status FROM operation WHERE TargetKind='idea' AND TargetId=? AND Status<>'proposed' ORDER BY rowid DESC LIMIT 1", (int(target_id),)) or {}
         return f"/{op.get('OpId') or ''}:{op.get('Status') or ''}"
     # ...and whether its draft could not be written: a Reply whose draft failed left the line it was judged before standing (2026-10-19)
-    rv = store._one(f"SELECT GROUP_CONCAT(ReviewId || ':' || IFNULL(Status,'') || ':' || IFNULL(DeliveryState,'') || ':' || (IFNULL(DraftError,'')<>''), ',') AS d FROM "
+    rv = store._one(f"SELECT GROUP_CONCAT(ReviewId || ':' || IFNULL(Status,'') || ':' || IFNULL(DeliveryState,'') || ':' || (IFNULL(DraftError,'')<>'') || (IFNULL(DraftNeeds,'')<>''), ',') AS d FROM "
                     f"(SELECT * FROM review WHERE {col}=? ORDER BY ReviewId)", (int(target_id),)) or {}
     op = store._one("SELECT OpId, Status FROM operation WHERE TargetKind=? AND TargetId=? AND Status<>'proposed' ORDER BY rowid DESC LIMIT 1",
                     (target_kind, int(target_id))) or {}
@@ -393,6 +393,13 @@ def _draft(store, item, target_kind, target_id):
     return r if r and r.get('Status') in ('pending', 'held') and (r.get('FinalText') or r.get('DraftText')) else None
 
 
+def draft_needs(store, item) -> str:
+    """What the reply writer said it NEEDS on the item's pending review, with no draft on it - '' when it drafted, or never said."""
+    r = (store.get_review(int(item['rid'])) if item.get('rid') else None) or (store.pending_review(int(item['tid']), live_only=False) if item.get('tid') else None) or {}
+    if r.get('Status') not in ('pending', 'held') or str(r.get('DraftText') or '').strip(): return ''
+    return str(r.get('DraftNeeds') or '').strip()
+
+
 def draft_line(store, item, target_kind, target_id) -> str:
     """THE DRAFT ITSELF, and what goes with it: the line said "read it, then send it" over a draft it had never seen - one promising a
     payment date nobody had set, another saying "sending it now" with nothing attached (the Advisor deep dive, 2026-10-20)."""
@@ -544,6 +551,9 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     if att: lines.append(att)
     try: f = failure(store, item)
     except Exception as e: logger.debug(f'advisor: no failure read for {item.get("key")} - {e}'); f = None
+    try: needs = draft_needs(store, item)
+    except Exception: needs = ''
+    if needs: lines.append(f'THE REPLY WRITER DID NOT DRAFT IT - it said: {needs} (not a failure: an agent does that work and drafts the reply)')
     if f: lines.append(f"WHAT FAILED: {f['what']} - {f['why'] or 'no reason was given'}"
                        + (' (nobody knows whether it went: check before sending again)' if f.get('unknown') else '')
                        + (f". The fix offered: {f['fix']['label']}" if f.get('fix') else ''))

@@ -15,7 +15,7 @@ export const useDraftJob = (rid) => useSyncExternalStore(subscribeDrafts, () => 
 export function draftBehind(api, rid, instruction = null) {
   if (jobs.get(rid)?.state === "drafting") return jobs.get(rid).promise;
   const promise = api.post(`/api/reviews/${rid}/draft`, instruction ? { instruction } : {})
-    .then(({ data }) => put(rid, { state: "done", draft: data?.draft || "" }))
+    .then(({ data }) => put(rid, { state: "done", draft: data?.draft || "", needs: data?.needs || null }))
     .catch((e) => put(rid, { state: "failed", error: e?.response?.data?.detail || e?.message || "the draft could not be written" }));
   put(rid, { state: "drafting", promise });
   return promise;

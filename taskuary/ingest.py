@@ -695,7 +695,9 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
                              # judged. The loop closes here: a verdict, a correction, a better verdict.
                              routing_history=_routing_history(store, msg),
                              # ...and whether coding exists here at all: no coding tool connected, no coding kind (2026-10-16)
-                             coding=capabilities.can_code(store))
+                             coding=capabilities.can_code(store),
+                             # ...and what it can reach: "I can pull the Q3 totals" was offered with no connection to pull them from (B25)
+                             connected=connected_systems(store))
     intent['notes'], intent['notes_left'] = notes, notes_left
     return intent, fail
 
@@ -1959,8 +1961,23 @@ OFFER_JOB = ('The owner accepted your offer: "{offer}". Do that for them. Regist
              'message you write waits for their Send.')
 
 
+def connected_systems(store) -> list:
+    """The systems this install can reach, as triage is shown them: each active connection's name and type."""
+    try: return [f"{c.get('Name') or c.get('Type')} ({c.get('Type')})" for c in store.list_connectors() if c.get('Active')][:40]
+    except Exception as e:
+        logger.debug(f'ingest: connected systems unread - {e}'); return []
+
+
+def _drafted(store, tid) -> bool:
+    """A reply has been drafted on the task - waiting, sent or edited: the work of an offer that only drafts it is done."""
+    return bool(store._one("SELECT 1 x FROM review WHERE TaskId=? AND COALESCE(Kind,'')<>'action' AND COALESCE(DraftText,'')<>'' "
+                           "AND Status<>'rejected' LIMIT 1", (tid,)))
+
+
 def offer_of(store, tid) -> str:
-    """The offer triage made on this task, '' when there is none, it was taken, or an agent already works the task."""
+    """The offer triage made on this task, '' when there is none, it was taken, or an agent already works the task - or when all it
+    would produce is the reply (the verdict's offer_is_reply) and a reply is already drafted: "I can draft a reply" stood over the
+    draft it offered (B25, the email walk 2026-10-29). Read off the state, never the offer's words."""
     t = store.get_task(tid) or {}
     if not t or t.get('Kind') in task_kinds.AGENT or t.get('Status') in ('done', 'dropped'): return ''
     if OFFER_TAG in re.split(r'[\s,]+', str(t.get('Tags') or '')): return ''
@@ -1968,7 +1985,8 @@ def offer_of(store, tid) -> str:
     for r in store._rows("SELECT VerdictJson FROM route WHERE TaskId=? AND VerdictJson LIKE '%\"offer\"%' ORDER BY RouteId DESC LIMIT 5", (tid,)):
         try: v = json.loads(r.get('VerdictJson') or 'null') or {}
         except (TypeError, ValueError): continue
-        if isinstance(v, dict) and str(v.get('offer') or '').strip(): return ' '.join(str(v['offer']).split())[:240]
+        if isinstance(v, dict) and str(v.get('offer') or '').strip():
+            return '' if v.get('offer_is_reply') is True and _drafted(store, tid) else ' '.join(str(v['offer']).split())[:240]
     return ''
 
 

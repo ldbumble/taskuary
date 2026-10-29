@@ -1105,6 +1105,13 @@ def _activity_time(value):
         return None
 
 
+def not_ahead(stamps) -> list:
+    """The stamps that are not in the future: a mail's Date header is the sender's clock, and one set hours ahead made the rail read
+    "in 5h" over a row that had already arrived (the email walk, 2026-10-29). Nothing arrives later than now; all ahead, all kept."""
+    now = datetime.now() + timedelta(minutes=1)
+    return [x for x in stamps if (t := _activity_time(x)) and t <= now] or list(stamps)
+
+
 def arrived(item):
     """When a row ARRIVED - its task's creation, else its first message (`arrived_at`, stamped by the builders) - the one clock its
     place on the rail is read from. Never its last activity: a reply landing, an agent starting or asking and the walk's own marks
@@ -1404,7 +1411,7 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
     made = {tid: made_at(tid) for tid in {i['tid'] for i in items if i.get('tid')}}
     def first(i, made_at):
         stamps, mailed = made_at
-        at = [s for s in (*stamps, *(() if mailed else (i.get('sort_at') or i.get('since') or i.get('when'),))) if _activity_time(s)]
+        at = not_ahead([s for s in (*stamps, *(() if mailed else (i.get('sort_at') or i.get('since') or i.get('when'),))) if _activity_time(s)])
         return min(at, key=_activity_time) if at else (stamps or [None])[0]
     from .processing_unread import came_back
     back = {tid: came_back(store, tid, store.list_messages(tid) if hasattr(store, 'list_messages') else []) for tid in made}

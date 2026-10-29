@@ -6292,35 +6292,28 @@ class SQLiteStore:
     def lore_topics(self) -> list:
         return self._rows("SELECT Topic, COUNT(*) n, MAX(UpdatedAt) last FROM lore WHERE Status='live' "
                           'AND IFNULL(Topic,"")<>"" GROUP BY Topic ORDER BY n DESC, Topic')
-    LORE_STOP = {'the', 'and', 'for', 'you', 'are', 'not', 'with', 'this', 'that', 'have', 'from',
-                 'was', 'will', 'has', 'but', 'all', 'our', 'your', 'their', 'its', 'any', 'out',
-                 'can', 'when', 'what', 'how', 'why', 'who', 'does', 'did', 'about', 're'}
+    LORE_POOL = 500         # the posts a query is ranked among: the best-scored and newest
 
     def lore_posts(self, topic=None, q=None, limit=50, sort='new', status='live', kind=None) -> list:
-        """Ranked by HOW MANY of the query's distinctive words a post carries, not by whether it
-        carries all of them. Requiring all is right for a person typing three words and wrong for
-        handbook.block, which hands a whole task's text in - that found nothing at all, because no
-        one entry mentions every word of a mail. A post the query touches twice beats one it
-        touches once, and the top of that list is what an agent is handed."""
-        # the substring runs off the SINGULAR stem so a query's plural finds a singular entry:
-        # 'adjustments' must reach a post about an 'adjustment', which is the case that found nothing
-        terms = list(dict.fromkeys(t.rstrip('s') for t in re.findall(r'[a-z][a-z0-9-]{2,}', str(q or '').lower())
-                                   if t not in self.LORE_STOP))[:12]
-        hay = 'lower(l.Title || " " || IFNULL(l.Body,"") || " " || IFNULL(l.Topic,""))'
-        score = ' + '.join(f'(CASE WHEN {hay} LIKE ? THEN 1 ELSE 0 END)' for _ in terms) if terms else '0'
-        like = [f'%{t}%' for t in terms]
-        # params bind in TEXTUAL order across the whole statement: the score expression in SELECT,
-        # then the topic in WHERE, then the score expression again in WHERE. ORDER BY uses the
-        # alias, which is why it costs no third copy.
+        """The posts, filtered by status, topic and kind. With `q`, the ones that MEAN what it is about, best first - ranked by
+        embeddings (textsim), `Hits` their similarity. A stopword list and a count of shared words ranked them once (the owner,
+        2026-10-28: no hard-coded words). With no embedder a query is FOUND, literally: posts that carry it whole."""
         w = ((["l.Status='live'"] if status == 'live' else ["l.Status<>'live'"])
-             + (['l.Topic=?'] if topic else []) + (['l.Kind=?'] if kind else [])
-             + ([f'({score}) > 0'] if terms else []))
-        p = [*like] + ([topic] if topic else []) + ([kind] if kind else []) + [*like]
+             + (['l.Topic=?'] if topic else []) + (['l.Kind=?'] if kind else []))
+        p = ([topic] if topic else []) + ([kind] if kind else [])
         # Agreement is the strongest value signal; discussion breaks ties. The same ordering
         # feeds the Hub tab and handbook.block(), so validated entries reach later agents first.
-        order = ('Hits DESC, ' if terms else '') + ('l.Score DESC, Comments DESC, l.UpdatedAt DESC' if sort == 'top' or terms else 'l.UpdatedAt DESC')
-        return self._rows(f'SELECT l.*, ({score}) Hits, (SELECT COUNT(*) FROM lore_comment WHERE LoreId=l.LoreId) Comments '
-                          f'FROM lore l WHERE {" AND ".join(w)} ORDER BY {order} LIMIT ?', (*p, int(limit)))
+        order = 'l.Score DESC, Comments DESC, l.UpdatedAt DESC' if sort == 'top' or q else 'l.UpdatedAt DESC'
+        rows = self._rows(f'SELECT l.*, 0 Hits, (SELECT COUNT(*) FROM lore_comment WHERE LoreId=l.LoreId) Comments '
+                          f'FROM lore l WHERE {" AND ".join(w)} ORDER BY {order} LIMIT ?', (*p, self.LORE_POOL if q else int(limit)))
+        q = ' '.join(str(q or '').split())
+        if not q: return rows
+        from . import textsim
+        text = lambda r: f"{r.get('Title') or ''}\n{r.get('Topic') or ''}\n{str(r.get('Body') or '')[:1500]}"
+        got = textsim.rank(self, q, [(f"lore:{r['LoreId']}", text(r)) for r in rows], int(limit))
+        if got is None: return [r for r in rows if q.lower() in ' '.join(text(r).split()).lower()][:int(limit)]
+        by = {f"lore:{r['LoreId']}": r for r in rows}
+        return [{**by[k], 'Hits': round(sim, 4)} for k, sim in got]
     def lore_vote(self, lid, delta: int, actor: str = 'owner') -> int:
         """One vote per voter, forum-style: voting again REPLACES your vote rather than stacking it,
         so an agent that meets the same entry in ten sessions moves it one step, not ten. The Score

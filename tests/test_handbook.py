@@ -206,8 +206,16 @@ class VotedOn(unittest.TestCase):
     def test_search_gives_the_id_that_vote_and_comment_need(self):
         s = MemoryStore()
         p = handbook.post(s, 'The census lives in the old view', 'not the new one', 'census', 'gotcha', 'coding')
-        _, body = handbook.run_hub_search({'store': s, 'query': 'census old view'})
+        handbook.post(s, 'Payworth exports run at noon', 'the nightly one was moved', 'payroll', 'gotcha', 'coding')
+        # what a post is ABOUT is read off embeddings (textsim), never a count of shared words (2026-10-28)
+        from tests import fake_embed
+        with fake_embed.meaning({'census': ['census']}):
+            _, body = handbook.run_hub_search({'store': s, 'query': 'where is the census kept'})
         self.assertEqual([json.loads(l).get('id') for l in body.splitlines()], [p['LoreId']])
+        # no embedder: a query is FOUND, literally, never guessed at by its words
+        with fake_embed.no_embedder():
+            self.assertEqual([r['LoreId'] for r in s.lore_posts(q='the old view')], [p['LoreId']])
+            self.assertEqual(s.lore_posts(q='census view'), [])
 
     def test_a_post_is_written_down_as_a_hub_post_not_a_lore_post(self):
         s = MemoryStore()

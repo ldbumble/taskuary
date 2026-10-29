@@ -181,7 +181,11 @@ def vote(store, lid: int, delta: int, actor: str = 'owner') -> dict:
 
 # ── what an agent is given before it starts ─────────────────────────────────────────────
 def search(store, text: str, limit: int = BLOCK_POSTS, topic: str = None) -> list:
-    return store.lore_posts(topic=topic, q=text, limit=limit, sort='top')
+    """The posts alike in meaning to a piece of work (embeddings) - and with no embedder, the best-scored ones within the cap for
+    the model to judge, never a guess by shared words."""
+    from . import textsim
+    hits = store.lore_posts(topic=topic, q=text, limit=limit, sort='top')
+    return hits if hits or textsim.available(store) else store.lore_posts(topic=topic, limit=limit, sort='top')
 
 
 def block(store, text: str, budget: int = BLOCK_BUDGET, limit: int = BLOCK_POSTS, topic: str = None,

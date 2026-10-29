@@ -138,7 +138,8 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
     if not cmd: raise RuntimeError('this held step names no command')
     if cwd and not os.path.isdir(cwd): raise RuntimeError(f'the folder it was held in is gone ({cwd}) - nothing was done')
     def go(argv, folder):
-        r = subprocess.run(argv, cwd=folder or None, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
+        from . import spawn
+        r = spawn.run(argv, cwd=folder or None, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
         return r.returncode, (r.stdout or '') + (r.stderr or '')
     rc, said = (run or go)(_argv(p.get('shell') or 'Bash', cmd), cwd)
     said = ' '.join(str(said or '').split())[-600:]

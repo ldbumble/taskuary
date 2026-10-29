@@ -1220,8 +1220,8 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     # needs one started with nothing on screen. On its own thread: Chrome takes a few seconds
     # and the session must not wait for it.
     if task_id and store:
-        from . import browserview as _bv
-        if _bv.wanted(store.get_task(task_id)):
+        from . import browserview as _bv, ingest as _ingest
+        if _ingest.mark_browser(store, task_id):         # ...or that triage read the work as done on a web page (2026-10-29)
             threading.Thread(target=_bv.start, args=(t.sid,), daemon=True).start()
     if agent and task_id and 'codex' in os.path.basename(str(argv[0])).lower():
         from .witness import RolloutTail
@@ -1813,6 +1813,8 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     from .store import task_ref
     from . import batch as _batch
     if _batch.is_batch(store, tid): return _batch.seed(store, tid, repo, cwd, instruction)
+    from . import ingest as _ingest
+    _ingest.mark_browser(store, tid)                 # what triage read the work to need, before the brief below reads the tag (2026-10-29)
     t = store.get_task(tid) or {}
     msgs = [m for m in store.list_messages(tid) if m.get('Status') != 'context']
     m = msgs[-1] if msgs else None

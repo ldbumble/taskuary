@@ -53,7 +53,7 @@ import { onLive, touches } from "./live.js";
 import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT, ALERT_BD, ALERT_INK, ALERT_TINT, BRAND } from "./theme.jsx";
 import RunSteps from "./RunSteps.jsx";
-import { askLine, byLine, cameFromLabel, channelName, filesByMessage, fromExpands, fromRows, groupConversations, groupMeta, headerFacts, isIdeaLine, isChat, madeLine, rowText, sortedLine, todoSources, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
+import { askLine, byLine, cameFromLabel, cameFromWhere, channelName, filesByMessage, fromExpands, fromRows, groupConversations, groupMeta, headerFacts, isIdeaLine, isChat, madeLine, rowText, sortedLine, todoSources, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
 import { latestTriageVerdict, legacyTriageVerdict, parseTriageVerdict, routeIntent } from "./triageVerdict.js";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
@@ -1670,7 +1670,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       <Box data-tq-came-in="" sx={CARD}>
         <Typography sx={cardHead}>What came in</Typography>
         {cameIn ? <>
-          <Typography sx={{ fontSize: 13, color: DIM }}>{byLine(cameIn.who || cameIn.FromName || cameIn.FromEmail, cameIn.SourceName || channelName(cameIn.Channel),
+          <Typography sx={{ fontSize: 13, color: DIM }}>{byLine(cameIn.who || cameIn.FromName || cameIn.FromEmail, cameFromWhere(cameIn),
             cameIn.SentAt ? whenShort(cameIn.SentAt) : "")}</Typography>
           {flow ? <Typography data-tq-came-in-newest="" sx={{ fontSize: 13, color: FAINT }}>The newest of {timeline.length} messages - the conversation is below</Typography>
             : <Typography data-tq-came-in-words="" title={cameInFull ? undefined : "Read it all"} onClick={() => setCameInFull((v) => !v)}

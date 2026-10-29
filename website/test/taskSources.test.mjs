@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { askLine, byLine, cameFromLabel, expands, groupConversations, groupMeta, isIdeaLine, headerFacts, hidden, latestRows, madeLine, previewRows, routeHead, startedBy, triageLine, workflowOrigin, workflowTitle } from "../src/taskSources.js";
+import { askLine, byLine, cameFromLabel, cameFromWhere, expands, groupConversations, groupMeta, isIdeaLine, headerFacts, hidden, latestRows, madeLine, previewRows, routeHead, startedBy, triageLine, workflowOrigin, workflowTitle } from "../src/taskSources.js";
 
 const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
 let id = 0;
@@ -237,4 +237,12 @@ test("the Advisor's line is set apart, a name said once, a preview cut on a word
   assert.ok(long.startsWith(ex.slice(0, -1)) && long[ex.length - 1] === " ", `ends on a whole word: ${ex}`);
   assert.match(page, /storedMessages = \(detail\?\.messages \|\| \[\]\)\.filter\(\(m\) => !isIdeaLine\(m\)\)/);
   assert.match(page, /data-tq-raised[\s\S]{0,400}Raised by/);
+});
+
+test("Came from names the sender's address on mail, never the owner's mailbox it arrived in", () => {
+  const m = { Channel: "email", FromName: "Omar Keller", FromEmail: "omar@vendor.example", SourceName: "alex@northwind.example" };
+  assert.equal(byLine(m.FromName, cameFromWhere(m)), "Omar Keller · omar@vendor.example");
+  assert.equal(cameFromWhere({ Channel: "teams", SourceName: "Ops chat" }), "Ops chat");
+  assert.equal(cameFromWhere({ Channel: "report", SourceName: "" }), "Report");
+  assert.match(page, /cameFromWhere\(cameIn\)/);
 });

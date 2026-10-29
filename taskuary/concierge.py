@@ -3612,6 +3612,12 @@ def card_for(item: dict) -> dict:
                                        'brief_today', 'thread', 'thread_n', 'thread_items')} | ({'dashboard': True} if item.get('dashboard') else {})   # a dashboard's row draws the dashboard
 
 
+def opened_reads(item: dict) -> bool:
+    """Whether putting `item` on the table reads it. A task does - it stays on the rail either way. A row read leaves the rail (a report,
+    a dashboard, a single fyi, an idea): only Next reads it, on the way out (move_on) - opening it, looking or Back never do."""
+    return lanes.level_of(item) in ('task', 'later')
+
+
 def move_on(store, key: str, actor: str = 'owner') -> dict:
     """Put down the thing the owner is walking away from. It is READ, and that is all: Next settles
     nothing. An open task stays under Tasks, passed for the rest of this walk; the next walk starts with it again.
@@ -3888,7 +3894,10 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         # read and then move on"). A draft waiting on a yes used to be held back unread; walking past one now
         # marks it read and leaves it waiting in Passed - move_on(), which the Next road calls on the way out,
         # settles nothing.
-        funnel.settle(store, item['key'], 'surfaced', actor, note=item.get('sig'), read=True)
+        # ...but a row with no task behind it - a report, a dashboard, a single fyi - is only SHOWN here: read, it leaves the rail, and the
+        # owner opened a report, pressed Back, and it was gone (2026-10-29: Next marks it read, Back never does, nor opening or looking).
+        # Next reads it on the way out (move_on); a task stays on the rail read or not, so opening one still clears what it showed.
+        funnel.settle(store, item['key'], 'surfaced', actor, note=item.get('sig'), read=opened_reads(item))
         closed = bool(item.get('tid')) and (store.get_task(item['tid']) or {}).get('Status') in ('done', 'dropped')
         set_current(store, tid, item['key'], actor, closed=closed)           # on the table, written down (PW-162)
         # ...and where the walk is: Next goes on below it - from where the RAIL draws it. A closed task opened by name is no row of the

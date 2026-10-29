@@ -495,7 +495,9 @@ function HeadMoves() {
   const box = useRef(null), [n, setN] = useState(99), [at, setAt] = useState(null), [chAt, setChAt] = useState(null);
   const sig = items.map((x) => `${x.key}:${x.v?.label || ""}:${x.v?.tone || ""}`).join("|");
   useLayoutEffect(() => { setN(99); }, [sig]);
-  useLayoutEffect(() => { const b = box.current; if (b && n > 1 && b.scrollWidth > b.clientWidth + 1) setN((k) => Math.min(k, items.length) - 1); });
+  // ...never past Mark done and what is lit, which lead the list (splitRow): a lit move folded behind the ▾ is one the owner cannot see
+  const keep = Math.max(1, items.findIndex((x) => !x.v || (x.v.id !== "done" && !/:done$/.test(String(x.v.id)) && x.v.tone !== "p")));
+  useLayoutEffect(() => { const b = box.current; if (b && n > keep && b.scrollWidth > b.clientWidth + 1) setN((k) => Math.max(keep, Math.min(k, items.length) - 1)); });
   useEffect(() => {
     const b = box.current?.parentElement;
     if (!b || typeof ResizeObserver === "undefined") return undefined;

@@ -446,7 +446,9 @@ export function splitRow(row, on, list = []) {
   const redraft = list.filter((x) => x.card && stageOf(x) === "close").map((v) => ({ ...v, tone: row.lit === v.id ? "p" : "s" }));
   if (redraft.length) by.close = [...redraft, ...(by.close || []).filter((v) => !redraft.some((r) => r.label === v.label) && v.id !== "reply")];
   const { move: all, change: changes, share } = pillsOf(row), rest = all.filter((v) => !stageOf(v));
-  by.head = [...rest.filter(isDone), ...rest.filter((v) => !isDone(v))];
+  // ...Mark done first, then what is lit (a start held for its folder, the Advisor's pick): the title bar folds from its end, never a lit move
+  const lit = (v) => !isDone(v) && v.tone === "p";
+  by.head = [...rest.filter(isDone), ...rest.filter(lit), ...rest.filter((v) => !isDone(v) && !lit(v))];
   by.change = changes.filter((v) => !stageOf(v));
   by.share = share;
   return { row: nav, by };

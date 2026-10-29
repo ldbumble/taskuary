@@ -508,11 +508,15 @@ const until = async (f, ms = 3000) => { for (const t = Date.now(); Date.now() - 
 const cardSends = (s) => s.cardBtns.some((b) => !b.off && sendWords.some((w) => b.word.startsWith(w)));
 // ...a greyed button is not one to press (the owner, 2026-10-22: a button that cannot work is greyed, its reason in the hover) - a click
 // on it does nothing, and the walk took that for a start and judged the screen it never left
-const rowHandle = (page, verb) => page.evaluateHandle((verb, ids, words) => {
+// ...on the row, or where a move lives once it left the bar (the owner, 2026-10-29: the bar is Back and Next): a stage move on its pane's
+// spine or strip, the task's own on its title bar, a live agent's Stop and save on its strip - walkdriver.doVerb looks in the same places
+const MOVES = ["[data-tq-row]", "[data-tq-spine-moves]", "[data-tq-pane-moves]", "[data-tq-head-moves]", "[data-tq-pane-strip]"];
+const MORE = MOVES.map((m) => `${m} [data-tq-more]`).join(", ");
+const rowHandle = (page, verb) => page.evaluateHandle((verb, ids, words, M) => {
   const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !e.disabled; };
-  return [...document.querySelectorAll("[data-tq-row] button[data-tq-verb]")].filter(vis).find((b) => ids.includes(b.getAttribute("data-tq-verb").split(":").pop())
+  return [...document.querySelectorAll(M.map((m) => `${m} button[data-tq-verb]`).join(", "))].filter(vis).find((b) => ids.includes(b.getAttribute("data-tq-verb").split(":").pop())
     && (!words.length || words.some((w) => b.innerText.trim().startsWith(w)))) || null;
-}, verb, [verb, ...(VERBS[verb]?.row || [])], verb === "approve" ? sendWords : []);
+}, verb, [verb, ...(VERBS[verb]?.row || [])], verb === "approve" ? sendWords : [], MOVES);
 // ...and one folded behind a ▾ is pressed from its menu (walkdriver.doVerb): the one-row bar's pill takes the row's width, so Send to agent
 // folded on a laptop and the faults pass found "no task with Send to agent to start" (0.3.9.49) - a press the owner makes in two clicks
 const menuHandle = (page, verb) => page.evaluateHandle((ids, words) => [...document.querySelectorAll('[role="menu"] [role="menuitem"][data-tq-verb]')]
@@ -523,8 +527,8 @@ const pressVerb = async (page, verb) => {
   // ...pressed from inside the page, as walkdriver does: a menu redrawn between the find and a remote click threw "Node is either not
   // clickable or not an Element" and ended the faults pass on CI (0.3.9.50) - a node gone by then is looked for again, not a crash
   if (h && (await tap(page, h))) { mark(verb, page.step); return true; }
-  for (const m of await page.$$eval("[data-tq-row] [data-tq-more]", (e) => e.map((x) => x.dataset.tqMore))) {
-    await page.evaluate((m) => document.querySelector(`[data-tq-row] [data-tq-more="${m}"]`)?.click(), m);
+  for (const [n, m] of (await page.$$eval(MORE, (e) => e.map((x) => x.dataset.tqMore))).entries()) {
+    await page.evaluate((MORE, n) => document.querySelectorAll(MORE)[n]?.click(), MORE, n);
     if (!(await until(() => menuUp(page)))) continue;
     const i = (await menuHandle(page, verb)).asElement();
     if (i && (await tap(page, i))) { mark(verb, page.step); walked.push(`${page.step}: ${verb} pressed from the ${m} ▾`); return true; }
@@ -1205,8 +1209,10 @@ async function table() {
   });
   await road("end chip", async () => {
     for (let n = 0; n < 40; n++) {
-      const words = (await look(page)).verbs.map((v) => v.word), w = words.find((x) => x.startsWith("Open TQ"));
-      if (w) { await clickText(page, w, "[data-tq-row]"); return Number(w.match(/TQ-0*(\d+)/)[1]); }
+      // ...a chip is a card's own words: on the row, or on the title bar where the task's moves went (the owner, 2026-10-29)
+      const chips = await page.$$eval(MOVES.map((m) => `${m} button`).join(", "), (bs) => bs.filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.innerText.trim()));
+      const words = (await look(page)).verbs.map((v) => v.word), w = [...words, ...chips].find((x) => x.startsWith("Open TQ"));
+      if (w) { for (const m of MOVES) if (await clickText(page, w, m)) break; return Number(w.match(/TQ-0*(\d+)/)[1]); }
       // ...a run of notices read together moves on by its own word, as the walk pass presses it
       if (words.includes(label("next", "batch"))) await clickText(page, label("next", "batch"), "[data-tq-row]");
       else if (!(await pressNext(page))) break;

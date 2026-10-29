@@ -17,13 +17,19 @@ test("Send on Close out: a failed send stays on Close out with its error, one th
   page.on("pageerror", (e) => errors.push(e.message));
   // the demo sends nothing, so the channel's answer is played here: the first press refused, the second one gone with its receipt -
   // what follows a send (the close) is the app's own, against the fixture
-  let refuse = true;
+  let refuse = true, recorded = 0;
   page.off("request", page.fixtureRequestGuard);   // one handler answers every request: the fixture's guard for all but this one
-  page.on("request", (req) => {
-    if (req.method() === "POST" && /\/api\/reviews\/\d+\/decide$/.test(new URL(req.url()).pathname))
+  page.on("request", async (req) => {
+    const rid = (new URL(req.url()).pathname.match(/^\/api\/reviews\/(\d+)\/decide$/) || [])[1];
+    if (req.method() === "POST" && rid) {
+      // ...one that went is recorded as sent on the server, as a real Send leaves it: the close after it asks whether anything on the
+      // task still waits for a Send (concierge.close_after_send), and a reply left pending would keep it open
+      if (!refuse) recorded = (await fetch(`${harness.fixtureApi}/api/fixture/review/${rid}/sent`, { method: "POST", body: "{}",
+        headers: { "X-Taskuary-Token": harness.token, "Content-Type": "application/json" } })).status;
       return req.respond({ status: 200, contentType: "application/json", body: JSON.stringify(refuse
         ? { ok: false, status: "pending", sent: null, send_error: "the mailbox refused it" }
         : { ok: true, status: "approved", sent: { channel: "email" }, send_error: null }) });
+    }
     page.fixtureRequestGuard(req);
   });
   await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
@@ -53,7 +59,10 @@ test("Send on Close out: a failed send stays on Close out with its error, one th
   assert.ok(await press(), "Send again, once the error is read");
   let status = "";
   for (let i = 0; i < 40 && status !== "done"; i++) { await sleep(500); status = String((await taskOf(inv.TaskId)).Status); }
-  assert.equal(status, "done", "the send that went closed the task");
+  const said = async () => (((await (await fetch(`${harness.fixtureApi}/api/tasks/${inv.TaskId}`, { headers: { "X-Taskuary-Token": harness.token } })).json()).comments) || [])
+    .slice(-3).map((c) => c.Body).join(" / ");
+  assert.equal(recorded, 200, "the reply that went recorded as sent");
+  assert.equal(status, "done", `the send that went closed the task - it says: ${status === "done" ? "" : await said()}`);
   await page.waitForFunction((id) => !document.querySelector(`[data-tq-task-page="${id}"] [data-tq-closeout]`), { timeout: 15000 }, inv.TaskId);
   assert.deepEqual(errors, []);
 });

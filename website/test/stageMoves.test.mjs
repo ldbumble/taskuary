@@ -49,3 +49,11 @@ test("where no panes are laid (a phone, the Tasks tab) the row is as it was", ()
   const r = rowOf({ ref: "TQ-1", list: task });
   assert.equal(splitRow(r, null, task).row, r);
 });
+
+test("a lit move on the title bar comes right after Mark done, so the bar's fold from its end never takes it", () => {
+  const list = [...task, v("repo", "decide", { tone: "p", label: "Choose where the code is" })];
+  const { by } = splitRow(rowOf({ ref: "TQ-1", list }), { live: false, open: "agent" }, list);
+  const all = [...by.head, ...by.change].map((x) => x.id);
+  assert.ok(all.includes("repo"), JSON.stringify(by));
+  if (by.head.some((x) => x.id === "repo")) assert.deepEqual(by.head.slice(0, 2).map((x) => x.id), ["done", "repo"]);
+});

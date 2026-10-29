@@ -315,7 +315,7 @@ class ApiTests(unittest.TestCase):
         from taskuary import server
         s = MemoryStore(); tid = task(s)
         asking = FakeTerm(tid, idle=terminal.IDLE_WAITING + 3, tail=['Which repo should I use?'])
-        asking.cwd, asking.agent, asking.label, asking.started = 'x', 'coding', 'coding', ''
+        asking.cwd, asking.agent, asking.label, asking.started, asking.sid = 'x', 'coding', 'coding', '', 'a'
         state = {'state': None}
         def info(tail=0): return {'sid': 'a', 'taskId': tid, 'alive': True, 'idle': asking._idle, 'files': [], 'agent': 'coding', 'label': 'coding',
                                   'started': '', 'tail': asking.tail(tail), **state}

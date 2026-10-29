@@ -12,7 +12,7 @@ const live = new Map();          // id -> the latest verb (its run closes over t
 const ofs = new Map();           // id -> the card that registered it: the item a button drawn from it was drawn for (press)
 const owners = new Map();        // owner -> { verbs, ref, at }
 const subs = new Set();
-const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", ...(v.blank ? { blank: v.blank } : {}), promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.fill ? { fill: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}), ...(v.card ? { card: true } : {}), ...(v.steady ? { steady: true } : {}), ...(v.tucked ? { tucked: true } : {}) });
+const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", ...(v.blank ? { blank: v.blank } : {}), promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.fill ? { fill: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}), ...(v.card ? { card: true } : {}), ...(v.steady ? { steady: true } : {}), ...(v.tucked ? { tucked: true } : {}), ...(v.spine ? { spine: v.spine } : {}), ...(v.laid ? { laid: v.laid } : {}) });
 let snap = { list: [], ref: "" }, sig = "";
 // THE WALK'S TWO WAYS, ONE PILL (the owner, 2026-10-27: "We have a Next button - let's have a Back button that goes up the line as well ...
 // on the first one no Back, like no Next on the last one. Combine Next/Back into one big pill called Nav"): Back is the walk's step up the
@@ -411,3 +411,34 @@ export function fitRow(row, m, avail, phone = false, extra = 0) {
 }
 const MOVE_MIN = 72;   // a few words and the ellipsis: less reads as a stray letter
 
+// THE STAGE MOVES RIDE ON THEIR PANE (the owner, 2026-10-29, after three mockups). The bar keeps what acts on the whole task - Back and
+// Next, Mark done, Change, Share, Hand it to a person, Close with a note, Attach a file. The moves that take the task a STAGE on belong to
+// their pane: Send to agent, Continue, Run another to Agent; Reply, Draft reply, Redraft to Close out. Folded, a pane carries them on its
+// spine, between its name and its status; open, inside it - and never on the bar. A press opens that pane and starts the step there
+// (TaskPage's "a press opens its section"). While an agent is LIVE the bar's one move is Stop and save, Back and Next beside it.
+// The task page's verbs say which pane is open and whether an agent is live (`laid`; none where it lays no panes - a phone, the Tasks
+// tab): carried WITH the verbs, so the row never draws a set where the item's moves and the panes they ride on disagree (row-draws-once).
+// The row draws the rest and hands the stage moves here, by pane (putSpineVerbs, useSpineVerbs)
+const CLOSE_STAGE = new Set(["reply", "redraft", "chase", "accept_invite", "decline_invite", "propose_time", "find_time"]);
+export const stageOf = (v) => { const k = String(v?.id || "").split(":").pop(), t = typeOf(v);
+  return CLOSE_STAGE.has(k) ? "close" : t === "agent" && k !== "save-end" && k !== "diff" ? "agent" : ""; };
+const NONE = [];
+let spineVerbs = {}, spineSig = "";
+const spineSubs = new Set(), spineSub = (f) => { spineSubs.add(f); return () => spineSubs.delete(f); }, spineDraw = () => spineSubs.forEach((f) => f());
+export const laidOf = (list) => (list || []).find((v) => v.laid)?.laid || null;
+export const putSpineVerbs = (by) => { const s = JSON.stringify(by); if (s === spineSig) return; spineSig = s; spineVerbs = by; spineDraw(); };
+export const useSpineVerbs = (sec) => useSyncExternalStore(spineSub, () => spineVerbs[sec] || NONE);
+// ...the row less its stage moves, and each pane's in the move pill's order (`spine`: the word a folded pane shows - Draft reply where
+// nothing is drafted yet); a live agent's row only its Stop and save
+export function splitRow(row, on, list = []) {
+  if (!on) return { row, by: {} };
+  const only = (keep) => ({ ...row, decide: row.decide.filter(keep), agent: row.agent.filter(keep), more: row.more.filter(keep) });
+  if (on.live) return { row: only((v) => String(v.id).split(":").pop() === "save-end"), by: {} };
+  const by = {};
+  for (const v of pillsOf(row).move) { const k = stageOf(v); if (k) (by[k] ||= []).push(v); }
+  // ...and a draft's own Redraft, which the row never draws (it is the card's, under the draft, while Close out is open): on the folded
+  // spine it stands for the draft - filled when it is the Advisor's pick (rowOf's lit) - and Reply, which only opens that draft, steps aside
+  const redraft = list.filter((x) => x.card && stageOf(x) === "close").map((v) => ({ ...v, tone: row.lit === v.id ? "p" : "s" }));
+  if (redraft.length) by.close = [...redraft, ...(by.close || []).filter((v) => !redraft.some((r) => r.label === v.label) && v.id !== "reply")];
+  return { row: only((v) => !stageOf(v)), by };
+}

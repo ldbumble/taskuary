@@ -27,8 +27,12 @@ const pinned = (base, m, say) => {
   assert.ok(Math.abs(m.card.top - base.card.top) <= 2, `the card's top moved ${say}: ${base.card.top} -> ${m.card.top}`);
   assert.ok(Math.abs(m.card.h - base.card.h) <= 2, `the card's height moved ${say}: ${base.card.h} -> ${m.card.h}`);
 };
+// ...on the row, or - a stage move (the owner, 2026-10-29) - on its pane's spine or in the open pane's heading; Reply reads Draft reply on a
+// spine while nothing is drafted
 const rowPress = (page, label) => page.evaluate((label) => {
-  const b = [...document.querySelectorAll("[data-tq-row] button")].find((x) => x.textContent.trim() === label && !x.disabled);
+  const words = label === "Reply" ? ["Reply", "Draft reply"] : [label];
+  const b = [...document.querySelectorAll("[data-tq-row] button, [data-tq-spine-moves] button, [data-tq-pane-moves] button")]
+    .find((x) => words.includes(x.textContent.trim()) && !x.disabled && x.offsetParent);
   b?.click(); return !!b;
 }, label);
 

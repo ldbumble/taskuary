@@ -10,7 +10,7 @@ const hint = (page) => page.evaluate(() => {
   const t = document.querySelector(".tq-compose-box textarea"), cs = getComputedStyle(t);
   const ctx = document.createElement("canvas").getContext("2d"); ctx.font = `${cs.fontSize} ${cs.fontFamily}`;
   const room = t.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-  return { text: t.placeholder, fits: ctx.measureText(t.placeholder).width <= room + 1, pill: !!t.closest(".tq-dock-line")?.querySelector(":scope > .tq-arow"),
+  return { text: t.placeholder, fits: ctx.measureText(t.placeholder).width <= room + 1, pill: !!t.closest(".tq-chat-unit") || !!t.closest(".tq-dock-line")?.querySelector(":scope > .tq-arow"),   // a desk's own unit (2026-10-29), or beside the row
     open: t.closest(".tq-compose-box").hasAttribute("data-tq-open") };
 });
 
@@ -22,7 +22,7 @@ test("a task opened from the opener: the pill's line is centred in the pill", { 
   await clickRow(page, first);
   await page.waitForSelector(".tq-dock-line > .tq-arow [data-tq-next]", { timeout: 30000 }); await sleep(1500);
   const at = await page.evaluate(() => {
-    const box = document.querySelector(".tq-dock-line > .tq-compose-box"), ta = box.querySelector("textarea"), send = box.querySelector(".tq-send");
+    const box = document.querySelector(".tq-dock-line > .tq-compose-box, .tq-chat-unit > .tq-compose-box"), ta = box.querySelector("textarea"), send = box.querySelector(".tq-send");
     const mid = (e) => { const r = e.getBoundingClientRect(); return r.top + r.height / 2; };
     return { box: mid(box), ta: mid(ta), send: mid(send), h: ta.getBoundingClientRect().height, open: box.hasAttribute("data-tq-open") };
   });
@@ -39,7 +39,7 @@ test("the dock's pill at rest says a hint that fits it, and the whole hint once 
   // ...shut by its × (the box stays open until the owner shuts it, 2026-10-27), not by a look away
   await page.click("[data-tq-box-close]"); await sleep(800);
   const rest = await hint(page);
-  assert.ok(rest.pill && !rest.open, `the box is the pill beside the row: ${JSON.stringify(rest)}`);
+  assert.ok(rest.pill && !rest.open, `the box is the pill, its own unit beside the bar: ${JSON.stringify(rest)}`);
   assert.ok(rest.fits, `the pill's hint fits it: ${JSON.stringify(rest)}`);
   // ...and it is the SAME words whatever is on the table (the owner, 2026-10-27: "it should always be the same size and words")
   assert.equal(rest.text, "Ask…");

@@ -77,10 +77,10 @@ test("an answer goes into the chat window on a task and on a report, never into 
   assert.deepEqual(await inCanvas(page), before, "nothing new is drawn in the canvas");
   assert.match(await page.$eval("[data-tq-chat-win] .tq-chat-pop-body", (e) => e.textContent), /outstanding tasks[\s\S]*suggested questions/, "the question and its answer are in the window");
   assert.equal(await page.$eval("[data-tq-chat-win] .tq-chat-pop-head b", (e) => e.textContent), "Taskuary");
-  // ...THE PILL'S WIDTH, OUT OF THE BAR, AT MOST HALF THE SCREEN (the owner, 2026-10-28: "the chat should come out of the bottom bar and not go all
-  // the way up, max 50%" - "make it narrower to fit the size on the bar and it expands only height not width")
-  assert.ok(box.w >= 276 && box.w <= 284 && Math.abs(win.w - box.w) <= 1 && Math.abs(win.r - box.r) <= 1 && Math.abs(field.w - box.w) <= 1, `one ~280px panel, the pill's width ${say}`);
-  assert.ok(box.t >= line.t - 1 && box.b <= line.b + 1 && dock.r - box.r < 40, `...the box stays in the bar, at its right end ${say}`);
+  // ...ONE PANEL OUT OF THE PILL'S CORNER, APART FROM THE BAR, AT MOST HALF THE SCREEN (the owner, 2026-10-28: "not go all the way up, max 50%";
+  // 2026-10-29: "it looks weird coming out of the bottom bar" - the chat its own unit in the corner, the bar ending before it)
+  assert.ok(box.w >= 336 && box.w <= 344 && Math.abs(win.w - box.w) <= 1 && Math.abs(win.r - box.r) <= 1 && Math.abs(field.w - box.w) <= 1, `one ~340px panel ${say}`);
+  assert.ok(Math.abs(box.b - line.b) <= 2 && body.r - box.r < 40 && dock.r < box.r - box.w + 200, `...out of the corner, the bar ending before the pill was ${say}`);
   assert.ok(Math.abs(field.b - box.b) <= 1 && Math.abs(win.b - field.t) <= 1, `...the field rises out of it, the conversation flush on the field ${say}`);
   assert.ok(win.t >= body.t && win.h + field.h <= 0.5 * 768 + 2 && win.h + field.h >= 300, `...within the canvas, 300px to half the screen ${say}`);
   assert.deepEqual(await rect(page, "[data-tq-canvas-item]"), view, "the task view did not move");
@@ -205,11 +205,11 @@ test("the chat window stays open through answers, acts, feed rebuilds and Next; 
   await ask(page, Q);
   await during("an answer");
   await sleep(1500); await stays("an answer");
-  // ...TALL ENOUGH, NEVER PAST HALF THE SCREEN (the owner, 2026-10-28: "max 50%"), between the canvas's top and the box in the bar
+  // ...TALL ENOUGH, NEVER PAST HALF THE SCREEN (the owner, 2026-10-28: "max 50%"), between the canvas's top and the box at the bar's foot line
   const win = await rect(page, "[data-tq-chat-win]"), box = await rect(page, ".tq-compose-box"), body = await rect(page, ".tq-chat-body"), line = await rect(page, ".tq-dock-line");
   const field = await rect(page, ".tq-compose-box .tq-compose-field"), tall = JSON.stringify({ win, box, field, body, line });
   assert.ok(win.h + field.h >= 300 && win.h + field.h <= 0.5 * 900 + 2, `the window is 300px..half the screen tall ${tall}`);
-  assert.ok(win.t >= body.t && box.t >= line.t - 1 && box.b <= line.b + 1, `...under the canvas's top, its box in the bar ${tall}`);
+  assert.ok(win.t >= body.t && Math.abs(box.b - line.b) <= 2, `...under the canvas's top, its box at the bar's foot line ${tall}`);
   const fill = await page.$eval("[data-tq-chat-win] .tq-chat-pop-body", (b) => ({ h: b.getBoundingClientRect().height, win: b.parentElement.getBoundingClientRect().height }));
   assert.ok(fill.win - fill.h < 60, `the conversation fills the window ${JSON.stringify(fill)}`);
 
@@ -252,7 +252,7 @@ test("the chat window stays open through answers, acts, feed rebuilds and Next; 
   // MINIMIZE IS NOT × (the owner, 2026-10-28: the two did the same): it folds the window to its head - a strip standing on the open box, the
   // conversation kept - and a press on the strip brings the whole window back at its newest line; × (and Esc) from the strip is the pill
   const hint = () => page.$eval(".tq-compose-box textarea", (e) => e.placeholder);
-  assert.notEqual(await hint(), "Continue chat…", "a shut window's pill is the plain one");
+  assert.ok(!/^Continue/.test(await hint()), "a shut window's pill is the plain one");
   await press(page, ".tq-compose-box textarea");
   await page.waitForSelector("[data-tq-chat-win]:not([hidden])", { timeout: 15000 });
   await still(page, "[data-tq-chat-win]");
@@ -290,7 +290,7 @@ test("the chat window stays open through answers, acts, feed rebuilds and Next; 
   await minimize();
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector(".tq-compose-box[data-tq-continue]", { timeout: 30000 });
-  assert.equal(await hint(), "Continue chat…", "the pill still continues it after a reload");
+  assert.equal(await hint(), "Continue…", "the pill still continues it after a reload (the corner pill's short word, 2026-10-29)");
   await press(page, ".tq-compose-box textarea");
   await page.waitForSelector("[data-tq-chat-win]:not([hidden])", { timeout: 15000 });
   assert.match(await page.$eval("[data-tq-chat-win] .tq-chat-pop-body", (e) => e.textContent), /outstanding tasks[\s\S]*open TQ-0004[\s\S]*mark this done/, "the same conversation after the reload");

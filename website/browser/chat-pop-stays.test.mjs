@@ -36,7 +36,8 @@ test("the box and the pop-up are one column, the row's slot is unseen, and an ac
     const s = getComputedStyle(e);
     return { w: e.getBoundingClientRect().width, border: parseFloat(s.borderTopWidth) === 0, bg: s.backgroundColor, shadow: s.boxShadow, fields: e.querySelectorAll(".tq-compose-field").length };
   });
-  assert.ok(slot.w >= 276 && slot.w <= 284, `the box still holds the pill's room ${JSON.stringify(slot)}`);
+  // ...on a desk the window opens out of the pill in the corner, its own unit (the owner, 2026-10-29): the box is the window's width, 340px
+  assert.ok(slot.w >= 336 && slot.w <= 344, `the box is the window's width ${JSON.stringify(slot)}`);
   assert.ok(slot.border && slot.bg === "rgba(0, 0, 0, 0)" && slot.shadow === "none" && slot.fields === 1, `...and is not drawn: no blank second input ${JSON.stringify(slot)}`);
 
   // SENT: an answer that only lit a button
@@ -48,7 +49,7 @@ test("the box and the pop-up are one column, the row's slot is unseen, and an ac
   const pop = await rect(page, "[data-tq-chat-pop]"), box = await rect(page, ".tq-compose-box .tq-compose-field");
   const say = JSON.stringify({ pop, box });
   assert.ok(Math.abs(pop.l - box.l) <= 1 && Math.abs(pop.r - box.r) <= 1, `one column: the same left and right edges ${say}`);
-  assert.ok(pop.w >= 276 && pop.w <= 284, `...the pill's width, like a chat helper on an app ${say}`);
+  assert.ok(pop.w >= 336 && pop.w <= 344, `...the window's width, like a chat helper on an app ${say}`);
   assert.ok(pop.b <= box.t + 1 && box.t - pop.b <= 8, `...the answer flush above the box ${say}`);
 
   // ...still up 5 s later, ending on words that say what was done

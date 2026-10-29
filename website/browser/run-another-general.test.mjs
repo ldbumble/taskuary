@@ -61,7 +61,8 @@ test("Run another agent on a stopped general agent starts a new conversation and
   // Run another agent rides in the row's More - the row is up once it has its ▾ (Mark done folds into it beside Back, the nav pill)
   await page.waitForSelector('[data-tq-row] [data-tq-more]', { timeout: 20000 });
   await new Promise((r) => setTimeout(r, 1000));
-  let press = await page.$('[data-tq-row] button[data-tq-verb$="run-another"]');
+  // ...a stage move: in the open Agent pane's heading or on its spine (the owner, 2026-10-29), else on the row or behind a ▾ there
+  let press = await page.$('[data-tq-pane-moves] button[data-tq-verb$="run-another"], [data-tq-spine-moves] button[data-tq-verb$="run-another"], [data-tq-row] button[data-tq-verb$="run-another"]');
   for (const more of await page.$$("[data-tq-row] [data-tq-more]")) {
     if (press) break;
     await more.click();

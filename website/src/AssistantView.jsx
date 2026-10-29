@@ -1229,6 +1229,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     el.style.height = `${el.scrollHeight}px`;
   }, [text]);
   const phone = useMediaQuery("(max-width:600px)");     // the composer's hint is one line there
+  const deskChat = useMediaQuery("(min-width:760px)");  // ...and from 760px the chat is its own unit in the corner (composeBox)
   const [chatsOpen, setChatsOpen] = useState(false);
   const [chats, setChats] = useState([]);
   const [chatsLoading, setChatsLoading] = useState(false);
@@ -3472,13 +3473,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const field = el.querySelector(".tq-compose-field");
     const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect(), pos = getComputedStyle(el).position, open = el.hasAttribute("data-tq-open"), over = open && (pos === "absolute" || pos === "fixed");
-      const inBar = open && field && getComputedStyle(field).position === "absolute";
+      const inBar = open && field && (getComputedStyle(field).position === "absolute" || !!el.closest(".tq-chat-unit"));
       setBoxNarrow(r.width < 360); setBoxH(inBar ? Math.round(field.getBoundingClientRect().height) : over ? Math.round(r.height) : 0);
       el.closest(".tq-compose")?.style.setProperty("--tq-box-h", over ? `${Math.round(r.height) + (pos === "fixed" ? 0 : 6)}px` : "-2px");
     });
     ro.observe(el); if (field) ro.observe(field);
     return () => ro.disconnect();
-  }, [old, walk]);                                   // the box is mounted only while neither is up
+  }, [old, walk, deskChat, firstRun]);                // the box is mounted only while neither is up - and again when it moves (chatApart)
   // ...IT OPENS ONLY BY THE OWNER'S HAND (the owner, 2026-10-28: "when the walk-through ended, the chat reopened by itself"): the pill pressed,
   // a line typed, Continue chat - or an error to be read. A line that lands while it is shut or folded never opens it: the pill (or the strip)
   // counts the answers that came since the owner last had it in view (`seen`; over a reload, the minimize's own mark)
@@ -3558,6 +3559,45 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             </div>
           )}</>;
   const errLine = err && <Typography component="div" data-tq-err-line="" sx={{ color: "#7a2f3c", fontSize: 12, mb: 1 }}>{err}<ReportLink text={err} /></Typography>;
+  // THE CHAT IS ITS OWN UNIT ON A DESK (the owner, 2026-10-29: "it looks weird coming out of the bottom bar"): from 760px wide the box
+  // leaves the bar - the bar ends before it, a gap between them - and stands alone in the corner as a small pill, like any app's chat
+  // widget; pressed, it opens up out of its corner into the chat window, and shut it is the small pill again. Under 760px nothing moves
+  // ...not during setup, which has no chat: its bar keeps the whole width
+  const chatApart = deskChat && !firstRun;
+  const composeBox = (
+    <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined} ref={boxRef} data-tq-open={boxWide ? "" : undefined}
+    data-tq-continue={!boxWide && isMini && winLines.length ? "" : undefined} onFocus={openBox} onKeyDown={escShut}>
+    {/* ...on a desk, at rest, the chat widget's mark: the small pill reads as the chat, not as a field of the bar */}
+    {chatApart && !boxWide && <span className="tq-chat-mark" aria-hidden="true"><AssistantMark /></span>}
+    {!boxWide && unseen > 0 && <i className="tq-chat-unseen" data-tq-unseen={unseen} aria-label={`${unseen} new in the chat`}>{unseen}</i>}
+    {/* THE FIELD: nothing of its own at rest (display: contents - the pill is the box); in the chat window it is the bordered
+        field the words are typed in, tools and send inside it (the owner, 2026-10-28: "it does not look like a prompt input box?") */}
+    <div className="tq-compose-field">
+    <div className="tq-compose-tools">
+    <AttachImage pics={pics} sx={{ color: DIM }} />
+    <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onActive={setDictating} ctl={micRef} onInterim={setHeard}
+      onText={(t) => setText((v) => (v.trim() ? `${v.trimEnd()} ${t}` : t))} />
+    <Tooltip title="Send an emoji response">
+      <IconButton size="small" aria-label="Choose an emoji response" disabled={busy || resetting}
+        onClick={(e) => setEmojiEl(e.currentTarget)} sx={{ width: 34, height: 34, p: 0, color: DIM }}>
+        <SentimentSatisfiedAltIcon sx={{ fontSize: 18 }} />
+      </IconButton>
+    </Tooltip>
+    </div>
+    {/* a phone's composer is one line tall and the long hint wrapped under its own edge, cut
+        mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there - and the pill's at rest, and the open
+        box's over the canvas, a column as narrow as a phone's line (2026-10-27) */}
+    <textarea ref={composeRef} rows={1} value={heard ? (text.trim() ? `${text.trimEnd()} ${heard}` : heard) : text} disabled={resetting} aria-label={tableSays.name}
+      placeholder={!boxWide && isMini && winLines.length ? (phone || deskChat ? "Continue…" : "Continue chat…")
+        : boxNarrow && !boxWide ? "Ask…" : tableSays.phone /* the chat window's words: "Talk to Taskuary…" on a task (the owner, 2026-10-28) */}
+      onChange={(e) => { const v = e.target.value; setText(heard && v.endsWith(heard) ? v.slice(0, -heard.length).trimEnd() : v); openBox(); }} onKeyDown={(e) => {
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+        // Esc shuts the window, the box back to its pill (escShut, on the box)
+      }} />
+    <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || heard || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
+    </div>
+  </div>
+  );
   const chat = (
     <div className="tq-asst-col" style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div className="tq-chat-head">
@@ -3706,7 +3746,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       {/* NO LOCK WHILE THE WALK IS ON THE PHONE (the owner, 2026-10-23: "we used to have that if we were talking on the phone it would
           lock the screen on desktop but we should probably get rid of that"): the box stays, and the table follows the phone's walk */}
       {!old && !walk && (
-        <div className="tq-compose" {...pics.drop}>
+        <div className="tq-compose" data-tq-desk-chat={chatApart ? "" : undefined} {...pics.drop}>
           {/* THE CHAT WINDOW (the owner, 2026-10-28: "let's make that a chat box when you click on the chat box ui to pop up"): a support-style
               panel at the canvas's bottom right, over the dock - its head, the conversation scrolling inside, newest at the foot, and the box
               under it as its floor (the box is the panel's last band, assistantView.css). Shut, it stays mounted: the last line's chips are
@@ -3750,7 +3790,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                 word, no button - only a mark, so the dead-end walk can tell it from one that never got its decision */}
             {!shownAdvice && advice?.for === onTable && advice?.state && !advice.verb && !advice.none && <div hidden data-tq-advice="" data-tq-silent="" data-tq-unlit={advice.state} />}
           </>}
-          {!firstRun && <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />}
+          {!firstRun && !chatApart && <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />}
           {/* ONE ROW: the row's groups and the box share a line (the one-row chat bar, 2026-10-26) - the box a pill at its end while at rest,
               widened while it is used, the groups folding into their ▾ for the room (ActionRow measures what is left; Next and the lit
               move never fold). With no row - the day's opener, a phone, whose row rides with its task view - the box is the whole line */}
@@ -3760,38 +3800,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           {/* ...and during setup its line is the Advisor's (SetupLine): the move setup fills (FirstRun's tone) is the one lit - nothing
               was, so the line said "pick it" over a plain Back and a greyed Next (2026-10-19) */}
           <ActionRow advised={stripPick || setupLit} hold={rowHold} early={rowEarly} />
-          <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined} ref={boxRef} data-tq-open={boxWide ? "" : undefined}
-            data-tq-continue={!boxWide && isMini && winLines.length ? "" : undefined} onFocus={openBox} onKeyDown={escShut}>
-            {!boxWide && unseen > 0 && <i className="tq-chat-unseen" data-tq-unseen={unseen} aria-label={`${unseen} new in the chat`}>{unseen}</i>}
-            {/* THE FIELD: nothing of its own at rest (display: contents - the pill is the box); in the chat window it is the bordered
-                field the words are typed in, tools and send inside it (the owner, 2026-10-28: "it does not look like a prompt input box?") */}
-            <div className="tq-compose-field">
-            <div className="tq-compose-tools">
-            <AttachImage pics={pics} sx={{ color: DIM }} />
-            <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onActive={setDictating} ctl={micRef} onInterim={setHeard}
-              onText={(t) => setText((v) => (v.trim() ? `${v.trimEnd()} ${t}` : t))} />
-            <Tooltip title="Send an emoji response">
-              <IconButton size="small" aria-label="Choose an emoji response" disabled={busy || resetting}
-                onClick={(e) => setEmojiEl(e.currentTarget)} sx={{ width: 34, height: 34, p: 0, color: DIM }}>
-                <SentimentSatisfiedAltIcon sx={{ fontSize: 18 }} />
-              </IconButton>
-            </Tooltip>
-            </div>
-            {/* a phone's composer is one line tall and the long hint wrapped under its own edge, cut
-                mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there - and the pill's at rest, and the open
-                box's over the canvas, a column as narrow as a phone's line (2026-10-27) */}
-            <textarea ref={composeRef} rows={1} value={heard ? (text.trim() ? `${text.trimEnd()} ${heard}` : heard) : text} disabled={resetting} aria-label={tableSays.name}
-              placeholder={!boxWide && isMini && winLines.length ? (phone ? "Continue…" : "Continue chat…")
-                : boxNarrow && !boxWide ? "Ask…" : tableSays.phone /* the chat window's words: "Talk to Taskuary…" on a task (the owner, 2026-10-28) */}
-              onChange={(e) => { const v = e.target.value; setText(heard && v.endsWith(heard) ? v.slice(0, -heard.length).trimEnd() : v); openBox(); }} onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
-                // Esc shuts the window, the box back to its pill (escShut, on the box)
-              }} />
-            <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || heard || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
-            </div>
+          {!chatApart && composeBox}
           </div>
           </div>
-          </div>
+          {chatApart && <div className="tq-chat-unit" data-tq-chat-unit=""><ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />{composeBox}</div>}
           <Popover open={!!emojiEl} anchorEl={emojiEl} onClose={() => setEmojiEl(null)}
             anchorOrigin={{ vertical: "top", horizontal: "left" }} transformOrigin={{ vertical: "bottom", horizontal: "left" }}
             slotProps={{ paper: { sx: { p: 1.1, borderRadius: 2.5 } } }}>

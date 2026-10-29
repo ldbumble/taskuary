@@ -39,8 +39,9 @@ const openTask = async (page, id) => {
   await page.waitForSelector(`[data-tq-canvas-item] [data-tq-task-page="${id}"] [data-tq-task-body][data-tq-sections]`, { timeout: 20000 });
   await sleep(1800);
 };
+// ...a press on the row, or on a folded pane's spine, where its stage moves stand (the owner, 2026-10-29)
 const rowPress = (page, label) => page.evaluate((label) => {
-  const b = [...document.querySelectorAll("[data-tq-row] button")].find((x) => x.textContent.trim() === label && !x.disabled);
+  const b = [...document.querySelectorAll("[data-tq-row] button, [data-tq-spine-moves] button")].find((x) => x.textContent.trim() === label && !x.disabled);
   b?.click(); return !!b;
 }, label);
 
@@ -115,7 +116,7 @@ test("three sections in the flow's order, open where the task is up to, tabs tha
   await t.test("a row's press opens the section it belongs to", async () => {
     for (const [re, start, label, want] of [
       [/^Reconcile the August GL export/, "agent", "Reply", "close"],
-      [/^Year-end audit/, "from", "Reply", "close"],
+      [/^Year-end audit/, "from", "Draft reply", "close"],
       [/^Invoice 88213/, "close", "Send to agent", "agent"],
       [/^Migrate the census export/, "from", "Hand it to a person", "close"]]) {   // (Year-end has a draft by now: it opens on Close out)
       await openTask(page, id(re));

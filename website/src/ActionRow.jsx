@@ -3,7 +3,7 @@
 // ONE filled button at most - the Advisor's pick, and none before it answers - and a greyed decision says why it is greyed.
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Menu, MenuItem, useMediaQuery } from "@mui/material";
-import { NAV, ROW_HOLD_MS, ROW_STUCK_MS, TYPES, advisedAny, fitRow, press, rowOf, lightOnCard, sameRow, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { NAV, ROW_HOLD_MS, ROW_STUCK_MS, TYPES, advisedAny, fitRow, press, putSpineVerbs, rowOf, lightOnCard, sameRow, splitRow, laidOf, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
 import { adviceNone } from "./words.js";
 import { label } from "./buttons.js";
 import { CONNECT_AI } from "./ConnectAi.jsx";
@@ -100,7 +100,9 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   const move = advised?.none ? adviceNone(advised.none).move : "";
   const conn = move === "ai" ? verbs.list.find((v) => v.label === CONNECT_AI && !v.disabled) : null;
   const pick = advised?.none ? (conn ? { id: conn.id } : move === "ai" ? null : { verb: move || "next" }) : advised;
-  const row = rowOf(verbs, pick);
+  // ...LESS THE STAGE MOVES where the task lays its panes: those ride on their pane (actionRow.splitRow)
+  const { row, by: spineBy } = splitRow(rowOf(verbs, pick), laidOf(verbs.list), verbs.list);
+  useEffect(() => { putSpineVerbs(spineBy); });
   const { ref, decide, agent, more, next, back, why } = row;
   const hosted = useHosted();
   // ...a phone's row is Nav, Mark done, as many moves as fit and one ▾ (foldsOf.phone) - the width the page calls a phone (AssistantView)

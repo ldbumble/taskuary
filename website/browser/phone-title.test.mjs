@@ -44,7 +44,7 @@ async function task(page, id) {
   return page.evaluate(() => {
     const head = document.querySelector("[data-tq-task-head]"), pill = head.querySelector("[data-tq-status-pill]");
     const title = [...head.querySelectorAll(".MuiTypography-root")].find((e) => e.hasAttribute("title"));
-    const box = document.querySelector(".tq-dock .tq-compose-box");
+    const box = document.querySelector(".tq-dock .tq-compose-box, .tq-chat-unit .tq-compose-box");   // a desk's chat is its own unit (2026-10-29)
     return { headH: head.getBoundingClientRect().height, title: { text: title.textContent, w: title.clientWidth, whole: title.scrollWidth <= title.clientWidth + 1 },
       pill: { w: pill.getBoundingClientRect().width, word: pill.querySelector(".word")?.textContent, title: pill.getAttribute("title"),
         wordSeen: pill.querySelector(".word").getBoundingClientRect().width > 2 }, box: box.getBoundingClientRect().height };

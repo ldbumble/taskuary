@@ -59,10 +59,16 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       const m = await look(page);
       assert.deepEqual(m.agent.moves.map((x) => x.word), ["Send to agent"], JSON.stringify(m.agent));
       assert.ok(m.agent.between && m.agent.rule, "between the pane's name and its status, under a rule");
-      // ...and every move reads as a button at rest (the owner, 2026-10-29: "can't see the buttons"): a tint with the slate edge, INK words
+      // ...and the moves stand out but not all the same (the owner, 2026-10-29): a stage move outlined in the slate, slate words on white; Mark
+      // done the same with a stronger edge; the title bar's other moves quiet words, no edge; a put-down a faint edge, faint words
       const rest = await page.evaluate((CUR) => [...document.querySelectorAll(`${CUR} [data-tq-spine-moves] .tq-ab:not(.p), ${CUR} [data-tq-head-moves] .tq-ab:not(.p), ${CUR} [data-tq-pane-moves] .tq-ab:not(.p)`)]
-        .map((b) => { const cs = getComputedStyle(b); return [cs.borderTopColor, cs.backgroundColor]; }), CUR);
-      assert.ok(rest.length && rest.every(([edge, bg]) => edge === "rgb(85, 105, 122)" && bg === "rgb(241, 244, 247)"), `the moves' resting look ${JSON.stringify(rest)}`);
+        .map((b) => { const cs = getComputedStyle(b); return { word: b.textContent.trim(), rank: ["fwd", "done", "task", "down"].find((c) => b.classList.contains(c)), edge: cs.borderTopColor, bg: cs.backgroundColor, ink: cs.color, ring: cs.boxShadow }; }), CUR);
+      const SLATE = "rgb(85, 105, 122)", WHITE = "rgb(255, 255, 255)", CLEAR = "rgba(0, 0, 0, 0)";
+      const want = { fwd: (x) => x.edge === SLATE && x.bg === WHITE && x.ink === SLATE, done: (x) => x.edge === SLATE && x.bg === WHITE && /inset/.test(x.ring),
+        task: (x) => x.bg === CLEAR && x.edge === CLEAR, down: (x) => x.bg === CLEAR && x.edge !== SLATE && x.ink === "rgb(110, 104, 95)" };
+      assert.ok(rest.length && rest.every((x) => x.rank && want[x.rank](x)), `the moves' resting look ${JSON.stringify(rest)}`);
+      assert.deepEqual([...new Set(rest.map((x) => x.rank))].sort(), ["done", "down", "fwd", "task"], `all four weights on this task ${JSON.stringify(rest)}`);
+      assert.equal(rest.find((x) => x.word === "Mark done")?.rank, "done");
       assert.deepEqual(m.from.moves.map((x) => x.word).sort(), FROM, `Came from's spine: Not a task and Remind me ${JSON.stringify(m.from)}`);
       assert.ok(m.from.between && m.from.rule);
       assert.match(m.agent.text, /^\W*Agent\s+not started[\s\S]*Send to agent[\s\S]*2$/, "the spine's words as they were, the move in their middle");

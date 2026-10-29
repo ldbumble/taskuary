@@ -453,12 +453,25 @@ export function SectionTab({ sec, lines = [], foot = "", here = false, before = 
 // a rule, then the buttons"). A `tucked` move (a sent reply's Hand it to a person) is not on a spine unless it is lit: its open pane has it
 // ...and every move there READS AS A BUTTON AT REST (the owner, 2026-10-29: "can't see the buttons on top, maybe we need color?"): the
 // controls' own slate tint with the slate edge (5.7:1 on white) and INK words; the lit one keeps its filled slate
-export const MOVE_LOOK = { "& .tq-ab:not(.p)": { bgcolor: "#f1f4f7", borderColor: ACCENT, color: INK }, "& .tq-ab:not(.p):hover:not(:disabled)": { bgcolor: "#e7eef4" } };
+// ...and NOT ALL THE SAME (the owner, 2026-10-29: "what can we make them stand out but not all the same"): one slate, four weights. The
+// Advisor's pick filled (.p); a move that takes the task a stage on (`fwd`) outlined in the slate, slate words on white; Mark done the same
+// with a stronger edge (`done`), filled only when it is the pick; what acts on the whole task (`task`: Close with a note, Change, Share) quiet
+// words that take a tint on hover; a put-down (`down`: Not a task, Remind me) quiet and secondary, a faint edge - no new hue anywhere
+const PUT_DOWN = new Set(["nat", "remind"]);
+export const rankOf = (v, head = false) => { const k = String(v?.id || "").split(":").pop(); return head ? (k === "done" ? "done" : "task") : PUT_DOWN.has(k) ? "down" : "fwd"; };
+const OUTLINED = { bgcolor: "#fff", borderColor: ACCENT, color: ACCENT };
+export const MOVE_LOOK = {
+  "& .tq-ab.fwd:not(.p), & .tq-ab.done:not(.p)": OUTLINED, "& .tq-ab.done:not(.p)": { boxShadow: `inset 0 0 0 1px ${ACCENT}` },
+  "& .tq-ab.fwd:not(.p):hover:not(:disabled), & .tq-ab.done:not(.p):hover:not(:disabled)": { bgcolor: "#f1f4f7" },
+  "& .tq-ab.task:not(.p)": { bgcolor: "transparent", borderColor: "transparent", color: DIM },
+  "& .tq-ab.task:not(.p):hover:not(:disabled)": { bgcolor: "#ece9e3", borderColor: "transparent", color: INK },
+  "& .tq-ab.down:not(.p)": { bgcolor: "transparent", borderColor: "#d8d1c5", color: FAINT },
+  "& .tq-ab.down:not(.p):hover:not(:disabled)": { bgcolor: "#fff", borderColor: ACCENT, color: INK } };
 const SPINE_MOVES = { ...MOVE_LOOK, display: "flex", flexDirection: "column", gap: 0.6, width: "100%", flexShrink: 0, mt: 1, pt: 1, borderTop: `1px solid ${FOCUS_EDGE}`, cursor: "default",
   "& .tq-ab": { width: "100%", minWidth: 0, minHeight: 30, fontSize: 12.5, px: 1, justifyContent: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } };
 const SEC_NAME = { from: "Came from", agent: "Agent", close: "Close out" };
 const OPENS_FORM = new Set(["send-general", "start-agent", "run-another"]);   // the agent's moves that open its start box
-const stageBtn = (v, word = v.label) => <button key={v.id} type="button" className={`tq-ab ${v.tone}`} disabled={v.disabled} data-tq-verb={v.id}
+const stageBtn = (v, word = v.label, head = false) => <button key={v.id} type="button" className={`tq-ab ${v.tone} ${rankOf(v, head)}`} disabled={v.disabled} data-tq-verb={v.id}
   title={(v.disabled && v.why) || v.title || word} onClick={(e) => press(v.id, e, e.currentTarget, v.of)}>{word}</button>;
 function SpineMoves({ sec }) {
   const vs = useSpineVerbs(sec).filter((v) => !v.tucked || v.tone === "p");
@@ -481,7 +494,7 @@ function PaneMoves({ sec, skip = () => false }) {
   if (!all.length) return null;
   return <Box data-tq-pane-moves={sec} role="group" aria-label={`${SEC_NAME[sec]} moves`} sx={{ ...MOVE_LOOK, display: "flex", gap: 0.75, flexWrap: "nowrap", minWidth: 0, overflow: "hidden" }}>
     {vs.map((v) => stageBtn(v))}
-    {rest.length > 0 && <button type="button" className="tq-ab s" aria-label="More" aria-haspopup="menu" data-tq-more={sec} onClick={(e) => setAt(e.currentTarget)}>▾</button>}
+    {rest.length > 0 && <button type="button" className="tq-ab s task" aria-label="More" aria-haspopup="menu" data-tq-more={sec} onClick={(e) => setAt(e.currentTarget)}>▾</button>}
     <Menu open={!!at} anchorEl={at} onClose={() => setAt(null)}>
       {rest.map((v) => <MenuItem key={v.id} dense disabled={v.disabled} data-tq-verb={v.id} sx={{ fontSize: 12.5 }}
         onClick={(e) => { const a = at; setAt(null); press(v.id, e, a, v.of); }}>{v.label}</MenuItem>)}</Menu></Box>;
@@ -513,10 +526,10 @@ function HeadMoves() {
     <Box ref={box} data-tq-head-moves="" role="group" aria-label="What to do with this task" onClick={(e) => e.stopPropagation()}
       sx={{ ...MOVE_LOOK, display: "flex", alignItems: "center", gap: 0.6, flex: "0 1 auto", minWidth: 0, maxWidth: "62%", overflow: "hidden", "& .tq-ab": { minHeight: 26, fontSize: 12, px: 1.25, flexShrink: 0 } }}>
       {shown.map((x) => (x.change
-        ? <button key="change" type="button" className="tq-ab s" aria-haspopup="menu" aria-expanded={!!chAt} data-tq-more="change"
+        ? <button key="change" type="button" className="tq-ab s task" aria-haspopup="menu" aria-expanded={!!chAt} data-tq-more="change"
             title="Split or merge, who does it, the priority, who it is assigned to" onClick={(e) => setChAt(e.currentTarget)}>{"Change ▾"}</button>
-        : stageBtn(x.v)))}
-      {folded.length > 0 && <button type="button" className="tq-ab s" aria-label="More" aria-haspopup="menu" data-tq-more="head" onClick={(e) => setAt(e.currentTarget)}>▾</button>}
+        : stageBtn(x.v, x.v.label, true)))}
+      {folded.length > 0 && <button type="button" className="tq-ab s task" aria-label="More" aria-haspopup="menu" data-tq-more="head" onClick={(e) => setAt(e.currentTarget)}>▾</button>}
       <Menu open={!!chAt} anchorEl={chAt} onClose={() => setChAt(null)}>
         {change.map((v) => <MenuItem key={v.id} dense disabled={v.disabled} data-tq-verb={v.id} sx={{ fontSize: 12.5 }}
           onClick={(e) => { const a = chAt; setChAt(null); press(v.id, e, a, v.of); }}>{v.label}</MenuItem>)}</Menu>

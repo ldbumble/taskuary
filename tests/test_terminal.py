@@ -1216,6 +1216,10 @@ class RepoRoutingTests(unittest.TestCase):
         # the picker still lists every repo, with whether it can be opened - ordering it is not choosing
         ranked = terminal.rank_repos(server.store, tid, prof)
         self.assertEqual({r for r, _s, _h in ranked}, {'northwind/portal', 'northwind/Census'})
+        # ...ordered by what each repo IS alike in meaning to the ask (embeddings), never by shared words (2026-10-28)
+        from tests import fake_embed
+        with fake_embed.meaning({'expenses': ['reimbursement']}):
+            self.assertEqual(terminal.rank_repos(server.store, tid, prof)[0][0], 'northwind/portal')
 
     def test_a_repo_with_no_path_refuses_instead_of_opening_the_wrong_folder(self):
         # find_checkout scans the REAL disk now, so the refusal only fires on a genuine miss -

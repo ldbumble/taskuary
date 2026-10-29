@@ -2024,20 +2024,18 @@ def rank_repos(store, tid: int, profile: dict, text: str = None) -> list:
 
     Scored over the WHOLE SOUL.md map, not just the repos this agent has a path for. Scoring only
     the mapped ones is how a reimbursement task landed in the integrations repo: with one path
-    configured, "the only repo this agent has a path for" won without the ask ever being read."""
-    from .routing import cosine, tokens
+    configured, "the only repo this agent has a path for" won without the ask ever being read.
+
+    The score is the repo NAMED in the ask (its identifier, written there), plus how alike in MEANING what the repo is (its name
+    and SOUL.md's line) and the ask are - embeddings (textsim), never a count of shared words (the owner, 2026-10-28). No
+    embedder: the name alone orders it, and the owner picks."""
+    from . import textsim
     paths, desc = (profile.get('cwd_map') or {}), repo_map(store)
     known = list(dict.fromkeys(list(desc) + list(paths)))
     text = task_blob(store, tid) if text is None else text
-    xs, blob = tokens(text), text.lower()
-    def score(r):
-        dt = set(tokens(f"{r.replace('/', ' ')} {desc.get(r, '')}"))
-        named = 1.0 if r.split('/')[-1].lower() in blob else 0.0
-        # how much of what this repo IS turns up in the ask. Cosine alone dilutes a decisive word
-        # ("reimbursement") to 0.07 against a long mail, which is how a real routing signal ended
-        # up under the floor and lost to a repo that matched nothing at all.
-        hit = len(dt & set(xs)) / max(4, len(dt))
-        return round(named + 2 * hit + cosine(xs, list(dt)), 4)
+    blob = text.lower()
+    near = dict(textsim.rank(store, text, [(f'repo:{r}', f"{r} {desc.get(r, '')}") for r in known], least=0.0) or [])
+    def score(r): return round((1.0 if r.split('/')[-1].lower() in blob else 0.0) + 2 * near.get(f'repo:{r}', 0.0), 4)
     return sorted(((r, score(r), bool(paths.get(r))) for r in known), key=lambda x: -x[1])
 
 

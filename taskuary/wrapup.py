@@ -373,8 +373,12 @@ def unanswered(store, task_id: int) -> list:
 
 def left_open(asked: list) -> str:
     """What the session was left waiting on, in the agent's own words - said FIRST in its result, where the owner reads it."""
-    if not asked: return ''
-    return 'LEFT OPEN - the agent was waiting on your answer to:\n' + '\n'.join(f"- {r['text']}" for r in asked)
+    # the question rides ON the first line: the Agent column shows a result's first line, and it read "...your answer to:" with
+    # nothing after it (the email walk, 2026-10-29). A question with no words is no clause at all.
+    qs = [' '.join(str(r.get('text') or '').split()) for r in asked or []]
+    qs = [q for q in qs if q]
+    if not qs: return ''
+    return f'LEFT OPEN - the agent was waiting on your answer: {qs[0]}' + ''.join(f'\n- {q}' for q in qs[1:])
 
 
 def with_left_open(body: str, left: str) -> str: return f'{left}\n\n{body}'.strip() if left else body

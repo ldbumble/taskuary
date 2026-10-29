@@ -258,4 +258,7 @@ test("a report's line is its Summary, never its AGENT REPORT marker", () => {
   assert.equal(reportLine("AGENT REPORT\nDetermination: Ray has it."), "Ray has it.");
   assert.equal(reportLine("Looked at the sheet."), "Looked at the sheet.");
   assert.equal(reportLine(""), "");
+  // a first line ending on a colon carries the line it opens - never "It says:" and nothing (the email walk, 2026-10-29)
+  assert.equal(reportLine("AGENT REPORT\nThe vendor page says:\nRegistration closes Friday."), "The vendor page says: Registration closes Friday.");
+  assert.equal(reportLine("Summary: It says:"), "Summary: It says:".replace(/^Summary:\s*/, ""));
 });

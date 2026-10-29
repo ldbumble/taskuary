@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { startHarness } from "./harness.mjs";
+import { askWidth, startHarness } from "./harness.mjs";
 
 /* THE CHAT IS ITS OWN UNIT BESIDE THE BAR (the owner, 2026-10-29: "it looks weird coming out of the bottom bar", after the one-row chat
    bar of 2026-10-26). At 1600x810: the bar is one line and ENDS before the chat, a gap between them; the chat is a wide ask bar in the corner;
@@ -33,13 +33,16 @@ test("the chat is its own unit: the bar ends before it, it opens out of its corn
     const r = (e) => e.getBoundingClientRect(), mid = (e) => r(e).top + r(e).height / 2;
     return { line: Math.round(r(dock).height), mid: Math.abs(r(dock).bottom - r(pill).bottom), gap: Math.round(r(pill).left - r(dock).right), pill: Math.round(r(pill).width),
       right: Math.round(r(pill).right), inBar: !!dock.querySelector(".tq-compose-box"), open: pill.hasAttribute("data-tq-open"),
+      barLeft: Math.round(r(dock).left - r(dock.closest(".tq-compose")).left), barW: Math.round(r(dock).width), barRoom: Math.round(r(pill).left - r(dock).left - 16),
       tools: getComputedStyle(pill.querySelector(".tq-compose-tools")).display, hint: pill.querySelector("textarea").placeholder,
       labels: [...row.querySelectorAll("button")].map((b) => b.textContent.trim()) };
   });
   const say = JSON.stringify(rest);
   assert.ok(rest.line <= 46, `the bar is one line ${say}`);
   assert.ok(!rest.inBar && rest.gap >= 12 && rest.mid <= 3, `the bar ends before the chat, a gap between them, their feet on one line ${say}`);
-  assert.ok(rest.pill >= 300 && !rest.open && rest.tools !== "none", `the wide ask bar, as wide as the open window (the owner, 2026-10-29) at rest ${say}`);
+  assert.ok(Math.abs(rest.pill - askWidth(1600)) <= 1 && !rest.open && rest.tools !== "none", `the ask bar its one width (the owner, 2026-10-29: "freeze the size of chat") at rest ${say}`);
+  // ...the bar at the left at its own width, the middle between them empty
+  assert.ok(rest.barLeft <= 24 && rest.barW < rest.barRoom, `the bar keeps its own width at the left ${say}`);
   assert.ok(rest.hint.length > 3, `its placeholder ${say}`);
   // ...AT REST ONE LINE, the bar's own height (the owner, 2026-10-29: "too thick"): attach and voice at its left, the words, the round send -
   // no model picker yet - and the bar and the ask bar both inside the window, side by side
@@ -94,6 +97,7 @@ test("the chat is its own unit: the bar ends before it, it opens out of its corn
   await page.waitForFunction(() => document.querySelector("[data-tq-chat-pop] .tq-msg.you")?.textContent.includes("what does Tom want"), { timeout: 20000 });
   await page.waitForFunction(() => !document.querySelector("[data-tq-chat-pop] .tq-pending"), { timeout: 30000 });
   const pop = await box(page, "[data-tq-chat-pop]"), input = await box(page, ".tq-compose-box .tq-compose-field");
+  assert.ok(Math.abs(pop.w - rest.pill) <= 1 && Math.abs(input.w - rest.pill) <= 1, `the open window is the ask bar's width, not wider (the owner, 2026-10-29: "freeze the size of chat") ${JSON.stringify({ pop, input, rest: rest.pill })}`);
   assert.ok(pop.y + pop.h <= input.y + 2, `the pop-up stands above the box ${JSON.stringify({ pop, input })}`);
   const body = await box(page, ".tq-chat-body");
   assert.ok(pop.y < body.y + body.h && pop.y > body.y, `...over the canvas the task view stands on ${JSON.stringify({ pop, body })}`);

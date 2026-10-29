@@ -14,6 +14,9 @@ const website = path.resolve(here, "..");
 const repository = path.resolve(website, "..");
 const forbiddenPorts = new Set([7787, 7790]);
 
+// THE ASK BAR'S ONE WIDTH on a desk (assistantView.css --tq-ask-w): a third of the window, 360-520px, at rest and open alike
+export const askWidth = (vw) => Math.min(520, Math.max(360, 0.34 * vw));
+
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 // `taken`: ports this harness already holds - the OS can hand the same free port back to two asks in a row, and the start

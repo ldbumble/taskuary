@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { boot, sleep } from "./walkdriver.mjs";
+import { askWidth } from "./harness.mjs";
 
 /* THE PILL LEAVES THE ROW ITS WORDS (the overnight walk, 2026-10-26). On a phone the chat pill kept its desk width - 220px, held there by
    the textarea's own 20 columns whatever its basis - and the row beside it was left 88px: at the walk's end "Walk me through my tasks"
@@ -59,6 +60,6 @@ test("on the desk the pill's hint is one line", { timeout: 180000 }, async (t) =
   assert.equal(p.next?.text, "All read, next");
   assert.equal(p.hint, "nowrap");
   // ...a small pill of its own in the corner, apart from the bar (the owner, 2026-10-29)
-  assert.ok(p.box >= 300 && await page.$(".tq-chat-unit > .tq-compose-box"), `the desk's chat is the wide ask bar, as wide as the open window (the owner, 2026-10-29): ${p.box}`);
+  assert.ok(Math.abs(p.box - askWidth(1600)) <= 1 && await page.$(".tq-chat-unit > .tq-compose-box"), `the desk's chat is the ask bar at its one width (the owner, 2026-10-29: "freeze the size of chat"): ${p.box}`);
   assert.deepEqual(errors, []);
 });

@@ -122,13 +122,13 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   useLayoutEffect(() => {
     if (!box) return undefined;
     // ...ON A DESK THE BAR IS AS WIDE AS WHAT IT HOLDS (the owner, 2026-10-29: the room it frees goes to the chat): its own box then says only
-    // what it drew, so the room is the dock's lane - the composer's width, less its sides, the ask bar's least width and the gap, and the
-    // bar's own edges - and the bar folds into ▾ against that, as it did against its own width
+    // what it drew, so the room is the dock's lane - the composer's width, less its sides, the ask bar's own fixed width (--tq-ask-w, read
+    // off the drawn unit: it is a clamp) and the gap, and the bar's own edges - and the bar folds into ▾ against that, as it did against its own width
     const lane = box.closest(".tq-compose[data-tq-desk-chat]");
     const f = () => {
       if (!lane) { setAvail(box.clientWidth); return; }
       const cs = getComputedStyle(lane), dock = box.closest(".tq-dock") || box;
-      const ask = parseFloat(cs.getPropertyValue("--tq-pill-min")) || 0, gap = parseFloat(cs.columnGap) || 0;
+      const ask = lane.querySelector(":scope > .tq-chat-unit")?.offsetWidth || 0, gap = parseFloat(cs.columnGap) || 0;
       setAvail(Math.floor(lane.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - ask - gap - (dock.offsetWidth - box.clientWidth)));
     };
     f();

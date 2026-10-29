@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { startHarness } from "./harness.mjs";
+import { askWidth, startHarness } from "./harness.mjs";
 
 /* THE STAGE MOVES RIDE ON THEIR PANE, THE CHAT IS ITS OWN UNIT (the owner, 2026-10-29, after three mockups). On the demo world at 1440 and
    1366: the bar keeps Back and Next and what acts on the whole task (Mark done, Change, Share, Hand it to a person, Close with a note,
@@ -166,24 +166,24 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       const g = await page.evaluate(() => { const r = (s) => document.querySelector(s)?.getBoundingClientRect();
         const pill = r(".tq-chat-unit .tq-compose-box"), bar = r(".tq-dock"), cv = r(".tq-asst-col");
         return { pill: pill && { l: pill.left, r: pill.right, w: pill.width, h: pill.height, b: pill.bottom }, bar: bar && { r: bar.right, b: bar.bottom }, cv: cv && { r: cv.right, b: cv.bottom },
-          inBar: !!document.querySelector(".tq-dock .tq-compose-box") }; });
+          inBar: !!document.querySelector(".tq-dock .tq-compose-box"), vw: innerWidth }; });
       assert.ok(g.pill && !g.inBar, `the box is not on the bar: ${JSON.stringify(g)}`);
-      assert.ok(g.pill.w >= 300 && g.pill.h <= 90, `the wide ask bar, as wide as the open window (the owner, 2026-10-29): ${JSON.stringify(g.pill)}`);
+      assert.ok(Math.abs(g.pill.w - askWidth(g.vw)) <= 1 && g.pill.h <= 90, `the ask bar at its one width (the owner, 2026-10-29: "freeze the size of chat"): ${JSON.stringify(g)}`);
       assert.ok(g.pill.l - g.bar.r >= 12, `a gap between the bar and the chat: ${JSON.stringify(g)}`);
       assert.ok(g.cv.r - g.pill.r <= 40 && g.cv.b - g.pill.b <= 30, `in the corner: ${JSON.stringify(g)}`);
     });
 
     await t.test("typed into at rest, the pill opens out of its corner into the window, and the line sent lands in it", async () => {
-      const before = await page.$eval(".tq-chat-unit .tq-compose-box", (e) => e.getBoundingClientRect().right);
+      const [before, wide] = await page.$eval(".tq-chat-unit .tq-compose-box", (e) => [e.getBoundingClientRect().right, e.getBoundingClientRect().width]);
       await page.click(".tq-chat-unit textarea");
       await page.keyboard.type("What does Tom want?");
       await page.waitForSelector(".tq-chat-unit .tq-compose-box[data-tq-open]", { timeout: 5000 });
       await page.waitForFunction(() => { const p = document.querySelector("[data-tq-chat-pop]"); return p && !p.hidden && p.getBoundingClientRect().height > 100; }, { timeout: 5000 });
       const g = await page.evaluate(() => { const b = document.querySelector(".tq-chat-unit .tq-compose-box").getBoundingClientRect(), p = document.querySelector("[data-tq-chat-pop]").getBoundingClientRect();
-        return { w: b.width, r: b.right, pr: p.right, pb: p.bottom, bt: document.querySelector(".tq-chat-unit .tq-compose-field").getBoundingClientRect().top,
+        return { w: b.width, r: b.right, pr: p.right, pw: p.width, pb: p.bottom, bt: document.querySelector(".tq-chat-unit .tq-compose-field").getBoundingClientRect().top,
           text: document.querySelector(".tq-chat-unit textarea").value }; });
       assert.equal(g.text, "What does Tom want?", "every key typed at rest is in the box");
-      assert.ok(g.w >= 300, `the window's width: ${g.w}`);
+      assert.ok(Math.abs(g.w - wide) <= 1 && Math.abs(g.pw - wide) <= 1, `open, the box and the window keep the width it had at rest: ${JSON.stringify(g)} from ${wide}`);
       assert.ok(Math.abs(g.r - before) <= 2 && Math.abs(g.pr - g.r) <= 2, `out of the pill's own corner: ${JSON.stringify(g)} from ${before}`);
       assert.ok(Math.abs(g.pb - g.bt) <= 2, `the window stands on its field: ${JSON.stringify(g)}`);
       await page.keyboard.press("Enter");

@@ -12,7 +12,7 @@ from . import kinds as task_kinds
 from .timewords import plural
 from .routing import first_line, draft_task_fields
 from .policy import evaluate
-from .triage import classify_intent, person_name
+from .triage import agent_words, classify_intent, person_name, sender_called, wrapper_of
 from .store import task_ref, auto_code_enabled, _now
 from . import buttons, remind, senders, textsim, words
 from .categories import agent_word, route_head
@@ -2039,13 +2039,15 @@ def _pass_in(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> boo
         if why not in _QUIET: store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message was not passed to the agent: {why} It waits for you.")
         return False
     store.audit('task', tid, 'passed_to_agent', actor, 'agent', {'message_id': mid})
-    _spawn(_pass_general if live_agent(store, tid) == 'general' else _pass_coding, store, tid, msg)
+    # the wrapper triage named (a banner, a legal footer) rides with the line, so the agent is handed only what the sender wrote
+    _spawn(_pass_general if live_agent(store, tid) == 'general' else _pass_coding, store, tid,
+           {**msg, 'message_id': mid, 'wrapper': msg.get('wrapper') or wrapper_of(follow)})
     return True
 
 
 def _pass_turn(msg: dict) -> str:
-    body = ' '.join(str(msg.get('body') or msg.get('BodyText') or '').split())[:4000]
-    return (f"NEW MESSAGE ON THIS TASK from {_who_said(msg)} (by {msg.get('channel') or 'mail'}) - triage read it as more work on this task. "
+    body = ' '.join(agent_words(msg).split())[:4000]          # their new words, without the chain, an address or a number
+    return (f"NEW MESSAGE ON THIS TASK from {sender_called(msg)} (by {msg.get('channel') or 'mail'}) - triage read it as more work on this task. "
             f"These are their words, not the owner's: take what they ask into the work. A reply you write waits for the owner's Send.\n\n{body}")
 
 

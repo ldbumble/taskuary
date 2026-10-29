@@ -185,7 +185,7 @@ class PassInTests(unittest.TestCase):
         with mock.patch.dict(terminal.SESSIONS, {'p1': Live(tid)}, clear=True):
             _out, spawned = ingested(s, mail(**AGAIN))
             self.assertEqual(spawned, ['_pass_coding'])
-            with mock.patch.object(terminal, 'queue_codex', return_value=False), mock.patch.object(terminal, 'type_into') as typed:
+            with mock.patch.object(terminal, 'queue_codex', return_value=False), mock.patch.object(terminal, 'type_into', side_effect=lambda t, x, done=None: done(True)) as typed:
                 ingest._pass_coding(s, tid, mail(**AGAIN))
         self.assertIn('price the second site', typed.call_args[0][1])
         self.assertTrue(any("Passed Erin Blake's new message to the agent (typed into" in c['Body'] for c in s.list_comments(tid)))

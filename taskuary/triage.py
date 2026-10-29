@@ -366,6 +366,37 @@ def read_text(body: str, own: str = None, wrapper=()) -> str:
     return strip_wrapper(t, wrapper) or strip_wrapper(body or '', wrapper)
 
 
+# What an AGENT is told a sender wrote: their words, never how to reach them. An agent with a shell and a mail tool has no use
+# for a sender's address or number, and the signature's copy of both rode into its prompt on every passed-in line. Shapes, not
+# words: an address is its @, a phone number is 7+ digits grouped by separators - a bare run of digits (an order number, a
+# year) has no separator and is left alone.
+_ADDR = _re.compile(r"(?:mailto:)?[\w.+'\-]+@[\w\-]+(?:\.[\w\-]+)+")
+_TEL = _re.compile(r'(?<![\w.])(?:\+\d{1,3}[\s.' + _DASH + r']?)?(?:\(\d{2,4}\)\s?|\d{2,4}[\s.' + _DASH + r'])\d{3,4}'
+                   r'(?:[\s.' + _DASH + r']\d{3,4})?(?:\s*(?:x|ext\.?)\s*\d{1,5})?(?![\w])', _re.I)
+_HOLLOW = _re.compile(r'[<(\[]\s*[>)\]]')      # the brackets an address or a number stood in
+
+
+def unreachable(text: str) -> str:
+    """`text` without email addresses or phone numbers (anything with fewer than 7 digits is not a phone number)."""
+    t = _TEL.sub(lambda m: '' if sum(c.isdigit() for c in m.group()) >= 7 else m.group(), _ADDR.sub('', str(text or '')))
+    return _HOLLOW.sub('', t)
+
+
+def agent_words(msg: dict, wrapper=()) -> str:
+    """What a sender wrote THIS time, as an agent should be handed it: the message's own new text (OwnText / own_text, else
+    the body - read_text cuts the quoted chain under it and drops triage's named `wrapper`), with no addresses or numbers.
+    A message row or an ingest dict; `wrapper` falls back to the one the dict carries."""
+    m = msg or {}
+    body, own = str(m.get('BodyText') or m.get('body') or ''), m.get('OwnText') or m.get('own_text')
+    return unreachable(read_text(body, own, tuple(wrapper or m.get('wrapper') or ()))).strip()
+
+
+def sender_called(msg: dict) -> str:
+    """The sender as an agent is told of them: their name, else 'the sender' - never their address."""
+    m = msg or {}
+    return person_name(m.get('FromName') or m.get('from_name')) or 'the sender'
+
+
 def strip_boilerplate(text: str) -> str:
     """The words the sender actually typed: the trailing phone/address lines go, everything else stays byte-for-byte - a
     banner or a stamp is the model's to read past (strip_wrapper)."""

@@ -1,5 +1,5 @@
 """Narrow synthetic source edits, installed only by the disposable browser server."""
-import os
+import os, re
 from datetime import datetime, timedelta
 
 from fastapi import HTTPException
@@ -47,6 +47,9 @@ def install_processing_changes(app, store):
         # Every production route retains the original demo guard and socket guard.
         if method == 'POST' and path in fixture_paths:
             return ''
+        # ...and a reply recorded as sent by a test's own channel (review_sent below): one numbered review, nothing more
+        if method == 'POST' and re.fullmatch(r'/api/fixture/review/\d+/sent', path):
+            return ''
         # the one-time fill page's own form: its POST is what Chrome refused with Origin null (signin.HEADERS, 2026-10-25)
         if method == 'POST' and path.startswith('/signin/'):
             return ''
@@ -62,6 +65,15 @@ def install_processing_changes(app, store):
     answer_paths = set()
 
     sync_token = [None]
+
+    @app.post('/api/fixture/review/{rid}/sent')
+    def review_sent(rid: int):
+        """A reply the test's own channel answered as gone (send-stays-on-closeout): the review recorded as sent, as a real Send leaves it -
+        so the close after it (concierge.close_after_send) finds nothing still waiting for a Send, and judges the rest as it would."""
+        rv = store.get_review(rid)
+        if not rv or rv.get('Status') not in ('pending', 'held'): raise HTTPException(409, 'no pending reply by that id')
+        store.decide_review(rid, 'approved', rv.get('DraftText') or '', 'owner')
+        return {'ok': True}
 
     @app.post('/api/fixture/task/agent-closed')
     def agent_closed(body: dict):

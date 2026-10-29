@@ -20,7 +20,8 @@ const press = (page, re) => page.evaluate((src) => {
   const b = [...document.querySelectorAll(".tq-asst-col button")].find((n) => new RegExp(src).test(n.textContent.trim()) && !n.disabled && n.offsetParent);
   if (b) b.click(); return !!b;
 }, re.source);
-const row = (page) => page.evaluate(() => [...document.querySelectorAll(".tq-asst-col button")].filter((b) => b.offsetParent).map((b) => b.textContent.trim()));
+// ...a greyed button is no way to go (the owner, 2026-10-29: on a desk Back is always on the bar, greyed where there is nowhere to go back to)
+const row = (page) => page.evaluate(() => [...document.querySelectorAll(".tq-asst-col button")].filter((b) => b.offsetParent && !b.disabled).map((b) => b.textContent.trim()));
 const said = (page) => page.$$eval(".tq-msg .body", (els) => els.map((e) => e.textContent.trim()));
 const until = async (f, ms = 15000) => { for (const t0 = Date.now(); Date.now() - t0 < ms; await sleep(250)) if (await f()) return true; return false; };
 

@@ -13,7 +13,9 @@ jobs:
   ci-required:
     name: ci-required
     if: always()
-    needs: [test, build-web, browser, walk, walk-cover, docker]
+    # ...the layout-pinning browser parts and the walk REPORT and no longer block (the owner, 2026-10-29: "I need to iterate quicker");
+    # what blocks a release is the smoke set - the app loads and the agent buttons work end to end
+    needs: [test, build-web, smoke, docker]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every CI job to pass
@@ -108,6 +110,24 @@ jobs:
       - if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: web-as-ci-built-it, path: taskuary/web, retention-days: 3 }
+
+  smoke:
+    # THE BROWSER GATE (2026-10-29): a handful of files that prove the app loads and Send to agent / Continue / Run another work,
+    # coding and general - the rest of the browser suite and the walk still run below and report, but a moved button no longer stops a release
+    name: browser smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with: { node-version: "22" }
+      - run: pip install -e .[dev]
+      - run: npm ci
+        working-directory: website
+      - run: node --test --test-concurrency=1 browser/loads-once.test.mjs browser/general-starting.test.mjs browser/continue-shows-turn.test.mjs browser/run-another-general.test.mjs
+        working-directory: website
 
   browser:
     # Real Chromium + the disposable fixture backend; never targets the owner's server.

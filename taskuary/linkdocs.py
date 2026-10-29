@@ -136,7 +136,16 @@ def _row_msg(m: dict) -> dict:
     return {'body': g('body', 'BodyText') or '', 'channel': g('channel', 'Channel') or '', 'from_email': g('from_email', 'FromEmail'),
             'from_name': g('from_name', 'FromName'), 'source_name': g('source_name', 'SourceName'), 'source_link': g('source_link', 'SourceLink'),
             'conversation_id': g('conversation_id', 'ConversationId'), 'direction': g('direction', 'Direction'),
-            'status': g('status', 'Status'), 'MailMetaJson': m.get('MailMetaJson'), 'mid': m.get('MessageId')}
+            'status': g('status', 'Status'), 'MailMetaJson': m.get('MailMetaJson'), 'mid': m.get('MessageId'),
+            'unsub': m.get('unsub') or ((m.get('mail_meta') or {}).get('unsub') if isinstance(m.get('mail_meta'), dict) else None)}
+
+
+def _unsub_url(m: dict) -> str:
+    """The list's way off it, as its List-Unsubscribe HEADER named it (unsubscribe.parse) - a mail system's field, not a document."""
+    from . import unsubscribe
+    u = m.get('unsub') if isinstance(m.get('unsub'), dict) else unsubscribe.of(m)
+    url = str((u or {}).get('url') or '')
+    return (classify(url) or {}).get('url') or url              # spelled as find() spells what it found
 
 
 def of_msg(m: dict) -> list:
@@ -145,7 +154,9 @@ def of_msg(m: dict) -> list:
     from .store import OWN_CHANNELS
     m = _row_msg(m)
     if m['channel'] in OWN_CHANNELS: return []
-    got = find(m['body'], skip=[m['source_link']] if m['source_link'] else ())
+    # ...nor is the List-Unsubscribe link a "Web page" it sent (B33, the email walk 2026-10-29): Linked listed a newsletter's
+    # unsubscribe address beside its one real page. Known by the header that named it, never by the words around it
+    got = find(m['body'], skip=[x for x in (m['source_link'], _unsub_url(m)) if x])
     return [d for d in got if not (m['channel'] == 'github' and d['source'] == 'github')]
 
 

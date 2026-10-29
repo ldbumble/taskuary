@@ -11,16 +11,29 @@ const read = (f) => readFileSync(path(f), "utf8");
 
 test("a clean send hands over to the task page, which walks on only when the task closed", () => {
   const dec = read("ReviewDecision.jsx"), page = read("TaskPage.jsx");
-  assert.match(dec, /onMarkDone = null, onSent = null, onRemind = null, toRow = false/);
+  assert.match(dec, /onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, toRow = false/);
   // after the error checks, never instead of them: a refused or failed send keeps the card and says why
-  assert.match(dec, /else if \(data\.send_error\) setSendErr\(replySendFailure\(data\)\);(\n\s+\/\/[^\n]*)+\n\s+else if \(data\.ok && \(verb === "approve" \|\| \(verb === "close_unsent" && r\.Kind !== "slot"\)\) && onSent\) \{ setSent\(verb === "approve"\); setBusy\(false\); await onSent\(\); return; \}/);
+  assert.match(dec, /else if \(data\.send_error\) setSendErr\(replySendFailure\(data\)\);(\n\s+\/\/[^\n]*)+\n\s+else if \(data\.ok && \(verb === "approve" \|\| \(verb === "close_unsent" && r\.Kind !== "slot"\)\) && onSent\) \{\n\s+setSent\(verb === "approve"\); setBusy\(false\); await onSent\(\{ closes: closesIt && verb === "approve" && \(data\.reply \? !!data\.reply\.ok : true\) \}\); return;/);
   // ...and a chat's Mark done (close_unsent: it copies the draft and closes) walks on the same way - it stood as "task · done" (2026-10-20)
-  assert.match(dec, /else if \(data\.ok && verb !== "reject" && onSent\) \{ setSent\(true\); setBusy\(false\); await onSent\(\);/);   // the close-out (merge + reply) too
-  assert.match(page, /onMarkDone=\{askFinish\} onSent=\{sent\} onRemind=/);
+  assert.match(dec, /else if \(data\.ok && verb !== "reject" && onSent\) \{ setSent\(true\); setBusy\(false\); await onSent\(\{ closes: closesIt && !!data\.reply\?\.ok \}\);/);   // the close-out (merge + reply) too
+  assert.match(page, /onMarkDone=\{askFinish\} onSent=\{sent\} closeOnSend onRemind=/);
   const sent = page.slice(page.indexOf("const sent = async"), page.indexOf("// Remind me: put away"));
   assert.match(sent, /api\.get\(`\/api\/tasks\/\$\{selected\}`\)/);
   assert.match(sent, /if \(done\) \{ onLeave\?\.\(\); return closedHere\(\); \}/);
   assert.match(sent, /loadDetail\(selected\)/);   // still open: stay on it, read again
+});
+
+// THE REPLY THAT WENT CLOSES THE TASK (the owner, 2026-10-29): on the task page's Close out only, only after the server's receipt
+test("a reply sent from Close out closes the task once the send succeeded; a failed one leaves it open", () => {
+  const dec = read("ReviewDecision.jsx"), page = read("TaskPage.jsx");
+  assert.match(dec, /const closesIt = closeOnSend && onTask && !!onSent;/);   // a slot, a proposal, a clarification close nothing
+  // the close rides on onSent, which runs only past the error checks: a send_error sets the error and returns before it
+  const decide = dec.slice(dec.indexOf("const decide = async"), dec.indexOf("const release = async"));
+  assert.ok(decide.indexOf("setSendErr(replySendFailure(data))") < decide.indexOf("await onSent({ closes"));
+  assert.doesNotMatch(decide.slice(0, decide.indexOf("await api.post")), /onSent|complete/, "nothing closes at the press");
+  const sent = page.slice(page.indexOf("const sent = async"), page.indexOf("// Remind me: put away"));
+  assert.match(sent, /const sent = async \(\{ closes = false \} = \{\}\) => \{\n\s+if \(closes && !owesEmails\) return finish\("done"\);/);
+  assert.match(dec, /stays = closesIt \? "then the task closes"/);
 });
 
 test("an fyi batch offers its own All read, next and no second Next", () => {

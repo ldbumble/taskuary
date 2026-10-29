@@ -1063,9 +1063,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     try { await (onFinish ? onFinish(status, async () => {}) : loadDetail(selected)); } catch { /* already moved on the server */ }
     loadTasks(); onChanged?.();
   };
-  // SENT (Send / Approve): the send already went through, so the task is read again - it stays open (a send never closes it,
-  // 2026-10-18) and the page stays on it, its Mark done the move now; closed by something else meanwhile means walk on
-  const sent = async () => {
+  // SENT (Send / Approve): the send already went through. THE REPLY THAT WENT CLOSES THE TASK (the owner, 2026-10-29: "wait until the
+  // send actually succeeds, then close the task"): `closes` is ReviewDecision's word, said only after the server's receipt - the close
+  // is Mark done's own road - unless the task still owes emails (slots), which a close would throw away. Anything else (an Approve,
+  // one of its emails) reads the task again and stays on it; closed by something else meanwhile means walk on
+  const sent = async ({ closes = false } = {}) => {
+    if (closes && !owesEmails) return finish("done");
     let done = false;
     try { done = String((await api.get(`/api/tasks/${selected}`)).data?.task?.Status || "") === "done"; } catch { /* read it below */ }
     if (done) { onLeave?.(); return closedHere(); }
@@ -2883,11 +2886,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     description={term?.alive
                       ? (replyMessage ? "Close-out controls return when the agent stops." : "No inbound sender is attached to this task.")
                       : closeoutRv
-                        ? (replyMessage ? "Your reply to the sender and the last act on GitHub - approving them runs only that; Mark done closes the task." : "The last act on GitHub - approving it runs only that; Mark done closes the task.")
+                        ? (replyMessage ? "Your reply to the sender and the last act on GitHub - once the reply has gone, the task closes." : "The last act on GitHub - approving it runs only that; Mark done closes the task.")
                       : ended && !pendingReview ? "It ended upstream, so no reply is owed. What already went out is below."
                       : replyMessage
                         ? (owesEmails ? "What goes back to the sender, and the emails this task owes. Sending never closes the task - Mark done does."
-                          : pendingReview ? "What goes back to the sender." : "What goes back to the sender. Sending it never closes the task - Mark done does.")
+                          : "What goes back to the sender. Once it has gone, the task closes.")
                       : owesEmails
                         ? "The emails this task owes - each waits for your yes. Mark done closes the task."
                         : closedLine(t, detail?.closedWhy) || (co.advice ? "Nobody sent this one, so there is nobody to answer. Work it, or write what you found on the task." : CLOSE_BY_HAND)}
@@ -2967,7 +2970,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {/* THE DECISION ITSELF, on the task that owns it - the same component the review
                           queue mounts, so two surfaces cannot say different things about one draft. */}
                       {pendingReview ? (
-                        <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
+                        <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
                           onEmailInstead={() => setEmailOpen(true)} why={threeUp ? warn?.line || "" : ""}
                           onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   /* the list's row moves too (T19) */
                       ) : (

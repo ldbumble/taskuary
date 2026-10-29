@@ -95,9 +95,11 @@ export const CalendarLine = ({ meta }) => (
 // `onMarkDone`: the task's own Mark done (TaskPage puts the task down at the press) - a reply draft's other choice.
 // `onRemind`: the task's own Remind me - a close-out's "not now" (the owner, 2026-10-02: Not yet IS remind me later).
 // `onSent`: a send or close-out that went through - the task page reads the task and, when that closed it, walks on.
+// `closeOnSend`: the task page's Close out (the owner, 2026-10-29: "wait until the send actually succeeds, then close the task"): a reply
+// that went is the close too - onSent({ closes }) says so, only after the server's receipt; a send that failed leaves it open, its error here.
 // `toRow`: the decision's buttons are drawn by the action row above the chat line (layout B), not here - the same handlers, registered.
 // `onEmailInstead`: the task's Send out results - a chat reply that has to carry a file is answered by email instead (U17).
-export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, toRow = false, simulated = false, onDrop = null, onEmailInstead = null, why = "" }) {
+export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, toRow = false, simulated = false, onDrop = null, onEmailInstead = null, why = "" }) {
   const [text, setTextNow] = useState(() => heldOf(r)?.text ?? null);   // the owner's edit; null means "the draft as filed"
   const setText = (v) => { hold(r, { text: v ?? null }); setTextNow(v); };
   const [cc, setCcNow] = useState(() => heldOf(r)?.cc ?? null);         // null means "the CC the draft was filed with"
@@ -141,13 +143,14 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // the button right there, if related to task in general then put button on bottom"): Send where this channel carries it, Mark done
   // (with the draft copied) where it cannot - and Redraft beside them. ONE NAME for the send, wherever (buttons.json), and it only
   // sends: SENDING AND CLOSING ARE TWO STEPS (the owner, 2026-10-18) - the task's own Mark done is the close
-  const sendWord = btn("approve"), stays = `the task stays open until you ${btn("close")}`;
+  const closesIt = closeOnSend && onTask && !!onSent;
+  const sendWord = btn("approve"), stays = closesIt ? "then the task closes" : `the task stays open until you ${btn("close")}`;
   // A CHAT REPLY THAT PROMISES A FILE (U17): WhatsApp and the other chats carry words only, so a send went out with the promise and
   // without the file. The move becomes answering by email with the file; sending the words alone stays beside it.
   const chatFile = !!onEmailInstead && !proposal && !co && !isSlot && !r.Stale && !delivery.frozen && canSendIt
     && String(r.Channel || "email").toLowerCase() !== "email" && (deliveryFiles(filedDelivery).length > 0 || filesPromised(r));
   const thenLine = delivery.frozen ? "" : simulated ? "This approves the fictional reply and completes the demo task. No email is sent."
-    : co ? `${co.approveLabel} ${co.then}${sendable ? `, then sends your reply to ${replyContext(r)}` : ""} - and only that; ${stays}.`
+    : co ? `${co.approveLabel} ${co.then}${sendable ? `, then sends your reply to ${replyContext(r)}` : ""}${closesIt && sendable ? ` - ${stays}` : ` - and only that; the task stays open until you ${btn("close")}`}.`
     : chatFile ? `A ${r.Channel} message cannot carry a file. Reply by email with the file, or send the words alone.`
     : isCal && !r.Stale ? `${sendWord} tells the calendar, with the note above if there is one - ${stays}.`
     : onTask && !r.Stale && canSendIt ? `${sendWord} sends this to ${replyContext(r)} - ${stays}.` : "";
@@ -195,7 +198,8 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       else if (data.send_error) setSendErr(replySendFailure(data));
       // WAIT FOR IT, THEN MOVE ON (the owner, 2026-10-02): the close-out landed with no error, so the task may be closed now
       // ...the press is over when the server answers: the re-read after it is the page's, and "Sending…" waited on it too
-      else if (data.ok && verb !== "reject" && onSent) { setSent(true); setBusy(false); await onSent(); return; }
+      // ...and the reply that went with it closes the task, on the task page (closeOnSend) - the merge alone does not
+      else if (data.ok && verb !== "reject" && onSent) { setSent(true); setBusy(false); await onSent({ closes: closesIt && !!data.reply?.ok }); return; }
       reloadGh(); onChanged?.();
     } catch (e) {
       if (timedOut(e)) onChanged?.();       // no answer in a minute: the review's own delivery state says where it stands
@@ -229,7 +233,10 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       // ...and a close without sending (a chat's Mark done, which copies the draft) is a close: the task page reads it the same way,
       // finds it done and walks on - it stood on the table as "task · done" with no line over it (the matrix's verify, 2026-10-20)
       // ...and busy ends when the decide answers, not when that re-read does: behind a slow server "Sending…" outlived the send
-      else if (data.ok && (verb === "approve" || (verb === "close_unsent" && r.Kind !== "slot")) && onSent) { setSent(verb === "approve"); setBusy(false); await onSent(); return; }
+      // ...and on the task page a send that went IS the close (closeOnSend, 2026-10-29): only here, after the receipt - never at the press
+      else if (data.ok && (verb === "approve" || (verb === "close_unsent" && r.Kind !== "slot")) && onSent) {
+        setSent(verb === "approve"); setBusy(false); await onSent({ closes: closesIt && verb === "approve" && (data.reply ? !!data.reply.ok : true) }); return;
+      }
       onChanged?.();
     } catch (e) {
       // NO ANSWER IN A MINUTE is not "nothing was sent": the server may be sending still. The card reads the review again and its

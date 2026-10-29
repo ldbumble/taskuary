@@ -53,25 +53,17 @@ def test_the_writer_gets_the_whole_pasted_draft_and_the_no_promise_rule(s):
     assert calls[0]['max_tokens'] == responder.FEEDBACK_TOKENS and len(calls) == 1
 
 
-def test_a_promise_only_reply_is_asked_for_again_then_failed_with_the_reason(s):
-    tid = ask(s)
-    llm, calls = writer(LATER, GOOD)
-    assert responder.draft_reply(s, tid, llm=llm) == GOOD and len(calls) == 2 and 'YOUR FIRST DRAFT only promised' in calls[1]['user']
-    llm, calls = writer(LATER)
-    with pytest.raises(RuntimeError, match='only promised to look into it later'): responder.draft_reply(s, tid, llm=llm)
-    assert len(calls) == 2
-
-
-def test_the_reason_lands_on_the_review_the_owner_sees(s):
+def test_the_writers_own_needs_lands_on_the_review_the_owner_sees(s):
+    """Whether it can answer is the writer's judgement (its NEEDS), never a word list over its text (the owner, 2026-10-28)."""
     from taskuary import ingest
     tid = ask(s)
     mid = s.list_messages(tid)[0]['MessageId']
     rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'DraftText': '', 'Status': 'pending', 'Reason': 'asks for thoughts'})
-    llm, _ = writer(LATER)
+    llm, calls = writer('NEEDS: the portal logs to say why it fails')
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr('taskuary.llm.build_llm', lambda *a, **k: llm)
         ingest._auto_draft(s, tid, rid)
-    assert 'only promised to look into it later' in (s.get_review(rid).get('DraftError') or '')
+    assert 'needs the portal logs' in (s.get_review(rid).get('DraftError') or '') and len(calls) == 1
 
 
 def test_needs_is_said_to_the_owner_never_mailed(s):
@@ -79,21 +71,14 @@ def test_needs_is_said_to_the_owner_never_mailed(s):
     with pytest.raises(RuntimeError, match='needs the attached budget sheet did not come through'): responder.draft_reply(s, ask(s), llm=llm)
 
 
-def test_a_short_ask_is_never_answered_with_a_promise_either(s):
-    """The owner, 2026-10-28: "don't draft AI slop answers 'I'm looking into it'" - a short ask that needs work gets no placeholder:
-    asked once more, then not drafted (the reply task then goes to an agent, test_reply_needs_agent)."""
-    llm, calls = writer("I'll take a look this afternoon.")
-    tid = ask(s, 'Can you look at the portal login issue when you get a chance?')
-    with pytest.raises(responder.NotDrafted): responder.draft_reply(s, tid, llm=llm)
-    assert len(calls) == 2 and calls[0]['max_tokens'] == responder.REPLY_TOKENS
+def test_the_writer_is_asked_once_and_its_words_are_its_judgement(s):
+    """No code second-guesses the reply's words (no phrase list): the writer is told never to promise, and says NEEDS when it can't
+    answer - one call, its text or its NEEDS."""
+    llm, calls = writer(GOOD)
+    assert responder.draft_reply(s, ask(s), llm=llm) == GOOD and len(calls) == 1
+    assert not hasattr(responder, 'promise_only')
 
 
 def test_an_owner_instruction_is_theirs_even_if_it_promises(s):
     llm, calls = writer(LATER)
     assert responder.draft_reply(s, ask(s), llm=llm, nudge='tell her I will read it tonight') == LATER and len(calls) == 1
-
-
-@pytest.mark.parametrize('text,want', [
-    (LATER, True), ("I'll take a look and get back to you.", True), ('Thanks! Will review and circle back.', True),
-    (GOOD, False), ("Looks good. I'll send it to the team Friday.", False), ('Thanks, noted.', False)])
-def test_promise_only(text, want): assert responder.promise_only(text, 'Alex Doyle') is want

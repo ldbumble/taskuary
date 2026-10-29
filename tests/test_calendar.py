@@ -145,6 +145,22 @@ class ResponderTests(unittest.TestCase):
         self.assertIn('could we do 2', out)
         self.assertTrue(any('Checked your calendar' in c['Body'] for c in s.list_comments(tid)))
 
+    def test_with_no_calendar_every_drafter_is_told_a_time_is_never_committed_to(self):
+        """One drafter refused to pick a slot with no calendar; another wrote "Fri 9-10 works" with none either (walk 2026-10-29).
+        The same rule reaches every writer, and the model applies it - no calendar paragraph means no slot is promised."""
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Quarterly sync', 'Kind': 'reply', 'Status': 'open'}, 't')
+        mid = s.add_message({'TaskId': tid, 'ExternalId': 'c2', 'Channel': 'email', 'Subject': 'Quarterly sync',
+                             'FromEmail': 'ray@northwind.example', 'FromName': 'Ray Colton', 'SentAt': '2026-08-27 10:00:00', 'Status': 'routed',
+                             'BodyText': 'Can we find an hour on Friday for the quarterly sync?'})
+        rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending'})
+        seen = {}
+        def llm(sys_, usr_, **k): seen['sys'] = sys_; return 'I will check my calendar and confirm a time.'
+        with mock.patch('taskuary.calendar.context_for', return_value=''):
+            responder.write_draft(s, tid, rid, llm=llm)
+        self.assertIn('A MEETING TIME is a commitment', seen['sys'])
+        self.assertIn('With no calendar below', responder.SYSTEM)
+
 
 class AgendaNeverBlocksThePileTests(unittest.TestCase):
     """The pile reads the calendar (funnel.from_calendar -> assistant._agenda -> calendar.agenda

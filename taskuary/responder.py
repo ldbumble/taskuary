@@ -53,6 +53,11 @@ SYSTEM = (
     "the thread and the operator's document give you; never invent facts, numbers, dates or "
     'commitments. If something needed to answer a question put to you is genuinely missing, say plainly what you '
     'need instead of guessing.\n'
+    # one drafter refused to pick a slot with no calendar to read while another, on the same day, wrote "Fri 9-10 works" with
+    # none either (walk 2026-10-29): the same rule for every reply, the model's to apply
+    'A MEETING TIME is a commitment: accept, offer or propose a specific time only when YOUR CALENDAR below shows it free. '
+    'With no calendar below, or one that could not be read, never pick or accept a slot - say you will check and confirm, '
+    'or ask which times suit them.\n'
     # a question one colleague put to another, the owner on Cc, came back as "I need confirmation on X before I mark them" - the
     # sender's own ask in the owner's voice (2026-10-22). A gate on Cc is not the fix (the owner, 2026-10-24: "it should not be
     # a hard coded rule, just normally it's not you unless it mentions you"): the writer is told who the mail is To and Cc, by

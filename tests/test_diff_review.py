@@ -239,6 +239,52 @@ class TaskFootprintTests(unittest.TestCase):
         self.assertEqual(r['checkout_files'], 1)
 
 
+    def test_the_agents_own_commit_shows_and_the_runs_cache_is_not_other_work(self):
+        """B23 (the email walk, 2026-10-29): in a checkout with nowhere to push, the agent committed its fix and ran the tests -
+        Review changes said the task "changed no files" and counted __pycache__ and .pytest_cache as "3 changed file(s) from
+        other work". HEAD is marked when the task's agent first works there, the diff is measured from it, and a run's cache
+        is no work at all."""
+        import os
+        from unittest import mock
+        from taskuary import proof, terminal
+        d, run = self._repo()
+        s = MemoryStore()
+        mine = s.create_task({'Title': 'fix', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+        self.assertTrue(proof.mark_start(s, mine, d))
+        open(os.path.join(d, 'a.py'), 'a').write('a = 2\n'); run('commit', '-q', '-am', 'Fix the zero case')
+        os.makedirs(os.path.join(d, '__pycache__')); open(os.path.join(d, '__pycache__', 'a.cpython-310.pyc'), 'wb').write(b'\x00\x01')
+        os.makedirs(os.path.join(d, '.pytest_cache', 'v')); open(os.path.join(d, '.pytest_cache', 'CACHEDIR.TAG'), 'w').write('Signature\n')
+        open(os.path.join(d, '.pytest_cache', 'v', 'lastfailed'), 'w').write('{}\n')
+        fake = mock.Mock(task_id=mine, cwd=d, alive=True); fake.files = lambda: ['__pycache__/', '.pytest_cache/']
+        fake.info = lambda tail=0: {'sid': 'f', 'taskId': mine, 'alive': True, 'idle': 0, 'cwd': d, 'files': []}
+        with mock.patch.dict(terminal.SESSIONS, {'f': fake}, clear=True):
+            r = proof.review(s, mine)
+        self.assertEqual([c['subject'] for c in r['commits']], ['Fix the zero case'])
+        self.assertEqual([f['path'] for f in r['files']], ['a.py'])
+        self.assertNotIn('changed no files', r['note']); self.assertNotIn('other work', r['note'])
+        self.assertEqual(r['checkout_files'], 0)                                       # the cache is nobody's work
+        # ...a later session never moves the mark: a Continue's commits are the task's too
+        head = proof.started_at(s, mine, d)['head']
+        self.assertEqual(proof.mark_start(s, mine, d), head)
+
+    def test_on_a_shared_checkout_a_commit_since_the_start_is_not_mine_by_timing_alone(self):
+        import os
+        from unittest import mock
+        from taskuary import proof, terminal
+        d, run = self._repo()
+        s = MemoryStore()
+        mine = s.create_task({'Title': 'mine', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+        other = s.create_task({'Title': 'theirs', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+        proof.mark_start(s, mine, d)
+        open(os.path.join(d, 'b.py'), 'a').write('b = 2\n'); run('commit', '-q', '-am', 'their change')
+        fake = mock.Mock(task_id=mine, cwd=d, alive=True); fake.files = lambda: []
+        fake.info = lambda tail=0: {'sid': 'f', 'taskId': mine, 'alive': True, 'idle': 0, 'cwd': d, 'files': []}
+        theirs = mock.Mock(task_id=other, cwd=d, alive=True); theirs.files = lambda: ['b.py']
+        with mock.patch.dict(terminal.SESSIONS, {'f': fake, 'g': theirs}, clear=True):
+            r = proof.review(s, mine)
+        self.assertEqual(r['commits'], []); self.assertEqual(r['files'], [])
+
+
 class PullRequestTaskTests(unittest.TestCase):
     """A task that IS a pull request reviews the PR's own diff - the contributor's change - not
     the agent's checkout."""

@@ -35,11 +35,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # the newest Python on every OS, and the oldest supported one on Linux: six runners were twice the random
-        # failures for little more coverage (2026-10-20)
-        os: [ubuntu-24.04, windows-latest, macos-latest]
+        # Windows and macOS on the newest Python only (the owner, 2026-10-29: the Linux runs held a release for no one using them)
+        os: [windows-latest, macos-latest]
         python: ["3.12"]
-        include: [{ os: ubuntu-24.04, python: "3.10" }]
     runs-on: ${{ matrix.os }}
     # a hung test fails the job in minutes, with its logs, instead of holding a runner for six hours (2026-10-16)
     timeout-minutes: 25

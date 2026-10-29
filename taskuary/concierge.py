@@ -3435,12 +3435,19 @@ def close_task(store, tid: int, actor: str = 'owner') -> bool:
     closed = t.get('Status') in ('done', 'dropped')
     rv = store.pending_review(tid, live_only=False)
     if closed and not rv: return False
+    # A READY REPLY PUT DOWN UNSENT is said on the task, once - Mark done threw it away without a word, and the task kept saying a
+    # reply was owed (walk 2026-10-29). No confirm: closing is the owner's decision; the draft stays on its review
+    dropped = False
     while rv:
+        dropped |= rv.get('Kind') != 'action' and bool(str(rv.get('DraftText') or '').strip())
         store.decide_review(rv['ReviewId'], 'no_reply', None, actor, note='the owner closed the task')
         rv = store.pending_review(tid, live_only=False)
     # ...and a draft HELD while an agent worked it is decided too - it stayed held and invisible for good (A6)
     for h in store._rows("SELECT ReviewId FROM review WHERE TaskId=? AND Status='held'", (tid,)):
         store.decide_review(h['ReviewId'], 'no_reply', None, actor, note='the owner closed the task')
+    if dropped: store.add_comment(tid, actor, 'human', 'Closed without sending the drafted reply.')
+    from .ingest import REPLY_TAG
+    if store.task_has_tag(tid, REPLY_TAG): store.tag_task(tid, REPLY_TAG, on=False, actor=actor)     # a closed task owes nothing
     # a closed task has nobody working it: the PATCH road stops the session and this one did not, so
     # "close it" from the chat left the agent running in the checkout (2026-09-03)
     try:

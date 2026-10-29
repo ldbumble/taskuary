@@ -34,6 +34,7 @@
 .tq-rep-rows tbody tr:hover td { background: var(--d-wash); }
 .tq-rep-rows tbody tr.on td { background: var(--d-wash); box-shadow: inset 0 -1px 0 var(--d-axis); }
 
-/* A REPORT OF WORDS on the same card: the text itself, no tinted box around it, at a reading measure */
-[data-tq-report-body] .tq-card-full.report { background: transparent; border: 0; padding: 0; margin-top: 0; max-width: 78ch;
+/* A REPORT OF WORDS on the same card: the text itself, no tinted box around it, the card's whole width - a reading measure left it
+   a column down the left of an empty card once the side panes fold (the owner, 2026-10-29: use the whole space, like a data report) */
+[data-tq-report-body] .tq-card-full.report { background: transparent; border: 0; padding: 0; margin-top: 0; max-width: none;
   font-size: 13.5px; line-height: 1.6; max-height: none; overflow: visible; }

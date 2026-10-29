@@ -155,7 +155,7 @@ class JudgeTests(_Rail):
         s = MemoryStore(); t = self._asked_task(s)
         st = {'state': 'input_needed', 'requests': [{'kind': 'input_needed', 'text': 'Should I push the fix to ray/census-fix or open a new branch?'}]}
         with mock.patch.object(ws, 'status', return_value=st):
-            llm = brain_saying({'verb': 'regular_agent', 'line': 'It asks whether to push the fix to ray/census-fix or a new branch.', 'evidence': []})
+            llm = brain_saying({'verb': 'regular_agent', 'line': 'Which branch should the fix land on?', 'evidence': [], 'repeats_agent_question': True})
             rid = advisor.notice(s, 'agent.asked', 'task', t, wait=True, llm=llm)
         r = s._one('SELECT * FROM advice WHERE Id=?', (rid,))
         self.assertEqual((r['Verb'], r['Dropped']), (None, "repeats the agent's question"))
@@ -167,17 +167,23 @@ class JudgeTests(_Rail):
         s = MemoryStore(); t = self._asked_task(s)
         st = {'state': 'input_needed', 'requests': [{'kind': 'input_needed', 'text': 'Should I push the fix to ray/census-fix or open a new branch?'}]}
         with mock.patch.object(ws, 'status', return_value=st):
-            llm = brain_saying({'verb': 'forward', 'line': 'Ray Colton owns the exports.', 'evidence': []})
+            llm = brain_saying({'verb': 'forward', 'line': 'Ray Colton owns the exports.', 'evidence': [], 'repeats_agent_question': False})
             rid = advisor.notice(s, 'agent.asked', 'task', t, wait=True, llm=llm)
+            self.assertIn('THE AGENT IS ASKING: Should I push the fix', llm.calls[-1][1], 'the question is in the prompt the model judges against')
         self.assertEqual(s._one('SELECT * FROM advice WHERE Id=?', (rid,))['Verb'], 'forward')
-        # ...and the rule itself: the question whole, or most of its own words, is a repeat; a permission or a wall is not a question
-        self.assertTrue(advisor.repeats_ask('The agent asks: should I push the fix to ray/census-fix or open a new branch',
-                                            ['Should I push the fix to ray/census-fix or open a new branch?']))
-        self.assertFalse(advisor.repeats_ask('Send Gail the reply it drafted.', ['Should I push the fix to ray/census-fix or open a new branch?']))
-        self.assertFalse(advisor.repeats_ask('Push it?', ['Push?']), 'too few words to call it a repeat')
-        self.assertFalse(advisor.repeats_ask('anything', []))
+        self.assertIn('repeats_agent_question', advisor.SYSTEM); self.assertIn('repeats_agent_question', advisor.WANT['properties'])
+        # ...a permission or a wall is not a question
         with mock.patch.object(ws, 'status', return_value={'requests': [{'kind': 'approval_needed', 'text': 'Run git push?'}, {'kind': 'input_needed', 'text': 'Which branch?'}]}):
             self.assertEqual(advisor._asking(s, t), ['Which branch?'])
+
+    def test_the_repeat_flag_is_read_only_while_the_agent_is_asking(self):
+        # the flag is the model's; with nothing asked there is nothing to repeat, and the line stands
+        from taskuary import workerstate as ws
+        s = MemoryStore(); t = self._asked_task(s)
+        with mock.patch.object(ws, 'status', return_value={'state': 'input_needed', 'requests': [{'kind': 'approval_needed', 'text': 'Run git push?'}]}):
+            rid = advisor.notice(s, 'agent.asked', 'task', t, wait=True,
+                                 llm=brain_saying({'verb': 'forward', 'line': 'Ray Colton owns the exports.', 'evidence': [], 'repeats_agent_question': True}))
+        self.assertEqual(s._one('SELECT * FROM advice WHERE Id=?', (rid,))['Verb'], 'forward')
 
     def test_a_verb_the_item_cannot_carry_is_dropped(self):
         s = MemoryStore(); t = self._asked_task(s)

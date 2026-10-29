@@ -1136,16 +1136,14 @@ export const LifecycleChip = ({ kind, phase, compact = false, sx = {} }) => {
 export const timeAgo = (s) => (s ? ago(asUtc(String(s))) : "");
 
 // Bodies arrive as HTML (email) or oddly-spaced stripped text - make them readable.
-// A MAIL SYSTEM'S EXTERNAL-SENDER BANNER is not something anybody said: it led every card, every task's
-// source list and every Timeline reader (the owner, 2026-09-23: "this email ... template of all emails
-// should be removed from everywhere"). The SAME rule as triage._BANNER - test_banner_is_one_rule holds
-// the two together - and it only changes what is shown; the mail as stored stays whole.
-export const BANNER = /(this email was sent from outside of[^*\n]*(\*\*[^*]*\*\*)?\s*|\[?\s*you don'?t often get email from \S+\.?( learn why this is important( at \S+)?)?\s*\]?)/gi;
+// A MAIL SYSTEM'S EXTERNAL-SENDER BANNER is not something anybody said (the owner, 2026-09-23: "this email ... template of all
+// emails should be removed from everywhere") - and which text is one is the model's word, never a phrase list here (2026-10-28):
+// triage names it (its verdict's `wrapper`) and the server leaves it out of ReadText, what every screen shows.
 // the line Taskuary writes over a GitHub/Asana/monday item for TRIAGE ("[pull request by X - association: Y]") is
 // evidence for the judge, never what they said - remote_assistant.PROVENANCE is the same rule for the phone
 export const PROVENANCE = /^\s*\[(?:pull request|issue) by [^\]\n]*\]\s*|^\s*\[(?:Asana task|Monday item)[^\]\n]*\]\s*/i;
 export const cleanText = (s) => keepAddresses(s).replace(PROVENANCE, "").replace(/<(style|script|head)[^>]*>[\s\S]*?<\/\1>/gi, " ")
-  .replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#\d+;|&\w+;/g, " ").replace(BANNER, "")
+  .replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#\d+;|&\w+;/g, " ")
   .replace(/[^\S\n]+/g, " ").replace(/ ?\n ?/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 // a mail's text with its addresses as links (mailLinks.js), each opened in a new tab
 export const LinkedText = ({ text }) => linkParts(text).map((p, i) => p.href

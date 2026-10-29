@@ -3116,9 +3116,10 @@ def _drop_task(tid: int):
     store.delete_task(tid)
 
 def _readable(m: dict) -> dict:
-    """A message with its ReadText beside the body as stored (triage.read_text) - what every screen shows."""
-    from .triage import read_text
-    try: return m | {'ReadText': read_text(m.get('BodyText') or '', m.get('OwnText'))} if m else m
+    """A message with its ReadText beside the body as stored (triage.read_text) - what every screen shows, less the wrapper its
+    triage named (a banner, a stamp, a legal footer: the verdict's `wrapper`)."""
+    from .triage import read_text, wrapper_of
+    try: return m | {'ReadText': read_text(m.get('BodyText') or '', m.get('OwnText'), wrapper_of(store.message_verdict(m['MessageId'])))} if m else m
     except Exception: return m
 
 

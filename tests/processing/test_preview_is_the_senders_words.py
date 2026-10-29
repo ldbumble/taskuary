@@ -5,8 +5,8 @@ email was sent from outside of Northwind. ** Do not click links or download atta
 of them and never got as far as the message. The owner was looking at a CI failure whose summary
 said nothing about CI (2026-09-15).
 
-triage.strip_boilerplate is already the app's one answer to this - the assistant uses it for exactly
-this - so the preview uses it too rather than inventing a second rule. Classification is deliberately
+What is left out is what triage NAMED the message's wrapper (its verdict's `wrapper`, triage.strip_wrapper) - never a
+phrase list (the owner, 2026-10-28). A message triage has not read is shown as it came. Classification is deliberately
 NOT affected: category_of re-reads the raw body, because "unsubscribe" in a footer is how a promo is
 recognised.
 """
@@ -48,11 +48,12 @@ def row_for(db, mid):
 
 
 def test_the_external_banner_is_not_the_message(db):
-    mid = a_message(db, '[ldbumble/taskuary] Run failed: ci - master (7d7424a)',
-                    BANNER + '\r\n\r\n\r\n\r\n[ldbumble/taskuary] ci workflow failed on master.')
+    mid = a_message(db, '[org/app] Run failed: ci - master (7d7424a)',
+                    BANNER + '\r\n\r\n\r\n\r\n[org/app] ci workflow failed on master.')
+    db.add_route(mid, None, 'fyi', 0, 'triage', [], 'triage', verdict={'intent': 'fyi', 'wrapper': [BANNER]})
     preview = row_for(db, mid)['Preview']
     assert 'sent from outside of Northwind' not in preview, 'the wrapper is not the message'
-    assert preview.lstrip().startswith('[ldbumble/taskuary] ci workflow failed')
+    assert preview.lstrip().startswith('[org/app] ci workflow failed')
 
 
 def test_a_message_that_is_only_a_banner_still_says_something(db):
@@ -79,9 +80,9 @@ def test_stripping_for_display_does_not_reclassify_the_sender(db):
 
 def _uncached(body, n):
     """The preview as it was before it was remembered: the specification the cache must keep."""
-    from taskuary.triage import own_words, strip_footer
+    from taskuary.triage import own_words
     text = str(body or '')
-    return (strip_footer(own_words(text[:n * 4])) or text)[:n] if text else ''
+    return (own_words(text[:n * 4]) or text)[:n] if text else ''
 
 
 @pytest.mark.parametrize('n', [0, 1, 40, 400, 4000])

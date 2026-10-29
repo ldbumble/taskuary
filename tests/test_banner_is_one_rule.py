@@ -1,26 +1,36 @@
-"""The external-sender banner is stripped by ONE rule, written twice: triage._BANNER for what the
-model and the phone read, ui.jsx BANNER for what every screen shows (2026-09-23). They must match."""
-import re, unittest
+"""The external-sender banner, a mail app's stamp and a legal footer are left off what a screen shows (2026-09-23) - and which
+text is one is triage's word (its verdict's `wrapper`), never a phrase list in Python or on the screen (the owner, 2026-10-28)."""
+import json, unittest
+from unittest import mock
 from pathlib import Path
 
 from taskuary import triage
 
 ROOT = Path(__file__).resolve().parents[1]
-SAMPLE = ('This email was sent from outside of Northwind. ** Do not click links or download attachments unless you '
-          'know the content is safe. If you are not sure whether this email is safe, contact the Northwind Helpdesk.**'
-          '\n\nDid you put in my raise to be effective this paycheck? My hire date was September 4.')
+WRAP = ('This email was sent from outside of Northwind. ** Do not click links or download attachments unless you '
+        'know the content is safe.**')
+ASK = 'Did you put in my raise to be effective this paycheck? My hire date was September 4.'
+SAMPLE = f'{WRAP}\n\n{ASK}'
 
 
-class OneBannerRuleTests(unittest.TestCase):
-    def test_the_screens_rule_is_triages_rule(self):
-        js = (ROOT / 'website' / 'src' / 'ui.jsx').read_text(encoding='utf-8')
-        m = re.search(r'export const BANNER = /(.+)/gi;', js)
-        self.assertIsNotNone(m, 'ui.jsx lost its BANNER')
-        self.assertEqual(m.group(1), triage._BANNER.pattern)
+class WrapperIsTheModelsWordTests(unittest.TestCase):
+    def test_no_phrase_list_is_left(self):
+        for name in ('_BANNER', '_CLUTTER', '_LEGAL'): self.assertFalse(hasattr(triage, name), name)
+        self.assertNotIn('export const BANNER', (ROOT / 'website' / 'src' / 'ui.jsx').read_text(encoding='utf-8'))
 
-    def test_what_is_shown_is_what_was_said(self):
-        self.assertEqual(triage.strip_banner(SAMPLE), 'Did you put in my raise to be effective this paycheck? My hire date was September 4.')
-        self.assertEqual(triage.strip_banner('Just the words.'), 'Just the words.')
+    def test_what_triage_named_is_left_out_and_nothing_else(self):
+        self.assertEqual(triage.strip_wrapper(SAMPLE, (WRAP,)), ASK)
+        self.assertEqual(triage.strip_wrapper(SAMPLE), SAMPLE)                    # not judged: shown as it came
+        self.assertEqual(triage.strip_wrapper(WRAP, (WRAP,)), WRAP)               # never cut to nothing
+
+    def test_a_made_up_passage_is_not_kept_on_the_verdict(self):
+        self.assertEqual(triage.wrapper_in({'wrapper': [WRAP, 'Unsubscribe here']}, SAMPLE), [WRAP])
+
+    def test_the_verdict_carries_it(self):
+        llm = lambda *a, **k: json.dumps({'intent': 'reply_only', 'why': 'asks about pay', 'wrapper': [WRAP, 'not in the mail']})
+        v = triage.classify_intent({'subject': 'raise', 'body': SAMPLE, 'from_name': 'Erin Blake'}, llm=llm)
+        self.assertEqual(v.get('wrapper'), [WRAP])
+        self.assertIn('wrapper', triage.verdict_schema([], None, [], [])['schema']['properties'])
 
     def test_the_phone_reads_it_the_same_way(self):
         from taskuary import remote_assistant
@@ -28,5 +38,10 @@ class OneBannerRuleTests(unittest.TestCase):
         s = MemoryStore()
         mid = s.add_message({'ExternalId': 'b1', 'Channel': 'teams', 'FromName': 'Erin Blake', 'Subject': 'raise',
                              'BodyText': SAMPLE, 'SentAt': '2026-09-23 09:00:00', 'Status': 'open'})
-        block = remote_assistant.decision_block(s, {'mid': mid, 'kind': 'asked'})
+        with mock.patch.object(s, 'message_verdict', lambda m: {'intent': 'fyi', 'wrapper': [WRAP]}):
+            block = remote_assistant.decision_block(s, {'mid': mid, 'kind': 'asked'})
         self.assertNotIn('sent from outside', block); self.assertIn('hire date was September 4', block)
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -174,13 +174,11 @@ def _dt(s):
 def _when(s) -> str:
     """'Thu 28 Aug 11:21' - a day name the model can hold against a calendar, no year."""
     d = _dt(s); return d.strftime('%a %d %b %H:%M') if d else str(s or '')[:16]
-# the corporate wrapper around a body: one pattern for every surface, kept in triage.py (PW-029)
-from .triage import _BANNER
 def _gist(body, n=180) -> str:
-    """The sender's own words, one line: banner, legal footer, signature and the chain they wrote on
-    top of all gone (triage.own_words) - a preview of a forward used to be the forward (TQ-0665)."""
+    """The sender's own words, one line: their signature and the chain they wrote on top of gone (triage.own_words) - a preview
+    of a forward used to be the forward (TQ-0665). A banner is the model's to read past: no phrase list cuts it (2026-10-28)."""
     from .triage import own_words
-    return _short(own_words(_BANNER.sub('', str(body or ''))), n)
+    return _short(own_words(str(body or '')), n)
 
 
 def _reply_text(review: dict | None) -> str:
@@ -361,7 +359,7 @@ def their_asks(store, days: float = 2, hours: int = 3) -> tuple:
     triage never read is said as not judged, never silently "not an ask" (the owner, 2026-10-11)."""
     from .categories import sender_class, team_domains_of
     from .autoreply import STATUS as AUTO
-    from .triage import own_words
+    from .triage import own_words, strip_wrapper, wrapper_of
     settings = store.get_settings(); team = team_domains_of(settings); me = (settings.get('owner_email') or '').lower()
     cut = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
     pend = {r['TaskId'] for r in store.list_reviews('pending')}
@@ -381,8 +379,8 @@ def their_asks(store, days: float = 2, hours: int = 3) -> tuple:
         last = chain[-1]
         # the owner's own rule (ignore), a feed connection and an auto-reply were settled without triage on purpose
         if mine(last) or _ts(last.get('SentAt')) > cut or last.get('Status') in ('ignored', 'feed', AUTO): continue
-        body = own_words(_BANNER.sub('', str(last.get('BodyText') or '')))
         v = store.message_verdict(last['MessageId'])
+        body = strip_wrapper(own_words(str(last.get('BodyText') or '')), wrapper_of(v))    # what triage named its wrapper is not quoted
         if v is not None and v.get('intent') not in ASKING: continue
         tid = next((c.get('TaskId') for c in reversed(chain) if c.get('TaskId')), None)
         t = store.get_task(tid) if tid else None

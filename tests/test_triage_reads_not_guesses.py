@@ -92,10 +92,12 @@ class SignOffIsNotTheEndTests(unittest.TestCase):
         self.assertIn('draft the Q3 summary', triage.strip_boilerplate(body))
 
     def test_a_legal_footer_is_hidden_on_screen_and_read_whole_by_the_model(self):
-        """The owner's 2026-09-23 ruling governs what is SHOWN; what triage reads is never cut by it."""
-        body = ('The Q3 file for Northwind is attached - can you approve it today?\n\n'
-                'NOTICE: This message is confidential and intended solely for the addressee.')
-        self.assertNotIn('NOTICE', triage.read_text(body)); self.assertIn('approve it today', triage.read_text(body))
+        """The owner's 2026-09-23 ruling governs what is SHOWN - the footer triage named (its verdict's `wrapper`, never a phrase
+        list: 2026-10-28) - and what triage reads is never cut by it."""
+        notice = 'NOTICE: This message is confidential and intended solely for the addressee.'
+        body = f'The Q3 file for Northwind is attached - can you approve it today?\n\n{notice}'
+        shown = triage.read_text(body, wrapper=(notice,))
+        self.assertNotIn('NOTICE', shown); self.assertIn('approve it today', shown); self.assertIn('NOTICE', triage.read_text(body))
         self.assertIn('NOTICE', triage.strip_boilerplate(body))
         s, seen = MemoryStore(), {}
         def llm(sys_, usr_, **kw): seen['user'] = usr_; return json.dumps({'intent': 'task', 'why': 'x'})

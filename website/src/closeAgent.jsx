@@ -14,6 +14,8 @@ import { writeupHead, writeupSteps } from "./writeupState.js";
 export const writeUpSession = (api, tid) => api.post(`/api/tasks/${tid}/wrap`, { close: false, no_reply: true }).then((r) => r.data).catch(() => null);
 // the close itself: the one completion road every surface takes
 export const completeTask = (api, tid, note) => runOperation(api, "task.complete", tid, note ? { note } : {});
+// ...and a Close out Send's close: the server's one gate (concierge.close_after_send) - {closed: false, kept_open: [...]} while anything still waits on you
+export const closeAfterSend = (api, tid) => runOperation(api, "task.complete", tid, { after_send: true });
 // ...both, in order, as ONE job the server owns (writeup.py, 2026-10-20): answered once the session is harvested, the write-up
 // and then the close run behind the press - a close pressed anywhere meanwhile waits for it. True when the job started.
 export const writeUpThenClose = (api, tid) => api.post(`/api/tasks/${tid}/wrap`, { close: false, no_reply: true, background: true, then_close: true })

@@ -33,7 +33,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
 import { openReply as draftReply, draftBehind } from "./replyDraft.js";   // the component's own openReply below would shadow it, and call itself
 import { opError, runOperation } from "./taskOps.js";
-import { ClosingCard, WriteupBlock, WriteupLine, completeTask, writeUpThenClose } from "./closeAgent.jsx";
+import { ClosingCard, WriteupBlock, WriteupLine, closeAfterSend, completeTask, writeUpThenClose } from "./closeAgent.jsx";
 import { writeupView } from "./writeupState.js";
 import { agentName } from "./agentWork.js";
 import { lazyGeneral } from "./lazyGeneral.js";
@@ -1121,10 +1121,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   };
   // SENT (Send / Approve): the send already went through. THE REPLY THAT WENT CLOSES THE TASK (the owner, 2026-10-29: "wait until the
   // send actually succeeds, then close the task"): `closes` is ReviewDecision's word, said only after the server's receipt - the close
-  // is Mark done's own road - unless the task still owes emails (slots), which a close would throw away. Anything else (an Approve,
-  // one of its emails) reads the task again and stays on it; closed by something else meanwhile means walk on
+  // goes through the server's one gate (concierge.close_after_send): kept open, said on the task, while anything on it still waits on
+  // you - a held agent step, a proposal, an email it owes, a session still open (a held `git push` was closed under, 2026-10-29).
+  // Anything else (an Approve, one of its emails) reads the task again and stays on it; closed by something else meanwhile means walk on
   const sent = async ({ closes = false } = {}) => {
-    if (closes && !owesEmails) return finish("done");
+    if (closes) {
+      let out = null;
+      try { out = await closeAfterSend(api, selected); } catch { /* read it below */ }
+      if (out?.closed) { onLeave?.(); return closedHere(); }
+    }
     let done = false;
     try { done = String((await api.get(`/api/tasks/${selected}`)).data?.task?.Status || "") === "done"; } catch { /* read it below */ }
     if (done) { onLeave?.(); return closedHere(); }

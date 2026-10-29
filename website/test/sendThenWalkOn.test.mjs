@@ -32,7 +32,12 @@ test("a reply sent from Close out closes the task once the send succeeded; a fai
   assert.ok(decide.indexOf("setSendErr(replySendFailure(data))") < decide.indexOf("await onSent({ closes"));
   assert.doesNotMatch(decide.slice(0, decide.indexOf("await api.post")), /onSent|complete/, "nothing closes at the press");
   const sent = page.slice(page.indexOf("const sent = async"), page.indexOf("// Remind me: put away"));
-  assert.match(sent, /const sent = async \(\{ closes = false \} = \{\}\) => \{\n\s+if \(closes && !owesEmails\) return finish\("done"\);/);
+  // ...through the server's one gate, which keeps it open while anything on it still waits on the owner (a held `git push`, 2026-10-29):
+  // the page walks on only when that gate says it closed
+  assert.match(sent, /const sent = async \(\{ closes = false \} = \{\}\) => \{\n\s+if \(closes\) \{/);
+  assert.match(sent, /out = await closeAfterSend\(api, selected\);[^\n]*\n\s+if \(out\?\.closed\) \{ onLeave\?\.\(\); return closedHere\(\); \}/);
+  assert.doesNotMatch(sent, /finish\("done"\)/, "never Mark done's close, which has no gate");
+  assert.match(read("closeAgent.jsx"), /export const closeAfterSend = \(api, tid\) => runOperation\(api, "task\.complete", tid, \{ after_send: true \}\);/);
   assert.match(dec, /stays = closesIt \? "then the task closes"/);
 });
 

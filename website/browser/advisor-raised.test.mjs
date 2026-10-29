@@ -28,7 +28,7 @@ test("a task made from an Advisor idea comes from the mail, the Advisor said in 
   await page.evaluate((id) => { location.hash = ""; location.hash = `task=${id}`; }, made.taskId);
   await page.waitForSelector(`${CUR} [data-tq-task-body][data-tq-sections]`, { timeout: 20000 });
   await sleep(1500);
-  if (await page.$(`${CUR} [data-tq-section-tab=from]`)) { await page.click(`${CUR} [data-tq-section-tab=from]`); await sleep(800); }
+  if (await page.$(`${CUR} [data-tq-section-tab=from]`)) { await page.click(`${CUR} [data-tq-section-tab=from] [data-tq-tab-arrow]`); await sleep(800); }
   await page.waitForSelector(`${CUR} [data-tq-came-in]`, { visible: true, timeout: 10000 });
 
   const seen = await page.evaluate((CUR) => {

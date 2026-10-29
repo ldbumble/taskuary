@@ -117,7 +117,8 @@ test("the action row is one line in every state the demo reaches, at 1440, 1024 
   await onTable(saved.taskId);
   await check(page, "WhatsApp agent stopped and saved");
   const pressed = await page.evaluate(() => {
-    const b = document.querySelector('[data-tq-row] [data-tq-verb="reply"]');
+    // ...on the row, or - a stage move on a desk (the owner, 2026-10-29) - on Close out's spine or in its open heading
+    const b = document.querySelector('[data-tq-row] [data-tq-verb="reply"], [data-tq-spine-moves] [data-tq-verb="reply"], [data-tq-pane-moves] [data-tq-verb="reply"]');
     if (b) { b.click(); return "row"; }
     const m = document.querySelector('[data-tq-row] [data-tq-more]');
     return m ? "menu" : "";

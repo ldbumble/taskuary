@@ -423,17 +423,20 @@ export function SectionTab({ sec, lines = [], foot = "", here = false, before = 
 }
 // A FOLDED PANE'S STAGE MOVES (actionRow.splitRow, the owner 2026-10-29): Send to agent / Continue / Run another on Agent's spine, Draft
 // reply / Redraft on Close out's - stacked the spine's width in the row's own button look, the lit one filled. A press opens the pane and
-// starts the step there (the page's "a press opens its section"); a press on the rest of the spine opens it as before
-const SPINE_MOVES = { display: "flex", flexDirection: "column", gap: 0.6, width: "100%", flexShrink: 0, mt: 0.75, cursor: "default",
+// starts the step there (the page's "a press opens its section"); a press on the rest of the spine opens it as before. Came from's are Not a
+// task and Remind me, which act where they stand. ...and a thin rule between the spine's words and its moves (the owner, 2026-10-29: "text,
+// a rule, then the buttons"). A `tucked` move (a sent reply's Hand it to a person) is not on a spine unless it is lit: its open pane has it
+const SPINE_MOVES = { display: "flex", flexDirection: "column", gap: 0.6, width: "100%", flexShrink: 0, mt: 1, pt: 1, borderTop: `1px solid ${FOCUS_EDGE}`, cursor: "default",
   "& .tq-ab": { width: "100%", minWidth: 0, minHeight: 30, fontSize: 12.5, px: 1, justifyContent: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } };
+const SEC_NAME = { from: "Came from", agent: "Agent", close: "Close out" };
 const OPENS_FORM = new Set(["send-general", "start-agent", "run-another"]);   // the agent's moves that open its start box
 const stageBtn = (v, word = v.label) => <button key={v.id} type="button" className={`tq-ab ${v.tone}`} disabled={v.disabled} data-tq-verb={v.id}
   title={(v.disabled && v.why) || v.title || word} onClick={(e) => press(v.id, e, e.currentTarget, v.of)}>{word}</button>;
 function SpineMoves({ sec }) {
-  const vs = useSpineVerbs(sec);
+  const vs = useSpineVerbs(sec).filter((v) => !v.tucked || v.tone === "p");
   if (!vs.length) return null;
   return (
-    <Box data-tq-spine-moves={sec} role="group" aria-label={`${sec === "close" ? "Close out" : "Agent"} moves`} sx={SPINE_MOVES} onClick={(e) => e.stopPropagation()}>
+    <Box data-tq-spine-moves={sec} role="group" aria-label={`${SEC_NAME[sec]} moves`} sx={SPINE_MOVES} onClick={(e) => e.stopPropagation()}>
       {vs.map((v) => stageBtn(v, v.spine || v.label))}
     </Box>);
 }
@@ -442,16 +445,17 @@ function SpineMoves({ sec }) {
 function PaneMoves({ sec, skip = () => false }) {
   const vs = useSpineVerbs(sec).filter((v) => !v.card && !skip(v));
   if (!vs.length) return null;
-  return <Box data-tq-pane-moves={sec} role="group" aria-label={`${sec === "close" ? "Close out" : "Agent"} moves`} sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
+  return <Box data-tq-pane-moves={sec} role="group" aria-label={`${SEC_NAME[sec]} moves`} sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
     {vs.map((v) => stageBtn(v))}</Box>;
 }
 // ...and an open one's head: its NAME, in the closed tabs' own type, and nothing else (the owner, 2026-10-28: "it should just say Close out on
 // top in black without all the small text. It does not help") - the number, what it holds and "up to here" are the tabs' to say
 const SECTION_NAME = { fontSize: 14, fontWeight: 600, lineHeight: 1.35, color: INK };
-export function SectionHead({ sec }) {
+export function SectionHead({ sec, action = null }) {
   return (
-    <Box data-tq-section-head="" sx={{ display: "flex", alignItems: "baseline", mb: 1.25, flexShrink: 0 }}>
-      <Typography sx={SECTION_NAME}>{sec.name}</Typography>
+    <Box data-tq-section-head="" sx={{ display: "flex", alignItems: "baseline", gap: 1.25, mb: 1.25, flexShrink: 0 }}>
+      <Typography sx={{ ...SECTION_NAME, flex: action ? 1 : undefined }}>{sec.name}</Typography>
+      {action}
     </Box>
   );
 }
@@ -1883,8 +1887,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // what you type is the first thing it hears. The page had two older roads with no note (continue-session, resume).
   const [continueAt, setContinueAtRaw] = useState(null);
   // on the canvas Continue is a card IN the conversation (AssistantView listens), not a popover over the view
+  // ...and ON A DESK'S CANVAS IT OPENS IN THE AGENT PANE, where Run another agent's box does (the owner, 2026-10-29: "both should open in the
+  // agent window ... Continue box should be inside the canvas always"): pressed here, or lit by the Assistant (tq-continue-here)
+  const [continueCard, setContinueCard] = useState(null);   // { note } while the pane's Continue card is open
   const setContinueAt = (a) => {
     if (a) setRestartOpen(false);                 // one card under the conversation at a time
+    if (a && canvas && t && threeUp) { setContinueCard({ note: "" }); return; }
+    if (!a) setContinueCard(null);
     if (a && canvas && t) { window.dispatchEvent(new CustomEvent("tq-continue", { detail: { task: t, ref: t.ref || `TQ-${String(t.TaskId).padStart(4, "0")}` } })); return; }
     setContinueAtRaw(a);
   };
@@ -1960,6 +1969,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // THESE handlers, unchanged: the row calls the latest closure, so a press costs what the old button cost. The Tasks tab
   // (canvas=false) keeps its bars.
   const inRow = !!canvas;
+  // ...and on a desk's canvas Hand it to a person opens as a compose card in Close out, not a drawer over the page (the owner, 2026-10-29)
+  const handInPane = inRow && threeUp;
+  useEffect(() => {
+    if (handoff !== true || !handInPane) return undefined;
+    openSection("close");
+    const f = requestAnimationFrame(() => document.querySelector("[data-tq-handoff-card]")?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+    return () => cancelAnimationFrame(f);
+  }, [handoff, handInPane]);   // eslint-disable-line react-hooks/exhaustive-deps
   // AN AGENT WAITING ON YOU is answered in its own terminal - the owner talks to the coding CLI directly. Its question is never drawn
   // OVER the screen (the owner, 2026-10-19: "never get between a coder and their coding cli ... you have to click show details anyway
   // to move on"), and there is no "Answer it" on the row (owner-approved, 2026-10-20: "we don't need that button") - the pane is right
@@ -2272,10 +2289,30 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // agent box ... like we had originally"): the card under the table opened out of sight; the form sits in the work column and is
   // brought into view when it opens
   // ...and its words box takes the cursor, every time a door opens it (boxAt) - a second press found it open and did nothing
+  // ...the pane's Continue card the same: its section opens, the card in view, its words box taking the cursor; a Continue the Assistant
+  // lit for this task (AssistantView, tq-continue-here) is claimed here, with its notes
+  useEffect(() => {
+    if (!continueCard) return undefined;
+    if (threeUp) openSection("agent");
+    const f = requestAnimationFrame(() => {
+      const el = document.querySelector("[data-tq-continue-pane]");
+      el?.scrollIntoView({ block: "nearest", behavior: "smooth" }); el?.querySelector("textarea")?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(f);
+  }, [continueCard]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const claimRef = useRef(null);
+  claimRef.current = canvas && threeUp && active && t ? (d) => { if (Number(d?.tid) !== Number(selected)) return false; setRestartOpen(false); setContinueCard({ note: d.note || "" }); return true; } : null;
+  useEffect(() => {
+    const on = (e) => { if (claimRef.current?.(e.detail)) e.detail.claim?.(); };
+    window.addEventListener("tq-continue-here", on);
+    return () => window.removeEventListener("tq-continue-here", on);
+  }, []);
+  useEffect(() => { setContinueCard(null); }, [selected]);
   // ...and the box is in the Agent section: the row's Send to agent opens that section, or the press opened a box
   // nobody could see (CI, 0.3.9.48 - the drawer stayed shut over it)
   useEffect(() => {
     if (!restartOpen) return undefined;
+    setContinueCard(null);                        // one box in the pane at a time
     if (threeUp) openSection("agent");
     const f = requestAnimationFrame(() => {
       const el = document.querySelector("[data-tq-run-form]");
@@ -2441,7 +2478,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     aria-label={fromDrawer || threeUp ? "Came from" : undefined} aria-hidden={threeUp && section !== "from" ? true : undefined}
                     onClickCapture={stacked ? phoneFromTap : undefined} sx={threeUp ? { ...SECTION(section === "from", openW("from")), gap: 1.75 }
                       : { minWidth: 0, display: "flex", flexDirection: "column", gap: 1.75, ...(fromDrawer ? { ...card, px: 1.5, py: 1.25, ...FROM_SIDE } : PHONE_FROM(fromOpen)) }}>
-                    {threeUp && <SectionHead sec={SECTIONS[0]} sub="what came in, and what triage made of it" here={hereSec === "from"} />}
+                    {threeUp && <SectionHead sec={SECTIONS[0]} sub="what came in, and what triage made of it" here={hereSec === "from"}
+                      action={inRow && section === "from" && !sessionView ? <PaneMoves sec="from" /> : null} />}
                     {/* SECTION 1, IN THE ORDER THE OWNER APPROVED (2026-10-16): the ask, what there is to do, where it came from - and no
                         buttons. "The buttons stay on bottom by the prompt box like always. No buttons there." On the canvas that is the row
                         over the chat line; on the Tasks tab, the view's own bar under the sections. */}
@@ -2756,6 +2794,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       once with nothing said - it is the same box now, with the words, the mic and the pictures */}
                   {runFormOpen
                     && <Box data-tq-run-form="">{nextRunForm}</Box>}
+                  {continueCard && !runFormOpen && !sessionView && <Box data-tq-continue-pane="" sx={{ mt: 1.25 }}>
+                    <ContinueBox inline task={t} taskRef={detail?.ref || ""} initial={continueCard.note || ""} onClose={() => setContinueCard(null)}
+                      onPress={() => window.dispatchEvent(new CustomEvent("tq-continuing", { detail: { tid: selected } }))}
+                      onFail={() => window.dispatchEvent(new CustomEvent("tq-continuing", { detail: { tid: null } }))}
+                      onDone={() => { setContinueCard(null); continued(); }} /></Box>}
                   {/* folded onto the live bar these facts share a ROW with the controls, where a
                       rule above them is stray chrome - they get a rule beside them instead, so the
                       pills you press and the pills you read are two groups and not five in a line */}
@@ -2949,6 +2992,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             {openingReply ? "Drafting…" : replyPrimary}</Button>
                         </Box>
                       : null} />
+                  {/* HAND IT TO A PERSON, IN CLOSE OUT (the owner, 2026-10-29: "you click the button and the matching UI opens in its pane"): on
+                      the canvas the hand-off is a compose card here - who, the forward the AI drafts, and Send it - where the drawer stood;
+                      "sending" keeps it mounted behind, so a send that fails brings back what was typed */}
+                  {handInPane && handoff && <Box data-tq-handoff-card="" sx={{ ...FOCUS, mt: 1, mb: 0.5, display: handoff === true ? "block" : "none" }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+                      <ForwardToInboxIcon sx={{ fontSize: 17, color: "#55697a" }} />
+                      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5, flex: 1 }}>Hand this to a person</Typography>
+                      <IconButton aria-label="Close handoff" size="small" onClick={() => setHandoff(false)}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
+                    </Box>
+                    <Handoff taskId={selected} onLeave={() => { setHandoff("sending"); onLeave?.(); }}
+                      onStay={(msg) => { setHandoff(true); onStay?.(msg); }} onSent={handedOff} />
+                  </Box>}
                   {/* WHAT CLOSED IT, where it was closed (the owner, 2026-10-19: "i hit mark done on close out but agent work tab opened up
                       again - why is it not just staying in close out showing what closed out"): the close, when, and the note it was closed with */}
                   {pane === "reply" && t.Status === "done" && <Box data-tq-closed="" sx={{ mt: 1 }}>
@@ -3278,7 +3333,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       {/* ── hand off: a right-hand drawer, so it cannot hide above a tall terminal ── */}
       {/* ...and "sending" is the hand-off put down at the press: the drawer goes with the task, the form stays mounted behind
           it so a send that fails brings back what was typed (2026-10-01) */}
-      <Drawer anchor="right" open={handoff === true && !!t} onClose={() => setHandoff(false)} ModalProps={{ keepMounted: !!handoff }}
+      <Drawer anchor="right" open={handoff === true && !!t && !handInPane} onClose={() => setHandoff(false)} ModalProps={{ keepMounted: !!handoff && !handInPane }}
         PaperProps={{ sx: { width: { xs: "100%", sm: 460 }, p: 2, bgcolor: PANEL } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
           <ForwardToInboxIcon sx={{ fontSize: 18, color: "#55697a" }} />
@@ -3288,7 +3343,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
           {detail?.ref} · {t?.Title}
         </Typography>
-        {handoff && <Handoff taskId={selected} onLeave={() => { setHandoff("sending"); onLeave?.(); }}
+        {handoff && !handInPane && <Handoff taskId={selected} onLeave={() => { setHandoff("sending"); onLeave?.(); }}
           onStay={(msg) => { setHandoff(true); onStay?.(msg); }} onSent={handedOff} />}
       </Drawer>
 

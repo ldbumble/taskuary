@@ -5,9 +5,10 @@ import { startHarness } from "./harness.mjs";
 
 /* THE STAGE MOVES RIDE ON THEIR PANE, THE CHAT IS ITS OWN UNIT (the owner, 2026-10-29, after three mockups). On the demo world at 1440 and
    1366: the bar keeps Back and Next and what acts on the whole task (Mark done, Change, Share, Hand it to a person, Close with a note,
-   Attach a file); the moves that take the task a stage on - Send to agent / Continue / Run another, Draft reply / Reply / Redraft - stand on
-   their pane's spine while it is folded, between its words and its status, and inside it while it is open, never on the bar. A spine's
-   press opens its pane and starts the step there. A live agent's bar is Back, Next and Stop and save. The chat is a small pill in the
+   Attach a file); the moves that take the task a stage on - Send to agent / Continue / Run another, Draft reply / Reply / Redraft / Hand it
+   to a person, and Came from's Not a task / Remind me - stand on their pane's spine while it is folded, under a rule below its words, and
+   inside it while it is open, never on the bar. A spine's press opens its pane and starts the step there - Hand it to a person a compose
+   card in Close out. A live agent's bar is Back, Next and Stop and save. The chat is a small pill in the
    corner, apart from the bar, typeable at rest: typing opens it out of its corner into the window, and a line sent lands in it.
    And no pane is a dead end: every open task's open Agent pane and Close out carry their own way on. Invented people only. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -30,11 +31,14 @@ const look = (page) => page.evaluate((CUR) => {
   const spine = (k) => { const tab = document.querySelector(`${CUR} [data-tq-section-tab=${k}]`); if (!tab) return null;
     const y = (s) => tab.querySelector(s)?.getBoundingClientRect(), moves = y("[data-tq-spine-moves]");
     return { moves: [...tab.querySelectorAll("[data-tq-spine-moves] button")].map((b) => ({ word: b.textContent.trim(), lit: b.classList.contains("p") })),
-      between: !moves || (y("[data-tq-tab-name]").bottom <= moves.top && moves.bottom <= y("[data-tq-tab-foot]").top), text: tab.innerText }; };
+      between: !moves || (y("[data-tq-tab-name]").bottom <= moves.top && moves.bottom <= y("[data-tq-tab-foot]").top), text: tab.innerText,
+      rule: !moves || getComputedStyle(tab.querySelector("[data-tq-spine-moves]")).borderTopWidth === "1px" }; };
   return { bar: words("[data-tq-row] .tq-arow-verbs button").filter((w) => w !== "▾"), open: document.querySelector(`${CUR} [data-tq-slot][data-tq-open]`)?.dataset.tqSlot,
-    agent: spine("agent"), close: spine("close"), pane: { agent: words(`${CUR} [data-tq-pane-moves=agent] button`), close: words(`${CUR} [data-tq-pane-moves=close] button`) } };
+    from: spine("from"), agent: spine("agent"), close: spine("close"),
+    pane: { from: words(`${CUR} [data-tq-pane-moves=from] button`), agent: words(`${CUR} [data-tq-pane-moves=agent] button`), close: words(`${CUR} [data-tq-pane-moves=close] button`) } };
 }, CUR);
-const STAGE = /^(Send to agent|Continue|Try again|Run another agent|Reply|Draft reply|Redraft|Draft with AI|Starting…|Drafting…)$/;
+const STAGE = /^(Send to agent|Continue|Try again|Run another agent|Reply|Draft reply|Redraft|Draft with AI|Starting…|Drafting…|Hand it to a person|Remind me|Remove - not a task|Back .+)$/;
+const FROM = ["Remind me", "Remove - not a task"];
 
 for (const [w, h] of [[1440, 900], [1366, 768]]) {
   test(`stage moves on their pane, the bar the task's, the chat its own unit - ${w}x${h}`, { timeout: 400000 }, async (t) => {
@@ -54,7 +58,9 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       await openSec(page, "close");
       const m = await look(page);
       assert.deepEqual(m.agent.moves.map((x) => x.word), ["Send to agent"], JSON.stringify(m.agent));
-      assert.ok(m.agent.between, "between the pane's name and its status");
+      assert.ok(m.agent.between && m.agent.rule, "between the pane's name and its status, under a rule");
+      assert.deepEqual(m.from.moves.map((x) => x.word).sort(), FROM, `Came from's spine: Not a task and Remind me ${JSON.stringify(m.from)}`);
+      assert.ok(m.from.between && m.from.rule);
       assert.match(m.agent.text, /^\W*Agent\s+not started[\s\S]*Send to agent[\s\S]*2$/, "the spine's words as they were, the move in their middle");
       assert.ok(m.bar.includes("Mark done") && m.bar.includes("Share"), `the bar: ${m.bar}`);
       assert.ok(!m.bar.some((x) => STAGE.test(x)), `no stage move on the bar: ${m.bar}`);
@@ -65,8 +71,8 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       // ...once the draft card's own verbs have come round again after the switch
       await page.waitForSelector(`${CUR} [data-tq-section-tab=close] [data-tq-spine-moves] button`, { timeout: 5000 }).catch(() => {});
       const m = await look(page);
-      assert.deepEqual(m.close.moves.map((x) => x.word), ["Redraft"], JSON.stringify(m.close));
-      assert.ok(m.close.between);
+      assert.deepEqual(m.close.moves.map((x) => x.word), ["Redraft", "Hand it to a person"], JSON.stringify(m.close));
+      assert.ok(m.close.between && m.close.rule);
       assert.ok(!m.bar.some((x) => STAGE.test(x)), `no stage move on the bar: ${m.bar}`);
       assert.ok(m.bar.includes("Mark done"), `${m.bar}`);
       assert.ok(await page.$(`${CUR} [data-tq-run-form]`), "the agent's own form carries its start");
@@ -76,8 +82,8 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       await openTask(page, id(/^Year-end audit/));
       await openSec(page, "agent");
       const m = await look(page);
-      assert.deepEqual(m.close.moves.map((x) => x.word), ["Draft reply"], JSON.stringify(m.close));
-      await page.click(`${CUR} [data-tq-spine-moves=close] button`);
+      assert.deepEqual(m.close.moves.map((x) => x.word), ["Draft reply", "Hand it to a person"], JSON.stringify(m.close));
+      await page.click(`${CUR} [data-tq-spine-moves=close] button[data-tq-verb=reply]`);
       await page.waitForSelector(`${CUR} [data-tq-slot=close][data-tq-open]`, { timeout: 5000 });
       await page.waitForFunction((CUR) => /Drafting|AI drafted|Redraft|Send/.test(document.querySelector(`${CUR} [data-tq-slot=close]`)?.innerText || ""),
         { timeout: 20000 }, CUR);
@@ -87,9 +93,24 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       await openTask(page, id(/^Invoice 88213/));
       await openSec(page, "from");
       const m = await look(page);
-      assert.deepEqual([m.agent.moves.map((x) => x.word), m.close.moves.map((x) => x.word)], [["Send to agent"], ["Redraft"]], JSON.stringify(m));
+      assert.deepEqual([m.agent.moves.map((x) => x.word), m.close.moves.map((x) => x.word)], [["Send to agent"], ["Redraft", "Hand it to a person"]], JSON.stringify(m));
+      assert.deepEqual([...m.pane.from].sort(), FROM, `Came from open: its heading carries Not a task and Remind me ${JSON.stringify(m.pane)}`);
+      assert.ok(!m.bar.some((x) => STAGE.test(x)), `no stage move on the bar: ${m.bar}`);
       await page.click(`${CUR} [data-tq-section-tab=agent] [data-tq-tab-n]`);
       await page.waitForSelector(`${CUR} [data-tq-slot=agent][data-tq-open]`, { timeout: 5000 });
+    });
+
+    await t.test("Hand it to a person on Close out's spine opens Close out with the hand-off as a compose card in it - no drawer", async () => {
+      await openTask(page, id(/^Invoice 88213/));
+      await openSec(page, "agent");
+      await page.click(`${CUR} [data-tq-spine-moves=close] button[data-tq-verb=hand]`);
+      await page.waitForSelector(`${CUR} [data-tq-slot=close][data-tq-open] [data-tq-handoff-card] input`, { timeout: 8000 });
+      const h = await page.evaluate((CUR) => ({ drawer: !!document.querySelector(".MuiDrawer-root .MuiDrawer-paper"),
+        send: [...document.querySelectorAll(`${CUR} [data-tq-handoff-card] button`)].map((b) => b.textContent.trim()) }), CUR);
+      assert.ok(!h.drawer, "no drawer over the page");
+      assert.ok(h.send.includes("Send it") && h.send.some((x) => /Draft with AI|Redraft/.test(x)), `who, the forward and its own Send it: ${h.send}`);
+      await page.click(`${CUR} [data-tq-handoff-card] [aria-label="Close handoff"]`);
+      await page.waitForFunction((CUR) => !document.querySelector(`${CUR} [data-tq-handoff-card]`), { timeout: 5000 }, CUR);
     });
 
     await t.test("a live agent's bar is Back, Next and Stop and save - nothing else", async () => {
@@ -139,6 +160,8 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       for (const task of open) {
         await openTask(page, task.TaskId);
         if (await page.$(`${CUR} .xterm`)) continue;   // a live agent: its bar's Stop and save (above)
+        const from = await (async () => { await openSec(page, "from"); return (await look(page)).pane.from; })();
+        if (!from.includes("Remove - not a task") || !from.some((x) => /^(Remind me|Back .+)$/.test(x))) miss.push(`${task.Title} · from: ${from}`);
         for (const key of ["agent", "close"]) {
           await openSec(page, key);
           const way = await page.evaluate((CUR, key) => {

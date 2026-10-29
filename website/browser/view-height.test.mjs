@@ -65,10 +65,10 @@ test("a task of words stays at the canvas's top and one height through Reply, th
       const was = await page.evaluate(() => document.querySelector("[data-tq-canvas-item] [data-tq-task-body]")?.getAttribute("data-tq-main"));
       for (const k of ["from", "agent", "close"]) {
         if (!(await page.$(`[data-tq-canvas-item] [data-tq-section-tab=${k}]`))) continue;
-        await page.click(`[data-tq-canvas-item] [data-tq-section-tab=${k}]`); await sleep(500);
+        await page.click(`[data-tq-canvas-item] [data-tq-section-tab=${k}] [data-tq-tab-arrow]`); await sleep(500);
         pinned(base, await measure(page), `with ${k} open ${when} ${say}`);
       }
-      if (await page.$(`[data-tq-canvas-item] [data-tq-section-tab=${was}]`)) { await page.click(`[data-tq-canvas-item] [data-tq-section-tab=${was}]`); await sleep(500); }
+      if (await page.$(`[data-tq-canvas-item] [data-tq-section-tab=${was}]`)) { await page.click(`[data-tq-canvas-item] [data-tq-section-tab=${was}] [data-tq-tab-arrow]`); await sleep(500); }
       pinned(base, await measure(page), `back on ${was} ${when} ${say}`);
     };
     await drawers("before Reply");

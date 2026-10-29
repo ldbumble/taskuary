@@ -53,7 +53,7 @@ test("the task page: three sections at rest, the agent nearly the whole width wh
     assert.equal(shut.layout, "sections");
     assert.equal(shut.main, "close");
     assert.ok(!shut.from && shut.closeout, `the reply alone, Came from shut: ${JSON.stringify(shut)}`);
-    await page.click("[data-tq-section-tab=from]");
+    await page.click("[data-tq-section-tab=from] [data-tq-tab-arrow]");
     await page.waitForSelector("[data-tq-from] [data-tq-sorted]", { visible: true, timeout: 20000 });
     const l = await settled(page);
     assert.ok(l.from && !l.closeout, `Came from open, Close out its tab: ${JSON.stringify(l)}`);
@@ -69,7 +69,7 @@ test("the task page: three sections at rest, the agent nearly the whole width wh
     assert.ok(await page.$("[data-tq-from] [data-tq-ask]"), "the ask is in the task");
     assert.equal(await page.$("[data-tq-from] [data-tq-conversation-row][aria-expanded=true]"), null, "the ask's words are read once");
     assert.ok(await page.$("[data-tq-closeout] textarea"), "the draft is in Close out");
-    await page.click("[data-tq-section-tab=close]");
+    await page.click("[data-tq-section-tab=close] [data-tq-tab-arrow]");
     await page.waitForSelector("[data-tq-closeout] textarea", { visible: true, timeout: 5000 });
     // ...and the header's status is the rail row's own: the same words on the row's icon
     await page.waitForSelector(".tq-pile-row.current .tq-mark[role=img]", { timeout: 20000 });
@@ -107,7 +107,7 @@ test("the task page: three sections at rest, the agent nearly the whole width wh
     await open(page, made.taskId);
     // ...the burst is Came from's: its tab, then the Conversation under the two boxes (the one flow, 2026-10-28)
     await page.waitForSelector("[data-tq-task-body][data-tq-sections]", { timeout: 20000 });
-    if (await page.$("[data-tq-section-tab=from]")) await page.click("[data-tq-section-tab=from]");
+    if (await page.$("[data-tq-section-tab=from]")) await page.click("[data-tq-section-tab=from] [data-tq-tab-arrow]");
     await page.waitForSelector("[data-tq-from] [data-tq-conversation-block] [data-tq-conversation-row]", { visible: true, timeout: 20000 });
     const rows = () => page.$$eval("[data-tq-from] [data-tq-conversation-row]", (els) => els.map((e) => e.innerText.replace(/\s+/g, " ").trim()));
     const first = await rows();
@@ -163,11 +163,11 @@ test("the task page: three sections at rest, the agent nearly the whole width wh
     assert.deepEqual([shut.arrow, shut.cursor, shut.label], ["›", "pointer", "Open Came from"]);
     await page.hover("[data-tq-section-tab=from]");
     assert.notEqual((await look()).bg, shut.bg, "hovered, the tab tints");
-    await page.click("[data-tq-section-tab=from]");
+    await page.click("[data-tq-section-tab=from] [data-tq-tab-arrow]");
     await page.waitForSelector("[data-tq-from]", { visible: true, timeout: 5000 });
     assert.match(await page.$eval("[data-tq-from]", (e) => e.innerText), /What came in/, "the same Came from every other task shows");
     await new Promise((r) => setTimeout(r, 600));
-    await page.click("[data-tq-section-tab=agent]");
+    await page.click("[data-tq-section-tab=agent] [data-tq-tab-arrow]");
     await page.waitForFunction(() => document.querySelector("[data-tq-task-body]")?.getAttribute("data-tq-main") === "agent", { timeout: 5000 });
     await new Promise((r) => setTimeout(r, 600));
     assert.deepEqual(await pane(), before, "the pane is still there, the same size, after the look away");
@@ -238,10 +238,10 @@ test("the task page: three sections at rest, the agent nearly the whole width wh
     assert.doesNotMatch(text, /not available/i, "no reply pill where no reply exists");
     // ...Close out's tab says there is nothing owed; opened, it says what closes it - still no advice and no pill
     assert.match(await page.$eval("[data-tq-section-tab=close]", (e) => e.innerText), /Nothing owed/);
-    await page.click("[data-tq-section-tab=from]");
+    await page.click("[data-tq-section-tab=from] [data-tq-tab-arrow]");
     await page.waitForSelector("[data-tq-from]", { visible: true, timeout: 5000 });
     assert.equal(await page.$eval("[data-tq-from]", (e) => getComputedStyle(e).overflowY), "auto", "Came from scrolls inside itself");
-    await page.click("[data-tq-section-tab=close]");
+    await page.click("[data-tq-section-tab=close] [data-tq-tab-arrow]");
     // ...its heading the name alone - its explanation was small text that did not help (the owner, 2026-10-28)
     await page.waitForFunction(() => document.querySelector("[data-tq-task-body]")?.getAttribute("data-tq-main") === "close" && !!document.querySelector("[data-tq-closeout]"), { timeout: 5000 });
     const opened = await page.$eval("[data-tq-task-page]", (e) => e.innerText);

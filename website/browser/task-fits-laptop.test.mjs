@@ -74,11 +74,11 @@ test("three sections at every width: a failed run on the Agent, a fresh task on 
     assert.ok(m.seen, `the reason is in view ${say}`);
     assert.ok(m.dock <= 120, `the dock is short ${say}`);
     // ...Came from's tab opens it and the Agent folds to its tab; the Agent's brings the run back
-    await page.click("[data-tq-canvas-item] [data-tq-section-tab=from]");
+    await page.click("[data-tq-canvas-item] [data-tq-section-tab=from] [data-tq-tab-arrow]");
     await page.waitForSelector("[data-tq-from]", { visible: true, timeout: 5000 });
     assert.match(await page.$eval("[data-tq-from]", (e) => e.innerText), /Came from[\s\S]*What came in[\s\S]*What triage made of it/i);
     assert.equal(await main(), "from");
-    await page.click("[data-tq-canvas-item] [data-tq-section-tab=agent]");
+    await page.click("[data-tq-canvas-item] [data-tq-section-tab=agent] [data-tq-tab-arrow]");
     await page.waitForSelector("[data-tq-agent-section] [data-tq-result-summary], [data-tq-agent-section] [data-tq-run-why]", { visible: true, timeout: 5000 });
 
     // A TASK NOTHING HAS WORKED YET: Came from is open, the Agent and Close out its tabs on the right
@@ -88,7 +88,7 @@ test("three sections at every width: a failed run on the Agent, a fresh task on 
     const from = await rect(page, "[data-tq-from]"), card = await rect(page, "[data-tq-canvas-item]");
     // ...the open section fills the width (the owner, 2026-10-26: "no main view should fill the screen. why waste space?") - less the tabs
     assert.ok(from.w >= card.w - 2 * 156 - 10, `${width}: Came from fills the width ${JSON.stringify({ from, card })}`);
-    await page.click("[data-tq-canvas-item] [data-tq-section-tab=agent]");
+    await page.click("[data-tq-canvas-item] [data-tq-section-tab=agent] [data-tq-tab-arrow]");
     await page.waitForSelector("[data-tq-work] [data-tq-run-form]", { visible: true, timeout: 5000 });
     assert.equal(await main(), "agent");
     assert.equal(await page.$eval("[data-tq-from]", (e) => e.getBoundingClientRect().width), 0, `${width}: Came from closed as the Agent opened`);

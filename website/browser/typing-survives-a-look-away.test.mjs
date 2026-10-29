@@ -25,7 +25,7 @@ test("a reply draft's edit and the agent box's words are still there after Repor
   await clickRow(page, other); await sleep(3000);
   // ...where the task opens on another section the agent box is in the Agent section behind its tab (the three sections, 2026-10-27)
   const box = await page.waitForSelector("textarea[placeholder^='What should it do']", { timeout: 10000 });
-  if (!(await box.evaluate((x) => x.getBoundingClientRect().width > 0))) { await page.click("[data-tq-section-tab=agent]"); await sleep(800); }
+  if (!(await box.evaluate((x) => x.getBoundingClientRect().width > 0))) { await page.click("[data-tq-section-tab=agent] [data-tq-tab-arrow]"); await sleep(800); }
   await box.click(); await page.keyboard.type("check the bank feed first"); await sleep(1500);
   await nav(page, "reports"); await sleep(2500); await clickRow(page, other); await sleep(3500);
   assert.equal(await page.$eval("textarea[placeholder^='What should it do']", (x) => x.value).catch(() => null), "check the bank feed first");

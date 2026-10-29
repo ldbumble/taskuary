@@ -91,9 +91,9 @@ test("three sections in the flow's order, open where the task is up to, tabs tha
     assert.match(close.text, /Close out[\s\S]*Reply to Tom Alvarez[\s\S]*Drafted · waiting for Send[\s\S]*Up to here[\s\S]*3$/, close.text);
     // ...and the stage is the task's, not the pick's
     assert.equal(m.stage, before.stage);
-    await page.click(`${CUR} [data-tq-section-tab=agent]`); await sleep(500);
+    await page.click(`${CUR} [data-tq-section-tab=agent] [data-tq-tab-arrow]`); await sleep(500);
     assert.equal((await look(page)).main, "agent");
-    await page.click(`${CUR} [data-tq-section-tab=close]`); await sleep(500);
+    await page.click(`${CUR} [data-tq-section-tab=close] [data-tq-tab-arrow]`); await sleep(500);
     const back = await look(page);
     assert.equal(back.main, "close");
     assert.equal(back.card.h, before.card.h, "one height through every switch");
@@ -155,14 +155,14 @@ test("a live agent keeps the width: slim Came from and Close out, its terminal k
   const term = () => page.evaluate(() => { const x = document.querySelector("[data-tq-canvas-item] .xterm"); if (x && !x.__mark) x.__mark = Math.random();
     const r = x?.querySelector(".xterm-screen")?.getBoundingClientRect(); return { mark: x?.__mark, w: Math.round(r?.width || 0), h: Math.round(r?.height || 0) }; });
   const t0 = await term();
-  await page.click(`${CUR} [data-tq-section-tab=from]`); await sleep(600);
+  await page.click(`${CUR} [data-tq-section-tab=from] [data-tq-tab-arrow]`); await sleep(600);
   const away = await look(page);
   assert.equal(away.main, "from", "Came from opens over the live agent");
   assert.ok(away.tabs.some((x) => x.key === "agent" && !x.mini), "the agent folds to its tab");
   const t1 = await term();
   assert.equal(t1.mark, t0.mark, "the terminal is the same one, never remounted");
   assert.deepEqual([t1.w, t1.h], [t0.w, t0.h], "and never resized while it is out of sight");
-  await page.click(`${CUR} [data-tq-section-tab=agent]`); await sleep(600);
+  await page.click(`${CUR} [data-tq-section-tab=agent] [data-tq-tab-arrow]`); await sleep(600);
   assert.equal((await look(page)).main, "agent");
   const t2 = await term();
   assert.deepEqual([t2.mark, t2.w, t2.h], [t0.mark, t0.w, t0.h], "back on the agent, its screen is as it was");

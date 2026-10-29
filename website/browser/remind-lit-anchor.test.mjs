@@ -29,7 +29,8 @@ test("a typed remind lights Remind me, one press opens its picker, by the row", 
   await page.click(".tq-compose-box textarea");
   await page.keyboard.type("remind me Monday");
   await page.keyboard.press("Enter");
-  const lit = '.tq-arow-verbs button.tq-ab.p[data-tq-verb$="remind"]';
+  // ...on the row, or - Remind me is Came from's move now (the owner, 2026-10-29) - on its spine or in its open heading
+  const lit = '.tq-arow-verbs button.tq-ab.p[data-tq-verb$="remind"], [data-tq-spine-moves] button.tq-ab.p[data-tq-verb$="remind"], [data-tq-pane-moves] button.tq-ab.p[data-tq-verb$="remind"]';
   await page.waitForSelector(lit, { visible: true, timeout: 20000 });
   const btn = await page.$eval(lit, (b) => { const r = b.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width }; });
   // (the box is its pill again while the answer is up, 2026-10-27 - the case that slid the button no longer arises, and the press still

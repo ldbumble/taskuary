@@ -3,26 +3,22 @@
 No DB, no network - operates on plain dicts so it is unit-testable offline and reusable
 outside this repo. Signals (strongest first):
     thread   - same ConversationId as a message already on the task (near-certain match)
-    subject  - normalized-subject token overlap with the task title/known subjects
+    subject  - the same subject line, prefixes (Re:, Fwd:) aside
     sender   - the sender already appears on the task
-    body     - token-overlap (cosine on term counts) between body and task text
+    meaning  - how alike the two are in MEANING, read by the caller off embeddings (textsim) - never word overlap
 The decision keeps every candidate's per-signal scores so the "why" is fully replayable.
 """
-import re, math
-from collections import Counter
+import re
 
 from . import kinds as task_kinds
 
 # Common reply/forward prefixes stripped before subject comparison (incl. localized ones).
 _SUBJ_PREFIX = re.compile(r'^\s*((re|fw|fwd|aw|sv|vs)\s*(\[\d+\])?\s*:\s*)+', re.I)
 _TOKEN = re.compile(r'[a-z0-9]{2,}')
-_STOP = {'the','and','for','you','are','not','with','this','that','have','from','was','were',
-         'will','has','had','but','all','can','our','your','their','been','they','its','per',
-         'any','out','get','let','who','him','her','she','his','one','two','when','what',
-         'please','thanks','thank','regards','hello','sent','subject'}
 
 def norm_subject(s): return _SUBJ_PREFIX.sub('', s or '').strip().lower()
-def tokens(s): return [t for t in _TOKEN.findall((s or '').lower()) if t not in _STOP]
+# the words a typed SEARCH is matched by, literally - no stopword list, and never how alike two texts are (that is textsim's)
+def tokens(s): return _TOKEN.findall((s or '').lower())
 
 # The STANDING part of a subject line. "Resident Refund Request - Doe, Jane" is one
 # recurring topic and one resident: the trailing " - <somebody>" changes with every mail, so it
@@ -47,13 +43,6 @@ def first_line(body: str) -> str:
     is the name of an ask (the owner, 2026-10-11: "Everything should be ai"), this is only its fallback."""
     return next((l.strip() for l in (body or '').splitlines() if l.strip()), '')[:120]
 
-def cosine(a, b):
-    """Cosine similarity between two token lists (term-count vectors)."""
-    ca,cb = Counter(a),Counter(b)
-    if not ca or not cb: return 0.0
-    dot = sum(ca[t]*cb[t] for t in ca.keys() & cb.keys())
-    return dot / (math.sqrt(sum(v*v for v in ca.values())) * math.sqrt(sum(v*v for v in cb.values())))
-
 # Signal weights for ranking candidate tasks (reshape, context). route() and its attach threshold are gone
 # (2026-10-11): ingest imported it and never called it - identity_route and triage's same_as decide joins.
 #
@@ -67,26 +56,25 @@ def cosine(a, b):
 #   the last thing said on it; it never reopens the task and never makes a new one.
 # A chat room is neither: its conversation id names the ROOM, so the thread signal is only a
 # candidate there and ingest.chat_continues decides whether the line joins (owner, 2026-09-02).
-WEIGHTS = {'thread': 1.0, 'subject': 0.45, 'sender': 0.15, 'body': 0.40}
+WEIGHTS = {'thread': 1.0, 'subject': 0.45, 'sender': 0.15, 'meaning': 0.40}
 
-def score_candidate(msg, task):
+def score_candidate(msg, task, meaning: float = 0.0):
     """Per-signal scores of one message against one task snapshot.
 
     Args:
-        msg: dict with subject, from_email, body, conversation_id.
-        task: dict with task_id, title, subjects (list), senders (list), text (joined bodies),
-              conversation_ids (list).
+        msg: dict with subject, from_email, conversation_id.
+        task: dict with task_id, title, subjects (list), senders (list), conversation_ids (list).
+        meaning: the two's similarity off embeddings (textsim), 0.0 with no embedder. A cosine over shared words stood here and
+                 ranked by vocabulary - "Payworth timeout" and "Pay ... timed out" share none (the owner, 2026-10-28).
     Returns:
         dict of signal -> score in [0,1].
     """
-    sig = {}
-    sig['thread'] = 1.0 if msg.get('conversation_id') and msg['conversation_id'] in (task.get('conversation_ids') or []) else 0.0
     ms = norm_subject(msg.get('subject'))
-    subs = [norm_subject(s) for s in (task.get('subjects') or [])] + [norm_subject(task.get('title'))]
-    sig['subject'] = max([1.0 if ms and ms==s else cosine(tokens(ms), tokens(s)) for s in subs if s] or [0.0])
-    sig['sender'] = 1.0 if (msg.get('from_email') or '').lower() in {(e or '').lower() for e in (task.get('senders') or [])} else 0.0
-    sig['body'] = cosine(tokens(msg.get('body')), tokens(task.get('text')))
-    return sig
+    subs = {norm_subject(s) for s in (task.get('subjects') or [])} | {norm_subject(task.get('title'))}
+    return {'thread': 1.0 if msg.get('conversation_id') and msg['conversation_id'] in (task.get('conversation_ids') or []) else 0.0,
+            'subject': 1.0 if ms and ms in subs else 0.0,
+            'sender': 1.0 if (msg.get('from_email') or '').lower() in {(e or '').lower() for e in (task.get('senders') or [])} else 0.0,
+            'meaning': max(0.0, min(1.0, float(meaning or 0.0)))}
 
 # NOTHING HERE SCANS FOR CODE ANY MORE. `_CODE_HARD` / `_CODE_SOFT` used to decide `kind` from
 # the words in a message; 8b89e26a (2026-09-06) made an unnamed kind `general` outright and left

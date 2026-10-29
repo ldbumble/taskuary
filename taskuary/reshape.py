@@ -34,16 +34,6 @@ SPLIT_SYSTEM = (
 MAX_SUMMARY = 4000
 
 
-def task_text(store, tid: int, msgs=None) -> str:
-    """Everything the task knows about itself, as one blob: what it says it is, plus what
-    was actually written to us."""
-    from .triage import strip_boilerplate as sb
-    t = store.get_task(tid) or {}
-    ms = msgs if msgs is not None else store.list_messages(tid)
-    return '\n'.join([t.get('Title') or '', sb(str(t.get('Summary') or ''))[:2000]]
-                     + [f"{m.get('Subject') or ''}\n{sb(str(m.get('BodyText') or ''))[:2000]}" for m in ms])
-
-
 def no_split(store, tid: int, why: str) -> dict:
     """No AI connector, or the AI fell over: the task as it stands and an EMPTY second job for the
     owner to name. Never claims a split and never guesses one - a word list used to pick "the
@@ -112,8 +102,8 @@ def split_task(store, tid: int, second: dict, first: dict = None, move_message_i
 
 def _why(sig: dict) -> str:
     if sig['thread']: return 'same email thread'
-    bits = ([ 'same wording'] if sig['subject'] > 0.35 else []) + (['same sender'] if sig['sender'] else []) \
-        + (['same details'] if sig['body'] > 0.25 else [])
+    bits = (['same subject'] if sig['subject'] else []) + (['same sender'] if sig['sender'] else []) \
+        + (['alike in meaning'] if sig['meaning'] else [])
     return ' + '.join(bits) or 'nothing obvious in common'
 
 
@@ -121,11 +111,10 @@ OPEN = ('open', 'in_progress', 'waiting')
 OPEN_EDGE, MAX_CLOSED, MAX_FOUND = 0.05, 200, 20
 
 def _snapshot(store, t: dict) -> dict:
-    """A task as the router sees a candidate. Deliberately NOT store.snapshots(): that joins
-    the title and the message bodies only, so a task typed in by hand - all of its ask in
-    Summary - scored zero against its own duplicate."""
+    """A task as the router sees a candidate: its thread, senders and subjects. What it is ABOUT is read off its title and
+    summary by embeddings (context.alike), so a task typed in by hand - all of its ask in Summary - still meets its duplicate."""
     ms = store.list_messages(t['TaskId'])
-    return {'task_id': t['TaskId'], 'title': t.get('Title'), 'text': task_text(store, t['TaskId'], ms),
+    return {'task_id': t['TaskId'], 'title': t.get('Title'),
             'subjects': [m['Subject'] for m in ms if m['Subject']],
             'senders': [m['FromEmail'] for m in ms if m['FromEmail']],
             'conversation_ids': [m['ConversationId'] for m in ms if m['ConversationId']]}
@@ -148,17 +137,20 @@ def merge_candidates(store, tid: int, limit: int = 8, q: str = '') -> list:
     t = store.get_task(tid)
     if not t: raise ValueError(f'no task {tid}')
     mine = _snapshot(store, t)
-    me = {'subject': mine['title'], 'body': mine['text'], 'from_email': next(iter(mine['senders']), None),
+    me = {'subject': mine['title'], 'from_email': next(iter(mine['senders']), None),
           'conversation_id': next(iter(mine['conversation_ids']), None)}
     pool = [o for o in store.list_tasks() if o['TaskId'] != tid and (o.get('Status') in OPEN or o.get('Status') == 'done')]
     if q.strip(): pool = sorted((o for o in pool if _match(o, q)), key=lambda o: -o['TaskId'])[:MAX_FOUND]
     else:
         shut = sorted((o for o in pool if o.get('Status') == 'done'), key=lambda o: str(o.get('ClosedAt') or o.get('UpdatedAt') or ''))
         pool = [o for o in pool if o.get('Status') in OPEN] + shut[-MAX_CLOSED:]
+    # how alike in MEANING, off embeddings (textsim) - {} with no embedder, and the thread, the sender and the subject rank alone
+    from .context import alike
+    near = alike(store, f"{t.get('Title') or ''}\n{t.get('Summary') or ''}", pool)
     out = []
     for other in pool:
         s = _snapshot(store, other)
-        sig = score_candidate(me, s)
+        sig = score_candidate(me, s, near.get(other['TaskId'], 0.0))
         score, closed = round(min(1.0, sum(WEIGHTS[k] * v for k, v in sig.items())), 4), other.get('Status') == 'done'
         out.append({'task_id': s['task_id'], 'ref': task_ref(s['task_id']), 'title': s['title'], 'closed': closed,
                     'score': score, 'why': _why(sig), '_rank': score - (OPEN_EDGE if closed else 0)})

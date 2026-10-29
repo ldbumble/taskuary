@@ -97,6 +97,11 @@ test("the tabs look pressable: an arrow, a pointer, a hover tint, a focus ring -
   assert.match(sec, /"&:hover": \{ bgcolor: "#f8f6f2" \}/);
   assert.match(sec, /"&:focus-visible": \{ outline: `2px solid \$\{ACCENT\}`/);
   assert.match(src, /<Box component="button" type="button" data-tq-section-tab=\{sec\.key\}/);
+  // ...its lines whole or not drawn, as many as the room holds and none skipped: never a fixed count, never squeezed to a sliver
+  assert.match(sec, /"& \[data-tq-tab-line\]\[data-tq-unfit\]": \{ display: "none" \}/);
+  assert.match(sec, /WebkitLineClamp: 3, WebkitBoxOrient: "vertical",\s+overflow: "hidden", flexShrink: 0/);
+  assert.match(src, /const cut = ls\.findIndex\(.*\);\n\s+if \(cut >= 0\) ls\.slice\(cut\)/);
+  assert.doesNotMatch(src, /newestFirst\(sources\.flatMap\(\(g\) => g\.msgs\)\)\.slice/, "every message goes to the tab");
   assert.match(src, /transition: `flex-grow \$\{SLOT_MS\}ms ease, flex-basis \$\{SLOT_MS\}ms ease`, "@media \(prefers-reduced-motion: reduce\)": \{ transition: "none" \}/);
 });
 
@@ -230,10 +235,10 @@ test("a task waiting on a person says who and when it was due", () => {
 // foot (a book's spine) the one status line
 test("the three sections come in the flow's order, and each closed tab says where it stands", () => {
   assert.deepEqual(SECTIONS.map((s) => `${s.n} · ${s.name}`), ["1 · Came from", "2 · Agent", "3 · Close out"]);
-  // ...at a glance: on what and how many, then the last messages - who and a short line each, three at most
+  // ...at a glance: on what and how many, then every message newest first - who and a short line each; the tab draws as many as fit
   assert.deepEqual(fromStatus({ channel: "WhatsApp", count: 5, sorted: "Sorted: a reply to send · regular priority",
     msgs: [{ who: "Erin Blake", words: "So let's\nbuild one." }, { who: "You", words: "A link" }, { who: "Erin Blake", words: "Look" }, { who: "Ray Colton", words: "Old" }] }),
-    { lines: ["WhatsApp · 5 messages", "Erin Blake: “So let's build one.”", "You: “A link”", "Erin Blake: “Look”"], foot: "✓ Sorted: a reply to send · regular priority" });
+    { lines: ["WhatsApp · 5 messages", "Erin Blake: “So let's build one.”", "You: “A link”", "Erin Blake: “Look”", "Ray Colton: “Old”"], foot: "✓ Sorted: a reply to send · regular priority" });
   assert.deepEqual(fromStatus({ workflow: { title: "Nightly check" } }).lines, ["Workflow · Nightly check"], "a workflow run has no sender");
   assert.equal(agentWord({}), "not started");
   assert.equal(agentWord({ live: true, waiting: true }), "needs you");

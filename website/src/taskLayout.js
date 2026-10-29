@@ -86,10 +86,11 @@ export const SECTIONS = [{ key: "from", n: 1, name: "Came from" }, { key: "agent
 // bottom over a thin rule, the section's number under it
 const q = (s) => (s ? `“${String(s).replace(/\s+/g, " ").trim()}”` : "");
 // ...Came from: who, on what, when; their latest words; how many - and at its foot what triage made of it ("✓ Sorted: a reply to send · normal priority")
-// ...AT A GLANCE (the owner, 2026-10-27: "show more"): on what and how many, then the last two or three messages - who, and a short line each
+// ...AT A GLANCE (the owner, 2026-10-27: "show more"): on what and how many, then every message newest first - who, and a short line each;
+// the tab draws as many as fit, newest down with none skipped (TaskPage fitTabLines) - a fixed three under "4 messages" read as one lost
 export const fromStatus = ({ channel = "", count = 0, msgs = [], workflow = null, made = "", sorted = "" } = {}) => ({
   lines: [count ? [channel, plural(count, "message")].filter(Boolean).join(" · ") : workflow ? `Workflow · ${workflow.title}` : made,
-    ...msgs.slice(0, 3).map((m) => `${m.who}: ${q(m.words)}`)].filter(Boolean),
+    ...msgs.map((m) => `${m.who}: ${q(m.words)}`)].filter(Boolean),
   foot: sorted ? `✓ ${sorted}` : "" });
 // ...the Agent: its profile and where it stands, what it did in a line, what it made - and at its foot its state and the Advisor's next move
 export const agentWord = ({ live = false, waiting = false, failed = false, stopped = false, result = false, record = false, codeRun = false } = {}) =>

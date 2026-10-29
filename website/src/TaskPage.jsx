@@ -302,8 +302,10 @@ const SECTION_TAB = (here) => ({ appearance: "none", font: "inherit", cursor: "p
   "& [data-tq-tab-arrow]": { width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0, fontSize: 15, lineHeight: 1,
     border: `1px solid ${here ? ACCENT : BORDER}`, bgcolor: here ? ACCENT : "#fff", color: here ? "#fff" : ACCENT },
   "& [data-tq-tab-name]": { fontSize: 12.5, fontWeight: 600, lineHeight: 1.35, flexShrink: 0 },
+  // ...each line WHOLE or not drawn (fitTabLines): squeezed by flex, the last one in was cut mid-word and the ones under it vanished
   "& [data-tq-tab-line]": { fontSize: 11.5, lineHeight: 1.4, color: DIM, overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical",
-    overflow: "hidden", minHeight: 0, flexShrink: 1, maxWidth: "100%" },
+    overflow: "hidden", flexShrink: 0, maxWidth: "100%" },
+  "& [data-tq-tab-line][data-tq-unfit]": { display: "none" },
   "& [data-tq-tab-foot]": { mt: "auto", pt: 1, borderTop: `1px solid ${FOCUS_EDGE}`, width: "100%", display: "flex", flexDirection: "column", gap: 0.5, flexShrink: 0 },
   "& [data-tq-tab-status-box]": { height: "2.8em", fontSize: 11.5, lineHeight: 1.4, display: "flex", flexDirection: "column", overflow: "hidden" },
   "& [data-tq-tab-status]": { fontSize: 11.5, lineHeight: 1.4, color: "#5f7a5f", overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" },
@@ -388,8 +390,30 @@ function Part({ label, sub, subTitle, children, focus = false, ...rest }) {
   );
 }
 
+// AS MANY LINES AS THE TAB HOLDS, measured, never a fixed number: in order from the top, and from the first that would run into the foot
+// that one and every one after it are not drawn - so what shows is always a run with no gap (Came from: the newest messages, back as far
+// as the room goes; the owner, 2026-10-29: four counted and three shown, a fixed three, read as a message lost)
+const fitTabLines = (tab) => {
+  // ...above the spine's stage moves when it carries them, which sit between the words and the foot
+  const ls = [...tab.querySelectorAll("[data-tq-tab-line]")], foot = tab.querySelector("[data-tq-tab-foot]"), mv = tab.querySelector("[data-tq-spine-moves]");
+  ls.forEach((l) => l.removeAttribute("data-tq-unfit"));
+  if (!foot) return;
+  const cs = getComputedStyle(tab), room = tab.getBoundingClientRect().bottom - parseFloat(cs.paddingBottom || 0) - foot.offsetHeight - parseFloat(cs.rowGap || 0)
+    - (mv ? mv.offsetHeight + parseFloat(getComputedStyle(mv).marginTop || 0) + parseFloat(cs.rowGap || 0) : 0);
+  const cut = ls.findIndex((l) => l.getBoundingClientRect().bottom > room + 0.5);
+  if (cut >= 0) ls.slice(cut).forEach((l) => l.setAttribute("data-tq-unfit", ""));
+};
 // ONE CLOSED SECTION, AS ITS TAB (SECTION_TAB): the arrow points the way it opens, and a press opens it - the others close
 export function SectionTab({ sec, lines = [], foot = "", here = false, before = false, mini = false, icon = null, onOpen }) {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    const tab = ref.current;
+    if (!tab) return undefined;
+    fitTabLines(tab);
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(() => fitTabLines(tab)); ro.observe(tab);
+    return () => ro.disconnect();
+  }, [lines.join("\n"), foot, here]);   // eslint-disable-line react-hooks/exhaustive-deps -- the words, not the array's identity
   // ...SLIM beside a live agent: the arrow, the section's mark, and at its foot a dot for where it stands - the words are its hover
   if (mini) return (
     <Box component="button" type="button" data-tq-section-tab={sec.key} data-tq-mini="" data-tq-here={here ? "" : undefined} sx={MINI_TAB(here)}
@@ -402,12 +426,12 @@ export function SectionTab({ sec, lines = [], foot = "", here = false, before = 
   // ...and between what it is and where it stands, the folded pane's STAGE MOVES (SpineMoves) - so the tab is a div that opens on a press,
   // its moves real buttons inside it
   return (
-    <Box component="div" role="button" tabIndex={0} data-tq-section-tab={sec.key} data-tq-here={here ? "" : undefined} sx={SECTION_TAB(here)}
+    <Box ref={ref} component="div" role="button" tabIndex={0} data-tq-section-tab={sec.key} data-tq-here={here ? "" : undefined} sx={SECTION_TAB(here)}
       aria-label={`Open ${sec.name}`} title={`Open ${sec.name}`} aria-expanded={false} onClick={onOpen}
       onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onOpen?.(); } }}>
       <Box component="span" aria-hidden data-tq-tab-arrow="">{before ? "›" : "‹"}</Box>
       <Box component="span" data-tq-tab-name="">{sec.name}</Box>
-      {lines.map((l) => <Box component="span" key={l} data-tq-tab-line="">{l}</Box>)}
+      {lines.map((l, i) => <Box component="span" key={i} data-tq-tab-line="">{l}</Box>)}
       <SpineMoves sec={sec.key} />
       {/* ...its foot ONE HEIGHT in every tab (the owner, 2026-10-27: "the 1 line and 2 line are not on the same line"): the rule, a status
           block of two lines - there whether it says anything or not - then the number, so rules and numbers line up across the tabs */}
@@ -1554,8 +1578,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...read when a tab draws (tabFor, in the JSX): the Advisor's note (`warn`) is worked out further down
   const tabLines = () => !threeUp || !t ? {} : {
     from: fromStatus({ channel: cameIn ? cameIn.SourceName || channelName(cameIn.Channel) : sources[0] ? channelName(sources[0].channel) : "",
-      // ...the last few messages of its conversations, newest first: who, and their words
-      msgs: newestFirst(sources.flatMap((g) => g.msgs)).slice(0, 3).map((m) => ({ who: m.who || m.FromName || m.FromEmail || (m.Direction === "out" ? "You" : ""),
+      // ...EVERY message of its conversations, newest first - the tab draws as many as it has room for (fitTabLines): who, and their words
+      msgs: newestFirst(sources.flatMap((g) => g.msgs)).map((m) => ({ who: m.who || m.FromName || m.FromEmail || (m.Direction === "out" ? "You" : ""),
         words: (rowText(m, sourceFiles.get(m.MessageId)) || cleanText(m.ReadText || m.BodyText || "")).slice(0, 200) })),
       count: sourceCount, workflow: fromWorkflow, made: `${detail.ref} · ${made}`, sorted: sortedLine(facts, t?.Kind || "task").replace(/^Sorted as: /, "Sorted: ") }),
     agent: agentStatus({ profile: runRole || hasRecord || term ? agentName(t) : "",   /* Taskuary, never the profile (kinds.js shownAgent) */

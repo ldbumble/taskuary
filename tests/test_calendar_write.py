@@ -245,6 +245,26 @@ class TheWriteScope(unittest.TestCase):
             self.assertEqual(e.exception.fix, {'label': 'Sign in again', 'href': '#connector=outlook'})
             self.assertEqual(s.reviews_for_message(out['message_id']), [], 'nothing drafted')
 
+    def test_with_no_calendar_connected_accept_and_find_a_time_say_so_with_the_connect_step(self):
+        """B15 (the email walk, 2026-10-29): no mailbox card at all, an invite read off IMAP (provider google) - Accept talked about a
+        Google refresh token and offered "Open the Gmail card", Find a time "Sign in again"; nothing had ever been signed in."""
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s = MemoryStore(); s.set_setting('calendar_enabled', '0', 't')
+        out = arrive(s, {**INVITE, 'provider': 'google', 'event_id': 'ev-g'})
+        with self.assertRaises(calwrite.NoAccess) as e: calwrite.draft(s, out['message_id'], 'accept')
+        self.assertEqual(str(e.exception), calwrite.NO_CALENDAR)
+        self.assertNotIn('refresh token', str(e.exception))
+        self.assertEqual(e.exception.fix, {'label': 'Connect a calendar', 'href': '#connector=outlook'})
+        with mock.patch.object(server, 'store', s):
+            r = TestClient(server.app).get(f"/api/messages/{out['message_id']}/calendar/slots", params={'act': 'propose'}).json()
+        self.assertFalse(r['ok']); self.assertIn('No calendar is connected', r['say'])
+        self.assertNotEqual((r.get('fix') or {}).get('label'), 'Sign in again')
+        # ...and a Gmail card that IS there, with no Google calendar on it yet, is still told how to add one - on that card
+        gm = s.get_connector_by_type('gmail'); s.save_connector({'ConnectorId': gm['ConnectorId'], 'Active': 1}, 't')
+        with self.assertRaises(calwrite.NoAccess) as e: calwrite.draft(s, out['message_id'], 'accept')
+        self.assertEqual(e.exception.fix['href'], '#connector=gmail')
+
     def test_the_endpoint_answers_with_one_line_and_the_fix(self):
         from fastapi.testclient import TestClient
         from taskuary import server

@@ -3020,7 +3020,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                   inputProps={{ readOnly: true, style: { fontSize: 12.5, lineHeight: 1.45, cursor: "text" } }} />
                               </Box>
                               <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1, flexWrap: "wrap" }}>
-                                <Button size="small" variant="contained" disableElevation disabled={!!openingReply} sx={primaryBtn} data-tq-draft-ai=""
+                                {/* ...not lit on an INVITE (B15): its answer is the row's Accept or Decline, not an email */}
+                                <Button size="small" variant={calAsk?.invite ? "outlined" : "contained"} disableElevation disabled={!!openingReply}
+                                  sx={calAsk?.invite ? barBtn : primaryBtn} data-tq-draft-ai=""
                                   startIcon={openingReply === "generate" ? <CircularProgress size={12} color="inherit" /> : null}
                                   title={btnHint("redraft")} onClick={() => openReply("ai")}>{openingReply === "generate" ? "Drafting…" : btn("redraft", "none")}</Button>
                                 <Typography variant="caption" sx={{ color: FAINT }}>Nothing is sent until you approve it.</Typography>

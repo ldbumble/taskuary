@@ -315,6 +315,7 @@ def _google_token(cfg: dict) -> tuple:
 
 
 MS_FIX = ('Sign in again', '#connector=outlook')
+NO_CALENDAR = 'No calendar is connected - connect one, and the answer goes to it.'
 G_FIX = ('Open the Gmail card', '#connector=gmail')
 NEED_MS = (f'Calendar access needs to be granted - sign in again on the Outlook card and allow {MS_WRITE} '
            '(a tenant app needs it as an application permission).')
@@ -339,8 +340,12 @@ def account(store, msg: dict = None, provider: str = '') -> dict:
         cfg = _cfg(c)
         if c.get('Active') and cfg.get('google_refresh_token'):
             return {'provider': 'google', 'connector': c['ConnectorId'], 'cfg': cfg, 'secret': None, 'mailbox': cfg.get('address') or box}
-    if want == 'google': raise NoAccess(NEED_G, *G_FIX)
-    raise NoAccess('No calendar is connected to answer from - sign in on the Outlook card, or add a Google calendar to the Gmail card.', *MS_FIX)
+    # NOTHING CONNECTED IS SAID SO, with the connect step (B15, the email walk 2026-10-29): with no mailbox card at all, Accept on an
+    # invite talked about a Google refresh token and "Open the Gmail card", and Find a time offered "Sign in again" - nothing had ever
+    # been signed in. The Gmail card's calendar wording is for a Gmail card that is there.
+    if want == 'google' and any(c.get('Active') for c in store.connectors_by_type('gmail')): raise NoAccess(NEED_G, *G_FIX)
+    fix = connect_fix(store)
+    raise NoAccess(NO_CALENDAR, fix['label'], fix['href'])
 
 
 def require_write(store, acct: dict):

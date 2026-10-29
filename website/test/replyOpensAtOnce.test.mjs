@@ -64,6 +64,8 @@ test("every Reply press opens at once, and both views of a draft show Drafting w
   // REPLY WITH NO AGENT WORK OPENS EMPTY (the owner, 2026-10-28): only Draft with AI asks for the AI's draft
   assert.match(read("replyDraft.js"), /\.\.\.\(ai \? \{ ai: true \} : \{\}\)/);
   assert.match(page, /data-tq-draft-ai=""[\s\S]{0,300}onClick=\{\(\) => openReply\("ai"\)\}/);
+  // ...and NOT LIT on an invite (B15, the email walk 2026-10-29): its answer is the row's Accept or Decline, not an email
+  assert.match(page, /variant=\{calAsk\?\.invite \? "outlined" : "contained"\}[\s\S]{0,200}sx=\{calAsk\?\.invite \? barBtn : primaryBtn\} data-tq-draft-ai=""/);
   for (const src of [cards, dec]) assert.match(src, /useDraftJob\(/);
   assert.match(dec, /drafting \? "Drafting…"/);
   assert.match(cards.slice(cards.indexOf("export function ReplyCard"), cards.indexOf("export function MeetingCard")), /drafting \? "Drafting…"/);

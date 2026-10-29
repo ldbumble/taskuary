@@ -653,11 +653,13 @@ def arrived_at(store, card, task, view, allowed):
     tid = card.get('tid')
     t = task if tid and task.get('TaskId') == tid else (store.get_task(tid) or {}) if tid else {}
     idea = next((i for i in view.get('ideas') or [] if i.get('IdeaId') == card.get('idea')), None) if card.get('idea') else None
-    sent = [str(m['SentAt']) for m in view.get('messages') or [] if m.get('SentAt') and (not allowed or m.get('MessageId') in allowed)]
+    # ...each message by its Date header, and by when it reached us: a header set ahead of the clock is not when it arrived (not_ahead)
+    sent = [str(x) for m in view.get('messages') or [] if not allowed or m.get('MessageId') in allowed for x in (m.get('SentAt'), m.get('CreatedAt')) if x]
     # the earlier of the task's creation and its first message: triage makes a task a little after the mail that asked for it
     seen = [str(x) for x in (t.get('CreatedAt'), *((idea.get('CreatedAt') or idea.get('FirstSeen'),) if idea and not t else ()), *sent) if x]
     if tid and (back := came_back(store, tid, [m for m in view.get('messages') or [] if not allowed or m.get('MessageId') in allowed])): return back
-    return min(seen, key=funnel_time) if seen else card.get('sort_at') or card.get('since') or card.get('when')
+    from .funnel import not_ahead
+    return min(not_ahead(seen), key=funnel_time) if seen else card.get('sort_at') or card.get('since') or card.get('when')
 
 
 def came_back(store, tid, msgs):
@@ -668,7 +670,8 @@ def came_back(store, tid, msgs):
     if not at: return None
     cut = funnel_time(str(at))
     ins = [m for m in msgs if m.get('SentAt') and m.get('Direction', 'in') != 'out' and funnel_time(str(m.get('CreatedAt') or m['SentAt'])) <= cut]
-    return str(max(ins, key=lambda m: funnel_time(str(m['SentAt'])))['SentAt']) if ins else str(at)
+    line = str(max(ins, key=lambda m: funnel_time(str(m['SentAt'])))['SentAt']) if ins else ''
+    return line if line and funnel_time(line) <= cut else str(at)        # a Date header ahead of the reopen is the sender's clock
 
 
 def funnel_time(stamp):

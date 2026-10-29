@@ -1926,6 +1926,11 @@ def task_detail(task_id: int):
     for r in d.get('reviews') or []:
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
         r['Signature'] = signatures.for_review(store, r, memo=sigs)     # what goes under it: the reply box shows it
+    # the owner's own mail has nobody behind it to answer (wrapup.from_owner): the page's Reply doors read this, never a guess
+    from .ingest import own_addresses
+    from .wrapup import from_owner
+    me = own_addresses(store)
+    for m in d.get('messages') or []: m['FromOwner'] = from_owner(store, m, me)
     from . import batch as _batch
     batch_rows = store.batch_items(task_id)
     batch_outside = bool(batch_rows) and _batch.outside(store, task_id)

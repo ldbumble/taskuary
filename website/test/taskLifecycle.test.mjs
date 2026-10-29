@@ -4,8 +4,17 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
-  AGENT, agentPhase, focusStage, ownerControlsCompletion, sessionWord, wentOut, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, timelinePhases,
+  AGENT, agentPhase, focusStage, hasCorrespondent, ownerControlsCompletion, replySource, sessionWord, wentOut, pendingProposals, pendingReplyReview, replyPhase,
+  sentReplyReview, taskPhase, timelinePhases,
 } from "../src/taskLifecycle.js";
+
+test("a self-forward has nobody to answer: the owner's own mail is never the reply's correspondent", () => {
+  const self = { MessageId: 2, Channel: "email", FromEmail: "alex@northwind.example", FromOwner: true, Direction: "in" };
+  const erin = { MessageId: 1, Channel: "email", FromEmail: "erin@northwind.example", Direction: "in" };
+  assert.equal(hasCorrespondent(self), false);
+  assert.equal(hasCorrespondent(replySource([self])), false);
+  assert.equal(replySource([erin, self]).MessageId, 1, "the colleague behind it, not the owner's forward");
+});
 
 test("task, agent and reply phases remain independent", () => {
   assert.equal(taskPhase("in_progress"), "in progress");

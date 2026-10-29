@@ -284,7 +284,10 @@ def message_row(message, item, threads, now, *, full=False):
         and message.get('Status') is not None and message.get('Status') != 'withdrawn' and answered is None and not theirs)
     row = {key: message.get(key) for key in (
         'MessageId', 'Channel', 'SourceName', 'Subject', 'FromName', 'FromEmail', 'SentAt',
-        'ConversationId', 'SourceLink', 'TaskId', 'Direction')}
+        'ConversationId', 'SourceLink', 'TaskId', 'Direction',
+        # what triage named it and what it read the words as trying to make an AI do (message.Danger): the rail and card say both -
+        # a phishing mail triage caught wore its own subject and no warning (B3, 2026-10-29)
+        'TriageTitle', 'Danger')}
     row.update(IngestedAt=message.get('CreatedAt'), Preview=_preview(message.get('BodyText'), 4000 if full else 400, _wrapper(routes)),
                MsgStatus=message.get('Status'), Title=task.get('Title'), TaskStatus=task.get('Status'), Assignee=task.get('Assignee'),
                Priority=task.get('Priority'), TaskKind=task.get('Kind'), TaskTags=task.get('Tags'),

@@ -277,7 +277,9 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
         # ai decided. Same in work and timeline tabs")
         base = dict(who=who, when=r.get('SentAt'), mid=r['MessageId'], tid=r.get('TaskId'), channel=r.get('Channel') or '',
                     category=r.get('Category') or '', preview=r.get('Preview'), cid=cid, email=r.get('FromEmail') or '',
-                    priority=r.get('Priority'), route=r.get('RouteReason') or '', task_kind=r.get('TaskKind') or '')
+                    priority=r.get('Priority'), route=r.get('RouteReason') or '', task_kind=r.get('TaskKind') or '',
+                    # the mail's own subject beside triage's title, and the danger triage read in it (message.Danger) - shown, never a gate
+                    subject=_short(r.get('Subject') or '', 140), danger=_short(r.get('Danger') or '', 200) or None)
         subj = says(r)
         if r.get('MsgStatus') == 'triaging':
             # A RANKED ARRIVAL WAITING ITS TURN IS NOT BEING TRIAGED (the owner, 2026-09-28: "they should be ranked

@@ -3558,6 +3558,8 @@ def card_for(item: dict) -> dict:
                                        'restart',
                                        # an FYI from a list that names its own way off it: the card's Unsubscribe (unsubscribe.py)
                                        'unsub',
+                                       # ...and what triage read the words as trying to make an AI do, beside the mail's own subject (B3)
+                                       'danger', 'subject',
                                        'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'members', 'aliases', 'unread', 'deferred', 'actionable', 'paused', 'closed',
                                        # ...and an FYI row speaking for its email thread: the mails it opens on (processing_unread.fold_fyi_threads)
                                        'brief_today', 'thread', 'thread_n', 'thread_items')} | ({'dashboard': True} if item.get('dashboard') else {})   # a dashboard's row draws the dashboard

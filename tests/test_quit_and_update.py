@@ -93,7 +93,7 @@ class AnUpdateWaitsForRunningWork(unittest.TestCase):
         from taskuary import server
         c = TestClient(server.app)
         with mock.patch.object(update, 'ready', return_value={'newer': True, 'url': 'u'}), \
-             mock.patch('taskuary.awake.running', return_value='1 running agent'), \
+             mock.patch('taskuary.awake.update_waits_for', return_value='1 running agent'), \
              mock.patch.object(update, 'when_idle', wraps=lambda running, go: {'waiting': True, 'waits': update.waits_line(running()), 'restarting': False}), \
              mock.patch.object(update, 'apply') as apply, mock.patch.object(update, 'exit_soon') as bye:
             r = c.post('/api/update', json={})
@@ -101,6 +101,34 @@ class AnUpdateWaitsForRunningWork(unittest.TestCase):
             apply.assert_not_called(); bye.assert_not_called()
             with mock.patch.object(update, 'check', return_value={'current': '1', 'latest': '2', 'newer': True}):
                 self.assertEqual(c.get('/api/update').json()['waits'], 'Update waits for 1 running agent')
+
+
+class AnUpdateWaitsOnlyForWorkInFlight(unittest.TestCase):
+    """An agent parked at its prompt is waiting on the owner and never finishes by itself - an update held for one waited an hour and
+    a half without saying which task it was (TQ-1237). It waits for agents mid-turn, and names them."""
+    def sessions(self, tid, *parked):
+        from taskuary import terminal
+        ss = {f's{i}': mock.Mock(task_id=tid, alive=True, waiting=mock.Mock(return_value=p)) for i, p in enumerate(parked)}
+        return mock.patch.dict(terminal.SESSIONS, ss, clear=True)
+
+    def test_a_working_agent_holds_the_update_and_is_named(self):
+        s, tid, _ = working_store()
+        with self.sessions(tid, False):
+            self.assertEqual(awake.update_waits_for(s), f'1 running agent ({task_ref(tid)})')
+
+    def test_an_agent_parked_at_its_prompt_does_not_hold_it(self):
+        s, tid, _ = working_store()
+        with self.sessions(tid, True):
+            self.assertEqual(awake.update_waits_for(s), '')
+            self.assertEqual(awake.running(s), '1 running agent')      # ...though it is still live: Quit says it stops it, sleep stays held
+
+    def test_one_session_still_working_keeps_the_task_in_flight(self):
+        s, tid, _ = working_store()
+        with self.sessions(tid, True, False): self.assertEqual(awake.holding(s), ([tid], []))
+
+    def test_a_workflow_run_holds_it_too(self):
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True), mock.patch.object(workflows, '_STARTING', {7}):
+            self.assertEqual(awake.update_waits_for(MemoryStore()), f'1 workflow run ({task_ref(7)})')
 
 
 class TheAssistantLightsUpdateNeverPressesIt(unittest.TestCase):

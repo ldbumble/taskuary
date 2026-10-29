@@ -828,7 +828,7 @@ def version(): return {'version': _ver, 'started': _started, 'cli_installer_revi
 def update_check(force: int = 0):
     from . import awake, update
     # ...with what an Update now would wait for, and whether one already waits (update.when_idle)
-    return {**update.check(force=bool(force)), 'waits': update.waits_line(awake.running(store)),
+    return {**update.check(force=bool(force)), 'waits': update.waits_line(awake.update_waits_for(store)),
             'queued': update.QUEUED['at'] is not None, 'queued_error': update.QUEUED['error']}
 
 def _update_now(info: dict) -> dict:
@@ -851,7 +851,7 @@ def update_apply():
     from . import awake, update
     try: info = update.ready()
     except Exception as e: raise HTTPException(422, str(e))
-    try: return update.when_idle(lambda: awake.running(store), lambda: _update_now(info))
+    try: return update.when_idle(lambda: awake.update_waits_for(store), lambda: _update_now(info))
     except Exception as e: raise HTTPException(422, str(e))
 
 

@@ -2696,7 +2696,7 @@ def read_op(store, kind: str, params: dict) -> str:
         # never installed from the chat)
         if any(h.get('href') == places.href('updates') for h in hits):
             from . import awake, update
-            out.append(f"{places.name('updates')} now: {update.status_line(awake.running(store), lit=DELIVERY.get() != PHONE)}")
+            out.append(f"{places.name('updates')} now: {update.status_line(awake.update_waits_for(store), lit=DELIVERY.get() != PHONE)}")
         return NEWLINE.join(out)
     # THE APP ITSELF, by name - appfacts reads the tables the tabs read. A miss lists what exists, so
     # the second try finds it; an id is printed with every row, so the next call can be exact.

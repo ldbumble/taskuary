@@ -313,6 +313,8 @@ def apply(progress=None, info: dict = None) -> dict:
 # AN UPDATE WAITS FOR RUNNING WORK (the owner, 2026-10-25): the swap ends this process, and with it every agent and workflow run it
 # holds. So Update now with work live is kept, said ("Update waits for 1 running agent"), and done the moment the last one stops -
 # never by itself otherwise: only the owner's press queues it, and quitting forgets it.
+# What it waits for is work IN FLIGHT (awake.update_waits_for): an agent parked at its prompt is waiting on the owner and would hold
+# the update for good, so the swap closes it the way Quit does and its task stays open (TQ-1237).
 IDLE_POLL = 5.0
 QUEUED = {'at': None, 'error': None}
 _QLOCK = threading.Lock()

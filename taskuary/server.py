@@ -1384,6 +1384,8 @@ def _run_kind(op: dict, background: BackgroundTasks):
         # the same close the PATCH road does: the pending draft is dismissed and the agent on it is stopped
         from . import concierge
         if not store.get_task(tid): raise HTTPException(404, 'task not found')
+        # ...a Close out Send's close goes through the one gate: kept open, and said why, while anything on it still waits on the owner
+        if p.get('after_send'): return concierge.close_after_send(store, tid, ACTOR)
         # what came of work done off the app - "I called him" - is the close-out itself, so it is written on the task
         note = str(p.get('note') or '').strip()[:4000]
         if note: store.add_comment(tid, ACTOR, 'human', f'Closed out: {note}')

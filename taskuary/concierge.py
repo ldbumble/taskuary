@@ -3471,6 +3471,46 @@ def close_task(store, tid: int, actor: str = 'owner') -> bool:
     return True
 
 
+def waiting_on_owner(store, tid: int) -> list:
+    """What on this task still waits on the owner, each in the words it carries: a held agent step or a proposal for an Approve, another
+    reply or email for a Send, an agent session still open, a run or workflow still going, an agent queued to start. [] when nothing does.
+    A SEND THAT CLOSES (close_after_send) asks this first: a Close out Send closed a task whose agent's `git push` was held for the
+    owner's Approve - never approved, never pushed, and the task read done (2026-10-29)."""
+    from . import buttons, proposals, workerstate as ws, workflows
+    A, S, out = buttons.label('approve', 'action'), buttons.label('approve'), []
+    for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status IN ('pending','held') ORDER BY ReviewId", (tid,)):
+        if r.get('Kind') != 'action':
+            out.append(f"an email this task owes still waits for your {S}" if r.get('Kind') == 'slot' else
+                       'a reply held while the agent worked comes back for your Send' if r.get('Status') == 'held' else f'another reply still waits for your {S}')
+            continue
+        try: p = json.loads(r.get('DraftText') or '{}')
+        except ValueError: p = {}
+        if p.get('action') in proposals.HELD_ACTS:
+            out.append(f"the agent's held step still waits for your {A} - {p.get('what') or str(p.get('command') or 'a step')[:120]}")
+        else: out.append(f"{str(r.get('Reason') or 'a proposal').strip()[:200]} - still waiting for your {A}")
+    if ws._live(tid): out.append('the agent session on it is still open')
+    elif any(r.get('TaskId') == tid for r in store.running_runs()): out.append('an agent run on it is still going')
+    with workflows._LOCK: flowing = tid in workflows._STARTING
+    if flowing: out.append('its workflow is still running')
+    if store.get_dispatch(tid): out.append('an agent is queued to start on it')
+    return out
+
+
+def close_after_send(store, tid: int, actor: str = 'owner') -> dict:
+    """THE ONE GATE on "the reply that went closes the task" (the Close out Send, 2026-10-29): closed only when nothing on it still waits
+    on the owner (waiting_on_owner); otherwise it stays open and says why on the task. {'status', 'closed', 'kept_open'}."""
+    t = store.get_task(tid) or {}
+    if not t: raise ValueError('task not found')
+    if t.get('Status') in ('done', 'dropped'): return {'status': t['Status'], 'closed': False, 'kept_open': []}
+    kept = waiting_on_owner(store, tid)
+    if not kept: return {'status': 'done', 'closed': close_task(store, tid, actor), 'kept_open': []}
+    said = '; '.join(kept)
+    store.add_comment(tid, actor, 'human', f'Sent. Kept open: {said[0].upper()}{said[1:]}.')
+    store.audit('task', tid, 'send_kept_open', actor, detail={'kept': kept})
+    funnel.invalidate()
+    return {'status': t.get('Status') or 'open', 'closed': False, 'kept_open': kept}
+
+
 # What "set something up" opens. It used to be a CODING task on the default agent, which sent a coding agent
 # into a checkout to build what the app already has: asked to set up the Zoho invoice integration -
 # a connector card and a report, both shipped - it opened a session in the wrong repository entirely
@@ -5011,6 +5051,8 @@ def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = 
     st, start = op.get('status'), ''
     # the reason as a clause: "unknown agent: ." and "...failed.." were the error's own punctuation run into the sentence's
     why = lambda fallback: str(op.get('error') or fallback).strip().rstrip(' .:;') or fallback
+    # ...a Send's close KEPT OPEN (close_after_send) closed nothing: no Mark done badge on its card - the task's own comment says why
+    if st == 'done' and (kept := (op.get('outcome') or {}).get('kept_open')): return {'say': f"Sent. {ref or 'It'} is kept open: {'; '.join(kept)}.", 'chips': []}
     if st == 'done' and (start := str((op.get('outcome') or {}).get('start_error') or '').strip().rstrip(' .:;')):
         # THE TASK WAS MADE AND ITS AGENT NEVER STARTED (remote_assistant._run): "Done - Send to agent · TQ-0001. It is on TQ-0001, but
         # the agent did not start - ..." led with the one word that was not true (the 2026-10-22 re-walk)

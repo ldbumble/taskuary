@@ -93,3 +93,15 @@ test("an older version of a file an answer names is not one more file at the foo
   const listed = [outputRow(17, "plan_v2.md", []), outputRow(17, "plan_v1.md", []), outputRow(17, "raw costs.csv", [])];
   assert.deepEqual(uncited(listed, [`Done: ${HOME}/TQ-0017/plan_v2.md`], 17).map((r) => r.path), ["raw costs.csv"]);
 });
+
+// "TQ-0012 % Collected all-in-one v9.xlsx" is a real name an agent gave a workbook. A path on disk is its name as written - decoded, or
+// cut at a '#', it named a file that is not there - while a link's target is a URL: decoded, its query and fragment cut first
+test("a name with '%', '#' or an accent is the file it names, cited or linked", () => {
+  for (const name of ["TQ-0012 % Collected all-in-one v9.xlsx", "Q3 #2 rates.csv", "Résumé – Gail Moreno.md", "100%25 done.txt"]) {
+    const address = outputUrl(12, name).replace("/api/task-outputs/12/", "/outputs/TQ-0012/");
+    assert.deepEqual(outputRefs(`:codex-file-citation{path="${HOME}/TQ-0012/${name}"}`, 12).files, [name], name);
+    assert.deepEqual(outputRefs(`[it](${address})`, 12).files, [name], name);
+    assert.deepEqual(outputRefs(`[it](http://127.0.0.1:7787${address}?x=1#top)`, 12).files, [name], name);
+    assert.equal(decodeURIComponent(outputUrl(12, name).split("/").pop()), name);
+  }
+});

@@ -18,14 +18,20 @@ import { deliverables } from "./taskOutputs.js";
 export const TASK_CHANNELS = ["email", "teams", "whatsapp", "telegram", "imessage", "discord"];
 const NOTES = new Set(["coding_session", "agent_result"]);
 // the task's own files: what its agents saved or showed, and what came in with its messages
-export const taskFiles = (detail) => [
-  // ...not the session records nor the answers saved from them: those are Taskuary's own notes on a run, not something to hand anybody -
-  // a task worked twenty times offered twenty of them (2026-10-28) - and each thing an agent made once, its newest (taskOutputs.deliverables)
-  ...deliverables((detail?.artifacts || []).filter((a) => a.url && !NOTES.has(a.kind))).made
-    .map((a) => ({ key: `artifact:${a.id}`, kind: "artifact", id: a.id, name: a.name })),
-  ...(detail?.attachments || []).filter((a) => a.Path || a.saved || a.url)
-    .map((a) => ({ key: `attachment:${a.AttachmentId ?? a.id}`, kind: "attachment", id: a.AttachmentId ?? a.id, name: a.Name ?? a.name })),
-];
+// ...and the files its agents left in the task's outputs folder (outputs.py, `outputs`: GET /api/task-outputs) - the workbook itself, which
+// the list never offered (2026-10-28); a page shown FROM that folder is the same file, offered once (agentRecord.madeOnce)
+export const taskFiles = (detail, outputs = []) => {
+  const pages = (detail?.artifacts || []).filter((a) => a.url && !NOTES.has(a.kind)), seen = new Set(pages.map((a) => String(a.name || "").toLowerCase()));
+  return [
+    // ...not the session records nor the answers saved from them: those are Taskuary's own notes on a run, not something to hand anybody -
+    // a task worked twenty times offered twenty of them (2026-10-28) - and each thing an agent made once, its newest (taskOutputs.deliverables)
+    ...deliverables([...pages, ...(outputs || []).filter((o) => !seen.has(String(o.name || "").toLowerCase()))]).made
+      .map((a) => a.kind === "output" ? { key: `output:${a.path}`, kind: "output", path: a.path, name: a.name }
+        : { key: `artifact:${a.id}`, kind: "artifact", id: a.id, name: a.name }),
+    ...(detail?.attachments || []).filter((a) => a.Path || a.saved || a.url)
+      .map((a) => ({ key: `attachment:${a.AttachmentId ?? a.id}`, kind: "attachment", id: a.AttachmentId ?? a.id, name: a.Name ?? a.name })),
+  ];
+};
 
 const Label = ({ children }) => <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: DIM, mb: 0.5 }}>{children}</Typography>;
 const field = { "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } };
@@ -35,12 +41,13 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
   const [channel, setChannel] = useState("email"), [from, setFrom] = useState("");
   const [to, setTo] = useState([]), [chat, setChat] = useState(null), [cc, setCc] = useState([]);
   const [about, setAbout] = useState(""), [picked, setPicked] = useState(() => new Set());
-  const [busy, setBusy] = useState(false), [err, setErr] = useState("");
-  const files = taskFiles(detail);
+  const [busy, setBusy] = useState(false), [err, setErr] = useState(""), [outputs, setOutputs] = useState([]);
+  const files = taskFiles(detail, outputs);
   const email = channel === "email";
   useEffect(() => {
     if (!open) return;
     setErr(""); setTo([]); setChat(null); setCc([]); setPicked(new Set()); setAbout("");
+    if (task?.TaskId) api.get(`/api/task-outputs/${task.TaskId}`).then(({ data }) => setOutputs(data?.data || [])).catch(() => setOutputs([]));
     api.get("/api/send-targets").then(({ data }) => {
       const list = (data.data || []).filter((t) => TASK_CHANNELS.includes(t.channel));
       setTargets(list); setChannel((c) => (list.some((t) => t.channel === c) ? c : list[0]?.channel || "email"));
@@ -56,7 +63,7 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
     setBusy(true); setErr("");
     try {
       await api.post(`/api/tasks/${task.TaskId}/emails`, email
-        ? { channel, to: to[0], cc, about, mailbox: from || null, attach: files.filter((f) => picked.has(f.key)).map(({ kind, id }) => ({ kind, id })) }
+        ? { channel, to: to[0], cc, about, mailbox: from || null, attach: files.filter((f) => picked.has(f.key)).map(({ kind, id, path }) => (kind === "output" ? { kind, path } : { kind, id })) }
         : { channel, to: chat.to, name: chat.name || "", about });
       onDrafted?.();
     } catch (e) { setErr(e?.response?.data?.detail || "Could not draft it"); }

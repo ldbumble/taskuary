@@ -14,7 +14,42 @@ export const attUrl = (a, download) => {
   if (String(a.url || "").startsWith("data:")) return a.url;   // the static demo carries its own bytes
   const t = localStorage.getItem("taskuary_token");
   const q = [download ? "download=true" : "", t ? `token=${encodeURIComponent(t)}` : ""].filter(Boolean).join("&");
-  return `${a.url}${q ? `?${q}` : ""}`;
+  return `${a.url}${q ? `${String(a.url).includes("?") ? "&" : "?"}${q}` : ""}`;   // a link that came with its own query keeps it
+};
+
+// what a refused file read said, from a JSON body or a Blob one (a preview asks for bytes, so its error comes back as a Blob too)
+export const fileError = async (e, fallback) => {
+  let d = e?.response?.data;
+  if (typeof Blob !== "undefined" && d instanceof Blob) { try { d = JSON.parse(await d.text()); } catch { d = null; } }
+  return (d && typeof d === "object" && d.detail) || fallback;
+};
+
+// SAVE A FILE, never navigate to it. A Download that was a plain link took the window to the file's address: a file moved or deleted
+// left the owner on a raw JSON 404 - and the desktop window has no Back. The server is asked first (HEAD); a file that is there is
+// saved by a link with `download`, so the page stays where it is; one that is not throws the server's own reason for the page to say.
+export const saveFile = async (a) => {
+  const href = attUrl(a, true);
+  if (!href.startsWith("data:") && typeof api.head === "function") {
+    // no-cache: the browser answered a HEAD from the copy a preview had fetched, so a file deleted since was still "there"
+    try { await api.head(a.url, { headers: { "Cache-Control": "no-cache" } }); }
+    catch (e) {
+      // a HEAD has no body to carry the reason: ask once more for it - a file that is gone answers in a few bytes
+      let why = "";
+      try { await api.get(a.url, { params: { download: true }, responseType: "blob", headers: { "Cache-Control": "no-cache" } }); }
+      catch (e2) { why = await fileError(e2, ""); }
+      throw new Error(why || (e?.response?.status === 404 ? "This file was moved or deleted." : "This file could not be saved - try again."));
+    }
+  }
+  const el = document.createElement("a");
+  // `download` empty: the server's Content-Disposition names it (a published page gets its .html there)
+  el.href = href; el.download = ""; el.rel = "noopener"; el.style.display = "none";
+  document.body.appendChild(el); el.click(); el.remove();
+};
+
+// [error, save]: a Download's press, and the line it leaves when the file is not there (cleared by the next press)
+export const useSave = () => {
+  const [err, setErr] = useState("");
+  return [err, (a) => { setErr(""); saveFile(a).catch((e) => setErr(e.message)); }];
 };
 
 const LOGO = 48 * 1024;   // a company logo in a signature runs 20-40 KB (24 KB let a 24.4 KB one draw as a picture)
@@ -58,6 +93,7 @@ export const Attachments = ({ messageId, canFetch, dense, original, asFiles = nu
   const [big, setBig] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [saveErr, save] = useSave();
   const load = () => api.get(`/api/messages/${messageId}/attachments`)
     .then(({ data }) => setItems(data.data || [])).catch(() => setItems([]));
   useEffect(() => { setItems(null); setBig(null); setErr(""); load(); }, [messageId]);
@@ -140,6 +176,7 @@ export const Attachments = ({ messageId, canFetch, dense, original, asFiles = nu
             <Box key={a.id} component={hrefOf(a, original) ? "a" : "div"} href={hrefOf(a, original)} data-tq-linked-doc={a.link ? "" : undefined}
               data-tq-unsaved={!a.link && !a.url ? "" : undefined}
               target="_blank" rel={a.link || !a.url ? "noopener noreferrer" : "noopener"} title={titleOf(a, original)}
+              onClick={!a.link && a.url ? (e) => { e.preventDefault(); save(a); } : undefined}
               sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.9, py: 0.4, borderRadius: 1.5,
                 border: `1px solid ${BORDER}`, bgcolor: PANEL2, textDecoration: "none", maxWidth: "min(260px, 100%)", boxSizing: "border-box",
                 cursor: hrefOf(a, original) ? "pointer" : "default", opacity: hrefOf(a, original) ? 1 : 0.6,
@@ -152,6 +189,7 @@ export const Attachments = ({ messageId, canFetch, dense, original, asFiles = nu
             </Box>
           ))}
         </Box>
+        {saveErr && <Typography variant="caption" data-tq-file-error="" sx={{ display: "block", mt: 0.5, color: DIM }}>{saveErr}</Typography>}
         </Box>
       )}
       {/* full size, on top of everything - a screenshot of a spreadsheet is unreadable inline */}
@@ -162,7 +200,8 @@ export const Attachments = ({ messageId, canFetch, dense, original, asFiles = nu
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
               <Typography variant="caption" sx={{ color: INK, fontWeight: 600, flex: 1 }}>{big.name}</Typography>
               <Typography variant="caption" sx={{ color: FAINT }}>{kb(big.size)}</Typography>
-              <Button size="small" startIcon={<DownloadIcon sx={{ fontSize: 15 }} />} href={attUrl(big, true)}>Save</Button>
+              <Button size="small" startIcon={<DownloadIcon sx={{ fontSize: 15 }} />} href={attUrl(big, true)}
+                onClick={(e) => { e.preventDefault(); save(big); }}>Save</Button>
             </Box>
             <Box component="img" src={attUrl(big)} alt={big.name}
               sx={{ display: "block", maxWidth: "88vw", maxHeight: "82vh", objectFit: "contain" }} />

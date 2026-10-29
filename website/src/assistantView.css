@@ -940,8 +940,8 @@
    alike, so opening only adds the conversation above it. The box is only the place the card stands */
 .tq-chat-unit > .tq-compose-box { position: relative; width: 100%; box-sizing: border-box; margin: 0; min-height: 0; padding: 0; gap: 0; border: 0; border-radius: 0;
   background: transparent; box-shadow: none; }
-.tq-chat-unit > .tq-compose-box > .tq-compose-field { flex: 1; min-width: 0; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas: "words send" "tools model"; align-items: center; gap: 0 4px; padding: 4px 6px 3px 6px; border: 1px solid #d5d0c7; border-radius: 16px;
+.tq-chat-unit > .tq-compose-box > .tq-compose-field { flex: 1; min-width: 0; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: "words words send" "tools model model"; align-items: center; gap: 0 4px; padding: 4px 6px 3px 6px; border: 1px solid #d5d0c7; border-radius: 16px;
   background: #fff; box-shadow: 0 4px 16px #39352d1f, 0 1px 3px #39352d10; transition: border-color .12s, box-shadow .12s; }
 .tq-chat-unit > .tq-compose-box > .tq-compose-field:hover { border-color: #b5aea3; }
 .tq-chat-unit > .tq-compose-box > .tq-compose-field:focus-within { border-color: #55697a; box-shadow: 0 0 0 3px #55697a29; }
@@ -954,7 +954,7 @@
 .tq-chat-unit > .tq-compose-box .tq-compose-tools > * { flex: 0 0 auto; }
 .tq-chat-unit > .tq-compose-box .tq-compose-tools .MuiIconButton-root { width: 28px !important; height: 28px !important; }
 .tq-chat-unit > .tq-compose-box .tq-compose-tools svg { font-size: 17px !important; }
-.tq-chat-unit > .tq-compose-box .tq-send { grid-area: send; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; background: #55697a; transition: background-color .12s, color .12s; }
+.tq-chat-unit > .tq-compose-box .tq-send { grid-area: send; justify-self: end; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; background: #55697a; transition: background-color .12s, color .12s; }
 .tq-chat-unit > .tq-compose-box .tq-send:disabled { opacity: 1; background: #ebe8e2; color: #a19b91; }
 .tq-model-pick { grid-area: model; justify-self: end; display: inline-flex; align-items: center; gap: 3px; max-width: 180px; height: 24px; padding: 0 6px; border: 0;
   border-radius: 8px; background: transparent; color: #6e685f; font: 500 11.5px/1 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; white-space: nowrap; }

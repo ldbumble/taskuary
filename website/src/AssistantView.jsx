@@ -3327,7 +3327,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // stands while the table holds a walk item with a row above it on the rail; Next goes when the walk's own selection for this table
   // (selectionRef, captured for exactly this item) names nothing below it. A section walk picks its own next (sectionNext): Next stays
   const backTo = table.speaks && !firstRun && !old && !walk && currentItem ? backFrom(pile?.items, currentItem, isDown, lastReportRef.current) : null;
-  useVerbs("nav", [{ id: BACK, group: "back", label: btn("back"), title: btnHint("back"), run: () => goBack() }], !!backTo);
+  // ...and on a desk Back is ALWAYS on the bar, greyed where there is nowhere to go back to (the owner, 2026-10-29: the bar is Back and Next)
+  useVerbs("nav", [{ id: BACK, group: "back", label: btn("back"), title: btnHint("back"), disabled: !backTo, why: "nothing above this one",
+    run: () => backTo && goBack() }], !!backTo || (deskChat && !firstRun));
   const sel = selectionRef.current;
   const atEnd = !!current && table.speaks && !sectionRef.current && !!sel && sel.scope?.exclude === current
     && !sel.expected_next_key && !(sel.expected_next_members || []).length;
@@ -3498,7 +3500,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const field = el.querySelector(".tq-compose-field");
     const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect(), pos = getComputedStyle(el).position, open = el.hasAttribute("data-tq-open"), over = open && (pos === "absolute" || pos === "fixed");
-      const inBar = open && field && (getComputedStyle(field).position === "absolute" || !!el.closest(".tq-chat-unit"));
+      // ...on a desk the card is the window's floor at rest and open alike, one size: it is measured as that floor always, since opening
+      // it changes nothing an observer would see
+      const inBar = !!field && ((open && getComputedStyle(field).position === "absolute") || !!el.closest(".tq-chat-unit"));
       setBoxNarrow(r.width < 360); setBoxH(inBar ? Math.round(field.getBoundingClientRect().height) : over ? Math.round(r.height) : 0);
       el.closest(".tq-compose")?.style.setProperty("--tq-box-h", over ? `${Math.round(r.height) + (pos === "fixed" ? 0 : 6)}px` : "-2px");
     });
@@ -3627,7 +3631,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       onMouseDown={(e) => e.preventDefault()} onFocus={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setModelEl(e.currentTarget); }}>
       <span>{state?.providers?.length ? state?.provider || "AI" : state?.scripted ? "Scripted demo" : "No AI connected"}</span> ▾</button>}
     </div>
-    {chatApart && <Menu open={!!modelEl} anchorEl={modelEl} onClose={() => setModelEl(null)} anchorOrigin={{ vertical: "top", horizontal: "right" }}
+    {/* ...its focus kept to itself: a portal's focus bubbles up the React tree, and the box's own onFocus opened the chat window */}
+    {chatApart && <Menu open={!!modelEl} anchorEl={modelEl} onClose={() => setModelEl(null)} onFocus={(e) => e.stopPropagation()} anchorOrigin={{ vertical: "top", horizontal: "right" }}
       transformOrigin={{ vertical: "bottom", horizontal: "right" }} slotProps={{ paper: { sx: { minWidth: 220, borderRadius: 2 } } }}>
       {(state?.providers || []).map((p) => {
         const dflt = p.pick === state?.defaultPick;

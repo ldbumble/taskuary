@@ -477,10 +477,48 @@ function PaneMoves({ sec, skip = () => false }) {
   return <Box data-tq-pane-moves={sec} role="group" aria-label={`${SEC_NAME[sec]} moves`} sx={{ display: "flex", gap: 0.75, flexWrap: "nowrap", minWidth: 0, overflow: "hidden" }}>
     {vs.map((v) => stageBtn(v))}</Box>;
 }
+// THE TASK'S OWN MOVES, ON ITS TITLE BAR (the owner, 2026-10-29: the bar is Back and Next alone): Mark done first, then what acts on the
+// whole task - Close with a note, Attach a file, a card's own words - Change (its moves behind one ▾) and Share, at the right before the
+// status pill. One line: what does not fit folds into a ▾ from the end, never Mark done
+function HeadMoves() {
+  const moves = useSpineVerbs("head"), change = useSpineVerbs("change"), share = useSpineVerbs("share");
+  const items = [...moves.map((v) => ({ key: v.id, v })), ...(change.length ? [{ key: "change", change }] : []), ...share.map((v) => ({ key: v.id, v }))];
+  const box = useRef(null), [n, setN] = useState(99), [at, setAt] = useState(null), [chAt, setChAt] = useState(null);
+  const sig = items.map((x) => `${x.key}:${x.v?.label || ""}:${x.v?.tone || ""}`).join("|");
+  useLayoutEffect(() => { setN(99); }, [sig]);
+  useLayoutEffect(() => { const b = box.current; if (b && n > 1 && b.scrollWidth > b.clientWidth + 1) setN((k) => Math.min(k, items.length) - 1); });
+  useEffect(() => {
+    const b = box.current?.parentElement;
+    if (!b || typeof ResizeObserver === "undefined") return undefined;
+    let w = b.clientWidth;
+    const ro = new ResizeObserver(() => { if (Math.abs(b.clientWidth - w) > 2) { w = b.clientWidth; setN(99); } });
+    ro.observe(b);
+    return () => ro.disconnect();
+  }, []);
+  if (!items.length) return null;
+  const shown = items.slice(0, n), folded = items.slice(n);
+  const menuItems = folded.flatMap((x) => (x.change ? x.change : [x.v]));
+  return (
+    <Box ref={box} data-tq-head-moves="" role="group" aria-label="What to do with this task" onClick={(e) => e.stopPropagation()}
+      sx={{ display: "flex", alignItems: "center", gap: 0.6, flex: "0 1 auto", minWidth: 0, maxWidth: "62%", overflow: "hidden", "& .tq-ab": { minHeight: 26, fontSize: 12, px: 1.25, flexShrink: 0 } }}>
+      {shown.map((x) => (x.change
+        ? <button key="change" type="button" className="tq-ab s" aria-haspopup="menu" aria-expanded={!!chAt} data-tq-more="change"
+            title="Split or merge, who does it, the priority, who it is assigned to" onClick={(e) => setChAt(e.currentTarget)}>{"Change ▾"}</button>
+        : stageBtn(x.v)))}
+      {folded.length > 0 && <button type="button" className="tq-ab s" aria-label="More" aria-haspopup="menu" data-tq-more="head" onClick={(e) => setAt(e.currentTarget)}>▾</button>}
+      <Menu open={!!chAt} anchorEl={chAt} onClose={() => setChAt(null)}>
+        {change.map((v) => <MenuItem key={v.id} dense disabled={v.disabled} data-tq-verb={v.id} sx={{ fontSize: 12.5 }}
+          onClick={(e) => { const a = chAt; setChAt(null); press(v.id, e, a, v.of); }}>{v.label}</MenuItem>)}</Menu>
+      <Menu open={!!at} anchorEl={at} onClose={() => setAt(null)}>
+        {menuItems.map((v) => <MenuItem key={v.id} dense disabled={v.disabled} data-tq-verb={v.id} sx={{ fontSize: 12.5 }}
+          onClick={(e) => { const a = at; setAt(null); press(v.id, e, a, v.of); }}>{v.label}</MenuItem>)}</Menu>
+    </Box>);
+}
 const STRIP_ARROW = { appearance: "none", font: "inherit", cursor: "pointer", width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0,
   fontSize: 15, lineHeight: 1, border: `1px solid ${BORDER}`, bgcolor: "#fff", color: ACCENT, p: 0,
   "&:hover": { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } };
-export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, onStop }) {
+export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, onStop, onClose }) {
+  const liveMoves = useSpineVerbs("live");
   const arrows = FOLD[sec].map(([side, mark, to]) => ({ side, mark, to: fold(to) }));
   const arrow = (a) => <Box key={a.side} component="button" type="button" data-tq-strip-fold={a.side} aria-label={`Fold ${SEC_NAME[sec]} back`}
     title={`Fold ${SEC_NAME[sec]} back to its tab`} sx={live ? { ...STRIP_ARROW, width: 22, height: 22, fontSize: 13 } : STRIP_ARROW} onClick={() => onFold(a.to)}>{a.mark}</Box>;
@@ -490,8 +528,11 @@ export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, 
       {arrows.filter((a) => a.side === "left").map(arrow)}
       {!live && <Typography sx={{ ...SECTION_NAME, flexShrink: 0 }}>{SEC_NAME[sec]}</Typography>}
       <Box sx={{ flex: 1, minWidth: 0, display: "flex", justifyContent: live ? "flex-end" : "flex-start" }}>
-        {live ? onStop && <Tooltip title={btn("stop_agent")}><IconButton size="small" data-tq-strip-stop="" aria-label={btn("stop_agent")} onClick={onStop}
-            sx={{ width: 24, height: 24, color: ACCENT, border: `1px solid ${BORDER}` }}><StopCircleOutlinedIcon sx={{ fontSize: 15 }} /></IconButton></Tooltip>
+        {live ? <Box sx={{ display: "flex", gap: 0.5 }}>
+            {onStop && liveMoves.some((v) => !v.disabled) && <Tooltip title={btn("stop_agent")}><IconButton size="small" data-tq-strip-stop="" aria-label={btn("stop_agent")} onClick={onStop}
+              sx={{ width: 24, height: 24, color: ACCENT, border: `1px solid ${BORDER}` }}><StopCircleOutlinedIcon sx={{ fontSize: 15 }} /></IconButton></Tooltip>}
+            {onClose && <Tooltip title="Back to the task - the session keeps running"><IconButton size="small" data-tq-strip-close="" aria-label="Back to the task"
+              onClick={onClose} sx={{ width: 24, height: 24, color: ACCENT, border: `1px solid ${BORDER}` }}><CloseIcon sx={{ fontSize: 14 }} /></IconButton></Tooltip>}</Box>
           : <PaneMoves sec={sec} skip={skip} />}
       </Box>
       {arrows.filter((a) => a.side === "right").map(arrow)}
@@ -1567,7 +1608,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         ...(stripOn(k) ? { "& > [role=region]": { top: `${stripH(k)}px` }, "& > [role=region] [data-tq-section-head]": { display: "none" } } : {}) }}>
         {section !== k && tabFor(k)}
         {stripOn(k) && <PaneStrip sec={k} live={sessionView && k === "agent"} skip={stripSkip[k]} fold={foldTo(k)} onFold={openSection}
-          onStop={sessionView && k === "agent" ? () => press("save-end") : null} />}
+          onStop={sessionView && k === "agent" ? () => press("save-end") : null}
+          onClose={sessionView && k === "agent" ? () => setPeek(true) : null} />}
         {body}</Box>);
   // ...the open section draws its half of the work: the Agent its own, Close out the reply; Came from leaves the halves as they were
   const pane = section === "agent" ? "agent" : section === "close" ? "reply" : (stacked && !openStage && paneOfMove(litMove)) || paneRest;
@@ -2474,6 +2516,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   )}
                   {/* THE STATUS, TOP RIGHT: the rail's own mark and word for this task (railStatus.taskStatus) - its logo ringed while an
                       agent works. A task Taskuary closed under a working agent says so on its hover (the list row's "agent stopped"). */}
+                  {inRow && threeUp && !sessionView && <HeadMoves />}
                   <StatusPill status={status} agent={agentName(t)} note={interruptedTask ? INTERRUPTED : ""}
                     logo={<ChannelIcon channel={rail?.channel || t.Source || "email"} sx={{ fontSize: 13 }} />} />
                   {/* ON THE ASSISTANT CANVAS Expand gives the view the whole canvas - the pane keeps its size either way.

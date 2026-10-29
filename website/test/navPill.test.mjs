@@ -97,7 +97,8 @@ test("Back from the first FYI goes to the last report the walk read; from a late
 
 test("the view registers Back beside the floor and runs it as a row pick; Next is hidden on the last one only from the walk's own capture", () => {
   const view = fs.readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
-  assert.match(view, /useVerbs\("nav", \[\{ id: BACK, group: "back", label: btn\("back"\), title: btnHint\("back"\), run: \(\) => goBack\(\) \}\], !!backTo\);/);
+  // ...and on a desk Back is always there, greyed where there is nowhere to go back to (the owner, 2026-10-29)
+  assert.match(view, /useVerbs\("nav", \[\{ id: BACK, group: "back", label: btn\("back"\), title: btnHint\("back"\), disabled: !backTo, why: "nothing above this one",\s+run: \(\) => backTo && goBack\(\) \}\], !!backTo \|\| \(deskChat && !firstRun\)\);/);
   assert.match(view, /const up = backFrom\(pileRef\.current\?\.items, currentRef\.current, isDown, lastReportRef\.current\);/);
   assert.match(view, /return surface\(up\.key, null\);/, "the same road as a rail click: one draw, the ring follows");
   assert.match(view, /if \(busy \|\| turnFlight\.current\) \{ backHeld\.current = true;/, "a Back over a move in flight waits for it, and runs once");

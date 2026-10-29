@@ -18,10 +18,13 @@ test("each move's pane: the agent's, the reply's and the hand-off, where it came
   assert.equal(stageOf(v("run-another", "agent")), "agent");
 });
 
-test("with the panes laid the bar keeps the task's moves; the stage moves go to their pane, Draft reply its folded word", () => {
+test("with the panes laid the bar is Back and Next alone: the task's moves go to its title bar, the stage moves to their pane", () => {
   const { row, by } = splitRow(rowOf({ ref: "TQ-1", list: task }), { live: false, open: "from" }, task);
-  assert.deepEqual(ids(row).sort(), ["close-note", "done", "reshape", "share"].sort());
+  assert.deepEqual(ids(row), [], "nothing but Back and Next on the bar");
   assert.ok(row.next, "Next stays");
+  assert.deepEqual(by.head.map((x) => x.id), ["done", "close-note"], "Mark done first on the title bar");
+  assert.deepEqual(by.change.map((x) => x.id), ["reshape"]);
+  assert.deepEqual(by.share.map((x) => x.id), ["share"]);
   assert.deepEqual(by.agent.map((x) => x.label), ["Send to agent"]);
   assert.deepEqual(by.close.map((x) => x.spine || x.label), ["Draft reply", "hand"]);
   assert.deepEqual(by.from.map((x) => x.id).sort(), ["nat", "remind"]);
@@ -33,12 +36,13 @@ test("a draft's Redraft stands for it on the spine, lit when it is the pick; Rep
   assert.deepEqual(by.close.map((x) => [x.label, x.tone]), [["Redraft", "p"], ["hand", "s"]]);
 });
 
-test("a live agent's bar is Stop and save alone, Back and Next beside it", () => {
+test("a live agent's bar is Back and Next; its Stop and save is on its pane's strip", () => {
   const list = [v("save-end", "agent", { label: "Stop and save" }), v("diff", "agent"), v("run-another", "agent"), v("done", "more", { beside: true }), v("next", "next")];
   const { row, by } = splitRow(rowOf({ ref: "TQ-1", list }), { live: true, open: "agent" }, list);
-  assert.deepEqual(ids(row), ["save-end"]);
+  assert.deepEqual(ids(row), []);
   assert.ok(row.next);
-  assert.deepEqual(by, {});
+  assert.deepEqual(Object.keys(by), ["live"]);
+  assert.deepEqual(by.live.map((x) => x.id), ["save-end"]);
 });
 
 test("where no panes are laid (a phone, the Tasks tab) the row is as it was", () => {

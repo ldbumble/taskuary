@@ -66,7 +66,7 @@ def draft_message(store, channel: str, to, about: str, resolution: str = None, l
     signature, so mail from a second mailbox went out under the first one's hat."""
     from .knowledge import block as kb_block
     from .llm import build_llm
-    from .responder import email_rule, signature_for, signed, strip_signoff
+    from .responder import email_rule, own_lines, signature_for, signed, strip_signoff
     llm = llm or build_llm(store, job='draft')
     if not llm: raise RuntimeError('no AI connector is set up to write messages')
     ident, soul, sty, lrn, brevity, chat, _ = _voice(store)
@@ -92,7 +92,7 @@ def draft_message(store, channel: str, to, about: str, resolution: str = None, l
     if kb: user += kb
     out = str(llm(system, user, max_tokens=DRAFT_TOKENS) or '').strip()
     if not out: raise RuntimeError('the AI returned an empty message')
-    return strip_signoff(out) if is_chat else signed(out, signature_for(store, mailbox))
+    return (strip_signoff(out, own_lines(store)) or out) if is_chat else signed(out, signature_for(store, mailbox))
 
 
 def subject_for(store, about: str, llm=None) -> str:

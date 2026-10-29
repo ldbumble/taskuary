@@ -64,6 +64,24 @@ class FinishCheckTests(_Rail):
         self.assertEqual((d['state'], d['line'], d['by']), ('draft_ready', miss, 'check'), d)
         self.assertEqual(d['fix']['label'], 'Redraft with this'); self.assertNotEqual(d['verb'], 'approve', 'a gap never lights Send')
 
+    def test_a_redraft_is_read_again_and_the_redraft_it_satisfied_goes_dark(self):
+        """A redraft keeps its review, so the revision never moved: "Redraft: it promises an invite" stood over a redraft that had dropped
+        the promise (walk 2026-10-29). The draft's own words are in the revision now - the check reads the CURRENT draft, and judges it."""
+        from taskuary.testing import Factory
+        s = MemoryStore(); t = self._stopped(s)
+        rid = Factory(s).review(t, s.list_messages(t)[-1]['MessageId'], draft='The export moved; I will send an invite.'); funnel.invalidate()
+        miss = 'It promises an invite nothing sets up'
+        advisor.finish_check(s, t, wait=True, llm=brain_saying({'verdict': 'draft_misses', 'line': miss, 'evidence': []}))
+        self.assertEqual(self._decide(s, t)['line'], miss)
+        before = advisor.revision(s, 'task', t)
+        s.update_review_draft(rid, 'The export moved to the new share.', None); funnel.invalidate()
+        self.assertNotEqual(advisor.revision(s, 'task', t), before)
+        llm = brain_saying({'verdict': 'nothing', 'line': '', 'evidence': []})
+        advisor.finish_check(s, t, wait=True, llm=llm)
+        self.assertIn('The export moved to the new share.', llm.calls[0][1]); self.assertNotIn('send an invite', llm.calls[0][1])
+        d = self._decide(s, t)
+        self.assertNotEqual(d['line'], miss); self.assertNotEqual((d.get('fix') or {}).get('label'), 'Redraft with this')
+
     def test_an_answered_check_leaves_the_rules_mark_done_with_its_reason(self):
         s = MemoryStore(); t = self._stopped(s)
         s._exec("UPDATE run SET Result='The export moved to the new share.', FinishedAt=? WHERE TaskId=?",

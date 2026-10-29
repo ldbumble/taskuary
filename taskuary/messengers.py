@@ -599,7 +599,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
                     'external_id': f"whatsapp:{jid}:{m.get('id')}", 'channel': 'whatsapp', 'subject': None,
                     'body': m['text'].strip(), 'from_email': None, 'conversation_id': f'whatsapp:{jid}',
                     'sent_at': datetime.fromtimestamp(m.get('ts') or 0).strftime('%Y-%m-%d %H:%M:%S'),
-                    'source_name': where(m, jid)},
+                    'source_name': where(m, jid), 'quoted': (m.get('quoted') or '').strip() or None},
                     'your line in this chat - kept for context')
             took.append(m.get('id'))
             continue

@@ -118,6 +118,13 @@ export const isWatchingTask = (tab, selected, tid) => tab === "Tasks" && Number(
 export const handRaiseWhat = (raise) => raise.finished ? `${raise.agent} finished` : raise.line || says(subState(raise), raise.agent);
 
 export const enqueueHandRaise = (queue, raise) => [...(queue || []), raise];
+// ...and a queued hand whose session has gone from the live rows is let go (the email walk, 2026-10-29: a task deleted while its agent
+// asked still popped "asked you" with an Open to nowhere). A finished one is about a session that has gone: it stays.
+export const pruneHandRaises = (queue, rows) => {
+  const live = new Set((rows || []).map((r) => Number(r.TaskId)));
+  const q = queue || [], kept = q.filter((r) => r.finished || live.has(Number(r.tid)));
+  return kept.length === q.length ? q : kept;
+};
 export const dismissHandRaise = (queue) => (queue || []).slice(1);
 
 // setInterval does not wait for promises. Without this gate, an older slow response can land

@@ -936,6 +936,15 @@ class CoreTests(unittest.TestCase):
         s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'Reason': 'late'})
         self.assertEqual(s.list_reviews('pending'), [])
 
+    def test_a_deleted_task_leaves_no_question_open(self):
+        # the email walk, 2026-10-29: "Remove - not a task" while its agent asked, and the question still raised its toast
+        from taskuary import workerstate as ws
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Which requisitions are budgeted?'}, 'o')
+        ws.record(s, tid, 'g1', 'input_needed', text='Is any of it new spend?', source='api')
+        s.delete_task(tid)
+        self.assertEqual(s.worker_events(tid), [])
+
     def test_startup_heals_stacked_pending_reviews(self):
         import tempfile, os
         from taskuary.store import SQLiteStore

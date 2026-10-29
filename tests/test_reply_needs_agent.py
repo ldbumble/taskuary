@@ -183,17 +183,19 @@ def test_needs_leaves_no_draft_and_starts_the_general_agent():
     assert 'the reply writer said it needs the October invoice run' in ingest.reply_job(s, tid)
 
 
-def test_a_placeholder_is_never_a_draft_even_on_a_short_mail():
+def test_a_short_mail_the_writer_cannot_answer_is_no_draft():
+    """The writer says it can't answer (its NEEDS) - its judgement, not a phrase list (the owner, 2026-10-28) - so no draft is
+    parked and the work goes to the agent."""
     s = store(); tid = reply_task(s)
-    llm, calls = writer("Hi Erin,\n\nThanks for flagging. I have to look into it and will send that separately.\n\nAlex")
+    llm, calls = writer('NEEDS: the export logs, to see why the total moved')
     rv, spawned = drafted(s, tid, llm)
-    assert len(calls) == 2 and not (rv.get('DraftText') or '').strip()                 # asked once more, then no draft
-    assert 'only promised to look into it later' in rv['DraftError'] and spawned == ['_auto_general']
+    assert len(calls) == 1 and not (rv.get('DraftText') or '').strip()
+    assert 'needs the export logs' in rv['DraftError'] and spawned == ['_auto_general']
 
 
-def test_a_placeholder_with_auto_start_off_lights_send_to_agent_with_the_reason():
+def test_a_reply_it_cannot_write_with_auto_start_off_lights_send_to_agent_with_the_reason():
     s = store(general_auto_enabled='0'); tid = reply_task(s)
-    rv, spawned = drafted(s, tid, writer("I'll take a look and get back to you.")[0])
+    rv, spawned = drafted(s, tid, writer('NEEDS: the export logs')[0])
     assert spawned == [] and s.get_task(tid)['Kind'] == 'reply'
     assert 'An agent can work it out' in rv['DraftError']
     assert any(x.startswith('No agent started:') for x in lines(s, tid))
@@ -204,17 +206,6 @@ def test_a_quick_fact_is_still_drafted_at_once():
     rv, spawned = drafted(s, tid, writer('Hi Erin,\n\nYes - Tuesday from 2 works for me.\n\nAlex')[0])
     assert 'Tuesday from 2 works' in rv['DraftText'] and not rv.get('DraftError') and spawned == []
     assert s.get_task(tid)['Kind'] == 'reply'
-
-
-@pytest.mark.parametrize('text,want', [
-    ("Thanks Erin, this looks like a solid start. I'll go through it properly and send you my thoughts.", True),
-    ('Hi Erin,\n\nGood work overall. I\'m looking into it and will get back to you.\n\nAlex', True),
-    ('Noted. I have to look into it and will send that separately.', True),
-    ('Makes sense to me. I will review it tonight.', True),                        # one short aside beside the promise
-    ('Yes, the totals match for 3 of the 4 sites. I will check the last one tomorrow.', False),    # a figure is an answer
-    ('Two things:\n- Lead with the churn numbers.\n- I\'ll check the support figure with Gail.', False),   # a list is an answer
-    ('Yes - Tuesday from 2 works for me.', False)])
-def test_mostly_a_promise(text, want): assert responder.promise_only(text, 'Alex Doyle') is want
 
 
 # ── the add-on: a webinar invite and its banter are one task under one title, with the offer one press away ────────────────

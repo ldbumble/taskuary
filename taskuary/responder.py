@@ -111,45 +111,14 @@ FEEDBACK = ('FEEDBACK: when they ask for your thoughts, feedback, a review or a 
             'something you do not have (a file that did not come through, a figure only someone else knows), write exactly '
             f'{NEEDS} and one line, for your own eyes and not theirs, saying what is missing - nothing else.\n')
 
-# ...and said of the REPLY, never of the mail: what they asked is the model's to read (no hardcoded words for intent). A reply
-# that is mostly a promise to look later is drafted once more and then failed with the reason on the card - never parked as ready
-# to send, whatever the mail carried (the owner, 2026-10-28). Only the owner's own instruction may promise.
-_LATER = re.compile(r"\b(i'?ll|i will|let me|i'?m going to|i am going to|will)\b[^.!?\n]{0,60}?\b(review|look|go through|read|check|"
-                    r"get back|circle back|come back|follow up|revert|send (that |this |it )?separately|"
-                    r"send (you )?(over )?(my|some) (thoughts|feedback|comments|notes)|share (my |some )?(thoughts|feedback|comments))"
-                    r"|\b(i'?m|i am|we'?re|we are) (now |currently )?(looking|checking|reviewing|digging|working on)\b"
-                    r"|\b(i|we) (have|need) to (look|check|review|dig|go through|confirm)\b", re.I)
-_FILLER = re.compile(r"^(thanks|thank you|many thanks|appreciate (it|this|you)|got it|sounds good|great|noted|good (stuff|work)|nice( work)?|"
-                     r"(this|it) (looks|sounds|reads) (good|great|fine|helpful|interesting|like a (good|solid|great) start)|"
-                     r"let me know if|happy to help|hope (you|this|that|all))\b[^.!?\n]{0,60}[.!?]*$", re.I)
-_GREETING = re.compile(r'^(hi|hello|hey|dear|good (morning|afternoon|evening))\b[^\n]{0,40}$', re.I)
 SUBSTANCE = 400          # the sender's own words (or a readable file) long enough that there is something in front of the writer
 FEEDBACK_TOKENS = 700    # a few specific points need more room than a two-line answer
-ASIDE = 60               # "mostly a promise": the one sentence beside it is no longer than this, and carries no figure
-PROMISE_ONLY = ('the draft only promised to look into it later - that is no answer, so it was not drafted. '
-                'An agent can work it out and draft the reply, or Redraft and say what to tell them')
 
 
 class NotDrafted(RuntimeError):
-    """The writer could not answer from what it had - it said what it NEEDS, or would only promise to look later. No draft exists;
-    the reason is the owner's, and a reply task is handed to an agent that does the work (ingest.hand_reply_to_agent)."""
+    """The writer could not answer from what it had - it said what it NEEDS, its own judgement. No draft exists; the reason is the
+    owner's, and a reply task is handed to an agent that does the work (ingest.hand_reply_to_agent)."""
 
-
-def promise_only(text: str, sig: str = '') -> bool:
-    """True when a reply is MOSTLY a promise to look, review or get back later: greeting, thanks, a compliment and the signature aside,
-    and at most one short sentence beside it that says nothing checkable. A list or a figure is an answer."""
-    body = str(text or '').strip()
-    if sig and sig.strip() and body.endswith(sig.strip()): body = body[:-len(sig.strip())].rstrip()
-    body = strip_signoff(body) or body
-    lines = [l.strip() for l in body.splitlines() if l.strip()]
-    if lines and _GREETING.match(lines[0]): lines = lines[1:]
-    if any(re.match(r'^([-*•]|\d+[.)])\s', l) for l in lines): return False
-    sents = [x.strip() for l in lines for x in re.split(r'(?<=[.!?])\s+', l) if x.strip()]
-    if not sents or sum(map(len, sents)) > 400: return False
-    later = [x for x in sents if _LATER.search(x)]
-    rest = [x for x in sents if not _LATER.search(x) and not _FILLER.match(x)]
-    return bool(later) and (not rest or (len(rest) == 1 and len(rest[0]) <= ASIDE and not re.search(r'\d', rest[0])
-                                         and len(rest[0]) < sum(map(len, later))))
 # the agent has already closed the thread: this reply reports an outcome, never promises one
 # the owner said what this reply says. Every caller that passes one passes THEIR words - the chase that wrote follow-ups is
 # gone - and framing them as a follow-up ("nudge in one or two sentences") under "why you are writing again" made "thanks,
@@ -399,24 +368,16 @@ def _ask(llm, system, user, max_tokens, images=None):
         except TypeError: pass
     return llm(system, user, max_tokens=max_tokens)
 
-AGAIN = ('\n\n--- YOUR FIRST DRAFT only promised to look into this later - that is no answer and it is never sent. Answer it now from '
-         f'what is above - for something they sent, your specific points on it - or, if it truly needs work first, write {NEEDS} and '
-         'what work it needs.')
-
-
 def _answer(llm, system, user, max_tokens, images=None, guard=False, sig=''):
-    """The writer's text, held to two rules: NEEDS (it cannot answer without work or something it lacks) fails the draft with what
-    is missing, said to the owner; and, under `guard`, a reply that is mostly a promise to look later is asked for once more, then
-    failed (PROMISE_ONLY). Both raise NotDrafted - no placeholder is ever parked as a draft."""
-    for again in (False, True):
-        out = (_ask(llm, system, user + (AGAIN if again else ''), max_tokens, images) or '').strip()
-        if not out: raise RuntimeError('the AI returned an empty reply')
-        if out.upper().startswith(NEEDS):
-            why = ' '.join(out[len(NEEDS):].split())[:240] or 'something it does not have'
-            raise NotDrafted(f'not drafted - it needs {why.rstrip(".")}. An agent can work it out and draft the reply, or Redraft with it')
-        if not (guard and promise_only(out, sig)): return out
-        logger.info('the draft only promised to look later' + (' again - failing it' if again else ' - asking once more'))
-    raise NotDrafted(PROMISE_ONLY)
+    """The writer's text - or NotDrafted when the writer ITSELF says it cannot answer (its NEEDS token: work, or something it lacks),
+    said to the owner and handed on. Whether a reply really answers is the model's judgement, told in its prompt - never a word list
+    run over its text (the owner, 2026-10-28: "never ever use hard coded words ... AI should be doing this ... it's brittle")."""
+    out = (_ask(llm, system, user, max_tokens, images) or '').strip()
+    if not out: raise RuntimeError('the AI returned an empty reply')
+    if out.upper().startswith(NEEDS):
+        why = ' '.join(out[len(NEEDS):].split())[:240] or 'something it does not have'
+        raise NotDrafted(f'not drafted - it needs {why.rstrip(".")}. An agent can work it out and draft the reply, or Redraft with it')
+    return out
 
 
 def _to_cc(store, m: dict) -> str:

@@ -142,6 +142,48 @@ class EmailThreadReplies(unittest.TestCase):
         self.assertEqual(s.get_task(tid)['Title'], 'Send Erin the Q4 budget sheet')
 
 
+class GroupJoinIsSaidOutright(unittest.TestCase):
+    """2026-10-29: two days of one colleague's lines in a group - product questions, an offer to come by, a meeting time, a feed that
+    would not show - joined one task. Triage read each as `continues` the line before it without saying it was that task's ask, and a
+    line it read as new was still named `same_as` the room's task (the sender's open work). In a group a join is same_problem true."""
+    def setUp(self):
+        self.s = MemoryStore(); self.s.set_setting('owner_email', 'alex@northwind.example', 't')
+        self.tid = say(self.s, 'w1', ONBOARD, '2026-10-28 08:05:00', brain(SCRIPT))[0]['task_id']
+
+    def test_a_continues_left_unsaid_in_a_group_is_its_own_task(self):
+        out, _ = say(self.s, 'w2', 'Want me to come by today?', '2026-10-28 08:20:00',
+                     brain({'Want me to come by today?': {'relationship': 'continues', 'existing_task_id': self.tid, 'intent': 'reply_only',
+                                                          'title': 'Gail offers to come by'}}), who='Gail Moreno')
+        self.assertEqual(out['status'], 'created'); self.assertNotEqual(out['task_id'], self.tid)
+        self.assertIn('uncertain whether it continues', self.s.message_routes(out['message_id'])[-1]['Reason'])
+
+    def test_a_new_line_named_same_as_the_rooms_task_does_not_join_it(self):
+        out, _ = say(self.s, 'w2', 'The feed is not showing for me', '2026-10-28 08:30:00',
+                     brain({'The feed is not showing for me': {'relationship': 'new', 'same_as': self.tid, 'title': 'Feed not showing'}}))
+        self.assertEqual(out['status'], 'created'); self.assertNotEqual(out['task_id'], self.tid)
+        self.assertEqual(sum(1 for m in self.s.thread_messages(ROOM) if m['TaskId'] == self.tid), 1)
+
+    def test_same_problem_is_kept_on_the_route(self):
+        out, _ = self.joined()
+        self.assertIs(json.loads(self.s.message_routes(out['message_id'])[-1]['VerdictJson'])['same_problem'], True)
+
+    def joined(self):
+        return say(self.s, 'w2', 'Also on that - they both need laptops by Monday', '2026-10-28 08:20:00', brain(SCRIPT))
+
+    def test_said_outright_it_joins(self):
+        out, _ = self.joined()
+        self.assertEqual((out['status'], out['task_id']), ('attached', self.tid))
+
+    def test_a_one_to_one_chat_still_stays_on_its_task_when_unsure(self):
+        with mock.patch.object(ingest, '_spawn'), mock.patch.object(senders, 'wrote_to', return_value=True), \
+             mock.patch.object(senders, '_chat_known', return_value=(True, 'one-to-one')):
+            out = ingest_message(self.s, {'external_id': 'd2', 'channel': 'whatsapp', 'body': 'and the second one?', 'from_name': 'Paula Vance',
+                                          'conversation_id': ROOM, 'sent_at': '2026-10-28 08:40:00', 'source_name': 'Ops team',
+                                          'mail_meta': {'dm': True}},
+                                 llm=brain({'and the second one?': {'relationship': 'continues', 'existing_task_id': self.tid}}))
+        self.assertEqual((out['status'], out['task_id']), ('attached', self.tid))
+
+
 class CarryOnOnlyForTheSameTopic(unittest.TestCase):
     """196492ad: new work on a stopped assistant task carries its conversation on. A same-topic line still does; a separate ask that
     was split off is its own task and never turns the old conversation."""

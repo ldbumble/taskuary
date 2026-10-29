@@ -1080,6 +1080,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         if sv and store.get_task(sv['task']) and any(x['id'] == sv['step'] for x in store.goal_steps(sv['task'])):
             return _split_note(store, split_from, msg, _serve_step(store, msg, sv, intent, actor, _notes_note(), pol))
         same = intent.get('same_as')
+        # A CHAT LINE TRIAGE DID NOT JOIN TO ITS ROOM'S TASK DOES NOT JOIN IT BY SAME_AS (2026-10-29): the room's task is the sender's open
+        # work too, so a group line read as `new` or unsure was named "the same as" it and joined all the same - the second road onto one
+        # task. Work on another channel's task still joins by same_as; the room's own takes same_problem true (chat_route, `room`).
+        if same and same in (r.get('room') or ()): same = None
         if same and store.get_task(same):
             if pol['action'] == 'escalate': _escalate(store, same, pol, actor)
             elif intent.get('urgent') or intent.get('priority'): _mark_urgent(store, same, intent, actor)
@@ -2287,6 +2291,13 @@ def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
     for rel_mid in (intent.get('related_message_ids') or []):
         if target: break
         target = _joinable_task(store, (store.get_message(rel_mid) or {}).get('TaskId'))
+    dm = bool((msg.get('mail_meta') or {}).get('dm'))
+    # IN A GROUP, A JOIN IS TRIAGE SAYING THIS IS THAT TASK'S OWN ASK (the owner, 2026-10-29: "why was this all triaged as one, don't we
+    # triage them separately if unrelated?"). A colleague's two days of lines in one group - product questions, an offer to come by,
+    # a meeting time, a feed that would not show - each read as `continues` the line before it and joined one task, 53 lines in all: following
+    # on in the conversation is not being the same job. A group line joins a task only when triage answered same_problem true for it;
+    # left unsaid it is `uncertain`, which in a group is its own work. A one-to-one chat keeps its own ruling below.
+    if rel in ('continues', 'answers') and target and not dm and intent.get('same_problem') is not True: rel = 'uncertain'
     if rel in ('continues', 'answers') and target:
         closed = (store.get_task(target) or {}).get('Status') == 'done'
         return ({'decision': 'attach', 'task_id': target, 'score': 1.0, 'candidates': [], 'reopen': closed,
@@ -2296,7 +2307,7 @@ def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
     # task when unsure in group chats). One person talking with the owner is mostly still on what they were on, as a mail thread is;
     # a group carries many people's asks, and the 2026-09-24 ruling stands there. `new` is its own task in both. One-to-one is what
     # the platform said on the line (the poller's mail_meta dm), never who has spoken.
-    if rel == 'uncertain' and (msg.get('mail_meta') or {}).get('dm'):
+    if rel == 'uncertain' and dm:
         cur = target or next((c['task_id'] for c in reversed(cands) if _joinable_task(store, c['task_id'])), None) \
               or _open_task(store, store.task_for_conversation(msg.get('conversation_id')))
         if cur:
@@ -2306,12 +2317,16 @@ def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
                                + (' - it was closed, and reopens only on new work or a question to you' if closed else '')}, (intent, fail))
     # A SEPARATE ASK IS ITS OWN TASK, IN THE SAME CHAT (the owner, 2026-10-28): it says who asked where, and the task it was measured
     # against and found not to be - when triage named one - is told where it went (_split_note)
+    # ...and the room's tasks ride on the route when this line was NOT said to be one of their asks - said `new`, or in a group without
+    # same_problem true - so it does not join one by `same_as` instead (ingest_message)
+    room_ids = (list(dict.fromkeys(c['task_id'] for c in cands if c.get('task_id')))
+                if rel == 'new' or (not dm and intent.get('same_problem') is not True) else [])
     if rel == 'new':
         why = f"a separate ask from {_asker(msg)} in {msg.get('source_name') or 'this chat'}" + (
               f" - not the topic of {task_ref(target)}, so it did not join it" if target else apart)
-        return ({'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [], 'reason': why,
+        return ({'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [], 'reason': why, 'room': room_ids,
                  **({'split_from': target} if target else {})}, (intent, fail))
-    return ({'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [],
+    return ({'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [], 'room': room_ids,
              'reason': 'uncertain whether it continues an ask in this chat - not joined on a guess' + apart}, (intent, fail))
 
 

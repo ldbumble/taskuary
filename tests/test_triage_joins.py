@@ -219,7 +219,7 @@ class RetitleTests(unittest.TestCase):
         s = MemoryStore()
         first = mail(s, 'a', brain('task', title='Erin asks to come over today'), conv='c1', channel='whatsapp')
         tid = first['task_id']
-        mail(s, 'b', brain('task', same_as=tid, refines=True, title='Erin asks to come over tomorrow instead'), conv='c1', channel='whatsapp',
+        mail(s, 'b', brain('task', same_as=tid, refines=True, same_problem=True, title='Erin asks to come over tomorrow instead'), conv='c1', channel='whatsapp',
              body='Actually make it tomorrow')
         t = s.get_task(tid)
         self.assertEqual(t['Title'], 'Erin asks to come over tomorrow instead')

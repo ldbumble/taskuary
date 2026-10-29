@@ -33,7 +33,7 @@ def brain(same=False, seen=None):
     def llm(system, user, **kw):
         u = json.loads(user)
         if seen is not None: seen.append(u)
-        rel = {'relationship': 'continues', 'related_message_ids': [c['id'] for c in u.get('same_day_lines', [])]} if same else {'relationship': 'new'}
+        rel = {'relationship': 'continues', 'related_message_ids': [c['id'] for c in u.get('same_day_lines', [])], 'same_problem': True} if same else {'relationship': 'new'}
         return json.dumps({'intent': 'task', 'kind': 'coding', 'why': 'an ask', **rel})
     return llm
 

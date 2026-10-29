@@ -101,7 +101,7 @@ class ChatRoomAsksOnce(unittest.TestCase):
                         brain(seen, relationship='new', title='Add Ray Colton to portal admins'), '2026-10-26 09:05:00')
         self.assertNotIn('new_job', seen[-1][2]['schema']['properties'], 'judged once, by relationship')
         self.assertNotEqual(new['task_id'], first['task_id'])
-        thanks = lambda *a, **k: json.dumps({'intent': 'fyi', 'why': 'thanks', 'relationship': 'answers', 'related_message_ids': [mid]})
+        thanks = lambda *a, **k: json.dumps({'intent': 'fyi', 'why': 'thanks', 'relationship': 'answers', 'related_message_ids': [mid], 'same_problem': True})
         t = self.line(s, 'c3', 'thanks, the export works now', thanks, '2026-10-26 09:30:00')
         self.assertEqual(t['task_id'], first['task_id'])
 

@@ -44,7 +44,8 @@ FIELDS = {
     'thread_task': "thread_task is the task this message's thread already belongs to - its tid, title, ask and status. The message "
                    "joins it unless you answer new_job: one line saying why this is a different job; null when it is the same.",
     'room_tasks': "room_tasks are the tasks this chat's same-day lines already sit on, each with its tid, title, ask and status. A line "
-                  "joins one only when it is that task's own ask (same_problem true); a different subject is a new ask (same_problem false).",
+                  "joins one only when it is that task's own ask (same_problem true); a different subject is a new ask (same_problem false). "
+                  "Answer same_problem whenever the relationship is continues or answers - in a group a join left unsaid is not made.",
     'open_goals': "open_goals is the owner's OPEN GOALS, each with its tid, what done looks like and its steps (id, text, done, who holds it): "
                   "when this message serves one step - it delivers it, answers it, or is plainly about it - answer serves {task, step, done}, "
                   "done true only when the message completes that step; a message that serves no step answers serves null.",
@@ -623,7 +624,9 @@ def relationship_of(j: dict, candidates: list) -> dict:
     # colleague's morning of lines in a group - onboarding, a report, a chat that will not load, an email's wording - each read as
     # continuing the first, joined one task and renamed it on every line. Said to be another subject, it is its own task
     if rel in ('continues', 'answers') and j.get('same_problem') is False: rel = 'new'
-    return {'relationship': rel, 'related_message_ids': related, 'existing_task_id': task}
+    # ...and kept on the verdict: in a group a join needs it said outright (ingest.chat_route), and the route row shows what was said
+    same = j.get('same_problem') if isinstance(j.get('same_problem'), bool) else None
+    return {'relationship': rel, 'related_message_ids': related, 'existing_task_id': task, 'same_problem': same}
 
 
 def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, images=None,

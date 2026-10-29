@@ -98,7 +98,11 @@ export const agentWord = ({ live = false, waiting = false, failed = false, stopp
 // state matrix, 2026-10-28: the Agent tab of a task whose sender wrote again read "general · ran / AGENT REPORT")
 export const reportLine = (body) => {
   const ls = String(body || "").split("\n").map((l) => l.trim()).filter((l) => l && !/^(AGENT REPORT|LAST MESSAGE)$/i.test(l));
-  return (ls.find((l) => /^Summary:/i.test(l)) || ls[0] || "").replace(/^(Summary|Determination):\s*/i, "");
+  const i = Math.max(0, ls.findIndex((l) => /^Summary:/i.test(l)));
+  const line = (ls[i] || "").replace(/^(Summary|Determination):\s*/i, "");
+  // ...and a line that ends on a colon is not a summary, it introduces the next one ("It says:" with nothing after - the email walk,
+  // 2026-10-29): the line it opens rides with it
+  return line.endsWith(":") && ls[i + 1] ? `${line} ${ls[i + 1]}` : line;
 };
 export const agentStatus = ({ profile = "", word = "not started", said = "", made = "", advisor = "" } = {}) => ({
   lines: [[profile, word].filter(Boolean).join(" · "), said, made ? `Made: ${made}` : ""].filter(Boolean),

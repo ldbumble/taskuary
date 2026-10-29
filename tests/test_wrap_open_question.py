@@ -87,7 +87,7 @@ class OpenQuestionAtWrap(unittest.TestCase):
             out = wrapup.wrap(s, tid, close=False, actor='owner')
         wd.assert_not_called(); self.assertFalse(out['drafting'])
         general.report_note(s, tid)                                    # the session's own close, after: the same answer, not a second note
-        self.assertEqual(reports(s, tid), [f'AGENT REPORT\nLEFT OPEN - the agent was waiting on your answer to:\n- {ASK}\n\n{NOTE}'])
+        self.assertEqual(reports(s, tid), [f'AGENT REPORT\nLEFT OPEN - the agent was waiting on your answer: {ASK}\n\n{NOTE}'])
 
     def test_a_result_filed_plain_before_the_wrap_is_superseded_by_one_that_says_what_was_left_open(self):
         s = MemoryStore(); tid, mid = vendor_task(s)
@@ -95,6 +95,13 @@ class OpenQuestionAtWrap(unittest.TestCase):
         general.report_note(s, tid)
         general.report_note(s, tid, lead=wrapup.left_open([{'text': ASK}]))
         self.assertEqual(len(reports(s, tid)), 2); self.assertTrue(wrapup.report_body(reports(s, tid)[-1]).startswith('LEFT OPEN'))
+
+
+    def test_the_question_is_on_the_first_line_and_no_question_is_no_clause(self):
+        # the Agent column shows a result's first line: it read "...your answer to:" and nothing (the email walk, 2026-10-29)
+        self.assertEqual(wrapup.left_open([{'text': ASK}]).splitlines()[0], f'LEFT OPEN - the agent was waiting on your answer: {ASK}')
+        self.assertEqual(wrapup.left_open([{'text': ASK}, {'text': 'Which host?'}]).splitlines()[1], '- Which host?')
+        self.assertEqual(wrapup.left_open([{'text': '  '}]), '')
 
 
 if __name__ == '__main__':

@@ -8,6 +8,7 @@ behind `taskuary --search` / `--message` (cli.py) and GET /api/agent/messages (s
 import re
 from .routing import tokens
 from .store import task_ref
+from . import textsim
 
 SNIP = 240
 
@@ -83,11 +84,24 @@ def meeting_reads(store, who: list, subject: str, per: int = 3, cap: int = 12) -
     2026-10-25: "an agent to research about person and topic through your mails"). Handed to the agent in its brief, so a brain
     with no shell starts from the same history a CLI would search; the agent searches on from there."""
     out, seen = [], set()
-    asks = [{'sender': w} for w in (who or [])[:6] if str(w or '').strip()] + ([{'words': subject}] if str(subject or '').strip() else [])
-    for q in asks:
-        try: hits = search(store, limit=per if 'sender' in q else per + 2, **q)
-        except Exception: hits = []
+    def safe(f, *a, **k):
+        try: return f(*a, **k)
+        except Exception: return []
+    reads = [safe(search, store, sender=w, limit=per) for w in (who or [])[:6] if str(w or '').strip()] + [safe(on_subject, store, subject, per + 2)]
+    for hits in reads:
         for h in hits:
             if h['id'] in seen: continue
             seen.add(h['id']); out.append(h)
     return out[:cap]
+
+
+def on_subject(store, subject: str, k: int, days: int = 365, pool: int = 400) -> list:
+    """Saved mail ALIKE IN MEANING to `subject` (a task's title), nearest first - textsim over the recent mail. No embedder: none, never
+    a word match standing in for meaning (a title's 'brief me before the' is not what the mail is about)."""
+    if not str(subject or '').strip(): return []
+    from .concierge import newest_rows
+    try: rows = [r for r in newest_rows(store, days, cap=pool) if r.get('Channel') != 'assistant']
+    except Exception: return []
+    got = textsim.rank(store, subject, [(r['MessageId'], f"{r.get('Subject') or ''}. {r.get('Preview') or ''}") for r in rows], k=k)
+    by = {r['MessageId']: r for r in rows}
+    return [_hit(by[i]) for i, _ in (got or []) if i in by]

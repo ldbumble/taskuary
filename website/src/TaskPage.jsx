@@ -2935,8 +2935,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {lineAt === "record" && <WriteupLine view={writeup} hasReply={!!replyMessage} />}
                       </Box>
                     );
-                    // the sender wrote again since: the earlier session is history, one fold, never the page's lead
-                    return news ? <Box data-tq-earlier-session="" sx={{ mt: 1 }}><Fold title="The earlier session, before they wrote again">{record}</Fold></Box> : record;
+                    // the sender wrote again since: every run is history, never the page's lead - each one line, newest first, that opens in
+                    // place (EarlierRuns, 2026-10-29), where the whole record was one fold; the diff it left stays one fold under them
+                    return news ? <Box data-tq-earlier-session="" sx={{ mt: 1 }}><AgentRecord {...recordProps} history title="Before they wrote again" />
+                      {diffRun && <Fold title="The diff it left"><DiffBlock text={diffRun.DiffText} /></Fold>}</Box> : record;
                   })()}
                   {/* A FAILED GENERAL RUN IS ITS REASON AND ITS FIX (trust audit S1, 2026-10-28): the conversation under the reason said it twice -
                       it is one quiet link, the Result's own (ResultSummary), and one press back */}
@@ -3077,6 +3079,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     <Box sx={{ mt: 0.75, flexShrink: 0, "&:empty": { display: "none" } }}>
                       <PublishedPages pages={(detail?.artifacts || []).filter(isPublished)} />
                     </Box>
+                    {/* ...and the runs before this one under it, a line each (the owner, 2026-10-29): the terminal leads, nothing earlier is dropped */}
+                    {term.alive && hasRecord && <Box sx={{ flexShrink: 0, "&:empty": { display: "none" } }}><AgentRecord {...recordProps} history live={term.sid} /></Box>}
                     {/* NO ANSWER BOX UNDER THE PANE (the owner, 2026-10-13: "we know it's waiting on us from the emoji and we will
                         respond in chat"): the asks box and the type-in-for-later line said again what the rail's mark and the
                         terminal already say. Answer in the terminal, or in the chat - the Assistant draws a question's options. */}
@@ -3091,7 +3095,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {threeUp && advisorNote && adviceIn === "agent" && <Box sx={{ mt: 1.5, flexShrink: 0 }}>{advisorNote}</Box>}
                 {/* runs from before sessions (and any API-driven run) keep their trace here */}
                 {!sessionView && detail.runs.length > 0 && (
-                  <Fold title={`Earlier runs · ${detail.runs.length}`}>
+                  <Fold title={`Run traces · ${detail.runs.length}`}>
                     {detail.runs.map((r) => (
                       <Box key={r.RunId} sx={{ mb: 0.75, p: 1, bgcolor: r.Status === "running" ? "#dfeade" : PANEL2, borderRadius: 1.5, border: `1px solid ${BORDER}` }}>
                         <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>

@@ -3,14 +3,14 @@
 // about. You can do short the long version with more button maybe but make sure it's full and complete record but don't
 // duplicate sections"). In reading order (the owner, 2026-10-10): what happened - with what it decided and changed, and
 // the pages it made - and behind ONE More its last message, the files it saved in the project, the run's timeline, every step
-// (told, thought, tool, said) and earlier sessions.
+// (told, thought, tool, said) - and under it every earlier run, a line each that opens in place (2026-10-29).
 import React, { useEffect, useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import api from "./api";
 import { Md } from "./md.jsx";
 import PublishedPages, { FOLD } from "./PublishedPages.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
-import { cardParts, hasMore, lastWords, madeOnce, moreParts, plain, resultLine, recordFacts, recordHead, recordSteps, resultParts, runCost, runsOf, sourceLabel, splitFiles } from "./agentRecord.js";
+import { cardParts, hasMore, lastWords, madeOnce, moreParts, plain, resultLine, recordFacts, recordHead, recordSteps, resultParts, runCost, runHeads, runsOf, sourceLabel, splitFiles } from "./agentRecord.js";
 import AgentStory, { StoryLine, Timeline } from "./AgentStory.jsx";
 import { plural } from "./timeWords.js";
 
@@ -83,13 +83,13 @@ const FileNames = ({ files }) => {
 };
 
 // one session, in reading order: what happened, then ONE More for everything else - its last message in full, what it saved,
-// the run's timeline, what ended it since, every step, earlier sessions (the owner, 2026-10-12: "main summary, then details
-// behind more"). It was what happened + a folded last message + files + its own "Every step" button, under a second section
-// that told the same run again.
-export const SessionRecord = ({ s, pages = [], draft = "", startOpen = false, timeline = [], since = null, earlier = [], inChat = false }) => {
+// the run's timeline, what ended it since, every step (the owner, 2026-10-12: "main summary, then details behind more"). It was what
+// happened + a folded last message + files + its own "Every step" button, under a second section that told the same run again.
+// Earlier runs are under the record, one line each (EarlierRuns), never inside one run's More
+export const SessionRecord = ({ s, pages = [], draft = "", startOpen = false, timeline = [], since = null, inChat = false }) => {
   const [more, setMore] = useState(startOpen);
   const { lead, rows, message, isReply } = cardParts(s, draft), { mine, other } = splitFiles(s.files, s.cwd);
-  const parts = moreParts(s, { draft, timeline, since, earlier: earlier.length });
+  const parts = moreParts(s, { draft, timeline, since });
   return (
     <Box>
       <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 0.5 }}>{recordFacts(s).join(" · ")}</Typography>
@@ -122,10 +122,6 @@ export const SessionRecord = ({ s, pages = [], draft = "", startOpen = false, ti
               {s.source && <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> · from {sourceLabel(s.source)}</Box>}</Typography>
             <Steps s={s} />
           </Box>}
-          {!!earlier.length && <Box>
-            <Typography sx={head}>Earlier sessions · {earlier.length}</Typography>
-            {earlier.map((x) => <Earlier key={x.sid} s={x} />)}
-          </Box>}
         </Box>}
       </Box>}
     </Box>);
@@ -138,7 +134,10 @@ export const SessionRecord = ({ s, pages = [], draft = "", startOpen = false, ti
 // found, how it resolved it, its write-up whole, what it made, and the session as one "Replay the session" line. `diff`: the run's own
 // diff counted (agentRecord.diffStat), where a run kept one.
 // `onDiff`: the run's diff is folded on the page, and the stat line opens it (`diffOpen`, TaskPage)
-export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = null, folded = false, inChat = false, result = false, diff = null, diffOpen = false, onDiff = null, bare = false }) => {
+// ...and EVERY EARLIER RUN UNDER IT, a line each, newest first (EarlierRuns, the owner 2026-10-29). `history`: no run leads - a live
+// session's terminal is above (`live`, its sid), or the sender wrote again since - and every kept run is one of those lines (`title`)
+export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = null, folded = false, inChat = false, result = false, diff = null, diffOpen = false, onDiff = null, bare = false,
+  history = false, title = "", live = "" }) => {
   const [rec, setRec] = useState(null);
   useEffect(() => {
     let live = true;
@@ -164,23 +163,26 @@ export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = nul
         display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{lead}</Typography>}
     </Box> : null;
   }
-  if (!rec) return <CircularProgress size={12} />;
+  if (!rec) return history ? null : <CircularProgress size={12} />;
+  const runs = runHeads(rec.sessions, live), earlier = <EarlierRuns runs={runs.slice(1)} />;
+  if (history) return <EarlierRuns runs={runs} title={title} first />;
   if (!now && !pages.length) return story ? <AgentStory story={story} /> : null;
   const { state, since } = recordHead(story, rec.ended);
   // the run's last words stand in for a session whose own log kept none; a conversation's answers are the chat under the card,
   // so there it is only the working behind them (a card over the chat said the answer a second time)
   const chat = inChat && now?.source === "conversation";
   const s = chat ? { ...now, result: "", report: {} } : now && !String(now.result || "").trim() && story?.said ? { ...now, result: story.said } : now;
-  if (chat && !state && !pages.length && !moreParts(s, { earlier: before.length }).length) return null;
+  if (chat && !state && !pages.length && !moreParts(s).length && !before.length) return null;
   return (
     // `bare`: the page's white focus is the box (the owner, 2026-10-25), and the record reads as plain sections inside it
     <Box sx={bare ? { width: "100%" } : { width: "100%", bgcolor: PANEL, px: 1.35, py: 1.15, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
       {state && <Box sx={{ mb: 1, pb: 1, borderBottom: `1px solid ${BORDER}` }}><StoryLine kind={state.kind} line={state.line} why={state.why} /></Box>}
-      {s && !chat && result ? <ResultView s={s} before={before} pages={madeOnce(pages, outputs || [])} diff={diff} since={since} draft={draft} story={story} diffOpen={diffOpen} onDiff={onDiff} />
+      {s && !chat && result ? <ResultView s={s} pages={madeOnce(pages, outputs || [])} diff={diff} since={since} draft={draft} story={story} diffOpen={diffOpen} onDiff={onDiff} />
         : s && !chat ? <RunSummaries sessions={[s, ...before]} pages={pages}
-          full={<SessionRecord s={s} draft={draft} startOpen timeline={story?.steps || []} since={since} earlier={before} />} />
-        : s ? <SessionRecord s={s} pages={pages} draft={draft} timeline={story?.steps || []} since={since} earlier={before} inChat={chat} />
+          full={<SessionRecord s={s} draft={draft} startOpen timeline={story?.steps || []} since={since} />} />
+        : s ? <SessionRecord s={s} pages={pages} draft={draft} timeline={story?.steps || []} since={since} inChat={chat} />
         : <PublishedPages pages={pages} deliver />}
+      {earlier}
     </Box>);
 };
 
@@ -209,13 +211,14 @@ export const ResultSummary = ({ taskId, stamp, pages = [], said = "", onRecord =
       {/* the conversation it came out of is one quiet link under it, never the page (2026-10-28) */}
       {onRecord && <Box><Button size="small" data-tq-full-result="" aria-expanded="false" onClick={onRecord}
         sx={{ ...link, textAlign: "left" }}>The whole conversation ›</Button></Box>}
+      <EarlierRuns runs={runHeads(rec.sessions).slice(1)} />
     </Box>);
 };
 
 // THE RESULT (the redesign, owner-approved 2026-10-21): the write-up's own parts, each only where it recorded one - what it found, how
 // it resolved it, the summary and its last words whole - then what it made (the files it saved, the pages and files it made for the
 // task, the run's diff counted), and the terminal as ONE line that replays the session step by step. Never the raw log on top.
-const ResultView = ({ s, before, pages, diff, since, draft, story, diffOpen = false, onDiff = null }) => {
+const ResultView = ({ s, pages, diff, since, draft, story, diffOpen = false, onDiff = null }) => {
   const [replay, setReplay] = useState(false);
   const { rows, summary, writeup } = resultParts(s), { mine } = splitFiles(s.files, s.cwd);
   const made = !!(mine.length || pages.length || diff);
@@ -238,28 +241,28 @@ const ResultView = ({ s, before, pages, diff, since, draft, story, diffOpen = fa
       {since?.text && <Box sx={sec}><Typography sx={head}>Since then</Typography><Typography sx={{ fontSize: 12.5, color: INK }}>{since.text}</Typography></Box>}
       <Box sx={sec}>
         <Button size="small" data-tq-replay="" aria-expanded={replay} sx={{ ...link, textAlign: "left" }} onClick={() => setReplay(!replay)}>
-          {replay ? "▾" : "▶"} Replay the session{before.length ? ` · ${before.length + 1} runs` : ""}{s.at ? ` · ${String(s.at).slice(11, 16)}` : ""}
+          {replay ? "▾" : "▶"} Replay the session{s.at ? ` · ${String(s.at).slice(11, 16)}` : ""}
           {runCost(s).map((x) => ` · ${x}`).join("")}</Button>
-        {replay && <Box sx={{ mt: 1 }}><SessionRecord s={s} draft={draft} startOpen timeline={story?.steps || []} earlier={before} /></Box>}
+        {replay && <Box sx={{ mt: 1 }}><SessionRecord s={s} draft={draft} startOpen timeline={story?.steps || []} /></Box>}
       </Box>
     </Box>);
 };
 
 // EVERY RUN BY ITS LAST WORDS (the owner, 2026-10-15: "you don't see the last message from the agent from prior runs ... it should
-// summary from run 1|2|3 ... the step by step thing should be hidden behind clear door of full script"): newest first, each run's
-// last message; what happened, files, the timeline and every step - the run's record as it was - behind one Full transcript.
+// summary from run 1|2|3 ... the step by step thing should be hidden behind clear door of full script"): the latest run's last message;
+// what happened, files, the timeline and every step - the run's record as it was - behind one Full transcript. The runs before it are
+// one line each under the record (EarlierRuns, 2026-10-29), where every run's last words stood open in a column
 const RunSummaries = ({ sessions, pages, full }) => {
   const [open, setOpen] = useState(false);
-  const runs = runsOf(sessions);
+  const [{ s, n, said }] = runsOf(sessions);
   return (
     <Box>
-      {runs.map(({ s, n, said }, i) => (
-        <Box key={s.sid || n} sx={i ? { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` } : undefined}>
-          <Typography sx={head}>Run {n}{i === 0 && runs.length > 1 ? " · latest" : ""}
-            <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> · {recordFacts(s).slice(0, 2).join(" · ")}</Box></Typography>
-          {said ? <Box sx={{ fontSize: 13.5, lineHeight: 1.5, color: INK }}><Md text={said} /></Box>
-            : <Typography sx={{ fontSize: 12.5, color: DIM }}>It ended without a written result.</Typography>}
-        </Box>))}
+      <Box data-tq-run-latest={n}>
+        <Typography sx={head}>Run {n}{n > 1 ? " · latest" : ""}
+          <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> · {recordFacts(s).slice(0, 2).join(" · ")}</Box></Typography>
+        {said ? <Box sx={{ fontSize: 13.5, lineHeight: 1.5, color: INK }}><Md text={said} /></Box>
+          : <Typography sx={{ fontSize: 12.5, color: DIM }}>It ended without a written result.</Typography>}
+      </Box>
       {!!pages.length && <Box sx={{ mt: 1 }}><PublishedPages pages={pages} deliver /></Box>}
       <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
         <Button size="small" sx={{ ...link, textAlign: "left" }} onClick={() => setOpen(!open)}>Full transcript {open ? "▾" : "▸"}</Button>
@@ -268,16 +271,25 @@ const RunSummaries = ({ sessions, pages, full }) => {
     </Box>);
 };
 
-const Earlier = ({ s }) => {
+// AN EARLIER RUN, folded to its line - when it ended, which agent, what came of it - and opened in place to its whole record
+const Earlier = ({ r }) => {
   const [open, setOpen] = useState(false);
-  const line = plain(String(s.result || "").split(/\n\s*\n/)[0]);
   return (
-    <Box sx={{ py: 0.5, borderBottom: `1px dashed ${BORDER}`, "&:last-of-type": { borderBottom: 0 } }}>
-      <Box onClick={() => setOpen(!open)} sx={{ display: "flex", gap: 1, cursor: "pointer", fontSize: 12.5, minWidth: 0 }}>
-        <Box component="span" sx={{ color: FAINT, width: 12 }}>{open ? "▾" : "▸"}</Box>
-        <Box component="span" sx={{ color: DIM, flexShrink: 0 }}>{s.cli || s.by} · {String(s.at || "").slice(0, 16)}</Box>
-        {!open && <Box component="span" sx={{ color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line || "no written result"}</Box>}
+    <Box data-tq-run-before={r.n} sx={{ py: 0.5, borderBottom: `1px dashed ${BORDER}`, "&:last-of-type": { borderBottom: 0 } }}>
+      <Box role="button" tabIndex={0} aria-expanded={open} onClick={() => setOpen(!open)} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), setOpen(!open))}
+        sx={{ display: "flex", gap: 1, cursor: "pointer", fontSize: 12.5, minWidth: 0 }}>
+        <Box component="span" sx={{ color: FAINT, width: 12, flexShrink: 0 }}>{open ? "▾" : "▸"}</Box>
+        <Box component="span" sx={{ color: DIM, flexShrink: 0 }}>Run {r.n} · {r.at} · {r.who}</Box>
+        {!open && <Box component="span" title={r.line} sx={{ color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.line || "no written result"}</Box>}
       </Box>
-      {open && <Box sx={{ pl: 2.5, pt: 0.5 }}><SessionRecord s={s} /></Box>}
+      {open && <Box sx={{ pl: 2.5, pt: 0.5 }}><SessionRecord s={r.s} /></Box>}
     </Box>);
 };
+
+// THE RUNS BEFORE THE LATEST (the owner, 2026-10-29: "nothing earlier is dropped or replaced"), under its report, newest first, each one line
+// that opens in place (agentRecord.runHeads). `first`: nothing above it - a live terminal leads, or the sender wrote again - so no rule over it
+export const EarlierRuns = ({ runs, title = "", first = false }) => !runs?.length ? null : (
+  <Box data-tq-runs-before="" sx={first ? { mt: 1 } : sec}>
+    <Typography sx={head}>{title || "Earlier runs"} · {runs.length}</Typography>
+    {runs.map((r) => <Earlier key={r.s.sid || r.n} r={r} />)}
+  </Box>);

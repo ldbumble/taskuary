@@ -66,13 +66,13 @@ export const recordFacts = (s) => {
 export const hasMore = (s) => !!(recordSteps(s).some((x) => x.k !== "result") || s?.plan?.length || s?.refused?.length);
 
 // WHAT THE ONE "MORE" HOLDS, named on the button: everything past what happened - its last message in full, the files, the
-// run's timeline, what ended it since, every step, earlier sessions. One control, so nothing is drawn twice and nothing is
-// a second section (the owner, 2026-10-12: "main summary, then details behind more").
-export const moreParts = (s, { draft = "", timeline = [], since = null, earlier = 0 } = {}) => {
+// run's timeline, what ended it since, every step. One control, so nothing is drawn twice and nothing is a second section (the owner,
+// 2026-10-12: "main summary, then details behind more"). Earlier runs are not in it: they are listed under the latest (runHeads)
+export const moreParts = (s, { draft = "", timeline = [], since = null } = {}) => {
   const steps = recordSteps(s).filter((x) => x.k !== "result").length, files = s?.files?.length || 0;
   return [cardParts(s, draft).message && "its last message", files && plural(files, "file"), timeline?.length && "the timeline",
     since?.text && "since then", (steps || s?.plan?.length) && (s?.source === "conversation" ? "its working" : plural(steps, "step")),
-    s?.refused?.length && plural(s.refused.length, "refusal"), earlier && plural(earlier, "earlier session")].filter(Boolean);
+    s?.refused?.length && plural(s.refused.length, "refusal")].filter(Boolean);
 };
 
 // the state line over the record: the story's sentence, else - nothing being left to do - what ended it upstream, which is
@@ -107,6 +107,13 @@ export const runsOf = (sessions) => (sessions || []).map((s, i, all) => {
   const own = timed && !Number.isNaN(end) ? { ...s, steps: s.steps.filter((x) => when(x.at) > after && when(x.at) <= end + 60_000), result: i ? "" : s.result } : s;
   return { s, n: all.length - i, said: lastWords(own) };
 });
+// EVERY RUN, A LINE EACH (the owner, 2026-10-29: Continue, Run another agent or a second Send to agent - the latest run's report first and
+// every earlier one under it, newest first, none dropped or replaced): numbered from the first, by when it ended, which agent ran it, and
+// what came of it in one line - its write-up's summary, else the first paragraph of its own last words. `skip`: a live session's sid, which
+// is the terminal above, never a report under it
+export const runHeads = (sessions, skip = "") => runsOf((sessions || []).filter((s) => !skip || s.sid !== skip)).map(({ s, n, said }) => ({
+  s, n, at: String(s.at || "").slice(0, 16), who: s.cli || s.by || "agent",
+  line: plain(String(norm(s.report?.summary) ? s.report.summary : said || "").trim().split(/\n\s*\n/)[0]).replace(/\s+/g, " ") }));
 
 // THE RESULT, WHEN AN AGENT HAS STOPPED AND SAVED (the task page redesign, owner-approved 2026-10-21): what it found, how it resolved it,
 // and the whole summary of its write-up - the saved report, never a raw log. Each part only where the write-up recorded it; its last

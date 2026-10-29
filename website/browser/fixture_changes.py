@@ -244,9 +244,10 @@ def install_processing_changes(app, store):
     def coding_saved(body: dict):
         """A coding task whose agent the owner stopped and saved (Stop and save): its session's screen filed as the transcript, its
         AGENT REPORT written, and the run's own diff kept - what the Result in the work column reads. Invented people and paths.
-        `mine`: a task the owner made in the Assistant - nobody sent it, so nobody is owed a reply. `writing`: its write-up still running."""
-        if set(body) - {'mine', 'writing'} or not all(isinstance(v, bool) for v in body.values()):
-            raise HTTPException(422, 'only the booleans mine and writing are accepted')
+        `mine`: a task the owner made in the Assistant - nobody sent it, so nobody is owed a reply. `writing`: its write-up still running.
+        `twice`: an earlier run two hours before this one, with its own report - the Agent pane keeps it under the latest (2026-10-29)."""
+        if set(body) - {'mine', 'writing', 'twice'} or not all(isinstance(v, bool) for v in body.values()):
+            raise HTTPException(422, 'only the booleans mine, writing and twice are accepted')
         from taskuary import terminal, writeup
         mine = body.get('mine', False)
         tid = store.create_task({'Title': 'org/app#398 census sync fails when a site has no manager', 'Kind': 'coding', 'Status': 'in_progress',
@@ -258,6 +259,14 @@ def install_processing_changes(app, store):
                                  'BodyText': 'Third night in a row the census sync stops at a site with no manager.', 'Status': 'routed'})
         if body.get('writing'):
             with writeup._LOCK: writeup._STATE[tid] = {'job': f'fixture-{tid}', 'stage': 'report', 'running': True, 'error': None, 'close': False}
+        if body.get('twice'):
+            then = (datetime.now() - timedelta(hours=2)).isoformat(' ', timespec='seconds')
+            store.add_transcript(tid, f'fixture-{tid}-1', "Reading the census sync.\n> pytest tests/test_census_sync.py -q\n1 failed, 8 passed",
+                                 agent='coding', cwd='C:/work/org-app', brain='codex')
+            cid = store.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\nSummary: Found where the census run stops; no fix yet.\n\nLAST MESSAGE\n'
+                                    'The run stops at the first site with no manager. Not fixed yet - the test reproduces it.')
+            store._exec('UPDATE transcript SET CreatedAt=? WHERE Sid=?', (then, f'fixture-{tid}-1'))
+            store._exec('UPDATE comment SET CreatedAt=? WHERE CommentId=?', (then, cid))
         store.add_transcript(tid, f'fixture-{tid}', "I'll take #398. Reading the census sync first.\n> pytest tests/test_census_sync.py -q\n9 passed",
                              agent='coding', cwd='C:/work/org-app', brain='claude')
         store.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\nDetermination: A site with no manager stopped the whole census run.\n'

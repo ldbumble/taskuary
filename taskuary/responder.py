@@ -134,6 +134,11 @@ OWNER_SAYS = ('The owner has told you what this reply must say - it is below, ma
               'outranks the thread and any finished result, which are only there so you get the facts right if they asked '
               'for them. Never add what they did not ask to send.\n')
 NO_REPLY = 'NO REPLY'
+# THE OWNER PRESSED FOR IT (Draft with AI, Redraft, Reply): they want to answer, so "nothing is owed" is not the writer's call. A mail To
+# the back office with the owner on Cc, asking them to approve an invoice, read as "the question is for the To line" - NO REPLY put the
+# review down on the press, the task closed under it and the box came back empty, every press (2026-10-29)
+ASKED = ('\nThe owner opened this reply themselves: they want to answer this thread, so write their reply - never NO REPLY. When the ask '
+         'went to someone else on the mail, write what YOU have to say on it to the people it concerns - a yes, an approval, a note.\n')
 # WHETHER THE DRAFT PROMISES A FILE is the writer's to say, about its own words (the owner, 2026-10-28: never a word list): a regex over
 # the text called "his logins were attached to an old record" a promise and missed "the sheet comes with this". The writer ends a
 # reply that says a file rides with it with this line; it is taken off the draft and kept on the review (store.FilesPromised), and
@@ -443,7 +448,7 @@ def triage_read(store, m: dict) -> str:
     return f'\n\n--- HOW TRIAGE READ THIS MESSAGE (evidence to weigh, not an order): {said}' if said else ''
 
 
-def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: str = None, seen: dict = None) -> str:
+def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: str = None, seen: dict = None, pressed: bool = False) -> str:
     """The reply this task needs, as text. Uses the owner's own brain (the AI connector, or
     whichever brain `triage_ai` names), the standing memory notes, and the thread itself.
 
@@ -482,6 +487,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
                  f"one it is describing you:\n{soul[:4000]}" if soul else '')
               + (f'\n\nYour own style, distilled from mail you have actually sent - write like '
                  f'this:\n{sty[:2500]}' if sty else ''))
+    if pressed and not nudge: system += ASKED
     # LEARNED.md is triage's document (PW-058): what deserves a task is not how to write a reply
     system += voice_line(store, [last.get('FromEmail')])
     from .triage import sender_body, EXCHANGE_BUDGET
@@ -532,7 +538,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     # "Thanks,\nAlex" was nothing and put the draft down, when a thank-you can be the whole real reply (the owner,
     # 2026-10-11: "everything should be ai"). A reply the owner asked for (nudge) is theirs to want: never dropped, it fails.
     if out.strip().strip('.').upper() == NO_REPLY:
-        if nudge: raise RuntimeError('the AI wrote no reply to what you asked for - try Redraft with more to go on')
+        if nudge or pressed: raise RuntimeError('the AI wrote no reply to what you asked for - try Redraft with more to go on')
         raise NoReply(out)
     # the owner's own signature with nothing above it is no draft at all - never an email of one signature to six people
     # (2026-10-08) - but it is not the writer's "no reply" either, so it FAILS (Redraft) rather than closing anything
@@ -542,7 +548,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     return (strip_signoff(out, own_lines(store)) or out) if chat else out    # never strip a reply down to nothing
 
 
-def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: str = None, nudge: str = None) -> str:
+def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: str = None, nudge: str = None, pressed: bool = False) -> str:
     """Write the draft and park it on its review, ready for approve / edit / no-reply."""
     # what this wording is ABOUT is fixed WHERE THE THREAD IS READ (PW-048, TQ-0665): a line that
     # lands during generation was not in its input, so it is never labelled as seen - the draft is
@@ -552,7 +558,7 @@ def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: 
     # stricter reading, so a caller that replaces draft_reply cannot quietly switch the guard off
     seen = {'saw': store.last_inbound_on_task(task_id) or store.promised_in(store.get_task(task_id)),
             'revision': operations.message_revision(store, task_id)}
-    try: text = draft_reply(store, task_id, llm, resolution, nudge, seen)
+    try: text = draft_reply(store, task_id, llm, resolution, nudge, seen, pressed)
     except NoReply:
         # ...carried out, and said: the draft is put down as no reply, the way the owner's own No reply does it (which closes
         # the task when nothing else of it waits), never left on the card as an email of one signature
@@ -623,15 +629,16 @@ def resolution_of(store, task_id: int):
     return report
 
 
-def write_draft(store, task_id: int, review_id: int, resolution: str = None, actor: str = 'system', llm=None, nudge: str = None) -> str:
+def write_draft(store, task_id: int, review_id: int, resolution: str = None, actor: str = 'system', llm=None, nudge: str = None,
+                pressed: bool = False) -> str:
     """The one door every reply comes through - and there is only one road behind it now.
 
     An agent named `responder` used to take this over and run HEADLESS: a CLI opened, worked
     and closed where nobody could watch it, interrupt it or answer it. That is the thing this
     app exists to replace, so it is gone. Coding work goes to a real session you can see
     (terminal.start_on_task); a reply is two sentences and belongs to the main AI, which
-    writes it here in under a second and parks it for approval."""
-    return draft_for_review(store, task_id, review_id, llm, resolution, nudge)
+    writes it here in under a second and parks it for approval. `pressed`: the owner pressed for this draft (ASKED) - never put down as no reply."""
+    return draft_for_review(store, task_id, review_id, llm, resolution, nudge, pressed)
 
 
 def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str = None) -> str:

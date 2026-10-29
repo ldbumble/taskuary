@@ -3543,7 +3543,7 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     owed = not draft and (body is None or body.draft) and not (not promise and _blank_reply(tid, body))
     if owed and not later:
         try:
-            draft = (responder.write_draft(store, tid, rid, actor=ACTOR, nudge=_reply_nudge(body and body.instruction)) if tid
+            draft = (responder.write_draft(store, tid, rid, actor=ACTOR, nudge=_reply_nudge(body and body.instruction), pressed=True) if tid
                      else responder.draft_for_message(store, m, rid, instruction=_reply_nudge(body and body.instruction)))
         except Exception as e:
             logger.warning(f'reply draft failed for message {mid}: {e}')   # the box opens empty; write it yourself
@@ -4388,7 +4388,7 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
                 store.add_comment(rv['TaskId'], ACTOR, 'human', f'Your edited reply, kept for comparison - the thread moved before it was sent:\n{yours[:4000]}')
             draft = None
             try:
-                draft = (responder.write_draft(store, rv['TaskId'], rid, actor=ACTOR)
+                draft = (responder.write_draft(store, rv['TaskId'], rid, actor=ACTOR, pressed=True)
                          if rv.get('TaskId') else responder.draft_for_message(store, latest, rid))
             except Exception as e:
                 logger.warning(f'could not refresh stale review {rid}: {e}')
@@ -6087,7 +6087,8 @@ def draft_review(rid: int, body: DraftBody = None):
             draft = ob.redraft_review(store, rv, instruction=_reply_nudge(body and body.instruction))
         elif rv.get('TaskId'):
             _refresh_chat_context(task_id=rv.get('TaskId'), message_id=rv.get('MessageId'))
-            draft = responder.write_draft(store, rv['TaskId'], rid, actor=ACTOR, nudge=_reply_nudge(body and body.instruction))
+            # the owner pressed for it (Draft with AI / Redraft): a writer's NO REPLY must not put the review down (responder.ASKED)
+            draft = responder.write_draft(store, rv['TaskId'], rid, actor=ACTOR, nudge=_reply_nudge(body and body.instruction), pressed=True)
         else:
             message = store.get_message(rv.get('MessageId'))
             if not message: raise RuntimeError('the message behind this reply no longer exists')
@@ -6134,7 +6135,8 @@ def set_review_envelope(rid: int, body: EnvelopeBody):
             if a and '@' in a and a not in out: out.append(a)
         return out
     if body.to is not None: env['to'] = clean(body.to)
-    if body.cc is not None: env['cc'] = [a for a in clean(body.cc) if a not in env.get('to', [])]
+    # ...and whoever moved up to To leaves CC: the back office readdressed to stayed copied as well (2026-10-29)
+    env['cc'] = [a for a in (clean(body.cc) if body.cc is not None else env.get('cc') or []) if a not in env.get('to', [])]
     if not env.get('to'): raise HTTPException(422, 'a reply needs at least one recipient')
     store.set_review_envelope(rid, env)
     store.audit('review', rid, 'envelope', ACTOR, detail={'mode': env.get('mode'), 'to': env.get('to'), 'cc': env.get('cc')})

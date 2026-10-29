@@ -9,11 +9,20 @@ test("a general session that is open but not busy has answered; a busy one is wo
   assert.equal(generalAnswered(true, { alive: true, busy: false }), true);
   assert.equal(generalAnswered(true, { alive: true, busy: true }), false);
   assert.equal(generalAnswered(false, { alive: true, busy: false }), false);
+  // ...and one the server says is not waiting - opened for a turn that has not taken yet - has not answered (email walk 2026-10-29)
+  assert.equal(generalAnswered(true, { alive: true, busy: false, waiting: false }), false);
+  assert.equal(generalAnswered(true, { alive: true, busy: false, waiting: true }), true);
   assert.equal(agentPhase({ session: { alive: true, waiting: generalAnswered(true, { alive: true, busy: false }) } }), AGENT.waiting);
 });
 
 test("the heading says it answered", () => {
   assert.match(readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8"), /answered \? `\$\{agentName\(t\)\} answered`/);
+});
+
+test("a task read with no live session lets go of the answered chat session the page held", () => {
+  // the header kept "agent waiting on you" over an agent that had closed itself, until a reload (email walk 2026-10-29)
+  assert.match(readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8"),
+    /if \(!live\?\.alive && detail\?\.task\?\.TaskId === selected && term\?\.alive && term\.mode === "assistant"[\s\S]{0,120}term\.busy === false && !pressedHere\) \{ setTerm\(null\); return; \}/);
 });
 
 test("the chat's poll hands the page the session it read, so the turn's end reaches the heading", () => {

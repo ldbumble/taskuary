@@ -34,7 +34,12 @@ def state(store, t: dict, session=None, queued=None) -> str:
     # a live session is the fact happening now - a done task continued is work in progress again (T8). A session that
     # PREDATES the close is a terminal nobody shut, not the task picked back up (the Board's old rule, kept).
     if live and t.get('Status') == 'done' and t.get('ClosedAt') and str(session.get('started') or '') < str(t['ClosedAt']): live = False
-    if live: return 'blocked' if session.get('waiting') else 'working'
+    if live:
+        if not session.get('waiting'): return 'working'
+        # ...but an agent PARKED - it answered, asked nothing - over a reply it drafted is the reply waiting, as the rail says: the Board
+        # put it under "agent waiting on you" with "ready to send" on the same card, and the header said so until a reload (email walk 2026-10-29)
+        if (session.get('state') or 'parked') == 'parked' and not session.get('request') and t.get('ReviewStatus') == 'pending': return 'approve'
+        return 'blocked'
     st = t.get('Status')
     if st == 'dropped': return 'dropped'
     if st == 'done':

@@ -57,7 +57,8 @@ export const stateStatus = (key) => {
 // `owed`: whether the task's pending reply has no draft yet (TaskPage's pendingReview; null when it has none) - the task's own read
 // is newer than the rail's, so a draft that just landed lifts "reply owed" and one not written yet puts it there
 export const taskStatus = ({ live = null, rail = null, state = null, closed = false, cantSend = false, page = null, owed = null } = {}) => {
-  if (live?.alive) return railStatus({ lane: live.waiting ? "blocked" : "working" });
+  // ...unless the server read the parked session as the reply it drafted waiting (taskstate: `approve`) - one state, as the Board's
+  if (live?.alive && !(live.waiting && state === "approve")) return railStatus({ lane: live.waiting ? "blocked" : "working" });
   if (closed && stateStatus(state)) return stateStatus(state);
   const st = railStatus(owed === false && owedNoDraft(rail) ? { ...rail, draft: true } : rail, cantSend, page) || stateStatus(state);
   if (owed && ["approve", UNSENDABLE].includes(st?.key) && rail?.kind !== "action") return said(OWED, KIND_META[OWED], false);

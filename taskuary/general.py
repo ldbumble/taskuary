@@ -818,6 +818,7 @@ class GeneralSession:
         self.buf, self.n, self.ended, self.last = deque(), 0, None, time.time()
         self.subs, self.taps = [], []
         self.alive, self.busy = True, False
+        self.spoke = False                   # a turn of this session has ended: before one, a session being opened is not an answer
         self.rows, self.cols = 32, 110
         self._input, self._lock = '', threading.Lock()
         self._cancel = None                  # the stop switch for the answer being written now
@@ -928,7 +929,9 @@ class GeneralSession:
     def idle(self): return round(time.time() - self.last, 1)
     def files(self): return []
     def phase(self): return 'working' if self.busy else 'parked'
-    def waiting(self): return self.alive and not self.busy
+    # ...and a session OPENED for a turn that has not taken yet is not waiting either (OPENING): the header read "answered / waiting on
+    # you" eight seconds into a start, while the run was only about to begin (email walk 2026-10-29)
+    def waiting(self): return self.alive and not self.busy and (self.spoke or self.task_id not in OPENING)
     def tail(self, n=3):
         from .terminal import plain
         return [line for line in plain(self.scrollback()[-8000:]).splitlines() if line.strip()][-n:]
@@ -1371,7 +1374,7 @@ class GeneralSession:
                 threading.Timer(0.1, self.close, kwargs={'learn': False, 'report': False}).start()
             raise
         finally:
-            self.busy, self.last = False, time.time()
+            self.busy, self.last, self.spoke = False, time.time(), True
             self._cancel = None
             self._emit('\x1b[1;34myou>\x1b[0m ')
             self._lock.release()

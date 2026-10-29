@@ -58,6 +58,8 @@ export const doingNow = (work) => {
 // drew a research question as a black rectangle with the sentence cut off mid-word, under a prompt
 // nobody types into (the owner, 2026-09-08: "assistant still looks like coding cli?"). The last thing
 // it SAID is the last line that is not a prompt.
+// ...and a turn's whole answer, from its start (workerstate.status `said`): read off the tail, a drafted reply was its sign-off
+export const saidOf = (run) => String(run?.said || "").replace(/\s+/g, " ").trim() || saidFromTail(run?.tail);
 export const saidFromTail = (tail) => (tail || [])
   .map((line) => String(line).replace(/^\s*(?:assistant|you)>\s*/i, "").trim())
   .filter(Boolean).pop() || "";

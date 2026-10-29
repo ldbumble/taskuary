@@ -31,6 +31,15 @@ class StateTests(unittest.TestCase):
         self.assertEqual(taskstate.state(s, row(s, t), {'alive': True, 'waiting': False}), 'working')
         self.assertEqual(taskstate.state(s, row(s, t), {'alive': True, 'waiting': True}), 'blocked')
 
+    def test_a_parked_agent_over_its_drafted_reply_is_the_reply_waiting(self):
+        # the email walk, 2026-10-29: one Board card said "agent waiting on you" and "ready to send" - the rail said the reply
+        s = MemoryStore(); t = task(s, Kind='general')
+        parked, asking = {'alive': True, 'waiting': True, 'state': 'parked'}, {'alive': True, 'waiting': True, 'state': 'asking', 'request': {'text': 'Which date?'}}
+        self.assertEqual(taskstate.state(s, row(s, t, ReviewStatus='pending'), parked), 'approve')
+        self.assertEqual(taskstate.column('approve'), 'agentdone')
+        self.assertEqual(taskstate.state(s, row(s, t, ReviewStatus='pending'), asking), 'blocked')      # a question still outranks it
+        self.assertEqual(taskstate.state(s, row(s, t), parked), 'blocked')                                # nothing drafted: it waits on you
+
     def test_a_done_task_continued_is_live_work_but_a_stale_terminal_is_not(self):
         s = MemoryStore(); t = task(s); s.update_task(t, {'Status': 'done'}, 'owner')
         closed = s.get_task(t)['ClosedAt']

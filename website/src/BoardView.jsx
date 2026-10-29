@@ -17,7 +17,7 @@ import api from "./api";
 import { durSince, plural } from "./timeWords.js";
 import AgentWall from "./AgentWall.jsx";
 import NewSheet from "./NewSheet.jsx";
-import { agentName, saidFromTail } from "./agentWork.js";
+import { agentName, saidOf } from "./agentWork.js";
 import { isAgentKind, isGeneralKind } from "./autostart.js";
 import { onLive } from "./live.js";
 import { ALERT, GRADIENT, PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, ROLES, card, hoverable, mono } from "./theme.jsx";
@@ -86,7 +86,7 @@ export const FileChips = ({ files }) => (files || []).length === 0 ? null : (
 // conversation's peephole is its words.
 const ChatTail = ({ run, name }) => {
   const waiting = run.kind === "session" && isWaiting(run);
-  const said = saidFromTail(run.tail);
+  const said = saidOf(run);
   return (
     <Box sx={{ mt: 0.7 }}>
       <Typography sx={{ ...mono, fontSize: 9, letterSpacing: ".11em", textTransform: "uppercase", color: FAINT }}>

@@ -31,6 +31,7 @@ class Reading(unittest.TestCase):
 
 
 class Holding(unittest.TestCase):
+    held_dir = staticmethod(lambda p: p == r'C:\work\ledger')   # only the held folder is there: a blanket isdir would hide bash from shutil.which
     def setUp(self):
         self.s = MemoryStore(); self.tid = Factory(self.s).task('Fix the ledger export')
         self.told = []
@@ -68,7 +69,7 @@ class Holding(unittest.TestCase):
     def test_approve_runs_that_command_in_that_folder_and_tells_the_agent(self):
         self.held(); [rv] = self.pending()
         calls, run = self.ran(0, 'To northwind/ledger\n fix-export -> fix-export')
-        with mock.patch('taskuary.workerstate._live', return_value=self.sess), mock.patch.object(sg.os.path, 'isdir', return_value=True), run:
+        with mock.patch('taskuary.workerstate._live', return_value=self.sess), mock.patch.object(sg.os.path, 'isdir', self.held_dir), run:
             out = verdicts.decide(self.s, rv, 'approve')
         self.assertTrue(out['ok'], out)
         self.assertEqual(len(calls), 1); self.assertEqual((calls[0][0][-1], calls[0][1]), ('git push origin fix-export', r'C:\work\ledger'))
@@ -77,7 +78,7 @@ class Holding(unittest.TestCase):
     def test_a_step_that_fails_says_so_and_runs_nowhere_else(self):
         self.held(); [rv] = self.pending()
         calls, run = self.ran(1, 'rejected: non-fast-forward')
-        with mock.patch.object(sg.os.path, 'isdir', return_value=True), run:
+        with mock.patch.object(sg.os.path, 'isdir', self.held_dir), run:
             out = verdicts.decide(self.s, rv, 'approve')
         self.assertFalse(out['ok']); self.assertIn('non-fast-forward', out['send_error'])
         self.assertTrue(out['send_error'].startswith('The held step failed: '), out['send_error'])

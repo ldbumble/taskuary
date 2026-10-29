@@ -18,7 +18,7 @@ meetingMessageType, or the iCalendar part's METHOD and SEQUENCE. Only a request 
 an answer, an update and a cancellation stay fyi.
 """
 import base64, json, re, time
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from zoneinfo import ZoneInfo
 from loguru import logger
 from . import buttons, calendar as cal, net as requests
@@ -52,7 +52,8 @@ def _local(dt: dict, tz) -> str:
     except ValueError: return s[:16].replace('T', ' ')
     zone = str((dt or {}).get('timeZone') or '')
     if zone and zone.upper() != 'UTC' and tz is not None and zone == cal.tz_name(tz): return d.strftime('%Y-%m-%d %H:%M')
-    try: src = ZoneInfo('UTC' if zone.upper() in ('', 'UTC') else zone)
+    # UTC never needs the tz database: Windows has none without tzdata, and ZoneInfo('UTC') raised there
+    try: src = timezone.utc if zone.upper() in ('', 'UTC') else ZoneInfo(zone)
     except Exception: return d.strftime('%Y-%m-%d %H:%M')
     return d.replace(tzinfo=src).astimezone(tz).strftime('%Y-%m-%d %H:%M') if tz is not None else d.strftime('%Y-%m-%d %H:%M')
 
@@ -104,7 +105,7 @@ def _ics_time(params: dict, value: str, tz):
         return f'{v[:4]}-{v[4:6]}-{v[6:8]} 00:00', True
     try: d = datetime.strptime(v[:15], '%Y%m%dT%H%M%S')
     except ValueError: return '', False
-    if v.endswith('Z'): d = d.replace(tzinfo=ZoneInfo('UTC'))
+    if v.endswith('Z'): d = d.replace(tzinfo=timezone.utc)      # never ZoneInfo('UTC'): no tz database on Windows without tzdata
     elif params.get('TZID'):
         try: d = d.replace(tzinfo=ZoneInfo(params['TZID'].strip('"')))
         except Exception: d = d.replace(tzinfo=tz) if tz else d

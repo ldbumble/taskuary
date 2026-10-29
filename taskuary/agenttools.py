@@ -29,8 +29,9 @@ TOOLS = {
                         "back you looked.",
                         _S({'words': _STR, 'sender': _STR, 'subject': _STR, 'since': _STR, 'until': _STR, 'limit': _INT}),
                         ('GET', '/api/agent/messages')),
-    'read_message': ('read', "One saved message in full - body, recipients, its thread, and the ids of its attachments. Read-only.",
-                     _S({'id': _INT}, ('id',)), ('GET', '/api/agent/messages/1')),
+    'read_message': ('read', "One saved message in full - body, recipients, its thread, and the ids of its attachments. `id` as "
+                     "Taskuary writes it: m1073 or 1073. Read-only.",
+                     _S({'id': {'type': 'string', 'description': 'the message id - m1073 or 1073'}}, ('id',)), ('GET', '/api/agent/messages/1')),
     'read_attachment': ('read', "The text of one attachment on a saved message (PDF, Word, Excel, PowerPoint, text). Read-only.",
                         _S({'id': _INT}, ('id',)), ('GET', '/api/attachments/1')),
     'my_task': ('read', "This task's brief: its title, summary, status and checklist with each to-do's id. Re-read it after a long "
@@ -103,9 +104,10 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
                                  a.get('limit') or 20)
         return _out(mailsearch.says(hits), fence_it=bool(hits))
     if name == 'read_message':
-        m = mailsearch.message(store, int(a['id']))
-        if not m: raise ValueError(f"no saved message {a['id']}")
-        files = [{'id': x['AttachmentId'], 'name': x.get('Name'), 'bytes': x.get('Size')} for x in store.list_attachments(int(a['id'])) or []
+        mid = mailsearch.message_id(a.get('id'))
+        m = mailsearch.message(store, mid)
+        if not m: raise ValueError(f"Taskuary has no saved message m{mid} - search_messages finds a message and its id")
+        files = [{'id': x['AttachmentId'], 'name': x.get('Name'), 'bytes': x.get('Size')} for x in store.list_attachments(mid) or []
                  if not x.get('Inline')]
         return _out(_j({**m, 'attachments': files}), fence_it=True)
     if name == 'read_attachment':
@@ -159,6 +161,15 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if name == 'propose_email': return _j(doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or '')))
     if name == 'propose': return _j(doors['propose'](tid, a))
     raise ValueError(f'no tool {name!r} - tools/list names them')
+
+
+def own_message(store, tid: int, args: dict) -> bool:
+    """Is the message a read_message call names one of THIS task's own - the mail it came from or one filed on it? A task's own
+    messages are what its brief already shows, so reading them in full is no reach into the owner's history, a stranger's task too."""
+    from . import mailsearch
+    try: m = store.get_message(mailsearch.message_id((args or {}).get('id')))
+    except (ValueError, TypeError): return False
+    return bool(m) and m.get('Channel') != 'assistant' and str(m.get('TaskId') or '') == str(tid)
 
 
 def proposal_of(args: dict) -> dict:

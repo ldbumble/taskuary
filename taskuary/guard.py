@@ -142,7 +142,7 @@ AGENT_WRITES = (
 # (general.HISTORY_LINE, cli.py), and a door it is told of is a decision: each reads on the session's OWN task (owns_task),
 # and a stranger's session is refused by stranger_denied, which names none of them.
 AGENT_READS = (
-    (r'GET', r'^/api/agent/messages(/\d+)?$',
+    (r'GET', r'^/api/agent/messages(/[mM]?\d+)?$',
      "`taskuary --search/--message`: the owner's mail and messages, read-only (mailsearch.py) - never a stranger's task"),
     (r'GET', r'^/api/agent/memory$', "`taskuary --memory`: LEARNED.md, read on demand (context.MEMORY_LINE) - never a stranger's task"),
 )

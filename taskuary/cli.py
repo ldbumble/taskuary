@@ -191,7 +191,11 @@ def _history(args, stranger):
     except (AttributeError, OSError): pass
     tid = os.environ.get('TASKUARY_TASK')
     if not str(tid).isdigit(): print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no task to search for'); return
-    if args.message is not None: got = _get(f'/api/agent/messages/{int(args.message)}', {'task_id': int(tid)}, stranger)
+    if args.message is not None:
+        from .mailsearch import message_id
+        try: mid = message_id(args.message)
+        except ValueError as e: print(f'not read: {e}'); return
+        got = _get(f'/api/agent/messages/{mid}', {'task_id': int(tid)}, stranger)
     else: got = _get('/api/agent/messages', {'task_id': int(tid), 'words': args.search or '', 'sender': args.sender, 'subject': args.subject,
                                              'since': args.since, 'until': args.until, 'limit': args.limit}, stranger)
     if not got: return
@@ -339,7 +343,7 @@ def main():
     ap.add_argument('--since', default='', metavar='YYYY-MM-DD', help='with --search: sent on or after this day')
     ap.add_argument('--until', default='', metavar='YYYY-MM-DD', help='with --search: sent on or before this day')
     ap.add_argument('--limit', type=int, default=20, help='with --search: how many hits at most')
-    ap.add_argument('--message', type=int, metavar='ID', help='print one message from --search in full, with its thread')
+    ap.add_argument('--message', metavar='ID', help='print one message from --search in full, with its thread (m1073 or 1073)')
     ap.add_argument('--memory', metavar='SECTION', nargs='?', const='',
                     help="print what Taskuary has learned about the owner (LEARNED.md) - all of it, or one section: people, care, work, promises, bring")
     args = ap.parse_args()

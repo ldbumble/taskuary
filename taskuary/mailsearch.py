@@ -5,6 +5,7 @@ code of its own to go and find the mail (the owner, 2026-10-21: it should look i
 behind `taskuary --search` / `--message` (cli.py) and GET /api/agent/messages (server.py): a session reads it on its OWN task
 (guard.owns_task), and a stranger's session never (guard.stranger_denied refuses it, and its brief does not name it).
 """
+import re
 from .routing import tokens
 from .store import task_ref
 
@@ -50,9 +51,20 @@ def search(store, sender: str = '', subject: str = '', words: str = '', since: s
     return out
 
 
-def message(store, mid: int) -> dict | None:
+def message_id(x) -> int:
+    """A message's id as Taskuary writes it anywhere an agent reads one: 1073, '1073', 'm1073' (the Assistant's and the brief's own
+    spelling), '[1073]' or '#1073'. The agent was handed "message m1073" and read_message and `--message` both refused it as no number,
+    twice each, before it gave up on the mail (2026-10-28). Structure only - an id, never words."""
+    if isinstance(x, bool): raise ValueError(f'{x!r} is not a message id - one looks like m1073 or 1073')
+    if isinstance(x, int): return x
+    m = re.fullmatch(r'\s*[\[#(]?\s*[mM]?\s*(\d+)\s*[\])]?\s*', str(x if x is not None else ''))
+    if not m: raise ValueError(f'{str(x)[:40]!r} is not a message id - one looks like m1073 or 1073 (search_messages lists them)')
+    return int(m.group(1))
+
+
+def message(store, mid) -> dict | None:
     """One message in full, with the thread it is on (oldest first, the owner's own replies included) - None when there is none."""
-    m = store.get_message(int(mid))
+    m = store.get_message(message_id(mid))
     if not m or m.get('Channel') == 'assistant': return None
     thread = store.thread_messages(m.get('ConversationId'), m.get('Subject'), 40) or [m]
     return {**_hit(m), 'body': str(m.get('BodyText') or ''), 'to': str(m.get('RecipientsJson') or ''),

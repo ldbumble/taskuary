@@ -169,6 +169,17 @@ def _browser_task(task: dict) -> bool:
     return browserview.wanted(task)
 
 
+def browser_offered(store, tid: int, pick: str) -> bool:
+    """Is Taskuary's browser OFFERED to this task's agent though nobody marked the task for one? Every task of the owner's own on a CLI
+    with hands: whether a page is needed is the agent's to see in the work, never a word list's. Not the dock, and not a stranger's
+    task - a stranger's words do not get a browser to drive."""
+    from . import origin
+    if not str(pick or '').startswith('cli:') or not full_hands(store): return False
+    try: return not is_dock(store.get_task(tid)) and origin.of_task(store, tid)[0] != 'stranger'
+    except Exception as e:
+        logger.debug(f'general: browser not offered on task {tid} - {e}'); return False
+
+
 NO_BROWSER_LINE = "This AI can't use the browser - pick an AI CLI such as Claude Code or Codex to let it."
 
 
@@ -1025,7 +1036,7 @@ class GeneralSession:
             if delivery_instructions:
                 system = f'{system}\n\n{str(delivery_instructions).strip()}'
             if not as_owner: user = f'{user}\n\n{text}'      # the instruction, carried but not attributed
-            browser_tools, browser_env = False, None
+            browser_tools, browser_env, browser_offer = False, None, False
             if self.browser_wanted and not self.pick.startswith('cli:'):
                 # AN API CARD HAS NO SHELL, so no browser: said in the turn and to it, instead of a pane over a chat that "forgot" (2026-10-25)
                 self._remember_trace('progress', 'browser', NO_BROWSER_LINE)
@@ -1057,6 +1068,20 @@ class GeneralSession:
                     self._emit(f'\x1b[33mThe browser did not open: {why}.\x1b[0m\r\n')
                     self._remember_trace('progress', 'browser', f'The browser did not open: {why}. Send another message to try again.')
                     system = f'{system}\n\n{browserview.FAILED_LINE.format(why=why)}'
+                elif browser_offered(self.store, self.task_id, self.pick):
+                    # ...and a task nobody marked still gets the browser OFFERED, so a link in a message is followed in Taskuary's own
+                    # browser and not in a tool of the CLI's own that nobody can watch or hold (browserview.OWN_ONLY, 2026-10-28)
+                    if browserview.installed():
+                        browser_tools, browser_offer = True, True
+                        system = f'{system}\n\n{browserview.brief(held=self.holds_browser(), open_now=False)}'
+                    else:
+                        from . import words as places
+                        system = f"{system}\n\n{browserview.NOT_SET_UP.format(where=places.name('ai_apps'))}"
+                elif not is_dock(self.store.get_task(self.task_id)):
+                    # a stranger's task gets no browser, and its agent can say why instead of reaching for one of its own
+                    from . import origin
+                    o, why = origin.of_task(self.store, self.task_id)
+                    if o == 'stranger': system = f'{system}\n\n{browserview.STRANGER_LINE.format(why=why)}'
             # only a CLI-backed chat can post to the wall: an API provider has no shell to
             # run the command in, and telling it about a command it cannot run is a lie
             if self.pick.startswith('cli:'):
@@ -1186,7 +1211,7 @@ class GeneralSession:
                     system = f'{system}\n\n{hub.ASSISTANT_LINE}'
                 if browser_tools:
                     from . import browserview
-                    system = f'{system}\n\n{browserview.brief(held=self.holds_browser())}'
+                    system = f'{system}\n\n{browserview.brief(held=self.holds_browser(), open_now=not browser_offer)}'
                 system = f'{system}\n\n{_sc.ASK_LINE}'
                 if systems: system = f'{system}\n\n{systems}'
                 if said: system = f'{system}\n\n{said}'           # the fresh conversation hears of the mail as the first did
@@ -1253,7 +1278,12 @@ class GeneralSession:
                 reply = proposals.strip(reply).strip() or 'Proposed - it waits on the task for your yes.'
             # the page the turn ended on is where a restarted session's browser reopens (browserview.keep_page)
             if browser_tools:
-                try: browserview.keep_page(self.task_id, browserview.state(self.sid, fresh=True).get('url'))
+                try:
+                    st = browserview.state(self.sid, fresh=True)
+                    browserview.keep_page(self.task_id, st.get('url'))
+                    # an offered browser the agent opened is the task's from now on: the next turn is told it is open, not offered
+                    if browser_offer and st.get('open'):
+                        self.store.tag_task(self.task_id, browserview.WANTS, actor='assistant'); self.browser_wanted = True
                 except Exception as e: logger.debug(f'could not keep the page of task {self.task_id}: {e}')
             reply, closing = selfclose.chat_marker(reply)
             reply, signing = selfclose.signin_marker(reply)      # a sign-in it needs: Taskuary's to do, never the agent's (signin.py)

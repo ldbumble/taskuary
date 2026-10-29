@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dictate, dictationError } from "../src/dictation.js";
+import { browserRecogniser, dictate, dictationError } from "../src/dictation.js";
 
 /* The browser's own voice keeps listening until the owner stops it (the owner, 2026-10-28: "hit the mic and it just turns right off"). */
 const made = [];
@@ -118,4 +118,10 @@ test("the mic shows its error beside it and the chat box shows what is being hea
   assert.match(ui, /open=\{!ask && \(!!err/);
   assert.match(av, /onInterim=\{setHeard\}/);
   assert.match(av, /micRef\.current\?\.cancel\(\)/);
+});
+
+test("the Taskuary window has no browser voice: WebView2's recogniser has no service behind it", () => {
+  assert.equal(browserRecogniser({ webkitSpeechRecognition: FakeSR, pywebview: {} }), null);
+  assert.equal(browserRecogniser({ webkitSpeechRecognition: FakeSR }), FakeSR);
+  assert.equal(browserRecogniser({}), null);
 });

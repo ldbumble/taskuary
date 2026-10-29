@@ -217,6 +217,8 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
          # what an agent could do for the owner about the main ask, said to them in one sentence - the task's one-press offer
          # (the owner, 2026-10-28: "I can register you for the webinar and put it on your calendar"; ingest.offer_of)
          'offer': {'type': ['string', 'null']},
+         # ...and whether all the offer would produce is the reply to the sender: once a draft exists it is done (ingest.offer_of, B25)
+         'offer_is_reply': {'type': ['boolean', 'null']},
          # the text around the sender's words that they did not write - a mail system's banner, an app's stamp, an unsubscribe
          # strip, a legal footer - copied verbatim, so a screen can leave exactly it out (strip_wrapper; the owner, 2026-10-28)
          'wrapper': {'type': ['array', 'null'], 'items': {'type': 'string'}},
@@ -629,7 +631,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                     thread: dict = None, watch: str = None, playbooks: str = None,
                     project: dict = None, candidates: list = None, repos: list = None,
                     profiles: str = None, routing_history: list = None, seen: set = None, job: str = None,
-                    coding: bool = True, workflows: str = None) -> dict:
+                    coding: bool = True, workflows: str = None, connected: list = None) -> dict:
     """`job` is JOB.md as job_doc() reads it - what the owner is responsible for, who they serve, what to
     protect. It weighs IMPORTANCE (how much this arrival matters to the job) and never intent; blank until
     the owner wrote or generated something real, so the shipped template never rides in as noise.
@@ -757,6 +759,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                                # 160 cut every real description mid-clause - taskuary lost "do the work, you approve", ledger
                                # lost the noun its whole sentence was about. This is the one line the model routes on.
                                **({'known_repositories': [{'repo': r.get('repo'), 'about': (r.get('about') or '')[:REPO_ABOUT]} for r in repos]} if repos else {}),
+                               # what this install can reach - an offer is only what an agent can do with these (B25, 2026-10-29)
+                               **({'connected_systems': list(connected)} if connected is not None else {}),
                                **({'body_truncated': True} if body_cut else {}),
                                # what "by Friday" counts from (DUE)
                                **({'sent_on': str(msg['sent_at'])[:10]} if msg.get('sent_at') else {}),
@@ -890,7 +894,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if j.get('refines') is True and (home or same_ids or candidates is not None): out['refines'] = True
                 if j.get('data_class') in DATA_CLASSES: out['data_class'] = j['data_class']
                 offer = ' '.join(str(j.get('offer') or '').split())[:240]
-                if out['intent'] in ('task', 'reply_only') and offer and offer.lower() not in ('null', 'none'): out['offer'] = offer
+                if out['intent'] in ('task', 'reply_only') and offer and offer.lower() not in ('null', 'none'):
+                    out['offer'] = offer
+                    if j.get('offer_is_reply') is True: out['offer_is_reply'] = True
                 # ...and what it tries to make an AI do (TRIAGE.md's danger): asked for since 2026-10-15 and dropped here, so only ranking's
                 # reading ever reached message.Danger - and it holds the unattended start now (ingest.danger, the owner 2026-10-28)
                 dg = ' '.join(str(j.get('danger') or '').split())[:200]

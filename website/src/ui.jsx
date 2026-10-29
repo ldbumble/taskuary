@@ -734,35 +734,28 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
   // value outside it used to select brains[0] silently - the picker showed a CLI nobody chose.
   const list = coding ? (brain && !brains.includes(brain) ? [brain, ...brains] : brains) : roles;
   const value = coding ? brain : agent;
-  // A HAND-OFF MAY DECLINE THE QUESTION. Elsewhere a blank value shows list[0] and the dispatch sends
-  // nothing, which is the same answer twice; here blank means "leave the profile it already has", so
-  // it has to SAY that rather than name a profile the run will not use.
+  // A HAND-OFF LEAVES THE PROFILE IT HAS: blank, and no picker asks (below).
   const handOff = !coding && !!onPick;
   const selected = handOff ? value : (list.includes(value) ? value : (list[0] || value));
   const info = (coding ? brainModels[selected] : models[selected]) || {};
   const chosenBrain = generalBrains.find((b) => b.pick === pick) || {};
-  // blank runs the task's own profile - triage's role, else the assistant (general.py) - so it NAMES it. A role no longer
-  // carries a brain (the 2026-09-16 spec): the brain is the next picker's answer, and a stale "· claude" here said otherwise.
-  const hasLabel = has ? `its profile · ${has}` : "the profile it has";
   // NO CODING TOOL CHOSEN, SAID IN PLACE OF A BLANK PICKER (owner-approved, 2026-10-21): the picker drew an empty box and the start
   // found a tool on the computer by itself. The server refuses that start too (terminal.start_on_task).
   if (coding && brainsRead && !codingReady) return <NoCodingTool />;
   return (
     <>
-      {/* a blank answer SAYS so: closed, the select drew an empty box where "the profile it has" belonged (the 2026-10-07
-          design pass) - MUI does not draw an empty value's item unless it is told how */}
-      <Select size="small" value={selected || ""} displayEmpty={handOff}
-        renderValue={handOff ? (v) => v || hasLabel : undefined}
+      {/* A HAND-OFF NAMES NO PROFILE (the owner, 2026-10-29: "the agent should just say Taskuary but the profile inherits from it" - a
+          reservation was being made by "researcher", and "assistant" is no profile they ever made). It runs the profile the task has
+          (triage's role, else the assistant's own), behind the scenes; the profiles themselves are kept in Docs -> Profiles. */}
+      {!handOff && <Select size="small" value={selected || ""}
         onChange={(e) => (coding ? onBrain : onAgent)(e.target.value)}
         sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 120 }}>
-        {handOff && <MenuItem value="" sx={{ fontSize: 12.5 }}>{hasLabel}</MenuItem>}
-        {/* ...and the profile it has is that first line, not a second one further down saying the same */}
-        {list.filter((a) => !(handOff && has && a === has)).map((a) => (
+        {list.map((a) => (
           <MenuItem key={a} value={a} sx={{ fontSize: 12.5 }}>
             {a}{coding && brainModels[a] && brainModels[a].installed === false ? " · not installed" : ""}
           </MenuItem>
         ))}
-      </Select>
+      </Select>}
       {handOff && (
         <Select size="small" displayEmpty value={pick || ""} onChange={(e) => { onPick(e.target.value); onModel(""); }}
           sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 150 }}>

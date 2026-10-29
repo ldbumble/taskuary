@@ -55,7 +55,9 @@ test("a general worker is chosen by name alone - the brain is its own picker", (
   // a role no longer carries a brain (the 2026-09-16 spec), so "researcher · claude" named a CLI the run would not use
   // (the owner, 2026-10-15: "Profile has nothing to do with what brain it uses??")
   assert.doesNotMatch(picker, /models\[a\]\?\.cmd/);
-  assert.match(picker, /its profile · \$\{has\}/);       // blank names the profile it runs
+  // ...and a hand-off names no profile at all: the agent is Taskuary, the profile rides behind it (the owner, 2026-10-29)
+  assert.match(picker, /\{!handOff && <Select size="small" value=\{selected/);
+  assert.doesNotMatch(picker, /its profile · /);
 });
 
 test("Settings defaults and backups offer coding CLIs rather than profile names", () => {

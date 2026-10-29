@@ -80,8 +80,10 @@ def _acted(store, target_kind, target_id) -> str:
         op = store._one("SELECT OpId, Status FROM operation WHERE TargetKind='idea' AND TargetId=? AND Status<>'proposed' ORDER BY rowid DESC LIMIT 1", (int(target_id),)) or {}
         return f"/{op.get('OpId') or ''}:{op.get('Status') or ''}"
     # ...and whether its draft could not be written: a Reply whose draft failed left the line it was judged before standing (2026-10-19)
-    rv = store._one(f"SELECT GROUP_CONCAT(ReviewId || ':' || IFNULL(Status,'') || ':' || IFNULL(DeliveryState,'') || ':' || (IFNULL(DraftError,'')<>'') || (IFNULL(DraftNeeds,'')<>''), ',') AS d FROM "
-                    f"(SELECT * FROM review WHERE {col}=? ORDER BY ReviewId)", (int(target_id),)) or {}
+    # ...and THE DRAFT'S OWN WORDS: a redraft keeps its review, so "Redraft: it promises an invite" stood over the redraft that had
+    # already dropped the promise - the draft was never read again (walk 2026-10-29). The revision is hashed, so the text costs nothing
+    rv = store._one(f"SELECT GROUP_CONCAT(ReviewId || ':' || IFNULL(Status,'') || ':' || IFNULL(DeliveryState,'') || ':' || (IFNULL(DraftError,'')<>'') || (IFNULL(DraftNeeds,'')<>'')"
+                    f" || ':' || IFNULL(FinalText, IFNULL(DraftText,'')), ',') AS d FROM (SELECT * FROM review WHERE {col}=? ORDER BY ReviewId)", (int(target_id),)) or {}
     op = store._one("SELECT OpId, Status FROM operation WHERE TargetKind=? AND TargetId=? AND Status<>'proposed' ORDER BY rowid DESC LIMIT 1",
                     (target_kind, int(target_id))) or {}
     return f"{rv.get('d') or ''}/{op.get('OpId') or ''}:{op.get('Status') or ''}"

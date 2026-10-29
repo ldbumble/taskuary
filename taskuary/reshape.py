@@ -21,7 +21,7 @@ SPLIT_SYSTEM = (
     'One work task, and the mail it came from. Decide whether it is really TWO independent jobs '
     'that were filed as one, and if so name them. Answer JSON only:\n'
     '{"two": true|false, "why": "<10 words max>", '
-    '"first": {"title": "...", "summary": "..."}, "second": {"title": "...", "summary": "..."}}\n'
+    '"first": {"title": "...", "summary": "..."}, "second": {"title": "...", "summary": "...", "items": ["<id>"]}}\n'
     'two = the task carries two jobs that could be finished, handed over or dropped separately - '
     'usually two asks that happened to arrive in the same message. Steps of one job are NOT two jobs; '
     'neither is one job with a deadline, a caveat or a question attached.\n'
@@ -29,7 +29,9 @@ SPLIT_SYSTEM = (
     '"first" KEEPS this task - its ref, its agent session, its report - so put the job already under way, '
     'or the larger one, first. "second" becomes a brand-new task.\n'
     'Each title is one imperative line under 90 characters, in the sender\'s own words where you can. '
-    'Each summary quotes the part of the ask that belongs to that half - do not invent detail.')
+    'Each summary quotes the part of the ask that belongs to that half - do not invent detail.\n'
+    '"items" are the ids of the task\'s to-do items (its "checklist") that belong to the SECOND job - they move to the new '
+    'task with it; the rest stay. [] when none belongs to it or there is no checklist.')
 
 MAX_SUMMARY = 4000
 
@@ -56,21 +58,27 @@ def propose_split(store, tid: int, llm=None) -> dict:
            **no_split(store, tid, 'no AI brain is connected - name the second job yourself; the mail is listed below')}
     if not llm: return out
     try:
+        todo = store.task_checklist(tid)
         user = json.dumps({'title': t.get('Title'), 'summary': str(t.get('Summary') or '')[:2000], 'kind': t.get('Kind'),
+                           **({'checklist': [{'id': i['id'], 'text': i['text']} for i in todo]} if todo else {}),
                            'messages': [{'from': m.get('FromEmail'), 'subject': m.get('Subject'),
                                          'body': str(m.get('BodyText') or '')[:2500]} for m in msgs[:6]]})
         j = json.loads(re.sub(r'^```(json)?|```$', '', llm(SPLIT_SYSTEM, user, 700).strip(), flags=re.M))
         half = lambda k, d: {'title': str((j.get(k) or {}).get('title') or d)[:200],
                              'summary': str((j.get(k) or {}).get('summary') or '')[:MAX_SUMMARY]}
+        # ...and the to-do items the model gave the second job: only ids the checklist has (B13)
+        ids = {i['id'] for i in todo}
+        items = [str(x) for x in ((j.get('second') or {}).get('items') or []) if str(x) in ids] if isinstance(j.get('second'), dict) else []
         return {**out, 'ai': True, 'two': bool(j.get('two')), 'why': str(j.get('why') or '')[:200],
-                'first': half('first', t.get('Title') or ''), 'second': half('second', '')}
+                'first': half('first', t.get('Title') or ''), 'second': {**half('second', ''), 'items': list(dict.fromkeys(items))}}
     except Exception as e:
         return {**out, 'why': f'the AI could not read it ({str(e)[:60]}) - name the second job yourself'}
 
 
 def split_task(store, tid: int, second: dict, first: dict = None, move_message_ids=None, actor: str = 'owner') -> int:
     """Break one task in two. `first` retitles the task in place (optional); `second` becomes a
-    new one. Only messages you name move - the rest stay with the history they belong to."""
+    new one. Only messages you name move - the rest stay with the history they belong to - and the to-do items
+    `second['items']` names (the proposal's, by id) move with it, ticked or not; the rest stay."""
     t = store.get_task(tid)
     if not t: raise ValueError(f'no task {tid}')
     title = str((second or {}).get('title') or '').strip()
@@ -91,11 +99,20 @@ def split_task(store, tid: int, second: dict, first: dict = None, move_message_i
     for mid in moved:
         store.attach_message(mid, new)
         store.add_route(mid, new, 'split', None, f'{task_ref(tid)} was two jobs - this one is {task_ref(new)}', [], actor)
+    # THE TO-DOS GO WITH THEIR JOB (B13, the email walk 2026-10-29): a split left every box on the first task - the second job's
+    # own to-do stayed under the first and the new task had none. The boxes keep their ids, ticks and notes
+    want = {str(x) for x in ((second or {}).get('items') or [])}
+    todo = store.task_checklist(tid)
+    going = [i for i in todo if i.get('id') in want]
+    if going:
+        store._write_checklist(tid, [i for i in todo if i.get('id') not in want], actor)
+        store._write_checklist(new, going, actor)
+    said = [plural(len(moved), 'message')] * bool(moved) + [plural(len(going), 'to-do')] * bool(going)
     store.add_comment(tid, actor, 'human',
                       f'Broke this in two: "{title[:120]}" is now {task_ref(new)}'
-                      + (f' ({plural(len(moved), "message")} moved with it).' if moved else '.'))
+                      + (f' ({" and ".join(said)} moved with it).' if said else '.'))
     store.add_comment(new, actor, 'human', f'Broken out of {task_ref(tid)} - triage filed two jobs as one.')
-    store.audit('task', new, 'split_from_task', actor, detail={'from_task': tid, 'messages': moved})
+    store.audit('task', new, 'split_from_task', actor, detail={'from_task': tid, 'messages': moved, 'items': [i['id'] for i in going]})
     store.audit('task', tid, 'split_into_task', actor, detail={'new_task': new, 'title': title[:120]})
     return new
 

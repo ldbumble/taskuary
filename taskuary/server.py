@@ -3017,7 +3017,7 @@ def not_a_task(task_id: int, body: NotATaskBody = None, background: BackgroundTa
     _drop_task(task_id)
     return {'ok': True, 'learned': learned, **kept}
 
-class SplitHalf(BaseModel): title: str | None = None; summary: str | None = None
+class SplitHalf(BaseModel): title: str | None = None; summary: str | None = None; items: list[str] | None = None   # the to-dos that go with it
 class TaskSplitBody(BaseModel):
     second: SplitHalf
     first: SplitHalf | None = None

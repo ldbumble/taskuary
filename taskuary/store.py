@@ -3907,6 +3907,12 @@ class SQLiteStore:
                 root = follow(row['ItemId'])
                 if root not in roots or (kind != 'message' and root in message_roots): continue
                 if in_window(row['ActivityAt']): selected.add(root)
+        # ...and AN OPEN TASK IS ON THE RAIL HOWEVER OLD (processing_unread.card_for): the window is the mail's. A task whose one
+        # message aged past it fell off the rail with work still going on it - found through search, worked, and gone on Next (2026-10-29)
+        for row in cur.execute(f'''SELECT DISTINCT pm.ItemId FROM processing_member pm JOIN task t
+                ON pm.EntityKind='task' AND pm.LocalId=CAST(t.TaskId AS TEXT)
+                WHERE pm.RetiredAt IS NULL AND t.Status NOT IN ('done','dropped') AND COALESCE(t.SourceRef,'')!='assistant:dock' '''):
+            if (root := follow(row['ItemId'])) in roots: selected.add(root)
         return selected
 
     def _rail_coverage(self, cur, rail):

@@ -49,7 +49,8 @@ test("a report opens on itself between slim Came from and Close out tabs, a task
   assert.equal(await page.$$eval("[data-tq-report-body] [data-tq-report-table] tbody tr", (r) => r.length), 5);
   assert.ok(await page.$("[data-tq-report-body] [data-tq-report-chart]"), "its chart is there");
   // ...and the row is the report's own: Next, its moves, Share
-  for (const w of ["Next", "Put it on my list", "Pause this report", "Share"]) assert.ok(m.row.includes(w), `${w} on the row: ${m.row}`);
+  // ...the moves on the row, Pause this report a task-shape move in the Change pill's ▾ since the three-pill row (2026-10-28)
+  for (const w of ["Next", "Put it on my list", "Share"]) assert.ok(m.row.includes(w), `${w} on the row: ${m.row}`);
 
   // Came from opens on press - what produced it - and the report folds to its full tab; the card never moves
   await tab(page, "from"); await sleep(600);

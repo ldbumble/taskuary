@@ -2859,6 +2859,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         + "[follow the installation guide](https://taskuary.com/docs/).\n\n"
         + "In your installed app: enter your name, choose an AI, connect one mailbox or chat, and sync your first messages. "
         + "The setup guide helps you through each step. Hosted AI receives the context needed for the task; a local model keeps those prompts on your machine." }]);
+      setPopOpen(true);                  // the visitor pressed Setup: their own press opens the window the answer is in
       return;
     }
     setWalking(true);

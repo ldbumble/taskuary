@@ -43,6 +43,7 @@ import { ABOUT_SECTIONS, AUDIT_SECTIONS, secId, pageId, scrollToSection, section
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import DocsView, { OPERATOR_DOCS } from "./DocsView.jsx";
 import RoleStart from "./RoleStart.jsx";
+import { AGENT_SHOWN, instructionsHint } from "./kinds.js";
 import { recipientLabel, recipientOptions } from "./recipientOptions.js";
 
 
@@ -550,11 +551,15 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
         {!codingOptions.length && <MenuItem value="" disabled sx={{ fontSize: 12.5 }}>no coding CLI yet — add one under Connections</MenuItem>}
       </Select>
     );
+    // WHO TAKES YOUR MAIL IS TASKUARY (the owner, 2026-10-29: profile names hidden in Settings too, as on every other screen - kinds.json
+    // `shown_`): the choice is which instructions it follows, said as that - "Instructions: ap" - never a profile standing as a worker
     if (m.type === "profile") return (
-      <Select size="small" displayEmpty value={profileNames.includes(s.Value) ? s.Value : ""}
+      <Select size="small" displayEmpty value={profileNames.includes(s.Value) ? s.Value : ""} title={instructionsHint(s.Value) || undefined}
+        renderValue={(v) => (v ? AGENT_SHOWN : "nobody - leave it for me to pick")}
         onChange={(e) => saveSetting(s.Name, e.target.value)} sx={{ minWidth: 160, fontSize: 12.5, bgcolor: "#fff" }}>
         <MenuItem value="" sx={{ fontSize: 12.5 }}>nobody - leave it for me to pick</MenuItem>
-        {profileNames.map((n) => <MenuItem key={n} value={n} sx={{ fontSize: 12.5 }}>{n}</MenuItem>)}
+        {profileNames.map((n) => <MenuItem key={n} value={n} sx={{ fontSize: 12.5 }}>{AGENT_SHOWN}
+          <Box component="span" sx={{ color: DIM, ml: 0.75 }}>{instructionsHint(n)}</Box></MenuItem>)}
       </Select>
     );
     if (m.type === "agents") {

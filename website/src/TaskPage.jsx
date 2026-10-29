@@ -103,7 +103,7 @@ import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import EmailSomeone from "./EmailSomeone.jsx";
 import { useShareParts } from "./Share.jsx";
 import { ago, filesLine, plural } from "./timeWords.js";
-import { KIND_OPTIONS, KINDS, kindLabel, shortKind, shownAgent, instructionsHint } from "./kinds.js";
+import { KIND_OPTIONS, KINDS, kindLabel, shortKind, shownAgent, instructionsHint, AGENT_SHOWN } from "./kinds.js";
 import { PICK_REPO, openAppLink, takeRepoPick } from "./appLinks.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { place } from "./words.js";
@@ -1284,6 +1284,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // is the brain's - it is not a property of the task, so the card does not offer one. A live
   // session names the CLI it was ASKED to run; otherwise the roster says which brain the role uses.
   const runRole = assignedAgent(t?.Assignee) || (t?.Kind === "coding" ? codingProfile(agents, kinds) : "");
+  // the profile the Assigned to picker's one Taskuary row keeps: the task's own, else the one its kind starts with (general.py)
+  const asProfile = runRole || ownProfile || "";
   // NAME THE BRAIN, NOT THE PRODUCT. `term.cli` is hardcoded to the string "taskuary" on every
   // general session (general.info), so the one card that could not say which brain was running
   // read "brain taskuary" - the product's own name, on the row whose whole job is to answer that
@@ -3164,7 +3166,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         {pick?.what === "menu" && [
           <MenuItem key="kind" sx={{ fontSize: 12.5 }} onClick={() => setPick({ ...pick, what: "kind" })}>Who does it · {kindLabel(t.Kind || "task")}</MenuItem>,
           <MenuItem key="priority" sx={{ fontSize: 12.5 }} onClick={() => setPick({ ...pick, what: "priority" })}>Priority · {level(t.Priority)}</MenuItem>,
-          <MenuItem key="assign" sx={{ fontSize: 12.5 }} onClick={() => setPick({ ...pick, what: "assign" })}>Assigned to · {t.Assignee ? assigneeLabel(t.Assignee) : "nobody"}</MenuItem>,
+          <MenuItem key="assign" sx={{ fontSize: 12.5 }} title={instructionsHint(assignedAgent(t.Assignee)) || undefined}
+            onClick={() => setPick({ ...pick, what: "assign" })}>Assigned to · {t.Assignee ? assigneeLabel(t.Assignee) : "nobody"}</MenuItem>,
           ...(!isGeneral && canCode ? [<MenuItem key="repo" sx={{ fontSize: 12.5 }} onClick={() => { setPick(null); pickRepo(); }}>Repository · {repoOf(t) || "pick a repo"}</MenuItem>] : []),
         ]}
         {pick?.what === "kind" && (KINDS.includes(t.Kind || "task") ? KIND_OPTIONS : [{ key: t.Kind, label: t.Kind, hint: "legacy task type" }, ...KIND_OPTIONS])
@@ -3175,11 +3178,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         {/* no Status here: status is DERIVED - Start, Mark done, Remind me and Reopen set it (T12) */}
         {pick?.what === "priority" && PRIORITIES.map((p) =>
           <MenuItem key={p} selected={p === level(t.Priority)} sx={{ fontSize: 12 }} onClick={() => { setPick(null); if (p !== level(t.Priority)) change("task.update", { priority: p }); }}>{p}</MenuItem>)}
+        {/* WHO, NOT WHICH INSTRUCTIONS (the owner, 2026-10-29: profile names hidden in the Assigned to picker too): one Taskuary
+            row, the profile it keeps - the task's own, else the one its kind starts with - told on hover; the profile itself is
+            the agent section's pick and Settings', never a name here */}
         {pick?.what === "assign" && [
-          ["", "unassigned"], ["owner", "you"], ...agents.map((name) => [agentAssignee(name), name]),
+          ["", "unassigned"], ["owner", "you"], ...(asProfile ? [[agentAssignee(asProfile), AGENT_SHOWN]] : []),
           ...(t.Assignee && t.Assignee !== "owner" && !assignedAgent(t.Assignee) ? [[t.Assignee, t.Assignee]] : []),
         ].map(([v, name]) =>
-          <MenuItem key={v || "none"} selected={v === (t.Assignee || "")} sx={{ fontSize: 12 }} onClick={() => {
+          <MenuItem key={v || "none"} selected={v === (t.Assignee || "")} sx={{ fontSize: 12 }} title={instructionsHint(assignedAgent(v)) || undefined} onClick={() => {
             setPick(null);
             if (v === (t.Assignee || "")) return;
             const worker = assignedAgent(v);

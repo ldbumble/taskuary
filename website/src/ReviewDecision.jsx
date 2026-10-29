@@ -20,7 +20,7 @@ import { hint as btnHint, label as btn } from "./buttons.js";   // theme.jsx own
 import { useDraftJob } from "./replyDraft.js";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
 import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
-import { DECIDE_TIMEOUT, draftState, replySendFailure, reviewDeliveryState, sendFix, timedOut } from "./sendState.js";
+import { DECIDE_TIMEOUT, draftState, failureHead, replySendFailure, reviewDeliveryState, sendFix, timedOut } from "./sendState.js";
 import { openAppLink } from "./appLinks.js";
 import { runOperation } from "./taskOps.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
@@ -587,11 +587,12 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       {said && <Alert severity="success" sx={{ mt: 1 }} onClose={() => setSaid("")}>{said}. Press {btn("approve", "action")} again once the checks pass.</Alert>}
       {sendErr && (
         <Alert severity="error" sx={{ mt: 1 }} onClose={() => setSendErr("")}>
-          <b>{sendErr.unknown ? "Delivery has not been confirmed." : "The reply was not sent."}</b> {sendErr.message}
-          <Box sx={{ mt: 0.5, fontSize: 11.5 }}>
+          <b>{failureHead(sendErr, !!proposal)}</b> {sendErr.message}
+          {/* a proposal's failure is the act's own sentence ("The held step failed: ..."): no reply, no draft, nothing to send again */}
+          {(sendErr.unknown || !proposal) && <Box sx={{ mt: 0.5, fontSize: 11.5 }}>
             {sendErr.unknown ? "Check the original attempt before sending by any other route. A missing receipt will not cause Taskuary to send it again."
               : fix ? `The draft stays on the task - ${fix.label} below, then send it again.` : "The draft stays on the task. Correct the delivery problem, then send it again."}
-          </Box>
+          </Box>}
         </Alert>
       )}
     </Box>

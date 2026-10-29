@@ -173,9 +173,6 @@ def written_as_chat(channel) -> bool:
 REPLY_TOKENS = 300          # ordinary reply-only mail should remain quick and short
 COMPLETE_REPLY_TOKENS = 1200  # completed multi-item work must have room to answer every item
 
-# SOUL.md tells the model how to sign off, and it obeys - in a chat window too, where it reads
-# like a form letter. Belt and braces: the prompt says not to, and this takes it off anyway.
-_SIGNOFF = re.compile(r'^(best|thanks|thank you|regards|cheers|kind regards|best regards|sincerely)\b[\s,!.]*$', re.I)
 _COMMENT = re.compile(r'<!--.*?-->', re.S)
 _TEMPLATE_LINES = re.compile(r'^.*(not generated yet|Write your own rules here).*$', re.M)
 
@@ -243,7 +240,8 @@ def signed(text: str, sig: str) -> str:
     if not str(sig or '').strip(): return str(text or '').rstrip()
     body = str(text or '').rstrip()
     if body.endswith(sig.strip()): body = body[:-len(sig.strip())].rstrip()
-    return with_signature(strip_signoff(body) or body, sig)
+    lines = [l for l in sig.splitlines() if l.strip()]
+    return with_signature(strip_signoff(body, lines + [l.split()[0] for l in lines]) or body, sig)
 
 
 # THE SIGNATURE, READ OFF THE OWNER'S OWN SENT MAIL: the closing lines most of it shares, quoted history cut first. No model -
@@ -326,18 +324,25 @@ def history_block(store, m: dict) -> str:
             'and mention an open matter only when it bears on this reply.\n' + dos[:2500]) if dos else ''
 
 
-def strip_signoff(text: str) -> str:
-    lines = [l for l in (text or '').rstrip().splitlines()]
-    while lines:
-        last = lines[-1].strip()
-        # a closing word, or a bare name/initials on its own line at the end
-        # ...but a short SENTENCE is the reply: "Friday works." read as a name and was cut, with everything above it gone
-        # too when it was the whole answer (2026-10-06)
-        sentence = ' ' in last and last[-1:] in '.!?'
-        if not last or _SIGNOFF.match(last) or (len(last.split()) <= 3 and len(last) <= 28 and not sentence
-                                                and last.rstrip('.').replace('-', ' ').replace(',', '').replace(' ', '').isalpha()):
-            lines.pop(); continue
-        break
+def own_lines(store, sig: str = '') -> list:
+    """The lines that are the owner's own name or signature - what a writer that signed anyway put at the end, known from Settings."""
+    name = ' '.join(str(store.get_setting('owner_name') or '').split())
+    return [name, name.split()[0] if name else ''] + str(sig or '').splitlines()
+
+
+def _bare(l: str) -> str: return ' '.join(str(l).split()).strip(' ,.!-').lower()
+
+
+def strip_signoff(text: str, own=()) -> str:
+    """The writer is told never to sign (CHAT, EMAIL): what is taken off here is only what it is KNOWN to have signed with - trailing
+    lines that are the owner's own name or signature lines, from Settings. A closing-word list decided what a last line MEANT, and
+    cut "Friday works." as a name (2026-10-06) and kept "Thank you!" for years behind an eaten word boundary - no word list decides
+    it now (the owner, 2026-10-28: no hard-coded words). Above a cut name, a line that ends in a comma is the letter's closing by its
+    SHAPE ("<closing>,\\n<name>"), whatever word it is."""
+    keep = {_bare(o) for o in own if _bare(o)}
+    lines, n = str(text or '').rstrip().splitlines(), 0
+    while lines and (not lines[-1].strip() or _bare(lines[-1]) in keep): n += bool(lines.pop().strip())
+    if n and lines and lines[-1].rstrip().endswith(','): lines.pop()
     return '\n'.join(lines).strip()
 
 
@@ -524,7 +529,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     body, sig = out.rstrip(), signature_for(store, box).strip()
     if sig and body.endswith(sig) and not body[:-len(sig)].strip():
         raise RuntimeError('the AI wrote only your signature - try Redraft with more to go on')
-    return (strip_signoff(out) or out) if chat else out    # never strip a reply down to nothing
+    return (strip_signoff(out, own_lines(store)) or out) if chat else out    # never strip a reply down to nothing
 
 
 def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: str = None, nudge: str = None) -> str:
@@ -658,7 +663,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     has = bool(files) or len(sender_body(str(m.get('BodyText') or ''), m.get('OwnText'))[0]) >= SUBSTANCE
     out, files = _answer(llm, system, user, FEEDBACK_TOKENS if has else REPLY_TOKENS, images, guard=not instruction,
                          sig=signature_for(store, mailbox_in(m)))
-    out = (strip_signoff(out) or out) if chat else signed(out, signature_for(store, mailbox_in(m)))
+    out = (strip_signoff(out, own_lines(store)) or out) if chat else signed(out, signature_for(store, mailbox_in(m)))
     if not chat and not store.review_envelope(review_id):
         from . import outbound as _ob
         env = _ob.reply_envelope(store, m)

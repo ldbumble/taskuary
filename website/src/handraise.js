@@ -56,7 +56,8 @@ export async function desktopNotify(title, body, onClick) {
 // Watch every live agent; call onRaise({tid, ref, agent, title, asking, tail}) on the moment
 // a task's agent flips from working to waiting. The tracker is persisted so a fast question
 // seen on the very first poll rings once, while a reload cannot replay the same hand-raise.
-export function useHandRaise(onRaise, every = 8000) {
+// `onRows(rows)`: every poll's live rows, so a queued hand whose session has gone can be let go (pruneHandRaises).
+export function useHandRaise(onRaise, every = 8000, onRows = null) {
   const tracker = useRef(null);
   useEffect(() => {
     let alive = true;
@@ -67,6 +68,7 @@ export function useHandRaise(onRaise, every = 8000) {
         let storage = null;
         try { storage = window.localStorage; } catch { /* private mode */ }
         if (tracker.current === null) tracker.current = loadHandRaiseState(storage);
+        onRows?.(data.data || []);
         const next = advanceHandRaises(tracker.current, data.data || [], IDLE_WAITING);
         tracker.current = next.state;
         saveHandRaiseState(storage, next.state);
@@ -78,5 +80,5 @@ export function useHandRaise(onRaise, every = 8000) {
     poll();
     const id = setInterval(() => alive && poll(), every);
     return () => { alive = false; clearInterval(id); };
-  }, [onRaise, every]);
+  }, [onRaise, every, onRows]);
 }

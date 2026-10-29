@@ -2409,6 +2409,8 @@ class SQLiteStore:
                   'DELETE FROM review WHERE TaskId=?', 'DELETE FROM comment WHERE TaskId=?',
                   'DELETE FROM run WHERE TaskId=?', 'DELETE FROM task_artifact WHERE TaskId=?',
                   'DELETE FROM session_resume WHERE TaskId=?',
+                  # ...and its worker's events: a question it asked stayed open, and a deleted task still raised its toast (email walk 2026-10-29)
+                  'DELETE FROM worker_event WHERE TaskId=?',
                   'DELETE FROM task WHERE TaskId=?'):
             self._exec(q, (task_id,))
         self._bump_snapshots()

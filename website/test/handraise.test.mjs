@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { advanceHandRaises, claimHandRaise, dismissHandRaise, enqueueHandRaise,
-  handRaiseWhat, isWatchingTask, loadHandRaiseState, nonOverlapping,
+  handRaiseWhat, isWatchingTask, loadHandRaiseState, nonOverlapping, pruneHandRaises,
   saveHandRaiseState } from "../src/handraiseState.js";
 
 const session = (overrides = {}) => ({ TaskId: 247, AgentName: "coding", cli: "codex", kind: "session",
@@ -115,4 +115,12 @@ test("a slow poll cannot overlap and land out of order", async () => {
   assert.equal(calls, 2);
   finish();
   assert.equal(await third, true);
+});
+
+test("a queued hand whose session has gone is let go - a task deleted while its agent asked (email walk 2026-10-29)", () => {
+  const asked = { tid: 4, asking: true, finished: false }, done = { tid: 9, finished: true }, other = { tid: 247, asking: true };
+  const q = [asked, done, other];
+  assert.deepEqual(pruneHandRaises(q, [session()]), [done, other]);
+  assert.equal(pruneHandRaises(q, [session(), session({ TaskId: 4 })]), q, "nothing gone: the same queue, no re-render");
+  assert.deepEqual(pruneHandRaises([], []), []);
 });

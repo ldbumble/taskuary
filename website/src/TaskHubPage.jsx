@@ -33,7 +33,7 @@ import { SetupChip, useSetup } from "./SetupWizard.jsx";
 import { DEMO } from "./demoApi.js";
 import { buildMove, isBusy, loadedAsset, markReloaded, reloadedFor, staleWhat } from "./staleBuild.js";
 import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
-import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } from "./handraiseState.js";
+import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask, pruneHandRaises } from "./handraiseState.js";
 import { askAssistant } from "./askAssistant.js";
 import { TaskuaryMark, asUtc, timeAgo } from "./ui.jsx";
 import AssistantView from "./AssistantView.jsx";
@@ -417,7 +417,8 @@ export default function TaskHubPage() {
       if (desktop) desktopNotify(`${r.ref} · ${what}`, r.title || r.tail || "", () => openTask(r.tid));
     })();
   }, []);
-  useHandRaise(onRaise);
+  const liveRows = useCallback((rows) => setRaisedQueue((q) => pruneHandRaises(q, rows)), []);
+  useHandRaise(onRaise, 8000, liveRows);
   // SETUP IS THE ASSISTANT CANVAS (the owner, 2026-10-14: "Remove the popup things just use the assistant canvas"): the
   // chip takes you there, where FirstRun asks its three questions. No dialog opens itself over the app any more.
   const openSetup = () => { go("Assistant"); setTimeout(() => window.dispatchEvent(new Event("tq-first-run")), 60); };

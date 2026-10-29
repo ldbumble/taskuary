@@ -1011,6 +1011,29 @@ class CoreTests(unittest.TestCase):
         new = reshape.split_task(s, tid, {'title': 'second job'}, None, [9999])
         self.assertEqual(s.list_messages(new), [])
 
+    def test_split_moves_the_to_dos_the_model_gave_the_second_job(self):
+        """B13 (the email walk, 2026-10-29): Break it in two left every to-do on the first task - the second job's own box stayed
+        under the first, and the new task had none. The model names which boxes go with the second job; they move, ticks and all."""
+        s, tid, _mid = self._two_job_task()
+        s.set_task_checklist(tid, ['Fix the PTO import mapping', 'Add the 112 active employees'], 'triage')
+        fix, add = s.task_checklist(tid)
+        s.tick_checklist_item(tid, add['id'], True, 'owner')
+        seen = {}
+        def llm(sys, user, mt=None):
+            seen['user'] = json.loads(user)
+            return json.dumps({'two': True, 'why': 'two asks', 'first': {'title': 'Fix the import', 'summary': 'a'},
+                               'second': {'title': 'Add the employees', 'summary': 'b', 'items': [add['id'], 'not-a-box']}})
+        out = reshape.propose_split(s, tid, llm)
+        self.assertEqual(seen['user']['checklist'], [{'id': fix['id'], 'text': fix['text']}, {'id': add['id'], 'text': add['text']}])
+        self.assertEqual(out['second']['items'], [add['id']])                          # only boxes the task has
+        new = reshape.split_task(s, tid, out['second'], out['first'])
+        self.assertEqual([i['text'] for i in s.task_checklist(tid)], ['Fix the PTO import mapping'])
+        self.assertEqual([(i['id'], i['text'], i['done']) for i in s.task_checklist(new)], [(add['id'], add['text'], True)])
+        self.assertIn('1 to-do moved with it', s.list_comments(tid)[-1]['Body'])
+        # ...and a split naming no boxes leaves them all where they were
+        other = reshape.split_task(s, tid, {'title': 'a third job'})
+        self.assertEqual(s.task_checklist(other), []); self.assertEqual(len(s.task_checklist(tid)), 1)
+
     def test_propose_split_reads_the_ai_and_falls_back_to_the_ask_lines(self):
         s, tid, _mid = self._two_job_task()
         out = reshape.propose_split(s, tid, lambda sys, user, mt=None: '{"two": true, "why": "two asks",'

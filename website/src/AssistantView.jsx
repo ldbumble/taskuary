@@ -916,7 +916,7 @@ function RetryVerbs({ item, failed, onSaid, onDone }) {
   return null;
 }
 
-function Line({ m, lastBrief = false, live, last, further = false, actions, fresh, tableChips = [], barHolds = false, canvas = null }) {
+function Line({ m, lastBrief = false, live, last, further = false, actions, fresh, tableChips = [], barHolds = false, pageOver = false, canvas = null }) {
   // a PREPARED answer's line (drawAhead, `held`) says its words at once and draws its card once the press has answered: a card's
   // first reads write (a task's origin filed on its first detail read, the Advisor asked), and a write under a press between
   // its admission and its commit check refused the press as stale (PW-118, 2026-10-20)
@@ -980,6 +980,7 @@ function Line({ m, lastBrief = false, live, last, further = false, actions, fres
   // the place of the welcome block's own. What there is to do then is start something - the welcome block's doors, as words.
   const idle = !(actions.items || []).length;
   const chips = barHolds && !m.card ? []          // the task view's own row under the chat holds its words, Next included
+    : pageOver && !m.card ? [{ verb: "next", label: btn("next") }]   // ...and under a page only the walk's way on (pageOver)
     : said.length || !last || m.role !== "assistant" || m.proposal || kind === "proposal" || kind === "fyis"
     ? said : idle ? IDLE_CHIPS : [{ verb: "next", label: btn("next") }];
   // A REPORT OR AN FYI ON THE TABLE is drawn in a task's three sections, at a task's height (ItemSections, the owner 2026-10-28)
@@ -1344,7 +1345,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [foldedKey, setFoldedKey] = useState(null);
   // the card browsed open, in words - what "this" means to the next turn (concierge.say open_card)
   const openCardRef = useRef(null);
-  const browseRef = useRef(null), openTaskRef = useRef(null), openMsgRef = useRef(null), browseDownRef = useRef(null);
+  const browseRef = useRef(null), openTaskRef = useRef(null), openMsgRef = useRef(null), browseDownRef = useRef(null), browsingRef = useRef(null);
   const openCard = useCallback((label) => { openCardRef.current = label || null; }, []);
   // the table changed: the next item opens un-expanded and unfolded - a NEW item only. advance() empties the table on the way to
   // the next one, and resetting the fold then drew the task just closed again until the next landed (the owner, 2026-10-05:
@@ -2136,6 +2137,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const putDown = !key && currentRef.current?.key ? currentRef.current.key : null;
     const leftItem = putDown ? currentRef.current : null;
     if (putDown) { setExpanded(false); setFoldedKey(putDown); leave(leftItem); }
+    // ...AND A PAGE OPEN OVER THE TABLE GOES WITH IT (the owner, 2026-10-29: Next on Reports with a task under it did nothing): Next walks
+    // on from the table's item, as it does from the task page, and what it brings - the next item, the end of the walk, a failure - is
+    // drawn on the canvas. With the page left up, an answer with no card (the walk's end, "still being read") landed in the shut chat
+    // window and under the page, and nothing on screen moved
+    if (!key && browsingRef.current) browseDownRef.current?.();
     // ...AND IT WEARS "Next" like any press (the owner, 2026-10-23: "we should have next pill on this one to show what was clicked on
     // each task") - only a card nothing else was pressed on; a Next that fails takes the badge off with the fold
     // ...saying what Next did (the owner, 2026-10-23: "should show read on reports if you go pass them when you hit next"): "Read" on a
@@ -3251,6 +3257,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     }
     return null;
   }, [shown]);
+  browsingRef.current = browsing;
   // ...and during setup, the task or message opened over it (overSetup): the newest card, drawn alone like a page (W2)
   const setupCard = firstRun && overSetup && !browsing ? [...shown].reverse().find((m) => m.card && !m.card.background_event) || null : null;
   const setupCovered = useRef(false);
@@ -3427,6 +3434,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const c = shown[lastCardIdx]?.card;
     return c && current && (c.key === current || (c.aliases || []).includes(current)) ? chipsOf(shown[lastCardIdx]) : [];
   }, [shown, lastCardIdx, current]);
+  // ...and UNDER A PAGE the bar is Back and Next, as it is on the task page (the owner, 2026-10-29): a line said after the task - an
+  // answer carries the table's own words (concierge.chips_for) - put its Reply, Put it on my list and Not ours on the Reports page's bar,
+  // moves on a task nobody could see
+  const pageOver = useMemo(() => {
+    const c = shown[lastCardIdx]?.card;
+    return !old && !!c && showsTask(c, cardFor(c)) && !!canvasState?.browsing;
+  }, [shown, lastCardIdx, old, canvasState]);
   // THE ONE-ROW CHAT BAR (the owner, 2026-10-26: "try one row chat bar with ai pop up. let me see what it looks like"): the box is how the
   // owner tells Taskuary what to do with the task ("reply saying Thursday works", "remind me Monday") - a pill at the row's end at rest.
   // `popOn` is only whether a task view holds the table on a desk now - the pill's hint reads it
@@ -3704,7 +3718,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           </div>}
           {firstRun ? state && <div data-tq-setup-under={setupCovered.current ? "hidden" : ""} style={setupCovered.current ? { display: "none" } : undefined}>{welcome()}</div>
             : state && !shown.some((m) => !inWin.has(m.id)) && (!busy || popOpen) && !starting && welcome()}
-          {!firstRun && shown.map((m, i) => inWin.has(m.id) ? null : <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} further={!old && i === furtherIdx} tableChips={tableChips} barHolds={barHolds}
+          {!firstRun && shown.map((m, i) => inWin.has(m.id) ? null : <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} further={!old && i === furtherIdx} tableChips={tableChips} barHolds={barHolds} pageOver={pageOver}
                                      actions={actions} fresh={currentItem} canvas={old ? null : canvasState} />)}
           {/* CONTINUE, IN LINE (the owner, 2026-09-30): a card under the item, like New - the mic and pictures in it */}
           {!old && continueOn && (
@@ -3782,7 +3796,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                 <Tooltip title="Close (Esc)"><IconButton size="small" aria-label="Close the chat" data-tq-box-close="" onClick={(e) => { e.stopPropagation(); shutBox(); }}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip></div>
               <div className="tq-chat-pop-body" ref={popBodyRef}>
                 {!winLines.length && !popPending && !popErr && <p className="tq-chat-pop-empty">{currentItem?.ref ? `Ask about ${currentItem.ref}, or anything on your list.` : "Ask about anything on your list."}</p>}
-                {winLines.map(([m, i]) => <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={false} last={!old && i === lastSaidIdx} further={!old && i === furtherIdx} tableChips={tableChips} barHolds={barHolds}
+                {winLines.map(([m, i]) => <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={false} last={!old && i === lastSaidIdx} further={!old && i === furtherIdx} tableChips={tableChips} barHolds={barHolds} pageOver={pageOver}
                   actions={actions} fresh={currentItem} canvas={canvasState} />)}
                 {popPending && pendingLine}
                 {popOpen && errLine}

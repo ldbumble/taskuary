@@ -109,8 +109,12 @@ class ANamedTaskIsFound(unittest.TestCase):
 
     def test_tasks_list_finds_it_the_same_way(self):
         s, a, b, item = two_tasks()
-        out = lookups.tasks_list(s, {'contains': 'Omar Spendly lockout'})
+        # by MEANING (embeddings), never a count of shared word stems (2026-10-28)
+        from tests import fake_embed
+        with fake_embed.meaning({'lockout': ['Spendly lockout', 'Spendly locked me out']}):
+            out = lookups.tasks_list(s, {'contains': 'Omar Spendly lockout'})
         self.assertTrue(out.startswith(f'TQ-{a:04d}'), out)
+        with fake_embed.no_embedder(): self.assertIn('No open tasks match', lookups.tasks_list(s, {'contains': 'Omar Spendly lockout'}))
 
     def test_the_turn_is_told_to_read_the_table_first_then_a_named_task_then_search(self):
         s = T.store(); item = an_idea(s)

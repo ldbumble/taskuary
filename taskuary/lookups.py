@@ -4,11 +4,12 @@ what happened, what failed, what is kept about the owner and the rules that filt
 reads what is already recorded and changes nothing - the assistant stays light because it asks for
 what it needs instead of carrying a memory in its prompt
 (the owner, 2026-09-24: "it should be able to search ... using lookup tools")."""
-import json, math, re
+import hashlib, json, math, re
 from datetime import datetime, timedelta
 from pathlib import Path
 from .routing import tokens
 from .store import task_ref
+from . import textsim
 from .timewords import plural
 
 NL = chr(10)
@@ -34,16 +35,14 @@ def tasks_list(store, p: dict) -> str:
     q = str(p.get('contains') or '').strip() or None
     rows = store.list_tasks(status=None if status in ('open', 'all') else status, q=q)
     if status == 'open': rows = [t for t in rows if t.get('Status') in ACTIVE]
-    # ...and a task named by its person and subject, not the literal sentence: every word must match, so "Omar Spendly lockout"
-    # missed the task whose mail says "locked me out" (the 2026-10-01 press audit). Each word by its stem; best match first.
-    words = [w for w in tokens(q or '')]
-    if not rows and len(words) > 1:
-        from .concierge import _enough, _stem
-        hits = {}
-        for w in words:
-            for t in store.list_tasks(status=None if status in ('open', 'all') else status, q=_stem(w)):
-                if status != 'open' or t.get('Status') in ACTIVE: hits.setdefault(t['TaskId'], [t, 0])[1] += 1
-        rows = [t for t, n in sorted(hits.values(), key=lambda x: (-x[1], -x[0]['TaskId'])) if n >= _enough(words)]
+    # ...and a task named by its person and subject, not the literal sentence: "Omar Spendly lockout" missed the task whose mail
+    # says "locked me out" (the 2026-10-01 press audit). By MEANING (embeddings, context.alike), best first - a count of shared
+    # word stems decided it once (the owner, 2026-10-28: no hard-coded words). No embedder: the literal find above is all.
+    if not rows and q:
+        from .context import alike
+        pool = [t for t in store.list_tasks(status=None if status in ('open', 'all') else status) if status != 'open' or t.get('Status') in ACTIVE]
+        near = alike(store, q, pool)
+        rows = sorted((t for t in pool if t['TaskId'] in near), key=lambda t: -near[t['TaskId']])
     if not rows: return f'No {"" if status == "all" else status + " "}tasks match that.'
     run = lambda t: f" - agent {t['RunAgent']} {t['RunStatus']}" if t.get('RunStatus') in ('running', 'queued') else ''
     out = [f"{task_ref(t['TaskId'])} [{t.get('Status')}/{t.get('Kind')}] {_cut(t.get('Title'), 120)} - updated {_day(t.get('UpdatedAt') or t.get('CreatedAt'))}{run(t)}"
@@ -96,8 +95,16 @@ def sender_read(store, p: dict) -> str:
 _COMMENT = re.compile(r'<!--.*?-->', re.S)
 CHUNK = 1200
 
-def _stem(w): return w[:-1] if len(w) > 4 and w.endswith('s') else w
-def _words(text): return {_stem(w) for w in tokens(text) if len(w) > 2}
+def _key(kind: str, text: str) -> str: return f"{kind}:{hashlib.sha1(str(text).encode('utf-8', 'replace')).hexdigest()[:16]}"
+
+
+def _find(store, q: str, items: list) -> list:
+    """The keys of [(key, text)] that bear on `q`, best first: alike in MEANING (embeddings, textsim) - a set of shared word stems
+    decided it once (the owner, 2026-10-28: no hard-coded words). No embedder: the ones that carry `q` whole, found literally."""
+    got = textsim.rank(store, q, items)
+    if got is not None: return [k for k, _ in got]
+    want = ' '.join(str(q or '').split()).lower()
+    return [k for k, t in items if want and want in ' '.join(str(t or '').split()).lower()]
 
 def _sections(name: str, text: str):
     """A doc cut at its `##` headings, and a long section at its paragraphs - a passage is what an answer quotes."""
@@ -116,16 +123,12 @@ def _corpus(store):
     for n in store.doc_names(): yield from _sections(f'your doc {n}', store.doc(n) or '')
 
 def docs_search(store, p: dict) -> str:
-    q = str(p.get('query') or '')
-    want = _words(q)
-    if not want: return 'docs.search needs the words to look for.'
-    chunks = [(w, t, _words(t)) for w, t in _corpus(store)]
-    # a word most passages share says little about which one is meant; a rare one says a lot
-    df = {w: sum(w in have for _, _, have in chunks) for w in want}
-    idf = {w: math.log((len(chunks) + 1) / (df[w] + 0.5)) for w in want if df[w]}
-    scored = sorted(((sum(idf[w] for w in idf if w in have), where, t) for where, t, have in chunks if want & have), key=lambda s: -s[0])
-    if not scored: return f'Nothing in the help pages or your docs mentions "{q}".'
-    return (NL * 2).join(f'[{w}]{NL}{_cut(t, CHUNK)}' for sc, w, t in scored[:4] if sc >= scored[0][0] / 2)
+    q = ' '.join(str(p.get('query') or '').split())
+    if not q: return 'docs.search needs the words to look for.'
+    chunks = {f'doc:{where}#{i}': (where, t) for i, (where, t) in enumerate(_corpus(store))}
+    hits = _find(store, q, [(k, t) for k, (_, t) in chunks.items()])[:4]
+    if not hits: return f'Nothing in the help pages or your docs bears on "{q}".'
+    return (NL * 2).join(f'[{chunks[k][0]}]{NL}{_cut(chunks[k][1], CHUNK)}' for k in hits)
 
 def _days(p, default):
     try: days = float(p.get('days') or default)
@@ -305,21 +308,30 @@ def errors_list(store, p: dict) -> str:
     if logged: out += ['LAST ERRORS IN THE LOG:'] + [f'  {_cut(l, 300)}' for l in logged]
     return NL.join(out)
 
-def _about(p) -> set: return _words(str(p.get('about') or ''))
+def _about(p) -> str: return ' '.join(str(p.get('about') or '').split())
+
+
+def _bearing(store, want: str, texts) -> set:
+    """Which of `texts` bear on `want` (_find), as the texts themselves - every one when nothing was asked about."""
+    texts = [str(t) for t in texts if str(t or '').strip()]
+    if not want: return set(texts)
+    by = {_key('line', t): t for t in texts}
+    return {by[k] for k in _find(store, want, list(by.items()))}
 
 def memory_list(store, p: dict) -> str:
     """Everything kept about the owner: LEARNED.md - their verdicts and what they told the Assistant are lines in it (2026-10-27)."""
     from . import learn
     want = _about(p)
-    hit = lambda *xs: not want or bool(want & _words(' '.join(str(x or '') for x in xs)))
     doc = store.doc(learn.DOC) or ''
     learned, testing = learn.injectable(doc), learn._block(doc, learn.HYP_START, learn.HYP_END)
-    if want: learned = NL.join(l for l in learned.splitlines() if hit(l))
+    from . import orgchart
+    lines, org = learned.splitlines(), orgchart.block(store).splitlines()
+    near = _bearing(store, want, lines + org)
+    if want: learned = NL.join(l for l in lines if l in near)
     out = ['YOUR MEMORY (LEARNED.md - what you said and what I learned from what you did):' + NL + _cut(learned, 4000) if learned.strip()
            else 'LEARNED.md has nothing' + (' that matches.' if want else ' in it yet.')]
     if testing and not want: out.append('STILL BEING TESTED, not trusted yet:' + NL + _cut(testing, 1200))
-    from . import orgchart
-    org = NL.join(l for l in orgchart.block(store).splitlines() if hit(l))
+    org = NL.join(l for l in org if l in near)
     if org: out.append('YOUR PEOPLE (the org chart - your manager, your reports, who owns what):' + NL + org)
     return NL.join(out)
 
@@ -330,12 +342,16 @@ def rules_list(store, p: dict) -> str:
     """The standing filters: queue mutes (said with a reason) and the policy rules, which decide before any model reads the mail."""
     from . import funnel
     want = _about(p)
-    hit = lambda *xs: not want or bool(want & _words(' '.join(str(x or '') for x in xs)))
-    mutes = [m for m in funnel.mutes(store) if hit(m.get('sender'), ' '.join(m.get('words') or []), m.get('why'))]
+    says = lambda *xs: ' '.join(str(x or '') for x in xs)
+    mutes, pols = funnel.mutes(store), store.list_policies(active_only=False)
+    near = _bearing(store, want, [says(m.get('sender'), ' '.join(m.get('words') or []), m.get('why')) for m in mutes]
+                    + [says(x.get('Name'), x.get('Pattern'), x.get('Reason')) for x in pols])
+    hit = lambda *xs: not want or says(*xs) in near
+    mutes = [m for m in mutes if hit(m.get('sender'), ' '.join(m.get('words') or []), m.get('why'))]
     out = [f'QUEUE MUTES ({len(mutes)}) - set when you cleared items with a reason:'] if mutes else ['No queue mutes.']
     out += [f"  {m.get('sender') or 'anyone'}{' about ' + ' '.join(m['words']) if m.get('words') else ''}{' - ' + _cut(m['why'], 160) if m.get('why') else ''}"
             for m in mutes]
-    pols = [x for x in store.list_policies(active_only=False) if hit(x.get('Name'), x.get('Pattern'), x.get('Reason'))]
+    pols = [x for x in pols if hit(x.get('Name'), x.get('Pattern'), x.get('Reason'))]
     off = sum(1 for x in pols if not x.get('Active', 1))
     out.append(f'POLICY RULES ({len(pols) - off} on{f", {off} off" if off else ""}) - checked before any model reads the mail:' if pols else 'No policy rules.')
     for act in ACTION_SAYS:

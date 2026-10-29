@@ -69,10 +69,16 @@ class LookupTests(unittest.TestCase):
     def test_docs_search_finds_the_help_pages_and_the_owners_docs(self):
         s = world()
         s.save_doc('COUNSEL.md', '# Counsel\n\n## Tone\n\nKeep replies to two sentences.\n', 't')
-        self.assertIn('your doc COUNSEL.md > Tone', read(s, 'docs.search', query='what tone should replies take'))
-        if lookups.SITE_DOCS.is_dir():
-            self.assertIn('help/', read(s, 'docs.search', query='connect whatsapp phone'))
-        self.assertIn('Nothing in the help', read(s, 'docs.search', query='zzzqqq'))
+        # a passage bears on a question by MEANING (embeddings), never by shared words (2026-10-28)
+        from tests import fake_embed
+        with fake_embed.meaning({'tone': ['tone should replies', 'Keep replies to two sentences'], 'phone': ['whatsapp']}):
+            self.assertIn('your doc COUNSEL.md > Tone', read(s, 'docs.search', query='what tone should replies take'))
+            if lookups.SITE_DOCS.is_dir():
+                self.assertIn('help/', read(s, 'docs.search', query='connect whatsapp phone'))
+        with fake_embed.no_embedder():         # no embedder: a question is found only where it is written whole
+            self.assertIn('Nothing in the help', read(s, 'docs.search', query='zzzqqq'))
+            self.assertIn('your doc COUNSEL.md > Tone', read(s, 'docs.search', query='keep replies to two sentences'))
+            self.assertIn('Nothing in the help', read(s, 'docs.search', query='what tone should replies take'))
 
 
 class CutTests(unittest.TestCase):

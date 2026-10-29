@@ -58,7 +58,8 @@ const RefLink = ({ refText, onOpen }) => (
   <a href={`#task=${refNumber(refText)}`} className="tq-ref-link" data-tq-task-link={refNumber(refText)}
     onClick={(e) => { e.preventDefault(); onOpen(refNumber(refText)); }}>{refText}</a>);
 const withRefs = (p, onOpen) => (onOpen ? refParts(p).map((x, i) => (i % 2 ? <RefLink key={i} refText={x} onOpen={onOpen} /> : x)) : p);
-import { DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, PRIORITY_COLOR, ROLES } from "./theme.jsx";
+import { ALERT, DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, PRIORITY_COLOR, ROLES } from "./theme.jsx";
+import { dangerLine } from "./strangerLine.js";
 import { railShort } from "./batchItems.js";
 import ProposalCard from "./ProposalCard.jsx";
 import { adviceRead, tableOf, tableWords } from "./tableState.js";
@@ -786,7 +787,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                       onClick={() => (isCur ? onCurrent?.() : !i.settling && onPull(i.key))}
                       onPointerEnter={() => { if (!isCur && i.tid) prefetchTask(api, i.tid); }}
                       aria-label={urgentDot ? `${i.title} - urgent` : imp ? `${i.title} - important` : undefined}
-                      title={[i.who, st?.word || meta.word, i.ref, imp ? "important" : "", i.promoted ? 'moved up - it looked urgent' : '', why].filter(Boolean).join(" · ")}>
+                      title={[i.who, st?.word || meta.word, i.ref, imp ? "important" : "", i.promoted ? 'moved up - it looked urgent' : '', dangerLine(i.danger), why].filter(Boolean).join(" · ")}>
                       <div className="t">
                         {/* AN AGENT AT WORK is a ring spinning round the row's icon (the owner, 2026-10-21) - it stops when the agent
                             finishes, asks, fails or is stopped; the highlighted border stays the table's alone. A goal wears its mark. */}
@@ -794,6 +795,9 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                           {goal ? <span className="goal">{meta.mark}</span> : <SourceMark item={i} size={15} />}</StatusLogo>
                         {!!rankNo[i.key] && <span className="tq-pile-rank" title={`#${rankNo[i.key]} of this batch, by importance`}>
                           {CIRCLED[rankNo[i.key] - 1] || rankNo[i.key]}</span>}
+                        {/* what triage read the words as trying to make an AI do (message.Danger): its mark leads the title, its line on hover
+                            and on the card (B3, 2026-10-29) - a warning in the row's own height, never a gate */}
+                        {!!i.danger && <span className="tq-pile-danger" data-tq-danger="" style={{ color: ALERT }} aria-label={dangerLine(i.danger)}>⚠</span>}
                         <b className={goal ? "goal-t" : undefined}>{i.title}</b>
                         {/* ONE FYI ROW PER EMAIL THREAD (trust audit P2, 2026-10-28): the newest mail speaks, the rest are its "+N" */}
                         {i.thread_n > 0 && <span className="tq-pile-ref" data-tq-thread-n={i.thread_n} title={`${i.thread_n} more on this thread - it opens on all of them`}>+{i.thread_n}</span>}

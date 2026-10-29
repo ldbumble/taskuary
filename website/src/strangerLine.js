@@ -18,3 +18,9 @@ export const strangerLine = (d) => {
 // and then we won't have issue again"): a step held for a new sender shows the presses in its box, and Came from then shows none -
 // one place, one wording
 export const trustInBox = (story) => story?.kind === "held" && !!story.trust?.person;
+
+// WHAT TRIAGE READ THE WORDS AS TRYING TO MAKE AN AI DO (message.Danger) said in ONE line wherever the mail is - the task page, the FYI
+// card, the rail row - whoever sent it: a phishing mail triage caught was filed FYI under its own subject with no warning at all (B3,
+// 2026-10-29). A warning, never a gate: links and moves stay as they were
+export const dangerLine = (danger) => (danger ? `⚠ Reads as an attempt to steer the agent: ${danger}` : null);
+export const dangerOf = (d) => d?.origin?.danger || null;

@@ -18,6 +18,7 @@ import OutlinedFlagIcon from "@mui/icons-material/OutlinedFlag";
 import InsertChartOutlinedIcon from "@mui/icons-material/InsertChartOutlined";
 import api from "./api.js";
 import { gistFor } from "./fyiRow.js";
+import { dangerLine } from "./strangerLine.js";
 import { canUnsubscribe, unsubscribeFrom } from "./unsubscribe.js";
 import { runOperation } from "./taskOps.js";
 import { ChannelIcon, DraftField, LinkedText, TaskuaryMark, channelColor, cleanText, fmtDateTime, fmtTime12 } from "./ui.jsx";
@@ -1207,7 +1208,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
         <YourMove title={own || mineAlone ? "who should take it?" : `reply to ${asker}`} go={verb}
           then={own || mineAlone ? `starts ${suggestedKind === "coding" ? "a coding agent" : "an agent"} on it; it comes back here when it stops.`
             : "writes one for you to approve here - nothing is sent."} />
-      ) : card.kind === "fyi" && <div className="tq-card-note">Nothing to decide - it only wants you to know.</div>}
+      ) : card.kind === "fyi" && <><DangerNote danger={card.danger} /><div className="tq-card-note">Nothing to decide - it only wants you to know.</div></>}
       <Foot openTask={onOpenTask} close={card} onDone={onDone}
         extra={card.kind === "fyi" && canUnsubscribe(card) ? [{ verb: "unsubscribe", label: btn("unsubscribe"), title: btnHint("unsubscribe"), onClick: unsub, disabled: !!busy }] : []}
         covers={[...(own || mineAlone ? (suggestedKind === "coding" ? ["coding_agent", "coder"] : ["regular_agent"]) : ["reply"]), ...(mineAlone ? ["reply", "not_ours"] : [])]}
@@ -1381,6 +1382,10 @@ export function BriefCard({ card, onStart }) {
 // that opens it: its whole text, pictures and "open the original" (children, mounted only then) and, in a batch, its own moves. `open` and
 // `onHead` hand the state to the batch (one open at a time); without them the message keeps its own
 const whoName = (w) => String(w || "someone").replace(/\s*<[^>]*>/g, "") || "someone";
+// the mail's own subject, beside triage's title when the two differ (B3): what it was sent as, and what triage made of it
+export const shownSubject = (item) => (item?.subject && item.subject !== item.title ? item.subject : "");
+// what triage read the words as trying to make an AI do (message.Danger): the task page's one warning line, on the card too (B3)
+const DangerNote = ({ danger }) => (danger ? <div className="tq-card-note" data-tq-danger="" style={{ color: ALERT, overflowWrap: "anywhere" }}>{dangerLine(danger)}</div> : null);
 export function FyiMessage({ item, onHead = null, open: held = null, children }) {
   const [mine, setMine] = useState(false);
   const open = held ?? mine, gist = gistFor(item);
@@ -1389,12 +1394,14 @@ export function FyiMessage({ item, onHead = null, open: held = null, children })
       <button type="button" className="tq-item-msg-h press" onClick={onHead || (() => setMine((o) => !o))} aria-expanded={open} title={open ? "Fold it" : "Read it here"}>
         <SourceMark item={item} size={13} /><b>{whoName(item.who)}</b>
         <span className="ch">{channelWord(item.channel || "email")}</span>
-        {!open && item.title && <span className="t">{item.title}</span>}
+        {!open && item.title && <span className="t" title={shownSubject(item) ? `Subject: ${shownSubject(item)}` : undefined}>{item.title}</span>}
         {(item.since || item.when) && <span className="at">{fmtDateTime(item.since || item.when)}</span>}
         <span className="chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
       </button>
+      <DangerNote danger={item.danger} />
       {!open && gist && <div className="tq-item-msg-g">{gist}</div>}
       {open && item.title && <div className="tq-item-msg-t">{item.title}</div>}
+      {open && shownSubject(item) && <div className="tq-item-msg-g" data-tq-subject="">Subject: {shownSubject(item)}</div>}
       {open && children}
     </div>
   );

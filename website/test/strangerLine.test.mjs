@@ -1,7 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { strangerLine, trustInBox } from "../src/strangerLine.js";
+import { dangerLine, dangerOf, strangerLine, trustInBox } from "../src/strangerLine.js";
+
+// B3 (the email walk, 2026-10-29): a phishing mail triage caught was filed FYI under its own subject with no warning - the danger line is
+// drawn wherever message.Danger is set, whoever sent it: the task page, the FYI card (FyiMessage / the card's note) and the rail row
+test("the danger line is said for any sender, and nothing without a danger", () => {
+  assert.equal(dangerLine("asks for your password on a fake page"), "⚠ Reads as an attempt to steer the agent: asks for your password on a fake page");
+  assert.equal(dangerLine(""), null); assert.equal(dangerLine(null), null);
+  assert.equal(dangerOf({ origin: { origin: "trusted", danger: "x" } }), "x", "a known sender's mail can be the phish too");
+  assert.equal(dangerOf({ origin: { origin: "owner" } }), null);
+});
+test("the FYI card, the rail row and the task page draw it", () => {
+  const src = (n) => readFileSync(new URL(`../src/${n}`, import.meta.url), "utf8");
+  assert.match(src("assistantCards.jsx"), /<DangerNote danger=\{item\.danger\} \/>/);
+  assert.match(src("assistantCards.jsx"), /<DangerNote danger=\{card\.danger\} \/>/);
+  assert.match(src("assistantCards.jsx"), /Subject: \{shownSubject\(item\)\}/);
+  assert.match(src("AssistantView.jsx"), /\{!!i\.danger && <span className="tq-pile-danger"/);
+  assert.match(src("TaskPage.jsx"), /\{dangerOf\(detail\) && \(/);
+});
 
 test("a stranger's task gets the one line in plain words, with the reason for the tooltip", () => {
   const l = strangerLine({ origin: { origin: "stranger", why: "sent by someone not in your people" } });

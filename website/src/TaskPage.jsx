@@ -394,6 +394,7 @@ function Part({ label, sub, subTitle, children, focus = false, ...rest }) {
 // AS MANY LINES AS THE TAB HOLDS, measured, never a fixed number: in order from the top, and from the first that would run into the foot
 // that one and every one after it are not drawn - so what shows is always a run with no gap (Came from: the newest messages, back as far
 // as the room goes; the owner, 2026-10-29: four counted and three shown, a fixed three, read as a message lost)
+const TAB_WORDS = 0.42;
 const fitTabLines = (tab) => {
   // ...above the spine's stage moves when it carries them, which sit between the words and the foot
   const ls = [...tab.querySelectorAll("[data-tq-tab-line]")], foot = tab.querySelector("[data-tq-tab-foot]"), mv = tab.querySelector("[data-tq-spine-moves]");
@@ -401,7 +402,10 @@ const fitTabLines = (tab) => {
   if (!foot) return;
   const cs = getComputedStyle(tab), room = tab.getBoundingClientRect().bottom - parseFloat(cs.paddingBottom || 0) - foot.offsetHeight - parseFloat(cs.rowGap || 0)
     - (mv ? mv.offsetHeight + parseFloat(getComputedStyle(mv).marginTop || 0) + parseFloat(cs.rowGap || 0) : 0);
-  const cut = ls.findIndex((l) => l.getBoundingClientRect().bottom > room + 0.5);
+  // ...and in the TOP of the tab only (the owner, 2026-10-29: "why does it drag down so much"): the words take at most TAB_WORDS of its
+  // height, so a long chat no longer pushes its moves to the foot while the other spines carry theirs near the top
+  const r = tab.getBoundingClientRect(), top = Math.min(room, r.top + r.height * TAB_WORDS);
+  const cut = ls.findIndex((l) => l.getBoundingClientRect().bottom > top + 0.5);
   if (cut >= 0) ls.slice(cut).forEach((l) => l.setAttribute("data-tq-unfit", ""));
 };
 // ONE CLOSED SECTION, AS ITS TAB (SECTION_TAB): the arrow points the way it opens, and a press opens it - the others close

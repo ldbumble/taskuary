@@ -201,7 +201,7 @@ def test_a_closed_session_takes_its_browser_with_it(monkeypatch):
     s = mock.Mock(mode='', store=None, task_id=None)
     monkeypatch.setitem(terminal.SESSIONS, 'sx', s)
     closed = []
-    monkeypatch.setattr(browserview, 'close', closed.append)
+    monkeypatch.setattr(browserview, 'close', lambda sid, tid=None: closed.append(sid))
     terminal.shutdown_sessions()
     s.close.assert_called_once()
     assert closed == ['sx'] and 'sx' not in terminal.SESSIONS

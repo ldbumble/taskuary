@@ -24,6 +24,6 @@ test("a finished agent's result is sent on by Hand it to a person", () => {
 test("a close-out offers Remind me, never Not yet", () => {
   const dec = read("ReviewDecision.jsx"), rp = read("reviewProposal.js");
   assert.doesNotMatch(rp, /"Not yet"/);
-  assert.match(dec, /\{ id: no\("remind"\), label: btn\("defer"\), tone: "q", disabled: busy, run: onRemind, title: remindTitle \}/);
+  assert.match(dec, /\{ id: no\("remind"\), label: btn\("defer"\), tone: "q", disabled: off, run: onRemind, title: remindTitle \}/);
   assert.match(dec, /\(co \|\| proposal\?\.kind === "closeout"\) && onRemind && <Button[^\n]*>\{btn\("defer"\)\}<\/Button>/);
 });

@@ -17,6 +17,7 @@ import time
 from loguru import logger
 
 from .categories import category_of, team_domains_of
+from .kinds import SHOWN, shown
 from .processing_order import feed_band
 
 
@@ -290,10 +291,10 @@ def message_row(message, item, threads, now, *, full=False):
                AnsweredAt=answered, TheirTurn=int(theirs))
     workers = [r for r in view.get('worker_attention', [])
                if str(r.get('taskId', r.get('task_id'))) == str(tid)] if tid else []
-    working = (running[-1].get('AgentName') or 'agent') if running else None
+    working = SHOWN if running else None                 # the name a chip says: Taskuary, never the profile (kinds.shown)
     waiting, line = False, ''
     for worker in workers:
-        working = worker.get('agent') or worker.get('label') or 'agent'
+        working = shown(worker)
         waiting, line = waiting or bool(worker.get('waiting')), line or str(worker.get('line') or '')
     if working and active_task:
         row.update(Working=working, AgentWaiting=waiting, AgentLine=line if waiting else '')
@@ -466,10 +467,10 @@ def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=Fa
                 legacy.update(TaskId=tid, Title=entity.get('Title'), TaskStatus=status, Assignee=entity.get('Assignee'), TaskKind=entity.get('Kind'))
                 workers = [w for w in view.get('worker_attention', []) if str(w.get('taskId', w.get('task_id'))) == str(tid)]
                 running = [r for r in view.get('runs', []) if r.get('TaskId') == tid and r.get('Status') == 'running']
-                working = (running[-1].get('AgentName') or 'agent') if running else None
+                working = SHOWN if running else None
                 waiting, line = False, ''
                 for w in workers:
-                    working = w.get('agent') or w.get('label') or 'agent'
+                    working = shown(w)
                     waiting, line = waiting or bool(w.get('waiting')), line or str(w.get('line') or '')
                 if working and open_task:
                     legacy.update(Working=working, AgentWaiting=waiting, AgentLine=line if waiting else '', NeedsYou=int(waiting),

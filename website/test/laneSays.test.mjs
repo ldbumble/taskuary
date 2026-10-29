@@ -33,7 +33,8 @@ test("the walk's lead, the hand-raise and the Timeline read the same sentence", 
 });
 
 test("an agent started and silent is one sentence, from lanes.json", () => {
-  assert.equal(starting("researcher", "Codex"), "Starting the researcher on Codex…");
-  assert.equal(starting("researcher"), "Starting the researcher…");
-  assert.equal(lanes.lanes.find((l) => l.key === "working").says.starting.line, "Starting the {agent} on {text}…");
+  // the agent goes by Taskuary, never the profile it runs under (the owner, 2026-10-28) - so no "the" before it
+  assert.equal(starting("Taskuary", "Codex"), "Starting Taskuary on Codex…");
+  assert.equal(starting("Taskuary"), "Starting Taskuary…");
+  assert.equal(lanes.lanes.find((l) => l.key === "working").says.starting.line, "Starting {agent} on {text}…");
 });

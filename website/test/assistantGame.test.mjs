@@ -22,10 +22,10 @@ test("the boss's health is what you have not seen - read in the chat counts, a w
   assert.equal(bossHp(items, new Set(["a", "b"])), 0);
 });
 
-test("the matchmaker routes on the judged kind and the agents you have, never on words", () => {
+test("the matchmaker routes on the judged kind, never on words - and names who works it, never a profile (2026-10-28)", () => {
   const agents = [{ Name: "coding", Kind: "coding" }, { Name: "helper", Kind: "general" }];
-  assert.equal(matchFor({ lane: "asked", kind: "todo", coding: true }, agents).who, "coding");
-  assert.equal(matchFor({ lane: "yours", kind: "todo" }, agents).who, "helper");
+  assert.equal(matchFor({ lane: "asked", kind: "todo", coding: true }, agents).who, "the coding agent");
+  assert.equal(matchFor({ lane: "yours", kind: "todo" }, agents).who, "Taskuary");
   assert.equal(matchFor({ lane: "approve" }, agents).verb, "approve");
   assert.equal(matchFor({ lane: "fyi" }, agents).who, "nobody");
   // the same words on a different lane give a different answer: the title is not read

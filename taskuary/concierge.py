@@ -391,7 +391,7 @@ def task_now(store, tid: int) -> str:
     if live:
         tail = [str(l).strip() for l in (live.get('tail') or []) if str(l).strip()]
         waiting = live.get('waiting') if live.get('waiting') is not None else (live.get('idle') or 0) >= 45
-        who, req, idle = live.get('agent') or live.get('label') or 'an agent', live.get('request'), int(live.get('idle') or 0)
+        who, req, idle = task_kinds.shown(live), live.get('request'), int(live.get('idle') or 0)
         # the run's own word first (a stall is not a question, however the screen looks), then the screen
         state = (f"{ws.request_line(who, req)} (idle {idle}s)" if waiting and req else
                  f"{who} is PARKED and ASKING you: {tail[-1][:200]}" if waiting and live.get('state') == 'asking' else
@@ -1490,8 +1490,8 @@ def said_started(store, cid, out: dict) -> str:
     row = next(iter(store._rows('SELECT * FROM comment WHERE CommentId=?', (int(cid),))), None)
     if not row or row['Actor'] != 'assistant' or not general.is_dock(store.get_task(row['TaskId'])): return ''
     general_ = out.get('dispatch') == 'assistant'
-    who = general.assigned_role(store, store.get_task(int(out['taskId'])) or {}) if general_ else out.get('agent')
-    said = (f"Started {out.get('ref') or task_ref(out['taskId'])}" + (f" with the {who}" if who else '')
+    # ...by the name the owner meets it under - Taskuary, never the profile it runs under (kinds.json `shown_`, 2026-10-28)
+    said = (f"Started {out.get('ref') or task_ref(out['taskId'])} with {task_kinds.SHOWN}"
             + (f" on {out['agent']}" if general_ and out.get('agent') else '') + '.')
     rewrite(store, int(cid), said)
     return said
@@ -1846,14 +1846,14 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
         return f"{item.get('ref') or item['title']}: {_cap(why)}. {_cap(_from_you(store, item))}."
     # an agent WORKING it, walked to like any task now (2026-10-21): what it is doing, never "waiting on you - answer it below"
     if item.get('lane') == 'working':
-        who = item.get('working') or item.get('agent') or 'An agent'
+        who = item.get('working') or item.get('agent') or task_kinds.SHOWN
         return f"{_cap(who)} is working on {item.get('ref') or item['title']} - nothing for you until it finishes or asks."
     if item['kind'] == 'agent':
         # ONE sentence per state (lanes.json): the item's `why` when the run said what it needs, else the
         # screen's question. A stall has nothing to answer - saying "answer it below" over a rate limit
         # sent the owner typing at a wall.
         sub = ws.sub_state(True, bool(item.get('asking')), {'kind': item['request_kind']} if item.get('request_kind') else None)
-        line = item['why'] if item.get('request_kind') and item.get('why') else ws.says(sub, item.get('agent') or 'An agent', item['tail'][-1] if sub == 'asking' and item.get('tail') else '')
+        line = item['why'] if item.get('request_kind') and item.get('why') else ws.says(sub, item.get('agent') or task_kinds.SHOWN, item['tail'][-1] if sub == 'asking' and item.get('tail') else '')
         if sub == 'stalled': return f"{line} ({item.get('ref') or item['title']}) - it picks up again on its own when the limit lifts. Nothing is lost."
         # "answer it below" only where somebody is listening - a stopped, saved or paused run has nobody (a stall is answered above)
         ans = not item.get('paused') and item.get('lane') not in ('stopped', 'saved')
@@ -1876,7 +1876,7 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
     if item['kind'] == 'agentdone':      # a phone has no card to point at (B19)
         return (_finished(item) + (f": {str(item['summary']).strip().rstrip('.')}." if item.get('summary') else '.')
                 + (' Open it to read the full report.' if DELIVERY.get() == PHONE else ' Its full report is on the card.'))
-    lead = {'agent': f"{item.get('why') or ws.says('parked', item.get('agent') or 'An agent')} ({item.get('ref') or item['title']}).",
+    lead = {'agent': f"{item.get('why') or ws.says('parked', item.get('agent') or task_kinds.SHOWN)} ({item.get('ref') or item['title']}).",
             'meeting': f"{item['title']} is {item.get('why')}.",
             'review': f"{item.get('who') or 'Someone'} is owed a reply on \"{item['title']}\"" + (' - the draft is below.' if item.get('draft') else ' - nothing is drafted yet.'),
             'action': (f"{item.get('why') or item['title']} - it closes when you say so." if item.get('closeout') else

@@ -13,6 +13,7 @@ changed, and written into the task's discussion with its delivery outcome.
 import hashlib, json, re, threading, time
 from pathlib import Path
 from loguru import logger
+from .kinds import SHOWN, shown   # who the owner sees at work: Taskuary, never the profile (kinds.json `shown_`)
 
 KINDS = ('working', 'turn_end', 'background', 'input_needed', 'approval_needed', 'stalled', 'answered', 'finished', 'failed', 'disconnected', 'stopped',
          'floor_denied')
@@ -47,7 +48,7 @@ def says(sub: str, agent: str = None, text: str = '') -> str:
     """The sentence for a sub-state: with the request's words when it has any."""
     s = SAYS.get(sub) or SAYS['parked']
     text = ' '.join(str(text or '').split())[:300]
-    return (s['line'] if text and s.get('line') else s['bare']).format(agent=agent or 'the agent', text=text)
+    return (s['line'] if text and s.get('line') else s['bare']).format(agent=agent or SHOWN, text=text)
 
 
 def request_id_for(text: str) -> str:

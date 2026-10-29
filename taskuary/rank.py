@@ -29,6 +29,7 @@ from datetime import datetime
 from loguru import logger
 
 from .store import task_ref
+from . import kinds as task_kinds
 
 BASE = 0.5
 HEAD = 40                 # how many of the queue the rerank call sees
@@ -390,7 +391,7 @@ def funnel(store) -> dict:
     """What the Timeline's funnel bar shows: who is being worked, what waits and in what order."""
     from . import terminal as term
     from .ingest import auto_sessions
-    working = [{'tid': t['taskId'], 'ref': task_ref(t['taskId']), 'agent': t.get('agent') or t.get('label'), 'idle': t.get('idle'),
+    working = [{'tid': t['taskId'], 'ref': task_ref(t['taskId']), 'agent': task_kinds.shown(t), 'idle': t.get('idle'),
                 'title': (store.get_task(t['taskId']) or {}).get('Title') or ''}
                for t in term.live_sessions() if t.get('taskId')]
     seen = {w['tid'] for w in working}

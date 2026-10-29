@@ -20,6 +20,7 @@ const GeneralWorkspace = React.lazy(() => import("./GeneralWorkspace.jsx"));
 import { TellAgent, WorkLine, isWaiting } from "./ui.jsx";
 import { agentName } from "./agentWork.js";
 import { cliName } from "./BoardView.jsx";
+import { shownAgent } from "./kinds.js";
 import { defaultPaneHeight, holdWrappingSessions, movePane, resizedPaneHeight, wallPaneAtPoint, withoutWallSession } from "./wallLayout.js";
 
 const COLS = [1, 2, 3, 4];
@@ -218,7 +219,7 @@ export default function WallView({ onOpenTask, refresh = 0, active = true }) {
             const wrapBusy = !!wrapping[s.sid], wrapError = wrapErrors[s.sid];
             // a chat session reports its agent as the literal string "assistant" - the name of the
             // thing that helps you run Taskuary, not of the agent doing this task's work
-            const who = s.mode === "assistant" ? agentName(t) : (s.agent || cliName(s.cli || "agent"));
+            const who = s.mode === "assistant" ? agentName(t) : shownAgent({ mode: s.mode, cli: s.cli && cliName(s.cli) });   // never the profile (kinds.js)
             return (
               <Box key={s.sid} data-wall-pane={s.sid}
                 sx={{ ...pane0, position: "relative", display: "flex", flexDirection: "column", height: paneH, minHeight: MIN_H,

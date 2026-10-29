@@ -25,6 +25,8 @@ import { wantsAsk, wantsBrowser, withoutAsk } from "./newTask.js";
 import { FULL_SX, useFullScreen } from "./fullScreen.js";
 import { pickFor } from "./assistantProvider.js";
 import { agentName, workOf, doingNow, trailText, turnStart, elapsedText } from "./agentWork.js";
+import { instructionsHint } from "./kinds.js";
+import { assignedAgent } from "./agentIdentity.js";
 import { Md } from "./md.jsx";
 import PublishedPages from "./PublishedPages.jsx";
 import { placeShown } from "./shownPages.js";
@@ -861,7 +863,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         flexWrap: "wrap", flexShrink: 0 }}>
         <Box sx={{ width: 7, height: 7, borderRadius: 99, bgcolor: session?.alive ? "#78a17b" : "#c7a258" }} />
         {/* the strip named the window after the concierge; it belongs to the agent working in it */}
-        <Typography noWrap sx={{ ...mono, fontSize: 10.5, letterSpacing: ".13em", textTransform: "uppercase", color: DIM, flexShrink: 0 }}>{name}</Typography>
+        <Typography noWrap sx={{ ...mono, fontSize: 10.5, letterSpacing: ".13em", textTransform: "uppercase", color: DIM, flexShrink: 0 }}
+          title={instructionsHint(assignedAgent(task?.Assignee)) || undefined}>{name}</Typography>
         <Box sx={{ flex: 1, minWidth: 8 }} />
         {tools}
       </Box>}

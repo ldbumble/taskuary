@@ -1453,7 +1453,7 @@ class GeneralSession:
                 'agent': self.agent, 'cli': 'taskuary', 'mode': self.mode, 'alive': self.alive,
                 'busy': self.busy,
                 'started': self.started, 'idle': self.idle(), 'phase': self.phase(),
-                'waiting': waiting, 'request': req, 'state': sub, 'line': ws.says(sub, self.agent, (req or {}).get('text')) if sub else None,
+                'waiting': waiting, 'request': req, 'state': sub, 'line': ws.says(sub, ws.SHOWN, (req or {}).get('text')) if sub else None,
                 'cmd': f'{self.provider or "AI connector"} {self.model}'.strip(),
                 'provider': self.provider, 'pick': self.pick,
                 'connector_id': int(self.pick.split(':', 1)[1]) if self.pick.startswith('connector:') else None,

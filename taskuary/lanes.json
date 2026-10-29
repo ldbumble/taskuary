@@ -135,7 +135,7 @@
       "hint": "an agent is working on it — its icon spins until it finishes, asks, fails or is stopped",
       "_says": "the one sentence for an agent that has been started and has said nothing yet (laneSays.starting): `line` names the AI it runs on, `bare` when that is not known",
       "says": {
-        "starting": { "bare": "Starting the {agent}…", "line": "Starting the {agent} on {text}…" }
+        "starting": { "bare": "Starting {agent}…", "line": "Starting {agent} on {text}…" }
       }
     }
   ],

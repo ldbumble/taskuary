@@ -9,16 +9,14 @@
 //
 // Nothing here asks the server for anything new. The trace is already on the assistant payload and
 // the name is already on the task, so an agent that reads as working needs no new endpoint.
-import { assignedAgent } from "./agentIdentity.js";
+import { AGENT_SHOWN } from "./kinds.js";
 import { toolTarget } from "./assistantStream.js";
 import { plural } from "./timeWords.js";
 
-// Until a roster of named specialists exists, the kind of work IS the name - which is the same
-// thing triage already decided. A worker explicitly assigned to the task outranks it.
-export const KIND_NAME = { research: "Research", marketing: "Marketing", triage: "Triage",
-                           setup: "Set-up", coding: "Coding", general: "Agent", assistant: "Agent" };
-export const agentName = (task) => assignedAgent(task?.Assignee)
-  || KIND_NAME[String(task?.Kind || "").toLowerCase()] || "Agent";
+// ONE NAME AT WORK (the owner, 2026-10-28): the agent is Taskuary on every screen. The profile it runs under ("researcher",
+// a kind's "Research") read as the actor - "researcher asked you something" over a run signing the owner up for things - and it
+// is the instructions, not the worker: it shows on hover only (kinds.instructionsHint), and Settings edits it.
+export const agentName = () => AGENT_SHOWN;
 
 const HOST = /^https?:\/\/(?:www\.)?([^/?#]+)/i;
 export const sourceOf = (target) => (HOST.exec(String(target || "")) || [])[1] || "";

@@ -421,7 +421,7 @@ const write = (method, url, body) => {
       detail.comments.push({ ActorType: "assistant_user", Actor: "Ruth Bennett", Body: NUMBERS_REQUEST, CreatedAt: now() });
       startDemoAssistant(NUMBERS_TASK, { text: NUMBERS_REQUEST });
       const item = scriptedAssistant.pile.items.find((i) => i.tid === NUMBERS_TASK);
-      if (item) Object.assign(item, { kind: "agent", lane: "working", working: "analyst", agent: "analyst",
+      if (item) Object.assign(item, { kind: "agent", lane: "working", working: "Taskuary", agent: "Taskuary",
         why: "preparing the fictional report and checking its totals" });
       scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
       journeyChanged();
@@ -579,7 +579,7 @@ const write = (method, url, body) => {
       const taskId = row?.TaskId || item?.tid || ++nextId;
       scriptedAssistant.pile.items = scriptedAssistant.pile.items.filter((candidate) => candidate !== item && candidate.key !== `agent:${taskId}`);
       scriptedAssistant.pile.items.push({ ...(item || {}), key: `agent:${taskId}`, kind: "agent", lane: "working", tid: taskId,
-        ref: `TQ-${String(taskId).padStart(4, "0")}`, agent: "coding", working: "coding", asking: false,
+        ref: `TQ-${String(taskId).padStart(4, "0")}`, agent: "claude", working: "claude", asking: false,
         why: "the scripted demo shows this as handed off; no agent was started" });
       scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
       return { taskId, ref: `TQ-${String(taskId).padStart(4, "0")}`, agent: "coding", demo: true };

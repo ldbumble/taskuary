@@ -2,23 +2,22 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { shownAgent, instructionsHint } from "../src/kinds.js";
 import { agentName, workOf, doingNow, trailText, turnStart, elapsedText, sourceOf, saidFromTail } from "../src/agentWork.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 
-test("the agent doing the work is named, and never called the assistant", () => {
-  assert.equal(agentName({ Kind: "research" }), "Research");
-  assert.equal(agentName({ Kind: "marketing" }), "Marketing");
-  assert.equal(agentName({ Kind: "coding" }), "Coding");
-  // an explicitly assigned worker outranks the kind of work
-  assert.equal(agentName({ Kind: "research", Assignee: "agent:Atlas" }), "Atlas");
-  // a person owning it is not the agent's name; the kind still is
-  assert.equal(agentName({ Kind: "research", Assignee: "owner" }), "Research");
-  // "assistant" is the thing that helps you run Taskuary - it is never the name of a worker
-  assert.equal(agentName({ Kind: "assistant" }), "Agent");
-  assert.equal(agentName({ Kind: "general" }), "Agent");
-  assert.equal(agentName({}), "Agent");
-  assert.equal(agentName(null), "Agent");
+test("the agent doing the work is Taskuary - the profile it runs under is never its name (the owner, 2026-10-28)", () => {
+  for (const t of [{ Kind: "research" }, { Kind: "coding" }, { Kind: "general", Assignee: "agent:researcher" }, { Assignee: "owner" }, {}, null])
+    assert.equal(agentName(t), "Taskuary");
+  // a coding session names its tool; a chat session's cli is Taskuary's own, and no session at all is Taskuary
+  assert.equal(shownAgent({ mode: "terminal", cli: "claude" }), "claude");
+  assert.equal(shownAgent({ mode: "chat", cli: "taskuary", agent: "researcher" }), "Taskuary");
+  assert.equal(shownAgent({ mode: "chat", cli: "codex" }), "Taskuary");
+  assert.equal(shownAgent(null), "Taskuary");
+  // ...and the profile is said only where a look for it finds it
+  assert.equal(instructionsHint("researcher"), "Instructions: researcher");
+  assert.equal(instructionsHint(""), "");
 });
 
 test("a call with no result yet is what the agent is doing right now", () => {

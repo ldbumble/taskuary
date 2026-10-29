@@ -36,7 +36,7 @@ import { ROLES, ASSISTANT, ALERT, ALERT_INK } from "./theme.jsx";
 import { laneMeta } from "./funnelPile.js";
 import { age, ago, plural } from "./timeWords.js";
 import { SECTION, WORD, ideaWord } from "./lanes.js";
-import { kindLabel } from "./kinds.js";
+import { kindLabel, AGENT_SHOWN } from "./kinds.js";
 import { sendBlockLine, draftState } from "./sendState.js";
 import { openReply, useDraftJob } from "./replyDraft.js";
 import { agentRuns } from "./taskFilter.js";
@@ -184,14 +184,12 @@ export const personName = (name) => {
   return n;
 };
 const capital = (s) => { const t = String(s || "").trim(); return t ? t[0].toUpperCase() + t.slice(1) : ""; };
-// WHAT AN AGENT IS, never the profile's bare name (the owner, 2026-09-28, puzzled by a bare profile name on a card): a terminal
-// agent codes, a chat one does general work; the profile shows beside it only when it says more than that.
-const PLAIN_PROFILE = new Set(["coding", "claude", "codex", "agent", "assistant", "general", "regular", "the agent"]);
+// WHAT AN AGENT IS, never the profile it runs under (the owner, 2026-09-28, puzzled by a bare profile name on a card; 2026-10-28:
+// "General agent · researcher" named the instructions as the worker): a chat agent is Taskuary, a terminal one the coding agent.
 export function agentLabel(card, name) {
-  const p = String(name || card?.working || card?.agent || "").trim();
-  const chat = ["chat", "assistant"].includes(String(card?.mode || "")) || p.toLowerCase() === "assistant";
-  const kind = chat ? "General agent" : "Coding agent";
-  return p && !PLAIN_PROFILE.has(p.toLowerCase()) ? `${kind} · ${p}` : kind;
+  const p = String(name || card?.working || card?.agent || "").trim().toLowerCase();
+  const chat = ["chat", "assistant"].includes(String(card?.mode || "")) || ["assistant", AGENT_SHOWN.toLowerCase()].includes(p);
+  return chat ? AGENT_SHOWN : "Coding agent";
 }
 // the report an agent files (wrapup.py: AGENT REPORT, CODER REPORT on older rows): Summary is what it found, Actions what it did, Determination its verdict -
 // the evidence the move is decided on, where one sentence ("PR #81 was reviewed and approved") is not enough

@@ -4,7 +4,7 @@ import { advanceHandRaises, claimHandRaise, dismissHandRaise, enqueueHandRaise,
   handRaiseWhat, isWatchingTask, loadHandRaiseState, nonOverlapping,
   saveHandRaiseState } from "../src/handraiseState.js";
 
-const session = (overrides = {}) => ({ TaskId: 247, AgentName: "codex", kind: "session",
+const session = (overrides = {}) => ({ TaskId: 247, AgentName: "coding", cli: "codex", kind: "session",
   StartedAt: "2026-08-30 00:00:00", phase: "working", waiting: false, idle: 2,
   Title: "Fix notifications", tail: ["working"], ...overrides });
 

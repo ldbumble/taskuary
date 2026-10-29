@@ -142,7 +142,8 @@ test("the result reads the write-up's own parts, each once, and nothing it did n
   assert.match(src, /api\.get\(`\/api\/task-outputs\/\$\{taskId\}`\)/, "the files it made for the task are listed with its work");
   const page = readFileSync(fileURLToPath(new URL("../src/TaskPage.jsx", import.meta.url)), "utf8");
   assert.match(page, /const resultShown = !term\?\.alive && hasRecord && !news && \[AGENT\.saved, AGENT\.stopped, AGENT\.finished\]\.includes\(agentState\);/);
-  assert.match(page, /title=\{!term\?\.alive \? \(resultShown \? "Result" : "Agent work"\)/);
+  // ...and the heading tells the profile it runs under on hover only - the name on it is Taskuary (the owner, 2026-10-28)
+  assert.match(page, /title=\{<span title=\{instructionsHint\(runRole\) \|\| undefined\}>\{!term\?\.alive \? \(resultShown \? "Result" : "Agent work"\)/);
   assert.match(page, /rowState === "agentdone" && \(\s*<Typography data-tq-handled="" [^>]*>Nothing to do\. It's handled\.<\/Typography>\)/);
 });
 

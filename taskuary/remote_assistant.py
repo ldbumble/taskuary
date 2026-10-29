@@ -2426,8 +2426,6 @@ _CHANNEL_WORDS = {'email': 'Email', 'github': 'GitHub', 'whatsapp': 'WhatsApp', 
                   'sms': 'Text', 'discord': 'Discord', 'google_chat': 'Google Chat', 'assistant': 'Advisor', 'gitlab': 'GitLab'}
 _VIA = {'whatsapp': 'on WhatsApp', 'teams': 'in Teams', 'slack': 'in Slack', 'telegram': 'on Telegram', 'sms': 'by text',
         'github': 'on GitHub', 'discord': 'on Discord', 'google_chat': 'in Google Chat'}
-# a profile whose name only repeats the kind, the CLI or the word agent says nothing the label does not already say
-_PLAIN_PROFILE = {'coding', 'claude', 'codex', 'agent', 'assistant', 'general', 'regular', 'the agent', ''}
 RULE = '──────────'
 # THE TASK PAGE'S THREE COLOURS, as a chat can wear them (the owner, 2026-09-28: "make sure whatsapp/telegram matches
 # this new color scheme"): 1 the task in slate, 2 the agent in sage, 3 you in tan - the card's avatars, as dots
@@ -2459,11 +2457,12 @@ def _general(store, it: dict) -> bool:
 
 
 def agent_label(item: dict | None, name: str = None, store=None) -> str:
-    """What an agent IS - never the profile's bare name ("coding"); the profile only when it says more."""
+    """What an agent IS - Taskuary for general work, the coding agent for code - and never the profile it runs under: "General
+    agent · researcher" named the instructions as the worker (the owner, 2026-10-28; kinds.json `shown_`)."""
     it = item or {}
     p = str(name or it.get('working') or it.get('agent') or '').strip()
-    kind = 'General agent' if str(it.get('mode') or '') in ('chat', 'assistant') or p.lower() == 'assistant' or _general(store, it) else 'Coding agent'
-    return f'{kind} · {p}' if p.lower() not in _PLAIN_PROFILE else kind
+    general = str(it.get('mode') or '') in ('chat', 'assistant') or p.lower() in ('assistant', task_kinds.SHOWN.lower()) or _general(store, it)
+    return task_kinds.SHOWN if general else 'Coding agent'
 
 
 def asker(store, it: dict) -> str:

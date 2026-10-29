@@ -1,4 +1,5 @@
 import vocab from "../../taskuary/lanes.json" with { type: "json" };
+import { AGENT_SHOWN } from "./kinds.js";   // an agent with no name given is Taskuary, never "the agent"
 // ONE SENTENCE PER SUB-STATE of a blocked agent - the same entry workerstate.says reads on the
 // server. Seven surfaces each spelled "parked at its prompt" their own way (the 2026-09-18 audit's
 // top open item), and none could say "stuck on a rate limit", because each composed its sentence
@@ -13,13 +14,13 @@ export const subState = (x) => x?.state || SUB[x?.request?.kind || x?.request_ki
 
 export const says = (sub, agent, text = "") => {
   const s = SAYS[sub] || SAYS.parked, t = String(text || "").replace(/\s+/g, " ").trim().slice(0, 300);
-  return (t && s.line ? s.line : s.bare).replace("{agent}", agent || "the agent").replace("{text}", t);
+  return (t && s.line ? s.line : s.bare).replace("{agent}", agent || AGENT_SHOWN).replace("{text}", t);
 };
 
-// ...and the one for an agent started that has said nothing yet: "Starting the researcher on Codex…" - the pane's band says it
+// ...and the one for an agent started that has said nothing yet: "Starting Taskuary on Codex…" - the pane's band says it
 // while the first output is on its way, in place of a tall empty conversation (the owner, 2026-10-21)
 const WORKING = vocab.lanes.find((l) => l.key === "working").says;
 export const starting = (agent, brain = "") => {
   const s = WORKING.starting, b = String(brain || "").trim();
-  return (b ? s.line : s.bare).replace("{agent}", agent || "agent").replace("{text}", b);
+  return (b ? s.line : s.bare).replace("{agent}", agent || AGENT_SHOWN).replace("{text}", b);
 };

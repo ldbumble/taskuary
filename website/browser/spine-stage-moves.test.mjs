@@ -142,7 +142,7 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       await page.waitForFunction((CUR) => !document.querySelector(`${CUR} [data-tq-handoff-card]`), { timeout: 5000 }, CUR);
     });
 
-    await t.test("a live agent's bar is Back and Next; its strip holds Stop and save and the session's close", async () => {
+    await t.test("a live agent's bar is Back and Next; its strip holds Stop and save and the fold arrows, no x", async () => {
       const live = tasks.find((x) => x.State === "working" || /census sync fails/.test(x.Title));
       await openTask(page, live.TaskId);
       await page.waitForSelector(`${CUR} .xterm`, { timeout: 20000 }); await sleep(800);
@@ -151,9 +151,14 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       assert.deepEqual(m.head, [], "nothing on the title bar while the agent works");
       assert.ok(m.bar.some((x) => /^Next/.test(x)), `Next stays: ${m.bar}`);
       const st = await page.evaluate((CUR) => { const e = document.querySelector(`${CUR} [data-tq-pane-strip=agent]`);
-        return e && { live: e.hasAttribute("data-tq-live"), h: Math.round(e.getBoundingClientRect().height), stop: !!e.querySelector("[data-tq-strip-stop]") && !!e.querySelector("[data-tq-strip-close]"),
+        return e && { live: e.hasAttribute("data-tq-live"), h: Math.round(e.getBoundingClientRect().height), stop: !!e.querySelector("[data-tq-strip-stop]"),
+          x: e.querySelectorAll("button").length - e.querySelectorAll("[data-tq-strip-fold], [data-tq-strip-stop]").length,
           arrows: e.querySelectorAll("[data-tq-strip-fold]").length, words: [...e.querySelectorAll("[data-tq-strip-fold]")].map((a) => a.innerText).join("") + (e.querySelector("[data-tq-section-head], p")?.innerText || "") }; }, CUR);
-      assert.ok(st && st.live && st.h <= 34 && st.stop && st.arrows === 2 && !/Agent/.test(st.words), `a live agent's strip is slim: Stop and save, close and its arrows, small ${JSON.stringify(st)}`);
+      // ...its x was a second Stop and save (the owner, 2026-10-29): gone, and the arrows are the way back to the task
+      assert.ok(st && st.live && st.h <= 34 && st.stop && st.x === 0 && st.arrows === 2 && !/Agent/.test(st.words), `a live agent's strip is slim: Stop and save and its arrows, small ${JSON.stringify(st)}`);
+      await page.click(`${CUR} [data-tq-pane-strip=agent] [data-tq-strip-fold=left]`);
+      await page.waitForSelector(`${CUR} [data-tq-slot=from][data-tq-open]`, { timeout: 5000 });
+      assert.ok(await page.$(`${CUR} [data-tq-section-tab=agent]`), "back on the task, the session in its tab");
     });
 
     await t.test("the chat is a small pill in the corner, the bar ending before it", async () => {

@@ -543,7 +543,9 @@ const HIDDEN_WORDS = { position: "absolute", width: 1, height: 1, overflow: "hid
 const STRIP_ARROW = { appearance: "none", font: "inherit", cursor: "pointer", width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0,
   fontSize: 15, lineHeight: 1, border: `1px solid ${BORDER}`, bgcolor: "#fff", color: ACCENT, p: 0,
   "&:hover": { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } };
-export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, onStop, onClose }) {
+// ...A LIVE AGENT'S STRIP HAS NO X (the owner, 2026-10-29): its x was a second way to end the session, which Stop and save already is; the
+// way back to the task is the fold arrows either side of it, which open Came from or Close out with the session kept running in its slim tab
+export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, onStop }) {
   const liveMoves = useSpineVerbs("live");
   const arrows = FOLD[sec].map(([side, mark, to]) => ({ side, mark, to: fold(to) }));
   const arrow = (a) => <Box key={a.side} component="button" type="button" data-tq-strip-fold={a.side} aria-label={`Fold ${SEC_NAME[sec]} back`}
@@ -557,9 +559,7 @@ export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, 
         {live ? <Box sx={{ display: "flex", gap: 0.5 }}>
             {onStop && liveMoves.some((v) => !v.disabled) && <Tooltip title={btn("stop_agent")}><IconButton size="small" data-tq-strip-stop="" data-tq-verb="save-end" aria-label={btn("stop_agent")} onClick={onStop}
               sx={{ width: 24, height: 24, color: ACCENT, border: `1px solid ${BORDER}` }}><StopCircleOutlinedIcon sx={{ fontSize: 15 }} />
-              <Box component="span" sx={HIDDEN_WORDS}>{btn("stop_agent")}</Box></IconButton></Tooltip>}
-            {onClose && <Tooltip title="Back to the task - the session keeps running"><IconButton size="small" data-tq-strip-close="" aria-label="Back to the task"
-              onClick={onClose} sx={{ width: 24, height: 24, color: ACCENT, border: `1px solid ${BORDER}` }}><CloseIcon sx={{ fontSize: 14 }} /></IconButton></Tooltip>}</Box>
+              <Box component="span" sx={HIDDEN_WORDS}>{btn("stop_agent")}</Box></IconButton></Tooltip>}</Box>
           : <PaneMoves sec={sec} skip={skip} />}
       </Box>
       {arrows.filter((a) => a.side === "right").map(arrow)}
@@ -1646,8 +1646,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         ...(inRow && sessionView && k === "agent" && section !== k ? { "& > [role=region]": { top: `${STRIP_LIVE_H}px` } } : {}) }}>
         {section !== k && tabFor(k)}
         {stripOn(k) && <PaneStrip sec={k} live={sessionView && k === "agent"} skip={stripSkip[k]} fold={foldTo(k)} onFold={openSection}
-          onStop={sessionView && k === "agent" ? () => press("save-end") : null}
-          onClose={sessionView && k === "agent" ? () => setPeek(true) : null} />}
+          onStop={sessionView && k === "agent" ? () => press("save-end") : null} />}
         {body}</Box>);
   // ...the open section draws its half of the work: the Agent its own, Close out the reply; Came from leaves the halves as they were
   const pane = section === "agent" ? "agent" : section === "close" ? "reply" : (stacked && !openStage && paneOfMove(litMove)) || paneRest;

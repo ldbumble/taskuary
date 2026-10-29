@@ -87,8 +87,8 @@ import { autostartPlan, isGeneralKind, opensOnRegular } from "./autostart.js";
 import { adviceKeyFor, taskNote } from "./advice.js";
 import AdvisorNote from "./AdvisorNote.jsx";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
-import { CLOSE_BY_HAND, SECTIONS, agentStatus, agentWord, reportLine, askIsTitle, closeOut, closeStatus, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, waitingOn, workPane } from "./taskLayout.js";
-import { mainView, sectionOf, stageOf } from "./stages.js";
+import { CLOSE_BY_HAND, SECTIONS, advisorAt, agentStatus, agentWord, answeredOutside, reportLine, askIsTitle, closeOut, closeStatus, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, outsideLine, sameWords, sectionHere, waitingOn, workPane } from "./taskLayout.js";
+import { mainView, stageOf } from "./stages.js";
 import { taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
 import { ASK_TAG, BROWSER_TAG } from "./newTask.js";
@@ -982,6 +982,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   }, [fromSide]);
   // THE SECTION OPENED BY HAND (a closed section's tab), held for the view it was pressed in - `key` is the held view's (mainKey below)
   const [secPick, setSecPick] = useState({ key: null, sec: null });
+  // THE ADVISOR ON THE TASKS TAB (U12): read further down (readTaskAdvice); declared here, as the section the task opens on is its pick too
+  const [taskAdvice, setTaskAdvice] = useState(null);
   // ...and Came from's whole thread, behind "Full message history (N)"
   const [histOpen, setHistOpen] = useState(false);
   const [cameInFull, setCameInFull] = useState(false), [doneOpen, setDoneOpen] = useState(false), [todoAll, setTodoAll] = useState(false);
@@ -1586,10 +1588,20 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // section are read when the task opens and its detail lands, and again only when an agent starts or ends, the task closes or reopens, or
   // the width stacks it - never because a press the owner made changed what the page holds. A closed section's tab opens it (secPick)
   const mainNow = mainView({ stage: taskStage, sessionView, stacked });
-  const mainHeld = useRef({ key: null, main: null, sec: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${threeUp}|${t?.Status}`;
-  if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: sectionOf(taskStage) };
+  // ...AND THE ADVISOR'S PICK NAMES THE SECTION ITS MOVE IS IN (advice `section`, taskLayout.sectionHere): a reply that already went opens
+  // on Close out, its Mark done lit - read once its decision lands, as the detail is (the canvas hands its decision in with its line, `note`)
+  const advised = String((canvas ? note?.advice : taskAdvice)?.section || "");
+  const mainHeld = useRef({ key: null, main: null, sec: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${threeUp}|${t?.Status}|${advised}`;
+  if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: sectionHere({ stage: taskStage, advised }) };
   const main = mainHeld.current.main;
-  const section = threeUp ? (secPick.key === mainKey ? secPick.sec : mainHeld.current.sec) : null, hereSec = sectionOf(taskStage);
+  const section = threeUp ? (secPick.key === mainKey ? secPick.sec : mainHeld.current.sec) : null, hereSec = sectionHere({ stage: taskStage, advised });
+  // ...and the Advisor's line stands in that section, the one it is about
+  const adviceIn = advisorAt(advised);
+  // THE OWNER ANSWERED OUTSIDE TASKUARY (taskLayout.answeredOutside): their own line in Teams or the mail client is the newest on the task -
+  // Close out says so, when and where, and its Draft reply is not the lit move there: Mark done is (the owner, 2026-10-29)
+  const outside = answeredOutside({ messages: taskMessages, outside: sentOutside, pending: !!pendingReview });
+  const outsideSays = outside && outsideLine({ who: replyMessage?.FromName || "", where: outside.SourceName || channelName(outside.Channel),
+    when: (() => { const w = whenShort(outside.SentAt); return !w ? "" : asUtc(String(outside.SentAt)).toDateString() === new Date().toDateString() ? `at ${w}` : `on ${w}`; })() });
   const openSection = (s) => setSecPick({ key: mainKey, sec: s });
   // ...each section's slot: a closed one its tab's width (slim beside a live agent), the open one the rest - and its body laid at that
   // open width whether it is open or not, so the move never reflows it and a hidden terminal keeps its size
@@ -1616,7 +1628,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and a reply owed with nothing drafted shows its empty box in Close out, Draft with AI under it (the three sections, 2026-10-27)
   // ...and only where nothing else waits there: a close-out to approve, a proposal, emails owed or a write-up under way have their own box
   const replyEmpty = threeUp && !!replyMessage && !pendingReview && !sentReview && !unsentReview && !ended && !liveSession && !closeoutRv && !allProposals.length
-    && !owesEmails && !emailsWaiting && !writeup
+    && !owesEmails && !emailsWaiting && !writeup && !outside
     && !!t && !["done", "dropped"].includes(t.Status);
   // ONE SCROLLER IN THE WORK COLUMN (the owner, 2026-10-26, a failed run on a laptop: "you can't see anything"): a settled agent's part
   // scrolled inside the column with its transcript scrolling inside THAT, and the reason it failed sat at the foot of the inner one. Now
@@ -1671,8 +1683,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         .replace(/^[#>*\s-]+/, "").slice(0, 240),
       made: (() => { const p = recordProps.pages || []; const n = p[0]?.title || p[0]?.name || String(p[0]?.path || "").split(/[\\/]/).pop();
         return n ? `${n}${p.length > 1 ? ` +${p.length - 1}` : ""}` : ""; })(),
-      advisor: warn?.advice?.label || "" }),
-    close: closeStatus({ closed: ["done", "dropped"].includes(t.Status), note: closedNote, to: replyMessage?.FromName || "",
+      advisor: adviceIn === "agent" ? warn?.advice?.label || "" : "" }),
+    close: closeStatus({ advisor: adviceIn === "close" ? warn?.advice?.label || "" : "", closed: ["done", "dropped"].includes(t.Status), note: closedNote, to: replyMessage?.FromName || "",
       where: replyMessage ? replyMessage.SourceName || channelName(replyMessage.Channel) : "",
       draft: String(pendingReview?.DraftText || sentReview?.FinalText || sentReview?.DraftText || newestFirst(sentOutside)[0]?.OwnText || newestFirst(sentOutside)[0]?.BodyText || "").slice(0, 240),
       waiting: !!pendingReview, emails: emailsWaiting, sent: !!(sentReview || sentOutside.length), owed: !!replyMessage,
@@ -2121,7 +2133,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     return () => cancelAnimationFrame(f);
   }, [agentUp, t?.TaskId]);
   // THE ADVISOR ON THE TASKS TAB (U12): the canvas reads it for the item on its table; this view, standing alone, reads its own
-  const [taskAdvice, setTaskAdvice] = useState(null);
   const readTaskAdvice = useCallback((id) => {
     if (!id) { setTaskAdvice(null); return; }
     api.get("/api/advice", { params: { key: `task:${id}` } })
@@ -3040,7 +3051,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   </>
                 ) : null}
                 {/* THE ADVISOR'S LINE, in the Agent section under its work (the owner's mockup, 2026-10-27) - never over a live agent's screen */}
-                {threeUp && advisorNote && <Box sx={{ mt: 1.5, flexShrink: 0 }}>{advisorNote}</Box>}
+                {threeUp && advisorNote && adviceIn === "agent" && <Box sx={{ mt: 1.5, flexShrink: 0 }}>{advisorNote}</Box>}
                 {/* runs from before sessions (and any API-driven run) keep their trace here */}
                 {!sessionView && detail.runs.length > 0 && (
                   <Fold title={`Earlier runs · ${detail.runs.length}`}>
@@ -3078,6 +3089,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       : closeoutRv
                         ? (replyMessage ? "Your reply to the sender and the last act on GitHub - once the reply has gone, the task closes." : "The last act on GitHub - approving it runs only that; Mark done closes the task.")
                       : ended && !pendingReview ? "It ended upstream, so no reply is owed. What already went out is below."
+                      : replyMessage && outsideSays && !owesEmails ? outsideSays
                       : replyMessage
                         ? (owesEmails ? "What goes back to the sender, and the emails this task owes. Sending never closes the task - Mark done does."
                           : "What goes back to the sender. Once it has gone, the task closes.")
@@ -3092,7 +3104,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     action={inRow ? null
                       : pane !== "reply" && replyMessage
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
-                          <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
+                          <Button size="small" variant={outside ? "outlined" : "contained"} disableElevation disabled={!!openingReply}
                             sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                             startIcon={openingReply ? <CircularProgress size={11} /> : <ForwardToInboxIcon sx={{ fontSize: 14 }} />}
                             onClick={() => (pendingReview ? setOpenStage("reply") : openReply(true))}>
@@ -3153,8 +3165,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               the first one was named for. The box is still editable, and Redraft below
                               writes it again. */}
                           {!pendingReview && !inRow && !replyEmpty && (
-                            <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
-                              sx={primaryBtn}
+                            <Button size="small" variant={outside ? "outlined" : "contained"} disableElevation disabled={!!openingReply}
+                              sx={outside ? barBtn : primaryBtn} data-tq-reply-again={outside ? "" : undefined}
                               startIcon={openingReply ? <CircularProgress size={12} /> : <ForwardToInboxIcon sx={{ fontSize: 16 }} />}
                               title="Drafts the reply here, from this task's own context. Nothing is sent until you approve it."
                               onClick={() => openReply(true)}>{openingReply ? "Drafting…" : replyPrimary}</Button>
@@ -3303,6 +3315,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       Nothing is waiting on you here, and no inbound sender is attached to this task.
                     </Typography>
                   ))}
+                  {/* ...and the Advisor's line here when its move is Close out's (advice `section`): beside the Mark done it is the reason for */}
+                  {threeUp && advisorNote && adviceIn === "close" && <Box data-tq-advisor-in="close" sx={{ mt: 1.5, flexShrink: 0 }}>{advisorNote}</Box>}
                 </Box>)}
                 </Box>
                 </Box>

@@ -19,8 +19,9 @@ test("a reply sent from here is Close out's: the stage stays drafted and Close o
 });
 
 test("once open, the main view and its section are held: only a new task, its detail landing, an agent starting or ending, a close or a stack re-reads them", () => {
-  assert.match(src, /mainKey = `\$\{selected\}\|\$\{detail\?\.task\?\.TaskId === selected\}\|\$\{!!term\?\.alive\}\|\$\{sessionView\}\|\$\{stacked\}\|\$\{threeUp\}\|\$\{t\?\.Status\}`/);
-  assert.match(src, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: sectionOf\(taskStage\) \};/);
+  // ...and the section the Advisor's decision names once it lands (advice `section`, 2026-10-29: answered outside, it opens on Close out)
+  assert.match(src, /mainKey = `\$\{selected\}\|\$\{detail\?\.task\?\.TaskId === selected\}\|\$\{!!term\?\.alive\}\|\$\{sessionView\}\|\$\{stacked\}\|\$\{threeUp\}\|\$\{t\?\.Status\}\|\$\{advised\}`/);
+  assert.match(src, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: sectionHere\(\{ stage: taskStage, advised \}\) \};/);
   assert.match(src, /const main = mainHeld\.current\.main;/);
   // ...a tab's press opens its section for the view it was pressed in, and only that
   assert.match(src, /const section = threeUp \? \(secPick\.key === mainKey \? secPick\.sec : mainHeld\.current\.sec\) : null/);

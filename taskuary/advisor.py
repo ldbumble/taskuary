@@ -1160,7 +1160,9 @@ def _out(store, key, item, verbs, r, rev, d, fix, check=False) -> dict:
     verb, line, by, ev = d['verb'], d['line'], d['by'], d['evidence']
     lbl = _label(verbs, verb, item) if verb else ''
     out = {'key': key, **({'fix': fix} if fix else {}), 'state': r['state'], 'verb': verb, 'label': lbl, 'line': line, 'by': by, 'revision': rev, 'pill': lbl, 'evidence': ev,
-           'ask': r['ask'], 'needs_ai': r['state'] in rulebook.NEEDS_AI, 'kind': d['kind'], **({'checked': d['checked']} if d.get('checked') else {})}
+           'ask': r['ask'], 'needs_ai': r['state'] in rulebook.NEEDS_AI, 'kind': d['kind'], **({'checked': d['checked']} if d.get('checked') else {}),
+           # ...and the section the rule's move is in (rulebook.SEC): the page opens there, its line beside it - only while that move is the lit one
+           **({'section': r['section']} if r.get('section') and verb and verb == r['verb'] else {})}
     # a fix is a place, not a proposal: the page opens its href where the row has no '<rid>:fix' of its own to press (a failed act with
     # no draft on the table) - read live, so a fix already made carries no stale link
     if verb == 'fix':

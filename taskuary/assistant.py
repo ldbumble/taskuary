@@ -382,6 +382,9 @@ def their_asks(store, days: float = 2, hours: int = 3) -> tuple:
         v = store.message_verdict(last['MessageId'])
         body = strip_wrapper(own_words(str(last.get('BodyText') or '')), wrapper_of(v))    # what triage named its wrapper is not quoted
         if v is not None and v.get('intent') not in ASKING: continue
+        # ...and triage's own word on whether it still waits on the owner (asks_owner): a vendor's "let me know if you can make it" under a
+        # reply_only came back every morning as an ask that slipped (2026-10-29) - nobody waits on it, and the verdict said so
+        if v is not None and v.get('asks_owner') is False: continue
         tid = next((c.get('TaskId') for c in reversed(chain) if c.get('TaskId')), None)
         t = store.get_task(tid) if tid else None
         # a task closed AFTER the ask is what answered it; an ask that came after the close is new work

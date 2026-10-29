@@ -7,7 +7,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { promisesFiles, sizeText } from "../src/replyFiles.js";
+import { filesPromised, sizeText } from "../src/replyFiles.js";
 import { replyEnvelope } from "../src/sendState.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
@@ -19,18 +19,16 @@ test("a file is named the way a person would say its size", () => {
   assert.equal(sizeText(undefined), "0 B");
 });
 
-test("the card can tell when the words promise a file", () => {
-  assert.equal(promisesFiles("Attached are the PTO accrual files for the 8/31 payroll."), true);
-  assert.equal(promisesFiles("I'm attaching the workbook."), true);
-  assert.equal(promisesFiles("Please find enclosed the summary."), true);
-  assert.equal(promisesFiles("Thanks - the numbers are in the body below."), false);
-  assert.equal(promisesFiles(""), false);
-  // "attached to" is joined-to, not a file in the envelope (a draft explaining a fix said his logins were "attached to
-  // an old leftover record" and the card warned that nothing was attached, 2026-10-06)
-  assert.equal(promisesFiles("His logins were attached to an old leftover record."), false);
-  assert.equal(promisesFiles("The account stays attached to her profile."), false);
-  assert.equal(promisesFiles("See attached."), true);
-  assert.equal(promisesFiles("I've attached the file to this email."), true);
+test("whether a draft promises a file is its writer's word on the review, never read off the text", () => {
+  assert.equal(filesPromised({ FilesPromised: JSON.stringify({ named: ["PTO_Accruals.xlsx"] }) }), true);
+  assert.equal(filesPromised({ FilesPromised: JSON.stringify({ named: [] }) }), true, "a file promised, unnamed");
+  // the words say "attached" and the writer said no file rides with it: the card believes the writer
+  assert.equal(filesPromised({ DraftText: "His logins were attached to an old leftover record.", FilesPromised: null }), false);
+  assert.equal(filesPromised({}), false);
+  assert.equal(filesPromised(null), false);
+  assert.equal(filesPromised({ FilesPromised: "not json" }), false);
+  // ...and nothing in the module reads the draft's words
+  assert.doesNotMatch(read("replyFiles.js"), /attach\(|enclosed|\.test\(/);
 });
 
 test("the delivery envelope carries the files up to the card", () => {
@@ -51,7 +49,9 @@ test("the surface that approves a reply shows what rides with it", () => {
 
 test("a chat offers no picker that lies, and says a file cannot ride only where its draft promises one", () => {
   const pane = read("ReplyFiles.jsx");
-  assert.match(pane, /\) : \(promisesFiles\(text\) \|\| files\.length\) \? \(/);
+  assert.match(pane, /\) : \(promised \|\| files\.length\) \? \(/);
+  assert.match(read("ReviewDecision.jsx"), /promised=\{filesPromised\(r\)\}/);
+  assert.match(read("ReviewDecision.jsx"), /deliveryFiles\(filedDelivery\)\.length > 0 \|\| filesPromised\(r\)\)/);
   assert.match(pane, /message cannot carry one — reply by email with the file instead/);
   // ...no line under every chat draft that promises nothing (the owner, 2026-10-22: no explanation lines)
   assert.doesNotMatch(pane, /answer by email to attach one/);

@@ -6,7 +6,7 @@
 // need UI to show the attachment here... otherwise it looks like it sends without attachment").
 //
 // So the card says what is going: every file by name and size, one click to take one off, one to add
-// one - and when the words promise an attachment that is not there, a line saying so. It never
+// one - and when its writer said the words promise an attachment that is not there (filesPromised), a line saying so. It never
 // blocks the send; the owner can always mean "attached in my last mail".
 import React, { useRef, useState } from "react";
 import { label, hint } from "./buttons.js";
@@ -14,10 +14,10 @@ import { Box, Button, Chip, CircularProgress, Typography } from "@mui/material";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import api from "./api.js";
 import { ALERT_INK, DIM } from "./theme.jsx";
-import { promisesFiles, sizeText } from "./replyFiles.js";
+import { sizeText } from "./replyFiles.js";
 import { useVerbs } from "./actionRow.js";
 
-export default function ReplyFiles({ reviewId, files = [], text = "", channel = "email", onChanged, toRow = false, disabled = false }) {
+export default function ReplyFiles({ reviewId, files = [], promised = false, channel = "email", onChanged, toRow = false, disabled = false }) {
   const pick = useRef(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
@@ -47,7 +47,7 @@ export default function ReplyFiles({ reviewId, files = [], text = "", channel = 
     finally { setBusy(""); }
   };
 
-  const missing = !files.length && promisesFiles(text);
+  const missing = !files.length && promised;
   // in the row above the chat line the button is one of its More verbs: the same hidden file input opens
   useVerbs(`attach:${reviewId}`, [{ id: "attach", group: "more", tone: "s", label: label("attach", files.length ? "more" : null), disabled: disabled || busy === "adding",
     run: () => pick.current?.click(), title: hint("attach") }], toRow && mail);
@@ -65,7 +65,7 @@ export default function ReplyFiles({ reviewId, files = [], text = "", channel = 
             sx={{ color: DIM, textTransform: "none", fontSize: 11.5 }}>
             {busy === "adding" ? "Attaching…" : label("attach", files.length ? "more" : null)}
           </Button>
-        ) : (promisesFiles(text) || files.length) ? (
+        ) : (promised || files.length) ? (
           // ...a draft that PROMISES one says so in the alert colour: sent here, the words would arrive without it (U17). A chat draft that
           // promises none says nothing - "a Teams message cannot carry a file" under every chat draft was a line, not a button (2026-10-22)
           <Typography variant="caption" sx={{ color: ALERT_INK }}>

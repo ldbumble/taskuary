@@ -1051,6 +1051,9 @@ class SQLiteStore:
             # who wrote the draft: 'agent:<name>' when the agent that did the work wrote it itself
             # (wrapup.agent_reply), NULL when the responder did - the end of the run keeps the former
             if 'DraftBy' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN DraftBy TEXT')
+            # THE FILES THE DRAFT SAYS RIDE WITH IT, in the writer's own words (responder.FILES): JSON {"named": [...]}, NULL when it
+            # promises none or nobody judged. The card's "this mentions a file" line reads this, never a word list over the text (2026-10-28)
+            if 'FilesPromised' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN FilesPromised TEXT')
             # THE OWNER'S OWN WORDS FOR THE DRAFT ("shorter", "say we pay on Friday"), every one, JSON [{at, text}] - they rode into
             # the model's prompt and were gone (the owner, 2026-10-23: the typed instruction is now stored and remembered)
             if 'Instructions' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN Instructions TEXT')
@@ -5198,8 +5201,13 @@ class SQLiteStore:
     def update_review_reason(self, rid, reason, run_id=None):
         self._exec('UPDATE review SET Reason=?, RunId=COALESCE(?, RunId) WHERE ReviewId=?', (reason, run_id, rid))
         self._review_changed(rid)
-    def update_review_draft(self, rid, draft, run_id, by=None):
-        self._exec("UPDATE review SET DraftText=?, RunId=?, DraftError=NULL, DraftBy=? WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')", (draft, run_id, by, rid))
+    def update_review_draft(self, rid, draft, run_id, by=None, files=...):
+        """`files`: the names the writer said ride with this draft ([] = a file promised, unnamed; None = it promised none). Left out,
+        the same text keeps what its writer said and new text from anyone else drops it - a word about other words is no word on these."""
+        fp = None if files in (None, ...) else json.dumps({'named': [str(f) for f in files]})
+        self._exec("UPDATE review SET FilesPromised=CASE WHEN ? THEN ? WHEN DraftText IS ? THEN FilesPromised END, DraftText=?, RunId=?, DraftError=NULL, "
+                   "DraftBy=? WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')",
+                   (files is not ..., fp, draft, draft, run_id, by, rid))
         self._review_changed(rid)
     def add_review_instruction(self, rid, text: str):
         """Keep the owner's instruction for this draft beside the ones before it - never replaced, never cleared by a redraft."""

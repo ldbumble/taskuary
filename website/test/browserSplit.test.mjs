@@ -18,6 +18,10 @@ import {
   toPage,
   viewportFor,
   viewportMoved,
+  viewOnScreen,
+  heldOn,
+  isTurn,
+  TURN_PREFIX,
   wheelMessage,
 } from "../src/browserSplit.js";
 
@@ -89,6 +93,30 @@ test("the slot decides: no browser is nothing, a narrow slot is a chip, otherwis
   assert.equal(layoutFor(500, true, false), "chip");
   assert.equal(layoutFor(1200, true, false), "split");
   assert.equal(layoutFor(1200, true, true), "folded");
+});
+
+// THE BROWSER IN THE AGENT'S CANVAS (the owner, 2026-10-28): an agent's conversation too narrow to split stacks the view above it -
+// only a phone's width folds it to the chip, its link
+test("an agent's conversation stacks the view above it when narrow, and a phone gets the chip", () => {
+  assert.equal(layoutFor(600, true, false, true), "stack");
+  assert.equal(layoutFor(600, true, true, true), "folded");
+  assert.equal(layoutFor(390, true, false, true), "chip");
+  assert.equal(layoutFor(1200, true, false, true), "split");
+  assert.equal(layoutFor(600, true, false), "chip", "a Wall tile keeps its chip");
+  assert.ok(viewOnScreen("split") && viewOnScreen("stack") && !viewOnScreen("chip") && !viewOnScreen("folded"));
+});
+
+test("what waits on the view: a held act of THIS browser, and the agent's hand-over", () => {
+  const row = (p, id = 7) => ({ ReviewId: id, DraftText: JSON.stringify(p) });
+  const act = { action: "browser_act", sid: "s1", command: "agent-browser click @e7", what: 'press "Register" on events.trainly.example',
+    site: "trainly.example", url: "https://events.trainly.example/r", why: "it can't be undone" };
+  assert.deepEqual(heldOn(row(act), "s1"), { id: 7, what: act.what, site: act.site, url: act.url, why: act.why });
+  assert.equal(heldOn(row(act), "s2"), null, "another session's act stays on its card");
+  assert.equal(heldOn(row({ ...act, action: "shell_act" }), "s1"), null, "a shell step is not the browser's");
+  assert.equal(heldOn({ ReviewId: 1, DraftText: "not json" }, "s1"), null);
+  assert.equal(heldOn(row({ ...act, what: "" }), "s1").what, act.command);
+  assert.ok(isTurn({ request_id: `${TURN_PREFIX}abc` }));
+  assert.ok(!isTurn({ request_id: "signin:bank.example" }) && !isTurn(null));
 });
 
 

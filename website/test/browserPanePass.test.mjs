@@ -27,7 +27,7 @@ test("the socket connects only while the browser is open, and backs off", () => 
   assert.match(pane, /\}, \[sid, open\]\);/);
   assert.match(pane, /2000 \* 2 \*\* tries\+\+/);
   assert.match(term, /showsBrowser\(browser\.open, expectBrowser, seen\)/);
-  assert.equal((term.match(/open=\{browser\.open\}/g) || []).length, 2, "the split and the peek both pass it");
+  assert.equal((term.match(/open=\{browser\.open\}/g) || []).length, 3, "the stack, the split and the peek all pass it");
 });
 
 test("the viewport is set only by the tab the owner is at", () => {

@@ -5,6 +5,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Box, Typography } from "@mui/material";
 import api from "./api.js";
+import { label } from "./buttons.js";
 import { BORDER, CATPPUCCIN, FAINT, PANEL, mono } from "./theme.jsx";
 import { fitFrame, keyMessage, mayShape, mouseMessage, parseMessage, shortUrl, viewportFor, viewportMoved,
   wheelMessage } from "./browserSplit.js";
@@ -22,8 +23,11 @@ const btn = { ...mono, fontSize: 10.5, lineHeight: 1, px: 0.9, py: 0.45, borderR
 // `open`: the parent's poll of browserview.state - the relay refuses a session with no browser, so this
 // connects only while that says open (a caller that does not poll leaves it true and always tries).
 // `filling`: Taskuary is typing a sign-in into this page (browserview.filling) - the picture holds, and the pane says why
+// `waiting`: acts of this browser the hold keeps for the owner's press (browserSplit.heldOn) - Approve / Dismiss on the view itself.
+// `turn`: the agent handed the page over (browserSplit.isTurn) - "Your turn" with the hand-back on the view. `ended`: the browser closed;
+// the pane stays on its last frame (GeneralWorkspace's view outlives the browser), said as such.
 export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, onFold, overlay = false, yourTurn = false, clearRight = false,
-  filling = false }) {
+  filling = false, waiting = [], turn = null, onHandBack, onDecided, ended = false }) {
   const box = useRef(null), canvas = useRef(null), sendRef = useRef(null), img = useRef(null), fit = useRef(null);
   const [live, setLive] = useState(false);
   const [url, setUrl] = useState(url0);
@@ -279,7 +283,13 @@ Take over to drive it yourself; close the session to close it."
             {`Taskuary is signing in${hostOf(url) ? ` to ${hostOf(url)}` : ""} — the picture resumes in a moment`}
           </Typography>
         )}
-        {driving && !filling && (
+        {ended && (
+          <Typography data-tq-browser-ended="" sx={{ ...mono, position: "absolute", left: 8, top: 6, fontSize: 10, color: "#e1dcd5",
+            bgcolor: "#000000cc", px: 0.75, py: 0.25, borderRadius: 1, pointerEvents: "none" }}>
+            the browser closed — this is where it last was; it reopens when the agent next needs it
+          </Typography>
+        )}
+        {driving && !filling && !turn && (
           <Typography sx={{ ...mono, position: "absolute", left: 8, bottom: 6, fontSize: 10, color: CATPPUCCIN.yellow,
             bgcolor: "#000000aa", px: 0.75, py: 0.25, borderRadius: 1, pointerEvents: "none" }}>
             {handed.current ? "your turn — the agent is waiting on you; click the page and type" : "you are driving — the agent's next command still runs; hand back when done"}
@@ -296,6 +306,101 @@ Take over to drive it yourself; close the session to close it."
           </Box>
         )}
       </Box>
+      {/* WHAT WAITS ON THE OWNER, ON THE PAGE IT WAITS ON - below the page, never over it: a CAPTCHA box under a bar is not one they
+          can tick. A held act's Approve / Dismiss, and the owner's turn with its hand-back; both flow back into the agent's chat. */}
+      {waiting.map((h) => <HeldBar key={h.id} held={h} onDecided={onDecided} />)}
+      {turn && <TurnBar turn={turn} onHandBack={onHandBack} />}
+    </Box>
+  );
+}
+
+// dark, as the page's own frame is: the light toolbar's light text would read faint here, where the one thing to read is the ask
+const bar = { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1, px: 1.25, py: 0.75, flexShrink: 0, bgcolor: "#1c1b19",
+  borderTop: `1px solid ${CATPPUCCIN.yellow}88` };
+const barText = { fontSize: 12.5, color: "#e1dcd5", flex: "1 1 220px", minWidth: 0, lineHeight: 1.4 };
+const press = { ...btn, fontSize: 11.5, px: 1.25, py: 0.6 };
+const primary = { ...press, color: "#101010", bgcolor: CATPPUCCIN.yellow, borderColor: CATPPUCCIN.yellow,
+  "&:hover": { bgcolor: "#f3d98f", borderColor: "#f3d98f", color: "#101010" } };
+const failed = (e, data) => data?.send_error || e?.response?.data?.detail || (e ? "That did not go through - nothing was done. Try again." : "");
+
+// A HELD ACT (browsergate.check): Approve runs that exact command in this browser and the agent is told what happened - it goes on
+// in the same conversation by itself; Dismiss tells it the step was not done. The existing decide road, the same as the card's.
+function HeldBar({ held: h, onDecided }) {
+  const [busy, setBusy] = useState(""), [err, setErr] = useState("");
+  const decide = async (verb) => {
+    if (busy) return;
+    setBusy(verb); setErr("");
+    try {
+      const { data } = await api.post(`/api/reviews/${h.id}/decide`, { verb, final_text: null, note: null, cc: null, anyway: false }, { timeout: 120000 });
+      if (data?.send_error) { setErr(failed(null, data)); setBusy(""); onDecided?.(); return; }
+      onDecided?.();
+    } catch (e) { setErr(failed(e)); setBusy(""); }
+  };
+  return (
+    <Box data-tq-browser-held={h.id} sx={bar}>
+      <Typography sx={barText} title={[h.url, h.why].filter(Boolean).join("\n")}>
+        <Box component="span" sx={{ color: CATPPUCCIN.yellow, fontWeight: 600 }}>Approve: </Box>{h.what}
+        {h.why && <Box component="span" sx={{ color: "#a8a196" }}>{` — held because ${h.why}`}</Box>}
+      </Typography>
+      <Box component="button" onClick={() => decide("approve")} disabled={!!busy} sx={primary}
+        title="Taskuary runs exactly this in the agent's browser, and the agent carries on from there">{busy === "approve" ? "running…" : label("approve", "action")}</Box>
+      <Box component="button" onClick={() => decide("reject")} disabled={!!busy} sx={press}
+        title="Not done - the agent is told, and carries on without it or asks you">{busy === "reject" ? "…" : "Dismiss"}</Box>
+      {err && <Typography role="alert" sx={{ ...mono, fontSize: 10.5, color: CATPPUCCIN.red, flexBasis: "100%" }}>{err}</Typography>}
+    </Box>
+  );
+}
+
+// THE OWNER'S TURN (browserview.your_turn): the page is theirs to click and type on (yourTurn hands it over), and Done hands it back -
+// the agent's next message, so it looks at the page and goes on.
+function TurnBar({ turn, onHandBack }) {
+  const [busy, setBusy] = useState(false), [err, setErr] = useState("");
+  const back = async () => {
+    if (busy) return;
+    setBusy(true); setErr("");
+    try { await onHandBack?.(); } catch (e) { setErr(failed(e)); setBusy(false); }
+  };
+  useEffect(() => { setBusy(false); setErr(""); }, [turn?.request_id]);
+  return (
+    <Box data-tq-browser-turn={turn.request_id} sx={bar}>
+      <Typography sx={barText}>
+        <Box component="span" sx={{ color: CATPPUCCIN.yellow, fontWeight: 600 }}>{turn.text || "Your turn in the browser"}</Box>
+        <Box component="span" sx={{ color: "#a8a196" }}> · click the page and do it, then hand it back</Box>
+      </Typography>
+      <Box component="button" onClick={back} disabled={busy} sx={primary}
+        title="The agent looks at the page as you left it and carries on">{busy ? "handing back…" : "Done — hand back to the agent"}</Box>
+      {err && <Typography role="alert" sx={{ ...mono, fontSize: 10.5, color: CATPPUCCIN.red, flexBasis: "100%" }}>{err}</Typography>}
+    </Box>
+  );
+}
+
+// THE TASK'S LAST BROWSER VIEW, once no browser is showing (browserview.keep_frame): the page its agent last stood on, folded to one
+// line on a phone, and kept folded or open as the owner left it. Nothing at all when the task kept none. Drawn above a live session's
+// conversation until its browser opens (SessionPane), and on the ended agent's Result (TaskPage).
+const lastFoldKey = (tid) => `tq-browser-last-folded.${tid}`;
+export function LastView({ taskId, sid = "", narrow = false }) {
+  const [last, setLast] = useState(null);
+  const [open, setOpen] = useState(() => { try { const v = localStorage.getItem(lastFoldKey(taskId)); return v === null ? null : v !== "1"; } catch { return null; } });
+  useEffect(() => {
+    let live = true;
+    api.get(`/api/tasks/${taskId}/browser/last`).then((r) => live && setLast(r.data?.src ? r.data : null)).catch(() => {});
+    return () => { live = false; };
+  }, [taskId, sid]);
+  if (!last) return null;
+  const shown = open === null ? !narrow : open;
+  const toggle = () => { setOpen(!shown); try { localStorage.setItem(lastFoldKey(taskId), shown ? "1" : "0"); } catch { /* private mode */ } };
+  return (
+    <Box data-tq-browser-last="" sx={{ flex: "0 0 auto", mb: 1, border: `1px solid ${BORDER}`, borderRadius: 2, overflow: "hidden", bgcolor: "#101010" }}>
+      <Box component="button" onClick={toggle} aria-expanded={shown}
+        sx={{ ...mono, width: "100%", display: "flex", alignItems: "center", gap: 1, px: 1, py: 0.6, fontSize: 10.5, cursor: "pointer",
+          border: 0, bgcolor: "#1a1a1a", color: "#c9c3b9", textAlign: "left", "&:hover": { color: "#e1dcd5" } }}>
+        <Box sx={{ width: 7, height: 7, borderRadius: 99, bgcolor: "#5a554d", flexShrink: 0 }} />
+        <Box component="span" sx={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {`browser · where the agent last was${last.url ? ` · ${shortUrl(last.url, 48)}` : ""}`}</Box>
+        <Box component="span" sx={{ flexShrink: 0 }}>{shown ? "Hide" : "Show"}</Box>
+      </Box>
+      {shown && <Box component="img" src={last.src} alt={`The agent's browser, last on ${last.url || "a page"}`}
+        sx={{ display: "block", width: "100%", maxHeight: "min(46vh, 480px)", objectFit: "contain", bgcolor: "#101010" }} />}
     </Box>
   );
 }

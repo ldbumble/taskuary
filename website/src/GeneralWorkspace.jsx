@@ -30,6 +30,7 @@ import PublishedPages from "./PublishedPages.jsx";
 import { placeShown } from "./shownPages.js";
 import { outputRefs, outputRow, uncited } from "./taskOutputs.js";
 import { SessionPane } from "./TerminalView.jsx";
+import { heldOn, isTurn, TURN_BACK } from "./browserSplit.js";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import { level } from "./priority.js";
 import "./generalWorkspace.css";
@@ -630,6 +631,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const [error, setError] = useState("");
   const [ownPrompt, setOwnPrompt] = useState(null);
   const [answered, setAnswered] = useState("");          // the question this card answered (AgentAsks)
+  // the browser view is on screen: what waits on it is drawn there (SessionPane.onView). Not set*-named: the scope check (scope.test)
+  // reads this file's JSX apostrophes as strings and loses the declaration
+  const [viewShown, viewShownIs] = useState(false);
   // the whole window, where it stands - the dock is exempt, it has its own expand
   const { full, toggle: toggleFull } = useFullScreen();
   const [newChatBusy, setNewChatBusy] = useState(false);
@@ -796,6 +800,15 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     await api.post(`/api/tasks/${task.TaskId}/worker/answer`, { request_id: req.request_id, text });
     setAnswered(req.request_id); onAnswered?.();
   };
+  /* WHAT WAITS ON THE BROWSER IS ON THE BROWSER (the owner, 2026-10-28: "it should show up as a BROWSER inside the agent canvas ... so it
+     flows better to go back and continue"). A held act of this session's browser shows its Approve / Dismiss on the view, and the
+     agent's hand-over of the page ("your turn") its Done - both into this same conversation. Off screen (a phone's chip), their cards. */
+  const viewActs = (data?.browserActs || []).map((r) => heldOn(r, session?.sid)).filter(Boolean);
+  const turn = asking && isTurn(asking) ? asking : null;
+  const actsHere = viewShown ? (data?.browserActs || []).filter((r) => !heldOn(r, session?.sid)) : data?.browserActs || [];
+  // Approve runs the act and tells the agent on a thread of its own (browsergate._tell): its next turn starts a moment after the press
+  const decidedOnView = () => { refresh(); setTimeout(refresh, 2000); };
+  const handBack = () => answerAsk(TURN_BACK);
   const promptUsed = (id) => { if (ownPrompt?.id === id) setOwnPrompt(null); else onPromptUsed?.(id); };
   const placed = placeShown(data?.published, shownMessages);     // no hook: this sits below the loading return
   const thread = (
@@ -808,10 +821,10 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onEnded={refresh} onClearAttachments={clearAttachments}
         onAttach={() => fileRef.current?.click()}
         dock={dock} dockExpanded={dockExpanded} prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
-        asking={asking} onAnswer={answerAsk} noComposer={noComposer}
+        asking={turn && viewShown ? null : asking} onAnswer={answerAsk} noComposer={noComposer}
         onBusyChange={threadBusy} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
         serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since}
-        drafts={data?.playbookDrafts || []} acts={data?.browserActs || []} onDraftDecided={refresh} starting={starting} />
+        drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} starting={starting} />
     </OutputsCtx.Provider>
     </ShownCtx.Provider></AgentNameCtx.Provider>
   );
@@ -929,7 +942,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
             change the tree around the thread, or the answer streaming into it is remounted away
             ...and no sid on a card whose session is not live (`noTools`): its browser was asked for every 3 s under a stopped, saved
             or failed agent's Result, for as long as it stayed open (the agents walk, 2026-10-26) */}
-        <SessionPane sid={(!noTools && session?.sid) || null} height="100%" yourTurn={!!asking} idle={!busy && !streaming} expectBrowser={wantsBrowser(task)}>{thread}</SessionPane>
+        <SessionPane sid={(!noTools && session?.sid) || null} height="100%" yourTurn={!!asking} idle={!busy && !streaming}
+          stack={!dock} taskId={dock ? null : task.TaskId} held={viewActs} turn={turn} onHandBack={handBack} onDecided={decidedOnView}
+          onView={viewShownIs} expectBrowser={wantsBrowser(task)}>{thread}</SessionPane>
       </Box>
     </Box>
   );

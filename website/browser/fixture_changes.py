@@ -31,6 +31,7 @@ def install_processing_changes(app, store):
         '/api/fixture/signin/link',
         '/api/fixture/signin/terminal-ask',
         '/api/fixture/browser/last-frame',
+        '/api/fixture/browser/view',
         '/api/fixture/processing/arrive-during-next',
         '/api/fixture/task/closed-elsewhere',
         '/api/fixture/advisor/world',
@@ -586,6 +587,105 @@ def install_processing_changes(app, store):
         store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, {'held': 'The invoice page is open, waiting on your Approve.',
                           'failed': 'The Pay button on the invoice page did not go through.', 'normal': 'I read the invoice page.'}[body['end']])
         return {'taskId': tid}
+
+    # ── THE BROWSER VIEW IN THE AGENT'S CANVAS (browser/browser-view, 2026-10-28) ───────────────────────────────────────────────────────
+    # An agent-browser session with no Chrome and no socket: browserview.state says it is open on an invented sign-up page, the relay sends
+    # that page's frame (the test draws it) and keeps what the owner's mouse and keys send, and a held act's Approve "runs" here. The agent
+    # is a conversation session whose turns are recorded, not run - what it was told is what the test reads.
+    from taskuary import browsergate as _bg, browserview as _bv, general as _gen
+    VIEW, told, view_sid = {}, {}, {}
+    _state, _relay, _run = _bv.state, _bv.relay, _bg._run
+
+    def view_state(sid, fresh=False):
+        v = VIEW.get(str(sid))
+        return {'open': v['open'], 'url': v['url'] if v['open'] else '', 'port': 0} if v else _state(sid, fresh)
+
+    async def view_relay(ws, sid):
+        import json
+        v = VIEW.get(str(sid))
+        if not v: return await _relay(ws, sid)
+        if not v['open']: return await ws.close(code=4404)
+        await ws.accept()
+        frame = json.dumps({'type': 'frame', 'seq': 1, 'data': v['frame'], 'metadata': {'deviceWidth': 1200, 'deviceHeight': 760}})
+        _bv.remember(str(sid), frame)
+        for m in (json.dumps({'type': 'status', 'connected': True, 'screencasting': True}), json.dumps({'type': 'url', 'url': v['url']}), frame):
+            await ws.send_text(m)
+        try:
+            while True: v['input'].append(json.loads(await ws.receive_text()).get('type'))
+        except Exception: pass
+
+    def view_run(sid, args, wait, tag):
+        v = VIEW.get(str(sid))
+        if not v: return _run(sid, args, wait, tag)
+        if list(args) == ['get', 'url']: return 0, v['url']
+        v['ran'].append(list(args)); v['url'] = v.get('next') or v['url']
+        return 0, '✓ Done'
+
+    _bv.state, _bv.relay, _bg._run = view_state, view_relay, view_run
+
+    class ViewAgent(_gen.GeneralSession):
+        """A conversation agent whose turns are kept, not run: Approve's word and the owner's hand-back land here. Taskuary's word starts
+        a turn that stays at work until the fixture's next step ends it (the way the agent goes on after Approve); the owner's is answered."""
+        def send_prompt(self, text, *a, as_owner=True, **k):
+            told.setdefault(self.task_id, []).append(text)
+            if not as_owner: self.busy = True; return ''
+            store.add_comment(self.task_id, 'owner', _gen.USER_TYPE, text)
+            reply = 'I looked at the page again and carried on from there.'
+            store.add_comment(self.task_id, 'assistant', _gen.ASSISTANT_TYPE, reply)
+            return reply
+
+    @app.post('/api/fixture/browser/view')
+    def browser_view(body: dict):
+        """{step: 'open', frame}: a general task whose agent has Taskuary's browser open on an invented webinar sign-up page.
+        {step: 'hold' | 'turn' | 'close', taskId}: the hold puts its Register press on the task (browsergate's own proposal); the agent
+        hands the page over for a human check (browserview.your_turn); the agent's session ends with the browser on that page."""
+        step = body.get('step')
+        if step not in ('open', 'hold', 'turn', 'close') or not set(body) <= {'step', 'frame', 'taskId'}: raise HTTPException(422, 'bad step')
+        from taskuary import proposals, terminal
+        if step == 'open':
+            frame = str(body.get('frame') or '')
+            if not frame or len(frame) > 2_000_000: raise HTTPException(422, 'a base64 JPEG frame is required')
+            tid = store.create_task({'Title': 'Sign up for the Trainly onboarding webinar', 'Kind': 'general', 'Status': 'in_progress',
+                                     'Tags': 'needs:browser'}, 'fixture')
+            store.add_comment(tid, 'owner', _gen.USER_TYPE, 'Sign me up for the Trainly onboarding webinar from the invite.')
+            store.add_comment(tid, 'assistant', _gen.ASSISTANT_TYPE, 'I opened the registration page and filled in your name and email.')
+            sess = ViewAgent(store, tid)
+            terminal.SESSIONS[sess.sid] = sess; view_sid[tid] = sess.sid
+            sess.busy = True                                      # at work: its turn opened the browser, and ends at the next step
+            VIEW[sess.sid] = {'open': True, 'url': 'https://events.trainly.example/onboarding/register', 'frame': frame, 'input': [], 'ran': [],
+                              'next': 'https://events.trainly.example/onboarding/registered'}
+            answer_paths.update({f'/api/tasks/{tid}/assistant/stream', f'/api/tasks/{tid}/worker/answer'})
+            return {'taskId': tid, 'sid': sess.sid}
+        tid = int(body.get('taskId') or 0)
+        sess = terminal.SESSIONS.get(view_sid.get(tid) or '')
+        if not isinstance(sess, ViewAgent): raise HTTPException(404, 'no fixture browser on that task')
+        if step == 'hold':
+            v = VIEW[sess.sid]
+            r = proposals.queue(store, tid, {'action': 'browser_act', 'sid': sess.sid, 'args': ['click', '@e7'], 'command': 'agent-browser click @e7',
+                                             'url': v['url'], 'site': 'trainly.example', 'what': 'press "Register" on events.trainly.example - signs you up',
+                                             'why': "it can't be undone"}, 'agent')
+            rid = (r or {}).get('ReviewId') or store._rows("SELECT ReviewId FROM review WHERE TaskId=? AND Status='pending' ORDER BY ReviewId DESC", (tid,))[0]['ReviewId']
+            answer_paths.add(f'/api/reviews/{rid}/decide')
+            sess.busy = False                                     # ...and the held press ended that turn (browsergate: "End your turn now")
+            return {'reviewId': rid}
+        if step == 'turn':
+            rid = _bv.your_turn(store, tid, sess.sid, 'tick the "I\'m not a robot" box on the form')
+            sess.busy = False                                     # the turn it went on with after Approve ends on the hand-over
+            return {'requestId': rid}
+        _bv.LAST[sess.sid] = {'frame': json_frame(VIEW[sess.sid]['frame']), 'url': VIEW[sess.sid]['url'], 'at': 0}
+        sess.close(learn=False, report=False)
+        VIEW[sess.sid]['open'] = False
+        return {'closed': True, 'kept': bool(_bv.last_frame(tid))}
+
+    def json_frame(data):
+        import json
+        return json.dumps({'type': 'frame', 'data': data})
+
+    @app.get('/api/fixture/browser/view/{tid}')
+    def browser_view_seen(tid: int):
+        "What the agent was told, what its browser ran, and what the owner's mouse and keys sent the page."
+        v = VIEW.get(view_sid.get(tid)) or {}
+        return {'told': told.get(tid, []), 'ran': v.get('ran', []), 'input': v.get('input', [])}
 
     # ── THE STATE MATRIX (browser/state-matrix, 2026-10-28): the task states the demo world lacks, each one task, invented people ──────────
     MATRIX = ('sent', 'working', 'coding_working', 'asked', 'stopped', 'finished', 'done', 'note', 'deferred', 'todo', 'idea', 'news',

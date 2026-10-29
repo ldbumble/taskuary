@@ -137,4 +137,27 @@ export const mayShape = (hidden, focused, claim = false) => !hidden && (!!claim 
 export const isLocalPage = (url) => /^file:/i.test(String(url || "").trim());
 
 // Should this slot hold the split, or just a chip? The Wall tiles three or four sessions across.
-export const layoutFor = (width, open, folded) => (!open ? "none" : width < CHIP_BELOW ? "chip" : folded ? "folded" : "split");
+// `stack`: an agent's conversation on its task (GeneralWorkspace) - too narrow to split, the browser goes ABOVE the chat instead of
+// into a chip, so the page the agent is on is in its canvas (the owner, 2026-10-28: "it should show up as a BROWSER inside the agent
+// canvas"). Only a phone's width still gets the chip - the view as a link.
+export const PHONE_BELOW = 560;
+export const layoutFor = (width, open, folded, stack = false) => (!open ? "none"
+  : width < CHIP_BELOW ? (!stack || width < PHONE_BELOW ? "chip" : folded ? "folded" : "stack")
+  : folded ? "folded" : "split");
+// the layouts where the view itself is on screen, so what waits on it (a held act, the owner's turn) is drawn on it
+export const viewOnScreen = (layout) => layout === "split" || layout === "stack";
+
+// A STEP ONLY THE OWNER CAN DO ON THE PAGE (browserview.TURN_PREFIX): the agent handed the page over - drawn on the view as "Your turn"
+export const TURN_PREFIX = "yourturn:";
+export const isTurn = (asking) => String(asking?.request_id || "").startsWith(TURN_PREFIX);
+// what the owner's Done tells the agent (browserview.TURN_BACK)
+export const TURN_BACK = "Done - I finished that in the browser. Look at the page as it is now and continue.";
+
+// A HELD BROWSER ACT of THIS session's browser (browsergate.py), as the view draws it - null for anything else (a shell step, another
+// session's act: those stay on their card in the conversation)
+export const heldOn = (review, sid) => {
+  let p;
+  try { p = JSON.parse(review?.DraftText || ""); } catch { return null; }
+  if (p?.action !== "browser_act" || !sid || String(p.sid) !== String(sid)) return null;
+  return { id: review.ReviewId, what: p.what || p.command || "the step the agent held", site: p.site || "", url: p.url || "", why: p.why || "" };
+};

@@ -1287,6 +1287,7 @@ class GeneralSession:
                 except Exception as e: logger.debug(f'could not keep the page of task {self.task_id}: {e}')
             reply, closing = selfclose.chat_marker(reply)
             reply, signing = selfclose.signin_marker(reply)      # a sign-in it needs: Taskuary's to do, never the agent's (signin.py)
+            reply, turn = selfclose.turn_marker(reply)           # a step only the owner can do on the page: handed over on the browser view
             reply, asks = selfclose.ask_markers(reply)
             # THE QUESTION STAYS IN THE ANSWER. The marker line IS the question - ASK_LINE asks for it there - and cutting the
             # marker cut the question with it, so the chat showed "the laptop spend needs your yes first" and never what to say
@@ -1295,6 +1296,7 @@ class GeneralSession:
             said = '\n\n'.join(q + (f" ({' / '.join(c)})" if c else '') for q, c in asks if q not in reply)
             reply = '\n\n'.join(x for x in (reply, said) if x) or (closing or '')
             if signing is not None and not reply: reply = 'I need the site signed in to go on.'
+            if turn is not None and not reply: reply = turn or 'Your turn in the browser.'
             # the worker's own lifecycle, as events (PW-225): the turn ended; and if it asked, the exact question
             try:
                 from . import workerstate as ws
@@ -1309,9 +1311,13 @@ class GeneralSession:
                 from . import signin
                 try: signin.needs(self.store, self.task_id, self.sid, signing)
                 except Exception as e: logger.warning(f'task {self.task_id}: the sign-in the agent asked for was not raised - {e}')
+            if turn is not None:
+                from . import browserview
+                try: browserview.your_turn(self.store, self.task_id, self.sid, turn)
+                except Exception as e: logger.warning(f'task {self.task_id}: the page the agent handed over was not raised - {e}')
             # A TURN THAT ENDED SHORT is not one waiting on the owner: read by the turn judge (hooks.judge_ended), it is filed as the run
             # failing with its reason, and the session ends with its conversation saved - never parked as "waiting on you"
-            if not asks and signing is None and closing is None and not is_dock(self.store.get_task(self.task_id)):
+            if not asks and signing is None and turn is None and closing is None and not is_dock(self.store.get_task(self.task_id)):
                 from . import hooks
                 hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=lambda: self.close(learn=False, report=False))
             rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
@@ -1423,7 +1429,7 @@ class GeneralSession:
             from . import browserview
             try: browserview.keep_page(self.task_id, browserview.state(self.sid, fresh=True).get('url'))
             except Exception as e: logger.debug(f'could not keep the page of task {self.task_id}: {e}')
-            browserview.close(self.sid)
+            browserview.close(self.sid, self.task_id)
         self._emit('\r\n\x1b[2msession closed\x1b[0m\r\n')
         for loop, q in list(self.subs):
             try: loop.call_soon_threadsafe(q.put_nowait, None)

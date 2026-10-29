@@ -5,6 +5,12 @@
    that ends while the mic is on is started again; a refused vocabulary is dropped and the mic goes on without it; a stop the browser
    will not take back says why in one line. The mic stays on until the owner presses it again or sends. */
 
+/* NOT IN THE TASKUARY WINDOW (a user, 2026-10-29: "voice noting not working" - the mic said it could not reach the speech service).
+   The desktop window is Edge's WebView2: it carries Chromium's SpeechRecognition class but no speech service behind it, so every
+   session ends at once with "network", online or not. There the browser's own voice is no choice at all - the mic asks for a voice AI. */
+export const browserRecogniser = (w = typeof window === "undefined" ? null : window) =>
+  w && !w.pywebview ? (w.SpeechRecognition || w.webkitSpeechRecognition || null) : null;
+
 // what the owner reads when the browser will not listen - null: not the owner's to fix, the mic just goes on
 export const dictationError = (code) => ({
   "not-allowed": "The browser blocked the microphone - allow it in the address bar, then press the mic again",

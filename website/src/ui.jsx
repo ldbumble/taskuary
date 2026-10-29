@@ -14,7 +14,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import BlockIcon from "@mui/icons-material/Block";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
-import { dictate, dictationError } from "./dictation.js";
+import { browserRecogniser, dictate, dictationError } from "./dictation.js";
 import { onLive, touches } from "./live.js";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { RepoPicker } from "./RepoPicker.jsx";
@@ -503,7 +503,7 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
   // to configure voice ai before it will activate"): the mic shows crossed out and its press asks - set up a voice AI, or (Edge and
   // Chrome ship their own recogniser, the Web Speech API, free) use the browser's. That one cannot transcribe a voice-note FILE, so
   // the connectors still matter for the funnel.
-  const SR = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+  const SR = browserRecogniser();
   const viaBrowser = !!(voice && !voice.ready && SR && byBrowser);
   const off = !!(voice && !voice.ready && !viaBrowser);
   const press = (e) => { if (!off) return start(); setAsk(e.currentTarget); voice.recheck(); };

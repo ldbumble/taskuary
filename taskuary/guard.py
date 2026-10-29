@@ -162,6 +162,7 @@ OWNER_ONLY = (
     (r'POST', r'^/api/messages/\d+/calendar$',"answering an invite or drafting one is the owner's - drafted for their Send (calwrite)"),
     (r'POST', r'^/api/meetings$', "a meeting set up from New is the owner's - drafted for their Send (calwrite.draft_new)"),
     (r'POST', r'^/api/concierge/chats/\d+/continue$', "continuing an earlier Assistant chat is the owner's own conversation"),
+    (r'POST', r'^/api/concierge/chat-ai$', "which AI answers one Assistant chat is the owner's choice for their own conversation"),
     (r'PATCH', r'^/api/tasks/\d+/checklist/[^/]+/note$', "a note on one of a task's to-dos is the owner's (the agent writes through its own task tools)"),
     (r'POST', r'^/api/advice/press$', "the owner's own press, recorded against what the Advisor lit (presses.py)"),
     (r'POST', r'^/api/launch-key$', "a launch key opens a page that carries the owner token (launchkey.py, R29)"),

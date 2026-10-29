@@ -22,7 +22,7 @@ PreToolUse parses `ask` without supporting it yet); a session whose hook could n
 browser hook); and a step reached some other way than these tools by name (a script that pushes, an HTTP call made by hand). This
 gates the commands agents use, not every road there is.
 """
-import json, os, shutil, subprocess
+import json, ntpath, os, shutil, subprocess
 from loguru import logger
 from .browsergate import _segments, _deny, _tell
 
@@ -149,25 +149,28 @@ def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '
 
 def git_bash() -> str:
     """The bash an agent's Bash tool runs on Windows: Git's, beside git.exe. NEVER System32's bash.exe - WSL's launcher, which on a box
-    with no distribution answered an approved push with "no distribution installed", in UTF-16 (2026-10-29). '' when none is found."""
-    if os.name != 'nt': return shutil.which('bash') or ''
+    with no distribution answered an approved push with "no distribution installed", in UTF-16 (2026-10-29). '' when none is found.
+    Off Windows it is the system's own bash, else sh - there is no Git Bash to look for there."""
+    if os.name != 'nt': return shutil.which('bash') or shutil.which('sh') or next((c for c in ('/bin/bash', '/bin/sh') if os.path.isfile(c)), '')
+    P = ntpath                                  # Windows paths, read as Windows paths whatever runs this
     cands, g = [os.environ.get('CLAUDE_CODE_GIT_BASH_PATH') or ''], shutil.which('git')     # Claude Code's own setting for that bash first
     if g:                                       # git.exe sits in <Git>\cmd, <Git>\bin or <Git>\mingw64\bin
-        d = os.path.dirname(os.path.abspath(g))
-        cands += [os.path.join(r, *b) for r in (os.path.dirname(d), os.path.dirname(os.path.dirname(d))) for b in (('bin', 'bash.exe'), ('usr', 'bin', 'bash.exe'))]
-    cands += [os.path.join(os.environ[v], *b) for v in ('ProgramFiles', 'ProgramW6432', 'LOCALAPPDATA') if os.environ.get(v)
+        d = P.dirname(P.abspath(g))
+        cands += [P.join(r, *b) for r in (P.dirname(d), P.dirname(P.dirname(d))) for b in (('bin', 'bash.exe'), ('usr', 'bin', 'bash.exe'))]
+    cands += [P.join(os.environ[v], *b) for v in ('ProgramFiles', 'ProgramW6432', 'LOCALAPPDATA') if os.environ.get(v)
               for b in (('Git', 'bin', 'bash.exe'), ('Programs', 'Git', 'bin', 'bash.exe'))]
-    w, sysroot = shutil.which('bash') or '', os.path.normcase(os.environ.get('SystemRoot') or r'C:\Windows')
-    if w and not os.path.normcase(os.path.abspath(w)).startswith(sysroot) and 'windowsapps' not in w.lower(): cands.append(w)
+    w, sysroot = shutil.which('bash') or '', P.normcase(os.environ.get('SystemRoot') or r'C:\Windows')
+    if w and not P.normcase(P.abspath(w)).startswith(sysroot) and 'windowsapps' not in w.lower(): cands.append(w)
     return next((c for c in cands if c and os.path.isfile(c)), '')
 
 
 def _argv(shell: str, cmd: str) -> list:
-    "The held command in the shell it was written in: the agent's PowerShell tool in PowerShell, its Bash tool in Git Bash."
+    "The held command in the shell it was written in: the agent's PowerShell tool in PowerShell, its Bash tool in Git Bash (the system bash off Windows)."
     if str(shell).lower() == 'powershell':
         return [shutil.which('pwsh') or shutil.which('powershell') or 'powershell', '-NoProfile', '-NonInteractive', '-Command', cmd]
     b = git_bash()
-    if not b: raise RuntimeError('The held step was not run: no Git Bash (the bash beside git.exe) was found to run it in - nothing was done')
+    if not b: raise RuntimeError('The held step was not run: ' + ('no Git Bash (the bash beside git.exe)' if os.name == 'nt' else 'no bash or sh')
+                                 + ' was found to run it in - nothing was done')
     return [b, '-c', cmd]
 
 

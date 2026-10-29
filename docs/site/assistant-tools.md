@@ -26,7 +26,7 @@ Decide about the item on the table.
 
 ### `reply`
 
-The "Reply" button: write a reply to the sender. Nothing is sent.
+The "Reply" button ("Draft reply" when nothing is drafted yet): write a reply to the sender. Nothing is sent.
 
 - `text` - the gist, in the owner's words
 - `cc` (optional) - people to loop in on it, by name or address ("loop Gail in and ask her" is a reply with Gail copied, never an agent)

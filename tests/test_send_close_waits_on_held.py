@@ -21,6 +21,7 @@ def send_close(s, tid):
 
 
 class SendThenClose(unittest.TestCase):
+    held_dir = staticmethod(lambda p: p == r'C:\work\ledger')   # only the held folder is there: a blanket isdir would hide bash from shutil.which
     def setUp(self):
         self.s = MemoryStore(); self.tid = Factory(self.s).task('Fix the ledger export for Erin', kind='coding')
 
@@ -62,7 +63,7 @@ class SendThenClose(unittest.TestCase):
         self.assertEqual(json.loads(rv['DraftText'])['command'], 'git push origin fix-export')
         calls = []
         def run(argv, cwd=None, **kw): calls.append((argv[-1], cwd)); return SimpleNamespace(returncode=0, stdout='fix-export -> fix-export', stderr='')
-        with mock.patch.object(sg.subprocess, 'run', run), mock.patch.object(sg.os.path, 'isdir', return_value=True):
+        with mock.patch.object(sg.subprocess, 'run', run), mock.patch.object(sg.os.path, 'isdir', self.held_dir):
             self.assertTrue(verdicts.decide(self.s, self.held()[0], 'approve')['ok'])
         self.assertEqual(calls, [('git push origin fix-export', r'C:\work\ledger')]); self.assertEqual(self.held(), [])
         self.assertTrue(any('No agent is running on this task to tell' in n for n in self.notes()))

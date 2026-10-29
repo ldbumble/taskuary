@@ -416,7 +416,9 @@ const MOVE_MIN = 72;   // a few words and the ellipsis: less reads as a stray le
 // agent, Continue, Run another to Agent; Reply, Draft reply, Redraft and Hand it to a person to Close out; and Not a task and Remind me,
 // which are about where the task came from, to Came from (the owner, 2026-10-29). Folded, a pane carries them on its
 // spine, between its name and its status; open, inside it - and never on the bar. A press opens that pane and starts the step there
-// (TaskPage's "a press opens its section"). While an agent is LIVE the bar's one move is Stop and save, Back and Next beside it.
+// (TaskPage's "a press opens its section"). ...and THE BAR IS BACK AND NEXT ALONE (the owner, 2026-10-29): what acts on the whole task -
+// Mark done first, Change, Share, Close with a note, Attach a file - goes to the task's title bar (`head`, `change`, `share`), and a live
+// agent's Stop and save to its pane's strip (`live`).
 // The task page's verbs say which pane is open and whether an agent is live (`laid`; none where it lays no panes - a phone, the Tasks
 // tab): carried WITH the verbs, so the row never draws a set where the item's moves and the panes they ride on disagree (row-draws-once).
 // The row draws the rest and hands the stage moves here, by pane (putSpineVerbs, useSpineVerbs)
@@ -430,12 +432,12 @@ const spineSubs = new Set(), spineSub = (f) => { spineSubs.add(f); return () => 
 export const laidOf = (list) => (list || []).find((v) => v.laid)?.laid || null;
 export const putSpineVerbs = (by) => { const s = JSON.stringify(by); if (s === spineSig) return; spineSig = s; spineVerbs = by; spineDraw(); };
 export const useSpineVerbs = (sec) => useSyncExternalStore(spineSub, () => spineVerbs[sec] || NONE);
-// ...the row less its stage moves, and each pane's in the move pill's order (`spine`: the word a folded pane shows - Draft reply where
-// nothing is drafted yet); a live agent's row only its Stop and save
+// ...the row: Back and Next alone; each pane's stage moves in the move pill's order (`spine`: the word a folded pane shows - Draft reply
+// where nothing is drafted yet); the title bar's the task's own, Mark done first; a live agent's only its Stop and save, on its strip
 export function splitRow(row, on, list = []) {
   if (!on) return { row, by: {} };
-  const only = (keep) => ({ ...row, decide: row.decide.filter(keep), agent: row.agent.filter(keep), more: row.more.filter(keep) });
-  if (on.live) return { row: only((v) => String(v.id).split(":").pop() === "save-end"), by: {} };
+  const nav = { ...row, decide: [], agent: [], more: [] };
+  if (on.live) return { row: nav, by: { live: [...row.decide, ...row.agent, ...row.more].filter((v) => String(v.id).split(":").pop() === "save-end") } };
   const by = {};
   const { move, change } = pillsOf(row);
   for (const v of [...move, ...change]) { const k = stageOf(v); if (k) (by[k] ||= []).push(v); }
@@ -443,5 +445,9 @@ export function splitRow(row, on, list = []) {
   // spine it stands for the draft - filled when it is the Advisor's pick (rowOf's lit) - and Reply, which only opens that draft, steps aside
   const redraft = list.filter((x) => x.card && stageOf(x) === "close").map((v) => ({ ...v, tone: row.lit === v.id ? "p" : "s" }));
   if (redraft.length) by.close = [...redraft, ...(by.close || []).filter((v) => !redraft.some((r) => r.label === v.label) && v.id !== "reply")];
-  return { row: only((v) => !stageOf(v)), by };
+  const { move: all, change: changes, share } = pillsOf(row), rest = all.filter((v) => !stageOf(v));
+  by.head = [...rest.filter(isDone), ...rest.filter((v) => !isDone(v))];
+  by.change = changes.filter((v) => !stageOf(v));
+  by.share = share;
+  return { row: nav, by };
 }

@@ -23,12 +23,11 @@ LEGAL = '\n\nCONFIDENTIALITY NOTICE: This message is intended solely for the add
 
 
 class CleanerTests(unittest.TestCase):
-    def test_banners_hints_and_footer_clutter_go_and_the_words_stay(self):
+    def test_a_banner_and_a_stamp_reach_the_model_and_only_the_named_wrapper_leaves_the_screen(self):
+        # which text is a mail system's wrapper is the model's word (its verdict's `wrapper`), never a phrase list (2026-10-28)
         body = BANNER + HINT + 'Can you send the reconciled ledger by Friday?\n\nSent from my iPhone\n'
-        clean = triage.strip_boilerplate(body)
-        self.assertEqual(clean.strip(), 'Can you send the reconciled ledger by Friday?')
-        self.assertEqual(triage.strip_boilerplate('Please approve the invoice.\n\nGet Outlook for iOS\n').strip(), 'Please approve the invoice.')
-        self.assertEqual(triage.strip_boilerplate('New prices below.\n\nUnsubscribe | Manage your email preferences | View this email in your browser\n').strip(), 'New prices below.')
+        self.assertEqual(triage.strip_boilerplate(body).strip(), body.strip())
+        self.assertEqual(triage.strip_wrapper(body, (BANNER, HINT, 'Sent from my iPhone')), 'Can you send the reconciled ledger by Friday?')
 
     def test_sign_off_and_legal_footer_stay_and_the_contact_lines_go(self):
         # a sign-off word or a confidentiality sentence is not where the sender's words end - a P.S. comes after
@@ -179,7 +178,7 @@ class PayloadTests(unittest.TestCase):
         notes = ['2026-08-25: "Export" - NOT OURS: x', '2026-08-26: "Export" - NOT OURS: y']
         triage.classify_intent({'from_email': 'd@v.example', 'subject': 'Re: Export', 'body': body}, llm=llm, notes=notes)
         self.assertIn('item599', seen['usr']['body']); self.assertIn('confirm by Friday', seen['usr']['body'])
-        self.assertNotIn('outside of the organization', seen['usr']['body'])
+        self.assertIn('outside of the organization', seen['usr']['body'])        # the model reads past a banner itself
         self.assertNotIn('body_truncated', seen['usr'])
         self.assertNotIn('SETTLED BY YOUR OWNER', seen['sys']); self.assertIn('EVIDENCE', seen['sys'])
 

@@ -150,6 +150,7 @@ LEVELS = ('regular', 'important', 'urgent')
 DIFFICULTY, SURE, DATA = _bullet('difficulty'), _bullet('sure'), _bullet('data_class')
 REFINES = _bullet('refines')
 OFFER = _bullet('offer')         # what an agent could do for the owner about the main ask (2026-10-28)
+WRAPPER = _bullet('wrapper')     # the text its sender did not write, for a screen to leave out (2026-10-28)
 DATA_CLASSES = ('ordinary', 'sensitive')
 DIFFICULTIES = ('quick', 'standard', 'hard')
 
@@ -216,6 +217,9 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
          # what an agent could do for the owner about the main ask, said to them in one sentence - the task's one-press offer
          # (the owner, 2026-10-28: "I can register you for the webinar and put it on your calendar"; ingest.offer_of)
          'offer': {'type': ['string', 'null']},
+         # the text around the sender's words that they did not write - a mail system's banner, an app's stamp, an unsubscribe
+         # strip, a legal footer - copied verbatim, so a screen can leave exactly it out (strip_wrapper; the owner, 2026-10-28)
+         'wrapper': {'type': ['array', 'null'], 'items': {'type': 'string'}},
          # the message asks the owner to find a time to meet: how long and which days (its row's Find a time, calwrite.py)
          'meet': {'type': ['object', 'null'], 'additionalProperties': False, 'required': ['minutes', 'from', 'to'],
                   'properties': {'minutes': {'type': ['integer', 'null']}, 'from': {'type': ['string', 'null']}, 'to': {'type': ['string', 'null']}}},
@@ -289,8 +293,8 @@ NOT_JUDGED = 'not judged - no AI read this message'
 # ONLY SHAPES ARE TRIMMED (the owner, 2026-10-11: "Everything should be ai"). _VALEDICTION cut everything after a
 # bare "Thanks," line, so "P.S. can you also send the October numbers?" never reached the model; _LEGAL cut from
 # the first line saying "this message is confidential" to the end, the sender's own ask with it. Both decided
-# from English words where the sender's words end - so both went. What is left is parsing: a mail system's
-# banner and a client's stamp line (below), the quote head and the phone/address lines a signature is made of.
+# from English words where the sender's words end - so both went. What is left is parsing: the quote head and the
+# phone/address lines a signature is made of; a banner or a stamp is triage's to name (strip_wrapper, below).
 # Outlook's phone dash is U+2011, and it pads a signature block with zero-width spaces (which str.strip() does
 # not remove, so the block read as ordinary text).
 _DASH = '\u2010\u2011\u2012\u2013\u2014\u2212-'
@@ -302,61 +306,63 @@ _PHONE = r'\+?[\d(][\d\s().x' + _DASH + r']{6,}'
 _CONTACT = _re.compile(r'^\s*([a-z][a-z.\-]{0,11}[:.]?\s*)?(' + _PHONE + r'|[^@\s]+@[^@\s]+\.[a-z]{2,}|(https?://|www\.)\S+)'
                        r'(\s*[a-z]{1,8})?\s*$', _re.I)
 _KEEP_MIN = 30          # never trim a message down past this - when in doubt, keep
-# the corporate wrapper AROUND a body, not the sender's words: the external-mail banner and the
-# "you don't often get email" hint (one pattern for every surface - assistant.py imports it)
-_BANNER = _re.compile(r"(this email was sent from outside of[^*\n]*(\*\*[^*]*\*\*)?\s*|"
-                      r"\[?\s*you don'?t often get email from \S+\.?( learn why this is important( at \S+)?)?\s*\]?)", _re.I)
-# footer clutter: a mail client's stamp, a newsletter's unsubscribe strip - whole lines made of these
-_CLUTTER_BIT = (r"(sent from my [\w ]+|get outlook for (ios|android)|sent via [\w ]+|unsubscribe( here| from this list)?|"
-                r"manage (your )?(email )?preferences|view (this )?(email )?in (your )?browser|update your preferences|opt out)")
-_CLUTTER = _re.compile(r'^\s*(' + _CLUTTER_BIT + r')(\s*[|·•\-]\s*' + _CLUTTER_BIT + r')*\s*\.?\s*$', _re.I)
 BODY_BUDGET = 6000      # the current body reaches the model whole up to this; a cut is disclosed, never silent
 EXCHANGE_BUDGET = 12000
 NL = chr(10)
 
 
-# DISPLAY ONLY: the confidentiality footer, from its first line to the end. The owner's 2026-09-23 ruling ("NOTICE etc
-# ... no one needs to see it") governs what a SCREEN shows, and a screen offers the whole email beside it; what a model
-# reads is never cut by this (strip_boilerplate does not call it - 2026-10-11, where it ate a sender's own ask). The
-# heading alternative is case-SENSITIVE: a footer shouts NOTICE; "Notice the error at the top" is an ask (2026-09-02).
-_LEGAL = _re.compile(r'^\s*(NOTICE|DISCLAIMER|CONFIDENTIALITY( NOTICE)?|LEGAL NOTICE)[:\s]'
-                     r'|^\s*(Notice|Disclaimer|Confidentiality Notice|Legal Notice):'
-                     r'|(?i:this (e-?mail|message|communication)[^.]{0,120}(confidential|privileged|intended (solely|only))'
-                     r'|if you (are not the intended|have received this[^.]{0,40}in error)'
-                     r'|unauthorized (use|review|disclosure|distribution))')
+# THE WRAPPER IS THE MODEL'S WORD (the owner, 2026-10-28: no hard-coded words). A mail system's external-sender banner, a mail
+# app's stamp, a newsletter's unsubscribe strip and a legal footer were cut by phrase lists - "this email was sent from outside
+# of", "sent from my", "NOTICE" - each a rule about English words deciding where a sender's words end. Now triage, which reads
+# every word anyway, names them (its verdict's `wrapper`, copied verbatim), and what a SCREEN shows leaves out exactly those. A
+# model reads them whole; a message triage has not read is shown as it came.
+WRAPPER_MAX, WRAPPER_CHARS = 8, 3000
 
 
-def strip_footer(text: str) -> str:
-    """The legal footer off a body about to be SHOWN - never one about to be read by a model."""
-    lines = str(text or '').splitlines()
-    i = next((i for i, l in enumerate(lines) if _LEGAL.search(l) and len(NL.join(lines[:i]).strip()) >= _KEEP_MIN), None)
-    return text if i is None else NL.join(lines[:i]).rstrip()
+def _squash(t) -> str: return ' '.join(str(t or '').split()).lower()
 
 
-def strip_banner(text: str) -> str:
-    """The words to SHOW: a mail system's external-sender banner, a client's clutter lines and the legal footer
-    removed, everything else as it arrived. triage read past these from the start, but every surface that shows a
-    message - the card, the task's source list, the phone - printed them first (the owner, 2026-09-23:
-    "this email etc or template of all emails ... should be removed from everywhere"). The mail as STORED
-    is untouched; this is how it is read. Display only - no prompt is built from it."""
-    kept = strip_footer(NL.join(l for l in _BANNER.sub('', text or '').splitlines() if not _CLUTTER.match(l))).strip()
-    return kept or (text or '')
+def wrapper_of(verdict) -> tuple:
+    """The verbatim wrapper text triage named on a message (its stored verdict), () when none or never judged."""
+    w = verdict.get('wrapper') if isinstance(verdict, dict) else None
+    return tuple(str(x) for x in w if str(x).strip()) if isinstance(w, list) else ()
 
 
-def read_text(body: str, own: str = None) -> str:
+def wrapper_in(j: dict, body: str) -> list:
+    """The verdict's `wrapper`, kept only where the message really says it - a passage it made up hides nothing."""
+    hay = _squash(body)
+    got = [str(x).strip()[:WRAPPER_CHARS] for x in (j.get('wrapper') or []) if isinstance(x, str) and str(x).strip()]
+    return [x for x in dict.fromkeys(got) if _squash(x) in hay][:WRAPPER_MAX]
+
+
+def strip_wrapper(text: str, wrapper=()) -> str:
+    """The words to SHOW: what triage named as the message's wrapper taken out, everything else as it arrived. The mail as
+    STORED is untouched, and a screen offers the whole email beside this. Never cut to nothing."""
+    t = str(text or '')
+    for w in wrapper: t = t.replace(w.strip(), '')
+    # ...and line by line, where the copy the screen holds is spaced unlike the copy triage read
+    gone = {_squash(l) for w in wrapper for l in str(w).splitlines() if _squash(l)}
+    kept = NL.join(l for l in t.splitlines() if _squash(l) not in gone).strip()
+    while NL * 3 in kept: kept = kept.replace(NL * 3, NL * 2)
+    return kept or str(text or '')
+
+
+strip_banner = strip_footer = strip_wrapper   # the names every screen already calls
+
+
+def read_text(body: str, own: str = None, wrapper=()) -> str:
     """What the owner READS of a message: the sender's own words this time - the mailbox's own cut when
     it gave one (Graph uniqueBody, message.OwnText), else split_own's - with the trailing contact lines,
-    the external-sender banner and the legal footer gone (strip_banner; the footer for the screen only). The same cleaning triage already reads through, now on every
-    screen (the owner, 2026-09-23: "NOTICE etc ... no one needs to see it"). The mail as stored is untouched;
-    a screen that shows this offers the whole email beside it."""
+    and the `wrapper` triage named gone (strip_wrapper - a banner, a stamp, a legal footer: the owner, 2026-09-23: "NOTICE etc ...
+    no one needs to see it"). The mail as stored is untouched; a screen that shows this offers the whole email beside it."""
     t = strip_boilerplate(str(own).strip()) if own and str(own).strip() else own_words(body or '')
-    return strip_banner(t) or strip_banner(body or '')
+    return strip_wrapper(t, wrapper) or strip_wrapper(body or '', wrapper)
 
 
 def strip_boilerplate(text: str) -> str:
-    """The words the sender actually typed: the mail system's banner, a client's stamp lines and the
-    trailing phone/address lines go, everything else stays byte-for-byte."""
-    lines = [l for l in _BANNER.sub('', text or '').splitlines() if not _CLUTTER.match(l)]
+    """The words the sender actually typed: the trailing phone/address lines go, everything else stays byte-for-byte - a
+    banner or a stamp is the model's to read past (strip_wrapper)."""
+    lines = str(text or '').splitlines()
     # contact lines left at the very end - never a sign-off word, which is not where a message ends (P.S.)
     while lines and (_CONTACT.match(lines[-1]) or _BLANKISH.match(lines[-1])):
         if len(NL.join(lines[:-1]).strip()) < _KEEP_MIN: break
@@ -756,6 +762,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # ...and whether a joining line refines the task's own ask, wherever a task it may join was shown (2026-10-28)
             if not shape and 'refines' not in base and (home or same_ids or candidates is not None): system += '\n\n' + REFINES
             if not shape and '**offer**' not in base: system += '\n\n' + OFFER        # ...and what an agent could do for them (2026-10-28)
+            if not shape and '**wrapper**' not in base: system += '\n\n' + WRAPPER    # ...and what its sender did not write (2026-10-28)
             # the last thing asked for, after every block that says how to JUDGE: the output shape
             if shape: system += '\n\n' + TASK_FIELDS
             # ...and the shape goes on the WIRE as well, where the brain has one: a schema the
@@ -868,6 +875,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 # reading ever reached message.Danger - and it holds the unattended start now (ingest.danger, the owner 2026-10-28)
                 dg = ' '.join(str(j.get('danger') or '').split())[:200]
                 if dg and dg.lower() not in ('null', 'none', 'no', 'false'): out['danger'] = dg
+                # the text around the sender's words that they did not write - what a screen leaves out (strip_wrapper)
+                wr = wrapper_in(j, f"{msg.get('body') or ''}\n{msg.get('own_text') or ''}")
+                if wr: out['wrapper'] = wr
                 return out
             parse_error = f"invalid intent {j.get('intent')!r}; expected task, reply_only, or fyi"
         except Exception as e:

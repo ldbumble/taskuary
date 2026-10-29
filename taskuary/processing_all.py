@@ -21,29 +21,36 @@ from .kinds import SHOWN, shown as shown_agent
 from .processing_order import feed_band
 
 
-def _preview(body, n: int) -> str:
+def _preview(body, n: int, wrapper=()) -> str:
     """What the SENDER wrote, cut to n - not the wrapper it arrived in.
 
     Every mail from outside the company opens with a security banner, so the Timeline's Message step
     read "This email was sent from outside of Northwind. ** Do not click links..." on every one of them and
-    never reached the message: the owner was looking at a CI failure whose summary said nothing about
-    CI (2026-09-15). triage.own_words is already the app's one answer to this - assistant.py
-    imports the same pattern - so this reuses it rather than inventing a second rule.
+    never reached the message (2026-09-15). What is left out is what triage named the message's `wrapper`
+    (triage.strip_wrapper) - never a phrase list (the owner, 2026-10-28).
 
-    Only the head of the body is scanned: a banner sits at the top, and running the stripper over
-    every full body would put that work on every row of a 400-row feed.
+    Only the head of the body is scanned, so running it over every full body does not put that work on every row of a feed.
 
     Remembered: the answer is a pure function of the scanned head and n, and every rail build asked it again for
     every row - the regexes were about half of the rebuild that rides along each Next (3,770 rows, 2026-10-20).
     """
     text = str(body or '')
-    return _preview_of(text[:n * 4], n) if text else ''
+    return _preview_of(text[:n * 4], n, tuple(wrapper)) if text else ''
+
+
+def _wrapper(routes) -> tuple:
+    """The wrapper triage named on the message, off its newest route that holds a verdict."""
+    import json
+    from .triage import wrapper_of
+    r = max((r for r in routes if r.get('VerdictJson')), key=lambda r: r['RouteId'], default=None)
+    try: return wrapper_of(json.loads(r['VerdictJson'])) if r else ()
+    except (TypeError, ValueError): return ()
 
 
 @functools.lru_cache(maxsize=8192)
-def _preview_of(head: str, n: int) -> str:
-    from .triage import own_words, strip_footer
-    return (strip_footer(own_words(head)) or head)[:n]     # a preview is shown: the legal footer goes (2026-10-11)
+def _preview_of(head: str, n: int, wrapper: tuple = ()) -> str:
+    from .triage import own_words, strip_wrapper
+    return (strip_wrapper(own_words(head), wrapper) or head)[:n]     # a preview is shown: the wrapper triage named goes
 
 
 # THE MARK SAYS WHERE THE WORK CAME FROM (the owner, 2026-09-25), not which message is newest. A report run that joined
@@ -278,7 +285,7 @@ def message_row(message, item, threads, now, *, full=False):
     row = {key: message.get(key) for key in (
         'MessageId', 'Channel', 'SourceName', 'Subject', 'FromName', 'FromEmail', 'SentAt',
         'ConversationId', 'SourceLink', 'TaskId', 'Direction')}
-    row.update(IngestedAt=message.get('CreatedAt'), Preview=_preview(message.get('BodyText'), 4000 if full else 400),
+    row.update(IngestedAt=message.get('CreatedAt'), Preview=_preview(message.get('BodyText'), 4000 if full else 400, _wrapper(routes)),
                MsgStatus=message.get('Status'), Title=task.get('Title'), TaskStatus=task.get('Status'), Assignee=task.get('Assignee'),
                Priority=task.get('Priority'), TaskKind=task.get('Kind'), TaskTags=task.get('Tags'),
                NeedsYou=int(needs), ChainSize=sum(m.get('Status') not in {'context', 'history'}

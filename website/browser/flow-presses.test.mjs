@@ -10,7 +10,16 @@ import { boot, rail, clickRow, findRow, doVerb, pressNext, folded, bubbles, type
 const ringed = async (page) => (await rail(page)).find((r) => r.cur)?.text || "";
 const badge = async (page, re) => (await folded(page)).find((f) => re.test(f.title)) || null;
 const tasksNow = async (h) => (await (await fetch(`${h.fixtureApi}/api/tasks`, { headers: { "X-Taskuary-Token": h.token } })).json()).data;
-const open = async (page, re) => { const k = await findRow(page, re); assert.ok(k, `${re} is on the rail`); await clickRow(page, k); await sleep(2500); };
+/* STEADY UNDER LOAD (2026-10-28): fixed sleeps stood for "the press has landed" - 2.5s for a row to open, 3s for a Next to move on - and a busy
+   runner took longer. Each now waits for the thing itself (the row ringed and its moves on the dock; the ring moved), bounded, and the
+   assertion after it is the same one. */
+const until = (page, f, arg, timeout = 20000) => page.waitForFunction(f, { timeout, polling: 100 }, arg).catch(() => {});
+const open = async (page, re) => {
+  const k = await findRow(page, re); assert.ok(k, `${re} is on the rail`); assert.ok(await clickRow(page, k), `${re}'s row pressed`);
+  await until(page, (k) => !!document.querySelector(`[data-tq-rail] .tq-pile-row.current[data-tq-key="${k}"]`)
+    && [...document.querySelectorAll("[data-tq-row] .tq-arow-verbs button")].some((b) => b.getBoundingClientRect().width > 0), k);
+  await page.waitForNetworkIdle({ idleTime: 300, timeout: 10000 }).catch(() => {});
+};
 const clickWords = (page, words, scope = "body") => page.evaluate((w, s) => {
   const b = [...document.querySelectorAll(`${s} button, ${s} [role=menuitem]`)].find((n) => n.innerText.trim() === w && !n.disabled && n.getBoundingClientRect().width > 0);
   b?.click(); return !!b; }, words, scope);
@@ -24,7 +33,7 @@ test("a press folds its item with its badge, lands on the row below, and a reloa
   let below = await next(/overnight import/);
   assert.ok(await doVerb(page, "done"), "Mark done is on the row");
   await page.waitForFunction(() => [...document.querySelectorAll("[data-tq-folded] [data-tq-pressed]")].some((e) => /Mark done/.test(e.getAttribute("data-tq-pressed"))), { timeout: 20000 });
-  await sleep(1500);
+  await until(page, (b) => (document.querySelector("[data-tq-rail] .tq-pile-row.current")?.innerText || "").replace(/\s+/g, " ").slice(0, 30) === b, below.slice(0, 30));
   assert.equal((await ringed(page)).slice(0, 30), below.slice(0, 30), "Mark done puts the row below on the table");
 
   // Close with a note: the note under its badge
@@ -62,7 +71,9 @@ test("a press folds its item with its badge, lands on the row below, and a reloa
 
   // ...and a reload keeps every one of them
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 40000 }); await sleep(3000);
+  await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 40000 });
+  // ...the rail as the server rebuilt it: the reminded row back under its day (waited for, then every claim below asserted)
+  await until(page, () => [...document.querySelectorAll("[data-tq-rail] .tq-pile-row")].some((e) => /^in \d+[hd].*Reconcile the August/.test(e.innerText.replace(/\s+/g, " "))));
   const titles = (await rail(page)).map((r) => r.text);
   for (const re of [/overnight import/, /AP cutover date/, /Year-end audit/]) assert.ok(!titles.some((x) => re.test(x)), `${re} stays closed after a reload`);
   assert.ok(titles.some((x) => /^in \d+[hd].*Reconcile the August/.test(x)), `the reminded task waits on the rail under its day: ${JSON.stringify(titles)}`);
@@ -92,7 +103,8 @@ for (const [width, height] of [[1440, 900], [390, 844]]) {
     assert.doesNotMatch(await page.evaluate(() => document.body.innerText), /Failed to fetch|Network Error/, "in words, not the browser's");
     assert.equal(await ringed(page), was, "the item it could not leave is still the one on the table");
     failing = false;
-    assert.ok(await pressNext(page)); await sleep(3000);
+    assert.ok(await pressNext(page));
+    await until(page, (was) => (document.querySelector("[data-tq-rail] .tq-pile-row.current")?.innerText || "").replace(/\s+/g, " ").slice(0, 90) !== was, was);
     assert.notEqual(await ringed(page), was, "the next Next goes on");
     assert.deepEqual(errors, []);
   });
@@ -103,13 +115,16 @@ test("Hand it to a person opens on the name to type; a person found with nothing
   await open(page, /Month-end close/);
   assert.ok(await doVerb(page, "hand"));
   await page.waitForSelector('input[placeholder="who should own this — name or email"]', { visible: true, timeout: 15000 });
-  await sleep(600);
+  await until(page, () => document.activeElement?.placeholder === "who should own this — name or email");
   assert.equal(await page.evaluate(() => document.activeElement?.placeholder || ""), "who should own this — name or email", "the name is where typing goes");
-  await page.keyboard.type("gail"); await sleep(1500);
+  await page.keyboard.type("gail"); await sleep(1500);   // ...and it is still there 1.5s on: nothing re-drawn under it took it
   assert.equal(await page.$eval('input[placeholder="who should own this — name or email"]', (e) => e.value), "gail");
-  await page.click('[aria-label="Close handoff"]'); await sleep(800);
+  await page.evaluate(() => document.querySelector('[aria-label="Close handoff"]').click());
+  await until(page, () => !document.querySelector('input[placeholder="who should own this — name or email"]'));
 
-  await page.keyboard.down("Control"); await page.keyboard.press("k"); await page.keyboard.up("Control"); await sleep(800);
+  // ...Ctrl+K typed into once its box has the focus: letters typed before then went to the page
+  await page.keyboard.down("Control"); await page.keyboard.press("k"); await page.keyboard.up("Control");
+  await until(page, () => !!document.activeElement?.closest("[data-tq-search]") && document.activeElement.matches("input, textarea"));
   await page.keyboard.type("dynamo");
   await page.waitForFunction(() => /Lena Ortiz/.test(document.querySelector("[data-tq-search]")?.innerText || ""), { timeout: 15000 });
   await page.evaluate(() => [...document.querySelectorAll("[data-tq-search] *")].find((e) => e.children.length === 0 && e.textContent === "Lena Ortiz")?.click());

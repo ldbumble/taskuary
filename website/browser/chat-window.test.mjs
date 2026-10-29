@@ -15,22 +15,46 @@ const rect = (page, sel) => page.$eval(sel, (e) => { const r = e.getBoundingClie
 const Q = "what are my outstanding tasks?";
 const inCanvas = (page) => page.$$eval(".tq-chat-body .tq-msg.you, .tq-chat-body .tq-msg.receipt, .tq-chat-body .tq-msg:not(.tq-live-card):not(.tq-welcome-msg) .body > p",
   (els) => els.map((e) => e.textContent.trim()).filter(Boolean));
+/* STEADY UNDER LOAD (2026-10-28): a held element handle went stale when the window or the rail re-rendered under it ("Node is detached from
+   document"), and fixed sleeps measured a view a busy runner had not finished laying out. A press now finds its element as it presses - again,
+   if it was swapped out or moved between the find and the click - and a measure waits for what it measures to stand still. */
+const stale = (e) => /detached|not clickable|not an Element|No node found|Node is either not visible|Cannot find context/i.test(e.message);
+// the i-th element matching `sel`, clicked by the mouse where it is drawn
+const press = async (page, sel, i = 0, timeout = 20000) => {
+  for (const t0 = Date.now(); ; await sleep(150)) {
+    try {
+      await page.waitForFunction((sel, i) => { const e = document.querySelectorAll(sel)[i]; return !!e && e.getBoundingClientRect().width > 0; }, { timeout: Math.max(1000, timeout - (Date.now() - t0)) }, sel, i);
+      const e = (await page.$$(sel))[i];
+      await e.click();
+      return;
+    } catch (e) { if (!stale(e) || Date.now() - t0 > timeout) throw e; }
+  }
+};
+// ...the same box over five polls in a row (100ms apart)
+const still = (page, sel, timeout = 20000) => page.evaluate(() => { window.__stillAt = null; window.__stillN = 0; }).then(() => page.waitForFunction((sel) => {
+  const r = document.querySelector(sel)?.getBoundingClientRect(), at = r ? [r.left, r.top, r.width, r.height].map(Math.round).join() : "";
+  window.__stillN = at && at === window.__stillAt ? window.__stillN + 1 : 0; window.__stillAt = at;
+  return window.__stillN >= 4;
+}, { polling: 100, timeout }, sel));
+// ...and the window's conversation scrolled to its newest line, which it reaches a few frames after it stands (waited for, then asserted)
+const newest = (page) => page.waitForFunction(() => { const b = document.querySelector("[data-tq-chat-win] .tq-chat-pop-body"); return !!b && b.scrollHeight - b.scrollTop - b.clientHeight <= 2; },
+  { timeout: 10000 }).catch(() => {});
 const ask = async (page, q) => {
-  await page.click(".tq-compose-box textarea");
-  await page.waitForSelector("[data-tq-chat-win]:not([hidden])", { timeout: 5000 });
+  await press(page, ".tq-compose-box textarea");
+  await page.waitForSelector("[data-tq-chat-win]:not([hidden])", { timeout: 15000 });
   await page.keyboard.type(q);
   await page.keyboard.press("Enter");
   await page.waitForFunction((q) => [...document.querySelectorAll("[data-tq-chat-win] .tq-msg.you")].some((e) => e.textContent.includes(q)), { timeout: 20000 }, q);
   await page.waitForFunction(() => !document.querySelector("[data-tq-chat-win] .tq-pending"), { timeout: 30000 });
-  await sleep(400);
+  await still(page, "[data-tq-chat-win]"); await newest(page);
 };
 const openTask = async (page, harness, re) => {
   const tasks = (await (await fetch(`${harness.fixtureApi}/api/tasks`, { headers: { "X-Taskuary-Token": harness.token } })).json()).data;
   const t = tasks.find((x) => re.test(x.Title));
   assert.ok(t, `the demo's ${re}`);
   await page.evaluate((id) => { location.hash = `task=${id}`; }, t.TaskId);
-  await page.waitForSelector(`[data-tq-task-page="${t.TaskId}"]`, { timeout: 20000 });
-  await sleep(2000);
+  await page.waitForSelector(`[data-tq-task-page="${t.TaskId}"] [data-tq-task-head]`, { timeout: 20000 });
+  await still(page, "[data-tq-canvas-item]");
 };
 
 test("an answer goes into the chat window on a task and on a report, never into the canvas; × shuts it and the pill brings the same conversation back", { timeout: 300000 }, async (t) => {
@@ -70,26 +94,29 @@ test("an answer goes into the chat window on a task and on a report, never into 
 
   // ...it stays open (no auto-close, a click on the canvas leaves it), × shuts it, the pill opens it on the same conversation
   await sleep(3000);
-  await page.click("[data-tq-task-head]");
+  await press(page, "[data-tq-task-head]");
   await sleep(300);
   assert.equal(await page.$eval("[data-tq-chat-win]", (e) => e.hidden), false, "it stays open until × or Esc");
-  await page.click("[data-tq-chat-win] [aria-label='Close the chat']");
-  await page.waitForSelector("[data-tq-chat-win][hidden]", { timeout: 5000 });
-  await page.waitForFunction(() => !document.querySelector(".tq-compose-box[data-tq-open]"), { timeout: 5000 });
-  await page.click(".tq-compose-box textarea");
-  await page.waitForSelector("[data-tq-chat-win]:not([hidden])", { timeout: 5000 });
+  await press(page, "[data-tq-chat-win] [aria-label='Close the chat']");
+  await page.waitForSelector("[data-tq-chat-win][hidden]", { timeout: 15000 });
+  await page.waitForFunction(() => !document.querySelector(".tq-compose-box[data-tq-open]"), { timeout: 15000 });
+  await press(page, ".tq-compose-box textarea");
+  await page.waitForSelector("[data-tq-chat-win]:not([hidden])", { timeout: 15000 });
   assert.match(await page.$eval("[data-tq-chat-win] .tq-chat-pop-body", (e) => e.textContent), /outstanding tasks[\s\S]*scripted/, "reopened, the same conversation");
   await page.keyboard.press("Escape");
-  await page.waitForSelector("[data-tq-chat-win][hidden]", { timeout: 5000 });
+  await page.waitForSelector("[data-tq-chat-win][hidden]", { timeout: 15000 });
 
   // ON A REPORT (the owner's screenshot: the answer drawn under it, in the canvas)
-  const rows = await page.$$("[data-tq-rail] .tq-pile-row");
   const at = await page.$$eval("[data-tq-rail] .tq-pile-row", (r) => r.findIndex((x) => /Headcount by site/.test(x.textContent)));
   assert.ok(at >= 0, "the demo's report on the rail");
-  await rows[at].click();
+  await press(page, "[data-tq-rail] .tq-pile-row", at);
   await page.waitForSelector("[data-tq-item-sections]", { timeout: 20000 });
-  await sleep(1500);
-  const onReport = await inCanvas(page);
+  // ...what the canvas says under the report, once it has stopped changing (the same over five reads 100ms apart)
+  let onReport = await inCanvas(page);
+  for (let same = 0, t0 = Date.now(); same < 5 && Date.now() - t0 < 20000; await sleep(100)) {
+    const now = await inCanvas(page);
+    same = JSON.stringify(now) === JSON.stringify(onReport) ? same + 1 : 0; onReport = now;
+  }
   await ask(page, `${Q} (report)`);
   assert.deepEqual(await inCanvas(page), onReport, "nothing new in the canvas under the report");
   assert.equal(await page.$$eval("[data-tq-chat-win] .tq-msg.you", (els) => els.length), 2, "the window holds both turns");
@@ -101,17 +128,23 @@ test("an answer goes into the chat window on a task and on a report, never into 
     view: document.querySelector("[data-tq-task-page]")?.getAttribute("data-tq-task-page") || "" }));
   await ask(page, "open TQ-0004");
   await page.waitForFunction(() => document.querySelector("[data-tq-task-page]")?.getAttribute("data-tq-task-page") === "4", { timeout: 20000 });
+  // ...the rail's selection follows the view a render later on a busy box: waited for, then asserted (the wait alone passes nothing)
+  const railOn4 = () => page.waitForFunction(() => /TQ-0004/.test(document.querySelector("[data-tq-rail] .tq-pile-row .card[aria-selected=true]")?.textContent || ""),
+    { timeout: 20000 }).catch(() => {});
+  await railOn4();
   let at4 = await onTable();
   assert.match(at4.sel, /TQ-0004/, `the Assistant pressed TQ-0004's rail row ${JSON.stringify(at4)}`);
   assert.match(await page.$eval("[data-tq-chat-win] .tq-chat-pop-body", (e) => [...e.querySelectorAll(".tq-msg.receipt")].pop()?.textContent || ""), /Opened TQ-0004/,
     "...and said so in the window");
-  const first = await page.$$("[data-tq-rail] .tq-pile-row .card");
-  await first[0].click();
-  await page.waitForFunction(() => document.querySelector("[data-tq-task-page]")?.getAttribute("data-tq-task-page") !== "4", { timeout: 20000 });
-  await sleep(800);
-  await page.click("[data-tq-chat-win] .tq-chat-pop-body [data-tq-task-link='4']");
+  await press(page, "[data-tq-rail] .tq-pile-row .card", 0);
+  // ...that row's open finished - its view up and the address naming it - before the name is pressed: pressed while the row's own write of
+  // the address was still to come, that write landed after the name's and the page sat on task 4 with the address of the row (2026-10-28)
+  await page.waitForFunction(() => { const v = document.querySelector("[data-tq-task-page]")?.getAttribute("data-tq-task-page");
+    return !!v && v !== "4" && location.hash === `#task=${v}`; }, { timeout: 20000 });
+  await press(page, "[data-tq-chat-win] .tq-chat-pop-body [data-tq-task-link='4']");
   await page.waitForFunction(() => document.querySelector("[data-tq-task-page]")?.getAttribute("data-tq-task-page") === "4", { timeout: 20000 });
-  await sleep(500);
+  await railOn4();
+  await page.waitForFunction(() => location.hash === "#task=4", { timeout: 10000 }).catch(() => {});
   at4 = await onTable();
   assert.match(at4.sel, /TQ-0004/, `the name pressed in the answer selected its rail row ${JSON.stringify(at4)}`);
   assert.equal(at4.hash, "#task=4");
@@ -134,8 +167,8 @@ test("on a phone the chat window is a bottom sheet", { timeout: 300000 }, async 
   assert.ok(win.l <= 0.5 && win.r >= 389.5 && box.l <= 0.5 && box.r >= 389.5, `the screen's width ${say}`);
   assert.ok(Math.abs(box.b - 844) <= 1 && Math.abs(win.b - box.t) <= 1, `...the box at the screen's foot, the conversation on it ${say}`);
   assert.deepEqual(await inCanvas(page), before, "nothing new in the canvas");
-  await page.click("[data-tq-chat-win] [aria-label='Close the chat']");
-  await page.waitForSelector("[data-tq-chat-win][hidden]", { timeout: 5000 });
+  await press(page, "[data-tq-chat-win] [aria-label='Close the chat']");
+  await page.waitForSelector("[data-tq-chat-win][hidden]", { timeout: 15000 });
   assert.deepEqual(errors, []);
 });
 
@@ -196,37 +229,38 @@ test("the chat window stays open through answers, acts, feed rebuilds and Next; 
   await sleep(1500); await stays("a feed rebuild");
 
   await during("Next"); const was = await page.evaluate(() => location.hash);
-  await page.click("[data-tq-next]");
+  await press(page, "[data-tq-next]");
   await page.waitForFunction((h) => location.hash !== h, { timeout: 20000 }, was);
   await sleep(1500); await stays("Next");
 
   await during("a click on the canvas and an Esc aimed at it");
-  await page.click(".tq-chat-body"); await page.keyboard.press("Escape"); await sleep(500);
+  await press(page, ".tq-chat-body"); await page.keyboard.press("Escape"); await sleep(500);
   await stays("a click on the canvas and an Esc aimed at it");
   await during("a rail row");
-  const cards = await page.$$("[data-tq-rail] .tq-pile-row .card"); await cards[1].click(); await sleep(2000);
+  await press(page, "[data-tq-rail] .tq-pile-row .card", 1); await sleep(2000);
   await stays("a rail row");
   await page.evaluate(() => { window.__watch = false; });
 
   // × shuts it; the pill opens it; Esc in it shuts it
-  await page.click("[data-tq-chat-win] [aria-label='Close the chat']");
-  await page.waitForSelector("[data-tq-chat-win][hidden]", { timeout: 5000 });
-  await page.click(".tq-compose-box textarea");
-  await page.waitForSelector("[data-tq-chat-win]:not([hidden])", { timeout: 5000 });
+  await press(page, "[data-tq-chat-win] [aria-label='Close the chat']");
+  await page.waitForSelector("[data-tq-chat-win][hidden]", { timeout: 15000 });
+  await press(page, ".tq-compose-box textarea");
+  await page.waitForSelector("[data-tq-chat-win]:not([hidden])", { timeout: 15000 });
   await page.keyboard.press("Escape");
-  await page.waitForSelector("[data-tq-chat-win][hidden]", { timeout: 5000 });
+  await page.waitForSelector("[data-tq-chat-win][hidden]", { timeout: 15000 });
 
   // MINIMIZE IS NOT × (the owner, 2026-10-28: the two did the same): it folds the window to its head - a strip standing on the open box, the
   // conversation kept - and a press on the strip brings the whole window back at its newest line; × (and Esc) from the strip is the pill
   const hint = () => page.$eval(".tq-compose-box textarea", (e) => e.placeholder);
   assert.notEqual(await hint(), "Continue chat…", "a shut window's pill is the plain one");
-  await page.click(".tq-compose-box textarea");
-  await page.waitForSelector("[data-tq-chat-win]:not([hidden])", { timeout: 5000 });
+  await press(page, ".tq-compose-box textarea");
+  await page.waitForSelector("[data-tq-chat-win]:not([hidden])", { timeout: 15000 });
+  await still(page, "[data-tq-chat-win]");
   const said = await page.$eval("[data-tq-chat-win] .tq-chat-pop-body", (e) => e.textContent), full = await rect(page, "[data-tq-chat-win]");
   const minimize = async () => {
-    await page.click("[data-tq-chat-win] [aria-label='Minimize the chat']");
-    await page.waitForSelector("[data-tq-chat-win][data-tq-mini]:not([hidden])", { timeout: 5000 });
-    await sleep(300);
+    await press(page, "[data-tq-chat-win] [aria-label='Minimize the chat']");
+    await page.waitForSelector("[data-tq-chat-win][data-tq-mini]:not([hidden])", { timeout: 15000 });
+    await still(page, "[data-tq-chat-win]");
     const strip = await rect(page, "[data-tq-chat-win]"), fld = await rect(page, ".tq-compose-box .tq-compose-field"), at = JSON.stringify({ strip, fld, full });
     assert.ok(strip.h > 20 && strip.h < 60 && Math.abs(strip.w - full.w) <= 1, `minimized, the window is its head strip ${at}`);
     assert.ok(Math.abs(strip.b - fld.t) <= 1, `...standing on the open box, not down at the bar ${at}`);
@@ -235,32 +269,32 @@ test("the chat window stays open through answers, acts, feed rebuilds and Next; 
     assert.ok(await page.$("[data-tq-chat-win] [aria-label='Expand the chat']"), "...its control now expands");
   };
   await minimize();
-  await page.click("[data-tq-chat-win] .tq-chat-pop-head b");
-  await page.waitForFunction(() => { const w = document.querySelector("[data-tq-chat-win]"); return w && !w.hidden && !w.hasAttribute("data-tq-mini"); }, { timeout: 5000 });
-  await sleep(300);
+  await press(page, "[data-tq-chat-win] .tq-chat-pop-head b");
+  await page.waitForFunction(() => { const w = document.querySelector("[data-tq-chat-win]"); return w && !w.hidden && !w.hasAttribute("data-tq-mini"); }, { timeout: 15000 });
+  await still(page, "[data-tq-chat-win]"); await newest(page);
   assert.equal(await page.$eval("[data-tq-chat-win] .tq-chat-pop-body", (e) => e.textContent), said, "pressing the strip: the same conversation");
   assert.ok(Math.abs((await rect(page, "[data-tq-chat-win]")).h - full.h) <= 2, "...the whole window again");
   assert.ok(await page.$eval("[data-tq-chat-win] .tq-chat-pop-body", (b) => b.scrollHeight - b.scrollTop - b.clientHeight <= 2), "at its newest line");
   await minimize();
-  await page.click("[data-tq-chat-win] [aria-label='Expand the chat']");
-  await page.waitForFunction(() => { const w = document.querySelector("[data-tq-chat-win]"); return w && !w.hidden && !w.hasAttribute("data-tq-mini"); }, { timeout: 5000 });
+  await press(page, "[data-tq-chat-win] [aria-label='Expand the chat']");
+  await page.waitForFunction(() => { const w = document.querySelector("[data-tq-chat-win]"); return w && !w.hidden && !w.hasAttribute("data-tq-mini"); }, { timeout: 15000 });
   await minimize();
   await page.focus("[data-tq-chat-win] [aria-label='Expand the chat']");
   await page.keyboard.press("Escape");
-  await page.waitForSelector("[data-tq-chat-win][hidden]", { timeout: 5000 });
-  await page.waitForFunction(() => !document.querySelector(".tq-compose-box[data-tq-open]"), { timeout: 5000 });
+  await page.waitForSelector("[data-tq-chat-win][hidden]", { timeout: 15000 });
+  await page.waitForFunction(() => !document.querySelector(".tq-compose-box[data-tq-open]"), { timeout: 15000 });
 
   // ...and over a reload: put away, the pill continues it, the conversation read back from the server
-  await page.click(".tq-compose-box textarea");
-  await page.waitForSelector("[data-tq-chat-win]:not([hidden])", { timeout: 5000 });
+  await press(page, ".tq-compose-box textarea");
+  await page.waitForSelector("[data-tq-chat-win]:not([hidden])", { timeout: 15000 });
   await minimize();
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector(".tq-compose-box[data-tq-continue]", { timeout: 30000 });
   assert.equal(await hint(), "Continue chat…", "the pill still continues it after a reload");
-  await page.click(".tq-compose-box textarea");
-  await page.waitForSelector("[data-tq-chat-win]:not([hidden])", { timeout: 5000 });
+  await press(page, ".tq-compose-box textarea");
+  await page.waitForSelector("[data-tq-chat-win]:not([hidden])", { timeout: 15000 });
   assert.match(await page.$eval("[data-tq-chat-win] .tq-chat-pop-body", (e) => e.textContent), /outstanding tasks[\s\S]*open TQ-0004[\s\S]*mark this done/, "the same conversation after the reload");
-  await sleep(500);
+  await still(page, "[data-tq-chat-win]"); await newest(page);
   assert.ok(await page.$eval("[data-tq-chat-win] .tq-chat-pop-body", (b) => b.scrollHeight - b.scrollTop - b.clientHeight <= 2), "...at its newest line");
   await page.screenshot({ path: process.env.TASKUARY_CHATWIN_SHOT || path.join(os.tmpdir(), "chat-window-open.png") });
   assert.deepEqual(errors, []);
@@ -286,19 +320,19 @@ test("a walk to its end with the chat window shut never opens it", { timeout: 30
   await sleep(1500);
   // ...a conversation had, then ×: the window has lines a walk's would join
   await ask(page, Q);
-  await page.click("[data-tq-chat-win] [aria-label='Close the chat']");
-  await page.waitForSelector("[data-tq-chat-win][hidden]", { timeout: 5000 });
+  await press(page, "[data-tq-chat-win] [aria-label='Close the chat']");
+  await page.waitForSelector("[data-tq-chat-win][hidden]", { timeout: 15000 });
   await page.evaluate(() => { window.__opened = 0;
     new MutationObserver(() => { const w = document.querySelector("[data-tq-chat-win]"); if (w && !w.hidden) window.__opened += 1; })
       .observe(document.body, { subtree: true, attributes: true, attributeFilter: ["hidden"], childList: true }); });
-  const press = (re) => page.evaluate((src) => {
+  const pressWords = (re) => page.evaluate((src) => {
     const b = [...document.querySelectorAll(".tq-asst-col button")].find((n) => new RegExp(src).test(n.textContent.trim()) && !n.disabled && n.offsetParent);
     if (b) b.click(); return !!b;
   }, re.source);
   const until = async (f, ms = 15000) => { for (const t0 = Date.now(); Date.now() - t0 < ms; await sleep(250)) if (await f()) return true; return false; };
   let nexts = 0;
-  if (await until(() => press(/^Walk me through my tasks$/), 6000)) nexts += 1;
-  for (let i = 0; i < 30 && await until(() => press(/^(Next|All read, next)( →)?$/), 6000); i += 1) { nexts += 1; await sleep(1500); }
+  if (await until(() => pressWords(/^Walk me through my tasks$/), 6000)) nexts += 1;
+  for (let i = 0; i < 30 && await until(() => pressWords(/^(Next|All read, next)( →)?$/), 6000); i += 1) { nexts += 1; await sleep(1500); }
   await sleep(2500);
   assert.ok(nexts >= 2, `walked: ${nexts} presses`);
   assert.ok(await until(async () => (await page.evaluate(() => [...document.querySelectorAll(".tq-asst-col button")].filter((b) => b.offsetParent).map((b) => b.textContent.trim())))

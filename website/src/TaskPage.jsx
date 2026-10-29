@@ -21,7 +21,7 @@ import RemindMe, { RemindPicker } from "./RemindMe.jsx";
 import { steady } from "./steadyAnchor.js";
 import { useFoldBar } from "./foldBar.js";
 import { SlotPicker } from "./CalendarPick.jsx";
-import { onPressed, onPressing, useVerbs } from "./actionRow.js";
+import { onPressed, onPressing, press, useSpineVerbs, useVerbs } from "./actionRow.js";
 import { notePress, pagePress } from "./pressLog.js";
 import { VERBS, choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
 import { PRIORITIES, level } from "./priority.js";
@@ -399,12 +399,16 @@ export function SectionTab({ sec, lines = [], foot = "", here = false, before = 
       <Box component="span" aria-hidden data-tq-tab-dot="" sx={here ? { bgcolor: ACCENT } : foot ? { bgcolor: "#5f7a5f" } : { border: `1.5px solid ${FAINT}` }} />
       <Box component="span" aria-hidden data-tq-tab-n="">{sec.n}</Box>
     </Box>);
+  // ...and between what it is and where it stands, the folded pane's STAGE MOVES (SpineMoves) - so the tab is a div that opens on a press,
+  // its moves real buttons inside it
   return (
-    <Box component="button" type="button" data-tq-section-tab={sec.key} data-tq-here={here ? "" : undefined} sx={SECTION_TAB(here)}
-      aria-label={`Open ${sec.name}`} title={`Open ${sec.name}`} aria-expanded={false} onClick={onOpen}>
+    <Box component="div" role="button" tabIndex={0} data-tq-section-tab={sec.key} data-tq-here={here ? "" : undefined} sx={SECTION_TAB(here)}
+      aria-label={`Open ${sec.name}`} title={`Open ${sec.name}`} aria-expanded={false} onClick={onOpen}
+      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onOpen?.(); } }}>
       <Box component="span" aria-hidden data-tq-tab-arrow="">{before ? "›" : "‹"}</Box>
       <Box component="span" data-tq-tab-name="">{sec.name}</Box>
       {lines.map((l) => <Box component="span" key={l} data-tq-tab-line="">{l}</Box>)}
+      <SpineMoves sec={sec.key} />
       {/* ...its foot ONE HEIGHT in every tab (the owner, 2026-10-27: "the 1 line and 2 line are not on the same line"): the rule, a status
           block of two lines - there whether it says anything or not - then the number, so rules and numbers line up across the tabs */}
       <Box component="span" data-tq-tab-foot="">
@@ -416,6 +420,30 @@ export function SectionTab({ sec, lines = [], foot = "", here = false, before = 
       </Box>
     </Box>
   );
+}
+// A FOLDED PANE'S STAGE MOVES (actionRow.splitRow, the owner 2026-10-29): Send to agent / Continue / Run another on Agent's spine, Draft
+// reply / Redraft on Close out's - stacked the spine's width in the row's own button look, the lit one filled. A press opens the pane and
+// starts the step there (the page's "a press opens its section"); a press on the rest of the spine opens it as before
+const SPINE_MOVES = { display: "flex", flexDirection: "column", gap: 0.6, width: "100%", flexShrink: 0, mt: 0.75, cursor: "default",
+  "& .tq-ab": { width: "100%", minWidth: 0, minHeight: 30, fontSize: 12.5, px: 1, justifyContent: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } };
+const OPENS_FORM = new Set(["send-general", "start-agent", "run-another"]);   // the agent's moves that open its start box
+const stageBtn = (v, word = v.label) => <button key={v.id} type="button" className={`tq-ab ${v.tone}`} disabled={v.disabled} data-tq-verb={v.id}
+  title={(v.disabled && v.why) || v.title || word} onClick={(e) => press(v.id, e, e.currentTarget, v.of)}>{word}</button>;
+function SpineMoves({ sec }) {
+  const vs = useSpineVerbs(sec);
+  if (!vs.length) return null;
+  return (
+    <Box data-tq-spine-moves={sec} role="group" aria-label={`${sec === "close" ? "Close out" : "Agent"} moves`} sx={SPINE_MOVES} onClick={(e) => e.stopPropagation()}>
+      {vs.map((v) => stageBtn(v, v.spine || v.label))}
+    </Box>);
+}
+// ...and OPEN, its stage moves are its heading's (the Tasks tab's own bar stands there): the ones the pane does not already draw - never a
+// card's own (Redraft, Send under the draft) nor the start its open form already carries - so a pane off the bar is never a dead end
+function PaneMoves({ sec, skip = () => false }) {
+  const vs = useSpineVerbs(sec).filter((v) => !v.card && !skip(v));
+  if (!vs.length) return null;
+  return <Box data-tq-pane-moves={sec} role="group" aria-label={`${sec === "close" ? "Close out" : "Agent"} moves`} sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
+    {vs.map((v) => stageBtn(v))}</Box>;
 }
 // ...and an open one's head: its NAME, in the closed tabs' own type, and nothing else (the owner, 2026-10-28: "it should just say Close out on
 // top in black without all the small text. It does not help") - the number, what it holds and "up to here" are the tabs' to say
@@ -1895,6 +1923,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     } finally { endStart(id); }
   };
   const continueWord = startingAgent === "resume" ? (failedRun ? "Trying again…" : "Continuing…") : failedRun ? btn("try_again") : labelOfRow("continue");
+  // WHAT THE OPEN AGENT PANE ALREADY DRAWS, so its heading's stage moves (PaneMoves) never say a press twice: the start box stands open
+  // (RunForm) and its own button is the start; a failed general run's Try again stands under its reason (data-tq-failed-fix) - unless
+  // its fix (Connect an AI) stands there instead
+  const runFormOpen = restartOpen || (!term?.alive && !liveRun && !report && !detail?.transcript && (!isGeneral || !generalStarted));
+  const failedFix = failedRun && isGeneral && !resultOpen && !sessionView && !runFix && canContinue;
   // ...and Continue picks the agent's conversation back up, so the Result unfolds to it (it rests on its summary otherwise)
   const continuePress = (e, a) => { setResultOpen(true); return failedRun ? tryAgain() : setContinueAt(steady(a || e?.currentTarget)); };
   // THE BAR THE AGENT CARD ACTS THROUGH, built here so it can ride inside the heading beside the
@@ -2083,6 +2116,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       ...calVerbs,
       // ...an invite is answered by the calendar, not by an email back (calwrite.py)
       ...(replyMessage && !liveSession && !calAsk?.invite && (stage !== "reply" || !pendingReview) ? [{ id: "reply", group: "decide", tone: "p", label: openingReply ? "Drafting…" : replyPrimary,
+        spine: openingReply ? "Drafting…" : !pendingReview && !sentReview ? btn("reply", "none") : undefined,
         disabled: !!openingReply, run: () => (pendingReview ? setOpenStage("reply") : openReply(true)), title: hintOfRow("reply") }] : []),
       // done off the app - a call - closes with what came of it: the card opens in the conversation, under the item. It is Mark
       // done with words, so it registers with Mark done and the row stands it beside that (actionRow.rowOf)
@@ -2142,7 +2176,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // and the same repository picker, each a menu at the row's button
       ...changeVerbs,
     ];
-  useVerbs("task", rowVerbs, inRow && !!t, detail?.ref || "");
+  // ...and where the task lays its panes, their STAGE MOVES leave the bar for them (actionRow.splitRow): the verbs say which pane is open
+  // and whether an agent is live, whose bar is Stop and save alone
+  const laid = threeUp && active && !!t ? { open: section, live: !!term?.alive } : null;
+  useVerbs("task", laid ? rowVerbs.map((v) => ({ ...v, laid })) : rowVerbs, inRow && !!t, detail?.ref || "");
   // A PRESS OPENS THE SECTION IT BELONGS TO (the owner, 2026-10-27: "when you hit a button on the bottom that relates to a group, the correct
   // section opens"): the reply's, the draft's and the close's presses Close out, the agent's the Agent - never a closed section for the
   // thing pressed. Heard before it runs (actionRow.onPressing), the row's presses and a card's own alike
@@ -2591,7 +2628,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     /* folded, this heading carried NOTHING - it passed no action at all, so the one
                        card that can actually be picked back up was the one row you could not act on.
                        It gets the move that matches its state, the way the Task strip does. */
-                    action={inRow ? null : pane === "agent" && agentBar ? agentBarRow :
+                    action={inRow ? (threeUp && section === "agent" && !sessionView ? <PaneMoves sec="agent" skip={(v) => (runFormOpen && OPENS_FORM.has(v.id)) || (v.id === "continue" && failedFix)} /> : null)
+                      : pane === "agent" && agentBar ? agentBarRow :
                       pane !== "agent" && !term?.alive && !["done", "dropped"].includes(t.Status)
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
                           {/* a regular agent's conversation is continued too - "Start an agent" read as starting over (T15) */}
@@ -2716,7 +2754,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {resultOpen ? "‹ Hide the conversation" : "The whole conversation ›"}</Button></Box>)}
                   {/* ONE BOX FOR EVERY START: a general task nobody has started had its own row of pickers and a button that started at
                       once with nothing said - it is the same box now, with the words, the mic and the pictures */}
-                  {(restartOpen || (!term?.alive && !liveRun && !report && !detail?.transcript && (!isGeneral || !generalStarted)))
+                  {runFormOpen
                     && <Box data-tq-run-form="">{nextRunForm}</Box>}
                   {/* folded onto the live bar these facts share a ROW with the controls, where a
                       rule above them is stray chrome - they get a rule beside them instead, so the
@@ -2901,7 +2939,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                        does not carry */
                     chip={emailsWaiting ? <LifecycleChip kind="emails" phase={`${emailsWaiting} waiting`} compact /> : null}
                     tone={PALETTE.oat} {...stageProps("reply")}
-                    action={!inRow && pane !== "reply" && replyMessage
+                    action={inRow ? (threeUp && section === "close" && !sessionView ? <PaneMoves sec="close" skip={(v) => v.id === "reply" && (replyEmpty || !!pendingReview)} /> : null)
+                      : pane !== "reply" && replyMessage
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
                           <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
                             sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}

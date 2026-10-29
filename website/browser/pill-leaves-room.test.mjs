@@ -6,7 +6,7 @@ import { boot, sleep } from "./walkdriver.mjs";
    the textarea's own 20 columns whatever its basis - and the row beside it was left 88px: at the walk's end "Walk me through my tasks"
    read "W.". On the desk the box's long hint wrapped inside the one-line pill and half its second line showed under the first. */
 const pill = (page) => page.evaluate(() => {
-  const box = document.querySelector(".tq-dock .tq-dock-line > .tq-compose-box"), ta = box?.querySelector("textarea");
+  const box = document.querySelector(".tq-dock .tq-dock-line > .tq-compose-box, .tq-chat-unit > .tq-compose-box"), ta = box?.querySelector("textarea");
   const b = document.querySelector("[data-tq-row] [data-tq-next]");
   return { line: box?.parentElement.getBoundingClientRect().width || 0, box: box?.getBoundingClientRect().width || 0,
     hint: ta ? getComputedStyle(ta, "::placeholder").whiteSpace : "", next: b ? { text: b.textContent.trim(), cut: b.scrollWidth > b.clientWidth + 1 } : null };
@@ -58,6 +58,7 @@ test("on the desk the pill's hint is one line", { timeout: 180000 }, async (t) =
   const p = await pill(page);
   assert.equal(p.next?.text, "All read, next");
   assert.equal(p.hint, "nowrap");
-  assert.ok(p.box >= 276 && p.box <= 284, `the desk's pill is the chat's own 280px at rest (the owner, 2026-10-28): ${p.box}`);
+  // ...a small pill of its own in the corner, apart from the bar (the owner, 2026-10-29)
+  assert.ok(p.box > 0 && p.box <= 160 && await page.$(".tq-chat-unit > .tq-compose-box"), `the desk's chat is a small pill in the corner: ${p.box}`);
   assert.deepEqual(errors, []);
 });

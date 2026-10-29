@@ -921,3 +921,36 @@
 /* a task named in an answer: a link that opens it as its rail row does (AssistantView RefLink, md.jsx linkRefs) */
 .tq-ref-link, .tq-chat-pop-body a[data-tq-task-link] { color: #55697a; font-weight: 600; text-decoration: none; border-bottom: 1px solid #c9d2d9; white-space: nowrap; cursor: pointer; }
 .tq-ref-link:hover, .tq-chat-pop-body a[data-tq-task-link]:hover { border-bottom-color: #55697a; }
+
+/* THE CHAT IS ITS OWN UNIT ON A DESK (the owner, 2026-10-29: "it looks weird coming out of the bottom bar"; AssistantView composeBox). From
+   760px the box is not on the bar: the bar ends before it, a gap between them, and the chat stands alone in the corner - at rest a SMALL
+   pill, its mark, "Ask…" and its send, like any app's chat widget; used, the same corner opens up into the window (its field the floor,
+   the conversation standing on it, the window's right edge on the pill's) and shut it is the small pill again. Under 760px it is as it was */
+.tq-compose[data-tq-desk-chat] { --tq-pill-w: 136px; --tq-chat-w: 340px; padding-right: calc(20px + var(--tq-pill-w) + 16px); min-height: 52px; box-sizing: border-box; }
+/* ...a bar with nothing on it (the day's opener) is no bar at all: the pill stands alone */
+.tq-compose[data-tq-desk-chat] .tq-dock:not(:has(.tq-arow)):not(:has(> :not(.tq-dock-line, [hidden]))) { display: none; }
+.tq-chat-unit { position: absolute; right: 20px; bottom: 8px; z-index: 7; width: var(--tq-pill-w); display: flex; flex-direction: column; align-items: flex-end;
+  transition: width .16s ease; }
+.tq-chat-unit:has(> .tq-compose-box[data-tq-open]) { width: var(--tq-chat-w); }
+@media (prefers-reduced-motion: reduce) { .tq-chat-unit { transition: none; } }
+.tq-chat-unit > .tq-compose-box { position: relative; width: 100%; box-sizing: border-box; margin: 0; min-height: 40px; align-items: center; gap: 2px; padding: 0 5px 0 7px;
+  border: 1px solid #a9b6c1; border-radius: 20px; background: #fff; box-shadow: 0 4px 16px #39352d24, 0 1px 3px #39352d14; }
+.tq-chat-unit > .tq-compose-box:hover:not([data-tq-open]) { border-color: #55697a; }
+.tq-chat-unit .tq-chat-mark { width: 26px; height: 26px; flex: 0 0 26px; display: flex; align-items: center; justify-content: center; }
+.tq-chat-unit > .tq-compose-box:not([data-tq-open]) .tq-compose-tools { display: none; }
+.tq-chat-unit > .tq-compose-box:not([data-tq-open]) textarea { height: 30px !important; min-height: 30px; padding: 0 3px; line-height: 30px; overflow: hidden; cursor: pointer; }
+.tq-chat-unit > .tq-compose-box textarea::placeholder { color: #55697a; white-space: nowrap; }
+.tq-chat-unit > .tq-compose-box:not([data-tq-open]) .tq-send { width: 30px; height: 30px; flex-basis: 30px; border-radius: 50%; background: #55697a; }
+.tq-chat-unit > .tq-compose-box:not([data-tq-open]) .tq-send:disabled { opacity: .7; }
+/* ...open, the box is only the place its field stands: the field is the window's floor, the conversation on it (.tq-chat-pop) */
+.tq-chat-unit > .tq-compose-box[data-tq-open] { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.tq-chat-unit > .tq-compose-box[data-tq-open] > .tq-compose-field { flex: 1; min-width: 0; box-sizing: border-box; display: grid;
+  grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "words words" "tools send"; align-items: center; gap: 0 2px;
+  padding: 3px 5px 4px 3px; border: 1px solid #d5d0c7; border-top-color: #ece7de; border-radius: 0 0 14px 14px; background: #fff;
+  box-shadow: 0 10px 28px -8px #39352d40; transition: border-color .12s, box-shadow .12s; }
+.tq-chat-unit > .tq-compose-box[data-tq-open] > .tq-compose-field:focus-within { border-color: #55697a; box-shadow: 0 0 0 3px #55697a29; }
+.tq-chat-unit > .tq-compose-box[data-tq-open] textarea { grid-area: words; width: 100%; min-height: 34px; max-height: 114px; padding: 7px 6px 3px; line-height: 20px; }
+.tq-chat-unit > .tq-compose-box[data-tq-open] .tq-compose-tools { grid-area: tools; display: flex; align-items: center; gap: 0; min-width: 0; }
+.tq-chat-unit > .tq-compose-box[data-tq-open] .tq-compose-tools > * { flex: 0 0 auto; }
+.tq-chat-unit > .tq-compose-box[data-tq-open] .tq-send { grid-area: send; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; background: #55697a; }
+.tq-chat-unit > .tq-compose-box[data-tq-open] .tq-send:disabled { opacity: 1; background: #ebe8e2; color: #a19b91; }

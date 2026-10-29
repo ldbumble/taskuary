@@ -5,7 +5,8 @@ import { startHarness } from "./harness.mjs";
 
 /* THE SMALL PILL LEAVES A LAPTOP ITS BUTTONS (the owner, 2026-10-27: "yes shrink the chat box"). At 220px the one-row bar's chat pill took
    the room Mark done and Send to agent need, and on a 1366-1600px laptop they folded behind a ▾ - two clicks each, and Mark done's next
-   card ~500-800 ms instead of ~200. At rest the pill is ~120px ("Ask…"): both stay on the row, on one line, at every laptop width. */
+   card ~500-800 ms instead of ~200. The chat is its own small pill in the corner now (the owner, 2026-10-29), the bar ending before it: Mark
+   done stays on the bar, on one line, at every laptop width - and Send to agent, a stage move, is on Agent's spine, never the bar's. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 test("at rest the pill is small and Mark done stays on the row at 1366, 1440 and 1600px", { timeout: 300000 }, async (t) => {
@@ -27,19 +28,19 @@ test("at rest the pill is small and Mark done stays on the row at 1366, 1440 and
     await page.setViewport({ width, height: 810, deviceScaleFactor: 1 });
     await sleep(1500);
     const s = await page.evaluate(() => {
-      const line = document.querySelector(".tq-dock .tq-dock-line"), pill = line.querySelector(".tq-compose-box");
+      const line = document.querySelector(".tq-dock .tq-dock-line"), pill = document.querySelector(".tq-chat-unit .tq-compose-box");
       const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
       return { pill: Math.round(pill.getBoundingClientRect().width), line: Math.round(line.getBoundingClientRect().height),
-        verbs: [...line.querySelectorAll("[data-tq-row] button[data-tq-verb]")].filter(vis).map((b) => b.getAttribute("data-tq-verb").split(":").pop()) };
+        verbs: [...line.querySelectorAll("[data-tq-row] button[data-tq-verb]")].filter(vis).map((b) => b.getAttribute("data-tq-verb").split(":").pop()),
+        spine: [...document.querySelectorAll("[data-tq-spine-moves=agent] button[data-tq-verb]")].filter(vis).map((b) => b.getAttribute("data-tq-verb")) };
     });
     const say = `${width}px ${JSON.stringify(s)}`;
-    assert.ok(s.pill <= 290, `the pill is the bar's 280px at rest (the owner, 2026-10-28: one width, open or shut) ${say}`);
+    assert.ok(s.pill <= 160, `the chat is a small pill at rest ${say}`);
     assert.ok(s.line <= 46, `one line ${say}`);
     console.log(`# ${say}`);
     // ...and Close folds last (the owner, 2026-10-27: "if there is no space"): Mark done is on the row at every laptop width
     assert.ok(s.verbs.includes("done"), `Mark done is on the row, not behind a ▾ ${say}`);
-    if (width < 1600) continue;
-    assert.ok(s.verbs.some((v) => /agent/.test(v)), `Send to agent is on the row, not behind a ▾ ${say}`);
+    assert.ok(!s.verbs.some((v) => /agent/.test(v)) && s.spine.some((v) => /agent/.test(v)), `Send to agent is on Agent's spine, not the bar ${say}`);
   }
   assert.deepEqual(errors, []);
 });

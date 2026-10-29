@@ -5,8 +5,8 @@ import { startHarness } from "./harness.mjs";
 
 /* ONCE OPEN, THE CHAT BOX STAYS OPEN (the owner, 2026-10-27: "it gets smaller and bigger at random times when you are in there ... when you
    click in, it stays open until you do X or something"; "it should not hover over the buttons but over the canvas"; "typing is above where
-   attachments, emojis and voice note is - looks weird"). Opened: the box stays in the bar at the pill's width and its field rises out of it
-   over the canvas - never over the row's buttons (the owner, 2026-10-28: "the chat should come out of the bottom bar"); the words on a line of
+   attachments, emojis and voice note is - looks weird"). Opened: the box - its own unit in the corner, apart from the bar (the owner, 2026-10-29: "it
+   looks weird coming out of the bottom bar") - has its field rise out of the pill's corner over the canvas; the words on a line of
    their own the field's full width, attach, mic and emoji under them on the left and send on the right (the owner, 2026-10-28: the words began
    after the icons and lost their first line); open through a click elsewhere, a look away and an answer; shut by its × or Esc. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -30,8 +30,8 @@ test("the chat box stays open over the canvas until its × or Esc, in one row, n
     const box = document.querySelector(".tq-compose-box"), line = document.querySelector(".tq-dock-line"), r = (e) => e.getBoundingClientRect();
     const field = box.querySelector(".tq-compose-field"), ta = box.querySelector("textarea"), send = box.querySelector(".tq-send"), verbs = line.querySelector(".tq-arow-verbs");
     const tools = [...box.querySelectorAll(".tq-compose-tools button")].filter((b) => b.offsetParent), f = r(field), t = r(ta);
-    return { inBar: r(box).top >= r(line).top - 1 && r(box).bottom <= r(line).bottom + 1, rises: f.top < r(line).top && Math.abs(f.bottom - r(box).bottom) <= 1,
-      clear: Math.round(f.left - r(verbs).right), wordsWide: t.left - f.left <= 8 && f.right - t.right <= 8,
+    return { apart: !!box.closest(".tq-chat-unit") && !box.closest(".tq-dock"), rises: f.top < r(line).top && Math.abs(f.bottom - r(box).bottom) <= 1,
+      corner: Math.round(r(document.querySelector(".tq-asst-col")).right - f.right), wordsWide: t.left - f.left <= 8 && f.right - t.right <= 8,
       toolsUnder: tools.every((b) => r(b).top >= t.bottom - 1 && r(b).right <= r(send).left), sendRight: f.right - r(send).right <= 10 && r(send).top >= t.bottom - 1,
       tools: tools.length };
   });
@@ -40,7 +40,9 @@ test("the chat box stays open over the canvas until its × or Esc, in one row, n
   await page.waitForSelector(".tq-compose-box[data-tq-open]", { timeout: 5000 });
   await sleep(300);
   const s = await shape();
-  assert.ok(s.inBar && s.rises && s.clear >= 0, `the box stays in the bar, its field rising out of it - never over the buttons ${JSON.stringify(s)}`);
+  // ...its own unit on a desk (the owner, 2026-10-29: "it looks weird coming out of the bottom bar"): the pill in the corner, apart from the
+  // bar, opening up out of its own corner
+  assert.ok(s.apart && s.rises && s.corner <= 40, `the box is its own unit, its field rising out of its corner ${JSON.stringify(s)}`);
   assert.ok(s.tools >= 2 && s.wordsWide && s.toolsUnder && s.sendRight, `the words the field's width, the tools under them on the left, send on the right ${JSON.stringify(s)}`);
 
   // a click on the canvas, a look away: still open

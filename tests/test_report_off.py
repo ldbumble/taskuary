@@ -61,7 +61,8 @@ def test_the_advisor_lights_it_only_on_an_answer_citing_the_care_line():
             advisor.notice(s, advisor.SHOWN, *tgt, wait=True, llm=_brain(answer), key=it['key'])
             with mock.patch.object(advisor, 'notice'): return advisor.decide(s, it['key'], preread=False)
 
-    d = lit({'verb': 'report_off', 'line': 'You retired the vendor export job', 'evidence': [cite], 'kind': 'memory'})
+    d = lit({'verb': 'report_off', 'line': 'You retired the vendor export job', 'evidence': [cite], 'kind': 'memory',
+             'memory_says': 'The vendor export job is retired; you do not care about it'})
     assert d['verb'] == 'report_off' and d['by'] == 'model'
     assert lit({'verb': 'report_off', 'line': 'Looks dull', 'evidence': [], 'kind': 'other'})['verb'] == 'next', 'a guess never switches it off'
 

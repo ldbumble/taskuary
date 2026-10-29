@@ -1145,7 +1145,10 @@ class SQLiteStore:
                             'Dropped TEXT, CreatedAt TEXT)')
             self.cx.execute('CREATE INDEX IF NOT EXISTS advice_target ON advice(TargetKind, TargetId)')
             # ...the KIND of reason the model gave (late, same_ask, draft_caution, ...): what the check after it reads, never its words
-            if 'Kind' not in {r[1] for r in self.cx.execute('PRAGMA table_info(advice)')}: self.cx.execute('ALTER TABLE advice ADD COLUMN Kind TEXT')
+            cols = {r[1] for r in self.cx.execute('PRAGMA table_info(advice)')}
+            if 'Kind' not in cols: self.cx.execute('ALTER TABLE advice ADD COLUMN Kind TEXT')
+            # ...and what the memory it cites SAYS, in the model's own field: a line citing a memory with this empty is not shown (hollow)
+            if 'MemorySays' not in cols: self.cx.execute('ALTER TABLE advice ADD COLUMN MemorySays TEXT')
             # ...AND THE ONE DECISION EVERY SURFACE READS (the Advisor audit's judge, 2026-10-26): the item's lit verb, line and what it rests
             # on, stored per key with the stamp it was made at - the section, the clock menu, the phone and the row read this, never their own.
             # A duplicate pair's survivor is kept here too (Key pair:<a>:<b>), so the pair is decided once

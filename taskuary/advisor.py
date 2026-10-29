@@ -85,11 +85,11 @@ def _acted(store, target_kind, target_id) -> str:
 
 
 def _write(store, *, target_kind, target_id, key, event, revision, tier=1, line='', verb=None, label=None, count=(0, 0),
-           evidence=(), model=None, dropped=None, kind=None) -> int:
-    return store._exec('INSERT INTO advice (TargetKind,TargetId,Key,Event,Revision,Tier,Line,Verb,Label,CountJson,EvidenceJson,Model,Dropped,CreatedAt,Kind) '
-                       'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+           evidence=(), model=None, dropped=None, kind=None, memory_says='') -> int:
+    return store._exec('INSERT INTO advice (TargetKind,TargetId,Key,Event,Revision,Tier,Line,Verb,Label,CountJson,EvidenceJson,Model,Dropped,CreatedAt,Kind,MemorySays) '
+                       'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                        (target_kind, int(target_id), key, event, revision, int(tier), line or '', verb, label, json.dumps(list(count)),
-                        json.dumps(list(evidence)), model, dropped, _now(), kind))
+                        json.dumps(list(evidence)), model, dropped, _now(), kind, memory_says or ''))
 # A drop for an OUTSIDE reason is not a verdict on the item: with no AI, opening an item wrote "no brain" and the line never
 # came once one was connected; 30 reads in an hour left every later item a "cap" for good (2026-10-17 audit). The next look
 # tries again. "nothing to say", "verb not offered", "no item", "no actions" stand for the revision.
@@ -152,7 +152,9 @@ SYSTEM = (
     # ...AND WHAT KIND OF FACT THE LINE IS (the Advisor audit's judge, 2026-10-26): a caution about the draft stood beside a lit Send - the
     # check after the answer reads this field, never the line's words, to refuse a verb that contradicts its own reason
     "Answer with JSON only:{\"verb\": \"<one of the verbs>\" or null, \"line\": \"<sentence>\" or \"\", "
-    "\"evidence\": [\"<ids from the lines below>\"], \"kind\": \"<what the line's fact is>\"}. The kind is one of: late (an answer or a "
+    "\"evidence\": [\"<ids from the lines below>\"], \"kind\": \"<what the line's fact is>\", \"memory_says\": \"<the remembered fact>\" or \"\"}. "
+    "memory_says is what the memory line or usual line your evidence cites SAYS, in its own words - empty only when the evidence cites "
+    "none. The kind is one of: late (an answer or a "
     "wait past its time), same_ask (another task holds this same ask), draft_caution (the draft is not ready to send as written), "
     "handoff (someone else does this work), failure (something failed), memory (another fact about how the owner works), work_gap (an "
     "agent's result or a draft leaves out something the person asked for - a question unanswered, a promise nothing shows - and the "
@@ -206,7 +208,8 @@ def _system(store) -> str:
 SHOWN = 'item.shown'
 KINDS = ('late', 'same_ask', 'draft_caution', 'handoff', 'failure', 'memory', 'work_gap', 'other')
 WANT = {'type': 'object', 'properties': {'verb': {'type': ['string', 'null']}, 'line': {'type': 'string'},
-                                         'evidence': {'type': 'array', 'items': {'type': 'string'}}, 'kind': {'type': 'string', 'enum': list(KINDS)}},
+                                         'evidence': {'type': 'array', 'items': {'type': 'string'}}, 'kind': {'type': 'string', 'enum': list(KINDS)},
+                                         'memory_says': {'type': 'string'}},
         'required': ['verb', 'line', 'evidence']}
 _EV = re.compile(r'^(out|mem|rv|task|msg|fs|sv|idea|lrn)\d+$')   # ...and the owner's own acts the usual is counted from (usual.py), and a memory line
 
@@ -354,31 +357,11 @@ def memory_ids(store, item, target_kind, target_id) -> set:
     return out
 
 
-def remembered(store, item, target_kind, target_id, ev) -> list:
-    """What the memory an answer cites SAYS: each cited LEARNED line (its cite id, or an episode its tag names) and each usual line
-    naming a cited id - the texts a line resting on them must carry a word of."""
-    from . import learned_cut
-    from .learnedgraph import TAG
-    want, out = {str(e) for e in ev or ()}, []
-    doc = store.doc('learned') or ''
-    for s in learned_cut.READS['advisor']:
-        for raw, k in learned_cut.lines(doc, learned_cut.SECTIONS[s]):
-            m = TAG.match(raw)
-            if learned_cut.cite_of(k) in want or (m and want & {e.strip() for e in (m.group('ev') or '').split(',')}):
-                out.append(m.group('text') if m else raw)
-    if target_kind in ('task', 'message'): out += [l for l in _usual(store, item, target_kind, target_id)[0] if want & set(re.findall(_ID, l))]
-    return out
-def _stems(text) -> set: return {w[:5] for w in _content(re.sub(_ID, ' ', str(text or '')))}
-def hollow(store, item: dict, tgt, line: str, ev) -> bool:
+def hollow(store, item: dict, tgt, says: str, ev) -> bool:
     """WHETHER A LINE CITES A MEMORY BUT DOES NOT SAY IT (the Advisor audit, 2026-10-28): "GitHub notice; no ask here" cited a memory line
-    and said only what the card shows. Hollow when it cites one the Advisor reads and carries no word of what that memory says beyond
-    the card's own words (its title, who, preview, why). A line citing no memory, or one whose memory cannot be read, is never hollow."""
-    try:
-        if not set(ev or ()) & memory_ids(store, item, *tgt): return False
-        mem = set().union(*[_stems(t) for t in remembered(store, item, *tgt, ev)] or [set()])
-        if not mem: return False
-        card = _stems(' '.join(str((item or {}).get(k) or '') for k in ('title', 'who', 'preview', 'why', 'ref', 'channel')))
-        return not (_stems(line) & (mem - card))
+    and said only what the card shows. The model says what the memory it cites says, in its own field (memory_says); hollow when it cites
+    one the Advisor reads and that field is empty. Whether the line carries it is the model's judgement, never a comparison of words."""
+    try: return bool(set(ev or ()) & memory_ids(store, item, *tgt)) and not ' '.join(str(says or '').split())
     except Exception as e:
         logger.debug(f"advisor: no hollow check for {(item or {}).get('key')} - {e}"); return False
 
@@ -761,7 +744,7 @@ def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1
         if last and last.get('Dropped') == 'no brain': return last['Id']
         rid = W(dropped='no brain'); _emit(key, target_kind, target_id); return rid
     model = getattr(brain, 'last_pick', None) or getattr(brain, 'model', None) or 'light'
-    ans = ask_json(brain, _system(store), _prompt(store, event, item, verbs, tier, target_kind, target_id), want=WANT, max_tokens=200)
+    ans = ask_json(brain, _system(store), _prompt(store, event, item, verbs, tier, target_kind, target_id), want=WANT, max_tokens=300)
     d = ans.data if isinstance(ans.data, dict) else {}
     # a line that landed while this one was thinking stands: a tier-2 answer, drop or not, never replaces a line the owner may
     # already be reaching for (B5 - the filled button moved under the cursor seconds after the item opened)
@@ -785,7 +768,8 @@ def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1
     if verb != 'forward' and target_kind in ('task', 'message') and set(ev) & _usual(store, item, target_kind, target_id)[1]:
         return W(dropped='a hand-off reason over another verb', model=model, line=line, evidence=ev)
     kind = d.get('kind') if d.get('kind') in KINDS else 'other'
-    rid = W(line=line, verb=verb, label=hit['label'],count=habit(store, verb, item), evidence=ev, model=model, kind=kind)
+    rid = W(line=line, verb=verb, label=hit['label'],count=habit(store, verb, item), evidence=ev, model=model, kind=kind,
+              memory_says=' '.join(str(d.get('memory_says') or '').split())[:300])
     _emit(key, target_kind, target_id); return rid
 
 
@@ -1084,7 +1068,7 @@ def decide(store, key: str, preread: bool = True) -> dict:
         # ...A LINE THAT CITES A MEMORY WITHOUT SAYING IT is not shown (the Advisor audit, 2026-10-28): "GitHub notice; no ask here" cited
         # a memory line and said only what the card shows - the strip says nothing in its place
         said = plain(m.get('Line') or '', m['Verb'], hit['label']) if hit and m.get('Line') else ''
-        if said and hollow(store, item, tgt, said, json.loads(m.get('EvidenceJson') or '[]')): said = ''
+        if said and hollow(store, item, tgt, m.get('MemorySays'), json.loads(m.get('EvidenceJson') or '[]')): said = ''
         # ...AND NO SILENT OVERRIDE (the same audit; NO DEFAULT VERB, the owner, 2026-10-28): the model's verb stands where it differs
         # from the rule's only with its reason said - without one, the rule's button and its own fact decide. An idea's own words are its
         # reason (its line is never said)

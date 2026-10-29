@@ -32,6 +32,35 @@ def running(store) -> str:
     except Exception as e: logger.warning(f'awake: could not count live work - {e}'); return ''
 
 
+# AN UPDATE WAITS ONLY FOR WORK IN FLIGHT (TQ-1237, 2026-10-29): an agent parked at its prompt is waiting on the owner, so it never
+# "finishes" by itself - an update held for one waited an hour and a half, and the card never said which task it was. The swap closes
+# a parked session the way Quit does (its task stays open), so the update waits for agents mid-turn and workflow runs, and names them.
+def _parked(t) -> bool:
+    try: return t.waiting() is True
+    except Exception: return False
+
+def holding(store) -> tuple:
+    """(agent task ids mid-turn, workflow run task ids) - what an update must not cut off. A task with any session still working, or a
+    headless run, is mid-turn; one whose every live session is parked is not."""
+    from . import terminal, welcome, workflows
+    ss = [t for t in list(terminal.SESSIONS.values()) if getattr(t, 'alive', False)]
+    parked = {t.task_id for t in ss if _parked(t)} - {t.task_id for t in ss if not _parked(t)}
+    try: parked -= {r.get('TaskId') for r in store.running_runs()}
+    except Exception: pass
+    agents = sorted(t['TaskId'] for t in welcome.working(store) if t['TaskId'] not in parked)
+    with workflows._LOCK: flows = sorted(set(workflows._STARTING) - set(agents) - parked)
+    return agents, flows
+
+def update_waits_for(store) -> str:
+    """'1 running agent (TQ-0012)' - what an update waits for, named so the owner can find it; '' when nothing in flight."""
+    from .store import task_ref
+    try:
+        agents, flows = holding(store)
+        s = said(len(agents), len(flows))
+        return s and f"{s} ({', '.join(task_ref(i) for i in agents + flows)})"
+    except Exception as e: logger.warning(f'awake: could not count work in flight - {e}'); return ''
+
+
 def _set(flags: int) -> bool:
     """The OS call; False where there is none. Windows ties the state to THIS thread, so the watcher's own thread makes every call."""
     if sys.platform != 'win32': return False

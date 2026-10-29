@@ -3465,6 +3465,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const shutBox = () => { setBoxOpen(false); if (mini) keepMini(null); composeRef.current?.blur(); };
   // ...MINIMIZE IS NOT × (the owner, 2026-10-28: the two did the same): it folds the window down to its head, a strip standing on the open box -
   // the title, what came since, expand; a press on the strip brings the whole window back. × is the pill again
+  // ...HALF ITS HEIGHT, not a strip (the owner, 2026-10-29: "minimize should be half the size not a tiny bit open"): the newest lines
+  // stay readable over less of the task; × still folds it all the way down to the bar
   const minimize = () => { keepMini({ tid: chatTid, last: winLines[winLines.length - 1]?.[0]?.id ?? null }); composeRef.current?.blur(); };
   const expand = () => { if (mini) keepMini(null); };
   const winFull = popOpen && !isMini;
@@ -3767,7 +3769,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               on the row either way, and opened again it is the same conversation */}
           {winOn && (
             <div className="tq-chat-pop" data-tq-chat-pop="" data-tq-chat-win="" data-tq-mini={popOpen && isMini ? "" : undefined} role={popOpen ? "dialog" : undefined} aria-label="Chat with Taskuary"
-              ref={popRef} hidden={!popOpen} style={isMini ? undefined : { height: popH }} onKeyDown={escShut}>
+              ref={popRef} hidden={!popOpen} style={{ height: isMini ? Math.round(popH / 2) : popH }} onKeyDown={escShut}>
               {/* ...folded, the head is all there is - and a press anywhere on it brings the window back */}
               <div className="tq-chat-pop-head" onClick={isMini ? expand : undefined} title={isMini ? "Open the chat" : undefined}>
                 <TaskuaryMark size={16} /><b>Taskuary</b>{currentItem?.ref && <span>{`· ${currentItem.ref}`}</span>}
@@ -3778,7 +3780,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                   : <Tooltip title="Minimize - keeps this conversation"><IconButton size="small" aria-label="Minimize the chat" data-tq-box-mini="" onClick={minimize}><CloseFullscreenIcon sx={{ fontSize: 15, color: DIM }} /></IconButton></Tooltip>}
                 {/* ...its ×: the one way, with Esc, the window shuts to the pill - what is typed stays for the next time it opens */}
                 <Tooltip title="Close (Esc)"><IconButton size="small" aria-label="Close the chat" data-tq-box-close="" onClick={(e) => { e.stopPropagation(); shutBox(); }}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip></div>
-              <div className="tq-chat-pop-body" ref={popBodyRef} hidden={isMini}>
+              <div className="tq-chat-pop-body" ref={popBodyRef}>
                 {!winLines.length && !popPending && !popErr && <p className="tq-chat-pop-empty">{currentItem?.ref ? `Ask about ${currentItem.ref}, or anything on your list.` : "Ask about anything on your list."}</p>}
                 {winLines.map(([m, i]) => <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={false} last={!old && i === lastSaidIdx} further={!old && i === furtherIdx} tableChips={tableChips} barHolds={barHolds}
                   actions={actions} fresh={currentItem} canvas={canvasState} />)}

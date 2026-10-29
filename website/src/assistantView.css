@@ -691,8 +691,8 @@
 .tq-chat-pop { position: absolute; right: 20px; bottom: calc(100% + var(--tq-box-h, -2px)); z-index: 6; width: var(--tq-chat-w); box-sizing: border-box; display: flex; flex-direction: column;
   border: 1px solid #d5d0c7; border-bottom: 0; border-radius: 14px 14px 0 0; background: #fff; box-shadow: 0 -2px 28px #39352d1f, 0 2px 6px #39352d10; animation: tqPopIn .14s ease-out; }
 .tq-chat-pop[hidden] { display: none; }
-/* ...MINIMIZED, only its head: a strip on the open box, pressed to bring the window back */
-.tq-chat-pop[data-tq-mini] { height: auto; cursor: pointer; }
+/* ...MINIMIZED, half its height: its head pressed brings the whole window back */
+.tq-chat-pop[data-tq-mini] .tq-chat-pop-head { cursor: pointer; }
 .tq-chat-pop[data-tq-mini] .tq-chat-pop-head { border-bottom: 0; }
 .tq-chat-pop[data-tq-mini] .tq-chat-pop-head:hover { background: #f6f5f1; border-radius: 14px 14px 0 0; }
 .tq-chat-pop-body[hidden] { display: none; }

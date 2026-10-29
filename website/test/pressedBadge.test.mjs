@@ -104,7 +104,8 @@ test("Next leaves its own badge on the card it passed, and a failed Next takes i
   assert.match(view, /const word = i < 0 \? "" : nextBadge\(m\[i\]\.card\);/);
   assert.match(view, /on \? \{ \.\.\.x, pressed: word \}/);
   assert.match(view, /if \(putDown\) wear\(true\);/);
-  assert.match(view, /if \(putDown\) \{ setFoldedKey\(\(k\) => \(k === putDown \? null : k\)\); wear\(false\); \}/);
+  // ...unless the server says that Next was made already (already_completed): then nothing is taken back (the email walk, 2026-10-29)
+  assert.match(view, /if \(!done && putDown\) \{ setFoldedKey\(\(k\) => \(k === putDown \? null : k\)\); wear\(false\); \}/);
 });
 
 // NEXT READS A REPORT, IT PASSES A TASK (the owner, 2026-10-23: "should show read on reports if you go pass them when you hit next"):

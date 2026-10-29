@@ -1005,6 +1005,10 @@ class GeneralSession:
             raise RuntimeError(f'the assistant has been answering the previous question for over '
                                f'{int(WAIT_TURN)}s - something is stuck. Press stop, or reload the page.')
         self.busy, self.last = True, time.time()
+        # A NEW TURN MAY FINISH AGAIN (the email walk, 2026-10-29): the mark a self-close leaves stops two hooks wrapping one turn,
+        # and it outlived the turn - Continue on an agent that had closed once refused its next [[TASKUARY-DONE]], parked "waiting on you"
+        from . import selfclose
+        selfclose.forget(self.task_id)
         t0 = self.last                       # the turn's own time, kept with its record (sessionrecord.record sums them)
         self._cancel = cancel if cancel is not None else threading.Event()
         cancel = self._cancel

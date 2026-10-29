@@ -268,6 +268,8 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     if (m.get('Status') == 'context' or m.get('Direction') == 'out') and not store.review_envelope(rid):
         from .outbound import reply_envelope
         if (env := reply_envelope(store, m)): store.set_review_envelope(rid, env)
+    from .signatures import agent_signed
+    text = agent_signed(store, store.get_review(rid) or rv, text, m) or text
     store.update_review_draft(rid, text, run_id or rv.get('RunId'), by=AGENT_DRAFT + agent)
     store.add_comment(task_id, agent, 'agent', f'{agent} drafted the reply itself - it is on the task, waiting on your approval.')
     return {'ok': True, 'review_id': rid, 'message_id': mid, **attach_files(store, rid, files, agent)}

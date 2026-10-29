@@ -28,3 +28,10 @@ test("the reply box is drawn with it and counts only the words above it", () => 
   assert.match(src, /text \?\? withSignature\(reviewText\(r\), r\.Signature\)/);
   assert.doesNotMatch(src, /value\.trim\(\)/, "Send is offered on what the owner wrote, not on the signature alone");
 });
+
+test("an agent's own sign-off is taken off before the block goes on, never signed twice (walk 2026-10-29)", () => {
+  assert.equal(withSignature("Hi Erin,\n\nDone.\n\nBest,\nAlex Doyle", SIG), `Hi Erin,\n\nDone.\n\n${SIG}`);
+  assert.equal(withSignature("Hi Erin,\n\nDone.\n\nThanks,\nAlex", SIG), `Hi Erin,\n\nDone.\n\n${SIG}`);
+  // only the owner's own lines are cut: a last line that is not theirs stays, and so does a comma line above it
+  assert.equal(withSignature("Hi Erin,\n\nFriday works,\nsee you then", SIG), `Hi Erin,\n\nFriday works,\nsee you then\n\n${SIG}`);
+});

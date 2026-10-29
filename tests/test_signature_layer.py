@@ -121,3 +121,23 @@ def test_learning_reads_only_the_named_mailboxes_sent_mail():
     with mock.patch('taskuary.histgen.sent_mail', return_value=(mail, [], 2, 'IMAP')):
         assert responder.learn_signature(MemoryStore(), mailbox=SIDE) == 'Alex - the board'
         assert responder.learn_signature(MemoryStore(), mailbox=NW) == SIG
+
+
+def test_an_agents_draft_is_filed_with_the_block_once_not_under_its_own_sign_off(s):
+    """The agent signed "Best,\\nAlex Doyle", it was filed as written, and the box put the block under it: signed twice (walk
+    2026-10-29). Its sign-off comes off by shape - the owner's own lines and the comma line above them - and the block goes on."""
+    from taskuary import wrapup, slots
+    tid, mid, _ = thread(s, draft='')
+    out = wrapup.agent_reply(s, tid, 'Hi Erin,\n\nThe export ran.\n\nBest,\nAlex Doyle', 'coding')
+    assert s.get_review(out['review_id'])['DraftText'] == f'Hi Erin,\n\nThe export ran.\n\n{SIG}'
+    got = slots.draft(s, tid, 'Hi Ray,\n\nThe export ran.\n\nThanks,\nAlex', to='ray@northwind.example', subject='Export')
+    assert got['ok'], got
+    assert s.get_review(got['review_id'])['DraftText'] == f'Hi Ray,\n\nThe export ran.\n\n{SIG}'
+
+
+def test_an_agents_chat_reply_loses_its_name_and_gets_no_block(s):
+    from taskuary import wrapup
+    s.set_setting('owner_name', 'Alex Doyle', 'owner')
+    tid, mid, _ = thread(s, channel='teams', box='Erin Blake', draft='')
+    out = wrapup.agent_reply(s, tid, 'on it - done by noon\nAlex', 'coding')
+    assert s.get_review(out['review_id'])['DraftText'] == 'on it - done by noon'

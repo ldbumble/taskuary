@@ -8,7 +8,7 @@ import { announceRemoved, clearRemoved, fromAnswer, lastRemoved, removedLine, sh
 // the task leaves - the rail and the Tasks list - draw "Removed <title> - Undo", Undo restoring it.
 const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 
-test("the server's answer to Remove - not a task is the Undo line's", () => {
+test("the server's answer to Not a task is the Undo line's", () => {
   const r = announceRemoved(fromAnswer({ ok: true, deleted: 41, title: "Fuel card statement", kind: "task" }, "task", "x"));
   assert.deepEqual([r.did, r.title, r.kind], [41, "Fuel card statement", "task"]);
   assert.equal(lastRemoved(), r);

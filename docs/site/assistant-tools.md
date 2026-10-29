@@ -527,7 +527,7 @@ Close a SET at once. "Close all the tasks from Priya" is select sender: Priya. R
 
 Not ours for a SET at once - "dismiss the spam", "get rid of these newsletters" - then triage learns from each; otherwise it teaches nothing. Never touches work waiting on the owner, an agent at work, a draft waiting for its Send or a goal - those are left and said. Runs at once; the receipt lists every row as its link.
 
-- `select` - (below; `keys`: the rows you judged, from pipe.read): each mail is filed, each task removed (Remove - not a task), nothing deleted
+- `select` - (below; `keys`: the rows you judged, from pipe.read): each mail is filed, each task removed (Not a task), nothing deleted
 - `learn` (optional) - true only when the owner says "from now on" too
 
 <p class="runs">Runs at once and says what it changed.</p>

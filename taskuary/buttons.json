@@ -43,7 +43,7 @@
     "share":           {"label": "Email a summary", "hint": "The AI writes a short summary of what the work found, for someone you pick - it waits in Close out for your Send. One of Share's ways now, not a button of its own", "row": []},
     "share_result":    {"label": "Share", "hint": "Email this result or a summary of it, give people on your network a read-only link, or put it in your OneDrive or Google Drive - each way only where it can work", "row": ["share"]},
     "forward":         {"label": "Hand it to a person", "hint": "Pass it to a colleague", "row": ["hand"]},
-    "remove":          {"label": "Remove - not a task", "hint": "Taskuary stops making tasks from messages like this; the email itself is kept", "row": ["nat"]},
+    "remove":          {"label": "Not a task", "hint": "Taskuary stops making tasks from messages like this; the email itself is kept", "row": ["nat"]},
     "run_another":     {"label": "Run another agent", "hint": "Start a second agent on the same task", "row": ["run-another"]},
     "strong_again":    {"label": "Run again on the strong model", "hint": "Runs this agent once more on a strong model, picking up from its saved work - only when you press it", "row": ["strong-again"]},
     "retriage":        {"label": "Sort it again", "hint": "Ask the AI to read this one again and decide where it goes", "row": ["retriage"]},

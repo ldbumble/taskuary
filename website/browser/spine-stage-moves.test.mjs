@@ -37,8 +37,8 @@ const look = (page) => page.evaluate((CUR) => {
     from: spine("from"), agent: spine("agent"), close: spine("close"),
     pane: { from: words(`${CUR} [data-tq-pane-moves=from] button`), agent: words(`${CUR} [data-tq-pane-moves=agent] button`), close: words(`${CUR} [data-tq-pane-moves=close] button`) } };
 }, CUR);
-const STAGE = /^(Send to agent|Continue|Try again|Run another agent|Reply|Draft reply|Redraft|Draft with AI|Starting…|Drafting…|Hand it to a person|Remind me|Remove - not a task|Back .+)$/;
-const FROM = ["Remind me", "Remove - not a task"];
+const STAGE = /^(Send to agent|Continue|Try again|Run another agent|Reply|Draft reply|Redraft|Draft with AI|Starting…|Drafting…|Hand it to a person|Remind me|Not a task|Back .+)$/;
+const FROM = ["Not a task", "Remind me"];
 
 for (const [w, h] of [[1440, 900], [1366, 768]]) {
   test(`stage moves on their pane, the bar the task's, the chat its own unit - ${w}x${h}`, { timeout: 400000 }, async (t) => {
@@ -195,7 +195,7 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
         await openTask(page, task.TaskId);
         if (await page.$(`${CUR} .xterm`)) continue;   // a live agent: its bar's Stop and save (above)
         const from = await (async () => { await openSec(page, "from"); return (await look(page)).pane.from; })();
-        if (!from.includes("Remove - not a task") || !from.some((x) => /^(Remind me|Back .+)$/.test(x))) miss.push(`${task.Title} · from: ${from}`);
+        if (!from.includes("Not a task") || !from.some((x) => /^(Remind me|Back .+)$/.test(x))) miss.push(`${task.Title} · from: ${from}`);
         for (const key of ["agent", "close"]) {
           await openSec(page, key);
           const way = await page.evaluate((CUR, key) => {

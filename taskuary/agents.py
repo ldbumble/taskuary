@@ -1049,6 +1049,11 @@ def _rename_coding_profile(store) -> None:
     _retire_old_name(store)
 
 
+# A profile's old name -> its name now. The notes and runs it wrote are relabelled (_retire_old_name); a read receipt hashed
+# over the old label still counts (processing_reads._was), or every task the profile ever worked came back unread.
+RENAMED = {'coder': 'coding'}
+
+
 def _retire_old_name(store) -> None:
     """Every place that still names the coding profile by its old name. Not only on the rename: old code running beside a
     migrated store went on assigning new tasks to it, and those failed to start with "unknown agent" (2026-10-16) - so this
@@ -1058,8 +1063,9 @@ def _retire_old_name(store) -> None:
     # who did what keeps its meaning under the new name - the queue, runs, notes, the wall and votes; the audit log is left as written
     for table, col in (('transcript', 'Agent'), ('dispatchq', 'Agent'), ('run', 'AgentName'), ('comment', 'Actor'),
                        ('boardnote', 'Agent'), ('outcome', 'Actor')):
-        try: store._exec(f"UPDATE {table} SET {col}='coding' WHERE {col}='coder'")
-        except Exception: pass                              # a table an older or in-memory store does not have
+        for old, new in RENAMED.items():
+            try: store._exec(f"UPDATE {table} SET {col}=? WHERE {col}=?", (new, old))
+            except Exception: pass                          # a table an older or in-memory store does not have
     try: store._exec("UPDATE OR IGNORE lore_vote SET Actor='coding' WHERE Actor='coder'"); store._exec("DELETE FROM lore_vote WHERE Actor='coder'")
     except Exception: pass
     # ...and a start that FAILED on the old name has no cause left once it is gone: its row kept saying "unknown agent: coder - Start

@@ -116,6 +116,8 @@ FEEDBACK = ('FEEDBACK: when they ask for your thoughts, feedback, a review or a 
 # to send, whatever the mail carried (the owner, 2026-10-28). Only the owner's own instruction may promise.
 _LATER = re.compile(r"\b(i'?ll|i will|let me|i'?m going to|i am going to|will)\b[^.!?\n]{0,60}?\b(review|look|go through|read|check|"
                     r"get back|circle back|come back|follow up|revert|send (that |this |it )?separately|"
+                    r"pick (this|it|that) up|take care of|get (on|to) (this|it|that)|handle (this|it|that)|deal with|sort (this|it|that) out|"
+                    r"work on (this|it|that)|look into|loop back|reply (properly|in full|later)|respond (later|properly|in full)|"
                     r"send (you )?(over )?(my|some) (thoughts|feedback|comments|notes)|share (my |some )?(thoughts|feedback|comments))"
                     r"|\b(i'?m|i am|we'?re|we are) (now |currently )?(looking|checking|reviewing|digging|working on)\b"
                     r"|\b(i|we) (have|need) to (look|check|review|dig|go through|confirm)\b", re.I)
@@ -138,7 +140,8 @@ class NotDrafted(RuntimeError):
 def promise_only(text: str, sig: str = '') -> bool:
     """True when a reply is MOSTLY a promise to look, review or get back later: greeting, thanks, a compliment and the signature aside,
     and at most one short sentence beside it that says nothing checkable. A list or a figure is an answer."""
-    body = str(text or '').strip()
+    body = str(text or '').strip().replace('’', "'").replace('‘', "'")    # a model's curly apostrophe is still "I'll"
+    sig = str(sig or '').replace('’', "'")
     if sig and sig.strip() and body.endswith(sig.strip()): body = body[:-len(sig.strip())].rstrip()
     body = strip_signoff(body) or body
     lines = [l.strip() for l in body.splitlines() if l.strip()]

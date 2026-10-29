@@ -97,3 +97,16 @@ def test_an_owner_instruction_is_theirs_even_if_it_promises(s):
     (LATER, True), ("I'll take a look and get back to you.", True), ('Thanks! Will review and circle back.', True),
     (GOOD, False), ("Looks good. I'll send it to the team Friday.", False), ('Thanks, noted.', False)])
 def test_promise_only(text, want): assert responder.promise_only(text, 'Alex Doyle') is want
+
+
+def test_a_bare_promise_in_any_words_is_no_draft():
+    """'I'll pick this up' on a short forward was offered as ready to send (the owner, 2026-10-28: "if it can't add anything then
+    just create the task, no reply")."""
+    from taskuary.responder import promise_only
+    sig = 'Alex Doyle - Northwind'
+    for t in ('I’ll pick this up.\n\n' + sig, 'I will pick this up.', "I'll take care of it.", "Thanks, I'll get to this tomorrow.",
+              "I'll look into it and get back to you."):
+        assert promise_only(t, sig), t
+    for t in ('Yes - Thursday at 2 works.', "Approved - it goes out in Friday's payment run.",
+              'The volume rose because two new billing runs moved into October; I will send the breakdown by Friday with the figures.'):
+        assert not promise_only(t, sig), t

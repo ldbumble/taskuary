@@ -78,6 +78,7 @@
     "asked_late":    {"line": "You usually answer {who} {usual}; this is {age}.", "lit": ["reply"], "ask": true},
     "answered":      {"line": "Your reply went {when}; nothing since.", "lit": ["close"], "ask": true},
     "done_list":     {"line": "All {n} to-dos ticked.", "lit": ["close"]},
+    "untouched":     {"line": "", "lit": [], "ask": true},
     "own":           {"line": "", "lit": ["next"]}
   },
   "local": "on this computer",

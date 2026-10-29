@@ -363,6 +363,35 @@ def test_a_draft_says_what_leaves_with_it_beside_send_never_instead(s):
     assert rulebook.decide(s, it, V)['line'] == 'Goes to paula@northwind.example - new to this thread.'
 
 
+def test_a_task_left_sitting_lights_only_the_models_move_beside_what_is_owed(s):
+    """UNTOUCHED TOO LONG (the design rev 2): an open task of the owner's that nothing moved for UNTOUCHED_DAYS working days asks the model
+    what is still owed - nothing lit while it reads, then its verb only beside its line; nothing owed is silent."""
+    from tests.test_advisor import brain_saying
+    t = Factory(s).task(title='Sign the Elm Street lease', kind='task')
+    old = (datetime.now() - timedelta(days=12)).strftime('%Y-%m-%d %H:%M:%S')
+    it = {'key': f'task:{t}', 'kind': 'own', 'lane': 'mine', 'tid': t, 'title': 'Sign the Elm Street lease'}
+    assert rulebook.state(s, it, [])[0] == 'own', 'fresh: the rule lights nothing of its own'
+    rev = advisor.revision(s, 'task', t)
+    s._exec('UPDATE task SET CreatedAt=?, UpdatedAt=? WHERE TaskId=?', (old, old, t))
+    assert rulebook.untouched(s, s.get_task(t)) >= rulebook.UNTOUCHED_DAYS
+    assert advisor.revision(s, 'task', t) != rev, 'crossing the line is read again'
+    d = rulebook.decide(s, it, _verbs('close', 'defer', 'reply'))
+    assert (d['state'], d['verb'], d['line'], d['ask']) == ('untouched', None, '', True)
+    orig = advisor._item
+    def decide():
+        with mock.patch.object(advisor, '_item', lambda store, tk, ti, key=None: it if ti == t else orig(store, tk, ti, key)), \
+             mock.patch.object(advisor, 'offered', return_value=[{'verb': v, 'label': v} for v in ('close', 'defer', 'reply')]):
+            advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=llm)
+            with mock.patch.object(advisor, 'notice'): return advisor.decide(s, f'task:{t}', preread=False)
+    llm = brain_saying({'verb': None, 'line': '', 'evidence': []})
+    assert decide()['verb'] is None, 'nothing owed: nothing lit'
+    assert 'UNTOUCHED: nothing has moved on it for' in llm.calls[0][1]
+    s._exec('DELETE FROM advice WHERE TargetId=?', (t,))
+    llm = brain_saying({'verb': 'reply', 'line': 'Erin still needs the signed lease', 'evidence': [], 'kind': 'late'})
+    d = decide()
+    assert (d['state'], d['verb'], d['line'], d['by']) == ('untouched', 'reply', 'Erin still needs the signed lease', 'model'), d
+
+
 def test_what_leaves_stands_over_the_models_agreeing_send(s):
     t, m, it = _asked(s, 'Q3 accruals')
     Factory(s).review(t, m, draft='Here are the Q3 accruals.', Deliver=json.dumps({'kind': 'reply', 'to': ['erin@northwind.example'], 'cc': ['dana@vendor.example']}))

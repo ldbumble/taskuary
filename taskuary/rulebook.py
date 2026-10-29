@@ -25,7 +25,7 @@ FAILED = frozenset({'failed', 'failed_cause', 'report_failed'})
 # where the lit move needs an AI to work: with none connected the strip asks for one there, and only there
 NEEDS_AI = frozenset({'asked', 'asked_late', 'stranger'})
 # THE KIND OF FACT a state's line is - what the check after the Advisor decides reads (advisor.checked), the same field the model states
-KIND = {'asked_late': 'late', 'waiting_late': 'late', 'waiting_late_usual': 'late', 'waiting_overdue': 'late', 'goal_late': 'late',
+KIND = {'asked_late': 'late', 'untouched': 'late','waiting_late': 'late', 'waiting_late_usual': 'late', 'waiting_overdue': 'late', 'goal_late': 'late',
         'duplicate': 'same_ask', 'failed': 'failure', 'failed_cause': 'failure', 'report_failed': 'failure'}
 EV = '_evidence'         # a fact's own ids (usual.py), carried beside the line's facts and handed on as the decision's evidence
 
@@ -303,7 +303,24 @@ def state(store, item: dict, verbs: list) -> tuple:
             return 'asked_late', {'who': late['who'], 'usual': late['usual'], 'age': late['age'], EV: late['evidence']}
         return 'asked', {'who': _name(ins[-1]), 'ago': ago(ins[-1].get('SentAt') or ins[-1].get('CreatedAt'))}
     if t and (cl := advisor._checklist(t)) and all(c.get('done') for c in cl): return 'done_list', {'n': len(cl)}
+    if t and untouched(store, t): return 'untouched', {}
     return 'own', {}
+
+
+# UNTOUCHED TOO LONG (the design rev 2: "an ask with no answer, a promise past its day" - the owner, 2026-10-28: "there to hold your hand
+# when something was dropped"): an open task of the owner's own that nothing has moved for UNTOUCHED_DAYS working days. That it sat is a
+# fact the app keeps; WHAT is still owed on it, to whom, and the move that gets it going are the model's to read (advice_rule `untouched`
+# asks it, and lights only its verb beside its line) - never a word list. Nothing owed: nothing lit.
+UNTOUCHED_DAYS = 5
+
+
+def untouched(store, t: dict) -> int:
+    """Working days nothing has moved on an open task - its own change, a message on it, its agent's last word - or 0 under UNTOUCHED_DAYS."""
+    if not t or t.get('Status') not in ('open', 'in_progress'): return 0
+    m = store._one('SELECT MAX(IFNULL(SentAt,CreatedAt)) AS at FROM message WHERE TaskId=?', (int(t['TaskId']),)) or {}
+    ats = [a for a in (_dt(t.get('UpdatedAt')), _dt(t.get('CreatedAt')), _dt(m.get('at')), _dt(last_word(store, t['TaskId']))) if a]
+    n = working_days(max(ats)) if ats else 0
+    return n if n >= UNTOUCHED_DAYS else 0
 
 
 # WHAT LEAVES WITH A DRAFT (the design rev 2, data leaving; the owner, 2026-10-28: "a line on top ... it should recommend action", never a

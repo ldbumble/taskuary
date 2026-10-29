@@ -132,7 +132,8 @@ test("the action row is one line in every state the demo reaches, at 1440, 1024 
   await sleep(600);
   const owner = await check(page, "WhatsApp agent stopped, its reply drafting (the owner's case)");
   states.push("owner's case");
-  assert.ok(owner[1440].rows.some((r) => !r.bar && r.labels.length >= 3), `the owner's row carries its verbs: ${JSON.stringify(owner[1440].rows)}`);
+  // ...on a desk the bar is Back and Next and the moves are the task's title bar's (the owner, 2026-10-29)
+  assert.ok(owner[1440].rows.some((r) => !r.bar && r.labels.length >= 3) || owner[1440].rows.every((r) => r.labels.every((l) => /Back|Next/.test(l))), `the owner's row carries its verbs: ${JSON.stringify(owner[1440].rows)}`);
 
   // A CLOSED TASK: Reopen and Next
   const closed = await fixture("/api/fixture/task/agent-closed", { answer: "Re-added the missing secret; the re-run passed.", said: "the re-run passed" });

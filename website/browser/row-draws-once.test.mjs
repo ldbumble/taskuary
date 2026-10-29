@@ -94,8 +94,8 @@ test("the action row draws once with the new item's buttons: Reopen, Next, rail,
     const closed = await fixture("/api/fixture/task/agent-closed", { answer: "Re-added the missing secret; the re-run passed.", said: "the re-run passed" });
     assert.ok(closed.taskId, JSON.stringify(closed));
     await link(closed.taskId);
-    await page.waitForSelector('.tq-dock [data-tq-row] [data-tq-verb="reopen"]', { timeout: 30000 }); await sleep(2000);
-    const end = await watch("reopen", () => page.evaluate(() => document.querySelector('.tq-dock [data-tq-row] [data-tq-verb="reopen"]').click()));
+    await page.waitForSelector('.tq-dock [data-tq-row] [data-tq-verb="reopen"], [data-tq-head-moves] [data-tq-verb="reopen"]', { timeout: 30000 }); await sleep(2000);
+    const end = await watch("reopen", () => page.evaluate(() => document.querySelector('.tq-dock [data-tq-row] [data-tq-verb="reopen"], [data-tq-head-moves] [data-tq-verb="reopen"]').click()));
     assert.ok(!/Reopen/.test(end), `the reopened task's row: ${end}`);
     await settle();
   });

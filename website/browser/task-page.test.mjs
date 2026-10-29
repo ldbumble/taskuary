@@ -203,7 +203,9 @@ test("the task page: three sections at rest, the agent nearly the whole width wh
     // ...the diff folded behind its count (the task-view cleanup, owner-approved 2026-10-25)
     assert.match(r.diff, /1 file changed \+2 −1/);
     assert.equal(await page.$("[data-tq-work] .xterm"), null, "no terminal: the session is one line");
-    const heading = await page.$eval('[data-tq-work] [data-tq-step="2"]', (dot) => dot.parentElement.innerText);
+    // ...on the canvas its name is the open pane's white strip's (the owner, 2026-10-29), the heading under it carrying no second one
+    const heading = await page.evaluate(() => document.querySelector("[data-tq-pane-strip=agent]")?.innerText.replace(/^[‹›\s]+/, "")
+      || document.querySelector('[data-tq-work] [data-tq-step="2"]').parentElement.innerText);
     // ...the section's own heading, no second way to the record (the owner, 2026-10-27: "why are there 2 buttons for full results?")
     assert.match(heading, /^Agent/, "the agent's section, by its name alone (2026-10-28)");
     assert.equal(await page.$eval('[data-tq-work] [data-tq-step="2"]', (dot) => dot.parentElement.getAttribute("aria-expanded")), null, "the heading folds nothing");

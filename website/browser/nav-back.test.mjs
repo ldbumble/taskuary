@@ -14,8 +14,9 @@ const on = (page) => page.evaluate(`(${ON})()`);
 const ring = async (page) => (await rail(page)).find((r) => r.cur)?.key || "";
 const nav = (page) => page.evaluate(() => {
   const g = document.querySelector(".tq-dock [data-tq-row] [data-tq-type=nav]");
-  return { label: g?.querySelector(".tq-cl-h")?.textContent || "", back: !!g?.querySelector("[data-tq-walk-back]"), next: !!g?.querySelector("[data-tq-next]"),
-    words: [...(g?.querySelectorAll("button") || [])].map((b) => b.textContent.trim()) };
+  // ...on a desk Back is always on the bar, greyed where there is nowhere to go back to (the owner, 2026-10-29): a greyed Back is no Back
+  return { label: g?.querySelector(".tq-cl-h")?.textContent || "", back: !!g?.querySelector("[data-tq-walk-back]:not([disabled])"), next: !!g?.querySelector("[data-tq-next]"),
+    greyed: !!g?.querySelector("[data-tq-walk-back][disabled]"), words: [...(g?.querySelectorAll("button:not([disabled][data-tq-walk-back])") || [])].map((b) => b.textContent.trim()) };
 });
 const pressBack = (page) => page.evaluate(() => { const b = document.querySelector(".tq-dock [data-tq-row] [data-tq-walk-back]"); if (b && !b.disabled) { b.click(); return true; } return false; });
 const until = async (f, ms = 15000) => { for (const t0 = Date.now(); Date.now() - t0 < ms; await sleep(200)) if (await f()) return true; return false; };
@@ -33,6 +34,7 @@ test("Back walks up the line: the row above, across sections, past what a close 
     await clickRow(page, rows[0].key); await settle(page);
     const n = await nav(page);
     assert.equal(n.label, "Nav"); assert.ok(n.next, "Next is there"); assert.ok(!n.back, `no Back on the first one: ${JSON.stringify(n)}`);
+    assert.ok(n.greyed, `...its place kept, greyed (the owner, 2026-10-29) ${JSON.stringify(n)}`);
   });
 
   await t.test("Next, then Back: the row it came from, ringed on the rail", async () => {

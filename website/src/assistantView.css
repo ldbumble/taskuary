@@ -952,6 +952,9 @@
 .tq-chat-unit > .tq-compose-box:not([data-tq-open]) .tq-model-pick,
 .tq-chat-unit > .tq-compose-box:not([data-tq-open]) .tq-compose-emoji { display: none !important; }
 .tq-chat-unit > .tq-compose-box:not([data-tq-open]) textarea { height: 30px !important; min-height: 30px; padding: 0 4px; line-height: 30px; }
+/* ...and its slot is ONE line, open or not: open, the card rises out of it over the canvas, so nothing under or beside it moves */
+.tq-chat-unit > .tq-compose-box { height: 44px; }
+.tq-chat-unit > .tq-compose-box[data-tq-open] > .tq-compose-field { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; }
 /* ...open it is the window's floor, the conversation flush on it */
 .tq-chat-unit > .tq-compose-box[data-tq-open] > .tq-compose-field { border-radius: 0 0 16px 16px; border-top-color: #ece7de; }
 .tq-chat-unit > .tq-compose-box textarea { grid-area: words; width: 100%; min-height: 32px; max-height: 114px; padding: 6px 6px 2px; line-height: 20px; }

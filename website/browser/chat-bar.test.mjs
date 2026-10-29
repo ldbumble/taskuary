@@ -59,7 +59,7 @@ test("the chat is its own unit: the bar ends before it, it opens out of its corn
   const card = await page.evaluate(() => {
     const f = document.querySelector(".tq-chat-unit .tq-compose-field"), r = (e) => e.getBoundingClientRect(), ta = f.querySelector("textarea"), send = f.querySelector(".tq-send");
     const pick = f.querySelector("[data-tq-model-pick]"), tools = [...f.querySelectorAll(".tq-compose-tools button, .tq-compose-tools label")].filter((b) => b.offsetParent);
-    return { radius: parseFloat(getComputedStyle(f).borderTopLeftRadius), sendOnLine: r(send).top < r(ta).bottom && r(send).bottom > r(ta).top && r(send).left >= r(ta).right - 2,
+    return { radius: parseFloat(getComputedStyle(f).borderBottomLeftRadius), sendOnLine: r(send).top < r(ta).bottom && r(send).bottom > r(ta).top && r(send).left >= r(ta).right - 2,
       round: Math.abs(r(send).width - r(send).height) <= 1, tools: tools.length, toolsBelow: tools.every((b) => r(b).top >= r(ta).bottom - 1 && r(b).right < r(f).left + r(f).width / 2),
       pick: pick && { text: pick.textContent, right: Math.round(r(f).right - r(pick).right), below: r(pick).top >= r(ta).bottom - 1 } };
   });

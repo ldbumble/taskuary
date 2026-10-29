@@ -172,7 +172,11 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // A REPLY OPENED AT ONCE is drawn before its draft exists (replyDraft.js, 2026-10-01): "Drafting…" until the model is done,
   // then the task is read again and the draft is in the box; one that could not be written says why here
   const job = useDraftJob(r.ReviewId);
-  const drafting = job?.state === "drafting";
+  // A REDRAFT IS NOT A SEND (the email walk, 2026-10-29: Redraft turned Send into "Sending…"): its own state holds every button off
+  // while the model writes, and only Redraft says what is happening
+  const [redrafting, setRedrafting] = useState(false);
+  const drafting = job?.state === "drafting" || redrafting;
+  const off = busy || drafting;
   useEffect(() => {
     if (job?.state === "done") onChanged?.();
     if (job?.state === "failed") setErr(`The draft could not be written - ${job.error}. Write it here, or Draft with AI again.`);
@@ -250,11 +254,10 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   const redraft = async () => {
     if (delivery.frozen) return;
     announce(no("redraft"));
-    setBusy(true);
+    setRedrafting(true);
     try { await api.post(`/api/reviews/${r.ReviewId}/draft`); setText(null); onChanged?.(); }
     catch (e) { setErr(e?.response?.data?.detail || "Redraft failed"); }
-    finally { acted(no("redraft")); }
-    setBusy(false);
+    finally { acted(no("redraft")); setRedrafting(false); }
   };
 
   // THE DECISION'S VERBS, one list for the card's buttons and the action row: what presses, what it says, when it is off
@@ -282,6 +285,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // Redraft (Draft with AI while nothing is drafted): the same handler the in-card button has
   const canRedraft = !proposal && meta.kind !== "zoho_invoice" && !isCal && !isSlot;   // the redrafter writes a REPLY to the sender
   const redraftWord = r.DraftText || r.Stale ? btn("redraft") : btn("redraft", "none");
+  const redraftLabel = redrafting && r.DraftText ? "Redrafting…" : drafting ? "Drafting…" : redraftWord;
   // the Advisor lit Redraft and said why: the warning and its button go over the draft (warnTop), not a line beside the buttons under it
   const warnTop = !!why && canRedraft && !r.Stale && !delivery.frozen && lit === no("redraft");
   // the alternative (Decline) sends WHAT IS IN THE BOX, edited or not - and with the box empty it just closes the pull request, sending nothing
@@ -299,49 +303,49 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   };
   const moves = r.Status !== "pending" ? [] : [
     ...(delivery.frozen ? [
-      { id: no("approve"), label: busy ? "Checking delivery…" : delivery.label, tone: "p", disabled: busy || !delivery.canCheck,
+      { id: no("approve"), label: busy ? "Checking delivery…" : delivery.label, tone: "p", disabled: off || !delivery.canCheck,
         run: () => decide("approve"), title: delivery.line, why: delivery.active ? "waiting for the provider" : "" },
-      ...(unconfirmed ? [{ id: no("anyway"), label: btn("approve", "unknown"), tone: "s", disabled: busy, run: sendAnyway, title: btnHint("approve", "unknown") },
-        ...(r.TaskId ? [{ id: no("done"), label: btn("close"), tone: "s", disabled: busy, run: doneAnyway, title: btnHint("close") }] : [])] : []),
+      ...(unconfirmed ? [{ id: no("anyway"), label: btn("approve", "unknown"), tone: "s", disabled: off, run: sendAnyway, title: btnHint("approve", "unknown") },
+        ...(r.TaskId ? [{ id: no("done"), label: btn("close"), tone: "s", disabled: off, run: doneAnyway, title: btnHint("close") }] : [])] : []),
     ] : co && !r.Stale ? [
-      { id: no("approve"), label: busy ? sentOr(co.busyLabel) : co.approveLabel, tone: "p", title: blocked ? gh.reason : thenLine, disabled: busy || blocked || (sendable && !words.trim()), run: () => decideBoth("approve"),
+      { id: no("approve"), label: busy ? sentOr(co.busyLabel) : co.approveLabel, tone: "p", title: blocked ? gh.reason : thenLine, disabled: off || blocked || (sendable && !words.trim()), run: () => decideBoth("approve"),
         why: blocked ? gh.reason.split(" - ")[0] : sendable && !words.trim() ? "write the reply first" : "" },
-      ...(co.alt ? [{ id: no("alt"), label: altSends ? `${co.alt.label} & send your text` : co.alt.label, tone: "s", title: altTitle, disabled: busy, run: () => decideBoth(co.alt.verb) }] : []),
+      ...(co.alt ? [{ id: no("alt"), label: altSends ? `${co.alt.label} & send your text` : co.alt.label, tone: "s", title: altTitle, disabled: off, run: () => decideBoth(co.alt.verb) }] : []),
     ] : proposal ? [
-      { id: no("approve"), label: busy ? sentOr(proposal.busyLabel) : proposal.approveLabel, tone: "p", disabled: busy || (proposal.kind === "closeout" && blocked), run: () => decide("approve"),
+      { id: no("approve"), label: busy ? sentOr(proposal.busyLabel) : proposal.approveLabel, tone: "p", disabled: off || (proposal.kind === "closeout" && blocked), run: () => decide("approve"),
         why: proposal.kind === "closeout" && blocked ? gh.reason.split(" - ")[0] : "",
         title: proposal.kind === "closeout" && blocked ? gh.reason : proposal.kind === "playbook" ? "Save this process in Reports → Playbooks; nothing is sent to the sender"
           : proposal.kind === "closeout" ? `${proposal.approveLabel} - the text above goes with it` : "Run the proposed action; nothing is sent to the sender" },
     ] : !canSendIt ? [
       // NO CLOSE UNDER A DRAFT THAT CANNOT LEAVE (the owner, 2026-10-22: "there should be no mark done under reply if you can't send
       // out message ... mark done is on the tasks"): the draft is there to copy, Redraft beside it, and the task's own Mark done closes
-      { id: no("copy"), label: copied ? `✓ ${btn("copy", "done")}` : btn("copy"), tone: "s", disabled: busy || !words.trim(), run: copyIt, title: copyTitle,
+      { id: no("copy"), label: copied ? `✓ ${btn("copy", "done")}` : btn("copy"), tone: "s", disabled: off || !words.trim(), run: copyIt, title: copyTitle,
         why: words.trim() ? "" : "write the reply first" },
     ] : r.Stale ? [
-      { id: no("approve"), label: busy ? "Drafting…" : btn("redraft"), tone: "p", disabled: busy, run: redraft, title: btnHint("redraft") },
+      { id: no("approve"), label: redrafting ? "Redrafting…" : drafting ? "Drafting…" : btn("redraft"), tone: "p", disabled: off, run: redraft, title: btnHint("redraft") },
     ] : chatFile ? [
-      { id: no("email-file"), label: "Reply by email with the file", tone: "p", disabled: busy, run: onEmailInstead,
+      { id: no("email-file"), label: "Reply by email with the file", tone: "p", disabled: off, run: onEmailInstead,
         title: `A ${r.Channel} message cannot carry a file - this writes an email with the file on it, which waits here for your yes` },
-      { id: no("approve"), label: busy ? sentOr("Sending…") : `${sendWord} without the file`, tone: "s", disabled: busy || !words.trim(), why: words.trim() ? "" : "write the reply first",
+      { id: no("approve"), label: busy ? sentOr("Sending…") : `${sendWord} without the file`, tone: "s", disabled: off || !words.trim(), why: words.trim() ? "" : "write the reply first",
         run: () => decide("approve"), title: `Sends only the words to ${replyContext(r)} - no file goes with them` },
     ] : [
-      { id: no("approve"), label: busy ? sentOr(simulated ? "Simulating…" : "Sending…") : simulated ? "Simulate approval" : `${sendWord}${ccNow.length && !isCal ? `, copying ${ccNow.length}` : ""}`, tone: "p", disabled: busy || (!words.trim() && !isCal), why: words.trim() || isCal ? "" : "write the reply first",
+      { id: no("approve"), label: busy ? sentOr(simulated ? "Simulating…" : "Sending…") : simulated ? "Simulate approval" : `${sendWord}${ccNow.length && !isCal ? `, copying ${ccNow.length}` : ""}`, tone: "p", disabled: off || (!words.trim() && !isCal), why: words.trim() || isCal ? "" : "write the reply first",
         run: () => decide("approve"), title: simulated ? "Complete this temporary demo; no email is sent" : isCal ? thenLine : `Sends this response to ${replyContext(r)}` },
     ]),
-    ...(proposal?.alt ? [{ id: no("palt"), label: proposal.alt.label, tone: "s", disabled: busy, run: () => decide(proposal.alt.verb), title: `${proposal.alt.label} - ${proposal.alt.then}` }] : []),
+    ...(proposal?.alt ? [{ id: no("palt"), label: proposal.alt.label, tone: "s", disabled: off, run: () => decide(proposal.alt.verb), title: `${proposal.alt.label} - ${proposal.alt.then}` }] : []),
     // A CLOSE-OUT HAS NO "NOT YET" (the owner, 2026-10-02): Next keeps it open and moves on, Remind me keeps it open until a day
-    ...(co || proposal?.kind === "closeout" ? (onRemind ? [{ id: no("remind"), label: btn("defer"), tone: "q", disabled: busy, run: onRemind, title: remindTitle }] : [])
-      : proposal ? [{ id: no("reject"), label: proposal.rejectLabel, tone: "q", disabled: busy, run: () => decide("reject"), title: rejectTitle }]
+    ...(co || proposal?.kind === "closeout" ? (onRemind ? [{ id: no("remind"), label: btn("defer"), tone: "q", disabled: off, run: onRemind, title: remindTitle }] : [])
+      : proposal ? [{ id: no("reject"), label: proposal.rejectLabel, tone: "q", disabled: off, run: () => decide("reject"), title: rejectTitle }]
       // A REPLY DRAFT IS NEVER REJECTED (the owner, 2026-10-01: "rejected is useless - it should be redraft or close task"): Reject
       // threw the draft away and left the task open, which is neither. Its other choices are Redraft and the task's own Mark done.
-      : [...(canRedraft && !r.Stale ? [{ id: no("redraft"), group: "decide", tone: "s", label: drafting ? "Drafting…" : redraftWord, disabled: busy || drafting, run: redraft,
+      : [...(canRedraft && !r.Stale ? [{ id: no("redraft"), group: "decide", tone: "s", label: redraftLabel, disabled: off, run: redraft,
           title: btnHint("redraft") }] : []),
-        ...(onMarkDone && canSendIt ? [{ id: no("done"), group: "decide", closes: true, tone: "s", label: btn("close"), disabled: busy, run: onMarkDone, title: doneTitle }] : [])]),
+        ...(onMarkDone && canSendIt ? [{ id: no("done"), group: "decide", closes: true, tone: "s", label: btn("close"), disabled: off, run: onMarkDone, title: doneTitle }] : [])]),
   ].map((v) => ({ ...v, group: "decide", disabled: v.disabled || (delivery.frozen && ![no("approve"), no("anyway"), no("done")].includes(v.id)) }));
   // ...and behind More where the decision does not carry it already (a close-out; a stale draft's Refresh is the move itself)
   // The draft's own buttons are drawn under it, never on the task's bar (2026-10-06) - but they are REGISTERED as `card` verbs, so
   // the row knows the card holds the move and the Advisor's Send finds this Send instead of drawing a second one (B4, 2026-10-17)
-  useVerbs(`decision:${r.ReviewId}`, [...moves, ...(canRedraft && moves.length && !moves.some((v) => v.id === no("redraft")) ? [{ id: no("redraft"), group: "more", tone: "s", label: drafting ? "Drafting…" : redraftWord, disabled: busy || drafting || delivery.frozen, run: redraft,
+  useVerbs(`decision:${r.ReviewId}`, [...moves, ...(canRedraft && moves.length && !moves.some((v) => v.id === no("redraft")) ? [{ id: no("redraft"), group: "more", tone: "s", label: redraftLabel, disabled: off || delivery.frozen, run: redraft,
     title: btnHint("redraft") }] : [])].map((v) => ({ ...v, card: true })), toRow);
   // A FAILED SEND'S FIX IS A BUTTON ON THE ROW, not directions in the error ("add one under Connections" with nothing to press,
   // 2026-10-17) - and an ordinary row verb, so the Advisor can pick it like any other
@@ -361,7 +365,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           here rewritten from what the agent actually found.
         </Typography>
         <Box sx={{ display: "flex", gap: 0.75, mt: 0.75, alignItems: "center" }}>
-          <Button size="small" variant="outlined" disabled={busy || delivery.frozen} onClick={release}>Answer now anyway</Button>
+          <Button size="small" variant="outlined" disabled={off || delivery.frozen} onClick={release}>Answer now anyway</Button>
           {onOpenTask && <Button size="small" sx={{ color: DIM }} onClick={() => onOpenTask(r.TaskId)}>Open the task</Button>}
         </Box>
         {r.DraftText && (
@@ -412,7 +416,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       {/* an EMAIL draft's recipient is the owner's to correct (ToRow); a proposal's destination and a chat's room are not - and a
           calendar answer goes to the calendar: what it will be told stands in their place, with no copies and no files */}
       {isCal ? <CalendarLine meta={meta} /> : !proposal && String(r.Channel || deliveryMeta(r).channel || "").toLowerCase() === "email" ? (
-        <ToRow to={replyContext(filedDelivery)} disabled={busy || delivery.frozen}
+        <ToRow to={replyContext(filedDelivery)} disabled={off || delivery.frozen}
           onSave={async (to) => { await api.put(`/api/reviews/${r.ReviewId}/envelope`, { to }); onChanged?.(); }} />
       ) : (
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mb: 0.75, minWidth: 0 }}>
@@ -430,7 +434,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         </Box>
       )}
       {!proposal && !isCal && <ReplyFiles reviewId={r.ReviewId} files={deliveryFiles(filedDelivery)}
-        promised={filesPromised(r)} channel={r.Channel} onChanged={onChanged} toRow={toRow} disabled={busy || delivery.frozen} />}
+        promised={filesPromised(r)} channel={r.Channel} onChanged={onChanged} toRow={toRow} disabled={off || delivery.frozen} />}
       {isCal ? null : !proposal && (busy || delivery.frozen) ? String(r.Channel || "").toLowerCase() === "email" && (
         <Typography variant="caption" data-tq-delivery-cc sx={{ display: "block", color: DIM, mb: 0.75 }}>
           CC: {ccNow.length ? ccNow.join(", ") : "none"}
@@ -442,12 +446,12 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       {warnTop && <Box data-tq-redraft-warn="" sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 0.75, px: 1.25, py: 0.75,
         border: "1px solid #e3c9a8", bgcolor: "#fbf3e8", borderRadius: 1.5 }}>
         <Typography component="span" data-tq-lit-why="" sx={{ flex: "1 1 220px", minWidth: 0, color: "#6b4a1f", fontSize: 13, overflowWrap: "anywhere" }}>{why}</Typography>
-        <Button size="small" variant="contained" disableElevation disabled={busy || drafting} onClick={redraft} title={btnHint("redraft")}>
-          {drafting ? "Drafting…" : redraftWord}</Button>
+        <Button size="small" variant="contained" disableElevation disabled={off} onClick={redraft} title={btnHint("redraft")}>
+          {redraftLabel}</Button>
       </Box>}
       <Box ref={draftRef} data-tq-draft-box=""><DraftField value={value} onChange={(e) => setText(e.target.value)}
         placeholder={proposal?.kind === "closeout" ? proposal.placeholder : isCal ? "A note with your answer - or leave it empty" : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}
-        inputProps={{ readOnly: busy || delivery.frozen || !!proposal?.readOnly, style: { fontSize: 12.5, lineHeight: 1.45 } }} /></Box>
+        inputProps={{ readOnly: off || delivery.frozen || !!proposal?.readOnly, style: { fontSize: 12.5, lineHeight: 1.45 } }} /></Box>
       {compare?.reviewId === r.ReviewId && (
         <Box sx={{ mt: 0.75, border: "1px solid #d2d6cf", borderRadius: 1.5, px: 1.25, py: 0.75, bgcolor: PANEL2 }}>
           <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, display: "block" }}>
@@ -455,7 +459,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           </Typography>
           <Typography variant="body2" sx={{ color: INK, whiteSpace: "pre-wrap", fontSize: 12.5, mt: 0.5 }}>{compare.refreshed || "(no refreshed draft - hit Redraft)"}</Typography>
           <Box sx={{ display: "flex", gap: 0.75, mt: 0.75 }}>
-            <Button size="small" variant="outlined" disabled={busy || delivery.frozen || !compare.refreshed}
+            <Button size="small" variant="outlined" disabled={off || delivery.frozen || !compare.refreshed}
               onClick={() => { setText(compare.refreshed); setCompare(null); }}>Use the refreshed draft</Button>
             <Button size="small" sx={{ color: DIM }} onClick={() => setCompare(null)}>Keep mine</Button>
           </Box>
@@ -468,26 +472,26 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
             off gets 'No response required' as THE action, not a send that bounces */}
         <>
         {delivery.frozen ? (<>
-          <Button size="small" variant={solid} disableElevation disabled={busy || !delivery.canCheck}
+          <Button size="small" variant={solid} disableElevation disabled={off || !delivery.canCheck}
             onClick={() => decide("approve")} title={delivery.line}>
             {busy ? "Checking delivery…" : delivery.label}
           </Button>
-          {unconfirmed && <Button size="small" variant="outlined" disabled={busy} onClick={sendAnyway} title={btnHint("approve", "unknown")}>{btn("approve", "unknown")}</Button>}
-          {unconfirmed && r.TaskId && <Button size="small" variant="outlined" disabled={busy} onClick={doneAnyway} title={btnHint("close")}>{btn("close")}</Button>}
+          {unconfirmed && <Button size="small" variant="outlined" disabled={off} onClick={sendAnyway} title={btnHint("approve", "unknown")}>{btn("approve", "unknown")}</Button>}
+          {unconfirmed && r.TaskId && <Button size="small" variant="outlined" disabled={off} onClick={doneAnyway} title={btnHint("close")}>{btn("close")}</Button>}
         </>) : co && !r.Stale ? (
           /* ONE PRESS FOR THE LAST TWO ACTS (the owner, 2026-09-27: "shouldn't we combine this?"): the merge or
              close runs first, and the reply above goes out only once it succeeded. A reply this channel cannot
              carry leaves just the close-out. */
           <>
-            <Button size="small" variant={solid} disableElevation disabled={busy || blocked || (sendable && !words.trim())}
+            <Button size="small" variant={solid} disableElevation disabled={off || blocked || (sendable && !words.trim())}
               onClick={() => decideBoth("approve")} title={blocked ? gh.reason : thenLine}>
               {busy ? sentOr(co.busyLabel) : co.approveLabel}</Button>
-            {co.alt && <Button size="small" variant="outlined" disabled={busy}
+            {co.alt && <Button size="small" variant="outlined" disabled={off}
               onClick={() => decideBoth(co.alt.verb)} title={altTitle}>
               {altSends ? `${co.alt.label} & send your text` : co.alt.label}</Button>}
           </>
         ) : proposal ? (
-          <Button size="small" variant={solid} disableElevation disabled={busy || (proposal.kind === "closeout" && blocked)}
+          <Button size="small" variant={solid} disableElevation disabled={off || (proposal.kind === "closeout" && blocked)}
             onClick={() => decide("approve")}
             title={proposal.kind === "closeout" && blocked ? gh.reason : proposal.kind === "playbook"
               ? "Save this process in Reports → Playbooks; nothing is sent to the sender"
@@ -498,7 +502,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         ) : !canSendIt ? (
           /* COPY, BESIDE REDRAFT (the owner, 2026-10-22): the draft goes to the clipboard and the task stays open - its badge says it
              went; the reason nothing here can send it is the hover */
-          <Button size="small" variant={lit === no("copy") ? "contained" : "outlined"} disableElevation disabled={busy || !words.trim()} onClick={copyIt}
+          <Button size="small" variant={lit === no("copy") ? "contained" : "outlined"} disableElevation disabled={off || !words.trim()} onClick={copyIt}
             title={copyTitle} data-tq-copy={copied ? "done" : ""}>
             {copied ? `✓ ${btn("copy", "done")}` : btn("copy")}</Button>
         ) : r.Stale ? (
@@ -507,16 +511,16 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
              new message arrived" was a dead end (the owner, 2026-09-21: "can't hit approve &
              send since there is warning? just reprocess it then"). Refreshing IS the primary
              action while the thread is ahead of the draft. */
-          <Button size="small" variant={solid} disableElevation disabled={busy}
+          <Button size="small" variant={solid} disableElevation disabled={off}
             onClick={redraft} title={btnHint("redraft")}>
-            {busy ? "Drafting…" : btn("redraft")}
+            {redrafting ? "Redrafting…" : drafting ? "Drafting…" : btn("redraft")}
           </Button>
         ) : chatFile ? (
           <>
-            <Button size="small" variant={solid} disableElevation disabled={busy} onClick={onEmailInstead}
+            <Button size="small" variant={solid} disableElevation disabled={off} onClick={onEmailInstead}
               title={`A ${r.Channel} message cannot carry a file - this writes an email with the file on it, which waits here for your yes`}>
               Reply by email with the file</Button>
-            <Button size="small" variant="outlined" disabled={busy || !words.trim()} onClick={() => decide("approve")}
+            <Button size="small" variant="outlined" disabled={off || !words.trim()} onClick={() => decide("approve")}
               title={`Sends only the words to ${replyContext(r)} - no file goes with them`}>
               {busy ? sentOr("Sending…") : `${sendWord} without the file`}</Button>
           </>
@@ -524,7 +528,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           // ...a calendar answer's note may be empty (verdicts: `cal`), so an invite with none still has its Send - New → Meeting's pick
           // drafts one with no note, and the button sat grey over it (2026-10-28)
           <Button size="small" variant={solid}
-            disabled={busy || (!words.trim() && !isCal)}
+            disabled={off || (!words.trim() && !isCal)}
             onClick={() => decide("approve")}
             title={simulated ? "Complete this temporary demo; no email is sent" : `Sends this response to ${replyContext(r)}`}>
             {/* the one word for the send, as everywhere (buttons.json) */}
@@ -533,20 +537,20 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           </Button>
         )}
         {/* Redraft beside the send, under the draft it rewrites - not at the far end of the row, and not on the task's bar */}
-        {canRedraft && !r.Stale && !delivery.frozen && !warnTop && <Button size="small" variant={lit === no("redraft") ? "contained" : "outlined"} disableElevation disabled={busy || drafting} onClick={redraft}
+        {canRedraft && !r.Stale && !delivery.frozen && !warnTop && <Button size="small" variant={lit === no("redraft") ? "contained" : "outlined"} disableElevation disabled={off} onClick={redraft}
           title={btnHint("redraft")}>
-          {drafting ? "Drafting…" : redraftWord}</Button>}
+          {redraftLabel}</Button>}
         {/* ...and one email of several can be let go: it drops that slot and closes nothing (slots.settled) */}
-        {isSlot && onDrop && !delivery.frozen && <Button size="small" variant="outlined" disabled={busy} onClick={onDrop}
+        {isSlot && onDrop && !delivery.frozen && <Button size="small" variant="outlined" disabled={off} onClick={onDrop}
           title="Drop this email - it is never sent, and the task stays open">Don't send</Button>}
         {/* no "No reply needed" - Mark done on the task is that (the owner, 2026-09-24: "no button should be that") */}
-        {proposal?.alt && <Button size="small" variant="outlined" disabled={busy || delivery.frozen} onClick={() => decide(proposal.alt.verb)}
+        {proposal?.alt && <Button size="small" variant="outlined" disabled={off || delivery.frozen} onClick={() => decide(proposal.alt.verb)}
           title={`${proposal.alt.label} - ${proposal.alt.then}`}>{proposal.alt.label}</Button>}
-        {(co || proposal?.kind === "closeout") && onRemind && <Button size="small" disabled={busy || delivery.frozen} onClick={(e) => onRemind(e)} title={remindTitle}>{btn("defer")}</Button>}
+        {(co || proposal?.kind === "closeout") && onRemind && <Button size="small" disabled={off || delivery.frozen} onClick={(e) => onRemind(e)} title={remindTitle}>{btn("defer")}</Button>}
         {/* a close-out card is Close out / Decline / Remind me and nothing else (the owner, 2026-09-28: "what does reject
             reply mean here? don't think we need that") - the reply is edited or redrafted in place, never rejected apart;
             and a plain draft is Close out, Redraft (at the row's end) or the task bar's own Mark done (2026-10-01) */}
-        {proposal && proposal.kind !== "closeout" && <Button size="small" color="error" disabled={busy || delivery.frozen} onClick={() => decide("reject")} title={rejectTitle}>{proposal.rejectLabel}</Button>}
+        {proposal && proposal.kind !== "closeout" && <Button size="small" color="error" disabled={off || delivery.frozen} onClick={() => decide("reject")} title={rejectTitle}>{proposal.rejectLabel}</Button>}
         {/* WHY IT IS LIT, BESIDE IT (the owner, 2026-10-28): the Advisor's reason for lighting Redraft over Send stood in the folded Agent
             section, and Close out showed a lit Redraft with no word of why. `why`: the task's Advisor line, said where its button is lit */}
         {why && !warnTop && String(lit || "").startsWith(`${r.ReviewId}:`) && <Typography component="span" data-tq-lit-why="" variant="body2"
@@ -567,7 +571,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         return (
           <Alert severity={coFail || blocked ? "warning" : "info"} sx={{ mt: 1 }} onClose={coFail ? () => setCoFail(null) : undefined}
             action={offers?.length ? <Box sx={{ display: "flex", gap: 0.5 }}>{offers.map((o) => (
-              <Button key={o} size="small" color="inherit" disabled={busy || delivery.frozen} title={OFFER_HINT[o]} onClick={() => run(o)}>{OFFER_LABEL[o]}</Button>
+              <Button key={o} size="small" color="inherit" disabled={off || delivery.frozen} title={OFFER_HINT[o]} onClick={() => run(o)}>{OFFER_LABEL[o]}</Button>
             ))}</Box> : null}>
             {coFail || blocked ? <b>Not now - nothing is merged or sent. </b> : null}{text}
           </Alert>

@@ -232,6 +232,17 @@ def busy(store) -> list:
         logger.warning(f'closing: could not count running work - {e}'); return []
 
 
+def allow_downloads(webview) -> bool:
+    """Every Download in the window SAVES. pywebview (5+) ships ALLOW_DOWNLOADS off, and its WebView2 handler then cancels each
+    download as it starts - so Download on a file an agent made, a mail attachment or a published page was a click that did
+    nothing at all, with no error anywhere (the owner, 2026-10-28: "this did not work - both preview and download?"). On, the
+    window asks where to save it, as a browser does. An older pywebview has no switch and downloads already."""
+    s = getattr(webview, 'settings', None)
+    if not isinstance(s, dict): return False
+    s['ALLOW_DOWNLOADS'] = True
+    return True
+
+
 def closing_handler(window, store_of=_server_store, secs: float = GOODBYE_SECS, shell: dict = None):
     """pywebview's `closing` event. With a tray (`shell['tray']`) a close that is not a Quit HIDES the window and the tray says the
     goodbye; nothing stops. A Quit (`shell['quit']`), or any close with no tray: with work running, the first close ASKS (Keep working /
@@ -442,6 +453,7 @@ def main():
     # the app is ~8s cold before uvicorn exists at all, so the alternative is what the owner
     # actually saw: their own window telling them it could not connect, for 18 seconds.
     # ...and if one is already up, this window is a VIEW of it, not a second copy of the app.
+    allow_downloads(webview)
     running = already_serving() or held_elsewhere()
     held, booted = {}, threading.Event()
     # a view of another process's server: that server mints the key, asked with the owner token this install keeps

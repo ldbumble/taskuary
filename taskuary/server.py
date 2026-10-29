@@ -3174,6 +3174,18 @@ def _att_filename(name: str) -> str:
     n = Path((str(name or 'attachment').splitlines() or ['attachment'])[0]).name[:120]
     return n or 'attachment'
 
+def _disposition(kind: str, name: str) -> str:
+    """inline/attachment with the file's name, the way FileResponse writes it: a plain name as is, anything else (a space, an
+    en dash, a quote, '%') as RFC 5987 filename*. A hand-written filename="..." raised UnicodeEncodeError on a published page
+    titled with an en dash - a 500 on both Open and Download - and a '"' in a name cut the header short."""
+    from urllib.parse import quote
+    n = _att_filename(name); q = quote(n)
+    return f'{kind}; filename="{n}"' if q == n else f"{kind}; filename*=utf-8''{q}"
+
+GONE = 'was moved or deleted'      # the words every file route says a missing file with, so the page can say it the same way
+# ...and every file they serve is asked for afresh (Cache-Control: no-cache - its ETag makes the asking cheap): an agent overwrites its
+# one final file in place, and a cached copy previewed the version before; a file deleted since was still "there" to the browser
+
 @app.get('/api/messages/{mid}/thread')
 def message_thread(mid: int, limit: int = 40):
     """Everything said on this conversation, oldest last - INCLUDING the owner's own replies.
@@ -3233,7 +3245,9 @@ def task_document(tid: int, did: str, offset: int = 0, limit: int = 0, fresh: bo
     got = linkdocs.read(store, d, auto=False, full=True, fresh=fresh, offset=offset, limit=max(0, min(int(limit or 0), linkdocs.FULL_ROWS)))
     return {'id': d['id'], 'kind': d['label'], 'url': d['url'], 'name': linkdocs.name_of(d, got), **got}
 
-@app.get('/api/attachments/{aid}')
+# GET and HEAD: the page asks HEAD before it saves (Attachments.saveFile), so a file that is gone is a line on the page, never the
+# window navigated to a JSON 404 - the desktop window has no Back to come home with
+@app.api_route('/api/attachments/{aid}', methods=['GET', 'HEAD'])
 def attachment(aid: int, download: bool = False):
     """The bytes. Images are served inline so the panel can just draw them; everything else
     downloads under its own name. Path is confined to the attachments dir; SVG/HTML never
@@ -3241,6 +3255,8 @@ def attachment(aid: int, download: bool = False):
     a = store.get_attachment(aid)
     if not a: raise HTTPException(404, 'attachment not found')
     path = _attachment_path(a.get('Path'))
+    if not path and a.get('Path'):
+        raise HTTPException(404, f'{_att_filename(a.get("Name"))} {GONE} from Taskuary\'s attachments folder - open the original message for it')
     if not path:
         raise HTTPException(404, 'this one was never saved - open the original message for it')
     ct = (a.get('ContentType') or 'application/octet-stream').split(';')[0].strip() or 'application/octet-stream'
@@ -3249,26 +3265,35 @@ def attachment(aid: int, download: bool = False):
     inline = (not download) and ct.lower().startswith(('image/', 'audio/')) and ct.lower() not in _NOSCRIPT
     resp = FileResponse(path, media_type=ct, filename=_att_filename(a.get('Name')),
                         content_disposition_type='inline' if inline else 'attachment')
-    resp.headers['X-Content-Type-Options'] = 'nosniff'
+    resp.headers['X-Content-Type-Options'], resp.headers['Cache-Control'] = 'nosniff', 'no-cache'
     return resp
 
 
-@app.get('/api/task-artifacts/{aid}')
+@app.api_route('/api/task-artifacts/{aid}', methods=['GET', 'HEAD'])
 def task_artifact(aid: int, download: bool = False):
     """Open or download a session artifact without exposing arbitrary local files."""
     from . import session_artifacts
     artifact = store.get_task_artifact(aid)
     if not artifact: raise HTTPException(404, 'artifact not found')
     path = session_artifacts.confined(artifact.get('Path'))
-    if not path: raise HTTPException(404, 'this artifact is no longer on disk')
+    if not path: raise HTTPException(404, f'{_att_filename(artifact.get("Name"))} {GONE} - it is no longer in Taskuary\'s artifacts folder')
     # a picture the chat SHOWED (session_artifacts.shown) is drawn by <img> as itself; anything that could run - SVG, a page -
     # comes back as text like a Claude page below, for the sandboxed frame or the reader to draw (_NOSCRIPT)
     kind = str(artifact.get('ContentType') or '')
+    name = _att_filename(artifact.get('Name'))
     if artifact.get('Kind') == 'shown' and kind.startswith('image/') and kind not in _NOSCRIPT:
         response = Response(path.read_bytes(), media_type=kind)
-        response.headers['Content-Disposition'] = f'{"attachment" if download else "inline"}; filename="{_att_filename(artifact.get("Name"))}"'
-        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['Content-Disposition'] = _disposition('attachment' if download else 'inline', name)
+        response.headers['X-Content-Type-Options'], response.headers['Cache-Control'] = 'nosniff', 'no-cache'
         return response
+    # SAVED, a page the agent published or showed is the file itself - its own type and its own extension: a published page is
+    # titled ("Budget coverage"), and the download was a text file with no extension that opened in nothing. An attachment is
+    # never drawn on this origin, so its script cannot run as Taskuary.
+    if download and artifact.get('Kind') in ('claude_artifact', 'shown'):
+        if not Path(name).suffix and path.suffix: name = f'{name}{path.suffix}'
+        resp = FileResponse(path, media_type=kind or 'application/octet-stream', filename=name, content_disposition_type='attachment')
+        resp.headers['X-Content-Type-Options'], resp.headers['Cache-Control'] = 'nosniff', 'no-cache'
+        return resp
     text = path.read_text(encoding='utf-8', errors='replace')
     # a page a Claude session published: the task page draws it in a sandboxed frame from this TEXT -
     # served as plain text, so opening the url itself never runs the page as Taskuary (_NOSCRIPT)
@@ -3278,9 +3303,8 @@ def task_artifact(aid: int, download: bool = False):
         # file intact, but do not make the in-app reader render terminal repaints and tool chatter.
         text, media = text.split('\n## Full session transcript', 1)[0].rstrip() + '\n', 'text/markdown; charset=utf-8'
     response = Response(text, media_type=media)
-    disposition = 'attachment' if download else 'inline'
-    response.headers['Content-Disposition'] = f'{disposition}; filename="{_att_filename(artifact.get("Name"))}"'
-    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Content-Disposition'] = _disposition('attachment' if download else 'inline', name)
+    response.headers['X-Content-Type-Options'], response.headers['Cache-Control'] = 'nosniff', 'no-cache'
     return response
 
 @app.get('/api/task-outputs/{tid}')
@@ -3291,17 +3315,25 @@ def task_outputs(tid: int):
     return {'data': outputs.listing(tid), 'folder': f'scratch/outputs/{task_ref(tid)}'}
 
 
-@app.get('/api/task-outputs/{tid}/{rel:path}')
+@app.api_route('/api/task-outputs/{tid}/{rel:path}', methods=['GET', 'HEAD'])
 def task_output(tid: int, rel: str, download: bool = False, preview: bool = False, sheet: str = ''):
     """One file from THIS task's outputs folder - a name inside it, never a path out of it (outputs.resolve). `preview` gives a
-    workbook's sheet as rows (outputs.sheet); otherwise the bytes: a picture drawn as itself, text and anything that could run as
-    plain text, the rest as a download under its own name (_NOSCRIPT, as the attachment and artifact routes do)."""
+    workbook's sheet as rows (outputs.sheet) or a document's paragraphs and tables (outputs.document); otherwise the bytes: a
+    picture drawn as itself, text and anything that could run as plain text, the rest as a download under its own name (_NOSCRIPT,
+    as the attachment and artifact routes do)."""
     from . import outputs
     if not store.get_task(tid): raise HTTPException(404, 'task not found')
     path = outputs.resolve(tid, rel)
-    if not path: raise HTTPException(404, f'no file {rel!r} in the outputs of {task_ref(tid)}')
+    if not path: raise HTTPException(404, f'{Path(str(rel).replace(chr(92), "/")).name or "That file"} {GONE} - it is no longer in '
+                                          f'{task_ref(tid)}\'s folder ({outputs.folder(tid)})')
     if preview:
-        if outputs.PREVIEW.get(path.suffix.lower()) != 'sheet': raise HTTPException(422, 'only a workbook has a sheet preview - open the file itself')
+        how = outputs.PREVIEW.get(path.suffix.lower())
+        if how == 'document':
+            try: return outputs.document(path)
+            except Exception as e:
+                logger.info(f'task {tid} output {path.name} not previewed - {e}')
+                raise HTTPException(422, 'This document could not be read for a preview - Download it to open it.')
+        if how != 'sheet': raise HTTPException(422, 'only a workbook or a document has a preview here - open the file itself')
         if not outputs.can_sheet():
             raise HTTPException(501, 'No preview on this install (it needs openpyxl) - Download opens it in your spreadsheet app.')
         try: return outputs.sheet(path, sheet)
@@ -3316,7 +3348,7 @@ def task_output(tid: int, rel: str, download: bool = False, preview: bool = Fals
         # in place: a picture as itself, a PDF for the viewer, text (and SVG/HTML, which could run as Taskuary) as plain text
         media = ct if (low.startswith('image/') or low == 'application/pdf') and low not in _NOSCRIPT else 'text/plain; charset=utf-8'
         resp = FileResponse(path, media_type=media, filename=_att_filename(path.name), content_disposition_type='inline')
-    resp.headers['X-Content-Type-Options'] = 'nosniff'
+    resp.headers['X-Content-Type-Options'], resp.headers['Cache-Control'] = 'nosniff', 'no-cache'
     return resp
 
 @app.post('/api/messages/{mid}/attachments/fetch')
@@ -4692,7 +4724,7 @@ def mailboxes(task: int | None = None):
 
 class TaskEmailBody(BaseModel):
     to: str; about: str = ''; cc: list[str] = []; subject: str | None = None
-    attach: list[dict] = []          # [{kind: 'artifact' | 'attachment', id}] - files already on the task
+    attach: list[dict] = []          # [{kind: 'artifact' | 'attachment', id} | {kind: 'output', path}] - files already on the task
     channel: str = 'email'; mailbox: str | None = None; name: str = ''     # a chat: `to` is its id, `name` what to call it
 
 @app.post('/api/tasks/{task_id}/emails')
@@ -4701,7 +4733,15 @@ def task_email(task_id: int, body: TaskEmailBody):
     from . import outbox as ob, session_artifacts as sa
     files = []
     for f in body.attach or []:
-        kind, fid = str(f.get('kind') or ''), int(f.get('id') or 0)
+        kind = str(f.get('kind') or '')
+        # a file the agent made in the task's outputs folder (outputs.py) - the workbook itself, named inside THAT folder only;
+        # the list offered artifacts and mail attachments, so the one thing the owner wanted to send was not in it
+        if kind == 'output':
+            from . import outputs
+            path = outputs.resolve(task_id, str(f.get('path') or ''))
+            if not path: raise HTTPException(422, f"{f.get('path')} {GONE} - it is no longer in {task_ref(task_id)}'s folder")
+            files.append((path.name, path.read_bytes())); continue
+        fid = int(f.get('id') or 0)
         row = store.get_task_artifact(fid) if kind == 'artifact' else store.get_attachment(fid) if kind == 'attachment' else None
         # only a file of THIS task: the ids come from the page, and another task's file is not this one's to send
         mine = row and (row.get('TaskId') == task_id if kind == 'artifact'

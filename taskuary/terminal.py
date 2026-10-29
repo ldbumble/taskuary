@@ -140,6 +140,9 @@ def session_env(agent: str = '', task_id=None, cwd: str = '', sid: str = None, s
                                   # app context. Task-backed agents need the exact running URL so
                                   # they reuse it instead of starting another port.
                                   ('TASKUARY_URL', f'http://{host}:{srv.get("port") or 7787}' if task_id else '')) if v}
+    # where a file it makes for the owner goes - the one folder the task page serves (outputs.WHERE says so in the rules)
+    from . import outputs
+    if not stranger and (d := outputs.env_folder(task_id)): out[outputs.ENV] = d
     # ...and the token that says WHO IS ASKING. It is what --note, --learned and --done
     # authenticate with, and it is what the middleware reads to refuse this session the routes
     # that send (guard.DENIED). Less authority than the owner has, by construction rather than by
@@ -1747,6 +1750,8 @@ def with_fence_rule(rules: str) -> str:
     if 'one final file' not in rules:                   # one file per thing asked (2026-10-28): an owner's copy from before it hears it too
         from .outputs import ONE_FILE
         rules = f'{rules} Files you make: {ONE_FILE}'
+    from .outputs import ENV, WHERE
+    if ENV not in rules: rules = f'{rules} {WHERE}'     # ...and WHERE they go: the one folder the task page serves (outputs.py)
     return rules if 'Big results' in rules else f'{rules} {BIG_LINE}'
 
 

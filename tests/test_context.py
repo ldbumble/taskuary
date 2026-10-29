@@ -8,6 +8,7 @@ from pathlib import Path
 
 from taskuary import context, terminal, wrapup
 from taskuary.store import MemoryStore
+from tests import fake_embed
 
 ME, DANA = 'owner@ours.com', 'dana@vendor.com'
 def _ago(days=0): return (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
@@ -40,11 +41,17 @@ class PastWorkTests(unittest.TestCase):
         _closed(s, 'Printer on floor 3', 'sam@ours.com', 'Actions: nothing to do here')
         tid = s.create_task({'Title': 'Ledger export still duplicating', 'Kind': 'coding'}, 't')
         mid = _mail(s, DANA, 'Ledger export still duplicating', 'Same rows twice again.', days=0, tid=tid)
-        rows = context.past_work(s, s.list_messages(tid), 'Ledger export still duplicating')
+        # ...the same subject is the same MEANING (embeddings), never shared title words
+        with fake_embed.meaning({'ledger rows': ['ledger export']}):
+            rows = context.past_work(s, s.list_messages(tid), 'Ledger export still duplicating')
         self.assertEqual({r['tid']: r['why'] for r in rows}, {a: 'the same sender', b: 'the same subject'})
         self.assertIn('payroll date', next(r for r in rows if r['tid'] == a)['report'])
         text = context.render_past(rows)
         self.assertIn('TQ-%04d' % b, text); self.assertIn('dedupe on (id, period)', text)
+        # ...and with no embedder, structure alone: the sender
+        with fake_embed.no_embedder():
+            self.assertEqual({r['tid']: r['why'] for r in context.past_work(s, s.list_messages(tid), 'Ledger export still duplicating')},
+                             {a: 'the same sender'})
 
     def test_no_history_means_no_section_and_no_file(self):
         s = _store()

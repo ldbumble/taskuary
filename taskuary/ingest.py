@@ -627,9 +627,10 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
         seen = {w['tid'] for w in still}
         still += [w for w in taskcontext.owner_started_work(store, msg) if w['tid'] not in seen]
         # ...and on a CLOSED task's thread, the open work about the same job - the owner's own too - which new work may be (2026-10-27)
+        # ...its entry, with what the task is doing now, in place of the plainer one recent_open gave the same task
         if (ht := thread.get('thread_task')) and ht['status'] == 'closed':
-            seen = {w['tid'] for w in still}
-            still += [w for w in taskcontext.open_same_job(store, msg, ht) if w['tid'] not in seen]
+            job = {w['tid']: w for w in taskcontext.open_same_job(store, msg, ht)}
+            still = [job.pop(w['tid'], w) for w in still] + list(job.values())
         if still: thread = {**thread, 'open_work': still}
         # ...and the open GOALS with their steps, so a mail on another thread can say which step it serves (spec 2026-10-12)
         goals = taskcontext.open_goals(store)

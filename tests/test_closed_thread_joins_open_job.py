@@ -1,14 +1,18 @@
 """New work on a CLOSED task's thread may be an OPEN task's job (the owner, 2026-10-27: "this task should go on the deep dive rec
 task, it's the same thing. why did it not work?"). A vendor's reply on a finished "explain these figures" thread asked for a change
 to the sheet the owner's own reconciliation task was rebuilding; triage reopened the closed task, as the open one - made by hand, no
-thread, no sender - was never put in front of it. Now it is shown (context.open_same_job) and its `same_as` decides. The model is a stub."""
+thread, no sender - was never put in front of it. Now it is shown (context.open_same_job) and its `same_as` decides. The model is a stub,
+and so is the embedder that says which texts mean the same job (tests/fake_embed.py)."""
 import json, unittest
 from unittest import mock
 
 from taskuary import context, ingest
 from taskuary.store import MemoryStore
+from tests import fake_embed
 
 VENDOR, CONV = 'paula@vendor.example', 'AAQk-coins'
+# what the stand-in embedder reads as one job: the payer mapping the reconciliation rebuilds
+JOBS = {'payer mapping': ['payer mapping', 'payer category']}
 
 
 def brain(seen=None, **extra):
@@ -29,6 +33,7 @@ def mail(s, ext, body, llm, at='2026-10-27 09:00:00', conv=CONV):
 
 class ClosedThreadJoinsOpenJob(unittest.TestCase):
     def setUp(self):
+        cm = fake_embed.meaning(JOBS); cm.__enter__(); self.addCleanup(cm.__exit__, None, None, None)
         s = self.s = MemoryStore()
         for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled'): s.set_setting(k, '0', 't')
         s.set_setting('owner_email', 'alex@northwind.example', 't')
@@ -50,7 +55,7 @@ class ClosedThreadJoinsOpenJob(unittest.TestCase):
         work = json.loads(seen[-1][1])['open_work']
         b = next(w for w in work if w['tid'] == self.b)
         self.assertEqual(b['from'], 'you - your own task, nobody else asked for it')
-        self.assertIn('payer', b['why']); self.assertIn('self-pay', b['latest'])
+        self.assertIn('about the same thing', b['why']); self.assertIn('self-pay', b['latest'])
         self.assertIn('same_as', seen[-1][2]['schema']['properties'])
 
     def test_same_job_joins_the_open_task_and_the_closed_one_stays_closed(self):
@@ -83,8 +88,9 @@ class ClosedThreadJoinsOpenJob(unittest.TestCase):
         seen = []
         r = mail(self.s, 'b', self.ASK, brain(seen, same_as=self.b))
         self.assertEqual(r['task_id'], self.a, 'an open thread keeps its reply')
-        self.assertNotIn(self.b, {w['tid'] for w in json.loads(seen[-1][1]).get('open_work') or []},
-                         'the owner\'s work is offered only beside a closed thread')
+        # ...the owner's work is offered AS THE CLOSED THREAD'S OTHER JOB only beside a closed thread (it may still be shown as open work
+        # alike in meaning, recent_open - same_as is the model's either way)
+        self.assertFalse([w for w in json.loads(seen[-1][1]).get('open_work') or [] if "closed thread's reply" in w['why']])
 
     def test_unrelated_open_work_is_not_offered(self):
         other = self.s.create_task({'Title': 'Book the offsite room', 'Summary': 'Find a room for the Thursday offsite.', 'Kind': 'task',
@@ -92,6 +98,15 @@ class ClosedThreadJoinsOpenJob(unittest.TestCase):
         ht = ingest.thread_task(self.s, self.a)
         got = {w['tid'] for w in context.open_same_job(self.s, {'subject': 'Re: Co-insurance', 'body': self.ASK}, ht)}
         self.assertIn(self.b, got); self.assertNotIn(other, got); self.assertNotIn(self.a, got)
+
+    def test_with_no_embedder_the_owners_recent_work_is_still_offered(self):
+        # structure, not words: what the owner worked in the last days, and the sender's own open tasks
+        other = self.s.create_task({'Title': 'Book the offsite room', 'Kind': 'task', 'Status': 'open', 'Source': 'manual', 'OriginBase': 'owner'}, 'owner')
+        ht = ingest.thread_task(self.s, self.a)
+        with fake_embed.no_embedder(), mock.patch.object(self.s, 'tasks_owner_worked', return_value=[{'TaskId': self.b, 'Touched': '2026-10-27 08:00:00'}]):
+            got = context.open_same_job(self.s, {'subject': 'Re: Co-insurance', 'body': self.ASK}, ht)
+        self.assertEqual([w['tid'] for w in got], [self.b]); self.assertNotIn(other, [w['tid'] for w in got])
+        self.assertIn('you were working on it', got[0]['why'])
 
 
 if __name__ == '__main__': unittest.main()

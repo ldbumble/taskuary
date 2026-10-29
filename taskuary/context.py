@@ -16,6 +16,7 @@ import json, re
 from datetime import datetime, timedelta
 from loguru import logger
 
+from . import textsim
 from .store import task_ref
 from .wrapup import is_report, report_body
 
@@ -35,17 +36,29 @@ def _report(store, tid: int) -> str:
     return next((report_body(c.get('Body')) for c in reversed(store.list_comments(tid)) if is_report(c.get('Body'))), '')
 
 
+def task_text(t: dict) -> str:
+    """What a task is about, as its similarity is read (textsim): its title and its summary."""
+    return f"{t.get('Title') or ''}\n{t.get('Summary') or ''}".strip()
+
+
+def alike(store, query: str, rows: list, k: int = None) -> dict:
+    """{TaskId: similarity} of the tasks whose title and summary MEAN what `query` is about (textsim, embeddings), best k - {} with no
+    embedder, where only structure (the thread, the sender, the record) puts a task in front of the model."""
+    got = textsim.rank(store, query, [(f"task:{t['TaskId']}", task_text(t)) for t in rows], k)
+    return {int(key.split(':', 1)[1]): sim for key, sim in got or []}
+
+
 def past_work(store, msgs: list, title: str = '', repo: str = None, limit: int = PAST) -> list:
-    """Closed tasks that touch this one - same sender, two shared title words, or the same repo -
+    """Closed tasks that touch this one - same sender, a title and summary alike in meaning (embeddings), or the same repo -
     newest first, each with the report its session ended on. [] when the hub has no history."""
-    from .routing import tokens
     senders = {(m.get('FromEmail') or '').lower() for m in msgs if m.get('FromEmail')}
-    toks = set(tokens(title or '')) | {t for m in msgs for t in tokens(m.get('Subject') or '')}
     by_sender = {r['TaskId'] for r in store.done_tasks_from(senders)} if senders else set()
+    done = store.list_tasks(status='done')[:400]
+    near = alike(store, '\n'.join([title or ''] + [str(m.get('Subject') or '') for m in msgs]), done, limit)
     out = []
-    for t in store.list_tasks(status='done')[:400]:
+    for t in done:
         why = ('the same sender' if t['TaskId'] in by_sender
-               else 'the same subject' if len(toks & set(tokens(t.get('Title') or ''))) >= 2
+               else 'the same subject' if t['TaskId'] in near
                else 'the same repository' if repo and repo.lower() in str(t.get('Tags') or '').lower() else '')
         if not why: continue
         out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '', 'closed': str(t.get('ClosedAt') or t.get('UpdatedAt') or '')[:10],
@@ -60,18 +73,21 @@ RECENT = 3               # ...and how many of them the judge is shown
 RECENT_CHARS = 700
 
 
+TOPIC_CHARS = 1500       # how much of an arrival's body says what it is about - a forward's topic is in its chain, so the chain counts
+
+
 def _arrival_keys(msg: dict) -> tuple:
-    """(conversation, sender, words) an arrival is matched on. Taskuary's OWN reports and ideas are the exception
-    (2026-09-25): every run of one report shares a conversation id, so "the same thread" only says "the same
-    report" and crowded the one task that mattered out of the three shown; and their subject is the report's name
-    ("Process Error Check - Failure summary"), so the words that identify them are the body's."""
-    from .routing import tokens
+    """(conversation, sender, text, own) an arrival is matched on - the text is what its similarity to a task is read from
+    (textsim). Taskuary's OWN reports and ideas are the exception (2026-09-25): every run of one report shares a conversation id,
+    so "the same thread" only says "the same report" and crowded the one task that mattered out of the three shown; and their
+    subject is the report's name ("Process Error Check - Failure summary"), so what identifies them is the body."""
     from .store import OWN_CHANNELS
     own = msg.get('channel') in OWN_CHANNELS
     # ...the WHOLE run, not its first 600 characters: a check that leads with a timeout and lists a second failure under it was
     # matched on the timeout alone, and the task that had just fixed the second one was never shown (TQ-1088/1089, 2026-10-14)
-    words = f"{msg.get('subject') or ''} {msg.get('_title') or ''}" + (f" {str(msg.get('body') or '')[:4000]}" if own else '')
-    return str(msg.get('conversation_id') or ''), str(msg.get('from_email') or '').lower(), set(tokens(words)), own
+    body = str(msg.get('body') or '')[:4000 if own else TOPIC_CHARS]
+    return (str(msg.get('conversation_id') or ''), str(msg.get('from_email') or '').lower(),
+            f"{msg.get('subject') or ''}\n{msg.get('_title') or ''}\n{body}".strip(), own)
 
 
 # THE SAME RUN OR RECORD: a long number both texts carry - a run id, a ticket, an order. Two monitors reported one failed run
@@ -100,22 +116,27 @@ def _who(sender, senders) -> str:
     if not senders: return 'no sender (a report or an idea)'
     if sender and sender in senders: return 'this sender'
     return 'someone else: ' + ', '.join(sorted(senders)[:3]) + ' - not this sender'
+OWN_TASK = 'you - your own task, nobody else asked for it'      # ...and a task the owner started is theirs, never "no sender"
 
 
-def _match(conv, sender, toks, own, convs, senders, title_toks):
-    """(why, rank) this task touches the arrival, or None. For a report or an idea the shared conversation is only
-    "the same report": among those, the one its words name comes first, so last week's other failures of one report
-    cannot crowd out the one this run is about.
+def _match(conv, sender, sim, own, convs, senders):
+    """(why, rank) this task touches the arrival, or None. `sim` is how alike in MEANING the arrival and the task's title and
+    summary are (textsim; None when they are not among the nearest, or there is no embedder). For a report or an idea the shared
+    conversation is only "the same report": among those, the one it is most alike comes first, so last week's other failures of
+    one report cannot crowd out the one this run is about.
 
-    ...and the same report outranks ANOTHER source's task that merely shares two words with it. Below them, a
-    report's own earlier tasks lost all three seats to a bills mail and a phishing notice that shared "export" or
-    "check" with the run's text, while the run said "Pay ... timed out" and its tasks said "Payworth timeout":
-    triage never saw that the failure had been looked at, and one recurring timeout opened eight tasks in three
-    days (2026-10-09)."""
-    shared = toks & title_toks
+    ...and the same report outranks ANOTHER source's task that is merely alike. Below them, a report's own earlier tasks lost all
+    three seats to a bills mail and a phishing notice that shared "export" or "check" with the run's text, while the run said
+    "Pay ... timed out" and its tasks said "Payworth timeout": triage never saw that the failure had been looked at, and one
+    recurring timeout opened eight tasks in three days (2026-10-09).
+
+    ALIKE IN MEANING, NEVER IN WORDS (the owner, 2026-10-28): two shared title words was the rule, after a stopword list - a
+    greeting and a weekday tied anything, "Pay ... timed out" and "Payworth timeout" tied nothing. And another person, another
+    thread, another channel about the same job (the owner, 2026-10-26: "if there is teams message then email about same task will
+    it join it? We should join them as it's about same thing") is that same similarity: the model says if it is the same job."""
     if conv and conv in convs and not own: return 'the same thread', 3.0
-    if conv and conv in convs: return 'the same report', 2.0 + len(shared) / max(1, len(title_toks))
-    if len(shared) >= 2: return 'the same subject', 1.0 + len(shared) / max(1, len(title_toks))
+    if conv and conv in convs: return 'the same report', 2.0 + (sim or 0.0)
+    if sim is not None: return f'about the same thing (similarity {sim:.2f})', 1.0 + sim
     if sender and sender in senders: return 'the same sender', 0.5
     return None
 
@@ -129,21 +150,7 @@ def _threads(convs: set) -> dict:
 
 
 OPEN_SEATS = 4           # open tasks triage is shown: one more than RECENT, so a same-topic task on another thread still finds a seat
-TOPIC_CHARS = 1500       # how much of an arrival's body says what it is about - a forward's topic is in its chain, so the chain counts
-
-
-def _topic(words: set, title_toks: set, sum_toks: set):
-    """(why, rank) when the arrival's WORDS are about this task's job though nothing else ties them - another person, another
-    thread, another channel (the owner, 2026-10-26: "if someone sends a email to us, then another person sends us about same
-    topic will they get joined on one task ... also if there is teams message then email about same task will it join it? We
-    should join them as it's about same thing"). Only the subject was ever read against the title, so a second colleague's
-    differently-worded mail, or a Teams line whose subject is its first line, was never put in front of triage and opened a task
-    of its own. Three words shared with the task's title and summary, one of them the title's: a greeting and a weekday are not a
-    topic. Ranked under the same subject, by how much of the task's own words it carries; the model says if it is the same job."""
-    shared = words & (title_toks | sum_toks)
-    if len(shared) < 3 or not shared & title_toks: return None
-    return (f"the same topic ({', '.join(sorted(shared, key=lambda w: (w not in title_toks, w))[:5])})",
-            0.5 + 0.5 * len(shared) / len(title_toks | sum_toks))
+NEAREST = 8              # tasks alike in meaning an arrival is weighed against, before the seats are filled by rank
 
 
 # A PERSON WRITES FROM ANOTHER CHANNEL UNDER A NAME, NOT AN ADDRESS (the owner, 2026-10-26: "the triage should decide if it's about the
@@ -212,37 +219,31 @@ def same_name(store, msg: dict, names: list, people: list):
 
 
 def recent_open(store, msg: dict, limit: int = OPEN_SEATS) -> list:
-    """The OPEN work this arrival touches - the same thread, the same sender, two words of the same subject, or the same topic
-    in its body - so triage can say "this is TQ-x again" (same_as) instead of opening a second task for one job
-    (the owner, 2026-09-25). Ranked like recent_closures; the model decides whether it is the same."""
-    from .routing import tokens
-    conv, sender, toks, own = _arrival_keys(msg)
+    """The OPEN work this arrival touches - the same thread, the same run or record, the same sender, or a title and summary alike
+    in meaning (textsim) - so triage can say "this is TQ-x again" (same_as) instead of opening a second task for one job (the owner,
+    2026-09-25). Ranked like recent_closures; the model decides whether it is the same. With no embedder only structure ties them:
+    the thread, the record, the sender, a name on another channel - newest first."""
+    conv, sender, text, own = _arrival_keys(msg)
     ids = ids_of(f"{msg.get('subject') or ''} {msg.get('body') or ''}")
-    # ...a report's words are its body already (_arrival_keys), and its own earlier tasks keep their seats (2026-10-09)
-    words = set() if own else toks | set(tokens(str(msg.get('body') or '')[:TOPIC_CHARS]))
     out, rows = [], store.tasks_open_linked()
+    near = alike(store, text, rows, NEAREST)
     names = [] if own else arrival_names(store, msg)
     people = store.task_people([t['TaskId'] for t in rows]) if names else {}
     for t in rows:
         convs = {c for c in str(t.get('Convs') or '').split(',') if c}
         senders = {s for s in str(t.get('Senders') or '').split(',') if s}
-        title_toks = set(tokens(t.get('Title') or ''))
-        same = _shared_ids(store, t, ids)
-        hit = (f"the same run or record ({', '.join(sorted(same)[:3])})", 4.0) if same else _match(conv, sender, toks, own, convs, senders, title_toks)
-        # ...and the same job in other words when nothing stronger ties them: the same sender alone outranks no topic
-        topic = _topic(words, title_toks, set(tokens(t.get('Summary') or ''))) if words and (not hit or hit[1] < 1.0) else None
-        # ...and a name like the sender's on another channel: under the same sender, over nothing - and a name WITH the topic over
-        # the topic alone, as the same person on the same job is the likelier of the two
-        named = same_name(store, msg, names, people.get(t['TaskId'])) if names and (not hit or hit[1] < 0.5) else None
-        if topic and named: topic = (f'{topic[0]}; {named[0]}', topic[1] + 0.4)
-        elif named: named = (named[0], 0.3 + 0.1 * named[1])
-        if topic and (not hit or topic[1] > hit[1]): hit = topic
-        elif named and not topic and not hit: hit = named
+        same, sim = _shared_ids(store, t, ids), near.get(t['TaskId'])
+        hit = (f"the same run or record ({', '.join(sorted(same)[:3])})", 4.0) if same else _match(conv, sender, sim, own, convs, senders)
+        meant = sim is not None and not same and not (conv and conv in convs)      # tied by meaning alone
+        # ...and a name like the sender's on another channel: under the same sender, over nothing - and a name on a task alike in
+        # meaning over that task alone, as the same person on the same job is the likelier of the two
+        named = same_name(store, msg, names, people.get(t['TaskId'])) if names and (meant or not hit) else None
+        if named: hit = (f'{hit[0]}; {named[0]}', hit[1] + 0.4) if meant else (named[0], 0.3 + 0.1 * named[1])
         if not hit: continue
-        why, rank = hit
-        out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '', 'from': _who(sender, senders),
-                    'why': why, **({'about': _short(t.get('Summary'), 200)} if hit in (topic, named) and t.get('Summary') else {}),
-                    **_threads(convs), '_rank': rank})
+        out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '',
+                    'from': OWN_TASK if t.get('OriginBase') == 'owner' else _who(sender, senders),
+                    'why': hit[0], **({'about': _short(t.get('Summary'), 200)} if (meant or named) and t.get('Summary') else {}),
+                    **_threads(convs), '_rank': hit[1]})
     out.sort(key=lambda r: -r['_rank'])
     return [{k: v for k, v in r.items() if k != '_rank'} for r in out[:limit]]
 
@@ -293,26 +294,30 @@ def _latest(store, tid: int) -> str:
 
 
 def open_same_job(store, msg: dict, home: dict, limit: int = OPEN_SEATS) -> list:
-    """The OPEN tasks a reply on a CLOSED task's thread may be the job of: those whose title and ask share words with the reply
-    or the closed task's own ask, and the owner's own work of the last days. Each with its ask and what it is doing now, ranked by
-    the words it shares; the model says whether this is that job (same_as) or the thread's task again."""
-    from .routing import tokens
-    from .timewords import ago_m, mins, span
-    words = set(tokens(f"{msg.get('subject') or ''} {msg.get('_title') or ''} {str(msg.get('body') or '')[:TOPIC_CHARS]} "
-                       f"{home.get('title') or ''} {home.get('ask') or ''}"))
+    """The OPEN tasks a reply on a CLOSED task's thread may be the job of: those whose title and summary are alike in meaning
+    (textsim) to the reply and the closed task's own ask, the owner's own work of the last days, and open work from the same sender.
+    Each with its ask and what it is doing now, ranked by how alike it is; the model says whether this is that job (same_as) or the
+    thread's task again. With no embedder, the owner's recent work and the sender's open tasks are what is shown."""
+    from .timewords import ago_m, mins
+    text = (f"{msg.get('subject') or ''}\n{msg.get('_title') or ''}\n{str(msg.get('body') or '')[:TOPIC_CHARS]}\n"
+            f"{home.get('title') or ''}\n{home.get('ask') or ''}").strip()
     since = (datetime.now() - timedelta(days=WORKED_DAYS)).strftime('%Y-%m-%d %H:%M:%S')
     worked = {t['TaskId']: t['Touched'] for t in store.tasks_owner_worked(since, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 20)}
-    out = []
-    for t in store.tasks_open_linked():
-        if t['TaskId'] == home.get('tid'): continue
-        own, shared = _own(t), words & set(tokens(f"{t.get('Title') or ''} {t.get('Summary') or ''}"))
-        if not (len(shared) >= 2 or (own and shared) or t['TaskId'] in worked): continue
-        why = [f"shares {', '.join(sorted(shared)[:5])}"] if shared else []
-        if t['TaskId'] in worked: why.append(f"you were working on it {ago_m(mins(worked[t['TaskId']]) or 0, long=True)}")
-        out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '',
-                    'from': 'you - your own task, nobody else asked for it' if own else _who('', {s for s in str(t.get('Senders') or '').split(',') if s}),
+    sender = str(msg.get('from_email') or '').lower()
+    rows = [t for t in store.tasks_open_linked() if t['TaskId'] != home.get('tid')]
+    near, out = alike(store, text, rows, NEAREST), []
+    for t in rows:
+        own, sim, tid = _own(t), near.get(t['TaskId']), t['TaskId']
+        senders = {s for s in str(t.get('Senders') or '').split(',') if s}
+        theirs = bool(sender) and sender in senders
+        if sim is None and tid not in worked and not theirs: continue
+        why = [f'about the same thing (similarity {sim:.2f})'] if sim is not None else []
+        if tid in worked: why.append(f"you were working on it {ago_m(mins(worked[tid]) or 0, long=True)}")
+        if theirs: why.append('open work from the same sender')
+        out.append({'tid': tid, 'ref': task_ref(tid), 'title': t.get('Title') or '',
+                    'from': OWN_TASK if own else _who('', senders),
                     'why': f"open work on what this closed thread's reply asks - {'; '.join(why)}", 'about': _short(t.get('Summary'), 200),
-                    '_rank': len(shared) + 0.5 * own + (t['TaskId'] in worked)})
+                    '_rank': 2 * (sim or 0.0) + 0.5 * own + (tid in worked) + 0.25 * theirs})
     out.sort(key=lambda r: -r['_rank'])
     return [{k: v for k, v in {**r, 'latest': _latest(store, r['tid'])}.items() if k != '_rank' and v} for r in out[:limit]]
 
@@ -357,7 +362,7 @@ def sender_history(store, msg: dict, days: int = SENDER_DAYS, limit: int = SENDE
     three days on purpose (a repeating check speaks in hours), so a person whose every ask for a month went to the coding
     agent on one repository was judged cold the week after: a payroll lead's fourth T&E data fix went to the general
     assistant with the right repository named (TQ-0955, 2026-10-05). Evidence for the model to weigh, never a rule."""
-    conv, sender, _toks, own = _arrival_keys(msg)
+    conv, sender, _text, own = _arrival_keys(msg)
     if own or not sender: return []
     since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
     from .ingest import TRIAGE_REPO_TAG
@@ -372,7 +377,7 @@ def sender_history(store, msg: dict, days: int = SENDER_DAYS, limit: int = SENDE
 
 def recent_closures(store, msg: dict, days: int = RECENT_DAYS, limit: int = RECENT) -> list:
     """What was answered and closed RECENTLY that touches this arriving message - the same thread,
-    the same sender, or two words of the same subject - newest first, each with how it ended.
+    the same sender, the same run or record, or alike in meaning (textsim) - newest first, each with how it ended.
 
     This is past_work aimed one step earlier. The coding agent has had this block since it was written;
     triage never has, so a condition that repeats - a scheduled check reporting the same two Spendly
@@ -384,24 +389,21 @@ def recent_closures(store, msg: dict, days: int = RECENT_DAYS, limit: int = RECE
     A SHORT window, because a closure speaks to what arrives next and then stops speaking: a check
     that repeats does it in hours, and last month's closure is history - which belongs in the agent's
     file, where the whole of past_work already is, not in every triage prompt."""
-    from .routing import tokens
     since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
-    conv, sender, toks, own = _arrival_keys(msg)
+    conv, sender, text, own = _arrival_keys(msg)
     ids = ids_of(f"{msg.get('subject') or ''} {msg.get('body') or ''}")
-    # RANKED, then capped - not filtered by a cleverer rule. Weighting the shared words by how rare
-    # they are in the window was tried and measured nothing: across 60 closed titles every shared word
-    # appeared once or twice, so "spendly" and "failures" scored alike. What actually separates them is
-    # meaning, which is the model's job - so the code ranks by how much of a closed task's title the
-    # arrival shares, hands over the best few, and the prompt says to weigh them (triage.FIELDS).
+    # RANKED, then capped - not filtered by a cleverer rule. Weighting shared words by how rare they are was tried and measured
+    # nothing; what separates them is meaning - so the code ranks by how alike in meaning a closed task is (embeddings), hands over
+    # the best few, and the prompt says to weigh them (triage.FIELDS)
     out, rows = [], store.tasks_closed_since(since)
+    near = alike(store, text, rows, NEAREST)
     names = [] if own else arrival_names(store, msg)
     people = store.task_people([t['TaskId'] for t in rows]) if names else {}
     for t in rows:
         convs = {c for c in str(t.get('Convs') or '').split(',') if c}
         senders = {s for s in str(t.get('Senders') or '').split(',') if s}
-        title_toks = set(tokens(t.get('Title') or ''))
         same = _shared_ids(store, t, ids)
-        hit = (f"the same run or record ({', '.join(sorted(same)[:3])})", 4.0) if same else _match(conv, sender, toks, own, convs, senders, title_toks)
+        hit = (f"the same run or record ({', '.join(sorted(same)[:3])})", 4.0) if same else _match(conv, sender, near.get(t['TaskId']), own, convs, senders)
         # ...and the same person writing from another channel under a name (recent_open, 2026-10-26), under the same sender
         if not hit and names and (named := same_name(store, msg, names, people.get(t['TaskId']))): hit = (named[0], 0.3 + 0.1 * named[1])
         if not hit: continue

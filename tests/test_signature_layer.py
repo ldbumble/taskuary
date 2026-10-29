@@ -135,6 +135,29 @@ def test_an_agents_draft_is_filed_with_the_block_once_not_under_its_own_sign_off
     assert s.get_review(got['review_id'])['DraftText'] == f'Hi Ray,\n\nThe export ran.\n\n{SIG}'
 
 
+MD = 'Hi Erin,\n\n## Flights\n\n- **Tue 9:05** out, `NW 12`\n- see [the fares](https://fares.example/x)\n\n| Day | Fare |\n|---|---|\n| Tue | 210 |'
+PLAIN = 'Hi Erin,\n\nFlights\n\n- Tue 9:05 out, NW 12\n- see the fares\n\nDay · Fare\nTue · 210'
+
+
+def test_a_drafted_email_is_plain_text_not_markdown(s):
+    """A redraft came back with **bold** and ## headings, and that is what the mail client would print (walk 2026-10-29). The
+    Markdown is parsed off as syntax when the draft is filed, and again as it leaves - the owner's own edit too."""
+    from taskuary import wrapup
+    assert responder.signed(MD, SIG) == f'{PLAIN}\n\n{SIG}' and responder.signed(MD, '') == PLAIN
+    assert 'PLAIN TEXT' in responder.email_rule(s)
+    tid, mid, _ = thread(s, draft='')
+    out = wrapup.agent_reply(s, tid, MD, 'coding')
+    assert s.get_review(out['review_id'])['DraftText'] == f'{PLAIN}\n\n{SIG}'
+    _, body = send(s, out['review_id'], f'**Hi** Erin,\n\n# Done\n\nsnake_case_name stays.\n\n{SIG}')
+    assert body == f'Hi Erin,\n\nDone\n\nsnake_case_name stays.\n\n{SIG}'
+
+
+def test_a_chat_reply_keeps_its_text_as_typed(s):
+    _, _, rid = thread(s, channel='teams', box='Erin Blake', draft='on it')
+    _, body = send(s, rid, 'on it - **noon**')
+    assert body == 'on it - **noon**'
+
+
 def test_an_agents_chat_reply_loses_its_name_and_gets_no_block(s):
     from taskuary import wrapup
     s.set_setting('owner_name', 'Alex Doyle', 'owner')

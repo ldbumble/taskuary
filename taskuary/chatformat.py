@@ -167,6 +167,12 @@ def render(text, channel: str) -> str:
     return re.sub(r'\n{3,}', '\n\n', out).strip()
 
 
+def plain_text(text) -> str:
+    """Markdown as a plain-text EMAIL reads it: the marks parsed off (bold, headings, code spans, links, tables), the words kept.
+    A redrafted reply went out with **bold** and ## headings (walk 2026-10-29) - syntax, read here as syntax, never as meaning."""
+    return render(text, 'email')
+
+
 def split(text: str, limit: int = HARD) -> list:
     """One section that will not fit, broken where a reader would break it: a blank line, then a
     line end, and only as a last resort a space. The old splitter took max() of those three

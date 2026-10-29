@@ -77,7 +77,9 @@ CHAT = ('This is a CHAT or a COMMENT THREAD (Teams, Slack, a GitHub issue...), n
         'the channel already says who you are. One short paragraph, written the way a person types '
         'in a chat window.')
 EMAIL = ('This is EMAIL. Use the greeting STYLE.md specifies. Do NOT write a sign-off, your name or a signature - the '
-         "owner's signature is added under your text. Nothing else ceremonial.")
+         "owner's signature is added under your text. Nothing else ceremonial. Write PLAIN TEXT, as a person types an email: "
+         'no Markdown at all - no **bold**, no # headings, no tables - even when what you were given is written that way; a list '
+         'is plain lines, each starting with "- ".')
 # ...the signature is never the writer's to write: Taskuary puts the owner's block on every email itself (the owner, 2026-10-16:
 # "it should not be based on prompt but hardcoded to emails"; 2026-10-28: "It should use the default signature always") - asked
 # to sign "as STYLE.md says" with nothing saved, a STYLE.md without a sign-off line sent replies out with no signature at all
@@ -236,12 +238,15 @@ def signature_for(store, mailbox: str = None) -> str:
 
 
 def signed(text: str, sig: str) -> str:
-    """An email as it goes out: the writer's own sign-off taken off and the saved signature put on, once. Nothing saved: as written."""
-    if not str(sig or '').strip(): return str(text or '').rstrip()
+    """An email as it goes out: plain text (chatformat.plain_text - a writer's Markdown is syntax a mail client prints as stars), the
+    writer's own sign-off taken off and the saved signature put on, once. Nothing saved: no signature."""
+    from .chatformat import plain_text
+    if not str(sig or '').strip(): return plain_text(text) or str(text or '').rstrip()
     body = str(text or '').rstrip()
     if body.endswith(sig.strip()): body = body[:-len(sig.strip())].rstrip()
     lines = [l for l in sig.splitlines() if l.strip()]
-    return with_signature(strip_signoff(body, lines + [l.split()[0] for l in lines]) or body, sig)
+    body = strip_signoff(body, lines + [l.split()[0] for l in lines]) or body
+    return with_signature(plain_text(body) or body, sig)
 
 
 # THE SIGNATURE, READ OFF THE OWNER'S OWN SENT MAIL: the closing lines most of it shares, quoted history cut first. No model -

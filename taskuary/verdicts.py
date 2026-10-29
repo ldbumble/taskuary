@@ -499,7 +499,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
         final = final_text if (final_text or '').strip() or (cal and final_text is not None) else rv.get('DraftText')
         bare = lambda t: signatures.unsigned(t, sig).strip()
         verb = 'edit' if bare(final) != bare(rv.get('DraftText')) else 'approve'
-        if sig: final = signatures.sign(store, rv, final)
+        if sig or final is not None: final = signatures.sign(store, rv, final)     # ...and an email goes as plain text (chatformat.plain_text)
     else:
         final, verb = None, verb_in
     # a PROPOSAL is not a draft reply: approving it RUNS the action the agent asked for

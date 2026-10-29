@@ -64,10 +64,14 @@ def unsigned(text: str, sig: str) -> str:
 
 
 def sign(store, rv: dict, text: str, msg: dict = None) -> str:
-    """The text as it goes out: the signature once at the end - never a second copy, never one on chat."""
+    """The text as it goes out: an email as plain text (chatformat.plain_text: the owner's or a writer's Markdown left in the box
+    went out as stars and hashes) with the signature once at the end - never a second copy; chat untouched."""
     from .responder import with_signature
+    from .chatformat import plain_text
+    if not str(text or '').strip() or not is_email(store, rv, msg): return str(text or '')
     sig = for_review(store, rv, msg)
-    return with_signature(text, sig) if sig and str(text or '').strip() else str(text or '')
+    body = plain_text(unsigned(text, sig)) or str(text)
+    return with_signature(body, sig) if sig else body
 
 
 def agent_signed(store, rv: dict, text: str, msg: dict = None) -> str:

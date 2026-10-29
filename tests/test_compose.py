@@ -111,6 +111,27 @@ class ComposeTests(unittest.TestCase):
                         answers={'Where does the census file live?': 'C:/x.csv'})
         self.assertIn('answers_to_your_questions', llm.seen[0]['user'])
 
+    def test_each_question_carries_the_kind_of_answer_it_takes(self):
+        """The builder draws a repository question as the repository list - told by the model's kind, never by its words."""
+        llm = llm_saying(json.dumps({'questions': [
+            {'q': 'Which repository holds the review skill?', 'kind': 'repo'},
+            {'q': 'Which sites?', 'kind': 'choice', 'options': ['North', 'South']},
+            {'q': 'How often?', 'kind': 'schedule', 'options': ['ignored']}]}))
+        out = compose.compose(self.s, 'run the review skill', llm)
+        self.assertEqual([(a['kind'], a['options']) for a in out['asks']],
+                         [('repo', []), ('choice', ['North', 'South']), ('schedule', [])])
+        self.assertEqual(out['questions'][0], 'Which repository holds the review skill?')   # the chat and old pages read strings
+        self.assertIn('"repo" when the answer is one of the owner', llm.seen[0]['system'])
+
+    def test_a_kind_it_cannot_draw_is_asked_as_text(self):
+        out = compose.compose(self.s, 'x', llm_saying(json.dumps({'questions': [
+            {'q': 'Which?', 'kind': 'colour'}, {'q': 'Pick one', 'kind': 'choice', 'options': ['only']}, 'Anything else?']})))
+        self.assertEqual([a['kind'] for a in out['asks']], ['text', 'text', 'text'])   # a bare string is the old shape
+
+    def test_every_builder_is_told_the_question_shape(self):
+        from taskuary.compose import ASK_SHAPE, SOURCE_SYSTEM, SYSTEM, WORKFLOW_SYSTEM, dashboard_system
+        for sys_ in (SYSTEM, WORKFLOW_SYSTEM, SOURCE_SYSTEM, dashboard_system()): self.assertIn(ASK_SHAPE, sys_)
+
     def test_at_most_three_questions(self):
         llm = llm_saying(json.dumps({'questions': ['a', 'b', 'c', 'd', 'e']}))
         self.assertEqual(len(compose.compose(self.s, 'x', llm)['questions']), 3)

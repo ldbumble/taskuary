@@ -120,6 +120,13 @@ WATCH_RULE = ('- "watch": ONLY when the owner wants to hear from it IF something
               'task already covers. A report the owner simply wants ("send me X every morning") has NO "watch": it shows every '
               'run and triage never sees it. Never write "route" - the server writes it from "watch".\n')
 
+# AN ANSWER HAS A SHAPE (the owner, 2026-10-29: "which repository holds the skill?" was asked as a free-text box beside a list the
+# app already has). The model says what kind of answer each question takes, and the builder draws that control; no words are read.
+ASK_KINDS = ('text', 'repo', 'schedule', 'choice')
+ASK_SHAPE = ('- Each entry of "questions" is {"q": "<the question>", "kind": "text|repo|schedule|choice", "options": ["..."]}: "repo" when the '
+             'answer is one of the owner\'s code repositories, "schedule" when it is when or how often it runs, "choice" when it is one '
+             'of a few answers you can name (2-6 "options"), else "text". "options" only with "choice".\n')
+
 REPOS_RULE = ('- "repositories" are the owner\'s own code repositories: full name and what each is for. When the request names one '
               'by its short name ("taskuary", "ledger"), it means that one - write its full owner/name, never ask which.\n')
 
@@ -153,7 +160,7 @@ SYSTEM = (
     JUDGEMENT +
     '- A config is not finished until it carries what its type needs to RUN: an Intacct report has an object, a SQL '
     'report has a query, a REST report has a url. A title alone is the owner\'s form handed back to them - peek or ask instead.\n'
-    + WATCH_RULE + REPOS_RULE)
+    + WATCH_RULE + REPOS_RULE + ASK_SHAPE)
 
 
 # A WORKFLOW IS STEPS, and code runs every one it can (flow.py; the owner, 2026-10-18: "maybe we should do the same for
@@ -227,7 +234,7 @@ WORKFLOW_SYSTEM = (
     '"on_mail": when the job starts as a certain mail ARRIVES, that mail described in plain words (triage starts the run when one '
     'like it comes in, and its steps read it as {{mail.from}}, {{mail.subject}}, {{mail.body}}).\n'
     '- Do not add report-only keys such as sources, ai_prompt, charts, triage, route, watch, delivery, or alerts: a run is a task, '
-    'so there is no condition to wait for and nothing for triage to judge.\n\n' + FLOW_RULES)
+    'so there is no condition to wait for and nothing for triage to judge.\n' + ASK_SHAPE + '\n' + FLOW_RULES)
 
 WORKFLOW_KEYS = {
     'zoho_monthly_invoices': {'type', 'title', 'connector_id', 'customers', 'customer_ids',
@@ -398,7 +405,7 @@ SOURCE RULES
 - "ai_prompt" is one instruction over ALL these sources together - what the check should SURFACE. Concrete ("Flag any vendor over 10k or new this month; give the number and the site"), never "summarize the data". Write it when the ask says what matters; leave it out when the owner asked only for the data.
 - Never choose "assistant" as a source. That is the check itself; reading its own output is a loop.
 - the_card_you_are_filling_in names the type already chosen on the card. Keep it unless the ask plainly needs another system, and then say so in explain.
-""" + REPOS_RULE + '\n' + JUDGEMENT
+""" + REPOS_RULE + ASK_SHAPE + '\n' + JUDGEMENT
 
 
 def _json(text):
@@ -424,6 +431,15 @@ def _peek(store, spec):
     except Exception as e:
         return f'(the lookup failed: {str(e)[:300]})'
 
+def ask_of(q) -> dict:
+    """One question as the builder draws it: {'q', 'kind', 'options'}. A bare string (the old shape) is a text answer; a kind the
+    builder has no control for is one too, and a choice with fewer than two options is asked as text."""
+    if not isinstance(q, dict): return {'q': str(q or '').strip()[:300], 'kind': 'text', 'options': []}
+    kind = q.get('kind') if q.get('kind') in ASK_KINDS else 'text'
+    opts = [str(o).strip()[:120] for o in (q.get('options') or []) if str(o).strip()][:8] if kind == 'choice' else []
+    return {'q': str(q.get('q') or q.get('question') or '').strip()[:300], 'kind': 'text' if kind == 'choice' and len(opts) < 2 else kind,
+            'options': opts if len(opts) >= 2 else []}
+
 def _rounds(store, llm, system, user, rounds, finish):
     """The loop both composers share: the model may go and READ a real schema before it writes
     anything, a question comes back as a question, and `finish` reads its final answer."""
@@ -432,7 +448,8 @@ def _rounds(store, llm, system, user, rounds, finish):
         out = _json(llm(system, json.dumps(user, default=str), max_tokens=2000))
         if not out: return {'error': AGAIN.format('a report')}
         if out.get('questions'):
-            return {'questions': [str(q)[:300] for q in out['questions']][:3], 'looked_at': looked}
+            asks = [a for a in map(ask_of, out['questions'] if isinstance(out['questions'], list) else [out['questions']]) if a['q']][:3]
+            if asks: return {'questions': [a['q'] for a in asks], 'asks': asks, 'looked_at': looked}
         if out.get('peek') and len(looked) <= rounds:
             spec = out['peek']
             looked.append(spec)
@@ -592,7 +609,7 @@ DASHBOARD_KEYS = ('type', 'title', 'every_minutes', 'daily_at', 'cron', 'on_star
 def dashboard_system() -> str:
     from .dashboards import DATASETS
     return (DASHBOARD_SYSTEM + '- Taskuary\'s own data is type "taskuary_data" with "dataset" one of: '
-            + '; '.join(f'{k} ({v[1]})' for k, v in DATASETS.items()) + '.\n' + JUDGEMENT)
+            + '; '.join(f'{k} ({v[1]})' for k, v in DATASETS.items()) + '.\n' + JUDGEMENT + ASK_SHAPE)
 
 
 def compose_dashboard(store, ask: str, llm, answers: dict = None, rounds: int = MAX_PEEKS) -> dict:

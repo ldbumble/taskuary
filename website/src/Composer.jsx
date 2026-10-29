@@ -11,6 +11,8 @@ import { openAppLink } from "./appLinks.js";
 import { NL } from "./sourceShape.js";
 import { DASH } from "./words.js";
 import { PANEL2, DIM, FAINT, INK, ACCENT2, card } from "./theme.jsx";
+import BuilderAsks from "./BuilderAsks.jsx";
+import { asksOf, blanks } from "./builderAsks.js";
 
 export default function Composer({ onDraft, kind = "report", initial = "" }) {
   const [ask, setAsk] = useState(initial);   // the words the Assistant wrote it up with (concierge._new)
@@ -33,7 +35,7 @@ export default function Composer({ onDraft, kind = "report", initial = "" }) {
   // alone said where to go and gave nothing to press (2026-10-17). A miss the owner fixes by asking again leaves Build it as the move.
   const fix = out?.error && out?.fix?.href ? out.fix : null;
   useVerbs(`composer:${kind}`, fix ? [{ id: `composer:${kind}:fix`, group: "decide", tone: "s", label: fix.label, run: () => openAppLink(fix.href) }] : [], !!fix);
-  const answered = out?.questions?.length && out.questions.every((q) => String(answers[q] || "").trim());
+  const asks = asksOf(out), answered = asks.length && !blanks(asks, answers);
   return (
     <Box sx={{ ...card, p: 1.5, mb: 2, bgcolor: PANEL2 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, mb: 0.9 }}>
@@ -73,15 +75,12 @@ export default function Composer({ onDraft, kind = "report", initial = "" }) {
         {out.explain}</Alert>}
 
       {/* it did not know something. Better here than as a silently wrong WHERE clause. */}
-      {out?.questions?.length > 0 && (
+      {asks.length > 0 && (
         <Box sx={{ mt: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
           <Typography sx={{ fontSize: 11.5, color: DIM, fontWeight: 600 }}>
             A couple of things it will not guess at:
           </Typography>
-          {out.questions.map((qq) => (
-            <TextField key={qq} size="small" fullWidth label={qq} sx={{ bgcolor: "#fff" }}
-              value={answers[qq] || ""} onChange={(e) => setAnswers({ ...answers, [qq]: e.target.value })} />
-          ))}
+          <BuilderAsks asks={asks} answers={answers} setAnswers={setAnswers} disabled={busy} />
           <Button size="small" variant="contained" disableElevation disabled={busy || !answered}
             onClick={() => go(answers)} sx={{ alignSelf: "flex-start" }}>Answer & build</Button>
         </Box>

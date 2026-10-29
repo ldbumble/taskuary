@@ -338,3 +338,37 @@ def test_a_dashboard_row_is_silent_with_next_lit_and_share_is_seen_but_never_lit
     assert rulebook.decide(s, rep, _verbs(*have))['verb'] == 'next'
     assert not any('share_result' in w['lit'] or 'share' in w['lit'] for w in words.ADVICE_RULE.values()), 'no state lights Share'
     assert 'share_result' not in [c['verb'] for c in concierge.chips_for(s, dash)], "the phone's chips have no Share menu"
+
+
+def test_a_draft_says_what_leaves_with_it_beside_send_never_instead(s):
+    """WHAT LEAVES WITH A DRAFT (the design rev 2, data leaving): an address its thread never had and the files it carries are one line beside
+    the lit Send - no dialog, nothing held. A plain reply to the thread's own people says nothing. Addresses and files, never words."""
+    t, m, it = _asked(s, 'Q3 accruals')
+    f, V = Factory(s), _verbs('approve', 'redraft')
+    rv = f.review(t, m, draft='Here are the Q3 accruals.')
+    set_env = lambda env: s._exec('UPDATE review SET Deliver=? WHERE ReviewId=?', (json.dumps(env), rv))
+    d = rulebook.decide(s, it, V)
+    assert (d['state'], d['verb'], d['line']) == ('draft_ready', 'approve', ''), 'a reply to whom wrote: nothing to say'
+    set_env({'kind': 'reply', 'to': ['erin@northwind.example'], 'cc': ['dana@vendor.example']})
+    d = rulebook.decide(s, it, V)
+    assert (d['verb'], d['line'], d['evidence']) == ('approve', 'Goes to dana@vendor.example - new to this thread.', [f'rv{rv}']), d
+    files = [{'name': 'q3.xlsx', 'path': 'x'}]
+    set_env({'kind': 'reply', 'to': ['erin@northwind.example'], 'attachments': files})
+    assert rulebook.decide(s, it, V)['line'] == 'Sends the file q3.xlsx.'
+    set_env({'kind': 'reply', 'to': ['erin@northwind.example', 'dana@vendor.example'], 'attachments': files + [{'name': 'notes.pdf'}]})
+    assert rulebook.decide(s, it, V)['line'] == 'Goes to dana@vendor.example, new to this thread, with 2 files.'
+    # ...new mail on the task to someone it never had - and the owner's own address is never "new"
+    s.set_setting('owner_email', 'alex@northwind.example', 'test')
+    set_env({'channel': 'email', 'to': ['paula@northwind.example'], 'cc': ['alex@northwind.example']})
+    assert rulebook.decide(s, it, V)['line'] == 'Goes to paula@northwind.example - new to this thread.'
+
+
+def test_what_leaves_stands_over_the_models_agreeing_send(s):
+    t, m, it = _asked(s, 'Q3 accruals')
+    Factory(s).review(t, m, draft='Here are the Q3 accruals.', Deliver=json.dumps({'kind': 'reply', 'to': ['erin@northwind.example'], 'cc': ['dana@vendor.example']}))
+    s.reconcile_processing_membership(); s.activate_processing_reads(fixed_now=datetime.now().isoformat(), live_state=[]); funnel.invalidate()
+    from tests.test_advisor import brain_saying
+    advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=brain_saying({'verb': 'approve', 'line': '', 'evidence': []}))
+    with mock.patch.object(advisor, 'notice'):
+        d = advisor.decide(s, f'task:{t}', preread=False)
+    assert (d['state'], d['verb'], d['line']) == ('draft_ready', 'approve', 'Goes to dana@vendor.example - new to this thread.'), d

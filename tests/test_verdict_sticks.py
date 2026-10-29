@@ -23,6 +23,8 @@ from taskuary import ingest, server
 from taskuary.store import MemoryStore
 from tests.memlines import note as put_note
 from tests.memlines import teaching
+from tests import fake_embed
+from taskuary.routing import subject_topic
 
 c = TestClient(server.app)
 
@@ -43,16 +45,16 @@ VERDICT = ('subject', TOPIC, 'Resident refunds are not our task.', 'verdict')
 
 
 class TopicScopeTests(unittest.TestCase):
-    def test_the_changing_part_of_a_subject_is_ignored(self):
-        """Every mail in the thread names a different resident. Keying on the exact subject
-        would have matched exactly one of them."""
-        hit = lambda subj: ingest.topic_hit(TOPIC, subj)
-        self.assertTrue(hit('RE: Resident Refund Request - PAYNE, MICHAEL'))
-        self.assertTrue(hit('Resident Refund Request - Blickenstaff, D'))
-        self.assertTrue(hit('Re: resident refund request'))
-        self.assertFalse(hit('Vendor Create'))
-        self.assertFalse(hit('Directors meeting'))
-        self.assertFalse(hit(''))
+    def test_which_topic_a_mail_is_about_is_its_meaning(self):
+        """Every mail in the thread names a different resident, and no share of shared words says which topic
+        verdict it is about (the owner, 2026-10-28): every topic note is in scope, ranked by meaning (a stand-in
+        embedder here), and the model says which it applied."""
+        s = _store(VERDICT, ('subject', 'vendor create', 'New vendor set-up is for the AP team.', 'verdict'))
+        first = lambda subj: ingest.notes_for(s, {'from_email': 'x@elsewhere.example', 'subject': subj, 'body': 'see attached'})[0]
+        with fake_embed.meaning({'refunds': ['refund'], 'vendors': ['vendor']}):
+            for subj in ('RE: Resident Refund Request - Doe, Jane', 'Resident Refund Request - Roe, Sam', 'a refund for a resident'):
+                self.assertEqual(first(subj), 'Resident refunds are not our task.', subj)
+            self.assertEqual(first('Vendor Create'), 'New vendor set-up is for the AP team.')
 
     def test_a_topic_verdict_applies_to_a_sender_who_was_never_named(self):
         """THE bug: the thread has seventeen people on it, and a sender-scoped note covers one.
@@ -62,9 +64,10 @@ class TopicScopeTests(unittest.TestCase):
                                      'subject': 'RE: Resident Refund Request - PAYNE, MICHAEL',
                                      'body': 'Attached is a new transaction history.'})
         self.assertEqual(notes, ['Resident refunds are not our task.'])
-        # and it stays out of mail that is genuinely about something else
+        # ...and mail about something else is shown it too: whether it bears on it is the model's word (notes_applied), never
+        # a share of the subject's words
         self.assertEqual(ingest.notes_for(s, {'from_email': 'someone-new@elsewhere.com',
-                                              'subject': 'Directors meeting', 'body': 'agenda attached'}), [])
+                                              'subject': 'Directors meeting', 'body': 'agenda attached'}), ['Resident refunds are not our task.'])
 
     def test_a_topic_verdict_reaches_the_classifier_as_evidence_not_as_an_order(self):
         """The verdict is shown with the sender and subject it was given on, under an EVIDENCE
@@ -210,11 +213,12 @@ class TheTopicIsTheStandingPartTests(unittest.TestCase):
 
     def test_the_generalised_key_matches_every_resident_outright(self):
         key = 'resident refund request'
-        for subj in ('Re: Resident Refund Request - PAYNE, MICHAEL',
-                     'RE: Resident Refund Request - Watson, Lisa',
-                     'Resident refund request - Roe, Sam'):
-            self.assertTrue(ingest.topic_hit(key, subj))
-        self.assertFalse(ingest.topic_hit(key, 'Vendor Create'))
+        # ...the standing part of the subject IS the key (what _also_covered falls back on with no embedder)
+        for subj in ('Re: Resident Refund Request - Doe, Jane',
+                     'RE: Resident Refund Request - Roe, Sam',
+                     'Resident refund request - Poe, Lee'):
+            self.assertEqual(subject_topic(subj), key)
+        self.assertNotEqual(subject_topic('Vendor Create'), key)
 
     def test_the_owner_can_say_what_the_topic_is(self):
         """Trimming is a guess at the standing part. Being told beats guessing."""
@@ -222,7 +226,7 @@ class TheTopicIsTheStandingPartTests(unittest.TestCase):
         d = c.post(f'/api/messages/{mid}/not-mine',
                    json={'scope': 'subject', 'topic': 'RE: resident refunds', 'note': 'not ours'}).json()
         self.assertEqual(d['scopeKey'], 'resident refunds')       # normalised, Re: stripped
-        self.assertTrue(ingest.topic_hit(d['scopeKey'], 'Resident Refunds - anyone at all'))
+        self.assertEqual(subject_topic('Resident Refunds - anyone at all'), d['scopeKey'])
 
     def test_a_topic_too_thin_to_match_falls_back_rather_than_saving_nothing(self):
         mid = self._msg('Re: Resident Refund Request - Adams, Neil')

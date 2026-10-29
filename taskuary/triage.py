@@ -177,8 +177,15 @@ def due_of(j: dict, sent=None) -> str | None:
     except ValueError: base = datetime.now().date()
     return s if base - timedelta(days=7) <= d <= base + timedelta(days=366) else None
 
+
+def note_id(line: str) -> str:
+    """The id ingest.relevant_notes(ids=True) put in front of a standing note ("[lrn123] ..."), '' for a line that carries none."""
+    line = str(line or '')
+    return line[1:line.index('] ')] if line.startswith('[lrn') and '] ' in line else ''
+
+
 def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, same=False, goals=False, coding=True, workflows=None,
-                   earlier=False, thread_task=False) -> dict:
+                   earlier=False, thread_task=False, notes=False) -> dict:
     """The answer's shape as a JSON schema, for the brains whose wire can carry one (llm.ask_json).
 
     Prose asks; a schema binds. Handed this, gpt-5.4 answered `title` and `summary` even when the
@@ -231,6 +238,8 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
     if thread_task or same or candidates is not None: p['refines'] = {'type': ['boolean', 'null']}
     # the earlier lines of the exchange the ask rests on - shown with the task so its ask can be checked (2026-10-22)
     if earlier: p['rests_on'] = {'type': ['array', 'null'], 'items': {'type': 'integer'}}
+    # ...and the standing notes it applied, by the ids they were shown with (ingest.relevant_notes): the model says which bear on it
+    if notes: p['notes_applied'] = {'type': ['array', 'null'], 'items': {'type': 'string'}}
     # how hard the WORK is and whether the reader could tell (the router, 2026-10-25): its own verdict, never the priority. Shown on
     # the task, the owner can correct it, and in Auto mode it picks the model tier - an unsure quick answer may be asked again higher up
     p.update(difficulty={'type': ['string', 'null'], 'enum': [*DIFFICULTIES, None]}, sure={'type': ['boolean', 'null']},
@@ -642,6 +651,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
     the session with the playbook instead of the coding profile's repository rules. Matching is a judgement
     about the message, so it is made here, by the model that read it - never by a keyword rule."""
     raw_answer, parse_error = None, None
+    note_ids = [i for i in map(note_id, notes or []) if i]
     if llm:
         try:
             base = re.sub(r'<!--.*?-->', '', system or '', flags=re.S).strip() or INTENT_SYSTEM
@@ -680,9 +690,13 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 # already ranked and budgeted by ingest.relevant_notes. Evidence, never an order (PW-025): how much
                 # each counts for is the guide's to say (templates/triage.md, section 6).
                 # ...from LEARNED.md now (memorylines, 2026-10-27): a line about one sender or topic says so at its end, `(about: ...)`
+                # ...each in front of the model whole and ranked by meaning, never matched by its words: which ones bear on THIS message is
+                # the model's call, said by their ids (notes_applied, the owner 2026-10-28)
                 system += ('\n\nEVIDENCE - the owner\'s own word that may bear on this: verdicts they gave on earlier mail that looks related '
                            '(each names the sender and subject it was given on, and what it is about) and what they told you they care '
-                           'about, or do not:\n' + '\n'.join(f'- {n}' for n in notes)
+                           'about, or do not' + (' - each starts with its id in brackets; name in "notes_applied" the ids of the ones that '
+                                                  'bear on this message and that you applied, [] when none does' if note_ids else '')
+                           + ':\n' + '\n'.join(f'- {n}' for n in notes)
                            + (f'\n({notes_left} further note(s) also apply to this sender but did not fit.)' if notes_left else ''))
             # From here down the code only LABELS what it hands over. Every sentence about how to judge it - the
             # report brief, the workers, kind, repositories, chat lines, same_as - lives in the guide (2026-10-09:
@@ -750,7 +764,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # what was left out. Both exist because neither reaches every brain (TQ-0665).
             from .llm import ask_json
             answer = ask_json(llm, system, user, want=verdict_schema(repos, candidates, playbooks, profiles, same=bool(same_ids), goals=bool(goal_steps),
-                                                                     coding=coding, workflows=workflows, earlier=bool(earlier_ids), thread_task=bool(home)),
+                                                                     coding=coding, workflows=workflows, earlier=bool(earlier_ids), thread_task=bool(home),
+                                                                     notes=bool(note_ids)),
                               need=('title', 'summary'), **({'max_tokens': TRIAGE_TOKENS} if takes_tokens(llm) else {}),
                               **({'images': images} if images else {}))
             raw_answer, j = answer.raw, answer.data
@@ -803,6 +818,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                     except (TypeError, ValueError): continue
                     if v in earlier_ids and v not in rests: rests.append(v)
                 if rests: out['rests_on'] = rests
+                # notes_applied: only the ids of notes it was shown - which standing notes bore on this message is the model's word
+                applied = j.get('notes_applied') if isinstance(j.get('notes_applied'), list) else []
+                if note_ids: out['notes_applied'] = [i for i in dict.fromkeys(str(x) for x in applied) if i in note_ids]
                 # serves: only a goal and a step it was actually shown - a step it made up lands nowhere (spec 2026-10-12)
                 sv = j.get('serves') if isinstance(j.get('serves'), dict) else {}
                 try: gt = int(sv.get('task')) if sv.get('task') is not None else None

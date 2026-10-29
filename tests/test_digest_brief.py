@@ -9,6 +9,7 @@ from unittest import mock
 from taskuary import assistant, digest, reports
 from taskuary.store import MemoryStore
 from tests.memlines import note as put_note
+from tests import fake_embed
 
 ME, DANA = 'owner@ours.com', 'dana@vendor.com'
 def _ago(days=0, hours=0): return (datetime.now() - timedelta(days=days, hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
@@ -197,25 +198,39 @@ class BriefMemoryTests(unittest.TestCase):
         self.assertIn('do not raise them to Alex', text)
         self.assertIn('governs every section', digest.PROMPT)
 
-    def test_an_ask_a_standing_verdict_covers_ranks_below_the_live_asks_and_names_its_verdict(self):
-        """TQ-0654: the on-start digest led 'People want' with a resident-refund thread the owner had
-        ruled not ours. The ask sat first in THEIR ASKS with 'no task, no draft' and the verdict lived
-        blocks later as general context, so the model ranked the ask before it read the ruling."""
+    def test_an_ask_a_sender_verdict_covers_ranks_below_the_live_asks_and_names_its_verdict(self):
+        """TQ-0654: the on-start digest led 'People want' with a thread the owner had ruled not ours. The
+        ask sat first in THEIR ASKS with 'no task, no draft' and the verdict lived blocks later as general
+        context, so the model ranked the ask before it read the ruling. A verdict about the SENDER covers
+        their ask by its scope."""
         s = _store()
-        _mail(s, 'christine@ours.com', 'Re: Resident Refund Request Form Rejected - Sawyers, Donald R, Valley',
-              'Can you explain why rejected? They have been calling and wanting a refund.', days=0, conv='sawyers')
-        s._exec("UPDATE message SET SentAt=? WHERE ConversationId='sawyers'", (_ago(hours=5),))
-        _mail(s, 'bob@ours.com', 'Target meeting', 'Can you confirm Thursday still holds?', days=1, conv='target')
-        put_note(s, {'Scope': 'subject', 'ScopeKey': 'resident refund request', 'Note': 'resident refunds are not ours',
+        _mail(s, 'erin@northwind.example', 'Re: Refund Request Form Rejected - Unit 4',
+              'Can you explain why rejected? They have been calling and wanting a refund.', days=0, conv='unit4')
+        s._exec("UPDATE message SET SentAt=? WHERE ConversationId='unit4'", (_ago(hours=5),))
+        _mail(s, 'gail@northwind.example', 'Target meeting', 'Can you confirm Thursday still holds?', days=1, conv='target')
+        put_note(s, {'Scope': 'sender', 'ScopeKey': 'erin@northwind.example', 'Note': 'refunds from Erin are not ours',
                       'Active': 1, 'CreatedBy': 'owner'})
         text = digest.gather(s, 1)
         asks = text[text.index('THEIR ASKS YOU HAVE NOT ANSWERED'):text.index('ASKS YOUR STANDING VERDICTS ALREADY COVER')]
-        self.assertIn('Bob asked', asks)
-        self.assertNotIn('Christine asked', asks)
+        self.assertIn('Gail asked', asks)
+        self.assertNotIn('Erin asked', asks)
         ruled = text[text.index('ASKS YOUR STANDING VERDICTS ALREADY COVER'):text.index('MY OPEN LOOPS')]
-        self.assertIn('Christine asked', ruled)
-        self.assertIn('ruled out by your verdict "resident refunds are not ours"', ruled)
-        self.assertLess(text.index('Bob asked'), text.index('Christine asked'))
+        self.assertIn('Erin asked', ruled)
+        self.assertIn('ruled out by your verdict "refunds from Erin are not ours"', ruled)
+        self.assertLess(text.index('Gail asked'), text.index('Erin asked'))
+
+    def test_a_topic_verdict_goes_to_the_model_beside_the_asks_with_its_topic_named(self):
+        """Which ask a TOPIC verdict covers is never a share of shared words (the owner, 2026-10-28): it goes to the
+        brief model whole, under the asks, naming its topic, as a global rule does."""
+        s = _store()
+        _mail(s, 'erin@northwind.example', 'Re: Resident Refund Request Form Rejected - Unit 4',
+              'Can you explain why rejected?', days=1, conv='unit4')
+        put_note(s, {'Scope': 'subject', 'ScopeKey': 'resident refund request', 'Note': 'resident refunds are not ours',
+                      'Active': 1, 'CreatedBy': 'owner'})
+        text = digest.gather(s, 1)
+        self.assertNotIn('ASKS YOUR STANDING VERDICTS ALREADY COVER', text)
+        asks = text[text.index('THEIR ASKS YOU HAVE NOT ANSWERED'):text.index('MY OPEN LOOPS')]
+        self.assertIn('resident refunds are not ours (about: resident refund request)', asks[asks.index('STANDING RULES'):])
 
     def test_a_global_verdict_goes_to_the_model_beside_the_asks_and_code_never_matches_its_words(self):
         """A word-overlap test used to decide which ask a GLOBAL rule was "about" - "refunds" met "Refund
@@ -247,8 +262,10 @@ class BriefMemoryTests(unittest.TestCase):
         parking = put_note(s, {'Scope': 'subject', 'ScopeKey': 'parking permits',
                                 'Note': 'Parking permits belong to facilities.', 'Active': 1, 'CreatedBy': 'owner'})
         retired = put_note(s, {'Scope': 'global', 'Note': 'Retired rule.', 'Active': 0, 'CreatedBy': 'owner'})
-        text = digest.gather(s, 1)
-        self.assertNotIn('Parking permits belong', text)
+        # ...a topic note unlike the window's mail in MEANING (a stand-in embedder) is not about it
+        with fake_embed.meaning({'refunds': ['refund'], 'parking': ['parking']}): text = digest.gather(s, 1)
+        decided = text[text.index('WHAT THE OWNER HAS ALREADY DECIDED'):] if 'WHAT THE OWNER HAS ALREADY DECIDED' in text else ''
+        self.assertNotIn('Parking permits belong', decided)
         self.assertNotIn('Retired rule', text)
 
 

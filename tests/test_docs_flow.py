@@ -139,10 +139,12 @@ class EveryScopeIsHonouredTests(unittest.TestCase):
     def test_and_none_of_them_matches_an_unrelated_message(self):
         other = {'from_email': 'someone@elsewhere.com', 'subject': 'Directors meeting',
                  'body': 'agenda', 'source_name': 'dana@corp.example'}
-        for scope, key in (('sender', 'dana@vendor.com'), ('sender_domain', 'vendor.com'),
-                           ('subject', 'resident refund request'), ('source', 'devteam-logs@corp.example')):
+        for scope, key in (('sender', 'dana@vendor.com'), ('sender_domain', 'vendor.com'), ('source', 'devteam-logs@corp.example')):
             with self.subTest(scope=scope):
                 self.assertEqual(ingest.notes_for(self._note(scope, key), other), [])
+        # ...a TOPIC note is the exception: no share of words says a message is not about it, so it is always evidence, ranked by
+        # meaning, and the model says whether it bears on it (notes_applied, 2026-10-28)
+        self.assertTrue(ingest.notes_for(self._note('subject', 'resident refund request'), other))
 
 
 if __name__ == '__main__':

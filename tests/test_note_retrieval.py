@@ -1,7 +1,8 @@
 """Standing notes were taken in ROW ORDER and the joined text cut at 2000 characters, so past
 the twentieth note - or the two-thousandth character - verdicts the owner had already given
 stopped being applied, and nothing anywhere said so. These cover the retrieval that replaced
-it: the right notes first, whole notes only, and the count of what did not fit said out loud.
+it: the right notes first, whole notes only, and the count of what did not fit said out loud. Which note is about the
+message is its MEANING (embeddings, here a stand-in: tests/fake_embed.py), never the words they share.
 """
 import unittest
 
@@ -9,6 +10,7 @@ from taskuary import agents
 from taskuary.ingest import NOTE_CAP, ingest_message, notes_for, relevant_notes
 from taskuary.store import MemoryStore
 from tests.memlines import note as put_note
+from tests import fake_embed
 
 DANA = 'dana@vendor.com'
 
@@ -27,6 +29,8 @@ INVOICE = ('sender', DANA, 'Dana asking about invoices always needs a reply, nev
 SHIPPING = ('sender_domain', 'vendor.com', 'Vendor mail about shipping schedules is not ours.', 'learned')
 GLOBAL = ('global', None, 'Never open tasks from newsletters or digests.', 'verdict')
 STRANGER = ('sender', 'someone@else.com', 'Unrelated note about somebody else entirely.', 'verdict')
+# what the stand-in embedder reads as one subject: the texts below about the ledger, the invoices, shipping
+JOBS = {'ledger': ['ledger'], 'invoices': ['invoice'], 'shipping': ['shipping']}
 
 
 class RankingTests(unittest.TestCase):
@@ -37,15 +41,16 @@ class RankingTests(unittest.TestCase):
         all share a scope and the message's own words are the only thing left to rank them by."""
         s = _store(LEDGER, INVOICE, SHIPPING, GLOBAL)
         first = lambda text: relevant_notes(s, [DANA], text)[0][0]
-        self.assertIn('Quarterly ledger', first('Quarterly ledger reconciliation - attached'))
-        self.assertIn('invoices', first('question about the invoices you sent'))
+        with fake_embed.meaning(JOBS):
+            self.assertIn('Quarterly ledger', first('Quarterly ledger reconciliation - attached'))
+            self.assertIn('invoices', first('question about the invoices you sent'))
 
     def test_scope_outranks_relevance_across_tiers_but_not_within_one(self):
         """Where the weights land, said plainly: a note about THIS sender leads even when a
         broader one shares more words, because a verdict about the person in front of you is
         better evidence than a rule about their whole company. Below that tier the words decide."""
         s = _store(LEDGER, SHIPPING, GLOBAL)
-        notes, _left = relevant_notes(s, [DANA], 'shipping schedules for next month')
+        with fake_embed.meaning(JOBS): notes, _left = relevant_notes(s, [DANA], 'shipping schedules for next month')
         self.assertIn('Quarterly ledger', notes[0])       # sender scope, barely matching
         self.assertIn('shipping', notes[1])               # domain scope, matching - beats global
         self.assertIn('newsletters', notes[2])
@@ -74,11 +79,11 @@ class RankingTests(unittest.TestCase):
         """Half a verdict reads as a DIFFERENT verdict - "file it, do not open a task" cut early
         can end at "file it, do not". So a note goes in whole or waits its turn."""
         s = _store(LEDGER, INVOICE, SHIPPING, GLOBAL)
-        notes, left = relevant_notes(s, [DANA], 'ledger', budget=80)
+        with fake_embed.meaning(JOBS): notes, left = relevant_notes(s, [DANA], 'ledger', budget=80)
         self.assertEqual((len(notes), left), (1, 3))
         self.assertTrue(notes[0].endswith('do not open a task.'))
         # and the first note always survives, however tight the budget - some memory beats none
-        notes, left = relevant_notes(s, [DANA], 'ledger', budget=1)
+        with fake_embed.meaning(JOBS): notes, left = relevant_notes(s, [DANA], 'ledger', budget=1)
         self.assertEqual((len(notes), left), (1, 3))
 
     def test_past_the_twentieth_note_the_owner_is_told(self):
@@ -87,6 +92,17 @@ class RankingTests(unittest.TestCase):
         s = _store(*[('sender', DANA, f'Verdict number {i} about Dana.', 'verdict') for i in range(25)])
         notes, left = relevant_notes(s, [DANA], 'Dana')
         self.assertEqual((len(notes), left), (NOTE_CAP, 25 - NOTE_CAP))
+
+
+    def test_with_ids_each_note_carries_the_id_triage_names_it_by(self):
+        from taskuary import learned_cut as lc
+        from taskuary.triage import note_id
+        s = _store(LEDGER, GLOBAL)
+        notes, _ = relevant_notes(s, [DANA], 'ledger', ids=True)
+        cites = {lc.cite_of(k) for _raw, k in lc.lines(s.get_doc('learned'), lc.CARE)} | \
+                {lc.cite_of(k) for h in lc.SECTIONS.values() for _raw, k in lc.lines(s.get_doc('learned'), h)}
+        self.assertTrue(notes and all(note_id(n) in cites for n in notes), notes)
+        self.assertEqual(note_id('Never open tasks from newsletters.'), '')
 
 
 class ItSaysSoTests(unittest.TestCase):
@@ -125,8 +141,9 @@ class ItSaysSoTests(unittest.TestCase):
         s = _store(LEDGER, INVOICE, GLOBAL,
                    *[('sender', DANA, f'Verdict number {i} about Dana, at some length.', 'learned')
                      for i in range(25)])
-        block = agents.memory_block(s, [{'FromEmail': DANA, 'Subject': 'Quarterly ledger reconciliation',
-                                         'BodyText': 'the ledger again'}])
+        with fake_embed.meaning(JOBS):
+            block = agents.memory_block(s, [{'FromEmail': DANA, 'Subject': 'Quarterly ledger reconciliation',
+                                             'BodyText': 'the ledger again'}])
         self.assertIn('Quarterly ledger', block.splitlines()[1])      # ranked to the top
         self.assertLessEqual(len(block.splitlines()), NOTE_CAP + 3)    # header + notes + the count line
         self.assertIn('did not fit', block)

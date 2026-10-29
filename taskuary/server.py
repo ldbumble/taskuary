@@ -3671,13 +3671,19 @@ def _also_covered(scope: str, key: str, dropped_tid) -> list:
     """Other OPEN tasks this new verdict now covers - REPORTED, never deleted. One click that
     silently removes five tasks is not a verdict, it is a surprise. But saying nothing is how
     "the system is not learning it" happens: the verdict works from now on while yesterday's
-    tasks sit there looking like proof that it did not."""
-    from .ingest import topic_hit
+    tasks sit there looking like proof that it did not.
+
+    A TOPIC verdict covers the tasks whose subjects are alike in MEANING (embeddings), never ones sharing half its words (the owner,
+    2026-10-28); with no embedder, the tasks whose subject's standing part IS the topic."""
+    from . import textsim
+    from .routing import subject_topic
     if scope == 'global' or not key: return []
+    snaps = [t for t in store.snapshots() if t['task_id'] != dropped_tid]
+    near = textsim.rank(store, key, [(f"subjects:{t['task_id']}", ' / '.join(t['subjects'])) for t in snaps]) if scope == 'subject' else []
+    near = None if near is None else {k for k, _ in near}
     out = []
-    for t in store.snapshots():
-        if t['task_id'] == dropped_tid: continue
-        hit = (any(topic_hit(key, s) for s in t['subjects']) if scope == 'subject'
+    for t in snaps:
+        hit = ((f"subjects:{t['task_id']}" in near if near is not None else any(subject_topic(s) == key for s in t['subjects'])) if scope == 'subject'
                else any((e or '').lower().endswith('@' + key) for e in t['senders']) if scope == 'sender_domain'
                else key in {(e or '').lower() for e in t['senders']})
         if hit: out.append({'taskId': t['task_id'], 'title': t['title']})

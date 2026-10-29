@@ -1291,15 +1291,13 @@ def _verdicts_block(store, cands: list, source: str = "") -> str:
     which went on raising the next refund thread as an idea worth acting on. A verdict the owner
     gives once should not have to be given again per surface.
 
-    Scoped by the words of the material this check is READING, so a note about a topic nothing
-    today touches costs nothing; global notes always apply.
+    Ranked by how alike in meaning each note is to the material this check is READING (embeddings,
+    ingest.relevant_notes), within a budget; global notes always apply, and the model says which bear on it.
 
     `source` is what the model was handed - the threads and the sender/subject lines - and it
-    matters more here than the candidates do. A subject-scoped verdict is matched (ingest.topic_hit)
-    against the words it was learned from, "resident refund request approved"; a candidate's
-    `facts` is the MODEL'S PARAPHRASE of a thread, and "Barnes and Watson stall the same way"
-    carries not one of those four words. So the ruling missed and the brief went on raising a
-    subject the owner had closed. Match the source it summarised, not the summary."""
+    matters more here than the candidates do: a candidate's `facts` is the MODEL'S PARAPHRASE of a
+    thread, and a topic verdict was once matched against the paraphrase's words and missed, so the
+    brief went on raising a subject the owner had closed. Rank against the source it summarised too."""
     from .ingest import relevant_notes
     text = ' '.join([source or '', *(str(c.get('facts') or c.get('text') or '') for c in cands)])[:8000]
     if not text.strip():

@@ -71,11 +71,14 @@ class VerdictsReachTheBrief(unittest.TestCase):
         self.assertNotIn('Retired ruling', assistant.inputs(s, CANDS))
 
     def test_a_verdict_about_something_else_costs_nothing(self):
-        """Scoped by the candidates' own words: an unrelated topic note stays out of the prompt."""
+        """Ranked by MEANING (embeddings; a stand-in here), never by shared words: a topic note unlike the material stays out of the
+        prompt. With no embedder it goes in, and the model reads which bear on what (the owner, 2026-10-28)."""
+        from tests import fake_embed
         s = _store()
         put_note(s, {'Scope': 'subject', 'ScopeKey': 'parking permits',
                       'Note': 'Parking permits go to facilities.', 'Active': 1, 'CreatedBy': 'owner'})
-        self.assertNotIn('Parking permits', assistant.inputs(s, CANDS))
+        with fake_embed.meaning({'parking': ['parking']}): self.assertNotIn('Parking permits', assistant.inputs(s, CANDS))
+        with fake_embed.no_embedder(): self.assertIn('Parking permits', assistant.inputs(s, CANDS))
 
     def test_no_verdicts_adds_no_heading(self):
         """An empty memory must not put an empty section in front of the model."""

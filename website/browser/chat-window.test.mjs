@@ -262,7 +262,7 @@ test("the chat window stays open through answers, acts, feed rebuilds and Next; 
     await page.waitForSelector("[data-tq-chat-win][data-tq-mini]:not([hidden])", { timeout: 15000 });
     await still(page, "[data-tq-chat-win]");
     const strip = await rect(page, "[data-tq-chat-win]"), fld = await rect(page, ".tq-compose-box .tq-compose-field"), at = JSON.stringify({ strip, fld, full });
-    assert.ok(strip.h > 20 && strip.h < 60 && Math.abs(strip.w - full.w) <= 1, `minimized, the window is its head strip ${at}`);
+    assert.ok(Math.abs(strip.h - full.h / 2) <= 4 && Math.abs(strip.w - full.w) <= 1, `minimized, the window is half its height (2026-10-29) ${at}`);
     assert.ok(Math.abs(strip.b - fld.t) <= 1, `...standing on the open box, not down at the bar ${at}`);
     assert.ok(await page.$(".tq-compose-box[data-tq-open]"), "...the box still open under it");
     assert.equal(await page.$eval("[data-tq-chat-win] .tq-chat-pop-head b", (e) => e.textContent), "Taskuary");

@@ -3135,10 +3135,12 @@ def get_message(mid: int):
     if not m: raise HTTPException(404, 'message not found')
     return _readable(m)
 
-def _att_row(a: dict) -> dict:
-    """One attachment as the panel needs it: enough to decide whether to draw it or list it."""
+def _att_row(a: dict, mail: bool = True) -> dict:
+    """One attachment as the panel needs it: enough to decide whether to draw it or list it. `mail`: it rode in on an email, where
+    a small inline picture is a signature's logo (Attachments.jsx chrome) - a chat's photo is marked inline too, and IS the message
+    (the owner, 2026-10-29: a WhatsApp photo in an open message stood as a "JPG ...jpg 14 KB" chip to click)."""
     return {'id': a['AttachmentId'], 'name': a['Name'], 'content_type': a['ContentType'] or '',
-            'size': a['Size'], 'inline': bool(a['Inline']), 'saved': bool(a['Path']),
+            'size': a['Size'], 'inline': bool(a['Inline']), 'saved': bool(a['Path']), 'mail': mail,
             'is_image': str(a['ContentType'] or '').startswith('image/'),
             # a voice note is meant to be PLAYED where you are reading it, not downloaded and
             # opened in something else - the panel draws a player for these (Attachments.jsx)
@@ -3215,9 +3217,10 @@ def message_thread(mid: int, limit: int = 40):
 
 @app.get('/api/messages/{mid}/attachments')
 def message_attachments(mid: int):
-    if not store.get_message(mid): raise HTTPException(404, 'message not found')
+    if not (m := store.get_message(mid)): raise HTTPException(404, 'message not found')
     from . import linkdocs
-    return {'data': [_att_row(a) for a in store.list_attachments(mid)] + [_doc_row(d) for d in linkdocs.of_message(store, mid)]}
+    mail = str(m.get('Channel') or 'email').lower() == 'email'
+    return {'data': [_att_row(a, mail) for a in store.list_attachments(mid)] + [_doc_row(d) for d in linkdocs.of_message(store, mid)]}
 
 
 def _doc_row(d: dict) -> dict:

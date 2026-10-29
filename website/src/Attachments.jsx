@@ -56,8 +56,12 @@ const LOGO = 48 * 1024;   // a company logo in a signature runs 20-40 KB (24 KB 
 // A cid-referenced image smaller than a logo IS a signature, not the ask, so it gets a chip like
 // any other file. SVG is exempt: nobody signs their mail in one, and Taskuary's own report charts
 // are small by nature.
-const chrome = (a) => a.inline && a.size && a.size < LOGO && a.content_type !== "image/svg+xml";
-const drawable = (a) => a.is_image && a.url && !chrome(a);
+// ...and only in MAIL (`mail`, server _att_row): a WhatsApp or Telegram photo is marked inline too, and IS the message - its 14 KB
+// JPEG stood as a chip to click in the open message (the owner, 2026-10-29: "its images show inline")
+export const chrome = (a) => a.mail !== false && !!a.inline && !!a.size && a.size < LOGO && a.content_type !== "image/svg+xml";
+// drawn from our own bytes only - the attachment route (images inline, SVG never as a page) or the demo's data: image, never a remote address
+const ownImage = (u) => /^\/api\//.test(String(u || "")) || /^data:image\//.test(String(u || ""));
+export const drawable = (a) => !!a.is_image && ownImage(a.url) && !chrome(a);
 // A voice note is the message, not a file about it: WhatsApp and Teams send audio where other
 // people send a sentence, so it gets a player here rather than a download chip that opens some
 // other app. content_type is the truth; the extension is the fallback for a bridge that sent none.

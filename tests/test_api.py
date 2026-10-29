@@ -536,6 +536,20 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(c.post(f'/api/messages/{mid}/attachments/fetch', json={}).status_code, 422)  # no Outlook connection
         self.assertEqual(c.get('/api/messages/999999/attachments').status_code, 404)
 
+    def test_a_chat_photo_is_not_mail_so_it_is_never_a_signature_logo(self):
+        """A WhatsApp photo is saved inline and small - the shape of a signature's logo in mail - and stood as a chip in the open
+        message. Each row says whether it rode in on mail, so the panel keeps the logo rule to mail alone."""
+        import base64
+        from taskuary import channels
+        jpg = base64.b64encode(bytes.fromhex('ffd8ffe000104a464946')).decode()
+        for ch, ext, mail in (('whatsapp', 'whatsapp:111@s.whatsapp.net:P1', False), ('email', 'graph:LOGO1', True)):
+            mid = server.store.add_message({'ExternalId': ext, 'Channel': ch, 'FromName': 'Erin Blake', 'SentAt': '2026-10-29 09:00',
+                                            'BodyText': '(no text - see the attachment)', 'Status': 'filed'})
+            channels.save_attachments(server.store, mid, [{'id': 'p', 'name': '3EB07A1B2C3D4E5F.jpg', 'contentType': 'image/jpeg',
+                                                           'size': 14 * 1024, 'isInline': True, 'contentBytes': jpg}], ext)
+            row, = c.get(f'/api/messages/{mid}/attachments').json()['data']
+            self.assertEqual((row['inline'], row['is_image'], row['mail']), (True, True, mail), ch)
+
     def test_attachment_url_stays_in_the_attachments_dir_and_does_not_script(self):
         """A Path pointing at config.toml used to be served as the attachment. SVG marked
         image/svg+xml used to render as a document on this origin when opened in a tab,

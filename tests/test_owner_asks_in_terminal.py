@@ -48,8 +48,8 @@ class TheOwnersQuestion(Base):
         hooks.ask(payload(), wait=30)
         w = term.worker_fields(self.s, self.t)
         self.assertEqual((w['waiting'], w['state'], w['held']), (True, 'asking', False))
-        self.assertEqual(w['line'], ws.says('asking', 'coding', Q))
-        self.assertEqual(w['line'], f'coding asked you: {Q}')
+        self.assertEqual(w['line'], ws.says('asking', 'claude', Q))
+        self.assertEqual(w['line'], f'claude asked you: {Q}')
 
     def test_the_rail_and_board_put_it_in_the_waving_lane(self):
         hooks.ask(payload(), wait=30)

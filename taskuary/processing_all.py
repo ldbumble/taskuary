@@ -17,7 +17,7 @@ import time
 from loguru import logger
 
 from .categories import category_of, team_domains_of
-from .kinds import SHOWN, shown
+from .kinds import SHOWN, shown as shown_agent
 from .processing_order import feed_band
 
 
@@ -294,7 +294,7 @@ def message_row(message, item, threads, now, *, full=False):
     working = SHOWN if running else None                 # the name a chip says: Taskuary, never the profile (kinds.shown)
     waiting, line = False, ''
     for worker in workers:
-        working = shown(worker)
+        working = shown_agent(worker)
         waiting, line = waiting or bool(worker.get('waiting')), line or str(worker.get('line') or '')
     if working and active_task:
         row.update(Working=working, AgentWaiting=waiting, AgentLine=line if waiting else '')
@@ -470,7 +470,7 @@ def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=Fa
                 working = SHOWN if running else None
                 waiting, line = False, ''
                 for w in workers:
-                    working = shown(w)
+                    working = shown_agent(w)
                     waiting, line = waiting or bool(w.get('waiting')), line or str(w.get('line') or '')
                 if working and open_task:
                     legacy.update(Working=working, AgentWaiting=waiting, AgentLine=line if waiting else '', NeedsYou=int(waiting),

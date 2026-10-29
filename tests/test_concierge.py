@@ -598,13 +598,13 @@ class TaskNowTests(unittest.TestCase):
         self.assertIn('YOU ALREADY REPLIED', concierge.task_now(s, t)); self.assertIn('sorry for the wait', concierge.task_now(s, t))
         working = [{'taskId': t, 'agent': 'codex', 'label': 'codex', 'started': ago(0), 'idle': 3, 'waiting': False, 'tail': ['editing']}]
         with mock.patch('taskuary.terminal.live_sessions', return_value=working):
-            self.assertIn('codex is WORKING right now', concierge.task_now(s, t))
+            self.assertIn('Taskuary is WORKING right now', concierge.task_now(s, t))
         asking = [{'taskId': t, 'agent': 'codex', 'label': 'codex', 'started': ago(0), 'idle': 120, 'waiting': True, 'tail': ['Should I also fix the header? (y/n)']}]
         with mock.patch('taskuary.terminal.live_sessions', return_value=asking):           # the words on the tail ask nothing (2026-10-11)
-            self.assertIn('codex is PARKED at its prompt', concierge.task_now(s, t))
+            self.assertIn('Taskuary is PARKED at its prompt', concierge.task_now(s, t))
         asking[0]['state'] = 'asking'                                                      # ...the session's own reading does
         with mock.patch('taskuary.terminal.live_sessions', return_value=asking):
-            self.assertIn('codex is PARKED and ASKING you: Should I also fix the header?', concierge.task_now(s, t))
+            self.assertIn('Taskuary is PARKED and ASKING you: Should I also fix the header?', concierge.task_now(s, t))
         s.update_task(t, {'Status': 'done'}, 'o')
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             self.assertIn('CLOSED', concierge.task_now(s, t))

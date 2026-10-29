@@ -6,7 +6,7 @@ import contextlib, contextvars, copy, hashlib, json, os, re, sqlite3, sys, threa
 from datetime import datetime, timedelta
 from loguru import logger
 from . import vault
-from .kinds import SHOWN, shown   # the name a chip says for whoever works a task: Taskuary, never the profile
+from .kinds import SHOWN, shown as shown_agent   # the name a chip says for whoever works a task: Taskuary, never the profile
 
 # WHO HELD THE STORE, AND FOR HOW LONG (2026-10-23): three freezes in a day left a log where unrelated requests all finished in
 # the same second after 20-150 s, and nothing said what they had waited on. The writer's lock now says it: a wait over
@@ -3956,7 +3956,7 @@ class SQLiteStore:
         for raw in live_state or ():
             tid = raw.get('taskId', raw.get('task_id'))
             if tid is None: continue
-            live_by_task[int(tid)] = {'working': raw.get('Working') or shown(raw),   # the name the chip says: Taskuary, never the profile
+            live_by_task[int(tid)] = {'working': raw.get('Working') or shown_agent(raw),   # the name the chip says: Taskuary, never the profile
                                       'waiting': bool(raw.get('AgentWaiting', raw.get('waiting', False)))}
         with self.lock:
             cur = self.cx.cursor()
@@ -5955,7 +5955,7 @@ class SQLiteStore:
             observed_live = hub_term.live_sessions(tail=0) if live_state is _LIVE_UNSET else live_state
             for t in observed_live:
                 if not t.get('taskId'): continue
-                live[t['taskId']] = shown(t)
+                live[t['taskId']] = shown_agent(t)
                 # "an agent has it" and "an agent stopped and is waiting on you" are opposite
                 # facts and the row wore the same chip for both, so a session sitting on an
                 # unanswered question read as work in progress for as long as nobody looked.

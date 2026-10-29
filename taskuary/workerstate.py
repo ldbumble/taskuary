@@ -13,7 +13,7 @@ changed, and written into the task's discussion with its delivery outcome.
 import hashlib, json, re, threading, time
 from pathlib import Path
 from loguru import logger
-from .kinds import SHOWN, shown   # who the owner sees at work: Taskuary, never the profile (kinds.json `shown_`)
+from .kinds import SHOWN, shown as shown_agent   # who the owner sees at work: Taskuary, never the profile (kinds.json `shown_`)
 
 KINDS = ('working', 'turn_end', 'background', 'input_needed', 'approval_needed', 'stalled', 'answered', 'finished', 'failed', 'disconnected', 'stopped',
          'floor_denied')

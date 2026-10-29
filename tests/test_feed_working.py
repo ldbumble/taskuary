@@ -19,7 +19,7 @@ class WorkingTests(unittest.TestCase):
         self.assertEqual((row['NeedsYou'], row.get('Working')), (1, None))          # nobody has it: yours
         with mock.patch.object(terminal, 'live_sessions', return_value=[{'taskId': tid, 'agent': 'claude', 'label': 'coding'}]):
             row = s.feed()[0]
-        self.assertEqual((row['NeedsYou'], row['Working']), (0, 'claude'))
+        self.assertEqual((row['NeedsYou'], row['Working']), (0, 'Taskuary'))
 
     def test_a_pending_review_still_needs_you_even_with_an_agent_on_it(self):
         s = MemoryStore(); tid = self._task_with_mail(s)
@@ -27,7 +27,7 @@ class WorkingTests(unittest.TestCase):
         s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'r'})
         with mock.patch.object(terminal, 'live_sessions', return_value=[{'taskId': tid, 'agent': 'claude'}]):
             row = s.feed()[0]
-        self.assertEqual((row['NeedsYou'], row['Working']), (1, 'claude'))
+        self.assertEqual((row['NeedsYou'], row['Working']), (1, 'Taskuary'))
 
 
 class DigestBriefTests(unittest.TestCase):

@@ -136,7 +136,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual([e['kind'] for e in p['events']], ['working'])
         item = next(i for i in p['items'] if i.get('tid') == t)
         self.assertEqual((item['key'], item['lane'], item['agent'], item['sid']),
-                         (f'agent:{t}', 'working', 'coding', 'live123'))
+                         (f'agent:{t}', 'working', 'Taskuary', 'live123'))
 
     def test_the_page_walks_the_same_loop(self):
         s = self.s

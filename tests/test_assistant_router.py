@@ -254,7 +254,7 @@ class DeskRoutes(unittest.TestCase):
         started = {'dispatch': 'assistant', 'agent': 'Codex', 'started': True, 'existing': False, 'taskId': tid, 'ref': f'TQ-{tid:04d}'}
         with mock.patch.object(server, 'store', s), mock.patch('taskuary.server._dispatch_task_to_its_agent', return_value=started):
             got = TestClient(server.app).post(f'/api/tasks/{tid}/dispatch', json={'kind': 'general', 'agent': 'researcher', 'said': line}).json()
-        said = f'Started TQ-{tid:04d} with the researcher on Codex.'
+        said = f'Started TQ-{tid:04d} with Taskuary on Codex.'
         self.assertEqual(got['said'], said)
         self.assertEqual(next(c['Body'] for c in s.list_comments(dock) if c['CommentId'] == line), said)
 

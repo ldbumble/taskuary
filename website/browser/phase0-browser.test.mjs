@@ -10,6 +10,9 @@ const limits = {
   inputMs: Number(process.env.TASKUARY_BROWSER_INPUT_MS || 1500),
   // not a budget: firstVisibleMs is the budget, measured from before goto. This only bounds a load that never ends.
   loadMs: 60000,
+  // nor this: how long a wait for the app to SETTLE may take on a loaded runner. The budgets above are measured and asserted; a wait
+  // that is no budget timed out at a budget's few seconds on a busy CI box, a failure about the runner and not the app (2026-10-28)
+  settleMs: 30000,
 };
 
 test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t) => {
@@ -52,21 +55,21 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
     // the day's welcome is drawn as a .tq-msg too (904916c2); "no conversation yet" is no OTHER line
     return !!walk && !walk.disabled && !document.querySelector(".tq-msg:not(.tq-welcome-msg)")
       && !document.querySelector(".tq-pile-row.current");
-  }, { timeout: limits.firstVisibleMs });
+  }, { timeout: limits.settleMs });
 
   // A fresh fixture has no Current yet. Two same-tick clicks reproduce the duplicate-turn
   // trigger while React is still scheduling its busy render; exactly one request may leave.
   await page.waitForFunction(() => [...document.querySelectorAll("button")]
-    .some((button) => button.innerText === "Walk me through my tasks" && !button.disabled), { timeout: 10000 });
+    .some((button) => button.innerText === "Walk me through my tasks" && !button.disabled), { timeout: limits.settleMs });
   await page.evaluate(() => {
     const button = [...document.querySelectorAll("button")]
       .find((candidate) => candidate.innerText === "Walk me through my tasks");
     button.click();
     button.click();
   });
-  await page.waitForSelector(".tq-pile-row.current .card", { timeout: 15000 });
-  await page.waitForFunction(() => !document.querySelector(".tq-typing"), { timeout: 15000 });
-  await page.waitForSelector(".tq-pile-row.next .card", { timeout: limits.navigationMs });
+  await page.waitForSelector(".tq-pile-row.current .card", { timeout: limits.settleMs });
+  await page.waitForFunction(() => !document.querySelector(".tq-typing"), { timeout: limits.settleMs });
+  await page.waitForSelector(".tq-pile-row.next .card", { timeout: limits.settleMs });
   assert.equal(turnRequests, 1, "a same-tick double click must create exactly one assistant turn");
   // a press is not a typed line (the owner, 2026-10-23): no "Walk me through my tasks." bubble, only the "…" until the item lands
   assert.equal(await page.$$eval(".tq-msg.you", (rows) => rows.filter((row) => row.textContent.includes("Walk me through my tasks")).length), 0);
@@ -79,11 +82,15 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
   const expectedNext = await page.$eval(".tq-pile-row.next .card b", (node) => node.textContent.trim());
   // Next sits in the card's own foot since the one-card walk (904916c2), not in the verb line under it
   // ...and on a task, under the task view the canvas shows (0.3.7.0: [data-tq-next])
-  await page.evaluate(() => [...document.querySelectorAll(".tq-msg button, [data-tq-next]")]
-    .filter((button) => button.innerText.trim() === "Next").pop()?.click());
+  // ...pressed once it is there and live: a busy box drew the task view after Current did, and a press aimed before then found no
+  // Next (or a greyed one) and was lost - the wait below for the advance then ran out (CI, 2026-10-28)
+  const nextLive = () => [...document.querySelectorAll(".tq-msg button, [data-tq-next]")]
+    .filter((button) => button.innerText.trim() === "Next" && !button.disabled && button.getBoundingClientRect().width > 0).pop();
+  await page.waitForFunction(`!!(${nextLive})()`, { timeout: limits.settleMs });
+  assert.ok(await page.evaluate(`(() => { const b = (${nextLive})(); b?.click(); return !!b; })()`), "Next is on the card");
   await page.waitForFunction((title) => document.querySelector(".tq-pile-row.current .card b")?.textContent.trim() === title,
-    { timeout: 15000 }, expectedNext);
-  await page.waitForFunction(() => !document.querySelector(".tq-typing"), { timeout: 15000 });
+    { timeout: limits.settleMs }, expectedNext);
+  await page.waitForFunction(() => !document.querySelector(".tq-typing"), { timeout: limits.settleMs });
   assert.equal(turnRequests, 2, "explicit Next must advance with exactly one additional assistant turn");
   const advancedCurrent = await page.$eval(".tq-pile-row.current .card b", (node) => node.textContent.trim());
   assert.equal(advancedCurrent, expectedNext, "the visible Next row must become Current");
@@ -94,7 +101,7 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
   // render and its commit having run (the commit's microtask runs before the bubbling window listener). Timing
   // input.type() from here counted ~70 CDP round trips as well, and a busy box failed the budget on that transport
   // alone (1652ms for a page that spent a fraction of it). The round trip is still reported, as typedMs.
-  const input = await page.$(".tq-compose textarea");
+  const input = ".tq-compose textarea";   // found as each press is made: a handle held across the walk's re-renders went stale
   await page.evaluate(() => {
     const spent = window.__tqInputMs = [];
     let began = 0;
@@ -104,12 +111,13 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
     }
   });
   const typedStarted = performance.now();
-  await input.type("phase zero latency probe");
+  await page.focus(input); await page.keyboard.type("phase zero latency probe");
   await page.waitForFunction(() => document.querySelector(".tq-compose textarea")?.value === "phase zero latency probe", { timeout: 30000 });
   const typedMs = Math.round(performance.now() - typedStarted);
-  const inputMs = Math.round(await page.evaluate(() => window.__tqInputMs.reduce((a, b) => a + b, 0)));
-  assert.ok(inputMs <= limits.inputMs, `Assistant input took ${inputMs}ms`);
-  await input.click({ clickCount: 3 });
+  const spent = await page.evaluate(() => window.__tqInputMs);
+  const inputMs = Math.round(spent.reduce((a, b) => a + b, 0));
+  assert.ok(inputMs <= limits.inputMs, `Assistant input took ${inputMs}ms over ${spent.length} events, the slowest ${JSON.stringify(spent.map(Math.round).sort((a, b) => b - a).slice(0, 8))}`);
+  await page.click(input, { clickCount: 3 });
   await page.keyboard.press("Backspace");
 
   // the canvas redesign (0.3.7.0): Tasks and Reports are no longer tabs - a task opens as its view in the canvas (a
@@ -134,25 +142,25 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
     // is there while /api/tasks is still in flight - so reading body text the instant the marker
     // appears raced the response rather than waiting for it. Navigation keeps its own budget; the
     // fixture row only has to turn up.
-    await waitForBody(page, fixtureText, limits.firstVisibleMs);
+    await waitForBody(page, fixtureText, limits.settleMs);
     assert.ok(elapsed <= limits.navigationMs, `${label} took ${elapsed}ms to become visible`);
     timings[`${label.toLowerCase()}VisibleMs`] = elapsed;
   }
 
   await clickNav(page, "Assistant");
-  await page.waitForSelector(".tq-pile-row.current .card", { timeout: limits.navigationMs });
+  await page.waitForSelector(".tq-pile-row.current .card", { timeout: limits.settleMs });
   assert.equal(await page.$eval(".tq-pile-row.current .card b", (node) => node.textContent.trim()), advancedCurrent,
     "tab navigation must retain Current");
 
   await page.reload({ waitUntil: "domcontentloaded", timeout: limits.loadMs });
-  await page.waitForSelector(".tq-pile-row.current .card", { timeout: limits.firstVisibleMs });
+  await page.waitForSelector(".tq-pile-row.current .card", { timeout: limits.settleMs });
   assert.equal(await page.$eval(".tq-pile-row.current .card b", (node) => node.textContent.trim()), advancedCurrent,
     "durable replay must restore Current");
   // the Current turn is a chat line, or - on a task - the task view the canvas shows (0.3.7.0), which fills in its title
   // once the task loads
   const currentTurns = (title) => [...document.querySelectorAll(".tq-chat-inner > .tq-msg, .tq-chat-inner > .tq-canvas-live")]
     .filter((row) => row.textContent.includes(title)).length;
-  await page.waitForFunction(currentTurns, { timeout: limits.firstVisibleMs }, advancedCurrent);
+  await page.waitForFunction(currentTurns, { timeout: limits.settleMs }, advancedCurrent);
   assert.equal(await page.evaluate(currentTurns, advancedCurrent), 1, "durable replay must not duplicate the Current assistant turn");
   assert.equal(turnRequests, 2, "tab navigation and reload must not initiate another assistant turn");
 

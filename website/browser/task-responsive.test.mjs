@@ -50,12 +50,31 @@ test("task context, expanded messages and agent results fit short laptops and ph
       } else if (name === "rest") {
         // its chat is the rest of its Result, behind the Result heading (the owner, 2026-10-27: "click Result to see more")
         await page.waitForSelector("[data-tq-result-summary]", { timeout: 20000 });
-        await page.$eval('[data-tq-work]', (w) => (w.querySelector('[data-tq-full-result]') || w.querySelector('[data-tq-step="2"]').parentElement).click());
-        await page.waitForSelector("[data-tq-agent-room='rest'] .tq-aui-viewport", { timeout: 20000 });
+        // ...pressed again only when the press was lost - the control it hit still reads as it did and no room came (a busy runner drew the
+        // Result's press before the task's detail had loaded, and the room never opened: CI, 2026-10-28). A press that took is never repeated,
+        // so a toggle cannot be folded back
+        const room = "[data-tq-agent-room='rest'] .tq-aui-viewport";
+        for (let i = 0; i < 4 && !(await page.$(room)); i++) {
+          const was = await page.$eval('[data-tq-work]', (w) => { const b = w.querySelector('[data-tq-full-result]') || w.querySelector('[data-tq-step="2"]').parentElement;
+            window.__pressed = b; const v = b.getAttribute("aria-expanded"); b.click(); return v; });
+          // ...took: the room, the Result's own button now reading open ("‹ Back to the result"), or the heading pressed now folded the other way
+          const took = await page.waitForFunction((room, was) => !!document.querySelector(room) || !!document.querySelector('[data-tq-work] [data-tq-full-result][aria-expanded="true"]')
+            || (window.__pressed.isConnected && window.__pressed.getAttribute("aria-expanded") !== was), { timeout: 10000 }, room, was).then(() => true, () => false);
+          if (took) break;
+        }
+        await page.waitForSelector(room, { timeout: 20000 }).catch((e) => { throw new Error(`the rest's room at ${width}x${height}: ${e.message}`); });
       } else if (name === "agent") {
         await page.waitForSelector(".xterm-screen", { timeout: 20000 });
       }
-      await new Promise((resolve) => setTimeout(resolve, 400));
+      // measured once the card STANDS STILL - its box and the work's the same over five polls - not after a fixed 400ms, which a loaded
+      // runner can spend before the opened section has finished laying out
+      await page.evaluate(() => { window.__cardAt = null; window.__cardSame = 0; });
+      await page.waitForFunction(() => {
+        const box = (e) => { const r = e?.getBoundingClientRect(); return r ? [r.x, r.y, r.width, r.height].map(Math.round).join() : ""; };
+        const at = box(document.querySelector("[data-tq-canvas-item]")) + "|" + box(document.querySelector("[data-tq-canvas-item] [data-tq-work]"));
+        window.__cardSame = at === window.__cardAt ? window.__cardSame + 1 : 0; window.__cardAt = at;
+        return window.__cardSame >= 4;
+      }, { polling: 100, timeout: 20000 });
       const metrics = await page.evaluate(() => {
         const rect = (e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, right: r.right, bottom: r.bottom }; };
         const card = document.querySelector("[data-tq-canvas-item]");

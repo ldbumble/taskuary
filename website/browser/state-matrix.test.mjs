@@ -190,19 +190,27 @@ test("every state shows the right thing at a desk and on a phone", { timeout: 90
     await page.setViewport({ width: w, height: hgt, deviceScaleFactor: 1 });
     await page.goto(h.ui, { waitUntil: "domcontentloaded" });
     await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 30000 });
-    await sleep(1500);
+    await page.waitForNetworkIdle({ idleTime: 500, timeout: 20000 }).catch(() => {});   // the boot's reads in, not a fixed 1.5s
     for (const [name, target, want] of CELLS(ids)) {
       if (name === "Advisor idea" && w <= 600) await api("/api/fixture/task/matrix", { state: "idea" });   // the desk's was read
       if (target == null) { failures.push(`${name} @${w}: the state could not be built`); continue; }
       const seen = errors.length, failedAt = failed.length;
-      let tid = null;
+      let tid = null, read = null;
       if (typeof target === "number") {
         tid = target;
+        // FIRST PAINT IS THE TASK AS READ (2026-10-28): a fixed 500ms after the head stood took the page before its own read of the task had
+        // landed on a loaded runner - the frame drawn from the rail's copy - and the page then settling on the read was called a move. The
+        // first look is now taken once that read is in and drawn (two frames on); the 3.5s after it still catch any move of the page's own
+        read = want.gone ? null : page.waitForResponse((r) => r.request().method() === "GET" && new URL(r.url()).pathname === `/api/tasks/${tid}`, { timeout: 20000 }).catch(() => null);
         await page.evaluate((id) => { location.hash = `task=${id}`; }, tid);
       } else {
         await page.evaluate(() => { location.hash = ""; });
         // a phone keeps the rail in its drawer
-        if (w <= 600) { await page.evaluate(() => document.querySelector('[aria-label="Your work"]')?.click()); await sleep(800); }
+        if (w <= 600) await page.evaluate(() => document.querySelector('[aria-label="Your work"]')?.click());
+        // ...and its row on the rail before it is pressed: a state built just now (the phone's Advisor idea) reaches the rail with the next
+        // feed push, which a fixed 800ms outran on a loaded box. Bounded - a row that never comes is still said, below
+        await page.waitForFunction((src) => [...document.querySelectorAll("[data-tq-rail] .tq-pile-row")].some((e) => new RegExp(src).test(e.textContent)),
+          { timeout: 20000 }, target.source).catch(() => {});
         const opened = await page.evaluate((src) => {
           const rx = new RegExp(src);
           const r = [...document.querySelectorAll("[data-tq-rail] .tq-pile-row")].find((e) => rx.test(e.textContent));
@@ -215,10 +223,14 @@ test("every state shows the right thing at a desk and on a phone", { timeout: 90
             bands: [...document.querySelectorAll("[data-tq-rail] *")].filter((e) => /^(REPORTS|FYI|FOR LATER)/.test(e.textContent.trim()) && e.childElementCount === 0).map((e) => e.textContent.trim()) }));
           failures.push(`${name} @${w}: no rail row for ${target} ${JSON.stringify(rows)}`); continue;
         }
-        if (want.batch) { await sleep(2500);   // the fyi batch: an FYI on the table, then Next
+        if (want.batch) {   // the fyi batch: an FYI on the table, then Next - pressed once the row offers it live
+          await page.waitForFunction((src) => { const b = document.querySelector("[data-tq-row] [data-tq-next]");
+            return !!b && !b.disabled && new RegExp(src).test(document.querySelector("[data-tq-rail] .tq-pile-row.current")?.textContent || ""); }, { timeout: 20000 }, target.source).catch(() => {});
           await page.evaluate(() => document.querySelector("[data-tq-row] [data-tq-next]")?.click()); }
       }
       if (tid && !want.gone) await page.waitForSelector(`[data-tq-task-page="${tid}"] [data-tq-task-head]`, { timeout: 20000 }).catch(() => {});
+      if (read && !(await read)) failures.push(`${name} @${w}: the page never read task ${tid}`);
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
       await sleep(500);
       const a = await look(page, want.card ? null : tid);
       await sleep(3500);

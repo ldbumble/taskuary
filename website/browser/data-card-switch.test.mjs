@@ -14,6 +14,24 @@ const type = (page, sel, v) => page.evaluate((sel, v) => {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(i, v); i.dispatchEvent(new Event("input", { bubbles: true }));
 }, sel, v);
 const card = (page) => page.evaluate(() => document.querySelector("[data-tq-browse-one]").innerText);
+// A CARD'S SWITCH, pressed where it is drawn once it stands still - and AGAIN only while it still reads off with nothing on its way: a
+// loaded runner can move it between the still check and the press (two polls apart, the press a CDP round trip later), and a press that
+// landed beside it was lost for good. The switch is greyed while its save is out (draft.flipping) and on once the server has it; either
+// (or `also`, what the test itself sees of the press) says it landed, so a second press never turns back off what the first turned on
+async function pressSwitch(page, scope, also = () => false) {
+  const sel = `${scope} [data-tq-card-on] input`.trim();
+  const landed = (sel) => { const i = document.querySelector(sel); return !!i && (i.checked || i.disabled); };
+  for (let i = 0; i < 5 && !also() && !(await page.evaluate(landed, sel)); i++) {
+    await page.evaluate((sel) => { window.__switchAt = null; document.querySelector(sel).scrollIntoView({ block: "center" }); }, sel);
+    await until(page, (sel) => {
+      const r = document.querySelector(sel).getBoundingClientRect(), at = `${r.x},${r.y}`, hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      const still = window.__switchAt === at; window.__switchAt = at;
+      return still && !!hit?.closest("[data-tq-card-on]");
+    }, sel);
+    await page.click(sel);
+    for (const t0 = Date.now(); Date.now() - t0 < 5000 && !also() && !(await page.evaluate(landed, sel));) await new Promise((r) => setTimeout(r, 50));
+  }
+}
 
 test("a data card: Save keeps it off, its own switch turns it on, and Remove's row says what uses it", { timeout: 600000 }, async (t) => {
   const harness = await startHarness(); t.after(() => harness.close());
@@ -60,7 +78,7 @@ test("a data card: Save keeps it off, its own switch turns it on, and Remove's r
   assert.equal(JSON.parse(posts[0].ConfigJson).base_url, "https://metrics.northwind.example");
 
   // the switch is the card's own, saved on the press like a channel card's: no Save bar calls it unsaved
-  await page.click("[data-tq-browse-one] [data-tq-card-on] input");
+  await pressSwitch(page, "[data-tq-browse-one]", () => posts.length >= 2);
   for (let i = 0; i < 100 && posts.length < 2; i++) await new Promise((r) => setTimeout(r, 100));
   assert.deepEqual(posts[1], { ConnectorId: pm.ConnectorId, Active: true }, "the press posts the switch");
   assert.equal(await page.$(".tq-savebar"), null, "nothing left unsaved");
@@ -87,13 +105,8 @@ test("a channel card: Enable saves at once, Sync now never stands beside an unsa
   // ...pressed once it STANDS STILL (2026-10-25): the Enable step was still opening when its words were up - the switch sat below the fold
   // and slid 16px right and ~280px up after the press was aimed, so the click landed beside it and the card said Off for good (CI's first
   // try since 0.3.9.37, and every try on 0.3.9.40's runner). The press is the owner's: on the switch, where it is drawn
-  await page.evaluate(() => document.querySelector("[data-tq-card-on]").scrollIntoView({ block: "center" }));
-  await until(page, () => {
-    const r = document.querySelector("[data-tq-card-on] input").getBoundingClientRect(), at = `${r.x},${r.y}`, hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
-    const still = window.__switchAt === at; window.__switchAt = at;
-    return still && !!hit?.closest("[data-tq-card-on]");
-  });
-  await page.click("[data-tq-card-on] input");
+  // ...and again only while it reads off with nothing on its way (pressSwitch)
+  await pressSwitch(page, "");
   // ...on a CI runner the first poll after the switch can take past the default 30s (it failed there three times and passed on each
   // rerun, 2026-10-25) - the wait is for the server's own word, so a longer wait cannot pass a wrong card
   await until(page, () => /polling on schedule/.test(document.body.innerText) && [...document.querySelectorAll("button")].some((b) => /^Sync/.test(b.innerText.trim()) && !b.disabled), undefined, 120000);

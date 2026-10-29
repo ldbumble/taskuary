@@ -267,3 +267,29 @@ class NewsAfterTheAgentTests(unittest.TestCase):
         self.wrote(ago(6))
         self.assertIsNone(funnel.news_since_agent(self.s, self.t))
         self.assertIn('You stopped it', funnel.not_started_why(self.s, self.t))
+
+
+class WhyNoAgentWasMeantTests(unittest.TestCase):
+    """The owner's own task and a reply opened on an empty Agent section: the reason - "on your list - no agent works it" - was only
+    in triage's panel (the email walk, 2026-10-29). The Agent section says it, from the route's own ending or the not-started line."""
+    def test_the_owners_task_says_why_no_agent_is_on_it(self):
+        s = MemoryStore()
+        t = s.create_task({'Title': 'Move the budget review with Ray Colton', 'Kind': 'task', 'Status': 'open'}, 'triage')
+        s.add_route(None, t, 'new', None, 'triage: a task for you - Ray asks to move it · new thread · on your list - no agent works it', [])
+        self.assertEqual(funnel.agent_story(s, t), {'kind': 'none', 'line': 'No agent started: on your list - no agent works it.'})
+
+    def test_a_not_started_line_written_on_it_leads(self):
+        from taskuary import ingest
+        s = MemoryStore()
+        t = s.create_task({'Title': 'Answer Gail Moreno', 'Kind': 'reply', 'Status': 'open'}, 'triage')
+        s.add_route(None, t, 'new', None, 'triage: a reply · new thread · a reply draft goes to the task for you', [])
+        ingest.not_started(s, t, 'auto-start is off in Settings')
+        self.assertEqual(funnel.agent_story(s, t)['line'], 'No agent started: auto-start is off in Settings.')
+
+    def test_agent_work_and_a_closed_task_say_nothing_here(self):
+        s = MemoryStore()
+        g = s.create_task({'Title': 'Brief me on Payworth', 'Kind': 'general', 'Status': 'open'}, 'triage')
+        s.add_route(None, g, 'new', None, 'triage: research · new thread · the assistant was set to start by itself', [])
+        self.assertIsNone(funnel.agent_story(s, g))
+        d = s.create_task({'Title': 'Move the budget review', 'Kind': 'task', 'Status': 'done'}, 'triage')
+        self.assertIsNone(funnel.agent_story(s, d))

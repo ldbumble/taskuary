@@ -8,7 +8,7 @@
 //      produced it: set and wiped in the same commit, gone before the chat mounted.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { autostartPlan, isGeneralKind } from "../src/autostart.js";
+import { autostartPlan, isGeneralKind, opensOnRegular } from "../src/autostart.js";
 
 const detailOf = (TaskId, Kind, Summary = "") => ({ task: { TaskId, Kind, Summary } });
 
@@ -54,4 +54,11 @@ test("every kind the assistant workspace handles is a chat", () => {
     assert.equal(isGeneralKind(k), true, String(k));
   assert.equal(isGeneralKind("coding"), false);
   assert.equal(isGeneralKind("reply"), false);
+});
+
+test("Send to agent opens on the regular agent for the owner's task and a reply, the coding agent only for code (email walk 2026-10-29)", () => {
+  for (const k of ["task", "reply", "general", "research", undefined]) assert.equal(opensOnRegular(k), true, String(k));
+  assert.equal(opensOnRegular("coding"), false);
+  // ...and a task or a reply is still not the assistant's conversation (general.handles): its view would refuse it
+  assert.equal(isGeneralKind("task"), false);
 });

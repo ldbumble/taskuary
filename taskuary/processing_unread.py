@@ -323,7 +323,9 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
                                     **(base | {'tid': about['TaskId'], 'idea': None, 'idea_kind': None, 'mid': None, 'channel': own,
                                                'priority': about.get('Priority'), 'preview': str(about.get('Summary') or '')[:400]}))
                 card.update(loose=True, loose_at=idea.get('LastSaid'), why=idea.get('Text'))
-                if about.get('Status') in ('done', 'dropped'): closed = True     # closed is closed: off at once, the check puts it down
+                # closed is closed, and kept open on purpose is a state: off at once, the check puts the line down
+                from . import sweep
+                if about.get('Status') in ('done', 'dropped') or sweep.kept_open(about): closed = True
         else:
             card = funnel._item('', 'todo' if kind == 'task' else 'action',
                                 # a task with no message is YOUR task, like one with mail (R14, 2026-09-25) - not "asked"

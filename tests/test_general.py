@@ -114,7 +114,7 @@ class SharedSessionTests(unittest.TestCase):
         with mock.patch.object(handbook, 'enabled', return_value=False), \
              mock.patch.object(browserview, 'close') as close:
             session.close(); session.close()
-        close.assert_called_once_with(session.sid)
+        close.assert_called_once_with(session.sid, session.task_id)          # ...its last frame kept for the task (keep_frame)
 
     def test_native_api_is_the_fast_default_when_assistant_choice_is_blank(self):
         store = MemoryStore()

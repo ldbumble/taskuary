@@ -364,7 +364,7 @@ def without_ask(text: str) -> str:
     nowhere else, so a CLI that put its question in a progress line printed Taskuary's own plumbing
     into the middle of the agent's thinking - `[[TASKUARY-ASK]] Have you signed in? | Signed in |
     Login failed`, verbatim, on screen (2026-09-15). The question itself is shown as a question."""
-    return _SIGNIN_RE.sub('', _ASK_RE.sub('', str(text or ''))).rstrip()
+    return _TURN_RE.sub('', _SIGNIN_RE.sub('', _ASK_RE.sub('', str(text or '')))).rstrip()
 
 
 # ── ...and a sign-in it needs (signin.py) ────────────────────────────────────────────────────
@@ -380,6 +380,21 @@ def signin_marker(text: str) -> tuple:
     m = _SIGNIN_RE.search(t)
     if not m: return text, None
     return _SIGNIN_RE.sub('', t).rstrip(), ' '.join((m.group(1) or '').split())[:200]
+
+
+# ── ...and a step only the owner can do on the page (browserview.TURN_PREFIX) ────────────────────────────────────────────────
+# A CAPTCHA, a sign-in the agent cannot finish, a card number: the agent stops and HANDS THE PAGE OVER, and the owner does it in the
+# browser view and hands it back. The owner's words in the marker are shown on the view; the page is the browser's, never the marker's.
+TURN_MARKER = '[[TASKUARY-YOURTURN]]'
+_TURN_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?YOUR[-_ ]?TURN\s*(?::\s*([^\]]*))?\]\][^\n]*', re.I)
+
+
+def turn_marker(text: str) -> tuple:
+    """(cleaned reply, what the owner is to do on the page - '' when it named nothing) - or (text, None) when it handed nothing over."""
+    t = str(text or '')
+    m = _TURN_RE.search(t)
+    if not m: return text, None
+    return _TURN_RE.sub('', t).rstrip(), ' '.join((m.group(1) or '').split())[:300]
 
 
 def for_screen(text: str) -> str:

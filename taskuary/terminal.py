@@ -332,7 +332,7 @@ class Term:
         # surface with it (PW-178). Telling them cost a turn each to hear it (removed 2026-09-22).
         self._emit(None)
         from . import browserview as _bv
-        _bv.close(self.sid)                               # its browser goes with it, not into an hour of idling
+        _bv.close(self.sid, getattr(self, 'task_id', None))   # its browser goes with it, not into an hour of idling - its last frame kept
         # A plan/session limit is known only after an interactive CLI paints the refusal and
         # exits. start_on_task installs the replacement callback; ordinary agent/task errors
         # never take this road, because changing authors after work began would be unsafe.
@@ -2808,7 +2808,7 @@ def shutdown_sessions():
             # ...and its browser, here: the pump that closes it when the pty ends may not get to run before the
             # process does, and a headless Chrome left behind outlives the app it belonged to
             from . import browserview as _bv
-            _bv.close(sid)
+            _bv.close(sid, getattr(session, 'task_id', None))
         except Exception as e:
             SESSIONS.pop(sid, None); logger.debug(f'could not close session {sid} during shutdown: {e}')
     return len(sessions)

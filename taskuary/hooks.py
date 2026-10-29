@@ -462,18 +462,23 @@ def _events(t, p: dict) -> None:
             # a CLI with no question tool (codex) asks with the marker: every line of it is a question, one group
             from . import selfclose
             said, signing = selfclose.signin_marker(str(p.get('last_assistant_message') or ''))
+            said, turn = selfclose.turn_marker(said)
             said, asks = selfclose.ask_markers(said)
             ws.record(st, tid, sid, 'turn_end', text=said[:4000], source='hook')
             if signing is not None:                     # a sign-in it needs: Taskuary's to do, never the agent's (signin.py)
                 from . import signin
                 try: signin.needs(st, tid, sid, signing)
                 except Exception as e: logger.warning(f'task {tid}: the sign-in the agent asked for was not raised - {e}')
+            if turn is not None:                        # a step only the owner can do on the page (browserview.your_turn)
+                from . import browserview
+                try: browserview.your_turn(st, tid, sid, turn)
+                except Exception as e: logger.warning(f'task {tid}: the page the agent handed over was not raised - {e}')
             try:                                        # the ledger: what the owner does next after a stop (outcomes.py); never breaks a hook
                 from . import advisor, ci, outcomes
                 agent = getattr(t, 'agent', '') or 'agent'
                 # ...and the Advisor hears of it once per stretch - unless the turn ASKED: then the ask below is the event, and a
                 # stop judged here would be stale the moment the question is recorded (the review, 2026-10-12)
-                if outcomes.stopped(st, tid, f'agent:{agent}', facts={'pr': bool(ci.pr_of(st, tid)), 'agent': agent}) and not asks and signing is None:
+                if outcomes.stopped(st, tid, f'agent:{agent}', facts={'pr': bool(ci.pr_of(st, tid)), 'agent': agent}) and not asks and signing is None and turn is None:
                     advisor.notice(st, 'agent.stopped', 'task', tid)
             except Exception as e: logger.debug(f'task {tid}: the stop was not ledgered - {e}')
             g = ws.group_key('|'.join(q for q, _ in asks)) if len(asks) > 1 else None
@@ -481,7 +486,7 @@ def _events(t, p: dict) -> None:
                 ws.record(st, tid, sid, 'input_needed', request_id=ws.question_id(g, i) if g else ws.request_id_for(q),
                           text=q, choices=choices, source='hook')
             # ...and a turn that asked only in PROSE is the model's to read, in the background - never a word list's
-            if not asks and signing is None and said.strip() and not ws.open_requests(ws.events(st, tid, sid)): judge_turn(st, tid, sid, said)
+            if not asks and signing is None and turn is None and said.strip() and not ws.open_requests(ws.events(st, tid, sid)): judge_turn(st, tid, sid, said)
             # the response ended, the WORK did not: a shell, a monitor or a subagent it left running and will be woken by
             # (background.py) - Claude's own list, else the jobs its hooks started (Copilot), else Claude's transcript.
             # Devin is not here on purpose: it does not wake for a background shell, so one left running is the owner's

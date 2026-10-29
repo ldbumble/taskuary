@@ -74,6 +74,7 @@ import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import SendIcon from "@mui/icons-material/Send";
 import { Divider, ListItemText } from "@mui/material";
 import { TerminalPane } from "./TerminalView.jsx";
+import { LastView } from "./BrowserPane.jsx";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -2596,6 +2597,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {resultRest && !sessionView && <ResultSummary taskId={selected} stamp={recordProps.stamp} said={story?.said || ""}
                     pages={(detail?.artifacts || []).filter((a) => isPublished(a) || a.kind === "shown")}
                     onRecord={threeUp ? () => { if (pane !== "agent") setOpenStage("agent"); setResultOpen(true); } : null} />}
+                  {/* ...and the page its browser last stood on: the view outlives the session, under whichever way the ended agent is shown
+                      (BrowserPane.LastView, the owner 2026-10-28) */}
+                  {workspaceMode === "general" && !sessionView && !term?.alive && <Box sx={{ mt: 1, "&:empty": { display: "none" } }}><LastView taskId={t.TaskId} narrow={narrow} /></Box>}
                   {/* ...opened, one press back to the result */}
                   {resultShown && !failedRun && !sessionView && threeUp && !resultRest && <Box sx={{ mt: 1.5 }}><Button size="small" variant="outlined"
                     data-tq-full-result="" aria-expanded="true" onClick={() => setResultOpen(false)}

@@ -10191,6 +10191,18 @@ def terminal_browser(sid: str):
     if tid and st.get('url'): browserview.keep_page(tid, st['url'])
     return st
 
+@app.get('/api/tasks/{task_id}/browser/last')
+def task_browser_last(task_id: int):
+    """The page the task's browser view last showed, once its session has ended (browserview.keep_frame) - {} when it kept none. The
+    frame rides as a data URL: one authenticated read, and an <img> needs no token in its address."""
+    from . import browserview
+    k = browserview.last_frame(task_id)
+    if not k: return {}
+    import base64
+    try: src = 'data:image/jpeg;base64,' + base64.b64encode(k['path'].read_bytes()).decode()
+    except OSError: return {}
+    return {'url': k['url'], 'at': k['at'], 'src': src}
+
 class SnapBody(BaseModel): task_id: int | None = None
 
 @app.post('/api/terminals/{sid}/browser/snapshot')

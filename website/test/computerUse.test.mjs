@@ -46,18 +46,20 @@ test("the pane says it is starting, closed, or being signed in - and never scrol
   const pane = src("BrowserPane.jsx"), term = src("TerminalView.jsx");
   assert.match(pane, /starting the browser…/);
   assert.match(pane, /Taskuary is signing in\$\{hostOf\(url\) \? ` to \$\{hostOf\(url\)\}` : ""\} — the picture resumes in a moment/);
-  assert.match(pane, /\{driving && !filling && \(/);
+  assert.match(pane, /\{driving && !filling && !turn && \(/);
   assert.equal((pane.match(/focus\(\{ preventScroll: true \}\)/g) || []).length, 2);
   assert.doesNotMatch(pane, /\.focus\(\)/);
   assert.match(term, /The browser closed\$\{lastPage\.current \? ` \(last on/);
   assert.match(term, /It reopens when the agent next needs it\./);
   assert.match(term, /yourTurn \? "browser · your turn - open it"/);
-  assert.equal((term.match(/filling=\{!!browser\.filling\}/g) || []).length, 2);
+  assert.equal((term.match(/filling=\{!!browser\.filling\}/g) || []).length, 3);
 });
 
 test("a held act waits on the live canvas, and the sign-in ask never invites the password", () => {
   const gw = src("GeneralWorkspace.jsx");
-  assert.match(gw, /acts=\{data\?\.browserActs \|\| \[\]\}/);
+  // ...on the browser view when it is on screen (BrowserPane's Approve / Dismiss, 2026-10-28), else its card in the chat
+  assert.match(gw, /acts=\{actsHere\}/);
+  assert.match(gw, /const actsHere = viewShown \? \(data\?\.browserActs \|\| \[\]\)\.filter\(\(r\) => !heldOn\(r, session\?\.sid\)\) : data\?\.browserActs \|\| \[\];/);
   assert.match(gw, /data-tq-browser-acts=""/);
   assert.match(gw, /acts\.map\(\(r\) => <ReviewDecision key=\{r\.ReviewId\} review=\{r\} onChanged=\{onDraftDecided\} \/>\)/);
   assert.match(gw, /placeholder=\{site \? "Message the agent - never your password" : "Type your answer"\}/);

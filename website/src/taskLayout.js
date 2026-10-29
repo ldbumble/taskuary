@@ -3,7 +3,7 @@
 import { channelName } from "./taskSources.js";
 import { plural } from "./timeWords.js";
 import { fmtDate } from "./dates.js";
-import { drawerLit, mainView, stageOf } from "./stages.js";
+import { drawerLit, mainView, sectionOf as sectionOfStage, stageOf } from "./stages.js";
 
 // WHILE AN AGENT WORKS THE WORK TAKES THE WHOLE WIDTH: a live session - coding or general, working or waiting on you (the rail's
 // spinning ring, or its hand) - and From folds to one line over it; the terminal is never covered or squeezed. `sessionView` is the
@@ -110,11 +110,35 @@ export const agentStatus = ({ profile = "", word = "not started", said = "", mad
   foot: [word === "finished" ? "✓ Done" : "", advisor ? `Advisor: ${advisor} is next` : ""].filter(Boolean).join(" · ") });
 // ...Close out: who it answers and where, the draft's first words, and whether it went - "Drafted · waiting for Send", "Sent", "Nothing owed"
 // ...and what is in it: the draft's first words, or what was sent and when, the emails owed, the close and its note
-export const closeStatus = ({ closed = false, note = "", to = "", where = "", draft = "", waiting = false, emails = 0, sent = false, sentWhen = "", owed = false } = {}) => ({
+// ...and at its foot the Advisor's next move when that move is Close out's (advisorAt): "Mark done is next" stood under an Agent nobody started
+export const closeStatus = ({ closed = false, note = "", to = "", where = "", draft = "", waiting = false, emails = 0, sent = false, sentWhen = "", owed = false, advisor = "" } = {}) => ({
   lines: [to ? `Reply to ${to}${where ? ` in ${where}` : ""}` : "", q(draft),
     closed ? ["Closed", note].filter(Boolean).join(" · ") : waiting ? "Drafted · waiting for Send" : sent ? (sentWhen ? `Sent ${sentWhen}` : "Sent") : owed ? "Not drafted yet" : emails ? "" : "Nothing owed",
     emails ? `${plural(emails, "email")} waiting for Send` : ""].filter(Boolean),
-  foot: "" });
+  foot: advisor ? `Advisor: ${advisor} is next` : "" });
+
+// THE SECTION THE TASK OPENS ON, AND WHERE THE ADVISOR'S LINE STANDS (the owner, 2026-10-29: answered in Teams, the page opened on Came from
+// with "Mark done is next" under an Agent nobody started): the Advisor's decision names the section its move is in (rulebook.SEC, the
+// decision's `section`) and that is where the task is up to - save over a live agent or a closed task, whose page is theirs. With no
+// section named, the stage's (stages.sectionOf), and the line stays the Agent's, under its work.
+const OWN_PAGE = new Set(["agent_working", "done", "closed_by_agent"]);
+export const sectionHere = ({ stage, advised = "" } = {}) =>
+  advised && SECTIONS.some((s) => s.key === advised) && !OWN_PAGE.has(stage) ? advised : sectionOfStage(stage);
+export const advisorAt = (advised = "") => (advised === "close" ? "close" : "agent");
+
+// ANSWERED OUTSIDE TASKUARY: the newest message on the task is the owner's own, typed in Teams, the mail client or a chat
+// (channels.ingest_own_message: a `context` row, Direction out) - not a reply sent from here coming back (taskLifecycle.sentElsewhere
+// already left those out of `outside`). `messages` the task's conversation with the replies sent from here in it. That message, or null
+// while anything came in after it, a reply went from here after it, or a draft waits.
+const ts = (m) => Date.parse(String(m?.SentAt || m?.CreatedAt || "").replace(" ", "T")) || 0;
+export const answeredOutside = ({ messages = [], outside = [], pending = false } = {}) => {
+  if (pending || !outside.length) return null;
+  const newest = [...messages].sort((a, b) => ts(b) - ts(a))[0];
+  return newest && outside.some((m) => m.MessageId === newest.MessageId) ? newest : null;
+};
+// ...said plainly in Close out: who was answered, where and when, and that what is left is closing it
+export const outsideLine = ({ who = "", where = "", when = "" } = {}) =>
+  `You answered ${who || "them"} yourself${where ? ` in ${where}` : ""}${when ? `, ${when}` : ""} - outside Taskuary. Nothing has come in since, so the task can be closed: Mark done.`;
 
 // THE ASK IS THE MESSAGE'S OWN WORDS when triage left no summary of its own (the task-view cleanup, owner-approved 2026-10-25): said
 // once, under the title, and From does not open the same words again as the message under it. Spacing and line breaks aside.

@@ -76,7 +76,7 @@ test("a task its agent closed opens on the Agent section", () => {
 
 test("the task page reads the stage, and says it on its body", () => {
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  assert.match(page, /import \{ mainView, sectionOf, stageOf \} from "\.\/stages\.js";/);
+  assert.match(page, /import \{ mainView, stageOf \} from "\.\/stages\.js";/);   // ...its section through taskLayout.sectionHere
   // ...read through the held view (2026-10-27: Send must not swap Close out for the task): the stage's view, held once open
   assert.match(page, /const mainNow = mainView\(\{ stage: taskStage, sessionView, stacked \}\);/);
   assert.match(page, /const main = mainHeld\.current\.main;/);

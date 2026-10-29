@@ -146,8 +146,10 @@ test("an important line lands in the task's Advisor section, and every other str
   // (the three sections, the owner's mockup 2026-10-27) - never a drawer
   const steps = page.indexOf("<Box ref={stepsBox}"), at = page.indexOf("{!threeUp && advisorNote}"), cols = page.indexOf("<Box ref={columnsBox} data-tq-columns");
   assert.ok(steps > 0 && steps < at && at < cols, "in the body's own scroller, before the columns");
-  const agent = page.indexOf('{slot("agent",'), inAgent = page.indexOf("{threeUp && advisorNote && <Box"), close = page.indexOf('slot("close",');
+  const agent = page.indexOf('{slot("agent",'), inAgent = page.indexOf('{threeUp && advisorNote && adviceIn === "agent" && <Box'), close = page.indexOf('slot("close",');
   assert.ok(agent > 0 && agent < inAgent && inAgent < close, "in the Agent section, before Close out");
+  // ...or in Close out, when the move it is the reason for is there (advice `section`, 2026-10-29: a reply the owner sent in Teams)
+  assert.ok(page.indexOf('{threeUp && advisorNote && adviceIn === "close" && <Box') > close, "in Close out when its move is Close out's");
   assert.doesNotMatch(page, /1 note/, "nothing hides behind a tab, so the tab says nothing of it");
   assert.match(sec, /aria-label="Advisor" data-tq-advisor=""/);
   assert.match(sec, /<TaskuaryMark size=\{12\} \/><Typography[^>]*>Advisor<\/Typography>/);

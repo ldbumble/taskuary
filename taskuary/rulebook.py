@@ -28,6 +28,10 @@ NEEDS_AI = frozenset({'asked', 'asked_late', 'stranger'})
 KIND = {'asked_late': 'late', 'untouched': 'late','waiting_late': 'late', 'waiting_late_usual': 'late', 'waiting_overdue': 'late', 'goal_late': 'late',
         'duplicate': 'same_ask', 'failed': 'failure', 'failed_cause': 'failure', 'report_failed': 'failure'}
 EV = '_evidence'         # a fact's own ids (usual.py), carried beside the line's facts and handed on as the decision's evidence
+# ...and WHERE ITS MOVE IS, of the task's three sections (stages.json `section`): a reply that already went is Close out's to settle, so the
+# page opens there with the Advisor's line beside it (the owner, 2026-10-29: the owner answered in Teams, and the page opened on Came from
+# with "Mark done is next" under the Agent nobody started). Carried as a fact beside the line's, handed on as the decision's `section`
+SEC = '_section'
 
 
 def asks(state: str) -> bool: return bool((RULES.get(state) or {}).get('ask'))
@@ -253,9 +257,15 @@ def state(store, item: dict, verbs: list) -> tuple:
         # ...its reason the newest of what ended it - the agent's last word, or the owner's reply that went - with nothing come in since
         try: sent = store.sent_reply(task_id=int(tid)) if tid else None
         except Exception: sent = None
-        went, work = str((sent or {}).get('DecidedAt') or '')[:19], str(last_word(store, tid) or '')[:19] if tid else ''
+        # ...sent from here, or TYPED OUTSIDE TASKUARY (channels.ingest_own_message: the owner's own line, Direction out): a Teams answer is
+        # as much the reply as a Send here, and with neither counted the wrap card of a task answered in Teams lit nothing
+        try: own = (store._one("SELECT MAX(IFNULL(SentAt,CreatedAt)) AS at FROM message WHERE TaskId=? AND Direction='out'", (int(tid),)) or {}).get('at') if tid else None
+        except Exception: own = None
+        went = max(str((sent or {}).get('DecidedAt') or '')[:19], str(own or '').replace('T', ' ')[:19])
+        work = str(last_word(store, tid) or '')[:19] if tid else ''
         if not tid or not (went or work): return 'agent_done', {'what': '', 'when': ''}
-        return 'agent_done', {'what': 'Your reply went' if went > work else 'Finished', 'when': finished_quiet(store, tid, max(went, work))}
+        if went > work: return 'agent_done', {'what': 'Your reply went', 'when': finished_quiet(store, tid, went), SEC: 'close'}
+        return 'agent_done', {'what': 'Finished', 'when': finished_quiet(store, tid, work)}
     # an agent stopped, saved, or paused when Taskuary stopped - its card, or the task's own row in an agent's stopped lane: its work is kept
     if kind == 'agent' or (tid and lane in ('stopped', 'saved')):
         at = last_word(store, tid) if tid else None
@@ -300,7 +310,7 @@ def state(store, item: dict, verbs: list) -> tuple:
         # THE OWNER ALREADY ANSWERED (trust audit A3, 2026-10-28): their own reply went after the sender's newest message, so nobody is
         # waiting - Mark done, as the model's prompt says ("someone is waiting only when they wrote again after it"); Reply lit there
         # offered to say twice what was said
-        if (went := answered(store, it, ins[-1])): return 'answered', {'when': when(went)}
+        if (went := answered(store, it, ins[-1])): return 'answered', {'when': when(went), SEC: 'close'}
         from . import usual
         if (late := usual.late_reply(store, ins[-1])):
             return 'asked_late', {'who': late['who'], 'usual': late['usual'], 'age': late['age'], EV: late['evidence']}
@@ -411,7 +421,7 @@ def decide(store, item: dict, verbs: list) -> dict:
     except Exception as e:
         logger.warning(f"rulebook: {(item or {}).get('key')} not decided - {e}"); st, facts = 'own', {}
     offered = {v['verb'] for v in verbs or []}
-    ev = facts.pop(EV, None) or []
+    ev, sec = facts.pop(EV, None) or [], facts.pop(SEC, None)
     verb = _lit(st, offered)
     # a line only over the move it is the fact for: "Erin Blake asked yesterday" over a lit Next would be a reason for another button
     # ...save what failed: the failure is the fact whatever is lit - the demo's refused Send leaves only Next, and "Failed: ..." over it
@@ -426,7 +436,7 @@ def decide(store, item: dict, verbs: list) -> dict:
         try: mem = cares_on(store) if st == 'report_ok' and 'report_off' in offered else [] if st == 'report_ok' else memory_on(store, item)
         except Exception as e: logger.debug(f"rulebook: no memory read for {(item or {}).get('key')} - {e}")
     return {'state': st, 'verb': verb, 'line': _cut(line, 64), 'ask': ask or bool(mem), **({'evidence': ev} if ev and line else {}),
-            **({'memory': mem} if mem else {})}
+            **({'memory': mem} if mem else {}), **({'section': sec} if sec and verb else {})}
 
 
 # A STATE THE RULE DECIDES ALONE NEVER READ THE MEMORY (the memory audit, 2026-10-26): a promise to the person a wait is on, or a line about

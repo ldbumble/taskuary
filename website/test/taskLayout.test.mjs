@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { CLOSE_BY_HAND, SECTIONS, agentStatus, agentWord, reportLine, closeStatus, closeOut, fromStatus, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, waitingOn, workPane } from "../src/taskLayout.js";
+import { CLOSE_BY_HAND, SECTIONS, advisorAt, agentStatus, agentWord, answeredOutside, outsideLine, reportLine, closeStatus, closeOut, fromStatus, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, sectionHere, waitingOn, workPane } from "../src/taskLayout.js";
 import { taskSource } from "./taskSource.mjs";
 
 test("two columns at rest, the whole width while an agent works - coding or general, working or waiting on you", () => {
@@ -120,8 +120,9 @@ test("the main view follows where the task is up to: the work with Came from on 
   // focus, never a word of the Advisor's - the lit tab reads main and focus, and focus is read off the task alone
   assert.equal(nextInDrawer({ main: "task", focus: "list", advice: { verb: "reply" } }), false, "advice lights no tab");
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  // ...the right drawer and its lit tab went with the three sections (2026-10-27): the section the task is up to is the stage's (sectionOf)
-  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: sectionOf\(taskStage\) \};/);
+  // ...the right drawer and its lit tab went with the three sections (2026-10-27): the section the task is up to is the stage's (sectionOf),
+  // or the one the Advisor's decision names its move is in (sectionHere, 2026-10-29)
+  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: sectionHere\(\{ stage: taskStage, advised \}\) \};/);
   assert.match(page, /const taskStage = stageOf\(\{ focus: restFocus, drafted: replyHas, closed: /, "the stage reads the focus, never the advice");
   // ...the focus the task opens on - a section opened by hand changes neither the stage nor the main view (the overnight walk, 2026-10-27)
   const restLine = page.match(/const restFocus = focusOf\(\{[^;]*;/)?.[0];
@@ -266,4 +267,40 @@ test("a report's line is its Summary, never its AGENT REPORT marker", () => {
   // a first line ending on a colon carries the line it opens - never "It says:" and nothing (the email walk, 2026-10-29)
   assert.equal(reportLine("AGENT REPORT\nThe vendor page says:\nRegistration closes Friday."), "The vendor page says: Registration closes Friday.");
   assert.equal(reportLine("Summary: It says:"), "Summary: It says:".replace(/^Summary:\s*/, ""));
+});
+
+// ANSWERED OUTSIDE TASKUARY (the owner, 2026-10-29): Erin wrote twice in Teams, the owner answered her there. The Advisor's Mark done names
+// Close out as the section its move is in, so the task opens there - with its line there, not under an Agent nobody started
+test("the Advisor's pick names the section the task opens on, and its line stands there", () => {
+  assert.equal(sectionHere({ stage: "to_reply", advised: "close" }), "close");
+  assert.equal(sectionHere({ stage: "to_reply" }), "from", "no section named: the stage's");
+  assert.equal(sectionHere({ stage: "agent_working", advised: "close" }), "agent", "a live agent's page is its own");
+  assert.equal(sectionHere({ stage: "done", advised: "close" }), "close");
+  assert.equal(sectionHere({ stage: "to_reply", advised: "elsewhere" }), "from", "only one of the three sections");
+  assert.equal(advisorAt("close"), "close");
+  assert.equal(advisorAt(""), "agent");
+  assert.equal(closeStatus({ to: "Erin Blake", sent: true, advisor: "Mark done" }).foot, "Advisor: Mark done is next");
+  assert.equal(agentStatus({ word: "not started" }).foot, "");
+  const src = taskSource();
+  assert.match(src, /sectionHere\(\{ stage: taskStage, advised \}\)/, "the opening section reads the Advisor's pick");
+  assert.match(src, /advisorNote && adviceIn === "close"/, "Close out draws the Advisor's line when its move is there");
+  assert.match(src, /advisorNote && adviceIn === "agent"/);
+});
+
+test("Close out knows the owner answered outside Taskuary, and says so", () => {
+  const ins = [1, 2].map((i) => ({ MessageId: i, Direction: "in", Status: "routed", FromName: "Erin Blake", SentAt: `2026-10-29 11:${i}0:00` }));
+  const own = { MessageId: 3, Direction: "out", Status: "context", FromName: "You", Channel: "teams", SourceName: "Teams", SentAt: "2026-10-29 12:10:00" };
+  assert.equal(answeredOutside({ messages: [...ins, own], outside: [own] }), own);
+  assert.equal(answeredOutside({ messages: [...ins, own], outside: [own], pending: true }), null, "a draft waiting is a decision nobody took");
+  const again = { ...ins[0], MessageId: 4, SentAt: "2026-10-29 12:30:00" };
+  assert.equal(answeredOutside({ messages: [...ins, own, again], outside: [own] }), null, "she wrote again after it");
+  const sentHere = { MessageId: "review:9", ReviewSent: true, Direction: "out", SentAt: "2026-10-29 12:20:00" };
+  assert.equal(answeredOutside({ messages: [...ins, own, sentHere], outside: [own] }), null, "a reply sent from here since is not outside");
+  assert.equal(answeredOutside({ messages: ins, outside: [] }), null);
+  const line = outsideLine({ who: "Erin Blake", where: "Teams", when: "at 12:10 PM" });
+  for (const w of ["Erin Blake", "in Teams", "at 12:10 PM", "outside Taskuary", "Mark done"]) assert.ok(line.includes(w), w);
+  // ...and its Draft reply is not the lit move there: the empty draft box with its filled Draft with AI is not drawn, the reply button is outlined
+  const src = taskSource();
+  assert.match(src, /&& !writeup && !outside/);
+  assert.match(src, /variant=\{outside \? "outlined" : "contained"\}/);
 });

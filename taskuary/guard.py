@@ -72,6 +72,7 @@ DENIED = (
     (r'GET|POST', r'^/signin/', "the fill page is the owner's"),
     # ...and anything that would let it widen its own reach
     (r'POST|PUT|PATCH', r'^/api/settings', 'the settings decide what agents may do'),
+    (r'PUT', r'^/api/combine/', "how far triage combines a connection's messages is the owner's setting"),
     (r'POST|PUT|PATCH|DELETE', r'^/api/(policies|agents)', 'the rules and the agent profiles'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/(docs?|playbooks)(/|$)', 'SOUL.md, the playbooks and the rest are the owner\'s word, not an agent\'s - propose, do not write'),
     # importing a skill does BOTH of the two above - an agent row and a rules document - through a

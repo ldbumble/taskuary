@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { shownAgent, instructionsHint } from "../src/kinds.js";
-import { agentName, workOf, doingNow, trailText, turnStart, elapsedText, sourceOf, saidFromTail } from "../src/agentWork.js";
+import { agentName, workOf, doingNow, trailText, turnStart, elapsedText, sourceOf, saidFromTail, saidOf } from "../src/agentWork.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 
@@ -109,4 +109,11 @@ test("the general assistant's own window is left exactly as it was", () => {
   assert.match(view, /const name = dock \? "Taskuary" : agentName\(task\)/);   // the dock's turns stay Taskuary's
   assert.match(view, /keepStart = true/);                           // and it keeps the trace's start line
   assert.match(view, /placeholder=\{working \? /);                  // and its composer keeps its own words
+});
+
+test("a chat card shows its turn's answer from the start, never the sign-off its tail ends on (email walk 2026-10-29)", () => {
+  const run = { said: "Hi Paula,\n\nThe announcement reads well.\n\nBest,\nAlex", tail: ["Best,", "Alex"] };
+  assert.equal(saidOf(run), "Hi Paula, The announcement reads well. Best, Alex");
+  assert.equal(saidOf({ tail: ["assistant> Looking at the thread"] }), "Looking at the thread");
+  assert.match(readFileSync(fileURLToPath(new URL("../src/BoardView.jsx", import.meta.url)), "utf8"), /const said = saidOf\(run\);/);
 });

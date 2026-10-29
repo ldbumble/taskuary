@@ -4314,6 +4314,9 @@ def live_runs(lines: int = 3):
                         'line': _workerstate().says(sub, task_kinds.shown(t), (t.get('request') or {}).get('text')) if sub else None,
                         'Title': (store.get_task(t['taskId']) or {}).get('Title') or '',
                         'files': t.get('files') or [], 'tail': t.get('tail') or [],
+                        # ...and what its last turn SAID, whole (workerstate.status): a chat card showed its tail's last line - "Alex", the
+                        # sign-off of the reply it drafted - for the answer (email walk 2026-10-29)
+                        'said': (_workerstate().status(store, t['taskId']).get('said') or '') if w else '',
                         'cli': t.get('cli'), 'work': t.get('work')})     # the CLI it runs; said and did (witness.py) - the card's pane
     return {'data': out}
 

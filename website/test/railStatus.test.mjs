@@ -28,6 +28,9 @@ test("an agent at work spins; only the hand waves", () => {
 test("the live session's word leads, then the rail's row, then the server's state", () => {
   assert.equal(taskStatus({ live: { alive: true, waiting: false }, rail: { lane: "approve" } }).key, "working");
   assert.equal(taskStatus({ live: { alive: true, waiting: true }, rail: { lane: "working" } }).key, "blocked");
+  // ...but a parked agent the server read as its drafted reply waiting (taskstate `approve`) is that, as the Board and the rail say (2026-10-29)
+  assert.equal(taskStatus({ live: { alive: true, waiting: true }, state: "approve" }).word, "ready to send");
+  assert.equal(taskStatus({ live: { alive: true, waiting: false }, state: "approve" }).key, "working");
   assert.equal(taskStatus({ rail: { lane: "approve", kind: "review" }, state: "yours" }).word, "ready to send");
   // no rail row (the Tasks tab, or a closed task): the server's own state, in the same words
   assert.equal(taskStatus({ state: "agentdone" }).word, "agent finished");

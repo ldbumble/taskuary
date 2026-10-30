@@ -92,10 +92,12 @@ test('New playbook offers optional historical email, starts AI, and preserves co
   assert.match(await page.$eval('[role="dialog"]', (el) => el.innerText), /Please prepare the new numbers/);
   await mkdir('../.codex-tmp', { recursive: true });
   await page.screenshot({ path: '../.codex-tmp/playbook-email-setup.png', fullPage: true });
+  // ...THE BUILD IS THE GENERAL AGENT'S, SAID IN THE CHAT (2026-10-30): the dialog shuts and the chat window says where it is - no thread in it
   await click(page, 'Set up with AI');
-  await page.waitForFunction(() => document.querySelector('[role="dialog"]')?.innerText.includes('Which connected system'));
+  await page.waitForSelector('.MuiDialog-root [role="dialog"]', { hidden: true });
+  await page.waitForFunction(() => /Started TQ-9001 - the general agent drafts the playbook/.test(document.querySelector('.tq-chat-pop')?.innerText || ''));
+  await page.click('[data-tq-box-close]'); await page.waitForSelector('.tq-chat-pop[hidden]');   // the chat is shut to go on with the shelf
   assert.deepEqual(writes[0], { text: '', message_id: 41, connector_type: '' });
-  await click(page, 'Close'); await page.waitForSelector('[role="dialog"]', { hidden: true });
 
   await click(page, 'New playbook'); await click(page, 'Use a past email', false);
   await page.type('[role="dialog"] input', 'missing');
@@ -115,9 +117,9 @@ test('New playbook offers optional historical email, starts AI, and preserves co
   await page.type('[role="dialog"] textarea', 'Prepare weekly numbers');
   unavailable = false;
   await click(page, 'Set up with AI');
-  await page.waitForFunction(() => document.querySelector('[role="dialog"]')?.innerText.includes('Which connected system'));
+  await page.waitForSelector('.MuiDialog-root [role="dialog"]', { hidden: true });
+  await page.waitForSelector('.tq-chat-pop:not([hidden])'); await page.click('[data-tq-box-close]'); await page.waitForSelector('.tq-chat-pop[hidden]');
   assert.equal(writes[2].connector_type, 'quickbooks');
-  await click(page, 'Close'); await page.waitForSelector('[role="dialog"]', { hidden: true });
   await page.setViewport({ width: 390, height: 844 });
   await click(page, 'New playbook'); await click(page, 'Start from scratch', false);
   assert.equal(await page.$eval('[role="dialog"]', (el) => {

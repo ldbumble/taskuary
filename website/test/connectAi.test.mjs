@@ -21,7 +21,7 @@ test("each no-AI line carries the button", () => {
     ["NewSheet.jsx", /action=\{errAi \? <ConnectAi/],
     ["NewPlaybookDialog.jsx", /action=\{noAi \? <ConnectAi/],
     ["DigestText.jsx", /noAi \? <ConnectAi/],
-    ["ConnectorsView.jsx", /needs an AI first[\s\S]{0,400}<ConnectAi/],
+    // (not a connection's Get AI to set it up any more: it opens the chat, whose own no-AI answer carries the button - 2026-10-30)
   ]) {
     const s = src(file);
     assert.match(s, /import ConnectAi/, `${file} imports the button`);

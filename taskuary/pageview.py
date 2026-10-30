@@ -26,7 +26,8 @@ OPEN_KEYS = ('section', 'open', 'knob', 'connector', 'step', 'tab')
 # AN OUTWARD SEND, by its verb (buttons.json) or by its words: the row's Send is `approve`, an invite's answer sends one, a hand-off sends
 # the person a mail. The page marks its own (data-tq-send); this list is the server's check when it did not
 SEND_VERBS = frozenset({'approve', 'send', 'accept_invite', 'decline_invite', 'propose_time', 'share', 'forward', 'send-handoff', 'email'})
-_SEND_WORDS = re.compile(r'^\s*(send|approve|post|forward|reply all|email (it|them|him|her)|share by email)\b', re.I)
+# ..."Send to agent" starts work here and sends nothing out: it is the owner's kind of press, like Mark done
+_SEND_WORDS = re.compile(r'^\s*(send(?! to (an? )?agent)|approve|post|forward|reply all|email (it|them|him|her)|share by email)\b', re.I)
 _SECRET_WORDS = re.compile(r'(password|passphrase|secret|token|api[ _-]?key|private key|access key|client key|xox[bp]-)', re.I)
 REFUSED_SECRET = 'is yours to paste into its field - I never see or type a secret'
 SENT_IS_YOURS = 'sends something out - that press is yours, so it is lit for you'

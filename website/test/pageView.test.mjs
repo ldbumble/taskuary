@@ -36,5 +36,5 @@ test("the chat sends the view only with a line the owner asked, and runs what ca
   assert.match(view, /if \(!react\) setMsgs\(\(m\) => \{ const i = held/);
   assert.match(view, /s\.auto >= 3\) return;/);
   // ...and its × asks before it ends the help
-  assert.match(view, /if \(pageView\.sessionNow\(\)\) setEnding\(true\); else shutBox\(\);/);
+  assert.match(view, /if \(pageView\.sessionNow\(\)\?\.door\) setEnding\(true\); else \{ pageView\.endSession\(\); shutBox\(\); \}/);
 });

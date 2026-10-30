@@ -56,9 +56,9 @@ test("the LinkedIn card asks in plain words and says where each comes from; AI s
 // card's door to the chat window - no walk drawn on the card, no Board task - and a walk left open from before is folded into the chat
 test("Get AI to set it up is a button in the card's own row that opens the chat - nothing of the walk is drawn on the card", () => {
   const ai = src.slice(src.indexOf("function useAiWalk("), src.indexOf("const GATEWAY_HINT"));
-  assert.match(ai, /<Button variant="outlined" disabled=\{!ai\.ready\.ok\} onClick=\{ai\.start\} data-tq-ai-setup="start"/, "outlined, never the card's filled button");
+  assert.match(ai, /<Button variant="outlined" onClick=\{ai\.start\} data-tq-ai-setup="start"/, "outlined, never the card's filled button - and never greyed: the chat answers with no AI too");
   assert.match(ai, /start: \(\) => openHelp\(`Help me set up \$\{name\}`\)/, "the door opens the chat with the card as its subject");
-  assert.match(ai, /if \(data\?\.moved && data\.earlier\) sayEarlier\(data\.earlier\)/, "an open walk from before is said in the chat once");
+  assert.match(ai, /if \(live && data\?\.moved && data\.earlier\) sayEarlier\(data\.earlier\)/, "an open walk from before is said in the chat once");
   for (const gone of ['post("/say"', 'post("/done"', "lightField(", "AI SETUP ·", "data-tq-walk-say", "TerminalPane"]) assert.ok(!ai.includes(gone), gone);
   const data = src.slice(src.indexOf("function DataDetail("), src.indexOf("const ROLE_META"));
   assert.match(data, /<AiWalkButton ai=\{ai\} \/>\s*\{msg && /, "beside Save and Test");

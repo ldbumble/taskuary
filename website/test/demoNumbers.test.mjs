@@ -39,6 +39,7 @@ test('a fresh public demo is one current request, without unrelated tasks, meeti
   assert.deepEqual(state['/api/tasks'].data.map(t => t.TaskId), [NUMBERS_TASK]);
   assert.deepEqual(state['/api/tasks?active=1'].data.map(t => t.TaskId), [NUMBERS_TASK]);
   assert.deepEqual(state['/api/feed'].data.map(m => m.MessageId), [NUMBERS_MESSAGE]);
+  assert.equal(state['/api/demo'].opens, null, 'the guided request does not open on the office tour');
   assert.equal(assistant.pile.items.length, 1);
   assert.equal(assistant.chats.length, 1);
   assert.equal(assistant.pile.items[0].when, '2027-02-10 09:29:00');

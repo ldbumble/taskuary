@@ -48,10 +48,12 @@ installDemoAssistantTimeline(state, scripted(clone(DEMO_ASSISTANT_TIMELINE)));
 installDemoWorkflows(state);          // two workflows built as steps: one ran clean, one failed at its first step
 // Two tasks that are the owner's own ("your task": nothing works them) - the recording has none, and
 // the Assistant Game's gym is where they train. Invented, like everything in the demo world.
-for (const [id, title, boxes] of [[31, "Renew the building access badges", [["Collect the expiring list", true], ["Order new badges", false], ["Book the handover", false]]],
-  [32, "Quarterly vendor spend review", [["Pull the spend export", true], ["Flag the three biggest changes", true], ["Send the summary to finance", false], ["File the export", false]]]]) {
+// Numbered past the recording's own tasks, which grow whenever the seed does (the tour made them 30).
+const ownTop = Math.max(0, ...(state["/api/tasks"]?.data || []).map((t) => t.TaskId));
+for (const [id, title, boxes] of [[ownTop + 1, "Renew the building access badges", [["Collect the expiring list", true], ["Order new badges", false], ["Book the handover", false]]],
+  [ownTop + 2, "Quarterly vendor spend review", [["Pull the spend export", true], ["Flag the three biggest changes", true], ["Send the summary to finance", false], ["File the export", false]]]]) {
   const row = { TaskId: id, Title: title, Summary: null, Kind: "task", Status: "open", Priority: "normal", Source: "owner", CreatedBy: "owner",
-    CreatedAt: "2026-09-02 09:00:00", ref: `TQ-00${id}`, Session: null, Waiting: 0, HadAgent: false,
+    CreatedAt: "2026-09-02 09:00:00", ref: `TQ-${String(id).padStart(4, "0")}`, Session: null, Waiting: 0, HadAgent: false,
     Checklist: JSON.stringify(boxes.map(([text, done], n) => ({ id: `c${id}-${n}`, text, done }))) };
   for (const k of ["/api/tasks", "/api/tasks?active=1"]) (state[k] ||= { data: [] }).data.push(scripted(clone(row)));
 }
@@ -67,11 +69,12 @@ scriptedAssistant.transcripts[scriptedAssistant.activeTaskId] = scriptedAssistan
 if (!numbersWorkflow) {
   const soon = new Date(Date.now() + 70 * 60000);
   const at = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:00`;
+  // numbered past the recording's own messages (it has ~45), so none of these lands on a real one
   const said = {
-    41: ["teams", "Gail Moreno", "gmoreno@northwind.example", "Can you sign off the new rota before 3?", "Hi - the weekend rota is in the shared folder. Can you sign it off before 3 so I can post it? Two swaps from last week are already in."],
-    42: ["whatsapp", "Omar Keller", "+1 555 0142", "Driver is at the loading dock - which door?", "The furniture delivery is here early. Door B is blocked by the recycling pickup - OK to use door D?"],
-    43: ["slack", "Erin Blake", "@erin", "Heads up: the payroll portal moved to single sign-on", "From Monday the payroll portal signs in through the company login. Nothing to do unless your bookmark breaks."],
-    44: ["email", "Paula Vance", "pvance@vendor.example", "Badge printer quote", "Following up on the badge printer quote from last week - it is valid until Friday. Want me to hold it?"],
+    941: ["teams", "Gail Moreno", "gmoreno@northwind.example", "Can you sign off the new rota before 3?", "Hi - the weekend rota is in the shared folder. Can you sign it off before 3 so I can post it? Two swaps from last week are already in."],
+    942: ["whatsapp", "Omar Keller", "+1 555 0142", "Driver is at the loading dock - which door?", "The furniture delivery is here early. Door B is blocked by the recycling pickup - OK to use door D?"],
+    943: ["slack", "Erin Blake", "@erin", "Heads up: the payroll portal moved to single sign-on", "From Monday the payroll portal signs in through the company login. Nothing to do unless your bookmark breaks."],
+    944: ["email", "Paula Vance", "pvance@vendor.example", "Badge printer quote", "Following up on the badge printer quote from last week - it is valid until Friday. Want me to hold it?"],
   };
   // the coding agent's task in the recording, by what it is - its number moves whenever the seed does
   const gl = (state["/api/tasks"]?.data || []).find((t) => t.Title === "Reconcile the August GL export")?.TaskId || 4;
@@ -80,13 +83,13 @@ if (!numbersWorkflow) {
     one[mid] = { MessageId: Number(mid), TaskId: null, Channel: channel, Subject: subject, FromName: who, FromEmail: from, SentAt: at(new Date(Date.now() - 50 * 60000)),
       BodyText: body, ReadText: body, SourceLink: null, Status: "feed", Direction: "in" };
   scriptedAssistant.pile.items.push(
-    { key: "msg:41", kind: "asked", lane: "asked", title: said[41][3], who: said[41][1], when: at(new Date()), why: "asked you to sign something off today", mid: 41, channel: "teams", preview: said[41][4] },
-    { key: "msg:42", kind: "asked", lane: "asked", title: said[42][3], who: said[42][1], when: at(new Date()), why: "a one-line answer settles it", mid: 42, channel: "whatsapp", preview: said[42][4] },
+    { key: "msg:941", kind: "asked", lane: "asked", title: said[941][3], who: said[941][1], when: at(new Date()), why: "asked you to sign something off today", mid: 941, channel: "teams", preview: said[941][4] },
+    { key: "msg:942", kind: "asked", lane: "asked", title: said[942][3], who: said[942][1], when: at(new Date()), why: "a one-line answer settles it", mid: 942, channel: "whatsapp", preview: said[942][4] },
     { key: "meeting:ops", kind: "meeting", lane: "time", title: "Operations review", who: "Calendar", when: at(soon), why: "starts in about an hour", channel: "meeting",
       event: { subject: "Operations review", start: at(soon), who: ["Gail Moreno", "Ray Colton", "Marcus Reed"], where: "Room 2", about: "Weekly numbers, the AP cutover, and the census sync." } },
-    { key: "msg:43", kind: "fyi", lane: "fyi", title: said[43][3], who: said[43][1], when: at(new Date()), why: "an announcement - nothing to do", mid: 43, channel: "slack", preview: said[43][4] },
+    { key: "msg:943", kind: "fyi", lane: "fyi", title: said[943][3], who: said[943][1], when: at(new Date()), why: "an announcement - nothing to do", mid: 943, channel: "slack", preview: said[943][4] },
     { key: "idea:badges", kind: "idea", lane: "forgotten", title: "The badge printer quote has gone quiet", who: "Paula Vance", when: scripted(["2026-09-01 14:00:00"])[0],
-      why: "no reply since Monday; the quote runs out Friday", idea_kind: "cold", channel: "assistant", action: { type: "followup", mid: 44 }, mid: 44 },
+      why: "no reply since Monday; the quote runs out Friday", idea_kind: "cold", channel: "assistant", action: { type: "followup", mid: 944 }, mid: 944 },
     { key: `agentdone:${gl}`, kind: "agentdone", lane: "report", title: "Reconcile the August GL export", who: "coding", when: at(new Date()), tid: gl, ref: `TQ-${String(gl).padStart(4, "0")}`,
       summary: "Found the two inter-company rows the export dropped; the fix is on a branch with a test.", channel: "github" },
   );
@@ -211,7 +214,7 @@ const REPLIES = [
   "In your own Taskuary this is the AI you connected answering. Here it is a script - " +
   "but everything else on this page is the real application.",
   "I would read the thread, pull the numbers it names, and come back with the two lines that " +
-  "decide it. Then you approve the reply and it goes.",
+  "decide it. Then you press Send on the reply and it goes.",
 ];
 
 const feedRows = () => (state["/api/feed"]?.data) || [];
@@ -301,7 +304,7 @@ const agentAsking = () => scriptedAssistant.pile.items.find((i) => i.kind === "a
 const DEMO_PROMPTS = [
   { id: "next", ask: "What's next?", walk: () => null },
   { id: "agent", ask: "Show me the agent waiting on me", walk: agentAsking },
-  { id: "approve", ask: "Approve the draft", item: true, decision: "approve", say: "The demo will mark the invented draft handled; nothing is sent." },
+  { id: "approve", ask: "Send the draft", item: true, decision: "approve", say: "The demo will mark the invented draft sent; nothing leaves the demo." },
   { id: "later", ask: "Not now", item: true, decision: "later", say: "I will move this invented item back in the demo pipe." },
   { id: "tomorrow", ask: "Remind me tomorrow", item: true, decision: "skip", say: "It will reappear tomorrow in the demo." },
   { id: "done", ask: "Mark this done", item: true, decision: "done", say: "Marked done in this temporary demo." },

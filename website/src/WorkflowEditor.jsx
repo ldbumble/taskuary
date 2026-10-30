@@ -16,6 +16,7 @@ import { effortChoices, keepEffort, modelChoices } from "./workflowBrain.js";
 import WorkflowSteps from "./WorkflowSteps.jsx";
 import { REPAIR, REPORT_WORDS, asReport, asSteps, askFor, diffKeys, firstMissing, onlyReads, outputsOf, toSaved } from "./workflowFlow.js";
 import { openAppLink } from "./appLinks.js";
+import { openHelp, useViewExtras } from "./pageView.js";
 
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -159,6 +160,9 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
   useEffect(() => { if (fixRun && cur) { fix(fixRun); onFixTaken?.(); } }, [fixRun, cur?.SourceId]);   // eslint-disable-line react-hooks/exhaustive-deps
   const changed = repair ? diffKeys(repair.was, cfg.flow) : null;
   const canFix = !!(cur && steps && lastRunRec?.failed && lastRunRec?.run_id && (lastRunRec.steps || []).some((r) => r.status === "failed"));
+  // FIX WITH AI OPENS THE CHAT (2026-10-30): the repair it ran is the Assistant's to press here, as the owner's own "Repair the failed step"
+  // would be - it lands as the same unsaved change (Keep, then Save stay the owner's)
+  useViewExtras("reports", { buttons: canFix ? [{ id: "repair", label: "Repair the failed step", press: () => fix(lastRunRec.run_id) }] : [] });
 
   const body = () => {
     const c = withSchedule({ ...cfg, type: "agent", access: "write" }, sched);
@@ -224,7 +228,7 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
       </Box>
       {msg && <Alert severity={msg.ok ? "success" : "warning"} sx={{ mb: 1.5, fontSize: 12.5 }} onClose={() => setMsg(null)}
         action={msg.fix ? <Button size="small" component="a" href={msg.fix.href} sx={{ fontSize: 12 }}>{msg.fix.label || btnLabel("fix")}</Button> : null}>{msg.text}</Alert>}
-      {lastRun && lastRun({ onFix: canFix ? () => fix(lastRunRec.run_id) : null, fixing: busy === "fix",
+      {lastRun && lastRun({ onFix: canFix ? () => openHelp(`Fix the failed run of ${cfg.title || cur?.Address || "this routine"}`) : null, fixing: busy === "fix",
         // a repair taken back puts the old steps on the saved workflow: the page shows them too
         onChanged: async () => { await reload(); const { data } = await api.get("/api/sources"); const row = (data.data || []).find((x) => x.SourceId === cur?.SourceId);
           if (row) setCfg((c) => ({ ...c, flow: parse(row.ConfigJson).flow })); } })}

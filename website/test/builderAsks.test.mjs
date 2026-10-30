@@ -26,14 +26,7 @@ test("a typed answer that is not in the list stays a row of its own", () => {
   assert.deepEqual(pickRows(["northwind/ledger"], OTHER), ["northwind/ledger"]);
 });
 
-test("a repository question reads the coding picker's list, and both builders draw the same questions", () => {
-  const src = read("BuilderAsks.jsx");
-  assert.match(src, /api\.get\("\/api\/repos"\)/);
-  assert.match(src, /a\.kind === "repo"/);
-  assert.match(src, /<SchedulePicker /);
-  for (const f of ["Composer.jsx", "ReportsView.jsx"]) assert.match(read(f), /<BuilderAsks asks=\{asks\} answers=\{answers\} setAnswers=\{setAnswers\}/);
-  assert.doesNotMatch(read("BuilderAsks.jsx"), /\/repositor|\.test\(a\.q|a\.q\.(includes|match)/i, "the question's words decide nothing");
-});
+
 
 // ANSWER & BUILD LOOKED FROZEN (the owner, 2026-10-29): greyed until every box was filled, and nothing moved once pressed
 test("Answer & build presses with some questions blank, and says why when it cannot", () => {
@@ -47,12 +40,4 @@ test("Answer & build presses with some questions blank, and says why when it can
   assert.deepEqual(answersFor(asks, { "Which repository?": " northwind/ledger " }), { "Which repository?": "northwind/ledger", "Which sites?": "" });
 });
 
-test("while it builds the button spins and a status line says so; a miss keeps the questions with Try again", () => {
-  const src = read("Composer.jsx");
-  assert.match(src, /if \(running\.current\) return;/);
-  assert.match(src, /busy === "answer" \? <CircularProgress/);
-  assert.match(src, /role="status"[^>]*>Building it from your answers…/);
-  assert.match(src, /data-tq-composer-retry=""[\s\S]*?onClick=\{\(\) => go\(last\.current\)\}>\{btnLabel\("try_again"\)\}</);
-  assert.match(src, /asks: o\?\.asks, questions: o\?\.questions/);
-  assert.match(src, /<Tooltip title=\{can\.hint\}/);
-});
+

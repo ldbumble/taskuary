@@ -43,7 +43,7 @@ export function BrowseFrame({ title, summary, sections = [], section, onSection,
   // an earlier browse card is one line - a record, not a door, like every folded item on the canvas (the owner, 2026-10-16)
   if (!live) return <div className="tq-fold"><b>{title}</b></div>;
   return (
-    <Box ref={root} sx={{ display: "flex", flexDirection: "column", gap: 1.25, scrollMarginTop: "8px" }}>
+    <Box ref={root} data-tq-view-label={detail ? openLabel : where} sx={{ display: "flex", flexDirection: "column", gap: 1.25, scrollMarginTop: "8px" }}>
       {/* 1. sections */}
       <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: "12px", bgcolor: PANEL, px: 2, py: 1.75 }}>
         <Box sx={{ display: "flex", alignItems: "baseline", gap: 1.25, flexWrap: "wrap" }}>

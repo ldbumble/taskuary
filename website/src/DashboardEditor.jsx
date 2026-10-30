@@ -11,7 +11,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import api from "./api";
-import Composer from "./Composer.jsx";
+import SetupWithAi from "./SetupWithAi.jsx";
 import Dashboard from "./dashboard/Dashboard.jsx";
 import { RANGES } from "./dashboard/slice.js";
 import { BINDS, MAX_COMPONENTS, MAX_SOURCES, OWN_KEYS, runCfg, freshKey, orphans, sigOf, whereOf, whereText, windowOf, withField, withKind, withWindow } from "./dashboard/setup.js";
@@ -221,10 +221,8 @@ export default function DashboardEditor({ sourceId = null, draft = null, types =
     <Box data-tq-dashboard-setup="">
       {err && <Alert severity="error" sx={{ mb: 1.5 }}>{err}</Alert>}
       {sourceId == null ? <>
-        <Composer kind="dashboard" onDraft={(config, meta) => {
-          setSpec(config); setTitle(config.title || ""); setSched(scheduleOf(config));
-          setNote({ severity: meta?.error || meta?.confidence === "low" ? "warning" : "info", text: meta?.error ? `${meta.error}.` : meta?.explain || "" });
-        }} />
+        {/* the describe box is the chat's now (2026-10-30): its door, and the Assistant's draft lands here as New's did (ReportsView compose) */}
+        <SetupWithAi kind="dashboard" sx={{ mb: 2 }} />
         <Templates onUse={takeTemplate} />
       </> : !err && <CircularProgress size={20} />}
     </Box>

@@ -2,7 +2,7 @@
 // Connections tab, or an inline one), write the query, optionally an AI summary prompt,
 // preview the whole pipeline, schedule it - results land on the Timeline. Connections
 // stay pure connections; this tab is where reports are built and managed.
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog,
   DialogContent, DialogTitle, IconButton, ListSubheader, Menu, MenuItem, Select, Step, StepButton, StepContent,
@@ -31,9 +31,6 @@ import WorkflowEditor, { SchedulePicker, scheduleOf, withSchedule } from "./Work
 import RunSteps from "./RunSteps.jsx";
 import { TYPE_LABELS, cronText, reportSchedule, startupText } from "./reportWords.js";
 import { asSteps, runWords } from "./workflowFlow.js";
-import Composer from "./Composer.jsx";
-import BuilderAsks from "./BuilderAsks.jsx";
-import { answerState, answersFor, asksOf } from "./builderAsks.js";
 import { onDraftHanded, takeDraft } from "./draftHandoff.js";
 import { label as btnLabel } from "./buttons.js";
 import { ideaCounted, ideaWord } from "./lanes.js";   // an Advisor line's kind, in lanes.json's words
@@ -43,6 +40,8 @@ import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
 import { NewPlaybook, PB_EMPTY, PB_OPEN, PlaybookDetail, PlaybookRow, RecentlyDeleted as PlaybooksDeleted, pbOpen, usePlaybooks } from "./PlaybookShelf.jsx";
 import { NEW_PB, takePlaybookAsk } from "./playbookOpen.js";
+import SetupWithAi from "./SetupWithAi.jsx";
+import { openHelp, useViewExtras, viewResult } from "./pageView.js";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
   "e.g. Summarize headcount by site. Flag anything under 70 and any day-over-day drop."];
@@ -419,6 +418,23 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         : low ? "It is not confident about this one — preview it in step 2 before you save." : "Check it below and preview it in step 2 before you save."}` });
   };
   onDraftRef.current = onDraft;
+  // THE DESCRIBE-IT, AS THE ASSISTANT'S (2026-10-30): the box that drafted a report from words is gone from the page - its door opens the
+  // chat - and the composer it ran is a field the Assistant fills when it is helping here. Its draft lands in the builder through the same
+  // onDraft the box used; what the composer asks back, or its miss, is the page's answer the Assistant hears next (viewResult)
+  const composeKind = browseState.section === "dashboards" ? "dashboard" : browseState.section === "workflows" ? "workflow" : "report";
+  const compose = async (ask) => {
+    const kind = composeKind;
+    const endpoint = kind === "workflow" ? "/api/workflows/compose" : kind === "dashboard" ? "/api/dashboards/compose" : "/api/reports/compose";
+    const { data } = await api.post(endpoint, { ask: String(ask || "") });
+    if (data.config && !data.error) {
+      if (kind === "dashboard") { setDashDraft({ config: data.config, meta: data }); if (browse) onBrowseState?.({ section: "dashboards", open: "draft" }); else setBucket("draft-dashboard"); }
+      else if (kind === "workflow" && data.verdict !== "report") { onDraft(data.config, data); if (browse) onBrowseState?.({ section: "workflows", open: "new-agent" }); else setBucket("new-agent"); }
+      else { onDraft(data.config, data); if (browse) onBrowseState?.({ section: "reports", open: "draft" }); else setBucket("draft"); }
+      viewResult({ action: "compose", ok: true, detail: `${data.explain || "Drafted"} - in the builder now, not saved` });
+    } else viewResult({ action: "compose", ok: false, detail: data.questions?.length ? `It needs to know: ${data.questions.join(" ")}` : data.error || "It could not draft that." });
+  };
+  useViewExtras("reports", { fields: [{ key: "describe", label: composeKind === "workflow" ? "Describe the routine you want" : composeKind === "dashboard" ? DASH.describe : "Describe the report you want",
+    value: "", set: compose }] });
 
   // a failed load is said, with a way to try again - a spinner here waited for ever
   if (!sources) return err
@@ -535,7 +551,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         fixRun={fixRun?.sid === openId ? fixRun.runId : browse && browseState.fix && browseState.open === openId ? browseState.fix : null}
         onFixTaken={() => { setFixRun(null); if (browse && browseState.fix) onBrowseState?.({ ...browseState, fix: null }); }} onReport={asReportDraft}
         composer={<>
-          <Composer kind="workflow" onDraft={(config, meta) => meta?.verdict === "report" ? asReportDraft(config, meta) : onDraft(config, meta)} />
+          <SetupWithAi kind="workflow" sx={{ mb: 2 }} />
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: -1.25, mb: 2 }}>
             Monthly Zoho invoices have a form of their own — <Box component="span" onClick={toInvoices}
               sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>open it</Box>.
@@ -602,12 +618,9 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
             </Button>
             {note && <Typography variant="body2" sx={{ fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
           </Box>
-          {section === "reports" && <Composer kind="report" onDraft={(config, meta) => {
-            onDraft(config, meta); onBrowseState?.({ section, open: "draft" });
-          }} />}
-          {section === "dashboards" && <Composer kind="dashboard" onDraft={(config, meta) => {
-            setDashDraft({ config, meta: meta || {} }); onBrowseState?.({ section, open: "draft" });
-          }} />}
+          {section === "reports" && <SetupWithAi kind="report" onOpen={() => { setDraft(null); onBrowseState?.({ section, open: "new-report" }); }} />}
+          {section === "dashboards" && <SetupWithAi kind="dashboard" onOpen={() => { setDashDraft(null); onBrowseState?.({ section, open: "new-dashboard" }); }} />}
+          {section === "workflows" && <SetupWithAi kind="workflow" onOpen={() => { setDraft(null); onBrowseState?.({ section, open: "new-agent" }); }} />}
         </Box>
       ) : null,
       cards: section === "playbooks" ? [...pbs.books.map((b) => ({ key: `pb-${b.slug}`, node: <PlaybookRow b={b}
@@ -656,8 +669,8 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
       </Box>
       {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
       <UndoLine kinds={["report", "workflow", "dashboard"]} onRestored={load} />
-      {!workflowOverview && !dashOverview && <Composer kind="report" onDraft={(config, meta) => { onDraft(config, meta); setBucket("draft"); }} />}
-      {dashOverview && <Composer kind="dashboard" onDraft={(config, meta) => { setDashDraft({ config, meta: meta || {} }); setBucket("draft-dashboard"); }} />}
+      {!workflowOverview && !dashOverview && <SetupWithAi kind="report" sx={{ mb: 2 }} onOpen={() => { setDraft(null); setBucket("new-report"); }} />}
+      {dashOverview && <SetupWithAi kind="dashboard" sx={{ mb: 2 }} onOpen={() => { setDashDraft(null); setBucket("new-dashboard"); }} />}
       {!list.length && <Empty>{q ? nothingMatches(q, workflowOverview ? "Routines" : "Reports") : dashOverview ? DASH.empty : workflowOverview
         ? "No routines yet — New routine describes one and sets it up."
         : "No reports yet — New report walks you through source, query, AI summary and schedule."}</Empty>}
@@ -1792,75 +1805,22 @@ function AwsPicker({ label, which, value, placeholder, service, onChange }) {
    One component for both callers, because they differ only in how many cards come back: a single
    card fills itself in, and the Assistant's Pipeline step gets the whole set of systems the ask
    needs plus the instruction to judge them by. */
-function SourceComposer({ typeHint, one, hint, placeholder, onSources }) {
-  const [open, setOpen] = useState(!one);
-  const [ask, setAsk] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [out, setOut] = useState(null);
-  const [answers, setAnswers] = useState({});
-
-  const go = async (withAnswers) => {
-    if (busy) return;
-    setBusy(true); if (!withAnswers) setOut(null);    // the questions stay up while their answers are read
-    try {
-      const { data } = await api.post("/api/reports/compose-sources",
-        { ask, type: typeHint || undefined, answers: withAnswers || undefined });
-      if (data.sources?.length) {
-        onSources(data.sources, data.ai_prompt || "");
-        setAsk(""); setAnswers({});
-        // the server hands back cards that failed its check WITH the reason (compose_sources) - never a bare tick
-        setOut(data.error ? { error: `It drafted ${one ? "this" : "these"}, but: ${data.error}. Fix that before you save.` }
-          : { done: (data.explain || (one ? "Filled it in." : "Added them."))
-            + (data.confidence === "low" ? " It is not confident about this one — check it before you save." : "") });
-      } else setOut(data);
-    } catch (e) { setOut({ error: e?.response?.data?.detail || "the composer could not be reached" }); }
-    setBusy(false);
+function SourceComposer({ typeHint, one, hint, onSources }) {
+  // ...A DOOR TO THE CHAT NOW (2026-10-30): "let AI fill this in" opens the Assistant on this setup, and the composer that wrote the cards
+  // is a field it fills here (pageView view extras) - the cards land through the same onSources, and what it asks back is heard next
+  const n = useId();
+  const what = one ? `What the ${typeHint || "source"} card should return` : hint;
+  const fill = async (ask) => {
+    const { data } = await api.post("/api/reports/compose-sources", { ask: String(ask || ""), type: typeHint || undefined });
+    if (data.sources?.length) {
+      onSources(data.sources, data.ai_prompt || "");
+      viewResult({ action: "compose", ok: !data.error, detail: data.error || data.explain || (one ? "Filled it in." : "Added them.") });
+    } else viewResult({ action: "compose", ok: false, detail: data.questions?.length ? `It needs to know: ${data.questions.join(" ")}` : data.error || "It could not write that card." });
   };
-  const asks = asksOf(out), can = answerState(asks, answers, busy);
-
-  if (!open) {
-    return (
-      <Button size="small" onClick={() => setOpen(true)} startIcon={<AutoAwesomeIcon sx={{ fontSize: 14 }} />}
-        sx={{ fontSize: 11.5, alignSelf: "flex-start" }}>let AI fill this in</Button>
-    );
-  }
+  useViewExtras("reports", { fields: [{ key: `sources${n}`, label: what, value: "", set: fill }] });
   return (
-    <Box sx={one ? { bgcolor: "#fffdf7", border: "1px solid #d8cfbe", borderRadius: 1, p: 1 }
-      : { ...card, p: 1.5, mb: 1.25, bgcolor: "#fffdf7", borderColor: "#d8cfbe" }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, mb: 0.7 }}>
-        <AutoAwesomeIcon sx={{ fontSize: 14, color: ACCENT2 }} />
-        <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: INK, flex: 1 }}>{hint}</Typography>
-        {one && <CloseIcon onClick={() => { setOpen(false); setOut(null); }} titleAccess="Fill it in by hand instead"
-          sx={{ fontSize: 14, color: FAINT, cursor: "pointer" }} />}
-      </Box>
-      <TextField fullWidth size="small" multiline minRows={2} value={ask} disabled={busy} sx={{ bgcolor: "#fff" }}
-        inputProps={{ style: { fontSize: 12 } }} placeholder={placeholder}
-        onChange={(e) => setAsk(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && ask.trim()) go(); }} />
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.7, flexWrap: "wrap" }}>
-        <Button size="small" variant="contained" disableElevation disabled={busy || !ask.trim()} onClick={() => go()}
-          startIcon={busy ? <CircularProgress size={12} /> : <AutoAwesomeIcon sx={{ fontSize: 14 }} />}>
-          {busy ? "Reading the schema…" : one ? "Write this card" : "Point it at them"}
-        </Button>
-        <Typography sx={{ fontSize: 10.5, color: FAINT }}>
-          It reads the real schema first, and asks rather than guessing a field name.
-        </Typography>
-      </Box>
-      {out?.error && <Alert severity="warning" sx={{ mt: 1, fontSize: 12 }}>{out.error}</Alert>}
-      {out?.done && <Typography sx={{ mt: 0.9, fontSize: 11.5, color: "#47654a", fontWeight: 600 }}>✓ {out.done}</Typography>}
-
-      {/* it did not know something. Better here than as a silently wrong filter. */}
-      {asks.length > 0 && (
-        <Box sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 0.9 }}>
-          <Typography sx={{ fontSize: 11, color: DIM, fontWeight: 600 }}>A couple of things it will not guess at:</Typography>
-          <BuilderAsks asks={asks} answers={answers} setAnswers={setAnswers} disabled={busy} />
-          <Tooltip title={can.hint} placement="top-start"><span style={{ alignSelf: "flex-start" }}>
-            <Button size="small" variant="contained" disableElevation disabled={can.disabled} onClick={() => go(answersFor(asks, answers))}
-              startIcon={busy ? <CircularProgress size={12} sx={{ color: "inherit" }} /> : null}>{busy ? "Writing it…" : <>Answer &amp; write it</>}</Button>
-          </span></Tooltip>
-        </Box>
-      )}
-    </Box>
+    <Button size="small" data-tq-setup-ai="sources" onClick={() => openHelp(one ? `Fill in the ${typeHint || "source"} card with me` : `Help me with this: ${hint}`)}
+      startIcon={<AutoAwesomeIcon sx={{ fontSize: 14 }} />} sx={{ fontSize: 11.5, alignSelf: "flex-start" }}>let AI fill this in</Button>
   );
 }
 

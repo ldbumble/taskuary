@@ -13,7 +13,8 @@ const NOW = new Date("2026-10-23T10:00:00");
 test("New dashboard offers the ready ones under the composer, and Use this draws one without a preview round-trip", () => {
   const ed = src("DashboardEditor.jsx");
   const setup = ed.slice(ed.indexOf("if (!spec) return ("), ed.indexOf("data-tq-dashboard-editor"));
-  assert.match(setup, /<Composer kind="dashboard"[\s\S]*<Templates onUse=\{takeTemplate\} \/>/, "the ready ones sit under Describe it, in the New flow");
+  // ...under Set up with AI, the describe box's door to the chat (2026-10-30)
+  assert.match(setup, /<SetupWithAi kind="dashboard"[\s\S]*<Templates onUse=\{takeTemplate\} \/>/, "the ready ones sit under the door, in the New flow");
   assert.match(setup, /sourceId == null \?/, "...only on a NEW dashboard, never over a saved one");
   assert.match(ed, /api\.get\("\/api\/dashboards\/templates"\)/);
   assert.match(ed, /api\.get\(`\/api\/dashboards\/templates\/\$\{encodeURIComponent\(key\)\}`\)/);

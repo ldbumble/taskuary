@@ -32,6 +32,7 @@ import DifferenceIcon from "@mui/icons-material/Difference";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
+import { useViewExtras } from "./pageView.js";
 import { openReply as draftReply, draftBehind } from "./replyDraft.js";   // the component's own openReply below would shadow it, and call itself
 import { opError, runOperation } from "./taskOps.js";
 import { ClosingCard, WriteupBlock, WriteupLine, closeAfterSend, completeTask, writeUpThenClose } from "./closeAgent.jsx";
@@ -2205,6 +2206,17 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // and what else could be pressed. The canvas's copy is the desk's row, recorded there
   const pageRef = useRef(null), taskAdviceRef = useRef(null);
   taskAdviceRef.current = taskAdvice;
+  // WHAT THE ASSISTANT IS TOLD OF THIS TASK when the owner asks about it (pageView.js, 2026-10-30): the task, and its title as a field it may
+  // rewrite - the task tool's own update (task.update), the road every owner act on this page takes. Its boxes (the draft) and its row's
+  // buttons are read off the page
+  const tref = t ? t.ref || `TQ-${String(t.TaskId).padStart(4, "0")}` : "";
+  useViewExtras(pageRef, t ? {
+    item: { kind: "task", id: t.TaskId, ref: tref, title: t.Title || "" }, title: `${tref} - ${t.Title || ""}`,
+    fields: [{ key: "title", label: "Title", value: t.Title || "", set: async (v) => {
+      await runOperation(api, "task.update", t.TaskId, { title: String(v || "").trim() || t.Title });
+      loadDetail(t.TaskId); onListChanged?.(); onChanged?.();
+    } }],
+  } : {});
   useEffect(() => {
     const el = pageRef.current;
     if (canvas || !active || !el) return undefined;

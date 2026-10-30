@@ -56,122 +56,64 @@ import { validEmail } from "./recipientOptions.js";
 import { waLabel, waMatches, waPhone } from "./waChats.js";
 import { PEOPLE_MISSING } from "./peopleSearch.js";
 import ReasonPanel from "./ReasonNetwork.jsx";
+import { openHelp, sayEarlier, viewResult } from "./pageView.js";
 
-/* ── Get AI to set it up: the GENERAL agent walks the person through the card (taskuary/aisetup.py start_walk - the owner,
-   2026-10-21: "it should look like general agent working, not code one"). Its brief is the card's Guide; its hands are the card's
-   own - put a value it knows onto the card, run Test, ask the person for one step. A BUTTON in the card's own row, and the walk
-   on the card under it: what it is doing now, the step it needs from you with that field lit, and what is done. The task is on
-   the Board behind it. ── */
+/* ── Get AI to set it up: THE ASSISTANT, IN THE CHAT (the owner, 2026-10-30: "don't you think this sort of ai troubleshooting should go
+   on in the assistant. it's more intuitive and it will know if you change something in the screen"). The button is the card's door to
+   the chat window: it opens with this card as what it is about, and the Assistant fills what it knows, presses Test, lights what is the
+   owner's to paste - each a step in the chat (pageView.js). No walk on the card, no Board task: the conversation is the record. A walk
+   left open from before is folded into the chat the next time the card opens (aisetup.move_walk). ── */
 // opens Connections > AI CLI agents from inside a card - the door the "no AI app here" line points at
 const AgentsDoor = createContext(null);
-function useAiWalk({ conn, steps = [], fields = [], secretLabel = "", agentSteps = [], reload, onAsk }) {
-  const [walk, setWalk] = useState(null);
+function useAiWalk({ conn }) {
   const [ready, setReady] = useState({ ok: true, why: "" });
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  const cid = conn.ConnectorId;
-  const ctx = { guide: steps || [], fields: (fields || []).map(([l, k]) => [l, k]), secret_label: secretLabel || "", agent_steps: agentSteps || [] };
-  const take = (data) => { setWalk(data?.session ? data : null); if (data?.ready !== undefined) setReady({ ok: data.ready !== false, why: data.why || "" }); };
-  const load = useCallback(async () => {
-    if (!cid) return;
-    try { take((await api.get(`/api/connectors/${cid}/ai-setup`)).data); } catch { /* the card still works without it */ }
-  }, [cid]);   // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { load(); }, [load]);
-  // the walk is followed while it is open: the agent answers on its own thread, and a Test it ran changes the card
-  const open = walk?.session?.taskId, finished = !!walk?.done;
-  useEffect(() => { if (!open) return undefined; const id = setInterval(load, 2000); return () => clearInterval(id); }, [open, load]);
-  useEffect(() => { if (finished) reload?.(); }, [finished]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const asked = walk?.ask?.label || walk?.ask?.field || "";
-  useEffect(() => { if (asked) onAsk?.(walk.ask); }, [asked, walk?.ask?.text]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const post = async (path, body, fail) => {
-    setBusy(true); setErr("");
-    try { const { data } = await api.post(`/api/connectors/${cid}/ai-setup${path}`, body); if (data?.session !== undefined) take(data); }
-    catch (e) { setErr(e?.response?.data?.detail || fail); }
-    setBusy(false);
-  };
-  return {
-    walk, ready, busy, err,
-    start: () => post("", ctx, "could not start the AI setup"),
-    // what you saved on the card, or said on it, is the agent's next turn
-    saved: (labels) => (walk && labels.length ? post("/say", { ...ctx, saved: labels }, "the AI did not hear that") : null),
-    say: (text) => post("/say", { ...ctx, text }, "the AI did not hear that"),
-    done: async () => { await post("/done", {}, "could not close the AI setup"); setWalk(null); reload?.(); },
-  };
+  const cid = conn.ConnectorId, name = conn.Name || conn.Type || "this connection";
+  useEffect(() => {
+    if (!cid) return undefined;
+    let live = true;
+    api.get(`/api/connectors/${cid}/ai-setup`).then(({ data }) => {
+      if (!live) return;
+      if (data?.ready !== undefined) setReady({ ok: data.ready !== false, why: data.why || "" });
+      if (data?.moved && data.earlier) sayEarlier(data.earlier);
+    }).catch(() => { /* the card still works without it */ });
+    return () => { live = false; };
+  }, [cid]);
+  return { ready, start: () => openHelp(`Help me set up ${name}`) };
 }
 
 // the button, in the card's own row beside Save and Test - outlined, never the card's one filled button
 function AiWalkButton({ ai }) {
-  if (ai.walk) return <Button variant="outlined" disabled={ai.busy} onClick={ai.done} data-tq-ai-setup="done">Done — stop the AI setup</Button>;
   return (
-    <Button variant="outlined" disabled={ai.busy || !ai.ready.ok} onClick={ai.start} data-tq-ai-setup="start"
-      title={ai.ready.ok ? "Optional - the AI walks you through this card, a step at a time" : ai.ready.why}
-      startIcon={ai.busy ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>
-      {ai.busy ? "starting…" : "Get AI to set it up"}
+    <Button variant="outlined" disabled={!ai.ready.ok} onClick={ai.start} data-tq-ai-setup="start"
+      title={ai.ready.ok ? "Optional - opens the chat, and the Assistant sets this card up with you" : ai.ready.why}
+      startIcon={<BoltIcon sx={{ fontSize: 15 }} />}>
+      Get AI to set it up
     </Button>
   );
 }
 
-const STEP_MARK = { done: ["✓", "#47654a"], failed: ["✗", "#6b2733"], agent: ["•", DIM], you: ["›", FAINT] };
-// the walk, on the card under its buttons: what is done, what the AI is doing now, the one step it needs from you (its field lit)
+// no brain to hand it to: say where to get one, rather than a button that only answers "not found" (B10)
 function AiWalk({ ai }) {
-  const box = useRef(null);
-  const [text, setText] = useState("");
-  const w = ai.walk;
-  const label = w?.ask?.label || "";
-  useEffect(() => {
-    if (!label || !box.current) return undefined;
-    const root = box.current.closest("[data-tq-connector-scope]") || box.current.parentElement;
-    let stop = () => {};
-    const t = setTimeout(() => { stop = lightField(root, label); }, 150);     // after the tab it asked for has drawn
-    return () => { clearTimeout(t); stop(); };
-  }, [label, w?.ask?.text]);
-  // no brain to hand it to: say where to get one, rather than a button that only answers "not found" (B10)
-  if (!w && !ai.ready.ok) return (
+  if (ai.ready.ok) return null;
+  return (
     <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", lineHeight: 1.5 }}>
       Get AI to set it up needs an AI first. {ai.ready.why || `Set one up under ${placeName("ai_apps")}.`}
       {/* the one button every "no AI" line carries, to the AI cards (owner-approved, 2026-10-21) */}
       <ConnectAi variant="outlined" />
     </Typography>
   );
-  if (!w) return ai.err ? <Alert severity="error" sx={{ fontSize: 12.5 }}>{ai.err}</Alert> : null;
-  const send = () => { if (text.trim()) { ai.say(text.trim()); setText(""); } };
-  return (
-    <Box ref={box} data-tq-ai-walk={w.session.taskId} sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 0.75 }}>
-      <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, letterSpacing: 0.5 }}>
-        AI SETUP · {w.session.ref} on the Board
-      </Typography>
-      {w.steps.map((s, i) => (
-        <Box key={i} data-tq-walk-step={s.kind} sx={{ display: "flex", gap: 1, alignItems: "baseline" }}>
-          <Box component="span" sx={{ color: STEP_MARK[s.kind]?.[1] || DIM, fontWeight: 700, width: 12, flexShrink: 0 }}>{STEP_MARK[s.kind]?.[0] || "•"}</Box>
-          <Typography variant="body2" sx={{ color: s.kind === "you" ? DIM : INK, whiteSpace: "pre-wrap", fontStyle: s.kind === "you" ? "italic" : "normal" }}>
-            {s.kind === "you" ? `You: ${s.text}` : s.text}
-          </Typography>
-        </Box>
-      ))}
-      {w.busy && (
-        <Typography variant="body2" data-tq-walk-now="" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 1 }}>
-          <CircularProgress size={12} /> {w.now || "Working on the next step…"}
-        </Typography>
-      )}
-      {w.ask && !w.busy && (
-        <Box data-tq-walk-ask={w.ask.field || "-"} sx={{ p: 1, borderRadius: 1.5, bgcolor: "#fff", border: `1px solid ${BORDER}` }}>
-          <Typography variant="body2" sx={{ color: INK }}><b>Your step:</b> {w.ask.text}</Typography>
-          {label && <Typography variant="caption" sx={{ color: DIM }}>The {label} box is lit above - paste it there and press Save.</Typography>}
-        </Box>
-      )}
-      {w.done && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Set up - Test passed on this card. Press Done to close the AI setup.</Typography>}
-      <Box sx={{ display: "flex", gap: 1 }}>
-        <TextField size="small" fullWidth value={text} onChange={(e) => setText(e.target.value)} placeholder="Answer or ask the AI… (never paste a key here - it goes in its box)"
-          onKeyDown={(e) => { if (e.key === "Enter") send(); }} sx={{ bgcolor: "#fff" }} inputProps={{ "data-tq-walk-say": "" }} />
-        <Button variant="outlined" disabled={!text.trim() || ai.busy} onClick={send}>Send</Button>
-      </Box>
-      {ai.err && <Alert severity="error" sx={{ fontSize: 12.5 }}>{ai.err}</Alert>}
-    </Box>
-  );
 }
 
-// a card whose Save and Test sit inside its own steps (the channel cards, SQL Server, WinRM): the button and the walk together, as
-// the card's last row under its form
+// TEST WHAT IS ON SCREEN (the owner, 2026-10-30: "a connection's Test can try the values on screen, so the Assistant can test before the
+// owner saves"): boxes typed past the saved card go with the press and are tried over it, saved nowhere (channels.DraftStore); a card as
+// saved is tested as it always was, its result kept on it
+const onScreen = (conn, cfg, saved, secret) => {
+  const edited = JSON.stringify(withoutWriteOnly(conn, cfg || {})) !== JSON.stringify(withoutWriteOnly(conn, saved || {}))
+    || (conn.WriteOnlyKeys || []).some((k) => (cfg || {})[k]);
+  return edited || secret ? { ...(edited ? { ConfigJson: JSON.stringify(cfg || {}) } : {}), ...(secret ? { Secret: secret } : {}) } : undefined;
+};
+
+// a card whose Save and Test sit inside its own steps (the channel cards, SQL Server, WinRM): the door as the card's last row
 const AiSetup = (props) => {
   const ai = useAiWalk(props);
   return (
@@ -1492,6 +1434,8 @@ const WaStatusLine = ({ st, cid, onTurnedAway, fixes = ["restart", "pair"] }) =>
 const TestLine = ({ test, mt = 1, cid }) => {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState("");
+  // ...the card's answer is what the Assistant hears next, when it is helping with this card (pageView.viewResult) - silent otherwise
+  useEffect(() => { if (test) viewResult({ action: "test", ok: !!test.ok, detail: test.detail || "" }); }, [test]);
   if (!test) return null;
   const ins = test.install;
   return (
@@ -2360,7 +2304,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   const runTest = async () => {
     setBusy("test"); setFresh(false);
     try {
-      const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/test`);
+      const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/test`, onScreen(conn, cfg, cfgSaved, secret));
       setTest(data);
       // Apple Messages has a second card (Automation) on this step - a passing read test must
       // not whisk the step away before the person can try the send probe
@@ -3134,7 +3078,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
   const [msg, setMsg] = useState("");
   // the AI setup: its button in the row below, its walk under it; a field it asks for brings the Connection tab up to be lit
   const ai = useAiWalk({ conn: conn || {}, steps: meta.howto || [], fields: meta.fields || [], secretLabel: meta.secretLabel,
-    agentSteps: meta.agent || [], reload, onAsk: (a) => { if (a?.field) setTab("Setup"); } });
+    agentSteps: meta.agent || [], reload });
   if (!conn) return null;
   const objects = (sources || []).filter((s) => s.Channel === conn.Type && s.ConnectorId === conn.ConnectorId);
   // the borrow offer: only when the OTHER card actually has something to lend (a tenant app, a
@@ -3159,12 +3103,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
       // the settings only: it switched the card on too, so editing a card turned off turned it back on (#242) - the switch below does that
       const body = { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(cfg) };
       if (secret) body.Secret = secret;
-      // what this press put on the card, by its label - the AI setup is told (never the values)
-      const was = parse(conn.ConfigJson);
-      const put = [...meta.fields.filter(([, k]) => String(cfg[k] ?? "") !== String(was[k] ?? "")).map(([l]) => l),
-        ...(secret ? [meta.secretLabel] : [])];
       await api.post("/api/connectors", body);
-      ai.saved(put);
       // a write-only value typed is the server's now: the box goes back to empty, its label says saved
       if ((conn.WriteOnlyKeys || []).some((k) => cfg[k])) setCfg(withoutWriteOnly(conn, cfg));
       setMsg("saved ✓"); setSecret(""); setTest(null); setFresh(true); reload();
@@ -3174,7 +3113,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
   const runTest = async () => {
     setBusy("test"); setFresh(false);
     try {
-      const t = (await api.post(`/api/connectors/${conn.ConnectorId}/test`)).data;
+      const t = (await api.post(`/api/connectors/${conn.ConnectorId}/test`, onScreen(conn, cfg, parse(conn.ConfigJson), secret))).data;
       setTest(t);
       if (Array.isArray(t?.apis)) setCfg((c) => ({ ...c, apis: t.apis }));   // the server saved the dots that answered; show them now
     } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "test call failed" }); }

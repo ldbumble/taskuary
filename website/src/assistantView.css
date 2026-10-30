@@ -706,6 +706,10 @@
 .tq-chat-pop-body > .tq-msg:first-child > .avatar { visibility: visible; }
 .tq-chat-pop-body > .tq-msg.receipt { margin-bottom: 8px; font-size: 11.5px; color: #6e685f; }
 .tq-chat-pop-empty { margin: 4px 0 10px; color: #8f8b84; font-size: 12.5px; }
+/* the ×'s question while it helps with a page: one quiet band under the head, the window's own words and two chips */
+.tq-chat-pop-end { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; flex-shrink: 0; padding: 8px 12px; border-bottom: 1px solid #ece7de;
+  background: #f8f6f2; font-size: 12.5px; color: #2f3a42; }
+.tq-chat-pop-end span { flex: 1 1 180px; }
 /* ...MINIMIZED, the pill says it can be continued ("Continue chat…") and counts the answers that came while it was put away */
 .tq-compose-box:not([data-tq-open]) { position: relative; }
 .tq-chat-unseen { position: absolute; top: -5px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px;
@@ -880,6 +884,8 @@
 [data-tq-card][data-tq-setup-lit] { border-color: #55697a; outline: 2px solid #55697a; outline-offset: 2px; }
 .MuiButton-root[data-tq-setup-lit] { outline: 2px solid #55697a; outline-offset: 2px; }
 .MuiInputBase-root[data-tq-setup-lit] { outline: 2px solid #55697a; outline-offset: 2px; }
+/* ...and what the Assistant pointed at or just filled on a page it was asked about (pageView.js): the same ring, on whatever it is */
+[data-tq-setup-lit="view"] { outline: 2px solid #55697a; outline-offset: 2px; border-radius: 6px; }
 .tq-ab.p:hover:not(:disabled) { background: #46586a; border-color: #46586a; }
 .tq-ab.q { border-color: transparent; background: transparent; color: #6e685f; padding-inline: 8px; }
 .tq-ab.q:hover:not(:disabled) { background: #f1eee8; border-color: transparent; }

@@ -188,3 +188,12 @@ Screenshots are taken against `taskuary --demo` only, with Northwind / Alex Doyl
    sees.
 6. **Machine-side steps.** For steps that need the machine (listing channels with a token, pairing helpers), should the Assistant route
    them to the general agent as a task, or say the step for the owner to do?
+
+## The owner's answers (2026-10-30)
+
+1. **No Board task.** A help session's chat is its record; nothing is added to the Board.
+2. **Chat shut, owner saves:** the Assistant's reply is a quiet mark on the chat pill; the window does not open by itself.
+3. **Test before Save:** a connection's Test can try the values on screen, so the Assistant can test before the owner saves.
+4. **No "Stop helping" chip.** The Assistant does nothing on a page unless the owner asked it or pressed a "set up with AI" button - someone setting up email by hand never triggers it. The owner ends a session by closing the chat with its ×, which asks to confirm ending the chat.
+5. **Sync is a probe:** the Assistant may press Sync.
+6. **Work on this computer** (listing Slack channels with the token, say) is handed to the general agent, which reports back in the chat.

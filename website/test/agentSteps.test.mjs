@@ -95,3 +95,13 @@ test("a failed or still-running call says so on its row", () => {
   ]);
   assert.deepEqual(steps.map((s) => s.status), ["error", "running"]);
 });
+
+test("a turn whose answer carries its reply draft is not shown twice - the stream had the draft taken out, the filed answer keeps it", () => {
+  const report = "My recommendation is to send Erin alone.\n\n**Worth going.** The tax changes land in January.";
+  const after = "If you'd rather send both of them, tell me and I'll rewrite the reply.";
+  const draft = "Hi Erin,\n\nYes, I think we should go.\n\nThanks,\nAlex Doyle";
+  const streamed = [{ type: "progress", name: "text", detail: `${report}\n\n\n\n${after}` }];
+  assert.deepEqual(stepsOf(streamed, { answer: `${report}\n\n${draft}\n\n${after}`, keepStart: false }).filter((s) => s.kind === "said"), []);
+  // ...while words the answer does not say stay the agent's own
+  assert.equal(stepsOf(streamed, { answer: `${report}\n\n${draft}`, keepStart: false }).filter((s) => s.kind === "said").length, 1);
+});

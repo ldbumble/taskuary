@@ -262,8 +262,11 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
     }
   }
   // what it said that the answer says again is the answer: a CLI's final text streams in as progress too
+  // ...paragraph by paragraph: the streamed text has the reply draft taken out where the filed answer keeps it, so the whole never
+  // matched and a general turn's answer showed twice, once without its draft and once with it (the overnight QA, 2026-10-30)
   const said = flat(forScreen(answer));
-  const kept = said ? steps.filter((s) => s.kind !== "said" || !said.includes(flat(s.summary))) : steps;
+  const inAnswer = (t) => { const ps = String(t || "").split(/\n\s*\n/).map(flat).filter(Boolean); return ps.length > 0 && ps.every((p) => said.includes(p)); };
+  const kept = said ? steps.filter((s) => s.kind !== "said" || !inAnswer(s.summary)) : steps;
   return group(kept).map(({ raw, output, live, q, host, file, pattern, count, ...s }) => s);
 }
 

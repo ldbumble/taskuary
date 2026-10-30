@@ -11,7 +11,6 @@ import pytest
 
 import walkworld
 
-pytest.importorskip('taskuary.railwalk', reason='the walk has no owner yet: railwalk is the next slice')   # SLICE-0-GUARD
 
 CASES = json.loads((Path(__file__).parent / 'fixtures' / 'walk_table.json').read_text(encoding='utf-8'))['cases']
 

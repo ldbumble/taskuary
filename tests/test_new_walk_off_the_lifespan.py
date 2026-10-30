@@ -9,7 +9,7 @@ from unittest import mock
 from fastapi.testclient import TestClient
 
 from taskuary import funnel, general, server
-from taskuary.processing_unread import WALK_KEY
+from taskuary.railwalk import KEY as WALK_KEY      # the walk's one setting (railwalk, 2026-10-30)
 from taskuary.store import MemoryStore
 
 

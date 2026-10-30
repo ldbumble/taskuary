@@ -3863,12 +3863,20 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // A TASK FOLDED BY ITS X IS PUT AWAY (UX walk, 2026-10-22): its rail row lost the "on the table" mark and the address its #task, which
   // said it was still in view - so its row is an ordinary row now, and a click on it opens it again in place, as its folded line does
   const unfoldTable = () => { setRailOpen(false); setFoldedKey(null); browseDown(); putOnTable(null, "view"); };
+  // ...AND A ROW ALREADY ON THE TABLE BRINGS ITS CARD BACK: the chat under it (the morning greeting, a digest, an answer) had scrolled
+  // the card out of view, and a click on its row did nothing at all - "I should be able to click on the task itself" (TQ-1251)
+  // ...or, its card gone from the chat, opens it again
+  const backToTable = (key = currentItem?.key) => {
+    setRailOpen(false);
+    if (table.folded || table.place) unfoldTable();
+    else { pin.current = true; if (!keepTable() && key) pull(key, null); }
+  };
   // A PRESS OF A RAIL ROW, by key: the rail's own click and a task named in the chat (actions.openRef, a link or the Assistant's open) take
-  // the one road - the canvas shows it, the rail rings it, the walk stands on it. The row already on the table only unfolds
+  // the one road - the canvas shows it, the rail rings it, the walk stands on it. The row already on the table is brought back into view
   const railPress = (key) => {
     sectionRef.current = null;
     const isCur = !!currentItem && !old && !table.folded && currentItem.key === key;
-    if (isCur || (table.folded && key === table.key)) { setRailOpen(false); if (table.folded || table.place) unfoldTable(); return; }
+    if (isCur || (table.folded && key === table.key)) { backToTable(key); return; }
     pull(key, null);
   };
   // ...a task by number: its row when the rail holds it, else the task link's own road (a closed task is on no rail)
@@ -3888,7 +3896,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         current={old || table.folded || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem} coming={nextComing || busy}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
         onPull={(key, asUser) => { if (asUser) { sectionRef.current = null; pull(key, asUser); } else railPress(key); }}
-        onSection={walkSection} onMoreFyi={moreFyi} tag={tableSays.tag} onCurrent={() => { setRailOpen(false); if (table.folded || table.place) unfoldTable(); }} /></>}
+        onSection={walkSection} onMoreFyi={moreFyi} tag={tableSays.tag} onCurrent={() => backToTable()} /></>}
       stage={chat}
       onPull={(r, o) => pull(keyForRow(r), o?.quiet ? null : `Tell me about “${r.Subject || r.Title || "this"}”`)}
       railOnNarrow={railOpen} setupMode={firstRun} setupRail={firstRun ? <SetupSteps /> : null} />

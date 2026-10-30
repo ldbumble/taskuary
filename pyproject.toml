@@ -42,7 +42,7 @@ sftp = ["paramiko>=2.11"]      # the SFTP card; the share needs nothing (a UNC p
 db = ["sqlalchemy>=2"]      # 'any database' URLs; add the engine driver too (psycopg2-binary, pymysql, ...)
 aws = ["boto3>=1.28"]       # azure needs no extra: tokens ride plain requests
 voice = ["faster-whisper>=1.0"]   # Local Whisper: speech to text on this machine, no key, audio never leaves the box
-desktop = ["pywebview>=4"]
+desktop = ["pywebview>=5"]  # create_window(maximized=)
 build = ["pyinstaller>=6"]
 # what the DESKTOP EXE ships (taskuary.spec reads deps.BUNDLE and collects each one). A packaged
 # build has no Python to install into afterwards, so the cards that need these must simply work

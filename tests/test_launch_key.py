@@ -89,6 +89,7 @@ def test_the_desktop_window_opens_on_a_keyed_url(monkeypatch):
     monkeypatch.setattr(sys, 'argv', ['taskuary-desktop'])
     desktop.main()
     assert loaded and loaded[0].startswith('http://127.0.0.1:7801/?k=') and launchkey.redeem(loaded[0].split('k=')[1])
+    assert made['maximized']        # a fixed 1280x840 hung off a laptop's screen on every launch (TQ-1251)
 
 def test_the_desktop_view_of_a_running_instance_asks_it_for_a_key(monkeypatch):
     made = {}

@@ -774,7 +774,9 @@
 /* ...but not over a box opened UNDER it (Close with a note, the agent box, Continue - a .tq-browse-line with something in it): below the
    floor, the box was a screen down and bringing it into view pushed the card up and off the table - a task view cut to its title by the
    drawers (0.3.9.48) kept 91px of itself in sight (the dead-end walk's SEEN). Without the floor the box stands right under the card */
-.tq-chat-inner > .tq-canvas-live:not(:has(~ .tq-msg:not(.tq-pending), ~ .tq-canvas-live, ~ .tq-live-card, ~ .tq-browse-line:not(:empty))) { min-height: calc(100cqh + 14px); }   /* an empty browse line may follow */
+/* ...and not over an item PUT DOWN (folded to its line) while the next is on its way (the owner, 2026-10-30: "nothing shows ... until the first
+   4 of the fyi come onto the canvas. add a ..."): the floor held a blank screen under the folded line and the dots under it, out of sight */
+.tq-chat-inner > .tq-canvas-live:not(:has([data-tq-folded])):not(:has(~ .tq-msg:not(.tq-pending), ~ .tq-canvas-live, ~ .tq-live-card, ~ .tq-browse-line:not(:empty))) { min-height: calc(100cqh + 14px); }   /* an empty browse line may follow */
 /* Expand: the view alone, the conversation around it hidden - its own box never changes size (CanvasItem) */
 .tq-chat-inner.expanded > :not(.tq-canvas-live) { display: none; }
 /* NOT a padding change: the task view is sized off this body (100cqh), so a smaller padding here grew the pane on Expand */

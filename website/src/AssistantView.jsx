@@ -923,6 +923,10 @@ function Line({ m, lastBrief = false, live, last, further = false, actions, fres
   // ...and not its words either: they are the card's own lead, shown only where no card hides them, so a held card's "Next up: 4 FYIs."
   // stood alone as a bubble until the press answered (the owner, 2026-10-25: "saw a stray text showing next 4 fyi every once in a while")
   if (m.held) m = { ...m, card: null, text: "" };
+  // ...but never NOTHING (the owner, 2026-10-30: "if you hit next nothing shows ... until the first 4 of the fyi come onto the canvas. add a
+  // ... to ensure user knows things are moving"): while it waits for the press's answer the held line is the dots, where its card will stand
+  if (m.held) return <div className="tq-msg tq-pending" data-tq-held=""><div className="avatar"><AssistantMark /></div>
+    <div className="body"><span className="tq-typing"><i /><i /><i /></span></div></div>;
   if (m.role === "user") return <div className="tq-msg you"><div className="body">{m.text}
     {!!m.shots?.length && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>{m.shots.map((s) => (
       <img key={s.path} src={s.url} alt={s.name} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: "1px solid #ddd6cb" }} />))}</div>}</div></div>;
@@ -1499,9 +1503,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     for (const pending of deferredChat.current) clearTimeout(pending);
     deferredChat.current.clear();
     const epoch = chatEpoch.current;
-    const timer = setTimeout(() => {
-      deferredChat.current.delete(timer); setNextComing(false);
-      if (epoch === chatEpoch.current && !resettingRef.current) fn();
+    // ...and the dots stand until what it runs has answered (the owner, 2026-10-30: "nothing shows ... until the first 4 of the fyi come onto
+    // the canvas. add a ..."): cleared as the timer fired, they went before the walk had even read which item comes next - seconds on a big
+    // home, with nothing on the canvas
+    const timer = setTimeout(async () => {
+      deferredChat.current.delete(timer);
+      try { if (epoch === chatEpoch.current && !resettingRef.current) await fn(); } finally { setNextComing(false); }
     }, delay);
     deferredChat.current.add(timer);
     return timer;

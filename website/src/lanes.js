@@ -34,9 +34,9 @@ export const attentionBand = (item) => {
   if (Number.isInteger(item?.order_band) && item.order_band >= 1 && item.order_band <= 4) return item.order_band;
   if (item?.kind === "meeting") return band({ urgent: !notYet(item), actionable: true });
   const l = LANE[item?.lane] || {}, sec = laneSection(item?.lane);
-  // a task its agent finished rides the report lane but is On you; an unjudged row the retry gave up on is the owner's
+  // a task its agent finished is a result, under Reports (2026-10-30); an unjudged row the retry gave up on is the owner's
   return band({ urgent: !!(l.urgent || (l.urgent_request && item?.urgent_request)), wait: !!l.waits,
-    actionable: sec === "task" || item?.kind === "agentdone" || (item?.lane === "unjudged" && !!item?.held), result: sec === "reports" });
+    actionable: sec === "task" || (item?.lane === "unjudged" && !!item?.held), result: sec === "reports" });
 };
 // urgent - a meeting inside ALERT_MIN, an ask triage called urgent, an escalated sender: shaded in its place, and walked in it like any other row
 export const isUrgent = (item) => attentionBand(item) === URGENT.band;
@@ -46,7 +46,7 @@ export const levelOf = (item) => {
   // later (spec 2026-10-12) - the rail-order rule wins. Only Remind me puts it there, as for any task (lanes.py level_of)
   // For later is what you PUT there with a date - Remind me - never a card merely shown (2026-10-08), and no longer Next: Next
   // moves the walk on and the task stays in Tasks (the owner, 2026-10-21)
-  if (b === 2 && item?.deferred) return "later";
+  if ((b === 1 || b === 2) && item?.deferred) return "later";      // ...an urgent row too: Remind me puts it away like any task
   if (b === 4 && item?.kind === "idea") return "ideas";
   return LEVEL_OF_BAND[b] || "fyi";
 };

@@ -33,17 +33,12 @@ test("a section heading walks that section; its chevron alone opens a capped ban
   assert.match(view, /e\.stopPropagation\(\)/);
 });
 
-test("Next inside a section stays in it, then says the section is done and goes back to the walk", async () => {
-  const { sectionNext } = await import("../src/funnelPile.js");
-  const items = [
-    { key: "a", lane: "fyi", order_band: 4 }, { key: "b", lane: "asked", order_band: 2 },
-    { key: "c", lane: "fyi", order_band: 4 }, { key: "d", lane: "fyi", order_band: 4, settling: true },
-  ];
-  assert.equal(sectionNext(items, "fyi", new Set())?.key, "a");
-  assert.equal(sectionNext(items, "fyi", new Set(["a"]))?.key, "c");
-  assert.equal(sectionNext(items, "fyi", new Set(["a", "c"])), null);
+test("a section heading opens its first row, and Next walks on down the rail - no section hold, no \"done.\" stop (Q6, 2026-10-30)", () => {
   const view = src("AssistantView.jsx");
-  assert.match(view, /sectionDone\(/);
+  const walk = view.slice(view.indexOf("const walkSection = (level) => {"), view.indexOf("// A SIDEBAR BUTTON POSTS ITS BROWSE CARD"));
+  assert.match(walk, /bandsOf\(pile\?\.items\)\.find\(\(b\) => b\.level === level\)\?\.items\?\.find\(\(i\) => !i\.settling\)/);
+  assert.match(walk, /if \(first\) pull\(first\.key, null\);/);
+  assert.doesNotMatch(view, /sectionRef|sectionNext|sectionDone/);
 });
 
 // the owner, 2026-09-29: "make the full time fit ... hide the 8 in today while refreshing ... when it's not refreshing it

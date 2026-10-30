@@ -31,11 +31,11 @@
     {"id": "W26", "rule": [5], "steps": ["start", "next"], "action": "leave T2 done", "expect": "T3", "rail": {"not": ["T2"]}, "back": true},
     {"id": "W27", "rule": [5], "steps": ["start", "next"], "action": "leave T2 note", "expect": "T3", "rail": {"not": ["T2"]}, "back": true},
     {"id": "W28", "rule": [5], "steps": ["open T4"], "action": "send T4 closes", "expect": "T5", "rail": {"not": ["T4"]}, "back": true},
-    {"id": "W29", "rule": [5], "steps": ["open T4"], "action": "send T4 kept", "expect": "T4", "rail": {"has": ["T4"]}, "back": true},
+    {"id": "W29", "browser": {"skip": "the demo has no second step on a task to keep a sent one open - pinned in process"}, "rule": [5], "steps": ["open T4"], "action": "send T4 kept", "expect": "T4", "rail": {"has": ["T4"]}, "back": true},
     {"id": "W30", "rule": [5], "steps": ["start", "next"], "action": "leave T2 remind", "expect": "T3", "later": ["T2"], "back": true},
     {"id": "W31", "rule": [5], "steps": ["open T5"], "action": "leave T5 not_task", "expect": "M1", "rail": {"not": ["T5"]}, "back": true},
     {"id": "W32", "rule": [5, 7], "steps": ["read R1", "read R2", "read R3", "read I1", "close-elsewhere M1", "open T5"], "action": "leave T5 not_task", "expect": "F1-F4", "rail": {"not": ["T5"]}, "back": true},
-    {"id": "W33", "rule": [6], "bug": "Next after a Send skipped a task", "steps": ["start", "next", "open T1"], "action": "send T1 closes", "expect": "T2", "rail": {"not": ["T1"]}, "back": false},
+    {"id": "W33", "browser": {"skip": "T1 has no draft, so the desk has no Send on it - its Mark done road is W26"}, "rule": [6], "bug": "Next after a Send skipped a task", "steps": ["start", "next", "open T1"], "action": "send T1 closes", "expect": "T2", "rail": {"not": ["T1"]}, "back": false},
     {"id": "W34", "rule": [3, 4], "bug": "Back onto an FYI batch read it", "steps": ["open F5", "back"], "action": "reload", "expect": "F1-F4", "read": [], "rail": {"has": ["F1", "F2", "F3", "F4"]}, "back": true},
     {"id": "W35", "rule": [3, 4], "bug": "Back onto a report read it", "steps": ["open R3", "back"], "action": "reload", "expect": "R2", "rail": {"has": ["R2"]}, "back": true},
     {"id": "W36", "rule": [6], "bug": "a walk opened out of order never reached the rows above", "steps": ["new-chat", "open T4"], "action": "next-to-end", "expect": "END", "opens": ["T1", "T2", "T3"], "rail": {"has": ["T1", "T2", "T3"]}, "back": true},
@@ -56,7 +56,7 @@
     {"id": "W51", "rule": ["phone"], "steps": ["phone start"], "action": "phone next", "expect": "T2", "desk": "T2", "back": true},
     {"id": "W52", "rule": [7], "steps": ["start", "peek T2", "close-elsewhere T2"], "action": "next", "expect": "T3", "back": true},
     {"id": "W53", "rule": [4], "steps": ["open T3"], "action": "next", "expect": "T4", "rail": {"has": ["T3"]}, "back": true},
-    {"id": "W54", "rule": ["edge"], "steps": ["start", "next press=p1"], "action": "next press=p1", "expect": "T2", "lines": 0, "back": true},
-    {"id": "W55", "rule": [4], "steps": ["start", "next", "reports-page R1"], "action": "next", "expect": "T3", "read": ["R1"], "back": true}
+    {"id": "W54", "browser": {"steps": ["start"], "action": "next-twice"}, "rule": ["edge"], "steps": ["start", "next press=p1"], "action": "next press=p1", "expect": "T2", "lines": 0, "back": true},
+    {"id": "W55", "browser": {"skip": "the Reports page over the table is report-back-unread's; the read it carries is pinned in process"}, "rule": [4], "steps": ["start", "next", "reports-page R1"], "action": "next", "expect": "T3", "read": ["R1"], "back": true}
   ]
 }

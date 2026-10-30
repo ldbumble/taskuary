@@ -30,20 +30,19 @@ test("a line drawn ahead and filled, replaced or taken back leaves what the answ
   }
 });
 
-test("the press draws the prepared answer only for the selection it was prepared for, else the rail's row, on one road", () => {
+test("the press draws the prepared answer only from the row the walk stands on (walk.below), else the rail's row, on one road", () => {
   const surface = src.slice(src.indexOf("const surface = useCallback"), src.indexOf("useEffect(() => { surfaceRef.current = surface; }"));
-  assert.match(surface, /preparedRef\.current\?\.selection_revision === capture\.selection_revision/);
-  assert.match(surface, /else if \(prep\) aheadRef\.current = drawAhead\(\{ \.\.\.line, text: prep\.answer\.say[^;]*\}, prep\.answer_hash\);/);
+  assert.match(surface, /preparedFor\(pileRef\.current, fromKey\)/);
+  assert.match(surface, /else if \(prep\) aheadRef\.current = drawAhead\(\{ \.\.\.line, text: prep\.say[^;]*\}, prep\.answer_hash\);/);
   assert.match(surface, /const drawsNow = \(c\) => !!c && showsTask\(c, cardFor\(c\)\) && !!heldTask\(c\.tid\) && heldTerm\(c\.tid\) !== undefined;/);
-  assert.match(surface, /else if \(aheadItem && \(drawsNow\(aheadItem\) \|\| \(key && showsTask\(aheadItem, cardFor\(aheadItem\)\)\)\)\)\s+aheadRef\.current = drawAhead\(/);
+  assert.match(surface, /else if \(aheadItem && \(drawsNow\(aheadItem\) \|\| showsTask\(aheadItem, cardFor\(aheadItem\)\)\)\)\s+aheadRef\.current = drawAhead\(/);
   assert.match(surface, /const aheadKey = prep \? null : /, "one line ahead, never two");
   assert.match(surface, /\} catch \(e\) \{\s+unshow\(aheadRef\.current\); aheadRef\.current = null;/);
-  const landed = src.slice(src.indexOf("const landed = useCallback"), src.indexOf("const ensureNextSelection = useCallback"));
+  const landed = src.slice(src.indexOf("const landed = useCallback"), src.indexOf("// a line of the assistant's own that needs no turn"));
   assert.match(landed, /ahead\.hash === data\.answer_hash && !extra/);
   assert.match(landed, /const id = keep \? ahead\.id : `a\$\{Date\.now\(\)\}`;/, "the same id: the view stays mounted");
-  // every rail the page holds brings its prepared answer, and only that rail's
-  assert.match(src, /preparedRef\.current = data\.prepared_next \|\| null;\s*setPile/);
-  assert.match(src, /selectionRef\.current = captured; preparedRef\.current = data\.prepared_next \|\| null;/);
+  // every rail the page holds brings the walk beside it - its prepared answer - and the press reads the one it holds (pileRef)
+  assert.match(src, /pileRef\.current = refreshPilePresentation\(pileRef\.current, data\);\s*setPile/);
 });
 
 test("a line drawn ahead asks the Advisor nothing, and holds a card that would write, until its press has answered (PW-118)", () => {
@@ -54,12 +53,12 @@ test("a line drawn ahead asks the Advisor nothing, and holds a card that would w
   const draw = src.slice(src.indexOf("const drawAhead = useCallback"), src.indexOf("const landed = useCallback"));
   assert.ok(draw.indexOf("unconfirmedRef.current = line.card?.key") < draw.indexOf("putOnTable(line.card)"), "held before the table changes");
   assert.match(draw, /const unshow[^]*unconfirmedRef\.current = null; adviceHeld\.current = null;/);
-  const landed = src.slice(src.indexOf("const landed = useCallback"), src.indexOf("const ensureNextSelection = useCallback"));
+  const landed = src.slice(src.indexOf("const landed = useCallback"), src.indexOf("// a line of the assistant's own that needs no turn"));
   assert.match(landed, /if \(heldAdvice\) readAdvice\(card\?\.key \|\| heldAdvice\);/);
   // ...and a prepared card whose task was never read is drawn once the answer has landed: its first read files the task's origin.
   // One whose read is held (prefetchTask) had that read already, and draws at once, as the rail's row does
   const surface = src.slice(src.indexOf("const surface = useCallback"), src.indexOf("useEffect(() => { surfaceRef.current = surface; }"));
-  assert.match(surface, /\.\.\.\(drawsNow\(prep\.answer\.item\) \? \{\} : \{ held: true \}\)/);
+  assert.match(surface, /\.\.\.\(drawsNow\(prep\.item\) \? \{\} : \{ held: true \}\)/);
   // ...and its words with it: they are the card's lead, and alone they were a stray "Next up: 4 FYIs." bubble (2026-10-25)
   assert.match(src, /function Line\(\{[^\n]*\n[^]*?if \(m\.held\) m = \{ \.\.\.m, card: null, text: "" \};/);
   // the answer's line is a fresh object: `held` and `ahead` go with the line they were on

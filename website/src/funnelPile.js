@@ -73,102 +73,29 @@ export const refreshPilePresentation = (current, fresh) => {
   if (current && Number(fresh?.generated_at) < Number(current?.generated_at)) return current;
   const revision = displayRevision(fresh);
   if (!(current && revision && displayRevision(current) === revision)) return fresh;
-  // Selection capture is intentionally separate from the completed display revision. A transient
-  // unavailable result can therefore recover with the same rows/revision, and a newly captured
-  // token must still replace the disabled or older marker.
-  const membersMatch = Array.isArray(current.expected_next_members)
-    && Array.isArray(fresh.expected_next_members)
-    && current.expected_next_members.length === fresh.expected_next_members.length
-    && current.expected_next_members.every((member, index) => member === fresh.expected_next_members[index]);
-  const selectionMatches = current.selection_unavailable === fresh.selection_unavailable
-    && current.selection_invalidated === fresh.selection_invalidated
-    && current.selection_revision === fresh.selection_revision
-    && current.expected_next_key === fresh.expected_next_key
-    && (current.expected_next_members === undefined && fresh.expected_next_members === undefined || membersMatch);
-  return selectionMatches ? current : fresh;
+  // ...but the walk beside it is not part of the rows' revision: the same rows with the walk moved (a Next, a Back) is a new answer
+  return JSON.stringify(current.walk ?? null) === JSON.stringify(fresh.walk ?? null) ? current : fresh;
 };
 
-// A completed pile response captures the server's exact automatic selection.  Keep the scope
-// beside the token in the browser: a token for "all except A" cannot authorize a mail-only walk,
-// nor can it authorize moving on after Current has changed to B.
-export const nextSelectionScope = (only = null, exclude = null, includeSurfaced = false) => ({
-  only: only || null,
-  include_surfaced: !!includeSurfaced,
-  exclude: exclude || null,
-});
-export const sameSelectionScope = (left, right) => !!left && !!right
-  && left.only === right.only
-  && left.include_surfaced === right.include_surfaced
-  && left.exclude === right.exclude;
-export const hasNextSelection = (pile) => !!pile
-  && (pile.selection_unavailable === true || pile.selection_invalidated === true
-    || (typeof pile.selection_revision === "string"
-    && Object.prototype.hasOwnProperty.call(pile, "expected_next_key")
-    && Array.isArray(pile.expected_next_members)));
-export const captureNextSelection = (pile, scope) => hasNextSelection(pile)
-  && !pile.selection_unavailable && !pile.selection_invalidated ? {
-  selection_revision: pile.selection_revision,
-  expected_next_key: pile.expected_next_key ?? null,
-  expected_next_members: [...pile.expected_next_members],
-  selection_pending: pile.selection_pending ?? null,
-  scope: nextSelectionScope(scope?.only, scope?.exclude, scope?.include_surfaced),
-} : null;
-export const nextSelectionBody = (capture) => ({
-  selection_revision: capture.selection_revision,
-  expected_next_key: capture.expected_next_key,
-  expected_next_members: [...capture.expected_next_members],
-  only: capture.scope.only,
-  include_surfaced: capture.scope.include_surfaced,
-  exclude: capture.scope.exclude,
-});
-// THE TABLE MOVED AND NO RAIL CAME WITH IT (a row clicked, a task pulled by name): the selection the rail holds was captured for the
-// table as it was, so its NEXT ring named the row the walk would have taken from THERE - the top of the rail, over the row just put on
-// the table - until the reload landed, and a press read in that gap disagreed with the ring (PW-118, CI 2026-10-22). Withdraw the
-// marker until the read for the new table lands; the reload's fresh selection replaces it (refreshPilePresentation).
-export const withdrawSelection = (pile) => pile && hasNextSelection(pile) && !pile.selection_unavailable ? {
-  ...pile, selection_invalidated: true, expected_next_key: null, expected_next_members: [],
-} : pile;
+// THE WALK BESIDE THE RAIL (railwalk.peek, the walk has one owner, 2026-10-30): every rail carries `walk` - the row on screen (`on`),
+// the key Back brings (`above`) and the Answer Next would give (`below`) - so a press draws at once and asks nothing first. The page keeps
+// no rule of its own about which row comes next or above.
+export const walkOf = (pile) => pile?.walk || null;
+// ...the prepared Answer is for the row the walk stands on: drawn at a press made FROM that row (or from no row: the walk's own place)
+export const preparedFor = (pile, fromKey) => {
+  const w = walkOf(pile);
+  if (!w?.below) return null;
+  return !fromKey || fromKey === w.on || (w.members || []).includes(fromKey) ? w.below : null;
+};
 export const nextMarkerKey = (pile, items, current) => {
-  if (hasNextSelection(pile))
-    return pile.expected_next_members[0] || pile.expected_next_key || null;
-  // ...a task an agent is working included: the walk takes every task in the rail's order (the owner, 2026-10-21)
-  // ...an urgent row too, in its place (the owner, 2026-10-22: "you go through it like all other tasks")
+  const b = walkOf(pile)?.below?.item;
+  if (b) return (b.members || [])[0] || b.key || null;
+  if (walkOf(pile)) return null;
   const eligible = (item) => !item.settling && item.key !== current?.key;
-  return ((items || []).find((item) => eligible(item) && !item.surfaced)
-    || (items || []).find(eligible))?.key || null;
+  return (items || []).find(eligible)?.key || null;
 };
-export const canAdvanceSelection = (pile, ready, only = null) => {
-  if (!hasNextSelection(pile)) return (ready || []).length > 0;
-  if (pile.selection_unavailable || pile.selection_invalidated) return false;
-  if (pile.expected_next_key) return true;
-  // (a mail-only walk used to continue here; the mode is gone - 2026-09-25, no typed word picks a walk)
-  return false;
-};
-
-// Both an initial HTTP conflict and a late streamed conflict carry this shape.  Keeping parsing
-// here lets the UI share one no-retry path and avoids rendering a structured `detail` object.
-export const selectionGuardDetail = (error) => {
-  const detail = error?.detail || error?.response?.data?.detail;
-  if (detail?.code === "selection_unavailable") return detail;
-  return detail?.code === "selection_stale" ? detail : null;
-};
-export const replaceSelectionToken = (pile, detail) => pile ? (detail.code === "selection_unavailable" ? {
-  ...pile, selection_unavailable: true, selection_invalidated: false,
-  expected_next_key: null, expected_next_members: [],
-  selection_pending: detail.selection_pending ?? null,
-} : typeof detail.selection_revision !== "string" || !Array.isArray(detail.expected_next_members) ? {
-  // The post-model commit guard can detect staleness after streaming began, when it cannot safely
-  // promise a replacement capture. Invalidate the old marker until the authoritative GET returns.
-  ...pile, selection_unavailable: false, selection_invalidated: true,
-  expected_next_key: null, expected_next_members: [],
-  selection_pending: detail.selection_pending ?? null,
-} : {
-  ...pile, selection_unavailable: false, selection_invalidated: false,
-  selection_revision: detail.selection_revision,
-  expected_next_key: detail.expected_next_key ?? null,
-  expected_next_members: [...detail.expected_next_members],
-  selection_pending: detail.selection_pending ?? null,
-}) : pile;
+// can Next go on from here: the walk says what is below; before any walk was read, anything on the rail
+export const canAdvance = (pile, ready) => walkOf(pile) ? !!walkOf(pile).below : (ready || []).length > 0;
 
 // Until durable Current lands, reload restores the latest explicitly surfaced card. Passive
 // watcher cards stay readable in history but cannot silently become the conversation subject.
@@ -587,41 +514,6 @@ export const coveredByReload = (meta, forcedStartedAt) =>
 export const heldSince = (pile, now = Date.now()) => {
   const at = Number(pile?.generated_at);
   return Number.isFinite(at) && at > 0 ? Math.min(at, now) : now;
-};
-
-// ── walking one section (the canvas redesign, 2026-09-29) ──────────────────────────────────────
-// Clicking a section's heading puts its first row on the table, and Next stays inside that section until it is empty -
-// then it says so and the walk goes on as normal. The rows are the rail's own (bandsOf, so For later walks soonest
-// first); the server's funnel.section_next is the same rule for the phone doorway.
-export const sectionNext = (items, section, seen = new Set()) =>
-  (bandsOf(items).find((b) => b.level === section)?.items || [])
-    .find((i) => !i.settling && !seen.has(i.key) && !(i.aliases || []).some((a) => seen.has(a))) || null;
-export const sectionDone = (section) => `${SECTION_WORDS[section] || section} done.`;
-// BACK GOES UP THE LINE (the owner, 2026-10-27: "a Back button that goes up the line as well. Basic nav. Of course on the first one no
-// Back"): the line is the rail's - its sections in their order, rows by arrival (bandsOf), Tasks -> Reports -> FYI - read upward from the
-// row on the table, the same order Next walks down (funnel_selection.below). Only rows the walk can stand on: not For later (Remind me put
-// it there), not one settling (a close on its way), not a meeting not yet due. `table`: the item on the table - its row, else the row it
-// joins (a task pulled by name, an fyi batch's members, which leave the pile once shown); `gone(row)`: put down by a press (Mark done,
-// Remind me, Close with a note) and never drawn again (leftRef) - skipped. Null on the first row: no Back there.
-export const rowAbove = (items, table, gone = () => false) => {
-  if (!table?.key) return null;
-  const batch = table.kind === "fyis" ? table.items || [] : null, keys = new Set(batch ? table.members || batch.map((i) => i.key) : [table.key, ...(table.aliases || [])]);
-  const has = (i) => keys.has(i.key) || (i.aliases || []).some((a) => keys.has(a)), rows = items || [];
-  const extra = rows.some(has) ? [] : batch ? batch.filter((i) => i.key) : [pulledRow(table)];
-  const line = bandsOf(inOrder(rows, extra)).filter((b) => b.level !== "later").flatMap((b) => b.items)
-    .filter((i) => has(i) || (!i.settling && !i.deferred && !notYet(i)));
-  const at = line.findIndex(has);
-  for (let j = at - 1; j >= 0; j -= 1) if (!gone(line[j])) return line[j];
-  return null;
-};
-
-// ...AND FROM THE FIRST FYI, THE LAST REPORT READ (trust audit F1, 2026-10-28): a report read leaves the rail, so the row above the first FYI
-// was the last task and Back skipped every report the walk had just shown. `read`: the last report this walk put on the table ({key})
-export const backFrom = (items, table, gone = () => false, read = null) => {
-  const up = rowAbove(items, table, gone);
-  if (!read?.key || levelOf(table) !== "fyi" || (up && levelOf(up) === "fyi")) return up;
-  const onRail = (items || []).some((i) => i.key === read.key || (i.aliases || []).includes(read.key));
-  return onRail ? up : { key: read.key, kind: "report" };
 };
 
 // ── the FYI tail (funnel.page_fyi) ─────────────────────────────────────────────────────────────

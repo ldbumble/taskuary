@@ -1286,6 +1286,8 @@ class GeneralSession:
         """A quick answer (quickwork.ask) filed as this session's turn, by `_file` - so its draft, question and close reach the owner
         exactly as a general turn's do. `steps` are the call's own (kind, name, detail), kept as the turn's working."""
         from . import quickwork, selfclose, workerstate as ws
+        self.quick = True                    # before any event: every event of this turn says 'quick' (quickwork.only_quick)
+        if not self.alive: raise RuntimeError('this assistant session has ended - reload the page and ask again')
         if not self._take(WAIT_TURN):
             raise RuntimeError(f'the assistant has been answering the previous question for over {int(WAIT_TURN)}s - something is stuck.')
         self.busy, self.last = True, time.time()
@@ -1300,6 +1302,8 @@ class GeneralSession:
         except Exception as e:
             try: ws.record(self.store, self.task_id, self.sid, 'failed', text=str(e)[:4000], source='quick')
             except Exception as skipped: logger.debug(f'quick worker event skipped: {skipped}')
+            # ...and it ends, as a failed general turn does: left open it read "waiting on you" and held its place in SESSIONS
+            if not is_dock(self.store.get_task(self.task_id)): threading.Timer(0.1, self.close, kwargs={'learn': False, 'report': False}).start()
             raise
         finally:
             self.busy, self.last, self.spoke = False, time.time(), True

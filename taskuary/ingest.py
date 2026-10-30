@@ -2750,10 +2750,11 @@ def advisor_brief(store, msg: dict, mid: int) -> str | None:
     return '\n\n'.join(parts)
 
 
-def _auto_general(store, tid, brief: str = None):
+def _auto_general(store, tid, brief: str = None, deep: bool = False):
     """Auto-dispatch for a GENERAL task: the assistant's own per-task session, the same one the
     owner sees when they open the task (PW-069). A full house queues it like a coding task; the
-    queue drain knows the kind. A live conversation is reused - the ask is put once."""
+    queue drain knows the kind. A live conversation is reused - the ask is put once.
+    `deep`: the quick path already handed this one on (quickwork.escalate), so it never goes back to it."""
     from . import blackboard as bb
     cap = auto_sessions(store)
     if bb.live_count() >= cap:
@@ -2763,22 +2764,25 @@ def _auto_general(store, tid, brief: str = None):
     _start_general(store, tid, brief)
 
 
+def first_ask(store, tid, brief: str = None) -> str:
+    "A general task's first ask: the brief, else its Summary, else its Title - a reply task's job (reply_job) in front."
+    t = store.get_task(tid) or {}
+    ask = (brief or str(t.get('Summary') or '').strip() or str(t.get('Title') or '').strip())
+    job = reply_job(store, tid)                    # a reply task's agent: work it out, then draft the reply (agent_on_reply)
+    return f'{job}\n\n{ask}'.strip() if job else ask
+
+
 def _start_general(store, tid, brief: str = None) -> bool:
     """Open (or reuse) the assistant session and put the task to it - once. A failure is written on
     the task as a failure, never left looking like nobody got round to it (PW-073), counted on the retry
     budget, and reported as False so a queue drain neither clears the row nor says Started (PW-085)."""
     from . import general
     try:
-        t = store.get_task(tid) or {}
         session = general.start_session(store, tid, actor='router')
         fresh = not general.history(store, tid)
         store.add_comment(tid, 'router', 'agent', 'The assistant started by itself'
                           + ('.' if fresh else ' - it carries on the conversation already open here.'))
-        if fresh:
-            ask = (brief or str(t.get('Summary') or '').strip() or str(t.get('Title') or '').strip())
-            job = reply_job(store, tid)                    # a reply task's agent: work it out, then draft the reply (agent_on_reply)
-            if job: ask = f'{job}\n\n{ask}'.strip()
-            if ask: session.send_prompt(ask)
+        if fresh and (ask := first_ask(store, tid, brief)): session.send_prompt(ask)
         return True
     except Exception as e:
         logger.warning(f'assistant auto-start failed for task {tid}: {e}')

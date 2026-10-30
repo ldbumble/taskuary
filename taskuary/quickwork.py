@@ -3,7 +3,7 @@
 An agent session costs a launch and a long wait for what is often one sentence ("does it make sense to go on Friday?"). This module only
 READS the depth - triage's difficulty, plus the things that always need the agent (a browser, a stranger, several emails owed, a task that
 already ran deep). It never guesses from the words of the task."""
-import re
+import re, threading
 from typing import NamedTuple
 from . import brainroute, browserview, general, ingest, llm, origin, selfclose, slots
 
@@ -93,3 +93,32 @@ def ask(store, tid, ask: str, steps: list = None, cancel=None) -> 'QuickAnswer |
     system, user = prompt(store, tid, ask, lookups)
     with llm.watching(trace): got = llm.ask_json(brain, system, user, want=None if web else QUICK_WANT, max_tokens=QUICK_TOKENS, **({'web': True} if web else {}))
     return read(got.data)
+
+
+QUICK_TIMEOUT = 180
+ESCALATED = 'A quick look found this needs the agent: '
+ESCALATE_BRIEF = 'A QUICK LOOK CAME FIRST: one call, which could not act, found this needs the agent - {why}. Take it from here.'
+FOUND = 'What it found so far: '
+
+def escalate(store, tid, ask: str, why: str, report: str = '') -> None:
+    "The deep path, with the quick call's notes as its brief. The cap, the queue and the retry budget apply as to any deep start."
+    store.add_comment(tid, 'router', 'agent', f'{ESCALATED}{why}')
+    store.audit('task', tid, 'quick_escalated', 'router', 'agent', {'why': why})
+    ask = ask.removeprefix(ingest.reply_job(store, tid)).strip()       # first_ask puts the reply job back in front of the brief
+    note = ESCALATE_BRIEF.format(why=why.rstrip('.')) + (f'\n{FOUND}{report}' if report else '')
+    ingest._auto_general(store, tid, f'{ask}\n\n{note}', deep=True)
+
+def start(store, tid, brief: str = None, as_owner: bool = True) -> str:
+    "One call for a quick task, filed as a general turn - 'filed'; or the deep path, when the call says it needs more or fails - 'escalated'."
+    q, steps, cancel = ingest.first_ask(store, tid, brief), [], threading.Event()
+    timer = threading.Timer(QUICK_TIMEOUT, cancel.set); timer.daemon = True; timer.start()
+    try: out, failed = ask(store, tid, q, steps, cancel), ''
+    except Exception as e: out, failed = None, f'the quick answer could not be made ({e})'
+    finally: timer.cancel()
+    if out is None or out.escalate:
+        why = failed or ('the quick answer could not be read' if out is None else out.why or 'it needs more than one call')
+        escalate(store, tid, q, why, out.report if out else '')
+        return 'escalated'
+    ses = general.start_session(store, tid, actor='router'); ses.quick = True
+    ses.file_quick(q, out, steps, as_owner)
+    return 'filed'

@@ -61,8 +61,8 @@
 //             the Advisor for the person, or drew the old row panel ("CLEAR FROM TIMELINE", "Talk it through", "undefined in chat")
 //   HEAD      the task view's header takes more than one row - at 1366 on every road a task opens by, and at 390 (2026-10-21)
 //   PHONE     at 390px the page scrolls sideways (a tooltip ran 200px off it), or a word stands a letter a line (the FYI subjects)
-//   STOPSAVE  Stop and save on a live session (a plain shell, a slow brain - stopsave) drew no pending Close out within 500 ms, or the
-//             draft did not replace that block in the same card (the owner, 2026-10-21: "it looks frozen")
+//   STOPSAVE  Stop and save on a live session (a plain shell, a slow brain - stopsave) drew no pending write-up line within 500 ms, or the
+//             draft never took its place in Close out (the owner, 2026-10-21: "it looks frozen")
 //
 //   node website/deadend_check.mjs [--port 7799] [--keep] [--no-build] [--json] [--throttle 4] [--only walk,sweep,faults,cards,links,search,table,based,stopsave]
 //
@@ -101,6 +101,8 @@ const WALK_SKIP = {
   "approve:action": "an agent's proposal: the demo's agents are recordings and never propose an act",
   "redraft": "redrafting asks the AI - the demo's canned brain writes no drafts, and the faults world has no AI",
   "redraft:none": "as Redraft: writing a draft is the AI's",
+  "reply": "Reply only opens a draft: since the moves left the bar (2026-10-29) a waiting draft's spine says Redraft, its Close out holds Send, "
+    + "and nothing drafted says Draft reply (walked) - Reply stands only by a reply already sent on a task still open, which neither world seeds",
   "not_ours_sender": "From now on: the chip under Not ours' receipt (proposalCard.followUps), not a row of its own",
   "block_sender": "a rule in Settings: the card's third answer, now a page of its own, not a chip under Not ours",
   "not_ours_kind": "No more ideas like this: the chip under an idea's Not ours receipt (proposalCard.followUps)",
@@ -407,6 +409,9 @@ const readPage = (page) => page.evaluate(() => {
   const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   const row = document.querySelector("[data-tq-row]"), chat = document.querySelector(".tq-chat-body");
   const verbs = row ? [...row.querySelectorAll("button")].filter(vis).map((b) => ({ word: b.innerText.trim(), id: b.getAttribute("data-tq-verb") || "", dark: b.classList.contains("p"), own: b.hasAttribute("data-tq-own"), next: b.hasAttribute("data-tq-next") || b.hasAttribute("data-tq-walk-back"), off: b.disabled })) : [];
+  // ...and the moves off the bar, by their ids (MOVES less the row: the title bar, the panes' spines and strips - the owner, 2026-10-29)
+  const moves = [...document.querySelectorAll(["[data-tq-spine-moves]", "[data-tq-pane-moves]", "[data-tq-head-moves]", "[data-tq-pane-strip]"].map((m) => `${m} button[data-tq-verb]`).join(", "))]
+    .filter(vis).map((b) => ({ word: b.innerText.trim(), id: b.getAttribute("data-tq-verb"), off: b.disabled }));
   const cards = [...document.querySelectorAll("[data-tq-task-page]")].filter(vis), card = cards[cards.length - 1];
   const cardBtns = card ? [...card.querySelectorAll("button")].filter(vis).map((b) => ({ word: b.innerText.trim(), off: b.disabled })).filter((b) => b.word) : [];
   const cr = card?.getBoundingClientRect(), hr = chat?.getBoundingClientRect(), rr = row?.getBoundingClientRect();
@@ -440,7 +445,7 @@ const readPage = (page) => page.evaluate(() => {
   const pops = [...document.querySelectorAll('.MuiPopover-paper, [role="dialog"], .MuiDrawer-paper')].filter(vis).map((p) => p.innerText.replace(/\s+/g, " ").slice(0, 80));
   const msgs = chat ? [...chat.querySelectorAll(".tq-msg")] : [];
   const tail = msgs.slice(-8);                       // a receipt stays a few lines up once the walk has brought the next item
-  return { verbs, cardBtns, advice: !!adviceEl, decided, adv: adviceEl?.innerText || "", errs, rail, ref, read, chat: chat?.innerText || "", pops, lit,
+  return { verbs, moves, cardBtns, advice: !!adviceEl, decided, adv: adviceEl?.innerText || "", errs, rail, ref, read, chat: chat?.innerText || "", pops, lit,
     swap: (window.__swap || []).splice(0),
     strip: strip ? { empty: !strip.querySelector(".tq-next"), busy: strip.getAttribute("data-tq-strip") === "busy", unlit: !!strip.querySelector("[data-tq-unlit]") } : null,
     undoSaid: tail.some((m) => /Undo: |confirm below/i.test(m.innerText || "")),
@@ -649,14 +654,16 @@ async function sweep() {
     for (const r of (await look(page)).rail) {
       if (done.has(r.key)) continue;
       if (!(await openItem(page, r.key))) continue;
-      // what the row offers: its buttons, and each More menu's items
+      // what the row offers: its buttons, and each More menu's items - and where a move lives off the bar (MOVES: the title bar, the
+      // panes' spines and strips, the owner 2026-10-29), each id once and never a greyed one
       const offers = [];
       const s0 = await look(page);
       for (const v of s0.verbs) if (!v.next && v.word !== "▾") offers.push({ id: v.id, word: v.word, menu: -1 });
-      const mores = await page.$$("[data-tq-row] button");
+      for (const v of await page.$$eval(MOVES.slice(1).map((m) => `${m} button[data-tq-verb]`).join(", "), (bs) => bs.filter((b) => b.getBoundingClientRect().width > 0 && !b.disabled)
+        .map((b) => ({ id: b.getAttribute("data-tq-verb"), word: b.innerText.trim() })))) if (!offers.some((o) => o.id === v.id)) offers.push({ ...v, menu: -1 });
+      const mores = await page.$$(MORE);
       let mi = 0;
       for (const m of mores) {
-        if ((await m.evaluate((b) => b.innerText.trim())) !== "▾") continue;
         await m.click(); await wait(600);
         const items = await page.evaluate(() => [...document.querySelectorAll('[role="menuitem"]')].filter((e) => e.getBoundingClientRect().width > 0)
           .map((e) => ({ id: e.getAttribute("data-tq-verb") || "", word: e.innerText.trim() })));
@@ -674,16 +681,17 @@ async function sweep() {
         const at = page.step = `sweep ${key} on ${r.text.slice(0, 40)}`;
         const before = await look(page);
         if (o.menu >= 0) {
-          const ms = []; for (const m of await page.$$("[data-tq-row] button")) if ((await m.evaluate((b) => b.innerText.trim())) === "▾") ms.push(m);
+          const ms = await page.$$(MORE);
           if (!ms[o.menu]) continue;
           await ms[o.menu].click(); await wait(600);
           const it = await page.evaluateHandle((id, word) => [...document.querySelectorAll('[role="menuitem"]')].find((e) => (id && e.getAttribute("data-tq-verb") === id) || e.innerText.trim() === word) || null, o.id, o.word);
           if (!it.asElement()) { await closePops(page); continue; }
           await it.asElement().click();
         } else {
-          let h = await page.$(`[data-tq-row] [data-tq-verb="${o.id}"]`);
+          let h = (await page.evaluateHandle((M, id) => [...document.querySelectorAll(M.map((m) => `${m} [data-tq-verb="${id}"]`).join(", "))]
+            .find((b) => b.getBoundingClientRect().width > 0) || null, MOVES, o.id)).asElement();
           // ...a press before it can move a button into ▾ (a drafted answer's Send takes a slot): it is found there, by its id
-          if (!h) for (const m of await page.$$("[data-tq-row] [data-tq-more]")) {
+          if (!h) for (const m of await page.$$(MORE)) {
             await m.click(); await wait(600);
             h = await page.$(`[role="menuitem"][data-tq-verb="${o.id}"]`);
             if (h) break;
@@ -713,7 +721,7 @@ async function faults() {
   const fault = (f) => srv.api("POST", "/api/test/fault", { fault: f });
   // each scenario from the chat as it opens: a fix that opened a place leaves the canvas on it
   const fresh = async () => { await page.goto(`${srv.base}/`, { waitUntil: "load" }); await wait(5000); await clickText(page, "Walk me through my tasks"); await wait(4000); };
-  const outs = (s) => [...s.verbs.filter((v) => !v.next && !v.off).map((v) => ({ word: v.word, id: v.id, row: true })), ...s.cardBtns.filter((b) => !b.off).map((b) => ({ word: b.word }))];
+  const outs = (s) => [...[...s.verbs, ...s.moves].filter((v) => !v.next && !v.off).map((v) => ({ word: v.word, id: v.id, row: true })), ...s.cardBtns.filter((b) => !b.off).map((b) => ({ word: b.word }))];
   // press the draft's Send: the card's own, under the draft (a proposal's row verb first, where one is on the bar)
   // ...and see it reach the server: on CI a Send pressed while the card was still settling sent nothing, and the pass judged the untouched
   // draft as a failure with no way out (0.3.9.50). A press that sent nothing is pressed again; three that send nothing are the finding.
@@ -739,7 +747,7 @@ async function faults() {
     walked.push(`${at}: offered "${hit.word}"`);
     if (!press) return hit;
     const before = s;
-    if (hit.id) { const h = await page.$(`[data-tq-row] [data-tq-verb="${hit.id}"]`); if (h) await h.click(); }
+    if (hit.id) { const h = await page.$(MOVES.map((m) => `${m} [data-tq-verb="${hit.id}"]`).join(", ")); if (h) await h.click(); }
     else await clickText(page, hit.word);
     const v = hit.id ? verbOfId(hit.id) : byLabel[hit.word]; mark(v && coverOf(v, hit.word), at);
     await wait(4500);
@@ -1213,6 +1221,15 @@ async function table() {
       const chips = await page.$$eval(MOVES.map((m) => `${m} button`).join(", "), (bs) => bs.filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.innerText.trim()));
       const words = (await look(page)).verbs.map((v) => v.word), w = [...words, ...chips].find((x) => x.startsWith("Open TQ"));
       if (w) { for (const m of MOVES) if (await clickText(page, w, m)) break; return Number(w.match(/TQ-0*(\d+)/)[1]); }
+      // ...or behind a ▾: the end's Opens fold there beside Walk me through my tasks when the bar is short of room (the ask bar's fixed width)
+      for (let i = 0; i < (await page.$$(MORE)).length; i++) {
+        await page.evaluate((MORE, i) => document.querySelectorAll(MORE)[i]?.click(), MORE, i);
+        if (!(await until(() => menuUp(page)))) continue;
+        const o = await page.evaluate(() => { const it = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].find((e) => e.innerText.trim().startsWith("Open TQ")
+          && e.getAttribute("aria-disabled") !== "true"); if (!it) return ""; const word = it.innerText.trim(); it.click(); return word; });
+        if (o) return Number(o.match(/TQ-0*(\d+)/)[1]);
+        await closePops(page);
+      }
       // ...a run of notices read together moves on by its own word, as the walk pass presses it
       if (words.includes(label("next", "batch"))) await clickText(page, label("next", "batch"), "[data-tq-row]");
       else if (!(await pressNext(page))) break;
@@ -1446,8 +1463,9 @@ async function based() {
   await page.close(); srv.stop();
 }
 
-// STOPSAVE: Stop and save on a live session opens Close out AT THE PRESS with the write-up's pending block - the server job's own stage
-// - and the draft replaces that block in place, in the same card, no reload (the owner, 2026-10-21: "it looks frozen"). A world of
+// STOPSAVE: Stop and save on a live session shows the write-up under way AT THE PRESS - the server job's own stage, one line in the Agent
+// pane where Stop was pressed (832bb274: one Stop, one spinner) - and the draft then stands in Close out, no reload (the owner, 2026-10-21:
+// "it looks frozen"); only a failed write-up, with its Try again, stands in Close out. A world of
 // its own: a plain shell as the task's session (never a real coding CLI) and a brain that takes its time, so the job is still writing
 // when the block must already be up.
 const PENDING_BY = 500, STOPSAVE_TITLE = "Post the hardware store charge", STOPSAVE_FAILS = "Post the fuel card statement";
@@ -1471,13 +1489,11 @@ async function stopsave() {
   await page.evaluate(() => {
     const vis = (e) => { const r = e?.getBoundingClientRect(); return !!r && r.width > 0 && r.height > 0 && r.top < innerHeight && r.bottom > 0; };
     const tick = () => {
-      const now = performance.now(), block = document.querySelector("[data-tq-closeout] [data-tq-writeup]");
-      if (!window.__tqPending && vis(block) && block.getAttribute("data-tq-writeup") === "pending") { window.__tqPending = now; window.__tqCard = block.closest("[data-tq-closeout]"); }
+      const now = performance.now(), block = [...document.querySelectorAll("[data-tq-writeup=pending]")].find(vis);
+      if (!window.__tqPending && block) window.__tqPending = now;
       const card = document.querySelector("[data-tq-closeout]");
-      if (window.__tqPending && !window.__tqDraft && card && !card.querySelector("[data-tq-writeup]")
-        && /Hi Gail/.test(card.innerText + [...card.querySelectorAll("textarea")].map((t) => t.value).join(" "))) {
-        window.__tqDraft = now; window.__tqSame = card === window.__tqCard;
-      }
+      if (window.__tqPending && !window.__tqDraft && card && !document.querySelector("[data-tq-writeup=pending]")
+        && /Hi Gail/.test(card.innerText + [...card.querySelectorAll("textarea")].map((t) => t.value).join(" "))) window.__tqDraft = now;
       if (!window.__tqDraft) requestAnimationFrame(tick);
     };
     document.addEventListener("click", () => { if (!window.__tqPress) { window.__tqPress = performance.now(); requestAnimationFrame(tick); } }, { capture: true, once: true });
@@ -1485,20 +1501,19 @@ async function stopsave() {
   const href = await page.evaluate(() => location.href);
   await btn.click(); mark("stop_agent", page.step);
   let r = {};
-  for (let t = 0; t < 40000; t += 250) { r = await page.evaluate(() => ({ press: window.__tqPress, pending: window.__tqPending, draft: window.__tqDraft, same: window.__tqSame,
+  for (let t = 0; t < 40000; t += 250) { r = await page.evaluate(() => ({ press: window.__tqPress, pending: window.__tqPending, draft: window.__tqDraft,
     stage: document.querySelector("[data-tq-writeup]")?.getAttribute("data-tq-writeup-stage") || "", failed: !!document.querySelector('[data-tq-writeup="failed"]') }));
     if (r.draft || r.failed) break; await wait(250); }
   const ms = (a) => Math.round(a - r.press);
-  if (!r.pending) note("STOPSAVE", page.step, "Stop and save drew no pending block in Close out");
-  else if (ms(r.pending) > PENDING_BY) note("STOPSAVE", page.step, `Close out's pending block took ${ms(r.pending)} ms to show - over ${PENDING_BY} ms`);
+  if (!r.pending) note("STOPSAVE", page.step, "Stop and save drew no pending write-up line");
+  else if (ms(r.pending) > PENDING_BY) note("STOPSAVE", page.step, `the pending write-up line took ${ms(r.pending)} ms to show - over ${PENDING_BY} ms`);
   if (r.failed) note("STOPSAVE", page.step, "the write-up failed in a world where it cannot");
   else if (!r.draft) {
     const d = await srv.api("GET", `/api/tasks/${tid}`);
-    note("STOPSAVE", page.step, `the draft never replaced the pending block (the write-up: ${JSON.stringify(d.writeup)}, ${(d.reviews || []).length} review(s), `
+    note("STOPSAVE", page.step, `the draft never took the pending line's place in Close out (the write-up: ${JSON.stringify(d.writeup)}, ${(d.reviews || []).length} review(s), `
       + `last note "${String((d.comments || []).slice(-1)[0]?.Body || "").slice(0, 120)}"; Close out reads "${
         (await page.evaluate(() => document.querySelector("[data-tq-closeout]")?.innerText || "")).replace(/\s+/g, " ").slice(0, 300)}")`);
   }
-  else if (!r.same) note("STOPSAVE", page.step, "the draft came in a different Close out card - the page was redrawn, not the block replaced");
   if (await page.evaluate(() => location.href) !== href) note("STOPSAVE", page.step, "the page moved while the reply was written");
   walked.push(`stopsave: pending Close out at ${r.pending ? ms(r.pending) : "-"} ms, the draft in its place at ${r.draft ? ms(r.draft) : "-"} ms`);
   await page.close();
@@ -1522,7 +1537,7 @@ async function stopsave() {
       await p2.evaluate((w) => [...document.querySelectorAll('[data-tq-writeup="failed"] button')].find((b) => b.innerText.trim() === w)?.click(), label("try_again"));
       mark("try_again", p2.step);
       let again = false;
-      for (let t = 0; t < 3000 && !again; t += 50) { again = !!(await p2.$('[data-tq-closeout] [data-tq-writeup="pending"]')); if (!again) await wait(50); }
+      for (let t = 0; t < 3000 && !again; t += 50) { again = !!(await p2.$('[data-tq-writeup="pending"]')); if (!again) await wait(50); }
       if (!again) note("STOPSAVE", p2.step, `${label("try_again")} on the failed write-up showed no pending block - the press did nothing on screen`);
       else if (!(await failedBlock())) note("STOPSAVE", p2.step, `${label("try_again")} ran, failed again, and Close out did not say so`);
       walked.push(`stopsave: a failed write-up says so in Close out, with ${ways.join(" and ")}, and ${label("try_again")} runs it again`);

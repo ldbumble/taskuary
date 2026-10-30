@@ -366,6 +366,16 @@ export default function TaskHubPage() {
   const [canvasReq, setCanvasReq] = useState(() => { const r = canvasRequestFromHash(window.location.hash || "", 1); readAhead(r); return r && { ...r, fromUrl: true }; });
   const ask = useCallback((req) => setCanvasReq((cur) => ({ ...req, n: (cur?.n || 0) + 1 })), []);
   const demo = useDemo();          // the badge, and what the header hides to make room for it
+  // THE DEMO OPENS ON ITS TOUR (the owner, 2026-10-30: "when you open it it first opens on a task list todo to get sense of what it can
+  // do"): a visitor who came with no address of their own gets the tour task on the canvas, once per tab - a #task= or #report= link is
+  // honoured as it always was, and a reload goes back to wherever they had got to (demo.opens)
+  const cameTo = useRef(window.location.hash || "");
+  useEffect(() => {
+    const tid = demo?.opens?.tid;
+    if (!tid || cameTo.current) return;
+    try { if (sessionStorage.getItem("tq-demo-opened")) return; sessionStorage.setItem("tq-demo-opened", "1"); } catch { /* no storage: open it */ }
+    ask({ kind: "task", tid });
+  }, [demo?.opens?.tid, ask]);
   useEffect(() => holdLive(), []);
   const [selectedTask, setSelectedTask] = useState(null);
   // the one "Report this bug" popup: any screen asks for it through REPORT_EVENT (bugReportOpen.js)

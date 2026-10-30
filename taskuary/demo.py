@@ -11,10 +11,10 @@ against anything, no shell or CLI starts, and no channel is ever polled - and th
 by one middleware over the METHOD and PATH, before any handler sees the request, so a
 capability added next month is refused by default rather than discovered later.
 
-What is left is everything worth showing: a timeline of work arriving, triage verdicts with
-their reasons, drafts waiting on the task, a board with agents on it, reports, the assistant's
-posts, the wall. All of it invented, all of it already in the database, and the coding
-sessions REPLAY a recorded transcript so the board is alive without a CLI existing.
+What is left is everything worth showing: a rail of work arriving, led by a tour to try, triage
+verdicts with their reasons, drafts waiting in Close out, a board with agents on it, reports,
+the assistant's posts, the wall. All of it invented, all of it already in the database, and the
+coding sessions REPLAY a recorded transcript so the board is alive without a CLI existing.
 """
 import json
 import os
@@ -181,7 +181,7 @@ CANNED = [
     "Here is what I would do: read the thread, pull the numbers it refers to, and come back with "
     "the two lines that decide it. In the demo I answer from a script - in your own Taskuary this "
     "is your own AI doing the work.",
-    "I looked at your list. {list} Ask me to draft a reply and it lands on the task.",
+    "I looked at your list. {list} Ask me to draft a reply and it lands in the task's Close out.",
     "That is a report, not a question - give me the schedule and I will write it every morning "
     "before you are up.",
 ]
@@ -319,11 +319,13 @@ PROMPTS = (
     ('month_end', 'Open the month-end close', 'Here: {task:Month-end close is short by 4,180}.'),
     ('reports', 'Show me the reports', 'Here: [Reports](#report=reports).'),
     ('reply', 'How does a reply get written?',
-     'Open the item and press Reply - the draft lands on the task, and nothing goes out until you say yes. In the demo the drafts '
+     'Open the item and press Reply - the draft lands in its Close out, and nothing goes out until you press Send. In the demo the drafts '
      'are written ahead of time; in your own Taskuary your own AI writes them from the thread.'),
     ('schedule', 'Can you send me a report every morning?',
      'Yes - in your own Taskuary that is a report: say what it covers and when, and it is written every morning before you are up. '
      "The demo's are recorded ones: [Reports](#report=reports)."),
+    # ...and the way in, for a visitor who opened the chat before the rail (seed_tour, the owner 2026-10-30)
+    ('tour', 'Where do I start?', "Here: {task:Start here - what Taskuary can do} - its to-do is a short tour of what to try."),
 )
 OUT_OF_SCRIPT = 'In the demo I answer the suggested questions - in your own Taskuary your AI answers anything.'
 
@@ -445,6 +447,8 @@ VERDICTS = {
     'northwind/importers#214 - census sync fails when a site has no manager': {'verbs': ('regular_agent',), 'line': 'An issue with a traceback in it.'},
     # the advisor matrix's world (faults.world): a reply the mail server bounced for its address - fixed at the address, never redrafted
     'Lease renewal for the Elm Street office': {'verbs': ('fix', 'new_task'), 'line': 'The address was refused: {why}.', 'on': 'failed'},
+    # the tour (TOUR, below): nobody wrote it, so nobody waits on a reply - the scripted "Someone is waiting on an answer" lit Reply over it
+    'Start here - what Taskuary can do': {'verbs': ('next',), 'line': 'A tour of the demo - nobody is waiting on it.'},
 }
 
 # EACH AGENT ITS OWN WORK (B23, 2026-10-17): every agent task replayed the month-end transcript, so the census issue's
@@ -501,14 +505,14 @@ REPORTS = [
 ]
 
 # What the assistant is FOR, in the assistant's own words: it has read the thread, it knows what
-# is on the timeline, and it says the one thing that decides the next move. The demo used to open
+# is on the rail, and it says the one thing that decides the next move. The demo used to open
 # this pane empty, which showed a chat box and nothing worth chatting about.
 ASSIST = [
     ('user', 'what is actually waiting on me this morning?'),
     ('assistant', """Six things came in, four are handled. What is actually yours:
 
 - **{gl} - month-end short by 4,180.** An agent is on it; it found the four transfers between our own companies that the export leaves out.
-- **{cutover} - AP cutover Thursday.** Ruth needs a yes or a date. A reply is drafted on the task.
+- **{cutover} - AP cutover Thursday.** Ruth needs a yes or a date. A reply is drafted in its Close out.
 - **{q3} - Sam wants the Q3 numbers.** Also drafted.
 
 The newsletter, the thank-you and the maintenance notice are filed. Nothing there needs you."""),
@@ -615,7 +619,7 @@ def seed_calendar(store, f) -> int:
     ruth, priya = PEOPLE[3], PEOPLE[1]
     c = {'kind': 'request', 'provider': 'outlook', 'mailbox': 'demo', 'event_id': 'demo-event-1', 'ical_uid': 'demo-uid-1', 'update': False,
          'answered': False, 'asks': True, 'subject': 'AP cutover dry run', 'start': f'{d1} 10:00', 'end': f'{d1} 11:00', 'all_day': False,
-         'organizer': ruth[0], 'organizer_email': ruth[1], 'attendees': [ruth[1], 'dwhitfield@northwind.example']}
+         'organizer': ruth[0], 'organizer_email': ruth[1], 'attendees': [ruth[1], OWNER_EMAIL]}
     at, clash = calwrite.when(c['start'], c['end']), calwrite.clash_line(store, c['start'], c['end'], skip=c['subject'], events=agenda())
     tid = f.task(title=f"Invite: {c['subject']}", status='open', kind='reply', source='email',
                  Summary=f"{ruth[0]} invited you to {c['subject']}, {at}." + (f' It {clash}.' if clash else '') + ' Accept, decline or propose a new time.')
@@ -631,6 +635,9 @@ def seed_calendar(store, f) -> int:
     f.route(m2, t2, 'create', 'she asks for half an hour with you on a named day')
     f.review(t2, m2, draft=f"Yes - {d2.strftime('%A')} works. I'll send an invite.")
     return 2
+
+
+SPREAD_MIN = 25                          # minutes between the morning's arrivals (seed)
 
 
 def seed(store) -> int:
@@ -651,7 +658,7 @@ def seed(store) -> int:
         name, email = PEOPLE[who]
         hours = 2 + i * 3
         conv = f'{channel}:{email or name}'
-        # a chat line has no subject of its own, and a timeline row is titled by its subject -
+        # a chat line has no subject of its own, and a rail row is titled by its subject -
         # so the row would read as the sender's name and nothing else
         subject = subject or (body[:60] + ('…' if len(body) > 60 else ''))
         source = None if channel == 'email' else ('Ops chat' if channel == 'teams' else channel)
@@ -752,11 +759,13 @@ def seed(store) -> int:
     # hours back (an fyi 14 and 17 hours ago) kept their stamps across midnight, outside the pipe's reach (funnel_hours), and the demo
     # held two fyi at 08:00 and four at 18:00 (tests/assistant_queries.py, 2026-10-21). The morning is everything from the last day;
     # the week of history is seeded after this and keeps its days.
+    # ...over eight hours, not twelve: at 37 minutes apart the oldest row sat a minute inside the pipe's twelve-hour reach, so the tour
+    # (seed_tour), which must arrive before it to lead the rail, fell outside it - and an hour of the demo open aged the morning out too
     since = (datetime.now() - timedelta(hours=24)).strftime('%Y-%m-%d %H:%M:%S')
     for i, m in enumerate(store.scan_messages(60)):
         if str(m.get('SentAt') or '') < since: continue
         store._exec('UPDATE message SET SentAt=? WHERE MessageId=?',
-                    ((datetime.now() - timedelta(minutes=37 * i + 11)).strftime('%Y-%m-%d %H:%M:%S'), m['MessageId']))
+                    ((datetime.now() - timedelta(minutes=SPREAD_MIN * i + 11)).strftime('%Y-%m-%d %H:%M:%S'), m['MessageId']))
 
     # the week behind today: finished, so it reads as history rather than a backlog
     past = []
@@ -836,8 +845,54 @@ def seed(store) -> int:
         elif kind == 'technical_solve':
             store.lore_comment(lid, 'The same elapsed-time budget should apply to report polling.', 'assistant')
     seed_dashboard(store)
+    made += seed_tour(store, f)
     logger.info(f'demo: seeded {made} items of invented work')
     return made
+
+
+# THE DEMO OPENS ON A TOUR (the owner, 2026-10-30: "when you open it it first opens on a task list todo to get sense of what it can
+# do"). One task whose to-do is the app's own moves, each one a press that works here, in the words the buttons say (buttons.json) -
+# a visitor dropped on a morning of somebody's work had nowhere to start. It is the OLDEST row under Tasks, so the rail draws it
+# first and the walk starts on it (funnel.order_key: a section, then oldest first); it is made LAST so every other task and message
+# keeps the number the tests and the static demo know it by.
+TOUR = 'Start here - what Taskuary can do'
+TOUR_BODY = ('Welcome to the demo. Northwind, its people and their mail are invented, and nothing you press here reaches anyone. '
+             'The to-do on this task is a short tour - each step is something you can try in the demo. Tick a step as you go; '
+             'ticking the last one closes this task.')
+TOUR_STEPS = (                           # in the order they are read: the to-do draws newest first, so they are stored the other way round
+    'Open "Month-end close is short by 4,180": Came from is what arrived, Agent is who works it, Close out is how it ends',
+    'Walk your work with Next and Back - Next goes down the rail, Back comes up it',
+    'Watch an agent work: open "northwind/importers#214" and read its run in the Agent pane',
+    'Send a reply from Close out: open "Invoice 88213 - past due", read the draft and press Send - nothing leaves the demo',
+    'Put one off from Came from: Remind me, or Not a task, on "New starter on Monday"',
+    'Open a report under Reports, then ask the chat pill "What\'s on me right now?"',
+)
+
+
+def seed_tour(store, f) -> int:
+    """The tour task, arrived a few minutes before the oldest of the morning's work, so it leads the rail and the walk."""
+    fmt, since = '%Y-%m-%d %H:%M:%S', datetime.now() - timedelta(hours=24)
+    oldest = min((s for m in store.scan_messages(200) for s in [str(m.get('SentAt') or '')] if s >= since.strftime(fmt)), default=None)
+    at = ((datetime.strptime(oldest, fmt) if oldest else datetime.now()) - timedelta(minutes=7)).strftime(fmt)
+    # the owner's own to-do ('you made it', origin.of_task; an own note, which nobody wrote and nobody waits on a reply to) - as an email
+    # from "Taskuary" its Close out read "Reply to Taskuary · Not drafted yet" and offered Draft reply, and its kind said an agent works it
+    tid = f.task(title=TOUR, status='open', kind='task', source='own', OriginBase='owner')
+    mid = f.message(task_id=tid, channel='own', subject=TOUR, body=TOUR_BODY, from_name='Taskuary', sent_at=at, conversation_id='demo:tour')
+    f.route(mid, tid, 'create', 'the tour of the demo: every step is something to try here')
+    store.set_task_checklist(tid, list(reversed(TOUR_STEPS)), 'owner')
+    store._exec('UPDATE task SET CreatedAt=?, TrustedThrough=? WHERE TaskId=?', (at, mid, tid))
+    return 1
+
+
+# ...and the canvas OPENS on it (TaskHubPage): leading the rail alone opened the demo on the greeting, the tour one press away. The
+# browser tests boot this world to drive everything else from the greeting, so their harness turns the opening off (OPENS_ENV=0).
+OPENS_ENV = 'TASKUARY_DEMO_OPENS_TOUR'
+
+def opens(store) -> dict | None:
+    """What a visitor's first view opens on: the tour while it is open, else nothing - the greeting, as an install opens."""
+    if not enabled() or os.environ.get(OPENS_ENV, '1') == '0' or store is None: return None
+    t = next((t for t in store.list_tasks() if t.get('Title') == TOUR and t.get('Status') not in ('done', 'dropped')), None)
+    return {'tid': t['TaskId']} if t else None
 
 
 SOUL = """# SOUL.md - the operator's document

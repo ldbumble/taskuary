@@ -449,3 +449,67 @@ class TheOwnerIsAtNorthwindTests(unittest.TestCase):
         vendor = next(t for t, e in by.items() if e.endswith('@vendor.example'))
         self.assertEqual(origin.of_task(s, colleague)[0], 'trusted')
         self.assertEqual(origin.of_task(s, vendor)[0], 'stranger')
+
+
+class TheDemoOpensOnItsTourTests(unittest.TestCase):
+    """The owner, 2026-10-30: "when you open it it first opens on a task list todo to get sense of what it can do"."""
+    def seeded(self):
+        from taskuary import funnel, terminal
+        s = MemoryStore()
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            demo.seed(s); funnel.invalidate()
+            items = funnel.pile(s, force=True)['items']
+        funnel.invalidate()
+        return s, items
+
+    def test_the_tour_leads_the_rail_and_the_walk(self):
+        from taskuary.funnel_selection import first_at_start
+        s, items = self.seeded()
+        self.assertEqual(items[0]['title'], demo.TOUR, [i['title'] for i in items[:3]])
+        self.assertEqual(first_at_start(items)['title'], demo.TOUR)
+
+    def test_it_is_made_last_so_every_other_number_stands(self):
+        s, _ = self.seeded()
+        tour = next(t for t in s.list_tasks() if t['Title'] == demo.TOUR)
+        self.assertEqual(tour['TaskId'], max(t['TaskId'] for t in s.list_tasks() if t.get('SourceRef') != 'assistant:dock'))
+        self.assertEqual(s.get_task(1)['Title'], 'Month-end close is short by 4,180')
+
+    def test_it_is_the_owners_own_to_do_that_nobody_waits_on(self):
+        from taskuary import origin
+        s, _ = self.seeded()
+        tour = next(t for t in s.list_tasks() if t['Title'] == demo.TOUR)
+        self.assertEqual((tour['Kind'], origin.of_task(s, tour['TaskId'])[0]), ('task', 'owner'))
+        self.assertEqual({m['Channel'] for m in s.list_messages(tour['TaskId'])}, {'own'}, 'an own note: no Reply to anyone')
+
+    def test_its_steps_read_top_down_and_name_only_what_the_demo_has(self):
+        """The to-do draws newest first (TaskPage), so the steps are stored the other way round. Every row a step names is on the
+        rail, and every button it names is a button (buttons.json) - the words the owner sees on the page."""
+        import json, re
+        from pathlib import Path
+        s, items = self.seeded()
+        tour = next(t for t in s.list_tasks() if t['Title'] == demo.TOUR)
+        self.assertEqual([i['text'] for i in reversed(s.task_checklist(tour['TaskId']))], list(demo.TOUR_STEPS))
+        titles = [i['title'] for i in items]
+        for step in demo.TOUR_STEPS:
+            for named in re.findall(r'"([^"]+)"', step):
+                if named.endswith('?'): continue                      # the chat's own suggestion, not a row
+                self.assertTrue(any(t.startswith(named) for t in titles), (named, titles))
+        labels = {v['label'] for v in json.loads((Path(demo.__file__).with_name('buttons.json')).read_text(encoding='utf-8'))['verbs'].values()}
+        for b in ('Next', 'Back', 'Send', 'Remind me', 'Not a task'): self.assertIn(b, labels)
+        self.assertIn("What's on me right now?", [ask for _, ask, _ in demo.PROMPTS], 'the chat answers the question the tour asks')
+
+    def test_the_first_view_opens_on_it_until_it_is_done(self):
+        s, _ = self.seeded()
+        tour = next(t for t in s.list_tasks() if t['Title'] == demo.TOUR)
+        with on(): self.assertEqual(demo.opens(s), {'tid': tour['TaskId']})
+        with on(), mock.patch.dict(os.environ, {demo.OPENS_ENV: '0'}): self.assertIsNone(demo.opens(s))
+        self.assertIsNone(demo.opens(s), 'never outside the demo')
+        s.update_task(tour['TaskId'], {'Status': 'done'}, 'owner')
+        with on(): self.assertIsNone(demo.opens(s), 'a finished tour opens nothing: the greeting, as an install opens')
+
+    def test_where_do_i_start_brings_up_the_tour(self):
+        from taskuary import concierge
+        s, _ = self.seeded()
+        tid = next(t['TaskId'] for t in s.list_tasks() if t['Title'] == demo.TOUR)
+        said = demo.brain(store=s)('You are the assistant.', f'{concierge.OWNER_SAYS}Where do I start?')
+        self.assertIn(f'(#task={tid})', said)

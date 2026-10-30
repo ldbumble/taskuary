@@ -7449,7 +7449,10 @@ def workflow_brain():
 def workflow_compose(body: dict):
     """Describe a stateful invoice or scheduled AI-agent workflow; return an editable draft."""
     from .compose import compose_workflow
+    from . import workflows
     out = compose_workflow(store, (body or {}).get('ask') or '', _llm(), (body or {}).get('answers'))
+    # ...a coding routine's repository and skill are the owner's picks on New → Routine, laid over the draft as given (workflows.with_runs)
+    if out.get('config'): out['config'] = workflows.with_runs(out['config'], (body or {}).get('runs'))
     if out.get('config'):
         store.audit('workflow', 0, 'compose', ACTOR,
                     detail={'ask': ((body or {}).get('ask') or '')[:300],

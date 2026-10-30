@@ -192,7 +192,7 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
 // `line`: the Assistant's line that wrote this card (concierge._new) - its press says that line again as what it started (`onSaid`)
 // `initialChannel` / `initialTo`: Send something already addressed - a People hit's Message them (SearchEverything, trust audit F6)
 export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false, initialKind = "send", initialHow = "", initialText = "", line = null, onSaid,
-  initialChannel = "", initialTo = "", initialMeeting = null }) {
+  initialChannel = "", initialTo = "", initialMeeting = null, initialRoutine = null }) {
   const [kind, setKind] = useState(initialKind);
   const said = useRef(null);      // the words, for the repository picker (see NewRepo)
   const repoPick = useRef(null);  // what the picker says to use, read on submit
@@ -484,7 +484,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         )}
 
         {REPEATS.includes(kind) && (
-          <Composer kind={kind} initial={kind === initialKind ? initialText : ""} onDraft={(config, meta) => { const k = meta?.verdict === "report" ? "report" : kind; handDraft(k, config, meta); onClose?.(); openAppLink(DRAFT_HASH[k]); }} />
+          <Composer kind={kind} initial={kind === initialKind ? initialText : ""} initialRuns={kind === initialKind ? initialRoutine : null} onDraft={(config, meta) => { const k = meta?.verdict === "report" ? "report" : kind; handDraft(k, config, meta); onClose?.(); openAppLink(DRAFT_HASH[k]); }} />
         )}
 
         {kind === "meeting" && (

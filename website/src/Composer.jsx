@@ -1,7 +1,7 @@
 // "Describe the report / workflow you want": one box that asks the composer for a draft, asks back what it will not guess,
 // and hands the draft on. Reports draws it on its lists and the new workflow's page; New draws it on its Report and
 // Workflow tabs (the owner, 2026-10-15), and hands the draft to Reports to open.
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, Box, Button, CircularProgress, TextField, Tooltip, Typography } from "@mui/material";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
@@ -14,8 +14,18 @@ import { PANEL2, DIM, FAINT, INK, ACCENT2, card } from "./theme.jsx";
 import BuilderAsks from "./BuilderAsks.jsx";
 import { answerState, answersFor, asksOf } from "./builderAsks.js";
 
-export default function Composer({ onDraft, kind = "report", initial = "" }) {
+export default function Composer({ onDraft, kind = "report", initial = "", initialRuns = null }) {
   const [ask, setAsk] = useState(initial);   // the words the Assistant wrote it up with (concierge._new)
+  // A CODING ROUTINE (the owner, 2026-10-29): it runs in a repository, on a skill the coding CLI finds there - both picked here, and the
+  // Assistant's prefill (concierge._new `routine`) fills them in. `repo` is the repository's name; its folder rides as the routine's cwd
+  const [runs, setRuns] = useState(() => ({ coding: !!(initialRuns?.coding || initialRuns?.repo || initialRuns?.skill), repo: initialRuns?.repo || "", skill: initialRuns?.skill || "" }));
+  const [repos, setRepos] = useState(null);
+  useEffect(() => {
+    if (kind !== "workflow" || !runs.coding || repos) return undefined;
+    let live = true;
+    api.get("/api/repos").then(({ data }) => live && setRepos(data.data || [])).catch(() => live && setRepos([]));
+    return () => { live = false; };
+  }, [kind, runs.coding, repos]);
   const [busy, setBusy] = useState("");      // "build" | "answer": which press is running, so its own button spins
   const [out, setOut] = useState(null);
   const [answers, setAnswers] = useState({});
@@ -29,7 +39,9 @@ export default function Composer({ onDraft, kind = "report", initial = "" }) {
     const keep = (o, e) => ({ ...e, ...(withAnswers && !e.questions ? { asks: o?.asks, questions: o?.questions } : {}) });
     try {
       const endpoint = kind === "workflow" ? "/api/workflows/compose" : kind === "dashboard" ? "/api/dashboards/compose" : "/api/reports/compose";
-      const { data } = await api.post(endpoint, { ask, answers: withAnswers || undefined });
+      const cwd = (repos || []).find((r) => r.repo === runs.repo)?.path || runs.repo;
+      const extra = kind === "workflow" && runs.coding ? { runs: { coding: true, cwd, skill: runs.skill } } : {};
+      const { data } = await api.post(endpoint, { ask, answers: withAnswers || undefined, ...extra });
       setOut((o) => data.error ? keep(o, data) : data);
       if (data.config && !data.error) { onDraft(data.config, data); setAsk(""); setAnswers({}); setOut(null); }
     } catch (e) {
@@ -61,6 +73,21 @@ export default function Composer({ onDraft, kind = "report", initial = "" }) {
             + NL + "Every Monday, list the AP bills from Intacct due in the next 30 days and call out anything over 10k."}
         onChange={(e) => setAsk(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && ask.trim()) go(); }} />
+      {kind === "workflow" && <Box data-tq-routine-runs="" sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.9, flexWrap: "wrap" }}>
+        {[[false, "General"], [true, "Coding"]].map(([c, l]) => (
+          <Button key={l} size="small" variant={runs.coding === c ? "contained" : "outlined"} disableElevation disabled={!!busy} aria-pressed={runs.coding === c}
+            onClick={() => setRuns((r) => ({ ...r, coding: c }))} sx={{ minWidth: 0, py: 0.1 }}>{l}</Button>))}
+        {runs.coding && <>
+          <select aria-label="repository" data-tq-routine-repo="" value={runs.repo} disabled={!!busy} onChange={(e) => setRuns((r) => ({ ...r, repo: e.target.value }))}
+            style={{ fontSize: 12.5, padding: "4px 6px", borderRadius: 6, minWidth: 200 }}>
+            <option value="">{repos === null ? "loading the repositories…" : "choose the repository…"}</option>
+            {runs.repo && !(repos || []).some((r) => r.repo === runs.repo) && <option value={runs.repo}>{runs.repo}</option>}
+            {(repos || []).map((r) => <option key={r.repo} value={r.repo}>{r.repo}</option>)}
+          </select>
+          <TextField size="small" label="skill" placeholder="/weekly-review" value={runs.skill} disabled={!!busy} inputProps={{ "data-tq-routine-skill": "" }}
+            onChange={(e) => setRuns((r) => ({ ...r, skill: e.target.value }))} sx={{ bgcolor: "#fff", width: 180 }} />
+        </>}
+      </Box>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.9 }}>
         <Button size="small" variant="contained" disableElevation disabled={!!busy || !ask.trim()}
           sx={{ whiteSpace: "nowrap", flexShrink: 0 }}

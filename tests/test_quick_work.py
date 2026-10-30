@@ -121,6 +121,11 @@ def test_a_pending_question_is_never_done():
 def test_the_quick_line_says_what_it_cannot_reach():
     assert all(w in quickwork.QUICK_LINE for w in ('no mail search', 'no connectors', 'no files', 'cannot verify', 'Never set done while a question is pending'))
 
+def test_the_owners_decision_is_a_question_not_an_escalation():
+    """A colleague asking "is the $900 summit worth it?" escalated to the full agent because the spend was the owner's call (the overnight
+    QA, 2026-10-30) - the one call had the recommendation and the draft already. The decision is the question it asks."""
+    assert all(w in quickwork.QUICK_LINE for w in ('is not a reason to escalate', 'recommendation in report', 'decision in question'))
+
 def test_lookups_are_claimed_from_the_brain_that_was_built():
     s = home(); tid, _ = arrived(s)
     for looks, line in ((False, True), (True, False)):

@@ -53,6 +53,8 @@ QUICK_LINE = ('QUICK WORK: answer in one go, as one JSON object with the fields 
     'without the [[TASKUARY-...]] markers above; their jobs are fields here. report is what the owner reads (a few sentences). draft is the reply to send, '
     'or null. question is one question only the owner can answer, or null. done is true when nothing more is owed on this task, and why says in a line what finished it. '
     'Set escalate to true, with one line in why, when the job needs more than a lookup: acting anywhere, files to work through, booking, or multi-step research. '
+    'A decision that is the owner\'s to make - spending, who goes, which option - is not a reason to escalate: give your recommendation in report, '
+    'the draft built on it, and the decision in question with the options. '
     'Never claim an action you did not take. You have no mail search, no connectors and no files: when the answer depends on any of them, '
     'or on anything you cannot verify, set escalate rather than answer from memory. Never set done while a question is pending.')
 NO_LOOKUP_LINE = 'THIS AI CANNOT LOOK ANYTHING UP. When the answer depends on a fact that must be checked, set escalate (why: what needs checking) rather than answer from memory.'

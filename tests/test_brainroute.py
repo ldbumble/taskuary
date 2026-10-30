@@ -93,7 +93,7 @@ def test_fixed_mode_is_todays_answer_for_every_job(real, home):
             r = brainroute.choose(s, job)
             assert (r.pick, r.model) == _today(s, job), (home, job)
             assert r.tier == 'fixed' and r.rule == 'fixed'
-            assert r.gear == ('main' if job in ('general', 'coding') else 'light')
+            assert r.gear == ('main' if job in ('general', 'coding', 'quick_work') else 'light')
             # the reason names what runs, or says nothing does - never a vendor the home does not have
             assert r.why and (agents.NO_AI in r.why) == (not r.pick)
 

@@ -21,17 +21,17 @@ from typing import NamedTuple
 from loguru import logger
 
 # What a call is FOR. Closed: a new call site picks one of these, and an AST test fails a build_llm without it.
-JOBS = ('triage', 'draft', 'summary', 'advisor', 'memory', 'rank', 'assistant', 'general', 'coding', 'judge', 'report')
+JOBS = ('triage', 'draft', 'summary', 'advisor', 'memory', 'rank', 'assistant', 'general', 'coding', 'judge', 'report', 'quick_work')
 # the one-message jobs: read, judge, write - none of them can act, so asking again cannot do anything twice
 ONE_SHOT = ('triage', 'draft', 'summary', 'advisor', 'memory', 'rank', 'judge', 'report')
 # ...of which these may be asked again of a strong model (a report may research with tools, so it is not one of them)
 ESCALATES = ('triage', 'draft', 'summary', 'judge', 'advisor', 'rank', 'memory')
 # A job with no slot of its own rides the triage brain, as every unnamed build_llm always has (llm.build_llm).
-SLOT_OF = {**{j: 'triage_ai' for j in ONE_SHOT}, 'draft': 'draft_ai', 'general': 'assistant_ai', 'coding': 'default_brain',
+SLOT_OF = {**{j: 'triage_ai' for j in ONE_SHOT}, 'draft': 'draft_ai', 'general': 'assistant_ai', 'quick_work': 'assistant_ai', 'coding': 'default_brain',
            'assistant': 'concierge_ai'}
 JOB_WORDS = {'triage': 'triage', 'draft': 'a draft', 'summary': 'a summary', 'advisor': 'the Advisor', 'memory': 'memory',
              'rank': 'ranking', 'assistant': 'the Assistant', 'general': 'general work', 'coding': 'coding',
-             'judge': 'a judgement', 'report': 'a report'}
+             'quick_work': 'quick general work', 'judge': 'a judgement', 'report': 'a report'}
 
 
 class Route(NamedTuple):
@@ -189,7 +189,7 @@ GEAR_OF = {'light': 'light', 'standard': 'main', 'strong': 'strong'}
 DEFAULT_RULES = [
     {'id': 'quick-jobs', 'when': {'job': ['triage', 'rank', 'memory', 'advisor', 'summary']}, 'use': {'tier': 'light'}},
     {'id': 'hard-work', 'when': {'job': ['draft', 'general', 'coding'], 'difficulty': ['hard']}, 'use': {'tier': 'strong'}},
-    {'id': 'work', 'when': {'job': ['draft', 'general', 'coding']}, 'use': {'tier': 'standard'}},
+    {'id': 'work', 'when': {'job': ['draft', 'general', 'coding', 'quick_work']}, 'use': {'tier': 'standard'}},
     # an answer that could not be read, or one its model said it was unsure of, is asked once of a strong model - only for the jobs
     # that read and write; an agent that can act is never re-run by itself (it may have done half its work), it offers a press
     {'id': 'unsure', 'when': {'job': list(ESCALATES)}, 'use': {'escalate': True}},
@@ -403,7 +403,7 @@ def cap_left(store) -> bool:
 
 # ── what Settings shows: the mode line, the rules as sentences, the cap line, the recent routes ───────────────────────────────
 PLURAL = {'triage': 'triage', 'draft': 'drafts', 'summary': 'summaries', 'advisor': 'the Advisor', 'memory': 'memory', 'rank': 'ranking',
-          'assistant': 'the Assistant', 'general': 'general work', 'coding': 'coding', 'judge': 'judgements', 'report': 'reports'}
+          'assistant': 'the Assistant', 'general': 'general work', 'coding': 'coding', 'quick_work': 'quick general work', 'judge': 'judgements', 'report': 'reports'}
 USE_WORDS = {'light': 'the quick model', 'standard': "the card's own model", 'strong': 'the strong model'}
 
 

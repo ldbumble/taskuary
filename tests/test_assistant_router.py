@@ -357,6 +357,17 @@ class DeskRoutes(unittest.TestCase):
             self.assertEqual(out['open'], '#connector=quickbooks&step=1')
         self.assertNotIn('proposal', out); self.assertEqual(proposals(s), [])
 
+    def test_a_system_with_no_card_is_said_so_and_handed_to_an_agent(self):
+        # "connect me to Runway" opened #connector=None - Connections with nothing on it (TQ-1251)
+        s = store()
+        sort = {'kind': 'connection', 'provider': 'runway', 'name': 'Runway', 'why': 'a video tool'}
+        with mock.patch.object(concierge, '_compose_llm', return_value=lambda *a, **k: json.dumps(sort)):
+            out, _ = say(s, 'connect me to runway', None, 'CALL: {"kind": "setup", "params": {"text": "connect me to runway"}}')
+        self.assertNotIn('open', out)
+        self.assertEqual((out['new']['kind'], out['new']['text']), ('agent', 'connect me to runway'))
+        self.assertTrue(out['say'].startswith('Runway has no card under Connections'), out['say'])
+        self.assertIn('Wrote it into New', out['say']); self.assertEqual(proposals(s), [])
+
     def test_a_job_the_model_says_repeats_is_new_routine_filled_in_never_a_one_off(self):
         # the owner, 2026-10-29: "every Monday at noon run the user management review skill" made a one-off agent task
         s = store(); ask = 'every Monday at noon run the weekly review skill in northwind/ledger'; had = len(s.list_sources())

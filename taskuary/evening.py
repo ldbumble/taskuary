@@ -159,6 +159,11 @@ def sources(store) -> list:
     out = []
     for c, _ in channels._poll_jobs(store):
         err = str(c.get('LastError') or '').strip()
+        # AN ERROR FROM BEFORE THIS RUN IS NOT YET RETRIED (issue #270: "the report ran without Outlook mail, although Outlook was listed
+        # among the connectors"): an evening report owed at startup reads Taskuary's own data, so it runs first - before the connector's
+        # first poll of this session has cleared last session's error - and filed the run without a connection that reads fine. One that
+        # still fails is re-stamped by that poll, and says so on the next run
+        if err and str(c.get('LastErrorAt') or '') < channels.BOOT: c, err = {**c, 'LastError': None}, ''
         why = ('signed out - sign in again under Connections' if problems.signed_out(c)
                else channels.plain_error_text(err)[:200] if err else '')
         label = (c.get('Name') or '').strip() or (connectorcatalog.by_type(c['Type']) or {}).get('title') or c['Type']

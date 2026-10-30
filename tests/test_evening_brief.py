@@ -93,3 +93,17 @@ class FirstScheduleTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class StaleConnectorErrorTests(unittest.TestCase):
+    """Issue #270: "the report ran without Outlook mail, although Outlook was listed among the connectors". An evening report owed at
+    startup ran before Outlook's first poll of the session, and last session's stored error named Outlook unreadable."""
+    def test_an_error_from_before_this_run_is_not_a_connection_that_cannot_be_read(self):
+        from taskuary import channels
+        old = (datetime.strptime(channels.BOOT, '%Y-%m-%d %H:%M:%S') - timedelta(hours=3)).strftime('%Y-%m-%d %H:%M:%S')
+        now = (datetime.strptime(channels.BOOT, '%Y-%m-%d %H:%M:%S') + timedelta(seconds=5)).strftime('%Y-%m-%d %H:%M:%S')
+        jobs = [({'ConnectorId': 1, 'Type': 'outlook', 'Name': 'Outlook mail', 'Active': 1, 'LastError': 'connection reset', 'LastErrorAt': old}, None),
+                ({'ConnectorId': 2, 'Type': 'gmail', 'Name': 'Gmail', 'Active': 1, 'LastError': 'connection reset', 'LastErrorAt': now}, None)]
+        with mock.patch.object(channels, '_poll_jobs', return_value=jobs):
+            got = {x['label']: x['ok'] for x in evening.sources(MemoryStore())}
+        self.assertEqual(got, {'Outlook mail': True, 'Gmail': False})

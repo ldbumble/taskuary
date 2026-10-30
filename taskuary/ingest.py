@@ -1871,7 +1871,7 @@ def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bo
     from . import blackboard as bb, general, quickwork
     coding = not general.handles(store.get_task(tid) or {})
     # a conversation of quick answers carries on quick while the task still reads quick: one call, no desk, so no cap
-    quick = not coding and quickwork.only_quick(store, tid) and quickwork.takes(store, tid)
+    quick = not coding and quickwork.only_quick(store, tid) and _reads_quick(store, tid)
     if not quick and bb.live_count() >= (cap := auto_sessions(store)):
         not_started(store, tid, f'{cap} agents are already running - Continue picks it up')
         return False
@@ -2072,16 +2072,16 @@ def _pass_turn(msg: dict) -> str:
 def _pass_general(store, tid, msg: dict):
     """The line as the assistant's NEXT turn: send_prompt takes its turn behind the one running (GeneralSession._take), so a line
     that lands mid-answer - or while a carried-on turn is still opening - is queued, never dropped."""
-    from . import general
+    from . import general, quickwork
     end = time.time() + PASS_WAIT
-    # a conversation still opening (carry-on, Continue) takes ITS turn first: this one waits until that turn has the session
-    while time.time() < end and tid in general.OPENING and not getattr(general.session_for(tid), 'busy', False): time.sleep(.25)
+    # a conversation still opening (carry-on, Continue) takes ITS turn first: this one waits until that turn has the session -
+    # past the deadline while a quick call is in flight, whose session opens only once its answer is in (a POOL wait plus the call)
+    while (time.time() < end or tid in quickwork.RUNNING) and tid in general.OPENING and not getattr(general.session_for(tid), 'busy', False): time.sleep(.25)
     ses = general.session_for(tid)
     if not ses:
         store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message could not be passed in: the assistant's session ended - Continue picks it up.")
         return
     store.add_comment(tid, 'router', 'agent', f"Passed {_who_said(msg)}'s new message to the agent - it is the assistant's next turn.")
-    from . import quickwork
     try:
         # a session of quick answers re-decides on the task's depth now: still quick, one more call on it; else the turn runs the agent
         if ses.quick and quickwork.takes(store, tid): quickwork.again(store, tid, ses, _pass_turn(msg))
@@ -2757,6 +2757,15 @@ def advisor_brief(store, msg: dict, mid: int) -> str | None:
     return '\n\n'.join(parts)
 
 
+def _reads_quick(store, tid) -> bool:
+    "quickwork.takes, or False - the agent starts - when the depth cannot be read: a start never fails on it."
+    from . import quickwork
+    try: return quickwork.takes(store, tid)
+    except Exception as e:
+        logger.warning(f'the depth of task {tid} could not be read - it starts the agent: {e}')
+        return False
+
+
 def _auto_general(store, tid, brief: str = None, deep: bool = False):
     """Auto-dispatch for a GENERAL task: the assistant's own per-task session, the same one the
     owner sees when they open the task (PW-069). A full house queues it like a coding task; the
@@ -2765,12 +2774,11 @@ def _auto_general(store, tid, brief: str = None, deep: bool = False):
     A task triage judged quick (quickwork.takes) is answered in one call instead, ahead of the cap: it takes no desk. Every door reaching
     here has passed auto_start_ok already, so the gate is the same for both; a task triage never judged reads as deep."""
     from . import blackboard as bb, quickwork
-    try: quick = not deep and quickwork.takes(store, tid)
-    except Exception as e: quick = logger.warning(f'the depth of task {tid} could not be read - it starts the agent: {e}') or False
-    if quick: return quickwork.start(store, tid, brief)
+    if not deep and _reads_quick(store, tid): return quickwork.start(store, tid, brief)
     cap = auto_sessions(store)
     if bb.live_count() >= cap:
-        store.enqueue_dispatch(tid, None, 'assistant', f'{cap} agent sessions are already live')
+        # the brief waits with it (a quick call's notes, an Advisor's idea): the drain starts the agent on it, not on the bare Summary
+        store.enqueue_dispatch(tid, None, 'assistant', f'{cap} agent sessions are already live', brief=brief)
         store.add_comment(tid, 'router', 'agent', f'Waiting its turn: {cap} agents are already running, and it starts by itself when one ends.')
         return
     _start_general(store, tid, brief)

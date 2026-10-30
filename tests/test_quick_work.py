@@ -350,3 +350,32 @@ def test_a_depth_that_cannot_be_read_starts_the_agent():
          mock.patch.object(ingest, '_start_general', return_value=True) as deep:
         ingest._auto_general(s, tid)
     quick.assert_not_called(); deep.assert_called_once()
+
+def test_a_line_landing_mid_call_is_passed_in_however_long_the_call_takes():
+    s = home(); tid, _ = arrived(s)
+    gate, calls = threading.Event(), []
+    def slow(system, user, **k): calls.append(user); gate.wait(5); return json.dumps(ANSWER)
+    slow.takes_web, slow.takes_want = False, True
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(llm, 'build_llm', return_value=slow), \
+         mock.patch.object(general, 'start_session', side_effect=opened), mock.patch.object(ingest, 'PASS_WAIT', .2):     # the call outlasts the wait
+        first = threading.Thread(target=quickwork.start, args=(s, tid)); first.start()
+        end = time.time() + 5
+        while time.time() < end and not calls: time.sleep(.02)
+        line = threading.Thread(target=ingest._pass_general, args=(s, tid, {**mail(body='Erin Blake: also, can Gail Moreno come?'), 'message_id': None}))
+        line.start(); time.sleep(.6); gate.set()
+        first.join(10); line.join(10)
+    assert len(calls) == 2 and 'can Gail Moreno come' in calls[1]                 # answered quick again, behind the first
+    assert not any('could not be passed in' in c['Body'] for c in s.list_comments(tid))
+
+def test_a_queued_escalation_starts_the_agent_with_its_notes():
+    from taskuary import blackboard as bb
+    s = home(); tid, _ = arrived(s)
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(general, 'start_session', side_effect=opened), \
+         mock.patch.object(llm, 'build_llm', return_value=Brain({**ANSWER, 'escalate': True, 'why': 'it means booking for three', 'report': 'Two dates fit.'})), \
+         mock.patch.object(bb, 'live_count', return_value=99):                   # every agent slot is taken
+        assert quickwork.start(s, tid) == 'escalated'
+    brief = s.get_dispatch(tid)['Brief']
+    assert 'it means booking for three' in brief and 'Two dates fit.' in brief
+    with mock.patch.object(bb, 'live_count', return_value=0), mock.patch.object(ingest, '_start_general', return_value=True) as deep:
+        bb.drain(s)
+    assert deep.call_args[0][1:] == (tid, brief)                                 # the slot freed: the agent starts on the notes, not the bare Summary

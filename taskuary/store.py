@@ -1259,7 +1259,8 @@ class SQLiteStore:
             if 'ExtId' not in tcols: self.cx.execute('ALTER TABLE transcript ADD COLUMN ExtId TEXT')   # the CLI's own conversation, reopenable
             qcols = {r[1] for r in self.cx.execute('PRAGMA table_info(dispatchq)')}
             for col, typ in (('Value', 'REAL'), ('Floor', 'REAL'), ('Why', 'TEXT'),    # rank.py: value-ordered queue
-                             ('Attempts', 'INTEGER DEFAULT 0'), ('LastError', 'TEXT'), ('NextAt', 'TEXT'), ('State', 'TEXT')):   # PW-085: the retry budget
+                             ('Attempts', 'INTEGER DEFAULT 0'), ('LastError', 'TEXT'), ('NextAt', 'TEXT'), ('State', 'TEXT'),   # PW-085: the retry budget
+                             ('Brief', 'TEXT')):        # what a general start was to be asked (ingest._auto_general), kept for the drain
                 if col not in qcols: self.cx.execute(f'ALTER TABLE dispatchq ADD COLUMN {col} {typ}')
             have = {r[1] for r in self.cx.execute('PRAGMA table_info(connector)')}
             if 'Roles' not in have: self.cx.execute('ALTER TABLE connector ADD COLUMN Roles TEXT')
@@ -4921,10 +4922,12 @@ class SQLiteStore:
 
     # the dispatch queue: tasks held back from auto-start because a running agent's work would
     # likely collide (BehindTaskId) or every session slot is busy (NULL) - see blackboard.drain
-    def enqueue_dispatch(self, task_id, behind, agent, reason, value=None, why=None):
-        if self._one('SELECT 1 x FROM dispatchq WHERE TaskId=?', (task_id,)): return None
-        qid = self._exec('INSERT INTO dispatchq (TaskId,BehindTaskId,Agent,Reason,CreatedAt,Value,Floor,Why) VALUES (?,?,?,?,?,?,?,?)',
-                         (task_id, behind, agent, reason, _now(), value, value, why))
+    def enqueue_dispatch(self, task_id, behind, agent, reason, value=None, why=None, brief=None):
+        if self._one('SELECT 1 x FROM dispatchq WHERE TaskId=?', (task_id,)):
+            if brief: self._exec('UPDATE dispatchq SET Brief=? WHERE TaskId=?', (brief, task_id))     # the newer ask is the one to start on
+            return None
+        qid = self._exec('INSERT INTO dispatchq (TaskId,BehindTaskId,Agent,Reason,CreatedAt,Value,Floor,Why,Brief) VALUES (?,?,?,?,?,?,?,?,?)',
+                         (task_id, behind, agent, reason, _now(), value, value, why, brief))
         # Queued is already assigned work: waiting for a free desk must not look unowned. The
         # profile name survives the queue and the eventual session, regardless of whether triage
         # or the owner created the task.

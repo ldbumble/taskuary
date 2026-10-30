@@ -479,7 +479,7 @@ def drain(store):
                     from .ingest import _start_general
                     # a queued GENERAL task opens its assistant session, not a CLI (PW-069). Its failure is counted and
                     # re-armed inside; clearing the row here wrote "Started" over a launch that never happened (PW-073/085)
-                    if not _start_general(store, q['TaskId']): continue
+                    if not _start_general(store, q['TaskId'], q.get('Brief') or None): continue      # with the brief it was queued with
                 else:
                     from .ingest import reply_job       # a reply task's agent is told its job is the reply, queued or not
                     term.start_on_task(store, q['TaskId'], q.get('Agent') or '', instruction=reply_job(store, q['TaskId']) or None, actor='router')

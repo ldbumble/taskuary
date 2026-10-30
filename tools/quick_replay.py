@@ -2,7 +2,7 @@
 
 Reads a COPY of PATH (a read such as origin.of_task writes a cache) with TASKUARY_HOME pointed at a fresh temp dir, so the real home is never opened.
 There is no default for --db. Prints `key: count` lines - never a title, a name or any text. With --ask N it also makes the quick call on up to N
-would-be-quick tasks, and counts what came back; nothing is filed."""
+would-be-quick tasks, and counts what came back (answered, asked the owner, closed, escalated); nothing is filed."""
 import argparse, os, shutil, sys, tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -23,13 +23,13 @@ def replay(store, days: int = 14, now: datetime = None, ask: int = 0) -> dict:
         if w: out[f'deep:{w}'] += 1
         else: out['quick'] += 1; quick.append(t['TaskId'])
     if ask > 0:
-        out.update(asked=0, escalated=0, unreadable=0, failed=0)
+        out.update(asked=0, answered=0, question=0, closed=0, escalated=0, unreadable=0, failed=0)
         for tid in quick[:ask]:
             out['asked'] += 1
             try: a = quickwork.ask(store, tid, ingest.first_ask(store, tid))
             except Exception: out['failed'] += 1; continue
             if a is None: out['unreadable'] += 1
-            elif a.escalate: out['escalated'] += 1
+            else: out['escalated' if a.escalate else 'question' if a.question else 'closed' if a.done else 'answered'] += 1
     return out
 
 

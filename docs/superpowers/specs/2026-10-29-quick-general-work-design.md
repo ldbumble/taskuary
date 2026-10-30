@@ -83,6 +83,9 @@ are untouched: they keep the CLI terminal.
 - **No new triage field.** Triage already returns `difficulty: quick|standard|hard`. `difficulty=quick`
   takes the quick path, and `standard`/`hard` take today's deep path, so the two can never disagree.
   `needs_browser=true` always takes the deep path.
+  **Revised by the depth ruling (2026-10-29, after the replay):** quick when the difficulty is `quick`, `standard` or not
+  recorded; deep for `hard`, a browser, a stranger, several emails owed, a task that already ran deep, and a routine
+  (`Source == 'workflow'`). Escalation is the safety net.
 - **Context is fetched up front, not live tools.** The quick call gets the message, the task, the thread's
   history (as `history_brief` builds it for mail), LEARNED.md and today's calendar in its prompt, plus the
   provider's own web search. There is no shell, no local file access and no new tool-calling layer. Anything

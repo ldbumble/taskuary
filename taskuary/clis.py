@@ -187,6 +187,11 @@ def quick_read_args(cmd: str, args: list) -> list:
     return [a for a in args if a not in drop] + list(add)
 
 
+def quick_web(cmd: str) -> bool:
+    "True when this CLI's quick-call flags (QUICK_READ) give it the web - the one lookup a quick call may make."
+    return QUICK_TOOLS in QUICK_READ.get(_base(cmd), ((), ()))[1]
+
+
 def _require_restricted_mode(cmd: str):
     # An ALLOW list: a CLI with no verified per-run restriction keeps whatever its args grant
     # (cursor's --force, copilot's --allow-all-tools, any custom command), so it may not read

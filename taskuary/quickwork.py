@@ -2,13 +2,17 @@
 
 An agent session costs a launch and a long wait for what is often one sentence ("does it make sense to go on Friday?"). This module only
 READS the depth - triage's difficulty, plus the things that always need the agent (a browser, a stranger, several emails owed, a task that
-already ran deep). It never guesses from the words of the task."""
+already ran deep). It never guesses from the words of the task.
+
+THE DEPTH RULING (2026-10-29, after the replay found 93 of 140 recent tasks with no recorded difficulty and 30 'standard'): quick when triage
+read the work as quick or standard or recorded nothing; the agent only for hard work, a browser, a stranger, several emails owed, a task that
+already ran deep, and a routine. A quick call that finds it needs more escalates, so a wrong 'quick' costs one cheap call."""
 import re, threading
 from typing import NamedTuple
 from loguru import logger
 from . import brainroute, browserview, general, ingest, llm, origin, selfclose, slots
 
-DEEP_WHY = ('kind', 'difficulty', 'browser', 'stranger', 'emails', 'ran deep')
+DEEP_WHY = ('kind', 'routine', 'hard', 'browser', 'stranger', 'emails', 'ran deep')
 SETUP_REFS = (general.SETUP_REF, 'connector:setup')
 NOT_RUNS = ('answered',)          # an answer is the owner's reply landing, not a run; owner and judge events carry their own Source
 
@@ -16,19 +20,25 @@ NOT_RUNS = ('answered',)          # an answer is the owner's reply landing, not 
 def _runs(store, tid) -> list: return [e for e in store.worker_events(tid) if e.get('Kind') not in NOT_RUNS and e.get('Source') not in ('owner', 'judge')]
 
 def only_quick(store, tid) -> bool:
-    "True when the task has worker events and every run event came from the quick path."
-    evs = store.worker_events(tid)
-    return bool(evs) and all(e.get('Source') == 'quick' for e in _runs(store, tid))
+    "True when the task has run events and every one came from the quick path."
+    rs = _runs(store, tid)
+    return bool(rs) and all(e.get('Source') == 'quick' for e in rs)
+
+def ran_deep(store, tid) -> bool:
+    "A run that was not quick, or a conversation from before runs were recorded (general history, no run event)."
+    rs = _runs(store, tid)
+    return any(e.get('Source') != 'quick' for e in rs) if rs else bool(general.history(store, tid))
 
 def why_deep(store, tid) -> str:
     "'' when this general task is answered in one call (quick), else why it takes the agent - one of DEEP_WHY."
     t = store.get_task(tid) or {}
     if not general.handles(t) or general.is_dock(t) or str(t.get('SourceRef') or '') in SETUP_REFS: return 'kind'
-    if brainroute.judged(store, t)['difficulty'] != 'quick': return 'difficulty'
+    if t.get('Source') == 'workflow': return 'routine'            # a routine runs on its own brain and definition (workflows.brain)
+    if brainroute.judged(store, t)['difficulty'] == 'hard': return 'hard'
     if browserview.wanted(t) or ingest.triage_wants_browser(store, tid): return 'browser'
     if origin.of_task(store, tid)[0] == 'stranger': return 'stranger'
     if slots.all_(store, tid): return 'emails'
-    if store.worker_events(tid) and not only_quick(store, tid): return 'ran deep'
+    if ran_deep(store, tid): return 'ran deep'
     return ''
 
 def takes(store, tid) -> bool: return not why_deep(store, tid)
@@ -43,8 +53,9 @@ QUICK_LINE = ('QUICK WORK: answer in one go, as one JSON object with the fields 
     'without the [[TASKUARY-...]] markers above; their jobs are fields here. report is what the owner reads (a few sentences). draft is the reply to send, '
     'or null. question is one question only the owner can answer, or null. done is true when nothing more is owed on this task, and why says in a line what finished it. '
     'Set escalate to true, with one line in why, when the job needs more than a lookup: acting anywhere, files to work through, booking, or multi-step research. '
-    'Never claim an action you did not take.')
-NO_LOOKUP_LINE = 'THIS AI CANNOT LOOK ANYTHING UP. When a fact must be checked, set escalate (why: what needs checking) rather than answer from memory.'
+    'Never claim an action you did not take. You have no mail search, no connectors and no files: when the answer depends on any of them, '
+    'or on anything you cannot verify, set escalate rather than answer from memory. Never set done while a question is pending.')
+NO_LOOKUP_LINE = 'THIS AI CANNOT LOOK ANYTHING UP. When the answer depends on a fact that must be checked, set escalate (why: what needs checking) rather than answer from memory.'
 NO_CLOSE_LINE = 'DO NOT CLOSE THIS TASK: set done to false; the owner decides when it is finished.'
 
 
@@ -57,16 +68,18 @@ def _clean(s) -> str:
     from .selfclose import draft_markers, for_screen, reply_marker
     return _unmark(for_screen(draft_markers(reply_marker(str(s or ''))[0])[0]))
 
-# the [[TASKUARY-...]] tags, and the two envelopes _file also acts on: the Hub's <TASKUARY-HUB> and a bare TASKUARY-PROPOSE (proposals.MARK)
-_TAG = re.compile(r'\[\[\s*/?\s*TASKUARY[^\]]*\]\]|<\s*/?\s*TASKUARY[^>]*>|TASKUARY-PROPOSE', re.I)
+# the [[TASKUARY-...]] tags, and the two envelopes _file also acts on: the Hub's <TASKUARY-HUB>...</TASKUARY-HUB> with what it carries, and a bare
+# TASKUARY-PROPOSE (proposals.MARK)
+_TAG = re.compile(r'<\s*TASKUARY-HUB[^>]*>.*?<\s*/\s*TASKUARY-HUB[^>]*>|\[\[\s*/?\s*TASKUARY[^\]]*\]\]|<\s*/?\s*TASKUARY[^>]*>|TASKUARY-PROPOSE', re.I | re.S)
 def _unmark(text) -> str:
     "Every Taskuary tag out: the fields are words for the owner, and only as_reply writes the markers _file acts on."
     return _TAG.sub('', str(text or '')).strip()
 
 def read(data) -> 'QuickAnswer | None':
-    "The structured answer, or None when it is not an object or says neither something nor that the job is too big."
+    "The structured answer, or None when it is not an object or says neither something nor that the job is too big. A pending question is never done."
     if not isinstance(data, dict): return None
-    a = QuickAnswer(*(_clean(data.get(k)) for k in ('report', 'draft', 'question')), data.get('done') is True, data.get('escalate') is True, _clean(data.get('why')))
+    r, d, q = (_clean(data.get(k)) for k in ('report', 'draft', 'question'))
+    a = QuickAnswer(r, d, q, data.get('done') is True and not q, data.get('escalate') is True, _clean(data.get('why')))
     return a if a.report or a.escalate else None
 
 def as_reply(out: QuickAnswer) -> str:
@@ -89,8 +102,9 @@ def ask(store, tid, ask: str, steps: list = None, cancel=None) -> 'QuickAnswer |
     trace = (lambda kind, name, detail: steps.append((kind, name, detail))) if steps is not None else None
     brain = llm.build_llm(store, job='quick_work', task_id=tid, research='web', gear='main', trace=trace, cancel=cancel)
     if brain is None: raise RuntimeError(f'{general.NO_AI} - connect one to answer this task')
+    # what the brain BUILT can do (a failover's every brain): a CLI run on the web-only flags, or an API brain with the provider's web search
     web = bool(getattr(brain, 'takes_web', False))
-    lookups = web or brainroute.choose(store, 'quick_work', tid).pick.startswith('cli:')
+    lookups = bool(getattr(brain, 'looks_up', web))
     system, user = prompt(store, tid, ask, lookups)
     with llm.watching(trace): got = llm.ask_json(brain, system, user, want=None if web else QUICK_WANT, max_tokens=QUICK_TOKENS, **({'web': True} if web else {}))
     return read(got.data)

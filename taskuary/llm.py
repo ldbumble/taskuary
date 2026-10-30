@@ -223,9 +223,9 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     else:
         # The classifier reads untrusted text with every tool off. A report is different: it may
         # safely read files and the web, but never gets command, edit, write, or connector tools.
-        from .clis import preset_args, readonly_args, report_read_args
+        from .clis import preset_args, quick_read_args, readonly_args, report_read_args
         from . import config
-        restrict = report_read_args if research else readonly_args
+        restrict = quick_read_args if research == 'web' else report_read_args if research else readonly_args
         prof['args'] = restrict(prof['cmd'], list(prof.get('args') or preset_args(prof['cmd']) or ['-p']))
         scratch = config.home() / 'scratch'; scratch.mkdir(exist_ok=True)
         prof['cwd'] = cwd or str(scratch)

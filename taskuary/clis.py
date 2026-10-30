@@ -144,6 +144,11 @@ REPORT_READ = {
     'devin': READONLY['devin'],
 }
 
+# A quick general call (quickwork.py) answers in one go and may look a fact up on the web - nothing else: no files, no commands, no connectors.
+QUICK_TOOLS = 'WebFetch,WebSearch'
+QUICK_READ = {**REPORT_READ, 'claude': (('--dangerously-skip-permissions',),
+              ('--tools', QUICK_TOOLS, '--allowedTools', QUICK_TOOLS, '--disallowedTools', 'mcp__*'))}
+
 
 def _base(cmd: str) -> str:
     import re
@@ -172,6 +177,13 @@ def report_read_args(cmd: str, args: list) -> list:
     """CLI arguments for retrieving report data without command, edit, write, or MCP access."""
     _require_restricted_mode(cmd)
     drop, add = REPORT_READ[_base(cmd)]
+    return [a for a in args if a not in drop] + list(add)
+
+
+def quick_read_args(cmd: str, args: list) -> list:
+    """CLI arguments for a quick general call: the web and nothing else (claude); every other CLI keeps its read-only set."""
+    _require_restricted_mode(cmd)
+    drop, add = QUICK_READ[_base(cmd)] if _base(cmd) in QUICK_READ else READONLY[_base(cmd)]
     return [a for a in args if a not in drop] + list(add)
 
 

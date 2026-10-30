@@ -2656,7 +2656,7 @@ def resume_previous_work(task_id: int, background: BackgroundTasks):
         finally: general.OPENING.discard(task_id)
     return {'action': 'open', 'taskId': task_id}
 
-NEEDS_REPO = re.compile(r'could not tell which checkout|no local path|does not exist|choose one', re.I)
+from .funnel import NEEDS_REPO
 
 
 def _pressed_on(task_id: int, body) -> int:

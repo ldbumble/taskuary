@@ -323,7 +323,7 @@ def run(store, src, actor: str = 'schedule', trigger: str = 'schedule', context:
     busy = running(store, defn['source_id'])
     if busy:
         # ...and one run at a time: a tick that comes round while the last run still works would put a second agent on the same job
-        store.add_comment(busy['TaskId'], actor, 'agent', f"Workflow run ({trigger}) not started: this run is still working.")
+        store.add_comment(busy['TaskId'], actor, 'agent', f"Routine run ({trigger}) not started: this run is still working.")
         return {'task_id': busy['TaskId'], 'ref': task_ref(busy['TaskId']), 'kind': busy.get('Kind'), 'title': defn['title'],
                 'trigger': trigger, 'busy': True}
     when, kind = datetime.now().strftime('%Y-%m-%d %H:%M'), defn['runs_on']
@@ -343,9 +343,9 @@ def run(store, src, actor: str = 'schedule', trigger: str = 'schedule', context:
     b = brain(store, cfg_of(src), store.get_task(tid))
     if steps:
         n = len(flow.steps_of(cfg_of(src)))
-        store.add_comment(tid, actor, 'agent', f"Workflow run ({trigger}): {n} steps, run by code - a model only where a step asks for one. No triage.")
+        store.add_comment(tid, actor, 'agent', f"Routine run ({trigger}): {n} steps, run by code - a model only where a step asks for one. No triage.")
     else:
-        store.add_comment(tid, actor, 'agent', f"Workflow run ({trigger}): handed to the {'coding' if kind == 'coding' else 'regular'} agent "
+        store.add_comment(tid, actor, 'agent', f"Routine run ({trigger}): handed to the {'coding' if kind == 'coding' else 'regular'} agent "
                                                + (f"on {b['said']} " if b['said'] else '') + 'with the workflow definition - no triage.'
                                                + (f" {b['dropped']}" if b['dropped'] else ''))
     logger.info(f"workflow {defn['title']!r} ({trigger}) -> {task_ref(tid)} " + ('as steps' if steps else f'on the {kind} agent'))

@@ -56,7 +56,7 @@ const KINDS = [
   // ...and beside it, a dashboard (the owner, 2026-10-23: "similar to reports but more visual"): described here, drafted by the same
   // box, and opened on Reports → Dashboards drawn over real rows to save
   { key: "dashboard", mark: "📈", label: DASH.tab, hint: DASH.tab_hint },
-  { key: "workflow", mark: "🔁", label: "Workflow", hint: "does the work on a schedule — checks, opens tasks, prepares drafts — and asks before what you said it must not" },
+  { key: "workflow", mark: "🔁", label: "Routine", hint: "does the work on a schedule — checks, opens tasks, prepares drafts — and asks before what you said it must not" },
   // ...and the third thing Reports keeps (the owner, 2026-10-22: "this is not playbook ui?" - asked for one, the Assistant handed it to a
   // general agent as its job). Its words go to the shelf's own New playbook, which sets it up with AI there (playbookOpen.askPlaybook)
   { key: "playbook", mark: "📖", label: "Playbook", hint: "how one kind of request is handled from now on — triage matches new mail to it, and its steps are followed your way" },

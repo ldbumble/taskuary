@@ -44,7 +44,7 @@ const payrollRun = () => [
 ];
 const words = (recs) => {
   const bad = recs.findIndex((r) => r.status === "failed");
-  if (bad >= 0) return `Step ${bad + 1} failed: ${recs[bad].error} Fix it on the workflow, or change the step by hand.`;
+  if (bad >= 0) return `Step ${bad + 1} failed: ${recs[bad].error} Fix it on the routine, or change the step by hand.`;
   const ran = recs.filter((r) => r.status !== "repaired");
   return `Ran ${ran.length} steps in ${(recs.reduce((n, r) => n + r.ms, 0) / 1000).toFixed(1)}s, ${ran.filter((r) => ["ai", "draft", "agent"].includes(r.kind)).length} with AI`;
 };
@@ -83,7 +83,7 @@ export function installDemoWorkflows(state) {
       Kind: "general", Status: "done", Priority: "normal", Assignee: null, Source: "workflow", SourceRef: `workflow:${DUPES}`, Tags: "workflow-trigger:schedule",
       CreatedBy: "schedule", CreatedAt: a.at, UpdatedAt: a.at, ClosedAt: a.at, Checklist: null, ChecklistMd: "", Playbook: null },
     ref: `TQ-00${DUPES_TASK}`, messages: [], checklist: [], attachments: [], artifacts: [], routes: [], runs: [], audit: [], reviews: [], session: null, transcript: null,
-    comments: [`Workflow run (schedule): 4 steps, run by code - a model only where a step asks for one. No triage.`,
+    comments: [`Routine run (schedule): 4 steps, run by code - a model only where a step asks for one. No triage.`,
       ...a.steps.filter((r) => r.status !== "repaired").map((r, i) => `Step ${i + 1}/4 ${r.label}: ${r.head}`), a.summary].map((Body, i) => ({ CommentId: 6100 + i, TaskId: DUPES_TASK, Actor: "workflow", ActorType: "agent", Body, CreatedAt: a.at })),
     workflow: { source_id: DUPES, title: "Duplicate vendor bills", trigger: "schedule", schedule: "Mondays 07:00", started_by: "its schedule", runs_on: "", steps: a.steps, run_id: a.run_id, failed: false, summary: a.summary, repairs: a.repairs },
   };
@@ -93,7 +93,7 @@ export function installDemoWorkflows(state) {
     task: { ...detail[DUPES_TASK].task, TaskId: 63, Title: `Payroll export to the share - ${b.at.slice(0, 16)}`, Status: "open", ClosedAt: null, CreatedAt: b.at, UpdatedAt: b.at,
       SourceRef: `workflow:${PAYROLL}`, Summary: "WORKFLOW RUN: Payroll export to the share - started by its schedule.\n3 steps, run by code; a model only where a step says AI." },
     ref: "TQ-0063",
-    comments: ["Workflow run (schedule): 3 steps, run by code - a model only where a step asks for one. No triage.",
+    comments: ["Routine run (schedule): 3 steps, run by code - a model only where a step asks for one. No triage.",
       `Step 1/3 Read the payroll export: failed: ${b.steps[0].error}`, b.summary].map((Body, i) => ({ CommentId: 6200 + i, TaskId: 63, Actor: "workflow", ActorType: "agent", Body, CreatedAt: b.at })),
     workflow: { source_id: PAYROLL, title: "Payroll export to the share", trigger: "schedule", schedule: "Fridays 06:00", started_by: "its schedule", runs_on: "", steps: b.steps, run_id: b.run_id, failed: true, summary: b.summary, repairs: [] },
   };

@@ -381,7 +381,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     try {
       const { data } = await api.post(`/api/reports/${sid}/rerun`);
       // a workflow run IS a task: open it where the agent and its browser can be watched (the owner, 2026-10-08)
-      if (data.task_id) { setNote({ ok: true, detail: `${data.title || "Workflow"} started as ${data.ref} — opening it.` }); openAppLink(`task=${data.task_id}`); }
+      if (data.task_id) { setNote({ ok: true, detail: `${data.title || "Routine"} started as ${data.ref} — opening it.` }); openAppLink(`task=${data.task_id}`); }
       // where a report lands is its own routing, and a failure is the bell's alone (reports.run_lands)
       else setNote({ ok: true, detail: `${data.title || "Report"} is running in the background — you can leave this tab. ${data.lands || "If it fails, the bell says why."}` });
     } catch (e) { setNote({ ok: false, detail: e?.response?.data?.detail || "report could not be queued" }); }
@@ -435,10 +435,10 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     { key: "dashboards", label: "All dashboards", n: dashboardSources.length || null },
     ...dashboardSources.map((s) => ({ key: s.SourceId, label: titleOf(s) })),
     { key: "new-dashboard", label: DASH.new },
-    { section: "Workflows" },
+    { section: "Routines" },
     { key: "workflows", label: "All workflows", n: workflowSources.length || null },
     ...workflowSources.map((s) => ({ key: s.SourceId, label: titleOf(s) })),
-    { key: "new-agent", label: "+ New workflow" },
+    { key: "new-agent", label: "+ New routine" },
   ];
   // the canvas keeps its own place: a section, then one report (or a new one) open in it
   const bucketNow = browse ? (browseState.open ?? browseState.section ?? "reports") : bucket;
@@ -515,7 +515,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   const agentWorkflow = workflowOpen && !invoiceOpen;
   // a workflow that only reads is a report (the owner, 2026-10-18): the same reads open in the report builder, nothing saved yet
   const asReportDraft = (config, meta = {}) => {
-    onDraft(config, { explain: "Made from the workflow's reads - preview it, then save it as a report.", ...meta });
+    onDraft(config, { explain: "Made from the routine's reads - preview it, then save it as a report.", ...meta });
     if (browse) onBrowseState?.({ section: "reports", open: "draft" }); else setBucket("draft");
   };
   const toInvoices = () => { setDraft(null); if (browse) onBrowseState?.({ section: "workflows", open: "new-invoices" }); else setBucket("new-invoices"); };
@@ -565,12 +565,12 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
       // DASHBOARDS BESIDE REPORTS (the owner, 2026-10-23): Reports, Dashboards, Workflows, Playbooks - and the + New chips in that order
       sections: [{ key: "reports", label: "Reports", n: reportSources.length },
         { key: "dashboards", label: placeName("dashboards").split(" → ").pop(), n: dashboardSources.length },
-        { key: "workflows", label: "Workflows", n: workflowSources.length },
+        { key: "workflows", label: "Routines", n: workflowSources.length },
         { key: "playbooks", label: "Playbooks", n: pbs.books.length },
         // both ways in, always - not the open shelf's only: a new workflow was one click into Workflows away (the owner, 2026-10-15:
         // "it should say new workflow and new report right away without clicking in"). "new-invoices" is reached from the new workflow
         // ...and the third (the owner, 2026-10-22: "no new playbook ui either??"): New playbook's own dialog, opened on its shelf
-        { key: "new-report", label: "+ New report" }, { key: "new-dashboard", label: DASH.new }, { key: "new-agent", label: "+ New workflow" },
+        { key: "new-report", label: "+ New report" }, { key: "new-dashboard", label: DASH.new }, { key: "new-agent", label: "+ New routine" },
         { key: NEW_PB, label: "+ New playbook" }],
       section,
       onSection: (key) => {
@@ -620,24 +620,24 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         : browseState.open === "new-report" ? "a new report being set up (Reports)"
         : section === "dashboards" && !openSource && browseState.open != null ? "a new dashboard being set up (Reports - Dashboards)"
         : openSource && section === "dashboards" ? `the dashboard "${titleOf(openSource)}" (Reports - Dashboards), drawn with its buttons`
-        : openSource ? (section === "workflows" ? `the workflow "${titleOf(openSource)}" (Workflows), its steps open`
+        : openSource ? (section === "workflows" ? `the routine "${titleOf(openSource)}" (Routines), its steps open`
           : `the report "${titleOf(openSource)}" (Reports), its editor open`) : "",
-      empty: section === "playbooks" ? (pbs.err || (pbs.loaded ? PB_EMPTY : "Reading the playbooks…")) : section === "dashboards" ? DASH.empty : section === "workflows" ? "No workflows yet - + New workflow describes one and sets it up." : "No reports yet - + New report walks you through one.",
+      empty: section === "playbooks" ? (pbs.err || (pbs.loaded ? PB_EMPTY : "Reading the playbooks…")) : section === "dashboards" ? DASH.empty : section === "workflows" ? "No routines yet - + New routine describes one and sets it up." : "No reports yet - + New report walks you through one.",
       note: missing ? `That report (#${browseState.open}) is not here any more - these are the ones there are.` : "",
     });
   }
 
   return (
-    <SideRail title="Reports & workflows" q={q} setQ={setQ} placeholder="Search reports and workflows…"
+    <SideRail title="Reports & routines" q={q} setQ={setQ} placeholder="Search reports and routines…"
       items={railItems} value={bucket} onChange={setBucket}
-      note="Reports only read data and summarize it. Workflows write data or keep state. Their connections live on the Connections tab.">
+      note="Reports only read data and summarize it. Routines write data or keep state. Their connections live on the Connections tab.">
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       {open ? (
         wizard(() => { setBucket(invoiceOpen ? "workflows" : backTo); setDraft(null); load(); }, (sid) => setBucket(sid))
       ) : (<>
       <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
         <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
-          {q ? `Matches for “${q}”` : workflowOverview ? "Scheduled workflows" : dashOverview ? "Dashboards" : "Scheduled reports"}
+          {q ? `Matches for “${q}”` : workflowOverview ? "Scheduled routines" : dashOverview ? "Dashboards" : "Scheduled reports"}
         </Typography>
         <Button size="small" variant="outlined" disableElevation onClick={syncNow} disabled={syncing} sx={{ mr: 1 }}
           startIcon={syncing ? <CircularProgress size={12} /> : <SyncIcon sx={{ fontSize: 15 }} />}>
@@ -647,14 +647,14 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         <Button size="small" variant={workflowOverview ? "outlined" : "contained"} disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
           onClick={() => { setQ(""); setDraft(null); setBucket("new-report"); }} sx={{ mr: 1, ...(workflowOverview ? {} : { background: GRADIENT }) }}>New report</Button>
         <Button size="small" variant={workflowOverview ? "contained" : "outlined"} disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
-          onClick={() => { setQ(""); setDraft(null); setBucket("new-agent"); }} sx={workflowOverview ? { background: GRADIENT } : {}}>New workflow</Button>
+          onClick={() => { setQ(""); setDraft(null); setBucket("new-agent"); }} sx={workflowOverview ? { background: GRADIENT } : {}}>New routine</Button>
       </Box>
       {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
       <UndoLine kinds={["report", "workflow", "dashboard"]} onRestored={load} />
       {!workflowOverview && !dashOverview && <Composer kind="report" onDraft={(config, meta) => { onDraft(config, meta); setBucket("draft"); }} />}
       {dashOverview && <Composer kind="dashboard" onDraft={(config, meta) => { setDashDraft({ config, meta: meta || {} }); setBucket("draft-dashboard"); }} />}
-      {!list.length && <Empty>{q ? nothingMatches(q, workflowOverview ? "Workflows" : "Reports") : dashOverview ? DASH.empty : workflowOverview
-        ? "No workflows yet — New workflow describes one and sets it up."
+      {!list.length && <Empty>{q ? nothingMatches(q, workflowOverview ? "Routines" : "Reports") : dashOverview ? DASH.empty : workflowOverview
+        ? "No routines yet — New routine describes one and sets it up."
         : "No reports yet — New report walks you through source, query, AI summary and schedule."}</Empty>}
       {list.map((s) => row(s))}
       {!q && <RecentlyDeleted kinds={[workflowOverview ? "workflow" : dashOverview ? "dashboard" : "report"]} onRestored={load} />}
@@ -807,7 +807,7 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
   const save = async () => {
     setBusy("save"); setMsg("");
     try {
-      if (!String(cfg.title || "").trim()) throw new Error("Give this workflow a title.");
+      if (!String(cfg.title || "").trim()) throw new Error("Give this routine a title.");
       if (!cfg.connector_id) throw new Error("Choose a Zoho Invoice connection.");
       if (!cfg.customers.length) throw new Error("Choose at least one customer.");
       const body = { Channel: "report", Address: cfg.title, ConnectorId: Number(cfg.connector_id), Active: true,
@@ -842,14 +842,14 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
   };
   return (
     <Box sx={{ maxWidth: 1050, mx: "auto" }}>
-      <Crumb section="Workflows" onBack={onBack} title={cur ? cfg.title : "New monthly invoice workflow"} />
+      <Crumb section="Routines" onBack={onBack} title={cur ? cfg.title : "New monthly invoice routine"} />
       {note && <Alert severity={note.severity} sx={{ mb: 1.5, fontSize: 12.5 }}>{note.text}</Alert>}
       <Box sx={{ ...card, p: 2, mb: 2 }}>
-        <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.4, fontSize: 10 }}>WORKFLOW SETUP</Typography>
+        <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.4, fontSize: 10 }}>ROUTINE SETUP</Typography>
         <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15, mb: 0.4 }}>Monthly invoices → Zoho drafts → Review</Typography>
         <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>The schedule starts a monthly checklist. You confirm amounts; Prepare creates drafts; approving each Review card sends it.</Typography>
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(240px,1fr) 250px 220px" }, gap: 1 }}>
-          <TextField size="small" label="workflow title" value={cfg.title || ""} onChange={(e) => setCfg({ ...cfg, title: e.target.value })} />
+          <TextField size="small" label="routine title" value={cfg.title || ""} onChange={(e) => setCfg({ ...cfg, title: e.target.value })} />
           <Select size="small" displayEmpty value={cfg.connector_id || ""} onChange={(e) => setCfg({ ...cfg, connector_id: e.target.value, customers: [] })}>
             <MenuItem value="" disabled>Zoho Invoice connection</MenuItem>
             {zohoCards.map((c) => <MenuItem key={c.ConnectorId} value={c.ConnectorId}>{c.Name}{c.Active ? "" : " — off"}</MenuItem>)}
@@ -867,7 +867,7 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
           </Box>)}
         </Box>
         <Box sx={{ display: "flex", gap: 1, alignItems: "center", mt: 1.25 }}>
-          <Button variant="contained" disableElevation disabled={!!busy} onClick={save}>{busy === "save" ? "Saving…" : cur ? "Save workflow" : "Save workflow"}</Button>
+          <Button variant="contained" disableElevation disabled={!!busy} onClick={save}>{busy === "save" ? "Saving…" : cur ? "Save routine" : "Save routine"}</Button>
           <Typography variant="caption" sx={{ color: DIM }}>{cfg.customers.length} selected · no automatic sending</Typography>
         </Box>
       </Box>
@@ -1328,12 +1328,12 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Crumb section={workflow ? "Workflows" : "Reports"} onBack={onBack}
+          <Crumb section={workflow ? "Routines" : "Reports"} onBack={onBack}
             title={cur ? (parse(cur.ConfigJson).title || `Edit ${workflow ? "workflow" : "report"}`) : `New ${workflow ? "AI agent workflow" : "report"}`} />
         </Box>
         {cur && <Button size="small" color="error" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />}
           onClick={remove} sx={{ mt: 0.25, flexShrink: 0 }}>
-          Remove {workflow ? "workflow" : "report"}
+          Remove {workflow ? "routine" : "report"}
         </Button>}
       </Box>
       {removeErr && <Alert severity="error" sx={{ mb: 1.5, fontSize: 12.5 }}>{removeErr}</Alert>}
@@ -1352,7 +1352,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
           <StepContent>
             <Typography variant="body2" sx={{ color: DIM, mt: 0.5, mb: 1.5 }}>
               {workflow
-                ? "Give the AI agent a saved skill or a plain-English job that writes data. It runs with write access on this workflow's schedule and puts its result on your work rail."
+                ? "Give the AI agent a saved skill or a plain-English job that writes data. It runs with write access on this routine's schedule and puts its result on your work rail."
                 : isAssistant
                 ? "Point it at the systems it should read on every check — write the query here, or reuse a data view you already saved. This report reads only those sources; the general Advisor and Morning digest are separate."
                 : "Sources at the top feed one prompt at the bottom. Add as many as you want — the same connection twice with different queries is fine, and every source's rows reach the summary together."}
@@ -2025,7 +2025,7 @@ export function SourceCard({ src, index, count, typeOptions, connectors, draggin
       </Select>
       {src.type === "agent" && (
         <Typography variant="caption" sx={{ fontWeight: 600, color: writeEnabled ? "#8a3646" : "#47654a" }}>
-          {writeEnabled ? "Workflow · write access — this agent may change data"
+          {writeEnabled ? "Routine · write access — this agent may change data"
             : "Report · read-only — this agent can retrieve data but cannot change it"}
         </Typography>
       )}

@@ -118,7 +118,7 @@ export default function UpdateCard({ asked = false, at = 0 }) {
             {...(lit && canApply && !busy ? { "data-tq-asked": "" } : {})}
             sx={lit && canApply && !busy ? { outline: "2px solid #6f8a6e", outlineOffset: 3 } : undefined}
             startIcon={["apply", "waiting", "restarting"].includes(busy) ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}
-            title={how === "source" ? "a source checkout updates with git pull" : info?.newer ? `install v${info.latest} and reopen - it waits for agents mid-turn and workflow runs to finish first`
+            title={how === "source" ? "a source checkout updates with git pull" : info?.newer ? `install v${info.latest} and reopen - it waits for agents mid-turn and routine runs to finish first`
               : "nothing newer to install"}>
             {busy === "restarting" ? "Reopening…" : busy === "waiting" ? "Waiting…" : busy === "apply" ? "Updating…" : info?.newer ? `Update to v${info.latest}`
               : info && !unknown ? "Up to date" : "Checking…"}

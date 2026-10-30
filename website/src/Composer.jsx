@@ -49,7 +49,7 @@ export default function Composer({ onDraft, kind = "report", initial = "" }) {
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, mb: 0.9 }}>
         <AutoAwesomeIcon sx={{ fontSize: 15, color: ACCENT2 }} />
         <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK }}>
-          {kind === "workflow" ? "Describe the workflow you want" : kind === "dashboard" ? DASH.describe : "Describe the report you want"}
+          {kind === "workflow" ? "Describe the routine you want" : kind === "dashboard" ? DASH.describe : "Describe the report you want"}
         </Typography>
       </Box>
       <TextField fullWidth size="small" multiline minRows={2} value={ask} disabled={busy}

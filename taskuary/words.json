@@ -30,7 +30,7 @@
                           "does": "Taskuary's own version - which build runs, whether a new version (the latest release) is out, and the one button that installs it and reopens the app. Updating, upgrading or reinstalling Taskuary itself is that button"},
     "profiles":          {"name": "Settings → Profiles", "href": "#profiles",
                           "does": "the agent profiles - each worker's standing instructions"},
-    "workflows":         {"name": "Workflows", "href": "#report=workflows"},
+    "workflows":         {"name": "Reports → Routines", "href": "#report=workflows"},
     "playbooks":         {"name": "Reports → Playbooks", "href": "#report=playbooks"},
     "setup":             {"name": "Setup", "href": "#setup"},
     "later":             {"name": "For later on your rail", "href": ""},

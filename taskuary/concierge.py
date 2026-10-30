@@ -2736,7 +2736,7 @@ def read_op(store, kind: str, params: dict) -> str:
     if kind == 'reports.list':
         from . import appfacts
         rows = appfacts.reports(store)
-        if not rows: return 'No reports or workflows are set up.'
+        if not rows: return 'No reports or routines are set up.'
         def last(r): return 'never ran' if r['last_ok'] is None else (f"FAILED - {r['last_said']}" + (f" (the fix: {r['fix']})" if r.get('fix') else '') if r['last_ok'] is False else f"ok {r['last_at'][:16]}")
         return NEWLINE.join(f"{'WORKFLOW' if r['workflow'] else 'REPORT'} {r['title']} (source_id {r['source_id']}{'' if r['active'] else ', off'}) - "
                             f"{r['schedule'] or 'no clock'}; reaches you: {r['reach']}; goes: {r['goes']}; last: {last(r)}" for r in rows)
@@ -3514,7 +3514,7 @@ def waiting_on_owner(store, tid: int) -> list:
     if ws._live(tid): out.append('the agent session on it is still open')
     elif any(r.get('TaskId') == tid for r in store.running_runs()): out.append('an agent run on it is still going')
     with workflows._LOCK: flowing = tid in workflows._STARTING
-    if flowing: out.append('its workflow is still running')
+    if flowing: out.append('its routine is still running')
     if store.get_dispatch(tid): out.append('an agent is queued to start on it')
     return out
 
@@ -4635,7 +4635,7 @@ def role_card(store, tid: int, role: str, portal, route: bool, item: dict | None
              'Your mail: ' + ('non-coding mail goes to the worker' if route else 'goes where it goes today'),
              *([f"Ledger: {(store.get_connector_by_type(r['ledger']) or {}).get('Name') or r['ledger']} set to read if nobody chose its "
                 'authority, so nothing reaches it without your click'] if r.get('ledger') else []),
-             *([f"Workflow: \"{wf['title']}\", daily at {wf.get('daily_at', '')}, created switched off" + (f" - {portal}" if portal else '')] if wf else [])]
+             *([f"Routine: \"{wf['title']}\", daily at {wf.get('daily_at', '')}, created switched off" + (f" - {portal}" if portal else '')] if wf else [])]
     tail = '\n' + '\n'.join(lines) + '\n\n' + WAITS
     prop = _propose_raw(store, tid, 'role.apply', 0, params, 'Set it up', r['title'], tail, actor, item)
     return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}

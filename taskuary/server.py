@@ -7482,7 +7482,7 @@ def workflow_repair(sid: int, body: dict = None):
     for the editor to show as an unsaved change - nothing is kept until the owner saves it."""
     from . import flow, workflows
     src = store.get_source(sid)
-    if not src: raise HTTPException(404, 'workflow not found')
+    if not src: raise HTTPException(404, 'routine not found')
     b = body or {}
     run = store.get_report_run(int(b['run_id'])) if str(b.get('run_id') or '').isdigit() else None
     if not run or run.get('sourceId') != sid: raise HTTPException(404, 'that run is not one of this workflow\'s')

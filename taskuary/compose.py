@@ -289,7 +289,7 @@ AGAIN = "I couldn't turn that into {}. Say it another way - what should happen, 
 NO_AI = {'error': 'This needs an AI to build it - none is connected yet.', 'fix': {'label': 'Connect an AI', 'href': words.href('ai')}}
 ZOHO = {'error': 'Invoicing runs through a connected Zoho Invoice account.', 'fix': {'label': 'Connect Zoho Invoice', 'href': '#connector=zoho_invoice'}}
 
-REPORT_VERDICT = ('That only reads data and tells you about it, so it is a report, not a workflow - a workflow does something '
+REPORT_VERDICT = ('That only reads data and tells you about it, so it is a report, not a routine - a routine does something '
                   '(moves data, opens work, drafts what goes out), and every run of one is a task.')
 
 
@@ -304,7 +304,7 @@ def report_verdict(store, cfg: dict, explain, looked) -> dict:
 def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
     """Draft a stateful invoice or AI-agent workflow from a sentence. Nothing is saved."""
     if not llm: return dict(NO_AI)
-    if not (ask or '').strip(): return {'error': 'Say what you want the workflow to do.'}
+    if not (ask or '').strip(): return {'error': 'Say what you want the routine to do.'}
     options = workflow_catalog(store)
     # the systems a step may read or write, as the report composer sees them - a step is a report source card (flow.py)
     user = {'request': ask.strip(), 'workflow_options': options, 'catalog': catalog(store),
@@ -321,10 +321,10 @@ def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
             return report_verdict(store, _flow.as_report(raw), out.get('explain'), looked)
         # THE MODEL'S MISS IS NOT THE OWNER'S: they cannot fix a missing config, only ask again - so every miss below says what
         # to change in the ASK ("the model answered without a workflow config" was the whole message, 2026-10-17)
-        if not isinstance(raw, dict) or raw.get('type') not in WORKFLOW_KEYS: return {'error': AGAIN.format('a workflow')}
+        if not isinstance(raw, dict) or raw.get('type') not in WORKFLOW_KEYS: return {'error': AGAIN.format('a routine')}
         typ = raw['type']
         cfg = {k: v for k, v in raw.items() if k in WORKFLOW_KEYS[typ]}
-        if not str(cfg.get('title') or '').strip(): return {'error': AGAIN.format('a workflow')}
+        if not str(cfg.get('title') or '').strip(): return {'error': AGAIN.format('a routine')}
         schedules = [k for k in ('every_minutes', 'daily_at', 'cron', 'on_startup') if cfg.get(k)]
         if not schedules and not str(cfg.get('on_mail') or '').strip():      # a job a mail starts needs no clock
             cfg['cron' if typ == 'zoho_monthly_invoices' else 'daily_at'] = '0 9 1 * *' if typ == 'zoho_monthly_invoices' else '08:00'
@@ -335,12 +335,12 @@ def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
             if cfg.get('flow') is not None:
                 from . import flow
                 ok, why = flow.validate(store, cfg['flow'], strict=True)
-                if not ok: return {'error': f"{AGAIN.format('a workflow')} (Its steps did not hold: {why}.)"}
+                if not ok: return {'error': f"{AGAIN.format('a routine')} (Its steps did not hold: {why}.)"}
                 lone = len(cfg['flow']) == 1 and cfg['flow'][0].get('kind') == 'agent'
                 if lone and not cfg.get('prompt'): cfg['prompt'] = cfg['flow'][0].get('prompt') or ''
                 if lone: cfg.pop('flow')          # one agent step IS the prompt-only workflow (flow.steps_of)
             elif not (str(cfg.get('skill') or '').strip() or str(cfg.get('prompt') or '').strip()):
-                return {'error': AGAIN.format('a workflow')}
+                return {'error': AGAIN.format('a routine')}
             if str(cfg.get('repair') or '') not in ('propose', 'off'): cfg.pop('repair', None)      # auto is the default (flow.repair_mode)
             if not str(cfg.get('goal') or '').strip(): cfg.pop('goal', None)
             else: cfg['goal'] = str(cfg['goal']).strip()[:400]
@@ -495,7 +495,7 @@ def compose(store, ask: str, llm, answers: dict = None, rounds: int = MAX_PEEKS,
         cfg = out.get('config')
         if not isinstance(cfg, dict): return {'error': AGAIN.format('a report')}
         if cfg.get('type') in excluded:
-            return {'error': 'That reads as a workflow, not a report.', 'fix': {'label': 'Build it as a workflow', 'href': '#report=workflows'}}
+            return {'error': 'That reads as a routine, not a report.', 'fix': {'label': 'Build it as a routine', 'href': '#report=workflows'}}
         cfg = with_watch(cfg, cfg.get('watch'))
         ok, why = validate(store, cfg)
         if not ok: return {'error': why, 'config': cfg}

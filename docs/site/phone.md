@@ -119,7 +119,7 @@ later say when they come back ("back in 3h").
 | Pick | You get |
 |---|---|
 | **Connections** | its sections with a count each, then a section's cards with on / off, then one card: what it does, and "say *set it up*" |
-| **Reports** | every report and workflow with its clock and how its last run went, then one: when it runs, where it goes, what the last run said |
+| **Reports** | every report and routine with its clock and how its last run went, then one: when it runs, where it goes, what the last run said |
 | **Hub** | what the agents worked out, newest first, then one entry in full |
 | **Settings** | its sections, then each setting with its value, then one setting: what it does, and "say what it should be" |
 

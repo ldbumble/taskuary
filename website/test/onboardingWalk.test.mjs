@@ -173,7 +173,7 @@ test("setup is reachable on a phone, from the top bar, and the chat offers no Se
 test("setting something up and walking the app are two different doors", () => {
   const view = read("AssistantView.jsx");
   // the welcome's second door RUNS what exists - it opens Reports (2026-10-08); setting up is Set up Taskuary's
-  const at = view.lastIndexOf("Run a report or workflow");
+  const at = view.lastIndexOf("Run a report or routine");
   const chip = view.slice(view.lastIndexOf("<button", at), at);
   assert.ok(chip.includes('onClick={() => onNavigate?.("Reports")}'), "it opens Reports");
   assert.match(view, /const askSetup = \(\) =>/);

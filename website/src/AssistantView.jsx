@@ -3193,7 +3193,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         {/* RUN, not set up: setting things up is the top bar's Setup; this door goes where the reports and workflows ARE
             (the owner, 2026-10-08: "it should be run report/workflow which will take you to reports/workflows") */}
         <button type="button" className="tq-chip" disabled={resetting} onClick={() => onNavigate?.("Reports")}
-          title="Your reports and workflows - run one now, or see what each found">Run a report or workflow</button>
+          title="Your reports and routines - run one now, or see what each found">Run a report or routine</button>
         {/* the same walk, on your phone - offered only for a chat that is already connected and
             names an Assistant chat, because this talks to the assistant, it does not set one up */}
         {(state?.doorways || []).map((d) => (

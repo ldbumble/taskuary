@@ -25,11 +25,11 @@ test("no page asks before it removes: no confirm dialog and no browser confirm b
 });
 
 test("one verb: Remove - the buttons that said Delete say Remove", () => {
-  assert.match(read("ReportsView.jsx"), /Remove \{workflow \? "workflow" : "report"\}/);
-  assert.match(read("WorkflowEditor.jsx"), />Remove workflow</);
+  assert.match(read("ReportsView.jsx"), /Remove \{workflow \? "routine" : "report"}/);
+  assert.match(read("WorkflowEditor.jsx"), />Remove routine</);
   assert.match(read("AgentsPanel.jsx"), />Remove<\/Button>/);
   assert.match(read("SettingsView.jsx"), /title="Remove this rule"/);
-  assert.doesNotMatch(read("ReportsView.jsx") + read("WorkflowEditor.jsx"), /Delete (workflow|report)/);
+  assert.doesNotMatch(read("ReportsView.jsx") + read("WorkflowEditor.jsx"), /Delete (workflow|routine|report)/);
 });
 
 test("the Undo line: announced by the press, drawn by the list that holds its kind, and only while it is fresh", () => {

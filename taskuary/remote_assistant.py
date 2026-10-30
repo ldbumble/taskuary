@@ -2752,7 +2752,7 @@ def script_words(store, script: str) -> str:
         # ...a sentence only an AI can put together: with none it asked for one and nothing could read it (the 2026-10-22 walk)
         if (off := no_ai(store, 'put a report together')): return off
         # ...with one sentence to copy the shape of: the bare ask left the owner guessing what a sentence like that is (F25)
-        return ('Tell me what to set up - a check that reads, or a workflow that writes - in a sentence, and I put it together. '
+        return ('Tell me what to set up - a check that reads, or a routine that writes - in a sentence, and I put it together. '
                 'For example: "Every weekday at 8, list the invoices more than 30 days overdue and send them to me here."')
     return 'Setting Taskuary up is the Setup button at the top of Taskuary on your computer.'
 

@@ -126,7 +126,7 @@ export const proposalPresentation = (review) => {
   // content, read-only - an edit to them was never what ran (proposals.execute runs the proposal as queued)
   if (proposal?.action === "run_tool") return {
     kind: "action",
-    title: proposal.flow_run ? "A workflow step waits for your yes" : "Run a step in a connected system",
+    title: proposal.flow_run ? "A routine step waits for your yes" : "Run a step in a connected system",
     context: review.Reason || "Proposed action · nothing will be sent to the conversation",
     destinationLabel: "Where",
     destination: toolWhere(proposal),
@@ -163,10 +163,10 @@ export const proposalPresentation = (review) => {
   };
   if (proposal?.action === "repair_workflow") return {
     kind: "action",
-    title: "Repair this workflow's steps",
+    title: "Repair this routine's steps",
     context: "A step failed · the AI wrote a fix · the steps change only if you approve",
     destinationLabel: "Changes",
-    destination: "the workflow's saved steps",
+    destination: "the routine's saved steps",
     approveLabel: APPROVE,
     busyLabel: "saving…",
     rejectLabel: "Dismiss",

@@ -33,7 +33,7 @@ test("a workflow's write waiting for the yes reads as what it writes and where, 
     DraftText: JSON.stringify({ action: "run_tool", type: "smb_write", connector_id: 44, path: "Onboarding/new-starter-checklist.txt",
       text: "Start-day checklist\nJordan Pike - Finance", why: "workflow Monday onboarding run step Checklist", flow_run: { run_id: 4 } }) };
   const p = proposalPresentation(review);
-  assert.equal(p.title, "A workflow step waits for your yes");
+  assert.equal(p.title, "A routine step waits for your yes");
   assert.equal(p.destination, "Onboarding/new-starter-checklist.txt · smb write");
   assert.equal(p.readOnly, true);
   assert.equal(reviewText(review), "Start-day checklist\nJordan Pike - Finance");

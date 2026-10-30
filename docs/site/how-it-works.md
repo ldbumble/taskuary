@@ -2,23 +2,24 @@ Taskuary's whole behaviour is one loop: something arrives, it gets a verdict, th
 who does the work, and whatever comes out waits for you. This page follows one message the whole
 way, then explains the machinery underneath it.
 
-## The Timeline
+## The work rail
 
-The Timeline is the front door: every connection with a *trigger* or *feed* role lands here, in
-the order things happened. An email from a vendor, a pull request, a Teams message, this
-morning's spend report and a failed nightly export are one list.
+Every connection with a *trigger* or *feed* role lands on one rail beside the Assistant. An email
+from a vendor, a pull request, a Teams message, this morning's spend report and a failed nightly
+export are one list, sorted by what they need from you: **Tasks**, **For later**, **Reports**,
+**Advisor ideas** and **FYI**. The filter at the top narrows it to one source or kind.
 
-Each row shows where it came from above its original time, so mail, chat, GitHub, a SQL report
-and an Advisor post are told apart at a glance. Calendar entries show the meeting time. Open a
-row for the full message, its attachments, what triage decided and why, any drafted reply, and
-the actions available on it.
+Tasks is every open task, an agent working on it or not - a ring spins round the icon of one an
+agent is working, and the row stays where it is when the agent asks or stops. An urgent row is
+shaded in its place, an important one wears a quieter mark, and Next reaches both in their places
+like any other row. A thread or a step gone quiet past that person's usual day is *slipped*, inside
+Tasks, with Chase, Let it go, They answered elsewhere and Remind me under it (see
+[The Advisor](advisor#what-was-not-followed-up)).
 
-Beside the Timeline, the **work rail** holds what is actually waiting on you, under Tasks,
-For later, Reports, Advisor ideas and FYI - an urgent row is shaded in its place, an important one wears a quieter mark there, and Next reaches both in their places like any other row. Tasks is every open task, an agent working on it or not - a ring spins round the icon of
-one an agent is working, and the row stays where it is when the agent asks or stops. A thread or a step gone quiet past that person's usual day is
-*slipped*, inside Tasks, with Chase, Let it go, They answered elsewhere and Remind me under it (see [The Advisor](advisor#what-was-not-followed-up)).
-A finished or closed item gets no row: the rail is what still wants something from you, never a history. See [The work rail](tasks-and-agents#the-work-rail) for what
-puts a row there and what takes it off.
+A finished or closed item gets no row: the rail is what still wants something from you, never a
+history. Open a row and it goes on the table as its task - **Came from**, **Agent** and **Close
+out** - with what triage decided and why. See [The work rail](tasks-and-agents#the-work-rail) for
+what puts a row there and what takes it off.
 
 ## The five roads a message can take
 
@@ -57,9 +58,9 @@ caught it before triage ever saw it".
 | # | Step | Gate or AI | What it does |
 |---|---|---|---|
 | 1 | Dedupe | gate | A message whose id is already stored is dropped. Nothing below runs. |
-| 2 | Feed connections | gate | A connection marked *feed* lands on the Timeline and stops — no verdict, no AI call, no task. |
+| 2 | Feed connections | gate | A connection marked *feed* lands on the rail to read and stops — no verdict, no AI call, no task. |
 | 3 | Policy rules | gate | Your rules, plus whether the sender is known. `skip` and `ignore` end it here. |
-| 4 | Deferral | gate | Deferred triage lands the message as `triaging` so the Timeline shows it at once; the rest runs later. |
+| 4 | Deferral | gate | Deferred triage lands the message as `triaging` so the rail shows it at once; the rest runs later. |
 | 5 | Chat opener | gate | "hi", "you there?" — filed to wait for the ask it opens, so a greeting never becomes a task. |
 | 6 | Threading | gate (scored) | Similarity against open tasks picks *attach* or *create*; then a thread that is not yours is refused. |
 | 7 | Still the same ask? | **AI** | Chats only, and only when step 6 attached: does this line continue that task or start a new one? |

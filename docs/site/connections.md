@@ -28,7 +28,7 @@ A role is a permission, not a ranking.
 | Role | What Taskuary may do |
 |---|---|
 | **trigger** | Send inbound items through triage — they can become tasks, drafts or FYIs |
-| **feed** | Show inbound items on the Timeline, unread by any AI |
+| **feed** | Show inbound items on the rail to read, unread by any AI |
 | **report** | Make the source available to scheduled reports |
 | **tool** | Let agents query it while working a task |
 
@@ -119,14 +119,14 @@ are remembered so they can still be found offline.
 
 | System | Notes |
 |---|---|
-| **Teams**, **Slack** | Messages enter the Timeline through triage |
+| **Teams**, **Slack** | Messages reach the rail through triage |
 | **Telegram** | Bot-based inbound, approved in-chat replies, the Assistant walk on your phone; each chat is opt-in |
 | **WhatsApp** | A local bridge for inbound messages, approved replies and the Assistant walk on your phone. Unofficial protocol — use a number you can afford to lose |
 | **Discord** | Watches selected bot channels and posts approved replies back into the originating channel |
 | **Apple Messages** | macOS only. Reads the Mac's local Messages history and replies through Messages.app; needs Full Disk Access and Automation permissions |
 | **Mattermost**, **Rocket.Chat** | A server you host. Each watched channel is its own source, and approved replies post back into it. Rocket.Chat needs two values — the token and the user id issued beside it |
 | **Matrix** | Any homeserver, matrix.org or your own. Replies go back as your account rather than a bot, so the account has to have joined the room |
-| **Google Chat** | Spaces on the Timeline and replies back into them. Reuses the Gmail card's OAuth client, so there is one registration in Google Cloud rather than two |
+| **Google Chat** | Spaces on the rail and replies back into them. Reuses the Gmail card's OAuth client, so there is one registration in Google Cloud rather than two |
 
 Chat is different from mail in one way that matters: a chat message often has no clock on it.
 "Can you look at this when you get a chance" is a real ask with no deadline, and Taskuary keeps
@@ -140,7 +140,7 @@ held until the ask it opens arrives.
 | **GitHub** | Repository discovery, issues and pull requests as triggers, task-specific standing prompts |
 | **GitLab** | Assigned issues and merge requests, GitLab.com or self-hosted |
 | **Azure DevOps** | Work items assigned to the connected user, through WIQL `@Me` |
-| **Jira, Asana, Monday.com, ClickUp, Todoist** | Assigned work items enter the Timeline through triage |
+| **Jira, Asana, Monday.com, ClickUp, Todoist** | Assigned work items reach the rail through triage |
 | **Linear, Trello** | Assigned issues and cards |
 | **Notion** | Pages shared with the integration appear as a feed when they change |
 | **Sentry, PagerDuty** | New unresolved errors and open incidents join the same funnel |
@@ -259,7 +259,7 @@ card promising it would be a card that never works. Driving a browser is the opt
 for your press are described under
 [When the agent opens a browser](tasks-and-agents#when-the-agent-opens-a-browser).
 
-**Social** — **LinkedIn**, **Bluesky** and **Mastodon**. Nothing from these reaches the Timeline as
+**Social** — **LinkedIn**, **Bluesky** and **Mastodon**. Nothing from these reaches the rail as
 work: a public timeline is not an inbox, so they are report sources and tools rather than triggers.
 Like every connection they start at full authority, so an agent can post. A public post cannot be
 recalled: set the card to `read` and a post an agent drafts becomes a proposal you approve on the task.
@@ -354,7 +354,7 @@ type never become ambiguous downstream.
 
 ## Pushing something in yourself
 
-Anything that can make an HTTP request can put an item on the Timeline:
+Anything that can make an HTTP request can put an item on the rail:
 
 ```http
 POST /api/ingest/push

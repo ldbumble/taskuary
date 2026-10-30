@@ -42,7 +42,7 @@
 <div class="entry">
       <a class="page" href="./how-it-works">How it works</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show How it works's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./how-it-works#the-timeline">The Timeline</a><a class="sec" href="./how-it-works#the-five-roads-a-message-can-take">The five roads a message can take</a><a class="sec" href="./how-it-works#what-triage-actually-decides">What triage actually decides</a><a class="sec" href="./how-it-works#nothing-sends-itself">Nothing sends itself</a><a class="sec" href="./how-it-works#correcting-it-teaches-it">Correcting it teaches it</a><a class="sec" href="./how-it-works#three-brains-one-voice">Three brains, one voice</a><a class="sec" href="./how-it-works#the-documents-that-govern-it">The documents that govern it</a><a class="sec" href="./how-it-works#where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits</a></div>
+      <div class="secs" hidden><a class="sec" href="./how-it-works#the-work-rail">The work rail</a><a class="sec" href="./how-it-works#the-five-roads-a-message-can-take">The five roads a message can take</a><a class="sec" href="./how-it-works#what-triage-actually-decides">What triage actually decides</a><a class="sec" href="./how-it-works#nothing-sends-itself">Nothing sends itself</a><a class="sec" href="./how-it-works#correcting-it-teaches-it">Correcting it teaches it</a><a class="sec" href="./how-it-works#three-brains-one-voice">Three brains, one voice</a><a class="sec" href="./how-it-works#the-documents-that-govern-it">The documents that govern it</a><a class="sec" href="./how-it-works#where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./connections">Connections</a>
@@ -52,7 +52,7 @@
 <div class="entry on">
       <a class="page" href="./tasks-and-agents" aria-current="page">Tasks and agents</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide Tasks and agents's sections"></button>
-      <div class="secs"><a class="sec" href="#a-tasks-three-lives" data-sec="a-tasks-three-lives">A task's three lives</a><a class="sec" href="#sending-work-to-a-coding-agent" data-sec="sending-work-to-a-coding-agent">Sending work to a coding agent</a><a class="sec" href="#the-general-agent" data-sec="the-general-agent">The general agent</a><a class="sec" href="#sessions-and-transcripts" data-sec="sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="#several-agents-in-one-repository" data-sec="several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="#checklists-and-closing" data-sec="checklists-and-closing">Checklists and closing</a><a class="sec" href="#replies" data-sec="replies">Replies</a><a class="sec" href="#profiles-and-playbooks" data-sec="profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="#the-task-view-and-the-board" data-sec="the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="#the-work-rail" data-sec="the-work-rail">The work rail</a><a class="sec" href="#how-work-is-ordered" data-sec="how-work-is-ordered">How work is ordered</a></div>
+      <div class="secs"><a class="sec" href="#a-tasks-three-lives" data-sec="a-tasks-three-lives">A task's three lives</a><a class="sec" href="#sending-work-to-an-agent" data-sec="sending-work-to-an-agent">Sending work to an agent</a><a class="sec" href="#coding-agents-and-general-agents" data-sec="coding-agents-and-general-agents">Coding agents and general agents</a><a class="sec" href="#sessions-and-transcripts" data-sec="sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="#several-agents-in-one-repository" data-sec="several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="#checklists-and-closing" data-sec="checklists-and-closing">Checklists and closing</a><a class="sec" href="#replies" data-sec="replies">Replies</a><a class="sec" href="#profiles-and-playbooks" data-sec="profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="#the-task-view-and-the-board" data-sec="the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="#the-work-rail" data-sec="the-work-rail">The work rail</a><a class="sec" href="#how-work-is-ordered" data-sec="how-work-is-ordered">How work is ordered</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./security">Security</a>
@@ -109,39 +109,47 @@
 is closed out - the reply to whoever asked, and on GitHub the merge or the closed issue. They start and finish independently, and keeping them apart is what stops
 the word &quot;done&quot; meaning three different things.</p>
 <h2 id="a-tasks-three-lives">A task&#39;s three lives<a class="anchor" href="#a-tasks-three-lives" aria-label="Link to this section">#</a></h2>
-<p>The task page shows them as one numbered workflow — <strong>1 Task → 2 Agent work → 3 Close out</strong> — and
-each stage owns exactly one state badge.</p>
+<p>The task page shows them as three sections, left to right — <strong>1 Came from → 2 Agent → 3 Close
+out</strong>. The section the task is up to opens; the other two fold to slim columns beside it that still
+say where they stand. Each section carries its own moves: on its spine while folded, on a strip
+across its top while open.</p>
 <table>
 <thead>
 <tr>
-<th>Part</th>
+<th>Section</th>
 <th>What it records</th>
-<th>Main controls</th>
+<th>Its moves</th>
 <th>What it never does by itself</th>
 </tr>
 </thead>
 <tbody><tr>
-<td><strong>Task</strong></td>
-<td>The durable job and who owns it</td>
-<td>owner, kind, priority, Reopen, Mark done</td>
-<td>Starting or ending an agent session does not complete it</td>
+<td><strong>Came from</strong></td>
+<td>The message, what triage made of it and why, the ask, and who owns it</td>
+<td><strong>Remind me</strong>, <strong>Not a task</strong>, <strong>Change ▾</strong> (split or merge, who does it, priority, assign it, where the code is)</td>
+<td>Changing the task does not start or stop an agent</td>
 </tr>
 <tr>
-<td><strong>Agent work</strong></td>
-<td>One or more attempts by a coding or non-coding agent, plus the saved result</td>
-<td>harness, model, start, save and end session</td>
+<td><strong>Agent</strong></td>
+<td>One or more runs by a coding or general agent, and the Result each left</td>
+<td><strong>Send to agent</strong>, <strong>Stop and save</strong> while it runs, then <strong>Continue</strong> and <strong>Run another agent</strong></td>
 <td>Ending a session does not mark the task done or send a reply</td>
 </tr>
 <tr>
 <td><strong>Close out</strong></td>
 <td>The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue)</td>
-<td>write, generate, edit; <strong>Send</strong>, <strong>Approve</strong>, <strong>Decline</strong>, <strong>Not yet</strong></td>
+<td><strong>Draft reply</strong> / <strong>Reply</strong>, <strong>Send</strong>, <strong>Redraft</strong>, <strong>Hand it to a person</strong>, <strong>Mark done</strong>, <strong>Close with a note</strong>, <strong>Attach a file</strong>, <strong>Share</strong>; on GitHub <strong>Approve</strong>, <strong>Decline</strong>, <strong>Not yet</strong></td>
 <td>Closing the task: sending and approving never do — the task stays open until you <strong>Mark done</strong></td>
 </tr>
 </tbody></table>
-<p>While a terminal or an assistant chat is live, the task collapses to a one-line context strip and
-the workspace takes most of the page. Full controls, saved results and restart choices come back
-when the agent stops.</p>
+<p><strong>Mark done</strong> always comes first on Close out and is never folded away. When a strip runs out of
+room, the rest of its moves fold into a <strong>▾</strong> at its end. The task&#39;s title bar holds only its status,
+<strong>Expand</strong> and <strong>×</strong>.</p>
+<p>Under the task is one small bar, <strong>Nav</strong>: <strong>Back</strong> and <strong>Next</strong>, each greyed where there is nowhere to
+go. The chat is a separate pill in the corner; type there and a window opens out of it, about the
+task on the table.</p>
+<p>While an agent&#39;s session is live, it takes the whole width: Came from and Close out fold to their
+spines, and the Agent strip holds only <strong>Stop and save</strong>. Its Result, and <strong>Continue</strong>, come back
+when it stops.</p>
 <h3 id="who-is-allowed-to-close-it">Who is allowed to close it<a class="anchor" href="#who-is-allowed-to-close-it" aria-label="Link to this section">#</a></h3>
 <p><figure><img src="img/how-a-task-ends.svg" alt="Every way a task ends: you press Mark done, tick the last box, hand it to a person or say Not ours; or an agent says it is done or its pull request merges" loading="lazy"><figcaption>Every road ends in Mark done, or says why the task stays open.</figcaption></figure></p>
 <p>There is one close, <strong>Mark done</strong>. Sending a reply or approving an agent&#39;s act never closes a task by itself (the
@@ -286,10 +294,11 @@ finished anyway its sentence is filed on the task and the task stays open until 
 </tbody></table>
 <p>Reopening a completed task starts a fresh task lifecycle rather than pretending an old terminal
 is still alive.</p>
-<h2 id="sending-work-to-a-coding-agent">Sending work to a coding agent<a class="anchor" href="#sending-work-to-a-coding-agent" aria-label="Link to this section">#</a></h2>
-<p>Open <strong>Agent work</strong>, choose the CLI and model, and start. The session is handed the task summary,
+<h2 id="sending-work-to-an-agent">Sending work to an agent<a class="anchor" href="#sending-work-to-an-agent" aria-label="Link to this section">#</a></h2>
+<p>Choose <strong>Send to agent</strong> on the Agent section. A coding task opens a terminal on its CLI and model in
+the repository&#39;s checkout; a general task opens a conversation. The session is handed the task summary,
 the incoming messages, the attachments, any saved result from an earlier run and your optional
-new prompt — plus a context file under <code>~/.taskuary/context/</code> holding the thread, relevant sender
+note — plus a context file under <code>~/.taskuary/context/</code> holding the thread, relevant sender
 and topic history, the learned profile, and reports from related closed tasks.</p>
 <table>
 <thead>
@@ -299,23 +308,27 @@ and topic history, the learned profile, and reports from related closed tasks.</
 </tr>
 </thead>
 <tbody><tr>
-<td><strong>Start coding session</strong></td>
-<td>Starts the selected harness and model</td>
-</tr>
-<tr>
-<td><strong>Start new coding session</strong></td>
-<td>Picks a different harness after an earlier run stopped or hit a limit; the checkout and history are kept</td>
+<td><strong>Send to agent</strong></td>
+<td>Hands the work to an agent; the card lets you change which one</td>
 </tr>
 <tr>
 <td><strong>Stop and save</strong></td>
 <td>Ends the session and writes its result; the task stays open until you mark it done</td>
+</tr>
+<tr>
+<td><strong>Continue</strong></td>
+<td>Picks the work up where it left off, with what you add or as it is (<strong>Try again</strong> after a failed run)</td>
+</tr>
+<tr>
+<td><strong>Run another agent</strong></td>
+<td>Starts a second agent on the same task</td>
 </tr>
 </tbody></table>
 <p><strong>Mark done</strong> is stronger than all of them: it closes the task <em>and</em> ends any live session,
 because a finished task should not leave an orphan process running.</p>
 <h3 id="what-an-agent-is-doing">What an agent is doing<a class="anchor" href="#what-an-agent-is-doing" aria-label="Link to this section">#</a></h3>
 <p>An agent is always in one of six states. Each has one word and one mark, and the work rail, the
-Timeline, the task page, the Board, the assistant&#39;s cards and the phone all use the same ones.</p>
+task page, the Board, the assistant&#39;s cards and the phone all use the same ones.</p>
 <table>
 <thead>
 <tr>
@@ -334,8 +347,8 @@ Timeline, the task page, the Board, the assistant&#39;s cards and the phone all 
 <tr>
 <td>⚙️</td>
 <td><strong>agent working</strong></td>
-<td>Running, and needs nothing from you</td>
-<td><strong>Leave a note</strong> for when it stops</td>
+<td>Running, and needs nothing from you - including while its own subagents or background jobs run</td>
+<td>Type a note for when it stops</td>
 </tr>
 <tr>
 <td>👋</td>
@@ -397,8 +410,8 @@ Timeline, the task page, the Board, the assistant&#39;s cards and the phone all 
 <p><strong>Continue</strong> works for a coding agent (it reopens its own CLI session, or a fresh one seeded with the
 handover) and a regular agent (its saved conversation). It asks what to tell it as it picks up - optional; on the
 phone the next thing you type is the note, or tap <strong>Continue</strong>.</p>
-<p>The saved result is deliberately short. The complete transcript is on the task page: open the
-session on the <strong>Agent work</strong> step and choose <strong>More → Every step</strong>. A finished coding session also
+<p>The Result is deliberately short: a summary, what it found, and <strong>What it made</strong>, each file with
+Open and Download. The complete conversation is <strong>The whole conversation ›</strong> under it. A finished coding session also
 files a Markdown record of what it did under <code>~/.taskuary/artifacts/</code> — the outcome, not a copy of
 the terminal.</p>
 <h3 id="when-the-agent-opens-a-browser">When the agent opens a browser<a class="anchor" href="#when-the-agent-opens-a-browser" aria-label="Link to this section">#</a></h3>
@@ -426,19 +439,60 @@ agent is told it is waiting, and the act appears on the task as a card with <str
 is still on the same page; Dismiss tells the agent it was not done. With no AI connected nothing
 can judge, so typing into a box (<code>fill</code>, <code>type</code>, <code>keyboard type</code>) runs and every other act waits
 for you.</p>
-<h2 id="the-general-agent">The general agent<a class="anchor" href="#the-general-agent" aria-label="Link to this section">#</a></h2>
-<p>Not every job is code. A <code>general</code> task opens a conversation instead of a terminal: research,
-planning, writing, weighing an option, working out what to ask. No system is touched.</p>
-<p>You reach it from <strong>Talk it through</strong> on a Timeline row, from ＋ New → <em>Give an agent a job</em> →
-<strong>Just talk it through</strong>, or from <em>Prepare me for it</em> on a calendar invite.</p>
+<h2 id="coding-agents-and-general-agents">Coding agents and general agents<a class="anchor" href="#coding-agents-and-general-agents" aria-label="Link to this section">#</a></h2>
+<p>Not every job is code. A <code>coding</code> task goes to a coding agent, in a terminal in your repository. A
+<code>general</code> task goes to a general agent, in a conversation instead: research, planning, writing,
+weighing an option, working out what to ask. No system is touched.</p>
+<p>Both run on a <strong>brain</strong> - a CLI such as Claude Code or Codex, or an API connection, with the model
+chosen on it - and follow a <strong>profile</strong> of instructions laid on that brain: <code>CODING.md</code> for code,
+<code>ASSISTANT.md</code> for general work by default (see <a href="#profiles-and-playbooks">Profiles and playbooks</a>).
+You start one with <strong>Send to agent</strong> on a task, or from <strong>+ New → Give an agent a job</strong>, which asks
+whether the job is general or coding.</p>
 <p>General chats save their provider, model and native conversation id across restarts. Claude and
 Codex resume that exact conversation when it still exists and the provider configuration matches;
-otherwise the assistant continues from Taskuary&#39;s own saved history and says so.</p>
+otherwise the agent continues from Taskuary&#39;s own saved history and says so.</p>
+<h3 id="quick-work">Quick work<a class="anchor" href="#quick-work" aria-label="Link to this section">#</a></h3>
+<p>Most general asks are short - read the message, recommend, draft the reply, or ask you what to do.
+When triage reads a general task as quick, it is answered in a single call instead of an agent
+session. The call reads what the agent would - the message, the task, <code>LEARNED.md</code>, today&#39;s calendar,
+<code>AGENT.md</code> and the profile - may use only read-only look-ups, and leaves the same things a finished
+run does: what it found, a draft when a reply is owed, or a question to you. Nothing on the task page
+changes: the same Result, the same <strong>Continue</strong> and <strong>Run another agent</strong>, which open a full session.</p>
+<p>These always take a full agent session: hard work, work that needs a browser, a sender Taskuary does
+not know, several emails owed, a routine&#39;s run, and a task that has already had one. A quick call that
+finds it needs more hands over to a session, with its notes as the brief, and the task says so.</p>
+<h3 id="how-work-fans-out">How work fans out<a class="anchor" href="#how-work-fans-out" aria-label="Link to this section">#</a></h3>
+<p>Three levels, each counted on its own:</p>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>How many at once</th>
+<th>Counts against Agents at once</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Agent sessions</strong> started by themselves</td>
+<td><strong>Settings → Agents at once</strong> - 4 by default, 1 to 16. The rest queue and start as sessions end, and the Board shows why each waits</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><strong>Quick work</strong> calls</td>
+<td>a pool of 8</td>
+<td>no</td>
+</tr>
+<tr>
+<td><strong>A CLI&#39;s own subagents</strong>, background shells and monitors, inside one session</td>
+<td>whatever that CLI runs</td>
+<td>no - they are part of their session</td>
+</tr>
+</tbody></table>
+<p>Sessions you start yourself are never held back by <strong>Agents at once</strong>. When a CLI ends its turn with
+work still running in the background, Taskuary reads what is still running from the session and keeps
+the agent at ⚙️ <strong>agent working</strong> rather than waiting on you, until those jobs end.</p>
 <h2 id="sessions-and-transcripts">Sessions and transcripts<a class="anchor" href="#sessions-and-transcripts" aria-label="Link to this section">#</a></h2>
-<p><strong>Continue previous work</strong> on the Assistant page lists unfinished tasks that have saved agent
-work, each with an excerpt of the latest reply or handover. <strong>Resume</strong> opens the task and carries
-on; <strong>Review draft</strong> opens a pending result. Loading the page starts nothing, and a session
-already running is opened rather than duplicated.</p>
+<p>Unfinished tasks with saved agent work stay under Tasks on the rail. <strong>Continue</strong> on the Agent
+section carries on; a session already running is opened rather than duplicated.</p>
 <p>Reopening a pane seeds it from a render of the session, not from raw bytes, so a pane you come
 back to shows what the screen actually looked like.</p>
 <h2 id="several-agents-in-one-repository">Several agents in one repository<a class="anchor" href="#several-agents-in-one-repository" aria-label="Link to this section">#</a></h2>
@@ -465,9 +519,9 @@ outlives the job that produced it.</p>
 the task on its own. Closing a task ticks every remaining box: a closed task with open items is a lie about its own
 state.</p>
 <h2 id="replies">Replies<a class="anchor" href="#replies" aria-label="Link to this section">#</a></h2>
-<p>The Reply section exists whenever the task has an incoming sender. It shows one of three things:
-no draft yet, a draft ready, or a reply sent. <strong>Open on the task</strong> is the only road out — type your
-own or generate one, edit it, approve it.</p>
+<p>Close out holds the reply whenever the task has an incoming sender. It shows one of three things:
+no draft yet (<strong>Draft reply</strong>), a draft ready (<strong>Send</strong>, <strong>Redraft</strong>), or a reply sent. Type your own
+or generate one, edit it, send it.</p>
 <p>One reply is special. A <strong>clarification</strong> stops the active agent when it is sent and moves the
 task to waiting, because an external answer is now required. An ordinary reply from an
 owner-controlled task is just an update: it leaves both the task status and any useful session
@@ -548,78 +602,74 @@ state for a task, in the work rail&#39;s words — the server decides it once an
 </tr>
 </tbody></table>
 <h3 id="where-a-task-is-up-to">Where a task is up to<a class="anchor" href="#where-a-task-is-up-to" aria-label="Link to this section">#</a></h3>
-<p>A task view opens on one main view, with the rest one click away in a drawer. Which one is decided by the task&#39;s
-<strong>stage</strong> — one list, read by the task view, the server and the Assistant alike (<code>taskuary/stages.json</code>). The first
-row that holds wins, top to bottom:</p>
+<p>Which section a task opens on is decided by its <strong>stage</strong> — one list, read by the task page, the
+server and the Assistant alike (<code>taskuary/stages.json</code>). The first row that holds wins, top to bottom:</p>
 <table>
 <thead>
 <tr>
 <th>Stage</th>
 <th>When</th>
-<th>Main view</th>
-<th>Drawer</th>
-<th>Advisor&#39;s section</th>
+<th>Opens on</th>
+<th>Advisor&#39;s note</th>
 </tr>
 </thead>
 <tbody><tr>
 <td>agent working</td>
 <td>an agent&#39;s session is open, working or waiting on you</td>
-<td>the session, the whole width</td>
-<td>Came from, one line</td>
+<td>Agent - the session, the whole width</td>
 <td>over the work</td>
 </tr>
 <tr>
 <td>waiting on someone</td>
 <td>handed to a person</td>
-<td>the task, who it waits on and when it is due</td>
-<td>Agent and Close out</td>
-<td>in the drawer</td>
+<td>Came from - who it waits on and when it is due</td>
+<td>on the folded sections</td>
+</tr>
+<tr>
+<td>done (by its agent)</td>
+<td>its own agent closed it</td>
+<td>Agent - who closed it and why, and its Result</td>
+<td>—</td>
 </tr>
 <tr>
 <td>done</td>
 <td>closed</td>
-<td>how it closed — the note, what went out, the Result</td>
-<td>Came from</td>
+<td>Close out - how it closed, the note, what went out</td>
 <td>—</td>
 </tr>
 <tr>
 <td>close out</td>
 <td>a draft or emails wait for <strong>Send</strong>, or something went out</td>
 <td>Close out</td>
-<td>Came from</td>
 <td>over the work</td>
 </tr>
 <tr>
 <td>agent result</td>
 <td>an agent finished, stopped or failed</td>
-<td>its Result, or why it failed with <strong>Try again</strong></td>
-<td>Came from</td>
+<td>Agent - its Result, or why it failed with <strong>Try again</strong></td>
 <td>over the work</td>
 </tr>
 <tr>
 <td>to reply</td>
 <td>somebody wrote and nothing is drafted</td>
-<td>the task</td>
-<td>Agent and Close out — its tab lit</td>
-<td>in the drawer</td>
+<td>Came from, with Close out&#39;s move lit</td>
+<td>on the folded sections</td>
 </tr>
 <tr>
 <td>to do</td>
 <td>a to-do&#39;s checklist or a goal&#39;s steps</td>
-<td>the task and its list</td>
-<td>Agent and Close out</td>
-<td>in the drawer</td>
+<td>Came from and its list</td>
+<td>on the folded sections</td>
 </tr>
 <tr>
 <td>to start</td>
 <td>an ask nothing has worked yet</td>
-<td>the task</td>
-<td>Agent and Close out — its tab lit</td>
-<td>in the drawer</td>
+<td>Came from, with Agent&#39;s move lit</td>
+<td>on the folded sections</td>
 </tr>
 </tbody></table>
-<p>A lit tab says the next move is inside that drawer. The Assistant is told the stage of the task on the table, so a
-typed &quot;send it&quot; or &quot;mark it done&quot; acts on what you are looking at.</p>
+<p>A lit move says the next step is in that section. The Assistant is told the stage of the task on the
+table, so a typed &quot;send it&quot; or &quot;mark it done&quot; acts on what you are looking at.</p>
 <p>A task put away with <strong>Remind me</strong> waits under <strong>For later</strong> on the rail and off the Board until its day — unless its
 agent asks you something. Status has no box of its own: <strong>Start</strong>, <strong>Mark done</strong>, <strong>Remind me</strong> and <strong>Reopen</strong> set it, and Reopen clears
 an old reminder. <strong>Mark done</strong> keeps a draft that was waiting; <strong>Bring it back to send</strong> sends it after all. Done is
@@ -750,7 +800,7 @@ reranks the queue rather than joining the end of it.</li>
 were on it, has someone already answered, urgency, who wrote it — and the triage brain adds a
 short comparative reason when several tasks are waiting. Waiting tasks gain value over time, so
 the bottom of the queue cannot starve.</p>
-<p>The Timeline and the Board show the same order. <strong>Start now</strong> pins a task to the top; <strong>Later</strong>
+<p>The rail and the Board show the same order. <strong>Start now</strong> pins a task to the top; <strong>Later</strong>
 moves it down without deleting it.</p>
 
     </article>

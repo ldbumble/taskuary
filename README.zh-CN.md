@@ -44,56 +44,78 @@ Qwen Code 使用哪个云端或本地模型，由你配置。见[使用 Qwen Cod
 **Tasks**（所有未完成的任务，代理正在处理的那一项图标上有旋转的圆环）、**For later**、**Reports**、Advisor 的建议，以及 **FYI**。旁边是一天的开场卡片：昨晚以来的变化、
 学到的东西、早间摘要、今天的会议，以及每个分组里在等你的事，不用逐个打开各个系统。
 
-![工作栏把今天的事项分组，旁边是开场卡片：昨晚以来完成的代理和运行的报表、记忆与早间摘要、今天的会议，以及每个分组里在等你的事。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=row)
+![工作栏把今天的事项分组，旁边是开场卡片：昨晚以来完成的代理和运行的报表、记忆与早间摘要、今天的会议，以及每个分组里在等你的事。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=spine)
 
 ### 2. 让助手带你逐项处理
 
-选择 **Walk me through my tasks**。助手每次把一件事带到对话里，形式就是你自己打开时看到的同一张任务卡片，
-下面一行是：**Back** 和 **Next**、当前该做的操作（先是 **Mark done**，然后是 **Reply** 或 **Send to agent**）、**Change ▾** 和 **Share**。
-按钮每次都做同样的事；其他需求在这一行末尾的对话框里提问，对话会从对话框升起成一个窗口，助手已经掌握这条消息、整个线程以及你过去的决定。
+选择 **Walk me through my tasks**。助手每次把一件事带到对话里，形式就是你自己打开时看到的同一个任务。
+下面只有一个小栏 **Nav**：**Back** 和 **Next**，无处可去时显示为灰色。对任务能做的操作都在任务本身上（见下文）。
+其他需求在角落的对话框里提问，窗口会从那里展开，助手已经掌握这条消息、整个线程以及你过去的决定。
 
-![Ruth 的请求放在桌面上，对话窗口从操作行末尾的对话框升起：问到今天的清单，助手在任务旁边回答，任务本身不动。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/05-assistant.png?v=row)
+![Ruth 的请求放在桌面上，对话窗口从角落的对话框展开：问到今天的清单，助手在任务旁边回答，任务本身不动。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/05-assistant.png?v=spine)
 
 ### 3. 每个请求都成为带有完整经过的任务
 
 每个任务从左到右分为三部分：**Came from**（原始消息、分诊的结论和原因、要做的事）、**Agent** 和 **Close out**。
 任务进行到哪一部分，就展开哪一部分；另外两部分收成窄栏放在旁边，仍然显示各自的状态。
+每一部分都带着自己的操作——收起时在窄栏上，展开时在顶部的一条按钮栏里：
 
-![Ruth 的请求作为任务分成三部分：展开的 Came from 显示邮件、分诊结论和要做的事，旁边收起的 Agent（尚未开始）和 Close out（尚未起草）。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png?v=row)
+- **Came from**：**Remind me**、**Not a task** 和 **Change ▾**（拆分或合并、谁来做、优先级、指派、代码在哪里）。
+- **Agent**：**Send to agent**，运行过后是 **Continue** 或 **Run another agent**。
+- **Close out**：**Draft reply** 或 **Reply**、**Hand it to a person**、**Mark done**、**Close with a note**、**Attach a file** 和 **Share**。
+
+![Ruth 的请求作为任务分成三部分：展开的 Came from 显示邮件、分诊结论和要做的事，旁边收起的 Agent（尚未开始）和 Close out（尚未起草）。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png?v=spine)
 
 ### 4. 智能体展示它做了什么
 
 打开 Agent 部分并点击 **Send to agent**，智能体就在那里工作。完成后，这一部分显示它的结果：做了什么、它的答案、
-发现了什么，以及 **What it made**——每个文件都可以打开或下载，完整对话只是下面的一个链接。这里的智能体整理支出数据、
+发现了什么，以及 **What it made**——每个文件都可以打开或下载，完整对话只是下面的一个链接。
+**Continue** 带着你的一句说明让同一个智能体接着做；**Run another agent** 在同一个任务上启动第二个智能体。这里的智能体整理支出数据、
 核对分类合计、保存一个工作簿，并准备回复草稿。任何内容都不会自动发出。
 
-![智能体在 Ruth 的任务上的结果：一句话总结、七月和八月按分类的合计、它的发现，以及可以打开和下载的工作簿。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png?v=row)
+![智能体在 Ruth 的任务上的结果：一句话总结、七月和八月按分类的合计、它的发现，以及可以打开和下载的工作簿。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png?v=spine)
 
 ### 5. 最后由你决定
 
-准备好的回复放在 **Close out** 里，收件人是 Ruth，旁边收起的是 Came from 和智能体的结果。阅读、修改，确认无误后点击 **Send**，或者 Redraft。
+准备好的回复放在 **Close out** 里，收件人是 Ruth，旁边收起的是 Came from 和智能体的结果。阅读、修改，确认无误后点击 **Send**，或者 **Redraft**。
+发送和结束是两步：任务会一直保持打开，直到你点击 **Mark done**。
 
-![Close out 展开在给 Ruth 的回复草稿上：收件人、抄送、可编辑的草稿、Send 和 Redraft，旁边是收起的 Came from 和 Agent。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/04-review.png?v=row)
+![Close out 展开在给 Ruth 的回复草稿上：收件人、抄送、可编辑的草稿、Send 和 Redraft，旁边是收起的 Came from 和 Agent。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/04-review.png?v=spine)
 
 ### 6. 在忙起来之前开始一天
 
 每天早上，助手先说明昨晚以来的变化、学到的东西、今天的会议，以及每个分组里在等你的事；早间摘要直接在卡片里展开，
 看到时不会过时。Ruth 的请求有明确的期限：11:30 的运营会议。
 
-![早间画面的动画特写：开场卡片，以及在卡片里展开的早间摘要。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/06-morning.gif?v=row)
+![早间画面的动画特写：开场卡片，以及在卡片里展开的早间摘要。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/06-morning.gif?v=spine)
 
 ## 核心功能
 
 ### 报表、仪表板和 FYI 也像工作一样打开
 
-报表和任务一样分成三部分打开，中间是报表本身——图表、表格和附件——下面是同一行操作。仪表板就放在报表旁边。
+报表和任务一样分成三部分打开，中间是报表本身——图表、表格和附件——下面的 Nav 旁边有 **Put it on my list**，需要时把它变成任务。仪表板就放在报表旁边。
 不需要你处理的消息会成批出现：一张 FYI 卡片装下整批消息，每条收成发件人、渠道和一行内容，点击 **All read, next** 继续。
 
-![按任务三部分打开的报表：每晚各站点人数，含柱状图、表格和附件，下面是操作行。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/13-report.png?v=row)
+![按任务三部分打开的报表：每晚各站点人数，含柱状图、表格和附件，下面是 Nav 和 Put it on my list。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/13-report.png?v=spine)
 
-![Taskuary at a glance 仪表板：收到多少、新任务、当前未完成、回复时间、事项进展和智能体会话。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/14-dashboard.png?v=row)
+![Taskuary at a glance 仪表板：收到多少、新任务、当前未完成、回复时间、事项进展和智能体会话。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/14-dashboard.png?v=spine)
 
-![一批 FYI：六条不需要处理的消息，每条收成发件人、渠道、主题和第一行，下面是 All read, next。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/12-fyi.png?v=row)
+![一批 FYI：六条不需要处理的消息，每条收成发件人、渠道、主题和第一行，下面是 All read, next。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/12-fyi.png?v=spine)
+
+### 通用智能体、编程智能体，以及工作如何并行
+
+**编程智能体**在你的代码仓库里通过终端工作；**通用智能体**在对话里工作——调研、给出建议、起草回复——不触碰任何系统。
+两者都运行在一个 **brain** 上：Claude Code、Codex 等 CLI，或一个 AI 连接，加上你为它选的模型。它们听从的是 **profile**：
+例如通用工作用 `ASSISTANT.md`、代码用 `CODING.md` 的指令，可以放在任何一个 brain 上运行。
+
+大多数通用请求都很短。分诊判断为简单的请求，用一次调用完成，在任务上留下和智能体一样的结果、草稿或提问；
+困难的工作、需要浏览器的工作，以及简单调用发现需要更多步骤的工作，会交给完整的智能体会话。
+
+工作在三个层次上并行：
+
+- **智能体会话**最多同时运行 **Settings → Agents at once** 设定的数量（默认 4，最多 16），其余排队，有会话结束就开始。你自己启动的会话不受限制。
+- **简单工作**有自己的池，最多同时 8 个调用，不占用上面的数量，一批邮件可以直接并行处理而不打开会话。
+- **会话内部**，CLI 可以启动自己的子智能体、后台 shell 和监视器。Taskuary 从会话中读取它们，在它们运行时把智能体显示为工作中；它们属于同一个会话，不算额外的会话。
 
 ### 使用你选择的编程 CLI
 
@@ -106,21 +128,21 @@ Qwen Code 使用哪个云端或本地模型，由你配置。见[使用 Qwen Cod
 这两个预设用于执行任务；消息分拣和只读报告请选择 Qwen Code、Ollama 或 API 服务。
 详见[安装步骤和验证范围（英文）](docs/chinese-coding-clis.md)。
 
-![Claude、Qwen、OpenCode（支持 DeepSeek）和 Kimi Code 的连接卡片。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/07-coding-clis-chinese.png?v=row)
+![Claude、Qwen、OpenCode（支持 DeepSeek）和 Kimi Code 的连接卡片。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/07-coding-clis-chinese.png?v=spine)
 
 ### 用 Hub 保留共享知识
 
 按主题保存发现、决定和有用的提醒。智能体可以查阅前面的工作、补充讨论，
 也可以根据新证据纠正结论，减少重复摸索。
 
-![Hub 中按主题组织的共享发现，以及智能体之间的讨论。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/08-hub.png?v=row)
+![Hub 中按主题组织的共享发现，以及智能体之间的讨论。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/08-hub.png?v=spine)
 
 ### 智能体之间可以交接留言
 
 Board 的 **Live handoffs** 展示当前进展、阻碍和待接手事项。
 一个智能体留下说明，下一个接手时就能读到上下文；已读标记显示谁看过这条留言。
 
-![智能体的交接留言，包括进展、共享上下文和已读标记。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/09-handoffs.png?v=row)
+![智能体的交接留言，包括进展、共享上下文和已读标记。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/09-handoffs.png?v=spine)
 
 ### 从你的决定中学习
 
@@ -131,7 +153,7 @@ Board 的 **Live handoffs** 展示当前进展、阻碍和待接手事项。
 打开 **Docs → LEARNED.md**，可以阅读、修改或删除这些记忆。
 你在 `SOUL.md` 中写下的指令始终优先。
 
-![LEARNED.md 编辑器中可查看和修改的偏好、证据、待验证假设和待批准规则。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/11-learned-memory.png?v=row)
+![LEARNED.md 编辑器中可查看和修改的偏好、证据、待验证假设和待批准规则。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/11-learned-memory.png?v=spine)
 
 <details>
 <summary>技术细节：LEARNED.md 如何形成记忆</summary>

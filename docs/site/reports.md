@@ -10,7 +10,7 @@ One report is one saved configuration under **Reports** - the sidebar's button, 
 |---|---|
 | **Pipeline** | The title, the sources it reads, and the one prompt that reads all of them |
 | **Test & preview** | Test calls a single source; Preview runs the whole pipeline, AI pass included, filing nothing |
-| **Where each run goes** | The route card: Timeline, alert and send, each every run, ask the AI, when a rule trips, or never - and, under a Timeline line that waits on a condition, whether triage judges the run when it fires |
+| **Where each run goes** | The route card: show it under Reports, alert and send, each every run, ask the AI, when a rule trips, or never - and, under a Reports line that waits on a condition, whether triage judges the run when it fires |
 | **Schedule & save** | How often it runs |
 
 Sources at the top, one prompt at the bottom. Every source runs on its own connection and query,
@@ -100,7 +100,7 @@ sentence the judge answers yes or no to), **when a rule trips** (a number or wor
 
 | Line | every run | ask the AI | when a rule trips | never |
 |---|---|---|---|---|
-| **Timeline** | A row under Reports | A row when the judge says your sentence holds | A row when the rule trips | No row: a task, or nothing |
+| **Show it under Reports** | A row under Reports | A row when the judge says your sentence holds | A row when the rule trips | No row: a task, or nothing |
 | **Alert** | Reaches you right away on your channel, no Review | When the judge says so | When the rule trips | Never |
 | **Send** | Out to its people, through Review unless set to send without asking | When the judge says so | When the rule trips | Never |
 | **Triage** | Triage judges the run: whether it needs a task | When the judge says so | When the rule trips | Never - the default: a row, never a task |
@@ -115,12 +115,12 @@ sentence the judge answers yes or no to), **when a rule trips** (a number or wor
 - **Send it somewhere** — email, Teams, Telegram, WhatsApp, iMessage or Discord. It waits on
   the task for approval by default. "Send it without asking" is the one place in Taskuary where
   that gate can be switched off, and it is deliberate.
-- **Let triage judge it when it fires** is a switch under a Timeline line that asks the AI or waits
+- **Let triage judge it when it fires** is a switch under a Reports line that asks the AI or waits
   for a rule, and it is off unless you turn it on: most reports are news to read, and a daily summary
   never reaches triage. On, a run that meets the condition goes to triage, which reads it against
   `TRIAGE.md` and the report's own **Make it a task when…** sentence and decides whether it needs a
   task - a bug found, a job that did not run - or is a row to read. Nothing is made for what an open
-  task already covers. A triage condition set apart from the Timeline's is kept, and the card says so.
+  task already covers. A triage condition set apart from the Reports line's is kept, and the card says so.
 - **A run about a task you already have** never becomes a second task and is never put on that task:
   it stays a row under Reports, and the task gets one note that the report mentions it - one a day
   per report.
@@ -158,10 +158,10 @@ produced today's run, opening the app at 09:00 does not produce a second one.
 ## The Advisor
 
 The Advisor is a report of type `assistant`. It runs on its own schedule and when the app
-opens, and it posts on the Timeline **only** when it finds something worth saying: an unanswered
+opens, and it posts an idea on the rail **only** when it finds something worth saying: an unanswered
 reply, context for an upcoming meeting, a task gone quiet, a pattern across incoming work, or
 something in the systems it watches that does not look right. Each suggestion names its evidence
-and carries the same words everywhere it shows up - the Timeline, the Assistant chat, the work rail
+and carries the same words everywhere it shows up - the Assistant chat, the work rail
 and your phone. What it reads, its two clocks and the outcome ledger it learns from are on
 [The Advisor](advisor); this section is the report that runs it.
 
@@ -204,8 +204,8 @@ Delete the Advisor report to switch it off. Its **Preview** shows exactly what a
 the model, which is the fastest way to find out whether a watched source returns what you think
 it does.
 
-The morning brief is a separate report of type `digest`: it writes `DIGEST.md` and lands on the
-Timeline daily. Deleting that report turns the brief off.
+The morning brief is a separate report of type `digest`: it writes `DIGEST.md` and opens on the
+morning card daily. Deleting that report turns the brief off.
 
 ### Ideas it raises
 

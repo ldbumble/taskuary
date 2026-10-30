@@ -9,7 +9,7 @@ fresh build produces, so the site and the source cannot drift apart.
 | Page | Covers |
 |---|---|
 | [Start here](https://taskuary.com/docs/) | What Taskuary is, how to install it, and what the first hour looks like |
-| [How it works](https://taskuary.com/docs/how-it-works) | One message from arrival to approval: the Timeline, the five roads, and what triage actually decides |
+| [How it works](https://taskuary.com/docs/how-it-works) | One message from arrival to approval: the work rail, the five roads, and what triage actually decides |
 | [Connections](https://taskuary.com/docs/connections) | The accounts Taskuary may read, and the role that says what it may do with each |
 | [Tasks and agents](https://taskuary.com/docs/tasks-and-agents) | A task, the agent work on it and the reply to the sender are three separate lives |
 | [Assistant buttons](https://taskuary.com/docs/assistant) | Every button under an Assistant card, the one question two of them ask, Remind me, and the words that work typed |

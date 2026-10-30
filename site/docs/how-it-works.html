@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>How it works — Taskuary documentation</title>
-<meta name="description" content="One message from arrival to approval: the Timeline, the five roads, and what triage actually decides.">
+<meta name="description" content="One message from arrival to approval: the work rail, the five roads, and what triage actually decides.">
 <link rel="icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -42,7 +42,7 @@
 <div class="entry on">
       <a class="page" href="./how-it-works" aria-current="page">How it works</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide How it works's sections"></button>
-      <div class="secs"><a class="sec" href="#the-timeline" data-sec="the-timeline">The Timeline</a><a class="sec" href="#the-five-roads-a-message-can-take" data-sec="the-five-roads-a-message-can-take">The five roads a message can take</a><a class="sec" href="#what-triage-actually-decides" data-sec="what-triage-actually-decides">What triage actually decides</a><a class="sec" href="#nothing-sends-itself" data-sec="nothing-sends-itself">Nothing sends itself</a><a class="sec" href="#correcting-it-teaches-it" data-sec="correcting-it-teaches-it">Correcting it teaches it</a><a class="sec" href="#three-brains-one-voice" data-sec="three-brains-one-voice">Three brains, one voice</a><a class="sec" href="#the-documents-that-govern-it" data-sec="the-documents-that-govern-it">The documents that govern it</a><a class="sec" href="#where-the-rest-of-the-workspace-fits" data-sec="where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits</a></div>
+      <div class="secs"><a class="sec" href="#the-work-rail" data-sec="the-work-rail">The work rail</a><a class="sec" href="#the-five-roads-a-message-can-take" data-sec="the-five-roads-a-message-can-take">The five roads a message can take</a><a class="sec" href="#what-triage-actually-decides" data-sec="what-triage-actually-decides">What triage actually decides</a><a class="sec" href="#nothing-sends-itself" data-sec="nothing-sends-itself">Nothing sends itself</a><a class="sec" href="#correcting-it-teaches-it" data-sec="correcting-it-teaches-it">Correcting it teaches it</a><a class="sec" href="#three-brains-one-voice" data-sec="three-brains-one-voice">Three brains, one voice</a><a class="sec" href="#the-documents-that-govern-it" data-sec="the-documents-that-govern-it">The documents that govern it</a><a class="sec" href="#where-the-rest-of-the-workspace-fits" data-sec="where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./connections">Connections</a>
@@ -52,7 +52,7 @@
 <div class="entry">
       <a class="page" href="./tasks-and-agents">Tasks and agents</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Tasks and agents's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./tasks-and-agents#a-tasks-three-lives">A task's three lives</a><a class="sec" href="./tasks-and-agents#sending-work-to-a-coding-agent">Sending work to a coding agent</a><a class="sec" href="./tasks-and-agents#the-general-agent">The general agent</a><a class="sec" href="./tasks-and-agents#sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="./tasks-and-agents#several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="./tasks-and-agents#checklists-and-closing">Checklists and closing</a><a class="sec" href="./tasks-and-agents#replies">Replies</a><a class="sec" href="./tasks-and-agents#profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="./tasks-and-agents#the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="./tasks-and-agents#the-work-rail">The work rail</a><a class="sec" href="./tasks-and-agents#how-work-is-ordered">How work is ordered</a></div>
+      <div class="secs" hidden><a class="sec" href="./tasks-and-agents#a-tasks-three-lives">A task's three lives</a><a class="sec" href="./tasks-and-agents#sending-work-to-an-agent">Sending work to an agent</a><a class="sec" href="./tasks-and-agents#coding-agents-and-general-agents">Coding agents and general agents</a><a class="sec" href="./tasks-and-agents#sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="./tasks-and-agents#several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="./tasks-and-agents#checklists-and-closing">Checklists and closing</a><a class="sec" href="./tasks-and-agents#replies">Replies</a><a class="sec" href="./tasks-and-agents#profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="./tasks-and-agents#the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="./tasks-and-agents#the-work-rail">The work rail</a><a class="sec" href="./tasks-and-agents#how-work-is-ordered">How work is ordered</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./security">Security</a>
@@ -108,20 +108,21 @@
 <p>Taskuary&#39;s whole behaviour is one loop: something arrives, it gets a verdict, the verdict decides
 who does the work, and whatever comes out waits for you. This page follows one message the whole
 way, then explains the machinery underneath it.</p>
-<h2 id="the-timeline">The Timeline<a class="anchor" href="#the-timeline" aria-label="Link to this section">#</a></h2>
-<p>The Timeline is the front door: every connection with a <em>trigger</em> or <em>feed</em> role lands here, in
-the order things happened. An email from a vendor, a pull request, a Teams message, this
-morning&#39;s spend report and a failed nightly export are one list.</p>
-<p>Each row shows where it came from above its original time, so mail, chat, GitHub, a SQL report
-and an Advisor post are told apart at a glance. Calendar entries show the meeting time. Open a
-row for the full message, its attachments, what triage decided and why, any drafted reply, and
-the actions available on it.</p>
-<p>Beside the Timeline, the <strong>work rail</strong> holds what is actually waiting on you, under Tasks,
-For later, Reports, Advisor ideas and FYI - an urgent row is shaded in its place, an important one wears a quieter mark there, and Next reaches both in their places like any other row. Tasks is every open task, an agent working on it or not - a ring spins round the icon of
-one an agent is working, and the row stays where it is when the agent asks or stops. A thread or a step gone quiet past that person&#39;s usual day is
-<em>slipped</em>, inside Tasks, with Chase, Let it go, They answered elsewhere and Remind me under it (see <a href="advisor#what-was-not-followed-up">The Advisor</a>).
-A finished or closed item gets no row: the rail is what still wants something from you, never a history. See <a href="tasks-and-agents#the-work-rail">The work rail</a> for what
-puts a row there and what takes it off.</p>
+<h2 id="the-work-rail">The work rail<a class="anchor" href="#the-work-rail" aria-label="Link to this section">#</a></h2>
+<p>Every connection with a <em>trigger</em> or <em>feed</em> role lands on one rail beside the Assistant. An email
+from a vendor, a pull request, a Teams message, this morning&#39;s spend report and a failed nightly
+export are one list, sorted by what they need from you: <strong>Tasks</strong>, <strong>For later</strong>, <strong>Reports</strong>,
+<strong>Advisor ideas</strong> and <strong>FYI</strong>. The filter at the top narrows it to one source or kind.</p>
+<p>Tasks is every open task, an agent working on it or not - a ring spins round the icon of one an
+agent is working, and the row stays where it is when the agent asks or stops. An urgent row is
+shaded in its place, an important one wears a quieter mark, and Next reaches both in their places
+like any other row. A thread or a step gone quiet past that person&#39;s usual day is <em>slipped</em>, inside
+Tasks, with Chase, Let it go, They answered elsewhere and Remind me under it (see
+<a href="advisor#what-was-not-followed-up">The Advisor</a>).</p>
+<p>A finished or closed item gets no row: the rail is what still wants something from you, never a
+history. Open a row and it goes on the table as its task - <strong>Came from</strong>, <strong>Agent</strong> and <strong>Close
+out</strong> - with what triage decided and why. See <a href="tasks-and-agents#the-work-rail">The work rail</a> for
+what puts a row there and what takes it off.</p>
 <h2 id="the-five-roads-a-message-can-take">The five roads a message can take<a class="anchor" href="#the-five-roads-a-message-can-take" aria-label="Link to this section">#</a></h2>
 <p>Every message gets exactly one verdict, and there are only five places it can go.</p>
 <table>
@@ -192,7 +193,7 @@ caught it before triage ever saw it&quot;.</p>
 <td>2</td>
 <td>Feed connections</td>
 <td>gate</td>
-<td>A connection marked <em>feed</em> lands on the Timeline and stops — no verdict, no AI call, no task.</td>
+<td>A connection marked <em>feed</em> lands on the rail to read and stops — no verdict, no AI call, no task.</td>
 </tr>
 <tr>
 <td>3</td>
@@ -204,7 +205,7 @@ caught it before triage ever saw it&quot;.</p>
 <td>4</td>
 <td>Deferral</td>
 <td>gate</td>
-<td>Deferred triage lands the message as <code>triaging</code> so the Timeline shows it at once; the rest runs later.</td>
+<td>Deferred triage lands the message as <code>triaging</code> so the rail shows it at once; the rest runs later.</td>
 </tr>
 <tr>
 <td>5</td>

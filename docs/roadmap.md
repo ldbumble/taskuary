@@ -11,9 +11,9 @@ before 1.0.
 - General-work assistant sessions with interchangeable assistant-ui and terminal views,
   persistent task conversation, queue, image attachments, and the shared browser pane
 - Claude Code, Codex, Gemini, Cursor, Copilot, and Muse Code presets with connection tests
-- Timeline, task Board, Studio floor, and multi-terminal Wall
+- Work rail, task Board, Studio floor, and multi-terminal Wall
 - Assistant posts with evidence, actions, reviewed material, and cross-check notes
-- Scheduled report pipelines from source to query, AI summary, spreadsheet, chart, and Timeline
+- Scheduled report pipelines from source to query, AI summary, spreadsheet, chart, and a row under Reports
 - Plain-English report building against real connected schemas, with preview before save
 - Inbound mail, chat, code-host, work-tracker, incident, and monitoring connectors
 - Data sources spanning databases, AWS, Azure, Prometheus, Datadog, Sage Intacct, REST, RSS, and MCP

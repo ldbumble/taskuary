@@ -40,16 +40,17 @@ the window grown until none of it is scrolled away, the rest of the chat hidden)
 the rest keep a clip in the shot list. Screenshots are captured at double resolution and framed at 1200 pixels wide.
 Product source files and the deployed demo are unchanged.
 
-The first image shows readable source labels above the original timestamps for this image only;
-SQL report labels reflect the sample reports' SQL Server source configurations.
-Its filename is `01-timeline-sources-and-times.png` so readers receive the updated image
-even if an older Timeline image is cached.
+The first image is the opening card beside the work rail, in the full demo on a fresh chat. It keeps the
+filename `01-timeline-sources-and-times.png` from when it showed the Timeline (removed 2026-10-15), so the
+README's links stay put; `--timeline-only` captures nothing current.
 The LEARNED.md image uses authored example lessons in the real document editor.
 To recapture and frame just those two images, add `--memory-update` to both commands.
-For just the Timeline image, use `--timeline-only` instead.
 For just the CLI connections image (including Qwen Code), use `--cli-only`.
 For the four key-feature images (CLI, Hub, handoffs, LEARNED.md), capture and render with `--extras-only` (all of them: `--extras`).
 For just the first image (the opening card in the full demo, on a fresh chat), use `--home-only` with both commands.
+
+The Hub capture (08) shows "Nothing posted yet" against the current demo fixture (not yet looked into),
+so `08-hub.png` is the earlier frame; check it before replacing it.
 
 Review every final image at README width after regenerating: titles, amounts,
 source context, action buttons, and the ends of cards must remain visible.

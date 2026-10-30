@@ -42,7 +42,7 @@
 <div class="entry">
       <a class="page" href="./how-it-works">How it works</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show How it works's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./how-it-works#the-timeline">The Timeline</a><a class="sec" href="./how-it-works#the-five-roads-a-message-can-take">The five roads a message can take</a><a class="sec" href="./how-it-works#what-triage-actually-decides">What triage actually decides</a><a class="sec" href="./how-it-works#nothing-sends-itself">Nothing sends itself</a><a class="sec" href="./how-it-works#correcting-it-teaches-it">Correcting it teaches it</a><a class="sec" href="./how-it-works#three-brains-one-voice">Three brains, one voice</a><a class="sec" href="./how-it-works#the-documents-that-govern-it">The documents that govern it</a><a class="sec" href="./how-it-works#where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits</a></div>
+      <div class="secs" hidden><a class="sec" href="./how-it-works#the-work-rail">The work rail</a><a class="sec" href="./how-it-works#the-five-roads-a-message-can-take">The five roads a message can take</a><a class="sec" href="./how-it-works#what-triage-actually-decides">What triage actually decides</a><a class="sec" href="./how-it-works#nothing-sends-itself">Nothing sends itself</a><a class="sec" href="./how-it-works#correcting-it-teaches-it">Correcting it teaches it</a><a class="sec" href="./how-it-works#three-brains-one-voice">Three brains, one voice</a><a class="sec" href="./how-it-works#the-documents-that-govern-it">The documents that govern it</a><a class="sec" href="./how-it-works#where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./connections">Connections</a>
@@ -52,7 +52,7 @@
 <div class="entry">
       <a class="page" href="./tasks-and-agents">Tasks and agents</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Tasks and agents's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./tasks-and-agents#a-tasks-three-lives">A task's three lives</a><a class="sec" href="./tasks-and-agents#sending-work-to-a-coding-agent">Sending work to a coding agent</a><a class="sec" href="./tasks-and-agents#the-general-agent">The general agent</a><a class="sec" href="./tasks-and-agents#sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="./tasks-and-agents#several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="./tasks-and-agents#checklists-and-closing">Checklists and closing</a><a class="sec" href="./tasks-and-agents#replies">Replies</a><a class="sec" href="./tasks-and-agents#profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="./tasks-and-agents#the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="./tasks-and-agents#the-work-rail">The work rail</a><a class="sec" href="./tasks-and-agents#how-work-is-ordered">How work is ordered</a></div>
+      <div class="secs" hidden><a class="sec" href="./tasks-and-agents#a-tasks-three-lives">A task's three lives</a><a class="sec" href="./tasks-and-agents#sending-work-to-an-agent">Sending work to an agent</a><a class="sec" href="./tasks-and-agents#coding-agents-and-general-agents">Coding agents and general agents</a><a class="sec" href="./tasks-and-agents#sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="./tasks-and-agents#several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="./tasks-and-agents#checklists-and-closing">Checklists and closing</a><a class="sec" href="./tasks-and-agents#replies">Replies</a><a class="sec" href="./tasks-and-agents#profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="./tasks-and-agents#the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="./tasks-and-agents#the-work-rail">The work rail</a><a class="sec" href="./tasks-and-agents#how-work-is-ordered">How work is ordered</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./security">Security</a>
@@ -127,7 +127,7 @@ share one builder, which is why they share one page here.</p>
 </tr>
 <tr>
 <td><strong>Where each run goes</strong></td>
-<td>The route card: Timeline, alert and send, each every run, ask the AI, when a rule trips, or never - and, under a Timeline line that waits on a condition, whether triage judges the run when it fires</td>
+<td>The route card: show it under Reports, alert and send, each every run, ask the AI, when a rule trips, or never - and, under a Reports line that waits on a condition, whether triage judges the run when it fires</td>
 </tr>
 <tr>
 <td><strong>Schedule &amp; save</strong></td>
@@ -229,7 +229,7 @@ sentence the judge answers yes or no to), <strong>when a rule trips</strong> (a 
 </tr>
 </thead>
 <tbody><tr>
-<td><strong>Timeline</strong></td>
+<td><strong>Show it under Reports</strong></td>
 <td>A row under Reports</td>
 <td>A row when the judge says your sentence holds</td>
 <td>A row when the rule trips</td>
@@ -285,12 +285,12 @@ sentence the judge answers yes or no to), <strong>when a rule trips</strong> (a 
 <li><strong>Send it somewhere</strong> — email, Teams, Telegram, WhatsApp, iMessage or Discord. It waits on
 the task for approval by default. &quot;Send it without asking&quot; is the one place in Taskuary where
 that gate can be switched off, and it is deliberate.</li>
-<li><strong>Let triage judge it when it fires</strong> is a switch under a Timeline line that asks the AI or waits
+<li><strong>Let triage judge it when it fires</strong> is a switch under a Reports line that asks the AI or waits
 for a rule, and it is off unless you turn it on: most reports are news to read, and a daily summary
 never reaches triage. On, a run that meets the condition goes to triage, which reads it against
 <code>TRIAGE.md</code> and the report&#39;s own <strong>Make it a task when…</strong> sentence and decides whether it needs a
 task - a bug found, a job that did not run - or is a row to read. Nothing is made for what an open
-task already covers. A triage condition set apart from the Timeline&#39;s is kept, and the card says so.</li>
+task already covers. A triage condition set apart from the Reports line&#39;s is kept, and the card says so.</li>
 <li><strong>A run about a task you already have</strong> never becomes a second task and is never put on that task:
 it stays a row under Reports, and the task gets one note that the report mentions it - one a day
 per report.</li>
@@ -331,10 +331,10 @@ Run now while it runs is told so.</p>
 produced today&#39;s run, opening the app at 09:00 does not produce a second one.</p>
 </div><h2 id="the-advisor">The Advisor<a class="anchor" href="#the-advisor" aria-label="Link to this section">#</a></h2>
 <p>The Advisor is a report of type <code>assistant</code>. It runs on its own schedule and when the app
-opens, and it posts on the Timeline <strong>only</strong> when it finds something worth saying: an unanswered
+opens, and it posts an idea on the rail <strong>only</strong> when it finds something worth saying: an unanswered
 reply, context for an upcoming meeting, a task gone quiet, a pattern across incoming work, or
 something in the systems it watches that does not look right. Each suggestion names its evidence
-and carries the same words everywhere it shows up - the Timeline, the Assistant chat, the work rail
+and carries the same words everywhere it shows up - the Assistant chat, the work rail
 and your phone. What it reads, its two clocks and the outcome ledger it learns from are on
 <a href="advisor">The Advisor</a>; this section is the report that runs it.</p>
 <table>
@@ -393,8 +393,8 @@ once a day from the store&#39;s own facts; reflection reads it as evidence. See
 <p>Delete the Advisor report to switch it off. Its <strong>Preview</strong> shows exactly what a run would hand
 the model, which is the fastest way to find out whether a watched source returns what you think
 it does.</p>
-<p>The morning brief is a separate report of type <code>digest</code>: it writes <code>DIGEST.md</code> and lands on the
-Timeline daily. Deleting that report turns the brief off.</p>
+<p>The morning brief is a separate report of type <code>digest</code>: it writes <code>DIGEST.md</code> and opens on the
+morning card daily. Deleting that report turns the brief off.</p>
 <h3 id="ideas-it-raises">Ideas it raises<a class="anchor" href="#ideas-it-raises" aria-label="Link to this section">#</a></h3>
 <p>Beyond what it watches, the Advisor looks at the shape of your own work and occasionally raises
 an <strong>idea</strong>: a system your mail keeps naming that nothing here reads, for instance - at most one

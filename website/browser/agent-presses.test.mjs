@@ -97,6 +97,9 @@ async function startFromBox(page, ask, kind) {
     .catch(async () => assert.fail(`no ${kind} start in the box: ${await page.evaluate(() => document.querySelector("[data-tq-run-form]")?.innerText)}`));
   await page.$eval(start, (b) => b.click());
 }
+// ...and its write-up done: while it runs the page holds the Agent pane, and its end puts the page where the task is up to (TaskPage mainKey)
+// - Close out opened under it went back to Agent a few seconds later
+const writtenUp = (page) => page.waitForFunction(() => !document.querySelector("[data-tq-writeup=pending]"), { timeout: 30000 });
 // CONTINUE OPENS IN THE AGENT PANE (the owner, 2026-10-29: "both should open in the agent window, both for coding and general agent. Continue
 // box should be inside the canvas always"): pressed on Agent's spine and in the open pane's heading, its card stands in the Agent pane, where
 // Run another agent's box does - never under the canvas
@@ -109,7 +112,9 @@ async function continueInsideAgent(page) {
     }
     const btn = `[data-tq-${from}-moves=agent] button[data-tq-verb$="continue"]:not([disabled])`;
     await page.waitForSelector(btn, { timeout: 20000 })
-      .catch(async () => assert.fail(`no Continue on the Agent ${from}: ${await page.evaluate(() => [...document.querySelectorAll("[data-tq-spine-moves] button, [data-tq-pane-moves] button")].map((b) => b.textContent).join(" | "))}`));
+      .catch(async () => assert.fail(`no Continue on the Agent ${from}: ${await page.evaluate(() => [...document.querySelectorAll("[data-tq-spine-moves] button, [data-tq-pane-moves] button")]
+        .map((b) => { const sp = b.closest("[data-tq-spine-moves]"), at = sp ? `spine:${sp.dataset.tqSpineMoves}` : `pane:${b.closest("[data-tq-pane-moves]")?.dataset.tqPaneMoves}`;
+          return `${b.textContent}=${b.dataset.tqVerb}${b.disabled ? " (greyed)" : ""} on ${at}`; }).join(" | "))}`));
     await page.$eval(btn, (b) => b.click());
     await page.waitForSelector("[data-tq-slot=agent][data-tq-open] [data-tq-continue-pane] [data-tq-continue-card] textarea", { visible: true, timeout: 5000 })
       .catch(async () => assert.fail(`Continue from the ${from} did not open in the Agent pane: ${await page.evaluate(() => [...document.querySelectorAll("[data-tq-continue-card]")]
@@ -174,6 +179,7 @@ test("a regular agent on an open task: Send to agent, Continue, Run another agen
   await t.test("(b) Continue on the stopped agent: the note at once, working, the answer in the same conversation", async () => {
     await press(page, "Stop and save");
     await page.waitForSelector("[data-tq-result-summary], [data-tq-full-result]", { timeout: 30000 });   // resting on its summary, one press from its record (2026-10-27)
+    await writtenUp(page);
     await continueInsideAgent(page);
     const pressed = await continueWith(page, "look at the south office first");
     await inTask(page, /look at the south office first/, 1500);
@@ -188,6 +194,7 @@ test("a regular agent on an open task: Send to agent, Continue, Run another agen
   await t.test("(c) Run another agent on the stopped agent: a second run, shown apart from the first", async () => {
     await press(page, "Stop and save");
     await page.waitForSelector("[data-tq-result-summary], [data-tq-full-result]", { timeout: 30000 });   // resting on its summary, one press from its record (2026-10-27)
+    await writtenUp(page);
     await rowVerb(page, "run-another");
     await startFromBox(page, "take a fresh look from the north office", "general");
     await page.waitForSelector("[data-tq-earlier-run]", { timeout: 30000 })
@@ -223,6 +230,7 @@ test("a coding agent on an open task: Send to agent, Continue, Run another agent
   await t.test("(b) Continue on the stopped agent: the note at once, working, the answer in the same conversation", async () => {
     await press(page, "Stop and save");
     await page.waitForSelector("[data-tq-result-summary], [data-tq-full-result]", { timeout: 30000 });   // resting on its summary, one press from its record (2026-10-27)
+    await writtenUp(page);
     await continueInsideAgent(page);
     await continueWith(page, "now rerun the importer", () => w.backend.output()).catch(async (e) => { throw new Error(`${e.message}
 --- terminals: ${JSON.stringify(await w.api("/api/terminals")).slice(0, 3000)}`); });
@@ -235,6 +243,7 @@ test("a coding agent on an open task: Send to agent, Continue, Run another agent
   await t.test("(c) Run another agent on the stopped agent: a second run, shown apart from the first", async () => {
     await press(page, "Stop and save");
     await page.waitForSelector("[data-tq-result-summary], [data-tq-full-result]", { timeout: 30000 });   // resting on its summary, one press from its record (2026-10-27)
+    await writtenUp(page);
     const before = await w.api(`/api/terminals`);
     await rowVerb(page, "run-another");
     await startFromBox(page, "a second pass on the export", "coding");

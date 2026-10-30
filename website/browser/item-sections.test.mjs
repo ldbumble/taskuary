@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { boot, clickRow, findRow, pressNext, sleep } from "./walkdriver.mjs";
+import { boot, clickRow, findRow, pressNext, rowOffers, sleep } from "./walkdriver.mjs";
 
 /* A REPORT AND AN FYI COME IN A TASK'S THREE SECTIONS (the owner, 2026-10-28: "even reports should come in with the 3 sections of came in-close
    out but they should be small on the side like active agent. Want this to be consistent across. even fyi ... opening on what came in all
@@ -50,7 +50,9 @@ test("a report opens on itself between slim Came from and Close out tabs, a task
   assert.ok(await page.$("[data-tq-report-body] [data-tq-report-chart]"), "its chart is there");
   // ...and the row is the report's own: Next, its moves, Share
   // ...the moves on the row, Pause this report a task-shape move in the Change pill's ▾ since the three-pill row (2026-10-28)
-  for (const w of ["Next", "Put it on my list", "Share"]) assert.ok(m.row.includes(w), `${w} on the row: ${m.row}`);
+  for (const w of ["Next", "Put it on my list"]) assert.ok(m.row.includes(w), `${w} on the row: ${m.row}`);
+  // ...and Share its own band where the bar has the room, else behind the row's ▾ (the ask bar's fixed width leaves 1440 too little for it)
+  assert.ok(await rowOffers(page, "share"), `Share on the row or behind its ▾: ${m.row}`);
 
   // Came from opens on press - what produced it - and the report folds to its full tab; the card never moves
   await tab(page, "from"); await sleep(600);

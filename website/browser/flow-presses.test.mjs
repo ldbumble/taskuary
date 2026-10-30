@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { boot, rail, clickRow, findRow, doVerb, pressNext, folded, bubbles, type, sleep } from "./walkdriver.mjs";
+import { boot, rail, clickRow, findRow, doVerb, pressNext, folded, bubbles, rowOffers, type, sleep } from "./walkdriver.mjs";
 
 /* EVERY PRESS LEAVES WORDS, LANDS ON THE NEXT THING, AND STAYS DONE (the 2026-10-28 flow walk). On the demo world: Mark done, Close with
    a note, Remind me + a day and a typed "mark this done" each fold their item with the badge of what was pressed and put the next row on
@@ -62,7 +62,7 @@ test("a press folds its item with its badge, lands on the row below, and a reloa
 
   // a refused press says so and leaves the row whole: the demo pauses no report, and the report's Share stays on its row
   await open(page, /AP ageing over 30 days/);
-  const shareOn = () => page.$("[data-tq-row] button[data-tq-verb=share]").then(Boolean);
+  const shareOn = () => rowOffers(page, "share");   // ...on the row, or behind its ▾ where the bar is short of room
   assert.ok(await shareOn(), "a report on the table offers Share");
   assert.ok(await doVerb(page, "w:report_off"));
   await page.waitForFunction(() => /switched off/.test(document.body.innerText), { timeout: 20000 });

@@ -58,6 +58,18 @@ export async function doVerb(page, id) {
   }
   return null;
 }
+// is a verb offered on the row, pressable - in view, or behind its ▾ where the row folds it for room (a report's Share at 1440: the ask bar's
+// fixed width leaves the bar too little for its own band) - without pressing it: "row", "menu" or null
+export async function rowOffers(page, id) {
+  if (await page.evaluate((id) => { const b = document.querySelector(`[data-tq-row] button[data-tq-verb="${id}"]`); return !!b && !b.disabled; }, id)) return "row";
+  for (let i = 0; i < await page.$$eval("[data-tq-row] [data-tq-more]", (e) => e.length); i++) {
+    await page.evaluate((i) => document.querySelectorAll("[data-tq-row] [data-tq-more]")[i]?.click(), i); await sleep(400);
+    const hit = await page.evaluate((id) => { const m = document.querySelector(`[role=menu] [role=menuitem][data-tq-verb="${id}"]`); return !!m && m.getAttribute("aria-disabled") !== "true"; }, id);
+    await page.keyboard.press("Escape"); await sleep(300);
+    if (hit) return "menu";
+  }
+  return null;
+}
 export const rowVerbs = (page) => page.$$eval("[data-tq-row] .tq-arow-verbs button[data-tq-verb]", (bs) => bs.map((b) => b.dataset.tqVerb));
 export const folded = (page) => page.$$eval("[data-tq-folded]", (els) => els.map((e) => ({ title: e.querySelector("b")?.textContent || "",
   badge: e.querySelector("[data-tq-pressed]")?.getAttribute("data-tq-pressed") || null, note: e.querySelector("[data-tq-pressed-note]")?.textContent || null })));

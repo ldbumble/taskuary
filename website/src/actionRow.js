@@ -22,6 +22,10 @@ export const BACK = "nav:back";
 export const walkMove = (id) => /(^|:)next$/.test(String(id || "")) || id === BACK;   // a move along the walk: it moves the table, and acts on no item
 let end = false;
 export const navEnd = (on) => { if (!!on === end) return; end = !!on; draw(); };
+// ...AND GREYED UNDER A PAGE WITH ITS OWN WAY BACK (the owner, 2026-10-29): Settings and Connections carry their ← back to your tasks at the
+// top, so the bar's Back and Next stand greyed there, saying so - `off` is that hover, "" when they work
+let off = "";
+export const navOff = (why) => { if ((why || "") === off) return; off = why || ""; draw(); };
 
 export function put(owner, verbs, ref = "", at = null) {
   const old = owners.get(owner)?.verbs || [];
@@ -46,7 +50,7 @@ function draw() {
   const seen = new Set(), mine = new Set(shown.map(([o]) => o)), list = shown.flatMap(([o, { verbs: vs, at }]) => vs.map((v) => [o, v, at]))
     .filter(([, v]) => !seen.has(v.id) && seen.add(v.id))
     .map(([o, v, at]) => ({ ...view(v), of: mine.has(ofs.get(v.id)) ? ofs.get(v.id) : o, ...(at ? { at } : {}) }));
-  const next = { list, ref: shown.map(([, o]) => o.ref).find(Boolean) || "", ...(end ? { end } : {}) }, s = JSON.stringify(next);
+  const next = { list, ref: shown.map(([, o]) => o.ref).find(Boolean) || "", ...(end ? { end } : {}), ...(off ? { off } : {}) }, s = JSON.stringify(next);
   if (s === sig) return;
   sig = s; snap = next; subs.forEach((f) => f());
 }
@@ -230,7 +234,7 @@ export const pressInFlight = (list) => (list || []).some((v) => v.busy || /…$/
 // only when it is the advice. holdsMove: the card holds a move of its own under the draft (its filled button, or the task's Mark done
 // standing on it) - what the Advisor's Why? names as "under the draft".
 export const holdsMove = (list) => list.some((v) => v.onCard || (v.card && v.tone === "p"));
-export function rowOf({ list, ref, end: last = false }, pick = null) {
+export function rowOf({ list, ref, end: last = false, off = "" }, pick = null) {
   const by = (g) => list.filter((v) => v.group === g && !v.card);
   // the card's own idea of its move (its filled tone) only says which greyed button the row explains - it never fills one
   const head = by("decide").find((v) => v.tone === "p") || null;
@@ -282,7 +286,8 @@ export function rowOf({ list, ref, end: last = false }, pick = null) {
   const once = (xs) => xs.filter((v) => v.slot || (seen.has(v.label) ? false : (seen.add(v.label), true)));   // an empty slot names nothing
   decide = once(decide); agent = once(agent); more = once(more);
   // ...on the last item no Next (the walk's own; setup's Back and Next, and the floor's, are not the walk's), and Back beside it
-  const next = by("next").find((v) => !(last && v.id === "next")) || null, back = by("back")[0] || null;
+  const greyed = (v) => (v && off ? { ...v, disabled: true, steady: false, title: off, why: off } : v);
+  const next = greyed(by("next").find((v) => !(last && v.id === "next")) || null), back = greyed(by("back")[0] || null);
   if (decide.length > ROOM) { more = [...decide.slice(ROOM), ...more]; decide = decide.slice(0, ROOM); }   // the row stays a short line of chips; the rest wait behind More
   // a greyed decision says why it is greyed - the advised one never is (advisedIn skips greyed verbs), so the card's own move speaks
   return { ref, decide, agent, more, primary, lit: advised?.card ? advised.id : "", next: next && { ...next, tone: pick?.verb === "next" && (!next.disabled || next.steady) ? "p" : "s" },

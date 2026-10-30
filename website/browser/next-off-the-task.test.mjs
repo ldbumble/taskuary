@@ -37,6 +37,10 @@ test("Next on Reports over a task opens the row below it, and the bar there is B
     assert.deepEqual(s.browse, [area], `${area} did not open`);
     assert.deepEqual(s.ring, [row], `${area}: the task is not the one under the page`);
     assert.deepEqual(s.bar, ["Back", "Next"], `${area}: the bar carries the task's moves`);
+    // ...greyed under Settings, which has its own ← back to your tasks at the top (the owner, 2026-10-29); Reports and New keep them
+    const bar = await page.evaluate(() => [...document.querySelectorAll("[data-tq-row] [data-tq-next], [data-tq-row] [data-tq-walk-back]")].map((b) => ({ off: b.disabled, title: b.title })));
+    if (area === "settings") assert.ok(bar.length && bar.every((b) => b.off && /Back to your tasks with ← at the top/.test(b.title)), `settings: ${JSON.stringify(bar)}`);
+    else assert.ok(bar.some((b) => !b.off), `${area}: Back and Next are greyed ${JSON.stringify(bar)}`);
   }
   assert.ok(await nav(page, "reports")); await sleep(2500);
   assert.ok(await next(page), "no Next on the bar over Reports"); await sleep(4000);

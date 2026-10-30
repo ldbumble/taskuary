@@ -31,7 +31,7 @@ import { lazyView } from "./lazyView.jsx";
 import { loadGeneral } from "./lazyGeneral.js";
 // the static demo's guided journey: nothing outside the demo build ever draws it, so nothing there fetches it
 const DemoJourney = DEMO ? lazyView(() => import("./DemoJourney.jsx")) : () => null;
-import { BACK, advisedIn, aimed, navEnd, onPressed, onPressing, press as pressRow, walkMove, leaveRow, rowNow, rowDrawable, rowReady, rowTable, useHosted, useRowHold, useRowVerbs, useVerbs } from "./actionRow.js";
+import { BACK, advisedIn, aimed, navEnd, navOff, onPressed, onPressing, press as pressRow, walkMove, leaveRow, rowNow, rowDrawable, rowReady, rowTable, useHosted, useRowHold, useRowVerbs, useVerbs } from "./actionRow.js";
 import { deskPress, notePress as notePressed } from "./pressLog.js";
 import { forgetTasks, heldTask, heldTerm, notePile, pageRead, prefetchTask, watchReads } from "./taskDetail.js";
 import { readLists } from "./connectorLists.js";
@@ -3327,6 +3327,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   useEffect(() => { navEnd(atEnd); }, [atEnd]);
   useEffect(() => () => navEnd(false), []);
   const navOn = shown.find((x) => x.id === browsing)?.area || "";
+  // Settings and Connections have their own ← back to your tasks: the bar's Back and Next stand greyed under them (actionRow.navOff)
+  const ownBack = navOn === "settings" || navOn === "connections";
+  useEffect(() => { navOff(ownBack ? "Back to your tasks with ← at the top" : ""); }, [ownBack]);
+  useEffect(() => () => navOff(""), []);
   // WHAT THE PAGE ASKS THE CANVAS TO OPEN (TaskHubPage canvasReq): once each, and only once the chat has loaded - the
   // first load replaces the conversation, and a card posted before it would be wiped
   const doneReq = useRef(0);

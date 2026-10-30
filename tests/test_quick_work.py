@@ -266,3 +266,87 @@ def test_fifty_arrivals_run_eight_at_a_time_and_take_no_desk():
         for t in ts: t.join(10)
         assert most[0] == quickwork.QUICK_POOL == 8
         assert bb.live_count() == 0 and not s.queued_dispatches()             # no desk taken, nothing "Waiting its turn"
+
+
+def test_a_quick_arrival_gets_one_call_and_no_agent_session():
+    s = home(); tid, spawned = arrived(s)
+    assert spawned == ['_auto_general']                                       # arrival is unchanged: auto_start_ok decided
+    with mock.patch.object(quickwork, 'start', return_value='filed') as quick, mock.patch.object(ingest, '_start_general') as deep:
+        ingest._auto_general(s, tid)
+    quick.assert_called_once(); deep.assert_not_called()
+
+def test_a_hard_arrival_starts_the_agent_as_today():
+    s = home(); tid, _ = arrived(s, 'hard')
+    with mock.patch.object(quickwork, 'start') as quick, mock.patch.object(ingest, '_start_general', return_value=True) as deep:
+        ingest._auto_general(s, tid)
+    quick.assert_not_called(); deep.assert_called_once()
+
+def test_a_held_start_stays_held():
+    s = home(general_auto_enabled='0'); tid, spawned = arrived(s)
+    assert spawned == []                                                      # the owner's switch holds quick work too
+
+def test_more_mail_on_a_live_quick_task_is_answered_quick_again():
+    s = home(); tid, _ = arrived(s)
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(general, 'start_session', side_effect=opened), \
+         mock.patch.object(llm, 'build_llm', return_value=Brain(ANSWER)) as build:
+        quickwork.start(s, tid)
+        ingest._pass_general(s, tid, {**mail(body='Erin Blake: also, can Gail Moreno come?'), 'message_id': None})
+        assert [c.kwargs['job'] for c in build.call_args_list if c.kwargs.get('job') != 'judge'] == ['quick_work', 'quick_work']
+
+def test_more_mail_judged_hard_carries_on_as_the_general_agent():
+    s = home(); tid, _ = arrived(s)
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(general, 'start_session', side_effect=opened),          mock.patch.object(general, 'provider_options', return_value=CLAUDE):                     # a brain for the general turn to run on
+        with mock.patch.object(llm, 'build_llm', return_value=Brain(ANSWER)): quickwork.start(s, tid)
+        s.judge_task(tid, {'difficulty': 'hard'}, 'triage')
+        with mock.patch.object(llm, 'build_llm', return_value=mock.Mock(return_value='On it.')) as build:
+            ingest._pass_general(s, tid, {**mail(body='Erin Blake: please book it for three of us'), 'message_id': None})
+        assert build.call_args.kwargs['job'] == 'general'
+
+def test_more_mail_a_quick_call_cannot_answer_puts_the_ask_to_the_agent_on_the_same_session():
+    s = home(); tid, _ = arrived(s)
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(general, 'start_session', side_effect=opened), \
+         mock.patch.object(general, 'provider_options', return_value=CLAUDE):
+        with mock.patch.object(llm, 'build_llm', return_value=Brain(ANSWER)): quickwork.start(s, tid)
+        ses = general.session_for(tid)
+        with mock.patch.object(llm, 'build_llm', return_value=Brain({**ANSWER, 'escalate': True, 'why': 'it means booking for three'})), \
+             mock.patch.object(general.GeneralSession, 'send_prompt') as deep:
+            ingest._pass_general(s, tid, {**mail(body='Erin Blake: please book it for three of us'), 'message_id': None})
+        assert general.session_for(tid) is ses                              # the quick session carries on as the agent's
+        ask = deep.call_args[0][0]                                           # a turn put to it although its history is not empty
+        assert 'please book it for three of us' in ask and 'it means booking for three' in ask
+
+def test_two_quick_starts_on_one_task_make_one_call():
+    s = home(); tid, _ = arrived(s)
+    gate, calls = threading.Event(), []
+    def slow(system, user, **k): calls.append(1); gate.wait(5); return json.dumps(ANSWER)
+    slow.takes_web, slow.takes_want = False, True
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(llm, 'build_llm', return_value=slow), \
+         mock.patch.object(general, 'start_session', side_effect=opened):
+        first = threading.Thread(target=quickwork.start, args=(s, tid)); first.start()
+        end = time.time() + 5
+        while time.time() < end and not calls: time.sleep(.02)
+        assert ingest.live_agent(s, tid) == 'general'                         # a line landing now is passed in, not a second start
+        assert quickwork.start(s, tid) == 'running'
+        gate.set(); first.join(10)
+    assert len(calls) == 1 and tid not in general.OPENING and tid not in quickwork.RUNNING
+
+def test_more_mail_after_a_quick_session_ended_is_answered_quick():
+    s = home(); tid, _ = arrived(s)
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(general, 'start_session', side_effect=opened), \
+         mock.patch.object(llm, 'build_llm', return_value=Brain(ANSWER)):
+        quickwork.start(s, tid); general.session_for(tid).alive = False
+        new = {**mail(body='Erin Blake: also, can Gail Moreno come?', external_id='q2')}
+        mid = s.list_messages(tid)[0]['MessageId']
+        with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=True), \
+             mock.patch.object(general, 'provider_options', return_value=CLAUDE):
+            assert ingest._carry_on(s, tid, new, mid, {'intent': 'task', 'kind': 'general'}, 'triage')
+        general.OPENING.discard(tid)
+    fn, *args = spawn.call_args[0]
+    assert fn is quickwork.start and args[:2] == [s, tid] and 'can Gail Moreno come' in args[2] and args[3] is False
+
+def test_a_depth_that_cannot_be_read_starts_the_agent():
+    s = home(); tid, _ = arrived(s)
+    with mock.patch.object(quickwork, 'takes', side_effect=RuntimeError('store gone')), mock.patch.object(quickwork, 'start') as quick, \
+         mock.patch.object(ingest, '_start_general', return_value=True) as deep:
+        ingest._auto_general(s, tid)
+    quick.assert_not_called(); deep.assert_called_once()

@@ -111,26 +111,56 @@ def escalate(store, tid, ask: str, why: str, report: str = '') -> None:
     note = ESCALATE_BRIEF.format(why=why.rstrip('.')) + (f'\n{FOUND}{report}' if report else '')
     ingest._auto_general(store, tid, f'{ask}\n\n{note}', deep=True)
 
+RUNNING, _RUN_LOCK = set(), threading.Lock()      # tasks with a quick start in flight: a second start on one (two arrivals in a poll) makes no second call
+
+def _call(store, tid, ask_: str, steps: list) -> tuple:
+    "(the answer or None, why it failed or ''): the one call, holding a POOL slot only while it runs; the timeout counts the call, not the wait."
+    cancel = threading.Event()
+    try:
+        with POOL:
+            timer = threading.Timer(QUICK_TIMEOUT, cancel.set); timer.daemon = True; timer.start()
+            try: return ask(store, tid, ask_, steps, cancel), ''
+            finally: timer.cancel()
+    except Exception as e: return None, f'the quick answer could not be made ({e})'
+
+def _escalated(store, tid, q: str, out, failed: str) -> bool:
+    "True, having handed the task to the deep path, when the call failed, could not be read or said it needs more."
+    if out is not None and not out.escalate: return False
+    escalate(store, tid, q, failed or ('the quick answer could not be read' if out is None else out.why or 'it needs more than one call'), out.report if out else '')
+    return True
+
 def start(store, tid, brief: str = None, as_owner: bool = True) -> str:
     """One call for a quick task, filed as a general turn - 'filed'; or the deep path, when the call says it needs more or fails - 'escalated';
-    or 'failed', when the answer could not be filed: written on the task and counted on the retry budget, as _start_general does. Never raises."""
-    q, steps, cancel = ingest.first_ask(store, tid, brief), [], threading.Event()
+    or 'failed', when the answer could not be filed: written on the task and counted on the retry budget, as _start_general does;
+    or 'running', when a quick start is already in flight on this task. Never raises."""
+    with _RUN_LOCK:
+        if tid in RUNNING: return 'running'
+        RUNNING.add(tid)
+    # OPENING, as a carried-on turn holds it (ingest._continue_general): a line landing mid-call is passed in behind this one (_pass_general), never a second start
+    general.OPENING.add(tid)
     try:
-        with POOL:                                       # held for the call only, so filing or a deep start never keeps a slot; the timeout counts the call, not the wait
-            timer = threading.Timer(QUICK_TIMEOUT, cancel.set); timer.daemon = True; timer.start()
-            try: out, failed = ask(store, tid, q, steps, cancel), ''
-            finally: timer.cancel()
-    except Exception as e: out, failed = None, f'the quick answer could not be made ({e})'
-    if out is None or out.escalate:
-        why = failed or ('the quick answer could not be read' if out is None else out.why or 'it needs more than one call')
-        escalate(store, tid, q, why, out.report if out else '')
-        return 'escalated'
-    try:
+        q, steps = ingest.first_ask(store, tid, brief), []
+        out, failed = _call(store, tid, q, steps)
+        if _escalated(store, tid, q, out, failed): return 'escalated'
         ses = general.start_session(store, tid, actor='router'); ses.quick = True
         ses.file_quick(q, out, steps, as_owner)
         return 'filed'
     except Exception as e:
         logger.warning(f'quick answer could not be filed for task {tid}: {e}')
-        from . import blackboard as bb
-        bb.record_failure(store, tid, e, 'assistant', label='The assistant')
+        try:
+            from . import blackboard as bb
+            bb.record_failure(store, tid, e, 'assistant', label='The assistant')
+        except Exception as e2: logger.warning(f'the quick failure on task {tid} was not recorded: {e2}')
         return 'failed'
+    finally:
+        general.OPENING.discard(tid)
+        with _RUN_LOCK: RUNNING.discard(tid)
+
+def again(store, tid, session, turn: str) -> str:
+    """More work on a task whose live session is quick: another one call, filed on that session as the next turn - 'filed' - or the deep
+    path - 'escalated', whose start reuses this session (general.start_session returns session_for). Raises what filing raises."""
+    steps = []
+    out, failed = _call(store, tid, turn, steps)
+    if _escalated(store, tid, turn, out, failed): return 'escalated'
+    session.file_quick(turn, out, steps, as_owner=False)
+    return 'filed'

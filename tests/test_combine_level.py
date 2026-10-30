@@ -162,5 +162,38 @@ class TheLevelIsTheMeasure(unittest.TestCase):
         self.assertIn(tid, [c['task_id'] for c in u['same_day_lines']])
 
 
+class AJoinWidensTheTitle(unittest.TestCase):
+    """A line that joins at the combine level never renames the task to its own part: when the title no longer covers what is on the
+    task, triage answers `task_title`, the common subject, and the task takes that (the owner, 2026-10-29)."""
+    def setUp(self):
+        self.s, self.seen = store(), []
+        self.tid = say(self.s, 'w1', FIX, '2026-10-27 08:00:00', brain({}, self.seen))[0]['task_id']
+        self.first = self.s.get_task(self.tid)['Title']
+
+    def join(self, **v):
+        body = 'Also the rates line rounds wrong'
+        verdict = {'relationship': 'continues', 'same_problem': True, 'existing_task_id': self.tid, 'title': 'Fix the rates line rounding', **v}
+        return say(self.s, 'w2', body, '2026-10-28 10:00:00', brain({body: verdict}, self.seen))[0]
+
+    def test_the_guide_and_the_schema_ask_for_it(self):
+        self.assertIn('**task_title**', triage.SHIPPED); self.assertIn("never this line's own part", triage.TASK_TITLE)
+        self.assertIn('task_title', triage.verdict_schema(candidates=[])['schema']['properties'])
+        self.assertNotIn('task_title', triage.verdict_schema()['schema']['properties'])
+
+    def test_a_join_with_a_wider_title_renames_the_task_to_it(self):
+        out = self.join(task_title='Budget app line fixes')
+        self.assertEqual(out['task_id'], self.tid)
+        self.assertEqual(self.s.get_task(self.tid)['Title'], 'Budget app line fixes')
+        self.assertTrue(any(c['Body'] == f'Now covers: Budget app line fixes (was: {self.first})' for c in self.s.list_comments(self.tid)))
+
+    def test_a_join_without_one_keeps_the_title_never_the_lines_own(self):
+        self.assertEqual(self.join()['task_id'], self.tid)
+        self.assertEqual(self.s.get_task(self.tid)['Title'], self.first)
+
+    def test_refines_still_says_the_ask_as_it_now_stands(self):
+        self.join(refines=True, task_title='Budget app line fixes')
+        self.assertEqual(self.s.get_task(self.tid)['Title'], 'Fix the rates line rounding')
+
+
 if __name__ == '__main__':
     unittest.main()

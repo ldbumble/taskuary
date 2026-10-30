@@ -157,6 +157,7 @@ LEVELS = ('regular', 'important', 'urgent')
 # how much thought the work takes and whether the reader could tell - a verdict apart from priority, read by the router (2026-10-25)
 DIFFICULTY, SURE, DATA = _bullet('difficulty'), _bullet('sure'), _bullet('data_class')
 REFINES = _bullet('refines')
+TASK_TITLE = _bullet('task_title')   # ...and the wider title a line that joins at the combine level gives the task (2026-10-29)
 OFFER = _bullet('offer')         # what an agent could do for the owner about the main ask (2026-10-28)
 NEEDS_BROWSER = _bullet('needs_browser')   # the work is done on a web page: the agent gets Taskuary's browser, wherever it starts (2026-10-29)
 WRAPPER = _bullet('wrapper')     # the text its sender did not write, for a screen to leave out (2026-10-28)
@@ -253,7 +254,11 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
     # THE THREAD IS A HINT (the owner, 2026-10-26): a message on a task's thread joins it unless this says why it is another job
     if thread_task: p['new_job'] = {'type': ['string', 'null']}
     # ...and whether a line that joins changes what the task ITSELF asks - only then is it retitled (the owner, 2026-10-28)
-    if thread_task or same or candidates is not None: p['refines'] = {'type': ['boolean', 'null']}
+    if thread_task or same or candidates is not None:
+        p['refines'] = {'type': ['boolean', 'null']}
+        # ...and when it joins with a part the title does not cover, the title that covers both: the task widens, never narrows to the
+        # line (the owner, 2026-10-29: a chat bridge's later lines joined at combine 4 - the task should read as the bridge's, not the last line's)
+        p['task_title'] = {'type': ['string', 'null']}
     # the earlier lines of the exchange the ask rests on - shown with the task so its ask can be checked (2026-10-22)
     if earlier: p['rests_on'] = {'type': ['array', 'null'], 'items': {'type': 'integer'}}
     # ...and the standing notes it applied, by the ids they were shown with (ingest.relevant_notes): the model says which bear on it
@@ -830,6 +835,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if not shape and '"data_class"' not in base: system += '\n\n' + DATA                   # ...and what data it carries (2026-10-25)
             # ...and whether a joining line refines the task's own ask, wherever a task it may join was shown (2026-10-28)
             if not shape and 'refines' not in base and (home or same_ids or candidates is not None): system += '\n\n' + REFINES
+            if not shape and 'task_title' not in base and (home or same_ids or candidates is not None): system += '\n\n' + TASK_TITLE
             if not shape and '**offer**' not in base: system += '\n\n' + OFFER        # ...and what an agent could do for them (2026-10-28)
             if not shape and '**needs_browser**' not in base: system += '\n\n' + NEEDS_BROWSER   # ...and whether it is done on a web page (2026-10-29)
             if not shape and '**wrapper**' not in base: system += '\n\n' + WRAPPER    # ...and what its sender did not write (2026-10-28)
@@ -938,6 +944,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if isinstance(j.get('sure'), bool): out['sure'] = j['sure']
                 if isinstance(j.get('asks_owner'), bool): out['asks_owner'] = j['asks_owner']
                 if j.get('refines') is True and (home or same_ids or candidates is not None): out['refines'] = True
+                wide = ' '.join(str(j.get('task_title') or '').split())[:120]
+                if wide and wide.lower() not in ('null', 'none') and not out.get('refines') and (home or same_ids or candidates is not None):
+                    out['task_title'] = wide
                 if j.get('data_class') in DATA_CLASSES: out['data_class'] = j['data_class']
                 offer = ' '.join(str(j.get('offer') or '').split())[:240]
                 if out['intent'] in ('task', 'reply_only') and offer and offer.lower() not in ('null', 'none'):

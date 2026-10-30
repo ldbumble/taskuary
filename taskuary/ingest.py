@@ -1455,11 +1455,22 @@ def _retitle(store, t: dict, msg: dict, intent: dict, actor: str, reopened: bool
     owner wrote, a goal, a workflow run or a report keeps the name it was given.
 
     ...and only when the ask itself moved (the owner, 2026-10-28): a separate ask is its own task now, so a line that joins is on
-    the task's topic and the title stands - unless it `reopened` a closed task or triage says it `refines` the task's own ask."""
-    if not (reopened or (intent or {}).get('refines') is True): return False
-    title, summary = ' '.join(str(intent.get('title') or '').split())[:120], ' '.join(str(intent.get('summary') or '').split())
+    the task's topic and the title stands - unless it `reopened` a closed task or triage says it `refines` the task's own ask.
+
+    ...and a line that joins with another part of the task's subject, at the combine level (the owner, 2026-10-29), WIDENS it: never to
+    that line's own ask, but to triage's `task_title`, the common subject of everything on it. The summary stays the task's own."""
+    narrows = reopened or (intent or {}).get('refines') is True
+    wide = ' '.join(str((intent or {}).get('task_title') or '').split())[:120]
+    if not (narrows or wide): return False
+    title, summary = ((' '.join(str(intent.get('title') or '').split())[:120], ' '.join(str(intent.get('summary') or '').split()))
+                      if narrows else (wide, ''))
     if not title or str(t.get('Source') or '') != str(msg.get('channel') or ''): return False
     if 'goal' in str(t.get('Tags') or '').split(): return False
+    if not narrows:
+        if title == t.get('Title'): return False
+        store.update_task(t['TaskId'], {'Title': title}, actor)
+        store.add_comment(t['TaskId'], actor, 'agent', f"Now covers: {title} (was: {t.get('Title') or 'untitled'})")
+        return True
     if title == t.get('Title'):
         if summary and summary != t.get('Summary'): store.update_task(t['TaskId'], {'Summary': summary}, actor)
         return False

@@ -17,6 +17,8 @@ from .github import _h as gh_headers, list_accessible_repos
 from .ingest import ingest_message, rev_id, seen_before
 from .counsel import is_invite
 from .llm import AI_TYPES        # every brain picker and every brain Test read the one list
+# THIS RUN OF TASKUARY CAME UP: a connector's LastError stamped before it is last session's, not yet retried (evening.sources)
+BOOT = datetime.now().isoformat(sep=' ', timespec='seconds')
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
 MAIL_SELECT = ('id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,bodyPreview,body,'

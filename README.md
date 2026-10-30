@@ -50,7 +50,10 @@ Choose **Walk me through my tasks**. The Assistant puts one item on the table at
 same task you would open yourself. Under it is one small bar, **Nav**: **Back** and **Next**, each greyed
 where there is nowhere to go. Everything you can do to the task sits on the task itself (below). For
 anything else, type in the chat pill in the corner - a window opens out of it, and the Assistant already
-has the message, the thread, and your past decisions to answer from.
+has the message, the thread, and your past decisions to answer from. Asked about the page on screen - a
+task, a connection, a report being set up, a setting - it works that page as you would, a step at a time in
+the chat: it fills boxes and presses Save, Test or Mark done, but a Send is only ever lit for you, and a
+secret never reaches it. Every **Set up with AI** opens this chat.
 
 ![Ruth's request on the table with the chat window open out of the corner pill: asked what is on the list, the Assistant answers beside the task without moving it.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/05-assistant.png?v=spine)
 

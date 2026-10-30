@@ -24,6 +24,7 @@ import { DECIDE_TIMEOUT, draftState, failureHead, replySendFailure, reviewDelive
 import { openAppLink } from "./appLinks.js";
 import { runOperation } from "./taskOps.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
+import { blankRefusal, blankSpans } from "./blanks.js";
 
 // What they wrote, above what we would say back. The queue used to show only the draft: you
 // approved an answer without the question in front of you, or opened the task to find it. Four
@@ -115,6 +116,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   const [sendErr, setSendErr] = useState("");       // approved, but the channel refused it
   const [interrupt, setInterrupt] = useState(null); // PW-239: the click that did not send
   const [compare, setCompare] = useState(null);     // the refreshed draft, shown beside the owner's edit
+  // A BLANK LEFT IN IT (the owner, 2026-10-30): Send pressed over a "[REASON]" says "Fill in [REASON] first" under the button, and the
+  // line follows the box - it names what is still blank as the owner types, and is gone once nothing is
+  const [fillIn, setFillIn] = useState(false);
 
   const delivery = reviewDeliveryState(r);
   // ...until the review itself says where the send stands: its own delivery line (Sending… / Check delivery) takes over from "Sent"
@@ -129,6 +133,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   const meta = deliveryMeta(r);
   const isCal = meta.kind === "calendar";             // an invite answered or a meeting booked: its note may be empty
   const co = closeout && !proposal ? proposalPresentation(closeout) : null;
+  // the slots in a REPLY's box (blanks.js): a proposal's text is the agent's act, and a frozen one is past changing
+  const blanks = proposal || isCal || delivery.frozen ? [] : blankSpans(value);
+  const fillLine = fillIn && blanks.length ? blankRefusal(value) : "";
   // a reply to a GitHub PR/issue IS a comment on it, so the close-out carries it whatever the replies switch says
   const carried = !!co && String(r.Channel || "").toLowerCase() === "github";
   // can THIS draft leave: the channel's answer (capabilities.js, live as connections change) and the row's own - r.CanSend also
@@ -185,16 +192,28 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
     if (job?.state === "failed") setErr(`The draft could not be written - ${job.error}. Write it here, or Draft with AI again.`);
   }, [job]);   // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ...the press stops there, before anything is posted, with the cursor on the first blank
+  const refuseBlank = () => {
+    if (!blanks.length) return false;
+    setFillIn(true);
+    const el = draftRef.current?.querySelector("textarea[data-tq-draft]");
+    if (el) { el.focus(); el.setSelectionRange(blanks[0][0], blanks[0][1]); }
+    return true;
+  };
+
   const decideBoth = async (verb) => {
     if (delivery.frozen) return;
+    // the reply that rides with the close-out is checked before the merge, not after it (verdicts.decide refuses it there too)
+    if (verb !== "reject" && sendable && words.trim() && refuseBlank()) return;
     announce(no(verb));
     setBusy(true); setErr(""); setSendErr(""); setCoFail(null);
     try {
       const { data } = await api.post(`/api/reviews/${closeout.ReviewId}/decide`,
         { verb, final_text: null, note: null, reply_text: verb !== "reject" && sendable && words.trim() ? value : null, cc: sendable ? ccNow : null },
         { timeout: DECIDE_TIMEOUT });
+      if (data.blanks?.length) { setFillIn(true); if (!blanks.length) setErr(data.send_error); }
       // refused before anything happened is not "approved, but it did not send"
-      if (!data.ok && data.send_error) setCoFail({ text: data.send_error, offers: data.offers || [] });
+      else if (!data.ok && data.send_error) setCoFail({ text: data.send_error, offers: data.offers || [] });
       else if (data.send_error) setSendErr(replySendFailure(data));
       // WAIT FOR IT, THEN MOVE ON (the owner, 2026-10-02): the close-out landed with no error, so the task may be closed now
       // ...the press is over when the server answers: the re-read after it is the page's, and "Sending…" waited on it too
@@ -213,6 +232,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // used to return quietly and leave a "NOT SENT" line in the task history for you to find later.
   const decide = async (verb, anyway = false) => {
     if (delivery.active || (delivery.frozen && verb !== "approve")) return;
+    if (verb === "approve" && refuseBlank()) return;
     announce(no(verb));
     setBusy(true); setErr(""); setSendErr("");
     try {
@@ -225,6 +245,8 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       // DECIDED ALREADY - answered in the chat itself (channels.retire_draft_answered_elsewhere), or by another window - is not a
       // delivery problem: it read "The reply was not sent ... correct the delivery problem" over a reply the owner had sent in Teams
       if (data.already) { onChanged?.(); setBusy(false); return; }
+      // a blank the server found: the same line as the press's own (blanks.js) - never "the reply was not sent ... delivery problem"
+      if (data.blanks?.length) { setFillIn(true); if (!blanks.length) setErr(data.send_error); setBusy(false); return; }
       // a close-out GitHub's state refused is "not now", with what fits instead - never "approved, but it did not send"
       if (data.refused) { setCoFail({ text: data.send_error || "", offers: data.offers || [] }); reloadGh(); }
       else if (data.send_error) setSendErr(replySendFailure(data));
@@ -456,7 +478,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         <Button size="small" variant="contained" disableElevation disabled={off} onClick={redraft} title={btnHint("redraft")}>
           {redraftLabel}</Button>
       </Box>}
-      <Box ref={draftRef} data-tq-draft-box=""><DraftField value={value} onChange={(e) => setText(e.target.value)}
+      <Box ref={draftRef} data-tq-draft-box=""><DraftField value={value} onChange={(e) => setText(e.target.value)} marks={blanks}
         placeholder={proposal?.kind === "closeout" ? proposal.placeholder : isCal ? "A note with your answer - or leave it empty" : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}
         inputProps={{ readOnly: off || delivery.frozen || !!proposal?.readOnly, style: { fontSize: 12.5, lineHeight: 1.45 } }} /></Box>
       {compare?.reviewId === r.ReviewId && (
@@ -564,6 +586,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           sx={{ alignSelf: "center", color: "#55697a", fontSize: 12.5, minWidth: 0, overflowWrap: "anywhere" }}>{why}</Typography>}
         </>
       </Box>
+      {fillLine && <Alert severity="warning" data-tq-fill-in="" sx={{ mt: 0.75 }} onClose={() => setFillIn(false)}>{fillLine} - nothing was sent.</Alert>}
       {/* what the one word does HERE - the buttons never change, this line does */}
       {thenLine && <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.5 }}>{thenLine}</Typography>}
       {(coFail || (gh && (blocked || gh.note))) && (() => {

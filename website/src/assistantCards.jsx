@@ -39,6 +39,7 @@ import { age, ago, plural } from "./timeWords.js";
 import { SECTION, WORD, ideaWord } from "./lanes.js";
 import { kindLabel, AGENT_SHOWN } from "./kinds.js";
 import { sendBlockLine, draftState } from "./sendState.js";
+import { blankSpans } from "./blanks.js";
 import { openReply, useDraftJob } from "./replyDraft.js";
 import { agentRuns } from "./taskFilter.js";
 import { progressLine } from "./checklist.js";
@@ -758,7 +759,7 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
         {/* WHAT THE BOX IS (the owner, 2026-09-28: "what does the words mean?"): the reply, to whom, and when it goes */}
         {rv && (!action || mate) && <div className="tq-move-to">{`Your reply to ${replyTo} ${via} - it goes when you press ${btn("approve", action ? "action" : undefined)}${stopped ? ", once it can merge" : ""}. Edit it here first if you like.`}</div>}
         {rv && (
-          <DraftField value={value} onChange={(e) => setText(e.target.value)}
+          <DraftField value={value} onChange={(e) => setText(e.target.value)} marks={!action || mate ? blankSpans(value) : []}
             placeholder={drafting ? "Drafting…" : action && !mate ? "" : "Write your answer here"}
             sx={{ mt: 0.75, "& .MuiOutlinedInput-root": { background: "#fffdf9" }, "& textarea": { fontSize: 13.5, lineHeight: 1.55 } }} />
         )}

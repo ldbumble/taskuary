@@ -458,8 +458,10 @@ def main():
     held, booted = {}, threading.Event()
     # a view of another process's server: that server mints the key, asked with the owner token this install keeps
     view = launchkey.remote_link(running, config.load()['server'].get('token') or '') if running else None
+    # MAXIMIZED, on whatever screen it is: a fixed 1280x840 was taller than a laptop's work area, so every launch - an update's
+    # relaunch included - opened hanging off the screen's edge (TQ-1251). Restore still gives the 1280x840 window.
     window = webview.create_window('Taskuary', url=view, html=None if running else SPLASH,
-                                   width=1280, height=840, min_size=(900, 600))
+                                   width=1280, height=840, min_size=(900, 600), maximized=True)
     # the window is up: the exe's splash hands over to it (and its own spinner and seconds take the wait from here)
     try: window.events.shown += lambda: splash()
     except Exception: pass

@@ -197,3 +197,18 @@ Screenshots are taken against `taskuary --demo` only, with Northwind / Alex Doyl
 4. **No "Stop helping" chip.** The Assistant does nothing on a page unless the owner asked it or pressed a "set up with AI" button - someone setting up email by hand never triggers it. The owner ends a session by closing the chat with its ×, which asks to confirm ending the chat.
 5. **Sync is a probe:** the Assistant may press Sync.
 6. **Work on this computer** (listing Slack channels with the token, say) is handed to the general agent, which reports back in the chat.
+
+## The owner's revision (2026-10-30, supersedes where it differs)
+
+"Nothing should really change in terms of how things work." The pages stay exactly as they are; the Assistant does not watch them.
+
+- **Only when asked.** The Assistant reads the screen when the owner asks it something about what is on it, or presses a "set up with
+  AI" button - then it brings in the current context.
+- **Every screen.** Tasks, Reports, Connections, Settings, the Board - whatever is on the canvas. It can find the right setting on the
+  Settings page and turn it off.
+- **It acts as the owner would:** edits the text of the item on the canvas and presses its buttons - Save, Mark done, Test, Sync and the
+  rest. **Except a send:** a press that sends something outside (an email, a chat message) is lit for the owner to press.
+- **Reacts while helping:** inside a conversation the owner started about that page, it notices the owner's own edits ("I see you
+  changed the region - testing again"); outside one it is silent.
+
+So the `probe`/`commit` split above narrows to one line: outward sends are the owner's; everything else on the screen the Assistant may press.

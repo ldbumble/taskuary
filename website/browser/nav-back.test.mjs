@@ -15,7 +15,7 @@ const ring = async (page) => (await rail(page)).find((r) => r.cur)?.key || "";
 const nav = (page) => page.evaluate(() => {
   const g = document.querySelector(".tq-dock [data-tq-row] [data-tq-type=nav]");
   // ...on a desk Back is always on the bar, greyed where there is nowhere to go back to (the owner, 2026-10-29): a greyed Back is no Back
-  return { label: g?.querySelector(".tq-cl-h")?.textContent || "", back: !!g?.querySelector("[data-tq-walk-back]:not([disabled])"), next: !!g?.querySelector("[data-tq-next]"),
+  return { label: g?.querySelector(".tq-cl-h")?.textContent || "", back: !!g?.querySelector("[data-tq-walk-back]:not([disabled])"), next: !!g?.querySelector("[data-tq-next]:not([disabled])"), nextGreyed: !!g?.querySelector("[data-tq-next][disabled]"),
     greyed: !!g?.querySelector("[data-tq-walk-back][disabled]"), words: [...(g?.querySelectorAll("button:not([disabled][data-tq-walk-back])") || [])].map((b) => b.textContent.trim()) };
 });
 const pressBack = (page) => page.evaluate(() => { const b = document.querySelector(".tq-dock [data-tq-row] [data-tq-walk-back]"); if (b && !b.disabled) { b.click(); return true; } return false; });
@@ -98,6 +98,8 @@ test("the last row has no Next and keeps its Back; the first has no Back", { tim
   await clickRow(page, rows.at(-1)); await settle(page);
   assert.ok(await until(async () => !(await nav(page)).next, 8000), `the last one has no Next: ${JSON.stringify(await nav(page))}`);
   assert.ok((await nav(page)).back, "...and its Back");
+  // ...its Next greyed, never gone (the owner, 2026-10-30)
+  assert.ok((await nav(page)).nextGreyed, `the last one's Next stands greyed: ${JSON.stringify(await nav(page))}`);
   assert.ok(await pressBack(page));
   assert.ok(await until(async () => (await on(page)) === rows.at(-2)));
   await settle(page);

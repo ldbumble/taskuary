@@ -37,15 +37,16 @@ def test_the_walks_lines_name_what_comes_up_and_repeat_nothing_its_card_shows():
     s, seen = W.world(), []
     with ExitStack() as st:
         W._guards(st, set())
+        on = None
         for _ in range(30):
-            out = concierge.surface(s)
+            out = concierge.surface(s, from_key=on)            # Next from the row on the table (railwalk)
             it = out.get('item')
             if not it or it['key'] in [k for k, _ in seen]: break
             seen.append((it['key'], out['say']))
             shown = [it.get('title'), it.get('who'), it.get('preview')] + [x for e in it.get('items') or [] for x in (e.get('title'), e.get('who'))]
             assert W.words(out['say']) <= W.BRIEF, (it['key'], out['say'])
             assert not [x for x in shown if x and len(str(x)) > 3 and str(x) in out['say']], (it['key'], out['say'])
-            concierge.move_on(s, it['key'], 'owner')
+            on = it['key']
     assert {k.split(':')[0] for k, _ in seen} >= {'msg', 'review', 'report', 'fyis'}, seen       # every kind of card the demo has
 
 

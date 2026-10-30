@@ -452,6 +452,13 @@ class HandoffTests(unittest.TestCase):
         self.assertIsNone(state['handoff'])
 
 
+def on_the_table(store, key):
+    """The row on the table, as the walk keeps it (railwalk's one setting, 2026-10-30)."""
+    import json
+    from taskuary import railwalk
+    store.set_setting(railwalk.KEY, json.dumps({**railwalk._blank(), 'on': key, 'members': [key]}), 't')
+
+
 class InterruptionsReachThePhoneTests(unittest.TestCase):
     """The desktop's by-the-way strip is on the tab the handoff locked - the wrong place to raise
     an agent's question (the owner, 2026-09-07)."""
@@ -485,7 +492,7 @@ class InterruptionsReachThePhoneTests(unittest.TestCase):
 
     def test_the_item_already_on_the_table_is_not_announced(self):
         store, _c = self.handed_over()
-        concierge.set_current(store, general.dock_task(store)[0]['TaskId'], 'agent:tq412')
+        on_the_table(store, 'agent:tq412')
         with mock.patch.object(funnel, 'pile', return_value=self.pile()),              mock.patch.object(messengers, 'wa_send') as send:
             self.assertEqual(remote_assistant.push_alerts(store, force=True), 0)
         send.assert_not_called()
@@ -494,7 +501,7 @@ class InterruptionsReachThePhoneTests(unittest.TestCase):
         """2026-09-29: "By the way - a reply is waiting for your yes", then the walk showed that very card seconds later.
         Only what OUTRANKS the table interrupts; a meeting about to start always does."""
         store, _c = self.handed_over()
-        concierge.set_current(store, general.dock_task(store)[0]['TaskId'], 'review:1')
+        on_the_table(store, 'review:1')
         pile = {'items': [{'key': 'review:1', 'lane': 'approve', 'kind': 'review'}, {'key': 'review:2', 'lane': 'approve', 'kind': 'review'},
                           {'key': 'meeting:3', 'lane': 'time', 'kind': 'meeting', 'mins': 5}],
                 'alerts': [{'key': 'alert:review:2', 'item': 'review:2', 'kind': 'review', 'text': "a reply is waiting for your yes",

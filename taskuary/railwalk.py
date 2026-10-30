@@ -230,7 +230,7 @@ def _dock(store, actor):
 
 def _present(store, item, actor, *, picked, record=True, llm=None, rows=None):
     from . import concierge
-    return concierge.present_turn(store, item, actor=actor, picked=picked, record=record, llm=llm, left=len(line(rows or [])))
+    return concierge.present_turn(store, item, actor=actor, picked=picked, record=record, llm=llm, left=max(0, len(line(rows or [])) - len(item.get('members') or [item.get('key')])))   # how many besides this one
 
 
 def _end(store, st, rows, actor, record=True):
@@ -353,9 +353,11 @@ def back(store, from_key: str = None, actor: str = 'owner', press: str = None) -
         return _remember(press, _answer(store, st, rows, _present(store, item, actor, picked=True, rows=rows)))
 
 
-def open(store, key: str, actor: str = 'owner', press: str = None, llm=None) -> dict:
+def open(store, key: str, actor: str = 'owner', press: str = None, llm=None, at: str = None) -> dict:
     """A rail click, a name, a link, a section heading (its first row), the Board's open, a search hit: that row on screen at its place.
-    Reads nothing (rule 4) - but a task opened clears its "+N" (Q1): what landed on it has now been seen; it stays where it is."""
+    Reads nothing (rule 4) - but a task opened clears its "+N" (Q1): what landed on it has now been seen; it stays where it is.
+    `at`: the row whose place it takes - Put it on my list keeps the new task on the table, and Next and Back go on from the report's
+    place (3.5, W49)."""
     with _LOCK:
         if (hit := _again(press)): return hit
         st, rows = state(store), _rows(store)
@@ -364,10 +366,10 @@ def open(store, key: str, actor: str = 'owner', press: str = None, llm=None) -> 
         if not item:
             from . import concierge
             return _remember(press, _answer(store, st, rows, concierge.missing_turn(store, key, actor)))
-        if row is not None and lanes.level_of(row) in ('task', 'later') and row.get('new_n'):
+        if row is not None and lanes.level_of(row) in ('task', 'later'):
             try: funnel.settle(store, row['key'], 'surfaced', actor, note=row.get('sig'), read=True)
             except Exception as e: logger.debug(f'railwalk: the +N on {key} was not cleared - {e}')
-        place = place_of(store, item['key'], st, rows) if row is None else None
+        place = place_of(store, at, st, rows) if at else place_of(store, item['key'], st, rows) if row is None else None
         _put(st, item, rows, place=place)
         if row is None and item.get('tid') and kind_of(item) != 'reads': st['kind'] = 'none'
         _write(store, st)

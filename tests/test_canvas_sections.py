@@ -41,8 +41,9 @@ class LevelOfTests(unittest.TestCase):
 
 
 class ForLaterTests(unittest.TestCase):
-    def test_a_passed_task_stays_in_tasks_with_no_clock_on_it(self):
-        from taskuary import concierge
+    def test_a_task_next_walked_past_stays_in_tasks_with_no_clock_on_it(self):
+        """Next moves on; the task stays (2026-10-21) - and since 2026-10-30 it is not even marked: Next on a task writes nothing."""
+        from taskuary import concierge, railwalk
         s, settle = settled()
         t = s.create_task({'Title': 'Send the August financials', 'Kind': 'task', 'Status': 'open'}, 'triage')
         mid = mail(s, 'August financials', who='Paula Vance', email='paula@vendor.example', hours=1, tid=t)
@@ -50,11 +51,11 @@ class ForLaterTests(unittest.TestCase):
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
-            concierge.move_on(s, first['item']['key'])                  # Next's mark, the walk not run out yet
+            railwalk.next(s, first['item']['key'])
             card = next(i for i in rail(s) if i.get('tid') == t)
-        self.assertEqual(funnel.level_of(card), 'task')                 # Next moves on; the task stays (2026-10-21)
-        self.assertTrue(card['put_down']); self.assertFalse(card['actionable'])
-        self.assertNotIn('back_at', card, 'passed for this walk, not for a number of hours')
+        self.assertEqual(funnel.level_of(card), 'task')
+        self.assertTrue(card['actionable']); self.assertNotIn('put_down', card)
+        self.assertNotIn('back_at', card, 'nothing is passed, so nothing has a time to come back')
 
     def test_remind_me_keeps_the_task_on_the_rail_in_for_later_until_its_day(self):
         s, settle = settled()
@@ -69,13 +70,21 @@ class ForLaterTests(unittest.TestCase):
 
 
 class SectionWalkTests(unittest.TestCase):
-    def test_the_next_of_a_section_is_its_first_row_the_walk_has_not_seen(self):
-        items = [{'key': 'a', 'lane': 'fyi', 'order_band': 4}, {'key': 'b', 'lane': 'asked', 'order_band': 2},
-                 {'key': 'c', 'lane': 'fyi', 'order_band': 4}, {'key': 'd', 'lane': 'fyi', 'order_band': 4, 'settling': True}]
-        self.assertEqual(funnel.section_next(items, 'fyi')['key'], 'a')
-        self.assertEqual(funnel.section_next(items, 'fyi', seen={'a'})['key'], 'c')
-        self.assertIsNone(funnel.section_next(items, 'fyi', seen={'a', 'c'}), 'triaging is not ready to walk')
-        self.assertIsNone(funnel.section_next(items, 'reports'))
+    def test_a_heading_opens_its_first_row_and_next_walks_on_down_the_rail(self):
+        """A heading clicked opens its section's first ready row, and Next carries on down the rail - past the section's end, with no
+        "seen" set and no section stop (Q6, 2026-10-30; railwalk.section)."""
+        from railwalk_rows import RowWalk
+        from taskuary.store import MemoryStore
+        items = [{'key': 'd', 'lane': 'fyi', 'order_band': 4, 'settling': True, 'since': '2026-10-29 07:00:00'},
+                 {'key': 'b', 'lane': 'asked', 'order_band': 2, 'since': '2026-10-29 07:30:00'},
+                 {'key': 'a', 'lane': 'fyi', 'order_band': 4, 'since': '2026-10-29 08:00:00'},
+                 {'key': 'r', 'lane': 'report', 'kind': 'report', 'order_band': 3, 'since': '2026-10-29 08:30:00'},
+                 {'key': 'c', 'lane': 'fyi', 'order_band': 4, 'since': '2026-10-29 09:00:00'}]
+        w = RowWalk(MemoryStore(), items); self.addCleanup(w.close)
+        self.assertEqual(w.key(w.rw.section(w.s, 'reports')), 'r')
+        self.assertEqual(w.next(), 'fyis:a,c', 'on down the rail, out of Reports, with no stop - FYI a handful at a time')
+        self.assertEqual(w.key(w.rw.section(w.s, 'fyi')), 'a', 'triaging is not ready to walk')
+        self.assertIsNone(w.key(w.rw.section(w.s, 'ideas')))
 
     def test_a_section_that_runs_out_says_so_in_its_own_words(self):
         self.assertEqual(funnel.section_done('fyi'), 'FYI done.')
@@ -95,10 +104,10 @@ class LegacyPileForLaterTests(unittest.TestCase):
         # Next leaves a mark carrying when it is back (concierge.move_on, put_down); a card merely SHOWN leaves one without
         states = {'msg:1': {'Status': 'surfaced', 'At': at, 'Until': back}, 'msg:2': {'Status': 'surfaced', 'At': at},
                   'msg:3': {'Status': 'later', 'Until': until}, 'msg:4': {'Status': 'surfaced', 'At': at}}
-        out = {i['key']: i for i in funnel._apply_states(items, states, now, quiet=180)}
+        out = {i['key']: i for i in funnel._apply_states(items, states, now)}
         self.assertEqual(set(out), {'msg:1', 'msg:3', 'msg:4'}, 'a read fyi is gone; open work is not')
-        self.assertTrue(out['msg:1']['surfaced'])
-        self.assertNotIn('back_at', out['msg:1'], 'an open task walked past is passed for this walk, with no clock')
+        self.assertFalse(out['msg:1'].get('surfaced'), 'nothing is "passed" (2026-10-30)')
+        self.assertNotIn('back_at', out['msg:1'], 'an open task walked past has no clock')
         self.assertEqual((out['msg:3']['deferred'], out['msg:3']['back_at']), (True, until))
         self.assertEqual({k: funnel.level_of(i | {'order_band': 2}) for k, i in out.items()},
                          {'msg:1': 'task', 'msg:3': 'later', 'msg:4': 'task'},

@@ -104,44 +104,25 @@ class ChatFreshnessTests(unittest.TestCase):
 
 
 class ConcurrentSyncTests(unittest.TestCase):
-    """PW-056: the owner's yes is on the pile they were SHOWN. A line that lands while the turn is in
-    flight changes that pile, so the commit is refused and the client re-captures - the action never
-    lands on a picture nobody saw."""
+    """PW-056/PW-118: the owner's press is on the row they were SHOWN, and a line landing while it is on its way never refuses it. The
+    walk has one owner (2026-10-30): a press carries the row the page had on screen (`from_key`) and its press id, so a line landing
+    mid-press changes what that row SAYS, never which row comes next - and a repeated press is one answer, not two."""
     def setUp(self): funnel.invalidate()
 
-    def _reserved(self, s):
-        from taskuary.funnel_selection import capture_selection
-        from taskuary.processing_navigation import fields, reserve
-        f = fields(s, capture_selection(s))          # the revision the client echoes is bound to the chat
-        return reserve(s, selection_revision=f['selection_revision'], expected_next_key=f['expected_next_key'],
-                       expected_next_members=f['expected_next_members'])
-
-    def test_a_sync_between_the_capture_and_the_commit_remakes_the_turn_from_it(self):
-        """A newer line on the pick landing mid-turn never commits the turn made from the older one: the turn is made again from
-        the rail as it is now (NavigationRebind) - the page already drew that pick, and a refusal put the row it left back on the
-        table (2026-10-23). Lines that keep landing under every attempt are refused, nothing committed."""
-        from taskuary.processing_navigation import NavigationStale, REBINDS
+    def test_a_line_landing_mid_press_never_refuses_it_and_a_repeat_is_one_answer(self):
+        from taskuary import concierge, general, railwalk
         chat = ChatFreshnessTests()
         s, tid, _first, _rid = chat.thread()
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
-            held, seen = self._reserved(s), []
-            def landed(selected, guard, dock):
-                seen.append(selected.revision)
-                if len(seen) == 1: chat.add_later(s, tid); funnel.invalidate()    # the poll lands a newer line mid-turn
-                with guard(): return 'acted'
-            self.assertEqual(held.run(landed), 'acted')
-            self.assertEqual(len(seen), 2); self.assertNotEqual(*seen)            # made again, from the newer rail
-            busy, tries = self._reserved(s), []
-            def always(selected, guard, dock):
-                tries.append(1); chat.add_later(s, tid); funnel.invalidate()
-                with guard(): return 'acted'
-            with self.assertRaises(NavigationStale) as e: busy.run(always)
-            self.assertEqual(len(tries), REBINDS + 1)
-            self.assertTrue(e.exception.detail.get('retryable'))
-            quiet = self._reserved(s)
-            def unchanged(selected, guard, dock):
-                with guard(): return 'acted'
-            self.assertEqual(quiet.run(unchanged), 'acted')          # nothing moved, the same shape commits
+            first = railwalk.start(s)['item']
+            self.assertEqual(first['tid'], tid)
+            chat.add_later(s, tid); funnel.invalidate()                          # the poll lands a newer line on it mid-press
+            lines = len(concierge.history(s, general.dock_task(s)[0]['TaskId']))
+            out = railwalk.next(s, first['key'], press='freshness-repeat')                     # Next from the row the page showed: it answers
+            self.assertIsNone(out['item']); self.assertTrue(out['walk']['ended'])
+            again = railwalk.next(s, first['key'], press='freshness-repeat')                   # a retry of the same press
+            self.assertIs(again, out)
+            self.assertEqual(len(concierge.history(s, general.dock_task(s)[0]['TaskId'])), lines + 1, 'one press, one line')
 
 if __name__ == '__main__':
     unittest.main()

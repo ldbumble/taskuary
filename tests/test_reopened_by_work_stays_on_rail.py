@@ -2,7 +2,7 @@
 it had been closed once and opened again by a session started on it - ran agent steps on it, pressed Next, and it was gone from Tasks.
 Nothing had closed it: its one message, the owner's own ask, had aged past the rail's history window (feed_days), and the rail's root
 selection and its inventory both kept only roots with activity inside the window. A task with work going on it is live work, and Next
-passes it for this walk only (processing_unread.this_walk); the window is for mail. Invented task and people."""
+writes nothing on it (the walk has one owner, 2026-10-30); the window is for mail. Invented task and people."""
 from datetime import datetime, timedelta
 from unittest import mock
 
@@ -31,12 +31,10 @@ def test_a_closed_task_opened_from_search_and_worked_stays_in_tasks_after_next()
         s.update_task(t, {'Status': 'open'}, 'owner'); s.tag_task(t, terminal.SAVED, True, 'owner'); settle()   # Stop and save
         [card] = on_rail()
         s.set_funnel_state(card['key'], 'surfaced', read=True); settle()                                  # it is on the table
-        funnel.settle(s, card['key'], 'surfaced', read=True, put_down=True); settle()                   # Next
+        from taskuary import railwalk
+        railwalk.next(s, card['key']); settle()                                                         # Next
         [card] = on_rail()
         assert funnel.level_of(card) == 'task', 'drawn under Tasks'
-        assert (card['unread'], card['put_down'], card['actionable']) == (True, True, False), 'in Tasks, passed for this walk'
-        s.set_setting(processing_unread.WALK_KEY, (datetime.now() + timedelta(seconds=1)).strftime('%Y-%m-%d %H:%M:%S'), 't'); funnel.invalidate()
-        later = datetime.now() + timedelta(seconds=2)
-        [again] = [i for i in processing_unread.build(s, now=later, live_state=[])['items'] if i.get('tid') == t]
-        assert again['actionable'], 'a new walk offers it again'
+        assert (card['unread'], card['actionable']) == (True, True), 'in Tasks, in its place'
+        assert railwalk.start(s)['item']['tid'] == t, 'a new walk offers it again'
     assert s.get_task(t)['Status'] == 'open'

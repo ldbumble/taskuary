@@ -5557,7 +5557,7 @@ def walk_open(body: WalkBody):
     from . import railwalk
     if body.level: return _walk_answer(railwalk.section(store, body.level, ACTOR, press=body.press), body)
     if not body.key: raise HTTPException(422, 'a key or a section is required')
-    return _walk_answer(railwalk.open(store, body.key, ACTOR, press=body.press), body)
+    return _walk_answer(railwalk.open(store, body.key, ACTOR, press=body.press, at=body.from_key), body)
 
 @app.post('/api/walk/leave')
 def walk_leave(body: WalkBody):

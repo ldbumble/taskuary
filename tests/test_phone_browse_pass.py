@@ -13,41 +13,33 @@ PILE = [{'key': 'msg:1', 'lane': 'asked', 'order_band': 2, 'title': 'Approve the
 
 
 class ActInASectionTests(unittest.TestCase):
+    """An act moves on to the row that was directly below the one it settled (railwalk, rule 5; the walk has one owner, 2026-10-30).
+    A section walked holds nothing of its own any more: Make a task on the first report used to put TQ-0001 up in the middle of
+    Walk Reports (2026-09-30) because the walk forgot where it stood - now the move is measured from the row the act left (Q6)."""
     def setUp(self):
         self.s, self.shown = MemoryStore(), []
         def surface(store, key=None, **kw):
-            self.shown.append(key)
-            return {'say': f'shown {key}', 'item': {'key': key} if key else None}
+            self.shown.append((key, kw.get('from_key')))
+            return {'say': f'shown {key or kw.get("from_key")}', 'item': {'key': key} if key else None}
         self.patches = [mock.patch.object(funnel, 'pile', return_value={'items': PILE}),
-                        mock.patch.object(db, 'next_in', side_effect=lambda store, sec, seen: next(
-                            (i for i in PILE if funnel.level_of(i) == sec and i['key'] not in seen), None)),
                         mock.patch.object(concierge, 'surface', side_effect=surface),
                         mock.patch.object(ra, 'turn_text', side_effect=lambda out, lead='', store=None, extra=None, full=False: (lead + ' ' + (out.get('say') or '')).strip()),
                         mock.patch.object(ra, 'asking', return_value={'channel': 'whatsapp', 'chat': 'c1'})]
-        for p in self.patches: p.start()
+        for p in self.patches:
+            p.start(); self.addCleanup(p.stop)
 
-    def tearDown(self):
-        for p in self.patches: p.stop()
+    def test_an_act_moves_on_from_the_row_it_settled(self):
+        ra._on(self.s, 'owner', ['Done - Put it on my list · TQ-0021.'], done_with='rep:1')
+        self.assertEqual(self.shown, [(None, 'rep:1')], 'the walk goes on from the report the act settled, never from the top')
 
-    def test_an_act_moves_on_inside_the_section_not_to_the_top_of_the_walk(self):
-        """Make a task on the first report put TQ-0001 (On you) up in the middle of Walk Reports."""
-        sec = funnel.level_of(PILE[1])
-        db.hold(self.s, ra.asking(), sec, ['rep:1'])
-        text = ra._on(self.s, 'owner', ['Done - Put it on my list · TQ-0021.'], done_with='rep:1')
-        self.assertEqual(self.shown[-1], 'rep:2')
-        self.assertIn('shown rep:2', text)
-
-    def test_when_the_section_runs_out_it_says_so_and_the_walk_goes_on(self):
-        sec = funnel.level_of(PILE[1])
-        db.hold(self.s, ra.asking(), sec, ['rep:1', 'rep:2'])
+    def test_the_end_of_a_section_says_nothing_and_the_walk_goes_on_down_the_rail(self):
         text = ra._on(self.s, 'owner', ['Done.'], done_with='rep:2')
-        self.assertIsNone(self.shown[-1])                       # the whole walk's own next
-        self.assertIn(funnel.section_done(sec), text)
-        self.assertIsNone(db.held(self.s, ra.asking()))
+        self.assertEqual(self.shown, [(None, 'rep:2')])
+        self.assertNotIn('Reports done.', text)              # Q6, 2026-10-30: no section stop
 
     def test_outside_a_section_an_act_moves_on_as_it_always_did(self):
         ra._on(self.s, 'owner', ['Done.'], done_with='msg:1')
-        self.assertEqual(self.shown, [None])
+        self.assertEqual(self.shown, [(None, 'msg:1')])
 
 
 class PollFitsTests(unittest.TestCase):

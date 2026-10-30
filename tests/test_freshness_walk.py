@@ -72,8 +72,9 @@ class TheChangeCheckFollowsTheFourTests(Base):
                                 'FromName': 'Sam', 'SentAt': stamp(-10 - i), 'BodyText': 'fyi only', 'Status': 'filed'})
             self.s.add_route(i + 1, None, 'file', None, 'triage: fyi - nothing to do', [], 'triage')
         polls = []
-        first = funnel.next_item(self.s, None)
-        card = {'kind': 'fyis', 'key': 'fyis:x', 'items': funnel.fyi_batch(self.s, first)}
+        from taskuary import railwalk
+        card = railwalk.as_item(self.s, railwalk._batch(self.s, railwalk.line(funnel.pile(self.s)['items']), 0, True))   # the walk's own batch
+        self.assertEqual(card['kind'], 'fyis')
         with mock.patch.object(server, '_poll_reports', side_effect=lambda *a, **k: polls.append(k.get('only')) or 0):
             server._refresh_after({'item': card}).join(5)
         self.assertEqual(sorted(p[0] for p in polls), ['slack', 'teams'])

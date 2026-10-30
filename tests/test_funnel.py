@@ -5,7 +5,7 @@ import json, threading, time, unittest
 from datetime import datetime, timedelta
 from unittest import mock
 
-from taskuary import funnel
+from taskuary import funnel, lanes
 from taskuary.store import MemoryStore
 
 
@@ -540,7 +540,9 @@ class LanesTests(unittest.TestCase):
         # the mail that started t1 is not a second line: answering the agent answers the mail
         self.assertEqual(items[0]['mid'], s.list_messages(t1)[0]['MessageId'])
 
-    def test_a_waiting_agent_stays_in_the_pipe_after_it_was_shown_and_comes_round_again(self):
+    def test_a_waiting_agent_stays_in_the_pipe_after_it_was_shown_and_is_walked_in_its_place(self):
+        """Shown is not acted on: an agent waiting on you, shown once, stays in its place and the walk's top is still it - no
+        cooldown, no three hours (2026-09-25, replaced by rule 6 on 2026-10-30)."""
         s = store()
         t = s.create_task({'Title': 'Pto', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
         mail(s, 'PTO', hours=3, tid=t)
@@ -549,21 +551,13 @@ class LanesTests(unittest.TestCase):
             self.assertEqual(funnel.next_item(s)['key'], f'agent:{t}')
             funnel.settle(s, f'agent:{t}', 'surfaced')
             items = funnel.build(s)['items']
-            self.assertEqual([(i['key'], i['surfaced']) for i in items], [(f'agent:{t}', True)])   # still in the pipe, marked
-            self.assertIsNone(funnel.next_item(s))                                             # but not straight back on the table
-            s.set_funnel_state(f'agent:{t}', 'surfaced', 'owner'); s._exec("UPDATE funnel_state SET At=? WHERE Key=?", (ago(minutes=150), f'agent:{t}'))
-            funnel.invalidate()
-            self.assertIsNone(funnel.next_item(s))                                             # passed: not back within the three hours (2026-09-25)
-            s._exec("UPDATE funnel_state SET At=? WHERE Key=?", (ago(minutes=190), f'agent:{t}'))
-            funnel.invalidate()
-            self.assertEqual(funnel.next_item(s)['key'], f'agent:{t}')                        # three hours on, it comes round again
-            self.assertIn('shown already, still waiting', funnel.summary(funnel.build(s)['items']))
+            self.assertEqual([i['key'] for i in items], [f'agent:{t}'])                         # still in the pipe
+            self.assertEqual(funnel.next_item(s)['key'], f'agent:{t}')                           # ...and still the walk's top
         # ...and when the agent picks the work back up, the shown item rides up to the shelf instead of vanishing
         busy = [dict(live[0], idle=2, waiting=False)]
         with mock.patch('taskuary.terminal.live_sessions', return_value=busy):
             items = funnel.build(s)['items']
-            self.assertEqual([(i['lane'], i.get('surfaced')) for i in items], [('working', True)])
-            self.assertIsNone(funnel.next_item(s))
+            self.assertEqual([i['lane'] for i in items], ['working'])              # a task an agent is working is walked like any task
         with mock.patch('taskuary.terminal.live_sessions', return_value=live):
             funnel.settle(s, f'agent:{t}', 'done')
             self.assertEqual(funnel.build(s)['items'], [])
@@ -666,20 +660,13 @@ class LanesTests(unittest.TestCase):
             funnel.invalidate()
             self.assertEqual([i['title'] for i in funnel.build(s)['items']], ['Budget review'])   # on the timeline
             funnel.invalidate()
-            self.assertIsNone(funnel.next_item(s))               # ...and the walk has nothing to open with
+            far_row = funnel.next_item(s)                        # ...walked in its place like a task (Q3, 2026-10-30), never urgent yet
+            self.assertEqual(far_row['title'], 'Budget review'); self.assertFalse(lanes.is_urgent(far_row))
         with mock.patch.object(funnel, '_agenda', return_value=near):
             funnel.invalidate()
             nxt = funnel.next_item(s)
-        self.assertEqual((nxt['kind'], nxt['title']), ('meeting', 'Standup'))    # inside fifteen it goes first
-
-    def test_a_far_off_meeting_does_not_interrupt_a_mail_only_walk_either(self):
-        """INTERRUPTS lets a meeting stop a 'just what came in' walk. That is for one about to
-        start, not one two hours out."""
-        s = store()
-        far = [{'start': ahead(95), 'end': ahead(125), 'subject': 'Budget review', 'who': [], 'all_day': False}]
-        with mock.patch.object(funnel, '_agenda', return_value=far):
-            funnel.invalidate()
-            self.assertNotEqual((funnel.next_item(s, only='mail') or {}).get('kind'), 'meeting')
+        self.assertEqual((nxt['kind'], nxt['title']), ('meeting', 'Standup'))    # inside fifteen it is shaded urgent
+        self.assertTrue(lanes.is_urgent(nxt))
 
     def test_the_gate_only_ever_holds_back_meetings(self):
         for kind in ('agent', 'todo', 'asked', 'fyi', 'review', 'wrapup', 'idea', 'report'):
@@ -715,8 +702,8 @@ class LanesTests(unittest.TestCase):
         self.assertEqual(funnel.more_urgent(p['items'], f'review:{s.list_reviews("pending")[0]["ReviewId"]}'), [])
         line = concierge._urgent_line(p['items'], fyi)
         self.assertIn('MORE URGENT WAITING', line); self.assertIn('Craig Palmer - RE: T&E Portal (ready to send)', line)
-        funnel.settle(s, f'review:{s.list_reviews("pending")[0]["ReviewId"]}', 'surfaced')
-        self.assertEqual(funnel.alerts(s), [])                            # once shown, it is no longer news
+        funnel.settle(s, al[0]['key'], 'ack')
+        self.assertEqual(funnel.alerts(s), [])                            # put down, it is no longer news (a walk marks nothing, 2026-10-30)
 
     def test_a_task_whose_reply_went_out_and_agent_finished_asks_to_be_closed(self):
         s = store()
@@ -911,30 +898,30 @@ class MemoryTests(unittest.TestCase):
         one, two = [i['key'] for i in funnel.build(s)['items']]
         funnel.settle(s, one, 'surfaced')
         items = funnel.build(s)['items']
-        self.assertEqual([(i['key'], bool(i.get('surfaced'))) for i in items], [(one, True), (two, False)])   # a reply for your yes stays, marked
-        self.assertEqual(funnel.next_item(s)['key'], two)
-        self.assertEqual(funnel.next_item(s, one)['key'], one)          # but the named one is always reachable
-        self.assertTrue(funnel.next_item(s, one)['surfaced'])
+        # a reply for your yes stays in its place, shown or not - nothing marks it passed, and the walk's top is still it (2026-10-30)
+        self.assertEqual([(i['key'], bool(i.get('surfaced'))) for i in items], [(one, False), (two, False)])
+        self.assertEqual(funnel.next_item(s)['key'], one)
+        self.assertEqual(funnel.next_item(s, one)['key'], one)          # the named one is always reachable
         out = funnel.settle(s, two, 'later', hours=2)
         self.assertTrue(out['until'] > ago(0))
         # put away, it waits in For later (the canvas redesign, 2026-09-29) - on the rail, never next
         self.assertEqual([(i['key'], bool(i.get('deferred'))) for i in funnel.build(s)['items']], [(one, False), (two, True)])
-        self.assertIsNone(funnel.next_item(s))
+        self.assertEqual(funnel.next_item(s)['key'], one, 'For later is off the walk; the reply is still its top')
         funnel.settle(s, one, 'done')
         self.assertEqual([i['key'] for i in funnel.build(s, keep_surfaced=True)['items']], [two], 'done removes; later still waits')
         self.assertIsNone(funnel.next_item(s))
 
-    def test_a_reply_shown_once_stays_and_a_rewritten_draft_is_new_again(self):
+    def test_a_reply_shown_once_stays_and_a_rewritten_draft_stays_too(self):
+        """Shown is not acted on (2026-10-13): a reply for your yes put on the table stays in its place, and so does its rewrite -
+        never walked past for having been shown (rule 6, 2026-10-30)."""
         s = self._two()
         one, two = [i['key'] for i in funnel.build(s)['items']]
         it = funnel.next_item(s, one)
         funnel.settle(s, one, 'surfaced', note=it['sig'])
-        items = funnel.build(s)['items']
-        self.assertEqual([(i['key'], bool(i.get('surfaced'))) for i in items], [(one, True), (two, False)])   # still in the pipe, marked
-        self.assertEqual(funnel.next_item(s)['key'], two)                                              # not straight back on the table
+        self.assertEqual([i['key'] for i in funnel.build(s)['items']], [one, two])
+        self.assertEqual(funnel.next_item(s)['key'], one)
         s.save_review_draft(int(one.split(':')[1]), 'The agent rewrote this after finishing the job.')
-        items = funnel.build(s)['items']
-        self.assertEqual([(i['key'], bool(i.get('surfaced'))) for i in items], [(one, False), (two, False)])  # changed: new again
+        self.assertEqual([i['key'] for i in funnel.build(s)['items']], [one, two])
         self.assertEqual(funnel.next_item(s)['key'], one)
 
     def test_a_new_chat_does_not_make_read_mail_new_again(self):
@@ -942,7 +929,8 @@ class MemoryTests(unittest.TestCase):
         one, two = [i['key'] for i in funnel.build(s)['items']]
         funnel.settle(s, one, 'surfaced'); funnel.settle(s, 'alert:x', 'ack')
         funnel.reset_walk(s)
-        self.assertEqual([(i['key'], bool(i.get('surfaced'))) for i in funnel.build(s)['items']], [(one, True), (two, False)])
+        self.assertEqual([i['key'] for i in funnel.build(s)['items']], [one, two])
+        self.assertEqual(s.funnel_states()[one]['Status'], 'surfaced', 'read stays read')
         self.assertNotIn('alert:x', s.funnel_states())
 
     def test_the_owners_knobs_bound_the_pile(self):
@@ -1022,14 +1010,11 @@ class MemoryTests(unittest.TestCase):
         s.update_task(t, {'Status': 'done'}, 'o'); settle()             # ...and closing it is what takes the row away
         self.assertEqual([i['title'] for i in funnel.build(s)['items'] if i.get('tid') == t], [])
 
-    def test_a_task_waiting_to_start_comes_round_again_once_the_hour_brings_it_back(self):
-        """The owner, 2026-09-18: "it's not feeding the waiting to start task into assistant. It skipped
-        it but then saw it at the end and hitting next just confuses it." Next put the queued row down
-        as shown and read; the quiet hour brought it back unread (why_open) - but the shown mark stayed,
-        since a new chat clears only agent: keys, so the walk never offered it again and stranded it at
-        the end as "1 unread thing still waits. Say next", for as long as Next was pressed. The mark
-        holds for the same hour the receipt does, and the row comes round with it."""
-        from taskuary import concierge, funnel_selection, processing_unread
+    def test_a_task_waiting_to_start_is_walked_again_by_the_next_walk(self):
+        """The owner, 2026-09-18: "it's not feeding the waiting to start task into assistant. It skipped it but then saw it at the end
+        and hitting next just confuses it." Next on it writes nothing now (2026-10-30): it stays under Tasks, the end of the walk
+        offers it, and Walk starts on it again - no hour, no mark."""
+        from taskuary import concierge, processing_unread, railwalk
         s = store()
         s.upsert_agent('coding', 'coding', 'cli', '{}')
         t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open', 'Assignee': 'agent:coding'}, 'o')
@@ -1040,13 +1025,11 @@ class MemoryTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
             self.assertEqual((first['item']['lane'], first['item']['tid']), ('queued', t))
-            again = concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
-            # put down: read, and still under Tasks - Next moves on, the task stays (the owner, 2026-10-21)
+            again = concierge.surface(s, llm=lambda *a, **k: 'never', from_key=first['item']['key'])
             self.assertIsNone(again['item']); self.assertEqual([c.get('key') for c in again['chips']][1:], [first['item']['key']])
-            later = datetime.now() + timedelta(hours=4)
-            on_rail = [(i['lane'], bool(i.get('why_open')), bool(i.get('surfaced'))) for i in processing_unread.build(s, now=later, live_state=[])['items'] if i.get('tid') == t]
-            self.assertEqual(on_rail, [('queued', True, False)])                                # the hour brought it back, and the mark went with it
-            self.assertEqual(funnel_selection.capture_selection(s, now=later).selected['tid'], t)   # ...so the walk offers it again
+            on_rail = [(i['lane'], bool(i.get('surfaced'))) for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t]
+            self.assertEqual(on_rail, [('queued', False)])
+            self.assertEqual(railwalk.start(s)['item']['tid'], t)
 
     def _canonical(self):
         from taskuary import funnel as f
@@ -1070,7 +1053,7 @@ class MemoryTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
             self.assertEqual(first['item']['tid'], t)
-            again = concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
+            again = concierge.surface(s, llm=lambda *a, **k: 'never', from_key=first['item']['key'])
             self.assertIsNone(again['item'])                                                  # the walk does not bring it straight back
             self.assertEqual(again['say'], '')                                                  # its Open is the line (2026-10-23)
             self.assertEqual([c.get('verb') for c in again['chips']], ['walk', 'open'])
@@ -1082,10 +1065,10 @@ class MemoryTests(unittest.TestCase):
         self.assertEqual([(bool(i.get('surfaced')), i['actionable']) for i in rail], [(False, True)])   # ...on the rail, the next walk's first
         self.assertEqual(s.get_task(t)['Status'], 'open')
 
-    def test_a_task_opened_but_not_passed_is_still_walked_first(self):
-        """The owner, 2026-10-14: "it skipped the first task again in walk through" - a task opened from the rail is read, and a
-        read open task stays under On you without a Next mark; the walk took any read for a pass and began on the second row."""
-        from taskuary import processing_unread, funnel_selection
+    def test_a_task_opened_is_still_walked_first(self):
+        """The owner, 2026-10-14: "it skipped the first task again in walk through" - a task opened from the rail is read, and the walk
+        took any read for a pass. Nothing is a pass now (2026-10-30): the walk starts at the top, the opened task included."""
+        from taskuary import processing_unread, railwalk
         s, settle = self._canonical()
         t = s.create_task({'Title': 'Simplify the export', 'Kind': 'task', 'Status': 'open'}, 'o')
         mid = mail(s, 'Simplify the export', who='Erin', email='erin@northwind.example', hours=3, tid=t)
@@ -1093,30 +1076,10 @@ class MemoryTests(unittest.TestCase):
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             key = next(i['key'] for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t)
-            s.set_funnel_state(key, 'surfaced', read=True); settle()                 # opened: read, shown, no Next
+            s.set_funnel_state(key, 'surfaced', read=True); settle()                 # opened: read, shown
             card = next(i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t)
-            self.assertEqual((card['put_down'], card['actionable']), (False, True))
-            self.assertEqual(funnel_selection.capture_selection(s).selected['tid'], t)
-
-    def test_next_on_a_task_back_from_its_quiet_hours_puts_it_down_again(self):
-        """The owner, 2026-09-30: "i hit next why is this still showing in on you tasks?" - the receipt kept the FIRST read,
-        so once that was three hours old the task was `back` for good: Next read it again, recorded nothing, and it stayed
-        on you. A look again moves the receipt's clock. (Back is a new walk now, not three hours - 2026-10-21.)"""
-        from taskuary import concierge, processing_unread
-        s, settle = self._canonical()
-        t = s.create_task({'Title': 'Complete the raise paperwork', 'Kind': 'task', 'Status': 'open'}, 'o')
-        mid = mail(s, 'Raise paperwork', who='Gail', email='gail@northwind.example', hours=30, tid=t)
-        s.add_route(mid, t, 'route', 1.0, 'triage: task', [], 'triage')
-        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
-        card = lambda: [(i.get('why_open') is not None, bool(i.get('surfaced')), i['actionable'])
-                        for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t]
-        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
-            key = concierge.surface(s, llm=lambda *a, **k: 'never')['item']['key']
-            s._exec("UPDATE processing_read_receipt SET ReadAt=?", (ago(4),))                       # that read was 4 hours ago...
-            s.set_setting(processing_unread.WALK_KEY, ago(2), 't'); funnel.invalidate()            # ...in a walk since over
-            self.assertEqual(card(), [(True, False, True)])                                       # ...so it is back on you
-            funnel.settle(s, key, 'surfaced', read=True, put_down=True); funnel.invalidate()       # Next, now (what move_on writes)
-        self.assertEqual(card(), [(False, True, False)])                                          # put down again, for this walk
+            self.assertTrue(card['actionable'])
+            self.assertEqual(railwalk.start(s)['item']['tid'], t)
 
     def test_a_task_its_agent_finished_shows_once_as_a_result(self):
         """"same for finished agent task?" - an agent that closed its task left nothing on the rail: the result
@@ -1132,14 +1095,14 @@ class MemoryTests(unittest.TestCase):
         card = [i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t]
         self.assertEqual([(i['kind'], i['lane'], i['unread'], i.get('mid')) for i in card], [('agentdone', 'report', True, None)])
         self.assertIn('ten-line checklist', card[0]['summary'])
-        self.assertEqual(card[0]['order_band'], 2)      # Your task - a task is never a report, and done is not 'working' (2026-09-24)
-        # ...and put on the table (which reads it) it is STILL the agent's result, in Reports, until Next moves on
-        # (the owner, 2026-09-24: "when bringing into assistant it disappears instead of staying on sidebar until
-        # next") - the read flipped it to a closed fyi row, and the rail dropped the card the chat was showing
-        from taskuary import concierge, funnel
+        self.assertEqual(card[0]['order_band'], 3)      # a result, under Reports (the walk has one owner, 2026-10-30, 3.5)
+        # ...and put on the table it is STILL the agent's result, in Reports, until Next moves on (the owner, 2026-09-24: "when
+        # bringing into assistant it disappears instead of staying on sidebar until next") - opening never reads (rule 4)
+        from taskuary import concierge, funnel, railwalk
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             key = concierge.surface(s, llm=lambda *a, **k: 'never')['item']['key']
         settle()
+        self.assertTrue([i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t], 'opened is not read')
         # ...and the table says so: Current is what the page draws on the rail, and "its task is done" wiped it
         # the moment it went up - a finished agent's task is ALWAYS done (the owner, 2026-09-24, twice)
         from taskuary import general
@@ -1148,6 +1111,9 @@ class MemoryTests(unittest.TestCase):
         self.assertEqual(concierge.current_key(s, home), key)
         here = funnel.next_item(s, key)
         self.assertEqual((here['kind'], here['lane']), ('agentdone', 'report'))
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            railwalk.next(s, key)                            # Next reads it
+        settle()
         self.assertFalse([i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t])  # read: not waiting
         self.assertIn(t, s.worked_today_task_ids())      # ...but handled on the rail today: the Tasks tab and Board keep it
         # what the rail shows the Tasks tab shows, however long ago it closed ("regardless of when it was")
@@ -1157,7 +1123,9 @@ class MemoryTests(unittest.TestCase):
         from taskuary import server
         with mock.patch.object(server, 'store', s), mock.patch.object(funnel, 'cached_pile', return_value={'items': [{'tid': t}]}):
             self.assertEqual(server._rail_tids(), {t})
-        # ...and the card on the table counts, although showing it read it and the rail's own list lost it
+        # ...and the card on the table counts, although Next read it and the rail's own list lost it
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            railwalk.open(s, key)                            # back on the table, by its row
         funnel.pile(s, force=True)
         with mock.patch.object(server, 'store', s), mock.patch.object(funnel, 'cached_pile', return_value={'items': []}):
             self.assertEqual(server._rail_tids(), {t})
@@ -1178,8 +1146,11 @@ class MemoryTests(unittest.TestCase):
         s.add_comment(t, 'assistant', 'agent', 'The agent closed this itself: it wraps any CLI as an agent tool.')
         s.update_task(t, {'Status': 'done'}, 'assistant'); settle()
         def walk():
+            """A walk from the top, and Next on what it opens with - Next is what reads a result (rule 4, 2026-10-30)."""
+            from taskuary import railwalk
             with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
-                got = concierge.surface(s, llm=lambda *a, **k: 'never')['item']
+                got = railwalk.start(s)['item']
+                if got: railwalk.next(s, got['key'])
             settle(); return got and (got['kind'], got['tid'])
         self.assertEqual(walk(), ('agentdone', t))
         self.assertIsNone(walk())
@@ -1211,8 +1182,11 @@ class MemoryTests(unittest.TestCase):
         s.add_comment(t, 'assistant', 'agent', 'The agent closed this itself: the group is refused on purpose.')
         s.update_task(t, {'Status': 'done'}, 'assistant'); settle()
         def walk():
+            """A walk from the top, and Next on what it opens with - Next is what reads a result (rule 4, 2026-10-30)."""
+            from taskuary import railwalk
             with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
-                got = concierge.surface(s, llm=lambda *a, **k: 'never')['item']
+                got = railwalk.start(s)['item']
+                if got: railwalk.next(s, got['key'])
             settle(); return got and (got['kind'], got['tid'])
         self.assertEqual(walk(), ('agentdone', t))
         self.assertIsNone(walk())
@@ -1241,8 +1215,9 @@ class MemoryTests(unittest.TestCase):
         s.add_comment(u, 'coding', 'agent', 'The agent closed this itself: fixed.')
         s.update_task(u, {'Status': 'done'}, 'coding'); settle()
         from taskuary import concierge
+        from taskuary import railwalk
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
-            concierge.surface(s, llm=lambda *a, **k: 'never')                 # the result is read
+            railwalk.next(s, concierge.surface(s, llm=lambda *a, **k: 'never')['item']['key'])   # the result opened, and Next reads it
         settle()
         s.upsert_idea({'key': 'idea:export-again', 'kind': 'idea', 'text': 'The export fix may not hold.', 'sig': 'x',
                        'action': {'type': 'note', 'tid': u}}, ago(0)); settle()
@@ -1259,10 +1234,14 @@ class MemoryTests(unittest.TestCase):
         mail(s, 'Research the CLI tool', who='Erin', email='erin@northwind.example', hours=2, tid=t)
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
         def walk():
+            """A walk from the top, and Next on what it opens with - Next is what reads a result (rule 4, 2026-10-30)."""
+            from taskuary import railwalk
             with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
-                got = concierge.surface(s, llm=lambda *a, **k: 'never')['item']
+                got = railwalk.start(s)['item']
+                if got: railwalk.next(s, got['key'])
             settle(); return got and (got['kind'], got['tid'])
-        walk()                                                      # the owner saw the ask while the agent worked it...
+        key = next(i['key'] for i in funnel.pile(s, force=True)['items'] if i.get('tid') == t)
+        funnel.settle(s, key, 'surfaced', read=True)                # the owner read the ask while the agent worked it...
         s._exec('UPDATE processing_read_receipt SET ReadAt=?', (ago(1),))                  # ...an hour ago
         s.add_comment(t, 'assistant', 'agent', 'The agent closed this itself: it wraps any CLI as an agent tool.')
         s.update_task(t, {'Status': 'done'}, 'assistant'); settle()

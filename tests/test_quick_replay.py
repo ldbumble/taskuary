@@ -41,3 +41,22 @@ def test_window_and_dock_are_left_out():
     a = s.create_task({'Title': 'Old job', 'Kind': 'general', 'OriginBase': 'owner'}, 'triage')
     s.judge_task(a, {'difficulty': 'quick'}, 'triage')
     assert qr.replay(s, now=datetime(2030, 1, 1))['general'] == 0
+
+def test_a_stranger_task_says_which_road_made_it_one():
+    """63 of 132 general tasks read as a stranger's in a replay (2026-10-30). A colleague at the owner's own domain is trusted; what makes
+    a task a stranger's is the WORST sender on it - an outside reply on a colleague's thread - or Taskuary's own words. The replay says
+    which, by key and count only."""
+    s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't')
+    def task(*senders, **f):
+        tid = s.create_task({'Title': 'Northwind job', 'Kind': 'general', **f}, 'triage'); s.judge_task(tid, {'difficulty': 'standard'}, 'triage')
+        for i, a in enumerate(senders):
+            s.add_message({'TaskId': tid, 'ExternalId': f'{tid}-{i}', 'Channel': 'email', 'FromEmail': a, 'SourceName': 'alex@northwind.example',
+                           'Subject': 's', 'BodyText': 'b', 'SentAt': f'{datetime.now():%Y-%m-%d} 09:0{i}:00', 'Status': 'routed'})
+        return tid
+    task('erin@northwind.example')                                            # a colleague: trusted, quick
+    task('erin@northwind.example', 'rep@vendor.example')                      # an outside reply on her thread
+    task('rep@vendor.example')
+    task(Source='report')
+    out = qr.replay(s, now=datetime.now())
+    assert (out['quick'], out['deep:stranger']) == (1, 3)
+    assert {k: v for k, v in out.items() if k.startswith('stranger:')} == {'stranger:later': 1, 'stranger:opener': 1, 'stranger:taskuary-wrote': 1}

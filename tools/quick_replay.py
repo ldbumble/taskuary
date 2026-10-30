@@ -22,6 +22,7 @@ def replay(store, days: int = 14, now: datetime = None, ask: int = 0) -> dict:
         w = quickwork.why_deep(store, t['TaskId'])
         if w: out[f'deep:{w}'] += 1
         else: out['quick'] += 1; quick.append(t['TaskId'])
+        if w == 'stranger': k = stranger_cause(store, t['TaskId']); out[k] = out.get(k, 0) + 1
     if ask > 0:
         out.update(asked=0, answered=0, question=0, closed=0, escalated=0, unreadable=0, failed=0)
         for tid in quick[:ask]:
@@ -31,6 +32,21 @@ def replay(store, days: int = 14, now: datetime = None, ask: int = 0) -> dict:
             if a is None: out['unreadable'] += 1
             else: out['escalated' if a.escalate else 'question' if a.question else 'closed' if a.done else 'answered'] += 1
     return out
+
+
+def stranger_cause(store, tid) -> str:
+    """Which road made a task a stranger's, as a key: 'stranger:taskuary-wrote' (an Advisor idea or a report run - no message did it),
+    'stranger:opener' (the first message's sender) or 'stranger:later' (the opener was trusted, a later message was not) - with
+    ':own-domain' when that sender is on the owner's own domain, which reads as a stranger only when a setting or a failed sender
+    check says so. Keys only: no sender, domain or words leave this."""
+    from taskuary import origin, senders
+    through = int((store.get_task(tid) or {}).get('TrustedThrough') or 0)
+    ms = [m for m in store.list_messages(tid) if m['MessageId'] > through]
+    worst = next(((i, m) for i, m in enumerate(ms) if origin.of_message(store, m)[0] == 'stranger'), None)
+    if worst is None: return 'stranger:taskuary-wrote'
+    i, m = worst
+    own = senders._domain(m.get('FromEmail')) in senders.own_domains(store) - senders.PUBLIC_MAIL
+    return f"stranger:{'opener' if i == 0 else 'later'}{':own-domain' if own else ''}"
 
 
 def main(argv=None):

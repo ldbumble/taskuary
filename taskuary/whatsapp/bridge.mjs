@@ -262,7 +262,10 @@ async function connect() {
   thisSock.ev.on("messages.upsert", (u) => onMessages(u).catch((e) => console.error("could not take in a message:", e?.message || e)));
   const onMessages = async ({ messages: ms, type }) => {
     if (thisSock !== sock) return;
-    if (type !== "notify") return;                       // history syncs are not new work
+    // WHAT WAITED OUT A DROPPED CONNECTION IS NEW WORK (TQ-1251). Baileys hands a message the server held while the link was down over as
+    // "append" (messages-recv: node.attrs.offline), and this dropped every one: on a connection that fell over every half hour, nothing
+    // ever came in. History sync is off (shouldSyncHistoryMessage), so no "append" here is history; a repeat is dropped by its id downstream.
+    if (type !== "notify" && type !== "append") return;
     for (const m of ms) {
       const k = m.key || {};
       // the author's other form, when the stanza carried it; a 1:1 chat's own LID only from the other side's message

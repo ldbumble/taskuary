@@ -7,7 +7,6 @@ from unittest import mock
 import pytest
 
 from taskuary import funnel, terminal
-from taskuary.funnel_selection import SelectionStale, capture_selection, recheck_selection
 from taskuary.processing_order import attention_band
 from taskuary.store import MemoryStore
 
@@ -96,7 +95,7 @@ def test_age_alone_orders_one_level_and_urgency_never_moves_a_row():
     """Saved priority used to reorder rows inside a level, which put a draft from ten minutes ago
     ahead of an ask from Tuesday (the owner, 2026-09-07: "no reason why open task is before a reply
     drafted"). Urgency is not a tiebreak, and since 2026-10-22 not a level either: an urgent request sits in Tasks at its
-    arrival place, shaded, and Next walks it in its place (funnel_selection.below)."""
+    arrival place, shaded, and Next walks it in its place (railwalk: the row directly below)."""
     rows = [item("low", "asked", priority="low", at=stamp(-90)),
             item("unknown", "asked", priority="ASAP", at=stamp(-100)),
             item("normal", "asked", at=stamp(-80)),
@@ -291,26 +290,30 @@ def test_wrapup_keeps_task_priority_and_actual_completion_activity(store):
     assert (result[0]["priority"], result[0]["when"], funnel._band(result[0])) == ("important", stamp(-2), 3)
 
 
-def test_priority_reorder_invalidates_captured_next_without_changing_read_or_task_state(store):
+def test_a_priority_change_moves_no_row_and_the_walk_writes_nothing_to_see_it(store):
+    """Inside one level the oldest leads, whatever priority it was saved with (2026-09-07), and urgent is a shade in its place
+    (2026-10-22): raising a task to urgent moves nothing on the walk's line. Looking at what Next would bring (railwalk.peek) writes
+    nothing - no read, no state, no task change. (A captured selection that a reorder made stale is gone with the selection itself,
+    2026-10-30: a press moves from the row the page showed.)"""
+    from taskuary import railwalk
+    from unittest import mock
     first_tid, first_mid = task_message(store, "High priority", priority="high", at=stamp(-2))
     second_tid, second_mid = task_message(store, "Low priority", priority="low", at=stamp(-20))
     done = message(store, "Previously handled", status="filed")
     deferred = message(store, "Temporarily deferred", status="filed")
     store.set_funnel_state(f"msg:{done}", "done", note="Owner receipt")
     store.set_funnel_state(f"msg:{deferred}", "later", until=stamp(60), note="Temporary interval")
-    before = list(store.cx.iterdump())
-    initial = capture_selection(store, now=NOW)
-    # inside one level the oldest leads, whatever priority it was saved with (2026-09-07); urgency
-    # moves a row by earning level 1, which is what invalidates the capture below
-    assert initial.selected["mid"] == second_mid
-    assert list(store.cx.iterdump()) == before
-    store.update_task(first_tid, {"Priority": "urgent"}, "owner")
-    updated = list(store.cx.iterdump())
-    with pytest.raises(SelectionStale) as stale:
-        recheck_selection(store, initial, now=NOW)
-    assert stale.value.capture.selected["mid"] == first_mid
-    assert stale.value.capture.revision != initial.revision
-    assert list(store.cx.iterdump()) == updated
+    with mock.patch("taskuary.terminal.live_sessions", return_value=[]):
+        rows = lambda: railwalk.line(funnel.build(store, now=NOW, live_state=[])["items"])
+        line = lambda: [r["key"] for r in rows()]
+        before = line()
+        assert rows()[0]["mid"] == second_mid
+        store.update_task(first_tid, {"Priority": "urgent"}, "owner")
+        assert line() == before, "urgent moved a row"
+        funnel.pile(store, force=True)
+        states = store.funnel_states()
+        railwalk.peek(store)
+    assert store.funnel_states() == states, "looking ahead wrote a state"
     assert store.get_task(first_tid)["Status"] == store.get_task(second_tid)["Status"] == "open"
     assert set(store.funnel_states()) == {f"msg:{done}", f"msg:{deferred}"}
 

@@ -358,11 +358,12 @@ class TheWalkOpensWithWhoWantsWhatTests(unittest.TestCase):
         self.assertLess(text.index('TASKS'), text.index('REPORTS ·')); self.assertLess(text.index('REPORTS ·'), text.index('FYI ·'))
         self.assertEqual(remote_assistant.who_wants_what([]), 'Nothing is waiting on you.')
 
-    def test_a_finished_agents_task_is_on_you_as_on_the_rail(self):
-        # the owner's screenshot, 2026-10-02: the rail had it On you, the opener said "Agents waiting" - no agent was working
+    def test_a_finished_agents_task_is_a_result_as_on_the_rail(self):
+        # the owner's screenshot, 2026-10-02: the opener said "Agents waiting" - no agent was working. Since 2026-10-30 (3.5) an agent's
+        # finished task is a result, drawn under Reports, and the phone groups it where the rail draws it
         done = {'key': 'agentdone:9', 'lane': 'report', 'kind': 'agentdone', 'agent': 'coding', 'title': 'Investigate the export'}
-        self.assertEqual(remote_assistant.group_of(done), 'task')
-        self.assertIn('TASKS · 1', remote_assistant.who_wants_what([done]))
+        self.assertEqual(remote_assistant.group_of(done), 'reports')
+        self.assertIn('REPORTS · 1', remote_assistant.who_wants_what([done]))
 
     def test_what_you_passed_stays_in_tasks_and_remind_me_is_for_later_as_on_the_rail(self):
         # Next moves on and the task stays under Tasks; Remind me puts it in For later (the owner, 2026-10-21)
@@ -538,8 +539,8 @@ class EndOfWalkAndFyiCountTests(unittest.TestCase):
             for _ in range(10):
                 if not out.get('item'): break
                 here = out['item']['key']
-                out = concierge.surface(s, llm=lambda *a, **k: 'never', leaving=here, exclude=here)
-        self.assertIn("That's everything for now", out['say'])
+                out = concierge.surface(s, llm=lambda *a, **k: 'never', from_key=here)
+        self.assertIn("That's the bottom of the list.", out['say'])
         opens = [c for c in out.get('chips') or [] if c.get('verb') == 'open']
         self.assertGreater(len(opens), 3, out.get('chips'))
 
@@ -620,7 +621,7 @@ class WalkOffTheOpenerTests(unittest.TestCase):
              mock.patch('taskuary.funnel.pile', return_value={'items': [{'key': 'msg:1', 'lane': 'approve', 'title': 'Thursday'}]}), \
              mock.patch('taskuary.general.dock_task', return_value=({'TaskId': 1}, False)), \
              mock.patch.object(concierge, 'restore_current', return_value=None), \
-             mock.patch.object(concierge, 'resume', return_value=card), \
+             mock.patch('taskuary.railwalk.start', return_value=card), \
              mock.patch.object(concierge, 'say', side_effect=AssertionError('a pick never reaches the model')),              mock.patch.object(remote_assistant, 'quiet', return_value=True),              mock.patch.object(remote_assistant, 'handoff', return_value=None):
             # quiet/handoff read state other tests in this process leave for the same chat (0 sent on Windows CI, 2026-10-22)
             self.assertEqual(remote_assistant.morning_line(s, now=datetime(2026, 10, 21, 20, 0)), 1)
@@ -633,18 +634,19 @@ class WalkOffTheOpenerTests(unittest.TestCase):
         from taskuary import concierge
         with mock.patch.object(remote_assistant, 'greeting', return_value='Good evening.'), \
              mock.patch('taskuary.funnel.pile', return_value={'items': []}), \
-             mock.patch.object(concierge, 'resume', return_value={'say': 'Nothing is waiting.', 'item': None}):
+             mock.patch('taskuary.railwalk.start', return_value={'say': 'Nothing is waiting.', 'item': None}):
             self.assertIn('Good evening', remote_assistant.run_act(MemoryStore(), {'t': 'walk'}, None))
 
-    def test_a_typed_walk_starts_at_the_card_on_the_table(self):
+    def test_a_typed_walk_starts_at_the_top_of_the_rail(self):
+        """It started at the card on the table (2026-09-29); the walk starts at the TOP since 2026-10-30 - the button, the words, a new chat."""
         from taskuary import concierge
         table = {'key': 'msg:3', 'kind': 'fyi', 'mid': 3, 'title': 'The Thursday plan'}
         prop = {'id': 'op1', 'status': 'proposed', 'auto': True, 'kind': 'script.start', 'params': {'name': 'walk me through my tasks'}}
         with mock.patch.object(concierge, 'run_proposal', return_value={**prop, 'status': 'done', 'outcome': {'script': 'walk me through my tasks'}}), \
              mock.patch.object(concierge, 'receipt', return_value='Done - Start a script. Starting: walk me through my tasks.'), \
              mock.patch('taskuary.funnel.pile', return_value={'items': []}), \
-             mock.patch.object(concierge, 'resume', return_value={'say': 'The Thursday plan.', 'item': None}) as resumed, \
-             mock.patch.object(concierge, 'surface', side_effect=AssertionError('the walk starts at the table, it does not skip it')):
+             mock.patch('taskuary.railwalk.start', return_value={'say': 'The Thursday plan.', 'item': None}) as resumed, \
+             mock.patch.object(concierge, 'surface', side_effect=AssertionError('the walk starts at the top, not on from the table')):
             text = remote_assistant.carry_out(MemoryStore(), {'say': 'Starting.', 'proposal': prop}, table)
         resumed.assert_called_once()
         self.assertIn('The Thursday plan.', text)

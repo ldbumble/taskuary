@@ -44,14 +44,14 @@ class RemindHasNoUndoTests(PhoneCase):
 
 class EndOfWalkTests(PhoneCase):
     """A1: the walk's end offered only Open picks, and outside a hand-off there was no way to start again. It offers "Walk me through my
-    tasks" first, and the new walk shows every open task again from the top (next-is-seen-in-this-walk)."""
+    tasks" first, and the new walk starts again at the top of the rail (the walk has one owner, 2026-10-30)."""
 
     def test_the_end_offers_a_new_walk_that_shows_every_open_task_again(self):
         a, b = _two_asks(self.f); self.ph.ready()
         first = text_of(self.ph.walk())
         self.ph.tap('Next')
         end = self.ph.tap('Next')
-        self.assertIn("That's everything for now", text_of(end))
+        self.assertIn("That's the bottom of the list.", text_of(end))
         self.assertEqual(end[-1][1][0], 'Walk me through my tasks', end[-1][1])
         again = self.ph.tap('Walk me through my tasks')
         ref = next(f'TQ-{t:04d}' for t in (a, b) if f'TQ-{t:04d}' in first)

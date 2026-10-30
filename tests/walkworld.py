@@ -104,6 +104,10 @@ def build(store, now: datetime = None) -> dict:
                               'text': 'Payworth renews in three weeks and nobody has asked for the new terms yet.',
                               'action': {'type': 'note', 'whose': 'the owner', 'suggest': 'Ask Payworth for the renewal terms.'}}, at(200))
     store._exec('UPDATE idea SET FirstSeen=?, LastSaid=? WHERE IdeaId=?', (at(200), at(200), idea['IdeaId']))
+    # ...judged already, as the Advisor's own pass leaves it: unjudged, a running app's triage pass marks it pending - "being read", off the line
+    store.set_idea_action(idea['IdeaId'], {'type': 'note', 'whose': 'the owner', 'suggest': 'Ask Payworth for the renewal terms.',
+                                           'triage': {'intent': 'fyi', 'kind': None, 'why': 'a note for you', 'sig': idea.get('Sig') or '',
+                                                      'at': at(200), 'linked_task': None, 'error': None}})
     src['I1'] = {'idea': idea['IdeaId']}
     # FYI: seven filed mails, one thread each, ten minutes apart
     for n in range(1, 8):
@@ -141,7 +145,10 @@ def close_elsewhere(store, src: dict, sym: str):
     """Closed somewhere other than the walk - the Tasks page, the phone, a meeting that is over."""
     from taskuary import concierge, funnel
     s = src[sym]
-    if 'tid' in s: concierge.close_task(store, s['tid'], 'owner')
+    if 'meeting' in s:                                # a meeting is over: gone from the calendar the rail reads
+        from taskuary import assistant
+        assistant._AGENDA['events'] = [e for e in assistant._AGENDA.get('events') or [] if e.get('subject') != s['meeting']]
+    elif 'tid' in s: concierge.close_task(store, s['tid'], 'owner')
     else:
         key = key_of(store, src, sym)
         if key: funnel.settle(store, key, 'done', 'owner')
@@ -151,6 +158,7 @@ def close_elsewhere(store, src: dict, sym: str):
 def agent_closes(store, src: dict, sym: str):
     """The task's agent finished it and closed it itself: its result is a row under Reports."""
     tid = src[sym]['tid']
+    import time; time.sleep(1.1)                      # after the open that read it: stamps are to the second, and a close in that second reads as seen
     store._exec("UPDATE run SET Status='done' WHERE TaskId=?", (tid,))
     store.add_comment(tid, 'coding', 'agent', 'The agent closed this itself: matched every card line to the ledger.')
     store.update_task(tid, {'Status': 'done'}, 'coding')

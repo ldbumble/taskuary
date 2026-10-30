@@ -463,10 +463,10 @@ class TheDemoOpensOnItsTourTests(unittest.TestCase):
         return s, items
 
     def test_the_tour_leads_the_rail_and_the_walk(self):
-        from taskuary.funnel_selection import first_at_start
+        from taskuary import railwalk
         s, items = self.seeded()
         self.assertEqual(items[0]['title'], demo.TOUR, [i['title'] for i in items[:3]])
-        self.assertEqual(first_at_start(items)['title'], demo.TOUR)
+        self.assertEqual(railwalk.line(items)[0]['title'], demo.TOUR, 'the walk starts at the top of the rail (2026-10-30)')
 
     def test_it_is_made_last_so_every_other_number_stands(self):
         s, _ = self.seeded()

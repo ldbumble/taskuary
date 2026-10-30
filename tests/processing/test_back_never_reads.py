@@ -46,16 +46,17 @@ def on_rail(store, key): return any(key in (i['key'], *i.get('aliases', ())) for
 
 @pytest.mark.parametrize('level', ['reports', 'fyi'])
 def test_back_from_a_row_leaves_it_unread_on_the_rail_and_next_reads_it(db, level):
-    store, it, task = db, row(db, level), row(db, 'task')
-    concierge.surface(store, it['key'])
+    from taskuary import railwalk
+    store, it = db, row(db, level)
+    railwalk.open(store, it['key'])
     assert on_rail(store, it['key']), f'opening the {level} row read it off the rail'
-    with mock.patch.object(concierge, 'move_on', wraps=concierge.move_on) as read:
-        concierge.surface(store, task['key'])                     # Back: the row above, pulled by key, nothing left behind
-    read.assert_not_called()
+    with mock.patch.object(funnel, 'settle', wraps=funnel.settle) as wrote:
+        railwalk.back(store, it['key'])                           # Back: the row above, nothing written about the row it leaves
+    wrote.assert_not_called()
     left = next((i for i in rail(store) if it['key'] in (i['key'], *i.get('aliases', ()))), None)
     assert left and left.get('unread'), f'Back marked the {level} row read: {left}'
-    concierge.surface(store, it['key'])
-    concierge.surface(store, leaving=it['key'])                   # Next on it: read, and gone from the rail
+    railwalk.open(store, it['key'])
+    railwalk.next(store, it['key'])                               # Next on it: read, and gone from the rail
     assert not on_rail(store, it['key']), f'Next did not read the {level} row'
 
 
@@ -65,6 +66,10 @@ def test_a_task_opened_and_left_stays_on_the_rail(db):
     assert on_rail(store, task['key']) and on_rail(store, report['key'])
 
 
-def test_only_a_task_is_read_by_being_opened():
-    assert concierge.opened_reads({'order_band': 2, 'lane': 'todo'})
-    assert not concierge.opened_reads({'order_band': 3, 'lane': 'report', 'kind': 'report'})
+def test_nothing_is_read_by_being_opened(db):
+    """Opening never reads (rule 4, 2026-10-30): a task opened only has its "+N" cleared; a report, an FYI stay unread until Next."""
+    from taskuary import railwalk
+    for level in ('task', 'reports', 'fyi'):
+        it = row(db, level)
+        railwalk.open(db, it['key'])
+        assert on_rail(db, it['key']) and next(i for i in rail(db) if i['key'] == it['key']).get('unread'), level

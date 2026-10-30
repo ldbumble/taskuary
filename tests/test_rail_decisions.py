@@ -2,7 +2,7 @@
 
 R4 "idea you dismissed or read of course should leave the rail" - and a draft decided on another page.
 R5 "Auto-replies or withdrawn messages should be filtered out yes. Though maybe a setting?"
-R6 "next should move it to passed and done should close it" - a stopped agent, which Next could not put down.
+R6 "next should move it to passed and done should close it" - since 2026-10-30 nothing is passed: Next leaves a task in place.
 R14 "now we have your task, where task with no message belongs"
 "For meeting it ends after 5 minutes make that a setting."
 """
@@ -89,31 +89,31 @@ class MeetingGraceTests(unittest.TestCase):
             self.assertEqual(len(funnel.from_calendar(s, datetime.now())), 1)
 
 
-class NextOnAMeetingHoldsItUntilItStartsTests(unittest.TestCase):
-    def test_next_on_a_coming_meeting_is_quiet_until_it_starts(self):
-        """The owner, 2026-09-28: "i should not have to dismiss invite a 100 times. once i click next within 15
-        minutes it should not come back to actual time" - Next wrote a shown mark only mail and tasks read, so the
-        meeting was back after every fyi batch."""
-        from taskuary import concierge
+class NextOnAMeetingIsWalkedLikeATaskTests(unittest.TestCase):
+    def test_next_on_a_coming_meeting_leaves_it_in_its_place(self):
+        """The owner, 2026-09-28: "i should not have to dismiss invite a 100 times" - Next held a meeting `later` until it started.
+        Decided 2026-10-30 (Q3, rule 6): a meeting is walked like a task, in its place - never skipped, never hidden until it starts;
+        Next writes nothing on it and it leaves the rail by itself after its grace minutes."""
+        from taskuary import concierge, railwalk
         s, settle = settled()
         st = datetime.now() + timedelta(minutes=10)
         agenda = [{'start': st.strftime('%Y-%m-%dT%H:%M:%S'), 'end': (st + timedelta(minutes=30)).strftime('%Y-%m-%dT%H:%M:%S'),
                    'subject': 'Month-end review', 'who': ['Erin Blake']}]
         mail(s, 'lunch on friday', who='Gail Moreno', email='gail@northwind.example', hours=1)
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
-        with mock.patch.object(funnel, '_agenda', return_value=agenda),              mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+        with mock.patch.object(funnel, '_agenda', return_value=agenda), mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
             self.assertEqual(first['item']['kind'], 'meeting')
-            concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
-            self.assertFalse([i for i in rail(s) if i['kind'] == 'meeting' and i['actionable']], 'not back before it starts')
-            at = st + timedelta(minutes=1)
-            back = [i for i in processing_unread.build(s, now=at, live_state=[])['items'] if i['kind'] == 'meeting']
-            self.assertEqual([i['actionable'] for i in back], [True], 'back when it starts')
+            concierge.surface(s, llm=lambda *a, **k: 'never', from_key=first['item']['key'])
+            self.assertEqual([i['actionable'] for i in rail(s) if i['kind'] == 'meeting'], [True], 'still on the rail, in its place')
+            self.assertEqual(railwalk.start(s)['item']['kind'], 'meeting', 'and the next walk starts on it again')
 
 
-class StoppedGoesToPassedTests(unittest.TestCase):
-    def test_next_puts_a_stopped_agent_in_passed_and_the_next_walk_brings_it_back(self):
-        from taskuary import concierge
+class NextLeavesAStoppedAgentInTasksTests(unittest.TestCase):
+    def test_next_leaves_a_stopped_agent_in_its_place_and_the_next_walk_starts_on_it(self):
+        """R6 (2026-09-25: "next should move it to passed") replaced 2026-10-30: nothing is passed. Next on a task writes nothing, the
+        row stays where it was under Tasks, and Walk starts at the top with it again (rules 4 and 6)."""
+        from taskuary import concierge, railwalk
         s, settle = settled()
         s.upsert_agent('coding', 'coding', 'cli', '{}')
         t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open', 'Assignee': 'agent:coding'}, 'o')
@@ -124,44 +124,38 @@ class StoppedGoesToPassedTests(unittest.TestCase):
              mock.patch.object(funnel, 'agent_left', return_value=True):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
             self.assertEqual((first['item']['lane'], first['item']['tid']), ('stopped', t))
-            concierge.move_on(s, first['item']['key'])                   # Next's mark, the walk not run out
+            railwalk.next(s, first['item']['key'])
             now = [(i['lane'], bool(i.get('surfaced')), i['actionable']) for i in rail(s) if i.get('tid') == t]
-            self.assertEqual(now, [('stopped', True, False)], 'in Passed, not offered again')
-            later = datetime.now() + timedelta(hours=4)          # no clock brings it back inside the walk (2026-10-21)...
-            self.assertEqual([i['actionable'] for i in processing_unread.build(s, now=later, live_state=[])['items'] if i.get('tid') == t], [False])
-            funnel.new_walk(s)                                   # ...the next walk does
-            self.assertEqual([i['actionable'] for i in rail(s) if i.get('tid') == t], [True])
+            self.assertEqual(now, [('stopped', False, True)], 'in its place, no Passed band')
+            self.assertEqual(railwalk.start(s)['item']['tid'], t)
 
 
 class AStopAfterNextIsYoursTests(unittest.TestCase):
-    def test_an_agent_that_stops_after_the_next_leaves_passed(self):
-        """The owner, 2026-09-28: "If agent stopped working after a next it should shoot up to your task category" -
-        a Next pressed before the agent stopped (or asked again) filed the new stop straight into Passed."""
-        from taskuary import concierge
+    def test_an_agent_that_stops_again_after_the_next_is_still_yours(self):
+        """The owner, 2026-09-28: "If agent stopped working after a next it should shoot up to your task category". With nothing passed
+        (2026-10-30) a stop before or after a Next is the same row, in Tasks, the owner's."""
+        from taskuary import concierge, railwalk
         s, settle = settled()
         s.upsert_agent('coding', 'coding', 'cli', '{}')
         t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open', 'Assignee': 'agent:coding'}, 'o')
         mid = mail(s, 'export', who='Omar Keller', email='omar@northwind.example', hours=3, tid=t)
         s.add_route(mid, t, 'route', 1.0, 'triage: coding', [], 'triage')
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
-        with mock.patch('taskuary.terminal.live_sessions', return_value=[]),              mock.patch.object(funnel, 'agent_left', return_value=True):
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]), mock.patch.object(funnel, 'agent_left', return_value=True):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
-            concierge.move_on(s, first['item']['key'])
-            passed = [(i['lane'], bool(i.get('surfaced'))) for i in rail(s) if i.get('tid') == t]
-            self.assertEqual(passed, [('stopped', True)], 'Next passed it')
-            # the run speaks again after the pass: continued, then stopped with a question
+            railwalk.next(s, first['item']['key'])
             later = (datetime.now() + timedelta(minutes=2)).isoformat(sep=' ', timespec='seconds')
             with mock.patch('taskuary.store._now', return_value=later):
                 s.add_worker_event({'TaskId': t, 'Sid': 's1', 'Kind': 'turn_end', 'Text': 'Done - one question for you.'})
             funnel.invalidate()
             now = [(i['lane'], bool(i.get('surfaced')), i['actionable']) for i in rail(s) if i.get('tid') == t]
-            self.assertEqual(now, [('stopped', False, True)], 'a stop newer than the pass is in Your task')
+            self.assertEqual(now, [('stopped', False, True)], 'in Your task')
 
 
-class UrgentGoesToPassedTests(unittest.TestCase):
-    def test_next_on_an_urgent_task_puts_it_in_passed(self):
-        """R3: urgent open work left the rail for three hours on Next - Passed was for the other lanes only."""
-        from taskuary import concierge
+class UrgentStaysInPlaceTests(unittest.TestCase):
+    def test_next_on_an_urgent_task_leaves_it_in_its_place(self):
+        """R3: urgent open work left the rail for three hours on Next. Since 2026-10-30 Next on any task writes nothing: it stays."""
+        from taskuary import concierge, railwalk
         s, settle = settled()
         t = s.create_task({'Title': 'Send the August financials', 'Kind': 'task', 'Status': 'open', 'Priority': 'urgent'}, 'triage')
         mid = mail(s, 'August financials', who='Paula Vance', email='paula@vendor.example', hours=1, tid=t)
@@ -170,9 +164,9 @@ class UrgentGoesToPassedTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
             self.assertEqual(first['item']['tid'], t)
-            concierge.move_on(s, first['item']['key'])
+            railwalk.next(s, first['item']['key'])
             now = [(bool(i.get('surfaced')), i['actionable']) for i in rail(s) if i.get('tid') == t]
-        self.assertEqual(now, [(True, False)], 'in Passed, not gone')
+        self.assertEqual(now, [(False, True)], 'on the rail, in its place')
 
 
 class RemindMeTests(unittest.TestCase):
@@ -211,31 +205,22 @@ class ErrorDismissTests(unittest.TestCase):
         self.assertFalse([i for i in rail(s) if i['key'] == f"conn:{c['ConnectorId']}"])
 
 
-class NewWalkRaisesWavingAgentsTests(unittest.TestCase):
-    def test_a_new_walk_clears_the_shown_mark_on_an_agent_waiting_on_you(self):
-        """R11: the rail keys an agent's row processing:<item>, and reset_walk only ever cleared agent: keys."""
+class NewChatTests(unittest.TestCase):
+    def test_a_new_chat_keeps_read_as_read_and_forgets_the_walks_place(self):
+        """R11 (a new walk cleared the shown mark on a waving agent) replaced 2026-10-30: no walk writes a shown mark, so a new chat has
+        none to clear - read stays read, and the walk's place is forgotten (railwalk.reset): Walk starts at the top."""
+        from taskuary import railwalk
         s = store()
-        s.set_funnel_state('processing:pi_1', 'surfaced', 'assistant')
         s.set_funnel_state('processing:pi_2', 'surfaced', 'assistant')
-        pile = {'items': [{'key': 'processing:pi_1', 'lane': 'blocked'}, {'key': 'processing:pi_2', 'lane': 'fyi'}]}
-        with mock.patch.object(processing_unread, 'build', return_value=pile):
-            funnel.reset_walk(s)
-        self.assertNotIn('processing:pi_1', s.funnel_states())
+        s.set_setting(railwalk.KEY, '{"v": 1, "on": "processing:pi_1", "members": ["processing:pi_1"], "first": null, "last": null}', 't')
+        funnel.reset_walk(s)
         self.assertEqual(s.funnel_states()['processing:pi_2']['Status'], 'surfaced', 'read stays read')
+        self.assertIsNone(railwalk.state(s)['on'])
 
-    def test_a_new_walk_raises_a_yes_still_owed_too(self):
-        """2026-09-29: Close out refused, the app restarted, and the new chat walked straight past the pull request still
-        waiting on the owner. Shown in the old chat is not answered."""
-        s = store()
-        s.set_funnel_state('processing:pi_3', 'surfaced', 'assistant')
-        with mock.patch.object(processing_unread, 'build', return_value={'items': [{'key': 'processing:pi_3', 'lane': 'approve'}]}):
-            funnel.reset_walk(s)
-        self.assertNotIn('processing:pi_3', s.funnel_states())
-
-    def test_a_yes_still_owed_is_back_in_your_task_after_a_new_walk_not_gone(self):
-        """2026-09-29: the new walk cleared the shown mark but the read stood, so the pull request was neither unread nor
-        Passed - off the rail for three hours while the task list still showed it."""
-        from taskuary import concierge
+    def test_a_yes_still_owed_stays_in_your_task_through_next_and_a_new_chat(self):
+        """2026-09-29: a new walk walked straight past the pull request still waiting on the owner. Next on it writes nothing now, and
+        a new chat changes nothing about it: it is in Tasks, walkable, the whole time."""
+        from taskuary import concierge, railwalk
         s, settle = settled()
         t = s.create_task({'Title': 'Merge the export fix', 'Kind': 'coding', 'Status': 'waiting', 'Assignee': 'agent:coding'}, 'o')
         mid = mail(s, 'export fix', who='Omar Keller', email='omar@northwind.example', hours=1, tid=t)
@@ -244,11 +229,10 @@ class NewWalkRaisesWavingAgentsTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
             self.assertEqual((first['item']['tid'], first['item']['lane']), (t, 'approve'))
-            concierge.move_on(s, first['item']['key'])
-            self.assertEqual([(bool(i.get('surfaced')), i['actionable']) for i in rail(s) if i.get('tid') == t], [(True, False)], 'Passed')
+            railwalk.next(s, first['item']['key'])
+            self.assertEqual([(bool(i.get('surfaced')), i['actionable']) for i in rail(s) if i.get('tid') == t], [(False, True)])
             funnel.reset_walk(s)
-            self.assertEqual([(bool(i.get('surfaced')), i['actionable']) for i in rail(s) if i.get('tid') == t], [(False, True)],
-                             'a new walk puts it back in Your task')
+            self.assertEqual([(bool(i.get('surfaced')), i['actionable']) for i in rail(s) if i.get('tid') == t], [(False, True)])
 
 
 class AnOpenTaskIsAlwaysOnTheRailTests(unittest.TestCase):

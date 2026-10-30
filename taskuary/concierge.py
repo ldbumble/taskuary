@@ -3707,7 +3707,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
     (railwalk.next). WHICH row, and what leaving it does, is railwalk's alone (the owner, 2026-10-30: the walk has one owner); this
     keeps the old signature for the callers that word a turn around it. `leaving` / `exclude`: the row the caller had on screen."""
     from . import railwalk
-    if key: return railwalk.open(store, key, actor=actor, press=press, llm=llm)
+    if key: return railwalk.open(store, key, actor=actor, press=press, llm=llm, at=from_key)
     return railwalk.next(store, from_key or leaving or exclude, actor=actor, press=press, read=read, llm=llm)
 
 
@@ -3735,7 +3735,7 @@ def present_turn(store, item: dict, actor: str = 'owner', picked: bool = False, 
                       if item['kind'] == 'report' and not item.get('bad') else '')
                    + ('The card below holds the draft that waits for their yes. ' if item['kind'] in ('review', 'action') else '')
                    + ('The agent is parked on the question in the card. ' if item['kind'] == 'agent' else ''))
-            say, options, wanted = _ask(store, llm, tid, item, ask, (funnel.cached_pile(store) or {}).get('items') or [])
+            say, options, wanted = _ask(store, llm, tid, item, ask, funnel.pile(store).get('items') or [])
             remember_llm = True
         except Exception as e: logger.warning(f'concierge: the model pass failed - {e}')
     if not say: say = brought_up(item, picked=picked) if routes() else fallback(item, True, store=store)

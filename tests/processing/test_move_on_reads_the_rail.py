@@ -1,6 +1,6 @@
 """Next puts the row it leaves down from the build the rail already holds (2026-10-20): a keyed build only to read
-back that row's sig was 0.2-1 s of every press on a big home. The rail's build is used only while nothing has been
-written since it began, and what is written is exactly what the keyed lookup wrote."""
+back that row's sig was 0.2-1 s of every press on a big home. The walk reads its line from the cached rail and never builds a row by
+key to move (railwalk, 2026-10-30: "line() must read the cached pile and never build")."""
 import sqlite3
 from datetime import datetime, timedelta
 
@@ -59,27 +59,15 @@ def keyed_builds(monkeypatch):
     return calls
 
 
-def test_the_row_left_is_put_down_from_the_rail_as_the_lookup_put_it_down(two, monkeypatch):
-    a, b = two
-    keys = [i['key'] for i in funnel.pile(b, quiet=True, observed=[])['items']]
-    assert len(keys) >= 3
-    for key in keys:                                   # the lookup it always was: a fresh rail read is never used for it
-        funnel.invalidate(); concierge.move_on(b, key)
-    calls = keyed_builds(monkeypatch)
-    for key in keys:
-        funnel.pile(a, quiet=True, observed=[]); concierge.move_on(a, key)
-    assert calls == [], 'the row left was found in the rail it was chosen from'
-    assert states(a) == states(b)
-
-
-def test_a_write_since_the_rail_was_built_is_the_lookup_again(two, monkeypatch):
+def test_next_reads_the_row_it_leaves_from_the_rail_it_already_holds(two, monkeypatch):
+    from taskuary import railwalk
     a, _ = two
-    key = funnel.pile(a, quiet=True, observed=[])['items'][0]['key']
-    a.add_comment(a.list_tasks()[0]['TaskId'], 'owner', 'user', 'written after the rail was built')
-    assert funnel.unwritten_full_items(a) is None
+    keys = [i['key'] for i in funnel.pile(a, quiet=True, observed=[])['items']]
+    assert len(keys) >= 3
     calls = keyed_builds(monkeypatch)
-    concierge.move_on(a, key)
-    assert calls, 'a rail built before a write is not the store as of now'
+    for key in keys[:-1]:
+        railwalk.open(a, key); railwalk.next(a, key)
+    assert calls == [], 'the walk built a row by key to move'
 
 
 def test_mark_done_asks_whether_its_task_is_on_the_table_from_the_rail_as_the_lookup_answered(two, monkeypatch):

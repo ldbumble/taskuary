@@ -1,0 +1,30 @@
+{
+  "_": "One list of edge cases for the blank-slot rule, read by tests/test_blanks.py and website/test/blanks.test.mjs so the server's refusal and the draft box's marks never disagree. Each case: the draft text, then the blanks it still holds.",
+  "cases": [
+    ["Hi Erin,\n\nI can't make it on [DATE] because [REASON].\n\nAlex", ["[DATE]", "[REASON]"]],
+    ["Thanks,\n[Your name]", ["[Your name]"]],
+    ["Dear [Recipient's Name], see you on [date].", ["[Recipient's Name]", "[date]"]],
+    ["Call me at [PHONE NUMBER] or [YOUR PHONE #].", ["[PHONE NUMBER]", "[YOUR PHONE #]"]],
+    ["Hi [First Name], [Insert meeting time] works.", ["[First Name]", "[Insert meeting time]"]],
+    ["Signed: [____]", ["[____]"]],
+    ["The total is [TBD] and the date is [TBD].", ["[TBD]"]],
+    ["Re: [External] Invoice for October - attached.", []],
+    ["[EXTERNAL] Payworth renewal, see below.", []],
+    ["[CAUTION] This email came from outside Northwind.", []],
+    ["See [the portal](https://portal.northwind.example) for details.", []],
+    ["As noted in the report [1] and [2], it holds.", []],
+    ["Done:\n[x] payroll\n[ ] training\n[X] badges", []],
+    ["The log said [ERROR] then [INFO] retrying.", []],
+    ["Use rows[INDEX] and cfg[KEY] in the script.", []],
+    ["Run `deploy --env [TARGET]` and wait.", []],
+    ["```\nvalue = table[ROW_ID]\nprint([NAME])\n```\nThat is all.", []],
+    ["> On Monday Gail wrote:\n> please send [DATE]\nAll set on my side.", []],
+    ["He said it was [sic] fine, and [name withheld] agreed.", []],
+    ["Item [A] and step [Q3] stand.", []],
+    ["The answer is N [N/A] for now.", []],
+    ["[Northwind] quarterly notes", []],
+    ["Ref [docs][1] and\n[1]: https://docs.northwind.example", []],
+    ["Plain text with no brackets at all.", []],
+    ["", []]
+  ]
+}

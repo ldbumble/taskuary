@@ -1,0 +1,10 @@
+{
+  "_": "A BLANK LEFT IN A DRAFT (the owner, 2026-10-30): a draft can hold a slot like [REASON] or [DATE] for the owner to fill, and Send went out with it. Send refuses while one remains - the server (taskuary/blanks.py, read by verdicts) and the draft box (website/src/blanks.js), which reads this same file. A slot is a bracket that is ALL CAPS (two letters or more), a run of underscores, or a short phrase that starts with a template cue. `not_slots` are the bracketed words real mail carries (a gateway's [EXTERNAL], a log's [ERROR]); a bracket holding a `said` word is an editor's own note ([name withheld]), never a slot.",
+  "not_slots": ["EXTERNAL", "EXT", "CAUTION", "WARNING", "WARN", "SPAM", "SUSPECTED SPAM", "ENCRYPT", "ENCRYPTED", "SECURE", "CONFIDENTIAL",
+                "URGENT", "IMPORTANT", "FYI", "RE", "FW", "FWD", "INFO", "DEBUG", "ERROR", "FATAL", "TRACE", "OK", "PASS", "PASSED",
+                "FAIL", "FAILED", "SKIP", "SKIPPED", "N/A", "NA", "SIC"],
+  "cues": ["your", "insert", "enter", "add", "fill in", "recipient", "recipient's", "customer", "client", "first name", "last name", "full name",
+           "name", "date", "time", "day", "amount", "number", "phone", "address", "email", "company", "title", "position", "reason", "link",
+           "details", "placeholder"],
+  "said": ["redacted", "removed", "withheld", "omitted", "sic"]
+}

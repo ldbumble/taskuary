@@ -4,7 +4,7 @@ import { laneMeta, taskStateMeta } from "./funnelPile.js";
 import { AGENT, NOT_SENT, READY } from "./taskLifecycle.js";
 import { WORD } from "./lanes.js";
 import { ago, agoMins, dur, durSince, plural } from "./timeWords.js";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useCapabilities, NO_CODING_TOOL } from "./capabilities.js";
 import { bareAddresses } from "./replyDelivery.js";
 import { keepAddresses, linkParts } from "./mailLinks.js";
@@ -1989,9 +1989,26 @@ export const CcRow = ({ cc, setCc, channel }) => {
 // window, and the corner handle drags it taller or shorter. The drag is fed back as autosize's own floor (minRows) rather
 // than a height autosize would overwrite on the next keystroke, so the two never fight: the box keeps the size you gave it
 // and still grows past it with the text.
-export const DraftField = ({ value, onChange, sx, inputProps, ...rest }) => {
-  const ref = useRef(null), drag = useRef(null);
+// `marks`: [start, end] spans of the text to light - the blanks Send refuses over (blanks.js, the owner 2026-10-30). A textarea
+// cannot colour its own words, so a copy of the text set the same way lies over it, transparent but for the marks, and scrolls with it.
+export const DraftField = ({ value, onChange, sx, inputProps, marks = [], ...rest }) => {
+  const ref = useRef(null), drag = useRef(null), wrap = useRef(null);
   const [rows, setRows] = useState(0), [cap, setCap] = useState(24);
+  const [box, setBox] = useState(null), [top, setTop] = useState(0);
+  const marked = marks.length > 0;
+  useLayoutEffect(() => {
+    const el = ref.current, w = wrap.current;
+    if (!marked || !el || !w) { setBox(null); return undefined; }
+    const place = () => {
+      const a = el.getBoundingClientRect(), b = w.getBoundingClientRect(), cs = getComputedStyle(el);
+      setBox({ top: a.top - b.top, left: a.left - b.left, width: el.clientWidth, height: el.clientHeight, font: cs.font,
+        lineHeight: cs.lineHeight, letterSpacing: cs.letterSpacing, padding: cs.padding });
+      setTop(el.scrollTop);
+    };
+    place();
+    const ro = new ResizeObserver(place); ro.observe(el);
+    return () => ro.disconnect();
+  }, [marked, value]);
   const line = (el) => parseFloat(getComputedStyle(el).lineHeight) || 18;
   useEffect(() => {
     const el = ref.current; if (!el) return;
@@ -2014,7 +2031,23 @@ export const DraftField = ({ value, onChange, sx, inputProps, ...rest }) => {
     window.addEventListener("pointerup", up);
     return () => { ro.disconnect(); cro?.disconnect(); window.removeEventListener("resize", fit); window.removeEventListener("pointerup", up); };
   }, []);
-  return <TextField fullWidth multiline minRows={Math.max(2, rows)} maxRows={Math.max(cap, rows)} value={value} onChange={onChange} {...rest}
-    inputRef={ref} inputProps={{ ...inputProps, "data-tq-draft": "", onPointerDown: () => { drag.current = { t: 0 }; } }}
+  const field = <TextField fullWidth multiline minRows={Math.max(2, rows)} maxRows={Math.max(cap, rows)} value={value} onChange={onChange} {...rest}
+    inputRef={ref} inputProps={{ ...inputProps, "data-tq-draft": "", onPointerDown: () => { drag.current = { t: 0 }; },
+      onScroll: (e) => { if (marked) setTop(e.currentTarget.scrollTop); inputProps?.onScroll?.(e); } }}
     sx={{ ...sx, "& textarea": { ...(sx?.["& textarea"] || {}), resize: "vertical" } }} />;
+  const text = String(value ?? "");
+  const pieces = [];
+  marks.reduce((at, [a, b], i) => { pieces.push(text.slice(at, a), <mark key={i} data-tq-blank="">{text.slice(a, b)}</mark>); return b; }, 0);
+  if (marked) pieces.push(text.slice(marks.at(-1)[1]), "​");
+  return (
+    <Box ref={wrap} sx={{ position: "relative" }}>
+      {field}
+      {box && <Box aria-hidden sx={{ position: "absolute", top: box.top, left: box.left, width: box.width, height: box.height, overflow: "hidden", pointerEvents: "none" }}>
+        <Box sx={{ font: box.font, lineHeight: box.lineHeight, letterSpacing: box.letterSpacing, padding: box.padding, boxSizing: "border-box",
+          whiteSpace: "pre-wrap", overflowWrap: "break-word", color: "transparent", transform: `translateY(${-top}px)`,
+          "& mark": { color: "transparent", bgcolor: "rgba(232, 168, 56, 0.38)", borderRadius: "2px", boxShadow: "0 1px 0 #c98a1e" } }}>
+          {pieces}</Box>
+      </Box>}
+    </Box>
+  );
 };

@@ -798,6 +798,7 @@ class GeneralSession:
     """A connector-backed conversation with the live-session contract used by the terminal."""
     mode = 'assistant'
     blocks_on_owner = False              # a turn that ended holds nothing up: no prompt to park at (PW-226)
+    quick = False                        # answered in one call (quickwork): takes no desk until a real turn runs on it
     argv = []
     cwd = ''
     label = 'Taskuary assistant'
@@ -1007,6 +1008,7 @@ class GeneralSession:
         if not self._take(WAIT_TURN, cancel):
             raise RuntimeError(f'the assistant has been answering the previous question for over '
                                f'{int(WAIT_TURN)}s - something is stuck. Press stop, or reload the page.')
+        self.quick = False                   # a real turn: from here the session is a desk like any other
         self.busy, self.last = True, time.time()
         # A NEW TURN MAY FINISH AGAIN (the email walk, 2026-10-29): the mark a self-close leaves stops two hooks wrapping one turn,
         # and it outlived the turn - Continue on an agent that had closed once refused its next [[TASKUARY-DONE]], parked "waiting on you"
@@ -1280,9 +1282,33 @@ class GeneralSession:
             self._emit('\x1b[1;34myou>\x1b[0m ')
             self._lock.release()
 
+    def file_quick(self, ask: str, out, steps: list, as_owner: bool = True) -> str:
+        """A quick answer (quickwork.ask) filed as this session's turn, by `_file` - so its draft, question and close reach the owner
+        exactly as a general turn's do. `steps` are the call's own (kind, name, detail), kept as the turn's working."""
+        from . import quickwork, selfclose, workerstate as ws
+        if not self._take(WAIT_TURN):
+            raise RuntimeError(f'the assistant has been answering the previous question for over {int(WAIT_TURN)}s - something is stuck.')
+        self.busy, self.last = True, time.time()
+        selfclose.forget(self.task_id)
+        t0 = self.last
+        try:
+            ws.record(self.store, self.task_id, self.sid, 'working', source='quick')
+            if as_owner: self.store.add_comment(self.task_id, 'owner', USER_TYPE, ask)
+            self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}}]; self.trace_revision += 1
+            for kind, name, detail in steps or []: self._remember_trace(kind, name, detail)
+            return self._file(quickwork.as_reply(out), [], t0)
+        except Exception as e:
+            try: ws.record(self.store, self.task_id, self.sid, 'failed', text=str(e)[:4000], source='quick')
+            except Exception as skipped: logger.debug(f'quick worker event skipped: {skipped}')
+            raise
+        finally:
+            self.busy, self.last, self.spoke = False, time.time(), True
+            self._lock.release()
+
     def _file(self, reply: str, paths: list, t0: float, browser_tools: bool = False, browser_offer: bool = False) -> str:
         """File one turn's answer: its markers read, its draft, question or close raised, the reply kept as the task's comment.
         A general turn and a quick answer (quickwork) both end here, so the two can never file differently."""
+        src = 'quick' if self.quick else 'api'     # quickwork.only_quick reads a task's runs by this source
         if not reply: raise RuntimeError('the model returned an empty response')
         from . import playbooks
         reply = playbooks.collect_setup_draft(self.store, self.task_id, reply)
@@ -1346,12 +1372,12 @@ class GeneralSession:
         # the worker's own lifecycle, as events (PW-225): the turn ended; and if it asked, the exact question
         try:
             from . import workerstate as ws
-            ws.record(self.store, self.task_id, self.sid, 'turn_end', text=reply[:4000], source='api')
+            ws.record(self.store, self.task_id, self.sid, 'turn_end', text=reply[:4000], source=src)
             # ...each question of the reply as one group, so the owner answers them together (workerstate.answer_group)
             g = ws.group_key(f'{self.sid}:' + '|'.join(q for q, _ in asks)) if len(asks) > 1 else None
             for i, (q, choices) in enumerate(asks, 1):
                 ws.record(self.store, self.task_id, self.sid, 'input_needed', request_id=ws.question_id(g, i) if g else ws.request_id_for(q),
-                          text=q, choices=choices, source='api')
+                          text=q, choices=choices, source=src)
         except Exception as e: logger.debug(f'api worker event skipped: {e}')
         if signing is not None:
             from . import signin

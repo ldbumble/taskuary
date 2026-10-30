@@ -26,7 +26,7 @@ test("the floor's Next waits while the next one is coming: All read, next shows 
   assert.match(view, /const done = async \(pressed\) => \{[\s\S]{0,600}?\.\.\.x, done: true[\s\S]{0,200}?setNextComing\(true\);/);
   // ...and the walk's own turn takes `busy` in the same tick it clears it, so there is no frame between the two
   // ...the dots stand until what it runs has answered (the owner, 2026-10-30)
-  assert.match(view, /deferredChat\.current\.delete\(timer\);\s*\n\s*try \{ if \(epoch === chatEpoch\.current && !resettingRef\.current\) await fn\(\); \} finally \{ setNextComing\(false\); \}/);
+  assert.match(view, /deferredChat\.current\.delete\(timer\);[\s\S]{0,400}?try \{ if \(epoch === chatEpoch\.current && !resettingRef\.current\) await fn\(\); \} finally \{ if \(!turnFlight\.current\) setNextComing\(false\); \}/);
   // ...and a settle that fails lets go of it, its receipt offering Next
   assert.match(view, /setNextComing\(false\);\s*\n\s*setMsgs\(\(m\) => \[[^\n]*\n[^\n]*Not done - [^\n]*chips: \[\{ verb: "next"/);
 });

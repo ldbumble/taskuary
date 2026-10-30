@@ -35,5 +35,5 @@ test("a phone turn shows on the desktop as it happens - the dots, then the words
   assert.match(view, /\{\(busy \|\| phoneBusy \|\| nextComing \|\| walkDots\) && \(/);
   // ...and between letting a card go and the next pick: the settle and the deferred surface() run before busy
   assert.match(view, /setNextComing\(true\);\s*let pile = null;/);
-  assert.match(view, /try \{ if \(epoch === chatEpoch\.current && !resettingRef\.current\) await fn\(\); \} finally \{ setNextComing\(false\); \}/);
+  assert.match(view, /try \{ if \(epoch === chatEpoch\.current && !resettingRef\.current\) await fn\(\); \} finally \{ if \(!turnFlight\.current\) setNextComing\(false\); \}/);
 });

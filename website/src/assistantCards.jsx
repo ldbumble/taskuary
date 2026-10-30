@@ -366,7 +366,11 @@ const QUIET = new Set(["report_off"]);
 
 // `stages`: { verb: pane } - a word that rides one of the item's own panes instead of the bar (an FYI's Should be a task on its Came from,
 // where a task's Not a task stands: actionRow.splitRow `only`)
-export function Foot({ verb, then, where, covers = [], close, onDone, more, promote, extra = [], inline = false, openTask, taskId, moves = false, stages = {} }) {
+// `tuck`: words that wait in the ▾ unless lit (actionRow.pill) - a phish's Send to agent (dangerTuck)
+// A PHISH FILED FYI IS PUT DOWN, NOT HANDED ON (the owner, 2026-10-30): Send to agent stood as its main move; Not ours is lit now
+// (rulebook fyi_danger) and the agent's words wait in the ▾ - an FYI with no danger keeps its row as it was
+export const dangerTuck = (card) => (card?.kind === "fyi" && card.danger ? ["regular_agent", "coding_agent"] : []);
+export function Foot({ verb, then, where, covers = [], close, onDone, more, promote, extra = [], inline = false, openTask, taskId, moves = false, stages = {}, tuck = [] }) {
   const nav = React.useContext(CardNav);
   const shut = useClose(close || {}, onDone);
   const [open, setOpen] = useState(false);
@@ -386,7 +390,7 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
   // the task page's acts - sit behind More. The card's own move (its Foot `verb`) stays in the card.
   const staged = words.find((a) => stages[a.verb]), laid = staged ? { only: stages[staged.verb] } : null;
   const asVerb = (a, group) => ({ id: `w:${a.verb || a.label}`, group, tone: "s", label: a.label, title: a.title, disabled: a.disabled,
-    ...(stages[a.verb] ? { stage: stages[a.verb] } : {}), ...(laid ? { laid } : {}), run: (e, anchor) => a.onClick?.({ currentTarget: anchor || e?.currentTarget }) });
+    ...(stages[a.verb] ? { stage: stages[a.verb] } : {}), ...(laid ? { laid } : {}), ...(tuck.includes(a.verb) ? { tucked: true } : {}), run: (e, anchor) => a.onClick?.({ currentTarget: anchor || e?.currentTarget }) });
   useVerbs("foot", rowed ? [
     // a move that IS the way on - a batch's "All read, next" (`moves`) - is the row's Next itself (the design, phase A: the batch verb in
     // the Next group), so the batch shows one way on, and the Advisor's lit Next is it
@@ -1195,7 +1199,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   if (table != null && card.kind === "fyi") return (
     <FyiSections card={card} table={table} items={thread} err={err}
       msgs={<>{thread.map((it) => <FyiMessage key={it.key || it.mid} item={it}>{it.mid && <FullText mid={it.mid} revision={it === card ? card.presentation_revision : undefined} />}</FyiMessage>)}</>}
-      foot={<Foot openTask={onOpenTask} close={card} onDone={onDone} stages={{ mine: "from" }}
+      foot={<Foot openTask={onOpenTask} close={card} onDone={onDone} stages={{ mine: "from" }} tuck={dangerTuck(card)}
         extra={canUnsubscribe(card) ? [{ verb: "unsubscribe", label: btn("unsubscribe"), title: btnHint("unsubscribe"), onClick: unsub, disabled: !!busy }] : []}
         covers={[...(own || mineAlone ? (suggestedKind === "coding" ? ["coding_agent", "coder"] : ["regular_agent"]) : ["reply"]), ...(mineAlone ? ["reply", "not_ours"] : [])]}
         where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />} />
@@ -1213,8 +1217,8 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
         <YourMove title={own || mineAlone ? "who should take it?" : `reply to ${asker}`} go={verb}
           then={own || mineAlone ? `starts ${suggestedKind === "coding" ? "a coding agent" : "an agent"} on it; it comes back here when it stops.`
             : "writes one for you to approve here - nothing is sent."} />
-      ) : card.kind === "fyi" && <><DangerNote danger={card.danger} /><div className="tq-card-note">Nothing to decide - it only wants you to know.</div></>}
-      <Foot openTask={onOpenTask} close={card} onDone={onDone}
+      ) : card.kind === "fyi" && <><DangerNote danger={card.danger} aim={card.danger_aim} /><div className="tq-card-note">Nothing to decide - it only wants you to know.</div></>}
+      <Foot openTask={onOpenTask} close={card} onDone={onDone} tuck={dangerTuck(card)}
         extra={card.kind === "fyi" && canUnsubscribe(card) ? [{ verb: "unsubscribe", label: btn("unsubscribe"), title: btnHint("unsubscribe"), onClick: unsub, disabled: !!busy }] : []}
         covers={[...(own || mineAlone ? (suggestedKind === "coding" ? ["coding_agent", "coder"] : ["regular_agent"]) : ["reply"]), ...(mineAlone ? ["reply", "not_ours"] : [])]}
         where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
@@ -1389,8 +1393,10 @@ export function BriefCard({ card, onStart }) {
 const whoName = (w) => String(w || "someone").replace(/\s*<[^>]*>/g, "") || "someone";
 // the mail's own subject, beside triage's title when the two differ (B3): what it was sent as, and what triage made of it
 export const shownSubject = (item) => (item?.subject && item.subject !== item.title ? item.subject : "");
-// what triage read the words as trying to make an AI do (message.Danger): the task page's one warning line, on the card too (B3)
-const DangerNote = ({ danger }) => (danger ? <div className="tq-card-note" data-tq-danger="" style={{ color: ALERT, overflowWrap: "anywhere" }}>{dangerLine(danger)}</div> : null);
+// what triage read the words as trying to make an AI do (message.Danger): the task page's one warning line, on the card too (B3) - a scam
+// on the owner said as one, its reason on hover (`aim`, the owner 2026-10-30)
+const DangerNote = ({ danger, aim = null }) => (danger ? <div className="tq-card-note" data-tq-danger="" title={aim === "owner" ? danger : undefined}
+  style={{ color: ALERT, overflowWrap: "anywhere" }}>{dangerLine(danger, aim)}</div> : null);
 export function FyiMessage({ item, onHead = null, open: held = null, children }) {
   const [mine, setMine] = useState(false);
   const open = held ?? mine, gist = gistFor(item);
@@ -1403,7 +1409,7 @@ export function FyiMessage({ item, onHead = null, open: held = null, children })
         {(item.since || item.when) && <span className="at">{fmtDateTime(item.since || item.when)}</span>}
         <span className="chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
       </button>
-      <DangerNote danger={item.danger} />
+      <DangerNote danger={item.danger} aim={item.danger_aim} />
       {!open && gist && <div className="tq-item-msg-g">{gist}</div>}
       {open && item.title && <div className="tq-item-msg-t">{item.title}</div>}
       {open && shownSubject(item) && <div className="tq-item-msg-g" data-tq-subject="">Subject: {shownSubject(item)}</div>}

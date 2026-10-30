@@ -13,8 +13,8 @@ test("the danger line is said for any sender, and nothing without a danger", () 
 });
 test("the FYI card, the rail row and the task page draw it", () => {
   const src = (n) => readFileSync(new URL(`../src/${n}`, import.meta.url), "utf8");
-  assert.match(src("assistantCards.jsx"), /<DangerNote danger=\{item\.danger\} \/>/);
-  assert.match(src("assistantCards.jsx"), /<DangerNote danger=\{card\.danger\} \/>/);
+  assert.match(src("assistantCards.jsx"), /<DangerNote danger=\{item\.danger\} aim=\{item\.danger_aim\} \/>/);
+  assert.match(src("assistantCards.jsx"), /<DangerNote danger=\{card\.danger\} aim=\{card\.danger_aim\} \/>/);
   assert.match(src("assistantCards.jsx"), /Subject: \{shownSubject\(item\)\}/);
   assert.match(src("AssistantView.jsx"), /\{!!i\.danger && <span className="tq-pile-danger"/);
   assert.match(src("TaskPage.jsx"), /\{dangerOf\(detail\) && \(/);

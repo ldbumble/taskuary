@@ -329,8 +329,9 @@ export const typeOf = (v) => TYPE_OF[String(v?.id || "").split(":").pop()] || "a
 // `pressable`: on the narrowest row the lead is never a greyed one (the owner, 2026-10-28: a phone's one move was a disabled "Send to agent") -
 // the lit move stays (its busy word is its state), any other is the first pressable one, and with none it is the ▾ alone.
 // An empty slot is neither a move nor a menu item: it only holds the Send's width on a wide row.
+// ...and never a `tucked` one unless lit: a phish's Send to agent waits in the ▾ (the owner, 2026-10-30), at every width
 export const leadOf = (row, pressable = true) => {
-  const ok = (v) => !v.slot && !(pressable && v.disabled);
+  const ok = (v) => !v.slot && !v.tucked && !(pressable && v.disabled);
   return [...row.decide, ...row.agent, ...row.more].find((v) => v.tone === "p" && !v.slot) || row.decide.find(ok) || (pressable ? row.agent.find(ok) : row.agent[0]) || null;
 };
 // MARK DONE IS NEVER FOLDED (the owner, 2026-10-28: "You should not have Mark done ever hidden"): a sent reply's row showed Reply and Hand it to

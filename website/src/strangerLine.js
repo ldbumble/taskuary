@@ -22,5 +22,10 @@ export const trustInBox = (story) => story?.kind === "held" && !!story.trust?.pe
 // WHAT TRIAGE READ THE WORDS AS TRYING TO MAKE AN AI DO (message.Danger) said in ONE line wherever the mail is - the task page, the FYI
 // card, the rail row - whoever sent it: a phishing mail triage caught was filed FYI under its own subject with no warning at all (B3,
 // 2026-10-29). A warning, never a gate: links and moves stay as they were
-export const dangerLine = (danger) => (danger ? `⚠ Reads as an attempt to steer the agent: ${danger}` : null);
+// ...AND A SCAM ON THE OWNER IS SAID AS ONE (the owner, 2026-10-30): a phish aimed at them read "an attempt to steer the agent". `aim` is
+// triage's (message.DangerAim): 'owner' says "a scam aimed at you" - its reason on hover (DangerNote) - and the steer words stay for text
+// written to hijack the agent, and for a reading that never said whom (rows from before)
+export const SCAM_LINE = "⚠ Looks like a scam aimed at you - don't click or pay.";
+export const dangerLine = (danger, aim = null) => (!danger ? null : aim === "owner" ? SCAM_LINE : `⚠ Reads as an attempt to steer the agent: ${danger}`);
 export const dangerOf = (d) => d?.origin?.danger || null;
+export const dangerAimOf = (d) => d?.origin?.danger_aim || null;

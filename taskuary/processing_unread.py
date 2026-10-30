@@ -716,7 +716,7 @@ def fold_fyi_threads(cards: list) -> list:
         head['thread'] = [k for c in rest for k in (c['key'], *c.get('thread', ()))]
         head['thread_n'] = len(rest) + sum(c.get('thread_n', 0) for c in rest)
         # ...and the mails it speaks for, oldest first, for Came from to show them all with it
-        head['thread_items'] = [{k: c.get(k) for k in ('key', 'mid', 'who', 'when', 'title', 'subject', 'danger', 'channel', 'source')} for c in rest]
+        head['thread_items'] = [{k: c.get(k) for k in ('key', 'mid', 'who', 'when', 'title', 'subject', 'danger', 'danger_aim', 'channel', 'source')} for c in rest]
         head['unread'] = any(c.get('unread') for c in cs)
         gone |= {id(c) for c in rest}
     return [c for c in cards if id(c) not in gone]

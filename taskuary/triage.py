@@ -153,6 +153,7 @@ def _bullets(name: str) -> str:
 PRIORITY = _bullets('priority') + '\n' + _bullet('priority_why')
 URGENT = PRIORITY        # the 2026-09-25 name for the one bullet an older document is given; it says the three now (2026-10-25)
 DUE, SENDER, GOAL, DANGER, MEET = (_bullet('due'), _bullet('sender_class'), _bullet('goal'), _bullet('danger'), _bullet('meet'))
+DANGER_AIM = _bullet('danger_aim')      # ...and who it is aimed at, the owner or the agent: the warning's words follow it (2026-10-30)
 LEVELS = ('regular', 'important', 'urgent')
 # how much thought the work takes and whether the reader could tell - a verdict apart from priority, read by the router (2026-10-25)
 DIFFICULTY, SURE, DATA = _bullet('difficulty'), _bullet('sure'), _bullet('data_class')
@@ -221,6 +222,9 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
          # what the text tries to make an AI do, or null - read here because triage already reads every word (the owner,
          # 2026-10-15: "not a separate call but part of the triage"); a stranger's card shows it, nothing is gated on it
          'danger': {'type': ['string', 'null']},
+         # ...and WHO IT IS AIMED AT (the owner, 2026-10-30): a phish on the owner read "an attempt to steer the agent" - it says "a scam
+         # aimed at you" now, and the steer words are kept for text written to hijack the agent
+         'danger_aim': {'type': ['string', 'null'], 'enum': ['owner', 'agent', None]},
          # the line still waits on the owner - a question or an ask put to them, not a thanks or a "sure" (the owner, 2026-10-25: a
          # colleague's question on a closed task's thread was kept on it, closed, and nearly missed). It is what reopens a closed task
          'asks_owner': {'type': ['boolean', 'null']},
@@ -830,6 +834,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if not shape and 'sender_class' not in base: system += '\n\n' + SENDER   # ...and who wrote it (2026-10-11)
             if not shape and 'done_when' not in base: system += '\n\n' + GOAL       # ...and whether it is a goal (2026-10-12)
             if not shape and '"danger"' not in base: system += '\n\n' + DANGER     # ...and what it tries to make an AI do (2026-10-15)
+            if not shape and 'danger_aim' not in base: system += '\n\n' + DANGER_AIM   # ...and whether that is the owner or the agent (2026-10-30)
             if not shape and '"meet"' not in base: system += '\n\n' + MEET         # ...and whether it asks for a time to meet (2026-10-20)
             if not shape and '"difficulty"' not in base: system += '\n\n' + DIFFICULTY + '\n' + SURE   # ...and how hard, how sure (2026-10-25)
             if not shape and '"data_class"' not in base: system += '\n\n' + DATA                   # ...and what data it carries (2026-10-25)
@@ -956,7 +961,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 # ...and what it tries to make an AI do (TRIAGE.md's danger): asked for since 2026-10-15 and dropped here, so only ranking's
                 # reading ever reached message.Danger - and it holds the unattended start now (ingest.danger, the owner 2026-10-28)
                 dg = ' '.join(str(j.get('danger') or '').split())[:200]
-                if dg and dg.lower() not in ('null', 'none', 'no', 'false'): out['danger'] = dg
+                if dg and dg.lower() not in ('null', 'none', 'no', 'false'):
+                    out['danger'] = dg
+                    if j.get('danger_aim') in ('owner', 'agent'): out['danger_aim'] = j['danger_aim']
                 # the text around the sender's words that they did not write - what a screen leaves out (strip_wrapper)
                 wr = wrapper_in(j, f"{msg.get('body') or ''}\n{msg.get('own_text') or ''}")
                 if wr: out['wrapper'] = wr

@@ -73,6 +73,7 @@
     "goal":          {"line": "", "lit": ["next"]},
     "idea":          {"line": "", "lit": ["mine"], "ask": true},
     "fyi":           {"line": "", "lit": ["next"], "ask": true},
+    "fyi_danger":    {"line": "", "lit": ["not_ours"]},
     "stranger":      {"line": "First mail from {domain}.", "lit": ["reply"]},
     "duplicate":     {"line": "Same ask as {ref} - fold it into that one.", "lit": ["split", "remove"]},
     "asked":         {"line": "{who} asked {ago}.", "lit": ["reply"], "ask": true},

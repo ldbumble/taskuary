@@ -357,6 +357,35 @@ class DeskRoutes(unittest.TestCase):
             self.assertEqual(out['open'], '#connector=quickbooks&step=1')
         self.assertNotIn('proposal', out); self.assertEqual(proposals(s), [])
 
+    def test_a_job_the_model_says_repeats_is_new_routine_filled_in_never_a_one_off(self):
+        # the owner, 2026-10-29: "every Monday at noon run the user management review skill" made a one-off agent task
+        s = store(); ask = 'every Monday at noon run the weekly review skill in northwind/ledger'; had = len(s.list_sources())
+        recurs = {'schedule': 'every Monday at noon', 'objective': 'run the weekly review', 'repo': 'northwind/ledger', 'skill': '/weekly-review'}
+        call = {'kind': 'task.create_from_text', 'params': {'kind': 'coding', 'text': ask, 'recurs': recurs}}
+        out, spawn = say(s, ask, None, 'CALL: ' + json.dumps(call))
+        self.assertEqual(out['new']['kind'], 'workflow')
+        self.assertEqual(out['new']['text'], 'every Monday at noon - run the weekly review')
+        self.assertEqual(out['new']['routine'], {'coding': True, 'repo': 'northwind/ledger', 'skill': 'weekly-review'})
+        self.assertEqual(out['say'], 'Wrote it into New - Build it there starts it.')
+        spawn.assert_not_called(); self.assertEqual(proposals(s), []); self.assertEqual(len(s.list_sources()), had)   # nothing saved
+        # ...the same verdict from the set-up sort
+        sort = {'kind': 'routine', 'why': 'it repeats', 'recurs': {'schedule': 'every weekday at 7', 'objective': 'review the failed imports'}}
+        with mock.patch.object(concierge, '_compose_llm', return_value=lambda *a, **k: json.dumps(sort)):
+            out, spawn = say(s, 'every weekday at 7 review the failed imports', None,
+                             'CALL: ' + json.dumps({'kind': 'setup', 'params': {'text': 'every weekday at 7 review the failed imports'}}))
+        self.assertEqual((out['new']['kind'], out['new']['text'], out['new']['routine']['coding']),
+                         ('workflow', 'every weekday at 7 - review the failed imports', False))
+        spawn.assert_not_called()
+        # ...and an ask with no `recurs` is the one-off it always was
+        out, _ = say(s, 'look into the failed import', None,
+                     'CALL: ' + json.dumps({'kind': 'task.create_from_text', 'params': {'kind': 'general', 'text': 'look into the failed import'}}))
+        self.assertEqual((out['new']['kind'], 'routine' in out['new']), ('agent', False))
+
+    def test_a_report_brought_up_by_name_carries_its_words(self):
+        s = store()
+        out = concierge._route(s, 0, 'script.start', 0, {'name': 'report', 'text': 'list the AP bills due this month'}, '', {}, None, '', 'owner')
+        self.assertEqual((out['new']['kind'], out['new']['text']), ('report', 'list the AP bills due this month'))
+
     def test_a_playbook_asked_for_is_new_playbook_never_an_agents_job(self):
         # the owner, 2026-10-22: "can I build a playbook for it?" opened New on Give an agent a job - "this is not playbook ui?"
         s = store(); ask = 'when people ask me for their combined leave, can I build a playbook for it?'

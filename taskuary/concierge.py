@@ -1431,14 +1431,33 @@ def _paged(store, tid: int, item: dict | None, kind: str, p: dict, text: str, ac
 # a new job's words go into New, on the tab that starts it, its own filled button the one to press: an agent for work, a note to self for
 # a to-do (the owner, 2026-10-19: "for hand this to coding agent match buttons" - typed words never start an agent)
 NEW_TAB = {'general': ('agent', 'general', 'regular_agent'), 'coding': ('agent', 'terminal', 'coding_agent'), 'task': ('note', '', ''),
-           'report': ('report', '', ''), 'workflow': ('workflow', '', ''), 'playbook': ('playbook', '', ''),
+           'report': ('report', '', ''), 'workflow': ('workflow', '', ''), 'routine': ('workflow', '', ''), 'playbook': ('playbook', '', ''),
            # ...and New's other tabs (the whole-app design, 2026-10-28): a message the owner starts, drafted for their Send; a goal; a dashboard
            'send': ('send', '', ''), 'goal': ('goal', '', ''), 'dashboard': ('dashboard', '', '')}
 NEW_ONLY = ('send', 'goal', 'dashboard')          # New's tabs alone: no task kind, so on a phone they are the desk's
 NEW_PRESS = {'note': 'Note it', 'report': 'Build it', 'workflow': 'Build it', 'playbook': 'Set up with AI', 'send': 'Draft it', 'goal': 'Track it',
              'dashboard': 'Build it'}
 
-def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = '') -> dict:
+def recurs_of(raw) -> dict | None:
+    """The model's structured word that an ask repeats on a clock, kept to its four fields - None when it said nothing of the kind."""
+    if not isinstance(raw, dict): return None
+    out = {k: str(raw.get(k) or '').strip()[:300] for k in ('schedule', 'objective', 'repo', 'skill')}
+    out['skill'] = out['skill'].lstrip('/')
+    return out if any(out.values()) else None
+
+
+def routine_prefill(recurs: dict, text: str = '') -> tuple:
+    """(the words New → Routine's box opens with, its form's picks): the clock and the job as one sentence for the builder, and the
+    repository and skill the owner named - a named one makes it a coding routine."""
+    r = recurs or {}
+    words = ' - '.join(x for x in (r.get('schedule'), r.get('objective') or str(text or '').strip()) if x)
+    return words, {'coding': bool(r.get('repo') or r.get('skill')), 'repo': r.get('repo') or '', 'skill': r.get('skill') or ''}
+
+
+def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = '', recurs: dict | None = None) -> dict:
+    # A JOB THAT REPEATS IS A ROUTINE (the owner, 2026-10-29): the model's `recurs` brings up New → Routine filled in - its clock, its job,
+    # its repository and skill - and Build it, then Save, are the owner's presses; nothing is saved from here
+    if recurs: want, (text, runs) = 'workflow', routine_prefill(recurs, text)
     kind, how, verb = NEW_TAB[want]
     press = buttons.label(verb) if verb else NEW_PRESS[kind]
     # ...in the past, never "below": after a reload New is shut and the line stood over nothing (verify, 2026-10-19)
@@ -1448,6 +1467,7 @@ def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = ''
     # ...and Send something's recipient, as its own field takes it (NewSheet initialTo) - nothing goes before its Send
     return {'say': said, 'options': [], 'chips': [], 'decision': None,
             'new': {'kind': kind, 'how': how, 'text': str(text or '').strip()[:2000], 'line': line,
+                    **({'routine': runs} if recurs else {}),
                     **({'to': str(to).strip()[:300]} if kind == 'send' and str(to or '').strip() else {})}}
 
 
@@ -2903,9 +2923,15 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     if kind in ('memory.wrong', 'memory.remember'): return _memory(store, tid, kind, params)
     if kind == 'meeting.new': return _meeting(store, tid, item, params, text, actor)
     # ON THE DESK A NEW JOB IS NEW, FILLED IN (routes): the words on the tab that starts it, its own button the one to press
+    # ...and a job the model said REPEATS (`recurs`) is New → Routine, never a one-off agent started now
+    recurs = recurs_of(params.get('recurs')) if kind == 'task.create_from_text' else None
     if routes() and kind in ('task.create_from_text', 'task.setup'):
-        return _new(store, tid, item, str(params.get('kind') or 'general') if kind == 'task.create_from_text' else 'general',
-                    str(params.get('text') or text or '').strip(), str(params.get('to') or ''))
+        want = str(params.get('kind') or 'general') if kind == 'task.create_from_text' else 'general'
+        return _new(store, tid, item, want if want in NEW_TAB else 'general', str(params.get('text') or text or '').strip(), str(params.get('to') or ''),
+                    recurs=recurs or (recurs_of({'objective': params.get('text') or text}) if want == 'routine' else None))
+    if recurs or (kind == 'task.create_from_text' and params.get('kind') == 'routine'):
+        say_ = f"A routine is set up on the desk, under {places.name('workflows')} - nothing was started."
+        record(store, tid, 'assistant', say_); return {'say': say_, 'options': [], 'chips': [], 'decision': None}
     if routes() and kind == 'role.apply':
         return _page(store, tid, item, '#profiles', "Opened Profiles - press Set up beside the job you do.")
     if kind == 'task.create_from_text' and str(params.get('kind') or '') in task_kinds.AGENT:
@@ -3291,7 +3317,9 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
     if kind == 'agent.answer' and it.get('kind') == 'agent' and it.get('asking') and int(it.get('tid') or 0) == target:
         return _answer_now(store, tid, table, target, str(params.get('text') or text or '').strip(), actor)
     if kind == 'script.start':
-        return _new(store, tid, table, 'report', '') if 'report' in str(params.get('name') or '') else surface(store, None, None, actor)
+        # ...its words ride in: "Wrote it into New" over an empty box was the line saying what it had not done (the owner, 2026-10-29)
+        return _new(store, tid, table, 'report', str(params.get('text') or text or '').strip()) if 'report' in str(params.get('name') or '') \
+            else surface(store, None, None, actor)
     if tk == 'setting':
         r = next((x for x in appfacts.settings(store) if x['key'] == params.get('setting')), None) or {}
         return _page(store, tid, table, f"#settings=config&group={quote(r.get('group') or '')}&key={quote(str(params.get('setting') or ''))}",
@@ -4342,14 +4370,20 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
 SECRET_WORDS = re.compile(r'(secret|token|password|passwd|api[_ -]?key|refresh|private[_ -]?key|client[_ -]?secret|bearer)', re.I)
 SETUP_QUESTIONS = 'setup_questions'
 SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small company\'s assistant. Answer JSON only: '
-                     '{"kind": "report" | "playbook" | "connection" | "role" | "investigate", "provider": "<connector type or null>", '
+                     '{"kind": "report" | "routine" | "playbook" | "connection" | "role" | "investigate", "provider": "<connector type or null>", '
                      '"role": "<a key from roles, or null>", "why": "<one sentence>", '
+                     '"recurs": <for a routine: {"schedule": "<when it runs, in the owner\'s words>", "objective": "<the job, without the clock>", '
+                     '"repo": "<a repository the owner named, or null>", "skill": "<a skill the owner named, its slash-command name, or null>"}; '
+                     'else null>, '
                      '"title": "<what to call it on a task list - a few words naming the job, e.g. Add Erin Blake to payroll>"}. '
                      # (the owner, 2026-10-08: "the assistant should be able to walk a user through setting up new role and work")
                      'A ROLE is the owner naming their JOB and asking for Taskuary to be set up for it ("I am an AP rep, set me '
                      'up", "I do accounts payable") - answer role, with its key from roles, when the job is one of them; a job '
                      'that is not in roles is investigate. '
-                     'A REPORT reads connected systems on a schedule and files what it found (a check, a digest, a scheduled agent job). '
+                     'A REPORT reads connected systems on a schedule and files what it found (a check, a digest). '
+                     # (the owner, 2026-10-29: "every Monday at noon run the user management review skill" became a one-off agent task)
+                     'A ROUTINE is a job that DOES work again and again on a clock - an agent run, a skill run, a review that opens tasks or '
+                     'drafts - "every Monday at noon run the access review skill in northwind/ledger". Answer routine and fill recurs. '
                      # it had no word for one, so "can I build a playbook for it?" sorted to investigate and became an agent's job (the
                      # owner, 2026-10-22: "this is not playbook ui?")
                      'A PLAYBOOK says how one kind of recurring REQUEST is handled from now on - when someone asks for this, gather that, '
@@ -4426,8 +4460,9 @@ def sort_setup(store, text: str, llm) -> dict:
     role = str(out.get('role') or '').lower().strip()
     # a role nobody ships is still a real ask - it is digging, never a report built from nothing
     if kind == 'role' and role not in have: kind = 'investigate'
-    return {'kind': kind if kind in ('report', 'playbook', 'connection', 'role', 'investigate') else 'report', 'provider': prov if prov in types else None,
-            'role': role if kind == 'role' else None, 'why': str(out.get('why') or '')[:300], 'title': _title_cut(out.get('title') or '')}
+    return {'kind': kind if kind in ('report', 'routine', 'playbook', 'connection', 'role', 'investigate') else 'report', 'provider': prov if prov in types else None,
+            'role': role if kind == 'role' else None, 'why': str(out.get('why') or '')[:300], 'title': _title_cut(out.get('title') or ''),
+            **({'recurs': recurs_of(out.get('recurs'))} if kind == 'routine' else {})}
 
 
 def _pending_setup(store, tid: int) -> dict | None:
@@ -4548,6 +4583,7 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
     # digging an agent's job in New - each with its own button to press; nothing is composed into a card to confirm here
     if routes():
         if sort['kind'] in ('report', 'playbook'): return _new(store, tid, item, sort['kind'], ask)
+        if sort['kind'] == 'routine': return _new(store, tid, item, 'workflow', ask, recurs=sort.get('recurs') or recurs_of({'objective': ask}))
         if sort['kind'] == 'role':
             return _page(store, tid, item, '#profiles', "Opened Profiles - press Set up beside the job you do.")
         if sort['kind'] == 'investigate': return _new(store, tid, item, 'general', ask)

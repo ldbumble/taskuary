@@ -72,7 +72,7 @@
 <div class="entry">
       <a class="page" href="./reports">Reports and the Advisor</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Reports and the Advisor's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./reports#a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="./reports#sources">Sources</a><a class="sec" href="./reports#letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="./reports#the-ai-pass">The AI pass</a><a class="sec" href="./reports#where-a-run-goes">Where a run goes</a><a class="sec" href="./reports#schedules">Schedules</a><a class="sec" href="./reports#the-advisor">The Advisor</a><a class="sec" href="./reports#workflows">Workflows</a><a class="sec" href="./reports#playbooks">Playbooks</a><a class="sec" href="./reports#stateful-workflows">Stateful workflows</a><a class="sec" href="./reports#sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="./reports#api">API</a></div>
+      <div class="secs" hidden><a class="sec" href="./reports#a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="./reports#sources">Sources</a><a class="sec" href="./reports#letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="./reports#the-ai-pass">The AI pass</a><a class="sec" href="./reports#where-a-run-goes">Where a run goes</a><a class="sec" href="./reports#schedules">Schedules</a><a class="sec" href="./reports#the-advisor">The Advisor</a><a class="sec" href="./reports#routines">Routines</a><a class="sec" href="./reports#playbooks">Playbooks</a><a class="sec" href="./reports#stateful-routines">Stateful routines</a><a class="sec" href="./reports#sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="./reports#api">API</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./advisor">The Advisor</a>
@@ -409,10 +409,12 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">Brings up its button for you to press.</p><h2 id="new">New<a class="anchor" href="#new" aria-label="Link to this section">#</a></h2>
 <p>New work with no task yet.</p>
 <h3 id="task-create-from-text"><code>task.create_from_text</code><a class="anchor" href="#task-create-from-text" aria-label="Link to this section">#</a></h3>
-<p>A new job with no message behind it. Never for a task that already exists (a TQ ref, or a row on THE RAIL BY NAME): starting an agent on one is dispatch.prepare, its own last session is agent.continue, and &quot;remind me about it&quot; is task.defer on it.</p>
+<p>A new job with no message behind it. A job that REPEATS on a clock (&quot;every Monday at noon run the review skill&quot;) is a routine, never a one-off: add <code>recurs</code>: {schedule (when, in their words), objective (the job without the clock), repo (one they named, else null), skill (a skill they named, else null)} - it brings up New → Routine filled in for their Save; and a short <code>title</code> in your own words for the job (never &quot;send it to the agent&quot;). Never for a task that already exists (a TQ ref, or a row on THE RAIL BY NAME): starting an agent on one is dispatch.prepare, its own last session is agent.continue, and &quot;remind me about it&quot; is task.defer on it.</p>
 <ul>
 <li><code>kind</code> - task (a to-do or reminder the owner does themselves, no agent) | general (a regular agent) | coding | send (a new message the owner starts, to someone - <code>to</code>: their name or address; drafted in their voice for their Send, never sent from here) | goal (an outcome with a date, its steps tasks) | dashboard (a page of numbers kept up to date)</li>
-<li><code>text</code> - , and a short <code>title</code> in your own words for the job (never &quot;send it to the agent&quot;)</li>
+<li><code>text</code></li>
+<li><code>recurs</code> - {schedule (when</li>
+<li><code>title</code></li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="task-create-from-message"><code>task.create_from_message</code><a class="anchor" href="#task-create-from-message" aria-label="Link to this section">#</a></h3>
 <p>Hand this message to an agent or put it on the list.</p>

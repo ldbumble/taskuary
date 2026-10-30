@@ -457,10 +457,12 @@ New work with no task yet.
 
 ### `task.create_from_text`
 
-A new job with no message behind it. Never for a task that already exists (a TQ ref, or a row on THE RAIL BY NAME): starting an agent on one is dispatch.prepare, its own last session is agent.continue, and "remind me about it" is task.defer on it.
+A new job with no message behind it. A job that REPEATS on a clock ("every Monday at noon run the review skill") is a routine, never a one-off: add `recurs`: {schedule (when, in their words), objective (the job without the clock), repo (one they named, else null), skill (a skill they named, else null)} - it brings up New → Routine filled in for their Save; and a short `title` in your own words for the job (never "send it to the agent"). Never for a task that already exists (a TQ ref, or a row on THE RAIL BY NAME): starting an agent on one is dispatch.prepare, its own last session is agent.continue, and "remind me about it" is task.defer on it.
 
 - `kind` - task (a to-do or reminder the owner does themselves, no agent) | general (a regular agent) | coding | send (a new message the owner starts, to someone - `to`: their name or address; drafted in their voice for their Send, never sent from here) | goal (an outcome with a date, its steps tasks) | dashboard (a page of numbers kept up to date)
-- `text` - , and a short `title` in your own words for the job (never "send it to the agent")
+- `text`
+- `recurs` - {schedule (when
+- `title`
 
 <p class="runs">Brings up its button for you to press.</p>
 

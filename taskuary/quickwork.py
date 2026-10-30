@@ -3,6 +3,7 @@
 An agent session costs a launch and a long wait for what is often one sentence ("does it make sense to go on Friday?"). This module only
 READS the depth - triage's difficulty, plus the things that always need the agent (a browser, a stranger, several emails owed, a task that
 already ran deep). It never guesses from the words of the task."""
+import re
 from typing import NamedTuple
 from . import brainroute, browserview, general, ingest, llm, origin, selfclose, slots
 
@@ -53,13 +54,24 @@ class QuickAnswer(NamedTuple):
 def _clean(s) -> str:
     "A string field with Taskuary's own markers taken out (a model told about them may still write one)."
     from .selfclose import draft_markers, for_screen, reply_marker
-    return for_screen(draft_markers(reply_marker(str(s or ''))[0])[0])
+    return _unmark(for_screen(draft_markers(reply_marker(str(s or ''))[0])[0]))
+
+# the [[TASKUARY-...]] tags, and the two envelopes _file also acts on: the Hub's <TASKUARY-HUB> and a bare TASKUARY-PROPOSE (proposals.MARK)
+_TAG = re.compile(r'\[\[\s*/?\s*TASKUARY[^\]]*\]\]|<\s*/?\s*TASKUARY[^>]*>|TASKUARY-PROPOSE', re.I)
+def _unmark(text) -> str:
+    "Every Taskuary tag out: the fields are words for the owner, and only as_reply writes the markers _file acts on."
+    return _TAG.sub('', str(text or '')).strip()
 
 def read(data) -> 'QuickAnswer | None':
     "The structured answer, or None when it is not an object or says neither something nor that the job is too big."
     if not isinstance(data, dict): return None
     a = QuickAnswer(*(_clean(data.get(k)) for k in ('report', 'draft', 'question')), data.get('done') is True, data.get('escalate') is True, _clean(data.get('why')))
     return a if a.report or a.escalate else None
+
+def as_reply(out: QuickAnswer) -> str:
+    "The answer as the markers a general turn writes, so GeneralSession._file reads it exactly as it reads one."
+    return '\n\n'.join(x for x in (out.report, out.draft and f'[[TASKUARY-REPLY]]{out.draft}[[/TASKUARY-REPLY]]',
+                                   out.question and f'[[TASKUARY-ASK]] {out.question}', out.done and f"{selfclose.MARKER} {' '.join(out.why.split())}") if x)   # the close reads one line
 
 def prompt(store, tid, ask: str, lookups: bool) -> tuple:
     "(system, user): what the general agent reads, the mail history it would have had searched for it, and the ask."

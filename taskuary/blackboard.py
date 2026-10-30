@@ -389,7 +389,7 @@ def live_count() -> int:
     """Every LIVE session, whatever it is doing: working, idle at its prompt, or stopped at an approval.
     A desk is taken until the process ends (owner, PW-084) - waiting for approval frees nothing."""
     from . import terminal as term
-    return len([t for t in list(term.SESSIONS.values()) if t.alive])
+    return len([t for t in list(term.SESSIONS.values()) if t.alive and getattr(t, 'quick', False) is not True])   # a quick answer is one call, no desk
 
 
 def is_permanent(err) -> bool:

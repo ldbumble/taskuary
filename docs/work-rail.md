@@ -10,7 +10,7 @@ connections, the walk's marks) and `remind.py` (Remind me).
 ```mermaid
 flowchart LR
   I["A message, a task, a draft, an agent,<br/>a report, an idea, a meeting"] --> W{"Inside the last 14 days<br/>(Settings: feed_days)?"}
-  W -->|no, and not Upcoming| X["Not on the rail -<br/>still in Tasks and the Timeline"]
+  W -->|no, and not Upcoming| X["Not on the rail -<br/>still in Tasks and the Board"]
   W -->|yes| D{"Decided, closed or noise?"}
   D -->|done, a draft decided,<br/>an idea dismissed| X2["Not on the rail"]
   D -->|an auto-reply, withdrawn,<br/>your reply is the last word| X3["Not on the rail<br/>(switch in Settings)"]

@@ -42,7 +42,7 @@
 <div class="entry">
       <a class="page" href="./how-it-works">How it works</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show How it works's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./how-it-works#the-timeline">The Timeline</a><a class="sec" href="./how-it-works#the-five-roads-a-message-can-take">The five roads a message can take</a><a class="sec" href="./how-it-works#what-triage-actually-decides">What triage actually decides</a><a class="sec" href="./how-it-works#nothing-sends-itself">Nothing sends itself</a><a class="sec" href="./how-it-works#correcting-it-teaches-it">Correcting it teaches it</a><a class="sec" href="./how-it-works#three-brains-one-voice">Three brains, one voice</a><a class="sec" href="./how-it-works#the-documents-that-govern-it">The documents that govern it</a><a class="sec" href="./how-it-works#where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits</a></div>
+      <div class="secs" hidden><a class="sec" href="./how-it-works#the-work-rail">The work rail</a><a class="sec" href="./how-it-works#the-five-roads-a-message-can-take">The five roads a message can take</a><a class="sec" href="./how-it-works#what-triage-actually-decides">What triage actually decides</a><a class="sec" href="./how-it-works#nothing-sends-itself">Nothing sends itself</a><a class="sec" href="./how-it-works#correcting-it-teaches-it">Correcting it teaches it</a><a class="sec" href="./how-it-works#three-brains-one-voice">Three brains, one voice</a><a class="sec" href="./how-it-works#the-documents-that-govern-it">The documents that govern it</a><a class="sec" href="./how-it-works#where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits</a></div>
     </div>
 <div class="entry on">
       <a class="page" href="./connections" aria-current="page">Connections</a>
@@ -52,7 +52,7 @@
 <div class="entry">
       <a class="page" href="./tasks-and-agents">Tasks and agents</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Tasks and agents's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./tasks-and-agents#a-tasks-three-lives">A task's three lives</a><a class="sec" href="./tasks-and-agents#sending-work-to-a-coding-agent">Sending work to a coding agent</a><a class="sec" href="./tasks-and-agents#the-general-agent">The general agent</a><a class="sec" href="./tasks-and-agents#sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="./tasks-and-agents#several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="./tasks-and-agents#checklists-and-closing">Checklists and closing</a><a class="sec" href="./tasks-and-agents#replies">Replies</a><a class="sec" href="./tasks-and-agents#profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="./tasks-and-agents#the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="./tasks-and-agents#the-work-rail">The work rail</a><a class="sec" href="./tasks-and-agents#how-work-is-ordered">How work is ordered</a></div>
+      <div class="secs" hidden><a class="sec" href="./tasks-and-agents#a-tasks-three-lives">A task's three lives</a><a class="sec" href="./tasks-and-agents#sending-work-to-an-agent">Sending work to an agent</a><a class="sec" href="./tasks-and-agents#coding-agents-and-general-agents">Coding agents and general agents</a><a class="sec" href="./tasks-and-agents#sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="./tasks-and-agents#several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="./tasks-and-agents#checklists-and-closing">Checklists and closing</a><a class="sec" href="./tasks-and-agents#replies">Replies</a><a class="sec" href="./tasks-and-agents#profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="./tasks-and-agents#the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="./tasks-and-agents#the-work-rail">The work rail</a><a class="sec" href="./tasks-and-agents#how-work-is-ordered">How work is ordered</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./security">Security</a>
@@ -137,7 +137,7 @@ readable part of the configuration.</p>
 </tr>
 <tr>
 <td><strong>feed</strong></td>
-<td>Show inbound items on the Timeline, unread by any AI</td>
+<td>Show inbound items on the rail to read, unread by any AI</td>
 </tr>
 <tr>
 <td><strong>report</strong></td>
@@ -254,7 +254,7 @@ are remembered so they can still be found offline.</p>
 </thead>
 <tbody><tr>
 <td><strong>Teams</strong>, <strong>Slack</strong></td>
-<td>Messages enter the Timeline through triage</td>
+<td>Messages reach the rail through triage</td>
 </tr>
 <tr>
 <td><strong>Telegram</strong></td>
@@ -282,7 +282,7 @@ are remembered so they can still be found offline.</p>
 </tr>
 <tr>
 <td><strong>Google Chat</strong></td>
-<td>Spaces on the Timeline and replies back into them. Reuses the Gmail card&#39;s OAuth client, so there is one registration in Google Cloud rather than two</td>
+<td>Spaces on the rail and replies back into them. Reuses the Gmail card&#39;s OAuth client, so there is one registration in Google Cloud rather than two</td>
 </tr>
 </tbody></table>
 <p>Chat is different from mail in one way that matters: a chat message often has no clock on it.
@@ -311,7 +311,7 @@ held until the ask it opens arrives.</p>
 </tr>
 <tr>
 <td><strong>Jira, Asana, Monday.com, ClickUp, Todoist</strong></td>
-<td>Assigned work items enter the Timeline through triage</td>
+<td>Assigned work items reach the rail through triage</td>
 </tr>
 <tr>
 <td><strong>Linear, Trello</strong></td>
@@ -486,7 +486,7 @@ card promising it would be a card that never works. Driving a browser is the opt
 <code>agent-browser</code> tool&#39;s job instead: signing in, authenticator codes and the browser acts that wait
 for your press are described under
 <a href="tasks-and-agents#when-the-agent-opens-a-browser">When the agent opens a browser</a>.</p>
-<p><strong>Social</strong> — <strong>LinkedIn</strong>, <strong>Bluesky</strong> and <strong>Mastodon</strong>. Nothing from these reaches the Timeline as
+<p><strong>Social</strong> — <strong>LinkedIn</strong>, <strong>Bluesky</strong> and <strong>Mastodon</strong>. Nothing from these reaches the rail as
 work: a public timeline is not an inbox, so they are report sources and tools rather than triggers.
 Like every connection they start at full authority, so an agent can post. A public post cannot be
 recalled: set the card to <code>read</code> and a post an agent drafts becomes a proposal you approve on the task.</p>
@@ -564,7 +564,7 @@ credentials, roles and schedule. Use it for:</p>
 <p>Every prompt, report source and agent tool names the connection it used, so two cards of the same
 type never become ambiguous downstream.</p>
 <h2 id="pushing-something-in-yourself">Pushing something in yourself<a class="anchor" href="#pushing-something-in-yourself" aria-label="Link to this section">#</a></h2>
-<p>Anything that can make an HTTP request can put an item on the Timeline:</p>
+<p>Anything that can make an HTTP request can put an item on the rail:</p>
 <pre><code class="language-http">POST /api/ingest/push
 Content-Type: application/json
 

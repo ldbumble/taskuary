@@ -42,7 +42,7 @@ A connector card shows its own last poll and its last error, and that is the fir
 
 If the card looks healthy and items still are not appearing, check the card's **roles**. A
 connection with no `trigger` or `feed` role is never polled, which looks exactly like a broken
-connection from the Timeline.
+connection from the rail.
 
 ## Triage got it wrong
 

@@ -10,9 +10,9 @@ It keeps its data in a SQLite file in your home directory and serves its interfa
 
 Three sentences, because the rest of this site is detail:
 
-1. **Everything arrives in one Timeline.** A vendor's email, a GitHub pull request, a Teams
-   message, a failed nightly export and this morning's spend report are one list, in the order
-   they happened.
+1. **Everything arrives on one rail.** A vendor's email, a GitHub pull request, a Teams
+   message, a failed nightly export and this morning's spend report are one list, sorted by what
+   each needs from you.
 2. **Each item gets one verdict.** A small AI reads it and decides: nothing to do, a sentence
    settles it, an agent should work it, let's talk it through, or it's yours. That verdict is
    visible, and arguing with it teaches the next one.
@@ -94,7 +94,7 @@ docker compose up
 ```
 
 Open `http://127.0.0.1:7787`. Data lives in the `taskuary-data` volume. The container gives you
-the Timeline, Review, Reports and Connections; coding CLIs and the optional WhatsApp bridge stay
+the Assistant, its rail, Reports and Connections; coding CLIs and the optional WhatsApp bridge stay
 host programs, because both need a machine of their own.
 
 The compose file binds to localhost. Set `TASKUARY_TOKEN` before publishing the port anywhere

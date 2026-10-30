@@ -75,4 +75,4 @@ no longer matches, and every row after it points at a parent that no longer exis
 | Out of order | Two writers raced at the same instant once; nothing was changed, and it cannot recur |
 
 The history below it is that log, newest first: when, who, what was done, and to what. It is the
-answer to "why did this happen" and "who did this" for anything on the Timeline or the Board.
+answer to "why did this happen" and "who did this" for anything on the rail or the Board.

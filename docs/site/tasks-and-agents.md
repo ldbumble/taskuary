@@ -4,18 +4,28 @@ the word "done" meaning three different things.
 
 ## A task's three lives
 
-The task page shows them as one numbered workflow — **1 Task → 2 Agent work → 3 Close out** — and
-each stage owns exactly one state badge.
+The task page shows them as three sections, left to right — **1 Came from → 2 Agent → 3 Close
+out**. The section the task is up to opens; the other two fold to slim columns beside it that still
+say where they stand. Each section carries its own moves: on its spine while folded, on a strip
+across its top while open.
 
-| Part | What it records | Main controls | What it never does by itself |
+| Section | What it records | Its moves | What it never does by itself |
 |---|---|---|---|
-| **Task** | The durable job and who owns it | owner, kind, priority, Reopen, Mark done | Starting or ending an agent session does not complete it |
-| **Agent work** | One or more attempts by a coding or non-coding agent, plus the saved result | harness, model, start, save and end session | Ending a session does not mark the task done or send a reply |
-| **Close out** | The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue) | write, generate, edit; **Send**, **Approve**, **Decline**, **Not yet** | Closing the task: sending and approving never do — the task stays open until you **Mark done** |
+| **Came from** | The message, what triage made of it and why, the ask, and who owns it | **Remind me**, **Not a task**, **Change ▾** (split or merge, who does it, priority, assign it, where the code is) | Changing the task does not start or stop an agent |
+| **Agent** | One or more runs by a coding or general agent, and the Result each left | **Send to agent**, **Stop and save** while it runs, then **Continue** and **Run another agent** | Ending a session does not mark the task done or send a reply |
+| **Close out** | The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue) | **Draft reply** / **Reply**, **Send**, **Redraft**, **Hand it to a person**, **Mark done**, **Close with a note**, **Attach a file**, **Share**; on GitHub **Approve**, **Decline**, **Not yet** | Closing the task: sending and approving never do — the task stays open until you **Mark done** |
 
-While a terminal or an assistant chat is live, the task collapses to a one-line context strip and
-the workspace takes most of the page. Full controls, saved results and restart choices come back
-when the agent stops.
+**Mark done** always comes first on Close out and is never folded away. When a strip runs out of
+room, the rest of its moves fold into a **▾** at its end. The task's title bar holds only its status,
+**Expand** and **×**.
+
+Under the task is one small bar, **Nav**: **Back** and **Next**, each greyed where there is nowhere to
+go. The chat is a separate pill in the corner; type there and a window opens out of it, about the
+task on the table.
+
+While an agent's session is live, it takes the whole width: Came from and Close out fold to their
+spines, and the Agent strip holds only **Stop and save**. Its Result, and **Continue**, come back
+when it stops.
 
 ### Who is allowed to close it
 
@@ -76,18 +86,20 @@ These never end a task:
 Reopening a completed task starts a fresh task lifecycle rather than pretending an old terminal
 is still alive.
 
-## Sending work to a coding agent
+## Sending work to an agent
 
-Open **Agent work**, choose the CLI and model, and start. The session is handed the task summary,
+Choose **Send to agent** on the Agent section. A coding task opens a terminal on its CLI and model in
+the repository's checkout; a general task opens a conversation. The session is handed the task summary,
 the incoming messages, the attachments, any saved result from an earlier run and your optional
-new prompt — plus a context file under `~/.taskuary/context/` holding the thread, relevant sender
+note — plus a context file under `~/.taskuary/context/` holding the thread, relevant sender
 and topic history, the learned profile, and reports from related closed tasks.
 
 | Control | What it does |
 |---|---|
-| **Start coding session** | Starts the selected harness and model |
-| **Start new coding session** | Picks a different harness after an earlier run stopped or hit a limit; the checkout and history are kept |
+| **Send to agent** | Hands the work to an agent; the card lets you change which one |
 | **Stop and save** | Ends the session and writes its result; the task stays open until you mark it done |
+| **Continue** | Picks the work up where it left off, with what you add or as it is (**Try again** after a failed run) |
+| **Run another agent** | Starts a second agent on the same task |
 
 **Mark done** is stronger than all of them: it closes the task *and* ends any live session,
 because a finished task should not leave an orphan process running.
@@ -95,12 +107,12 @@ because a finished task should not leave an orphan process running.
 ### What an agent is doing
 
 An agent is always in one of six states. Each has one word and one mark, and the work rail, the
-Timeline, the task page, the Board, the assistant's cards and the phone all use the same ones.
+task page, the Board, the assistant's cards and the phone all use the same ones.
 
 | Mark | State | What it means | Your move |
 |---|---|---|---|
 | ⏳ | **waiting to start** | Handed to an agent, not running yet | **Start now** |
-| ⚙️ | **agent working** | Running, and needs nothing from you | **Leave a note** for when it stops |
+| ⚙️ | **agent working** | Running, and needs nothing from you - including while its own subagents or background jobs run | Type a note for when it stops |
 | 👋 | **agent waiting on you** | Running, and it asked you something, needs your approval, or is stuck | Answer it |
 | 💾 | **session saved** | You ended it with **Stop and save**; its report is written | **Continue**, or **Mark done** |
 | ⏹ | **agent stopped** | It ended without finishing: a crash, a closed pane, Taskuary closing | **Continue**, or hand it on |
@@ -123,8 +135,8 @@ Timeline, the task page, the Board, the assistant's cards and the phone all use 
 handover) and a regular agent (its saved conversation). It asks what to tell it as it picks up - optional; on the
 phone the next thing you type is the note, or tap **Continue**.
 
-The saved result is deliberately short. The complete transcript is on the task page: open the
-session on the **Agent work** step and choose **More → Every step**. A finished coding session also
+The Result is deliberately short: a summary, what it found, and **What it made**, each file with
+Open and Download. The complete conversation is **The whole conversation ›** under it. A finished coding session also
 files a Markdown record of what it did under `~/.taskuary/artifacts/` — the outcome, not a copy of
 the terminal.
 
@@ -158,24 +170,53 @@ is still on the same page; Dismiss tells the agent it was not done. With no AI c
 can judge, so typing into a box (`fill`, `type`, `keyboard type`) runs and every other act waits
 for you.
 
-## The general agent
+## Coding agents and general agents
 
-Not every job is code. A `general` task opens a conversation instead of a terminal: research,
-planning, writing, weighing an option, working out what to ask. No system is touched.
+Not every job is code. A `coding` task goes to a coding agent, in a terminal in your repository. A
+`general` task goes to a general agent, in a conversation instead: research, planning, writing,
+weighing an option, working out what to ask. No system is touched.
 
-You reach it from **Talk it through** on a Timeline row, from ＋ New → *Give an agent a job* →
-**Just talk it through**, or from *Prepare me for it* on a calendar invite.
+Both run on a **brain** - a CLI such as Claude Code or Codex, or an API connection, with the model
+chosen on it - and follow a **profile** of instructions laid on that brain: `CODING.md` for code,
+`ASSISTANT.md` for general work by default (see [Profiles and playbooks](#profiles-and-playbooks)).
+You start one with **Send to agent** on a task, or from **+ New → Give an agent a job**, which asks
+whether the job is general or coding.
 
 General chats save their provider, model and native conversation id across restarts. Claude and
 Codex resume that exact conversation when it still exists and the provider configuration matches;
-otherwise the assistant continues from Taskuary's own saved history and says so.
+otherwise the agent continues from Taskuary's own saved history and says so.
+
+### Quick work
+
+Most general asks are short - read the message, recommend, draft the reply, or ask you what to do.
+When triage reads a general task as quick, it is answered in a single call instead of an agent
+session. The call reads what the agent would - the message, the task, `LEARNED.md`, today's calendar,
+`AGENT.md` and the profile - may use only read-only look-ups, and leaves the same things a finished
+run does: what it found, a draft when a reply is owed, or a question to you. Nothing on the task page
+changes: the same Result, the same **Continue** and **Run another agent**, which open a full session.
+
+These always take a full agent session: hard work, work that needs a browser, a sender Taskuary does
+not know, several emails owed, a routine's run, and a task that has already had one. A quick call that
+finds it needs more hands over to a session, with its notes as the brief, and the task says so.
+
+### How work fans out
+
+Three levels, each counted on its own:
+
+| Level | How many at once | Counts against Agents at once |
+|---|---|---|
+| **Agent sessions** started by themselves | **Settings → Agents at once** - 4 by default, 1 to 16. The rest queue and start as sessions end, and the Board shows why each waits | yes |
+| **Quick work** calls | a pool of 8 | no |
+| **A CLI's own subagents**, background shells and monitors, inside one session | whatever that CLI runs | no - they are part of their session |
+
+Sessions you start yourself are never held back by **Agents at once**. When a CLI ends its turn with
+work still running in the background, Taskuary reads what is still running from the session and keeps
+the agent at ⚙️ **agent working** rather than waiting on you, until those jobs end.
 
 ## Sessions and transcripts
 
-**Continue previous work** on the Assistant page lists unfinished tasks that have saved agent
-work, each with an excerpt of the latest reply or handover. **Resume** opens the task and carries
-on; **Review draft** opens a pending result. Loading the page starts nothing, and a session
-already running is opened rather than duplicated.
+Unfinished tasks with saved agent work stay under Tasks on the rail. **Continue** on the Agent
+section carries on; a session already running is opened rather than duplicated.
 
 Reopening a pane seeds it from a render of the session, not from raw bytes, so a pane you come
 back to shows what the screen actually looked like.
@@ -209,9 +250,9 @@ state.
 
 ## Replies
 
-The Reply section exists whenever the task has an incoming sender. It shows one of three things:
-no draft yet, a draft ready, or a reply sent. **Open on the task** is the only road out — type your
-own or generate one, edit it, approve it.
+Close out holds the reply whenever the task has an incoming sender. It shows one of three things:
+no draft yet (**Draft reply**), a draft ready (**Send**, **Redraft**), or a reply sent. Type your own
+or generate one, edit it, send it.
 
 One reply is special. A **clarification** stops the active agent when it is sent and moves the
 task to waiting, because an external answer is now required. An ordinary reply from an
@@ -259,23 +300,23 @@ state for a task, in the work rail's words — the server decides it once and bo
 
 ### Where a task is up to
 
-A task view opens on one main view, with the rest one click away in a drawer. Which one is decided by the task's
-**stage** — one list, read by the task view, the server and the Assistant alike (`taskuary/stages.json`). The first
-row that holds wins, top to bottom:
+Which section a task opens on is decided by its **stage** — one list, read by the task page, the
+server and the Assistant alike (`taskuary/stages.json`). The first row that holds wins, top to bottom:
 
-| Stage | When | Main view | Drawer | Advisor's section |
-|---|---|---|---|---|
-| agent working | an agent's session is open, working or waiting on you | the session, the whole width | Came from, one line | over the work |
-| waiting on someone | handed to a person | the task, who it waits on and when it is due | Agent and Close out | in the drawer |
-| done | closed | how it closed — the note, what went out, the Result | Came from | — |
-| close out | a draft or emails wait for **Send**, or something went out | Close out | Came from | over the work |
-| agent result | an agent finished, stopped or failed | its Result, or why it failed with **Try again** | Came from | over the work |
-| to reply | somebody wrote and nothing is drafted | the task | Agent and Close out — its tab lit | in the drawer |
-| to do | a to-do's checklist or a goal's steps | the task and its list | Agent and Close out | in the drawer |
-| to start | an ask nothing has worked yet | the task | Agent and Close out — its tab lit | in the drawer |
+| Stage | When | Opens on | Advisor's note |
+|---|---|---|---|
+| agent working | an agent's session is open, working or waiting on you | Agent - the session, the whole width | over the work |
+| waiting on someone | handed to a person | Came from - who it waits on and when it is due | on the folded sections |
+| done (by its agent) | its own agent closed it | Agent - who closed it and why, and its Result | — |
+| done | closed | Close out - how it closed, the note, what went out | — |
+| close out | a draft or emails wait for **Send**, or something went out | Close out | over the work |
+| agent result | an agent finished, stopped or failed | Agent - its Result, or why it failed with **Try again** | over the work |
+| to reply | somebody wrote and nothing is drafted | Came from, with Close out's move lit | on the folded sections |
+| to do | a to-do's checklist or a goal's steps | Came from and its list | on the folded sections |
+| to start | an ask nothing has worked yet | Came from, with Agent's move lit | on the folded sections |
 
-A lit tab says the next move is inside that drawer. The Assistant is told the stage of the task on the table, so a
-typed "send it" or "mark it done" acts on what you are looking at.
+A lit move says the next step is in that section. The Assistant is told the stage of the task on the
+table, so a typed "send it" or "mark it done" acts on what you are looking at.
 
 A task put away with **Remind me** waits under **For later** on the rail and off the Board until its day — unless its
 agent asks you something. Status has no box of its own: **Start**, **Mark done**, **Remind me** and **Reopen** set it, and Reopen clears
@@ -347,5 +388,5 @@ were on it, has someone already answered, urgency, who wrote it — and the tria
 short comparative reason when several tasks are waiting. Waiting tasks gain value over time, so
 the bottom of the queue cannot starve.
 
-The Timeline and the Board show the same order. **Start now** pins a task to the top; **Later**
+The rail and the Board show the same order. **Start now** pins a task to the top; **Later**
 moves it down without deleting it.

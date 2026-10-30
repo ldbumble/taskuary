@@ -5,7 +5,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { BACK, NAV, fitRow, foldsOf, navEnd, navOf, put, rowDrawable, rowNow, rowOf, rowWidth, walkMove } from "../src/actionRow.js";
-import { backFrom, rowAbove } from "../src/funnelPile.js";
 import { label } from "../src/buttons.js";
 
 const v = (id, group, extra = {}) => ({ id, group, tone: "s", label: id, title: "", disabled: false, why: "", promote: true, lead: false, ...extra });
@@ -50,60 +49,18 @@ test("the row's end flag rides the snapshot, and the walk's Back is no item's ve
 });
 
 // the rail's line, invented: two tasks (one urgent in its place), one put For later, a report, an idea, two fyi
-const rows = [
-  { key: "task:1", tid: 1, lane: "yours", order_band: 2, arrived_at: "2026-10-20 09:00:00" },
-  { key: "task:2", tid: 2, lane: "yours", order_band: 2, arrived_at: "2026-10-21 09:00:00" },
-  { key: "task:3", tid: 3, lane: "later", order_band: 2, deferred: true, defer_until: "2026-10-29 09:00:00", arrived_at: "2026-10-21 10:00:00" },
-  { key: "task:4", tid: 4, lane: "yours", order_band: 2, settling: true, arrived_at: "2026-10-22 09:00:00" },
-  { key: "report:5", lane: "report", order_band: 3, arrived_at: "2026-10-20 07:00:00" },
-  { key: "report:6", lane: "report", order_band: 3, arrived_at: "2026-10-22 07:00:00" },
-  { key: "msg:7", lane: "fyi", order_band: 4, arrived_at: "2026-10-19 07:00:00" },
-  { key: "msg:8", lane: "fyi", order_band: 4, arrived_at: "2026-10-23 07:00:00" },
-];
-const up = (key, gone) => rowAbove(rows, rows.find((i) => i.key === key) || { key }, gone)?.key || null;
-
-test("Back is the row above in the rail's order, across sections in reverse; the first row has none", () => {
-  assert.equal(up("task:1"), null, "the first one: no Back");
-  assert.equal(up("task:2"), "task:1");
-  assert.equal(up("report:5"), "task:2", "the first report goes back to the last task - past For later and a task settling");
-  assert.equal(up("report:6"), "report:5");
-  assert.equal(up("msg:7"), "report:6", "FYI back to Reports");
-  assert.equal(up("msg:8"), "msg:7");
-});
-
-test("Back skips what a press put down - Mark done, Remind me, Close with a note - and anything no longer on the rail", () => {
-  assert.equal(up("report:5", (i) => i.key === "task:2"), "task:1", "the task closed a moment ago is never brought back");
-  assert.equal(up("report:5", () => true), null, "everything above put down: no Back");
-  assert.equal(rowAbove(rows.filter((i) => i.key !== "task:2"), rows[4])?.key, "task:1");
-});
-
-test("an fyi batch goes back from its first member; a task pulled by name, from the place it joins", () => {
-  const batch = { key: "fyis:msg:7,msg:8", kind: "fyis", members: ["msg:7", "msg:8"], items: [rows[6], rows[7]] };
-  assert.equal(rowAbove(rows.filter((i) => !i.key.startsWith("msg:")), batch)?.key, "report:6", "its rows left the pile once shown - placed back by the batch");
-  assert.equal(rowAbove(rows, { key: "task:9", tid: 9, lane: "asked", arrived_at: "2026-10-20 12:00:00" })?.key, "task:1", "a task opened by name sits in Tasks by arrival");
-  assert.equal(rowAbove(rows, null), null);
-});
-
-// BACK FROM THE FIRST FYI IS THE LAST REPORT READ (trust audit F1, 2026-10-28): a report read leaves the rail, and Back skipped to the last task
-test("Back from the first FYI goes to the last report the walk read; from a later FYI, or with the report still on the rail, the row above", () => {
-  const rows = [{ key: "task:1", tid: 1, lane: "asked", order_band: 2 }, { key: "msg:7", lane: "fyi", order_band: 4 }, { key: "msg:8", lane: "fyi", order_band: 4 }];
-  const read = { key: "processing:report-6" };
-  assert.deepEqual(backFrom(rows, rows[1], undefined, read), { key: "processing:report-6", kind: "report" });
-  assert.equal(backFrom(rows, rows[1], undefined, null)?.key, "task:1", "no report read this walk: the row above");
-  assert.equal(backFrom(rows, rows[2], undefined, read)?.key, "msg:7", "a later FYI: the FYI above it");
-  assert.equal(backFrom([...rows, { key: "processing:report-6", lane: "report", order_band: 3 }], rows[1], undefined, read)?.key, "processing:report-6",
-    "a report still on the rail is the row above, by the rail's own order");
-  assert.equal(backFrom(rows, rows[0], undefined, read)?.key, undefined, "a task is never sent back to a report");
-});
-
-test("the view registers Back beside the floor and runs it as a row pick; Next is hidden on the last one only from the walk's own capture", () => {
+// WHICH ROW IS ABOVE is the server's (railwalk.back, 2026-10-30): the rail's order read upward from the row on screen, For later and
+// rows still settling off the line, a read row gone - pinned by the walk table (tests/fixtures/walk_table.json W05-W07, W12, W19, W20,
+// W39, W45, W47) and its browser runner. The page only asks, and greys Back where the walk says nothing is above.
+test("the view registers Back beside the floor and asks the walk for the row above; Next is hidden on the last one from the walk's own word", () => {
   const view = fs.readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
   // ...and on a desk Back is always there, greyed where there is nowhere to go back to (the owner, 2026-10-29)
   assert.match(view, /useVerbs\("nav", \[\{ id: BACK, group: "back", label: btn\("back"\), title: btnHint\("back"\), disabled: !backTo, why: "nothing above this one",\s+run: \(\) => backTo && goBack\(\) \}\], !!backTo \|\| \(deskChat && !firstRun\)\);/);
-  assert.match(view, /const up = backFrom\(pileRef\.current\?\.items, currentRef\.current, isDown, lastReportRef\.current\);/);
-  assert.match(view, /return surface\(up\.key, null\);/, "the same road as a rail click: one draw, the ring follows");
+  assert.match(view, /if \(!walkOf\(pileRef\.current\)\?\.above\) return undefined;/, "nothing above: nothing happens");
+  assert.match(view, /return surface\(null, null, null, false, "back"\);/, "the walk's own Back: the row above, from the server");
+  assert.match(view, /const backTo = table\.speaks && !firstRun && !old && !walk && onWalk \? walkNow\.above : null;/);
   assert.match(view, /if \(busy \|\| turnFlight\.current\) \{ backHeld\.current = true;/, "a Back over a move in flight waits for it, and runs once");
-  assert.match(view, /sel\.scope\?\.exclude === current\s+&& !sel\.expected_next_key && !\(sel\.expected_next_members \|\| \[\]\)\.length;/);
+  assert.match(view, /const atEnd = !!current && table\.speaks && onWalk && !walkNow\.below;/, "no Next on the last one: the walk says nothing is below");
   const row = fs.readFileSync(new URL("../src/ActionRow.jsx", import.meta.url), "utf8");
   assert.ok(row.indexOf("data-tq-walk-back") < row.indexOf("data-tq-next=\"\""), "Back on the left, Next on the right");
   assert.match(row, /aria-label=\{NAV\} data-tq-type="nav"/);

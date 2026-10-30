@@ -32,7 +32,8 @@ def clear(store):
     store._exec("UPDATE run SET Status='done' WHERE Status='running'")
     reconcile(store)
     for i in funnel.pile(store, force=True)['items']:
-        if not i.get('tid') and not str(i['key']).startswith('meeting:'): funnel.settle(store, i['key'], 'done', 'owner')
+        # ...and what a closed task still leaves there - an agent's result unread, a mail on it - read too, so a world laid out twice is one world
+        if not str(i['key']).startswith('meeting:'): funnel.settle(store, i['key'], 'done', 'owner')
     reconcile(store)
 
 

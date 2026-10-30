@@ -86,7 +86,7 @@ test("the receipt after a sweep carries Next, and the page puts the table down w
   // ...and a failed act's receipt carries its way on (concierge.recover), not the sweep's lone Next
   assert.match(view, /const chips = \(out\.status !== "done" \|\| p\.kind === "review\.approve"\) && res\?\.chips\?\.length \? res\.chips/);
   assert.match(view, /\{last && <BarVerbs owner=\{`line:\$\{m\.id\}`\} chips=\{receiptChips\(m\)\}/);   // the receipt hands them to the row by the prompt
-  assert.match(view, /const clearTable = \(\) => \{/);                 // putting the table down is not advancing
+  assert.match(view, /const clearTable = \(\) => putOnTable\(null, "sync"\);/);                 // putting the table down is not advancing
   assert.doesNotMatch(view, /if \(step === "offer"\) advance\(\)/);
 });
 

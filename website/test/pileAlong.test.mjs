@@ -25,27 +25,24 @@ test("a held rail dates from when the server began reading it, never later than 
 });
 
 test("landed holds the rail the turn brought and only falls back to its own load without one", () => {
-  const landed = between("const landed = useCallback", "const ensureNextSelection");
-  assert.match(landed, /if \(card && data\.pile\) holdPile\(data\.pile, nextSelectionScope\(only\.current, card\.key\)\)/,
-    "the new table is excluded from the held scope - that is the scope the next press sends");
-  // ...and with no rail along, the ring captured for the old table comes down until that load lands (PW-118)
-  assert.match(landed, /else \{ selectionRef\.current = null; if \(card\) setPile\(withdrawSelection\); loadPile\(true\); \}/);
+  const landed = between("const landed = useCallback", "// a line of the assistant's own that needs no turn");
+  assert.match(landed, /if \(data\.pile\) holdPile\(data\.pile\);/, "the rail the move left, with the next answer prepared in it");
+  assert.match(landed, /\/\/ \.\.\.no rail rides along: read it, with the walk beside it\n\s+else loadPile\(true\);/);
   assert.doesNotMatch(landed, /say\(data\.say\); loadPile\(true\)/, "the unconditional reload after every turn is gone");
   const hold = between("const holdPile = useCallback", "const landed = useCallback");
   assert.match(hold, /forcedLoadStartedAt\.current = heldSince\(data\)/);
-  assert.match(hold, /selectionRef\.current = captureNextSelection\(data, scope\)/);
   assert.match(hold, /setPile\(\(p\) => refreshPilePresentation\(p, data\)\)/);
 });
 
 test("All read, next: the settle brings the rail back and the walk takes it without a reload", () => {
   const done = between("const done = async (pressed)", "// Setting Taskuary up");
-  assert.match(done, /verb: "done", only: only\.current/, "the settle learns the walk's scope so the rail comes back captured under it");
+  assert.match(done, /verb: "done", only: only\.current/);
   assert.match(done, /\.data\?\.pile \|\| null/);
   assert.match(done, /advance\(pile\)/);
   const advance = between("const advance = (pile", "const done = async");
-  assert.match(advance, /if \(pile\) holdPile\(pile, nextSelectionScope\(only\.current, null\)\)/, "the table is empty after a settle: nothing excluded");
+  assert.match(advance, /if \(pile\) holdPile\(pile\);/);
   assert.match(advance, /pile \|\| settled \? 120 : 500/, "a rail in hand - or a close the server already answered - needs no half-second of grace");
-  assert.ok(advance.indexOf("clearTable()") < advance.indexOf("holdPile("), "clearTable nulls the capture; the held one must land after it");
+  assert.match(advance, /surfaceRef\.current\?\.\(null, null, from\)/, "the walk moves on from the row the close took off (rule 5)");
 });
 
 test("a typed next keeps the capture: the table did not change, so the token still names the pick", () => {

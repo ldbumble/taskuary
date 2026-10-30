@@ -80,7 +80,7 @@ test("Next draws what its capture names in the same frame as the fold, and the a
 // A ROW CLICKED COLD IS DRAWN AT THE CLICK (owner-approved, 2026-10-20): the old view and its ring stayed up for the whole read
 test("a rail row clicked before its task is read puts its frame up at the click, titled, over the view's loading state", () => {
   const view = src("AssistantView.jsx"), page = src("TaskPage.jsx"), item = src("CanvasItem.jsx");
-  assert.match(view, /else if \(aheadItem && \(drawsNow\(aheadItem\) \|\| \(key && showsTask\(aheadItem, cardFor\(aheadItem\)\)\)\)\)/,
+  assert.match(view, /else if \(aheadItem && \(drawsNow\(aheadItem\) \|\| showsTask\(aheadItem, cardFor\(aheadItem\)\)\)\)/,
     "a pick by name needs no held read; a Next still does");
   assert.match(item, /<TaskPage taskId=\{card\.tid\} title=\{card\.title \|\| ""\}/, "the frame knows which item it is");
   assert.match(page, /data-tq-task-loading=[\s\S]{0,800}canvas && !!title && <Typography data-tq-task-loading-title=""/, "...and says it while it reads");
@@ -92,11 +92,12 @@ test("Mark done, Remove and Remind me draw the next item at the press; a failed 
   assert.match(view, /putDown: \(key, tid = null\) => \{[^\n]*drawNextEarlyRef\.current\?\.\(key\); \}/, "the press that folds the item draws the next");
   assert.match(view, /pickUp: \(key, why\) => \{ takeEarlyBackRef\.current\?\.\(\);/, "a close that fails takes the drawn one down first");
   assert.match(view, /const takeEarlyBack = \(\) => \{ const e = earlyRef\.current; earlyRef\.current = null; movedOnRef\.current = false; if \(e\) unshow\(e\); \};/, "...and the closed item is back on the table");
-  assert.match(view, /earlyRef\.current = drawAhead\(\{ id: `a\$\{Date\.now\(\)\}`, role: "assistant", text: "", options: \[\], chips: \[\], card: it \}\);/, "on the one road ahead");
-  assert.match(view, /!heldTask\(it\.tid\) \|\| heldTerm\(it\.tid\) === undefined\) return;/, "only from a held read, as a Next draws");
-  assert.match(view, /if \(early\) \{ selectionRef\.current = null; currentRef\.current = null; carryRef\.current = early; \}\s+else clearTable\(\);/,
+  assert.match(view, /const b = preparedFor\(pileRef\.current, leaving\);/, "the walk's own prepared answer for the row on screen: the row that was below it");
+  assert.match(view, /earlyRef\.current = drawAhead\(\{ id: `a\$\{Date\.now\(\)\}`, role: "assistant", text: b\.say \|\| "", options: b\.options \|\| \[\], chips: b\.chips \|\| \[\], card: b\.item,/, "on the one road ahead");
+  assert.match(view, /\.\.\.\(drawsNow \? \{\} : \{ held: true \}\) \}, b\.answer_hash\);/, "its card held until the answer when its task is not read yet, as a Next draws");
+  assert.match(view, /if \(early\) \{ currentRef\.current = null; carryRef\.current = early; \}\s+else clearTable\(\);/,
     "advance keeps the drawn item up and hands it to the walk's surface");
-  assert.match(view, /if \(keeps\) aheadRef\.current = \{ \.\.\.carried, hash: null, table: tableNow\(\) \};\s+else dropCarried\(\);/,
+  assert.match(view, /if \(keeps\) aheadRef\.current = \{ \.\.\.carried, hash: carried\.hash \?\? null, table: tableNow\(\) \};\s+else dropCarried\(\);/,
     "the answer fills the drawn line in place when it names the same item, and takes it down when not");
 });
 

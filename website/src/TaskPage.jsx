@@ -2057,6 +2057,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const noteable = !!t && !term?.alive && !["done", "dropped"].includes(String(t?.Status || ""));
   const continued = () => {
     const id = selected;
+    if (!stale(id)) setResultOpen(true);
     if (!stale(id)) setChatRead((n) => n + 1);
     Promise.all([loadDetail(id), loadTasks()]).then(() => onChanged?.());
   };
@@ -2085,8 +2086,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // its fix (Connect an AI) stands there instead
   const runFormOpen = restartOpen || (!term?.alive && !liveRun && !report && !detail?.transcript && (!isGeneral || !generalStarted));
   const failedFix = failedRun && isGeneral && !resultOpen && !sessionView && !runFix && canContinue;
-  // ...and Continue picks the agent's conversation back up, so the Result unfolds to it (it rests on its summary otherwise)
-  const continuePress = (e, a) => { setResultOpen(true); return failedRun ? tryAgain() : setContinueAt(steady(a || e?.currentTarget)); };
+  // ...and Continue picks the agent's conversation back up, so the Result unfolds to it (it rests on its summary otherwise) - once it is
+  // SENT (continued), not at the press that opens the box: unfolding there swapped the summary for the full record under the new box, the
+  // pane blanked while it loaded, and a "Back to the result" stood over the result it was already showing (the owner, 2026-10-30)
+  const continuePress = (e, a) => (failedRun ? (setResultOpen(true), tryAgain()) : setContinueAt(steady(a || e?.currentTarget)));
   // THE NEW STEP'S BOX - Send to agent's / Run another agent's start, or Continue's - drawn once, placed by the layout (first in the desk's pane)
   // ...a function: the start box it holds (nextRunForm) is built further down
   const newStep = () => (<>

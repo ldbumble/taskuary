@@ -67,6 +67,11 @@ class ScrubTests(unittest.TestCase):
         s.add_message({'Subject': 'Payworth contract signed by Friday', 'FromEmail': 'erin@northwind.example'})
         self.assertEqual('x [removed] y', bugreport.scrub('x Renew the Payworth contract signed by Friday y', s))
 
+    def test_a_store_string_of_punctuation_alone_removes_nothing(self):
+        # issue #270: a blank or punctuation-only string made an empty pattern - "[removed]" after every comma, dot and "·"
+        text = 'In Taskuary 0.3.9.77, a report ran (exe) · Windows 11 · connectors: gmail, outlook'
+        self.assertEqual(text, bugreport._clean(text, ['-', '·', ' ', '']))
+
     def test_short_store_strings_are_left_alone(self):
         s = MemoryStore(); s.create_task({'Title': 'Fix'}, 'test')
         self.assertEqual('Fix the build', bugreport.scrub('Fix the build', s))

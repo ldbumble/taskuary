@@ -172,6 +172,21 @@ class TheOtherShapesTests(unittest.TestCase):
              mock.patch.object(images.time, 'sleep'):
             self.assertEqual(images.generate(s, 'a duck', c=c)['data'], PNG)
 
+    def test_runway_starts_a_task_and_waits_for_its_output(self):
+        s = MemoryStore(); c = _conn(s, 'runway_image')
+        running, done = _resp(payload={'id': 't1', 'status': 'RUNNING'}), _resp(payload={'id': 't1', 'status': 'SUCCEEDED', 'output': ['https://x/out.png']})
+        with mock.patch.object(images.requests, 'post', return_value=_resp(payload={'id': 't1'})) as post,              mock.patch.object(images.requests, 'get', side_effect=[running, done, _resp(content=PNG)]),              mock.patch.object(images.time, 'sleep'):
+            out = images.generate(s, 'a duck', size='1536x1024', c=c)
+        self.assertEqual((out['data'], out['model']), (PNG, 'gen4_image'))
+        self.assertEqual(post.call_args.kwargs['json'], {'model': 'gen4_image', 'promptText': 'a duck', 'ratio': '1440:1080'})
+        self.assertEqual(post.call_args.kwargs['headers']['X-Runway-Version'], images.RUNWAY_VERSION)
+
+    def test_a_failed_runway_task_says_why(self):
+        s = MemoryStore(); c = _conn(s, 'runway_image')
+        with mock.patch.object(images.requests, 'post', return_value=_resp(payload={'id': 't1'})),              mock.patch.object(images.requests, 'get', return_value=_resp(payload={'id': 't1', 'status': 'FAILED', 'failure': 'Prompt was rejected'})),              mock.patch.object(images.time, 'sleep'):
+            with self.assertRaises(RuntimeError) as e: images.generate(s, 'a duck', c=c)
+        self.assertIn('Prompt was rejected', str(e.exception))
+
     def test_a_failed_prediction_says_what_the_vendor_said(self):
         s = MemoryStore(); c = _conn(s, 'replicate_image')
         started = _resp(payload={'id': 'p1', 'status': 'starting', 'urls': {'get': 'https://g/p1'}})

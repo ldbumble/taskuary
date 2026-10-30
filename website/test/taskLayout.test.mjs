@@ -188,7 +188,7 @@ test("From folds to who and how many", () => {
   assert.equal(fromLine({ sender: { FromName: "Gail Moreno", Channel: "email" }, count: 3 }), "Gail Moreno · 3 messages");
   assert.equal(fromLine({ sender: { FromEmail: "gail@northwind.example" }, count: 1 }), "gail@northwind.example · 1 message");
   assert.equal(fromLine({ sender: { Channel: "whatsapp" }, count: 8 }), "WhatsApp · 8 messages");
-  assert.equal(fromLine({ workflow: { title: "Nightly check" } }), "Workflow · Nightly check");
+  assert.equal(fromLine({ workflow: { title: "Nightly check" } }), "Routine · Nightly check");
   assert.equal(fromLine({ made: "TQ-0007 · made by you 1h ago" }), "TQ-0007 · made by you 1h ago");
 });
 
@@ -245,7 +245,7 @@ test("the three sections come in the flow's order, and each closed tab says wher
   assert.deepEqual(fromStatus({ channel: "WhatsApp", count: 5, sorted: "Sorted: a reply to send · regular priority",
     msgs: [{ who: "Erin Blake", words: "So let's\nbuild one." }, { who: "You", words: "A link" }, { who: "Erin Blake", words: "Look" }, { who: "Ray Colton", words: "Old" }] }),
     { lines: ["WhatsApp · 5 messages", "Erin Blake: “So let's build one.”", "You: “A link”", "Erin Blake: “Look”", "Ray Colton: “Old”"], foot: "✓ Sorted: a reply to send · regular priority" });
-  assert.deepEqual(fromStatus({ workflow: { title: "Nightly check" } }).lines, ["Workflow · Nightly check"], "a workflow run has no sender");
+  assert.deepEqual(fromStatus({ workflow: { title: "Nightly check" } }).lines, ["Routine · Nightly check"], "a workflow run has no sender");
   assert.equal(agentWord({}), "not started");
   assert.equal(agentWord({ live: true, waiting: true }), "needs you");
   assert.equal(agentWord({ failed: true, result: true }), "failed");

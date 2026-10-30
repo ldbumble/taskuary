@@ -41,7 +41,7 @@ test("the page carries Run now for an unsaved workflow, and every field the run 
 test("Reports opens an agent workflow on its own page, with one way in to a new one", () => {
   const view = read("ReportsView.jsx");
   assert.match(view, /agentWorkflow\s*\n?\s*\? <WorkflowEditor/);
-  assert.match(view, /label: "\+ New workflow"/);
+  assert.match(view, /label: "\+ New routine"/);
   assert.doesNotMatch(view, /label: "\+ AI agent"/);
   assert.doesNotMatch(view, /label: "\+ Monthly invoices"/);
   assert.match(view, /Monthly Zoho invoices have a form of their own/);
@@ -49,9 +49,9 @@ test("Reports opens an agent workflow on its own page, with one way in to a new 
 
 test("Reports offers New report and New workflow together, whichever list is open", () => {
   const view = read("ReportsView.jsx");
-  assert.match(view, /\{ key: "new-report", label: "\+ New report" \}, \{ key: "new-dashboard", label: DASH\.new \}, \{ key: "new-agent", label: "\+ New workflow" \},\s*\{ key: NEW_PB, label: "\+ New playbook" \}\]/);
+  assert.match(view, /\{ key: "new-report", label: "\+ New report" \}, \{ key: "new-dashboard", label: DASH\.new \}, \{ key: "new-agent", label: "\+ New routine" \},\s*\{ key: NEW_PB, label: "\+ New playbook" \}\]/);
   assert.doesNotMatch(view, /section === "workflows" \? \{ key: "new-agent"/);
-  assert.ok(view.includes(">New report</Button>") && view.includes(">New workflow</Button>"));
+  assert.ok(view.includes(">New report</Button>") && view.includes(">New routine</Button>"));
 });
 
 // B3 (the 2026-10-21 UI audit): the report editor's free "daily at HH:MM" box saved "7am", which the scheduler cannot read

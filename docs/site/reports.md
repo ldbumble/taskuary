@@ -215,18 +215,18 @@ such system per run, and never one it has raised before. The app's own health (a
 run after run, a connection erroring) is raised the same way, and counts toward the post's
 lines like everything else.
 
-## Workflows
+## Routines
 
-A workflow is a job that writes or keeps state - posting bills, bumping dependencies, driving a
-portal - rather than a check that reads. **Every run of a workflow is a task**, whatever started
+A routine is a job that writes or keeps state - posting bills, bumping dependencies, driving a
+portal - rather than a check that reads. **Every run of a routine is a task**, whatever started
 it: its schedule, **Run now**, the assistant, or you from your phone. The run never becomes a row
 under Reports and never goes through triage; its agent works it like any other task.
 
-- A workflow that names a profile (`ap`, say) runs as that profile, with its rules; one that names
+- A routine that names a profile (`ap`, say) runs as that profile, with its rules; one that names
   none runs on the assistant, or on the coding profile when it has a folder to work in.
-- A workflow with a **folder** (`cwd`) runs in that folder. If the folder is gone, the task says so
+- A routine with a **folder** (`cwd`) runs in that folder. If the folder is gone, the task says so
   and nothing starts.
-- A workflow runs on the **same brain as your general agents** (Settings → How mail is sorted →
+- A routine runs on the **same brain as your general agents** (Settings → How mail is sorted →
   General agent), on its main model. For a hard job, the editor's **Model** row picks a stronger
   model from that CLI's own list and an **Effort** level - only the levels that CLI and model take
   (Claude Code's `--effort`, Codex's `model_reasoning_effort`). A CLI with no effort setting shows
@@ -235,24 +235,24 @@ under Reports and never goes through triage; its agent works it like any other t
 - One run at a time: a scheduled run that comes round while the last one is still working is not
   started, and **Run now** takes you to the run that is. A run that is only waiting for your yes
   does not hold the next one back.
-- The task shows where it came from: the workflow's mark, **Workflow · its name** and
+- The task shows where it came from: the routine's mark, **Routine · its name** and
   **Started by** - its schedule (with the clock, e.g. "Mondays 08:00"), you, the assistant, or your
-  phone - in the header and under **Came from**, with a link back to the workflow.
+  phone - in the header and under **Came from**, with a link back to the routine.
 - **A mail can start it.** Describe, in words, the mail that should start it under **Start when a
   mail like this arrives** ("a vendor sends an invoice for something we ordered"). Triage is shown
-  every such workflow beside your playbooks; when a mail is one, that workflow runs and its run is
+  every such routine beside your playbooks; when a mail is one, that routine runs and its run is
   the mail's task, with the mail filed on it. Its steps read the mail as `{{mail.from}}`,
   `{{mail.subject}}` and `{{mail.body}}` - as data, never pasted into a query. Approvals work as on
-  any run. A workflow that hands to an agent is not started by a sender who may not start one by
-  themselves; that mail becomes a task of its own that says which workflow it matched.
-- A new workflow's first scheduled run is its next slot - saving one on a Wednesday does not run a
+  any run. A routine that hands to an agent is not started by a sender who may not start one by
+  themselves; that mail becomes a task of its own that says which routine it matched.
+- A new routine's first scheduled run is its next slot - saving one on a Wednesday does not run a
   Monday job straight away. **Run now** runs it now.
 - A run of steps with nothing waiting on it is done when its last step runs; a draft it wrote
   waits on its own task, which the step names.
 
 ## Playbooks
 
-The third shelf on the Reports page, beside Reports and Workflows. A **playbook** is how this
+The third shelf on the Reports page, beside Reports and Routines. A **playbook** is how this
 company does one kind of job - when it starts, which connections it uses, the steps, what an agent
 may do alone, what to ask first and what counts as done. Triage matches arriving mail to a
 playbook's `when` line, and the agent working that task is handed the playbook.
@@ -264,14 +264,14 @@ playbook's `when` line, and the agent working that task is handed the playbook.
 - Each playbook has an **on/off switch**: off keeps it, and triage stops matching it. Settings →
   How mail is sorted → **Use playbooks** turns them all off at once.
 
-## Stateful workflows
+## Stateful routines
 
-**Monthly Zoho invoices** is the first workflow on the Reports page that is not a query returning
+**Monthly Zoho invoices** is the first routine on the Reports page that is not a query returning
 one result. One scheduled run opens a batch, the batch holds one row per customer, and each row
 advances separately through amount, draft, Review and sent.
 
 1. Connect **Zoho Invoice**, then use **Monthly invoices** on Reports.
-2. Choose the customers and a monthly cron. Saving enables the workflow.
+2. Choose the customers and a monthly cron. Saving enables the routine.
 3. On schedule (or **Open this month**), Taskuary reads each customer's latest prior sent invoice
    and prefills its total. No new invoice exists yet.
 4. Confirm or change the amounts, then **Prepare Zoho drafts** — each prior invoice is duplicated
@@ -279,7 +279,7 @@ advances separately through amount, draft, Review and sent.
 5. Edit and approve each email. Approval sends that invoice; leaving the page, restarting
    Taskuary or approving a different customer does not lose the others.
 
-The duplicate boundary is `(workflow, customer, YYYY-MM)`, stored locally and written into Zoho's
+The duplicate boundary is `(routine, customer, YYYY-MM)`, stored locally and written into Zoho's
 `reference_number`. A retry after a timeout reuses an existing draft; an existing non-draft
 invoice blocks the retry rather than creating another. A changed total is applied automatically
 only when the previous invoice had one line — a multi-line invoice with a changed total stops for

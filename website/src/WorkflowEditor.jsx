@@ -206,7 +206,7 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
   return (
     <Box sx={{ maxWidth: 820, mx: "auto" }}>
       {/* the title alone: the back button above already says Workflows */}
-      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 20, lineHeight: 1.2, mb: 1.5 }}>{cur ? (cfg.title || "Workflow") : "New workflow"}</Typography>
+      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 20, lineHeight: 1.2, mb: 1.5 }}>{cur ? (cfg.title || "Routine") : "New routine"}</Typography>
       {/* the actions, together: what it is doing now, and the three things you can do about it */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 2, mt: -1 }}>
         <Typography variant="body2" sx={{ color: DIM, flex: 1, minWidth: 200 }}>
@@ -229,7 +229,7 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
         onChanged: async () => { await reload(); const { data } = await api.get("/api/sources"); const row = (data.data || []).find((x) => x.SourceId === cur?.SourceId);
           if (row) setCfg((c) => ({ ...c, flow: parse(row.ConfigJson).flow })); } })}
       {repair && <Alert severity="info" sx={{ mb: 1.5, fontSize: 12.5 }} action={<Box sx={{ display: "flex", gap: 0.5 }}>
-        <Button size="small" color="inherit" onClick={() => { setRepair(null); setMsg({ ok: true, text: "Kept - Save to make it this workflow's steps." }); }}>Keep</Button>
+        <Button size="small" color="inherit" onClick={() => { setRepair(null); setMsg({ ok: true, text: "Kept - Save to make it this routine's steps." }); }}>Keep</Button>
         <Button size="small" color="inherit" onClick={() => { setCfg((c) => ({ ...c, flow: repair.was })); setRepair(null); }}>Discard</Button></Box>}>
         The AI's repair{repair.explain ? `: ${repair.explain}` : "."} The changed steps are marked below - nothing is saved yet.</Alert>}
       {/* describing it is how a new one starts; a draft that arrived built (New, or this box) is already past that */}
@@ -315,7 +315,7 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
         </Field>
         {/* A MAIL STARTS IT (the owner, 2026-10-21): said in words, like a playbook's "when" - triage is shown it beside the playbooks
             and starts this workflow on a mail that is one; the run is that mail's task, and its steps read it as {{mail.subject}} */}
-        <Field label="Start when a mail like this arrives" hint="optional - describe the mail in words; triage starts this workflow when one like it comes in, and the steps read it as {{mail.from}}, {{mail.subject}}, {{mail.body}}">
+        <Field label="Start when a mail like this arrives" hint="optional - describe the mail in words; triage starts this routine when one like it comes in, and the steps read it as {{mail.from}}, {{mail.subject}}, {{mail.body}}">
           <TextField size="small" fullWidth value={cfg.on_mail || ""} placeholder="a vendor sends an invoice for something we ordered"
             onChange={(e) => set("on_mail", e.target.value)} sx={{ bgcolor: "#fff" }} />
         </Field>
@@ -339,7 +339,7 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
                 onChange={(e) => set("cwd", e.target.value)} sx={{ bgcolor: "#fff" }} />
             </Field>
             {cur && <Button size="small" color="error" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />}
-              onClick={remove}>Remove workflow</Button>}
+              onClick={remove}>Remove routine</Button>}
           </Box>
         </Box>
       </Box>

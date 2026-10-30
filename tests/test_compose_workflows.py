@@ -64,7 +64,7 @@ def test_a_model_miss_asks_the_owner_to_say_it_again_not_a_config_error():
     """The owner cannot fix a missing config - "the model answered without a workflow config" was all they got (2026-10-17)."""
     for said in ({'explain': 'hm'}, {'config': {'type': 'nonsense', 'title': 'x'}}, {'config': {'type': 'agent', 'title': ''}}):
         out = compose.compose_workflow(MemoryStore(), 'do a thing', answering(said))
-        assert out['error'] == compose.AGAIN.format('a workflow') and 'config' not in out['error']
+        assert out['error'] == compose.AGAIN.format('a routine') and 'config' not in out['error']
     assert compose.compose_workflow(MemoryStore(), 'do a thing', None)['fix']['label'] == 'Connect an AI'
 
 

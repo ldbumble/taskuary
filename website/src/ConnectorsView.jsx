@@ -1076,10 +1076,10 @@ const DATA_META = {
       text: "Opens Zoho sign-in in a new tab. The refresh token returns directly to Taskuary." },
     howto: ["At api-console.zoho.com create a Server-based application and add the redirect URI shown here exactly.",
       "Paste the client id and secret, Save, then Connect. For a non-US account use its accounts host, such as accounts.zoho.eu.",
-      "Test reads the organization and active customers. Then open Reports and create a Monthly Zoho invoices workflow; its schedule opens a batch but never sends it.",
+      "Test reads the organization and active customers. Then open Reports and create a Monthly Zoho invoices routine; its schedule opens a batch but never sends it.",
       "Confirm amounts, Prepare drafts, and approve customer emails on the task. The customer/month reference prevents duplicate invoices on retries."],
     agent: ["The owner connects Zoho in the browser. Do not ask for or print refresh tokens.",
-      "Invoice sends are owner-gated Review actions. Never bypass Review or create a second invoice for the same workflow/customer/period."] },
+      "Invoice sends are owner-gated Review actions. Never bypass Review or create a second invoice for the same routine/customer/period."] },
   teller: { title: "Bank & card feed (Teller)", types: ["teller_accounts", "teller_transactions", "teller_balances", "teller_spend"],
     fields: [["Teller application id (teller.io → your application)", "application_id"],
       ["environment — sandbox, development (free, real banks, 100 logins) or production", "environment", "sandbox"],
@@ -3198,7 +3198,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
             <Switch data-tq-card-on="" checked={!!conn.Active} disabled={draft.flipping} onChange={(e) => setActive(e.target.checked)} />
             <Typography variant="body2" sx={{ color: DIM }}>
-              {conn.Active ? "On — reports, workflows and agents can use it." : "Off — flip on once Test passes."}
+              {conn.Active ? "On — reports, routines and agents can use it." : "Off — flip on once Test passes."}
             </Typography>
           </Box>
           {meta.search && <KbSearch conn={conn} />}

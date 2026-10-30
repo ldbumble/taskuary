@@ -158,7 +158,7 @@ test("a workflow run's header names the workflow and who started it, never Triag
   assert.equal(facts.triaged, false, "nobody triaged it, whatever a stray route says");
   assert.equal(facts.workflow, true);
   assert.deepEqual(facts.pills.slice(0, 2).map((p) => [p.label, p.value]),
-    [["Workflow", "Vendor bill sweep"], ["Started by", "its schedule (Mondays 08:00)"]]);
+    [["Routine", "Vendor bill sweep"], ["Started by", "its schedule (Mondays 08:00)"]]);
   assert.ok(!facts.pills.some((p) => p.key === "intent"));
   assert.deepEqual(facts.pills.slice(2).map((p) => p.value), ["an agent", "ap", "regular"]);
   // the list row has no detail: the tag alone still says who started it, and the run's own title still names the workflow
@@ -183,7 +183,7 @@ test("a workflow run's Came from is the workflow and its trigger, with the way b
   const task = { Kind: "coding", Source: "workflow", Tags: "workflow-trigger:manual", Title: "Dependency bumps - 2026-10-16 09:30" };
   assert.deepEqual(workflowOrigin(task, { source_id: 9, title: "Dependency bumps", trigger: "manual", started_by: "you (Run now)" }),
     { title: "Dependency bumps", by: "you (Run now)", line: "Started by you (Run now)", link: "#report=9" });
-  assert.deepEqual(workflowOrigin({ ...task, Tags: "" }, null), { title: "Dependency bumps", by: "", line: "A workflow run", link: "" },
+  assert.deepEqual(workflowOrigin({ ...task, Tags: "" }, null), { title: "Dependency bumps", by: "", line: "A routine run", link: "" },
     "the workflow deleted: the run still says what it was");
   assert.equal(workflowOrigin({ Source: "email" }), null);
   assert.ok(page.includes("workflowOrigin("), "the page draws it");

@@ -15,7 +15,7 @@ from . import settings_schema
 # is the same every time and needs no model, so its name and its promise are shipped, not computed.
 # (setting Taskuary up is the Setup button at the top, never a script the chat starts - the owner, 2026-10-19)
 SCRIPTS = [('walk me through my tasks', 'Next through the pile, one item at a time - the core'),
-           ('set up a report', 'describe a check or a workflow in your words and the composer builds it')]
+           ('set up a report', 'describe a check or a routine in your words and the composer builds it')]
 
 
 def _cfg(src) -> dict:
@@ -121,7 +121,7 @@ def state_block(store, cap: int = 2500) -> str:
     def con_line(c): return c['name'] + (' - erroring' if c['last_error'] else '') + ('' if c['has_secret'] or c['type'] in ('imap', 'ollama') else ' (no key yet)')
     lines = ['THE APP RIGHT NOW (read from its own tables; look things up by name for detail)',
              f"  {plural(len(plain), 'report')}: {named(plain, rep_line)}",
-             f"  {plural(len(wfs), 'workflow')}: {named(wfs, rep_line)}",
+             f"  {plural(len(wfs), 'routine')}: {named(wfs, rep_line)}",
              f"  {len(live)} connected: {named(live, con_line, more='connections.list')}" + (f"; {off} catalogue cards off" if off else ''),
              f"  agents: {', '.join(a['name'] for a in agents(store)) or 'none'} | brains: {'; '.join(brains(store))}",
              f"  settings: {len(settings_schema.knobs())} knobs in groups {', '.join(settings_schema.GROUPS)} - "

@@ -175,7 +175,7 @@ export function workflowOrigin(task = {}, wf = null) {
   if (!isWorkflowRun(task)) return null;
   const by = startedBy(task, wf);
   // ...and, when it ran as steps (flow.py), what each step did - the run's own record, not the agent's account of it
-  return { title: workflowTitle(task, wf), by, line: by ? `Started by ${by}` : "A workflow run",
+  return { title: workflowTitle(task, wf), by, line: by ? `Started by ${by}` : "A routine run",
     link: wf?.source_id != null ? `#report=${wf.source_id}` : "", ...(wf?.by_code ? { byCode: true } : {}), ...(Array.isArray(wf?.steps) && wf.steps.length ? { steps: wf.steps, repairs: wf.repairs || [], sourceId: wf.source_id, runId: wf.run_id } : {}) };
 }
 export function headerFacts({ verdict = null, route = null, task = {}, workflow = null } = {}) {
@@ -193,7 +193,7 @@ export function headerFacts({ verdict = null, route = null, task = {}, workflow 
     triaged: !!intent,
     workflow: run,
     pills: [
-      run && { key: "workflow", label: "Workflow", value: workflowTitle(task, workflow) },
+      run && { key: "workflow", label: "Routine", value: workflowTitle(task, workflow) },
       by && { key: "trigger", label: "Started by", value: by },
       // ...and what it runs on: the general agents' brain, or the harder model and effort this workflow asked for (workflows.brain)
       run && workflow?.runs_on && { key: "runs_on", label: "Runs on", value: workflow.runs_on, tone: "agent" },

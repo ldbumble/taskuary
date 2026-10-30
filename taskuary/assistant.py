@@ -604,9 +604,9 @@ def health_ideas(store, now: datetime = None) -> list:
                                    'why': 'three failures in a row is a broken report, not a bad day'}})
         elif r['workflow'] and not runs and _ts(seen.get(str(r['source_id']))) <= (now - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S'):
             out.append({'key': f"health:workflow:{r['source_id']}", 'kind': 'health', 'sig': 'never',
-                        'text': f"{r['title']} is a workflow that has never run - its clock is {r['schedule'] or 'not set'}.",
+                        'text': f"{r['title']} is a routine that has never run - its clock is {r['schedule'] or 'not set'}.",
                         'action': {'type': 'health', 'tab': 'Reports', 'hash': f"report={r['source_id']}", 'source_id': r['source_id'],
-                                   'why': 'a workflow that never ran is either mis-clocked or waiting on a sign-in'}})
+                                   'why': 'a routine that never ran is either mis-clocked or waiting on a sign-in'}})
     # An erroring CONNECTION is not raised here: the bell carries it, and nothing else (problems.py), and said twice it became an idea, then a task, then a coding agent investigating
     # a connection the owner was looking at (the owner, 2026-09-30: "don't need both ... if it fails we don't need
     # advisor to tell us").

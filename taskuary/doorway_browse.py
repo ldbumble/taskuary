@@ -158,7 +158,7 @@ def _reports(store, open_, page=0):
                 + (f"\n> {said}" if said else '')
                 + '\n\nSay "run it now", or what to change, and I propose it for your yes.')
         return text, up
-    if not rows: return 'No reports or workflows are set up yet. Say "set up a report" and I walk you through one.', []
+    if not rows: return 'No reports or routines are set up yet. Say "set up a report" and I walk you through one.', []
     lines = [f"· {r['title']}{'' if r['active'] else ' (off)'} - {r['schedule'] or 'no clock'}; {last(r)}" for r in rows]
     return (f'REPORTS · {len(rows)}\n' + '\n'.join(lines),
             paged([(r['title'], {'t': 'browse', 'area': 'reports', 'open': r['source_id']}) for r in rows], [], {'t': 'browse', 'area': 'reports'}, page))

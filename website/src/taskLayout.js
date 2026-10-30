@@ -73,7 +73,7 @@ export const CLOSE_BY_HAND = "Mark done closes it, or close it with a note.";
 // no message at all - where it was made
 export const fromLine = ({ sender = null, count = 0, workflow = null, made = "" } = {}) => {
   if (count && sender) return [sender.FromName || sender.FromEmail || channelName(sender.Channel), plural(count, "message")].join(" · ");
-  if (workflow) return `Workflow · ${workflow.title}`;
+  if (workflow) return `Routine · ${workflow.title}`;
   return made || "";
 };
 
@@ -91,7 +91,7 @@ const q = (s) => (s ? `“${String(s).replace(/\s+/g, " ").trim()}”` : "");
 // ...AT A GLANCE (the owner, 2026-10-27: "show more"): on what and how many, then every message newest first - who, and a short line each;
 // the tab draws as many as fit, newest down with none skipped (TaskPage fitTabLines) - a fixed three under "4 messages" read as one lost
 export const fromStatus = ({ channel = "", count = 0, msgs = [], workflow = null, made = "", sorted = "" } = {}) => ({
-  lines: [count ? [channel, plural(count, "message")].filter(Boolean).join(" · ") : workflow ? `Workflow · ${workflow.title}` : made,
+  lines: [count ? [channel, plural(count, "message")].filter(Boolean).join(" · ") : workflow ? `Routine · ${workflow.title}` : made,
     ...msgs.map((m) => `${m.who}: ${q(m.words)}`)].filter(Boolean),
   foot: sorted ? `✓ ${sorted}` : "" });
 // ...the Agent: its profile and where it stands, what it did in a line, what it made - and at its foot its state and the Advisor's next move

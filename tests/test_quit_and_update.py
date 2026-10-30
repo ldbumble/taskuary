@@ -26,14 +26,14 @@ class LiveWorkIsCountedOnce(unittest.TestCase):
     def test_agents_and_workflow_runs_in_words(self):
         self.assertEqual(awake.said(0, 0), '')
         self.assertEqual(awake.said(1, 0), '1 running agent')
-        self.assertEqual(awake.said(2, 1), '2 running agents and 1 workflow run')
-        self.assertEqual(awake.said(0, 3), '3 workflow runs')
+        self.assertEqual(awake.said(2, 1), '2 running agents and 1 routine run')
+        self.assertEqual(awake.said(0, 3), '3 routine runs')
 
     def test_a_workflow_run_whose_worker_is_live_counts_once_as_the_agent(self):
         s, tid, sessions = working_store()
         with sessions, mock.patch.object(workflows, '_STARTING', {tid, 999}):
             self.assertEqual(awake.live(s), (1, 1))
-            self.assertEqual(awake.running(s), '1 running agent and 1 workflow run')
+            self.assertEqual(awake.running(s), '1 running agent and 1 routine run')
         self.assertEqual(awake.live(MemoryStore()), (0, 0))
 
 
@@ -80,7 +80,7 @@ class AnUpdateWaitsForRunningWork(unittest.TestCase):
         self.assertIsNone(update.QUEUED['at'])
 
     def test_a_waiting_update_that_fails_says_why_on_the_card(self):
-        live = ['1 workflow run']
+        live = ['1 routine run']
         update.when_idle(lambda: live[0], mock.Mock(side_effect=RuntimeError('the download stopped short')), poll=0.01)
         live[0] = ''
         for _ in range(200):
@@ -128,7 +128,7 @@ class AnUpdateWaitsOnlyForWorkInFlight(unittest.TestCase):
 
     def test_a_workflow_run_holds_it_too(self):
         with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True), mock.patch.object(workflows, '_STARTING', {7}):
-            self.assertEqual(awake.update_waits_for(MemoryStore()), f'1 workflow run ({task_ref(7)})')
+            self.assertEqual(awake.update_waits_for(MemoryStore()), f'1 routine run ({task_ref(7)})')
 
 
 class TheAssistantLightsUpdateNeverPressesIt(unittest.TestCase):

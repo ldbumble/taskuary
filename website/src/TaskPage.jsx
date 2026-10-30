@@ -1827,7 +1827,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               <Typography variant="caption" sx={{ color: DIM, fontSize: 11.5, display: "block" }} title={`${detail.ref} · ${made}`}>
                                 {fromWorkflow.line} · {whenShort(t?.CreatedAt)}</Typography>
                             </Box>
-                            {fromWorkflow.link && <Link href={fromWorkflow.link} underline="hover" sx={{ fontSize: 12, flexShrink: 0 }}>Open the workflow</Link>}
+                            {fromWorkflow.link && <Link href={fromWorkflow.link} underline="hover" sx={{ fontSize: 12, flexShrink: 0 }}>Open the routine</Link>}
                             {codeRun && shareBadge}
                             {fromWorkflow.steps && <Box data-tq-workflow-steps="" sx={{ flexBasis: "100%", borderTop: `1px solid ${BORDER}`, pt: 0.75, mt: 0.25, minWidth: 0 }}>
                               {/* a failed run's fix is one press from its task: the workflow opens with Fix with AI already asked */}
@@ -2372,7 +2372,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const hasResult = resultShown || codeRun, canSummary = !liveSession && !cantSend && notDone;
   const { badge: shareBadge, menu: shareMenu } = useShareParts(`task:${t?.TaskId}`, { kind: fromWorkflow ? "workflow" : "agent", title: t?.Title || "", task: t?.TaskId },
     inRow && !!t && !liveSession && (hasResult || canSummary), {
-      noResult: hasResult ? "" : "there is no result to share yet - an agent's Result or a workflow run is what goes",
+      noResult: hasResult ? "" : "there is no result to share yet - an agent's Result or a routine run is what goes",
       summary: canSummary ? () => setEmailOpen(true) : null,
       summaryWhy: liveSession ? "an agent is still working" : !notDone ? "the task is closed - reopen it first" : "nothing can be sent from here",
       // ...a closed task's result is drafted on a task of its own (sharing.email): that one opens instead
@@ -2727,7 +2727,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           the ask (the owner, 2026-10-16: "you will probably have to have a scroll if it goes really far back"). A row opens
                           its message in full under it, as the old disclosure did. */}
                       {/* ...in the three sections the conversations are "Full message history (N)", their facts What came in (fromCards) */}
-                      {!threeUp ? <Part label="Came from" sub={fromWorkflow && !sources.length ? "a workflow run" : cameFromLabel(sources).replace(/^Came from · /, "").replace(" in ", " · ")} data-tq-came-from="" focus={focus === "source"}>
+                      {!threeUp ? <Part label="Came from" sub={fromWorkflow && !sources.length ? "a routine run" : cameFromLabel(sources).replace(/^Came from · /, "").replace(" in ", " · ")} data-tq-came-from="" focus={focus === "source"}>
                         {fromFacts()}{fromConvs()}</Part> : (sources.length || !fromWorkflow) && fromLinks()}
                       {!threeUp && fromSorted()}
                     </Box>

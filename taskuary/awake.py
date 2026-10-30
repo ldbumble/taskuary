@@ -23,7 +23,7 @@ def live(store) -> tuple:
 
 def said(agents: int, flows: int) -> str:
     """'1 running agent', '2 running agents and 1 workflow run', '' when nothing is live."""
-    return ' and '.join(x for x in (agents and plural(agents, 'running agent'), flows and plural(flows, 'workflow run')) if x)
+    return ' and '.join(x for x in (agents and plural(agents, 'running agent'), flows and plural(flows, 'routine run')) if x)
 
 
 def running(store) -> str:

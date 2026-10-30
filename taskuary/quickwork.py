@@ -113,8 +113,34 @@ def ask(store, tid, ask: str, steps: list = None, cancel=None) -> 'QuickAnswer |
 
 
 QUICK_TIMEOUT = 180
-QUICK_POOL = 8
-POOL = threading.BoundedSemaphore(QUICK_POOL)       # apart from ingest.auto_sessions: a quick call is not a desk
+# A QUICK CALL IS A FRACTION OF A DESK (the owner, 2026-10-30: "5 of them are one or something like that"): it takes a slot only while
+# ingest.has_room has 1/light_per_agent to spare, so quick work and agent sessions share the one "Agents at once" width. It never holds a
+# desk of its own (blackboard.live_count skips quick sessions); a call in flight is counted here, from taking its slot to giving it back.
+GATE, WAIT_POLL = threading.Condition(), 2.0     # sessions ending and subagents finishing do not notify the gate, so a waiter looks again
+_IN_FLIGHT = 0
+
+def in_flight() -> int: return _IN_FLIGHT
+
+def _fits(store) -> bool:
+    per = ingest.light_per_agent(store)
+    return _IN_FLIGHT < ingest.auto_sessions(store) * per and ingest.has_room(store, 1 / per)   # the first is the hard ceiling, whatever the load reads
+
+def _take(store, tid) -> None:
+    "Wait for room, then hold a quick slot. The wait is not the call's: its timeout starts once the slot is held."
+    global _IN_FLIGHT
+    with GATE:
+        if not _fits(store):
+            store.add_comment(tid, 'router', 'agent', f'Waiting its turn: {ingest.busy_words(store)}, and the quick answer comes when there is room.')
+            while not _fits(store): GATE.wait(WAIT_POLL)
+        _IN_FLIGHT += 1
+
+def _give(store) -> None:
+    global _IN_FLIGHT
+    with GATE: _IN_FLIGHT -= 1; GATE.notify_all()
+    try:
+        from . import blackboard as bb
+        if store.queued_dispatches(): bb.drain_later(store, 0)      # a queued agent may fit now; never on this thread, which the drain could hold
+    except Exception as e: logger.debug(f'no drain after a quick call: {e}')
 ESCALATED = 'A quick look found this needs the agent: '
 ESCALATE_BRIEF = 'A QUICK LOOK CAME FIRST: one call, which could not act, found this needs the agent - {why}. Take it from here.'
 FOUND = 'What it found so far: '
@@ -130,13 +156,15 @@ def escalate(store, tid, ask: str, why: str, report: str = '') -> None:
 RUNNING, _RUN_LOCK = set(), threading.Lock()      # tasks with a quick start in flight: a second start on one (two arrivals in a poll) makes no second call
 
 def _call(store, tid, ask_: str, steps: list) -> tuple:
-    "(the answer or None, why it failed or ''): the one call, holding a POOL slot only while it runs; the timeout counts the call, not the wait."
+    "(the answer or None, why it failed or ''): the one call, holding a quick slot only while it runs; the timeout counts the call, not the wait."
     cancel = threading.Event()
     try:
-        with POOL:
+        _take(store, tid)
+        try:
             timer = threading.Timer(QUICK_TIMEOUT, cancel.set); timer.daemon = True; timer.start()
             try: return ask(store, tid, ask_, steps, cancel), ''
             finally: timer.cancel()
+        finally: _give(store)
     except Exception as e: return None, f'the quick answer could not be made ({e})'
 
 def _escalated(store, tid, q: str, out, failed: str) -> bool:
@@ -158,7 +186,7 @@ def start(store, tid, brief: str = None, as_owner: bool = True) -> str:
         q, steps = ingest.first_ask(store, tid, brief), []
         out, failed = _call(store, tid, q, steps)
         if _escalated(store, tid, q, out, failed): return 'escalated'
-        ses = general.start_session(store, tid, actor='router'); ses.quick = True
+        ses = general.start_session(store, tid, actor='router', quick=True); ses.quick = True     # quick from birth: never a desk, even for an instant
         ses.file_quick(q, out, steps, as_owner, brief=True)      # the ask is Taskuary's, not the owner's (general.BRIEF_ACTOR)
         return 'filed'
     except Exception as e:

@@ -412,6 +412,12 @@ is what you see if those cards cannot load.</li>
 <p>The one number that decides how much work this machine takes on at once. Four is the default because four live CLI sessions in four checkouts is about what a laptop stays responsive under — each one is a real process with a real model behind it.</p>
 <p>Past the limit nothing is dropped: a dispatched task joins the queue and starts the moment a session ends, and the Board shows it waiting with the reason. The Board&#39;s floor view is drawn to this number, so raising it widens the room instead of crowding it.</p>
 <p>Raise it if the machine has headroom and your tasks rarely touch the same files; lower it to one if you would rather watch a single agent at a time. Sessions you start yourself are never blocked by this.</p>
+<h3 id="quick-answers-and-subagents-per-agent">Quick answers and subagents per agent<a class="anchor" href="#quick-answers-and-subagents-per-agent" aria-label="Link to this section">#</a></h3>
+<p><code>auto_sessions_light</code> · type: number · default: <code>5</code></p>
+<p>Quick answers and an agent&#39;s own subagents count as a fraction of an agent: this many make one.</p>
+<p>Agents at once is the whole width of the machine, and lighter work shares it. A quick answer is one call to a model, and a subagent is one an agent started for itself - each is real work, but far less than a session, so this many of them count as one agent.</p>
+<p>At the defaults (four agents, five here) four sessions fill the room; three sessions leave room for five quick answers at once; with nothing else running, twenty quick answers can run together. A new session or quick answer waits for room, then starts by itself.</p>
+<p>An agent&#39;s subagents are never stopped - they belong to its session - so they only make new work wait. Raise this if quick answers queue behind agents too often; lower it to count light work more heavily. 1 counts each one as a whole agent.</p>
 <h2 id="agent-permissions">Agent permissions<a class="anchor" href="#agent-permissions" aria-label="Link to this section">#</a></h2>
 <h3 id="general-agents-can">General agents can<a class="anchor" href="#general-agents-can" aria-label="Link to this section">#</a></h3>
 <p><code>general_agent_hands</code> · type: select · default: <code>cli</code></p>

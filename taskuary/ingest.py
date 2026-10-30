@@ -1870,10 +1870,10 @@ def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bo
         return False
     from . import blackboard as bb, general, quickwork
     coding = not general.handles(store.get_task(tid) or {})
-    # a conversation of quick answers carries on quick while the task still reads quick: one call, no desk, so no cap
+    # a conversation of quick answers carries on quick while the task still reads quick: one call at a fraction of a desk (quickwork._take)
     quick = not coding and quickwork.only_quick(store, tid) and _reads_quick(store, tid)
-    if not quick and bb.live_count() >= (cap := auto_sessions(store)):
-        not_started(store, tid, f'{cap} agents are already running - Continue picks it up')
+    if not quick and not has_room(store):
+        not_started(store, tid, f'{busy_words(store)} - Continue picks it up')
         return False
     (CODING_OPENING if coding else general.OPENING).add(tid)
     store.add_comment(tid, 'router', 'agent', f'{_who_said(msg)} wrote again with new work - the '
@@ -2075,7 +2075,7 @@ def _pass_general(store, tid, msg: dict):
     from . import general, quickwork
     end = time.time() + PASS_WAIT
     # a conversation still opening (carry-on, Continue) takes ITS turn first: this one waits until that turn has the session -
-    # past the deadline while a quick call is in flight, whose session opens only once its answer is in (a POOL wait plus the call)
+    # past the deadline while a quick call is in flight, whose session opens only once its answer is in (a wait for a quick slot plus the call)
     while (time.time() < end or tid in quickwork.RUNNING) and tid in general.OPENING and not getattr(general.session_for(tid), 'busy', False): time.sleep(.25)
     ses = general.session_for(tid)
     if not ses:
@@ -2559,6 +2559,33 @@ def auto_sessions(store) -> int:
     except (ValueError, TypeError): return AUTO_SESSIONS
     return max(1, min(16, n))
 
+# LIGHT WORK COUNTS TOO, AS A FRACTION (the owner, 2026-10-30: "it should count like sub agents, 5 of them are one or something like
+# that"). A quick call and an agent's own subagent are each a real model working, so the machine's width covers them - but at a
+# fraction of a session, LIGHT_PER_AGENT of them making one. A subagent cannot be held back from outside its session: it only adds load.
+LIGHT_PER_AGENT = 5
+
+def light_per_agent(store) -> int:
+    "How many quick calls or subagents count as one agent session (the 'auto_sessions_light' setting, 1..20)."
+    try: n = int(store.get_setting('auto_sessions_light') or LIGHT_PER_AGENT)
+    except (ValueError, TypeError): return LIGHT_PER_AGENT
+    return max(1, min(20, n))
+
+def agent_load(store) -> float:
+    "Live agent sessions, plus quick calls in flight and live subagents at 1/light_per_agent each - the one number the cap is read against."
+    from . import blackboard as bb, quickwork
+    return bb.live_count() + (quickwork.in_flight() + bb.subagent_count()) / light_per_agent(store)
+
+def has_room(store, need: float = 1.0) -> bool:
+    "True when `need` more (1 for a session, 1/light_per_agent for a quick call) still fits under auto_sessions."
+    return agent_load(store) + need <= auto_sessions(store) + 1e-9      # 5 x 0.2 must make 1, not 1.0000000000000002
+
+def busy_words(store) -> str:
+    "Why no agent starts now, in words that stay true when light work is what fills the slots."
+    from . import blackboard as bb
+    n, cap = bb.live_count(), auto_sessions(store)
+    if n >= cap: return f'{cap} agents are already running'
+    return (f"{n} agent{'s' if n != 1 else ''} plus " if n else '') + f'quick answers and subagents already fill the {cap} agent slots'
+
 def choose_repo(store, tid) -> tuple:
     """(repository or None, why) - the CODING AGENT's own pick of the checkout for a job triage could not place
     (the owner, 2026-09-25). One question to its light gear with the task and the repository map; a name that is
@@ -2627,10 +2654,9 @@ def _auto_code(store, tid):
         return
     # the note belongs INSIDE the worker: written before the thread started, a task could
     # claim "auto-dispatched" with no session behind it whenever the process died first
-    cap = auto_sessions(store)
-    if bb.live_count() >= cap:
-        store.enqueue_dispatch(tid, None, agent, f'{cap} agent sessions are already live')
-        store.add_comment(tid, 'router', 'agent', f'Waiting its turn: {cap} agents are already running, and it starts by itself when one ends.')
+    if not has_room(store):
+        store.enqueue_dispatch(tid, None, agent, busy_words(store))
+        store.add_comment(tid, 'router', 'agent', f'Waiting its turn: {busy_words(store)}, and it starts by itself when there is room.')
         return
     try:
         # similar work in the same checkout is a BRIEFING, not a queue (PW-171): the agent starts and is
@@ -2775,15 +2801,14 @@ def _auto_general(store, tid, brief: str = None, deep: bool = False):
     owner sees when they open the task (PW-069). A full house queues it like a coding task; the
     queue drain knows the kind. A live conversation is reused - the ask is put once.
     `deep`: the quick path already handed this one on (quickwork.escalate), so it never goes back to it.
-    A task triage judged quick (quickwork.takes) is answered in one call instead, ahead of the cap: it takes no desk. Every door reaching
+    A task triage judged quick (quickwork.takes) is answered in one call instead: no desk, a fraction of one (quickwork._take). Every door reaching
     here has passed auto_start_ok already, so the gate is the same for both; a task triage never judged reads as deep."""
     from . import blackboard as bb, quickwork
     if not deep and _reads_quick(store, tid): return quickwork.start(store, tid, brief)
-    cap = auto_sessions(store)
-    if bb.live_count() >= cap:
+    if not has_room(store):
         # the brief waits with it (a quick call's notes, an Advisor's idea): the drain starts the agent on it, not on the bare Summary
-        store.enqueue_dispatch(tid, None, 'assistant', f'{cap} agent sessions are already live', brief=brief)
-        store.add_comment(tid, 'router', 'agent', f'Waiting its turn: {cap} agents are already running, and it starts by itself when one ends.')
+        store.enqueue_dispatch(tid, None, 'assistant', busy_words(store), brief=brief)
+        store.add_comment(tid, 'router', 'agent', f'Waiting its turn: {busy_words(store)}, and it starts by itself when there is room.')
         return
     _start_general(store, tid, brief)
 

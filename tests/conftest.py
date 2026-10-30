@@ -249,12 +249,12 @@ def isolated_runtime_boundaries():
             return _blocked('PTY worker', command)
         return real_term_init(self, argv, *args, **kwargs)
 
-    def guarded_start_session(store, tid, connector_id=None, model=None, actor='owner', pick=None):
+    def guarded_start_session(store, tid, connector_id=None, model=None, actor='owner', pick=None, quick=False):
         # the router's UNATTENDED assistant start (ingest._start_general, PW-069) is a process boundary
         # like a PTY: a test that wants it supplies a fake general.start_session. An owner-opened
         # session is ordinary test fixture and passes through.
         if actor == 'router': return _blocked('unattended assistant session', f'task {tid}')
-        return real_start_session(store, tid, connector_id, model, actor, pick)
+        return real_start_session(store, tid, connector_id, model, actor, pick, quick)
 
     def guarded_drain_later(store, delay=2.0):
         # A failed-start retry is a real background Timer and can otherwise fire against a later

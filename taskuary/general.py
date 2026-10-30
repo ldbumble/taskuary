@@ -1542,7 +1542,7 @@ def drop_session(tid: int) -> int:
     return len(gone)
 
 
-def start_session(store, tid: int, connector_id=None, model=None, actor='owner', pick=None) -> GeneralSession:
+def start_session(store, tid: int, connector_id=None, model=None, actor='owner', pick=None, quick=False) -> GeneralSession:
     from . import terminal
     task = store.get_task(tid)
     if not task: raise ValueError(f'no task {tid}')
@@ -1578,6 +1578,9 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     if other: raise ValueError(f'this task already has a live {getattr(other, "agent", "") or "terminal"} '
                                'session - close it (the ✕ on its pane) and ask again here')
     session = GeneralSession(store, tid, connector_id, model, pick)
+    # a quick answer's session is quick BEFORE it is registered: set after, it was one more live agent for an instant, and the width
+    # (ingest.agent_load) then held back the quick calls and agent starts that read it in that instant
+    session.quick = quick
     terminal.SESSIONS[session.sid] = session
     # ...and a saved session is live again, as every terminal door says (terminal.open_session, A22): Continue on a general task kept
     # "You stopped it and its report is written" over the new run, so a turn that then died read as stopped, not failed (2026-10-26)

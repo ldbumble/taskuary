@@ -187,6 +187,13 @@
     "Default": "4"
    },
    {
+    "Name": "auto_sessions_light",
+    "Value": "5",
+    "Description": null,
+    "UpdatedBy": null,
+    "Default": "5"
+   },
+   {
     "Name": "automate_report_removed",
     "Value": "1",
     "Description": null,

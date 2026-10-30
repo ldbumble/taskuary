@@ -391,6 +391,11 @@ def live_count() -> int:
     from . import terminal as term
     return len([t for t in list(term.SESSIONS.values()) if t.alive and getattr(t, 'quick', False) is not True])   # a quick answer is one call, no desk
 
+def subagent_count() -> int:
+    "Subagents the live sessions left running at their last Stop (hooks.py keeps them on the session) - light load, ingest.agent_load."
+    from . import terminal as term
+    return sum(len(getattr(t, 'subagents', None) or ()) for t in list(term.SESSIONS.values()) if t.alive)
+
 
 def is_permanent(err) -> bool:
     s = str(err or '').lower()
@@ -459,7 +464,7 @@ def drain(store):
     Anything whose blocker is still working stays put; anything backing off waits its turn without
     holding the others; anything exhausted waits for the owner; anything whose task moved on is cleared."""
     from . import terminal as term, rank
-    from .ingest import auto_sessions
+    from .ingest import has_room
     from datetime import datetime
     # a drain in flight elsewhere (a session ending, a retry timer) must not make THIS one vanish - a lost
     # drain is a task that waits for an unrelated event; wait briefly for the lock instead
@@ -471,7 +476,7 @@ def drain(store):
         qs.sort(key=lambda q: -(rank.aged(q['Value'], q.get('CreatedAt')) if q.get('Value') is not None else 0.5))
         for q in qs:
             if q.get('State') == 'failed' or not _due(q, now): continue          # exhausted, or backing off: not this pass
-            if live_count() >= auto_sessions(store): return                       # a capacity wait is not an attempt (PW-086)
+            if not has_room(store): return                                        # a capacity wait is not an attempt (PW-086)
             # BehindTaskId is history now: likely overlap is advisory and rides into the briefing at
             # startup; an old row parked behind another task is simply due (PW-171)
             b = q.get('BehindTaskId')

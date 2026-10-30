@@ -272,6 +272,23 @@ def attach_report_output(store, mid: int, title: str, body: str) -> list:
     return made
 
 
+def attach_files(store, mid: int, files: list) -> list:
+    """Files a report's own source fetched during the run - {path, name, type} - copied onto its message beside the spreadsheet.
+    A copy, because the source keeps its staged file as a cache (an Amazon invoice PDF is not fetched twice) while deleting a
+    message is deleting its folder."""
+    import shutil
+    from pathlib import Path
+    made, d = [], attachment_dir(mid)
+    for i, f in enumerate(files or []):
+        src = Path(f.get('path') or '')
+        if not src.is_file(): continue
+        dst = d / (_SAFE.sub('', f.get('name') or src.name).strip() or f'file{i}')
+        shutil.copyfile(src, dst)
+        made.append(store.add_attachment({'MessageId': mid, 'ExternalId': f'report:{mid}:file:{i}', 'Name': dst.name,
+                                          'ContentType': f.get('type') or 'application/octet-stream', 'Size': dst.stat().st_size, 'Path': str(dst)}))
+    return made
+
+
 def outbox_dir(review_id: int):
     """Files waiting to go OUT with a reply, one folder per review.
 

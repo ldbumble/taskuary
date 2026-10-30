@@ -1454,14 +1454,14 @@ def routine_prefill(recurs: dict, text: str = '') -> tuple:
     return words, {'coding': bool(r.get('repo') or r.get('skill')), 'repo': r.get('repo') or '', 'skill': r.get('skill') or ''}
 
 
-def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = '', recurs: dict | None = None) -> dict:
+def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = '', recurs: dict | None = None, lead: str = '') -> dict:
     # A JOB THAT REPEATS IS A ROUTINE (the owner, 2026-10-29): the model's `recurs` brings up New → Routine filled in - its clock, its job,
     # its repository and skill - and Build it, then Save, are the owner's presses; nothing is saved from here
     if recurs: want, (text, runs) = 'workflow', routine_prefill(recurs, text)
     kind, how, verb = NEW_TAB[want]
     press = buttons.label(verb) if verb else NEW_PRESS[kind]
     # ...in the past, never "below": after a reload New is shut and the line stood over nothing (verify, 2026-10-19)
-    said = f"Wrote it into New - {press} there starts it."
+    said = f"{lead + ' ' if lead else ''}Wrote it into New - {press} there starts it."
     # `line`: this line's id, which the card's press says again as what it started (said_started)
     line = record(store, tid, 'assistant', said)
     # ...and Send something's recipient, as its own field takes it (NewSheet initialTo) - nothing goes before its Send
@@ -4375,7 +4375,8 @@ SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small comp
                      '"recurs": <for a routine: {"schedule": "<when it runs, in the owner\'s words>", "objective": "<the job, without the clock>", '
                      '"repo": "<a repository the owner named, or null>", "skill": "<a skill the owner named, its slash-command name, or null>"}; '
                      'else null>, '
-                     '"title": "<what to call it on a task list - a few words naming the job, e.g. Add Erin Blake to payroll>"}. '
+                     '"title": "<what to call it on a task list - a few words naming the job, e.g. Add Erin Blake to payroll>", '
+                     '"name": "<for a connection: the system the owner named, as they wrote it, or null>"}. '
                      # (the owner, 2026-10-08: "the assistant should be able to walk a user through setting up new role and work")
                      'A ROLE is the owner naming their JOB and asking for Taskuary to be set up for it ("I am an AP rep, set me '
                      'up", "I do accounts payable") - answer role, with its key from roles, when the job is one of them; a job '
@@ -4462,6 +4463,7 @@ def sort_setup(store, text: str, llm) -> dict:
     if kind == 'role' and role not in have: kind = 'investigate'
     return {'kind': kind if kind in ('report', 'routine', 'playbook', 'connection', 'role', 'investigate') else 'report', 'provider': prov if prov in types else None,
             'role': role if kind == 'role' else None, 'why': str(out.get('why') or '')[:300], 'title': _title_cut(out.get('title') or ''),
+            'name': str(out.get('name') or '').strip()[:80],
             **({'recurs': recurs_of(out.get('recurs'))} if kind == 'routine' else {})}
 
 
@@ -4589,6 +4591,13 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
         if sort['kind'] == 'investigate': return _new(store, tid, item, 'general', ask)
         if sort.get('provider'):
             return call_turn(store, tid, {'kind': 'connection.create', 'params': {'type': sort['provider']}}, item, text, actor)
+        # A SYSTEM THE CATALOGUE HAS NO CARD FOR is said so, with its closest cards, and is an agent's job to find the road to - its API, its
+        # site in the browser, its files: it opened #connector=None, Connections with nothing on it ("how do I add Runway?", TQ-1251)
+        if sort['kind'] == 'connection' and not sort.get('provider'):
+            want = sort.get('name') or 'That system'
+            near = ', '.join(x['title'] for x in catalogue_near(want)) if sort.get('name') else ''
+            return _new(store, tid, item, 'general', ask, lead=f"{want} has no card under {places.name('connections')}"
+                        f"{' (the closest: ' + near + ')' if near else ''} - an agent can find how to reach it.")
         if sort['kind'] == 'connection':
             prov = sort['provider']
             name = (store.get_connector_by_type(prov) or {}).get('Name') or prov

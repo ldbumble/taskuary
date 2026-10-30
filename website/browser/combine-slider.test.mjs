@@ -49,7 +49,7 @@ test("a message connection's card shows the combine slider at its level and save
   const want = ["whatsapp", "email"].includes(kind) ? 4 : 3;
   await until(page, (w) => Number(document.querySelector('[data-testid="combine-level"] input[type="range"]').value) === w, want);
   const shown = await page.evaluate(() => document.querySelector('[data-testid="combine-level"]').innerText);
-  assert.match(shown, /Keep separate/); assert.match(shown, /Combine/);
+  assert.match(shown, /Separate/); assert.match(shown, /Combine/);
 
   await page.focus('[data-testid="combine-level"] input[type="range"]');
   await page.keyboard.press("ArrowRight");

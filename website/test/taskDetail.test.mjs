@@ -97,7 +97,7 @@ test("Mark done, Remove and Remind me draw the next item at the press; a failed 
   assert.match(view, /\.\.\.\(drawsNow \? \{\} : \{ held: true \}\) \}, b\.answer_hash\);/, "its card held until the answer when its task is not read yet, as a Next draws");
   assert.match(view, /if \(early\) \{ currentRef\.current = null; carryRef\.current = early; \}\s+else clearTable\(\);/,
     "advance keeps the drawn item up and hands it to the walk's surface");
-  assert.match(view, /if \(keeps\) aheadRef\.current = \{ \.\.\.carried, hash: carried\.hash \?\? null, table: tableNow\(\) \};\s+else dropCarried\(\);/,
+  assert.match(view, /if \(keeps\) aheadRef\.current = \{ \.\.\.carried, hash: null, table: tableNow\(\) \};\s+else dropCarried\(\);/,
     "the answer fills the drawn line in place when it names the same item, and takes it down when not");
 });
 

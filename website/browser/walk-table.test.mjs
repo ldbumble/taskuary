@@ -14,10 +14,11 @@ import { boot, clickRow, clickText, doVerb, pressNext, sleep } from "./walkdrive
    WALK_TABLE=W01,W02 runs those alone; WALK_TABLE_OUT=<file> writes each case's result there. */
 const TABLE = JSON.parse(fs.readFileSync(new URL("../../tests/fixtures/walk_table.json", import.meta.url), "utf8")).cases;
 const ONLY = (process.env.WALK_TABLE || "").split(",").filter(Boolean);
-const RECORDED = /^(next|back|open|leave|send|heading|start)\b/;
+const RECORDED = /^(next|back|open|leave|send|heading|start)/;
 
 test("the walk table, clicked, with every action's frames recorded", { timeout: 60 * 60 * 1000 }, async (t) => {
-  const { h, page, errors } = await boot(t, { width: 1440, height: 900 });
+  // tall enough that every row of the table's world is drawn: a capped band folds its tail under "N more", and a folded row has no click
+  const { h, page, errors } = await boot(t, { width: 1440, height: 1700 });
   const api = (p, body) => fetch(`${h.fixtureApi}${p}`, { method: body ? "POST" : "GET", headers: { "X-Taskuary-Token": h.token, "Content-Type": "application/json" },
     ...(body ? { body: JSON.stringify(body) } : {}) }).then(async (r) => { if (!r.ok) throw new Error(`${p}: ${r.status} ${await r.text()}`); return r.json(); });
   let world = null, sendOk = true;
@@ -27,7 +28,7 @@ test("the walk table, clicked, with every action's frames recorded", { timeout: 
     const rid = (new URL(req.url()).pathname.match(/^\/api\/reviews\/(\d+)\/decide$/) || [])[1];
     if (req.method() === "POST" && rid) {
       if (sendOk) await api(`/api/fixture/review/${rid}/sent`, {}).catch(() => {});
-      return req.respond({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, status: "approved", sent: { channel: "email" }, send_error: null }) });
+      return req.respond({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, status: "approved", sent: { channel: "email" }, send_error: null, reply: { ok: true } }) });
     }
     page.fixtureRequestGuard(req);
   });
@@ -39,14 +40,16 @@ test("the walk table, clicked, with every action's frames recorded", { timeout: 
   const symOf = (k) => Object.entries(keys()).find(([, v]) => v === k)?.[0] || k;
   const look = () => page.evaluate(() => {
     const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.top < innerHeight && r.bottom > 0; };
-    const ring = [...document.querySelectorAll("[data-tq-rail] .tq-pile-row.current")].map((e) => e.getAttribute("data-tq-key"));
+    const ring = [...document.querySelectorAll("[data-tq-rail] .tq-pile-row.current, [data-tq-rail] .tq-pile-row.inbatch")].map((e) => e.getAttribute("data-tq-key"));
     const live = [...document.querySelectorAll(".tq-chat-body .tq-live-card, .tq-chat-body .tq-canvas-live")].filter(vis).filter((e) => e.innerText.trim().length > 10);
     const dots = [...document.querySelectorAll(".tq-typing")].some(vis);
     const back = document.querySelector("[data-tq-walk-back]");
     return { ring, item: live.length > 0, dots, back: back ? !back.disabled : null,
       rail: [...document.querySelectorAll("[data-tq-rail] .tq-pile-row[data-tq-key]")].map((e) => [e.closest("[data-tq-run]")?.dataset.tqRun, e.getAttribute("data-tq-key")]),
       walkChip: [...document.querySelectorAll("button")].some((b) => /^Walk me through/.test(b.textContent.trim()) && vis(b)),
-      lines: document.querySelectorAll(".tq-msg:not(.you):not(.receipt)").length };
+      lines: document.querySelectorAll(".tq-msg:not(.you):not(.receipt)").length,
+      // each assistant line by its first words: a badge worn on a line it left ("✓ Next") is not a new line
+      said: [...document.querySelectorAll(".tq-msg:not(.you):not(.receipt):not([data-wt-seen])")].map((e) => e.innerText.replace(/\s+/g, " ").slice(0, 36)) };
   });
   const settle = async (ms = 20000) => {
     let last = "", same = 0;
@@ -121,7 +124,9 @@ test("the walk table, clicked, with every action's frames recorded", { timeout: 
       if (!window.__rec) return;
       const live = [...document.querySelectorAll(".tq-chat-body .tq-live-card, .tq-chat-body .tq-canvas-live")].filter(vis).some((e) => e.innerText.trim().length > 10);
       const dots = [...document.querySelectorAll(".tq-typing")].some(vis);
-      window.__f.push({ t: Math.round(performance.now()), item: live, dots, ring: [...document.querySelectorAll("[data-tq-rail] .tq-pile-row.current")].map((e) => e.getAttribute("data-tq-key")).join(",") });
+      // the walk's end is its row by the prompt - Walk again and the Opens - not a blank canvas between two items
+      const end = [...document.querySelectorAll("button")].some((b) => /^Walk me through/.test(b.textContent.trim()) && vis(b));
+      window.__f.push({ end, t: Math.round(performance.now()), item: live, dots, ring: [...document.querySelectorAll("[data-tq-rail] .tq-pile-row.current, [data-tq-rail] .tq-pile-row.inbatch")].map((e) => e.getAttribute("data-tq-key")).join(",") });
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
@@ -139,8 +144,13 @@ test("the walk table, clicked, with every action's frames recorded", { timeout: 
       await newChat();
       for (const s of b.steps || c.steps) { await step(s); await settle(); }
       world = await api("/api/fixture/walk/keys", {});
+      await page.evaluate(() => document.querySelectorAll(".tq-msg").forEach((e) => { e.dataset.wtSeen = "1"; }));
+      // ...and what they said: the line a press leaves is drawn again folded - a new element, not a new line
+      const said0 = await page.evaluate(() => [...document.querySelectorAll(".tq-msg")].map((e) => e.innerText.replace(/\s+/g, " ")).join(" | "));
       const before = await look(), prepared = world.below;
-      const action = b.action || c.action, watched = RECORDED.test(action);
+      const action = b.action || c.action, watched = RECORDED.test(action), many = action === "next-to-end";
+      // a Walk with no Walk button on screen is a new chat's - emptied before the press, never inside the recorded frames
+      if (action === "start" && !(await page.$(".tq-welcome .tq-chip.primary:not([disabled])"))) await newChat();
       if (watched) await record();
       await step(action);
       const after = await settle();
@@ -162,13 +172,16 @@ test("the walk table, clicked, with every action's frames recorded", { timeout: 
       for (const s of c.later || []) if (!after.rail.some(([run, k]) => run === "later" && k === keys()[s])) why.push(`${s} should be under For later`);
       if ("back" in c && want !== "END" && after.back !== null && after.back !== c.back) why.push(`Back ${after.back ? "on" : "off"}, wanted ${c.back ? "on" : "off"}`);
       if (watched && frames.length) {
-        const press = frames.findIndex((f) => true), blank = frames.slice(press + 1).filter((f) => !f.item && !f.dots);
+        const press = frames.findIndex((f) => true), blank = frames.slice(press + 1).filter((f) => !f.item && !f.dots && !f.end);
         if (blank.length) why.push(`${blank.length} of ${frames.length} frames blank (first at ${blank[0].t - frames[0].t} ms)`);
         const okRing = new Set([before.ring.join(","), after.ring.join(","), prepared || "", "", ...(Array.isArray(keyOf(want)) ? [keyOf(want).join(",")] : [keyOf(want) || ""])]);
         const wrong = [...new Set(frames.map((f) => f.ring))].filter((r) => !okRing.has(r) && !r.split(",").every((k) => okRing.has(k)));
-        if (wrong.length) why.push(`the ring stood on ${wrong.map((r) => r.split(",").map(symOf).join("+")).join(" / ")}`);
-        if (after.lines - before.lines > 1) why.push(`${after.lines - before.lines} new lines for one press`);
+        if (wrong.length && !many) why.push(`the ring stood on ${wrong.map((r) => r.split(",").map(symOf).join("+")).join(" / ")}`);
+        const fresh = after.said.filter((x) => !said0.includes(x.slice(0, 20)));
+        // the row left is drawn again folded (a new element, its words reworded by the fold): two is the left row and the one brought
+        if (fresh.length > 2 && !many) why.push(`${fresh.length} new lines for one press: ${JSON.stringify(fresh)}`);
       }
+      if (why.length) why.push(`walk on ${symOf(world.on)}; rail ${after.rail.map(([r, k]) => `${r}:${symOf(k)}`).join(" ")}`);
       results.push({ id: c.id, result: why.length ? "FAIL" : "pass", why: why.join("; "), frames: frames.length });
     } catch (e) { results.push({ id: c.id, result: "FAIL", why: String(e.message || e).slice(0, 300) }); }
     console.log(JSON.stringify(results.at(-1)));

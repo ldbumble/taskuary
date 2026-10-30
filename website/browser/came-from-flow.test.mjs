@@ -80,7 +80,8 @@ test("Came from: the boxes, the conversation, the ask, the to-do - each message 
   // FOLDED TO ITS TAB, the count stays and the lines under it are the newest messages back as far as the room goes (the owner, 2026-10-29:
   // "4 messages" over a fixed three read as one lost): newest first, none skipped, each whole above the foot - measured, never a fixed number
   const other = (await page.$(`${CUR} [data-tq-section-tab=close]`)) ? "close" : "agent";
-  await page.click(`${CUR} [data-tq-section-tab=${other}]`); await sleep(800);
+  // ...on its name: the middle of Close out's spine is its moves now - Mark done, Close with a note (the owner, 2026-10-30)
+  await page.click(`${CUR} [data-tq-section-tab=${other}] [data-tq-tab-name]`); await sleep(800);
   const tab = await page.evaluate((CUR) => {
     const t = document.querySelector(`${CUR} [data-tq-section-tab=from]:not([data-tq-mini])`);
     if (!t) return null;

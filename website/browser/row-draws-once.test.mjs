@@ -60,7 +60,7 @@ test("the action row draws once with the new item's buttons: Reopen, Next, rail,
   await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 30000 });
   const fixture = (path, body = {}) => page.evaluate(async (p, b) => (await fetch(p, { method: "POST", body: JSON.stringify(b),
     headers: { "X-Taskuary-Token": localStorage.getItem("taskuary_token"), "Content-Type": "application/json" } })).json(), path, body);
-  const rowUp = () => page.waitForFunction(() => document.querySelectorAll(".tq-dock [data-tq-row] .tq-arow-verbs button, [data-tq-head-moves] button").length > 1, { timeout: 30000 });
+  const rowUp = () => page.waitForFunction(() => document.querySelectorAll(".tq-dock [data-tq-row] .tq-arow-verbs button, :is([data-tq-spine-moves], [data-tq-pane-moves]) button").length > 1, { timeout: 30000 });
   const settle = async () => { await rowUp(); await sleep(2000); };
   const watch = async (what, act, opts) => {
     await record(page); await act(); await sleep(WATCH_MS);
@@ -94,21 +94,21 @@ test("the action row draws once with the new item's buttons: Reopen, Next, rail,
     const closed = await fixture("/api/fixture/task/agent-closed", { answer: "Re-added the missing secret; the re-run passed.", said: "the re-run passed" });
     assert.ok(closed.taskId, JSON.stringify(closed));
     await link(closed.taskId);
-    await page.waitForSelector('.tq-dock [data-tq-row] [data-tq-verb="reopen"], [data-tq-head-moves] [data-tq-verb="reopen"]', { timeout: 30000 }); await sleep(2000);
-    const end = await watch("reopen", () => page.evaluate(() => document.querySelector('.tq-dock [data-tq-row] [data-tq-verb="reopen"], [data-tq-head-moves] [data-tq-verb="reopen"]').click()));
+    await page.waitForSelector('.tq-dock [data-tq-row] [data-tq-verb="reopen"], :is([data-tq-spine-moves], [data-tq-pane-moves]) [data-tq-verb="reopen"]', { timeout: 30000 }); await sleep(2000);
+    const end = await watch("reopen", () => page.evaluate(() => document.querySelector('.tq-dock [data-tq-row] [data-tq-verb="reopen"], :is([data-tq-spine-moves], [data-tq-pane-moves]) [data-tq-verb="reopen"]').click()));
     assert.ok(!/Reopen/.test(end), `the reopened task's row: ${end}`);
     await settle();
   });
 
   await t.test("Mark done", async () => {
     // a task on the walk whose row carries Mark done: its close puts the next one up
-    const doneBtn = () => page.evaluate(() => !![...document.querySelectorAll(".tq-dock [data-tq-row] .tq-arow-verbs button, [data-tq-head-moves] button")].find((b) => b.textContent.trim() === "Mark done" && !b.disabled));
+    const doneBtn = () => page.evaluate(() => !![...document.querySelectorAll(".tq-dock [data-tq-row] .tq-arow-verbs button, :is([data-tq-spine-moves], [data-tq-pane-moves]) button")].find((b) => b.textContent.trim() === "Mark done" && !b.disabled));
     const rows = await page.$$eval("[data-tq-rail] .tq-pile-row", (els) => els.filter((r) => r.closest("[data-tq-run]")?.getAttribute("data-tq-run") === "task")
       .map((r) => r.getAttribute("data-tq-key")).filter(Boolean));
     let found = false;
     for (const k of rows) { await clickRow(k); await settle(); if ((found = await doneBtn())) break; }
     assert.ok(found, "a task on the rail offers Mark done");
-    await watch("mark done", () => page.evaluate(() => [...document.querySelectorAll(".tq-dock [data-tq-row] .tq-arow-verbs button, [data-tq-head-moves] button")].find((b) => b.textContent.trim() === "Mark done").click()));
+    await watch("mark done", () => page.evaluate(() => [...document.querySelectorAll(".tq-dock [data-tq-row] .tq-arow-verbs button, :is([data-tq-spine-moves], [data-tq-pane-moves]) button")].find((b) => b.textContent.trim() === "Mark done").click()));
     await settle();
   });
 

@@ -33,12 +33,14 @@ const look = (page) => page.evaluate((CUR) => {
     return { moves: [...tab.querySelectorAll("[data-tq-spine-moves] button")].map((b) => ({ word: b.textContent.trim(), lit: b.classList.contains("p") })),
       between: !moves || (y("[data-tq-tab-name]").bottom <= moves.top && moves.bottom <= y("[data-tq-tab-foot]").top), text: tab.innerText,
       rule: !moves || getComputedStyle(tab.querySelector("[data-tq-spine-moves]")).borderTopWidth === "1px" }; };
-  return { bar: words("[data-tq-row] .tq-arow-verbs button").filter((w) => w !== "▾"), head: words(`${CUR} [data-tq-head-moves] button`).filter((w) => w !== "▾"), open: document.querySelector(`${CUR} [data-tq-slot][data-tq-open]`)?.dataset.tqSlot,
+  return { bar: words("[data-tq-row] .tq-arow-verbs button").filter((w) => w !== "▾"), head: words(`${CUR} :is([data-tq-spine-moves=close], [data-tq-pane-moves=close]) button`).filter((w) => w !== "▾"), title: words(`${CUR} [data-tq-head-moves] button`), open: document.querySelector(`${CUR} [data-tq-slot][data-tq-open]`)?.dataset.tqSlot,
     from: spine("from"), agent: spine("agent"), close: spine("close"),
     pane: { from: words(`${CUR} [data-tq-pane-moves=from] button`), agent: words(`${CUR} [data-tq-pane-moves=agent] button`), close: words(`${CUR} [data-tq-pane-moves=close] button`) } };
 }, CUR);
 const STAGE = /^(Send to agent|Continue|Try again|Run another agent|Reply|Draft reply|Redraft|Draft with AI|Starting…|Drafting…|Hand it to a person|Remind me|Not a task|Back .+)$/;
 const FROM = ["Not a task", "Remind me"];
+// ...the task's own moves that ride on Close out after its stage moves (the owner, 2026-10-30)
+const TASK_MOVE = /^(Mark done|Close with a note|Attach a file|Share)$/, stageWords = (sp) => sp.moves.map((x) => x.word).filter((w) => !TASK_MOVE.test(w));
 
 for (const [w, h] of [[1440, 900], [1366, 768]]) {
   test(`stage moves on their pane, the bar the task's, the chat its own unit - ${w}x${h}`, { timeout: 400000 }, async (t) => {
@@ -62,7 +64,7 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       // ...and the moves stand out but not all the same (the owner, 2026-10-29): a stage move outlined in the slate, slate words on white; Mark
       // done the same with a stronger edge; the title bar's other moves quiet words in a faint-edged white pill (the owner, 2026-10-29: "these
       // should have circle pills around them"); a put-down a faint edge, faint words
-      const rest = await page.evaluate((CUR) => [...document.querySelectorAll(`${CUR} [data-tq-spine-moves] .tq-ab:not(.p), ${CUR} [data-tq-head-moves] .tq-ab:not(.p), ${CUR} [data-tq-pane-moves] .tq-ab:not(.p)`)]
+      const rest = await page.evaluate((CUR) => [...document.querySelectorAll(`${CUR} [data-tq-spine-moves] .tq-ab:not(.p), ${CUR} [data-tq-pane-moves] .tq-ab:not(.p)`)]
         .map((b) => { const cs = getComputedStyle(b); return { word: b.textContent.trim(), rank: ["fwd", "done", "task", "down"].find((c) => b.classList.contains(c)), edge: cs.borderTopColor, bg: cs.backgroundColor, ink: cs.color, ring: cs.boxShadow }; }), CUR);
       const SLATE = "rgb(85, 105, 122)", WHITE = "rgb(255, 255, 255)", CLEAR = "rgba(0, 0, 0, 0)";
       const want = { fwd: (x) => x.edge === SLATE && x.bg === WHITE && x.ink === SLATE, done: (x) => x.edge === SLATE && x.bg === WHITE && /inset/.test(x.ring),
@@ -70,14 +72,14 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       assert.ok(rest.length && rest.every((x) => x.rank && want[x.rank](x)), `the moves' resting look ${JSON.stringify(rest)}`);
       assert.deepEqual([...new Set(rest.map((x) => x.rank))].sort(), ["done", "down", "fwd", "task"], `all four weights on this task ${JSON.stringify(rest)}`);
       assert.equal(rest.find((x) => x.word === "Mark done")?.rank, "done");
-      assert.deepEqual(m.from.moves.map((x) => x.word).sort(), FROM, `Came from's spine: Not a task and Remind me ${JSON.stringify(m.from)}`);
+      // ...and Change ▾ on it too (the owner, 2026-10-30: "Change should be on Came from")
+      assert.deepEqual(m.from.moves.map((x) => x.word).sort(), [...FROM, "Change ▾"].sort(), `Came from's spine: Not a task, Remind me, Change ${JSON.stringify(m.from)}`);
       assert.ok(m.from.between && m.from.rule);
       assert.match(m.agent.text, /^\W*Agent\s+not started[\s\S]*Send to agent[\s\S]*2$/, "the spine's words as they were, the move in their middle");
-      // ...the bar is Back and Next alone (the owner, 2026-10-29); the task's own moves are on its title bar, Mark done first
+      // ...the bar is Back and Next alone (the owner, 2026-10-29); the task's own moves ride on Close out, the title bar has none (2026-10-30)
       assert.deepEqual(m.bar.filter((x) => !/Back$|^Next/.test(x)), [], `the bar: ${m.bar}`);
-      assert.equal(m.head[0], "Mark done", `the title bar: ${m.head}`);
-      assert.ok(m.head.includes("Share") && m.head.some((x) => /^Change/.test(x)), `the title bar: ${m.head}`);
-      assert.ok(!m.head.some((x) => STAGE.test(x)), `no stage move on the title bar: ${m.head}`);
+      assert.deepEqual(m.title, [], `the title bar: ${m.title}`);
+      assert.ok(["Mark done", "Close with a note", "Share"].every((x) => m.head.includes(x)), `Close out's moves: ${m.head}`);
     });
 
     await t.test("an open pane's white strip: its name, its moves, and arrows that fold it back to its spine", async () => {
@@ -101,10 +103,10 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       // ...once the draft card's own verbs have come round again after the switch
       await page.waitForSelector(`${CUR} [data-tq-section-tab=close] [data-tq-spine-moves] button`, { timeout: 5000 }).catch(() => {});
       const m = await look(page);
-      assert.deepEqual(m.close.moves.map((x) => x.word), ["Redraft", "Hand it to a person"], JSON.stringify(m.close));
+      assert.deepEqual(m.close.moves.map((x) => x.word).slice(0, 3), ["Redraft", "Hand it to a person", "Mark done"], JSON.stringify(m.close));
       assert.ok(m.close.between && m.close.rule);
       assert.ok(!m.bar.some((x) => STAGE.test(x)), `no stage move on the bar: ${m.bar}`);
-      assert.equal(m.head[0], "Mark done", `${m.head}`);
+      assert.ok(m.head.includes("Mark done"), `${m.head}`);
       assert.ok(await page.$(`${CUR} [data-tq-run-form]`), "the agent's own form carries its start");
     });
 
@@ -112,7 +114,7 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       await openTask(page, id(/^Year-end audit/));
       await openSec(page, "agent");
       const m = await look(page);
-      assert.deepEqual(m.close.moves.map((x) => x.word), ["Draft reply", "Hand it to a person"], JSON.stringify(m.close));
+      assert.deepEqual(stageWords(m.close), ["Draft reply", "Hand it to a person"], JSON.stringify(m.close));
       await page.click(`${CUR} [data-tq-spine-moves=close] button[data-tq-verb=reply]`);
       await page.waitForSelector(`${CUR} [data-tq-slot=close][data-tq-open]`, { timeout: 5000 });
       await page.waitForFunction((CUR) => /Drafting|AI drafted|Redraft|Send/.test(document.querySelector(`${CUR} [data-tq-slot=close]`)?.innerText || ""),
@@ -123,8 +125,8 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       await openTask(page, id(/^Invoice 88213/));
       await openSec(page, "from");
       const m = await look(page);
-      assert.deepEqual([m.agent.moves.map((x) => x.word), m.close.moves.map((x) => x.word)], [["Send to agent"], ["Redraft", "Hand it to a person"]], JSON.stringify(m));
-      assert.deepEqual([...m.pane.from].sort(), FROM, `Came from open: its heading carries Not a task and Remind me ${JSON.stringify(m.pane)}`);
+      assert.deepEqual([m.agent.moves.map((x) => x.word), stageWords(m.close)], [["Send to agent"], ["Redraft", "Hand it to a person"]], JSON.stringify(m));
+      assert.deepEqual([...m.pane.from].sort(), [...FROM, "Change ▾"].sort(), `Came from open: its heading carries Not a task, Remind me and Change ${JSON.stringify(m.pane)}`);
       assert.ok(!m.bar.some((x) => STAGE.test(x)), `no stage move on the bar: ${m.bar}`);
       await page.click(`${CUR} [data-tq-section-tab=agent] [data-tq-tab-n]`);
       await page.waitForSelector(`${CUR} [data-tq-slot=agent][data-tq-open]`, { timeout: 5000 });

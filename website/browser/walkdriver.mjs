@@ -45,11 +45,11 @@ export async function doVerb(page, id) {
   // ...or a stage move, on its pane's spine or in the open pane's heading (the owner, 2026-10-29: they left the bar)
   // ...or the task's own move, on its title bar, or a live agent's Stop and save, on its strip (the owner, 2026-10-29: the bar is Back and Next)
   const onPane = await page.evaluate((id) => { const b = [...document.querySelectorAll([`[data-tq-spine-moves] button[data-tq-verb="${id}"]`, `[data-tq-pane-moves] button[data-tq-verb="${id}"]`,
-    `[data-tq-head-moves] button[data-tq-verb="${id}"]`, `[data-tq-pane-strip] button[data-tq-verb="${id}"]`].join(", "))]
+    `:is([data-tq-spine-moves], [data-tq-pane-moves]) button[data-tq-verb="${id}"]`, `[data-tq-pane-strip] button[data-tq-verb="${id}"]`].join(", "))]
     .find((x) => x.offsetParent && !x.disabled); if (b) { window.__pressAt = performance.now(); b.click(); return b.closest("[data-tq-spine-moves]") ? "spine" : "pane"; } return null; }, id);
   if (onPane) return onPane;
   // ...or behind a ▾: the row's, or the title bar's own and its Change
-  const MORE = "[data-tq-row] [data-tq-more], [data-tq-head-moves] [data-tq-more], [data-tq-pane-moves] [data-tq-more]";
+  const MORE = "[data-tq-row] [data-tq-more], :is([data-tq-spine-moves], [data-tq-pane-moves]) [data-tq-more], [data-tq-pane-moves] [data-tq-more]";
   for (const [i, m] of (await page.$$eval(MORE, (e) => e.map((x) => x.dataset.tqMore))).entries()) {
     await page.evaluate((MORE, i) => document.querySelectorAll(MORE)[i]?.click(), MORE, i); await sleep(400);
     const hit = await page.evaluate((id) => { const i = document.querySelector(`[role=menu] [role=menuitem][data-tq-verb="${id}"]`); if (i && i.getAttribute("aria-disabled") !== "true") { window.__pressAt = performance.now(); i.click(); return true; } return false; }, id);

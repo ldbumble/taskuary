@@ -32,7 +32,7 @@ test("at rest the pill is small and Mark done stays on the row at 1366, 1440 and
       const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
       return { pill: Math.round(pill.getBoundingClientRect().width), line: Math.round(line.getBoundingClientRect().height),
         // ...the task's own moves on its title bar now (the owner, 2026-10-29: the bar is Back and Next)
-        verbs: [...document.querySelectorAll("[data-tq-row] button[data-tq-verb], [data-tq-head-moves] button[data-tq-verb]")].filter(vis).map((b) => b.getAttribute("data-tq-verb").split(":").pop()),
+        verbs: [...document.querySelectorAll("[data-tq-row] button[data-tq-verb], :is([data-tq-spine-moves=close], [data-tq-pane-moves=close]) button[data-tq-verb]")].filter(vis).map((b) => b.getAttribute("data-tq-verb").split(":").pop()),
         spine: [...document.querySelectorAll("[data-tq-spine-moves=agent] button[data-tq-verb]")].filter(vis).map((b) => b.getAttribute("data-tq-verb")) };
     });
     const say = `${width}px ${JSON.stringify(s)}`;
@@ -40,8 +40,8 @@ test("at rest the pill is small and Mark done stays on the row at 1366, 1440 and
     assert.ok(s.line <= 46, `one line ${say}`);
     console.log(`# ${say}`);
     // ...and Close folds last (the owner, 2026-10-27: "if there is no space"): Mark done is on the row at every laptop width
-    assert.ok(s.verbs.includes("done"), `Mark done is on the title bar, not behind a ▾ ${say}`);
-    assert.ok(!s.verbs.some((v) => /agent/.test(v)) && s.spine.some((v) => /agent/.test(v)), `Send to agent is on Agent's spine, not the bar ${say}`);
+    assert.ok(s.verbs.includes("done"), `Mark done is on Close out, not behind a ▾ ${say}`);
+    assert.ok(s.spine.some((v) => /agent/.test(v)), `Send to agent is on Agent's spine ${say}`);
   }
   assert.deepEqual(errors, []);
 });

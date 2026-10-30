@@ -31,7 +31,7 @@ const pinned = (base, m, say) => {
 // spine while nothing is drafted
 const rowPress = (page, label) => page.evaluate((label) => {
   const words = label === "Reply" ? ["Reply", "Draft reply"] : [label];
-  const b = [...document.querySelectorAll("[data-tq-row] button, [data-tq-head-moves] button, [data-tq-spine-moves] button, [data-tq-pane-moves] button")]
+  const b = [...document.querySelectorAll("[data-tq-row] button, :is([data-tq-spine-moves], [data-tq-pane-moves]) button, [data-tq-spine-moves] button, [data-tq-pane-moves] button")]
     .find((x) => words.includes(x.textContent.trim()) && !x.disabled && x.offsetParent);
   b?.click(); return !!b;
 }, label);

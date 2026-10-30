@@ -368,7 +368,9 @@ def _present(cands, text) -> list:
     lookup rules most of ten thousand mails out before any substring search runs."""
     low = _key(text)
     words = set(low.split())
-    return [c for c in cands if words.issuperset(c.split()[1:-1]) and c in low]
+    # ...and a candidate with no letter or digit in it names nobody: blank or punctuation alone ("-", "·") made an EMPTY pattern, which
+    # matched between every two non-word characters and filed a report with "[removed]" after each comma and dot (issue #270)
+    return [c for c in cands if re.search(r'[^\W_]', c) and words.issuperset(c.split()[1:-1]) and c in low]
 
 
 def _pattern(h) -> str:

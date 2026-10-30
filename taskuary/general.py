@@ -21,6 +21,12 @@ ASSISTANT_TYPE = 'assistant_agent'
 # RUN ANOTHER AGENT on a general task starts a second conversation (new_run): this row is where it begins. The chat, the prompt and the
 # pane read the turns after the last one; the earlier agent's turns stay on the task, read as `earlier`
 RUN_TYPE = 'assistant_run'
+# TASKUARY'S INSTRUCTIONS ARE NOT THE OWNER'S WORDS (the owner, 2026-10-30): an agent that starts by itself is handed its brief - "THIS
+# TASK IS A REPLY OWED...", "A QUICK LOOK CAME FIRST..." - as the conversation's first user turn, and the pane drew it under YOU as though
+# the owner had typed it. It is still that turn (the next turn continues the conversation it opened), but filed by Taskuary, and the
+# pane folds it into one grey line, "Taskuary's instructions". The same actor as Taskuary's own notes (sessionrecord.NOTE_ACTOR).
+BRIEF_ACTOR = 'taskuary'
+def is_brief(c) -> bool: return c.get('ActorType') == USER_TYPE and c.get('Actor') == BRIEF_ACTOR
 # ``assistant`` was briefly written by Timeline discussions before those tasks were normalized
 # to ``general``. Keep it as a read-compatible alias so existing discussions still open in the
 # Assistant workspace without a data migration.
@@ -288,7 +294,7 @@ def _as_messages(rows) -> list:
     return [{'id': f"comment-{c['CommentId']}",
              'role': 'assistant' if c.get('ActorType') == ASSISTANT_TYPE else 'user',
              'content': [{'type': 'text', 'text': c.get('Body') or ''}],
-             'createdAt': c.get('CreatedAt')} for c in rows]
+             'createdAt': c.get('CreatedAt'), **({'brief': True} if is_brief(c) else {})} for c in rows]
 
 
 def history(store, tid: int) -> list:
@@ -906,7 +912,7 @@ class GeneralSession:
                      f'\x1b[2m{title}\x1b[0m\r\n\r\n')
         for row in chat_rows(self.store, self.task_id, run=True):
             if row.get('ActorType') == USER_TYPE:
-                self._append(f'\x1b[1;34myou>\x1b[0m {row.get("Body") or ""}\r\n')
+                self._append(f'\x1b[1;34m{"taskuary" if is_brief(row) else "you"}>\x1b[0m {row.get("Body") or ""}\r\n')
             else:
                 self._append(f'\x1b[1;32massistant>\x1b[0m {row.get("Body") or ""}\r\n\r\n')
         self._append('\x1b[1;34myou>\x1b[0m ')
@@ -997,11 +1003,12 @@ class GeneralSession:
 
     def send_prompt(self, text: str, attachments=None, connector_id=None, model=None, echo=True,
                     pick=None, trace=None, cancel=None, as_owner=True,
-                    delivery_instructions: str = None, kept: bool = False) -> str:
+                    delivery_instructions: str = None, kept: bool = False, brief: bool = False) -> str:
         """`as_owner=False` is an instruction to the assistant that the OWNER did not say - used to
         make it open a conversation (the walk, a setup). It is not written to the history and
         not echoed, because putting words in the owner's mouth in their own transcript is a lie the
-        rest of this product is built to avoid; the assistant's answer is recorded as normal."""
+        rest of this product is built to avoid; the assistant's answer is recorded as normal.
+        `brief`: the first ask of an agent that started by itself - kept as the conversation's turn, but filed by Taskuary (BRIEF_ACTOR)."""
         text = str(text or '').strip()
         if not text: raise ValueError('empty message')
         if not self.alive: raise RuntimeError('this assistant session has ended - reload the page and ask again')
@@ -1027,10 +1034,10 @@ class GeneralSession:
                     self.cli_sid = ''
                     self.resume_notice = 'Continuing from the saved conversation with the selected provider.'
                     self._remember_session()
-            if echo and as_owner: self._emit(f'\x1b[1;34myou>\x1b[0m {text}\r\n')
+            if echo and as_owner: self._emit(f'\x1b[1;34m{"taskuary" if brief else "you"}>\x1b[0m {text}\r\n')
             # the owner's words are kept FIRST, and the run says it is working only once it has an AI: with none, the message was
             # lost under "Started the selected agent" and a `working` record for an agent that never could start (2026-10-22 walk)
-            if as_owner and not kept: self.store.add_comment(self.task_id, "owner", USER_TYPE, text)   # `kept`: the door wrote them already (continue-work)
+            if as_owner and not kept: self.store.add_comment(self.task_id, BRIEF_ACTOR if brief else "owner", USER_TYPE, text)   # `kept`: the door wrote them already (continue-work)
             if not self.pick:
                 self.trace = []; self.trace_revision += 1
                 # ...in plain words: the AI CLI agents page's own name read "CLI agent" on the failed card (the 2026-10-21 audit, R2)
@@ -1282,9 +1289,9 @@ class GeneralSession:
             self._emit('\x1b[1;34myou>\x1b[0m ')
             self._lock.release()
 
-    def file_quick(self, ask: str, out, steps: list, as_owner: bool = True) -> str:
+    def file_quick(self, ask: str, out, steps: list, as_owner: bool = True, brief: bool = False) -> str:
         """A quick answer (quickwork.ask) filed as this session's turn, by `_file` - so its draft, question and close reach the owner
-        exactly as a general turn's do. `steps` are the call's own (kind, name, detail), kept as the turn's working."""
+        exactly as a general turn's do. `steps` are the call's own (kind, name, detail), kept as the turn's working. `brief`: as send_prompt's."""
         from . import quickwork, selfclose, workerstate as ws
         self.quick = True                    # before any event: every event of this turn says 'quick' (quickwork.only_quick)
         if not self.alive: raise RuntimeError('this assistant session has ended - reload the page and ask again')
@@ -1296,7 +1303,7 @@ class GeneralSession:
         t0 = self.last
         try:
             ws.record(self.store, self.task_id, self.sid, 'working', source='quick')
-            if as_owner: self.store.add_comment(self.task_id, 'owner', USER_TYPE, ask)
+            if as_owner: self.store.add_comment(self.task_id, BRIEF_ACTOR if brief else 'owner', USER_TYPE, ask)
             self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}}]; self.trace_revision += 1
             for kind, name, detail in steps or []: self._remember_trace(kind, name, detail)
             return self._file(quickwork.as_reply(out), [], t0)

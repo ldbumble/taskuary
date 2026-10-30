@@ -14,7 +14,7 @@ export const plain = (s) => String(s || "").replace(/^\s*(#+|>)\s*/gm, "").repla
 export const recordSteps = (s) => {
   const chat = s?.source === "conversation", res = norm(s?.result);
   return (s?.steps || [])
-    .filter((x) => !(chat && (x.k === "you" || x.k === "said")))
+    .filter((x) => !(chat && (x.k === "you" || x.k === "brief" || x.k === "said")))
     .map((x) => (x.k === "said" && res && norm(x.text) === res ? { ...x, k: "result" } : x));
 };
 

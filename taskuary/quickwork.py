@@ -159,7 +159,7 @@ def start(store, tid, brief: str = None, as_owner: bool = True) -> str:
         out, failed = _call(store, tid, q, steps)
         if _escalated(store, tid, q, out, failed): return 'escalated'
         ses = general.start_session(store, tid, actor='router'); ses.quick = True
-        ses.file_quick(q, out, steps, as_owner)
+        ses.file_quick(q, out, steps, as_owner, brief=True)      # the ask is Taskuary's, not the owner's (general.BRIEF_ACTOR)
         return 'filed'
     except Exception as e:
         logger.warning(f'quick answer could not be filed for task {tid}: {e}')

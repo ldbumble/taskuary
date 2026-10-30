@@ -9,8 +9,8 @@ events.jsonl, gemini's chat file - addressed by the conversation id we already f
 that account into one list of steps, and keeps a copy beside the task's artifacts when the session is saved, so a CLI
 pruning its logs next month does not take the record with it.
 
-A step is {k, text, name?, file?, at?}: k is `you` (what the agent was told), `thought`, `said`, `tool` (name + what it
-was pointed at), `plan` (its todo list) or `error`. Tool OUTPUT is left out on purpose - it is the noise the record
+A step is {k, text, name?, file?, at?}: k is `you` (what the agent was told), `brief` (what Taskuary told it - keep_seed),
+`thought`, `said`, `tool` (name + what it was pointed at), `plan` (its todo list) or `error`. Tool OUTPUT is left out on purpose - it is the noise the record
 is read past, and the agent's next thought or answer says what it made of it."""
 import json
 import re
@@ -291,8 +291,39 @@ def keep_turn(tid: int, reply_id, trace: list):
     with _gen_path(tid).open('a', encoding='utf-8') as f: f.write(json.dumps({'reply': reply_id, 'steps': steps}) + '\n')
 
 
+# TASKUARY'S INSTRUCTIONS ARE NOT THE OWNER'S WORDS (the owner, 2026-10-30): a coding agent's log has the prompt Taskuary typed into it
+# as the first user turn, and the record showed it as "Told" beside what the owner typed into the pane. Each seed is kept here as it
+# was sent (terminal.spawn), and a told step that IS one is a `brief` - drawn as one folded line, "Taskuary's instructions".
+SEED_N = 160            # a typed seed is flattened and may be clipped (terminal.fit_typed): its head is what both copies share
+
+def _seeds_path(tid: int) -> Path:
+    d = session_artifacts.root() / str(int(tid)); d.mkdir(parents=True, exist_ok=True)
+    return d / 'seeds.jsonl'
+
+
+def _flat(s) -> str: return ' '.join(str(s or '').split()).removesuffix('…')
+
+
+def keep_seed(tid: int, seed: str):
+    try:
+        with _seeds_path(tid).open('a', encoding='utf-8') as f: f.write(json.dumps({'seed': _flat(seed)[:SEED_N]}) + '\n')
+    except OSError as e: logger.warning(f'the seed of task {tid} was not kept: {e}')
+
+
+def mark_briefs(tid: int, steps: list) -> list:
+    "The told steps that are a seed Taskuary sent, as `brief`."
+    p = _seeds_path(tid)
+    if not p.is_file(): return steps
+    seeds = set()
+    for line in p.read_text(encoding='utf-8', errors='replace').splitlines():
+        try: seeds.add(json.loads(line).get('seed') or '')
+        except ValueError: continue
+    def ours(x): a = _flat(x.get('text'))[:SEED_N]; return any(s and a and (s.startswith(a) or a.startswith(s)) and min(len(a), len(s)) >= 20 for s in seeds)
+    return [{**x, 'k': 'brief'} if x.get('k') == 'you' and ours(x) else x for x in steps]
+
+
 def general_steps(store, tid: int) -> list:
-    from .general import ASSISTANT_TYPE, chat_rows
+    from .general import ASSISTANT_TYPE, chat_rows, is_brief
     p, by = _gen_path(tid), {}
     if p.is_file():
         for line in p.read_text(encoding='utf-8', errors='replace').splitlines():
@@ -315,7 +346,7 @@ def general_steps(store, tid: int) -> list:
         mine = c.get('ActorType') == ASSISTANT_TYPE
         # a turn's own working comes BEFORE its reply - and the reply is the said step, so a streamed copy of it is not said twice
         if mine: out += [s for s in by.get(c['CommentId'], []) if not (s['k'] == 'said' and s['text'].strip() == str(c.get('Body') or '').strip())]
-        out.append({'k': ('said' if turn(c) else 'note') if mine else 'you', 'text': _cut(c.get('Body'), SAID_N if mine else YOU_N), 'at': c.get('CreatedAt')})
+        out.append({'k': ('said' if turn(c) else 'note') if mine else 'brief' if is_brief(c) else 'you', 'text': _cut(c.get('Body'), SAID_N if mine else YOU_N), 'at': c.get('CreatedAt')})
     return out
 
 
@@ -329,6 +360,7 @@ def save(store, tid: int, sid: str, cli: str, ext: str, screen: str = '', starte
     """Snapshot a session's steps beside the task (wrapup.wrap), so the record outlives the CLI's own log - with how long the run
     took and what it cost, where its start is known (`started`, local) and its CLI counts."""
     steps, source = cli_steps(cli, ext)
+    steps = mark_briefs(tid, steps)
     if not steps: steps, source = screen_steps(screen), 'screen'
     rec = {'sid': sid, 'cli': cli, 'ext': ext, 'source': source, 'steps': _bound(steps)}
     if (secs := took(steps, _when(started), datetime.now().strftime('%Y-%m-%d %H:%M:%S'))) is not None: rec['took'] = secs
@@ -404,6 +436,7 @@ def record(store, tid: int) -> dict:
         rec = json.loads(saved.read_text(encoding='utf-8')) if saved.is_file() else None
         if not rec:
             steps, source = cli_steps(r.get('Brain'), r.get('ExtId'))
+            steps = mark_briefs(tid, steps)
             rec = {'steps': _bound(steps), 'source': source} if steps else {'steps': screen_steps(r.get('Text')), 'source': 'screen'}
         sessions.append({'sid': r.get('Sid'), 'by': r.get('Agent') or 'agent', 'cli': r.get('Brain') or '', 'cwd': r.get('Cwd') or '',
                          'at': _when(r.get('CreatedAt')), 'source': rec.get('source') or '', 'steps': rec.get('steps') or [],

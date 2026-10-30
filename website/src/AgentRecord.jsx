@@ -13,6 +13,7 @@ import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import { cardParts, hasMore, lastWords, madeOnce, moreParts, plain, resultLine, recordFacts, recordHead, recordSteps, resultParts, runCost, runHeads, runsOf, sourceLabel, splitFiles } from "./agentRecord.js";
 import AgentStory, { StoryLine, Timeline } from "./AgentStory.jsx";
 import { plural } from "./timeWords.js";
+import BriefLine from "./BriefLine.jsx";
 
 const head = { fontSize: 11, fontWeight: 600, color: FAINT, letterSpacing: ".04em", textTransform: "uppercase", mb: 0.35 };
 
@@ -37,6 +38,7 @@ const Step = ({ s }) => {
     </Box>);
   if (s.k === "result") return <Typography sx={{ fontSize: 12, color: FAINT, fontStyle: "italic" }}>Its answer — shown above.</Typography>;
   if (s.k === "error") return <Typography sx={{ fontSize: 12, color: "#8a3646" }}>⚠ {s.text}</Typography>;
+  if (s.k === "brief") return <BriefLine text={s.text} />;
   if (s.k === "gap") return <Typography sx={{ fontSize: 11.5, color: FAINT }}>… {s.text}</Typography>;
   if (s.k === "screen") return (
     <Box sx={{ ...mono, fontSize: 11, whiteSpace: "pre-wrap", bgcolor: PANEL2, p: 1, borderRadius: 1, maxHeight: 420, overflow: "auto", color: INK }}>{s.text}</Box>);

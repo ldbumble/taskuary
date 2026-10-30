@@ -2807,7 +2807,7 @@ def _start_general(store, tid, brief: str = None) -> bool:
         store.add_comment(tid, 'router', 'agent', 'The assistant started by itself'
                           + ('.' if fresh else ' - it carries on the conversation already open here.'))
         # ...and a conversation of quick answers only is put the ask too: the agent has not run on it yet (quickwork.escalate, a retry)
-        if (fresh or quickwork.only_quick(store, tid)) and (ask := first_ask(store, tid, brief)): session.send_prompt(ask)
+        if (fresh or quickwork.only_quick(store, tid)) and (ask := first_ask(store, tid, brief)): session.send_prompt(ask, brief=True)
         return True
     except Exception as e:
         logger.warning(f'assistant auto-start failed for task {tid}: {e}')

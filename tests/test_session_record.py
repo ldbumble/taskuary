@@ -143,6 +143,32 @@ def test_a_receipt_in_the_chat_is_a_note_never_the_agents_last_words(home):
     assert [x['k'] for x in rec2['steps']] == ['said', 'note']
 
 
+# TASKUARY'S INSTRUCTIONS ARE NOT THE OWNER'S WORDS (the owner, 2026-10-30): the brief an agent started on is marked where it is filed -
+# a chat turn by general.BRIEF_ACTOR, a coding seed kept as sent - and is a `brief` step; what the owner typed stays `you`
+def test_an_auto_start_brief_is_taskuarys_and_the_owners_words_stay_theirs(home):
+    s = MemoryStore(); tid = Factory(s).task(title='Partner day', kind='general')
+    s.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, 'THIS TASK IS A REPLY OWED to Erin Blake. Work out the answer.')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Friday works.')
+    s.add_comment(tid, 'owner', general.USER_TYPE, 'Check Saturday too.')
+    assert [m.get('brief', False) for m in general.history(s, tid)] == [True, False, False]
+    [rec] = sessionrecord.record(s, tid)['sessions']
+    assert [x['k'] for x in rec['steps']] == ['brief', 'said', 'you']
+
+
+def test_a_coding_seed_is_a_brief_and_a_line_typed_after_it_is_the_owners(home):
+    s = MemoryStore(); tid = Factory(s).task(title='March import doubled')
+    seed = 'TASK TQ-0001 - March import doubled.  REPO: C:/work/ledger - you are already in it; work only here.'
+    jsonl(home / '.claude' / 'projects' / 'C--work-ledger' / 'c9.jsonl', [
+        {'type': 'user', 'message': {'content': ' '.join(seed.split())}},
+        {'type': 'assistant', 'message': {'content': [{'type': 'text', 'text': 'Looking at the importer.'}]}},
+        {'type': 'user', 'message': {'content': 'Only March, please.'}}])
+    sessionrecord.keep_seed(tid, seed)
+    s.add_transcript(tid, 'pane-9', 'screen', 'coding', 'C:/work/ledger', 'c9', brain='claude')
+    [rec] = sessionrecord.record(s, tid)['sessions']
+    assert [x['k'] for x in rec['steps']] == ['brief', 'said', 'you']
+    assert [x['k'] for x in sessionrecord.save(s, tid, 'pane-9', 'claude', 'c9')['steps']] == ['brief', 'said', 'you']
+
+
 def test_sessions_come_newest_first_each_with_its_own_report(home):
     s = MemoryStore(); tid = Factory(s).task(title='Two runs')
     s._exec("INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)",

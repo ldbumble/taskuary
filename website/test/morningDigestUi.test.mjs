@@ -29,31 +29,27 @@ test("Settings has no empty Agents destination and profile links go straight to 
 
 // "A +" (the owner, 2026-10-08): what changed while you were away rides on top of the opening card, with the Morning digest folded
 // under it - the digest used to wait in Reports and was stale by the time the walk reached it
-test("the opening card carries what changed and the digest, folded, on its top", () => {
+// the owner, 2026-10-30: "it should just show the 2 cards your day then the tasks count. Under it the morning digest first few rows of it,
+// then with more button"
+test("the opening card is the day and the tasks, the digest's first lines under them, More for the rest", () => {
   const view = read("AssistantView.jsx"), cards = read("assistantCards.jsx");
   assert.match(view, /top=\{<SinceBlock onOpen=\{\(k\) => pull\(k, null\)\} onReading=\{setMailReading\} \/>\}/);
-  assert.match(view, /See the full digest ▾/);
+  assert.match(cards, /\{read\.map\(row\)\}[\s\S]{0,200}\{top\}\s*<\/div>/, "the digest stands under the two cards");
+  assert.match(view, /<DigestText text=\{open \? dg\.text : preview\} sourceId=\{dg\.source_id\} \/>/, "its first lines, the whole on More");
+  assert.match(view, /\{open \? "Less ▴" : "More ▾"\}/);
   assert.match(view, /api\.post\(`\/api\/reports\/\$\{dg\.source_id\}\/rerun`\)/, "Write a fresh one runs the digest now");
-  assert.match(view, /<DigestText text=\{dg\.text\} sourceId=\{dg\.source_id\} \/>/);
+  assert.doesNotMatch(view, /data-tq-since-card|data-tq-learned/, "no away cards and no memory line on the opener");
   assert.match(cards, /export function DayOpener\(\{ groups = \[\], onSection, top = null, loading = false \}\)/);
 });
 
-// the owner, 2026-10-14: "put the digest right away on load and the numbers ... in loading mode - same for morning digest until it shows up"
-test("the opening card loads in place: counts and the digest say they are coming, and the digest opens folded", () => {
+// the owner, 2026-10-14: "put the digest right away on load ... same for morning digest until it shows up"
+test("the opening card loads in place: the digest says it is coming", () => {
   const view = read("AssistantView.jsx"), cards = read("assistantCards.jsx"), turns = read("assistantTurns.js");
-  assert.match(view, /spin\("Reading what came in…"\)/);
   assert.match(view, /: "Writing today's digest…"\)\}/);
   assert.match(view, /dg\.waiting \? `Not written yet - \$\{plural\(dg\.waiting, "email"\)\}/, "queued by Finish, it says it waits on the mail");
-  assert.doesNotMatch(view, /shownFor\.current !== dg\.at/, "the digest opens folded - See the full digest opens it");
   assert.match(view, /data\?\.said \|\| data\?\.drawn/, "an opener drawn mid catch-up is read at once");
   assert.match(cards, /loading \? "Counting…" : tasks \? "Tasks" : "Nothing on you"/);
   assert.match(turns, /turn\.card\?\.kind === "brief"/, "the opener filled in its place is redrawn, not skipped by id");
-});
-
-test("what was learned is its own line on the opening card, never a card that loses its slot", () => {
-  const view = read("AssistantView.jsx");
-  assert.match(view, /\{d\?\.learned\?\.line && <div className="tq-since-digest" data-tq-learned="">/);
-  assert.match(view, /settings=docs&doc=learned&view=changes/);
 });
 
 // the whole card from the first day (the owner, 2026-10-15: "say calendar missing if not available")

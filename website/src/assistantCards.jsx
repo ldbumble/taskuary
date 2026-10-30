@@ -1329,7 +1329,6 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
   // ...and what CHANGED while you were away rides on top of the same card (SinceBlock - the owner picked "A +", 2026-10-08)
   return (
     <div className="tq-day-box">
-    {top}
     {(agenda || waits) && <div className={`tq-day${agenda && waits ? "" : " solo"}`}>
       {!!cal && (
         <div className="tq-day-agenda" data-tq-cal={cal}>
@@ -1364,6 +1363,8 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
         </div>
       )}
     </div>}
+    {/* ...and the morning digest under the two cards (SinceBlock; the owner, 2026-10-30) */}
+    {top}
     </div>
   );
 }

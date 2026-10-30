@@ -243,45 +243,36 @@ function SinceBlock({ onOpen, onReading }) {
     }
     setWriting("Still writing - it lands here when it's done.");
   };
-  const counts = [[o.mail, "came in"], [o.reports, o.reports === 1 ? "report ran" : "reports ran"],
-    [o.sessions, o.sessions === 1 ? "agent finished" : "agents finished"], [o.closed, o.closed === 1 ? "task closed" : "tasks closed"]]
-    .filter(([n]) => n).map(([n, w]) => `${n} ${w}`).join(" · ");
-  if (!pending && !counts && !cards.length && !dg.at && !d?.learned?.line) return null;
+  // THE OPENER IS THE DAY, THEN THE DIGEST (the owner, 2026-10-30: "it should just show the 2 cards your day then the tasks count. Under it
+  // the morning digest first few rows of it, then with more button"): the away counts, the away cards and the memory line are gone from
+  // here - this block is the digest alone, under DayOpener's two cards: its first lines, More for the rest
+  if (!pending && !dg.source_id) return null;
   const spin = (words) => <span role="status" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><CircularProgress size={12} thickness={5} sx={{ color: "#827356" }} />{words}</span>;
+  const lines = String(dg.text || "").split("\n"), PREVIEW = 6;
+  let seen = 0; const cut = lines.findIndex((l) => l.trim() && ++seen > PREVIEW);
+  const preview = cut < 0 ? dg.text : lines.slice(0, cut).join("\n"), more = cut >= 0;
   return (
     <div className="tq-since" data-tq-since="">
-      <div className="tq-since-head"><span className="tq-day-h" style={{ margin: 0 }}>{o.heading || "Since last night"}</span>{!d || d.reading ? spin("Reading what came in…") : counts && <span>{counts}</span>}</div>
-      {!!cards.length && <div className="tq-since-cards">
-        {cards.map((c, i) => (
-          <button key={c.key || c.link || i} type="button" className={`tq-since-card ${c.kind}`} data-tq-since-card={c.key || c.link}
-            onClick={() => { if (c.key) onOpen?.(c.key); else if (c.link) openAppLink(c.link); }} title={c.key ? "Open it" : "See what changed"}>
-            <span className="lbl"><i />{c.label}</span><span className="txt">{c.text}</span>
-          </button>
-        ))}
-      </div>}
-      {/* WHAT WAS LEARNED - the memory - always its own line, never squeezed out of the cards (2026-10-08: "did you remove the memory section?") */}
-      {d?.learned?.line && <div className="tq-since-digest" data-tq-learned="">
-        <span className="tag">MEMORY</span>
-        <span title={d.learned.latest ? `Latest: ${d.learned.latest}` : undefined}>{d.learned.line}</span>
-        <button type="button" className="tq-linkish" onClick={() => { openAppLink("settings=docs&doc=learned&view=changes"); }}>See what changed</button>
-      </div>}
       {dg.source_id && dg.writing && !writing && <div className="tq-since-digest" data-tq-digest="" data-tq-digest-writing="">
         {/* queued by Finish setup (firstrun.first_digest): not written until the mail it reads is sorted - said so, with how many are left */}
         <span className="tag">MORNING DIGEST</span>{spin(dg.waiting ? `Not written yet - ${plural(dg.waiting, "email")} still being sorted first`
           : "Writing today's digest…")}
       </div>}
-      {dg.source_id && !(dg.writing && !writing) && <div className="tq-since-digest" data-tq-digest="">
-        <span className="tag">MORNING DIGEST</span>
-        {dg.at ? <span>written {ago(dg.at)}</span> : <span>not written yet today</span>}
-        {dg.at && <button type="button" className="tq-linkish" onClick={() => setOpen((v) => !v)} aria-expanded={open}>{open ? "Fold it ▴" : "See the full digest ▾"}</button>}
-        <span className="sep">|</span>
-        {/* while it writes, the button IS the status - a spinner, not the button beside a second line saying the same (2026-10-13) */}
-        {writing.startsWith("Writing")
-          ? spin(writing)
-          : <button type="button" className="tq-linkish" onClick={fresh}>Write a fresh one</button>}
-        {writing && !writing.startsWith("Writing") && <span>{writing}</span>}
-      </div>}
-      {open && dg.text && <div className="tq-since-body"><DigestText text={dg.text} sourceId={dg.source_id} /></div>}
+      {dg.source_id && !(dg.writing && !writing) && <>
+        <div className="tq-since-digest" data-tq-digest="">
+          <span className="tag">MORNING DIGEST</span>
+          {dg.at ? <span>written {ago(dg.at)}</span> : <span>not written yet today</span>}
+          <span className="sep">|</span>
+          {/* while it writes, the button IS the status - a spinner, not the button beside a second line saying the same (2026-10-13) */}
+          {writing.startsWith("Writing")
+            ? spin(writing)
+            : <button type="button" className="tq-linkish" onClick={fresh}>Write a fresh one</button>}
+          {writing && !writing.startsWith("Writing") && <span>{writing}</span>}
+        </div>
+        {dg.text && <div className="tq-since-body" data-tq-digest-text=""><DigestText text={open ? dg.text : preview} sourceId={dg.source_id} /></div>}
+        {dg.text && more && <button type="button" className="tq-linkish" data-tq-digest-more="" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+          {open ? "Less ▴" : "More ▾"}</button>}
+      </>}
     </div>
   );
 }

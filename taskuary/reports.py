@@ -1695,7 +1695,11 @@ def is_due(cfg: dict, last_polled, startup: bool = False) -> bool:
     if cfg.get('every_minutes'):
         try: return (now - last).total_seconds() >= float(cfg['every_minutes']) * 60
         except (TypeError, ValueError): pass               # 'every 30' typed as words: daily default
-    if (due := _daily_slot(cfg, now)) is not None: return now >= due and last < due
+    if (due := _daily_slot(cfg, now)) is not None:
+        # ...a ROUTINE missed while the app was closed runs once at the next start (the owner, 2026-10-29), even before today's slot -
+        # yesterday's job is still owed. A report keeps waiting for today's: a fresher read serves it better than a late one
+        from .workflows import is_workflow
+        return (now >= due and last < due) or (is_workflow(cfg) and last < due - timedelta(days=1))
     return False
 
 

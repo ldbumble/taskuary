@@ -247,7 +247,7 @@ BRING_UP = [
     ('the AP ageing report', 'AP ageing', '#report=5'),
     ('the end of day report', 'end of day', '#report=2'),
     ('the headcount report', 'headcount', '#report=4'),
-    ('my workflows', 'workflows', '#report=workflows'),
+    ('my routines', 'routines', '#report=workflows'),   # the shelf's name since 2026-10-29
     ('my SOUL doc', 'soul', '#settings=docs&doc=soul'),
     ('what it learned', 'learned', '#settings=docs&doc=learned'),
     ('the audit log', 'audit log', '#settings=audit'),

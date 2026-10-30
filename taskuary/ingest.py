@@ -1868,16 +1868,19 @@ def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bo
     if why := carry_on_why(store, tid, msg, mid, follow):
         if why not in _QUIET_CARRY: not_started(store, tid, why)
         return False
-    from . import blackboard as bb, general
-    if bb.live_count() >= (cap := auto_sessions(store)):
+    from . import blackboard as bb, general, quickwork
+    coding = not general.handles(store.get_task(tid) or {})
+    # a conversation of quick answers carries on quick while the task still reads quick: one call, no desk, so no cap
+    quick = not coding and quickwork.only_quick(store, tid) and quickwork.takes(store, tid)
+    if not quick and bb.live_count() >= (cap := auto_sessions(store)):
         not_started(store, tid, f'{cap} agents are already running - Continue picks it up')
         return False
-    coding = not general.handles(store.get_task(tid) or {})
     (CODING_OPENING if coding else general.OPENING).add(tid)
     store.add_comment(tid, 'router', 'agent', f'{_who_said(msg)} wrote again with new work - the '
                       + ('coding agent reopens its own session' if coding else 'assistant carries on its conversation') + ' here by itself.')
-    store.audit('task', tid, 'auto_continue', actor, 'agent', {'message_id': mid, 'kind': 'coding' if coding else 'general'})
-    _spawn(_continue_coding if coding else _continue_general, store, tid)
+    store.audit('task', tid, 'auto_continue', actor, 'agent', {'message_id': mid, 'kind': 'coding' if coding else 'general', 'quick': quick})
+    if quick: _spawn(quickwork.start, store, tid, _pass_turn(msg), False)
+    else: _spawn(_continue_coding if coding else _continue_general, store, tid)
     return True
 
 
@@ -2078,7 +2081,11 @@ def _pass_general(store, tid, msg: dict):
         store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message could not be passed in: the assistant's session ended - Continue picks it up.")
         return
     store.add_comment(tid, 'router', 'agent', f"Passed {_who_said(msg)}'s new message to the agent - it is the assistant's next turn.")
-    try: ses.send_prompt(_pass_turn(msg), as_owner=False, echo=False)
+    from . import quickwork
+    try:
+        # a session of quick answers re-decides on the task's depth now: still quick, one more call on it; else the turn runs the agent
+        if ses.quick and quickwork.takes(store, tid): quickwork.again(store, tid, ses, _pass_turn(msg))
+        else: ses.send_prompt(_pass_turn(msg), as_owner=False, echo=False)
     except Exception as e:
         logger.warning(f'passing a line to the assistant failed for task {tid}: {e}')
         store.add_comment(tid, 'router', 'agent', f"The assistant couldn't take {_who_said(msg)}'s new message: {' '.join(str(e).split())[:200]} - Continue picks it up.")
@@ -2754,8 +2761,13 @@ def _auto_general(store, tid, brief: str = None, deep: bool = False):
     """Auto-dispatch for a GENERAL task: the assistant's own per-task session, the same one the
     owner sees when they open the task (PW-069). A full house queues it like a coding task; the
     queue drain knows the kind. A live conversation is reused - the ask is put once.
-    `deep`: the quick path already handed this one on (quickwork.escalate), so it never goes back to it."""
-    from . import blackboard as bb
+    `deep`: the quick path already handed this one on (quickwork.escalate), so it never goes back to it.
+    A task triage judged quick (quickwork.takes) is answered in one call instead, ahead of the cap: it takes no desk. Every door reaching
+    here has passed auto_start_ok already, so the gate is the same for both; a task triage never judged reads as deep."""
+    from . import blackboard as bb, quickwork
+    try: quick = not deep and quickwork.takes(store, tid)
+    except Exception as e: quick = logger.warning(f'the depth of task {tid} could not be read - it starts the agent: {e}') or False
+    if quick: return quickwork.start(store, tid, brief)
     cap = auto_sessions(store)
     if bb.live_count() >= cap:
         store.enqueue_dispatch(tid, None, 'assistant', f'{cap} agent sessions are already live')
@@ -2776,13 +2788,14 @@ def _start_general(store, tid, brief: str = None) -> bool:
     """Open (or reuse) the assistant session and put the task to it - once. A failure is written on
     the task as a failure, never left looking like nobody got round to it (PW-073), counted on the retry
     budget, and reported as False so a queue drain neither clears the row nor says Started (PW-085)."""
-    from . import general
+    from . import general, quickwork
     try:
         session = general.start_session(store, tid, actor='router')
         fresh = not general.history(store, tid)
         store.add_comment(tid, 'router', 'agent', 'The assistant started by itself'
                           + ('.' if fresh else ' - it carries on the conversation already open here.'))
-        if fresh and (ask := first_ask(store, tid, brief)): session.send_prompt(ask)
+        # ...and a conversation of quick answers only is put the ask too: the agent has not run on it yet (quickwork.escalate, a retry)
+        if (fresh or quickwork.only_quick(store, tid)) and (ask := first_ask(store, tid, brief)): session.send_prompt(ask)
         return True
     except Exception as e:
         logger.warning(f'assistant auto-start failed for task {tid}: {e}')

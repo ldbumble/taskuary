@@ -3,7 +3,8 @@
 An agent session costs a launch and a long wait for what is often one sentence ("does it make sense to go on Friday?"). This module only
 READS the depth - triage's difficulty, plus the things that always need the agent (a browser, a stranger, several emails owed, a task that
 already ran deep). It never guesses from the words of the task."""
-from . import brainroute, browserview, general, ingest, origin, slots
+from typing import NamedTuple
+from . import brainroute, browserview, general, ingest, llm, origin, selfclose, slots
 
 DEEP_WHY = ('kind', 'difficulty', 'browser', 'stranger', 'emails', 'ran deep')
 SETUP_REFS = (general.SETUP_REF, 'connector:setup')
@@ -29,3 +30,54 @@ def why_deep(store, tid) -> str:
     return ''
 
 def takes(store, tid) -> bool: return not why_deep(store, tid)
+
+
+QUICK_TOKENS = 3_000
+_STR = lambda null=False: {'type': ['string', 'null']} if null else {'type': 'string'}
+QUICK_WANT = {'name': 'quick_work', 'schema': {'type': 'object', 'additionalProperties': False,
+    'required': ['report', 'draft', 'question', 'done', 'escalate', 'why'],
+    'properties': {'report': _STR(), 'draft': _STR(True), 'question': _STR(True), 'done': {'type': 'boolean'}, 'escalate': {'type': 'boolean'}, 'why': _STR()}}}
+QUICK_LINE = ('QUICK WORK: answer in one go, as one JSON object with the fields report, draft, question, done, escalate, why - not as an agent session, and '
+    'without the [[TASKUARY-...]] markers above; their jobs are fields here. report is what the owner reads (a few sentences). draft is the reply to send, '
+    'or null. question is one question only the owner can answer, or null. done is true when nothing more is owed on this task, and why says in a line what finished it. '
+    'Set escalate to true, with one line in why, when the job needs more than a lookup: acting anywhere, files to work through, booking, or multi-step research. '
+    'Never claim an action you did not take.')
+NO_LOOKUP_LINE = 'THIS AI CANNOT LOOK ANYTHING UP. When a fact must be checked, set escalate (why: what needs checking) rather than answer from memory.'
+NO_CLOSE_LINE = 'DO NOT CLOSE THIS TASK: set done to false; the owner decides when it is finished.'
+
+
+class QuickAnswer(NamedTuple):
+    report: str; draft: str; question: str; done: bool; escalate: bool; why: str
+
+
+def _clean(s) -> str:
+    "A string field with Taskuary's own markers taken out (a model told about them may still write one)."
+    from .selfclose import draft_markers, for_screen, reply_marker
+    return for_screen(draft_markers(reply_marker(str(s or ''))[0])[0])
+
+def read(data) -> 'QuickAnswer | None':
+    "The structured answer, or None when it is not an object or says neither something nor that the job is too big."
+    if not isinstance(data, dict): return None
+    a = QuickAnswer(*(_clean(data.get(k)) for k in ('report', 'draft', 'question')), data.get('done') is True, data.get('escalate') is True, _clean(data.get('why')))
+    return a if a.report or a.escalate else None
+
+def prompt(store, tid, ask: str, lookups: bool) -> tuple:
+    "(system, user): what the general agent reads, the mail history it would have had searched for it, and the ask."
+    system, user = general._prompt(store, tid)
+    said, prior = general.history_brief(store, tid, False)
+    if said: system = f'{system}\n\n{said}'
+    if prior: user = f'{prior}\n\n{user}'
+    system = f'{system}\n\n{QUICK_LINE}' + ('' if lookups else f'\n\n{NO_LOOKUP_LINE}')
+    if selfclose.mode(store) == 'off' or selfclose.stays_open(store, tid): system += f'\n\n{NO_CLOSE_LINE}'
+    return system, f'{user}\n\n{ask}'
+
+def ask(store, tid, ask: str, steps: list = None, cancel=None) -> 'QuickAnswer | None':
+    "The one call. Raises what the brain raises; None for an answer that cannot be read."
+    trace = (lambda kind, name, detail: steps.append((kind, name, detail))) if steps is not None else None
+    brain = llm.build_llm(store, job='quick_work', task_id=tid, research='web', gear='main', trace=trace, cancel=cancel)
+    if brain is None: raise RuntimeError(f'{general.NO_AI} - connect one to answer this task')
+    web = bool(getattr(brain, 'takes_web', False))
+    lookups = web or brainroute.choose(store, 'quick_work', tid).pick.startswith('cli:')
+    system, user = prompt(store, tid, ask, lookups)
+    with llm.watching(trace): got = llm.ask_json(brain, system, user, want=None if web else QUICK_WANT, max_tokens=QUICK_TOKENS, **({'web': True} if web else {}))
+    return read(got.data)

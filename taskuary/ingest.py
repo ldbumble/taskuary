@@ -2642,7 +2642,11 @@ def _auto_code(store, tid):
                           + (f' - told it about the {len(ps)} other agent(s) working in the same checkout.' if ps else '.'))
     except Exception as e:
         logger.warning(f'auto dispatch failed for task {tid}: {e}')
-        bb.record_failure(store, tid, e, agent, label='The coding agent')   # counted, said, and retried on a bounded budget (PW-085)
+        # a start that asked WHICH CODE is a question for the owner, as the Send to agent press makes it (server.dispatch_message):
+        # retried, it is refused the same way until the owner picks - and it read "a setup problem" over a choice only they can make
+        from . import funnel
+        if isinstance(e, ValueError) and funnel.NEEDS_REPO.search(str(e)): funnel.hold_for_repo(store, tid)
+        else: bb.record_failure(store, tid, e, agent, label='The coding agent')   # counted, said, and retried on a bounded budget (PW-085)
 
 
 def _is_raw_body(summary: str, body: str) -> bool:

@@ -304,8 +304,9 @@ def test_a_stranger_s_line_reaches_only_an_auto_session(monkeypatch, mode):
     ingest._hand_to_agent(s, {'answer_to_agent': 'auto'}, t, {'from_email': 'someone@vendor.example'}, 'router')
     assert typed == []
 
-def test_an_auto_start_that_is_refused_says_so_on_the_task_and_does_not_retry(monkeypatch):
+def test_an_auto_start_that_is_refused_says_so_on_the_task_and_does_not_retry(monkeypatch, tmp_path):
     s = _store('gemini'); t = _stranger(s); s.set_setting('default_brain', 'gemini', 'owner')     # the coding brain is the CLI, not the profile
+    s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'gemini', 'cwd': str(tmp_path)}))   # a folder of its own: the checkout is not asked
     monkeypatch.setattr(blackboard, 'drain_later', lambda *a, **k: None)
     with mock.patch.object(terminal, 'Term'), mock.patch.dict(terminal.SESSIONS, {}, clear=True): ingest._auto_code(s, t)   # never raises into the poller
     said = ' '.join(c['Body'] for c in s.list_comments(t))

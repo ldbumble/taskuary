@@ -1116,6 +1116,13 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
                              '- the chooser this refusal opens, or the repo chip beside its agent - and say '
                              'which one; or tag it, and every later session goes there.')
         if len(paths) == 1: cwd = next(iter(paths.values()))
+        # ...and NOTHING AT ALL - no path, no folder of its own - is no answer either: the fallback below is the folder Taskuary was
+        # started in, which on the owner's machine is Taskuary's own checkout. A bug report about another app opened a coding agent
+        # there by itself (the overnight QA, 2026-10-30). The owner picks, unless the task says it has no repository at all.
+        elif not paths and not profile.get('cwd') and repo_tag(store.get_task(task_id) or {}) != NO_REPO:
+            raise ValueError('I could not tell which checkout this belongs in: no repository is set up for the coding agent, and '
+                             f'guessing would put it in {os.getcwd()}, the folder Taskuary started in. Pick the repository on the task '
+                             '- the chooser this refusal opens, or the repo chip beside its agent - and give it the path.')
     cwd = cwd or profile.get('cwd') or os.getcwd()
     if not os.path.isdir(cwd): raise ValueError(f'working directory does not exist: {cwd}')
     # WHICH CHECKOUT comes first, and only then which binary: resolving the CLI up here meant a box

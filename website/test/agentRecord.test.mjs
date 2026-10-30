@@ -47,6 +47,22 @@ test("a conversation lists only its working - its turns are the chat", () => {
   assert.equal(hasMore({ ...chat, steps: [{ k: "said", text: "August was up 8%." }] }), false);
 });
 
+// TASKUARY'S INSTRUCTIONS ARE NOT THE OWNER'S WORDS (the owner, 2026-10-30): the brief an agent started on is marked by the server
+// (a `brief` step, general.BRIEF_ACTOR on a chat turn) and drawn as one folded grey line - never "Told" or YOU
+test("a brief is its own step, listed for a coding run and left to the chat for a conversation", () => {
+  const run = { ...coding, steps: [{ k: "brief", text: "THIS TASK IS A REPLY OWED to Erin Blake." }, ...coding.steps] };
+  assert.deepEqual(recordSteps(run).map((s) => s.k), ["brief", "you", "thought", "tool", "result"]);
+  const chat = { source: "conversation", steps: [{ k: "brief", text: "A QUICK LOOK CAME FIRST." }, { k: "tool", name: "Read", text: "a.csv" }] };
+  assert.deepEqual(recordSteps(chat).map((s) => s.k), ["tool"]);
+  const read = (f) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), "utf8");
+  assert.match(read("BriefLine.jsx"), /BRIEF_LABEL = "Taskuary's instructions"/);
+  assert.match(read("BriefLine.jsx"), /component="details"/, "folded until clicked");
+  assert.match(read("AgentRecord.jsx"), /s\.k === "brief"\) return <BriefLine text=\{s\.text\} \/>/);
+  const ws = read("GeneralWorkspace.jsx");
+  assert.match(ws, /m\.brief \? \{ metadata: \{ custom: \{ brief: true \} \} \}/, "the server's flag reaches the thread");
+  assert.match(ws, /metadata\?\.custom\?\.brief\) \? \(\s*<MessagePrimitive\.Root className="tq-aui-message tq-aui-brief">\s*<BriefLine>/);
+});
+
 test("facts name who, when and how much", () => {
   assert.deepEqual(recordFacts(coding), ["claude", "2026-10-10 09:00", "2 thoughts", "1 step"]);
 });

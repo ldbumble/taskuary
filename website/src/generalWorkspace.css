@@ -5,6 +5,7 @@
 .tq-aui-welcome-copy { color: #77766f; font-size: 12.5px; margin-top: 3px; line-height: 1.45; }
 .tq-aui-message { width: 100%; max-width: 100%; min-width: 0; margin: 0 auto 18px; display: grid; grid-template-columns: 66px minmax(0, 1fr); gap: 10px; align-items: start; box-sizing: border-box; }
 .tq-aui-role { padding-top: 8px; color: #8b877e; font: 600 9px/1.2 'Cascadia Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; }
+.tq-aui-brief > * { grid-column: 1 / -1; }
 .tq-aui-user-bubble { justify-self: start; min-width: 0; max-width: 88%; border: 1px solid #dfdbd3; background: #f1eee8; border-radius: 13px; padding: 9px 13px; font-size: 13px; line-height: 1.48; overflow-wrap: anywhere; word-break: break-word; }
 .tq-aui-user-bubble p { margin: 0; white-space: pre-wrap !important; overflow-wrap: anywhere; }
 .tq-aui-agent-body { min-width: 0; max-width: 100%; padding: 5px 3px; overflow-wrap: anywhere; word-break: break-word; }

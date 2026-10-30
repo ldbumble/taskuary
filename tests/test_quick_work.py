@@ -259,6 +259,14 @@ def test_a_failed_quick_call_escalates_and_frees_its_slot():
     assert any('the quick answer could not be made (timed out after 180s)' in c['Body'] for c in s.list_comments(tid))
     assert quickwork.POOL._value == quickwork.QUICK_POOL                    # the slot came back
 
+# TASKUARY'S INSTRUCTIONS ARE NOT THE OWNER'S WORDS (the owner, 2026-10-30): the ask a quick start files is Taskuary's brief, never under YOU
+def test_a_quick_starts_ask_is_filed_as_taskuarys_brief():
+    s = home(); tid, _ = arrived(s)
+    said, _auto, _ = run(s, tid, Brain(ANSWER))
+    turns = general.history(s, tid)
+    assert said == 'filed' and turns[0]['role'] == 'user' and turns[0].get('brief') is True and not turns[1].get('brief')
+    assert not any(c.get('Actor') == 'owner' and c.get('ActorType') == general.USER_TYPE for c in s.list_comments(tid))
+
 def test_unreadable_json_escalates():
     s = home(); tid, _ = arrived(s)
     garbled = lambda *a, **k: 'not json at all'; garbled.takes_web = False; garbled.takes_want = True

@@ -121,6 +121,7 @@ def test_the_started_assistant_is_told_the_reply_job():
     with mock.patch.object(general, 'start_session', return_value=ses), mock.patch.object(general, 'history', return_value=[]):
         assert ingest._start_general(s, tid)
     assert ses.send_prompt.call_args[0][0].startswith('THIS TASK IS A REPLY OWED to Erin Blake')
+    assert ses.send_prompt.call_args.kwargs.get('brief') is True       # Taskuary's instructions, never shown under YOU (the owner, 2026-10-30)
 
 
 # ── ruling 4: why no agent started is written on the task ───────────────────────────────────────────────────────────────────

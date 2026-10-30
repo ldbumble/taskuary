@@ -1176,6 +1176,10 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     if seed and cli_named(profile, argv) == 'codex':
         from . import selfclose as _sc
         seed = f'{seed}\n\n{_sc.ASK_LINE}'
+    # ...kept as sent, so the record can tell Taskuary's instructions from what the owner typed into the pane (sessionrecord.keep_seed)
+    if seed and task_id:
+        from . import sessionrecord as _sr
+        _sr.keep_seed(task_id, seed)
     extra = seed_argv(profile, seed) if seed and not resume else None
     # pywinpty joins argv with list2cmdline - correct for a direct .exe - but an npm .CMD shim
     # runs through `cmd /c`, and cmd.exe parses & | < > and stray quotes as ITS OWN syntax:
@@ -2252,12 +2256,14 @@ def _as_general(store, tid: int, instruction: str = None, actor: str = 'owner') 
     store.add_comment(tid, 'router', 'agent', f'No coding tool is connected, so the general agent works this on {session.provider}.')
     if not general.history(store, tid):
         ask = str(instruction or t.get('Summary') or t.get('Title') or '').strip()
-        if ask: threading.Thread(target=_ask_quietly, args=(session, ask, tid), daemon=True, name=f'general-{tid}').start()
+        # ...the task's own Summary, or an instruction no owner typed, is Taskuary's brief (general.BRIEF_ACTOR), never put under YOU
+        brief = not (instruction and actor == 'owner')
+        if ask: threading.Thread(target=_ask_quietly, args=(session, ask, tid, brief), daemon=True, name=f'general-{tid}').start()
     return {**session.info(), 'taskId': tid, 'existing': False, 'general': True}
 
 
-def _ask_quietly(session, ask: str, tid: int):
-    try: session.send_prompt(ask)
+def _ask_quietly(session, ask: str, tid: int, brief: bool = False):
+    try: session.send_prompt(ask, brief=brief)
     except Exception as e: logger.warning(f'task {tid}: the general agent could not take the work - {e}')     # said on the task by the turn
 
 

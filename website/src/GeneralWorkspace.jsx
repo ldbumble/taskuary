@@ -47,11 +47,14 @@ import { openAppLink } from "./appLinks.js";
 import ConnectAi from "./ConnectAi.jsx";
 import { withoutAsked } from "./askOnce.js";
 import ReviewDecision from "./ReviewDecision.jsx";
+import BriefLine from "./BriefLine.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
+// the brief an agent was started on is Taskuary's, not the owner's (general.BRIEF_ACTOR): carried to UserMessage on the message's metadata
 const initial = (messages) => (messages || []).map((m) => ({
   ...m,
+  ...(m.brief ? { metadata: { custom: { brief: true } } } : {}),
   createdAt: m.createdAt ? new Date(String(m.createdAt).replace(" ", "T") + (String(m.createdAt).includes("Z") ? "" : "Z")) : undefined,
 }));
 
@@ -166,7 +169,11 @@ const AssistantText = ({ text }) => {
     {!!files.length && <PublishedPages pages={files.map((f) => outputRow(at.tid, f, at.listed))} />}
   </>;
 };
-const UserMessage = () => (
+const UserMessage = () => useAuiState((s) => !!s.message.metadata?.custom?.brief) ? (
+  <MessagePrimitive.Root className="tq-aui-message tq-aui-brief">
+    <BriefLine><MessagePrimitive.Parts /></BriefLine>
+  </MessagePrimitive.Root>
+) : (
   <MessagePrimitive.Root className="tq-aui-message tq-aui-user">
     <div className="tq-aui-role">you</div>
     <div className="tq-aui-user-bubble"><MessagePrimitive.Parts /></div>
@@ -935,8 +942,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
           The earlier agent's conversation · {plural(data.earlier.length, "message")}</Box>
         <Box sx={{ maxHeight: 260, overflow: "auto", py: 0.5, fontSize: 12.5, color: INK }}>
           {data.earlier.map((m) => <Box key={m.id} sx={{ py: 0.4 }}>
-            <Box component="span" sx={{ color: FAINT, fontWeight: 600, fontSize: 11 }}>{m.role === "user" ? "You" : name}</Box>
-            <Md text={textOf(m)} /></Box>)}
+            {m.brief ? <BriefLine text={textOf(m)} /> : <>
+              <Box component="span" sx={{ color: FAINT, fontWeight: 600, fontSize: 11 }}>{m.role === "user" ? "You" : name}</Box>
+              <Md text={textOf(m)} /></>}</Box>)}
         </Box>
       </Box>}
       <input ref={fileRef} hidden type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple onChange={(e) => upload(e.target.files)} />

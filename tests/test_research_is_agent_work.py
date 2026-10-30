@@ -23,6 +23,14 @@ def test_the_guide_says_research_is_general_and_only_the_booking_waits():
     assert g.index(LINE) > g.index('## 4. Who does it') and g.index(LINE) < g.index('## 5. Describing it')
 
 
+def test_an_ask_to_book_is_done_in_the_browser():
+    """"Book your flight and a hotel" went to the general agent with no browser, which then said it could not book from here (the
+    overnight QA, 2026-10-30): the booking is work on a web page, so the agent gets Taskuary's browser and the submit waits for Approve."""
+    g = ' '.join(triage.SHIPPED.split())
+    said = g.split(LINE, 1)[1].split('- **', 1)[0]
+    assert 'book or buy it' in said and '`needs_browser` is true too' in said and "the submit waits for the owner's Approve" in said
+
+
 def test_a_live_triage_doc_on_the_last_guide_takes_the_line():
     guide = (Path(triage.__file__).parent / 'templates' / 'triage.md').read_text(encoding='utf-8')
     before = '\n'.join(l for l in guide.splitlines() if LINE not in l)

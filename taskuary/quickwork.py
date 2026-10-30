@@ -5,6 +5,7 @@ READS the depth - triage's difficulty, plus the things that always need the agen
 already ran deep). It never guesses from the words of the task."""
 import re, threading
 from typing import NamedTuple
+from loguru import logger
 from . import brainroute, browserview, general, ingest, llm, origin, selfclose, slots
 
 DEEP_WHY = ('kind', 'difficulty', 'browser', 'stranger', 'emails', 'ran deep')
@@ -109,7 +110,8 @@ def escalate(store, tid, ask: str, why: str, report: str = '') -> None:
     ingest._auto_general(store, tid, f'{ask}\n\n{note}', deep=True)
 
 def start(store, tid, brief: str = None, as_owner: bool = True) -> str:
-    "One call for a quick task, filed as a general turn - 'filed'; or the deep path, when the call says it needs more or fails - 'escalated'."
+    """One call for a quick task, filed as a general turn - 'filed'; or the deep path, when the call says it needs more or fails - 'escalated';
+    or 'failed', when the answer could not be filed: written on the task and counted on the retry budget, as _start_general does. Never raises."""
     q, steps, cancel = ingest.first_ask(store, tid, brief), [], threading.Event()
     timer = threading.Timer(QUICK_TIMEOUT, cancel.set); timer.daemon = True; timer.start()
     try: out, failed = ask(store, tid, q, steps, cancel), ''
@@ -119,6 +121,12 @@ def start(store, tid, brief: str = None, as_owner: bool = True) -> str:
         why = failed or ('the quick answer could not be read' if out is None else out.why or 'it needs more than one call')
         escalate(store, tid, q, why, out.report if out else '')
         return 'escalated'
-    ses = general.start_session(store, tid, actor='router'); ses.quick = True
-    ses.file_quick(q, out, steps, as_owner)
-    return 'filed'
+    try:
+        ses = general.start_session(store, tid, actor='router'); ses.quick = True
+        ses.file_quick(q, out, steps, as_owner)
+        return 'filed'
+    except Exception as e:
+        logger.warning(f'quick answer could not be filed for task {tid}: {e}')
+        from . import blackboard as bb
+        bb.record_failure(store, tid, e, 'assistant', label='The assistant')
+        return 'failed'

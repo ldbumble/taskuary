@@ -1,5 +1,5 @@
 """Quick general work (spec 2026-10-29): a general task triage judged quick is answered in one call, not an agent session."""
-import json, threading, time, unittest
+import json, time, unittest
 from unittest import mock
 from taskuary import brainroute, browserview, general, ingest, llm, origin, quickwork, senders, terminal, workerstate as ws
 from taskuary.store import MemoryStore
@@ -18,7 +18,8 @@ def mail(**kw):
 def arrived(s, difficulty='quick', **verdict):
     "A general task as triage lands it, with _spawn caught: (task id, the names spawned)."
     said = lambda sy, u, **k: json.dumps({'intent': 'task', 'kind': 'general', 'why': 'w', 'difficulty': difficulty, **verdict})
-    with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=True),          mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude', 'type': 'cli'}]):
+    with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=True), \
+         mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude', 'type': 'cli'}]):
         out = ingest.ingest_message(s, mail(), llm=said)
     return out['task_id'], [getattr(c[0][0], '__name__', '') for c in spawn.call_args_list]
 
@@ -237,3 +238,12 @@ def test_an_escalated_reply_task_is_told_its_job_once():
         said, auto, _ = run(s, tid, Brain({**ANSWER, 'escalate': True, 'why': 'three sites to check'}))
         brief = auto.call_args[0][2]
         assert ingest.first_ask(s, tid, brief).count('Work it out, then draft the reply to Erin.') == 1   # what _start_general asks
+
+def test_a_quick_session_that_cannot_start_says_so_and_never_raises():
+    from taskuary import blackboard as bb
+    s = home(); tid, _ = arrived(s)
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(llm, 'build_llm', return_value=Brain(ANSWER)), \
+         mock.patch.object(general, 'start_session', side_effect=RuntimeError('claude is not signed in')), mock.patch.object(bb, 'drain_later'):
+        assert quickwork.start(s, tid) == 'failed'
+    assert any("The assistant couldn't start" in c['Body'] and 'not signed in' in c['Body'] for c in s.list_comments(tid))
+    assert s.get_dispatch(tid)                                                   # on the retry budget, as a failed deep start is

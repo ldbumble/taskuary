@@ -1288,6 +1288,7 @@ class GeneralSession:
         from . import quickwork, selfclose, workerstate as ws
         self.quick = True                    # before any event: every event of this turn says 'quick' (quickwork.only_quick)
         if not self.alive: raise RuntimeError('this assistant session has ended - reload the page and ask again')
+        # outside the try: without the lock this turn never began - its finally would release a lock it does not hold, and the live turn is no failure
         if not self._take(WAIT_TURN):
             raise RuntimeError(f'the assistant has been answering the previous question for over {int(WAIT_TURN)}s - something is stuck.')
         self.busy, self.last = True, time.time()

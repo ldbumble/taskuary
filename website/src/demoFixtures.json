@@ -11249,7 +11249,7 @@
    {
     "ConnectorId": 70,
     "Type": "amazon_sp",
-    "Name": "Amazon Seller Central (SP-API)",
+    "Name": "Amazon (Seller Central & Business)",
     "ConfigJson": "{}",
     "Active": 0,
     "Roles": "report,tool",

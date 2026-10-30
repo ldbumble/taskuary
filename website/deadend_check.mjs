@@ -817,7 +817,8 @@ async function faults() {
     await wait(5000);
     // ...a folder that is not there is answered by where the code is - in whichever words that button says: "Change where the code is"
     // once the task names a folder, the one that was not there (CI, 2026-10-21: the census issue led the rail after midnight UTC)
-    const whereCode = (x) => byLabel[x.word] === "pick_repo";
+    // ...the agent bar's repository pill says it in small letters while no code is chosen ("choose where the code is") - the same press
+    const whereCode = (x) => byLabel[x.word] === "pick_repo" || Object.entries(byLabel).some(([w, k]) => k === "pick_repo" && w.toLowerCase() === x.word.toLowerCase());
     await wayOut(page.step, [aFix, f === "nocli" ? "Connect a coding tool" : whereCode, (x) => /coding tool/i.test(x.word)]);
     page.expect.delete("/dispatch"); await fault("");
   }

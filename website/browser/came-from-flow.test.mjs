@@ -17,7 +17,7 @@ test("Came from: the boxes, the conversation, the ask, the to-do - each message 
   const page = await h.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
+  await page.setViewport({ width: Number(process.env.CF_W || 1440), height: Number(process.env.CF_H || 900), deviceScaleFactor: 1 });
   await page.goto(h.ui, { waitUntil: "domcontentloaded" });
   await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 30000 });
   const made = await (await fetch(`${h.fixtureApi}/api/fixture/task/long-chat`, { method: "POST",
@@ -86,7 +86,8 @@ test("Came from: the boxes, the conversation, the ask, the to-do - each message 
     const t = document.querySelector(`${CUR} [data-tq-section-tab=from]:not([data-tq-mini])`);
     if (!t) return null;
     const foot = t.querySelector("[data-tq-tab-foot]").getBoundingClientRect();
-    return { foot: foot.top, footBottom: foot.bottom, bottom: t.getBoundingClientRect().bottom,
+    const mv = t.querySelector("[data-tq-spine-moves]")?.getBoundingClientRect();
+    return { foot: foot.top, footBottom: foot.bottom, bottom: t.getBoundingClientRect().bottom, moves: mv ? mv.top : null,
       lines: [...t.querySelectorAll("[data-tq-tab-line]")].map((l) => ({ text: l.textContent, drawn: getComputedStyle(l).display !== "none", bottom: l.getBoundingClientRect().bottom })) };
   }, CUR);
   assert.ok(tab, "Came from folds to its tab");
@@ -98,6 +99,8 @@ test("Came from: the boxes, the conversation, the ask, the to-do - each message 
   drawn.forEach((l, i) => assert.match(l.text, new RegExp(`Move note ${15 - i}:`), `newest first: ${l.text}`));
   assert.ok(tab.lines.filter((l) => l.drawn).every((l) => l.bottom <= tab.foot + 0.5), `each drawn line ends above the foot ${JSON.stringify(tab)}`);
   assert.ok(tab.footBottom <= tab.bottom + 1, "the foot stays in the tab");
+  // ...and above the spine's moves, never under them (the owner, 2026-10-30: "i told you to not let the chat go past the line")
+  assert.ok(tab.moves == null || tab.lines.filter((l) => l.drawn).every((l) => l.bottom <= tab.moves + 0.5), `a drawn line runs under the moves ${JSON.stringify(tab)}`);
   t.diagnostic(`Came from tab draws ${drawn.length} of 15`);
   assert.deepEqual(errors, []);
 });

@@ -1,5 +1,5 @@
 """Quick general work (spec 2026-10-29): a general task triage judged quick is answered in one call, not an agent session."""
-import json, time, unittest
+import json, threading, time, unittest
 from unittest import mock
 from taskuary import brainroute, browserview, general, ingest, llm, origin, quickwork, senders, terminal, workerstate as ws
 from taskuary.store import MemoryStore
@@ -15,12 +15,12 @@ def mail(**kw):
     return {'external_id': 'q1', 'channel': 'email', 'subject': 'partner day', 'body': ASK, 'from_email': 'erin@northwind.example',
             'from_name': 'Erin Blake', 'conversation_id': 'conv-partner', 'sent_at': '2026-10-29 09:00', 'source_name': 'alex@northwind.example', **kw}
 
-def arrived(s, difficulty='quick', **verdict):
+def arrived(s, difficulty='quick', mail_kw=None, **verdict):
     "A general task as triage lands it, with _spawn caught: (task id, the names spawned)."
     said = lambda sy, u, **k: json.dumps({'intent': 'task', 'kind': 'general', 'why': 'w', 'difficulty': difficulty, **verdict})
     with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=True), \
          mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude', 'type': 'cli'}]):
-        out = ingest.ingest_message(s, mail(), llm=said)
+        out = ingest.ingest_message(s, mail(**(mail_kw or {})), llm=said)
     return out['task_id'], [getattr(c[0][0], '__name__', '') for c in spawn.call_args_list]
 
 def test_quick_work_is_a_job_on_the_general_agents_brain():
@@ -203,7 +203,7 @@ def test_a_failed_quick_call_escalates_and_frees_its_slot():
     said, auto, _ = run(s, tid, boom)
     assert said == 'escalated' and auto.call_args.kwargs == {'deep': True}
     assert any('the quick answer could not be made (timed out after 180s)' in c['Body'] for c in s.list_comments(tid))
-    # Task 5: assert quickwork.POOL._value == quickwork.QUICK_POOL             # the slot came back (Task 5 adds POOL)
+    assert quickwork.POOL._value == quickwork.QUICK_POOL                    # the slot came back
 
 def test_unreadable_json_escalates():
     s = home(); tid, _ = arrived(s)
@@ -247,3 +247,22 @@ def test_a_quick_session_that_cannot_start_says_so_and_never_raises():
         assert quickwork.start(s, tid) == 'failed'
     assert any("The assistant couldn't start" in c['Body'] and 'not signed in' in c['Body'] for c in s.list_comments(tid))
     assert s.get_dispatch(tid)                                                   # on the retry budget, as a failed deep start is
+
+def test_fifty_arrivals_run_eight_at_a_time_and_take_no_desk():
+    from taskuary import blackboard as bb
+    s = home(); tids = [arrived(s, mail_kw={'external_id': f'q{i}', 'conversation_id': f'conv-{i}'})[0] for i in range(50)]
+    assert len(set(tids)) == 50
+    gate, now, most, lock = threading.Event(), [0], [0], threading.Lock()
+    def slow(system, user, **k):
+        with lock: now[0] += 1; most[0] = max(most[0], now[0])
+        gate.wait(5)
+        with lock: now[0] -= 1
+        return json.dumps(ANSWER)
+    slow.takes_web, slow.takes_want = False, True
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(llm, 'build_llm', return_value=slow),          mock.patch.object(general, 'start_session', side_effect=opened):
+        ts = [threading.Thread(target=quickwork.start, args=(s, t)) for t in tids]
+        for t in ts: t.start()
+        time.sleep(.5); gate.set()
+        for t in ts: t.join(10)
+        assert most[0] == quickwork.QUICK_POOL == 8
+        assert bb.live_count() == 0 and not s.queued_dispatches()             # no desk taken, nothing "Waiting its turn"

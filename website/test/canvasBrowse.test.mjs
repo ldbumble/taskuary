@@ -56,7 +56,7 @@ test("each browse card carries the controls its tab had", () => {
   assert.match(src("HubView.jsx"), /title: "Hub", wide: true,/);
   const reports = src("ReportsView.jsx"), hub = src("HubView.jsx"), settings = src("SettingsView.jsx");
   const r = reports.slice(reports.indexOf("return browse({"));
-  for (const want of ["Run due now", "<Composer", '"new-invoices"', '"new-agent"']) assert.ok(r.slice(0, 5000).includes(want), `Reports: ${want}`);
+  for (const want of ["Run due now", "<SetupWithAi", '"new-invoices"', '"new-agent"']) assert.ok(r.slice(0, 5000).includes(want), `Reports: ${want}`);
   const h = hub.slice(hub.indexOf("return browse({"));
   for (const want of ["Write one", "setSort", "setKind", "setRemoved", "<NewEntry"]) assert.ok(h.slice(0, 5000).includes(want), `Hub: ${want}`);
   const st = settings.slice(settings.indexOf("return browse({"));

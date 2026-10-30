@@ -27,8 +27,8 @@ test("each no-AI line carries the button", () => {
     assert.match(s, /import ConnectAi/, `${file} imports the button`);
     assert.match(s, near, file);
   }
-  // the composers' miss names its fix in the message itself, not only on the row
-  assert.match(src("Composer.jsx"), /action=\{fix \? <Button[^>]*onClick=\{\(\) => openAppLink\(fix\.href\)\}/);
+  // the composer's miss is the page's answer the Assistant hears and says in the chat (2026-10-30: the describe box is the chat's now)
+  assert.match(src("ReportsView.jsx"), /viewResult\(\{ action: "compose", ok: false/);
 });
 
 test("the rail never says All done when no AI could judge anything", () => {

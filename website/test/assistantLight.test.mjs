@@ -64,7 +64,8 @@ test("a lit button says no line, in the chat or over the row", () => {
   // ...and the one-row chat bar's pop-up never shuts by itself (the owner, 2026-10-27: "it disappeared when done?") - no timer closes it
   assert.doesNotMatch(view, /POP_LIT_MS|setTimeout\(\(\) => setPopOpen\(false\)/);
   // ...and a reply that only lit or pressed is no chat line in the column: only words get one - in the chat window it ends on its receipt
-  assert.match(view, /if \(data\.say \|\| data\.options\?\.length \|\| data\.chips\?\.length\)\s+setMsgs\(\(m\) => \[\.\.\.m, \{ id: aid, role: "assistant"/);
+  // ...or acts on the page it was asked about (pageView): those acts are its steps, drawn on its line (the owner, 2026-10-30)
+  assert.match(view, /if \(data\.say \|\| data\.options\?\.length \|\| data\.chips\?\.length \|\| ops\.length\)\s+setMsgs\(\(m\) => \[\.\.\.m, \{ id: aid, role: "assistant"/);
   assert.match(view, /else if \(winOnRef\.current && !data\.context_update && !data\.decision\) setMsgs\(\(m\) => \[\.\.\.m, \{ id: `r\$\{Date\.now\(\)\}`, role: "receipt", \.\.\.actReceipt\(/);
   assert.doesNotMatch(view, /Thinking about this one/, "no Thinking under it - or anywhere (the owner, 2026-10-23)");
   assert.match(view, /lit: litNow,/);

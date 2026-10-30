@@ -26,8 +26,7 @@ import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptIma
 import { emailRecipientOptions, normalizeEmails, recipientId, recipientLabel, recipientOptions, validEmail } from "./recipientOptions.js";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Checkbox from "@mui/material/Checkbox";
-import Composer from "./Composer.jsx";
-import { DRAFT_HASH, handDraft } from "./draftHandoff.js";
+import SetupWithAi, { NEW_HASH } from "./SetupWithAi.jsx";
 import { useVerbs } from "./actionRow.js";
 import ConnectAi from "./ConnectAi.jsx";
 import NewMeeting from "./NewMeeting.jsx";
@@ -484,7 +483,11 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         )}
 
         {REPEATS.includes(kind) && (
-          <Composer kind={kind} initial={kind === initialKind ? initialText : ""} initialRuns={kind === initialKind ? initialRoutine : null} onDraft={(config, meta) => { const k = meta?.verdict === "report" ? "report" : kind; handDraft(k, config, meta); onClose?.(); openAppLink(DRAFT_HASH[k]); }} />
+          // ...THE DESCRIBE BOX IS THE CHAT'S NOW (2026-10-30): its builder comes up, and the Assistant sets it up there with you - or by hand
+          <Box data-tq-new-repeat={kind} sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+            <SetupWithAi kind={kind} words={kind === initialKind ? initialText : ""} onOpen={() => { onClose?.(); openAppLink(NEW_HASH[kind]); }} />
+            <Button size="small" onClick={() => { onClose?.(); openAppLink(NEW_HASH[kind]); }}>Set it up by hand</Button>
+          </Box>
         )}
 
         {kind === "meeting" && (

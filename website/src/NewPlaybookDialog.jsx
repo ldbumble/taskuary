@@ -4,6 +4,8 @@ import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
 import ConnectAi from "./ConnectAi.jsx";
+import { openAppLink } from "./appLinks.js";
+import { sayEarlier } from "./pageView.js";
 
 const GeneralWorkspace = lazy(() => import("./GeneralWorkspace.jsx"));
 const failure = (e) => e?.response?.data?.detail || e.message || "Could not start playbook setup.";
@@ -43,7 +45,14 @@ export default function NewPlaybookDialog({ connectorType = "", initialText = ""
       const { data } = await api.post("/api/playbooks/setup", {
         text: text.trim(), message_id: mode === "email" ? selected?.MessageId : null, connector_type: connectorType,
       });
-      setTask(data.task);
+      // ...THE BUILD IS THE GENERAL AGENT'S, SAID IN THE CHAT (2026-10-30: the "with AI" doors open the Assistant, not a thread on the page): the
+      // dialog shuts, the task the agent drafts on comes up on the canvas - its Approve saves the playbook - and the chat says where it is
+      const ref = data.task?.ref || (data.task?.TaskId ? `TQ-${String(data.task.TaskId).padStart(4, "0")}` : "");
+      if (data.task?.TaskId) {
+        onClose?.();
+        openAppLink(`task=${data.task.TaskId}`);
+        sayEarlier({ title: `Started ${ref} - the general agent drafts the playbook with you there, and its Approve saves it.`, open: true });
+      } else setTask(data.task);
     } catch (e) {
       setError(failure(e));
       // ...and when the reason is that no AI is connected, the line carries Connect an AI (owner-approved, 2026-10-21) - read as a fact

@@ -52,16 +52,21 @@ test("the LinkedIn card asks in plain words and says where each comes from; AI s
   assert.match(src, /return <TextField label=\{label\} placeholder=\{ph \|\| ""\} helperText=\{help\}/);   // ConfigField: the help under the box
 });
 
-test("Get AI to set it up is a button in the card's own row, and its walk is drawn on the card - no terminal", () => {
+// THE WALK MOVED INTO THE CHAT (the owner, 2026-10-30: "this sort of ai troubleshooting should go on in the assistant"): the button is the
+// card's door to the chat window - no walk drawn on the card, no Board task - and a walk left open from before is folded into the chat
+test("Get AI to set it up is a button in the card's own row that opens the chat - nothing of the walk is drawn on the card", () => {
   const ai = src.slice(src.indexOf("function useAiWalk("), src.indexOf("const GATEWAY_HINT"));
-  assert.match(ai, /<Button variant="outlined" disabled=\{ai\.busy \|\| !ai\.ready\.ok\} onClick=\{ai\.start\} data-tq-ai-setup="start"/, "outlined, never the card's filled button");
-  assert.doesNotMatch(ai, /TerminalPane/, "the walk is the general agent's, not a terminal");
-  for (const path of ['post("", ctx', 'post("/say", { ...ctx, saved: labels }', 'post("/say", { ...ctx, text }', 'post("/done"']) assert.ok(ai.includes(path), path);
-  assert.match(ai, /stop = lightField\(root, label\)/, "the field it asks for is lit");
+  assert.match(ai, /<Button variant="outlined" disabled=\{!ai\.ready\.ok\} onClick=\{ai\.start\} data-tq-ai-setup="start"/, "outlined, never the card's filled button");
+  assert.match(ai, /start: \(\) => openHelp\(`Help me set up \$\{name\}`\)/, "the door opens the chat with the card as its subject");
+  assert.match(ai, /if \(data\?\.moved && data\.earlier\) sayEarlier\(data\.earlier\)/, "an open walk from before is said in the chat once");
+  for (const gone of ['post("/say"', 'post("/done"', "lightField(", "AI SETUP ·", "data-tq-walk-say", "TerminalPane"]) assert.ok(!ai.includes(gone), gone);
   const data = src.slice(src.indexOf("function DataDetail("), src.indexOf("const ROLE_META"));
   assert.match(data, /<AiWalkButton ai=\{ai\} \/>\s*\{msg && /, "beside Save and Test");
-  assert.match(data, /await api\.post\("\/api\/connectors", body\);\s*ai\.saved\(put\);/, "what Save put on the card is told to the walk");
+  assert.doesNotMatch(data, /ai\.saved\(/, "Save tells no walk - the chat hears the owner's own Save itself (pageView)");
   assert.doesNotMatch(data.slice(0, data.indexOf("<UnderTabs")), /<AiSetup|<AiWalk/, "nothing above the form");
+  // ...and Test tries the values on screen when they are not the saved ones (channels.DraftStore)
+  assert.match(src, /api\.post\(`\/api\/connectors\/\$\{conn\.ConnectorId\}\/test`, onScreen\(conn, cfg, cfgSaved, secret\)\)/);
+  assert.match(data, /api\.post\(`\/api\/connectors\/\$\{conn\.ConnectorId\}\/test`, onScreen\(conn, cfg, parse\(conn\.ConfigJson\), secret\)\)/);
 });
 
 test("an app's client secret is a masked, write-only box that says it is saved (guard.WRITE_ONLY_CONFIG)", () => {

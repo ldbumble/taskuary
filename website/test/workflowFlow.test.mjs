@@ -122,8 +122,7 @@ test("steps that only read are a report: the editor offers it, built from the sa
   const ed = read("WorkflowEditor.jsx");
   assert.match(ed, /onlyReads\(cfg\.flow, types\) && <Alert[^>]*data-tq-report-suggestion/);
   assert.match(ed, /onReport\(asReport\(cfg\)\)}>\{btnLabel\("make_report"\)\}</);
-  assert.match(read("Composer.jsx"), /out\?\.verdict === "report"[\s\S]*btnLabel\("make_report"\)/);
-  assert.match(read("ReportsView.jsx"), /meta\?\.verdict === "report" \? asReportDraft\(config, meta\)/);
+  assert.match(read("ReportsView.jsx"), /kind === "workflow" && data\.verdict !== "report"/, "a routine the composer read as a report lands in the report builder");
 });
 
 test("the demo world has a clean run and a failed one, and its step test never writes", () => {

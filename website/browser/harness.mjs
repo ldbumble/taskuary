@@ -146,7 +146,8 @@ async function warmVite(ui, timeout = 240000) {
 
 // `fresh`: a first start on a machine with nothing set up instead of the demo world - its PATH holds only the system's own
 // folders and `bin` (a folder of fake CLIs, or none), so no AI tool of the machine running the test can be seen
-export async function startHarness({ fresh = false, bin = "" } = {}) {
+// `tour`: the canvas opens on the demo's tour, as a visitor's first view does (demo.opens) - off for the rest, written against the greeting
+export async function startHarness({ fresh = false, bin = "", tour = false } = {}) {
   const backendPort = await freePort();
   const frontendPort = await freePort(new Set([backendPort]));
   if (backendPort === frontendPort || forbiddenPorts.has(backendPort) || forbiddenPorts.has(frontendPort)) {
@@ -176,6 +177,7 @@ export async function startHarness({ fresh = false, bin = "" } = {}) {
     TASKUARY_DEMO: "1",
     // the demo reads no typed words: the asks these tests type are answered from a recording, by their exact words (demo.ANSWERS_ENV)
     TASKUARY_DEMO_ANSWERS: path.join(here, "demo_answers.json"),
+    TASKUARY_DEMO_OPENS_TOUR: tour ? "1" : "0",
     TASKUARY_PORT: String(backendPort),
     TASKUARY_API: fixtureApi,
     TASKUARY_TOKEN: "phase0-browser-owner-token",

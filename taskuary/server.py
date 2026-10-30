@@ -10358,8 +10358,8 @@ def health():
 
 @app.get('/api/demo')
 def demo_state():
-    """Is this a demo instance? The banner asks; nothing else depends on it."""
-    return {'demo': demo.enabled(), 'owner': demo.OWNER if demo.enabled() else ''}
+    """Is this a demo instance? The banner asks - and the first view, which opens on the demo's tour (demo.opens)."""
+    return {'demo': demo.enabled(), 'owner': demo.OWNER if demo.enabled() else '', 'opens': demo.opens(store) if demo.enabled() else None}
 
 @app.get('/api/build')
 def build():

@@ -37,6 +37,24 @@ def test_the_fyi_card_carries_triage_s_title_its_subject_and_the_danger(store):
     # ...and the card the canvas draws keeps both (concierge's few fields)
     shown = concierge.card_for(card)
     assert shown['danger'] == card['danger'] and shown['subject'] == card['subject']
+    # ...a reading that never said whom reads as text steering the agent, as every row before 2026-10-30 did
+    assert card['danger_aim'] == shown['danger_aim'] == 'agent'
+
+
+def test_a_scam_on_the_owner_says_whom_it_is_aimed_at(store):
+    """The owner, 2026-10-30: a phish on them read "an attempt to steer the agent" - triage's danger_aim rides to the card."""
+    mid = store.add_message({'ExternalId': 'phish-2', 'ConversationId': 'c-phish-2', 'Channel': 'email', 'SourceName': 'email',
+                             'FromName': 'IT Helpdesk', 'FromEmail': 'it@northwind-support.invalid', 'Subject': 'Verify your password',
+                             'SentAt': '2026-10-29 09:00:00', 'BodyText': 'Sign in within 24 hours or lose access.', 'Direction': 'in',
+                             'Status': 'filed'})
+    store.add_route(mid, None, 'file', None, 'triage: fyi', [], 'triage',
+                    verdict={'intent': 'fyi', 'danger': 'Wants Alex to sign in on a look-alike page.', 'danger_aim': 'owner'})
+    card = next(c for c in rail(store) if c.get('mid') == mid)
+    assert (card['danger'], card['danger_aim']) == ('Wants Alex to sign in on a look-alike page.', 'owner')
+    assert concierge.card_for(card)['danger_aim'] == 'owner'
+    # ...and a later clean reading clears both
+    store.set_message_danger(mid, None)
+    assert store.get_message(mid)['DangerAim'] is None
 
 
 def test_a_plain_mail_carries_no_danger(store):
@@ -44,4 +62,4 @@ def test_a_plain_mail_carries_no_danger(store):
                              'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example', 'Subject': 'Lunch on Friday',
                              'SentAt': '2026-10-29 09:00:00', 'BodyText': 'Team lunch is at noon.', 'Direction': 'in', 'Status': 'filed'})
     card = next(c for c in rail(store) if c.get('mid') == mid)
-    assert card['danger'] is None and card['title'] == 'Lunch on Friday'
+    assert card['danger'] is None and card['danger_aim'] is None and card['title'] == 'Lunch on Friday'

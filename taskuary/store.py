@@ -1229,6 +1229,10 @@ class SQLiteStore:
             # or ranking's for a batched arrival): a warning on a stranger's card, never a gate
             if 'Danger' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN Danger TEXT')
+            # ...and WHO IT IS AIMED AT - 'owner' (a scam on them) or 'agent' (text written to steer the AI): the warning's words follow it
+            # (the owner, 2026-10-30: a phish on the owner read "an attempt to steer the agent"). Null on older rows, which read as 'agent'
+            if 'DangerAim' not in mcols:
+                self.cx.execute('ALTER TABLE message ADD COLUMN DangerAim TEXT')
             # the message asks the owner to find a time to meet (the triage verdict's `meet`, JSON {minutes, from, to}): its row
             # offers Find a time (calwrite.slots_for)
             if 'MeetJson' not in mcols:
@@ -4699,10 +4703,11 @@ class SQLiteStore:
             -- IN THE ORDER THEY WERE LET IN: each ranking call scales its own pool from 1.0, so a later arrival's value
             -- is not comparable with the head's - the order of admission is the batch's real order
             ORDER BY t.CreatedAt, t.TaskId""", (channel,))
-    def set_message_danger(self, mid, text):
-        """What this message's text tries to make an AI do (one sentence), or nothing: the newest reading's word stands."""
+    def set_message_danger(self, mid, text, aim=None):
+        """What this message's text tries to make an AI or the owner do (one sentence), or nothing: the newest reading's word stands -
+        and `aim`, whom: 'owner' for a scam on them, 'agent' (the default) for text written to steer the AI."""
         t = ' '.join(str(text or '').split())[:200]
-        self._exec('UPDATE message SET Danger=? WHERE MessageId=?', (t or None, mid))
+        self._exec('UPDATE message SET Danger=?, DangerAim=? WHERE MessageId=?', (t or None, (aim if aim in ('owner', 'agent') else 'agent') if t else None, mid))
     def set_message_rank(self, mid, value: float, why: str, actor: str):
         """Where in the judging queue this arrival sits, and the words it got there by."""
         self._exec('UPDATE message SET RankValue=?, RankWhy=? WHERE MessageId=?', (float(value), str(why or ''), mid))
@@ -4782,7 +4787,7 @@ class SQLiteStore:
         # (the chip, the Advisor, the evening brief, the coding agent's hold) sees the model's word without a join
         sc = (verdict or {}).get('sender_class') if isinstance(verdict, dict) else None
         if sc in ('person', 'automated', 'bulk') and mid: self._exec('UPDATE message SET SenderClass=? WHERE MessageId=?', (sc, mid))
-        if isinstance(verdict, dict) and 'danger' in verdict and mid: self.set_message_danger(mid, verdict.get('danger'))
+        if isinstance(verdict, dict) and 'danger' in verdict and mid: self.set_message_danger(mid, verdict.get('danger'), verdict.get('danger_aim'))
         if isinstance(verdict, dict) and isinstance(verdict.get('meet'), dict) and mid:
             self._exec('UPDATE message SET MeetJson=? WHERE MessageId=?', (json.dumps(verdict['meet']), mid))
         if isinstance(verdict, dict) and tid: self.judge_task(tid, verdict, 'triage')     # how hard, how sure, what data (the router)

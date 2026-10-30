@@ -234,6 +234,16 @@ def test_a_goal_step_past_its_day_is_chase_named_in_the_line(s):
     assert rulebook.decide(s, it, _verbs('close', 'defer', 'chase'))['verb'] == 'next', 'on track: Next, silent'
 
 
+def test_a_phish_filed_fyi_lights_not_ours_never_send_to_agent(s):
+    """The owner, 2026-10-30: a phishing FYI's row lit Send to agent. Not ours is its move, at once, with no model read and no habit over it;
+    an FYI with no danger is read as before."""
+    fyi = {'key': 'msg:7', 'kind': 'fyi', 'lane': 'fyi', 'mid': 7}
+    d = rulebook.decide(s, {**fyi, 'danger': 'Wants Alex to sign in on a look-alike page.'}, _verbs('mine', 'regular_agent', 'not_ours'))
+    assert (d['state'], d['verb'], d['line'], d['ask']) == ('fyi_danger', 'not_ours', '', False)
+    assert 'fyi_danger' in rulebook.SAFE
+    assert rulebook.decide(s, fyi, _verbs('mine', 'regular_agent', 'not_ours'))['state'] == 'fyi'
+
+
 def test_unsorted_mail_a_batch_a_closed_task_and_a_failed_report(s):
     assert rulebook.decide(s, {'kind': 'fyi', 'lane': 'unjudged', 'mid': 1}, _verbs('retriage'))['verb'] == 'retriage'
     assert rulebook.decide(s, {'kind': 'fyis', 'lane': 'fyi'}, [])['verb'] == 'next'

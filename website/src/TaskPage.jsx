@@ -8,7 +8,7 @@ import ContinueBox from "./ContinueBox.jsx";
 import { usePromptImages, withImages } from "./promptImages.jsx";
 import { ASK_WHAT, RunForm } from "./RunForm.jsx";
 import QueuedStart from "./QueuedStart.jsx";
-import { dangerLine, dangerOf, strangerLine, trustInBox } from "./strangerLine.js";
+import { dangerAimOf, dangerLine, dangerOf, strangerLine, trustInBox } from "./strangerLine.js";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { canSend, cannotStart, draftCanSend, useCapabilities } from "./capabilities.js";
 import {
@@ -1786,8 +1786,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {/* ...and what its words read as trying to make an agent do: one line, before anyone presses Start - whoever sent
                             it (B3, 2026-10-29: a known sender's mail can be the phish too) */}
                         {dangerOf(detail) && (
-                          <Typography variant="body2" data-tq-danger="" sx={{ color: ALERT, mt: 0.3, fontSize: 12.5, overflowWrap: "anywhere" }}>
-                            {dangerLine(dangerOf(detail))}
+                          <Typography variant="body2" data-tq-danger="" title={dangerAimOf(detail) === "owner" ? dangerOf(detail) : undefined}
+                            sx={{ color: ALERT, mt: 0.3, fontSize: 12.5, overflowWrap: "anywhere" }}>
+                            {dangerLine(dangerOf(detail), dangerAimOf(detail))}
                           </Typography>
                         )}
   </>);

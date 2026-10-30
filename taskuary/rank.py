@@ -285,7 +285,7 @@ def _order(store, llm, rows: list):
         for r in rows:
             ref = f"m{r['MessageId']}"
             if ref not in order: continue
-            store.set_message_danger(r['MessageId'], bad.get(ref))
+            store.set_message_danger(r['MessageId'], bad.get(ref), 'agent')     # ranking reads only text that steers the agent
             # judged dangerous: last, with the warning as its reason - a warning, not a gate (the owner, 2026-10-15)
             if ref in bad: store.set_message_rank(r['MessageId'], SUSPECT, f'judged dangerous - {bad[ref]}'[:200], 'rank'); continue
             # the MODEL's position IS the rank here. The floor is the fallback, not half of it:

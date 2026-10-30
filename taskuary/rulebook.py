@@ -20,7 +20,9 @@ RULES = words.ADVICE_RULE
 CHASE_DAYS = 3           # the owner, 2026-10-23: "Chase lights after 3 working days, then learned per person" (the per person is phase E)
 # states no habit may change (the owner, 2026-10-23: "a habit only lights a button ... never a safety rule"): what failed is fixed before
 # anything else, an agent asking is answered in its pane, a closed or working item has no move of the owner's
-SAFE = frozenset({'closed', 'working', 'agent_asking', 'failed', 'failed_cause', 'report_failed', 'unsendable'})
+SAFE = frozenset({'closed', 'working', 'agent_asking', 'failed', 'failed_cause', 'report_failed', 'unsendable',
+                  # ...nor a phish's put-down: no habit lights Send to agent over a scam (the owner, 2026-10-30)
+                  'fyi_danger'})
 FAILED = frozenset({'failed', 'failed_cause', 'report_failed'})
 # where the lit move needs an AI to work: with none connected the strip asks for one there, and only there
 NEEDS_AI = frozenset({'asked', 'asked_late', 'stranger'})
@@ -293,6 +295,9 @@ def state(store, item: dict, verbs: list) -> tuple:
         if u: return ('waiting_late_usual', {'who': who, 'days': days, 'usual': usual.days(u['median'])}) if days >= u['days'] else ('waiting', {})
         return ('waiting_late', {'who': who, 'days': days}) if days >= CHASE_DAYS else ('waiting', {})
     if kind == 'idea': return 'idea', {}
+    # A PHISH FILED FYI IS PUT DOWN, NEVER HANDED ON (the owner, 2026-10-30): its row lit Send to agent - the one press that feeds a scam to
+    # an agent. Not ours is its move, at once and with no model read, and Send to agent waits in the ▾ (FyiCard's Foot `tuck`)
+    if kind == 'fyi' and it.get('danger'): return 'fyi_danger', {}
     if kind == 'fyi': return 'fyi', {}
     ins = _inbound(store, it)
     if ins:

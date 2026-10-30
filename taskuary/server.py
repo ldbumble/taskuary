@@ -1942,12 +1942,14 @@ def task_detail(task_id: int):
     # ▾): asking the router on every other open cost ~11 ms a task, 2.7x what an open cost in 0.3.9.34 (2026-10-26)
     strong = _brainroute().strong_offered(d['task'], judged, ran, story)
     o = dict(zip(('origin', 'why'), origin.of_task(store, task_id)))
+    dm = next((m for m in store.list_messages(task_id) if m.get('Danger')), {})
     return {**d,'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])},
             'origin': {**o,                                                                  # who's words are on it (origin.py)
                        # ...and the presses that trust them, in the same words as the held box's (senders.trust_offer)
                        **({'trust': _trust_offer(task_id)} if o['origin'] == 'stranger' else {}),
-                       # ...and what one of them tries to make an AI do, as triage or ranking read it (message.Danger)
-                       'danger': next((m['Danger'] for m in store.list_messages(task_id) if m.get('Danger')), None)},
+                       # ...and what one of them tries to make an AI or the owner do, as triage or ranking read it (message.Danger) - and
+                       # whom: 'owner' for a scam on them, 'agent' for text written to steer the AI (the owner, 2026-10-30)
+                       'danger': dm.get('Danger'), 'danger_aim': (dm.get('DangerAim') or 'agent') if dm else None},
             # the same sender writing again and again about this one thing, said once (concierge.repeats) - counted here, no model
             'repeats': concierge.repeats(store, task_id, d.get('messages'), d.get('routes')),
             # a WORKFLOW RUN has no message and no triage behind it: which workflow, and what started it (workflows.of_task)
